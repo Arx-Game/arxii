@@ -273,13 +273,50 @@ def house_feed_for(organization, *, limit: int = _DEFAULT_LIMIT) -> list[PublicF
         .distinct()[:limit]
     )
     crises = _open_crisis_items(organization, limit=limit)
+    proclamations = _proclamation_items(organization, limit=limit)
     items = (
         [_deed_item(entry) for entry in deeds]
         + [_scandal_item(secret) for secret in scandals]
         + crises
+        + proclamations
     )
     items.sort(key=lambda item: item.occurred_at, reverse=True)
     return items[:limit]
+
+
+def _proclamation_items(organization, *, limit: int) -> list[PublicFeedItem]:
+    """Recent proclamations by the household or in its name (#2842).
+
+    The headline is stance + speaker — pure mechanical fields. The prose is
+    carried as the item subject line for display, NEVER interpreted.
+    """
+    from django.db.models import Q  # noqa: PLC0415
+
+    from world.societies.models import OrganizationMembership, Proclamation  # noqa: PLC0415
+
+    member_persona_ids = OrganizationMembership.objects.filter(
+        organization=organization,
+        left_at__isnull=True,
+        exiled_at__isnull=True,
+    ).values("persona_id")
+    rows = (
+        Proclamation.objects.filter(Q(org=organization) | Q(issuer_id__in=member_persona_ids))
+        .select_related("issuer", "stance", "org")
+        .order_by("-issued_at")[:limit]
+    )
+    return [
+        PublicFeedItem(
+            kind=FeedItemKind.PROCLAMATION,
+            headline=(
+                f"{row.issuer.name} proclaims {row.stance.name}"
+                + (f" for {row.org.name}" if row.org_id else "")
+            ),
+            subject=row.issuer.name,
+            occurred_at=row.issued_at,
+            category=row.stance.name,
+        )
+        for row in rows
+    ]
 
 
 def _open_crisis_items(organization, *, limit: int) -> list[PublicFeedItem]:

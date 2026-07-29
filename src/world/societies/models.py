@@ -1786,6 +1786,111 @@ class PhilosophicalArchetype(NaturalKeyMixin, SharedMemoryModel):
         return self.name
 
 
+class StanceArchetype(NaturalKeyMixin, SharedMemoryModel):
+    """A public philosophical POSITION a character may proclaim (#2842).
+
+    Sibling of ``PhilosophicalArchetype`` (Apostate ruling): same six-axis
+    vector shape, but worded as stances someone stands FOR ("Defense of the
+    Old Ways") rather than judgments of a deed ("Treacherous") — the two
+    vocabularies grow independently. Mechanics read ONLY the vector; the
+    proclamation's prose is display-only, never parsed (ADR-0178).
+    """
+
+    name = models.CharField(max_length=100, unique=True)
+    description = models.TextField(blank=True)
+
+    mercy_delta = models.IntegerField(
+        default=0,
+        validators=principle_validators,
+        help_text="Compassion (+) ↔ Ruthlessness (-) axis contribution.",
+    )
+    method_delta = models.IntegerField(
+        default=0,
+        validators=principle_validators,
+        help_text="Honor (+) ↔ Cunning (-) axis contribution.",
+    )
+    status_delta = models.IntegerField(
+        default=0,
+        validators=principle_validators,
+        help_text="Humility (+) ↔ Ambition (-) axis contribution.",
+    )
+    change_delta = models.IntegerField(
+        default=0,
+        validators=principle_validators,
+        help_text="Progress (+) ↔ Tradition (-) axis contribution.",
+    )
+    allegiance_delta = models.IntegerField(
+        default=0,
+        validators=principle_validators,
+        help_text="Independence (+) ↔ Loyalty (-) axis contribution.",
+    )
+    power_delta = models.IntegerField(
+        default=0,
+        validators=principle_validators,
+        help_text="Equality (+) ↔ Hierarchy (-) axis contribution.",
+    )
+
+    objects = NaturalKeyManager()
+
+    class NaturalKeyConfig:
+        fields = ["name"]
+
+    class Meta:
+        ordering = ["name"]
+
+    def __str__(self) -> str:
+        return self.name
+
+
+class Proclamation(SharedMemoryModel):
+    """A public statement appealing to a philosophy (#2842).
+
+    The stance vector + the stored roll outcome are the ENTIRE mechanical
+    content; ``prose`` is shown verbatim on the feed and never parsed.
+    Aligned societies warm (scaled by the roll — a failed roll wins nobody);
+    opposed ones are provoked (mitigated by success, full on failure).
+    """
+
+    issuer = models.ForeignKey(
+        "scenes.Persona",
+        on_delete=models.CASCADE,
+        related_name="proclamations",
+    )
+    org = models.ForeignKey(
+        "societies.Organization",
+        null=True,
+        blank=True,
+        on_delete=models.CASCADE,
+        related_name="proclamations",
+        help_text="Set = issued on the organization's behalf (leadership only).",
+    )
+    stance = models.ForeignKey(
+        StanceArchetype,
+        on_delete=models.PROTECT,
+        related_name="proclamations",
+    )
+    prose = models.TextField(
+        blank=True,
+        default="",
+        help_text="Display-only RP text. Mechanics NEVER read this (ADR-0178).",
+    )
+    check_outcome = models.ForeignKey(
+        "traits.CheckOutcome",
+        null=True,
+        blank=True,
+        on_delete=models.PROTECT,
+        related_name="+",
+        help_text="The stored oratory roll tier that scaled the reception.",
+    )
+    issued_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["-issued_at"]
+
+    def __str__(self) -> str:
+        return f"{self.issuer.name} proclaims {self.stance.name}"
+
+
 # ---------------------------------------------------------------------------
 # #1891 — GANG_TURF project kind (TIERED_PERIOD, first of its kind)
 # ---------------------------------------------------------------------------

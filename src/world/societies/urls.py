@@ -10,6 +10,7 @@ from world.societies.views import (
     OrganizationRankViewSet,
     OrganizationReputationViewSet,
     OrganizationViewSet,
+    ProclamationViewSet,
 )
 
 app_name = "societies"
@@ -17,6 +18,7 @@ app_name = "societies"
 router = DefaultRouter()
 router.register(r"rankings", RankingDisplayViewSet, basename="ranking-display")
 router.register(r"organizations", OrganizationViewSet, basename="organization")
+router.register(r"proclamations", ProclamationViewSet, basename="proclamation")
 router.register(r"memberships", OrganizationMembershipViewSet, basename="organization-membership")
 router.register(r"ranks", OrganizationRankViewSet, basename="organization-rank")
 router.register(

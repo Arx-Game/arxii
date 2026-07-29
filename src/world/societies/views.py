@@ -140,6 +140,76 @@ class OrganizationViewSet(viewsets.ReadOnlyModelViewSet):
         return Response(PublicFeedItemSerializer(items, many=True).data)
 
 
+class ProclamationViewSet(viewsets.ReadOnlyModelViewSet):
+    """Public record of proclamations (#2842) + the issue door.
+
+    List/retrieve are public to authenticated players (proclamations are
+    public speech by design). ``POST /proclaim/`` issues one as the
+    requester's active persona — a plain stance, an org voice, or a domain
+    edict enactment (domain + edict_kind).
+    """
+
+    permission_classes = [IsAuthenticated]
+    pagination_class = SocietiesPagination
+    filter_backends = [DjangoFilterBackend]
+    filterset_fields = ("org", "stance", "issuer")
+
+    def get_queryset(self):
+        from world.societies.models import Proclamation  # noqa: PLC0415
+
+        return Proclamation.objects.select_related(
+            "issuer", "stance", "org", "check_outcome"
+        ).order_by("-issued_at")
+
+    def get_serializer_class(self):
+        from world.societies.serializers import ProclamationSerializer  # noqa: PLC0415
+
+        return ProclamationSerializer
+
+    @action(detail=False, methods=[HTTPMethod.POST], url_path="proclaim")
+    def proclaim(self, request):
+        """Issue a proclamation (optionally enacting a domain edict)."""
+        from world.scenes.interaction_permissions import get_account_personas  # noqa: PLC0415
+        from world.scenes.models import Persona  # noqa: PLC0415
+        from world.societies.houses.models import Domain, EdictKind  # noqa: PLC0415
+        from world.societies.models import Organization, StanceArchetype  # noqa: PLC0415
+        from world.societies.proclamations import (  # noqa: PLC0415
+            ProclamationError,
+            enact_edict,
+            issue_proclamation,
+        )
+        from world.societies.serializers import (  # noqa: PLC0415
+            ProclamationCreateSerializer,
+            ProclamationSerializer,
+        )
+
+        payload = ProclamationCreateSerializer(data=request.data)
+        payload.is_valid(raise_exception=True)
+        data = payload.validated_data
+        persona = Persona.objects.filter(pk__in=get_account_personas(request)).first()
+        if persona is None:
+            return Response({"detail": "No active persona."}, status=400)
+        try:
+            if data.get("domain"):
+                domain = Domain.objects.filter(pk=data["domain"]).first()
+                kind = EdictKind.objects.filter(pk=data["edict_kind"]).first()
+                if domain is None or kind is None:
+                    return Response({"detail": "No such domain or edict."}, status=400)
+                edict = enact_edict(domain, kind, persona, prose=data.get("prose", ""))
+                row = edict.proclamation
+            else:
+                stance = StanceArchetype.objects.filter(pk=data["stance"]).first()
+                if stance is None:
+                    return Response({"detail": "No such stance."}, status=400)
+                org = (
+                    Organization.objects.filter(pk=data["org"]).first() if data.get("org") else None
+                )
+                row = issue_proclamation(persona, stance, prose=data.get("prose", ""), org=org)
+        except ProclamationError as exc:
+            return Response({"detail": exc.user_message}, status=400)
+        return Response(ProclamationSerializer(row).data, status=201)
+
+
 class OrganizationMembershipViewSet(viewsets.ReadOnlyModelViewSet):
     """List/retrieve memberships for personas the requester currently plays.
 

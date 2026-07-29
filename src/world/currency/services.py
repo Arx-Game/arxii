@@ -460,6 +460,13 @@ def accrue_income_stream(stream: OrgIncomeStream) -> int:
     holding = stream.domain_holding_or_none
     if holding is not None:
         gross = int(gross * holding.domain.income_multiplier)
+        # A standing edict adjusts the take (#2842) — Squeeze the Taxes
+        # collects more this cycle; Bread and Circuses less.
+        from world.societies.proclamations import active_edict  # noqa: PLC0415
+
+        edict = active_edict(holding.domain_id)
+        if edict is not None and edict.kind.income_gross_pct:
+            gross = int(gross * (100 + edict.kind.income_gross_pct) / 100)
     # An open, surfaced org-target threat skims every stream the org runs
     # (#2837) — the org-leg symmetry of the domain crisis income malus.
     from world.societies.houses.crisis_services import (  # noqa: PLC0415

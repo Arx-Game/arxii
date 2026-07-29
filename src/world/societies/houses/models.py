@@ -383,6 +383,90 @@ class DomainImprovementDetails(SharedMemoryModel):
         return f"Improvement of {self.domain_id} (project {self.project_id})"
 
 
+class EdictKind(SharedMemoryModel):
+    """Authored standing-policy catalog for domains (#2842) — PLACEHOLDER rows.
+
+    Each kind carries its inherent stance (enacting it IS proclaiming that
+    philosophy — the social bill) plus the mechanical payload (the bite).
+    Military knobs wait on positional troop state.
+    """
+
+    name = models.CharField(max_length=100, unique=True)
+    description = models.TextField(blank=True)
+    stance = models.ForeignKey(
+        "societies.StanceArchetype",
+        on_delete=models.PROTECT,
+        related_name="edict_kinds",
+        help_text="The philosophy this policy embodies; proclaimed at enactment.",
+    )
+    income_gross_pct = models.SmallIntegerField(
+        default=0,
+        help_text="Percent adjustment to the domain's stream gross at weekly accrual. PLACEHOLDER.",
+    )
+    weekly_unrest_delta = models.SmallIntegerField(
+        default=0,
+        help_text="Unrest applied each weekly tick while active (clamped 0-100). PLACEHOLDER.",
+    )
+    weekly_upkeep_coppers = models.PositiveIntegerField(
+        default=0,
+        help_text="Treasury drain per weekly tick while active (skipped if broke). PLACEHOLDER.",
+    )
+
+    class Meta:
+        ordering = ["name"]
+
+    def __str__(self) -> str:
+        return self.name
+
+
+class DomainEdict(SharedMemoryModel):
+    """A standing policy enacted on a domain (#2842). One active per domain.
+
+    Enactment issues the kind's stance as a Proclamation (the social bill);
+    this row is the mechanical residue the weekly tick and stream accrual
+    read — and what a rival's domain report can see.
+    """
+
+    domain = models.ForeignKey(
+        Domain,
+        on_delete=models.CASCADE,
+        related_name="edicts",
+    )
+    kind = models.ForeignKey(
+        EdictKind,
+        on_delete=models.PROTECT,
+        related_name="enactments",
+    )
+    proclamation = models.ForeignKey(
+        "societies.Proclamation",
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="edicts",
+        help_text="The proclaiming act that enacted this policy.",
+    )
+    enacted_by = models.ForeignKey(
+        "scenes.Persona",
+        on_delete=models.CASCADE,
+        related_name="edicts_enacted",
+    )
+    enacted_at = models.DateTimeField(auto_now_add=True)
+    revoked_at = models.DateTimeField(null=True, blank=True)
+
+    class Meta:
+        ordering = ["-enacted_at"]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["domain"],
+                condition=models.Q(revoked_at__isnull=True),
+                name="one_active_edict_per_domain",
+            ),
+        ]
+
+    def __str__(self) -> str:
+        return f"{self.kind.name} in {self.domain.name}"
+
+
 class DomainCrisisType(SharedMemoryModel):
     """Authored crisis catalog row (#2238) — resolution is per-type, not global.
 

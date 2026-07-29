@@ -215,6 +215,12 @@ def _seed_crisis_types() -> None:
     ensure_crisis_catalog()
 
 
+def _seed_proclamations() -> None:
+    from world.seeds.proclamations import ensure_edict_kinds  # noqa: PLC0415
+
+    ensure_edict_kinds()
+
+
 def _seed_justice() -> None:
     from world.seeds.justice import seed_crime_kinds  # noqa: PLC0415
 
@@ -475,6 +481,8 @@ CLUSTER_SEEDERS: dict[str, Callable[[], None]] = {
     # Crisis catalog (#2837): threat/opportunity vocabulary for the weekly
     # generation tick. After "missions" so MISSION options can bind a template.
     "crisis_types": _seed_crisis_types,
+    # Proclamations (#2842): stance vocabulary + standing-policy catalog.
+    "proclamations": _seed_proclamations,
     # Justice: the starter CrimeKind vocabulary (#1765). Laws are world data, not seeds.
     "justice": _seed_justice,
     # Governance: Scholarship/Economics + Organization/Stewardship skills and the
@@ -643,7 +651,10 @@ def seeded_models_by_cluster() -> dict[str, list[type[Model]]]:
         DomainCrisisType,
         Title,
     )
-    from world.societies.models import PropagandaCampaignTier  # noqa: PLC0415
+    from world.societies.models import (  # noqa: PLC0415
+        PropagandaCampaignTier,
+        StanceArchetype,
+    )
     from world.species.models import Species  # noqa: PLC0415
     from world.tasking.models import TaskTemplate  # noqa: PLC0415
     from world.traits.models import ResultChart, Trait  # noqa: PLC0415
@@ -724,6 +735,8 @@ def seeded_models_by_cluster() -> dict[str, list[type[Model]]]:
         "spy_tasks": [TaskTemplate],
         # Crisis catalog (#2837): the generated threat/opportunity vocabulary.
         "crisis_types": [DomainCrisisType],
+        # Proclamations (#2842): the stance vocabulary.
+        "proclamations": [StanceArchetype],
         # Justice: the starter CrimeKind vocabulary (#1765); AreaLaw rows are world data.
         "justice": [CrimeKind],
         # Governance seeds skills/specs + CheckTypes (shared spine rows counted under

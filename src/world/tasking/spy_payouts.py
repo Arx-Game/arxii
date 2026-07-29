@@ -93,6 +93,11 @@ def _domain_report(task: OrgTask) -> list[str]:
         lines.append(f"Holdings observed: {holdings}.")
     if crises:
         lines.append(f"The domain nurses {crises} open crisis(es).")
+    from world.societies.proclamations import active_edict  # noqa: PLC0415
+
+    edict = active_edict(domain.pk)
+    if edict is not None:
+        lines.append(f"Standing policy: {edict.kind.name}.")
     return lines
 
 

@@ -13,4 +13,5 @@ class FeedItemKind(models.TextChoices):
     # its choices — enum membership makes the serializer honest.
     PARDON = "pardon", "Pardon"
     CRISIS = "crisis", "Crisis"
+    PROCLAMATION = "proclamation", "Proclamation"
     BIRTHDAY = "birthday", "Birthday"

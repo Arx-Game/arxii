@@ -29286,6 +29286,95 @@ paths:
               schema:
                 $ref: '#/components/schemas/PaginatedPublicFeedItemList'
           description: ''
+  /api/societies/proclamations/:
+    get:
+      operationId: societies_proclamations_list
+      description: |-
+        Public record of proclamations (#2842) + the issue door.
+
+        List/retrieve are public to authenticated players (proclamations are
+        public speech by design). ``POST /proclaim/`` issues one as the
+        requester's active persona — a plain stance, an org voice, or a domain
+        edict enactment (domain + edict_kind).
+      parameters:
+      - in: query
+        name: issuer
+        schema:
+          type: integer
+      - in: query
+        name: org
+        schema:
+          type: integer
+      - name: page
+        required: false
+        in: query
+        description: A page number within the paginated result set.
+        schema:
+          type: integer
+      - in: query
+        name: stance
+        schema:
+          type: integer
+      tags:
+      - societies
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaginatedProclamationList'
+          description: ''
+  /api/societies/proclamations/{id}/:
+    get:
+      operationId: societies_proclamations_retrieve
+      description: |-
+        Public record of proclamations (#2842) + the issue door.
+
+        List/retrieve are public to authenticated players (proclamations are
+        public speech by design). ``POST /proclaim/`` issues one as the
+        requester's active persona — a plain stance, an org voice, or a domain
+        edict enactment (domain + edict_kind).
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: A unique integer value identifying this proclamation.
+        required: true
+      tags:
+      - societies
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Proclamation'
+          description: ''
+  /api/societies/proclamations/proclaim/:
+    post:
+      operationId: societies_proclamations_proclaim_create
+      description: Issue a proclamation (optionally enacting a domain edict).
+      tags:
+      - societies
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ProclamationRequest'
+        required: true
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Proclamation'
+          description: ''
   /api/societies/rankings/{id}/:
     get:
       operationId: societies_rankings_retrieve
@@ -54308,6 +54397,29 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/PortalDestination'
+    PaginatedProclamationList:
+      type: object
+      required:
+      - count
+      - results
+      properties:
+        count:
+          type: integer
+          example: 123
+        next:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=4
+        previous:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=2
+        results:
+          type: array
+          items:
+            $ref: '#/components/schemas/Proclamation'
     PaginatedProgressionUnlockItemList:
       type: object
       required:
@@ -60498,6 +60610,68 @@ components:
         * `public` - Public
         * `private` - Private
         * `ephemeral` - Ephemeral
+    Proclamation:
+      type: object
+      description: Read surface for the public record (#2842). Prose is display-only.
+      properties:
+        id:
+          type: integer
+          readOnly: true
+        issuer:
+          type: integer
+        issuer_name:
+          type: string
+          readOnly: true
+        org:
+          type: integer
+          nullable: true
+          description: Set = issued on the organization's behalf (leadership only).
+        org_name:
+          type: string
+          readOnly: true
+          default: ''
+        stance:
+          type: integer
+        stance_name:
+          type: string
+          readOnly: true
+        prose:
+          type: string
+          description: Display-only RP text. Mechanics NEVER read this (ADR-0178).
+        outcome_name:
+          type: string
+          readOnly: true
+        issued_at:
+          type: string
+          format: date-time
+          readOnly: true
+      required:
+      - id
+      - issued_at
+      - issuer
+      - issuer_name
+      - org_name
+      - outcome_name
+      - stance
+      - stance_name
+    ProclamationRequest:
+      type: object
+      description: Read surface for the public record (#2842). Prose is display-only.
+      properties:
+        issuer:
+          type: integer
+        org:
+          type: integer
+          nullable: true
+          description: Set = issued on the organization's behalf (leadership only).
+        stance:
+          type: integer
+        prose:
+          type: string
+          description: Display-only RP text. Mechanics NEVER read this (ADR-0178).
+      required:
+      - issuer
+      - stance
     ProfileTextRequestDetails:
       type: object
       description: Read payload for PROFILE_TEXT requests (#2631).
@@ -60819,6 +60993,7 @@ components:
       - scandal
       - pardon
       - crisis
+      - proclamation
       - birthday
       type: string
       description: |-
@@ -60826,6 +61001,7 @@ components:
         * `scandal` - Scandal
         * `pardon` - Pardon
         * `crisis` - Crisis
+        * `proclamation` - Proclamation
         * `birthday` - Birthday
     PullActionContextRequest:
       type: object

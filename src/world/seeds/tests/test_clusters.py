@@ -32,6 +32,7 @@ class TestClusterRegistry(TestCase):
                 "npc_services",
                 "spy_tasks",
                 "crisis_types",
+                "proclamations",
                 "justice",
                 "governance",
                 "scandal",
