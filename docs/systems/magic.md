@@ -936,7 +936,7 @@ effects before committing.
 | Model | Purpose | Key Fields |
 |-------|---------|------------|
 | `CombatPull` | Per-round commit envelope for a thread pull | `participant` FK, `encounter` FK, `round_number`, `resonance` FK, `tier` (1/2/3), `threads` M2M, `resonance_spent`, `anima_spent`, `committed_at`. Unique per (participant, round_number); indexed on (encounter, round_number) |
-| `CombatPullResolvedEffect` | Frozen snapshot of one resolved effect at pull commit | `pull` FK, `kind`, `authored_value`, `level_multiplier`, `scaled_value`, `vital_target`, `source_thread` FK, `source_thread_level`, `source_tier`, `granted_capability` FK, `narrative_snippet`. CheckConstraints mirror ThreadPullEffect payload rules |
+| `CombatPullResolvedEffect` | Frozen snapshot of one resolved effect at pull commit | `pull` FK, `kind`, `authored_value`, `level_multiplier`, `scaled_value`, `vital_target`, `source_thread` FK, `source_thread_level`, `source_tier`, `granted_capability` FK, `capability_grant_value` (frozen curved magnitude for CAPABILITY_GRANT, #2730/ADR-0173), `narrative_snippet`. CheckConstraints mirror ThreadPullEffect payload rules |
 
 A CombatPull is considered *active* while `round_number == encounter.round_number`
 (canonical liveness check). `expire_pulls_for_round` (combat services) deletes
@@ -1979,9 +1979,10 @@ tables (`PathGiftGrant`, `TraditionGiftGrant`, `SpeciesGiftGrant`) key on their 
 owning technique plus their own unique-constraint fields, except `TechniqueOutcomeModifier`,
 a global outcome-tier table with no technique FK — it's a `OneToOneField` to
 `traits.CheckOutcome` and keys on `outcome` alone; `PortalAnchorKind` keys on `name`
-(`achievements.Achievement` also gained a name natural key this branch but is not itself
-in `CONTENT_MODELS`). `load_entries` (`core_management/content_fixtures.py`) upserts by
-natural key. There is no in-repo seed catalog to fall back on: the lore repo is the
+(`achievements.Achievement` keys on `slug` and is now in `CONTENT_MODELS`
+alongside `AchievementRequirement`/`AchievementReward`/`RewardDefinition`/
+`ConditionStatRule` — #2832). `load_entries` (`core_management/content_fixtures.py`)
+upserts by natural key. There is no in-repo seed catalog to fall back on: the lore repo is the
 single source (`seed_starter_gift_catalog()` was retired by #2474 — see "CG Starter
 Gift/Technique Catalog" and "Content-vs-config boundary in the dev seed" above for the
 seed-vs-content sequencing, which seeds the "Technique Cast" `ActionTemplate` config

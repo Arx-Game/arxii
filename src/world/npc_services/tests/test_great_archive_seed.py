@@ -8,7 +8,7 @@ itself (blocked pre-achievement, open post) driven through the real
 
 from __future__ import annotations
 
-from django.test import TestCase
+from django.test import TestCase, override_settings
 
 from world.achievements.factories import CharacterAchievementFactory
 from world.achievements.models import Achievement, CharacterAchievement
@@ -43,6 +43,7 @@ def _build_self_study_catalog():
     return MagicContent.create_starter_gift_catalog(specs)
 
 
+@override_settings(SEED_SAMPLE_CONTENT=True)
 class EnsureGreatArchiveLibrarianRoleTests(TestCase):
     @classmethod
     def setUpTestData(cls) -> None:
@@ -97,6 +98,7 @@ class EnsureGreatArchiveLibrarianRoleTests(TestCase):
         self.assertEqual(offers_first_pass, offers_second_pass)
 
 
+@override_settings(SEED_SAMPLE_CONTENT=True)
 class GreatArchiveSelfStudyGateTests(TestCase):
     """Blocked pre-achievement, open post — through the real offer-visibility gate."""
 

@@ -233,6 +233,7 @@ class CombatPullResolvedEffectInline(admin.TabularInline):
         "source_thread_level",
         "source_tier",
         "granted_capability",
+        "capability_grant_value",
         "narrative_snippet",
     ]
     raw_id_fields = ["source_thread", "granted_capability"]
@@ -271,6 +272,7 @@ class CombatPullResolvedEffectAdmin(admin.ModelAdmin):
         "source_thread",
         "source_tier",
         "granted_capability",
+        "capability_grant_value",
     ]
     list_filter = ["kind", "vital_target", "source_tier"]
     search_fields = ["narrative_snippet"]

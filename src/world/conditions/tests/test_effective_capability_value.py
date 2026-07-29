@@ -819,3 +819,45 @@ class CapabilityOracleQueryCountTests(TestCase):
         second_count = len(second_ctx.captured_queries)
 
         self.assertEqual(first_count, second_count)
+
+
+class ActivePullCapabilityGrantTests(TestCase):
+    """Tests that paid combat pulls fold into get_effective_capability_value (#2730)."""
+
+    def test_pull_value_adds_to_effective_capability(self) -> None:
+        """A committed combat pull granting a capability raises the oracle value."""
+        from world.combat.factories import (
+            CombatEncounterFactory,
+            CombatParticipantFactory,
+            CombatPullFactory,
+            CombatPullResolvedEffectFactory,
+        )
+
+        sheet = CharacterSheetFactory()
+        cap = CapabilityTypeFactory(innate_baseline=1)
+        thread = ThreadFactory(owner=sheet)
+        encounter = CombatEncounterFactory(round_number=1)
+        participant = CombatParticipantFactory(encounter=encounter, character_sheet=sheet)
+        pull = CombatPullFactory(participant=participant, round_number=1)
+        CombatPullResolvedEffectFactory(
+            pull=pull,
+            kind=EffectKind.CAPABILITY_GRANT,
+            granted_capability=cap,
+            capability_grant_value=8,
+            scaled_value=None,
+            authored_value=None,
+            level_multiplier=1,
+            source_thread=thread,
+        )
+
+        result = get_effective_capability_value(sheet, cap)
+        # baseline (1) + pull_value (8) = 9
+        self.assertEqual(result, 9)
+
+    def test_no_pull_returns_baseline(self) -> None:
+        """Without a pull, the oracle returns the baseline (no pull term)."""
+        sheet = CharacterSheetFactory()
+        cap = CapabilityTypeFactory(innate_baseline=1)
+
+        result = get_effective_capability_value(sheet, cap)
+        self.assertEqual(result, 1)

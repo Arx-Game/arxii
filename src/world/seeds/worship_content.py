@@ -141,14 +141,20 @@ def ensure_ceremony_check_type(skill) -> object | None:
 
 
 def ensure_favorite_achievements() -> None:
-    """Seed the three God's Favorite achievement rows (Decision 6, #2355)."""
+    """Seed the three God's Favorite achievement rows (Decision 6, #2355).
+
+    Content-repo-owned (#2832) — looked up via ``authored_or_sample`` rather
+    than invented. Skips silently (with a warning) when the rows are not
+    authored and ``SEED_SAMPLE_CONTENT`` is off.
+    """
     from world.achievements.models import Achievement  # noqa: PLC0415
+    from world.seeds.sample_content import authored_or_sample  # noqa: PLC0415
 
     for name in (GODS_FAVORITE_PRINCESS, GODS_FAVORITE_PRINCE, GODS_FAVORITE_CHOSEN):
-        Achievement.objects.get_or_create(
-            name=name,
-            defaults={
-                "slug": slugify(name),
+        authored_or_sample(
+            Achievement,
+            {
+                "name": name,
                 "description": (
                     "PLACEHOLDER — stand highest in a worshipped being's devotion. "
                     "The text never names the being."
@@ -156,6 +162,7 @@ def ensure_favorite_achievements() -> None:
                 "hidden": False,
                 "is_active": True,
             },
+            slug=slugify(name),
         )
 
 

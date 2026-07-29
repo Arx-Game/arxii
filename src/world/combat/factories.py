@@ -329,6 +329,7 @@ class CombatPullResolvedEffectFactory(factory_django.DjangoModelFactory):
     source_thread_level = 2
     source_tier = 1
     granted_capability = None
+    capability_grant_value = None
     narrative_snippet = ""
 
 

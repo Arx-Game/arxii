@@ -1616,6 +1616,25 @@ def _passive_capability_grants(character_sheet: "CharacterSheet") -> dict[int, i
     return handler.passive_capability_grants()
 
 
+def _active_pull_capability_grants(character_sheet: "CharacterSheet") -> dict[int, int]:
+    """Paid-pull CAPABILITY_GRANT values from active CombatPull rows (#2730).
+
+    Thin wrapper over ``CharacterCombatPullHandler.active_pull_capability_grants``,
+    mirroring ``_passive_capability_grants``'s pattern (try the character's
+    memoized handler, fall back to a fresh instance on AttributeError). Returns
+    an empty dict when the character has no active combat pulls — the common
+    case outside combat.
+    """
+    character = character_sheet.character
+    try:
+        handler = character.combat_pulls
+    except AttributeError:
+        from world.combat.handlers import CharacterCombatPullHandler  # noqa: PLC0415
+
+        handler = CharacterCombatPullHandler(character)
+    return handler.active_pull_capability_grants()
+
+
 def _inert_technique_capability_totals(
     grants: list["TechniqueCapabilityGrant"],
 ) -> dict[int, int]:
@@ -2129,7 +2148,10 @@ def get_effective_capability_value(
     technique_value = _technique_capability_values(character_sheet, action_ctx=action_ctx).get(
         capability.pk, 0
     )
-    return max(0, baseline + modifier_total + condition_total + grant_floor + technique_value)
+    pull_value = _active_pull_capability_grants(character_sheet).get(capability.pk, 0)
+    return max(
+        0, baseline + modifier_total + condition_total + grant_floor + technique_value + pull_value
+    )
 
 
 def get_all_capability_values(character_sheet: "CharacterSheet") -> dict[int, int]:

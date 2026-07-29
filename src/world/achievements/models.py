@@ -152,7 +152,7 @@ class Achievement(NaturalKeyMixin, SharedMemoryModel):
     objects = NaturalKeyManager()
 
     class NaturalKeyConfig:
-        fields = ["name"]
+        fields = ["slug"]
 
     class Meta:
         ordering = ["name"]
@@ -194,7 +194,7 @@ class DiscoverableContent(models.Model):
         abstract = True
 
 
-class AchievementRequirement(SharedMemoryModel):
+class AchievementRequirement(NaturalKeyMixin, SharedMemoryModel):
     """
     A stat threshold that must be met for an achievement.
 
@@ -229,8 +229,20 @@ class AchievementRequirement(SharedMemoryModel):
         help_text="Human-readable description of this requirement",
     )
 
+    objects = NaturalKeyManager()
+
+    class NaturalKeyConfig:
+        fields = ["achievement", "stat", "threshold", "comparison"]
+        dependencies = ["achievements.Achievement", "achievements.StatDefinition"]
+
     class Meta:
         ordering = ["achievement", "id"]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["achievement", "stat", "threshold", "comparison"],
+                name="unique_achievement_requirement",
+            ),
+        ]
 
     def __str__(self) -> str:
         return (
@@ -320,7 +332,7 @@ class CharacterAchievement(SharedMemoryModel):
         return f"{self.character_sheet} - {self.achievement.name}"
 
 
-class RewardDefinition(SharedMemoryModel):
+class RewardDefinition(NaturalKeyMixin, SharedMemoryModel):
     """
     Defines a reward that can be granted by achievements.
 
@@ -370,6 +382,11 @@ class RewardDefinition(SharedMemoryModel):
         ),
     )
 
+    objects = NaturalKeyManager()
+
+    class NaturalKeyConfig:
+        fields = ["key"]
+
     class Meta:
         ordering = ["reward_type", "key"]
 
@@ -377,7 +394,7 @@ class RewardDefinition(SharedMemoryModel):
         return f"{self.name} ({self.key})"
 
 
-class AchievementReward(SharedMemoryModel):
+class AchievementReward(NaturalKeyMixin, SharedMemoryModel):
     """
     A reward granted when an achievement is earned.
 
@@ -402,11 +419,25 @@ class AchievementReward(SharedMemoryModel):
         help_text="Additional value data for the reward (e.g., bonus amount)",
     )
 
+    objects = NaturalKeyManager()
+
+    class NaturalKeyConfig:
+        fields = ["achievement", "reward"]
+        dependencies = ["achievements.Achievement", "achievements.RewardDefinition"]
+
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(
+                fields=["achievement", "reward"],
+                name="unique_achievement_reward",
+            ),
+        ]
+
     def __str__(self) -> str:
         return f"{self.achievement.name}: {self.reward.name}"
 
 
-class ConditionStatRule(SharedMemoryModel):
+class ConditionStatRule(NaturalKeyMixin, SharedMemoryModel):
     """Rule mapping a ConditionTemplate event to a StatDefinition increment.
 
     When the named event occurs to an instance of `condition` on a character,
@@ -434,6 +465,12 @@ class ConditionStatRule(SharedMemoryModel):
         choices=ConditionEventType.choices,
     )
     increment_amount = models.PositiveIntegerField(default=1)
+
+    objects = NaturalKeyManager()
+
+    class NaturalKeyConfig:
+        fields = ["stat", "condition", "event_type"]
+        dependencies = ["achievements.StatDefinition", "conditions.ConditionTemplate"]
 
     class Meta:
         constraints = [

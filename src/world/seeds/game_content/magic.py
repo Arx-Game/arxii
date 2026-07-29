@@ -1189,6 +1189,7 @@ _HALLOWED_ACHIEVEMENT_BRIDGE_SPECS: list[dict[str, object]] = [
         "stat_key": "conditions.tempered_against_light.gained",
         "stat_name": "Tempered Against Light Gained",
         "achievement_name": "Hallowed-Hardened",
+        "achievement_slug": "hallowed-hardened",
         "achievement_description": (
             "Walked into hallowed ground unscathed. The wound your blood "
             "remembers has hardened to a callus."
@@ -1200,6 +1201,7 @@ _HALLOWED_ACHIEVEMENT_BRIDGE_SPECS: list[dict[str, object]] = [
         "stat_key": "conditions.singed.gained",
         "stat_name": "Singed Gained",
         "achievement_name": "Touched by Light",
+        "achievement_slug": "touched-by-light",
         "achievement_description": "Light glanced your skin. You carry a faint mark.",
         "notification_level": "personal",
     },
@@ -1208,6 +1210,7 @@ _HALLOWED_ACHIEVEMENT_BRIDGE_SPECS: list[dict[str, object]] = [
         "stat_key": "conditions.hallowed_burn.gained",
         "stat_name": "Hallowed Burn Gained",
         "achievement_name": "Cast Out by the Light",
+        "achievement_slug": "cast-out-by-the-light",
         "achievement_description": (
             "Broken against the threshold. Sanctified ground answered the spell with fire."
         ),
@@ -1238,8 +1241,6 @@ def _seed_hallowed_achievement_bridge() -> None:
     spec whose stat isn't authored/sampled skips its rule/achievement too
     (``ConditionStatRule.stat`` is a required FK).
     """
-    from django.utils.text import slugify  # noqa: PLC0415
-
     from world.achievements.constants import (  # noqa: PLC0415
         ComparisonType,
         ConditionEventType,
@@ -1269,26 +1270,30 @@ def _seed_hallowed_achievement_bridge() -> None:
         )
         if stat is None:
             continue
-        ConditionStatRule.objects.get_or_create(
+        authored_or_sample(
+            ConditionStatRule,
+            {"increment_amount": 1},
             stat=stat,
             condition=condition,
             event_type=ConditionEventType.GAINED,
-            defaults={"increment_amount": 1},
         )
         notification_level = spec["notification_level"]
-        achievement, _ = Achievement.objects.get_or_create(
-            name=spec["achievement_name"],
-            defaults={
-                "slug": slugify(spec["achievement_name"]),
+        achievement = authored_or_sample(
+            Achievement,
+            {
+                "name": spec["achievement_name"],
                 "description": spec["achievement_description"],
                 "hidden": True,
                 "notification_level": notification_level,
                 "is_active": True,
             },
+            slug=spec["achievement_slug"],
         )
-        # Key on (achievement, stat, threshold, comparison) to stay idempotent
-        # without requiring a DB-level unique constraint on AchievementRequirement.
-        AchievementRequirement.objects.get_or_create(
+        if achievement is None:
+            continue
+        authored_or_sample(
+            AchievementRequirement,
+            {"description": ""},
             achievement=achievement,
             stat=stat,
             threshold=1,
