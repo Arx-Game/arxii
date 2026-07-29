@@ -322,6 +322,7 @@ class OrgTaskViewSet(
             target_persona_id=(
                 data.get("target_persona").pk if data.get("target_persona") else None
             ),
+            target_crisis_id=(data.get("target_crisis").pk if data.get("target_crisis") else None),
         )
         if not result.success:
             return Response({"detail": result.message}, status=status.HTTP_400_BAD_REQUEST)

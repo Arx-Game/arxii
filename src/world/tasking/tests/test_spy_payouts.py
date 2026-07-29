@@ -325,10 +325,126 @@ class SeedTests(TestCase):
         CheckTypeFactory(name="Stealth")
         CheckOutcomeFactory(name="seed best", success_level=3)
         CheckOutcomeFactory(name="seed worst", success_level=-2)
-        self.assertEqual(ensure_spy_task_templates(), 10)
+        self.assertEqual(ensure_spy_task_templates(), 14)
         self.assertEqual(ensure_spy_task_templates(), 0)
         sabotage = TaskTemplate.objects.get(name="Sabotage the Works")
         self.assertEqual(sabotage.target_kind, TaskTargetKind.ROOM)
         self.assertIsNotNone(sabotage.consequence_pool)
         assay = TaskTemplate.objects.get(name="Assay Their Strength")
         self.assertEqual(assay.target_kind, TaskTargetKind.ORG)
+
+
+class ThreatLoopPayoutTests(SpyPayoutTestBase):
+    """Sweep / counter / inflame / exploit against generated crises (#2837)."""
+
+    def _rival_domain_crisis(self, *, valence=None):
+        from world.areas.factories import AreaFactory
+        from world.societies.houses.constants import (
+            CrisisAudience,
+            CrisisOrigin,
+            CrisisValence,
+        )
+        from world.societies.houses.crisis_services import open_crisis
+        from world.societies.houses.models import DomainCrisisType
+        from world.societies.houses.services import create_domain
+
+        rival = OrganizationFactory()
+        domain = create_domain(area=AreaFactory(), name=f"Rivalvale {rival.pk}", owner_org=rival)
+        ctype = DomainCrisisType.objects.create(
+            name=f"Trouble {rival.pk}",
+            valence=valence or CrisisValence.THREAT,
+            audience=CrisisAudience.DOMAIN,
+        )
+        crisis = open_crisis(domain, origin=CrisisOrigin.AMBIENT, crisis_type=ctype)
+        return rival, domain, crisis
+
+    def test_sweep_reveals_covert_crisis_and_mints_intel(self):
+        from world.societies.houses.models import CrisisIntel
+
+        _rival, domain, crisis = self._rival_domain_crisis()
+        self.assertFalse(crisis.is_surfaced)
+        template = TaskTemplateFactory(
+            duration=timedelta(days=1), target_kind=TaskTargetKind.DOMAIN
+        )
+        TaskOutcomeRouteFactory(template=template, outcome_tier=self.win, reveal_schemes=True)
+        _, fulfillment = self._resolve(template, target_domain=domain)
+        self.assertIn("uncovers", fulfillment.report)
+        self.assertTrue(CrisisIntel.objects.filter(crisis=crisis, org=self.org).exists())
+
+    def test_sweep_own_org_names_hostile_tasks(self):
+        from world.tasking.factories import TaskFulfillmentFactory
+
+        rival = OrganizationFactory(name="The Watching Rival")
+        hostile_template = TaskTemplateFactory(
+            name="Case Our Books",
+            duration=timedelta(days=1),
+            target_kind=TaskTargetKind.ORG,
+        )
+        hostile = OrgTaskFactory(template=hostile_template, org=rival, target_org=self.org)
+        TaskFulfillmentFactory(task=hostile, is_active=True)
+
+        template = TaskTemplateFactory(duration=timedelta(days=1), target_kind=TaskTargetKind.ORG)
+        TaskOutcomeRouteFactory(template=template, outcome_tier=self.win, reveal_schemes=True)
+        _, fulfillment = self._resolve(template, target_org=self.org)
+        self.assertIn("Case Our Books", fulfillment.report)
+        self.assertIn("The Watching Rival", fulfillment.report)
+
+    def test_counter_resolves_trouble(self):
+        from world.societies.houses.constants import CrisisResolution
+
+        _, _, crisis = self._rival_domain_crisis()
+        template = TaskTemplateFactory(
+            duration=timedelta(days=1), target_kind=TaskTargetKind.CRISIS
+        )
+        TaskOutcomeRouteFactory(template=template, outcome_tier=self.win, crisis_severity_delta=-1)
+        self._resolve(template, target_crisis=crisis)
+        crisis.refresh_from_db()
+        self.assertEqual(crisis.resolution, CrisisResolution.TASK_COMPLETED)
+
+    def test_inflame_steps_severity_up(self):
+        from world.societies.houses.constants import DomainCrisisSeverity
+
+        _, _, crisis = self._rival_domain_crisis()
+        template = TaskTemplateFactory(
+            duration=timedelta(days=1), target_kind=TaskTargetKind.CRISIS
+        )
+        TaskOutcomeRouteFactory(template=template, outcome_tier=self.win, crisis_severity_delta=1)
+        self._resolve(template, target_crisis=crisis)
+        crisis.refresh_from_db()
+        self.assertEqual(crisis.severity, DomainCrisisSeverity.CRISIS)
+
+    def test_exploit_pays_the_issuing_org(self):
+        from world.currency.services import get_or_create_treasury
+        from world.societies.houses.constants import CrisisResolution, CrisisValence
+
+        _, _, crisis = self._rival_domain_crisis(valence=CrisisValence.OPPORTUNITY)
+        template = TaskTemplateFactory(
+            duration=timedelta(days=1), target_kind=TaskTargetKind.CRISIS
+        )
+        TaskOutcomeRouteFactory(template=template, outcome_tier=self.win, exploit_crisis=True)
+        before = get_or_create_treasury(self.org).balance
+        self._resolve(template, target_crisis=crisis)
+        crisis.refresh_from_db()
+        self.assertEqual(crisis.resolution, CrisisResolution.EXPLOITED)
+        self.assertGreater(get_or_create_treasury(self.org).balance, before)
+
+    def test_inflaming_pc_led_target_needs_consent(self):
+        from world.seeds.consent import seed_social_consent_categories
+        from world.societies.models import OrganizationRank
+
+        seed_social_consent_categories()
+        rival, _, crisis = self._rival_domain_crisis()
+        leader_entry = RosterEntryFactory()
+        RosterTenureFactory(roster_entry=leader_entry, player_number=1)
+        rank = OrganizationRank.objects.filter(organization=rival, tier=1).first()
+        OrganizationMembershipFactory(
+            organization=rival,
+            persona=leader_entry.character_sheet.primary_persona,
+            rank=rank or 1,
+        )
+        template = TaskTemplateFactory(
+            duration=timedelta(days=1), target_kind=TaskTargetKind.CRISIS
+        )
+        TaskOutcomeRouteFactory(template=template, outcome_tier=self.win, crisis_severity_delta=1)
+        with self.assertRaises(TargetConsentError):
+            create_task(template, self.org, self.handler, target_crisis=crisis)

@@ -9,18 +9,31 @@ an unjudged crisis never worsens, per the AFK-protection ruling).
 
 from __future__ import annotations
 
+from datetime import timedelta
 import random
 from typing import TYPE_CHECKING
 
+from django.db import models
 from django.utils import timezone
 
 from world.societies.houses.constants import (
+    AMBIENT_DOMAIN_OPPORTUNITY_PCT,
+    AMBIENT_DOMAIN_THREAT_PCT,
+    AMBIENT_ORG_OPPORTUNITY_PCT,
+    AMBIENT_ORG_THREAT_PCT,
+    COVERT_WINDOW_DAYS,
+    OPPORTUNITY_BOON_COPPERS,
+    OPPORTUNITY_LIFETIME_DAYS,
+    OPPORTUNITY_PROSPERITY_BOON,
+    CrisisAudience,
     CrisisOrigin,
     CrisisResolution,
     CrisisResolutionKind,
+    CrisisValence,
     DomainCrisisSeverity,
 )
 from world.societies.houses.models import (
+    CrisisIntel,
     Domain,
     DomainCrisis,
     DomainCrisisType,
@@ -41,6 +54,7 @@ _PAY_SEVERITY_MULT: dict[str, int] = {
 _SPAWN_POOLS: dict[str, tuple[str, ...]] = {
     CrisisOrigin.IMPROVEMENT: (DomainCrisisSeverity.TROUBLE, DomainCrisisSeverity.CRISIS),
     CrisisOrigin.UNREST: (DomainCrisisSeverity.TROUBLE, DomainCrisisSeverity.CRISIS),
+    CrisisOrigin.AMBIENT: (DomainCrisisSeverity.TROUBLE, DomainCrisisSeverity.CRISIS),
 }
 
 _SEVERITY_ORDER: tuple[str, ...] = (
@@ -58,10 +72,23 @@ class CrisisServiceError(Exception):
         self.user_message = user_message
 
 
-def pick_crisis_type(origin: str, *, rng: random.Random | None = None) -> DomainCrisisType | None:
+def pick_crisis_type(
+    origin: str,
+    *,
+    audiences: tuple[str, ...] = (CrisisAudience.DOMAIN,),
+    valence: str = CrisisValence.THREAT,
+    rng: random.Random | None = None,
+) -> DomainCrisisType | None:
     """Weighted pick among automated types eligible for this origin's pool."""
     pool = _SPAWN_POOLS.get(origin, ())
-    candidates = list(DomainCrisisType.objects.filter(automated=True, default_severity__in=pool))
+    candidates = list(
+        DomainCrisisType.objects.filter(
+            automated=True,
+            default_severity__in=pool,
+            audience__in=audiences,
+            valence=valence,
+        )
+    )
     if not candidates:
         return None
     rng = rng or random
@@ -69,15 +96,16 @@ def pick_crisis_type(origin: str, *, rng: random.Random | None = None) -> Domain
     return rng.choices(candidates, weights=weights, k=1)[0]
 
 
-def open_crisis(
-    domain: Domain,
+def open_crisis(  # noqa: PLR0913 — one target pair + the existing authoring knobs
+    domain: Domain | None = None,
     *,
+    org=None,
     origin: str,
     crisis_type: DomainCrisisType | None = None,
     description: str = "",
     rng: random.Random | None = None,
 ) -> DomainCrisis | None:
-    """Open a crisis on ``domain``; the single creation seam for all origins.
+    """Open a crisis on ``domain`` OR ``org``; the single creation seam.
 
     Automated origins pick an eligible type when none is given (a typeless
     automated crisis would offer no options — dead content). Auto-mint rule:
@@ -85,18 +113,36 @@ def open_crisis(
     MISSION, has no judgment to make — the mission path goes live at creation
     (``chosen_option`` pre-set; the run itself starts when a member accepts).
     STAFF-origin crises never auto-choose anything.
+
+    One open crisis per (target, valence) — a domain can nurse a threat and an
+    opportunity at once, never two of a kind (#2837). Generated (non-staff)
+    crises stay covert for ``COVERT_WINDOW_DAYS`` before surfacing.
     """
-    if domain.crises.filter(resolved_at__isnull=True).exists():
-        return None
+    if (domain is None) == (org is None):
+        msg = "open_crisis takes exactly one of domain/org"
+        raise CrisisServiceError(msg, user_message="Invalid crisis target.")
     if crisis_type is None and origin != CrisisOrigin.STAFF:
-        crisis_type = pick_crisis_type(origin, rng=rng)
+        audiences = (CrisisAudience.DOMAIN,) if domain is not None else _org_audiences(org)
+        crisis_type = pick_crisis_type(origin, audiences=audiences, rng=rng)
+    valence = crisis_type.valence if crisis_type else CrisisValence.THREAT
+    open_of_kind = DomainCrisis.objects.filter(
+        domain=domain, org=org, resolved_at__isnull=True
+    ).select_related("crisis_type")
+    if any(c.valence == valence for c in open_of_kind):
+        return None
     severity = crisis_type.default_severity if crisis_type else DomainCrisisSeverity.TROUBLE
+    if origin == CrisisOrigin.STAFF:
+        surfaces_at = None
+    else:
+        surfaces_at = timezone.now() + timedelta(days=COVERT_WINDOW_DAYS)
     crisis = DomainCrisis.objects.create(
         domain=domain,
+        org=org,
         severity=severity,
         description=description or (crisis_type.description if crisis_type else ""),
         crisis_type=crisis_type,
         origin=origin,
+        surfaces_at=surfaces_at,
     )
     if origin != CrisisOrigin.STAFF and crisis_type is not None:
         options = list(crisis_type.options.all())
@@ -131,12 +177,52 @@ def crisis_options(crisis: DomainCrisis) -> list[dict]:
     ]
 
 
-def _require_administrator(persona: Persona, domain: Domain) -> None:
+def _org_audiences(org) -> tuple[str, ...]:
+    """Which type audiences an org-target draw includes (#2837)."""
+    from world.currency.constants import IncomeStreamKind  # noqa: PLC0415
+
+    criminal = bool(org.org_type_id is not None and org.org_type.is_covert) or (
+        org.income_streams.filter(active=True, kind=IncomeStreamKind.CRIME_KICKUP).exists()
+    )
+    if criminal:
+        return (CrisisAudience.ORG, CrisisAudience.CRIMINAL_ORG)
+    return (CrisisAudience.ORG,)
+
+
+def _can_lead_org(persona: Persona, org) -> bool:
+    from world.societies.models import OrganizationMembership  # noqa: PLC0415
+
+    return OrganizationMembership.objects.filter(
+        organization=org,
+        persona=persona,
+        left_at__isnull=True,
+        exiled_at__isnull=True,
+        rank__can_manage_ranks=True,
+    ).exists()
+
+
+def can_judge_crisis(persona: Persona, crisis: DomainCrisis) -> bool:
+    """Boolean face of the judgment gate, for viewset persona resolution."""
+    try:
+        _require_administrator(persona, crisis)
+    except CrisisServiceError:
+        return False
+    return True
+
+
+def _require_administrator(persona: Persona, crisis: DomainCrisis) -> None:
     from world.societies.houses.services import can_administer_domain  # noqa: PLC0415
 
-    if not can_administer_domain(persona, domain):
-        msg = f"persona {persona.pk} may not administer domain {domain.pk}"
+    if crisis.domain_id is not None:
+        if can_administer_domain(persona, crisis.domain):
+            return
+        msg = f"persona {persona.pk} may not administer domain {crisis.domain_id}"
         raise CrisisServiceError(msg, user_message="You do not have authority over this domain.")
+    if not _can_lead_org(persona, crisis.org):
+        msg = f"persona {persona.pk} may not lead org {crisis.org_id}"
+        raise CrisisServiceError(
+            msg, user_message="You do not have authority over this organization."
+        )
 
 
 def choose_crisis_option(
@@ -154,7 +240,7 @@ def choose_crisis_option(
     if option.crisis_type_id != crisis.crisis_type_id:
         msg = f"option {option.pk} does not belong to crisis {crisis.pk}'s type"
         raise CrisisServiceError(msg, user_message="That option does not apply here.")
-    _require_administrator(persona, crisis.domain)
+    _require_administrator(persona, crisis)
 
     if option.kind == CrisisResolutionKind.PAY:
         _pay_off(crisis, persona, option)
@@ -162,7 +248,21 @@ def choose_crisis_option(
 
     crisis.chosen_option = option
     crisis.chosen_at = timezone.now()
-    crisis.save(update_fields=["chosen_option", "chosen_at"])
+    update_fields = ["chosen_option", "chosen_at"]
+    if option.kind == CrisisResolutionKind.MISSION:
+        # #2837: the MISSION path actually mints now (was BUILT, NOT WIRED —
+        # `minted_mission` had no production writer, so
+        # `resolve_crisis_for_mission` could never match).
+        from world.missions.services.run import staff_assign_mission  # noqa: PLC0415
+
+        instance = staff_assign_mission(
+            option.mission_template,
+            persona.character_sheet.character,
+            persona=persona,
+        )
+        crisis.minted_mission = instance
+        update_fields.append("minted_mission")
+    crisis.save(update_fields=update_fields)
     return crisis
 
 
@@ -172,7 +272,7 @@ def _pay_off(crisis: DomainCrisis, persona: Persona, option: DomainCrisisTypeOpt
         get_or_create_treasury,
     )
 
-    org = crisis.domain.owner_org
+    org = crisis.target_org
     treasury = get_or_create_treasury(org)
     cost = pay_cost_for(crisis, option)
     if not can_spend_treasury(treasury, persona):
@@ -206,6 +306,18 @@ def crisis_wait_tick(*, rng: random.Random | None = None) -> int:
     """
     rng = rng or random
     processed = 0
+    # Opportunities are windows, not wounds: they close on schedule whether or
+    # not anyone judged them (#2837) — the AFK-protection ruling covers harm,
+    # and an expired windfall harms nobody.
+    cutoff = timezone.now() - timedelta(days=OPPORTUNITY_LIFETIME_DAYS)
+    stale = DomainCrisis.objects.filter(
+        resolved_at__isnull=True,
+        opened_at__lt=cutoff,
+        crisis_type__valence=CrisisValence.OPPORTUNITY,
+    )
+    for opportunity in stale:
+        resolve_crisis(opportunity, resolution=CrisisResolution.EXPIRED)
+        processed += 1
     crises = DomainCrisis.objects.filter(
         resolved_at__isnull=True,
         chosen_option__kind=CrisisResolutionKind.WAIT,
@@ -234,3 +346,109 @@ def resolve_crisis_for_mission(instance) -> DomainCrisis | None:
     if crisis is None:
         return None
     return resolve_crisis(crisis, resolution=CrisisResolution.MISSION_COMPLETED)
+
+
+def crisis_generation_tick(*, rng: random.Random | None = None) -> int:
+    """Weekly ambient spawner (#2837) — the loop's content pump.
+
+    Rolls each domain for a threat and an opportunity, then each eligible
+    org (one with active income streams, or a covert org type — the
+    player-run enterprises worth scheming about). ``open_crisis`` enforces
+    one-open-per-(target, valence), so a busy target just misses the roll.
+    """
+    from world.currency.models import OrgIncomeStream  # noqa: PLC0415
+    from world.societies.models import Organization  # noqa: PLC0415
+
+    rng = rng or random
+    opened = 0
+    for domain in Domain.objects.select_related("owner_org"):
+        if rng.random() * 100 < AMBIENT_DOMAIN_THREAT_PCT:
+            opened += open_crisis(domain, origin=CrisisOrigin.AMBIENT, rng=rng) is not None
+        if rng.random() * 100 < AMBIENT_DOMAIN_OPPORTUNITY_PCT:
+            opened += (
+                _open_generated(domain=domain, valence=CrisisValence.OPPORTUNITY, rng=rng)
+                is not None
+            )
+    stream_org_ids = set(
+        OrgIncomeStream.objects.filter(active=True).values_list("organization_id", flat=True)
+    )
+    orgs = Organization.objects.filter(
+        models.Q(pk__in=stream_org_ids) | models.Q(org_type__is_covert=True)
+    ).distinct()
+    for org in orgs:
+        if rng.random() * 100 < AMBIENT_ORG_THREAT_PCT:
+            opened += _open_generated(org=org, valence=CrisisValence.THREAT, rng=rng) is not None
+        if rng.random() * 100 < AMBIENT_ORG_OPPORTUNITY_PCT:
+            opened += (
+                _open_generated(org=org, valence=CrisisValence.OPPORTUNITY, rng=rng) is not None
+            )
+    return opened
+
+
+def _open_generated(
+    *,
+    domain: Domain | None = None,
+    org=None,
+    valence: str,
+    rng: random.Random,
+) -> DomainCrisis | None:
+    """Ambient open with an explicit valence draw (open_crisis defaults to threat)."""
+    audiences = (CrisisAudience.DOMAIN,) if domain is not None else _org_audiences(org)
+    crisis_type = pick_crisis_type(
+        CrisisOrigin.AMBIENT, audiences=audiences, valence=valence, rng=rng
+    )
+    if crisis_type is None:
+        return None
+    return open_crisis(
+        domain, org=org, origin=CrisisOrigin.AMBIENT, crisis_type=crisis_type, rng=rng
+    )
+
+
+def grant_crisis_intel(crisis: DomainCrisis, org, *, source: str) -> tuple[CrisisIntel, bool]:
+    """An org learns of a crisis early (#2837). Idempotent per (crisis, org)."""
+    return CrisisIntel.objects.get_or_create(crisis=crisis, org=org, defaults={"source": source})
+
+
+def org_knows_of(crisis: DomainCrisis, org) -> bool:
+    """Visibility rule: surfaced, yours, or sweated for (#2837)."""
+    if crisis.is_surfaced:
+        return True
+    return CrisisIntel.objects.filter(crisis=crisis, org=org).exists()
+
+
+def apply_crisis_boon(crisis: DomainCrisis, acting_org) -> str:
+    """Pay whoever seized/exploited the event, by magnitude (#2837).
+
+    The domain's own house seizing its own opportunity takes prosperity; any
+    other seizure (rival exploit, org-target event) pays coppers into the
+    acting org's treasury. PLACEHOLDER magnitudes.
+    """
+    from world.currency.services import get_or_create_treasury  # noqa: PLC0415
+
+    if (
+        crisis.domain_id is not None
+        and crisis.valence == CrisisValence.OPPORTUNITY
+        and acting_org.pk == crisis.domain.owner_org_id
+    ):
+        boon = OPPORTUNITY_PROSPERITY_BOON.get(crisis.severity, 0)
+        crisis.domain.prosperity = min(100, crisis.domain.prosperity + boon)
+        crisis.domain.save(update_fields=["prosperity"])
+        return f"Prosperity blooms in {crisis.domain.name}."
+    coppers = OPPORTUNITY_BOON_COPPERS.get(crisis.severity, 0)
+    treasury = get_or_create_treasury(acting_org)
+    treasury.balance += coppers
+    treasury.save(update_fields=["balance"])
+    return f"The venture pays {coppers} coppers into the coffers."
+
+
+def org_crisis_income_factor(org) -> float:
+    """The worst open, surfaced org-target threat's malus (#2837); 1.0 clean.
+
+    Domain-target crises already bite through ``Domain.income_multiplier`` —
+    this is the org-leg symmetry, applied at weekly stream accrual.
+    """
+    factors = [
+        crisis.income_factor
+        for crisis in DomainCrisis.objects.filter(org=org, resolved_at__isnull=True)
+    ]
+    return min(factors, default=1.0)

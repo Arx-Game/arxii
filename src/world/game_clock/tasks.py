@@ -107,6 +107,7 @@ def weekly_rollover_task() -> None:
         ("weekly economy", _run_weekly_economy),
         ("domain food consumption", _run_domain_food_consumption),
         ("domain crisis wait rolls", _run_crisis_wait_tick),
+        ("crisis generation", _run_crisis_generation_tick),
         ("social engagement kudos grant", _run_social_engagement_grant),
         ("idle table summary", _run_idle_table_summary),
     ]
@@ -136,6 +137,13 @@ def _run_crisis_wait_tick() -> None:
     from world.societies.houses.crisis_services import crisis_wait_tick
 
     crisis_wait_tick()
+
+
+def _run_crisis_generation_tick() -> None:
+    """Weekly ambient threat/opportunity spawner (#2837) — the content pump."""
+    from world.societies.houses.crisis_services import crisis_generation_tick
+
+    crisis_generation_tick()
 
 
 def _run_idle_table_summary() -> None:

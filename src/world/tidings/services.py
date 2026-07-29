@@ -283,12 +283,23 @@ def house_feed_for(organization, *, limit: int = _DEFAULT_LIMIT) -> list[PublicF
 
 
 def _open_crisis_items(organization, *, limit: int) -> list[PublicFeedItem]:
-    """Open crises on the org's domains (#2238) — the household hears its lands groan."""
+    """Open SURFACED crises on the org's domains or the org itself (#2238, #2837).
+
+    A still-covert generated crisis never reaches the public feed — spy
+    sweeps (CrisisIntel) are the only early sight of it.
+    """
+    from django.db.models import Q  # noqa: PLC0415
+    from django.utils import timezone  # noqa: PLC0415
+
     from world.societies.houses.models import DomainCrisis  # noqa: PLC0415
 
     crises = (
-        DomainCrisis.objects.filter(domain__owner_org=organization, resolved_at__isnull=True)
-        .select_related("domain", "crisis_type")
+        DomainCrisis.objects.filter(
+            Q(domain__owner_org=organization) | Q(org=organization),
+            resolved_at__isnull=True,
+        )
+        .filter(Q(surfaces_at__isnull=True) | Q(surfaces_at__lte=timezone.now()))
+        .select_related("domain", "org", "crisis_type")
         .order_by("-opened_at")[:limit]
     )
     return [
@@ -296,9 +307,9 @@ def _open_crisis_items(organization, *, limit: int) -> list[PublicFeedItem]:
             kind=FeedItemKind.CRISIS,
             headline=(
                 f"{crisis.crisis_type.name if crisis.crisis_type else 'Crisis'} "
-                f"in {crisis.domain.name}"
+                f"in {crisis.target_label}"
             ),
-            subject=crisis.domain.name,
+            subject=crisis.target_label,
             occurred_at=crisis.opened_at,
             category=crisis.severity,
         )

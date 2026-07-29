@@ -209,6 +209,12 @@ def _seed_spy_tasks() -> None:
     ensure_spy_task_templates()
 
 
+def _seed_crisis_types() -> None:
+    from world.seeds.crisis_types import ensure_crisis_catalog  # noqa: PLC0415
+
+    ensure_crisis_catalog()
+
+
 def _seed_justice() -> None:
     from world.seeds.justice import seed_crime_kinds  # noqa: PLC0415
 
@@ -466,6 +472,9 @@ CLUSTER_SEEDERS: dict[str, Callable[[], None]] = {
     # the "magic" cluster.
     "npc_services": _seed_npc_services,
     "spy_tasks": _seed_spy_tasks,
+    # Crisis catalog (#2837): threat/opportunity vocabulary for the weekly
+    # generation tick. After "missions" so MISSION options can bind a template.
+    "crisis_types": _seed_crisis_types,
     # Justice: the starter CrimeKind vocabulary (#1765). Laws are world data, not seeds.
     "justice": _seed_justice,
     # Governance: Scholarship/Economics + Organization/Stewardship skills and the
@@ -630,7 +639,10 @@ def seeded_models_by_cluster() -> dict[str, list[type[Model]]]:
     from world.roster.models import GameInvite, Kinsperson  # noqa: PLC0415
     from world.scenes.models import ReactionEmoji  # noqa: PLC0415
     from world.skills.models import Specialization  # noqa: PLC0415
-    from world.societies.houses.models import Title  # noqa: PLC0415
+    from world.societies.houses.models import (  # noqa: PLC0415
+        DomainCrisisType,
+        Title,
+    )
     from world.societies.models import PropagandaCampaignTier  # noqa: PLC0415
     from world.species.models import Species  # noqa: PLC0415
     from world.tasking.models import TaskTemplate  # noqa: PLC0415
@@ -710,6 +722,8 @@ def seeded_models_by_cluster() -> dict[str, list[type[Model]]]:
         "npc_services": [NPCRole],
         # Spy Job Kit (#2833): the sample spy TaskTemplates + Spywork Exposure pool.
         "spy_tasks": [TaskTemplate],
+        # Crisis catalog (#2837): the generated threat/opportunity vocabulary.
+        "crisis_types": [DomainCrisisType],
         # Justice: the starter CrimeKind vocabulary (#1765); AreaLaw rows are world data.
         "justice": [CrimeKind],
         # Governance seeds skills/specs + CheckTypes (shared spine rows counted under

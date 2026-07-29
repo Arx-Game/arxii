@@ -132,7 +132,8 @@ class IssueOrgTaskAction(Action):
 
     Kwargs:
         template_id, org_id, and optional target_room_id / target_org_id /
-        target_domain_id / target_persona_id matching the template's kind.
+        target_domain_id / target_persona_id / target_crisis_id matching the
+        template's kind.
     """
 
     key: str = "issue_org_task"
@@ -152,7 +153,7 @@ class IssueOrgTaskAction(Action):
 
         from evennia_extensions.models import RoomProfile  # noqa: PLC0415
         from world.scenes.models import Persona  # noqa: PLC0415
-        from world.societies.houses.models import Domain  # noqa: PLC0415
+        from world.societies.houses.models import Domain, DomainCrisis  # noqa: PLC0415
         from world.societies.houses.services import is_org_leader  # noqa: PLC0415
         from world.societies.models import Organization  # noqa: PLC0415
         from world.tasking.exceptions import TaskingError  # noqa: PLC0415
@@ -180,6 +181,9 @@ class IssueOrgTaskAction(Action):
                 target_org=Organization.objects.filter(pk=kwargs.get("target_org_id")).first(),
                 target_domain=Domain.objects.filter(pk=kwargs.get("target_domain_id")).first(),
                 target_persona=Persona.objects.filter(pk=kwargs.get("target_persona_id")).first(),
+                target_crisis=DomainCrisis.objects.filter(
+                    pk=kwargs.get("target_crisis_id")
+                ).first(),
             )
         except TaskingError as exc:
             return ActionResult(success=False, message=exc.user_message)

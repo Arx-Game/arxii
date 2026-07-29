@@ -59,6 +59,10 @@ class TaskOutcomeRouteSerializer(serializers.ModelSerializer):
             "domain_unrest_delta",
             "organization_report",
             "military_report",
+            # Threat-loop payouts (#2837).
+            "reveal_schemes",
+            "crisis_severity_delta",
+            "exploit_crisis",
         ]
 
 
@@ -211,6 +215,7 @@ class OrgTaskCreateSerializer(serializers.ModelSerializer):
             "target_org",
             "target_domain",
             "target_persona",
+            "target_crisis",
         ]
 
 

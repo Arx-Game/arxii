@@ -28,7 +28,7 @@ Deliberately NOT here: standing "stay here until recalled" postings — those ar
 - **`OrgTask`** — live instance: `template`, `org`, `issued_by` persona, `status`
   (`TaskStatus`: OPEN→ASSIGNED→RESOLVING→COMPLETED/FAILED/EXPIRED), `deadline`
   (set at assignment), target via `DiscriminatorMixin` (`target_kind` selects
-  exactly one of room/org/domain/persona; NONE ⇒ all null).
+  exactly one of room/org/domain/persona/crisis; NONE ⇒ all null).
 - **`TaskFulfillment`** — who's on it: `npc_asset` XOR `mission_instance` (clean-
   enforced), `handler` persona, stored dispatch check (`handler_check_outcome`,
   `handler_margin`), `resolved_outcome`, `report`, partial-unique one active row
@@ -96,6 +96,14 @@ missing/mismatched target, never an exception:
   own-agent count, parent/wings), `military_report` (ORG — persistent
   `MilitaryUnit` counts + active armies; troop *movements* wait on positional
   military state).
+- **Threat-loop counterplay (#2837, ADR-0177)**: `reveal_schemes` (ORG/DOMAIN —
+  mints `CrisisIntel` for the issuing org on still-covert generated crises;
+  on your own org also names active hostile tasks aimed at you —
+  counter-intelligence), `crisis_severity_delta` (CRISIS target — negative
+  counters a step, resolving below trouble as TASK_COMPLETED; positive
+  inflames), `exploit_crisis` (CRISIS target — resolves EXPLOITED and pays
+  the issuing org the magnitude boon via `apply_crisis_boon`). `OrgTask`
+  gains the `TaskTargetKind.CRISIS` discriminator leg (`target_crisis`).
 
 Consent: `template_is_offensive` classifies routes; offensive jobs refuse at
 ISSUE time (`TargetConsentError`) when the target is a PC — or a PC-led org /
@@ -103,8 +111,11 @@ domain (owner org's `can_manage_ranks` members' tenures) — who hasn't opted
 into the `espionage` category. Defensive templates (quash-only, soothe-only)
 and NPC targets are ungated.
 
-Seeds: `world/seeds/spy_tasks.py` (`spy_tasks` cluster) — ten PLACEHOLDER
-templates + the "Spywork Exposure" risk pool (ASSET_STATUS COMPROMISED).
+Seeds: `world/seeds/spy_tasks.py` (`spy_tasks` cluster) — fourteen
+PLACEHOLDER templates (incl. Sweep for Schemes / Counter the Scheme / Fan the
+Flames / Seize the Opening) + the "Spywork Exposure" risk pool (ASSET_STATUS
+COMPROMISED). The crisis catalog itself is the `crisis_types` cluster
+(`world/seeds/crisis_types.py`).
 
 ## API (`views.py`, `/api/tasking/`)
 

@@ -28665,7 +28665,7 @@ export interface components {
        * @description Resolution moment; set at assignment (now + template.duration).
        */
       deadline?: string | null;
-      target_kind?: components['schemas']['TargetKind219Enum'];
+      target_kind?: components['schemas']['TargetKind7e5Enum'];
       readonly target_label: string;
       /** Format: date-time */
       readonly created_at: string;
@@ -28685,7 +28685,7 @@ export interface components {
        * @description Resolution moment; set at assignment (now + template.duration).
        */
       deadline?: string | null;
-      target_kind?: components['schemas']['TargetKind219Enum'];
+      target_kind?: components['schemas']['TargetKind7e5Enum'];
       /** Format: date-time */
       resolved_at?: string | null;
     };
@@ -33103,6 +33103,12 @@ export interface components {
       organization_report?: boolean;
       /** @description ORG target: assay their strength — the org's military units and active armies. Movements come when positional troop state exists. */
       military_report?: boolean;
+      /** @description ORG/DOMAIN target: sweep for still-covert crises (mints CrisisIntel for the issuing org) and, on your own org, active hostile tasks (#2837). */
+      reveal_schemes?: boolean;
+      /** @description CRISIS target: negative steps the severity down (resolving below trouble); positive inflames it a step (#2837). */
+      crisis_severity_delta?: number;
+      /** @description CRISIS target: resolve the event your way — the issuing org takes the boon (#2837). */
+      exploit_crisis?: boolean;
     };
     /** @description Staff authoring surface for job templates. */
     PatchedTaskTemplateRequest: {
@@ -33123,8 +33129,9 @@ export interface components {
        *     * `org` - Organization
        *     * `domain` - Domain
        *     * `persona` - Persona
+       *     * `crisis` - Crisis
        */
-      target_kind?: components['schemas']['TargetKind219Enum'];
+      target_kind?: components['schemas']['TargetKind7e5Enum'];
       /** @description Predicate tree gating who may issue/fulfill (NPCServiceOffer convention). */
       eligibility_rule?: unknown;
       /** @description Set = PCs may fulfill this as a mission (phase 5). Unset = NPC-only. */
@@ -37652,9 +37659,10 @@ export interface components {
      *     * `org` - Organization
      *     * `domain` - Domain
      *     * `persona` - Persona
+     *     * `crisis` - Crisis
      * @enum {string}
      */
-    TargetKind219Enum: 'none' | 'room' | 'org' | 'domain' | 'persona';
+    TargetKind7e5Enum: 'none' | 'room' | 'org' | 'domain' | 'persona' | 'crisis';
     /** @description Read-only serializer for TargetSpec — entity kind + cardinality + filters. */
     TargetSpec: {
       readonly kind: string;
@@ -37754,6 +37762,12 @@ export interface components {
       organization_report?: boolean;
       /** @description ORG target: assay their strength — the org's military units and active armies. Movements come when positional troop state exists. */
       military_report?: boolean;
+      /** @description ORG/DOMAIN target: sweep for still-covert crises (mints CrisisIntel for the issuing org) and, on your own org, active hostile tasks (#2837). */
+      reveal_schemes?: boolean;
+      /** @description CRISIS target: negative steps the severity down (resolving below trouble); positive inflames it a step (#2837). */
+      crisis_severity_delta?: number;
+      /** @description CRISIS target: resolve the event your way — the issuing org takes the boon (#2837). */
+      exploit_crisis?: boolean;
     };
     /** @description Staff authoring surface for per-tier payout routes. */
     TaskOutcomeRouteRequest: {
@@ -37786,6 +37800,12 @@ export interface components {
       organization_report?: boolean;
       /** @description ORG target: assay their strength — the org's military units and active armies. Movements come when positional troop state exists. */
       military_report?: boolean;
+      /** @description ORG/DOMAIN target: sweep for still-covert crises (mints CrisisIntel for the issuing org) and, on your own org, active hostile tasks (#2837). */
+      reveal_schemes?: boolean;
+      /** @description CRISIS target: negative steps the severity down (resolving below trouble); positive inflames it a step (#2837). */
+      crisis_severity_delta?: number;
+      /** @description CRISIS target: resolve the event your way — the issuing org takes the boon (#2837). */
+      exploit_crisis?: boolean;
     };
     /** @description Staff authoring surface for job templates. */
     TaskTemplate: {
@@ -37807,8 +37827,9 @@ export interface components {
        *     * `org` - Organization
        *     * `domain` - Domain
        *     * `persona` - Persona
+       *     * `crisis` - Crisis
        */
-      target_kind?: components['schemas']['TargetKind219Enum'];
+      target_kind?: components['schemas']['TargetKind7e5Enum'];
       /** @description Predicate tree gating who may issue/fulfill (NPCServiceOffer convention). */
       eligibility_rule?: unknown;
       /** @description Set = PCs may fulfill this as a mission (phase 5). Unset = NPC-only. */
@@ -37836,8 +37857,9 @@ export interface components {
        *     * `org` - Organization
        *     * `domain` - Domain
        *     * `persona` - Persona
+       *     * `crisis` - Crisis
        */
-      target_kind?: components['schemas']['TargetKind219Enum'];
+      target_kind?: components['schemas']['TargetKind7e5Enum'];
       /** @description Predicate tree gating who may issue/fulfill (NPCServiceOffer convention). */
       eligibility_rule?: unknown;
       /** @description Set = PCs may fulfill this as a mission (phase 5). Unset = NPC-only. */
@@ -37862,8 +37884,9 @@ export interface components {
        *     * `org` - Organization
        *     * `domain` - Domain
        *     * `persona` - Persona
+       *     * `crisis` - Crisis
        */
-      target_kind?: components['schemas']['TargetKind219Enum'];
+      target_kind?: components['schemas']['TargetKind7e5Enum'];
     };
     /** @description Read-only template summary embedded in board rows. */
     TaskTemplateSummaryRequest: {
@@ -37880,8 +37903,9 @@ export interface components {
        *     * `org` - Organization
        *     * `domain` - Domain
        *     * `persona` - Persona
+       *     * `crisis` - Crisis
        */
-      target_kind?: components['schemas']['TargetKind219Enum'];
+      target_kind?: components['schemas']['TargetKind7e5Enum'];
     };
     /** @description Serializer for Technique records with intensity and control stats. */
     Technique: {
