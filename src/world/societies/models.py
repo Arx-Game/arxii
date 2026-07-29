@@ -1731,7 +1731,51 @@ def refresh_legend_views() -> None:
 # ---------------------------------------------------------------------------
 
 
-class PhilosophicalArchetype(NaturalKeyMixin, SharedMemoryModel):
+class PrincipleVector(models.Model):
+    """Abstract six-axis principle vector (#2842 dedup).
+
+    The shared shape behind archetype vocabularies: each field mirrors
+    ``Society.{mercy, method, status, change, allegiance, power}`` and feeds
+    the renown dot-product. Typical authored range is -2..+2; ±5 allowed for
+    rare extremes.
+    """
+
+    mercy_delta = models.IntegerField(
+        default=0,
+        validators=principle_validators,
+        help_text="Compassion (+) ↔ Ruthlessness (-) axis contribution.",
+    )
+    method_delta = models.IntegerField(
+        default=0,
+        validators=principle_validators,
+        help_text="Honor (+) ↔ Cunning (-) axis contribution.",
+    )
+    status_delta = models.IntegerField(
+        default=0,
+        validators=principle_validators,
+        help_text="Humility (+) ↔ Ambition (-) axis contribution.",
+    )
+    change_delta = models.IntegerField(
+        default=0,
+        validators=principle_validators,
+        help_text="Progress (+) ↔ Tradition (-) axis contribution.",
+    )
+    allegiance_delta = models.IntegerField(
+        default=0,
+        validators=principle_validators,
+        help_text="Independence (+) ↔ Loyalty (-) axis contribution.",
+    )
+    power_delta = models.IntegerField(
+        default=0,
+        validators=principle_validators,
+        help_text="Equality (+) ↔ Hierarchy (-) axis contribution.",
+    )
+
+    class Meta:
+        abstract = True
+
+
+class PhilosophicalArchetype(NaturalKeyMixin, PrincipleVector, SharedMemoryModel):
     """Tag a Renown event with one or more archetypes; each contributes a
     six-axis principle vector that dot-products against affected societies'
     own principle values to produce the reputation delta.
@@ -1743,40 +1787,6 @@ class PhilosophicalArchetype(NaturalKeyMixin, SharedMemoryModel):
     name = models.CharField(max_length=100, unique=True)
     description = models.TextField(blank=True)
 
-    # Six principle deltas mirror Society.{mercy, method, status, change,
-    # allegiance, power}. Typical authored range is -2..+2; ±5 is allowed
-    # for rare extreme archetypes but most archetypes should be subtler.
-    mercy_delta = models.IntegerField(
-        default=0,
-        validators=principle_validators,
-        help_text="Compassion (+) ↔ Ruthlessness (-) axis contribution.",
-    )
-    method_delta = models.IntegerField(
-        default=0,
-        validators=principle_validators,
-        help_text="Honor (+) ↔ Cunning (-) axis contribution.",
-    )
-    status_delta = models.IntegerField(
-        default=0,
-        validators=principle_validators,
-        help_text="Humility (+) ↔ Ambition (-) axis contribution.",
-    )
-    change_delta = models.IntegerField(
-        default=0,
-        validators=principle_validators,
-        help_text="Progress (+) ↔ Tradition (-) axis contribution.",
-    )
-    allegiance_delta = models.IntegerField(
-        default=0,
-        validators=principle_validators,
-        help_text="Independence (+) ↔ Loyalty (-) axis contribution.",
-    )
-    power_delta = models.IntegerField(
-        default=0,
-        validators=principle_validators,
-        help_text="Equality (+) ↔ Hierarchy (-) axis contribution.",
-    )
-
     objects = NaturalKeyManager()
 
     class NaturalKeyConfig:
@@ -1786,49 +1796,18 @@ class PhilosophicalArchetype(NaturalKeyMixin, SharedMemoryModel):
         return self.name
 
 
-class StanceArchetype(NaturalKeyMixin, SharedMemoryModel):
+class StanceArchetype(NaturalKeyMixin, PrincipleVector, SharedMemoryModel):
     """A public philosophical POSITION a character may proclaim (#2842).
 
     Sibling of ``PhilosophicalArchetype`` (Apostate ruling): same six-axis
-    vector shape, but worded as stances someone stands FOR ("Defense of the
-    Old Ways") rather than judgments of a deed ("Treacherous") — the two
-    vocabularies grow independently. Mechanics read ONLY the vector; the
-    proclamation's prose is display-only, never parsed (ADR-0178).
+    vector shape (shared ``PrincipleVector`` base), but worded as stances
+    someone stands FOR ("Defense of the Old Ways") rather than judgments of
+    a deed ("Treacherous") — the two vocabularies grow independently.
+    Mechanics read ONLY the vector; prose is display-only (ADR-0178).
     """
 
     name = models.CharField(max_length=100, unique=True)
     description = models.TextField(blank=True)
-
-    mercy_delta = models.IntegerField(
-        default=0,
-        validators=principle_validators,
-        help_text="Compassion (+) ↔ Ruthlessness (-) axis contribution.",
-    )
-    method_delta = models.IntegerField(
-        default=0,
-        validators=principle_validators,
-        help_text="Honor (+) ↔ Cunning (-) axis contribution.",
-    )
-    status_delta = models.IntegerField(
-        default=0,
-        validators=principle_validators,
-        help_text="Humility (+) ↔ Ambition (-) axis contribution.",
-    )
-    change_delta = models.IntegerField(
-        default=0,
-        validators=principle_validators,
-        help_text="Progress (+) ↔ Tradition (-) axis contribution.",
-    )
-    allegiance_delta = models.IntegerField(
-        default=0,
-        validators=principle_validators,
-        help_text="Independence (+) ↔ Loyalty (-) axis contribution.",
-    )
-    power_delta = models.IntegerField(
-        default=0,
-        validators=principle_validators,
-        help_text="Equality (+) ↔ Hierarchy (-) axis contribution.",
-    )
 
     objects = NaturalKeyManager()
 
