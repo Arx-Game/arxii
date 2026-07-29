@@ -5,12 +5,12 @@ from __future__ import annotations
 from typing import TYPE_CHECKING
 
 from world.conditions.services import (
+    advance_condition_severity,
     apply_condition,
+    decay_condition_severity,
     has_condition,
     remove_condition,
 )
-from world.game_clock.constants import TimePhase
-from world.game_clock.services import get_ic_phase
 from world.scenes.round_services import ensure_round_for_acute_condition
 from world.species.models import SpeciesGiftGrant
 
@@ -20,81 +20,117 @@ if TYPE_CHECKING:
 
 
 def reconcile_sunlight_exposure(character, room) -> None:
-    """Apply or remove the Sunlight Exposure condition based on outdoor + day-phase + shelter
-    (#1588, #1744).
+    """Reconcile the Sunlight Exposure condition to the character's felt sun exposure
+    (#1588, #1744, graded #2846).
 
-    A character whose species grant wires a Sunlight-Exposure drawback takes radiant
-    DoT while outdoors during a daylight phase; indoors, sheltered (location-shelter
-    cascade covers radiant), or at night the condition is removed. When applied, ensures
-    a danger scene round (the plummet pattern) so the existing round-tick processes the
-    DoT through the peril pipeline — AFK-safety (ADR-0004/ADR-0049) holds unchanged: an
-    unconscious victim flows into ``abandonment_environmental``, never a raw death.
+    Sensitivity is distinction-anchored (``sun_sensitivity_for`` — the sun-bane /
+    sun-allergy DistinctionTags), never species-probed: innate and voluntarily-taken
+    tiers behave identically. The tier maps the felt-exposure breakdown
+    (``felt_sun_exposure``) to a target condition severity; severity drives the
+    template's stages, so low severities only impair while Burning+ carries the
+    radiant DoT. Sustained exposure escalates: continuous IC hours under the
+    condition add severity up to a cap.
 
-    No-op for characters without a sheet or whose species has no sunlight drawback.
+    When the condition sits in a damaging stage, ensures a danger scene round (the
+    plummet pattern) so the existing round-tick processes the DoT through the peril
+    pipeline — AFK-safety (ADR-0004/ADR-0049) holds unchanged: an unconscious victim
+    flows into ``abandonment_environmental``, never a raw death.
+
+    No-op for characters without a sheet; removes any stale condition when the
+    character no longer holds a sun-sensitivity distinction.
 
     Args:
         character: the ObjectDB character whose exposure to reconcile.
         room: the room the character is in (may be None — treated as indoor).
     """
     from world.species.factories import ensure_sunlight_exposure_content  # noqa: PLC0415
+    from world.species.sun_exposure import felt_sun_exposure  # noqa: PLC0415
+    from world.species.sun_sensitivity import (  # noqa: PLC0415
+        SunSensitivity,
+        sun_sensitivity_for,
+        sun_severity,
+    )
 
-    template = ensure_sunlight_exposure_content()
     sheet = character.character_sheet
-    if sheet is None or not _has_sunlight_drawback(sheet):
+    if sheet is None:
         return
-    outdoor = _room_is_outdoor(room) and not _character_shelters_radiant(character, room)
-    phase = get_ic_phase()
-    should_expose = outdoor and phase in {
-        TimePhase.DAY,
-        TimePhase.DAWN,
-        TimePhase.DUSK,
-    }
-    active = has_condition(character, template)
-    if should_expose and not active:
-        apply_condition(character, template)
+    template = ensure_sunlight_exposure_content()
+    tier = sun_sensitivity_for(sheet)
+    if tier == SunSensitivity.NONE:
+        if has_condition(character, template):
+            remove_condition(character, template)
+        return
+    exposure = felt_sun_exposure(character, room)
+    target_severity = sun_severity(tier, exposure)
+    instance = _active_sunlight_instance(character, template)
+    if instance is not None and target_severity > 0:
+        target_severity += _sun_escalation_bonus(instance)
+    instance = _sync_condition_severity(character, template, instance, target_severity)
+    if instance is not None and _in_damaging_stage(instance):
         ensure_round_for_acute_condition(sheet)
-    elif not should_expose and active:
-        remove_condition(character, template)
 
 
-def _character_shelters_radiant(character, room) -> bool:
-    """Whether *character* in *room* is sheltered against radiant damage (#1744, #1756).
+def _sync_condition_severity(character, template, instance, target_severity: int):
+    """Move the active instance's severity to *target_severity* (apply/advance/decay/remove).
 
-    Composes room-level cascade shelter with position-level shelter (a tent,
-    table, or alcove the character occupies).
+    Returns the (possibly newly created) active instance, or None when the
+    condition ended at severity 0.
     """
-    if room is None:
-        return False
-    from world.conditions.factories import ensure_radiant_damage_type  # noqa: PLC0415
-    from world.locations.services import hazard_is_covered_for  # noqa: PLC0415
+    if target_severity <= 0:
+        if instance is not None:
+            remove_condition(character, template)
+        return None
+    if instance is None:
+        # Apply at severity 1, then advance to target: apply_condition always starts
+        # at the FIRST stage regardless of severity, while advance_condition_severity
+        # re-picks the stage by threshold — one code path keeps stage and severity
+        # consistent.
+        apply_condition(character, template, severity=1)
+        instance = _active_sunlight_instance(character, template)
+        if instance is not None and target_severity > 1:
+            advance_condition_severity(instance, target_severity - 1)
+        return instance
+    if target_severity > instance.severity:
+        advance_condition_severity(instance, target_severity - instance.severity)
+    elif target_severity < instance.severity:
+        decay_condition_severity(instance, instance.severity - target_severity)
+    return instance
 
-    return hazard_is_covered_for(character, room, ensure_radiant_damage_type())
+
+def _active_sunlight_instance(character, template):
+    """The unresolved Sunlight Exposure ConditionInstance for *character*, or None."""
+    from world.conditions.models import ConditionInstance  # noqa: PLC0415
+
+    return ConditionInstance.objects.filter(
+        target=character, condition=template, resolved_at__isnull=True
+    ).first()
 
 
-def _has_sunlight_drawback(sheet) -> bool:
-    """Whether the sheet's species (or an ancestor) grants a Sunlight-Exposure drawback."""
-    from world.species.factories import SUNLIGHT_EXPOSURE_NAME  # noqa: PLC0415
+def _sun_escalation_bonus(instance) -> int:
+    """Extra severity from sustained exposure: +1 per ESCALATION_IC_HOURS, capped.
 
-    if sheet.species_id is None:
-        return False
-    return SpeciesGiftGrant.objects.filter(
-        _inheritable_grant_filter(sheet.species),
-        drawback_condition__name=SUNLIGHT_EXPOSURE_NAME,
-    ).exists()
+    Derived from the instance's ``applied_at`` age in IC time — deterministic,
+    no extra state; leaving the sun resets it because the instance is removed.
+    """
+    from world.game_clock.services import get_ic_date_for_real_time, get_ic_now  # noqa: PLC0415
+    from world.species.sun_constants import (  # noqa: PLC0415
+        ESCALATION_CAP,
+        ESCALATION_IC_HOURS,
+    )
+
+    ic_now = get_ic_now()
+    ic_applied = get_ic_date_for_real_time(instance.applied_at)
+    if ic_now is None or ic_applied is None:
+        return 0
+    elapsed_hours = max(0.0, (ic_now - ic_applied).total_seconds() / 3600.0)
+    return min(ESCALATION_CAP, int(elapsed_hours // ESCALATION_IC_HOURS))
 
 
-def _room_is_outdoor(room) -> bool:
-    """Whether the room is outdoors. Missing RoomProfile -> treated as indoor (safe default)."""
-    if room is None:
-        return False
-    from django.core.exceptions import ObjectDoesNotExist  # noqa: PLC0415
+def _in_damaging_stage(instance) -> bool:
+    """Whether the instance's current stage carries the radiant DoT (Burning+)."""
+    from world.species.sun_constants import BURNING_SEVERITY_THRESHOLD  # noqa: PLC0415
 
-    try:
-        return room.room_profile.is_outdoor
-    except ObjectDoesNotExist:
-        return False
-    except AttributeError:
-        return False
+    return instance.severity >= BURNING_SEVERITY_THRESHOLD
 
 
 def _species_and_ancestors(species):

@@ -243,28 +243,37 @@ class InheritableFlagTests(TestCase):
             "Parent should be charged for its own non-inheritable costed grant",
         )
 
-    def test_non_inheritable_sunlight_drawback_not_inherited_by_child(self):
-        """_has_sunlight_drawback returns False for a child whose parent has a
-        non-inheritable sunlight-carrying grant, and True for the parent."""
-        from world.species.factories import ensure_sunlight_exposure_content
-        from world.species.services import _has_sunlight_drawback
+    def test_non_inheritable_sunlight_distinction_not_inherited_by_child(self):
+        """A non-inheritable grant's sun distinction stamps the parent species only (#2846).
 
-        sunlight_template = ensure_sunlight_exposure_content()
+        Sun sensitivity is distinction-anchored: provisioning stamps
+        ``drawback_distinction`` per the inheritance walk, and
+        ``sun_sensitivity_for`` reads the stamped distinction by tag.
+        """
+        from world.species.factories import ensure_sunlight_distinctions
+        from world.species.services import provision_species_gifts
+        from world.species.sun_sensitivity import SunSensitivity, sun_sensitivity_for
+
+        bane, _allergy = ensure_sunlight_distinctions()
         SpeciesGiftGrantFactory(
             species=self.parent_species,
             gift=GiftFactory(name="Test Sunlight Gift", kind=GiftKind.MINOR),
-            drawback_condition=sunlight_template,
+            drawback_distinction=bane,
             inheritable=False,
         )
         parent_sheet = CharacterSheetFactory(species=self.parent_species)
         child_sheet = CharacterSheetFactory(species=self.child_species)
-        self.assertTrue(
-            _has_sunlight_drawback(parent_sheet),
-            "Parent should have the sunlight drawback from its own non-inheritable grant",
+        provision_species_gifts(parent_sheet)
+        provision_species_gifts(child_sheet)
+        self.assertEqual(
+            sun_sensitivity_for(parent_sheet),
+            SunSensitivity.BANE,
+            "Parent should hold the bane tier from its own non-inheritable grant",
         )
-        self.assertFalse(
-            _has_sunlight_drawback(child_sheet),
-            "Child should NOT inherit the non-inheritable sunlight drawback",
+        self.assertEqual(
+            sun_sensitivity_for(child_sheet),
+            SunSensitivity.NONE,
+            "Child should NOT inherit the non-inheritable sun distinction",
         )
 
 
