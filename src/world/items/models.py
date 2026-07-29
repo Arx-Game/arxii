@@ -233,6 +233,15 @@ class ItemTemplate(NaturalKeyMixin, SharedMemoryModel):
         default=False,
         help_text="Whether instances of this template can store Outfit definitions.",
     )
+    # Skin-coverage semantics (#2846): a non-revealing garment fully covers the body regions
+    # of its slots — it blocks felt sun exposure there (world.species.sun_exposure) and, in a
+    # future slice, hides tattoos/skin marks on those regions. A revealing garment covers its
+    # slots for wardrobe purposes but exposes skin: it contributes only its authored
+    # GarmentMitigation SUN rows (a lace veil, a sheer wrap) and will not conceal marks.
+    is_revealing = models.BooleanField(
+        default=False,
+        help_text="Whether this garment leaves the skin of its covered regions exposed.",
+    )
     container_capacity = models.PositiveIntegerField(
         default=0,
         help_text="Maximum number of items this container can hold.",
