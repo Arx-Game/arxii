@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import logging
 from typing import TYPE_CHECKING
 
 from world.conditions.services import (
@@ -17,6 +18,27 @@ from world.species.models import SpeciesGiftGrant
 if TYPE_CHECKING:
     from world.character_sheets.models import CharacterSheet
     from world.magic.models.gifts import CharacterGift
+
+logger = logging.getLogger(__name__)
+
+
+def reconcile_sun_exposure_safely(character) -> None:
+    """Best-effort reconcile for hook/cron call sites (#2846).
+
+    Skips non-characters cheaply; isolates any reconcile failure so an equip,
+    position change, or cron sweep never breaks on a bad row. Log-and-continue
+    is the interim policy (#1164) — never a silent suppress.
+    """
+    try:
+        sheet = character.character_sheet
+    except AttributeError:
+        return
+    if sheet is None:
+        return
+    try:
+        reconcile_sunlight_exposure(character, character.location)
+    except Exception:  # the ONE ratcheted broad guard shared by every hook site
+        logger.exception("sun-exposure reconcile failed for character pk=%s", character.pk)
 
 
 def reconcile_sunlight_exposure(character, room) -> None:
@@ -54,12 +76,18 @@ def reconcile_sunlight_exposure(character, room) -> None:
     sheet = character.character_sheet
     if sheet is None:
         return
-    template = ensure_sunlight_exposure_content()
     tier = sun_sensitivity_for(sheet)
     if tier == SunSensitivity.NONE:
-        if has_condition(character, template):
+        # Cheap path for the hot hooks (movement/equip): no content-ensure unless
+        # a stale condition actually needs clearing.
+        from world.conditions.models import ConditionTemplate  # noqa: PLC0415
+        from world.species.factories import SUNLIGHT_EXPOSURE_NAME  # noqa: PLC0415
+
+        template = ConditionTemplate.objects.filter(name=SUNLIGHT_EXPOSURE_NAME).first()
+        if template is not None and has_condition(character, template):
             remove_condition(character, template)
         return
+    template = ensure_sunlight_exposure_content()
     exposure = felt_sun_exposure(character, room)
     target_severity = sun_severity(tier, exposure)
     instance = _active_sunlight_instance(character, template)

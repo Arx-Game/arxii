@@ -811,7 +811,17 @@ def place_in_position(objectdb: ObjectDB, position: Position) -> ObjectPosition:
         objectdb=objectdb,
         defaults={"position": position},
     )
+    _reconcile_sun_after_position_change(objectdb)
     return obj_pos
+
+
+def _reconcile_sun_after_position_change(objectdb: ObjectDB) -> None:
+    """Position changed: re-reconcile sunlight exposure (#2846) — stepping under the
+    tent should register immediately. No-op for non-characters and never raises
+    (isolation lives in the shared safe wrapper)."""
+    from world.species.services import reconcile_sun_exposure_safely
+
+    reconcile_sun_exposure_safely(objectdb)
 
 
 _ENTRY_KINDS = (PositionKind.PRIMARY, PositionKind.FEATURE)
@@ -873,6 +883,7 @@ def move_to_position(objectdb: ObjectDB, target: Position) -> ObjectPosition:
         objectdb=objectdb,
         defaults={"position": target},
     )
+    _reconcile_sun_after_position_change(objectdb)
     return obj_pos
 
 
@@ -887,6 +898,7 @@ def force_move_to_position(objectdb: ObjectDB, target: Position) -> ObjectPositi
         objectdb=objectdb,
         defaults={"position": target},
     )
+    _reconcile_sun_after_position_change(objectdb)
     return obj_pos
 
 

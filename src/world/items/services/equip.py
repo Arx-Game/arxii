@@ -68,6 +68,7 @@ def equip_item(
     )
     char_obj.equipped_items.invalidate()
     _recompute_body_persona_items_prestige(character_sheet)
+    _reconcile_sun_exposure(char_obj)
     return equipped
 
 
@@ -82,6 +83,19 @@ def unequip_item(*, equipped_item: EquippedItem) -> None:
     equipped_item.delete()
     sheet.character.equipped_items.invalidate()
     _recompute_body_persona_items_prestige(sheet)
+    _reconcile_sun_exposure(sheet.character)
+
+
+def _reconcile_sun_exposure(char_obj: object) -> None:
+    """Wardrobe changed: re-reconcile sunlight exposure so mitigation feels responsive
+    (#2846). Cheap no-op for characters without a sun-sensitivity distinction; a
+    failure inside never breaks the equip transaction (isolated in the shared
+    safe wrapper)."""
+    from world.species.services import reconcile_sun_exposure_safely  # noqa: PLC0415
+
+    if char_obj is None:
+        return
+    reconcile_sun_exposure_safely(char_obj)
 
 
 def _recompute_body_persona_items_prestige(character_sheet: object) -> None:
