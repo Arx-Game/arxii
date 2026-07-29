@@ -635,6 +635,7 @@ def seeded_models_by_cluster() -> dict[str, list[type[Model]]]:
     from world.mechanics.models import ChallengeTemplate  # noqa: PLC0415
     from world.missions.models import MissionGiver, MissionTemplate  # noqa: PLC0415
     from world.npc_services.models import NPCRole  # noqa: PLC0415
+    from world.proclamations.models import EdictKind, StanceArchetype  # noqa: PLC0415
     from world.progression.models import (  # noqa: PLC0415
         DuranceTrainingSite,
         KudosSourceCategory,
@@ -742,6 +743,8 @@ def seeded_models_by_cluster() -> dict[str, list[type[Model]]]:
         # Dev domain slice: PLACEHOLDER house + steward offers (#930/#1464).
         # Scandal vocabulary: the authored archetype categories (#1464/#1806).
         "scandal": [],
+        # Proclamations: stance archetypes + edict kinds (#2842).
+        "proclamations": [StanceArchetype, EdictKind],
         "domain_dev": [],
         # Stealth seeds skill/check rows counted under "checks" (#1464).
         "stealth": [],

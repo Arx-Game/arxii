@@ -93,20 +93,19 @@ class EdictKindTests(TestCase):
 
 @tag("postgres")  # Area.save() refreshes a materialized view (areas_areaclosure)
 class DomainEdictTests(TestCase):
-    @classmethod
-    def setUpTestData(cls) -> None:
+    def setUp(self) -> None:
         from world.areas.factories import AreaFactory
         from world.societies.factories import OrganizationFactory
         from world.societies.houses.models import Domain
 
         org = OrganizationFactory()
-        cls.domain = Domain.objects.create(
+        self.domain = Domain.objects.create(
             area=AreaFactory(), name="TestDomain", owner_org=org, population=100
         )
-        cls.persona = PersonaFactory()
-        cls.stance = StanceArchetypeFactory()
-        cls.kind = EdictKindFactory(stance=cls.stance)
-        cls.proc = ProclamationFactory(issuer=cls.persona, stance=cls.stance)
+        self.persona = PersonaFactory()
+        self.stance = StanceArchetypeFactory()
+        self.kind = EdictKindFactory(stance=self.stance)
+        self.proc = ProclamationFactory(issuer=self.persona, stance=self.stance)
 
     def test_active_edict_is_active(self):
         edict = DomainEdict.objects.create(
