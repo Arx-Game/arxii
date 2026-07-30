@@ -267,3 +267,61 @@ class FeastDayWeatherTests(TestCase):
         state = get_effective_weather(region)
         assert state is not None
         assert state.weather_type == madness
+
+
+class WeatherShelterTests(TestCase):
+    """#2845/ADR-0180: cloud cover materializes as area-wide hazard shelter."""
+
+    def setUp(self):
+        from world.conditions.factories import ensure_radiant_damage_type
+
+        self.radiant = ensure_radiant_damage_type()
+        self.region = AreaFactory(level=AreaLevel.CITY, climate=ClimateFactory())
+        self.overcast = WeatherTypeFactory(name="Overcast")
+        from world.weather.factories import WeatherTypeShelterFactory
+
+        WeatherTypeShelterFactory(weather_type=self.overcast, damage_type=self.radiant, value=6)
+
+    def test_roll_materializes_damage_type_shelter_modifier(self):
+        from world.locations.constants import KeyType
+        from world.locations.models import LocationValueModifier
+
+        roll_region_weather(self.region, weather_type=self.overcast)
+        row = LocationValueModifier.objects.get(area=self.region, key_type=KeyType.DAMAGE_TYPE)
+        self.assertEqual(row.damage_type, self.radiant)
+        self.assertEqual(row.value, 6)
+        self.assertEqual(row.source, f"weather:{self.region.pk}")
+        self.assertLess(row.change_per_day, 0)
+
+    def test_reroll_replaces_shelter_rows(self):
+        from world.locations.constants import KeyType
+        from world.locations.models import LocationValueModifier
+
+        clear = WeatherTypeFactory(name="ClearSky")
+        roll_region_weather(self.region, weather_type=self.overcast)
+        roll_region_weather(self.region, weather_type=clear)
+        self.assertEqual(
+            LocationValueModifier.objects.filter(
+                area=self.region, key_type=KeyType.DAMAGE_TYPE
+            ).count(),
+            0,
+        )
+
+    def test_overcast_raises_felt_sun_shade(self):
+        """The #2846 coupling: cloudy weather reduces felt sun exposure via shade."""
+        from unittest.mock import patch
+
+        from world.character_sheets.factories import CharacterSheetFactory
+        from world.game_clock.constants import TimePhase
+        from world.species.sun_exposure import felt_sun_exposure
+
+        profile = RoomProfileFactory(is_outdoor=True, area=self.region)
+        room = profile.objectdb
+        sheet = CharacterSheetFactory()
+        with patch("world.species.sun_exposure.get_ic_phase", return_value=TimePhase.DAY):
+            before = felt_sun_exposure(sheet.character, room)
+            roll_region_weather(self.region, weather_type=self.overcast)
+            after = felt_sun_exposure(sheet.character, room)
+        self.assertEqual(before.shade, 0)
+        self.assertEqual(after.shade, 6)
+        self.assertEqual(after.residual, before.residual - 6)

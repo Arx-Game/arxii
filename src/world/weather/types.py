@@ -7,7 +7,7 @@ from typing import TYPE_CHECKING, NamedTuple
 if TYPE_CHECKING:
     from datetime import datetime
 
-    from world.game_clock.constants import Season, TimePhase
+    from world.game_clock.constants import MoonPhase, Season, TimePhase
     from world.weather.models import WeatherType
 
 
@@ -22,5 +22,6 @@ class ConditionsSummary(NamedTuple):
     ic_time: datetime | None
     phase: TimePhase | None
     season: Season | None
+    moon_phase: MoonPhase | None
     weather_type: WeatherType | None
     emit_text: str | None

@@ -10,6 +10,7 @@ from world.weather.models import (
     WeatherEmit,
     WeatherType,
     WeatherTypeExposure,
+    WeatherTypeShelter,
 )
 
 
@@ -42,6 +43,15 @@ class WeatherTypeExposureFactory(DjangoModelFactory):
     weather_type = factory.SubFactory(WeatherTypeFactory)
     stat_key = StatKey.WET
     value = 10
+
+
+class WeatherTypeShelterFactory(DjangoModelFactory):
+    class Meta:
+        model = WeatherTypeShelter
+
+    weather_type = factory.SubFactory(WeatherTypeFactory)
+    value = 5
+    # damage_type — caller must provide (FK to conditions.DamageType).
 
 
 class WeatherEmitFactory(DjangoModelFactory):

@@ -178,6 +178,51 @@ class WeatherTypeExposure(NaturalKeyMixin, SharedMemoryModel):
         return f"{self.weather_type.name}: {self.stat_key} {self.value:+d}"
 
 
+class WeatherTypeShelter(NaturalKeyMixin, SharedMemoryModel):
+    """One hazard axis a weather type shelters a region from while active (#2845, ADR-0180).
+
+    ``(weather_type, damage_type) -> value``: cloud cover IS area-wide shelter.
+    An overcast/stormy type authors a radiant row and the whole region gains
+    graded shade — felt sun exposure (#2846) drops through its existing shade
+    term with no sun-side code. Materialized as the same decaying source-tagged
+    ``LocationValueModifier`` rows (``KeyType.DAMAGE_TYPE``) as the exposure
+    axes, so it stacks with authored room shade and self-clears if the cron
+    stalls. Future hazards (a moon-sensitivity layer, ash-fall) ride the same
+    rows. Magnitudes are a PLACEHOLDER author pass.
+    """
+
+    weather_type = models.ForeignKey(
+        WeatherType,
+        on_delete=models.CASCADE,
+        related_name="shelters",
+    )
+    damage_type = models.ForeignKey(
+        "conditions.DamageType",
+        on_delete=models.PROTECT,
+        related_name="weather_shelters",
+    )
+    value = models.IntegerField(
+        help_text="Shelter magnitude granted while this weather holds (+ = more cover).",
+    )
+
+    class Meta:
+        ordering = ["weather_type", "damage_type"]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["weather_type", "damage_type"],
+                name="unique_weather_shelter_per_damage_type",
+            ),
+        ]
+
+    class NaturalKeyConfig:
+        fields = ["weather_type", "damage_type"]
+
+    objects = NaturalKeyManager()
+
+    def __str__(self) -> str:
+        return f"{self.weather_type.name}: {self.damage_type.name} shelter {self.value:+d}"
+
+
 class WeatherEmit(NaturalKeyMixin, SharedMemoryModel):
     """An atmospheric flavour line shown while a weather type holds (#1522).
 

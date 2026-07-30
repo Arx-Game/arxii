@@ -23,6 +23,7 @@ class ConditionsSerializer(serializers.Serializer):
     ic_time = serializers.DateTimeField(allow_null=True)
     phase = serializers.SerializerMethodField()
     season = serializers.SerializerMethodField()
+    moon_phase = serializers.SerializerMethodField()
     weather_type = serializers.SerializerMethodField()
     emit_text = serializers.CharField(allow_null=True)
 
@@ -31,6 +32,9 @@ class ConditionsSerializer(serializers.Serializer):
 
     def get_season(self, obj: ConditionsSummary) -> str | None:
         return obj.season.value if obj.season is not None else None
+
+    def get_moon_phase(self, obj: ConditionsSummary) -> str | None:
+        return obj.moon_phase.value if obj.moon_phase is not None else None
 
     def get_weather_type(self, obj: ConditionsSummary) -> str | None:
         return obj.weather_type.name if obj.weather_type is not None else None

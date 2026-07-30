@@ -363,3 +363,58 @@ class PauseUnpauseTests(TestCase):
         unpause_clock(changed_by=self.account, reason="maintenance over")
 
         self.assertEqual(GameClockHistory.objects.count(), 1)
+
+
+class MoonPhaseTests(TestCase):
+    """Lunar derivation (#2845): pure function of IC time, no state."""
+
+    def test_epoch_is_new_moon(self):
+        from datetime import UTC, datetime
+
+        from world.game_clock.constants import MoonPhase
+        from world.game_clock.services import moon_phase_from_ic_time
+
+        epoch = datetime(2000, 1, 1, tzinfo=UTC)
+        self.assertEqual(moon_phase_from_ic_time(epoch), MoonPhase.NEW)
+
+    def test_half_cycle_is_full_moon(self):
+        from datetime import UTC, datetime, timedelta
+
+        from world.game_clock.constants import MOON_SYNODIC_IC_DAYS, MoonPhase
+        from world.game_clock.services import (
+            moon_illumination_from_ic_time,
+            moon_phase_from_ic_time,
+        )
+
+        full = datetime(2000, 1, 1, tzinfo=UTC) + timedelta(days=MOON_SYNODIC_IC_DAYS / 2)
+        self.assertEqual(moon_phase_from_ic_time(full), MoonPhase.FULL)
+        self.assertAlmostEqual(moon_illumination_from_ic_time(full), 1.0, places=6)
+
+    def test_quarter_cycle_is_first_quarter(self):
+        from datetime import UTC, datetime, timedelta
+
+        from world.game_clock.constants import MOON_SYNODIC_IC_DAYS, MoonPhase
+        from world.game_clock.services import moon_phase_from_ic_time
+
+        quarter = datetime(2000, 1, 1, tzinfo=UTC) + timedelta(days=MOON_SYNODIC_IC_DAYS / 4)
+        self.assertEqual(moon_phase_from_ic_time(quarter), MoonPhase.FIRST_QUARTER)
+
+    def test_cycle_wraps_and_predates_epoch_safely(self):
+        from datetime import UTC, datetime, timedelta
+
+        from world.game_clock.constants import MOON_SYNODIC_IC_DAYS, MoonPhase
+        from world.game_clock.services import moon_phase_from_ic_time
+
+        epoch = datetime(2000, 1, 1, tzinfo=UTC)
+        later = epoch + timedelta(days=MOON_SYNODIC_IC_DAYS * 7)
+        self.assertEqual(moon_phase_from_ic_time(later), MoonPhase.NEW)
+        earlier = epoch - timedelta(days=MOON_SYNODIC_IC_DAYS / 2)
+        self.assertEqual(moon_phase_from_ic_time(earlier), MoonPhase.FULL)
+
+    def test_no_clock_returns_none(self):
+        from world.game_clock.models import GameClock
+        from world.game_clock.services import get_moon_illumination, get_moon_phase
+
+        GameClock.objects.all().delete()
+        self.assertIsNone(get_moon_phase())
+        self.assertIsNone(get_moon_illumination())

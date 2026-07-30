@@ -1,6 +1,7 @@
 """Service functions for querying IC time from the game clock."""
 
 from datetime import datetime, timedelta
+import math
 
 from django.db import transaction
 from django.utils import timezone
@@ -8,7 +9,9 @@ from evennia.accounts.models import AccountDB
 
 from world.game_clock.constants import (
     MONTH_TO_SEASON,
+    MOON_SYNODIC_IC_DAYS,
     PHASE_BOUNDARIES,
+    MoonPhase,
     Season,
     TimePhase,
 )
@@ -89,6 +92,47 @@ def get_light_level(*, real_now: datetime | None = None) -> float | None:
     if ic_now is None:
         return None
     return light_level_from_ic_time(ic_now)
+
+
+def moon_cycle_fraction_from_ic_time(ic_now: datetime) -> float:
+    """Position in the synodic cycle for a concrete IC datetime, in [0, 1).
+
+    0.0 = new moon, 0.5 = full moon. Anchored to a fixed IC epoch so the value
+    is a pure function of IC time — a staff time-skip moves the moon with it.
+    """
+    epoch = datetime(2000, 1, 1, tzinfo=ic_now.tzinfo)
+    elapsed_days = (ic_now - epoch).total_seconds() / 86400.0
+    return (elapsed_days / MOON_SYNODIC_IC_DAYS) % 1.0
+
+
+def moon_phase_from_ic_time(ic_now: datetime) -> MoonPhase:
+    """Derive the lunar phase from a concrete IC datetime (8 centered bins)."""
+    fraction = moon_cycle_fraction_from_ic_time(ic_now)
+    phases = list(MoonPhase)
+    index = int(fraction * len(phases) + 0.5) % len(phases)
+    return phases[index]
+
+
+def moon_illumination_from_ic_time(ic_now: datetime) -> float:
+    """Smooth 0.0-1.0 illuminated fraction (0 = new, 1 = full)."""
+    fraction = moon_cycle_fraction_from_ic_time(ic_now)
+    return (1.0 - math.cos(2.0 * math.pi * fraction)) / 2.0
+
+
+def get_moon_phase(*, real_now: datetime | None = None) -> MoonPhase | None:
+    """Return the current lunar phase, or None if no clock exists."""
+    ic_now = get_ic_now(real_now=real_now)
+    if ic_now is None:
+        return None
+    return moon_phase_from_ic_time(ic_now)
+
+
+def get_moon_illumination(*, real_now: datetime | None = None) -> float | None:
+    """Return the current 0.0-1.0 lunar illumination, or None if no clock exists."""
+    ic_now = get_ic_now(real_now=real_now)
+    if ic_now is None:
+        return None
+    return moon_illumination_from_ic_time(ic_now)
 
 
 def get_ic_date_for_real_time(real_dt: datetime) -> datetime | None:

@@ -59,9 +59,12 @@ The central time engine that drives the living world. An anchor-based game clock
 
 ### Deferred (future PRs)
 - Weather system (own design + PR, consumes clock for season/time-of-day)
-- Celestial atmosphere — moon phases, astrological conjunctions (part of atmosphere
-  PR; the moon side now has a committed consumer — the lycan arc's follow-on spec
-  on #2845)
+- ~~Moon phases~~ — **built (#2845, ADR-0180)**: `MoonPhase` (8 phases) +
+  `get_moon_phase()`/`get_moon_illumination()` as pure IC-time derivations (synodic
+  cycle PLACEHOLDER 30 IC days, fixed epoch — no state, no cron writer; staff
+  time-skips move the moon). Surfaced via the weather `Conditions` read + widget
+  (night only). Astrological conjunctions remain deferred; the lycan consumer is
+  the #2845 follow-on spec.
 - **Consumer note (#2846, ADR-0179):** the sunlight bane/allergy system reads
   `get_ic_phase()` for its base-sun gate (full at DAY, reduced DAWN/DUSK, zero
   NIGHT) and registers the `species.sun_reconcile` cron (5-min, DRAIN band) —

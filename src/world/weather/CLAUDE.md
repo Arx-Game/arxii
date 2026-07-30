@@ -61,6 +61,12 @@ non-comfort consumers (e.g. a "what's the climate here" display).
   blizzards out of the tropics). **No** Arx-1 intensity scalar — the type *is* the intensity.
 - **`WeatherTypeExposure`** — `(weather_type, stat_key) -> value` (mirrors `StyleAffinity`); the
   exposure a type imparts while it holds (Stormy → +WET, +WIND).
+- **`WeatherTypeShelter`** (#2845, ADR-0180) — `(weather_type, damage_type) -> value`: cloud
+  cover IS area-wide hazard shelter. Overcast/stormy types author a Radiant row and the roll
+  materializes it on the `KeyType.DAMAGE_TYPE` cascade axis (same decaying `weather:<area_pk>`
+  source tag), so felt sun exposure (#2846) drops through its existing shade term with no
+  sun-side code. Content-repo-owned; magnitudes PLACEHOLDER; re-seed file
+  `weather_type_shelters.json` (`damage_type` by name).
 - **`WeatherEmit`** — atmospheric flavour lines, gated by IC season (`in_*`) + time-of-day phase
   (`at_*`) flags, weighted. Seeded (slice 2b) from the Arx-1 corpus; `text` is PLACEHOLDER.
 - **`RegionWeatherState`** — one row per region Area; the current weather, resolved
@@ -90,7 +96,9 @@ Services (`world.weather.services`):
   **web face** is `narrative.UserCategoryMuteViewSet` (`/api/narrative/category-mutes/`) →
   `CategoryMuteToggles` Switch on the frontend `MuteSettingsPage` (#1522).
 - **`current_conditions(room) -> ConditionsSummary`** (`types.py`): IC time + phase + season +
-  the room's effective weather + one emit line. Any field is None when its source is absent.
+  moon phase (#2845 — `game_clock.get_moon_phase`, a pure IC-time derivation) + the room's
+  effective weather + one emit line. Any field is None when its source is absent. The React
+  `WeatherWidget` shows the moon at night only.
 - **`time` command** (`commands/weather.py`, `CmdTime`, alias `weather`): the telnet face of
   `current_conditions` for the caller's room.
 - **API + React widget**: `GET /api/weather/conditions/?room_id=<id>` (`world.weather.views`

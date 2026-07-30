@@ -17,7 +17,12 @@ import secrets
 from typing import TYPE_CHECKING
 
 from evennia_extensions.models import RoomProfile
-from world.game_clock.services import get_ic_now, get_ic_phase, get_ic_season
+from world.game_clock.services import (
+    get_ic_now,
+    get_ic_phase,
+    get_ic_season,
+    get_moon_phase,
+)
 from world.locations.constants import KeyType, LocationParentType, StatKey
 from world.locations.models import LocationValueModifier
 from world.weather.constants import (
@@ -178,6 +183,21 @@ def apply_weather_exposure(state: RegionWeatherState) -> None:
             change_per_day=change_per_day,
             source=source,
         )
+    # #2845/ADR-0180: cloud cover IS area-wide shelter. Shelter rows land on the
+    # DAMAGE_TYPE axis of the same cascade, so overcast weather raises the graded
+    # shade term of felt sun exposure (#2846) — and any future hazard reading the
+    # shelter cascade — with no consumer-side code.
+    for shelter in state.weather_type.shelters.all():
+        change_per_day = round(-shelter.value / WEATHER_FADE_DAYS) if shelter.value else 0
+        LocationValueModifier.objects.create(
+            parent_type=LocationParentType.AREA,
+            area=state.area,
+            key_type=KeyType.DAMAGE_TYPE,
+            damage_type=shelter.damage_type,
+            value=shelter.value,
+            change_per_day=change_per_day,
+            source=source,
+        )
 
 
 def roll_region_weather(
@@ -266,6 +286,7 @@ def current_conditions(room: DefaultObject) -> ConditionsSummary:
         ic_time=get_ic_now(),
         phase=get_ic_phase(),
         season=get_ic_season(),
+        moon_phase=get_moon_phase(),
         weather_type=state.weather_type if state is not None else None,
         emit_text=emit.text if emit is not None else None,
     )
