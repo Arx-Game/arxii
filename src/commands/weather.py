@@ -1,16 +1,23 @@
-"""Telnet ``time`` command (#1522) — the IC clock + local weather readout.
+"""Telnet ``time`` command (#1522, celestial #2845) — the IC clock + local weather readout.
 
-A glance at what time it is in the world and what the weather is doing where the character is
-standing. The weather half resolves the region's current weather (most-specific-wins) and shows
-one season/phase-appropriate line — the same atmospheric flavour the periodic echo pushes, but
-on demand. The frontend renders the same `current_conditions` data as a widget.
+A glance at what time it is in the world (IC and server-clock), the moon at night, and what
+the weather is doing where the character is standing. The weather half resolves the region's
+current weather (most-specific-wins) and shows one season/phase-appropriate line — the same
+atmospheric flavour the periodic echo pushes, but on demand. The frontend renders the same
+`current_conditions` data as a widget.
 """
 
 from __future__ import annotations
 
 from typing import Any
+from zoneinfo import ZoneInfo
 
 from commands.command import ArxCommand
+
+# Player-facing server-clock timezone (#2845): the game's scheduling anchor is US-Eastern
+# (the weekly rollover anchors EST), so the `time` command reports it there. Display-only —
+# Django's TIME_ZONE stays UTC; %Z renders EST/EDT correctly across daylight saving.
+SERVER_DISPLAY_TIMEZONE = ZoneInfo("America/New_York")
 
 
 class CmdTime(ArxCommand):
@@ -50,7 +57,12 @@ class CmdTime(ArxCommand):
             return
 
         conditions = current_conditions(room)
-        lines: list[str] = [self._time_line(conditions), *self._weather_lines(conditions)]
+        lines: list[str] = [
+            self._time_line(conditions),
+            self._server_time_line(),
+            *self._moon_lines(conditions),
+            *self._weather_lines(conditions),
+        ]
 
         if account is not None and is_category_muted(
             account=account, category=NarrativeCategory.WEATHER
@@ -69,6 +81,23 @@ class CmdTime(ArxCommand):
             descriptor = f"{descriptor} in {conditions.season.label}"
         stamp = conditions.ic_time.strftime("%H:%M, %B %d, %Y")
         return f"|wIt is {descriptor} — {stamp}.|n"
+
+    @staticmethod
+    def _server_time_line() -> str:
+        """One line for the real server clock, in the game's US-Eastern anchor zone."""
+        from django.utils import timezone  # noqa: PLC0415
+
+        now = timezone.now().astimezone(SERVER_DISPLAY_TIMEZONE)
+        return f"|xServer time: {now.strftime('%H:%M %Z, %B %d')}.|n"
+
+    @staticmethod
+    def _moon_lines(conditions: Any) -> list[str]:
+        """The moon phase, shown at night only (#2845 — matches the web widget)."""
+        from world.game_clock.constants import TimePhase  # noqa: PLC0415
+
+        if conditions.phase != TimePhase.NIGHT or conditions.moon_phase is None:
+            return []
+        return [f"|wThe moon:|n {conditions.moon_phase.label}"]
 
     @staticmethod
     def _weather_lines(conditions: Any) -> list[str]:
