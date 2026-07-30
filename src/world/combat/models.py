@@ -3595,8 +3595,9 @@ class CombatMark(SharedMemoryModel):
     covenant-mates to focus. Vow content (perks, rungs) is lore-repo data that
     reads the mark via the ``TARGET_IS_MARKED_BY_ALLY`` situation evaluator.
 
-    Open seam: a general combatant-relationship model that could subsume
-    EngagementLock, Clash, and the mark is a ``needs-design`` follow-up.
+    EngagementLock, Clash, and CombatMark remain separate models — they are
+    three distinct concepts (pairing, struggle, mark), not parallel
+    implementations of one. See ADR-0178.
     """
 
     encounter = models.ForeignKey(

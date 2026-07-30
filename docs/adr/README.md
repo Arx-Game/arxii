@@ -79,6 +79,7 @@ treat those names as hints to confirm, not gospel.
 - [0101 — House aspects are catalog-only](0101-house-aspects-are-catalog-only.md)
 - [0107 — Solo darkness, not locked doors](0107-solo-darkness-not-locked-doors.md)
 - [0163 — Natural-key lookups are case-insensitive; a tuple→pk index removes the repeat query; whole-table warming is opt-in per model](0163-case-insensitive-natural-keys-and-opt-in-lookup-tables.md) (#2687; relates to ADR-0008)
+- [0178 — Combatant relationship models (EngagementLock, Clash, CombatMark) remain separate; no shared base](0178-combatant-relationships-remain-separate.md) (#2674; extends ADR-0094, ADR-0015, ADR-0016)
 
 ### Resolution
 - [0019 — Unified resolution: one roll path, data-sourced difficulty, graded outcomes](0019-unified-resolution-one-roll-path.md)
