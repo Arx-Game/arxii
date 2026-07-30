@@ -765,9 +765,31 @@ def register_all_tasks() -> None:
             callable=anima_regen_tick,
             interval=timedelta(hours=24),
             description=(
-                "Daily anima pool regeneration (skips engaged characters and "
-                "characters whose active condition stages carry blocks_anima_regen)."
+                "Daily anima pool regeneration (skips engaged characters, "
+                "blocks_anima_regen stages, and appetite holders #2853)."
             ),
+        )
+    )
+    from world.magic.services.appetites import appetite_daily_tick, appetite_weekly_tick
+
+    register_task(
+        CronDefinition(
+            task_key="magic.appetite_daily",
+            callable=appetite_daily_tick,
+            interval=timedelta(hours=24),
+            phase=CronPhase.DRAIN,
+            description="Daily appetite upkeep drains (shades) + glut decay (#2853).",
+        )
+    )
+    register_task(
+        CronDefinition(
+            task_key="magic.appetite_weekly",
+            callable=appetite_weekly_tick,
+            interval=timedelta(days=7),
+            anchor_weekday=0,
+            anchor_hour_utc=5,
+            phase=CronPhase.DRAIN,
+            description="Weekly appetite upkeep drains (vampires, floor 10%) (#2853).",
         )
     )
     register_task(

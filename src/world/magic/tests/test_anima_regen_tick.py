@@ -256,7 +256,8 @@ class NCharactersSingleDigitQueryCountTests(TestCase):
             )
 
         # Run with query counting (plan says <=8)
-        with self.assertNumQueries(6):
+        # 7 as of #2853: +1 bulk appetite-holder skip-set (still O(1) in characters).
+        with self.assertNumQueries(7):
             result = anima_regen_tick()
 
         self.assertIsInstance(result, AnimaRegenTickSummary)

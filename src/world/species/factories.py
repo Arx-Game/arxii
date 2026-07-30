@@ -287,3 +287,118 @@ def ensure_sunlight_distinctions() -> tuple:
     allergy.tags.add(allergy_tag)
     bane.mutually_exclusive_with.add(allergy)
     return bane, allergy
+
+
+def ensure_appetite_distinctions() -> tuple:
+    """Idempotently seed the Appetite: Blood / Appetite: Essence distinctions (#2853).
+
+    Tag-identified anchors (ADR-0179 pattern): species stamp them innately via
+    ``SpeciesGiftGrant.drawback_distinction``; the Shade condition grants
+    Essence on application. Cost 0 — the appetite's price is the economy
+    (no natural regen, upkeep drains), not CG points.
+
+    Returns:
+        ``(blood, essence)`` Distinction rows.
+    """
+    from world.distinctions.models import (
+        Distinction,
+        DistinctionCategory,
+        DistinctionTag,
+    )
+    from world.species.appetites import (
+        APPETITE_BLOOD_SLUG,
+        APPETITE_BLOOD_TAG,
+        APPETITE_ESSENCE_SLUG,
+        APPETITE_ESSENCE_TAG,
+    )
+
+    category, _created = DistinctionCategory.objects.get_or_create(
+        slug="drawbacks",
+        defaults={
+            "name": "Drawbacks",
+            "description": "PLACEHOLDER: disadvantages that reimburse CG points.",
+        },
+    )
+    blood_tag, _created = DistinctionTag.objects.get_or_create(
+        slug=APPETITE_BLOOD_TAG, defaults={"name": "Blood Appetite"}
+    )
+    essence_tag, _created = DistinctionTag.objects.get_or_create(
+        slug=APPETITE_ESSENCE_TAG, defaults={"name": "Essence Appetite"}
+    )
+    blood, _created = Distinction.objects.get_or_create(
+        slug=APPETITE_BLOOD_SLUG,
+        defaults={
+            "name": "Appetite: Blood",
+            "description": (
+                "PLACEHOLDER: living blood sustains you — anima comes from the "
+                "bite, never from rest."
+            ),
+            "category": category,
+            "cost_per_rank": 0,
+            "max_rank": 1,
+        },
+    )
+    essence, _created = Distinction.objects.get_or_create(
+        slug=APPETITE_ESSENCE_SLUG,
+        defaults={
+            "name": "Appetite: Essence",
+            "description": (
+                "PLACEHOLDER: the living warmth of others sustains you — anima "
+                "comes through touch and glamour, never from rest."
+            ),
+            "category": category,
+            "cost_per_rank": 0,
+            "max_rank": 1,
+        },
+    )
+    blood.tags.add(blood_tag)
+    essence.tags.add(essence_tag)
+    return blood, essence
+
+
+def ensure_ravenous_condition() -> "ConditionTemplate":
+    """Idempotently seed the Ravenous hunger condition (#2853).
+
+    Severity tracks hunger depth (``world.magic.services.appetites.hunger_severity``);
+    visible to observers (the hunger tell) and the driver of feeding restraint
+    checks. Check penalties are a PLACEHOLDER author pass.
+    """
+    from world.conditions.models import ConditionCategory, ConditionTemplate
+    from world.species.appetites import RAVENOUS_NAME
+
+    category, _created = ConditionCategory.objects.get_or_create(
+        name="Social",
+        defaults={"description": "Social conditions."},
+    )
+    template, _created = ConditionTemplate.objects.get_or_create(
+        name=RAVENOUS_NAME,
+        defaults={
+            "category": category,
+            "description": "PLACEHOLDER: gnawing hunger for blood or essence (#2853).",
+            "player_description": "Hunger gnaws at you.",
+            "observer_description": "looks hollow-eyed and hungry.",
+            "is_visible_to_others": True,
+        },
+    )
+    return template
+
+
+def ensure_appetite_upkeep() -> None:
+    """Idempotently seed the appetite upkeep configs (#2853, PLACEHOLDER magnitudes).
+
+    Blood appetite (vampires' anchor): weekly -1, floor 10% of maximum.
+    Essence appetite: no upkeep by default — the Shade condition's daily -1 /
+    floor 0 config rides its own distinction wiring at Shade content time (the
+    half-living tiers' ruled penalty is no-regen only).
+    """
+    from world.magic.models.appetites import AppetitePeriod, AppetiteUpkeep
+
+    blood, _essence = ensure_appetite_distinctions()
+    AppetiteUpkeep.objects.get_or_create(
+        distinction=blood,
+        defaults={
+            "period": AppetitePeriod.WEEKLY,
+            "amount": 1,
+            "floor_percent": 10,
+        },
+    )
