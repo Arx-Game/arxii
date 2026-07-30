@@ -55,6 +55,18 @@ def _ref(registry_key: str) -> ActionRef:
     return ActionRef(backend=ActionBackend.REGISTRY, registry_key=registry_key)
 
 
+def _advance_to_burning(target, template) -> None:
+    """Advance a fresh Sunlight Exposure instance into its damaging stage (#2846)."""
+    from world.conditions.models import ConditionInstance
+    from world.conditions.services import advance_condition_severity
+    from world.species.sun_constants import BURNING_SEVERITY_THRESHOLD
+
+    instance = ConditionInstance.objects.get(
+        target=target, condition=template, resolved_at__isnull=True
+    )
+    advance_condition_severity(instance, BURNING_SEVERITY_THRESHOLD - instance.severity)
+
+
 @tag("postgres")  # apply_condition (Sunlight Exposure + capability grant) uses DISTINCT ON
 @override_settings(SEED_SAMPLE_CONTENT=True)  # ensure_succor_content gates on #2698
 class SuccorSceneE2ETests(TestCase):
@@ -71,7 +83,6 @@ class SuccorSceneE2ETests(TestCase):
         )
         from world.conditions.models import CapabilityType
         from world.conditions.services import apply_condition
-        from world.game_clock.constants import TimePhase
         from world.magic.factories import GiftFactory
         from world.mechanics.models import ChallengeInstance, ChallengeTemplate
         from world.scenes.round_services import ensure_round_for_acute_condition
@@ -105,9 +116,10 @@ class SuccorSceneE2ETests(TestCase):
         ally_sheet = CharacterSheetFactory()
         self.ally = self._place_character(ally_sheet)
 
-        # Outdoors + noon -> the vampire's Sunlight Exposure drawback is active.
-        with patch("world.species.services.get_ic_phase", return_value=TimePhase.DAY):
-            apply_condition(self.vampire, self.sunlight_template)
+        # Outdoors + noon -> the vampire's Sunlight Exposure condition sits in a
+        # damaging stage (#2846: stage-level DoT — only Burning+ deals damage).
+        apply_condition(self.vampire, self.sunlight_template, severity=1)
+        _advance_to_burning(self.vampire, self.sunlight_template)
 
         # The ally can shelter allies via telekinesis (a seeded Succor capability).
         telekinesis = CapabilityType.objects.get(name="telekinesis")

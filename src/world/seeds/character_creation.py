@@ -1075,6 +1075,7 @@ def seed_character_creation_dev() -> None:
     _seed_cg_explanations()
     ensure_tradition_training_distinction()
     ensure_somehow_always_broke_distinction()
+    _seed_sun_sensitive_species()
     if not settings.SEED_SAMPLE_CONTENT:
         return
     # Named world content — authored in the content repo by maintainers, so
@@ -1164,6 +1165,143 @@ def ensure_somehow_always_broke_distinction():
         defaults={"drain_percent": 100, "floor_coppers": 0},
     )
     return distinction
+
+
+def _seed_sun_sensitive_species() -> None:
+    """#2846: sun-sensitive species with distinction-anchored bane/allergy wiring.
+
+    EVERY row here — the Bane/Allergy: Sunlight distinctions (+ category and
+    tags), the species rows, their Minor Gifts, and the SpeciesGiftGrant
+    wiring — is content-repo-owned (#2698): looked up via
+    ``authored_or_sample``, invented (with PLACEHOLDER prose) only under
+    ``SEED_SAMPLE_CONTENT``. Mirrors ``ensure_tradition_training_distinction``
+    above; tests/E2E use ``world.species.factories.ensure_sunlight_distinctions``
+    (a fixture ensure, deliberately NOT called from any seeder).
+
+    All four are deliberately LEAF species (no parent links) — playability is
+    derived leaf-ness, so parenting Dhampir under Vampire would silently retire
+    Vampire from chargen. Beginnings gating (Ariwn origins; Nox'alfar also via
+    Arx Sleeper/Misbegotten) is a content pass tracked on the spec issue.
+    """
+    from world.distinctions.models import (  # noqa: PLC0415
+        Distinction,
+        DistinctionCategory,
+        DistinctionTag,
+    )
+    from world.magic.constants import GiftKind  # noqa: PLC0415
+    from world.magic.models.gifts import Gift  # noqa: PLC0415
+    from world.seeds.sample_content import authored_or_sample  # noqa: PLC0415
+    from world.species.models import SpeciesGiftGrant  # noqa: PLC0415
+    from world.species.sun_constants import (  # noqa: PLC0415
+        SUN_ALLERGY_CG_COST,
+        SUN_ALLERGY_SLUG,
+        SUN_ALLERGY_TAG,
+        SUN_BANE_CG_COST,
+        SUN_BANE_SLUG,
+        SUN_BANE_TAG,
+    )
+
+    category = authored_or_sample(
+        DistinctionCategory,
+        {
+            "name": "Drawbacks",
+            "description": "PLACEHOLDER: disadvantages that reimburse CG points.",
+        },
+        slug="drawbacks",
+    )
+
+    def _sun_distinction(slug: str, *, tag: tuple[str, str], name: str, cost: int, desc: str):
+        if category is None:
+            return None
+        tag_slug, tag_name = tag
+        tag_row = authored_or_sample(DistinctionTag, {"name": tag_name}, slug=tag_slug)
+        distinction = authored_or_sample(
+            Distinction,
+            {
+                "name": name,
+                "description": desc,
+                "category": category,
+                "cost_per_rank": cost,
+                "max_rank": 1,
+            },
+            slug=slug,
+        )
+        if distinction is not None and tag_row is not None:
+            distinction.tags.add(tag_row)
+        return distinction
+
+    bane = _sun_distinction(
+        SUN_BANE_SLUG,
+        tag=(SUN_BANE_TAG, "Sun Bane"),
+        name="Bane: Sunlight",
+        cost=SUN_BANE_CG_COST,
+        desc="PLACEHOLDER: direct sunlight is anathema — without heavy precautions it "
+        "burns, and even covered you are diminished under the open sky.",
+    )
+    allergy = _sun_distinction(
+        SUN_ALLERGY_SLUG,
+        tag=(SUN_ALLERGY_TAG, "Sun Allergy"),
+        name="Allergy: Sunlight",
+        cost=SUN_ALLERGY_CG_COST,
+        desc="PLACEHOLDER: direct sunlight sickens you — cover up or keep to the "
+        "shade, or it will do far worse than sicken.",
+    )
+    if bane is not None and allergy is not None:
+        bane.mutually_exclusive_with.add(allergy)
+
+    rows = (
+        (
+            "Vampire",
+            bane,
+            20,
+            "PLACEHOLDER: the night's aristocracy of Ariwn — direct sunlight is their bane.",
+        ),
+        (
+            "Dhampir",
+            allergy,
+            21,
+            "PLACEHOLDER: mortal-blooded scions of vampire lines — the sun "
+            "sickens rather than slays.",
+        ),
+        (
+            "Nox'alfar",
+            allergy,
+            22,
+            "PLACEHOLDER: the night elves — reachable in Arx as Sleepers and "
+            "Misbegotten; daylight is an allergy, not a bane.",
+        ),
+        (
+            "Lycan",
+            None,
+            23,
+            "PLACEHOLDER: shapeshifters of Ariwn — the sun holds no terror; "
+            "the moon is another spec (#2845).",
+        ),
+    )
+    for name, sun_distinction, sort_order, description in rows:
+        species = authored_or_sample(
+            Species,
+            {"description": description, "sort_order": sort_order},
+            name=name,
+        )
+        if species is None or sun_distinction is None:
+            continue
+        gift = authored_or_sample(
+            Gift,
+            {
+                "kind": GiftKind.MINOR,
+                "description": f"PLACEHOLDER: the minor gift of the {name} blood.",
+            },
+            name=f"{name} Blood",
+        )
+        if gift is None:
+            continue
+        authored_or_sample(
+            SpeciesGiftGrant,
+            {"drawback_distinction": sun_distinction, "cg_point_cost": 0},
+            species=species,
+            gift=gift,
+        )
 
 
 def _seed_cg_explanations() -> None:

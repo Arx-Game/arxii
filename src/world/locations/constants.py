@@ -81,6 +81,11 @@ class StatKey(models.TextChoices):
     # POOL above neutral toward 6–10. Distinct from mitigation (which only cancels discomfort,
     # floored): amenities are how you ADD comfort, and the high end is deliberately expensive.
     AMENITY = "amenity", "Amenity (positive comfort)"
+    # Sun-protection axis (#2846): authored garment/parasol mitigation against felt sun
+    # exposure (hoods, veils, parasols — carried by items.GarmentMitigation rows). NOT an
+    # exposure/discomfort axis: deliberately excluded from EXPOSURE_STAT_KEYS so it never
+    # feeds comfort math — its sole consumer is world.species.sun_exposure.
+    SUN = "sun", "Sun protection"
 
 
 # Per-stat default value when no row exists in the cascade chain.
@@ -98,6 +103,7 @@ STAT_DEFAULTS: dict[StatKey, int] = {
     StatKey.WIND: 0,
     StatKey.DRY: 0,
     StatKey.AMENITY: 0,
+    StatKey.SUN: 0,
 }
 
 # Inclusive (min, max) bounds applied to the final cascade-resolved value.
@@ -120,6 +126,7 @@ STAT_CLAMPS: dict[StatKey, tuple[int, int]] = {
     StatKey.WIND: (0, 100_000),
     StatKey.DRY: (0, 100_000),
     StatKey.AMENITY: (0, 1_000_000),
+    StatKey.SUN: (0, 100_000),
 }
 
 # Suggested ``change_per_day`` value for new modifiers if the calling
@@ -140,6 +147,7 @@ SUGGESTED_CHANGE_PER_DAY: dict[StatKey, int] = {
     StatKey.WIND: 0,
     StatKey.DRY: 0,
     StatKey.AMENITY: 0,
+    StatKey.SUN: 0,
 }
 
 # Environmental discomfort axes that sum into the comfort score (#1514).

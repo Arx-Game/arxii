@@ -1,1 +1,1 @@
-0024_building_property_activated_at_and_more
+0025_alter_decorationaffinity_stat_key_and_more

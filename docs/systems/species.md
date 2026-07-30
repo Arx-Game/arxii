@@ -63,7 +63,49 @@ a free weak gift with no attached price):
   [character_creation.md](character_creation.md)).
 
 Which species uses which shape (or combination) is **lore-repo content** — this
-app never authors species/gift/distinction data itself.
+app never authors species/gift/distinction data itself. (Exception: the
+`Bane: Sunlight` / `Allergy: Sunlight` Distinction anchor rows are seeded
+unconditionally by `ensure_sunlight_distinctions()` because the sun-exposure
+mechanics resolve against them; the species/gift rows that *use* them stay
+content-owned.)
+
+---
+
+## Sunlight Bane & Allergy (#2846, ADR-0179; extends ADR-0073)
+
+Sun vulnerability is a graded continuum, not a boolean:
+
+- **`sun_exposure.felt_sun_exposure(character, room) -> SunExposure`** — one
+  non-negative residual with a full breakdown: base (IC phase × sky exposure —
+  `is_outdoor`, authored ROOFED/SEALED enclosure blocks; only the sun ever
+  counts) − graded shade (radiant cascade `effective_value` + position
+  shelter) − clothing coverage (non-revealing garments protect their equipped
+  sun-relevant `BodyRegion`s, capped; `ItemTemplate.is_revealing` exposes
+  skin) − authored `GarmentMitigation` SUN rows (hoods/veils/parasols;
+  resonance-imbued rows tracked as their own field — the sun-flex read) −
+  `sun_mitigation` ModifierTarget magic.
+- **`sun_sensitivity.sun_sensitivity_for(sheet)`** — worst held tier by
+  `DistinctionTag` (`sun-bane`/`sun-allergy`, #2752 pattern); innate
+  (species-stamped) and voluntarily-taken (CG reimbursement) resolve
+  identically. `sun_severity(tier, exposure)` maps residual → condition
+  severity; the bane floor clears only under real shadow
+  (`shade_only_residual`), never via clothing/magic.
+- **`services.reconcile_sunlight_exposure(character, room)`** — syncs the
+  staged Sunlight Exposure condition (Sun-Struck / Burning / Searing;
+  impairment below Burning, stage-level fixed radiant DoT at Burning+) to the
+  computed severity, with an IC-age escalation bonus for sustained exposure.
+  Triggers: movement (typeclass hook), the `species.sun_reconcile` cron
+  (5-min, DRAIN — stationary dawn pickup), and equip/position-change hooks via
+  `reconcile_sun_exposure_safely`.
+- **`sun_refuge.find_sun_refuge` / `flee_to_sun_refuge`** — bounded BFS over
+  exits to the nearest shade-safe room (non-public wins ties); the AFK guard
+  (`world.conditions.hazard_prompt`, `HazardResponseState`) prompts once on a
+  damaging stage and auto-flees after the second unanswered damage instance.
+  Player answers are the `hazard_endure` / `hazard_retreat` actions.
+- **CG gate** — `species_innate_distinction_ids(species)` backs the draft
+  validator: an innately-granted distinction is unselectable as a choice.
+- Tuning constants (all PLACEHOLDER) live in `sun_constants.py`. Headline
+  invariants are named tests in `world/species/tests/`.
 
 ### Hierarchy Design
 
@@ -127,5 +169,6 @@ str(bonus)  # "Infernal: -1 Charm"
 
 All models registered in Django admin:
 
-- **`SpeciesAdmin`** - List display with parent filter, stat bonus summary, and language count. Includes `SpeciesChildrenInline` (read-only subspecies list with change links) and `SpeciesStatBonusInline` (editable stat bonuses). Uses `filter_horizontal` for starting languages.
+- **`SpeciesAdmin`** - List display with parent filter, stat bonus summary, and language count. Includes `SpeciesChildrenInline` (read-only subspecies list with change links), `SpeciesStatBonusInline` (editable stat bonuses), and `SpeciesGiftGrantInline` (#2846). Fieldsets cover `codex_entry` and the aging axes (`eternal_youth`, `decline_start_age`). Uses `filter_horizontal` for starting languages.
+- **`SpeciesGiftGrantAdmin`** (#2846) - Standalone grant editing with species/inheritable filters.
 - **`LanguageAdmin`** - Simple list with name search.

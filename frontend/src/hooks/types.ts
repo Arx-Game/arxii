@@ -33,6 +33,8 @@ export const WS_MESSAGE_TYPE = {
   KUDOS_RECEIVED: 'kudos_received',
   /** Inbound: a new letter arrived for one of the recipient's tenures (#2160). */
   MAIL_ARRIVED: 'mail_arrived',
+  /** Inbound: an environmental hazard entered a damaging stage; show the response card (#2846). */
+  HAZARD_PROMPT: 'hazard_prompt',
 } as const;
 
 export type SocketMessageType = (typeof WS_MESSAGE_TYPE)[keyof typeof WS_MESSAGE_TYPE];
@@ -171,6 +173,22 @@ export interface MailArrivedPayload {
   mail_id: number;
   sender_display: string;
   subject: string;
+}
+
+/**
+ * An environmental-hazard condition (sunlight bane/allergy, #2846) crossed
+ * into a damaging stage. `endure_action`/`retreat_action` are action keys the
+ * client dispatches through the normal action-dispatch endpoint; cover-up and
+ * seek-shade route to existing wardrobe / room surfaces.
+ */
+export interface HazardPromptPayload {
+  character_id: number;
+  condition_name: string;
+  stage_name: string;
+  severity: number;
+  player_text: string;
+  endure_action: string;
+  retreat_action: string;
 }
 
 export interface InteractionWsPayload {

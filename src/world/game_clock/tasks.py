@@ -542,6 +542,22 @@ def _register_tasking_tasks() -> None:
     )
 
 
+def _register_external_app_tasks() -> None:
+    """Per-app task aggregators — each app owns its own registrations.
+
+    #676 Phase A: renown decay (societies). #514 Outfits Phase C: trendsetter
+    ceremony + vogue-momentum decay (items). #2846: sunlight reconcile
+    (species — stationary dawn pickup + escalation).
+    """
+    from world.items.tasks import register_all_tasks as register_fashion_tasks
+    from world.societies.tasks import register_all_tasks as register_renown_tasks
+    from world.species.tasks import register_all_tasks as register_species_tasks
+
+    register_renown_tasks()
+    register_fashion_tasks()
+    register_species_tasks()
+
+
 def register_all_tasks() -> None:
     """Register all periodic tasks with the scheduler."""
     register_task(
@@ -686,15 +702,7 @@ def register_all_tasks() -> None:
 
     _register_tasking_tasks()
 
-    # #676 Phase A: Renown decay (fame on personas, accumulated on orgs)
-    from world.societies.tasks import register_all_tasks as register_renown_tasks
-
-    register_renown_tasks()
-
-    # #514 Outfits Phase C: seasonal trendsetter ceremony + vogue-momentum decay
-    from world.items.tasks import register_all_tasks as register_fashion_tasks
-
-    register_fashion_tasks()
+    _register_external_app_tasks()
 
     _register_weekly_money_tasks()
 

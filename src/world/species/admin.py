@@ -7,6 +7,7 @@ from django.contrib import admin
 from world.species.models import (
     Language,
     Species,
+    SpeciesGiftGrant,
     SpeciesStatBonus,
 )
 
@@ -35,6 +36,23 @@ class SpeciesStatBonusInline(admin.TabularInline):
     fields = ["stat", "value"]
 
 
+class SpeciesGiftGrantInline(admin.TabularInline):
+    """Inline for editing gift grants (Minor Gift + drawbacks) on a species (#2846)."""
+
+    model = SpeciesGiftGrant
+    extra = 0
+    fields = [
+        "gift",
+        "drawback_condition",
+        "benefit_condition",
+        "drawback_distinction",
+        "cg_point_cost",
+        "inheritable",
+    ]
+    autocomplete_fields = ["gift", "drawback_condition", "benefit_condition"]
+    raw_id_fields = ["drawback_distinction"]
+
+
 @admin.register(Species)
 class SpeciesAdmin(admin.ModelAdmin):
     """Admin for Species model."""
@@ -44,13 +62,15 @@ class SpeciesAdmin(admin.ModelAdmin):
     search_fields = ["name", "description"]
     ordering = ["sort_order", "name"]
     filter_horizontal = ["starting_languages"]
-    inlines = [SpeciesChildrenInline, SpeciesStatBonusInline]
+    inlines = [SpeciesChildrenInline, SpeciesStatBonusInline, SpeciesGiftGrantInline]
 
     fieldsets = [
         (None, {"fields": ["name", "parent", "sort_order"]}),
-        ("Description", {"fields": ["description"]}),
+        ("Description", {"fields": ["description", "codex_entry"]}),
         ("Languages", {"fields": ["starting_languages"]}),
+        ("Aging (#2756)", {"fields": ["eternal_youth", "decline_start_age"]}),
     ]
+    raw_id_fields = ["codex_entry"]
 
     @admin.display(description="Stat Bonuses")
     def stat_bonus_summary(self, obj):
@@ -68,6 +88,24 @@ class SpeciesAdmin(admin.ModelAdmin):
     def language_count(self, obj):
         """Show count of starting languages."""
         return obj.starting_languages.count()
+
+
+@admin.register(SpeciesGiftGrant)
+class SpeciesGiftGrantAdmin(admin.ModelAdmin):
+    """Admin for SpeciesGiftGrant (#2846 — previously unregistered)."""
+
+    list_display = [
+        "species",
+        "gift",
+        "drawback_distinction",
+        "drawback_condition",
+        "cg_point_cost",
+        "inheritable",
+    ]
+    list_filter = ["inheritable", "species"]
+    search_fields = ["species__name", "gift__name"]
+    autocomplete_fields = ["species", "gift", "drawback_condition", "benefit_condition"]
+    raw_id_fields = ["drawback_distinction"]
 
 
 @admin.register(Language)
