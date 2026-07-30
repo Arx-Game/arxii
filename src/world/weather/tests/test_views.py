@@ -58,3 +58,27 @@ class WeatherConditionsApiTest(APITestCase):
         assert response.status_code == status.HTTP_200_OK
         assert response.data["weather_type"] is None
         assert response.data["emit_text"] is None
+
+
+class TimeCommandHelperTests(APITestCase):
+    """CmdTime's celestial additions (#2845): server-clock line + night-only moon."""
+
+    def test_server_time_line_renders_eastern(self):
+        from commands.weather import CmdTime
+
+        line = CmdTime._server_time_line()
+        self.assertIn("Server time:", line)
+        self.assertTrue("EST" in line or "EDT" in line)
+
+    def test_moon_line_shown_at_night_only(self):
+        from types import SimpleNamespace
+
+        from commands.weather import CmdTime
+        from world.game_clock.constants import MoonPhase, TimePhase
+
+        night = SimpleNamespace(phase=TimePhase.NIGHT, moon_phase=MoonPhase.FULL)
+        self.assertEqual(CmdTime._moon_lines(night), ["|wThe moon:|n Full Moon"])
+        day = SimpleNamespace(phase=TimePhase.DAY, moon_phase=MoonPhase.FULL)
+        self.assertEqual(CmdTime._moon_lines(day), [])
+        no_clock = SimpleNamespace(phase=None, moon_phase=None)
+        self.assertEqual(CmdTime._moon_lines(no_clock), [])

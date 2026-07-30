@@ -165,6 +165,7 @@
   - rampart_resistances <- areas.RampartElementResistance
   - cascade_overrides <- locations.LocationValueOverride
   - cascade_modifiers <- locations.LocationValueModifier
+  - weather_shelters <- weather.WeatherTypeShelter
   - weapon_templates <- items.ItemTemplate
   - miracledamageprofile_damage_profiles <- worship.MiracleDamageProfile
   - threat_pool_entries <- combat.ThreatPoolEntry
@@ -2657,6 +2658,7 @@
   - rampart_resistances <- areas.RampartElementResistance
   - cascade_overrides <- locations.LocationValueOverride
   - cascade_modifiers <- locations.LocationValueModifier
+  - weather_shelters <- weather.WeatherTypeShelter
   - weapon_templates <- items.ItemTemplate
   - miracledamageprofile_damage_profiles <- worship.MiracleDamageProfile
   - threat_pool_entries <- combat.ThreatPoolEntry
@@ -3775,8 +3777,13 @@
 - `get_ic_phase(*, real_now: datetime.datetime | None = None) -> world.game_clock.constants.TimePhase | None — Return the current time-of-day phase, or None if no clock exists.`
 - `get_ic_season(*, real_now: datetime.datetime | None = None) -> world.game_clock.constants.Season | None — Return the current IC season, or None if no clock exists.`
 - `get_light_level(*, real_now: datetime.datetime | None = None) -> float | None — Return a smooth 0.0-1.0 light level, or None if no clock exists.`
+- `get_moon_illumination(*, real_now: datetime.datetime | None = None) -> float | None — Return the current 0.0-1.0 lunar illumination, or None if no clock exists.`
+- `get_moon_phase(*, real_now: datetime.datetime | None = None) -> world.game_clock.constants.MoonPhase | None — Return the current lunar phase, or None if no clock exists.`
 - `get_real_time_for_ic_date(ic_dt: datetime.datetime) -> datetime.datetime | None — Convert an IC datetime to real datetime, or None if no clock exists.`
 - `light_level_from_ic_time(ic_now: datetime.datetime) -> float — Derive a smooth 0.0-1.0 light level from a concrete IC datetime.`
+- `moon_cycle_fraction_from_ic_time(ic_now: datetime.datetime) -> float — Position in the synodic cycle for a concrete IC datetime, in [0, 1).`
+- `moon_illumination_from_ic_time(ic_now: datetime.datetime) -> float — Smooth 0.0-1.0 illuminated fraction (0 = new, 1 = full).`
+- `moon_phase_from_ic_time(ic_now: datetime.datetime) -> world.game_clock.constants.MoonPhase — Derive the lunar phase from a concrete IC datetime (8 centered bins).`
 - `pause_clock(*, changed_by: evennia.accounts.models.AccountDB, reason: str = '') -> world.game_clock.models.GameClock — Pause the game clock, freezing IC time at its current value.`
 - `phase_from_ic_time(ic_now: datetime.datetime) -> world.game_clock.constants.TimePhase — Derive the time-of-day phase from a concrete IC datetime.`
 - `season_from_ic_time(ic_now: datetime.datetime) -> world.game_clock.constants.Season — Derive the IC season from a concrete IC datetime.`
@@ -9142,6 +9149,7 @@
 **Pointed to by:**
   - conjuring_techniques <- magic.Technique
   - exposures <- weather.WeatherTypeExposure
+  - shelters <- weather.WeatherTypeShelter
   - emits <- weather.WeatherEmit
   - active_in_regions <- weather.RegionWeatherState
   - feast_days <- weather.FeastDay
@@ -9153,6 +9161,11 @@
 ### WeatherTypeExposure
 **Foreign Keys:**
   - weather_type -> weather.WeatherType [FK]
+
+### WeatherTypeShelter
+**Foreign Keys:**
+  - weather_type -> weather.WeatherType [FK]
+  - damage_type -> conditions.DamageType [FK]
 
 ### WeatherEmit
 **Foreign Keys:**
@@ -9179,6 +9192,7 @@
 - `get_ic_now(*, real_now: datetime.datetime | None = None) -> datetime.datetime | None — Return the current IC datetime, or None if no clock exists.`
 - `get_ic_phase(*, real_now: datetime.datetime | None = None) -> world.game_clock.constants.TimePhase | None — Return the current time-of-day phase, or None if no clock exists.`
 - `get_ic_season(*, real_now: datetime.datetime | None = None) -> world.game_clock.constants.Season | None — Return the current IC season, or None if no clock exists.`
+- `get_moon_phase(*, real_now: datetime.datetime | None = None) -> world.game_clock.constants.MoonPhase | None — Return the current lunar phase, or None if no clock exists.`
 - `month_temperature_shift(month: 'int') -> 'int' — The global temperature shift for an IC month (1–12); 0 if out of range.`
 - `roll_region_weather(area: 'Area', *, weather_type: 'WeatherType | None' = None) -> 'RegionWeatherState | None' — Set (or roll) a region's current weather and re-apply its exposure modifiers (#1522).`
 - `select_weather_emit(area: 'Area | None', *, season: 'Season | None' = None, phase: 'TimePhase | None' = None) -> 'WeatherEmit | None' — Pick a weighted-random atmospheric emit for a region's current weather (#1522).`

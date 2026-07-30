@@ -17,7 +17,12 @@ import secrets
 from typing import TYPE_CHECKING
 
 from evennia_extensions.models import RoomProfile
-from world.game_clock.services import get_ic_now, get_ic_phase, get_ic_season
+from world.game_clock.services import (
+    get_ic_now,
+    get_ic_phase,
+    get_ic_season,
+    get_moon_phase,
+)
 from world.locations.constants import KeyType, LocationParentType, StatKey
 from world.locations.models import LocationValueModifier
 from world.weather.constants import (
@@ -178,6 +183,48 @@ def apply_weather_exposure(state: RegionWeatherState) -> None:
             change_per_day=change_per_day,
             source=source,
         )
+    # #2845/ADR-0180: cloud cover IS area-wide shelter. Shelter rows land on the
+    # DAMAGE_TYPE axis of the same cascade, so overcast weather raises the graded
+    # shade term of felt sun exposure (#2846) — and any future hazard reading the
+    # shelter cascade — with no consumer-side code.
+    for shelter in state.weather_type.shelters.all():
+        change_per_day = round(-shelter.value / WEATHER_FADE_DAYS) if shelter.value else 0
+        LocationValueModifier.objects.create(
+            parent_type=LocationParentType.AREA,
+            area=state.area,
+            key_type=KeyType.DAMAGE_TYPE,
+            damage_type=shelter.damage_type,
+            value=shelter.value,
+            change_per_day=change_per_day,
+            source=source,
+        )
+
+
+def _pick_next_weather(
+    current: RegionWeatherState | None,
+    candidates: list[WeatherType],
+) -> WeatherType:
+    """Pick the next weather from the transition graph, or the global pool (#2845, ADR-0181).
+
+    When the region currently holds a type with authored outgoing
+    ``WeatherTransition`` edges, the roll draws from those edges intersected
+    with the climate-eligible candidates — weather walks the graph, so shifts
+    trend (clear -> overcast -> storm) rather than jump-cut. A type with no
+    outgoing edges, an empty intersection (e.g. seasonal eligibility pruned
+    every authored destination), or no current state falls back to the global
+    ``selection_weight`` roll — sparse authoring degrades to today's behavior.
+    """
+    from world.weather.models import WeatherTransition  # noqa: PLC0415
+
+    if current is not None:
+        edge_weights = {
+            edge.to_type_id: edge.weight
+            for edge in WeatherTransition.objects.filter(from_type=current.weather_type)
+        }
+        reachable = [c for c in candidates if c.pk in edge_weights]
+        if reachable:
+            return _weighted_choice(reachable, [max(1, edge_weights[c.pk]) for c in reachable])
+    return _weighted_choice(candidates, [max(1, c.selection_weight) for c in candidates])
 
 
 def roll_region_weather(
@@ -196,8 +243,8 @@ def roll_region_weather(
         candidates = eligible_weather_types(area)
         if not candidates:
             return None
-        weather_type = _weighted_choice(
-            candidates, [max(1, c.selection_weight) for c in candidates]
+        weather_type = _pick_next_weather(
+            RegionWeatherState.objects.filter(area=area).first(), candidates
         )
     state, _ = RegionWeatherState.objects.update_or_create(
         area=area, defaults={"weather_type": weather_type}
@@ -266,6 +313,7 @@ def current_conditions(room: DefaultObject) -> ConditionsSummary:
         ic_time=get_ic_now(),
         phase=get_ic_phase(),
         season=get_ic_season(),
+        moon_phase=get_moon_phase(),
         weather_type=state.weather_type if state is not None else None,
         emit_text=emit.text if emit is not None else None,
     )

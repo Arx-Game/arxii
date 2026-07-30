@@ -39655,6 +39655,10 @@ components:
           type: string
           nullable: true
           readOnly: true
+        moon_phase:
+          type: string
+          nullable: true
+          readOnly: true
         weather_type:
           type: string
           nullable: true
@@ -39665,6 +39669,7 @@ components:
       required:
       - emit_text
       - ic_time
+      - moon_phase
       - phase
       - season
       - weather_type

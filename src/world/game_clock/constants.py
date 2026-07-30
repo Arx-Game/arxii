@@ -48,3 +48,25 @@ MONTH_TO_SEASON: dict[int, Season] = {
     11: Season.AUTUMN,
     12: Season.WINTER,
 }
+
+
+class MoonPhase(TextChoices):
+    """Lunar phases derived from IC time (#2845 celestial layer).
+
+    Deterministic off the IC clock — no state, no cron writer: every read
+    tracks the synodic cycle as time advances (staff time-skips included).
+    """
+
+    NEW = "new", "New Moon"
+    WAXING_CRESCENT = "waxing_crescent", "Waxing Crescent"
+    FIRST_QUARTER = "first_quarter", "First Quarter"
+    WAXING_GIBBOUS = "waxing_gibbous", "Waxing Gibbous"
+    FULL = "full", "Full Moon"
+    WANING_GIBBOUS = "waning_gibbous", "Waning Gibbous"
+    LAST_QUARTER = "last_quarter", "Last Quarter"
+    WANING_CRESCENT = "waning_crescent", "Waning Crescent"
+
+
+# PLACEHOLDER tuning (#2845): synodic cycle length in IC days, and the fixed IC
+# epoch anchoring a NEW moon. 30 IC days ≈ one IC month per cycle.
+MOON_SYNODIC_IC_DAYS = 30.0

@@ -267,3 +267,171 @@ class FeastDayWeatherTests(TestCase):
         state = get_effective_weather(region)
         assert state is not None
         assert state.weather_type == madness
+
+
+class WeatherShelterTests(TestCase):
+    """#2845/ADR-0180: cloud cover materializes as area-wide hazard shelter."""
+
+    def setUp(self):
+        from world.conditions.factories import ensure_radiant_damage_type
+
+        self.radiant = ensure_radiant_damage_type()
+        self.region = AreaFactory(level=AreaLevel.CITY, climate=ClimateFactory())
+        self.overcast = WeatherTypeFactory(name="Overcast")
+        from world.weather.factories import WeatherTypeShelterFactory
+
+        WeatherTypeShelterFactory(weather_type=self.overcast, damage_type=self.radiant, value=6)
+
+    def test_roll_materializes_damage_type_shelter_modifier(self):
+        from world.locations.constants import KeyType
+        from world.locations.models import LocationValueModifier
+
+        roll_region_weather(self.region, weather_type=self.overcast)
+        row = LocationValueModifier.objects.get(area=self.region, key_type=KeyType.DAMAGE_TYPE)
+        self.assertEqual(row.damage_type, self.radiant)
+        self.assertEqual(row.value, 6)
+        self.assertEqual(row.source, f"weather:{self.region.pk}")
+        self.assertLess(row.change_per_day, 0)
+
+    def test_reroll_replaces_shelter_rows(self):
+        from world.locations.constants import KeyType
+        from world.locations.models import LocationValueModifier
+
+        clear = WeatherTypeFactory(name="ClearSky")
+        roll_region_weather(self.region, weather_type=self.overcast)
+        roll_region_weather(self.region, weather_type=clear)
+        self.assertEqual(
+            LocationValueModifier.objects.filter(
+                area=self.region, key_type=KeyType.DAMAGE_TYPE
+            ).count(),
+            0,
+        )
+
+    def test_overcast_raises_felt_sun_shade(self):
+        """The #2846 coupling: cloudy weather reduces felt sun exposure via shade."""
+        from unittest.mock import patch
+
+        from world.character_sheets.factories import CharacterSheetFactory
+        from world.game_clock.constants import TimePhase
+        from world.species.sun_exposure import felt_sun_exposure
+
+        profile = RoomProfileFactory(is_outdoor=True, area=self.region)
+        room = profile.objectdb
+        sheet = CharacterSheetFactory()
+        with patch("world.species.sun_exposure.get_ic_phase", return_value=TimePhase.DAY):
+            before = felt_sun_exposure(sheet.character, room)
+            roll_region_weather(self.region, weather_type=self.overcast)
+            after = felt_sun_exposure(sheet.character, room)
+        self.assertEqual(before.shade, 0)
+        self.assertEqual(after.shade, 6)
+        self.assertEqual(after.residual, before.residual - 6)
+
+
+class PhaseAlignedWeatherTickTests(TestCase):
+    """#2845: the weather tick fires only at IC time-of-day phase boundaries."""
+
+    def _guard(self):
+        from world.weather.tasks import _phase_transitioned_since_last_run
+
+        return _phase_transitioned_since_last_run()
+
+    def _stamp(self, ic_dt):
+        from world.game_clock.models import ScheduledTaskRecord
+        from world.weather.tasks import WEATHER_TASK_KEY
+
+        record, _ = ScheduledTaskRecord.objects.get_or_create(task_key=WEATHER_TASK_KEY)
+        record.last_ic_run_at = ic_dt
+        record.save(update_fields=["last_ic_run_at"])
+
+    def test_no_clock_falls_back_to_legacy_cadence(self):
+        from datetime import timedelta
+        from unittest.mock import patch
+
+        from django.utils import timezone
+
+        from world.game_clock.models import ScheduledTaskRecord
+        from world.weather.tasks import WEATHER_TASK_KEY
+
+        with patch("world.game_clock.services.get_ic_now", return_value=None):
+            assert self._guard() is True  # first run: clockless worlds still roll
+            record, _ = ScheduledTaskRecord.objects.get_or_create(task_key=WEATHER_TASK_KEY)
+            record.last_run_at = timezone.now() - timedelta(minutes=30)
+            record.save(update_fields=["last_run_at"])
+            assert self._guard() is False
+            record.last_run_at = timezone.now() - timedelta(hours=3)
+            record.save(update_fields=["last_run_at"])
+            assert self._guard() is True
+
+    def test_first_run_fires(self):
+        from datetime import UTC, datetime
+        from unittest.mock import patch
+
+        noon = datetime(2020, 5, 10, 12, 0, tzinfo=UTC)
+        with patch("world.game_clock.services.get_ic_now", return_value=noon):
+            assert self._guard() is True
+
+    def test_same_phase_noops_boundary_fires(self):
+        from datetime import UTC, datetime
+        from unittest.mock import patch
+
+        noon = datetime(2020, 5, 10, 12, 0, tzinfo=UTC)
+        one_pm = datetime(2020, 5, 10, 13, 0, tzinfo=UTC)
+        night = datetime(2020, 5, 10, 20, 30, tzinfo=UTC)
+        self._stamp(noon)
+        with patch("world.game_clock.services.get_ic_now", return_value=one_pm):
+            assert self._guard() is False
+        with patch("world.game_clock.services.get_ic_now", return_value=night):
+            assert self._guard() is True
+
+
+class WeatherTransitionGraphTests(TestCase):
+    """#2845/ADR-0181: the roll walks the authored transition graph when edges exist.
+
+    Pure picker tests — no Areas (matview-free); ``_pick_next_weather`` takes the
+    current state row and the eligible candidates directly.
+    """
+
+    def _state(self, weather_type):
+        from world.weather.models import RegionWeatherState
+
+        return RegionWeatherState(weather_type=weather_type)
+
+    def test_outgoing_edges_restrict_the_roll(self):
+        from world.weather.factories import WeatherTransitionFactory
+        from world.weather.services import _pick_next_weather
+
+        clear = WeatherTypeFactory(name="TClear")
+        overcast = WeatherTypeFactory(name="TOvercast")
+        storm = WeatherTypeFactory(name="TStorm")
+        WeatherTransitionFactory(from_type=clear, to_type=clear, weight=1)
+        WeatherTransitionFactory(from_type=clear, to_type=overcast, weight=1)
+        # No clear->storm edge: a storm can never follow a cloudless sky.
+        for _ in range(25):
+            picked = _pick_next_weather(self._state(clear), [clear, overcast, storm])
+            assert picked in (clear, overcast)
+
+    def test_no_edges_falls_back_to_global_weights(self):
+        from world.weather.services import _pick_next_weather
+
+        clear = WeatherTypeFactory(name="TClear2")
+        storm = WeatherTypeFactory(name="TStorm2")
+        picked = _pick_next_weather(self._state(clear), [storm])
+        assert picked == storm
+
+    def test_eligibility_pruned_graph_falls_back(self):
+        """Edges exist but none of their destinations are climate-eligible -> global roll."""
+        from world.weather.factories import WeatherTransitionFactory
+        from world.weather.services import _pick_next_weather
+
+        clear = WeatherTypeFactory(name="TClear3")
+        snow = WeatherTypeFactory(name="TSnow3")
+        fog = WeatherTypeFactory(name="TFog3")
+        WeatherTransitionFactory(from_type=clear, to_type=snow, weight=5)
+        picked = _pick_next_weather(self._state(clear), [fog])
+        assert picked == fog
+
+    def test_no_current_state_uses_global_weights(self):
+        from world.weather.services import _pick_next_weather
+
+        fog = WeatherTypeFactory(name="TFog4")
+        assert _pick_next_weather(None, [fog]) == fog

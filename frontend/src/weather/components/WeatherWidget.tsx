@@ -32,12 +32,21 @@ export function WeatherWidget() {
   const season = titleCase(data.season);
   const clock = timeOfDay(data.ic_time);
   const timeLabel = [phase, clock].filter(Boolean).join(' ');
+  // The moon only reads at night — by day it's sky trivia, not a glanceable fact (#2845).
+  const moonLabel =
+    data.phase === 'night' && data.moon_phase
+      ? data.moon_phase
+          .split('_')
+          .map((word) => titleCase(word))
+          .join(' ')
+      : '';
 
   // Nothing resolved (no clock and no weather) → don't clutter the bar.
   if (!timeLabel && !data.weather_type) return null;
 
   const tooltip = [
     timeLabel && season ? `${timeLabel} in ${season}` : timeLabel,
+    moonLabel,
     data.weather_type ?? '',
     data.emit_text ?? '',
   ]
@@ -51,9 +60,15 @@ export function WeatherWidget() {
       aria-label="Local time and weather"
     >
       {timeLabel && <span>{timeLabel}</span>}
-      {data.weather_type && (
+      {moonLabel && (
         <>
           {timeLabel && <span aria-hidden>·</span>}
+          <span>{moonLabel}</span>
+        </>
+      )}
+      {data.weather_type && (
+        <>
+          {(timeLabel || moonLabel) && <span aria-hidden>·</span>}
           <span className="text-foreground">{data.weather_type}</span>
         </>
       )}

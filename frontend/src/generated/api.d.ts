@@ -23203,6 +23203,7 @@ export interface components {
       ic_time: string | null;
       readonly phase: string | null;
       readonly season: string | null;
+      readonly moon_phase: string | null;
       readonly weather_type: string | null;
       emit_text: string | null;
     };

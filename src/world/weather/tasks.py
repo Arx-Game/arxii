@@ -1,9 +1,14 @@
-"""Periodic weather tasks (#1522), registered with the ``game_clock`` scheduler.
+"""Periodic weather tasks (#1522, phase-aligned #2845), registered with the ``game_clock``
+scheduler.
 
-The weather tick runs every 2 real hours (≈6 IC hours at the default 3× ratio): it rerolls each
-climate-bearing region's weather and echoes one season/phase-appropriate line to the online
-characters in that region's rooms, as an ``ATMOSPHERE`` narrative message (so the frontend can
-route it to a tab and players can squelch it). Best-effort and quiet.
+The weather tick is checked every scheduler tick but FIRES only when the IC time-of-day phase
+transitions (dawn/day/dusk/night, #2845): it rerolls each climate-bearing region's weather and
+echoes one season/phase-appropriate line to the online characters in that region's rooms, as a
+``WEATHER`` narrative message (so the frontend can route it to a tab and players can squelch
+it). Rolling AT the boundary means the echo always describes the phase that just began —
+morning lines at dawn, night lines at nightfall — instead of landing mid-phase off a
+wall-clock interval. Four transitions per IC day ≈ the old 2-real-hour cadence at the default
+3x ratio, so churn is unchanged. Best-effort and quiet.
 """
 
 from __future__ import annotations
@@ -27,6 +32,8 @@ if TYPE_CHECKING:
     from world.character_sheets.models import CharacterSheet
 
 logger = logging.getLogger("world.weather")
+
+WEATHER_TASK_KEY = "weather.roll"
 
 
 def _online_recipients(room: DefaultObject) -> list[CharacterSheet]:
@@ -59,15 +66,47 @@ def _echo_region_weather(region: Area) -> None:
     )
 
 
-def roll_and_echo_weather() -> None:
-    """Reroll each climate-bearing region's weather and echo it to online occupants (#1522).
+def _phase_transitioned_since_last_run() -> bool:
+    """Whether the IC time-of-day phase changed since this task's last stamped run (#2845).
 
-    The 2-real-hour weather tick. On a **feast day** (Eclipse / Moon Madness), the special
-    weather is forced world-wide, overriding the normal climate-gated roll — the automation that
-    replaces a GM pulling the lever. Best-effort: a region with no eligible weather or no online
-    occupants simply emits nothing. Weather attaches to climate-bearing regions; sub-regions
-    inherit via the most-specific-wins resolver.
+    The registry stamps ``ScheduledTaskRecord.last_ic_run_at`` AFTER each run — including
+    the no-op runs this guard causes — so the stamp tracks tick-by-tick and the comparison
+    is true exactly once per boundary crossing. First-ever run (no stamp yet) fires, so a
+    fresh world gets weather immediately. No clock -> never fires.
     """
+    from datetime import timedelta  # noqa: PLC0415
+
+    from django.utils import timezone  # noqa: PLC0415
+
+    from world.game_clock.models import ScheduledTaskRecord  # noqa: PLC0415
+    from world.game_clock.services import get_ic_now, phase_from_ic_time  # noqa: PLC0415
+
+    record = ScheduledTaskRecord.objects.filter(task_key=WEATHER_TASK_KEY).first()
+    ic_now = get_ic_now()
+    if ic_now is None:
+        # No IC clock: fall back to the legacy 2-real-hour cadence so a
+        # clockless world still gets weather (the pre-#2845 behavior).
+        if record is None or record.last_run_at is None:
+            return True
+        return timezone.now() - record.last_run_at >= timedelta(hours=2)
+    if record is None or record.last_ic_run_at is None:
+        return True
+    return phase_from_ic_time(record.last_ic_run_at) != phase_from_ic_time(ic_now)
+
+
+def roll_and_echo_weather() -> None:
+    """Reroll each climate-bearing region's weather and echo it, at IC phase boundaries.
+
+    Checked every scheduler tick; no-ops unless the time-of-day phase transitioned since
+    the last run (#2845), so the roll + phase-gated echo land right as dawn/day/dusk/night
+    begins. On a **feast day** (Eclipse / Moon Madness), the special weather is forced
+    world-wide, overriding the normal climate-gated roll — the automation that replaces a
+    GM pulling the lever. Best-effort: a region with no eligible weather or no online
+    occupants simply emits nothing. Weather attaches to climate-bearing regions;
+    sub-regions inherit via the most-specific-wins resolver.
+    """
+    if not _phase_transitioned_since_last_run():
+        return
     special = special_weather_for_today()
     for region in Area.objects.filter(climate__isnull=False):
         roll_region_weather(region, weather_type=special)

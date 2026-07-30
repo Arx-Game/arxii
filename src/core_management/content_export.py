@@ -215,7 +215,9 @@ CONTENT_MODELS: frozenset[str] = frozenset(
         "weather.feastday",
         "weather.weatheremit",
         "weather.weathertype",
+        "weather.weathertransition",
         "weather.weathertypeexposure",
+        "weather.weathertypeshelter",
     }
 )
 

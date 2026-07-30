@@ -15,6 +15,8 @@ natural-key list) stays valid for fresh-DB ``loaddata``; this loader consumes th
 Identity keys (what "the same row" means on re-seed):
 - ``WeatherType``          → ``name``
 - ``WeatherTypeExposure``  → ``(weather_type, stat_key)`` (its unique constraint)
+- ``WeatherTypeShelter``   → ``(weather_type, damage_type)`` (its unique constraint, #2845)
+- ``WeatherTransition``    → ``(from_type, to_type)`` (its unique constraint, #2845)
 - ``WeatherEmit``          → ``(weather_type, text)`` (the line's content identity)
 - ``FeastDay``             → ``(ic_month, ic_day)`` (its unique constraint)
 
@@ -36,6 +38,8 @@ if TYPE_CHECKING:
 # Seed files, in dependency order (types before the rows that reference them).
 WEATHER_TYPES_FILE = "weather_types.json"
 WEATHER_TYPE_EXPOSURES_FILE = "weather_type_exposures.json"
+WEATHER_TYPE_SHELTERS_FILE = "weather_type_shelters.json"
+WEATHER_TRANSITIONS_FILE = "weather_transitions.json"
 WEATHER_EMITS_FILE = "weather_emits.json"
 FEAST_DAYS_FILE = "feast_days.json"
 
@@ -81,6 +85,45 @@ def upsert_weather_type_exposures(objects: list[dict]) -> tuple[int, int]:
         stat_key = fields.pop("stat_key")
         _, was_created = WeatherTypeExposure.objects.update_or_create(
             weather_type=weather_type, stat_key=stat_key, defaults=fields
+        )
+        created, updated = (created + 1, updated) if was_created else (created, updated + 1)
+    return created, updated
+
+
+def upsert_weather_type_shelters(objects: list[dict]) -> tuple[int, int]:
+    """Upsert ``WeatherTypeShelter`` rows keyed on ``(weather_type, damage_type)`` (#2845).
+
+    ``damage_type`` in the fixture is the DamageType's natural-key name (e.g. ``"Radiant"``).
+    """
+    from world.conditions.models import DamageType  # noqa: PLC0415
+    from world.weather.models import WeatherTypeShelter  # noqa: PLC0415
+
+    created = updated = 0
+    for obj in objects:
+        fields = _fields(obj)
+        weather_type = _resolve_weather_type(fields.pop("weather_type"))
+        damage_ref = fields.pop("damage_type")
+        if isinstance(damage_ref, (list, tuple)):
+            damage_ref = damage_ref[0]
+        damage_type = DamageType.objects.get(name=damage_ref)
+        _, was_created = WeatherTypeShelter.objects.update_or_create(
+            weather_type=weather_type, damage_type=damage_type, defaults=fields
+        )
+        created, updated = (created + 1, updated) if was_created else (created, updated + 1)
+    return created, updated
+
+
+def upsert_weather_transitions(objects: list[dict]) -> tuple[int, int]:
+    """Upsert ``WeatherTransition`` rows keyed on ``(from_type, to_type)`` (#2845)."""
+    from world.weather.models import WeatherTransition  # noqa: PLC0415
+
+    created = updated = 0
+    for obj in objects:
+        fields = _fields(obj)
+        from_type = _resolve_weather_type(fields.pop("from_type"))
+        to_type = _resolve_weather_type(fields.pop("to_type"))
+        _, was_created = WeatherTransition.objects.update_or_create(
+            from_type=from_type, to_type=to_type, defaults=fields
         )
         created, updated = (created + 1, updated) if was_created else (created, updated + 1)
     return created, updated
@@ -144,6 +187,12 @@ def load_weather_seed(fixtures_dir: Path) -> dict[str, tuple[int, int]]:
         "weather_types": upsert_weather_types(_read(fixtures_dir, WEATHER_TYPES_FILE)),
         "weather_type_exposures": upsert_weather_type_exposures(
             _read(fixtures_dir, WEATHER_TYPE_EXPOSURES_FILE)
+        ),
+        "weather_type_shelters": upsert_weather_type_shelters(
+            _read(fixtures_dir, WEATHER_TYPE_SHELTERS_FILE)
+        ),
+        "weather_transitions": upsert_weather_transitions(
+            _read(fixtures_dir, WEATHER_TRANSITIONS_FILE)
         ),
         "weather_emits": upsert_weather_emits(_read(fixtures_dir, WEATHER_EMITS_FILE)),
         "feast_days": upsert_feast_days(_read(fixtures_dir, FEAST_DAYS_FILE)),

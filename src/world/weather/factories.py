@@ -8,8 +8,10 @@ from world.weather.models import (
     FeastDay,
     RegionWeatherState,
     WeatherEmit,
+    WeatherTransition,
     WeatherType,
     WeatherTypeExposure,
+    WeatherTypeShelter,
 )
 
 
@@ -42,6 +44,24 @@ class WeatherTypeExposureFactory(DjangoModelFactory):
     weather_type = factory.SubFactory(WeatherTypeFactory)
     stat_key = StatKey.WET
     value = 10
+
+
+class WeatherTransitionFactory(DjangoModelFactory):
+    class Meta:
+        model = WeatherTransition
+
+    from_type = factory.SubFactory(WeatherTypeFactory)
+    to_type = factory.SubFactory(WeatherTypeFactory)
+    weight = 1
+
+
+class WeatherTypeShelterFactory(DjangoModelFactory):
+    class Meta:
+        model = WeatherTypeShelter
+
+    weather_type = factory.SubFactory(WeatherTypeFactory)
+    value = 5
+    # damage_type — caller must provide (FK to conditions.DamageType).
 
 
 class WeatherEmitFactory(DjangoModelFactory):
