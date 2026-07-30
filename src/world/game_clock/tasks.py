@@ -108,6 +108,7 @@ def weekly_rollover_task() -> None:
         ("domain food consumption", _run_domain_food_consumption),
         ("domain crisis wait rolls", _run_crisis_wait_tick),
         ("crisis generation", _run_crisis_generation_tick),
+        ("domain edict upkeep", _run_edict_weekly_tick),
         ("social engagement kudos grant", _run_social_engagement_grant),
         ("idle table summary", _run_idle_table_summary),
     ]
@@ -144,6 +145,13 @@ def _run_crisis_generation_tick() -> None:
     from world.societies.houses.crisis_services import crisis_generation_tick
 
     crisis_generation_tick()
+
+
+def _run_edict_weekly_tick() -> None:
+    """Weekly unrest/upkeep from each domain's standing edict (#2842)."""
+    from world.societies.proclamations import edict_weekly_tick
+
+    edict_weekly_tick()
 
 
 def _run_idle_table_summary() -> None:

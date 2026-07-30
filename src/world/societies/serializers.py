@@ -13,6 +13,7 @@ from world.societies.models import (
     OrganizationMembershipOffer,
     OrganizationRank,
     OrganizationReputation,
+    Proclamation,
 )
 
 _ORGANIZATION_NAME_SOURCE = "organization.name"
@@ -299,6 +300,53 @@ def _house_open_crises(organization) -> list[dict]:
         for crisis, name in candidates
         if crisis.surfaces_at is None or crisis.surfaces_at <= now or crisis.pk in known_ids
     ]
+
+
+class ProclamationSerializer(serializers.ModelSerializer):
+    """Read surface for the public record (#2842). Prose is display-only."""
+
+    issuer_name = serializers.CharField(source="issuer.name", read_only=True)
+    stance_name = serializers.CharField(source="stance.name", read_only=True)
+    org_name = serializers.CharField(source="org.name", read_only=True, default="")
+    outcome_name = serializers.SerializerMethodField()
+
+    class Meta:
+        model = Proclamation
+        fields = [
+            "id",
+            "issuer",
+            "issuer_name",
+            "org",
+            "org_name",
+            "stance",
+            "stance_name",
+            "prose",
+            "outcome_name",
+            "issued_at",
+        ]
+
+    def get_outcome_name(self, obj) -> str:
+        return str(obj.check_outcome.name) if obj.check_outcome_id else ""
+
+
+class ProclamationCreateSerializer(serializers.Serializer):
+    """Create payload (#2842): stance + optional org voice, optional edict leg."""
+
+    stance = serializers.IntegerField(min_value=1, required=False, allow_null=True)
+    prose = serializers.CharField(max_length=4000, required=False, allow_blank=True, default="")
+    org = serializers.IntegerField(min_value=1, required=False, allow_null=True)
+    domain = serializers.IntegerField(min_value=1, required=False, allow_null=True)
+    edict_kind = serializers.IntegerField(min_value=1, required=False, allow_null=True)
+
+    def validate(self, attrs: dict) -> dict:
+        has_edict = bool(attrs.get("domain")) and bool(attrs.get("edict_kind"))
+        if bool(attrs.get("domain")) != bool(attrs.get("edict_kind")):
+            msg = "Enacting an edict takes BOTH domain and edict_kind."
+            raise serializers.ValidationError(msg)
+        if not has_edict and not attrs.get("stance"):
+            msg = "A plain proclamation requires a stance."
+            raise serializers.ValidationError({"stance": msg})
+        return attrs
 
 
 class CrisisOptionInputSerializer(serializers.Serializer):

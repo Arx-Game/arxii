@@ -18024,6 +18024,71 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
+  '/api/societies/proclamations/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /**
+     * @description Public record of proclamations (#2842) + the issue door.
+     *
+     *     List/retrieve are public to authenticated players (proclamations are
+     *     public speech by design). ``POST /proclaim/`` issues one as the
+     *     requester's active persona — a plain stance, an org voice, or a domain
+     *     edict enactment (domain + edict_kind).
+     */
+    get: operations['societies_proclamations_list'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/societies/proclamations/{id}/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /**
+     * @description Public record of proclamations (#2842) + the issue door.
+     *
+     *     List/retrieve are public to authenticated players (proclamations are
+     *     public speech by design). ``POST /proclaim/`` issues one as the
+     *     requester's active persona — a plain stance, an org voice, or a domain
+     *     edict enactment (domain + edict_kind).
+     */
+    get: operations['societies_proclamations_retrieve'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/societies/proclamations/proclaim/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /** @description Issue a proclamation (optionally enacting a domain edict). */
+    post: operations['societies_proclamations_proclaim_create'];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   '/api/societies/rankings/{id}/': {
     parameters: {
       query?: never;
@@ -30754,6 +30819,21 @@ export interface components {
       previous?: string | null;
       results: components['schemas']['PortalDestination'][];
     };
+    PaginatedProclamationList: {
+      /** @example 123 */
+      count: number;
+      /**
+       * Format: uri
+       * @example http://api.example.org/accounts/?page=4
+       */
+      next?: string | null;
+      /**
+       * Format: uri
+       * @example http://api.example.org/accounts/?page=2
+       */
+      previous?: string | null;
+      results: components['schemas']['Proclamation'][];
+    };
     PaginatedProgressionUnlockItemList: {
       /** @example 123 */
       count: number;
@@ -34319,6 +34399,32 @@ export interface components {
      * @enum {string}
      */
     PrivacyModeEnum: 'public' | 'private' | 'ephemeral';
+    /** @description Read surface for the public record (#2842). Prose is display-only. */
+    Proclamation: {
+      readonly id: number;
+      issuer: number;
+      readonly issuer_name: string;
+      /** @description Set = issued on the organization's behalf (leadership only). */
+      org?: number | null;
+      /** @default  */
+      readonly org_name: string;
+      stance: number;
+      readonly stance_name: string;
+      /** @description Display-only RP text. Mechanics NEVER read this (ADR-0178). */
+      prose?: string;
+      readonly outcome_name: string;
+      /** Format: date-time */
+      readonly issued_at: string;
+    };
+    /** @description Read surface for the public record (#2842). Prose is display-only. */
+    ProclamationRequest: {
+      issuer: number;
+      /** @description Set = issued on the organization's behalf (leadership only). */
+      org?: number | null;
+      stance: number;
+      /** @description Display-only RP text. Mechanics NEVER read this (ADR-0178). */
+      prose?: string;
+    };
     /** @description Read payload for PROFILE_TEXT requests (#2631). */
     ProfileTextRequestDetails: {
       /** @description A character_sheets.ProfileTextField value. */
@@ -34464,10 +34570,11 @@ export interface components {
      *     * `scandal` - Scandal
      *     * `pardon` - Pardon
      *     * `crisis` - Crisis
+     *     * `proclamation` - Proclamation
      *     * `birthday` - Birthday
      * @enum {string}
      */
-    PublicFeedItemKindEnum: 'deed' | 'scandal' | 'pardon' | 'crisis' | 'birthday';
+    PublicFeedItemKindEnum: 'deed' | 'scandal' | 'pardon' | 'crisis' | 'proclamation' | 'birthday';
     /**
      * @description Wire shape for the optional ``action_context`` block in a pull preview.
      *
@@ -64570,6 +64677,76 @@ export interface operations {
         };
         content: {
           'application/json': components['schemas']['PaginatedPublicFeedItemList'];
+        };
+      };
+    };
+  };
+  societies_proclamations_list: {
+    parameters: {
+      query?: {
+        issuer?: number;
+        org?: number;
+        /** @description A page number within the paginated result set. */
+        page?: number;
+        stance?: number;
+      };
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['PaginatedProclamationList'];
+        };
+      };
+    };
+  };
+  societies_proclamations_retrieve: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        /** @description A unique integer value identifying this proclamation. */
+        id: number;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['Proclamation'];
+        };
+      };
+    };
+  };
+  societies_proclamations_proclaim_create: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['ProclamationRequest'];
+      };
+    };
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['Proclamation'];
         };
       };
     };
