@@ -325,3 +325,47 @@ class WeatherShelterTests(TestCase):
         self.assertEqual(before.shade, 0)
         self.assertEqual(after.shade, 6)
         self.assertEqual(after.residual, before.residual - 6)
+
+
+class PhaseAlignedWeatherTickTests(TestCase):
+    """#2845: the weather tick fires only at IC time-of-day phase boundaries."""
+
+    def _guard(self):
+        from world.weather.tasks import _phase_transitioned_since_last_run
+
+        return _phase_transitioned_since_last_run()
+
+    def _stamp(self, ic_dt):
+        from world.game_clock.models import ScheduledTaskRecord
+        from world.weather.tasks import WEATHER_TASK_KEY
+
+        record, _ = ScheduledTaskRecord.objects.get_or_create(task_key=WEATHER_TASK_KEY)
+        record.last_ic_run_at = ic_dt
+        record.save(update_fields=["last_ic_run_at"])
+
+    def test_no_clock_never_fires(self):
+        from unittest.mock import patch
+
+        with patch("world.game_clock.services.get_ic_now", return_value=None):
+            assert self._guard() is False
+
+    def test_first_run_fires(self):
+        from datetime import UTC, datetime
+        from unittest.mock import patch
+
+        noon = datetime(2020, 5, 10, 12, 0, tzinfo=UTC)
+        with patch("world.game_clock.services.get_ic_now", return_value=noon):
+            assert self._guard() is True
+
+    def test_same_phase_noops_boundary_fires(self):
+        from datetime import UTC, datetime
+        from unittest.mock import patch
+
+        noon = datetime(2020, 5, 10, 12, 0, tzinfo=UTC)
+        one_pm = datetime(2020, 5, 10, 13, 0, tzinfo=UTC)
+        night = datetime(2020, 5, 10, 20, 30, tzinfo=UTC)
+        self._stamp(noon)
+        with patch("world.game_clock.services.get_ic_now", return_value=one_pm):
+            assert self._guard() is False
+        with patch("world.game_clock.services.get_ic_now", return_value=night):
+            assert self._guard() is True

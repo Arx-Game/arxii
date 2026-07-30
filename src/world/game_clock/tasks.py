@@ -951,8 +951,11 @@ def _register_late_tasks(roll_and_echo_weather: object) -> None:
         CronDefinition(
             task_key="weather.roll",
             callable=roll_and_echo_weather,
-            interval=timedelta(hours=2),
-            description="Roll regional weather (every 2 real hrs ≈ 6 IC hrs) and echo to rooms.",
+            # #2845: checked every tick; the task itself no-ops unless the IC
+            # time-of-day phase transitioned, so rolls + phase-gated echoes land
+            # AT dawn/day/dusk/night boundaries (4/IC day ≈ the old 2h cadence).
+            interval=timedelta(minutes=5),
+            description="Roll regional weather at IC phase boundaries and echo to rooms.",
         )
     )
     register_task(
