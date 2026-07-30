@@ -308,6 +308,7 @@
   - alteration_events <- magic.MagicalAlterationEvent
   - treatment_action_requests <- scenes.SceneActionRequest
   - treatment_attempts_targeting_instance <- conditions.TreatmentAttempt
+  - hazard_response <- conditions.HazardResponseState
   - granted_properties <- mechanics.ObjectProperty
   - wound_details <- vitals.WoundDetails
 
@@ -336,6 +337,10 @@
 ### DamageSuccessLevelMultiplier
 
 ### PenetrationOutcomeFactor
+
+### HazardResponseState
+**Foreign Keys:**
+  - condition_instance -> conditions.ConditionInstance [OneToOne]
 
 
 ## evennia_extensions
@@ -2795,6 +2800,7 @@
   - alteration_events <- magic.MagicalAlterationEvent
   - treatment_action_requests <- scenes.SceneActionRequest
   - treatment_attempts_targeting_instance <- conditions.TreatmentAttempt
+  - hazard_response <- conditions.HazardResponseState
   - granted_properties <- mechanics.ObjectProperty
   - wound_details <- vitals.WoundDetails
 
@@ -2823,6 +2829,10 @@
 ### DamageSuccessLevelMultiplier
 
 ### PenetrationOutcomeFactor
+
+### HazardResponseState
+**Foreign Keys:**
+  - condition_instance -> conditions.ConditionInstance [OneToOne]
 
 ### Service Functions
 - `active_concealments(target: 'ObjectDB') -> django.db.models.query.QuerySet`
@@ -5679,7 +5689,7 @@
 - `resolve_and_consume_ritual_components(*, ritual: 'Ritual', components: 'list[ItemInstance]', performer_sheet: 'CharacterSheet', resonance_context: 'Resonance | None' = None) -> 'None' — Validate and atomically consume ``ritual``'s components from ``components``.`
 - `resolve_cast_check_type(character, template) — The CheckType a technique cast rolls, for EVERY cast path (ADR-0096).`
 - `resolve_pending_alteration(*, pending: 'PendingAlteration', name: 'str', player_description: 'str', observer_description: 'str', weakness_damage_type: 'DamageType | None' = None, weakness_magnitude: 'int' = 0, resonance_bonus_magnitude: 'int' = 0, social_reactivity_magnitude: 'int' = 0, is_visible_at_rest: 'bool', resolved_by: 'AccountDB | None', parent_template: 'MagicalAlterationTemplate | None' = None, is_library_entry: 'bool' = False, library_template: 'MagicalAlterationTemplate | None' = None) -> 'AlterationResolutionResult' — Resolve a PendingAlteration by creating or selecting a template.`
-- `resolve_pull_effects(threads: 'list[Thread]', tier: 'int', *, in_combat: 'bool', target: 'ObjectDB | None' = None, beseech_bonus_thread_id: 'int | None' = None, beseech_bonus: 'int' = 0) -> 'list[ResolvedPullEffect]' — Resolve every (thread × effect_tier 0..tier) pair into ResolvedPullEffect rows.`
+- `resolve_pull_effects(threads: 'list[Thread]', tier: 'int', *, in_combat: 'bool', target: 'ObjectDB | None' = None, beseech_bonus_thread_id: 'int | None' = None, beseech_bonus: 'int' = 0, character_sheet: 'CharacterSheet | None' = None) -> 'list[ResolvedPullEffect]' — Resolve every (thread × effect_tier 0..tier) pair into ResolvedPullEffect rows.`
 - `seed_thread_survivability_tuning() -> 'None' — Idempotently author the default ThreadSurvivabilityTuning rows (#1175).`
 - `select_mishap_pool(control_deficit: 'int') -> 'ConsequencePool | None' — Select a control mishap consequence pool based on deficit magnitude.`
 - `spend_resonance_for_imbuing(character_sheet: 'CharacterSheet', thread: 'Thread', amount: 'int') -> 'ThreadImbueResult' — Deduct resonance balance and greedily advance thread level.`
@@ -8127,6 +8137,8 @@
   - vassal_edges <- societies.FealtyEdge
   - titles <- societies.Title
   - domains <- societies.Domain
+  - org_crises <- societies.DomainCrisis
+  - crisis_intel <- societies.CrisisIntel
   - pacts_as_senior <- societies.MarriagePact
   - pacts_as_junior <- societies.MarriagePact
   - house_templates <- societies.HouseTemplate
@@ -8422,10 +8434,19 @@
 
 ### DomainCrisis
 **Foreign Keys:**
-  - domain -> societies.Domain [FK]
+  - domain -> societies.Domain [FK] (nullable)
+  - org -> societies.Organization [FK] (nullable)
   - crisis_type -> societies.DomainCrisisType [FK] (nullable)
   - chosen_option -> societies.DomainCrisisTypeOption [FK] (nullable)
   - minted_mission -> missions.MissionInstance [FK] (nullable)
+**Pointed to by:**
+  - intel <- societies.CrisisIntel
+  - org_tasks_targeting <- tasking.OrgTask
+
+### CrisisIntel
+**Foreign Keys:**
+  - crisis -> societies.DomainCrisis [FK]
+  - org -> societies.Organization [FK]
 
 ### MarriagePact
 **Foreign Keys:**
@@ -8548,13 +8569,16 @@
   - beginnings <- character_creation.Beginnings
 
 ### Service Functions
+- `advance_condition_severity(instance: world.conditions.models.ConditionInstance, amount: int) -> world.conditions.types.SeverityAdvanceResult — Increment a condition's severity and advance stage if threshold crossed.`
 - `apply_condition(target: 'ObjectDB', condition: world.conditions.models.ConditionTemplate, *, severity: int = 1, duration_rounds: int | None = None, source_character: 'ObjectDB | None' = None, source_technique: 'Technique | None' = None, source_description: str = '') -> world.conditions.types.ApplyConditionResult — Apply a condition to a target, handling stacking and interactions.`
+- `decay_condition_severity(instance: world.conditions.models.ConditionInstance, amount: int, *, _skip_corruption_sync: bool = False) -> world.conditions.types.SeverityDecayResult — Inverse of advance_condition_severity. Walks stage down if threshold crossed.`
 - `ensure_round_for_acute_condition(character_sheet: 'CharacterSheet') -> 'SceneRound | None' — Ensure an active scene round exists for the character's room and enrol all present`
-- `get_ic_phase(*, real_now: datetime.datetime | None = None) -> world.game_clock.constants.TimePhase | None — Return the current time-of-day phase, or None if no clock exists.`
 - `has_condition(target: 'ObjectDB', condition: world.conditions.models.ConditionTemplate, *, include_suppressed: bool = False) -> bool — Check if target has a specific condition.`
 - `provision_species_gifts(sheet: 'CharacterSheet', *, resonance=None) -> 'list[CharacterGift]' — Mint the species' Minor Gift(s) + latent GIFT thread + any drawback. Idempotent.`
-- `reconcile_sunlight_exposure(character, room) -> 'None' — Apply or remove the Sunlight Exposure condition based on outdoor + day-phase + shelter`
+- `reconcile_sun_exposure_safely(character) -> 'None' — Best-effort reconcile for hook/cron call sites (#2846).`
+- `reconcile_sunlight_exposure(character, room) -> 'None' — Reconcile the Sunlight Exposure condition to the character's felt sun exposure`
 - `remove_condition(target: 'ObjectDB', condition: world.conditions.models.ConditionTemplate, *, remove_all_stacks: bool = True, include_suppressed: bool = False) -> bool — Remove a condition from a target.`
+- `species_innate_distinction_ids(species) -> 'set[int]' — Distinction pks the species (or inheritable ancestors) stamps at finalize (#2846).`
 - `total_species_gift_cost(species) -> 'int' — Total CG-point cost of a species' gift grants, summed over it and its ancestors.`
 
 

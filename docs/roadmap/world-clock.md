@@ -59,7 +59,14 @@ The central time engine that drives the living world. An anchor-based game clock
 
 ### Deferred (future PRs)
 - Weather system (own design + PR, consumes clock for season/time-of-day)
-- Celestial atmosphere — moon phases, astrological conjunctions (part of atmosphere PR)
+- Celestial atmosphere — moon phases, astrological conjunctions (part of atmosphere
+  PR; the moon side now has a committed consumer — the lycan arc's follow-on spec
+  on #2845)
+- **Consumer note (#2846, ADR-0179):** the sunlight bane/allergy system reads
+  `get_ic_phase()` for its base-sun gate (full at DAY, reduced DAWN/DUSK, zero
+  NIGHT) and registers the `species.sun_reconcile` cron (5-min, DRAIN band) —
+  day/night is now a real mechanical pressure for sun-sensitive species, with
+  clothing/shade/magic mitigation and an AFK auto-flee guard.
 - IC calendar lore names (brainstorm separately, populate via config table)
 - ~~Aging mechanics~~ — **built (#2756)**: three age axes on CharacterSheet
   (chronological derives from `ic_birth_year` vs `get_ic_now()`; biological =

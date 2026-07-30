@@ -760,6 +760,14 @@ Species/race definitions with stat bonuses, language assignments, and species-gi
   (CG, after the Major-gift block). See ADR-0071. `cg_point_cost` is summed across the
   selected species + ancestors into the `"species"` line of
   `CharacterDraft.calculate_cg_points_breakdown()` (character_creation).
+  Sunlight bane/allergy (#2846, ADR-0179): `sun_exposure.felt_sun_exposure` (graded
+  breakdown), `sun_sensitivity.sun_sensitivity_for`/`sun_severity` (tag-anchored tier →
+  severity), `reconcile_sunlight_exposure` + `reconcile_sun_exposure_safely` (movement/
+  cron/equip/position triggers; staged condition sync), `sun_refuge.find_sun_refuge`/
+  `flee_to_sun_refuge` (AFK auto-flee), `species_innate_distinction_ids` (CG gate),
+  `tasks.sun_reconcile_tick` (`species.sun_reconcile` cron), factories
+  `ensure_sunlight_exposure_content` (staged template) + `ensure_sunlight_distinctions`
+  (Bane/Allergy: Sunlight anchor rows); PLACEHOLDER constants in `sun_constants.py`.
 - **Key Methods:** `Species.get_stat_bonuses_dict()`, `Species.is_subspecies`
 - **Integrates with:** character_creation (Beginnings.allowed_species, CG points
   breakdown), forms (physical traits — per-species palettes + `is_required`

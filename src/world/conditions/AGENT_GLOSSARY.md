@@ -91,3 +91,13 @@ _Avoid_: using "awareness" and "perception" interchangeably — they are separat
 **perception** (CapabilityType):
 The active, supernormal-sensing capability from the affordance matrix (`docs/architecture/capability-challenge-content.md`) — `innate_baseline=0` (granted by techniques/gifts, not innate), used for Application eligibility (e.g. Scout, Detect, Analyze, Spot) rather than as a baseline sense-gate. A character can have full `awareness` (conscious, sensing normally) with zero `perception` (no supernormal detection). See ADR-0143.
 _Avoid_: awareness, sense, detection (as a synonym for the granted capability specifically)
+
+**hazard prompt / hazard response** (#2846, ADR-0179):
+The hazard-generic player-response layer (`world.conditions.hazard_prompt` +
+`HazardResponseState`) for an environmental-hazard condition entering a damaging
+stage: prompt once (websocket `hazard_prompt` + telnet text), count
+sweep-observed damage instances, auto-flee via the hazard's own callback after
+the configured unanswered count (never the first — nothing is instantaneously
+lethal). Player answers are the `hazard_endure`/`hazard_retreat` actions.
+_Avoid_: sunlight-specific framings (the sun supplies only the refuge logic and
+thresholds); "AFK eviction" (it is a safety guard, not idle policing).

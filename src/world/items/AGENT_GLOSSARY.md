@@ -65,3 +65,9 @@ _Avoid_: take (as a synonym), pickpocket, loot (as a verb for a live owner's ite
 - **Dual provenance** — `crafter_*` + `designer_*` pairs on `ItemInstance`;
   renders "Crafted by X, Designed by Y", collapsing when equal. The prose
   author is never erased again. _Avoid:_ maker (ambiguous).
+- **Revealing (garment)** — `ItemTemplate.is_revealing`: the garment occupies
+  its slots but leaves the covered skin exposed — no sun coverage
+  (`world.species.sun_exposure`), and the future tattoo/skin-visibility
+  consumer reads the same flag. A non-revealing garment fully covers the body
+  regions it is equipped over. _Avoid:_ skimpy (flavor, not the field), a
+  separate coverage-percentage model.

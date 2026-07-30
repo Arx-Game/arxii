@@ -37,7 +37,7 @@ from world.items.constants import (
 
 | Model | Purpose | Key Fields |
 |-------|---------|------------|
-| `ItemTemplate` | Archetype definition for an item type | `name`, `description`, `weight`, `size`, `value`, `is_active`, container fields, stacking fields, consumable fields, crafting fields, `interactions` (M2M to InteractionType), `minimum_quality_tier` (FK), `tied_resonance` (FK to `magic.Resonance`, nullable — marks a template as a *touchstone*) + `resonance_tier` (FK to `magic.ResonanceTier`, nullable — potency floor; `CheckConstraint` requires both set together or both null, #707) |
+| `ItemTemplate` | Archetype definition for an item type | `name`, `description`, `weight`, `size`, `value`, `is_active`, `is_revealing` (#2846 — a garment whose covered regions still expose skin: contributes no sun coverage in `world.species.sun_exposure`; the future tattoo/skin-visibility consumer reads the same flag), container fields, stacking fields, consumable fields, crafting fields, `interactions` (M2M to InteractionType), `minimum_quality_tier` (FK), `tied_resonance` (FK to `magic.Resonance`, nullable — marks a template as a *touchstone*) + `resonance_tier` (FK to `magic.ResonanceTier`, nullable — potency floor; `CheckConstraint` requires both set together or both null, #707) |
 | `TemplateSlot` | Body region + layer an item occupies | `template` (FK), `body_region`, `equipment_layer`, `covers_lower_layers` |
 | `TemplateInteraction` | Flavor text for a specific interaction on a template | `template` (FK), `interaction_type` (FK), `flavor_text` |
 
