@@ -438,6 +438,9 @@ class ActionRegistryTests(TestCase):
             "enlist_battle_participant",
             "browse_battle_catalog",
             "collect_food",
+            # #2846 — hazard-prompt responses (sunlight AFK guard).
+            "hazard_endure",
+            "hazard_retreat",
             # #2239 — in-play domain management + office delegation.
             "add_domain_holding",
             "start_domain_improvement",

@@ -163,7 +163,7 @@ class DraftDistinctionViewSet(viewsets.ViewSet):
             raise NotFound(msg) from None
 
     def _validate_distinction_for_add(
-        self, data: dict, existing_ids: set[int]
+        self, data: dict, existing_ids: set[int], draft: CharacterDraft
     ) -> ValidatedDistinction:
         """
         Validate distinction data for adding to a draft.
@@ -171,6 +171,7 @@ class DraftDistinctionViewSet(viewsets.ViewSet):
         Args:
             data: Request data with distinction_id, rank, notes.
             existing_ids: Set of distinction IDs already on the draft.
+            draft: The draft being edited (species-innate gate, #2846).
 
         Returns:
             ValidatedDistinction with the validated data.
@@ -207,7 +208,36 @@ class DraftDistinctionViewSet(viewsets.ViewSet):
         # Check variant mutual exclusivity (parent has variants_are_mutually_exclusive=True)
         self._check_variant_exclusions(distinction, existing_ids)
 
+        # Species-innate gate (#2846)
+        self._check_species_innate(distinction, draft)
+
         return ValidatedDistinction(distinction=distinction, rank=rank, notes=notes)
+
+    def _check_species_innate_bulk(self, distinctions, draft: CharacterDraft) -> None:
+        """Apply the species-innate gate (#2846) to every distinction in a sync payload."""
+        for distinction in distinctions:
+            self._check_species_innate(distinction, draft)
+
+    def _check_species_innate(self, distinction: Distinction, draft: CharacterDraft) -> None:
+        """Reject selecting a distinction the drafted species grants innately (#2846).
+
+        The species' own ``SpeciesGiftGrant.drawback_distinction`` rows stamp at
+        finalize — selecting one in CG would double it up (and, for the
+        reimbursing sun drawbacks, double-refund the counterweight).
+        """
+        if draft.selected_species_id is None:
+            return
+        from world.species.services import species_innate_distinction_ids  # noqa: PLC0415
+
+        if distinction.id in species_innate_distinction_ids(draft.selected_species):
+            raise ValidationError(
+                {
+                    "detail": (
+                        f"{distinction.name} is innate to your selected species "
+                        "and cannot be taken as a choice."
+                    ),
+                }
+            )
 
     def _check_mutual_exclusions(self, distinction: Distinction, existing_ids: set[int]) -> None:
         """
@@ -289,7 +319,7 @@ class DraftDistinctionViewSet(viewsets.ViewSet):
         distinctions = draft.draft_data.get("distinctions", [])
         existing_ids = {d.get("distinction_id") for d in distinctions}
 
-        validated = self._validate_distinction_for_add(request.data, existing_ids)
+        validated = self._validate_distinction_for_add(request.data, existing_ids, draft)
 
         new_entry = self._build_distinction_entry(
             validated.distinction, validated.rank, validated.notes
@@ -385,7 +415,7 @@ class DraftDistinctionViewSet(viewsets.ViewSet):
             "rank": request.data.get("rank", 1),
             "notes": request.data.get("notes", ""),
         }
-        validated = self._validate_distinction_for_add(add_data, existing_ids)
+        validated = self._validate_distinction_for_add(add_data, existing_ids, draft)
 
         new_entry = self._build_distinction_entry(
             validated.distinction, validated.rank, validated.notes
@@ -487,6 +517,9 @@ class DraftDistinctionViewSet(viewsets.ViewSet):
 
         # Validate mutual exclusions
         self._validate_bulk_exclusions(distinctions)
+
+        # Species-innate gate (#2846)
+        self._check_species_innate_bulk(distinctions, draft)
 
         # Build the new distinctions list
         new_distinctions = []

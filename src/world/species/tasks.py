@@ -36,6 +36,7 @@ def sun_reconcile_tick() -> None:
             target = instance.target
             seen.add(target.pk)
             _reconcile_safely(target)
+            _observe_hazard_safely(instance)
     holder_rows = CharacterDistinction.objects.filter(
         distinction__tags__slug__in=(SUN_BANE_TAG, SUN_ALLERGY_TAG),
     ).select_related("character")
@@ -45,6 +46,31 @@ def sun_reconcile_tick() -> None:
             continue
         seen.add(character.pk)
         _reconcile_safely(character)
+
+
+def _observe_hazard_safely(instance) -> None:
+    """One sweep observation on a damaging sunlight instance: count damage, AFK-flee.
+
+    The observation layer is hazard-generic (``world.conditions.hazard_prompt``);
+    this supplies the sun-specific refuge behavior and thresholds.
+    """
+    from world.conditions.hazard_prompt import observe_hazard  # noqa: PLC0415
+    from world.species.sun_constants import (  # noqa: PLC0415
+        AUTO_FLEE_AFTER_DAMAGE_OBSERVATIONS,
+        BURNING_SEVERITY_THRESHOLD,
+    )
+    from world.species.sun_refuge import flee_to_sun_refuge  # noqa: PLC0415
+
+    if instance.resolved_at is not None:
+        return
+    if instance.severity < BURNING_SEVERITY_THRESHOLD:
+        return
+    target = instance.target
+    observe_hazard(
+        instance,
+        flee=lambda: flee_to_sun_refuge(target),
+        auto_flee_after=AUTO_FLEE_AFTER_DAMAGE_OBSERVATIONS,
+    )
 
 
 def _reconcile_safely(character) -> None:

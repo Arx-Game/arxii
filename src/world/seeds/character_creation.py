@@ -1075,6 +1075,7 @@ def seed_character_creation_dev() -> None:
     _seed_cg_explanations()
     ensure_tradition_training_distinction()
     ensure_somehow_always_broke_distinction()
+    _seed_sun_sensitive_species()
     if not settings.SEED_SAMPLE_CONTENT:
         return
     # Named world content — authored in the content repo by maintainers, so
@@ -1164,6 +1165,80 @@ def ensure_somehow_always_broke_distinction():
         defaults={"drain_percent": 100, "floor_coppers": 0},
     )
     return distinction
+
+
+def _seed_sun_sensitive_species() -> None:
+    """#2846: sun-sensitive species with distinction-anchored bane/allergy wiring.
+
+    The Bane/Allergy: Sunlight Distinction rows are unconditional mechanics
+    anchors (like the tradition-training distinction above). The species rows
+    and their Minor Gifts are content-repo-owned (#2698) — looked up via
+    ``authored_or_sample``, invented (with PLACEHOLDER prose) only under
+    ``SEED_SAMPLE_CONTENT``. All four are deliberately LEAF species (no parent
+    links) — playability is derived leaf-ness, so parenting Dhampir under
+    Vampire would silently retire Vampire from chargen. Beginnings gating
+    (Ariwn origins; Nox'alfar also via Arx Sleeper/Misbegotten) is a content
+    pass tracked on the spec issue, not seeded here.
+    """
+    from world.magic.constants import GiftKind  # noqa: PLC0415
+    from world.magic.models.gifts import Gift  # noqa: PLC0415
+    from world.seeds.sample_content import authored_or_sample  # noqa: PLC0415
+    from world.species.factories import ensure_sunlight_distinctions  # noqa: PLC0415
+    from world.species.models import SpeciesGiftGrant  # noqa: PLC0415
+
+    bane, allergy = ensure_sunlight_distinctions()
+    rows = (
+        (
+            "Vampire",
+            bane,
+            20,
+            "PLACEHOLDER: the night's aristocracy of Ariwn — direct sunlight is their bane.",
+        ),
+        (
+            "Dhampir",
+            allergy,
+            21,
+            "PLACEHOLDER: mortal-blooded scions of vampire lines — the sun "
+            "sickens rather than slays.",
+        ),
+        (
+            "Nox'alfar",
+            allergy,
+            22,
+            "PLACEHOLDER: the night elves — reachable in Arx as Sleepers and "
+            "Misbegotten; daylight is an allergy, not a bane.",
+        ),
+        (
+            "Lycan",
+            None,
+            23,
+            "PLACEHOLDER: shapeshifters of Ariwn — the sun holds no terror; "
+            "the moon is another spec (#2845).",
+        ),
+    )
+    for name, sun_distinction, sort_order, description in rows:
+        species = authored_or_sample(
+            Species,
+            {"description": description, "sort_order": sort_order},
+            name=name,
+        )
+        if species is None or sun_distinction is None:
+            continue
+        gift = authored_or_sample(
+            Gift,
+            {
+                "kind": GiftKind.MINOR,
+                "description": f"PLACEHOLDER: the minor gift of the {name} blood.",
+            },
+            name=f"{name} Blood",
+        )
+        if gift is None:
+            continue
+        SpeciesGiftGrant.objects.get_or_create(
+            species=species,
+            gift=gift,
+            defaults={"drawback_distinction": sun_distinction, "cg_point_cost": 0},
+        )
 
 
 def _seed_cg_explanations() -> None:

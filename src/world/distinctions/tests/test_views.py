@@ -638,3 +638,75 @@ class SyncResponseFormatTests(TestCase):
         assert response.status_code == 200
         assert "distinctions" in response.data
         assert len(response.data["distinctions"]) == 1
+
+
+class SpeciesInnateGateTests(TestCase):
+    """#2846: a distinction the drafted species grants innately is unselectable."""
+
+    @classmethod
+    def setUpTestData(cls):
+        from world.magic.constants import GiftKind
+        from world.magic.factories import GiftFactory
+        from world.species.factories import (
+            SpeciesFactory,
+            SpeciesGiftGrantFactory,
+            ensure_sunlight_distinctions,
+        )
+
+        User = get_user_model()
+        cls.user = User.objects.create_user(username="innateuser", password="testpass")
+        cls.bane, cls.allergy = ensure_sunlight_distinctions()
+        cls.vampire = SpeciesFactory(name="Vampire")
+        SpeciesGiftGrantFactory(
+            species=cls.vampire,
+            gift=GiftFactory(name="Vampire Blood", kind=GiftKind.MINOR),
+            drawback_distinction=cls.bane,
+        )
+        cls.human = SpeciesFactory(name="Human")
+
+    def setUp(self):
+        self.client = APIClient()
+        self.client.force_authenticate(user=self.user)
+
+    def _draft(self, species):
+        return CharacterDraftFactory(account=self.user, draft_data={}, selected_species=species)
+
+    def test_vampire_cannot_select_innate_bane(self):
+        draft = self._draft(self.vampire)
+        response = self.client.post(
+            f"/api/distinctions/drafts/{draft.id}/distinctions/",
+            {"distinction_id": self.bane.id},
+            format="json",
+        )
+        assert response.status_code == status.HTTP_400_BAD_REQUEST
+        assert "innate" in str(response.data)
+
+    def test_vampire_cannot_sync_in_innate_bane(self):
+        draft = self._draft(self.vampire)
+        response = self.client.put(
+            f"/api/distinctions/drafts/{draft.id}/distinctions/sync/",
+            {"distinctions": [{"id": self.bane.id, "rank": 1}]},
+            format="json",
+        )
+        assert response.status_code == status.HTTP_400_BAD_REQUEST
+
+    def test_human_may_take_bane_for_reimbursement(self):
+        """The voluntary path: negative cost lands in the draft entry (#2846)."""
+        draft = self._draft(self.human)
+        response = self.client.post(
+            f"/api/distinctions/drafts/{draft.id}/distinctions/",
+            {"distinction_id": self.bane.id},
+            format="json",
+        )
+        assert response.status_code == status.HTTP_201_CREATED
+        assert response.data["cost"] < 0
+
+    def test_vampire_may_take_unrelated_distinction(self):
+        draft = self._draft(self.vampire)
+        other = DistinctionFactory(name="Iron Stomach", is_active=True)
+        response = self.client.post(
+            f"/api/distinctions/drafts/{draft.id}/distinctions/",
+            {"distinction_id": other.id},
+            format="json",
+        )
+        assert response.status_code == status.HTTP_201_CREATED

@@ -201,6 +201,7 @@ class ReconcileSunlightExposureTest(TestCase):
             patch("world.species.services._sun_escalation_bonus", return_value=0),
             patch("world.species.services.decay_condition_severity") as dec,
             patch("world.species.services.ensure_round_for_acute_condition"),
+            patch("world.conditions.hazard_prompt.ensure_hazard_prompt"),
         ):
             reconcile_sunlight_exposure(char, room=MagicMock())
         dec.assert_called_once_with(instance, 9 - target)
@@ -246,6 +247,7 @@ class ReconcileSunlightExposureTest(TestCase):
             patch("world.species.services.advance_condition_severity"),
             patch("world.species.services.decay_condition_severity"),
             patch("world.species.services.ensure_round_for_acute_condition") as er,
+            patch("world.conditions.hazard_prompt.ensure_hazard_prompt"),
         ):
             reconcile_sunlight_exposure(char, room=MagicMock())
         er.assert_called_once_with(char.sheet_data)

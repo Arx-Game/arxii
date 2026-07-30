@@ -96,6 +96,9 @@ def reconcile_sunlight_exposure(character, room) -> None:
     instance = _sync_condition_severity(character, template, instance, target_severity)
     if instance is not None and _in_damaging_stage(instance):
         ensure_round_for_acute_condition(sheet)
+        from world.conditions.hazard_prompt import ensure_hazard_prompt  # noqa: PLC0415
+
+        ensure_hazard_prompt(instance)
 
 
 def _sync_condition_severity(character, template, instance, target_severity: int):
@@ -195,6 +198,20 @@ def _inheritable_grant_filter(species):
     from django.db.models import Q  # noqa: PLC0415
 
     return Q(species_id=own_pk) | Q(species_id__in=ancestor_pks, inheritable=True)
+
+
+def species_innate_distinction_ids(species) -> set[int]:
+    """Distinction pks the species (or inheritable ancestors) stamps at finalize (#2846).
+
+    Consumed by the CG draft validator: an innately-granted distinction is
+    unselectable as a choice (it would double up — and double-refund a
+    reimbursing drawback like the sun tiers).
+    """
+    return set(
+        SpeciesGiftGrant.objects.filter(
+            _inheritable_grant_filter(species), drawback_distinction__isnull=False
+        ).values_list("drawback_distinction_id", flat=True)
+    )
 
 
 def _apply_permanent_condition_once(character, condition) -> None:

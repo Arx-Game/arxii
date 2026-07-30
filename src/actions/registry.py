@@ -196,6 +196,7 @@ from actions.definitions.gm_stories import (
     WithdrawGroupStoryRequestAction,
 )
 from actions.definitions.goals import LogGoalProgressAction, SetCharacterGoalsAction
+from actions.definitions.hazards import HazardEndureAction, HazardRetreatAction
 from actions.definitions.identification import IdentifyAction
 from actions.definitions.imbue import ImbueAction
 from actions.definitions.investigation import SearchAction, StartInvestigationAction
@@ -786,6 +787,9 @@ _ALL_ACTIONS: list[Action] = [
     EnlistBattleParticipantAction(),
     BrowseBattleCatalogAction(),
     CollectFoodAction(),
+    # #2846 — hazard-prompt responses (sunlight bane/allergy AFK guard).
+    HazardEndureAction(),
+    HazardRetreatAction(),
     # #2222 — portal anchor install/dissolve (travel_to's portal branch
     # itself dispatches through TravelAction, already registered above).
     InstallPortalAnchorAction(),

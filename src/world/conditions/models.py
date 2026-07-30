@@ -1750,3 +1750,56 @@ class PenetrationOutcomeFactor(NaturalKeyMixin, SharedMemoryModel):
     def __str__(self) -> str:
         suffix = f" — {self.label}" if self.label else ""
         return f"SL ≥ {self.min_success_level}: ×{self.factor}{suffix}"
+
+
+class HazardResponseState(SharedMemoryModel):
+    """Player-response tracking for an environmental-hazard condition (#2846).
+
+    Created when a hazard condition (sunlight today; fire/cold later) first
+    enters a damaging stage: the player is prompted (web + telnet) with their
+    real options — retreat, cover up, seek shade, tough it out. This row tracks
+    what happened since. Hazard-generic by design: nothing here is
+    sunlight-specific; the per-hazard layer supplies the refuge logic.
+
+    ``damage_observations`` counts sweep-observed health drops since the
+    prompt; the AFK guard auto-flees after the configured count (never the
+    first — nothing is instantaneously lethal). ``endured_until`` marks a
+    successful tough-it-out: no re-prompt, no auto-flee while it holds.
+    Lifecycle rides the condition instance (CASCADE); a re-applied condition is
+    a new instance and therefore a fresh prompt.
+    """
+
+    condition_instance = models.OneToOneField(
+        ConditionInstance,
+        on_delete=models.CASCADE,
+        related_name="hazard_response",
+        help_text="The hazard condition instance this response state tracks.",
+    )
+    prompted_at = models.DateTimeField(
+        auto_now_add=True,
+        help_text="When the hazard prompt was first shown.",
+    )
+    last_health_snapshot = models.IntegerField(
+        help_text="Target health at the last observation; drops count as damage instances.",
+    )
+    damage_observations = models.PositiveSmallIntegerField(
+        default=0,
+        help_text="Observed damage instances since the prompt (auto-flee threshold input).",
+    )
+    responded_at = models.DateTimeField(
+        null=True,
+        blank=True,
+        help_text="When the player answered the prompt (any option). Null = unanswered.",
+    )
+    endured_until = models.DateTimeField(
+        null=True,
+        blank=True,
+        help_text="Tough-it-out holds until this real time: no re-prompt, no auto-flee.",
+    )
+
+    class Meta:
+        verbose_name = "Hazard Response State"
+        verbose_name_plural = "Hazard Response States"
+
+    def __str__(self) -> str:
+        return f"HazardResponse for instance {self.condition_instance_id}"

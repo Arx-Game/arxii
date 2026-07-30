@@ -4,11 +4,13 @@ import { setAccount } from '@/store/authSlice';
 import { parseGameMessage } from './parseGameMessage';
 import { GAME_MESSAGE_TYPE, WS_MESSAGE_TYPE } from './types';
 import { emitActionResult } from './actionResultBus';
+import { emitHazardPrompt } from './hazardPromptBus';
 
 import type {
   ActionResultPayload,
   CommandErrorPayload,
   GameMessage,
+  HazardPromptPayload,
   IncomingMessage,
   InteractionWsPayload,
   KudosReceivedPayload,
@@ -204,6 +206,11 @@ export function useGameSocket() {
 
           if (msgType === WS_MESSAGE_TYPE.MAIL_ARRIVED) {
             handleMailArrivedPayload(kwargs as unknown as MailArrivedPayload);
+            return;
+          }
+
+          if (msgType === WS_MESSAGE_TYPE.HAZARD_PROMPT) {
+            emitHazardPrompt(kwargs as unknown as HazardPromptPayload);
             return;
           }
 

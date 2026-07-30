@@ -21,6 +21,7 @@ class WebsocketMessageType(str, Enum):
     BATTLE_STATE = "battle_state"
     KUDOS_RECEIVED = "kudos_received"
     MAIL_ARRIVED = "mail_arrived"
+    HAZARD_PROMPT = "hazard_prompt"
 
 
 @dataclass
@@ -175,3 +176,23 @@ class MailArrivedPayload:
     mail_id: int
     sender_display: str
     subject: str
+
+
+@dataclass
+class HazardPromptPayload:
+    """Payload for ``hazard_prompt`` messages (#2846).
+
+    An environmental-hazard condition (sunlight bane/allergy today) crossed
+    into a damaging stage: the client surfaces an interactive card with the
+    character's real options. ``endure_action``/``retreat_action`` are the
+    action keys the client dispatches through the normal action-dispatch
+    endpoint; cover-up and seek-shade route to existing wardrobe/room UI.
+    """
+
+    character_id: int
+    condition_name: str
+    stage_name: str
+    severity: int
+    player_text: str
+    endure_action: str
+    retreat_action: str
