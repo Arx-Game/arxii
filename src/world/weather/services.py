@@ -200,6 +200,33 @@ def apply_weather_exposure(state: RegionWeatherState) -> None:
         )
 
 
+def _pick_next_weather(
+    current: RegionWeatherState | None,
+    candidates: list[WeatherType],
+) -> WeatherType:
+    """Pick the next weather from the transition graph, or the global pool (#2845, ADR-0181).
+
+    When the region currently holds a type with authored outgoing
+    ``WeatherTransition`` edges, the roll draws from those edges intersected
+    with the climate-eligible candidates — weather walks the graph, so shifts
+    trend (clear -> overcast -> storm) rather than jump-cut. A type with no
+    outgoing edges, an empty intersection (e.g. seasonal eligibility pruned
+    every authored destination), or no current state falls back to the global
+    ``selection_weight`` roll — sparse authoring degrades to today's behavior.
+    """
+    from world.weather.models import WeatherTransition  # noqa: PLC0415
+
+    if current is not None:
+        edge_weights = {
+            edge.to_type_id: edge.weight
+            for edge in WeatherTransition.objects.filter(from_type=current.weather_type)
+        }
+        reachable = [c for c in candidates if c.pk in edge_weights]
+        if reachable:
+            return _weighted_choice(reachable, [max(1, edge_weights[c.pk]) for c in reachable])
+    return _weighted_choice(candidates, [max(1, c.selection_weight) for c in candidates])
+
+
 def roll_region_weather(
     area: Area,
     *,
@@ -216,8 +243,8 @@ def roll_region_weather(
         candidates = eligible_weather_types(area)
         if not candidates:
             return None
-        weather_type = _weighted_choice(
-            candidates, [max(1, c.selection_weight) for c in candidates]
+        weather_type = _pick_next_weather(
+            RegionWeatherState.objects.filter(area=area).first(), candidates
         )
     state, _ = RegionWeatherState.objects.update_or_create(
         area=area, defaults={"weather_type": weather_type}

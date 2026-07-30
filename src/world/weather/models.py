@@ -178,6 +178,52 @@ class WeatherTypeExposure(NaturalKeyMixin, SharedMemoryModel):
         return f"{self.weather_type.name}: {self.stat_key} {self.value:+d}"
 
 
+class WeatherTransition(NaturalKeyMixin, SharedMemoryModel):
+    """One authored edge in the weather-transition graph (#2845, ADR-0181).
+
+    ``(from_type, to_type) -> weight``: when a region currently holds
+    ``from_type``, the next roll draws from its outgoing edges instead of the
+    global ``selection_weight`` pool — weather becomes a walk on an authored
+    graph, so a thunderstorm arrives *through* overcast instead of snapping
+    from a cloudless sky, and a high self-edge makes weather linger. Sparse by
+    design: a type with NO outgoing edges (or a forced feast-day special) falls
+    back to the global weighted roll, and climate eligibility still filters
+    every candidate. Weights are a PLACEHOLDER author pass.
+    """
+
+    from_type = models.ForeignKey(
+        WeatherType,
+        on_delete=models.CASCADE,
+        related_name="transitions_out",
+    )
+    to_type = models.ForeignKey(
+        WeatherType,
+        on_delete=models.CASCADE,
+        related_name="transitions_in",
+    )
+    weight = models.PositiveIntegerField(
+        default=1,
+        help_text="Relative likelihood of this transition when from_type holds.",
+    )
+
+    class Meta:
+        ordering = ["from_type", "to_type"]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["from_type", "to_type"],
+                name="unique_weather_transition_edge",
+            ),
+        ]
+
+    class NaturalKeyConfig:
+        fields = ["from_type", "to_type"]
+
+    objects = NaturalKeyManager()
+
+    def __str__(self) -> str:
+        return f"{self.from_type.name} -> {self.to_type.name} (w{self.weight})"
+
+
 class WeatherTypeShelter(NaturalKeyMixin, SharedMemoryModel):
     """One hazard axis a weather type shelters a region from while active (#2845, ADR-0180).
 

@@ -369,3 +369,56 @@ class PhaseAlignedWeatherTickTests(TestCase):
             assert self._guard() is False
         with patch("world.game_clock.services.get_ic_now", return_value=night):
             assert self._guard() is True
+
+
+class WeatherTransitionGraphTests(TestCase):
+    """#2845/ADR-0181: the roll walks the authored transition graph when edges exist.
+
+    Pure picker tests — no Areas (matview-free); ``_pick_next_weather`` takes the
+    current state row and the eligible candidates directly.
+    """
+
+    def _state(self, weather_type):
+        from world.weather.models import RegionWeatherState
+
+        return RegionWeatherState(weather_type=weather_type)
+
+    def test_outgoing_edges_restrict_the_roll(self):
+        from world.weather.factories import WeatherTransitionFactory
+        from world.weather.services import _pick_next_weather
+
+        clear = WeatherTypeFactory(name="TClear")
+        overcast = WeatherTypeFactory(name="TOvercast")
+        storm = WeatherTypeFactory(name="TStorm")
+        WeatherTransitionFactory(from_type=clear, to_type=clear, weight=1)
+        WeatherTransitionFactory(from_type=clear, to_type=overcast, weight=1)
+        # No clear->storm edge: a storm can never follow a cloudless sky.
+        for _ in range(25):
+            picked = _pick_next_weather(self._state(clear), [clear, overcast, storm])
+            assert picked in (clear, overcast)
+
+    def test_no_edges_falls_back_to_global_weights(self):
+        from world.weather.services import _pick_next_weather
+
+        clear = WeatherTypeFactory(name="TClear2")
+        storm = WeatherTypeFactory(name="TStorm2")
+        picked = _pick_next_weather(self._state(clear), [storm])
+        assert picked == storm
+
+    def test_eligibility_pruned_graph_falls_back(self):
+        """Edges exist but none of their destinations are climate-eligible -> global roll."""
+        from world.weather.factories import WeatherTransitionFactory
+        from world.weather.services import _pick_next_weather
+
+        clear = WeatherTypeFactory(name="TClear3")
+        snow = WeatherTypeFactory(name="TSnow3")
+        fog = WeatherTypeFactory(name="TFog3")
+        WeatherTransitionFactory(from_type=clear, to_type=snow, weight=5)
+        picked = _pick_next_weather(self._state(clear), [fog])
+        assert picked == fog
+
+    def test_no_current_state_uses_global_weights(self):
+        from world.weather.services import _pick_next_weather
+
+        fog = WeatherTypeFactory(name="TFog4")
+        assert _pick_next_weather(None, [fog]) == fog

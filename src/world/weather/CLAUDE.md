@@ -61,6 +61,12 @@ non-comfort consumers (e.g. a "what's the climate here" display).
   blizzards out of the tropics). **No** Arx-1 intensity scalar — the type *is* the intensity.
 - **`WeatherTypeExposure`** — `(weather_type, stat_key) -> value` (mirrors `StyleAffinity`); the
   exposure a type imparts while it holds (Stormy → +WET, +WIND).
+- **`WeatherTransition`** (#2845, ADR-0181) — `(from_type, to_type) -> weight`: the authored
+  transition graph. A region's next roll draws from its current type's outgoing edges
+  (intersected with climate eligibility) instead of the global pool, so weather *trends*
+  (clear -> overcast -> storm; high self-edge = lingering systems). No edges / pruned edges /
+  feast-day forcing / fresh region -> global `selection_weight` fallback. Content-repo-owned;
+  re-seed file `weather_transitions.json`.
 - **`WeatherTypeShelter`** (#2845, ADR-0180) — `(weather_type, damage_type) -> value`: cloud
   cover IS area-wide hazard shelter. Overcast/stormy types author a Radiant row and the roll
   materializes it on the `KeyType.DAMAGE_TYPE` cascade axis (same decaying `weather:<area_pk>`
