@@ -74,13 +74,21 @@ def _phase_transitioned_since_last_run() -> bool:
     is true exactly once per boundary crossing. First-ever run (no stamp yet) fires, so a
     fresh world gets weather immediately. No clock -> never fires.
     """
+    from datetime import timedelta  # noqa: PLC0415
+
+    from django.utils import timezone  # noqa: PLC0415
+
     from world.game_clock.models import ScheduledTaskRecord  # noqa: PLC0415
     from world.game_clock.services import get_ic_now, phase_from_ic_time  # noqa: PLC0415
 
+    record = ScheduledTaskRecord.objects.filter(task_key=WEATHER_TASK_KEY).first()
     ic_now = get_ic_now()
     if ic_now is None:
-        return False
-    record = ScheduledTaskRecord.objects.filter(task_key=WEATHER_TASK_KEY).first()
+        # No IC clock: fall back to the legacy 2-real-hour cadence so a
+        # clockless world still gets weather (the pre-#2845 behavior).
+        if record is None or record.last_run_at is None:
+            return True
+        return timezone.now() - record.last_run_at >= timedelta(hours=2)
     if record is None or record.last_ic_run_at is None:
         return True
     return phase_from_ic_time(record.last_ic_run_at) != phase_from_ic_time(ic_now)

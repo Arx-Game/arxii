@@ -343,11 +343,24 @@ class PhaseAlignedWeatherTickTests(TestCase):
         record.last_ic_run_at = ic_dt
         record.save(update_fields=["last_ic_run_at"])
 
-    def test_no_clock_never_fires(self):
+    def test_no_clock_falls_back_to_legacy_cadence(self):
+        from datetime import timedelta
         from unittest.mock import patch
 
+        from django.utils import timezone
+
+        from world.game_clock.models import ScheduledTaskRecord
+        from world.weather.tasks import WEATHER_TASK_KEY
+
         with patch("world.game_clock.services.get_ic_now", return_value=None):
+            assert self._guard() is True  # first run: clockless worlds still roll
+            record, _ = ScheduledTaskRecord.objects.get_or_create(task_key=WEATHER_TASK_KEY)
+            record.last_run_at = timezone.now() - timedelta(minutes=30)
+            record.save(update_fields=["last_run_at"])
             assert self._guard() is False
+            record.last_run_at = timezone.now() - timedelta(hours=3)
+            record.save(update_fields=["last_run_at"])
+            assert self._guard() is True
 
     def test_first_run_fires(self):
         from datetime import UTC, datetime
