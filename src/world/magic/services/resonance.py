@@ -1387,6 +1387,16 @@ def spend_resonance_for_pull(  # noqa: PLR0913, C901
     if in_combat:
         recompute_max_health_with_threads(character_sheet)
 
+    # #2840: non-combat CAPABILITY_GRANT effects are persisted via a Thread
+    # Surge condition + EphemeralPullCapabilityGrant sidecar rows, so the
+    # capability oracle can read them at arbitrary later times.
+    if not in_combat:
+        from world.magic.services.ephemeral_pull import (  # noqa: PLC0415
+            apply_ephemeral_pull_capability_grants,
+        )
+
+        apply_ephemeral_pull_capability_grants(character_sheet, resolved)
+
     # Phase 12-future: emit ThreadsPulled audit event when the event class
     # exists (spec §5.4 step 7). Currently a no-op.
 
