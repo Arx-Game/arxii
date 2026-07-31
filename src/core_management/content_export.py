@@ -89,6 +89,7 @@ CONTENT_MODELS: frozenset[str] = frozenset(
         # clues
         "clues.clue",
         # combat
+        "combat.creaturetemplate",
         "combat.threatpool",
         "combat.threatpoolentry",
         # codex
@@ -119,6 +120,7 @@ CONTENT_MODELS: frozenset[str] = frozenset(
         "covenants.covenantroleactionscaling",
         "covenants.covenantrolebonus",
         "covenants.covenantroledefenseprofile",
+        "covenants.covenantrolegiftgrant",
         "covenants.covenantroletechniquespecialty",
         "covenants.geararchetypecompatibility",
         "covenants.insighttableentry",
