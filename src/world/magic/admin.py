@@ -27,6 +27,7 @@ from world.magic.models import (
     CrossingOption,
     DistinctionResonanceRankThreshold,
     EffectType,
+    EphemeralPullCapabilityGrant,
     Facet,
     Gift,
     GiftAcquisitionConfig,
@@ -1334,3 +1335,25 @@ class TrainingOutcomeAwardAdmin(admin.ModelAdmin):
 
     list_display = ["outcome_tier", "dev_point_multiplier"]
     ordering = ["outcome_tier__success_level"]
+
+
+@admin.register(EphemeralPullCapabilityGrant)
+class EphemeralPullCapabilityGrantAdmin(admin.ModelAdmin):
+    """Read-only admin for non-combat pull capability grant sidecar rows (#2840)."""
+
+    list_display = ("character_sheet", "capability", "grant_value", "source_tier")
+    list_filter = ("source_tier",)
+    search_fields = ("character_sheet__character__db_key",)
+    readonly_fields = (
+        "condition_instance",
+        "character_sheet",
+        "capability",
+        "grant_value",
+        "source_thread",
+        "source_thread_level",
+        "source_tier",
+    )
+    raw_id_fields = ("character_sheet", "condition_instance", "source_thread")
+
+    def has_add_permission(self, request):  # noqa: ARG002
+        return False
