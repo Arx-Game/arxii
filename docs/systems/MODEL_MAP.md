@@ -656,6 +656,7 @@
   - dominant_society -> societies.Society [FK] (nullable)
   - allowed_building_kinds -> buildings.BuildingKind [M2M]
 **Pointed to by:**
+  - turf <- societies.NeighborhoodTurf
   - gang_turf_projects <- societies.GangTurfDetails
   - domain_profile <- societies.Domain
   - income_streams <- currency.OrgIncomeStream
@@ -4268,6 +4269,7 @@
 **Foreign Keys:**
   - check_type -> checks.CheckType [FK] (nullable)
   - skill_trait -> traits.Trait [FK] (nullable)
+  - required_feature_kind -> room_features.RoomFeatureKind [FK] (nullable)
   - output_item_template -> items.ItemTemplate [FK] (nullable)
 **Pointed to by:**
   - material_requirements <- items.CraftingMaterialRequirement
@@ -4394,7 +4396,7 @@
 
 ### MarketSale
 **Foreign Keys:**
-  - buyer_persona -> scenes.Persona [FK]
+  - buyer_persona -> scenes.Persona [FK] (nullable)
   - seller_persona -> scenes.Persona [FK] (nullable)
   - item_instance -> items.ItemInstance [FK] (nullable)
 
@@ -4623,6 +4625,7 @@
 
 ### Service Functions
 - `ap_regen_multiplier_pct(level: 'int') -> 'int' — The AP-regen percentage adjustment for a comfort level (#1514) — 0 at neutral (5).`
+- `area_stat_total(area: 'Area | None', stat_key: 'str') -> 'int' — Summed area-level modifier rows for *stat_key* on *area* + ancestors (#2862).`
 - `assign_room_tenant(*, persona: 'Persona', room: 'DefaultObject', tenant_persona: 'Persona', ends_at: 'datetime | None' = None, notes: 'str' = '') -> 'LocationTenancy' — Owner-gated grant of a room tenancy (#670) — the player seam over grant_tenancy.`
 - `cleanup_decayed_modifiers(now: 'datetime | None' = None) -> 'int' — Delete LocationValueModifier rows whose current_value() has`
 - `climate_exposure_base(climate: 'Climate | None', stat_key: 'StatKey', *, temperature_shift: 'int' = 0) -> 'int' — A climate's contribution to one exposure axis, before local modifiers/floor (#1522).`
@@ -7163,6 +7166,7 @@
 **Foreign Keys:**
   - allowed_building_kinds -> buildings.BuildingKind [M2M]
 **Pointed to by:**
+  - gated_recipes <- items.CraftingRecipe
   - install_rituals <- room_features.RoomFeatureKindInstallRitual
   - required_building_owner_types <- room_features.RoomFeatureKindOwnerType
   - instances <- room_features.RoomFeatureInstance
@@ -8179,6 +8183,7 @@
   - offices <- societies.OrganizationOffice
   - reputations <- societies.OrganizationReputation
   - proclamations <- societies.Proclamation
+  - held_turf <- societies.NeighborhoodTurf
   - gang_turf_projects <- societies.GangTurfDetails
   - personal_obligations_owed <- societies.OrganizationObligation
   - fealty <- societies.FealtyEdge
@@ -8382,6 +8387,11 @@
   - check_outcome -> traits.CheckOutcome [FK] (nullable)
 **Pointed to by:**
   - edicts <- societies.DomainEdict
+
+### NeighborhoodTurf
+**Foreign Keys:**
+  - area -> areas.Area [OneToOne]
+  - controlling_org -> societies.Organization [FK] (nullable)
 
 ### GangTurfDetails
 **Foreign Keys:**

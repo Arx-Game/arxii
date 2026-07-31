@@ -3978,6 +3978,20 @@ Unified modifier system — categories, types, sources, and per-character modifi
 ### Items & Equipment
 Items, equipment, inventory, and currency. Spec D PR1 shipped facets, equip/unequip
 
+- **The underworld (#2862, ADR-0185):** the fence (`MarketStall.stall_kind=FENCE`,
+  `sell_to_fence` — the first sell-to-NPC path; first consumer of `ItemTemplate.value`;
+  first live heat producers for the dormant `contraband`/`smuggling` CrimeKinds, AreaLaw-
+  weighted); Dust/Haze intoxicant ladders (`condition_template` override on INTOXICATE —
+  Dusted's pass-out reaches the dream realm via the built Unconscious rule; Hazed cannot
+  drop anyone); `CraftingRecipe.required_feature_kind` (LAB hardcode generalized — drug
+  refinement gates on the Workshop of Iniquity); `NeighborhoodTurf` + `turf_services`
+  (grip/flip; writes `StatKey.CRIME`, re-targets CRIME_KICKUP, provokes Retaliation
+  crises; the orphaned gang-turf project machinery finally moves state via
+  `complete_gang_turf` + `start_gang_turf` action); guard pressure scales with area
+  CRIME (`area_stat_total` in locations services); 7 RESTRICTED criminal missions on a
+  covert board + first `MissionCategory` rows + the standing smuggling route
+  (`TaskTemplate` + linked mission — the dual-execution bridge); seeds in
+  `world/seeds/underworld.py` (cluster `underworld`), all PLACEHOLDER.
 - **Consumables + cooking (#2852, ADR-0184):** three consequence EffectTypes
   (`RESTORE_FATIGUE` → new `fatigue.services.recover_fatigue`; `RESTORE_ANIMA` clamped —
   consumption, never regeneration; `INTOXICATE` → `imbibe`) make every edible pure content:
