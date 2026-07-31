@@ -80,6 +80,31 @@ def _reconcile_safely(character) -> None:
     reconcile_sun_exposure_safely(character)
 
 
+def moon_reconcile_tick() -> None:
+    """Roll moon-control windows for every moon-bound character (#2845).
+
+    Sibling of ``sun_reconcile_tick``: sweeps holders of any ``moon-bound``
+    tagged distinction and runs their control-check window. All gating (night,
+    sky exposure, pull threshold, tier exemption, already-Berserk) lives in
+    ``reconcile_moon_pull`` — the sweep is deliberately dumb. Volume is
+    proportional to moon-bound PCs, not the grid.
+    """
+    from world.distinctions.models import CharacterDistinction  # noqa: PLC0415
+    from world.species.moon_constants import MOON_BOUND_TAG  # noqa: PLC0415
+    from world.species.moon_sensitivity import reconcile_moon_pull_safely  # noqa: PLC0415
+
+    seen: set[int] = set()
+    holder_rows = CharacterDistinction.objects.filter(
+        distinction__tags__slug=MOON_BOUND_TAG,
+    ).select_related("character")
+    for row in holder_rows:
+        character = row.character.character
+        if character is None or character.pk in seen:
+            continue
+        seen.add(character.pk)
+        reconcile_moon_pull_safely(character)
+
+
 def register_all_tasks() -> None:
     """Register species cron tasks with the game-clock scheduler."""
     register_task(
@@ -91,6 +116,18 @@ def register_all_tasks() -> None:
             description=(
                 "Reconcile sunlight exposure for sun-sensitive characters "
                 "(stationary dawn pickup + sustained-exposure escalation, #2846)."
+            ),
+        )
+    )
+    register_task(
+        CronDefinition(
+            task_key="species.moon_reconcile",
+            callable=moon_reconcile_tick,
+            interval=timedelta(minutes=5),
+            phase=CronPhase.DRAIN,
+            description=(
+                "Moon control-check windows for moon-bound characters "
+                "(forced shift + Berserk on failure, #2845)."
             ),
         )
     )
