@@ -90,7 +90,7 @@ class GMAdjudicationActionsTestBase(TestCase):
         self.scene = SceneFactory(location=self.room)
 
         self.gm_actor, self.gm_account = _pc_in_room(self.room, db_key="GMActor")
-        GMProfileFactory(account=self.gm_account, level=GMLevel.JUNIOR)
+        GMProfileFactory(account=self.gm_account, level=GMLevel.SENIOR)
         SceneParticipationFactory(scene=self.scene, account=self.gm_account, is_gm=True)
 
         self.starting_gm_actor, self.starting_gm_account = _pc_in_room(
@@ -98,6 +98,12 @@ class GMAdjudicationActionsTestBase(TestCase):
         )
         GMProfileFactory(account=self.starting_gm_account, level=GMLevel.STARTING)
         SceneParticipationFactory(scene=self.scene, account=self.starting_gm_account, is_gm=True)
+
+        self.junior_gm_actor, self.junior_gm_account = _pc_in_room(
+            self.room, db_key="JuniorGMActor"
+        )
+        GMProfileFactory(account=self.junior_gm_account, level=GMLevel.JUNIOR)
+        SceneParticipationFactory(scene=self.scene, account=self.junior_gm_account, is_gm=True)
 
         self.player_actor, self.player_account = _pc_in_room(self.room, db_key="PlayerActor")
         SceneParticipationFactory(scene=self.scene, account=self.player_account, is_gm=False)
@@ -137,9 +143,9 @@ class InvokeCatalogCheckActionPermissionTests(GMAdjudicationActionsTestBase):
             difficulty=DifficultyChoice.HARD,
         )
         self.assertFalse(result.success)
-        self.assertIn("scene's GM or staff", result.message)
+        self.assertIn("GM trust required", result.message)
 
-    def test_scene_gm_can_invoke(self) -> None:
+    def test_senior_gm_can_invoke(self) -> None:
         result = InvokeCatalogCheckAction().run(
             actor=self.gm_actor,
             target=self.target,
@@ -148,7 +154,7 @@ class InvokeCatalogCheckActionPermissionTests(GMAdjudicationActionsTestBase):
         )
         self.assertTrue(result.success)
 
-    def test_staff_bypasses_scene_gm_gate(self) -> None:
+    def test_staff_bypasses_gm_level_gate(self) -> None:
         result = InvokeCatalogCheckAction().run(
             actor=self.staff_actor,
             target=self.target,
@@ -157,13 +163,42 @@ class InvokeCatalogCheckActionPermissionTests(GMAdjudicationActionsTestBase):
         )
         self.assertTrue(result.success)
 
-    def test_no_level_floor_required_for_check_invocation(self) -> None:
-        """A STARTING-tier scene GM may still invoke checks (ADR-0030: player-roll resolved)."""
+    def test_starting_gm_is_blocked_from_check_invocation(self) -> None:
+        """A STARTING-tier GM may not invoke ad-hoc checks (#2857)."""
         result = InvokeCatalogCheckAction().run(
             actor=self.starting_gm_actor,
             target=self.target,
             check_type_ref=self.check_type.name,
             difficulty=DifficultyChoice.HARD,
+        )
+        self.assertFalse(result.success)
+        self.assertIn("Senior GM or higher", result.message)
+
+    def test_junior_gm_is_blocked_from_check_invocation(self) -> None:
+        """A JUNIOR-tier GM may not invoke ad-hoc checks (#2857)."""
+        result = InvokeCatalogCheckAction().run(
+            actor=self.junior_gm_actor,
+            target=self.target,
+            check_type_ref=self.check_type.name,
+            difficulty=DifficultyChoice.HARD,
+        )
+        self.assertFalse(result.success)
+        self.assertIn("Senior GM or higher", result.message)
+
+    def test_junior_gm_blocked_from_find_mode(self) -> None:
+        """Find/catalog-browse mode shares the SENIOR gate (#2857)."""
+        result = InvokeCatalogCheckAction().run(
+            actor=self.junior_gm_actor,
+            query="Strike",
+        )
+        self.assertFalse(result.success)
+        self.assertIn("Senior GM or higher", result.message)
+
+    def test_senior_gm_can_use_find_mode(self) -> None:
+        """Find/catalog-browse mode is available to SENIOR GMs (#2857)."""
+        result = InvokeCatalogCheckAction().run(
+            actor=self.gm_actor,
+            query="Strike",
         )
         self.assertTrue(result.success)
 
