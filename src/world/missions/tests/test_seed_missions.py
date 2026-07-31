@@ -16,7 +16,6 @@ from django.test import TestCase, override_settings
 
 from evennia_extensions.factories import CharacterFactory
 from world.character_sheets.factories import CharacterSheetFactory
-from world.missions.constants import GiverKind
 from world.missions.models import MissionGiver, MissionNode, MissionTemplate
 from world.missions.services.opportunities import opportunities_for_character
 from world.seeds.database import seed_dev_database
@@ -42,7 +41,9 @@ class SeedMissionsDevTests(TestCase):
     def test_seeds_one_board_giver_and_three_open_templates(self) -> None:
         seed_dev_database()
 
-        giver = MissionGiver.objects.get(giver_kind=GiverKind.BOARD)
+        # #2862 added a second BOARD giver (the covert Back Room Wall) — fetch
+        # the starter board by name, same scoping the template set already uses.
+        giver = MissionGiver.objects.get(name="Arx City Notice Board")
         self.assertTrue(giver.is_publishable)
         templates = [t for t in giver.templates.all() if t.name in self._STARTER_TEMPLATE_NAMES]
         self.assertEqual(len(templates), 3)

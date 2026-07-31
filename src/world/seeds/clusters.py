@@ -420,7 +420,6 @@ CLUSTER_SEEDERS: dict[str, Callable[[], None]] = {
     # resolution spine exists; authoritative, so it corrects the placeholder stat+stat seed.
     "social": _seed_social,
     "provisioning": _seed_provisioning,
-    "underworld": _seed_underworld,
     # Investigation: the Search check (perception + Investigation) + the Investigation skill.
     # After "checks" for the resolution spine; authoritative (#1705).
     "investigation": _seed_investigation,
@@ -515,6 +514,10 @@ CLUSTER_SEEDERS: dict[str, Callable[[], None]] = {
     # CheckTypes (#2180). After "stealth" (reuses its Stealth skill for SNEAK)
     # and "investigation" (reuses its Investigation skill for Guard Detection).
     "security": _seed_security,
+    # #2862 — after security: the criminal missions roll the Gather Evidence
+    # CheckType that cluster composes; seeding earlier would skip 5 graphs on
+    # the first press and break idempotency.
+    "underworld": _seed_underworld,
     # Perception: the Concealed condition primitive (#1225) — the seam Stealth
     # witness-reduction (#1464) and forms disguise-piercing will apply/clear.
     "perception": _seed_perception,
