@@ -60,6 +60,7 @@ _CHECK_RANKS: tuple[tuple[int, int, str], ...] = (
 # CheckOutcome tier name constants — referenced in both _OUTCOMES and the band tuples.
 _OUTCOME_PARTIAL_SUCCESS = "Partial Success"
 _CRITICAL_SUCCESS = "Critical Success"
+_CRITICAL_FAILURE = "Critical Failure"
 
 # --- Outcome catalog (name -> success_level) ---
 # Initial sane defaults aligned with the integration-test setup. "Critical
@@ -67,7 +68,7 @@ _CRITICAL_SUCCESS = "Critical Success"
 # fetch a CheckOutcome named "Critical Failure") resolve against the canonical
 # spine rather than seeding their own outcome rows.
 _OUTCOMES: tuple[tuple[str, int], ...] = (
-    ("Critical Failure", -2),
+    (_CRITICAL_FAILURE, -2),
     ("Failure", -1),
     (_OUTCOME_PARTIAL_SUCCESS, 0),
     ("Success", 1),
@@ -78,67 +79,118 @@ _OUTCOMES: tuple[tuple[str, int], ...] = (
 # rank_difference is roller_rank MINUS target_rank, so POSITIVE means the roller is
 # stronger and must get the easier bands (#2707 — this mapping was inverted, making
 # better characters fail more; world/checks/tests/test_chart_direction.py guards it).
-_EASY_BANDS: tuple[tuple[str, int, int], ...] = (
-    ("Failure", 1, 20),
-    ("Success", 21, 90),
-    (_CRITICAL_SUCCESS, 91, 100),
-)
-_EVEN_BANDS: tuple[tuple[str, int, int], ...] = (
-    ("Failure", 1, 40),
-    (_OUTCOME_PARTIAL_SUCCESS, 41, 60),
-    ("Success", 61, 100),
-)
-_HARD_BANDS: tuple[tuple[str, int, int], ...] = (
-    ("Failure", 1, 70),
-    (_OUTCOME_PARTIAL_SUCCESS, 71, 85),
-    ("Success", 86, 100),
-)
-
-# Deep-gap bands (#2707). Design intent, stated because the numbers alone don't
-# show it: past a two-rung gap the FAILURE share stops growing — what degrades is
-# what you ACCOMPLISH. A party attacking something far above its level chips away
-# (Partial Success) instead of whiffing round after round; the chip-damage value
-# itself is an authored DamageSuccessLevelMultiplier row, not code.
-_DIRE_BANDS: tuple[tuple[str, int, int], ...] = (
-    ("Failure", 1, 55),
-    (_OUTCOME_PARTIAL_SUCCESS, 56, 98),
-    ("Success", 99, 100),
-)
-# A one-in-a-hundred Success keeps this chart out of chart_has_success_outcomes'
-# IMPOSSIBLE bucket (#2707 review): with an all-Failure/Partial-Success chart here,
-# world.mechanics.services reported DifficultyIndicator.IMPOSSIBLE for any rank
-# difference <= -5, and both approach-listing call sites (services.py:1408/:1657)
-# then dropped the action from the player's available-actions list entirely —
-# the exact inverse of "chip, not whiff, and still be offered" above.
-_HOPELESS_BANDS: tuple[tuple[str, int, int], ...] = (
-    ("Failure", 1, 45),
-    (_OUTCOME_PARTIAL_SUCCESS, 46, 99),
+#
+# 13 unique charts — one per rank_difference. Each gap has its own outcome
+# distribution; no two rank_differences share a chart (#2760). Previously 7
+# shared templates were reused across 13 slots via closest-match fallback.
+#
+# Botch (Critical Failure, success_level -2) appears at rank_diff <= -1 and
+# vanishes at EVEN — you can only botch when you're behind in rank, never on
+# even footing or better. Botch gradient: 10% at worst (-6) → 0% at EVEN.
+#
+# Partial Success is a smooth gradient present from -6 through +5, absent only
+# at +6 (pure win). The old design where Partial vanished entirely on EASY+ was
+# a mistake — it should be a smooth gradient.
+#
+# The -6 chart keeps a 1/100 success, preserving the "chip, don't whiff" design
+# (#2707) and keeping chart_has_success_outcomes True at every rank_difference
+# (so actions at the worst gap are still offered to the player, not dropped from
+# available-actions lists as IMPOSSIBLE).
+#
+# Deep-gap non-monotonicity (total negative outcomes peak at ~58% at -2/Hard,
+# then decline as Partial absorbs more at wider gaps) is intended — a party
+# attacking something far above its level chips away (partial success) instead
+# of whiffing round after round. The -6 "Crushing" chart is intentionally brutal
+# (89% negative); the non-monotonicity holds from -5 onward.
+_CRUSHING_BANDS: tuple[tuple[str, int, int], ...] = (
+    (_CRITICAL_FAILURE, 1, 10),
+    ("Failure", 11, 89),
+    (_OUTCOME_PARTIAL_SUCCESS, 90, 99),
     ("Success", 100, 100),
 )
-# Mirror bands for a roller far ABOVE the difficulty.
-_DOMINANT_BANDS: tuple[tuple[str, int, int], ...] = (
+_HOPELESS_BANDS: tuple[tuple[str, int, int], ...] = (
+    (_CRITICAL_FAILURE, 1, 7),
+    ("Failure", 8, 45),
+    (_OUTCOME_PARTIAL_SUCCESS, 46, 95),
+    ("Success", 96, 100),
+)
+_DIRE_BANDS: tuple[tuple[str, int, int], ...] = (
+    (_CRITICAL_FAILURE, 1, 5),
+    ("Failure", 6, 48),
+    (_OUTCOME_PARTIAL_SUCCESS, 49, 92),
+    ("Success", 93, 100),
+)
+_VERY_HARD_BANDS: tuple[tuple[str, int, int], ...] = (
+    (_CRITICAL_FAILURE, 1, 3),
+    ("Failure", 4, 45),
+    (_OUTCOME_PARTIAL_SUCCESS, 46, 88),
+    ("Success", 89, 100),
+)
+_HARD_BANDS: tuple[tuple[str, int, int], ...] = (
+    (_CRITICAL_FAILURE, 1, 2),
+    ("Failure", 3, 58),
+    (_OUTCOME_PARTIAL_SUCCESS, 59, 85),
+    ("Success", 86, 100),
+)
+_STEEP_BANDS: tuple[tuple[str, int, int], ...] = (
+    (_CRITICAL_FAILURE, 1, 2),
+    ("Failure", 3, 45),
+    (_OUTCOME_PARTIAL_SUCCESS, 46, 78),
+    ("Success", 79, 100),
+)
+_EVEN_BANDS: tuple[tuple[str, int, int], ...] = (
+    ("Failure", 1, 35),
+    (_OUTCOME_PARTIAL_SUCCESS, 36, 60),
+    ("Success", 61, 95),
+    (_CRITICAL_SUCCESS, 96, 100),
+)
+_FAVORABLE_BANDS: tuple[tuple[str, int, int], ...] = (
+    ("Failure", 1, 18),
+    (_OUTCOME_PARTIAL_SUCCESS, 19, 35),
+    ("Success", 36, 90),
+    (_CRITICAL_SUCCESS, 91, 100),
+)
+_EASY_BANDS: tuple[tuple[str, int, int], ...] = (
+    ("Failure", 1, 10),
+    (_OUTCOME_PARTIAL_SUCCESS, 11, 25),
+    ("Success", 26, 85),
+    (_CRITICAL_SUCCESS, 86, 100),
+)
+_VERY_EASY_BANDS: tuple[tuple[str, int, int], ...] = (
     ("Failure", 1, 5),
-    ("Success", 6, 55),
-    (_CRITICAL_SUCCESS, 56, 100),
+    (_OUTCOME_PARTIAL_SUCCESS, 6, 15),
+    ("Success", 16, 80),
+    (_CRITICAL_SUCCESS, 81, 100),
+)
+_DOMINANT_BANDS: tuple[tuple[str, int, int], ...] = (
+    ("Failure", 1, 3),
+    (_OUTCOME_PARTIAL_SUCCESS, 4, 10),
+    ("Success", 11, 75),
+    (_CRITICAL_SUCCESS, 76, 100),
 )
 _OVERWHELMING_BANDS: tuple[tuple[str, int, int], ...] = (
-    ("Success", 1, 30),
-    (_CRITICAL_SUCCESS, 31, 100),
+    (_OUTCOME_PARTIAL_SUCCESS, 1, 5),
+    ("Success", 6, 70),
+    (_CRITICAL_SUCCESS, 71, 100),
+)
+_INEVITABLE_BANDS: tuple[tuple[str, int, int], ...] = (
+    ("Success", 1, 50),
+    (_CRITICAL_SUCCESS, 51, 100),
 )
 _CHARTS: tuple[tuple[int, tuple[tuple[str, int, int], ...]], ...] = (
-    (-6, _HOPELESS_BANDS),
+    (-6, _CRUSHING_BANDS),
     (-5, _HOPELESS_BANDS),
     (-4, _DIRE_BANDS),
-    (-3, _DIRE_BANDS),
+    (-3, _VERY_HARD_BANDS),
     (-2, _HARD_BANDS),
-    (-1, _HARD_BANDS),
+    (-1, _STEEP_BANDS),
     (0, _EVEN_BANDS),
-    (1, _EASY_BANDS),
+    (1, _FAVORABLE_BANDS),
     (2, _EASY_BANDS),
-    (3, _DOMINANT_BANDS),
+    (3, _VERY_EASY_BANDS),
     (4, _DOMINANT_BANDS),
     (5, _OVERWHELMING_BANDS),
-    (6, _OVERWHELMING_BANDS),
+    (6, _INEVITABLE_BANDS),
 )
 
 
