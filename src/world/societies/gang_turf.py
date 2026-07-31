@@ -89,6 +89,9 @@ def resolve_gang_turf(project: Project) -> None:
     resolve_project(project, outcome_tier=tier.outcome_tier)
 
 
+TURF_PUSH_FACTOR = 2  # PLACEHOLDER — grip moved per reputation point (#2862).
+
+
 @transaction.atomic
 def complete_gang_turf(project: Project, outcome_tier: CheckOutcome | None) -> None:
     """Kind handler: apply the tier's reputation delta to the owning gang org.
@@ -103,6 +106,12 @@ def complete_gang_turf(project: Project, outcome_tier: CheckOutcome | None) -> N
     delta = _tier_to_reputation_delta(outcome_tier)
     if delta > 0:
         bump_organization_reputation(project.owner_persona, details.organization, delta)
+    # #2862: reputation was always the trophy — grip is now the ground. A
+    # completed tier pushes the target neighborhood's turf state.
+    if details.target_area_id is not None and delta > 0:
+        from world.societies.turf_services import apply_turf_push  # noqa: PLC0415
+
+        apply_turf_push(details.organization, details.target_area, delta * TURF_PUSH_FACTOR)
 
 
 @transaction.atomic

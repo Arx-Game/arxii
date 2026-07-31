@@ -101,6 +101,12 @@ def _seed_social() -> None:
     seed_social_check_content()
 
 
+def _seed_underworld() -> None:
+    from world.seeds.underworld import seed_underworld_demo  # noqa: PLC0415
+
+    seed_underworld_demo()
+
+
 def _seed_provisioning() -> None:
     from world.seeds.provisioning_checks import seed_provisioning_content  # noqa: PLC0415
 
@@ -414,6 +420,7 @@ CLUSTER_SEEDERS: dict[str, Callable[[], None]] = {
     # resolution spine exists; authoritative, so it corrects the placeholder stat+stat seed.
     "social": _seed_social,
     "provisioning": _seed_provisioning,
+    "underworld": _seed_underworld,
     # Investigation: the Search check (perception + Investigation) + the Investigation skill.
     # After "checks" for the resolution spine; authoritative (#1705).
     "investigation": _seed_investigation,
@@ -660,6 +667,7 @@ def seeded_models_by_cluster() -> dict[str, list[type[Model]]]:
         Title,
     )
     from world.societies.models import (  # noqa: PLC0415
+        NeighborhoodTurf,
         PropagandaCampaignTier,
         StanceArchetype,
     )
@@ -681,6 +689,9 @@ def seeded_models_by_cluster() -> dict[str, list[type[Model]]]:
         # first live QualityTier ladder. Skill/CheckType rows counted under "checks";
         # the recipe rows are the representative content.
         "provisioning": [CraftingRecipe],
+        # Underworld (#2862): the turf-war stage — NPC gang + contested
+        # neighborhood + Retaliation crisis type.
+        "underworld": [NeighborhoodTurf],
         # Investigation seeds the Search CheckType + Investigation skill (shared spine/skill
         # rows counted under "checks"); it still appears as a seeded cluster (#1705).
         "investigation": [],

@@ -436,6 +436,7 @@ from actions.definitions.tasking import (
 from actions.definitions.technique_authoring import AuthorTechniqueAction
 from actions.definitions.threads import WeaveThreadAction
 from actions.definitions.traps import DisarmTrapAction
+from actions.definitions.turf import StartGangTurfAction
 from actions.definitions.vault import (
     VaultAccessAddAction,
     VaultAccessListAction,
@@ -790,6 +791,7 @@ _ALL_ACTIONS: list[Action] = [
     # #2010 — GM battle staging: JUNIOR-gated catalog-pick-to-live-Battle actions.
     CreateBattleAction(),
     StageBattleMapAction(),
+    StartGangTurfAction(),
     SpawnBattleUnitsAction(),
     EnlistBattleParticipantAction(),
     BrowseBattleCatalogAction(),
