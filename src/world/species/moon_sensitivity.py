@@ -66,6 +66,7 @@ def reconcile_moon_pull(character) -> None:
     if sheet is None or not is_moon_bound(sheet):
         return
     if _active_berserk_instance(character) is not None:
+        _rampage_window(character)
         return
     exposure = felt_moon_pull(character, character.location)
     if exposure.pull < MOON_PULL_CHECK_THRESHOLD:
@@ -181,6 +182,13 @@ def _apply_berserk(character) -> None:
         duration_rounds=MOON_BERSERK_DURATION_ROUNDS,
         source_character=character,
     )
+
+
+def _rampage_window(character) -> None:
+    """One out-of-combat rampage window while the moon-swept character rages."""
+    from world.combat.berserk_compulsion import berserk_rampage_window  # noqa: PLC0415
+
+    berserk_rampage_window(character)
 
 
 def _active_berserk_instance(character):
