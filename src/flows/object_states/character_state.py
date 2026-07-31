@@ -6,7 +6,10 @@ from flows.object_states.base_state import BaseState
 from world.items.services.appearance import visible_worn_items_for
 
 if TYPE_CHECKING:
+    from collections.abc import Iterable
+
     from commands.types import Kwargs
+    from world.conditions.models import ConditionInstance
 
 
 class CharacterState(BaseState):
@@ -175,34 +178,40 @@ class CharacterState(BaseState):
         if vitals is not None and vitals.health_percentage < healthy_floor:
             clauses.append(vitals.wound_description)
 
-        # Fatigue — only when a pool already exists (never create one on look).
-        # The reverse OneToOne raises an AttributeError subclass when unset, so
-        # getattr-with-default reads it without a query-creating get_or_create.
+        # Depletion — ONE clause for the whole tired/hungry family, worst-wins
+        # (#2853 ruling: one wounds line + one depletion line, never a clause
+        # per condition — per-condition listing reads as spam). Candidates:
+        # the worst fatigue zone across the three pools, and Ravenous hunger.
+        # Fatigue reads only an existing pool (never create one on look).
+        zone_order = [
+            FatigueZone.FRESH,
+            FatigueZone.STRAINED,
+            FatigueZone.TIRED,
+            FatigueZone.OVEREXERTED,
+            FatigueZone.EXHAUSTED,
+        ]
+        worst_rank = 0
         fatigue_pool = sheet.fatigue_or_none
         if fatigue_pool is not None:
-            zone_order = [
-                FatigueZone.FRESH,
-                FatigueZone.STRAINED,
-                FatigueZone.TIRED,
-                FatigueZone.OVEREXERTED,
-                FatigueZone.EXHAUSTED,
-            ]
-            worst_rank = 0
             for category in ActionCategory.values:
                 worst_rank = max(worst_rank, zone_order.index(get_fatigue_zone(sheet, category)))
-            if worst_rank > 0:
-                clauses.append(str(zone_order[worst_rank].label).lower())
+        depletion_clause = str(zone_order[worst_rank].label).lower() if worst_rank > 0 else ""
 
-        # Visible conditions, most prominent first.
+        # Visible conditions, most prominent first. Ravenous folds into the
+        # depletion pick instead of listing separately: deep hunger (severity
+        # 3+, PLACEHOLDER) outranks any tiredness wording.
         visible = sorted(
             (c for c in get_active_conditions(self.obj) if c.condition.is_visible_to_others),
             key=lambda c: c.condition.display_priority,
             reverse=True,
         )
+        depletion_clause = _fold_ravenous_into_depletion(visible, depletion_clause)
+        if depletion_clause:
+            clauses.append(depletion_clause)
         clauses.extend(
             c.condition.observer_description.strip()
             for c in visible
-            if c.condition.observer_description.strip()
+            if not _is_ravenous_condition(c) and c.condition.observer_description.strip()
         )
 
         if not clauses:
@@ -232,3 +241,24 @@ class CharacterState(BaseState):
             worn_section=f"\n{worn}" if worn else "",
         )
         return self.format_appearance(appearance, **kwargs)
+
+
+def _is_ravenous_condition(instance: "ConditionInstance") -> bool:
+    from world.species.appetites import RAVENOUS_NAME  # noqa: PLC0415
+
+    return instance.condition.name == RAVENOUS_NAME
+
+
+def _fold_ravenous_into_depletion(
+    visible: "Iterable[ConditionInstance]", depletion_clause: str
+) -> str:
+    """One depletion clause, worst-wins (#2853): deep hunger outranks tiredness."""
+    ravenous_deep_severity = 3
+    for instance in visible:
+        if not _is_ravenous_condition(instance):
+            continue
+        observer_text = instance.condition.observer_description.strip()
+        deep_enough = not depletion_clause or instance.severity >= ravenous_deep_severity
+        if observer_text and deep_enough:
+            depletion_clause = observer_text
+    return depletion_clause

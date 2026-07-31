@@ -1591,6 +1591,9 @@
   - alteration_events <- magic.MagicalAlterationEvent
   - anima <- magic.CharacterAnima
   - anima_ritual_participations <- magic.AnimaRitualPerformance
+  - appetite_upkeep_receipts <- magic.AppetiteUpkeepReceipt
+  - feedings_taken <- magic.FeedingRecord
+  - feedings_suffered <- magic.FeedingRecord
   - aura <- magic.CharacterAura
   - resonances <- magic.CharacterResonance
   - dramatic_moment_tags <- magic.DramaticMomentTag
@@ -3367,6 +3370,7 @@
 **Pointed to by:**
   - action_enhancements <- actions.ActionEnhancement
   - species_gift_drawbacks <- species.SpeciesGiftGrant
+  - appetite_upkeep <- magic.AppetiteUpkeep
   - glimpse_tag_suggestions <- magic.GlimpseTagDistinctionSuggestion
   - ritual_grants <- magic.DistinctionRitualGrant
   - resonance_grants <- magic.DistinctionResonanceGrant
@@ -4981,6 +4985,23 @@
   - outcome -> traits.CheckOutcome [FK] (nullable)
 
 ### AnimaConfig
+
+### AppetiteUpkeep
+**Foreign Keys:**
+  - distinction -> distinctions.Distinction [OneToOne]
+**Pointed to by:**
+  - receipts <- magic.AppetiteUpkeepReceipt
+
+### AppetiteUpkeepReceipt
+**Foreign Keys:**
+  - character_sheet -> character_sheets.CharacterSheet [FK]
+  - upkeep -> magic.AppetiteUpkeep [FK]
+
+### FeedingRecord
+**Foreign Keys:**
+  - feeder_sheet -> character_sheets.CharacterSheet [FK]
+  - victim_sheet -> character_sheets.CharacterSheet [FK]
+  - scene -> scenes.Scene [FK] (nullable)
 
 ### CharacterAura
 **Foreign Keys:**
@@ -7451,6 +7472,7 @@
   - triggered_alterations <- magic.PendingAlteration
   - magicalalterationevent_set <- magic.MagicalAlterationEvent
   - anima_ritual_performances <- magic.AnimaRitualPerformance
+  - feedings <- magic.FeedingRecord
   - dramatic_moment_tags <- magic.DramaticMomentTag
   - dramatic_moment_suggestions <- magic.DramaticMomentSuggestion
   - entry_endorsements <- magic.SceneEntryEndorsement
@@ -7557,6 +7579,8 @@
   - legend_spreads <- societies.LegendSpread
   - legend_stories_written <- societies.LegendDeedStory
   - deed_knowledge <- societies.PersonaDeedKnowledge
+  - proclamations <- societies.Proclamation
+  - edicts_enacted <- societies.DomainEdict
   - org_contributions <- currency.ContributionRecord
   - contracts_proposed <- currency.Contract
   - contracts_received <- currency.Contract
@@ -8138,6 +8162,7 @@
   - memberships <- societies.OrganizationMembership
   - offices <- societies.OrganizationOffice
   - reputations <- societies.OrganizationReputation
+  - proclamations <- societies.Proclamation
   - gang_turf_projects <- societies.GangTurfDetails
   - personal_obligations_owed <- societies.OrganizationObligation
   - fealty <- societies.FealtyEdge
@@ -8328,6 +8353,20 @@
   - secrets <- secrets.Secret
   - mission_awards <- missions.MissionRenownAward
 
+### StanceArchetype
+**Pointed to by:**
+  - proclamations <- societies.Proclamation
+  - edict_kinds <- societies.EdictKind
+
+### Proclamation
+**Foreign Keys:**
+  - issuer -> scenes.Persona [FK]
+  - org -> societies.Organization [FK] (nullable)
+  - stance -> societies.StanceArchetype [FK]
+  - check_outcome -> traits.CheckOutcome [FK] (nullable)
+**Pointed to by:**
+  - edicts <- societies.DomainEdict
+
 ### GangTurfDetails
 **Foreign Keys:**
   - project -> projects.Project [OneToOne]
@@ -8402,6 +8441,7 @@
   - seat_of <- societies.Title
   - holdings <- societies.DomainHolding
   - improvement_details <- societies.DomainImprovementDetails
+  - edicts <- societies.DomainEdict
   - crises <- societies.DomainCrisis
   - food_stockpile <- agriculture.FoodStockpile
   - food_transfers_out <- agriculture.FoodTransfer
@@ -8426,6 +8466,19 @@
   - project -> projects.Project [OneToOne]
   - domain -> societies.Domain [FK]
   - holding -> societies.DomainHolding [FK] (nullable)
+
+### EdictKind
+**Foreign Keys:**
+  - stance -> societies.StanceArchetype [FK]
+**Pointed to by:**
+  - enactments <- societies.DomainEdict
+
+### DomainEdict
+**Foreign Keys:**
+  - domain -> societies.Domain [FK]
+  - kind -> societies.EdictKind [FK]
+  - proclamation -> societies.Proclamation [FK] (nullable)
+  - enacted_by -> scenes.Persona [FK]
 
 ### DomainCrisisType
 **Pointed to by:**
@@ -9123,6 +9176,7 @@
 - `is_alive(character_sheet: 'CharacterSheet | None') -> 'bool' — Return True if the character is not dead.`
 - `is_dead(character_sheet: 'CharacterSheet | None') -> 'bool' — Return True if the character's mortality marker is DEAD.`
 - `is_retired(character_sheet: 'CharacterSheet | None') -> 'bool' — True when the dead character has been released (retire fired, #2287).`
+- `mark_fed_to_death(victim_sheet: 'CharacterSheet') -> 'bool' — Kill an NPC drained past empty by feeding (#2853). Returns True on death.`
 - `mend_wound(healer_sheet: 'CharacterSheet', target_sheet: 'CharacterSheet', wound_instance: 'ConditionInstance', amount: 'int') -> 'int' — Raise a wounded target's health, double-bounded (#2644 — the attrition invariant).`
 - `perceives_dreamside(character_sheet: 'CharacterSheet | None') -> 'bool' — True when the character's perception is relocated to the dream side (#2287).`
 - `perform_check_with_modifiers(character: 'ObjectDB', check_type: 'CheckType', target_difficulty: int = 0, extra_modifiers: int = 0, effort_level: str | None = None, fatigue_penalty: int = 0, specialization: 'Specialization | None' = None, *, situation_ctx: 'SituationContext | None' = None, level_override: int | None = None, scene: 'Scene | None' = None, extra_contributions: 'list[ModifierContribution] | None' = None, skip_fashion: bool = False) -> world.checks.types.CheckResult — Run a check with all character modifiers gathered automatically.`

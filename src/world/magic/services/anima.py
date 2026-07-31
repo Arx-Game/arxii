@@ -495,6 +495,11 @@ def anima_regen_tick() -> AnimaRegenTickSummary:
     engaged_ids = set(
         CharacterEngagement.objects.values_list("character_id", flat=True),
     )
+    # #2853: appetite holders (vampires, dhampir, Vulpi, Vesperi, shades) never
+    # regenerate naturally — feeding and anima rituals are their only paths.
+    from world.magic.services.appetites import appetite_holder_sheet_ids  # noqa: PLC0415
+
+    appetite_ids = appetite_holder_sheet_ids()
     blocked_ids = set(
         ConditionInstance.objects.filter(
             resolved_at__isnull=True,
@@ -523,9 +528,15 @@ def anima_regen_tick() -> AnimaRegenTickSummary:
         if char_id in blocked_ids:
             condition_blocked += 1
             continue
-        regen = (row.maximum * config.daily_regen_percent) // 100
-        if regen <= 0:
+        if char_id in appetite_ids:
             continue
+        # #2853: floor at 1 when regen is enabled at all — integer percent of a
+        # standard 10-point pool floors to 0, which made daily regen silently
+        # inert for every standard character. "Extremely slow" means a real
+        # trickle, not never.
+        if config.daily_regen_percent <= 0:
+            continue
+        regen = max(1, (row.maximum * config.daily_regen_percent) // 100)
         row.current = min(row.current + regen, row.maximum)
         to_update.append(row)
         regenerated += 1

@@ -43,6 +43,13 @@ class CharacterAnima(SharedMemoryModel):
         blank=True,
         help_text="Stored maximum before Audere expanded the pool. Null when not in Audere.",
     )
+    # #2853: overfeeding lands here, NOT in current — clean() forbids current > maximum
+    # and that validation stays. Spends draw glut first; glut decays daily and never
+    # satisfies appetite-upkeep floors or quiets Ravenous (a temporary high, not a tank).
+    glut = models.PositiveIntegerField(
+        default=0,
+        help_text="Decaying overfill from feeding past maximum (#2853).",
+    )
 
     class Meta:
         verbose_name = "Character Anima"
@@ -50,6 +57,11 @@ class CharacterAnima(SharedMemoryModel):
 
     def __str__(self) -> str:
         return f"Anima of {self.character} ({self.current}/{self.maximum})"
+
+    @property
+    def effective_current(self) -> int:
+        """Spendable anima including glut (#2853). Glut spends first."""
+        return self.current + self.glut
 
     def clean(self) -> None:
         """Validate that current doesn't exceed maximum."""

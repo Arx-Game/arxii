@@ -202,3 +202,36 @@ class CharacterStateReturnAppearanceTests(TestCase):
         result = self.state.return_appearance()
         self.assertIn("Cloak", result)
         self.assertIn("Wearing", result)
+
+
+class DepletionFoldingTest(TestCase):
+    """#2853: one depletion clause, worst-wins — Ravenous folds in, never lists twice."""
+
+    def _visible(self, name, observer, severity=1):
+        from types import SimpleNamespace
+
+        condition = SimpleNamespace(
+            name=name, observer_description=observer, is_visible_to_others=True
+        )
+        return SimpleNamespace(condition=condition, severity=severity)
+
+    def test_deep_ravenous_outranks_tiredness(self):
+        from flows.object_states.character_state import _fold_ravenous_into_depletion
+
+        visible = [self._visible("Ravenous", "looks hollow-eyed and hungry.", severity=4)]
+        clause = _fold_ravenous_into_depletion(visible, "tired")
+        self.assertEqual(clause, "looks hollow-eyed and hungry.")
+
+    def test_shallow_ravenous_defers_to_existing_tiredness(self):
+        from flows.object_states.character_state import _fold_ravenous_into_depletion
+
+        visible = [self._visible("Ravenous", "looks hollow-eyed and hungry.", severity=1)]
+        clause = _fold_ravenous_into_depletion(visible, "exhausted")
+        self.assertEqual(clause, "exhausted")
+
+    def test_ravenous_fills_an_empty_depletion_slot(self):
+        from flows.object_states.character_state import _fold_ravenous_into_depletion
+
+        visible = [self._visible("Ravenous", "looks hollow-eyed and hungry.", severity=1)]
+        clause = _fold_ravenous_into_depletion(visible, "")
+        self.assertEqual(clause, "looks hollow-eyed and hungry.")

@@ -70,6 +70,12 @@ from world.magic.models.anima import (
     AnimaRitualPerformance,
     CharacterAnima,
 )
+from world.magic.models.appetites import (
+    AppetitePeriod,
+    AppetiteUpkeep,
+    AppetiteUpkeepReceipt,
+    FeedingRecord,
+)
 from world.magic.models.aura import (
     AuraAffinityThreshold,
     CharacterAura,
@@ -265,6 +271,10 @@ __all__ = [
     # soulfray (#1207)
     "AnimaRitualBudgetAward",
     "AnimaRitualPerformance",
+    # appetites (#2853)
+    "AppetitePeriod",
+    "AppetiteUpkeep",
+    "AppetiteUpkeepReceipt",
     # audere majora (re-exported from world.magic.audere_majora)
     "AudereMajoraCrossing",
     "AudereMajoraThreshold",
@@ -322,6 +332,7 @@ __all__ = [
     "FacetManager",
     "FallRedemptionConfig",
     "FallRedemptionRecord",
+    "FeedingRecord",
     # fury lever
     "FuryConfig",
     "FuryTier",

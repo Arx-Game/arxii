@@ -165,12 +165,33 @@ def _magic_mitigation(sheet) -> int:
     """Sun mitigation from the mechanics modifier system (spells/wards/conditions).
 
     ``sun_mitigation`` is a content-repo-owned ModifierTarget (#2698) — looked
-    up, never invented here; absent target reads as 0.
+    up, never invented here; absent target reads as 0. A glutted appetite
+    holder (#2853, ruled) adds ``glut × GLUT_SUN_MITIGATION_FACTOR`` — stolen
+    life answers the sun. It dampens severity but never clears a bane's debuff
+    floor (only real shadow does, ADR-0179 — the floor reads shade only).
     """
     from world.mechanics.models import ModifierTarget  # noqa: PLC0415
     from world.mechanics.services import get_modifier_total  # noqa: PLC0415
 
     target = ModifierTarget.objects.filter(name=SUN_MITIGATION_TARGET_NAME).first()
-    if target is None:
+    total = 0
+    if target is not None:
+        total = max(0, get_modifier_total(sheet, target))
+    total += _glut_sun_mitigation(sheet)
+    return total
+
+
+def _glut_sun_mitigation(sheet) -> int:
+    """Sun mitigation from feeding glut, for appetite holders (#2853)."""
+    from world.species.appetites import (  # noqa: PLC0415
+        GLUT_SUN_MITIGATION_FACTOR,
+        AppetiteKind,
+        appetite_for,
+    )
+
+    anima = sheet.anima_or_none
+    if anima is None or anima.glut <= 0:
         return 0
-    return max(0, get_modifier_total(sheet, target))
+    if appetite_for(sheet) == AppetiteKind.NONE:
+        return 0
+    return anima.glut * GLUT_SUN_MITIGATION_FACTOR

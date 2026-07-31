@@ -62,6 +62,15 @@ _CATEGORIES: tuple[tuple[str, str, str, int, str], ...] = (
         ConsentMode.EVERYONE,
     ),
     (
+        "drain",
+        "Feeding & Draining",
+        "Being fed upon — blood-drinking or essence drain (#2853).",
+        25,
+        # Inherits All Antagonism (FRIENDS_WHITELIST); own value kept opt-in so an
+        # orphaned row never reverts to EVERYONE.
+        ConsentMode.FRIENDS_WHITELIST,
+    ),
+    (
         "blackmail",
         "Blackmail",
         "Coercion by threat of exposing a secret you hold about the target.",
@@ -168,6 +177,7 @@ _CATEGORIES: tuple[tuple[str, str, str, int, str], ...] = (
 _CATEGORY_PARENTS: dict[str, str] = {
     "hostile": "antagonism",
     "blackmail": "antagonism",
+    "drain": "antagonism",
     "boon": "antagonism",
     "embezzlement": "antagonism",
     "manipulative": "antagonism",
@@ -182,6 +192,8 @@ _TEMPLATE_CATEGORY_MAP: dict[str, str] = {
     "Flirt": "romantic",
     "Intimidate": "hostile",
     "Blackmail": "blackmail",
+    "Feed": "drain",
+    "Drain": "drain",
     "Boon": "boon",
     "Deceive": "manipulative",
     "Persuade": "manipulative",

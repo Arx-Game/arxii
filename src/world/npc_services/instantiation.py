@@ -24,6 +24,10 @@ if TYPE_CHECKING:
     from world.scenes.models import Persona
 
 
+# #2853: anima pool for freshly-instantiated (quiescent-tier) NPCs. PLACEHOLDER.
+NPC_QUIESCENT_ANIMA = 2
+
+
 def name_culture_for_room(room: RoomProfile) -> NameCulture | None:
     """The nearest authored culture up the room's area chain, else the global default."""
     from world.areas.models import AreaClosure  # noqa: PLC0415
@@ -111,6 +115,15 @@ def materialize_functionary(
     _character, sheet, persona = create_character_with_sheet(
         character_key=full_name,
         primary_persona_name=full_name,
+    )
+    # #2853: instantiated NPCs get a tiny anima pool so feeding has something
+    # real (and dangerous) to draw on — quiescent tiers hold almost nothing, so
+    # a gorging feeder can genuinely kill. PLACEHOLDER magnitude.
+    from world.magic.models.anima import CharacterAnima  # noqa: PLC0415
+
+    CharacterAnima.objects.get_or_create(
+        character=sheet,
+        defaults={"current": NPC_QUIESCENT_ANIMA, "maximum": NPC_QUIESCENT_ANIMA},
     )
     functionary.persona = persona
     if not functionary.name_override:

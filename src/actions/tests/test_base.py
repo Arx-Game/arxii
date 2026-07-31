@@ -441,6 +441,9 @@ class ActionRegistryTests(TestCase):
             # #2846 — hazard-prompt responses (sunlight AFK guard).
             "hazard_endure",
             "hazard_retreat",
+            # #2853 — appetite feeding.
+            "feed",
+            "drain",
             # #2239 — in-play domain management + office delegation.
             "add_domain_holding",
             "start_domain_improvement",

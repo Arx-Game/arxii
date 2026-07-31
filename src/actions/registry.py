@@ -10,6 +10,7 @@ from actions.definitions.accusations import (
     mint_accusation,
 )
 from actions.definitions.alterations import ResolveAlterationAction
+from actions.definitions.appetites import DrainAction, FeedAction
 from actions.definitions.assets import IntroduceAssetAction
 from actions.definitions.battles import (
     BeginBattleRoundAction,
@@ -790,6 +791,9 @@ _ALL_ACTIONS: list[Action] = [
     # #2846 — hazard-prompt responses (sunlight bane/allergy AFK guard).
     HazardEndureAction(),
     HazardRetreatAction(),
+    # #2853 — appetite feeding (NPC-direct path; PC targets ride consent).
+    FeedAction(),
+    DrainAction(),
     # #2222 — portal anchor install/dissolve (travel_to's portal branch
     # itself dispatches through TravelAction, already registered above).
     InstallPortalAnchorAction(),
@@ -920,6 +924,8 @@ SOCIAL_ACTIONS_BY_TEMPLATE_NAME: dict[str, Action] = {
         flirt,
         seduce,
         blackmail,
+        FeedAction(),
+        DrainAction(),
         perform,
         entrance,
         restore_sense,
