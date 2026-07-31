@@ -10,6 +10,11 @@ class MagicConfig(AppConfig):
         # Trigger registration of action resolvers and menu contributors.
         from world.magic.services import anima_ritual_action  # noqa: F401, PLC0415
 
+        # #2853: feed/drain consent resolvers (both consent paths).
+        from world.magic.services.feeding import register_feeding_resolvers  # noqa: PLC0415
+
+        register_feeding_resolvers()
+
         # Register Sanctum as the SANCTUM service strategy for the
         # ROOM_FEATURE_PROGRESSION ProjectKind handler (Plan 4 §F).
         from world.magic.services.sanctum import handle_progression  # noqa: PLC0415

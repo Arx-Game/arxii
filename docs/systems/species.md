@@ -115,6 +115,18 @@ Species uses a single-level parent/child hierarchy:
 
 Access control for which species are available in CG is handled by `Beginnings.allowed_species` in the `character_creation` app, not in this model.
 
+## Appetites (#2853, ADR-0182)
+
+Hunger is tag-anchored like sun sensitivity: `Appetite: Blood` (Vampire, Dhampir),
+`Appetite: Essence` (Vulpi, Vesperi, Shades), `Undeath: Shade` (the drain anchor).
+`world.species.appetites` carries the tags + `appetite_for(sheet)` probe + Ravenous
+constants; the economy (regen skip, upkeep, glut, feeding) lives in
+`world.magic.services.appetites` / `.feeding` — see `docs/systems/magic.md` and the
+ADR. `ensure_appetite_distinctions` / `ensure_ravenous_condition` /
+`ensure_shade_condition` / `apply_shade_undeath` (factories) are the runtime ensures;
+seeded content routes through `authored_or_sample` in `_seed_appetite_content`
+(Vesperi is the eighth khati subspecies).
+
 ---
 
 ## Key Methods

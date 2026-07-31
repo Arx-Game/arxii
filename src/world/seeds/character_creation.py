@@ -1076,6 +1076,7 @@ def seed_character_creation_dev() -> None:
     ensure_tradition_training_distinction()
     ensure_somehow_always_broke_distinction()
     _seed_sun_sensitive_species()
+    _seed_appetite_content()
     if not settings.SEED_SAMPLE_CONTENT:
         return
     # Named world content — authored in the content repo by maintainers, so
@@ -1299,6 +1300,132 @@ def _seed_sun_sensitive_species() -> None:
         authored_or_sample(
             SpeciesGiftGrant,
             {"drawback_distinction": sun_distinction, "cg_point_cost": 0},
+            species=species,
+            gift=gift,
+        )
+
+
+def _seed_appetite_content() -> None:
+    """#2853: appetite distinctions, upkeep config, Vesperi, and species grants.
+
+    Content-model rows (distinctions, tags, species, gifts, grants) route
+    through ``authored_or_sample`` (#2698 — invented only under
+    ``SEED_SAMPLE_CONTENT``); the ``AppetiteUpkeep`` config sidecar is
+    mechanics (not in CONTENT_MODELS, mirrors ``DistinctionPurseDrain``) and is
+    get_or_create'd whenever its distinction resolves. The Shade condition is a
+    runtime ensure (``world.species.factories.ensure_shade_condition``), never
+    seeded here. Vulpi already ships in the khati fixture; Vesperi is the new
+    eighth subspecies (ruled 2026-07-30), skipped when Khati isn't authored.
+    """
+    from world.distinctions.models import (  # noqa: PLC0415
+        Distinction,
+        DistinctionCategory,
+        DistinctionTag,
+    )
+    from world.magic.constants import GiftKind  # noqa: PLC0415
+    from world.magic.models.appetites import AppetitePeriod, AppetiteUpkeep  # noqa: PLC0415
+    from world.magic.models.gifts import Gift  # noqa: PLC0415
+    from world.seeds.sample_content import authored_or_sample  # noqa: PLC0415
+    from world.species.appetites import (  # noqa: PLC0415
+        APPETITE_BLOOD_SLUG,
+        APPETITE_BLOOD_TAG,
+        APPETITE_ESSENCE_SLUG,
+        APPETITE_ESSENCE_TAG,
+    )
+    from world.species.models import SpeciesGiftGrant  # noqa: PLC0415
+
+    category = authored_or_sample(
+        DistinctionCategory,
+        {
+            "name": "Drawbacks",
+            "description": "PLACEHOLDER: disadvantages that reimburse CG points.",
+        },
+        slug="drawbacks",
+    )
+
+    def _appetite(slug: str, *, tag: tuple[str, str], name: str, desc: str):
+        if category is None:
+            return None
+        tag_slug, tag_name = tag
+        tag_row = authored_or_sample(DistinctionTag, {"name": tag_name}, slug=tag_slug)
+        distinction = authored_or_sample(
+            Distinction,
+            {
+                "name": name,
+                "description": desc,
+                "category": category,
+                "cost_per_rank": 0,
+                "max_rank": 1,
+            },
+            slug=slug,
+        )
+        if distinction is not None and tag_row is not None:
+            distinction.tags.add(tag_row)
+        return distinction
+
+    blood = _appetite(
+        APPETITE_BLOOD_SLUG,
+        tag=(APPETITE_BLOOD_TAG, "Blood Appetite"),
+        name="Appetite: Blood",
+        desc="PLACEHOLDER: living blood sustains you — anima comes from the bite, never from rest.",
+    )
+    essence = _appetite(
+        APPETITE_ESSENCE_SLUG,
+        tag=(APPETITE_ESSENCE_TAG, "Essence Appetite"),
+        name="Appetite: Essence",
+        desc="PLACEHOLDER: the living warmth of others sustains you — anima "
+        "comes through touch and glamour, never from rest.",
+    )
+    if blood is not None:
+        AppetiteUpkeep.objects.get_or_create(
+            distinction=blood,
+            defaults={
+                "period": AppetitePeriod.WEEKLY,
+                "amount": 1,
+                "floor_percent": 10,
+            },
+        )
+
+    khati = Species.objects.filter(name="Khati").first()
+    if khati is not None:
+        authored_or_sample(
+            Species,
+            {
+                "description": (
+                    "PLACEHOLDER: khati of the vesper line — heirs of the "
+                    "Vespers, rare and possibly extinct magical animals."
+                ),
+                "sort_order": 18,
+                "parent": khati,
+            },
+            name="Vesperi",
+        )
+
+    grant_rows = (
+        ("Vampire", blood, "Vampire Hunger"),
+        ("Dhampir", blood, "Dhampir Hunger"),
+        ("Vulpi", essence, "Vulpi Glamour"),
+        ("Vesperi", essence, "Vesper Glamour"),
+    )
+    for species_name, distinction, gift_name in grant_rows:
+        if distinction is None:
+            continue
+        species = Species.objects.filter(name=species_name).first()
+        if species is None:
+            continue
+        gift = authored_or_sample(
+            Gift,
+            {
+                "kind": GiftKind.MINOR,
+                "description": f"PLACEHOLDER: the hunger-gift of the {species_name}.",
+            },
+            name=gift_name,
+        )
+        if gift is None:
+            continue
+        authored_or_sample(
+            SpeciesGiftGrant,
+            {"drawback_distinction": distinction, "cg_point_cost": 0},
             species=species,
             gift=gift,
         )

@@ -359,3 +359,71 @@ class CmdDeny(_RespondCommand):
 
     key = "deny"
     decision = ConsentDecision.DENY
+
+
+class _FeedingCommand(ConsentRequestCommand):
+    """Base for the feeding verbs (#2853): consent flow for PCs, direct for NPCs.
+
+    Usage:
+        <key> <character>            - PC target: opens a consent request (DRINK)
+        <key> <character> = <mode>   - NPC target only: sip / drink / gorge
+
+    An NPC target (no player account) skips consent entirely — wide open at the
+    consent layer, priced at the justice layer — and dispatches the registry
+    action directly with the chosen amount mode.
+    """
+
+    _MODES: ClassVar[dict[str, str]] = {"sip": "SIP", "drink": "DRINK", "gorge": "GORGE"}
+    _DEFAULT_MODE: ClassVar[str] = "DRINK"
+
+    def _execute(self) -> None:
+        raw = (self.args or "").strip()
+        mode = None
+        if "=" in raw:
+            raw, _, mode_token = raw.partition("=")
+            mode_key = mode_token.strip().lower()
+            if mode_key not in self._MODES:
+                msg = "Mode must be one of: sip, drink, gorge."
+                raise CommandError(msg)
+            mode = self._MODES[mode_key]
+            self.args = raw.strip()
+        name = self.require_args(f"Whom do you want to {self.action_key}?")
+        target = self.search_or_raise(name)
+        if target.db_account is None:
+            self._feed_npc(target, mode or self._DEFAULT_MODE)
+            return
+        if mode is not None and mode != self._DEFAULT_MODE:
+            self.msg("|x(Feeding depth on a player character resolves through the scene.)|n")
+        self.args = name
+        super()._execute()
+
+    def _feed_npc(self, target: object, mode: str) -> None:
+        from actions.registry import get_action  # noqa: PLC0415
+
+        action = get_action(self.action_key)
+        result = action.run(self.caller, target_character=target, amount_mode=mode)
+        self.msg(result.message or ("Done." if result.success else "Nothing happens."))
+
+
+class CmdFeed(_FeedingCommand):
+    """Drink blood from a living target (Appetite: Blood).
+
+    Usage:
+      feed <character>             - open a consent request (players)
+      feed <character> = <mode>    - NPCs only: sip / drink / gorge
+    """
+
+    key = "feed"
+    action_key = "feed"
+
+
+class CmdDrain(_FeedingCommand):
+    """Drain living essence by touch or glamour (Appetite: Essence).
+
+    Usage:
+      drain <character>            - open a consent request (players)
+      drain <character> = <mode>   - NPCs only: sip / drink / gorge
+    """
+
+    key = "drain"
+    action_key = "drain"

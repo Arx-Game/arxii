@@ -42,3 +42,16 @@ Domain-local vocabulary for `world.species`. Root terms live in
   (`sun_refuge.find_sun_refuge`; non-public rooms win ties). The AFK guard
   auto-flees there after the second unanswered damage instance. _Avoid:_
   "safe room" (unscoped).
+- **Appetite (blood / essence)** — the hunger anchor Distinctions
+  (`appetite-blood`/`appetite-essence` tags, #2853/ADR-0182): holders never
+  regen anima naturally; blood feeds by the bite, essence by touch/glamour.
+  `Undeath: Shade` is the separate drain anchor (daily upkeep) so the
+  half-living never pay it. _Avoid:_ species-probed hunger, "vampirism" as a
+  mechanic name.
+- **Glut** — decaying overfill from feeding past maximum (`CharacterAnima.glut`):
+  spends first, grants sun mitigation to appetite holders, never satisfies
+  upkeep floors or quiets Ravenous. _Avoid:_ treating glut as a bigger tank.
+- **Ravenous** — the visible hunger condition; severity tracks depletion depth
+  and drives feeding restraint checks. In the desc footer it folds into the
+  single worst-wins depletion clause. _Avoid:_ separate per-condition hunger
+  lines (spam).

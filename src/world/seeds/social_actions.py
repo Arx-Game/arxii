@@ -36,6 +36,10 @@ _SOCIAL_ACTION_TEMPLATES = [
     ("Boon", "Persuasion", "single", "gift", 0),
     ("Deceive", "Deceive", "single", "mask", 0),
     ("Flirt", "Seduction", "single", "heart", 0),
+    # #2853 — the feeding skins; one tier harder like Seduce (PLACEHOLDER check reuse:
+    # a dedicated predation check is a content follow-through on the spec issue).
+    ("Feed", "Seduction", "single", "droplet", 1),
+    ("Drain", "Seduction", "single", "sparkles", 1),
     ("Seduce", "Seduction", "single", "flame", 1),
     ("Perform", "Performance", "area", "music", 0),
     ("Entrance", "Presence", "area", "sparkles", 0),
@@ -69,6 +73,16 @@ _POOL_CONSEQUENCES: dict[str, list[tuple[str, str, int]]] = {
         ("Failure", "Lie detected immediately", 1),
         ("Partial Success", "Partial deception holds", 2),
         ("Success", "Target completely deceived", 1),
+    ],
+    "Feed": [
+        ("Failure", "They pull away before the hunger finds purchase", 1),
+        ("Partial Success", "A shallow taste, quickly broken", 2),
+        ("Success", "The feeding takes hold", 1),
+    ],
+    "Drain": [
+        ("Failure", "The warmth slips through your fingers", 1),
+        ("Partial Success", "A thin sip of essence", 2),
+        ("Success", "Their vitality flows into you", 1),
     ],
     "Flirt": [
         ("Failure", "Advance rebuffed", 1),

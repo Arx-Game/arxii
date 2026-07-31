@@ -12,6 +12,7 @@ from world.species.models import Language, Species, SpeciesGiftGrant, SpeciesSta
 
 if TYPE_CHECKING:
     from world.conditions.models import ConditionTemplate
+    from world.distinctions.models import Distinction
 
 
 class LanguageFactory(factory_django.DjangoModelFactory):
@@ -402,3 +403,112 @@ def ensure_appetite_upkeep() -> None:
             "floor_percent": 10,
         },
     )
+
+
+def ensure_shade_condition() -> "ConditionTemplate":
+    """Idempotently seed the Undeath (Shade) condition (#2853). Runtime ensure.
+
+    An acquired condition, never a species: applying it grants the
+    Appetite: Essence distinction (via the reactive grant hook its applier
+    calls) and its holder pays the daily anima drain configured on the
+    shade upkeep row seeded here (daily -1, floor 0 — ruled).
+    """
+    from world.conditions.models import ConditionCategory, ConditionTemplate
+    from world.magic.models.appetites import AppetitePeriod, AppetiteUpkeep
+
+    category, _created = ConditionCategory.objects.get_or_create(
+        name="Environmental",
+        defaults={"description": "Environmental hazard conditions (#1588)."},
+    )
+    template, _created = ConditionTemplate.objects.get_or_create(
+        name="Undeath (Shade)",
+        defaults={
+            "category": category,
+            "description": "PLACEHOLDER: the sustained un-life of a shade (#2853).",
+            "player_description": "You are a shade — un-living, sustained by stolen essence.",
+            "observer_description": "is unnervingly still, a shade among the living.",
+        },
+    )
+    shade_distinction = ensure_shade_distinction()
+    AppetiteUpkeep.objects.get_or_create(
+        distinction=shade_distinction,
+        defaults={
+            "period": AppetitePeriod.DAILY,
+            "amount": 1,
+            "floor_percent": 0,
+        },
+    )
+    return template
+
+
+def ensure_shade_distinction() -> "Distinction":
+    """The Undeath: Shade anchor distinction (#2853).
+
+    Granted alongside the Shade condition (see ``apply_shade_undeath``); the
+    daily anima drain keys HERE, never on Appetite: Essence — the half-living
+    essence holders carry no drain (ruled). Also tagged appetite-essence so
+    every appetite behavior (regen skip, feeding modes) resolves unchanged.
+    """
+    from world.distinctions.models import (
+        Distinction,
+        DistinctionCategory,
+        DistinctionTag,
+    )
+    from world.species.appetites import (
+        APPETITE_ESSENCE_TAG,
+        SHADE_SLUG,
+        SHADE_TAG,
+    )
+
+    category, _created = DistinctionCategory.objects.get_or_create(
+        slug="drawbacks",
+        defaults={
+            "name": "Drawbacks",
+            "description": "PLACEHOLDER: disadvantages that reimburse CG points.",
+        },
+    )
+    shade_tag, _created = DistinctionTag.objects.get_or_create(
+        slug=SHADE_TAG, defaults={"name": "Shade Undeath"}
+    )
+    essence_tag, _created = DistinctionTag.objects.get_or_create(
+        slug=APPETITE_ESSENCE_TAG, defaults={"name": "Essence Appetite"}
+    )
+    distinction, _created = Distinction.objects.get_or_create(
+        slug=SHADE_SLUG,
+        defaults={
+            "name": "Undeath: Shade",
+            "description": (
+                "PLACEHOLDER: un-living — essence bleeds away daily and only "
+                "feeding or ritual holds the shape together."
+            ),
+            "category": category,
+            "cost_per_rank": 0,
+            "max_rank": 1,
+        },
+    )
+    distinction.tags.add(shade_tag, essence_tag)
+    return distinction
+
+
+def apply_shade_undeath(character) -> None:
+    """Apply the Shade condition + its anchor distinction to *character* (#2853).
+
+    The one entry point story/GM tools use to make someone a shade: the
+    condition carries the fiction, the distinction carries the economy
+    (regen skip, daily drain, essence feeding).
+    """
+    from world.conditions.services import apply_condition, has_condition
+    from world.distinctions.services import grant_distinction
+    from world.distinctions.types import DistinctionOrigin
+
+    template = ensure_shade_condition()
+    if not has_condition(character, template):
+        apply_condition(character, template)
+    sheet = character.character_sheet
+    if sheet is not None:
+        grant_distinction(
+            sheet,
+            ensure_shade_distinction(),
+            origin=DistinctionOrigin.GM_AWARD,
+            rank=1,
+        )

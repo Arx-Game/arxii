@@ -947,6 +947,31 @@ def _is_terminal_stage(instance: ConditionInstance) -> bool:
     ).exists()
 
 
+def mark_fed_to_death(victim_sheet: CharacterSheet) -> bool:
+    """Kill an NPC drained past empty by feeding (#2853). Returns True on death.
+
+    The narrow public seam for the appetite arc's gorge-kill: guards that the
+    victim is genuinely an NPC (no live account) and not already dead, ensures
+    a vitals row exists (instantiated NPCs are provisioned lazily), zeroes
+    health, then routes through the same ``_mark_dead`` finalization aging
+    deaths use — estate settlement, kinship flags, lifecycle propagation. Story
+    protection is the caller's gate (``is_death_prevented_by_story``); PC
+    victims are refused here as a second line of defense.
+    """
+    character = victim_sheet.character
+    if character is None or character.db_account is not None:
+        return False
+    from world.vitals.models import CharacterVitals  # noqa: PLC0415
+
+    vitals, _created = CharacterVitals.objects.get_or_create(character_sheet=victim_sheet)
+    if vitals.life_state == CharacterLifeState.DEAD:
+        return False
+    vitals.health = 0
+    vitals.save(update_fields=["health"])
+    _mark_dead(victim_sheet)
+    return True
+
+
 def _mark_dead(character_sheet: CharacterSheet) -> None:
     """Stamp life_state=DEAD and died_at on the character's vitals row.
 

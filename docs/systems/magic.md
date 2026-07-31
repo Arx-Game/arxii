@@ -2703,3 +2703,28 @@ execute_flow("cast_power", context={
 - **AuthorTechniqueAction** (key `"author_technique"`) — the single author seam; telnet
   `CmdTechnique` and the web `POST .../author/` both converge on it. Staff-only via telnet today;
   player self-service is a deferred `needs-design` follow-up.
+
+
+## Appetites: the anima feeding economy (#2853, ADR-0182)
+
+- **Models** (`models/appetites.py`): `AppetiteUpkeep` (Distinction-keyed periodic drain:
+  period DAILY/WEEKLY, amount, floor_percent), `AppetiteUpkeepReceipt` (per-holder-per-period
+  idempotency), `FeedingRecord` (the audit row: feeder, victim, mode, lost_control,
+  anima_taken, glut_gained, victim_fatigue, was_lethal). `CharacterAnima.glut` — decaying
+  overfill (`effective_current` spends glut first; `clean()`'s current ≤ maximum stays).
+- **Services**: `services/appetites.py` — `appetite_holder_sheet_ids` (the anima-regen
+  skip-set: appetite holders never regen naturally), `appetite_upkeep_tick`, `decay_glut_tick`,
+  `hunger_severity`, `reconcile_ravenous`; crons `magic.appetite_daily` / `magic.appetite_weekly`
+  (DRAIN phase). `services/feeding.py` — `feed_anima(feeder, victim, amount_mode=SIP|DRINK|GORGE)`
+  (sineating inverted; SIP non-fatal by construction; Ravenous restraint check may escalate to
+  GORGE; NPC gorged past empty dies via `vitals.mark_fed_to_death` + a concealed murder-tagged
+  deed with scene evidence), consent resolvers for the `feed`/`drain` action keys (registered in
+  `MagicConfig.ready`; NPC targets auto-resolve, PC targets need consent — `drain` category
+  under the antagonism root).
+- **Actions/commands**: `FeedAction`/`DrainAction` (`actions/definitions/appetites.py`) — the
+  NPC-direct path with explicit mode; telnet `feed`/`drain` (`commands/consent.py`) branch on
+  target: PC → consent request, NPC → direct with `= sip|drink|gorge`.
+- **Glut → sun**: appetite holders subtract `glut × factor` from felt sun exposure through the
+  magic-mitigation lane (never clears a bane's shade-only floor). See ADR-0179/0180/0182.
+- Regen note: daily regen now floors at 1 point when enabled — integer percent of the standard
+  10-point pool used to floor to 0 (regen was silently inert).

@@ -760,6 +760,10 @@ Species/race definitions with stat bonuses, language assignments, and species-gi
   (CG, after the Major-gift block). See ADR-0071. `cg_point_cost` is summed across the
   selected species + ancestors into the `"species"` line of
   `CharacterDraft.calculate_cg_points_breakdown()` (character_creation).
+  Appetites (#2853, ADR-0182): `services/appetites.py` (upkeep/glut/Ravenous/regen-skip),
+  `services/feeding.py` (`feed_anima` + feed/drain consent resolvers), models
+  `AppetiteUpkeep`/`AppetiteUpkeepReceipt`/`FeedingRecord`, `CharacterAnima.glut`;
+  `vitals.mark_fed_to_death` is the NPC gorge-kill seam. See magic.md.
   Sunlight bane/allergy (#2846, ADR-0179): `sun_exposure.felt_sun_exposure` (graded
   breakdown), `sun_sensitivity.sun_sensitivity_for`/`sun_severity` (tag-anchored tier →
   severity), `reconcile_sunlight_exposure` + `reconcile_sun_exposure_safely` (movement/

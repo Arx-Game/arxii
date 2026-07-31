@@ -17,6 +17,10 @@ APPETITE_ESSENCE_TAG = "appetite-essence"
 APPETITE_BLOOD_SLUG = "appetite-blood"
 APPETITE_ESSENCE_SLUG = "appetite-essence"
 APPETITE_TAGS = (APPETITE_BLOOD_TAG, APPETITE_ESSENCE_TAG)
+# Shade undeath is its own anchor so the daily drain never touches the
+# half-living essence holders (Vulpi/Vesperi carry NO drain — ruled).
+SHADE_TAG = "undead-shade"
+SHADE_SLUG = "undead-shade"
 
 # --- Ravenous (the hunger tell) — PLACEHOLDER magnitudes ---
 RAVENOUS_NAME = "Ravenous"
