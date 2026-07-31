@@ -376,7 +376,7 @@ Check compositions are authored as seed data (the design tenet: **stat + skill (
 
 | Cluster | Checks | Composition |
 |---------|--------|-------------|
-| `combat_checks` (#1706) | `Melee Attack` | strength + Melee Combat (+ Small/Medium/Heavy Weapons spec) |
+| `combat_checks` (#1706, #2757) | `Melee Combat` | Melee Combat (skill) + situational stat (default: strength; combat system passes `stat_override` from weapon) |
 | `combat` | `penetration` | willpower + intellect + Melee Combat |
 | `combat` | `flee` | agility + wits + Melee Combat |
 | `combat` | `Escalation Pace` | wits (single-stat resist) |
@@ -388,7 +388,8 @@ Check compositions are authored as seed data (the design tenet: **stat + skill (
 | `investigation` (#1705) | `Search` | perception + Investigation |
 | `governance` (#930) | Tax/Investment checks | stat + Scholarship/Economics |
 | `stealth` (#1464) | `Stealth` | agility + Stealth |
-| `security` (#2180) | `Lockpick` / `Break and Enter` / `Escape Through Window` / `Guard Detection` | wits+Skulduggery / strength+Athletics / agility+Athletics / perception+Investigation |
+| `security` (#2180, #2757) | `Athletics` | Athletics (skill) + situational stat (default: strength; `resolve_security_check` passes `stat_override` from `SecurityCheckKind`) |
+| `security` | `Lockpick` / `Guard Detection` | wits+Skulduggery / perception+Investigation |
 
 **Resist checks** (Reflexes, Escalation Pace, Endurance, Mortal Resolve) are the tenet-permitted single-stat exception — they seed exactly one `CheckTypeTrait`. The `Melee Combat` skill catalog (with weapon-class specializations aligned to `progression.services.scene_integration`'s `weapon_map`) is seeded by the `combat_checks` cluster; the penetration/flee retrofits depend on it.
 
@@ -396,27 +397,30 @@ Check compositions are authored as seed data (the design tenet: **stat + skill (
 
 ---
 
-## Security Checks (#2180)
+## Security Checks (#2180, #2757)
 
-Five security-domain check types seeded via the `"security"` cluster
+Security-domain check types seeded via the `"security"` cluster
 (`world/seeds/security_checks.py`):
 
 | CheckType | Category | Composition | Used by |
 |---|---|---|---|
 | Stealth | Physical | agility + Stealth | Sneaking past guards (reuses #1464 seed) |
 | Lockpick | Physical | wits + Skulduggery (+ Lockpicking) | Picking locks (#2176, renamed from Larceny #1825) |
-| Break and Enter | Physical | strength + Athletics | Forcing barriers (#2176) |
-| Escape Through Window | Physical | agility + Athletics (+ Climbing) | Fleeing via window (#2175) |
+| Athletics | Physical | Athletics (skill) + situational stat (default: strength) | Forcing barriers / fleeing via window (#2757 merge) |
 | Guard Detection | Exploration | perception + Investigation | Guard NPC spotting intruders (#2178) |
 
 **`SecurityCheckKind`** (`world/checks/constants.py`) maps each kind to its
-CheckType name via `SECURITY_CHECK_TYPE_NAMES`.
+CheckType name via `SECURITY_CHECK_TYPE_NAMES`, and to its stat override via
+`SECURITY_CHECK_STAT_OVERRIDE` (#2757). Both `BREAK_AND_ENTER` and
+`ESCAPE_THROUGH_WINDOW` resolve to the "Athletics" CheckType — the former
+passes `stat_override="strength"`, the latter `stat_override="agility"`.
 
 **`resolve_security_check(kind, actor, *, target_difficulty, extra_modifiers)`**
 (`world/checks/security_services.py`) is the helper entry point. It looks up the
-CheckType by name and delegates to `perform_check`. The caller computes
-`target_difficulty` from domain context (lock level, guard level, window height).
+CheckType by name, resolves the stat_override from the kind, and delegates to
+`perform_check`. The caller computes `target_difficulty` from domain context
+(lock level, guard level, window height).
 
-Two new skills: **Larceny** (fine manipulation — locks, pockets) and **Athletics**
+Two skills: **Larceny** (fine manipulation — locks, pockets) and **Athletics**
 (running, climbing, force). Specializations: **Lockpicking** (under Larceny) and
 **Climbing** (under Athletics). All weights PLACEHOLDER (1.0).

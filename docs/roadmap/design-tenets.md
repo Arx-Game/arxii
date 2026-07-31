@@ -370,21 +370,32 @@ sheet navigation. Corollary: "more findable places is a feature" — a
 main-sheet identity link complements a dedicated section, never replaces it.
 (Apostate, #1446.)
 
-### Checks are stat + skill (+ specialization), rarely stat + stat
+### Checks are skill + situational stat (+ specialization)
 
-A check's composition defaults to a **stat + the relevant skill**, plus a **specialization
-when the character owns one** (e.g. *Charm + Persuasion + Seduction*; *Charm + Persuasion +
-Gossip*). **stat + stat is the rare exception, not the norm** — a check resolving on two raw
-attributes with no trained skill must be a deliberate choice, never a default. Character
-identity (the trained skill, the owned specialization) should almost always matter to the
-roll. Specializations compose as **parent skill + specialization** and require the
-spec-in-checks engine foundation (#1688) before they can participate in a `CheckType`.
+A check's composition defaults to **the relevant skill + a situational stat**,
+plus a **specialization when the character owns one** (e.g. *Charm + Persuasion
++ Seduction*; *Charm + Persuasion + Gossip*). The skill is the CheckType's
+identity; the stat is determined by the calling system from situation context
+(weapon type, barrier type, approach). A check's STAT-type `CheckTypeTrait`
+rows carry the default stat; the calling system may override it via
+`stat_override`. **stat + stat is the rare exception, not the norm** — a check
+resolving on two raw attributes with no trained skill must be a deliberate
+choice, never a default. Character identity (the trained skill, the owned
+specialization) should almost always matter to the roll. Specializations compose
+as **parent skill + specialization** and require the spec-in-checks engine
+foundation (#1688) before they can participate in a `CheckType`.
+
+Single-stat resist checks (Endurance, Mortal Resolve, Reflexes, Escalation Pace)
+and fixed multi-stat checks (penetration, flee) are the documented exceptions —
+they do not use situational stats. See ADR-0182.
 
 Auto-scaffolded check seeds are **PLACEHOLDER** until a real composition pass: the social
 `CheckType`s (Intimidation/Persuasion/Deception/Seduction/Performance/Presence) shipped as
 stat+stat boilerplate and were redesigned to stat + skill (+ spec) (#1689); the combat + vitals
 checks (penetration/flee retrofitted, Reflexes/Endurance/Mortal Resolve/Escalation Pace seeded,
-Melee Combat skill catalog + the combat offense check added) followed in #1706. The resist-style
+Melee Combat skill catalog + the combat offense check added) followed in #1706. #2757 merged
+Melee Attack + Melee Defense into a single "Melee Combat" CheckType with a situational stat,
+and Break and Enter + Escape Through Window into "Athletics". The resist-style
 checks (single-stat) are the tenet-permitted exception.
 
 ---
