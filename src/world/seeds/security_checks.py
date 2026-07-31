@@ -48,10 +48,11 @@ _SECURITY_SPECIALIZATIONS: list[tuple[str, str]] = [
 
 # CheckType name -> (stat trait name, parent skill name, specialization | None, category name).
 # Stat categories: wits=MENTAL, strength=PHYSICAL, agility=PHYSICAL, perception=META.
+# #2757: "Break and Enter" and "Escape Through Window" merged into "Athletics" —
+# the stat_override is passed by resolve_security_check from SecurityCheckKind.
 _SECURITY_CHECK_COMPOSITION: dict[str, tuple[str, str, str | None, str]] = {
     "Lockpick": ("wits", "Skulduggery", "Lockpicking", "Physical"),
-    "Break and Enter": ("strength", "Athletics", None, "Physical"),
-    "Escape Through Window": ("agility", "Athletics", "Climbing", "Physical"),
+    "Athletics": ("strength", "Athletics", "Climbing", "Physical"),
     "Guard Detection": ("perception", "Investigation", None, "Exploration"),
     # #1825 accusation counter-play — the evidence pipeline's three checks.
     "Forge Evidence": ("wits", "Skulduggery", "Forgery", "Physical"),
