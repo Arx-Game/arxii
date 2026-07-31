@@ -115,10 +115,16 @@ class ProvisioningSeedTest(TestCase):
 
             seed_provisioning_content()
         self.assertEqual(QualityTier.objects.count(), 3)
-        recipes = CraftingRecipe.objects.filter(name__startswith="Cook: ")
-        self.assertEqual(recipes.count(), 2)
-        for recipe in recipes:
+        cook_recipes = CraftingRecipe.objects.filter(name__startswith="Cook: ")
+        refine_recipes = CraftingRecipe.objects.filter(name__startswith="Refine: ")
+        self.assertEqual(cook_recipes.count(), 2)
+        self.assertEqual(refine_recipes.count(), 2)
+        for recipe in list(cook_recipes) + list(refine_recipes):
             self.assertFalse(recipe.requires_station)
             self.assertEqual(recipe.check_type.name, "Cooking")
             self.assertEqual(CraftingSkillCap.objects.filter(recipe=recipe).count(), 3)
             self.assertGreater(recipe.material_requirements.count(), 0)
+        for recipe in cook_recipes:
+            self.assertIsNone(recipe.required_feature_kind)
+        for recipe in refine_recipes:
+            self.assertEqual(recipe.required_feature_kind.name, "Workshop of Iniquity")

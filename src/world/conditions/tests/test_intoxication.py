@@ -195,3 +195,80 @@ class RestorationEffectHandlerTest(TestCase):
         drink.assert_called_once()
         self.assertEqual(drink.call_args.kwargs.get("potency"), 2)
         self.assertTrue(applied.applied)
+
+
+class SubstanceLaddersTest(TestCase):
+    """Dusted/Hazed (#2862): the intoxicant override + pass-out ladder gate."""
+
+    @classmethod
+    def setUpTestData(cls):
+        ensure_intoxication_content()
+
+    def setUp(self):
+        self.sheet = CharacterSheetFactory()
+        self.character = self.sheet.character
+
+    def test_seed_creates_the_drug_ladders(self):
+        from world.conditions.models import ConditionTemplate
+
+        dusted = ConditionTemplate.objects.get(name="Dusted")
+        hazed = ConditionTemplate.objects.get(name="Hazed")
+        self.assertEqual(dusted.stages.count(), 4)
+        self.assertEqual(hazed.stages.count(), 2)
+
+    def test_override_advances_the_named_ladder(self):
+        from world.conditions.models import ConditionTemplate
+
+        dusted = ConditionTemplate.objects.get(name="Dusted")
+        with (
+            patch("world.conditions.services.apply_condition") as apply,
+            patch("world.conditions.services.get_active_conditions", return_value=[]),
+        ):
+            result = imbibe(self.character, potency=3, condition_template=dusted)
+        self.assertTrue(result.applied)
+        self.assertEqual(apply.call_args.args[1], dusted)
+
+    def test_dusted_reaches_the_pass_out_roll(self):
+        from world.conditions.intoxication_content import BLACKOUT_THRESHOLD
+        from world.conditions.models import ConditionTemplate
+
+        dusted = ConditionTemplate.objects.get(name="Dusted")
+        instance = MagicMock()
+        instance.condition_id = dusted.pk
+        instance.severity = BLACKOUT_THRESHOLD
+        with (
+            patch(
+                "world.conditions.services.get_active_conditions",
+                return_value=[instance],
+            ),
+            patch("world.conditions.services.advance_condition_severity"),
+            patch(
+                "world.conditions.intoxication_service._stomach_holds",
+                return_value=False,
+            ),
+            patch("world.conditions.intoxication_service._pass_out") as drop,
+        ):
+            result = imbibe(self.character, potency=1, condition_template=dusted)
+        drop.assert_called_once()
+        self.assertTrue(result.passed_out)
+
+    def test_hazed_can_never_drop_anyone(self):
+        """Hazed tops out at Blissed — no stage reaches the pass-out depth."""
+        from world.conditions.intoxication_content import BLACKOUT_THRESHOLD
+        from world.conditions.models import ConditionTemplate
+
+        hazed = ConditionTemplate.objects.get(name="Hazed")
+        instance = MagicMock()
+        instance.condition_id = hazed.pk
+        instance.severity = BLACKOUT_THRESHOLD + 5
+        with (
+            patch(
+                "world.conditions.services.get_active_conditions",
+                return_value=[instance],
+            ),
+            patch("world.conditions.services.advance_condition_severity"),
+            patch("world.conditions.intoxication_service._pass_out") as drop,
+        ):
+            result = imbibe(self.character, potency=1, condition_template=hazed)
+        drop.assert_not_called()
+        self.assertFalse(result.passed_out)

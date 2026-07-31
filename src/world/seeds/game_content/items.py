@@ -278,6 +278,13 @@ _CONSUMABLE_ROWS = (
     ("Strong Ale", {"effect_type": "intoxicate", "intoxication_potency": 2}),
     ("Dwarven Firebrandy", {"effect_type": "intoxicate", "intoxication_potency": 3}),
     ("Cardian Ambrosia", {"effect_type": "restore_anima", "anima_amount": 2}),
+    # #2862 — the first drugs; condition names resolve to the Dusted/Hazed
+    # ladders (INTOXICATE's intoxicant override).
+    (
+        "Dream Dust",
+        {"effect_type": "intoxicate", "intoxication_potency": 3, "condition": "Dusted"},
+    ),
+    ("Haze", {"effect_type": "intoxicate", "intoxication_potency": 1, "condition": "Hazed"}),
 )
 
 
@@ -293,9 +300,14 @@ def seed_consumable_catalog() -> None:
     """
     from actions.models import ConsequencePool, ConsequencePoolEntry  # noqa: PLC0415
     from world.checks.models import Consequence, ConsequenceEffect  # noqa: PLC0415
+    from world.conditions.intoxication_content import (  # noqa: PLC0415
+        ensure_intoxication_content,
+    )
+    from world.conditions.models import ConditionTemplate  # noqa: PLC0415
     from world.items.models import ItemTemplate  # noqa: PLC0415
     from world.traits.models import CheckOutcome  # noqa: PLC0415
 
+    ensure_intoxication_content()  # Dusted/Hazed ladders must exist for the drug rows
     outcome, _ = CheckOutcome.objects.get_or_create(name="Success")
     for name, effect_kwargs in _CONSUMABLE_ROWS:
         pool, _created = ConsequencePool.objects.get_or_create(
@@ -310,6 +322,12 @@ def seed_consumable_catalog() -> None:
         ConsequencePoolEntry.objects.get_or_create(pool=pool, consequence=consequence)
         kwargs = dict(effect_kwargs)
         effect_type = kwargs.pop("effect_type")
+        condition_name = kwargs.pop("condition", None)
+        if condition_name is not None:
+            condition = ConditionTemplate.objects.filter(name=condition_name).first()
+            if condition is None:
+                continue
+            kwargs["condition_template"] = condition
         ConsequenceEffect.objects.get_or_create(
             consequence=consequence,
             effect_type=effect_type,

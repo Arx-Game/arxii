@@ -18,6 +18,8 @@ from __future__ import annotations
 
 INTOXICATED_CONDITION_NAME = "Intoxicated"
 HUNGOVER_CONDITION_NAME = "Hungover"
+DUSTED_CONDITION_NAME = "Dusted"
+HAZED_CONDITION_NAME = "Hazed"
 
 # Severity thresholds for the stages (PLACEHOLDER).
 TIPSY_THRESHOLD = 1
@@ -100,6 +102,81 @@ def ensure_intoxication_content() -> None:
         },
     )
     _ensure_hungover_willpower_penalty(hungover)
+    _ensure_drug_conditions(category)
+
+
+def _ensure_drug_conditions(category) -> None:
+    """Dusted + Hazed (#2862) — the first two drugs on the INTOXICATE seam.
+
+    Dusted (Dream Dust, an opiate): a sedation ladder whose Gone Under stage
+    reaches the pass-out threshold — and an Unconscious character already
+    perceives dreamside (#2287/#2290), so Dream Dust literally delivers the
+    dream realm with zero new wiring. Hazed (Haze): a short mellow ladder
+    capped far below any pass-out. All copy PLACEHOLDER.
+    """
+    from world.conditions.constants import DurationType  # noqa: PLC0415
+    from world.conditions.models import ConditionStage, ConditionTemplate  # noqa: PLC0415
+
+    dusted, _ = ConditionTemplate.objects.get_or_create(
+        name=DUSTED_CONDITION_NAME,
+        defaults={
+            "category": category,
+            "description": "PLACEHOLDER: the dust's slow grey tide (#2862).",
+            "player_description": "The world softens at its edges; the dream leans close.",
+            "observer_description": "is heavy-lidded and far away.",
+            "default_duration_type": DurationType.INGAME_TIME,
+            "default_duration_value": 10,
+            "has_progression": True,
+            "is_stackable": False,
+            "can_be_dispelled": False,
+        },
+    )
+    dusted_stages = (
+        (1, "Lulled", 1, "PLACEHOLDER: warm, slow, unbothered."),
+        (2, "Drifting", 3, "PLACEHOLDER: the room breathes; time goes soft."),
+        (3, "Dreambound", 5, "PLACEHOLDER: the dream is closer than the street."),
+        (4, "Gone Under", BLACKOUT_THRESHOLD, "PLACEHOLDER: the tide takes you under."),
+    )
+    for order, name, threshold, desc in dusted_stages:
+        ConditionStage.objects.get_or_create(
+            condition=dusted,
+            stage_order=order,
+            defaults={
+                "name": name,
+                "description": desc,
+                "severity_threshold": threshold,
+                "severity_multiplier": "1.00",
+            },
+        )
+    hazed, _ = ConditionTemplate.objects.get_or_create(
+        name=HAZED_CONDITION_NAME,
+        defaults={
+            "category": category,
+            "description": "PLACEHOLDER: haze-smoke calm (#2862).",
+            "player_description": "Everything is fine. Everything is very, very fine.",
+            "observer_description": "wears an easy, unhurried smile.",
+            "default_duration_type": DurationType.INGAME_TIME,
+            "default_duration_value": 6,
+            "has_progression": True,
+            "is_stackable": False,
+            "can_be_dispelled": False,
+        },
+    )
+    hazed_stages = (
+        (1, "Mellow", 1, "PLACEHOLDER: loose shoulders, slow smile."),
+        (2, "Blissed", 3, "PLACEHOLDER: the world is soft-edged and generous."),
+    )
+    for order, name, threshold, desc in hazed_stages:
+        ConditionStage.objects.get_or_create(
+            condition=hazed,
+            stage_order=order,
+            defaults={
+                "name": name,
+                "description": desc,
+                "severity_threshold": threshold,
+                "severity_multiplier": "1.00",
+            },
+        )
 
 
 def _ensure_hungover_willpower_penalty(hungover) -> None:

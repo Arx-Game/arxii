@@ -1,1 +1,1 @@
-0051_itemtemplate_is_revealing_and_more
+0052_craftingrecipe_required_feature_kind

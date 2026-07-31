@@ -25,6 +25,8 @@ from world.conditions.intoxication_content import (
 if TYPE_CHECKING:
     from evennia.objects.models import ObjectDB
 
+    from world.conditions.models import ConditionTemplate
+
 logger = logging.getLogger(__name__)
 
 
@@ -38,8 +40,19 @@ class ImbibeResult:
     description: str
 
 
-def imbibe(character: ObjectDB, *, potency: int) -> ImbibeResult:
-    """One drink of *potency* for *character* (#2852)."""
+def imbibe(
+    character: ObjectDB,
+    *,
+    potency: int,
+    condition_template: ConditionTemplate | None = None,
+) -> ImbibeResult:
+    """One dose of *potency* for *character* (#2852; substances #2862).
+
+    ``condition_template`` selects which staged intoxicant ladder advances —
+    None keeps alcohol's ``Intoxicated``. The pass-out roll fires only when
+    the ladder actually reaches the pass-out threshold (Dusted does; Hazed
+    tops out at Blissed and can never drop anyone).
+    """
     from world.conditions.models import ConditionTemplate  # noqa: PLC0415
     from world.conditions.services import (  # noqa: PLC0415
         advance_condition_severity,
@@ -49,9 +62,11 @@ def imbibe(character: ObjectDB, *, potency: int) -> ImbibeResult:
 
     if potency <= 0:
         return ImbibeResult(False, 0, False, "The drink has no bite at all.")
-    template = ConditionTemplate.objects.filter(name=INTOXICATED_CONDITION_NAME).first()
+    template = condition_template
     if template is None:
-        logger.warning("Intoxicated template missing; drink had no effect.")
+        template = ConditionTemplate.objects.filter(name=INTOXICATED_CONDITION_NAME).first()
+    if template is None:
+        logger.warning("Intoxicant template missing; dose had no effect.")
         return ImbibeResult(False, 0, False, "The drink has no effect.")
     active = None
     for instance in get_active_conditions(character):
@@ -66,7 +81,11 @@ def imbibe(character: ObjectDB, *, potency: int) -> ImbibeResult:
         active.refresh_from_db()
         severity = active.severity
     passed_out = False
-    if severity >= PASS_OUT_SEVERITY_THRESHOLD and not _stomach_holds(character, severity):
+    if (
+        severity >= PASS_OUT_SEVERITY_THRESHOLD
+        and _ladder_reaches_pass_out(template)
+        and not _stomach_holds(character, severity)
+    ):
         passed_out = True
         _pass_out(character)
     description = (
@@ -75,6 +94,11 @@ def imbibe(character: ObjectDB, *, potency: int) -> ImbibeResult:
         else f"The drink lands (severity {severity})."
     )
     return ImbibeResult(True, severity, passed_out, description)
+
+
+def _ladder_reaches_pass_out(template: ConditionTemplate) -> bool:
+    """Whether this intoxicant's staged ladder climbs to the pass-out depth."""
+    return template.stages.filter(severity_threshold__gte=PASS_OUT_SEVERITY_THRESHOLD).exists()
 
 
 def _stomach_holds(character: ObjectDB, severity: int) -> bool:

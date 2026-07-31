@@ -24,11 +24,29 @@ COOKING_SKILL_NAME = "Cooking"
 COOKING_CHECK_NAME = "Cooking"
 BREWING_SPECIALIZATION_NAME = "Brewing"
 
-# (output template name, ((ingredient template name, quantity), ...))
+# (output template name, ((ingredient template name, quantity), ...), workshop_gated)
 _RECIPE_ROWS = (
-    ("Hearty Stew", (("Sack of Grain", 1), ("Wild Herbs", 1))),
-    ("Honeyed Wine", (("Orchard Honey", 2),)),
+    ("Hearty Stew", (("Sack of Grain", 1), ("Wild Herbs", 1)), False),
+    ("Honeyed Wine", (("Orchard Honey", 2),), False),
+    # #2862 — illicit refinement, gated on the Workshop of Iniquity. Rolls the
+    # Cooking check as PLACEHOLDER (a dedicated refining skill is a flagged
+    # skill-list hole, not force-fit).
+    ("Dream Dust", (("Duskpetal Resin", 2),), True),
+    ("Haze", (("Hazeleaf", 2),), True),
 )
+
+# MaterialCategory content (#2862) — the model has existed contentless since #684.
+_MATERIAL_CATEGORIES = (
+    ("Botanical", "Herbs, resins, and leaves — culinary or contraband."),
+    ("Provision", "Grains, honeys, and stock for the table."),
+)
+_INGREDIENT_CATEGORY = {
+    "Sack of Grain": "Provision",
+    "Wild Herbs": "Botanical",
+    "Orchard Honey": "Provision",
+    "Duskpetal Resin": "Botanical",
+    "Hazeleaf": "Botanical",
+}
 
 # (tier name, numeric_min, numeric_max, stat_multiplier, sort_order)
 _QUALITY_TIERS = (
@@ -138,27 +156,42 @@ def _ensure_recipes(check_type, tiers: dict[str, object]) -> None:
         CraftingRecipe,
         CraftingSkillCap,
     )
-    from world.items.models import ItemTemplate  # noqa: PLC0415
+    from world.items.models import (  # noqa: PLC0415
+        ItemTemplate,
+        MaterialCategory,
+    )
+    from world.room_features.seeds import (  # noqa: PLC0415
+        ensure_workshop_of_iniquity_kind,
+    )
     from world.traits.models import Trait, TraitType  # noqa: PLC0415
 
+    categories: dict[str, object] = {}
+    for cat_name, cat_desc in _MATERIAL_CATEGORIES:
+        category, _created = MaterialCategory.objects.get_or_create(
+            name=cat_name, defaults={"description": cat_desc}
+        )
+        categories[cat_name] = category
+    workshop_kind = ensure_workshop_of_iniquity_kind()
     skill_trait = Trait.objects.filter(name=COOKING_SKILL_NAME, trait_type=TraitType.SKILL).first()
-    for output_name, ingredients in _RECIPE_ROWS:
+    for output_name, ingredients, workshop_gated in _RECIPE_ROWS:
         output = ItemTemplate.objects.filter(name=output_name).first()
         if output is None:
             logger.warning("Recipe output template %r missing; recipe skipped.", output_name)
             continue
+        verb = "Refine" if workshop_gated else "Cook"
         recipe, _created = CraftingRecipe.objects.get_or_create(
             kind=CraftingRecipeKind.ITEM_CREATE,
             output_item_template=output,
             defaults={
-                "name": f"Cook: {output_name}",
+                "name": f"{verb}: {output_name}",
                 "check_type": check_type,
                 "skill_trait": skill_trait,
-                "base_difficulty": 10,
+                "base_difficulty": 20 if workshop_gated else 10,
                 "success_level_step": 10,
                 "min_success_level": 1,
                 "action_point_cost": 2,
                 "requires_station": False,
+                "required_feature_kind": workshop_kind if workshop_gated else None,
             },
         )
         for ingredient_name, quantity in ingredients:
@@ -167,6 +200,9 @@ def _ensure_recipes(check_type, tiers: dict[str, object]) -> None:
                 defaults={
                     "description": f"PLACEHOLDER: {ingredient_name.lower()} — cooking stock.",
                     "is_active": True,
+                    "material_category": categories.get(
+                        _INGREDIENT_CATEGORY.get(ingredient_name, ""),
+                    ),
                 },
             )
             CraftingMaterialRequirement.objects.get_or_create(

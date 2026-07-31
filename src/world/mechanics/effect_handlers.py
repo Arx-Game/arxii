@@ -1489,7 +1489,11 @@ def _intoxicate(
             applied=False,
             skip_reason="Target not found",
         )
-    result = imbibe(target, potency=effect.intoxication_potency or 0)
+    result = imbibe(
+        target,
+        potency=effect.intoxication_potency or 0,
+        condition_template=effect.condition_template,
+    )
     return AppliedEffect(
         effect_type=EffectType.INTOXICATE,
         description=result.description,
