@@ -69,11 +69,7 @@ def pick_up_body(carrier: ObjectDB, target: ObjectDB) -> CarriedBody:
         raise CarryError(msg)
     link = CarriedBody.objects.create(carrier=carrier_sheet, carried=target_sheet)
     carrier.msg(f"You gather up {target.key} and lift them across your shoulders.")
-    if carrier.location is not None:
-        carrier.location.msg_contents(
-            f"{carrier.key} lifts {target.key}'s limp form.",
-            exclude=[carrier],
-        )
+    _broadcast_waking(carrier, f"{carrier.key} lifts {target.key}'s limp form.")
     return link
 
 
@@ -93,11 +89,22 @@ def set_down_body(carrier: ObjectDB) -> None:
     carried_name = _carried_key(link)
     link.delete()
     carrier.msg(f"You ease {carried_name} down.")
-    if carrier.location is not None:
-        carrier.location.msg_contents(
-            f"{carrier.key} eases {carried_name} down gently.",
-            exclude=[carrier],
-        )
+    _broadcast_waking(carrier, f"{carrier.key} eases {carried_name} down gently.")
+
+
+def _broadcast_waking(carrier: ObjectDB, text: str) -> None:
+    """Room emit that honors dreamside perception (#2287) — the carried body
+    is unconscious and dreaming; they must not hear the waking room handle
+    them (the same exclusion every routed room broadcast applies)."""
+    from flows.service_functions.communication import _dreamside_occupants  # noqa: PLC0415
+
+    location = carrier.location
+    if location is None:
+        return
+    excluded = _dreamside_occupants(location)
+    if carrier not in excluded:
+        excluded.append(carrier)
+    location.msg_contents(text, exclude=excluded)
 
 
 def carried_body_follow(carrier: ObjectDB) -> None:
