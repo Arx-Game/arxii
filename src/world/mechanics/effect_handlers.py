@@ -1401,6 +1401,103 @@ def _apply_asset_status(
     )
 
 
+def _restore_fatigue(
+    effect: "ConsequenceEffect",
+    context: "ResolutionContext",
+) -> AppliedEffect:
+    """Recover fatigue on the resolved target (#2852 — food and drink)."""
+    from world.fatigue.services import recover_fatigue  # noqa: PLC0415
+
+    target = _resolve_target(effect, context)
+    try:
+        sheet = target.character_sheet if target is not None else None
+    except (AttributeError, ObjectDoesNotExist):
+        sheet = None
+    if sheet is None:
+        return AppliedEffect(
+            effect_type=EffectType.RESTORE_FATIGUE,
+            description="No character to restore",
+            applied=False,
+            skip_reason="Target has no CharacterSheet",
+        )
+    recovered = recover_fatigue(sheet, effect.fatigue_category, effect.fatigue_amount or 0)
+    return AppliedEffect(
+        effect_type=EffectType.RESTORE_FATIGUE,
+        description=f"Recovered {recovered} {effect.fatigue_category} fatigue",
+        applied=recovered > 0,
+        skip_reason=None if recovered > 0 else "Nothing to recover",
+    )
+
+
+def _restore_anima(
+    effect: "ConsequenceEffect",
+    context: "ResolutionContext",
+) -> AppliedEffect:
+    """Restore anima, clamped to maximum (#2852 — the magical-consumable exception).
+
+    Consumption is not regeneration: appetite holders' no-natural-regen rule
+    (#2853) is untouched — Cardian ambrosia feeds them like anyone else.
+    """
+    target = _resolve_target(effect, context)
+    try:
+        sheet = target.character_sheet if target is not None else None
+    except (AttributeError, ObjectDoesNotExist):
+        sheet = None
+    anima = sheet.anima_or_none if sheet is not None else None
+    if anima is None:
+        return AppliedEffect(
+            effect_type=EffectType.RESTORE_ANIMA,
+            description="No anima pool to restore",
+            applied=False,
+            skip_reason="Target has no CharacterAnima",
+        )
+    restored = min(effect.anima_amount or 0, anima.maximum - anima.current)
+    if restored <= 0:
+        return AppliedEffect(
+            effect_type=EffectType.RESTORE_ANIMA,
+            description="Anima already full",
+            applied=False,
+            skip_reason="Nothing to restore",
+        )
+    anima.current += restored
+    anima.save(update_fields=["current"])
+    return AppliedEffect(
+        effect_type=EffectType.RESTORE_ANIMA,
+        description=f"Restored {restored} anima",
+        applied=True,
+    )
+
+
+def _intoxicate(
+    effect: "ConsequenceEffect",
+    context: "ResolutionContext",
+) -> AppliedEffect:
+    """One drink's worth of intoxication (#2852) — the whole drunk loop's seam.
+
+    Advances the Intoxicated condition by the drink's potency. Past the
+    Blackout threshold, each further drink rolls the existing stamina check
+    (``fatigue_endurance_physical``); failure = the built Unconscious
+    machinery (wake rolls, deadlines) + Hungover queued for the morning.
+    """
+    from world.conditions.intoxication_service import imbibe  # noqa: PLC0415
+
+    target = _resolve_target(effect, context)
+    if target is None:
+        return AppliedEffect(
+            effect_type=EffectType.INTOXICATE,
+            description="No one to intoxicate",
+            applied=False,
+            skip_reason="Target not found",
+        )
+    result = imbibe(target, potency=effect.intoxication_potency or 0)
+    return AppliedEffect(
+        effect_type=EffectType.INTOXICATE,
+        description=result.description,
+        applied=result.applied,
+        skip_reason=None if result.applied else result.description,
+    )
+
+
 # ---------------------------------------------------------------------------
 # Handler registry
 # ---------------------------------------------------------------------------
@@ -1430,4 +1527,7 @@ _HANDLER_REGISTRY: dict[str, type[None] | object] = {
     EffectType.GRANT_FLIGHT: _grant_flight,
     EffectType.REMOVE_FLIGHT: _remove_flight,
     EffectType.ASSET_STATUS: _apply_asset_status,
+    EffectType.RESTORE_FATIGUE: _restore_fatigue,
+    EffectType.RESTORE_ANIMA: _restore_anima,
+    EffectType.INTOXICATE: _intoxicate,
 }

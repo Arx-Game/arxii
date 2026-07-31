@@ -360,6 +360,23 @@ class ConsequenceEffect(SharedMemoryModel):
     )
     distinction_rank = models.PositiveIntegerField(null=True, blank=True)
 
+    # Consumable restoration/intoxication effects (#2852)
+    fatigue_amount = models.PositiveIntegerField(
+        null=True, blank=True, help_text="RESTORE_FATIGUE: points recovered."
+    )
+    fatigue_category = models.CharField(
+        max_length=16,
+        blank=True,
+        default="",
+        help_text="RESTORE_FATIGUE: fatigue pool category (physical/social/mental).",
+    )
+    anima_amount = models.PositiveIntegerField(
+        null=True, blank=True, help_text="RESTORE_ANIMA: anima points restored (clamped to max)."
+    )
+    intoxication_potency = models.PositiveSmallIntegerField(
+        null=True, blank=True, help_text="INTOXICATE: severity added per use."
+    )
+
     # Damage effects (stubbed — needs HP/combat system)
     damage_amount = models.PositiveIntegerField(null=True, blank=True)
     damage_type = models.ForeignKey(
@@ -527,6 +544,12 @@ class ConsequenceEffect(SharedMemoryModel):
             ("position_name_b", "position_name_b"),
         ],
         EffectType.ASSET_STATUS: [("asset_status_target", "asset_status_target")],
+        EffectType.RESTORE_FATIGUE: [
+            ("fatigue_amount", "fatigue_amount"),
+            ("fatigue_category", "fatigue_category"),
+        ],
+        EffectType.RESTORE_ANIMA: [("anima_amount", "anima_amount")],
+        EffectType.INTOXICATE: [("intoxication_potency", "intoxication_potency")],
     }
 
     def clean(self) -> None:

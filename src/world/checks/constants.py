@@ -48,6 +48,9 @@ class EffectType(models.TextChoices):
     GRANT_FLIGHT = "grant_flight", "Grant Flight"
     REMOVE_FLIGHT = "remove_flight", "Remove Flight"
     ASSET_STATUS = "asset_status", "Asset Status"
+    RESTORE_FATIGUE = "restore_fatigue", "Restore Fatigue"
+    RESTORE_ANIMA = "restore_anima", "Restore Anima"
+    INTOXICATE = "intoxicate", "Intoxicate"
 
 
 class PositionDestination(models.TextChoices):

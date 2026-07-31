@@ -261,6 +261,73 @@ def seed_cosmetic_items() -> None:
 
 
 # ---------------------------------------------------------------------------
+# Consumable food & drink catalog (#2852)
+# ---------------------------------------------------------------------------
+
+# (template name, effect kwargs) — PLACEHOLDER magnitudes, author pass on #2852.
+_CONSUMABLE_ROWS = (
+    (
+        "Crusty Bread",
+        {"effect_type": "restore_fatigue", "fatigue_amount": 2, "fatigue_category": "physical"},
+    ),
+    (
+        "Hearty Stew",
+        {"effect_type": "restore_fatigue", "fatigue_amount": 4, "fatigue_category": "physical"},
+    ),
+    ("Honeyed Wine", {"effect_type": "intoxicate", "intoxication_potency": 1}),
+    ("Strong Ale", {"effect_type": "intoxicate", "intoxication_potency": 2}),
+    ("Dwarven Firebrandy", {"effect_type": "intoxicate", "intoxication_potency": 3}),
+    ("Cardian Ambrosia", {"effect_type": "restore_anima", "anima_amount": 2}),
+)
+
+
+def seed_consumable_catalog() -> None:
+    """Seed sample food/drink/ambrosia consumables (#2852).
+
+    Each is a plain consumable ItemTemplate with a deterministic on-use pool
+    (no check type — the effect always lands) carrying one Success-tier
+    consequence effect: RESTORE_FATIGUE for food, INTOXICATE for drink (the
+    whole drunk loop lives behind that one effect), RESTORE_ANIMA for the
+    rare magical exception. All rows PLACEHOLDER content for the author pass;
+    routed through get_or_create so authored content wins on reload.
+    """
+    from actions.models import ConsequencePool, ConsequencePoolEntry  # noqa: PLC0415
+    from world.checks.models import Consequence, ConsequenceEffect  # noqa: PLC0415
+    from world.items.models import ItemTemplate  # noqa: PLC0415
+    from world.traits.models import CheckOutcome  # noqa: PLC0415
+
+    outcome, _ = CheckOutcome.objects.get_or_create(name="Success")
+    for name, effect_kwargs in _CONSUMABLE_ROWS:
+        pool, _created = ConsequencePool.objects.get_or_create(
+            name=f"Consume: {name}",
+            defaults={"description": f"On-use effects of {name} (#2852)."},
+        )
+        consequence, _created = Consequence.objects.get_or_create(
+            outcome_tier=outcome,
+            label=f"{name} consumed",
+            defaults={"weight": 1, "character_loss": False},
+        )
+        ConsequencePoolEntry.objects.get_or_create(pool=pool, consequence=consequence)
+        kwargs = dict(effect_kwargs)
+        effect_type = kwargs.pop("effect_type")
+        ConsequenceEffect.objects.get_or_create(
+            consequence=consequence,
+            effect_type=effect_type,
+            defaults=kwargs,
+        )
+        ItemTemplate.objects.get_or_create(
+            name=name,
+            defaults={
+                "description": f"PLACEHOLDER: {name.lower()} — #2852 consumables catalog.",
+                "is_consumable": True,
+                "max_charges": 1,
+                "is_active": True,
+                "on_use_pool": pool,
+            },
+        )
+
+
+# ---------------------------------------------------------------------------
 # Mounted-combat weapon (#1843)
 # ---------------------------------------------------------------------------
 
@@ -319,6 +386,7 @@ def seed_items_dev() -> ItemsDevSeedResult:
     styles = seed_style_vocabulary()
     seed_cosmetic_items()
     seed_lance_item()
+    seed_consumable_catalog()
     return ItemsDevSeedResult(
         template_catalog=template_catalog,
         styles=styles,
