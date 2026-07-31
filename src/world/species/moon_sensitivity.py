@@ -38,6 +38,11 @@ from world.species.moon_constants import (
 )
 from world.species.moon_pull import felt_moon_pull, moon_clarity_instance_value
 
+CANI_UNEASE_MESSAGE = (
+    "|wThe moonlight prickles along your spine — something old in your blood "
+    "stirs and will not settle while the moon watches.|n"
+)
+
 if TYPE_CHECKING:
     from world.character_sheets.models import CharacterSheet
     from world.checks.models import CheckType
@@ -161,7 +166,9 @@ def _force_battle_form_shift(character, sheet: CharacterSheet) -> None:
         return
     alt = AlternateSelf.objects.filter(character=sheet, combat_profile__isnull=False).first()
     if alt is None:
-        return
+        from world.species.moon_provisioning import ensure_lycan_battle_form  # noqa: PLC0415
+
+        alt = ensure_lycan_battle_form(sheet)
     clarity = moon_clarity_instance_value(character, character.location)
     trigger_transformation(sheet, alt, cause="moon", instance_value=clarity)
 
@@ -230,3 +237,55 @@ def _ensure_moon_control_check_type() -> CheckType | None:
             check_type=check_type, trait=trait, defaults={"weight": weight}
         )
     return check_type
+
+
+def reconcile_cani_unease(character) -> None:
+    """Apply/remove the Cani Moonlit Unease with the open night moon (#2845).
+
+    Ruled 2026-07-31: the Cani umbrella (wolves, hounds, all canine-touched)
+    carries the unease — khati subspecies stay umbrella families, so no
+    wolf-specific subspecies exists or should. Mechanically inert flavor state
+    in v1 (PLACEHOLDER); the message fires once, on application.
+    """
+    from world.conditions.services import (  # noqa: PLC0415
+        apply_condition,
+        get_active_conditions,
+        remove_condition,
+    )
+    from world.species.factories import ensure_moonlit_unease_condition  # noqa: PLC0415
+    from world.species.moon_constants import MOONLIT_UNEASE_NAME  # noqa: PLC0415
+
+    sheet = character.character_sheet
+    if sheet is None or not _is_cani(sheet):
+        return
+    exposure = felt_moon_pull(character, character.location)
+    active = None
+    for instance in get_active_conditions(character):
+        if instance.condition.name == MOONLIT_UNEASE_NAME:
+            active = instance
+            break
+    if exposure.pull > 0 and active is None:
+        template = ensure_moonlit_unease_condition()
+        apply_condition(character, template, severity=1, source_character=character)
+        character.msg(CANI_UNEASE_MESSAGE)
+    elif exposure.pull <= 0 and active is not None:
+        remove_condition(character, active.condition)
+
+
+def _is_cani(sheet: CharacterSheet) -> bool:
+    """Whether the sheet's species is (or descends from) the Cani umbrella."""
+    from world.species.moon_constants import CANI_SPECIES_NAME  # noqa: PLC0415
+
+    species = sheet.species
+    while species is not None:
+        if species.name == CANI_SPECIES_NAME:
+            return True
+        species = species.parent
+    return False
+
+
+def reconcile_cani_unease_safely(character) -> None:
+    """Best-effort unease reconcile for the cron sweep (#2845)."""
+    from world.species.services import run_reconcile_safely  # noqa: PLC0415
+
+    run_reconcile_safely(character, reconcile_cani_unease, "cani-unease")

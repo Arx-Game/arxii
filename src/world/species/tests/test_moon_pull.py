@@ -1,7 +1,7 @@
 """Moon pull + lycan control checks (#2845). SQLite tier — apply_condition is
 PG-only, so consequence application is patched where the reconcile would reach it."""
 
-from unittest.mock import patch
+from unittest.mock import MagicMock, patch
 
 from django.test import TestCase
 
@@ -198,3 +198,140 @@ class BerserkContentTest(TestCase):
         template = ConditionTemplate.objects.get(name="Berserk")
         self.assertTrue(template.category.alters_behavior)
         self.assertEqual(template.category.name, "Control")
+
+
+class LycanBattleFormProvisioningTest(TestCase):
+    @classmethod
+    def setUpTestData(cls):
+        from world.species.moon_provisioning import BATTLE_FORM_STAT_SUITE
+        from world.traits.factories import TraitFactory
+        from world.traits.models import TraitType
+
+        for trait_name, _value in BATTLE_FORM_STAT_SUITE:
+            TraitFactory(name=trait_name, trait_type=TraitType.STAT)
+
+    def test_provisions_form_profile_effects_and_alt_idempotently(self):
+        from world.forms.models import AlternateSelf, FormCombatProfileEffect
+        from world.species.moon_provisioning import (
+            BATTLE_FORM_STAT_SUITE,
+            TUNING_BASELINE,
+            ensure_lycan_battle_form,
+        )
+
+        sheet = CharacterSheetFactory()
+        alt = ensure_lycan_battle_form(sheet)
+        again = ensure_lycan_battle_form(sheet)
+        self.assertEqual(alt.pk, again.pk)
+        self.assertEqual(AlternateSelf.objects.filter(character=sheet).count(), 1)
+        self.assertIsNotNone(alt.combat_profile)
+        self.assertEqual(
+            FormCombatProfileEffect.objects.filter(profile=alt.combat_profile).count(),
+            len(BATTLE_FORM_STAT_SUITE),
+        )
+        self.assertEqual(alt.tuning_value, TUNING_BASELINE)
+
+    def test_thread_level_feeds_tuning(self):
+        from world.species.moon_provisioning import (
+            TUNING_BASELINE,
+            ensure_lycan_battle_form,
+        )
+
+        sheet = CharacterSheetFactory()
+        with patch("world.species.moon_provisioning._gift_thread_level", return_value=3):
+            alt = ensure_lycan_battle_form(sheet)
+        self.assertEqual(alt.tuning_value, TUNING_BASELINE + 3)
+
+
+class CaniUneaseTest(TestCase):
+    @classmethod
+    def setUpTestData(cls):
+        from world.species.factories import SpeciesFactory
+
+        cls.cani = SpeciesFactory(name="Cani")
+
+    def setUp(self):
+        self.sheet = CharacterSheetFactory(species=self.cani)
+        self.character = self.sheet.character
+        self.room = RoomProfileFactory(is_outdoor=True).objectdb
+        self.character.location = self.room
+
+    def test_moonlit_cani_gains_unease_with_message(self):
+        from world.species.moon_sensitivity import reconcile_cani_unease
+
+        with (
+            _night_full_moon(),
+            patch("world.conditions.services.apply_condition") as apply,
+            patch("world.conditions.services.get_active_conditions", return_value=[]),
+            patch.object(self.character, "msg") as msg,
+        ):
+            reconcile_cani_unease(self.character)
+        apply.assert_called_once()
+        msg.assert_called_once()
+
+    def test_non_cani_never_gains_unease(self):
+        from world.species.moon_sensitivity import reconcile_cani_unease
+
+        other = CharacterSheetFactory()
+        other.character.location = self.room
+        with (
+            _night_full_moon(),
+            patch("world.conditions.services.apply_condition") as apply,
+        ):
+            reconcile_cani_unease(other.character)
+        apply.assert_not_called()
+
+    def test_unease_clears_out_of_the_moonlight(self):
+        from world.species.factories import ensure_moonlit_unease_condition
+        from world.species.moon_sensitivity import reconcile_cani_unease
+
+        template = ensure_moonlit_unease_condition()
+        instance = MagicMock()
+        instance.condition = template
+        with (
+            patch("world.species.moon_pull.get_ic_phase", return_value=TimePhase.DAY),
+            patch(
+                "world.conditions.services.get_active_conditions",
+                return_value=[instance],
+            ),
+            patch("world.conditions.services.remove_condition") as remove,
+        ):
+            reconcile_cani_unease(self.character)
+        remove.assert_called_once()
+
+
+class RestoreToSenseContentTest(TestCase):
+    def test_seed_creates_enhancement_and_removal_config(self):
+        from actions.models import ActionEnhancement
+        from actions.models.effect_configs import RemoveConditionOnCheckConfig
+        from world.checks.models import CheckCategory, CheckType
+        from world.conditions.berserk_content import ensure_berserk_content
+
+        category, _ = CheckCategory.objects.get_or_create(name="Social")
+        CheckType.objects.get_or_create(name="Persuasion", defaults={"category": category})
+        ensure_berserk_content()
+        enhancement = ActionEnhancement.objects.get(base_action_key="restore_sense")
+        config = RemoveConditionOnCheckConfig.objects.get(enhancement=enhancement)
+        self.assertEqual(config.condition.name, "Berserk")
+        self.assertEqual(config.check_type.name, "Persuasion")
+
+
+class VoluntaryShiftMoonScalingTest(TestCase):
+    def test_unbound_shifter_gets_baseline(self):
+        from actions.definitions.forms import ShiftFormAction
+
+        sheet = CharacterSheetFactory()
+        value = ShiftFormAction._moon_instance_value(sheet.character, sheet)
+        self.assertEqual(value, 1.0)
+
+    def test_moon_bound_shifter_drinks_the_moonlight(self):
+        from actions.definitions.forms import ShiftFormAction
+
+        sheet = CharacterSheetFactory()
+        CharacterDistinction.objects.create(
+            character=sheet, distinction=ensure_moon_bound_distinction()
+        )
+        room = RoomProfileFactory(is_outdoor=True).objectdb
+        sheet.character.location = room
+        with _night_full_moon():
+            value = ShiftFormAction._moon_instance_value(sheet.character, sheet)
+        self.assertAlmostEqual(value, 1.0 + MOON_FORM_CLARITY_MAX_BONUS)

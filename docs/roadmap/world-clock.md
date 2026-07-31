@@ -64,7 +64,9 @@ The central time engine that drives the living world. An anchor-based game clock
   cycle PLACEHOLDER 30 IC days, fixed epoch — no state, no cron writer; staff
   time-skips move the moon). Surfaced via the weather `Conditions` read + widget
   (night only). Astrological conjunctions remain deferred; the lycan consumer is
-  the #2845 follow-on spec.
+  **built (#2845, ADR-0183)**: `felt_moon_pull` (illumination × sky − shade) drives
+  the `moon_control` window (`species.moon_reconcile` cron, 5-min DRAIN) — forced
+  battle-form shift + shared Berserk on failure, Cani Moonlit Unease as flavor.
 - **Consumer note (#2846, ADR-0179):** the sunlight bane/allergy system reads
   `get_ic_phase()` for its base-sun gate (full at DAY, reduced DAWN/DUSK, zero
   NIGHT) and registers the `species.sun_reconcile` cron (5-min, DRAIN band) —

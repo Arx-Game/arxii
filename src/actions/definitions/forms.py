@@ -81,9 +81,14 @@ class ShiftFormAction(Action):
         # web path). Routes through ``trigger_transformation`` (the cause-path
         # seam) so the at-will command shares the audit hook + variance path
         # with the technique/trigger cause-paths (#1604); ``instance_value``
-        # defaults to 1.0 (the at-will baseline needs no per-instance scaling).
+        # defaults to 1.0 — except for a moon-bound shifter (#2845), whose form
+        # drinks the moonlight: a shift under a clear full moon scales the whole
+        # stat suite up (voluntary and forced shifts alike, ruled 2026-07-31).
+        instance_value = self._moon_instance_value(actor, sheet)
         try:
-            active = trigger_transformation(sheet, alt, cause="command")
+            active = trigger_transformation(
+                sheet, alt, cause="command", instance_value=instance_value
+            )
         except AlternateSelfActiveError as exc:
             # A different alt-self is already active — revert it first.
             return ActionResult(success=False, message=exc.user_message)
@@ -96,6 +101,16 @@ class ShiftFormAction(Action):
             message=f"You assume {alt.display_name or 'an alternate self'}.",
             data={"active_alternate_self_id": active.pk, "alternate_self_id": alt.pk},
         )
+
+    @staticmethod
+    def _moon_instance_value(actor: ObjectDB, sheet: Any) -> float:
+        """Moon-clarity multiplier for moon-bound shifters; 1.0 for everyone else."""
+        from world.species.moon_pull import moon_clarity_instance_value  # noqa: PLC0415
+        from world.species.moon_sensitivity import is_moon_bound  # noqa: PLC0415
+
+        if not is_moon_bound(sheet):
+            return 1.0
+        return moon_clarity_instance_value(actor, actor.location)
 
 
 @dataclass

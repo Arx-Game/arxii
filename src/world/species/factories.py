@@ -357,6 +357,38 @@ def ensure_appetite_distinctions() -> tuple:
     return blood, essence
 
 
+def ensure_moonlit_unease_condition() -> "ConditionTemplate":
+    """Idempotently seed the Cani Moonlit Unease condition (#2845).
+
+    A heightened-alert flavor state — mechanically inert in v1 (PLACEHOLDER);
+    applied/removed by the moon reconcile sweep while a Cani stands under the
+    open night moon.
+    """
+    from world.conditions.constants import DurationType
+    from world.conditions.models import ConditionCategory, ConditionTemplate
+    from world.species.moon_constants import MOONLIT_UNEASE_NAME
+
+    category, _created = ConditionCategory.objects.get_or_create(
+        name="Instinct",
+        defaults={"description": "Instinctive species states.", "is_negative": False},
+    )
+    template, _created = ConditionTemplate.objects.get_or_create(
+        name=MOONLIT_UNEASE_NAME,
+        defaults={
+            "category": category,
+            "description": "PLACEHOLDER: the moon watches, and the blood remembers (#2845).",
+            "player_description": (
+                "The moonlight prickles along your spine — something in you "
+                "will not settle while it watches."
+            ),
+            "observer_description": "is restless and watchful under the moonlight.",
+            "default_duration_type": DurationType.UNTIL_CURED,
+            "is_stackable": False,
+        },
+    )
+    return template
+
+
 def ensure_moon_bound_distinction() -> "Distinction":
     """Idempotently seed the Moon-Bound distinction (#2845).
 

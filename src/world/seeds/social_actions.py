@@ -41,6 +41,10 @@ _SOCIAL_ACTION_TEMPLATES = [
     ("Feed", "Seduction", "single", "droplet", 1),
     ("Drain", "Seduction", "single", "sparkles", 1),
     ("Seduce", "Seduction", "single", "flame", 1),
+    # #2845 — talk a berserk ally down through force of personality and connection.
+    # The removal effect itself is seeded by conditions.berserk_content (the
+    # ActionEnhancement + RemoveConditionOnCheckConfig targeting Berserk).
+    ("Restore to Sense", "Persuasion", "single", "sunrise", 0),
     ("Perform", "Performance", "area", "music", 0),
     ("Entrance", "Presence", "area", "sparkles", 0),
 ]
@@ -88,6 +92,11 @@ _POOL_CONSEQUENCES: dict[str, list[tuple[str, str, int]]] = {
         ("Failure", "Advance rebuffed", 1),
         ("Partial Success", "Interest piqued but guarded", 2),
         ("Success", "Charm lands completely", 1),
+    ],
+    "Restore to Sense": [
+        ("Failure", "The beast does not hear you", 1),
+        ("Partial Success", "A flicker of the person behind the rage", 2),
+        ("Success", "Sense restored — the rage lets go", 1),
     ],
     "Seduce": [
         ("Failure", "Seduction rebuffed", 1),

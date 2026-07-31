@@ -772,6 +772,16 @@ Species/race definitions with stat bonuses, language assignments, and species-gi
   `tasks.sun_reconcile_tick` (`species.sun_reconcile` cron), factories
   `ensure_sunlight_exposure_content` (staged template) + `ensure_sunlight_distinctions`
   (Bane/Allergy: Sunlight anchor rows); PLACEHOLDER constants in `sun_constants.py`.
+  Moon control (#2845, ADR-0183): `moon_pull.felt_moon_pull`/`moon_clarity_instance_value`,
+  `moon_sensitivity.reconcile_moon_pull` (control window: `moon_control` check →
+  forced shift + shared Berserk) + `reconcile_cani_unease` (umbrella flavor state),
+  `moon_provisioning.ensure_lycan_battle_form` (lazy battle-form provisioning),
+  `tasks.moon_reconcile_tick` (`species.moon_reconcile` cron), factories
+  `ensure_moon_bound_distinction`/`ensure_moonlit_unease_condition`; seeded content in
+  `_seed_moon_content` ("The Wolf's Fury" grant); Berserk production seed + Restore-to-Sense
+  removal effect in `world/conditions/berserk_content.py`; compulsion in
+  `world/combat/berserk_compulsion.py` (auto-attack fallback, disengage refusal,
+  out-of-combat rampage); PLACEHOLDER constants in `moon_constants.py`.
 - **Key Methods:** `Species.get_stat_bonuses_dict()`, `Species.is_subspecies`
 - **Integrates with:** character_creation (Beginnings.allowed_species, CG points
   breakdown), forms (physical traits — per-species palettes + `is_required`

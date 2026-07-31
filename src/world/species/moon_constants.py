@@ -57,6 +57,10 @@ MOON_BOUND_SLUG = "moon-bound"
 # --- Species gift (named by ApostateCD 2026-07-31; TehomCD may rename) ---
 WOLFS_FURY_GIFT_NAME = "The Wolf's Fury"
 
+# --- Cani unease (ruled 2026-07-31: the Cani umbrella carries it) ---
+CANI_SPECIES_NAME = "Cani"
+MOONLIT_UNEASE_NAME = "Moonlit Unease"
+
 # --- Check content (config rows named by code, ADR-0171) ---
 MOON_CONTROL_CHECK_NAME = "moon_control"
 MOON_CONTROL_WILLPOWER_WEIGHT = "1.00"

@@ -89,9 +89,16 @@ def moon_reconcile_tick() -> None:
     ``reconcile_moon_pull`` — the sweep is deliberately dumb. Volume is
     proportional to moon-bound PCs, not the grid.
     """
+    from world.character_sheets.models import CharacterSheet  # noqa: PLC0415
     from world.distinctions.models import CharacterDistinction  # noqa: PLC0415
-    from world.species.moon_constants import MOON_BOUND_TAG  # noqa: PLC0415
-    from world.species.moon_sensitivity import reconcile_moon_pull_safely  # noqa: PLC0415
+    from world.species.moon_constants import (  # noqa: PLC0415
+        CANI_SPECIES_NAME,
+        MOON_BOUND_TAG,
+    )
+    from world.species.moon_sensitivity import (  # noqa: PLC0415
+        reconcile_cani_unease_safely,
+        reconcile_moon_pull_safely,
+    )
 
     seen: set[int] = set()
     holder_rows = CharacterDistinction.objects.filter(
@@ -103,6 +110,17 @@ def moon_reconcile_tick() -> None:
             continue
         seen.add(character.pk)
         reconcile_moon_pull_safely(character)
+    # Cani unease (ruled 2026-07-31): the umbrella subspecies feels the open
+    # night moon — a flavor condition + one-time message, applied/removed here.
+    cani_sheets = CharacterSheet.objects.filter(
+        species__name=CANI_SPECIES_NAME,
+    ) | CharacterSheet.objects.filter(species__parent__name=CANI_SPECIES_NAME)
+    for sheet in cani_sheets:
+        character = sheet.character
+        if character is None or character.pk in seen:
+            continue
+        seen.add(character.pk)
+        reconcile_cani_unease_safely(character)
 
 
 def register_all_tasks() -> None:
