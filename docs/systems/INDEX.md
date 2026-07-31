@@ -1885,7 +1885,9 @@ GM at a given level may author (#2000, ADR-0097).
   three catalog-only Actions in `actions/definitions/gm_adjudication.py`:
   `InvokeCatalogCheckAction` (key `gm_invoke_check` — invokes an authored `CheckType` at a
   `DifficultyChoice` band via `perform_check`, plus a `find`/list catalog-search mode; never an
-  integer difficulty or a consequence-pool reference), `GMAwardAction` (key
+  integer difficulty or a consequence-pool reference; #2857: gated on
+  `MinimumGMLevelPrerequisite(GMLevel.SENIOR)` — a staff/senior stopgap; JUNIOR/STARTING
+  player GMs are funneled to `SetSituationAction`), `GMAwardAction` (key
   `gm_award_progression` — `award_xp`/`award_development_points` with
   `ProgressionReason.GM_AWARD`, gated additionally on `MinimumGMLevelPrerequisite(GMLevel
   .JUNIOR)`; `award_type="favor_token"` (#2428) mints a Golden Hare from an org via
