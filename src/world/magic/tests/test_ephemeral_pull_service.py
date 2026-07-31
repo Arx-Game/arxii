@@ -3,6 +3,7 @@
 from django.test import TestCase, override_settings
 
 from world.conditions.factories import CapabilityTypeFactory
+from world.conditions.services import expire_scene_scoped_conditions
 from world.magic.constants import EffectKind
 from world.magic.factories import (
     CharacterResonanceFactory,
@@ -123,6 +124,51 @@ class ApplyEphemeralPullCapabilityGrantsTest(TestCase):
             EphemeralPullCapabilityGrant.objects.filter(character_sheet=sheet).count(), 1
         )
         instance.delete()
+        self.assertEqual(
+            EphemeralPullCapabilityGrant.objects.filter(character_sheet=sheet).count(), 0
+        )
+
+
+class EphemeralPullCleanupTest(TestCase):
+    """Scene-scoped cleanup removes Thread Surge + sidecar (#2840)."""
+
+    def _setup_with_grant(self):
+        from world.character_sheets.factories import CharacterSheetFactory
+
+        sheet = CharacterSheetFactory()
+        resonance = ResonanceFactory()
+        CharacterResonanceFactory(
+            character_sheet=sheet,
+            resonance=resonance,
+            balance=10,
+            lifetime_earned=10,
+        )
+        cap = CapabilityTypeFactory()
+        thread = ThreadFactory(owner=sheet, resonance=resonance, level=10)
+        ThreadPullEffectFactory(
+            target_kind=thread.target_kind,
+            resonance=resonance,
+            tier=0,
+            min_thread_level=0,
+            effect_kind=EffectKind.CAPABILITY_GRANT,
+            flat_bonus_amount=None,
+            capability_grant=cap,
+            capability_grant_value=1,
+        )
+        resolved = resolve_pull_effects([thread], tier=1, in_combat=False, character_sheet=sheet)
+        instance = apply_ephemeral_pull_capability_grants(sheet, resolved)
+        return sheet, cap, instance
+
+    @override_settings(SEED_SAMPLE_CONTENT=True)
+    def test_expire_scene_scoped_conditions_removes_sidecar(self):
+        """expire_scene_scoped_conditions removes the condition + CASCADE-deletes sidecar."""
+        sheet, _cap, _instance = self._setup_with_grant()
+        self.assertEqual(
+            EphemeralPullCapabilityGrant.objects.filter(character_sheet=sheet).count(), 1
+        )
+
+        expire_scene_scoped_conditions([sheet.character])
+
         self.assertEqual(
             EphemeralPullCapabilityGrant.objects.filter(character_sheet=sheet).count(), 0
         )
