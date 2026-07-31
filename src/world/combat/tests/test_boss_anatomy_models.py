@@ -118,3 +118,28 @@ class CombatOpponentRuntimeFieldsTests(TestCase):
         self.assertEqual(opp.vulnerability_rounds_remaining, 0)
         self.assertEqual(opp.vulnerability_rounds, 0)
         self.assertEqual(opp.vulnerability_intensity_bonus, 0)
+
+
+class CreatureTemplateNaturalKeyTests(TestCase):
+    """CreatureTemplate natural key round-trip for content pipeline (#2847)."""
+
+    def test_natural_key_is_name(self):
+        template = CreatureTemplate.objects.create(name="Test Boss", tier=OpponentTier.BOSS)
+        self.assertEqual(template.natural_key(), ("Test Boss",))
+
+    def test_round_trip(self):
+        template = CreatureTemplate.objects.create(name="Round Trip Boss", tier=OpponentTier.BOSS)
+        self.assertEqual(
+            CreatureTemplate.objects.get_by_natural_key(*template.natural_key()).pk,
+            template.pk,
+        )
+
+    def test_serializes_with_natural_keys(self):
+        from django.core import serializers
+
+        template = CreatureTemplate.objects.create(name="Serialize Boss", tier=OpponentTier.BOSS)
+        data = serializers.serialize(
+            "json", [template], use_natural_foreign_keys=True, use_natural_primary_keys=True
+        )
+        self.assertIn('"name": "Serialize Boss"', data)
+        self.assertNotIn(f'"pk": {template.pk}', data)

@@ -2430,14 +2430,22 @@ class OpponentTierTemplate(SharedMemoryModel):
         return f"OpponentTierTemplate({self.tier})"
 
 
-class CreatureTemplate(SharedMemoryModel):
+class CreatureTemplateManager(NaturalKeyManager):
+    """Manager for CreatureTemplate with natural key support."""
+
+
+class CreatureTemplate(NaturalKeyMixin, SharedMemoryModel):
     """Bestiary entry for a spawnable creature (#2016).
 
     Thin — does not duplicate stat blocks (those come from OpponentTierTemplate
     via the scaling formula). Authored phase data lives on CreaturePhaseTemplate.
+
+    Lore-repo content (natural key ``name``, registered in
+    ``core_management.content_export.CONTENT_MODELS``) — authored in the
+    companion lore repo, never seeded in arxii.
     """
 
-    name = models.CharField(max_length=200)
+    name = models.CharField(max_length=200, unique=True)
     description = models.TextField(blank=True)
     tier = models.CharField(max_length=20, choices=OpponentTier.choices)
     threat_pool = models.ForeignKey(
@@ -2458,8 +2466,13 @@ class CreatureTemplate(SharedMemoryModel):
         help_text="Override probing threshold; null = use tier template scaling.",
     )
 
+    objects = CreatureTemplateManager()
+
     class Meta:
         ordering = ["name"]
+
+    class NaturalKeyConfig:
+        fields = ["name"]
 
     def __str__(self) -> str:
         return self.name
