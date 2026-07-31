@@ -9,7 +9,7 @@ from django.test import TestCase
 
 from world.checks.services import chart_has_success_outcomes
 from world.seeds.checks import seed_check_resolution_tables
-from world.traits.models import CheckRank, ResultChart, ResultChartOutcome
+from world.traits.models import CheckOutcome, CheckRank, ResultChart, ResultChartOutcome
 
 
 def _success_share(roller_points: int, target_difficulty: int) -> int:
@@ -96,3 +96,84 @@ class ChartDirectionTests(TestCase):
         for rank_difference in (-5, -6, -50):
             with self.subTest(rank_difference=rank_difference):
                 self.assertTrue(chart_has_success_outcomes(rank_difference))
+
+    def test_botch_bands_present_only_on_negative_charts(self):
+        """Critical Failure bands exist at rank_diff -1 through -6, not at 0+."""
+        botch_outcome = CheckOutcome.objects.get(name="Critical Failure")
+        for rank_diff in range(-6, 0):
+            chart = ResultChart.get_chart_for_difference(rank_diff)
+            assert chart is not None
+            has_botch = ResultChartOutcome.objects.filter(
+                chart=chart, outcome=botch_outcome
+            ).exists()
+            self.assertTrue(
+                has_botch,
+                f"Chart at rank_diff={rank_diff} should have a Critical Failure band",
+            )
+        for rank_diff in range(7):
+            chart = ResultChart.get_chart_for_difference(rank_diff)
+            assert chart is not None
+            has_botch = ResultChartOutcome.objects.filter(
+                chart=chart, outcome=botch_outcome
+            ).exists()
+            self.assertFalse(
+                has_botch,
+                f"Chart at rank_diff={rank_diff} should NOT have a Critical Failure band",
+            )
+
+    def test_botch_share_monotonically_non_increasing(self):
+        """Botch share decays from worst chart to EVEN (10% -> 7% -> 5% -> 3% -> 2% -> 2% -> 0%)."""
+        botch_outcome = CheckOutcome.objects.get(name="Critical Failure")
+
+        def botch_share(rank_difference: int) -> int:
+            chart = ResultChart.get_chart_for_difference(rank_difference)
+            rows = ResultChartOutcome.objects.filter(chart=chart, outcome=botch_outcome)
+            return sum(row.max_roll - row.min_roll + 1 for row in rows)
+
+        shares = [botch_share(rd) for rd in range(-6, 1)]
+        self.assertEqual(shares, sorted(shares, reverse=True))
+        # Even footing and above: zero botch
+        self.assertEqual(botch_share(0), 0)
+
+    def test_all_charts_have_distinct_bands(self):
+        """No two rank_differences share the same set of outcome bands (#2760).
+
+        Today -4/-3 share identical bands, +1/+2 share, +3/+4 share, +5/+6 share.
+        After this change every chart must have distinct bands.
+        """
+        band_signatures: dict[frozenset, int] = {}
+        for rank_diff in range(-6, 7):
+            chart = ResultChart.get_chart_for_difference(rank_diff)
+            assert chart is not None
+            rows = ResultChartOutcome.objects.filter(chart=chart).select_related("outcome")
+            sig = frozenset((row.outcome.name, row.min_roll, row.max_roll) for row in rows)
+            self.assertNotIn(
+                sig,
+                band_signatures,
+                f"Chart at rank_diff={rank_diff} duplicates rank_diff={band_signatures.get(sig)}",
+            )
+            band_signatures[sig] = rank_diff
+
+    def test_partial_success_gradient(self):
+        """Partial Success bands exist on charts from -6 through +5, not on +6."""
+        partial_outcome = CheckOutcome.objects.get(name="Partial Success")
+        for rank_diff in range(-6, 6):
+            chart = ResultChart.get_chart_for_difference(rank_diff)
+            assert chart is not None
+            has_partial = ResultChartOutcome.objects.filter(
+                chart=chart, outcome=partial_outcome
+            ).exists()
+            self.assertTrue(
+                has_partial,
+                f"Chart at rank_diff={rank_diff} should have a Partial Success band",
+            )
+        # +6 (Inevitable) has no Partial — pure win
+        chart = ResultChart.get_chart_for_difference(6)
+        assert chart is not None
+        has_partial = ResultChartOutcome.objects.filter(
+            chart=chart, outcome=partial_outcome
+        ).exists()
+        self.assertFalse(
+            has_partial,
+            "Chart at rank_diff=+6 should NOT have a Partial Success band",
+        )
