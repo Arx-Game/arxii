@@ -101,6 +101,12 @@ def _seed_social() -> None:
     seed_social_check_content()
 
 
+def _seed_provisioning() -> None:
+    from world.seeds.provisioning_checks import seed_provisioning_content  # noqa: PLC0415
+
+    seed_provisioning_content()
+
+
 def _seed_investigation() -> None:
     from world.seeds.investigation_checks import seed_investigation_check_content  # noqa: PLC0415
 
@@ -407,6 +413,7 @@ CLUSTER_SEEDERS: dict[str, Callable[[], None]] = {
     # Persuasion/Performance skills + their specializations (#1688). After "checks" so the
     # resolution spine exists; authoritative, so it corrects the placeholder stat+stat seed.
     "social": _seed_social,
+    "provisioning": _seed_provisioning,
     # Investigation: the Search check (perception + Investigation) + the Investigation skill.
     # After "checks" for the resolution spine; authoritative (#1705).
     "investigation": _seed_investigation,

@@ -18,6 +18,9 @@ _EVENT_ERROR_MESSAGES: dict[str, str] = {
     "RSVP_NOT_PERSONA": "Only persona invitations can be RSVP'd.",
     "RSVP_NOT_YOURS": "That invitation is not yours to respond to.",
     "RSVP_CLOSED": "Cannot RSVP to an invitation for an active or finished event.",
+    "CATER_INVALID": "Food can only be set out at a scheduled or active event.",
+    "CATER_NOT_CONSUMABLE": "Only food and drink can be set out at an event.",
+    "CATER_NO_PERSONA": "You must have a persona to contribute to an event's table.",
 }
 
 
@@ -37,6 +40,9 @@ class EventError(Exception):
     COMPLETE_INVALID = _EVENT_ERROR_MESSAGES["COMPLETE_INVALID"]
     UPDATE_LOCKED = _EVENT_ERROR_MESSAGES["UPDATE_LOCKED"]
     NO_PERSONA = _EVENT_ERROR_MESSAGES["NO_PERSONA"]
+    CATER_INVALID = _EVENT_ERROR_MESSAGES["CATER_INVALID"]
+    CATER_NOT_CONSUMABLE = _EVENT_ERROR_MESSAGES["CATER_NOT_CONSUMABLE"]
+    CATER_NO_PERSONA = _EVENT_ERROR_MESSAGES["CATER_NO_PERSONA"]
     INVITE_ACTIVE = _EVENT_ERROR_MESSAGES["INVITE_ACTIVE"]
     INVITE_MODIFY_ACTIVE = _EVENT_ERROR_MESSAGES["INVITE_MODIFY_ACTIVE"]
     INVITE_DUPLICATE = _EVENT_ERROR_MESSAGES["INVITE_DUPLICATE"]

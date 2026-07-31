@@ -147,6 +147,7 @@ from actions.definitions.endorsements import (
 from actions.definitions.estates import WillReadingAction
 from actions.definitions.events import (
     CancelEventAction,
+    CaterEventAction,
     CompleteEventAction,
     CreateEventAction,
     InviteToEventAction,
@@ -672,6 +673,7 @@ _ALL_ACTIONS: list[Action] = [
     CancelEventAction(),
     InviteToEventAction(),
     RespondInvitationAction(),
+    CaterEventAction(),
     ManageTrainingAction(),
     PurchaseUnlockAction(),
     ClaimKudosAction(),

@@ -1715,6 +1715,8 @@
   - mentor_bonds_as_sidekick <- covenants.MentorBond
   - court_pacts <- covenants.CourtPact
   - vitals <- vitals.CharacterVitals
+  - carrying_body <- vitals.CarriedBody
+  - carried_by <- vitals.CarriedBody
   - avatar_of_being <- worship.WorshippedBeing
   - worship_grants <- worship.WorshipGrant
   - devotion_standings <- worship.DevotionStanding
@@ -2950,6 +2952,7 @@
 ### Service Functions
 - `add_social_consent_blacklist(owner_tenure: 'RosterTenure', blocked_tenure: 'RosterTenure', category: 'SocialConsentCategory') -> 'SocialConsentBlacklist' — Bar *blocked_tenure* from targeting *owner_tenure* in *category* (#1698).`
 - `add_social_consent_whitelist(owner_tenure: 'RosterTenure', allowed_tenure: 'RosterTenure', category: 'SocialConsentCategory') -> 'SocialConsentWhitelist'`
+- `body_handling_category() -> 'SocialConsentCategory' — Lazy seeded row for the body-handling gate (#2852) — default-deny.`
 - `consent_blocks_targeting(*, owner_tenure: 'RosterTenure', category: 'SocialConsentCategory | None', actor_tenure: 'RosterTenure | None') -> 'bool' — True if *owner_tenure*'s consent excludes *actor_tenure* for *category* (#1909/#2170).`
 - `decide_consent_block(rule_mode: 'str | None', *, actor_present: 'bool', whitelisted: 'bool', blacklisted: 'bool', is_friend: 'bool', is_rival: 'bool') -> 'bool' — Per-category consent decision, given a pref exists with the master switch on.`
 - `effective_consent_mode(pref: 'SocialConsentPreference | None', category: 'SocialConsentCategory') -> 'str' — The ConsentMode governing *(pref, category)* after tree inheritance (#2170).`
@@ -3521,6 +3524,7 @@
   - hosts <- events.EventHost
   - invitations <- events.EventInvitation
   - modification <- events.EventModification
+  - catering <- events.EventCatering
   - ceremonies <- ceremonies.Ceremony
 
 ### EventHost
@@ -3540,9 +3544,17 @@
 **Foreign Keys:**
   - event -> events.Event [OneToOne]
 
+### EventCatering
+**Foreign Keys:**
+  - event -> events.Event [FK]
+  - item_template -> items.ItemTemplate [FK]
+  - quality_tier -> items.QualityTier [FK] (nullable)
+  - contributed_by -> scenes.Persona [FK]
+
 ### Service Functions
 - `add_host(event: world.events.models.Event, persona: world.scenes.models.Persona, *, is_primary: bool = False) -> world.events.models.EventHost — Add a host to an event.`
 - `cancel_event(event: world.events.models.Event) -> world.events.models.Event — Cancel an event from DRAFT or SCHEDULED status.`
+- `cater_event(event: world.events.models.Event, contributor: 'ObjectDB', item_instance: 'ItemInstance') -> world.events.models.EventCatering — Set a consumable out at *event*, consuming it (#2852 — the sink).`
 - `complete_event(event: world.events.models.Event) -> world.events.models.Event — Transition an event from ACTIVE to COMPLETED, finish linked scenes, and revert room.`
 - `create_event(*, name: str, location_id: int, scheduled_real_time: datetime.datetime, host_persona: world.scenes.models.Persona, description: str = '', is_public: bool = True, scheduled_ic_time: datetime.datetime | None = None, time_phase: str = TimePhase.DAY, status: str = EventStatus.DRAFT) -> world.events.models.Event — Create an event with a primary host.`
 - `derive_ic_time_from_real(real_time: datetime.datetime) -> datetime.datetime | None — Derive an IC datetime from a real datetime using the game clock.`
@@ -3578,6 +3590,7 @@
 - `get_full_status(character_sheet: 'CharacterSheet', *, pool: 'FatiguePool | None') -> 'dict' — Get fatigue status for all three categories in one pass.`
 - `get_or_create_fatigue_pool(character_sheet: 'CharacterSheet') -> 'FatiguePool' — Get or create a FatiguePool for a character sheet.`
 - `perform_check_with_modifiers(character: 'ObjectDB', check_type: 'CheckType', target_difficulty: int = 0, extra_modifiers: int = 0, effort_level: str | None = None, fatigue_penalty: int = 0, specialization: 'Specialization | None' = None, *, situation_ctx: 'SituationContext | None' = None, level_override: int | None = None, scene: 'Scene | None' = None, extra_contributions: 'list[ModifierContribution] | None' = None, skip_fashion: bool = False) -> world.checks.types.CheckResult — Run a check with all character modifiers gathered automatically.`
+- `recover_fatigue(character_sheet: 'CharacterSheet', category: 'str', amount: 'int') -> 'int' — Reduce one fatigue pool by up to *amount*, floored at zero (#2852).`
 - `reset_fatigue(character_sheet: 'CharacterSheet') -> 'None' — Reset all fatigue pools to 0.`
 - `resolve_fatigue_collapse(character_sheet: 'CharacterSheet', category: 'str') -> 'FatigueCollapseResult' — Run the fatigue collapse sequence for one category and apply strain damage.`
 - `rest(character_sheet: 'CharacterSheet') -> 'RestResult' — Spend AP to rest, gaining well_rested for the next dawn reset.`
@@ -4021,6 +4034,7 @@
   - itemfacet_attachments <- items.ItemFacet
   - itemstyle_attachments <- items.ItemStyle
   - crafted_item_recipes <- items.CraftedItemRecipe
+  - catering_contributions <- events.EventCatering
 
 ### MaterialCategory
 **Pointed to by:**
@@ -4059,6 +4073,7 @@
   - garment_mitigations <- items.GarmentMitigation
   - gem_details <- items.GemDetails
   - stock_listings <- items.StockListing
+  - catering_contributions <- events.EventCatering
   - lore_effects <- buildings.MaterialLoreEffect
   - building_uses <- buildings.BuildingMaterial
 
@@ -7611,6 +7626,7 @@
   - hosted_events <- events.EventHost
   - event_invitations <- events.EventInvitation
   - invitations_sent <- events.EventInvitation
+  - catering_contributions <- events.EventCatering
   - ceremonies_officiated <- ceremonies.Ceremony
   - ceremony_offerings <- ceremonies.CeremonyOffering
   - ceremony_speeches <- ceremonies.CeremonySpeech
@@ -9155,6 +9171,11 @@
 **Foreign Keys:**
   - condition_instance -> conditions.ConditionInstance [OneToOne]
 
+### CarriedBody
+**Foreign Keys:**
+  - carrier -> character_sheets.CharacterSheet [OneToOne]
+  - carried -> character_sheets.CharacterSheet [OneToOne]
+
 ### Service Functions
 - `advance_bleed_out(character_sheet: 'CharacterSheet | None') -> 'bool' — Advance staged bleed-out conditions toward death.`
 - `advance_surrounded(character_sheet: 'CharacterSheet | None', *, battle: 'Battle') -> 'bool' — Advance staged Surrounded (battle acute-peril) conditions toward death (#1733).`
@@ -9203,6 +9224,8 @@
 **Pointed to by:**
   - conjuring_techniques <- magic.Technique
   - exposures <- weather.WeatherTypeExposure
+  - transitions_out <- weather.WeatherTransition
+  - transitions_in <- weather.WeatherTransition
   - shelters <- weather.WeatherTypeShelter
   - emits <- weather.WeatherEmit
   - active_in_regions <- weather.RegionWeatherState
@@ -9215,6 +9238,11 @@
 ### WeatherTypeExposure
 **Foreign Keys:**
   - weather_type -> weather.WeatherType [FK]
+
+### WeatherTransition
+**Foreign Keys:**
+  - from_type -> weather.WeatherType [FK]
+  - to_type -> weather.WeatherType [FK]
 
 ### WeatherTypeShelter
 **Foreign Keys:**
