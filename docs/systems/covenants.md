@@ -299,6 +299,8 @@ discipline" section for the no-double-announce proof.
   `CovenantRole.granted_gifts` M2M to `magic.Gift`. Carries
   `unlock_thread_level` — the COVENANT_ROLE thread level at which the gift's
   techniques become available while engaged (0 = always while engaged).
+  Lore-repo content (NK `["covenant_role", "gift"]`,
+  `covenants.covenantrolegiftgrant` in `CONTENT_MODELS`, #2847).
 - **`CovenantRole.granted_capabilities`** (#2022) — M2M to
   `conditions.CapabilityType`. Read directly by `passive_capability_grants()`
   in `handlers.py` alongside the existing `ThreadPullEffect`-based capability
