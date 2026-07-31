@@ -59,6 +59,20 @@ class MarketStall(SharedMemoryModel):
     prestige retail tier with upkeep and cuts — are buildings, not stalls.
     """
 
+    class StallKind(models.TextChoices):
+        SQUARE = "square", "Market Stall"
+        FENCE = "fence", "Fence"
+
+    stall_kind = models.CharField(
+        max_length=10,
+        choices=StallKind.choices,
+        default=StallKind.SQUARE,
+        help_text=(
+            "FENCE (#2862): an NPC buyer of last resort — pays a cut rate, asks "
+            "no questions about provenance, and dealing vice through it mints "
+            "heat weighted by the local AreaLaw."
+        ),
+    )
     square = models.ForeignKey(
         MarketSquare,
         on_delete=models.CASCADE,
@@ -254,12 +268,16 @@ class MarketSale(SharedMemoryModel):
         STOCK = "stock", "NPC Stock"
         WARE = "ware", "Ware"
         SERVICE = "service", "Crafting Service"
+        FENCE = "fence", "Fenced Goods"
 
     kind = models.CharField(max_length=10, choices=SaleKind.choices)
     buyer_persona = models.ForeignKey(
         _PERSONA_FK,
         on_delete=models.PROTECT,
         related_name="market_purchases",
+        null=True,
+        blank=True,
+        help_text="Null for FENCE sales — the buyer is the NPC fence (#2862).",
     )
     seller_persona = models.ForeignKey(
         _PERSONA_FK,

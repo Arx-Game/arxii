@@ -393,6 +393,7 @@ class ActionRegistryTests(TestCase):
             "start_defense_installation",
             "fund_room_ward",
             "market_buy_stock",
+            "market_sell_fence",
             "market_buy_ware",
             "market_list_ware",
             "market_finish_ware",

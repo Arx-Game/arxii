@@ -249,6 +249,7 @@ from actions.definitions.market import (
     BuyWareAction,
     FinishWareAction,
     ListWareAction,
+    SellToFenceAction,
     ServiceCraftAction,
     SetServiceOfferAction,
 )
@@ -745,6 +746,7 @@ _ALL_ACTIONS: list[Action] = [
     StartDefenseInstallationAction(),
     FundRoomWardAction(),
     BuyStockAction(),
+    SellToFenceAction(),
     BuyWareAction(),
     ListWareAction(),
     FinishWareAction(),

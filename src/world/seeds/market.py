@@ -11,6 +11,7 @@ from __future__ import annotations
 MARKET_SQUARE_NAME = "City Center Market PLACEHOLDER"
 NPC_STALL_NAME = "Provisioners' Row PLACEHOLDER"
 PC_STALL_NAME = "Open Crafters' Stall PLACEHOLDER"
+FENCE_STALL_NAME = "The Back Door PLACEHOLDER"
 
 _NPC_STOCK = (
     ("Bolt of Plain Cloth PLACEHOLDER", 50),
@@ -44,6 +45,13 @@ def seed_market_demo() -> None:
 
     npc_stall, _ = MarketStall.objects.get_or_create(square=square, name=NPC_STALL_NAME)
     MarketStall.objects.get_or_create(square=square, name=PC_STALL_NAME)
+    # #2862 — the fence: the buy-anything NPC counter. PLACEHOLDER placement;
+    # real fences belong in crime neighborhoods (content pass on #2862).
+    MarketStall.objects.get_or_create(
+        square=square,
+        name=FENCE_STALL_NAME,
+        defaults={"stall_kind": MarketStall.StallKind.FENCE},
+    )
 
     for template_name, price in _NPC_STOCK:
         template, _ = ItemTemplate.objects.get_or_create(
