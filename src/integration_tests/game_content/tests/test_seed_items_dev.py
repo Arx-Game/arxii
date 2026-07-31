@@ -33,8 +33,9 @@ class SeedItemsDevCreationTests(TestCase):
 
     def test_all_templates_in_db(self) -> None:
         # 10 catalog templates + the starter Lance (#1843, seeded by
-        # seed_lance_item outside the archetype catalog dict).
-        self.assertEqual(ItemTemplate.objects.count(), 11)
+        # seed_lance_item outside the archetype catalog dict) + the 6
+        # consumable food/drink templates (#2852, seed_consumable_catalog).
+        self.assertEqual(ItemTemplate.objects.count(), 17)
 
     def test_template_slots_created(self) -> None:
         """At least one slot per template; total > 10 (multi-slot templates exist)."""
