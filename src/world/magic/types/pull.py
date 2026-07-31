@@ -52,10 +52,11 @@ class PullActionContext:
 class ResolvedPullEffect:
     """One resolved pull effect (per-thread × per-tier; Spec A §5.4 step 3).
 
-    ``inactive`` flags VITAL_BONUS rows in ephemeral context — the cost is
-    still paid in full but ``scaled_value`` is zeroed since there is no
-    combat consumer for the bonus. ``inactive_reason`` carries the player-
-    facing explanation.
+    ``inactive`` flags VITAL_BONUS and RESISTANCE rows in ephemeral context —
+    the cost is still paid in full but ``scaled_value`` is zeroed since there
+    is no combat consumer for the bonus. CAPABILITY_GRANT is active in
+    non-combat context (#2840). ``inactive_reason`` carries the player-facing
+    explanation.
     """
 
     kind: str

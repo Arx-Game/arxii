@@ -790,9 +790,11 @@ def resolve_pull_effects(  # noqa: PLR0913  — thread × effect_tier resolver; 
 ) -> list[ResolvedPullEffect]:
     """Resolve every (thread × effect_tier 0..tier) pair into ResolvedPullEffect rows.
 
-    Implements Spec A §5.4 step 3. VITAL_BONUS rows in non-combat (ephemeral)
-    context are flagged ``inactive`` with ``scaled_value=0`` per spec §7.4
-    lines 1981–1989; the caller still pays full cost.
+    Implements Spec A §5.4 step 3. VITAL_BONUS and RESISTANCE rows in non-combat
+    (ephemeral) context are flagged ``inactive`` with ``scaled_value=0`` per spec
+    §7.4 lines 1981–1989; the caller still pays full cost. CAPABILITY_GRANT is
+    active in non-combat context (#2840) — its frozen curved value is persisted
+    via the Thread Surge condition + EphemeralPullCapabilityGrant sidecar.
 
     ``target`` is the live target this pull's action is directed at (#1831);
     ``None`` for ephemeral / untargeted pulls. Fed through ``apply_target_modulation``
@@ -884,15 +886,17 @@ def resolve_pull_effects(  # noqa: PLR0913  — thread × effect_tier resolver; 
                     base_scaled = apply_target_modulation(t, target, row, base_scaled)
 
                 # VITAL_BONUS, RESISTANCE, and CAPABILITY_GRANT are combat-only
-                # consumers: their snapshot lives on CombatPullResolvedEffect and
-                # is read on the combat path, so ephemeral (RP) pulls flag them
-                # inactive (cost still paid).
+                # VITAL_BONUS and RESISTANCE are combat-only consumers: their
+                # snapshot lives on CombatPullResolvedEffect and is read on the
+                # combat path, so ephemeral (RP) pulls flag them inactive (cost
+                # still paid). CAPABILITY_GRANT is now active in non-combat
+                # context — the frozen value is persisted via the Thread Surge
+                # condition + EphemeralPullCapabilityGrant sidecar (#2840).
                 inactive = (
                     row.effect_kind
                     in (
                         EffectKind.VITAL_BONUS,
                         EffectKind.RESISTANCE,
-                        EffectKind.CAPABILITY_GRANT,
                     )
                     and not in_combat
                 )
