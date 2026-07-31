@@ -632,6 +632,7 @@ def seeded_models_by_cluster() -> dict[str, list[type[Model]]]:
     from world.conditions.models import ConditionTemplate  # noqa: PLC0415
     from world.consent.models import SocialConsentCategory  # noqa: PLC0415
     from world.gm.models import GMLevelCap, GMRewardConfig, SituationKind  # noqa: PLC0415
+    from world.items.crafting.models import CraftingRecipe  # noqa: PLC0415
     from world.items.market.models import MarketSquare  # noqa: PLC0415
     from world.items.models import ItemTemplate, Style  # noqa: PLC0415
     from world.justice.models import CrimeKind  # noqa: PLC0415
@@ -676,6 +677,10 @@ def seeded_models_by_cluster() -> dict[str, list[type[Model]]]:
         # Social: seeds Persuasion/Performance skills + their specializations + the
         # stat+skill(+spec) social CheckType compositions (#1688).
         "social": [Specialization],
+        # Provisioning (#2852): the Cooking tradeskill + food/drink recipes + the
+        # first live QualityTier ladder. Skill/CheckType rows counted under "checks";
+        # the recipe rows are the representative content.
+        "provisioning": [CraftingRecipe],
         # Investigation seeds the Search CheckType + Investigation skill (shared spine/skill
         # rows counted under "checks"); it still appears as a seeded cluster (#1705).
         "investigation": [],
