@@ -440,8 +440,10 @@ from actions.definitions.vault import (
     VaultAccessRemoveAction,
 )
 from actions.definitions.vitals import (
+    CarryBodyAction,
     GiveDeathKudosAction,
     RetireCharacterAction,
+    SetDownBodyAction,
     WakeAction,
 )
 from actions.definitions.voyages import (
@@ -829,6 +831,8 @@ _ALL_ACTIONS: list[Action] = [
     ClearRoomListenersAction(),
     # #2287 — death & unconsciousness core slice.
     WakeAction(),
+    CarryBodyAction(),
+    SetDownBodyAction(),
     # #2290 — dream realm.
     SleepAction(),
     DescendAction(),

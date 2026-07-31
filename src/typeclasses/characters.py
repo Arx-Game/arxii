@@ -578,6 +578,14 @@ class Character(ObjectParent, DefaultCharacter):
 
             run_safely("companion_follow_on_move", _companion_follow_on_move, actor=self)
 
+            # A carried unconscious body comes along (#2852).
+            def _carried_body_on_move() -> None:
+                from world.vitals.carry_services import carried_body_follow
+
+                carried_body_follow(self)
+
+            run_safely("carried_body_on_move", _carried_body_on_move, actor=self)
+
             # Guard detection (#2178) — post-arrival stealth check.
             run_safely(
                 "guard_detection_on_enter",

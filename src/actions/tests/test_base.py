@@ -474,6 +474,8 @@ class ActionRegistryTests(TestCase):
             "clear_room_listeners",
             # #2287 — death & unconsciousness core slice.
             "wake",
+            "carry_body",
+            "set_down_body",
             "retire",
             "death_kudos",
             # #2289 — ceremonies.
