@@ -1160,12 +1160,19 @@ class CovenantRoleDefenseProfile(NaturalKeyMixin, SharedMemoryModel):
         return f"{self.covenant_role.name}: {self.get_style_display()}"
 
 
-class CovenantRoleGiftGrant(SharedMemoryModel):
+class CovenantRoleGiftGrantManager(NaturalKeyManager):
+    """Manager for CovenantRoleGiftGrant with natural key support."""
+
+
+class CovenantRoleGiftGrant(NaturalKeyMixin, SharedMemoryModel):
     """Through model for CovenantRole.granted_gifts (#2022).
 
     Carries ``unlock_thread_level`` — the COVENANT_ROLE thread level at which
     the gift's techniques become available while engaged. 0 = always available
     while engaged.
+
+    Lore-repo content (natural key ``[covenant_role, gift]``, registered in
+    ``core_management.content_export.CONTENT_MODELS``).
     """
 
     covenant_role = models.ForeignKey(
@@ -1186,6 +1193,8 @@ class CovenantRoleGiftGrant(SharedMemoryModel):
         ),
     )
 
+    objects = CovenantRoleGiftGrantManager()
+
     class Meta:
         constraints = [
             models.UniqueConstraint(
@@ -1193,6 +1202,10 @@ class CovenantRoleGiftGrant(SharedMemoryModel):
                 name="covenant_role_gift_grant_unique",
             ),
         ]
+
+    class NaturalKeyConfig:
+        fields = ["covenant_role", "gift"]
+        dependencies = [COVENANT_ROLE_MODEL, "magic.Gift"]
 
     def __str__(self) -> str:
         return f"{self.covenant_role.name} → {self.gift.name} (≥L{self.unlock_thread_level})"
