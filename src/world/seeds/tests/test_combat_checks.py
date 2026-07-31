@@ -31,7 +31,7 @@ class CombatCheckSeedTests(TestCase):
         )
 
         seed_combat_check_content()
-        ct = CheckType.objects.get(name="Melee Attack")
+        ct = CheckType.objects.get(name="Melee Combat")
         trait_names = {t.trait.name for t in ct.traits.all()}  # type: ignore[attr-defined]
         self.assertEqual(trait_names, {"strength", "Melee Combat"})
         spec_names = {
@@ -45,21 +45,13 @@ class CombatCheckSeedTests(TestCase):
 
         seed_combat_check_content()
         seed_combat_check_content()  # re-run
-        self.assertEqual(CheckType.objects.filter(name="Melee Attack").count(), 1)
+        self.assertEqual(CheckType.objects.filter(name="Melee Combat").count(), 1)
 
-    def test_melee_defense_composition(self):
+    def test_melee_combat_is_single_check(self):
+        """#2757: Melee Attack + Melee Defense merged into one 'Melee Combat' CheckType."""
         from world.checks.models import CheckType
 
         seed_combat_check_content()
-        ct = CheckType.objects.get(name="Melee Defense")
-        trait_names = {t.trait.name for t in ct.traits.all()}
-        self.assertEqual(trait_names, {"agility", "Melee Combat"})
-        spec_names = {s.specialization.name for s in ct.specializations.all()}
-        self.assertEqual(spec_names, {"Small Weapons", "Medium Weapons", "Heavy Weapons"})
-
-    def test_melee_defense_idempotent(self):
-        from world.checks.models import CheckType
-
-        seed_combat_check_content()
-        seed_combat_check_content()
-        self.assertEqual(CheckType.objects.filter(name="Melee Defense").count(), 1)
+        # No separate Melee Defense CheckType exists anymore
+        self.assertFalse(CheckType.objects.filter(name="Melee Defense").exists())
+        self.assertEqual(CheckType.objects.filter(name="Melee Combat").count(), 1)

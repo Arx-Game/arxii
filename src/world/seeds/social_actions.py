@@ -119,7 +119,7 @@ _SMITTEN_EXPLOITABLE_TIERS = 2
 _SMITTEN_DEFENSE_PENALTY = -10
 _SMITTEN_DAMAGE_TYPE = "Force"
 _SMITTEN_DAMAGE_BONUS_PCT = 100
-_MELEE_DEFENSE_CHECK_NAME = "Melee Defense"
+_MELEE_DEFENSE_CHECK_NAME = "Melee Combat"  # #2757: merged with Melee Attack
 
 # Automatic affection shifts on success (#1697) — the first instances of the generic
 # valence-signed SHIFT_AFFECTION family. PLACEHOLDER magnitudes (#1699 scale: bump 1,
