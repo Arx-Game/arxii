@@ -478,6 +478,9 @@ class CombatTechniqueResolver:
             if focused is not None
             else 0
         )
+        from world.combat.stat_mapping import weapon_stat_override  # noqa: PLC0415
+
+        stat_override = weapon_stat_override(character)
         return check_fn(
             character,
             self.offense_check_type,
@@ -485,6 +488,7 @@ class CombatTechniqueResolver:
             extra_modifiers=extra_modifiers,
             fatigue_penalty=penalty,
             situation_ctx=situation_ctx,
+            stat_override=stat_override,
         )
 
     def _sum_intensity_bump_pulls(self) -> int:
@@ -6427,6 +6431,8 @@ def resolve_npc_attack(
     # aspect match on this defense check) that sets the difficulty -- the
     # inverse of the offense/penetration sites, where the difficulty is
     # sourced from the side being acted upon.
+    from world.combat.stat_mapping import DEFENSE_STAT  # noqa: PLC0415
+
     result: CheckResult = perform_check_fn(
         character,
         check_type,
@@ -6437,6 +6443,7 @@ def resolve_npc_attack(
         ),
         extra_modifiers=breakdown.total,
         situation_ctx=situation_ctx,
+        stat_override=DEFENSE_STAT,
     )
 
     multiplier = _damage_multiplier_for_success(result.success_level)
