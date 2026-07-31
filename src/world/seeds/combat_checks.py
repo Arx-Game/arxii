@@ -26,7 +26,7 @@ from decimal import Decimal
 # (specialization name) — weapon-class specs under Melee Combat.
 _WEAPON_SPECIALIZATIONS: list[str] = ["Small Weapons", "Medium Weapons", "Heavy Weapons"]
 
-_MELEE_ATTACK_CHECK_TYPE_NAME = "Melee Attack"
+_MELEE_COMBAT_CHECK_TYPE_NAME = "Melee Combat"
 _MELEE_SKILL_NAME = "Melee Combat"
 _MELEE_SKILL_TOOLTIP = "Fighting with melee weapons — the trained combat skill."
 
@@ -92,14 +92,18 @@ def ensure_weapon_specializations(skill) -> dict:
     return specs
 
 
-def ensure_melee_attack_check_type(skill, specs) -> object | None:
-    """Look up (or sample) the Melee Attack CheckType: strength + Melee Combat.
+def ensure_melee_combat_check_type(skill, specs) -> object | None:
+    """Look up (or sample) the Melee Combat CheckType: skill + default stat (strength).
 
     ``checks.checktype``/``checktypetrait`` are content-repo-owned (#2698) —
     returns ``None`` (logged by ``authored_or_sample``) when the category or
     the check type itself isn't authored. The skill's trait leg is skipped
     (not fatal) when ``skill`` is ``None`` — the CheckType may still be
     authored content the lore repo composes with its own trait rows.
+
+    The stat is situational (#2757): the calling system passes ``stat_override``
+    based on the equipped weapon. The default stat (strength) is used when no
+    override is given (GM ad-hoc, legacy callers).
     """
     from world.checks.models import (  # noqa: PLC0415
         CheckType,
@@ -114,8 +118,8 @@ def ensure_melee_attack_check_type(skill, specs) -> object | None:
         return None
     check_type = authored_or_sample(
         CheckType,
-        {"description": "A melee attack roll: strength + Melee Combat."},
-        name=_MELEE_ATTACK_CHECK_TYPE_NAME,
+        {"description": "A melee combat roll: skill + situational stat (default strength)."},
+        name=_MELEE_COMBAT_CHECK_TYPE_NAME,
         category=category,
     )
     if check_type is None:
@@ -131,57 +135,14 @@ def ensure_melee_attack_check_type(skill, specs) -> object | None:
         authored_or_sample(
             CheckTypeTrait, {"weight": weight}, check_type=check_type, trait=strength
         )
-    if skill is not None:
-        authored_or_sample(
-            CheckTypeTrait, {"weight": weight}, check_type=check_type, trait=skill.trait
-        )
-    for spec in specs.values():
-        CheckTypeSpecialization.objects.get_or_create(
-            check_type=check_type, specialization=spec, defaults={"weight": weight}
-        )
-    return check_type
-
-
-_MELEE_DEFENSE_CHECK_TYPE_NAME = "Melee Defense"
-
-
-def ensure_melee_defense_check_type(skill, specs) -> object | None:
-    """Look up (or sample) the Melee Defense CheckType: agility + Melee Combat.
-
-    Mirrors ``ensure_melee_attack_check_type`` but with ``agility`` as the stat
-    (evasion) instead of ``strength`` (attack). Reuses the same ``Melee Combat``
-    skill + weapon specializations from #1706 — one skill investment covers
-    offense and defense. See ``ensure_melee_attack_check_type`` for the
-    skip-on-missing-content contract.
-    """
-    from world.checks.models import (  # noqa: PLC0415
-        CheckType,
-        CheckTypeSpecialization,
-        CheckTypeTrait,
-    )
-    from world.seeds.sample_content import authored_or_sample  # noqa: PLC0415
-    from world.traits.models import Trait, TraitCategory, TraitType  # noqa: PLC0415
-
-    category = _ensure_combat_category()
-    if category is None:
-        return None
-    check_type = authored_or_sample(
-        CheckType,
-        {"description": "A melee defense roll: agility + Melee Combat."},
-        name=_MELEE_DEFENSE_CHECK_TYPE_NAME,
-        category=category,
-    )
-    if check_type is None:
-        return None
-
-    weight = Decimal("1.00")
-    agility = authored_or_sample(
+    # Ensure agility exists as a stat_override target for Melee Combat (#2757):
+    # the combat system passes stat_override="agility" for light-weapon offense
+    # and defense. The Trait row must exist so handler.get_trait_value works.
+    authored_or_sample(
         Trait,
         {"trait_type": TraitType.STAT, "category": TraitCategory.PHYSICAL, "is_public": True},
         name="agility",
     )
-    if agility is not None:
-        authored_or_sample(CheckTypeTrait, {"weight": weight}, check_type=check_type, trait=agility)
     if skill is not None:
         authored_or_sample(
             CheckTypeTrait, {"weight": weight}, check_type=check_type, trait=skill.trait
@@ -194,8 +155,7 @@ def ensure_melee_defense_check_type(skill, specs) -> object | None:
 
 
 def seed_combat_check_content() -> None:
-    """Cluster entry — seed Melee Combat skill catalog + Attack/Defense checks."""
+    """Cluster entry — seed Melee Combat skill catalog + Melee Combat check."""
     skill = ensure_melee_combat_skill()
     specs = ensure_weapon_specializations(skill)
-    ensure_melee_attack_check_type(skill, specs)
-    ensure_melee_defense_check_type(skill, specs)
+    ensure_melee_combat_check_type(skill, specs)

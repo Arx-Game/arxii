@@ -66,8 +66,8 @@ class TestClusterRegistry(TestCase):
         self.assertLess(keys.index("magic"), keys.index("character_creation"))
 
     def test_reactive_challenges_cluster_registered_after_combat_checks(self) -> None:
-        # Interpose's Melee-Defense twin approaches look up the "Melee Defense"
-        # CheckType seeded by the combat_checks cluster (#2636).
+        # Interpose's Melee Combat twin approaches look up the "Melee Combat"
+        # CheckType seeded by the combat_checks cluster (#2636, #2757 merge).
         keys = list(CLUSTER_SEEDERS)
         assert "reactive_challenges" in keys
         self.assertLess(keys.index("combat_checks"), keys.index("reactive_challenges"))
