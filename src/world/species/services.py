@@ -22,12 +22,13 @@ if TYPE_CHECKING:
 logger = logging.getLogger(__name__)
 
 
-def reconcile_sun_exposure_safely(character) -> None:
-    """Best-effort reconcile for hook/cron call sites (#2846).
+def run_reconcile_safely(character, reconcile, label: str) -> None:
+    """Best-effort celestial reconcile for hook/cron call sites (#2846/#2845).
 
     Skips non-characters cheaply; isolates any reconcile failure so an equip,
     position change, or cron sweep never breaks on a bad row. Log-and-continue
-    is the interim policy (#1164) — never a silent suppress.
+    is the interim policy (#1164) — never a silent suppress. Shared by the sun
+    and moon wrappers so the broad guard exists exactly once.
     """
     try:
         sheet = character.character_sheet
@@ -36,9 +37,18 @@ def reconcile_sun_exposure_safely(character) -> None:
     if sheet is None:
         return
     try:
-        reconcile_sunlight_exposure(character, character.location)
+        reconcile(character)
     except Exception:  # the ONE ratcheted broad guard shared by every hook site
-        logger.exception("sun-exposure reconcile failed for character pk=%s", character.pk)
+        logger.exception("%s reconcile failed for character pk=%s", label, character.pk)
+
+
+def reconcile_sun_exposure_safely(character) -> None:
+    """Best-effort sun reconcile for hook/cron call sites (#2846)."""
+    run_reconcile_safely(
+        character,
+        lambda c: reconcile_sunlight_exposure(c, c.location),
+        "sun-exposure",
+    )
 
 
 def reconcile_sunlight_exposure(character, room) -> None:

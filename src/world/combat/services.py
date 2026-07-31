@@ -1552,6 +1552,9 @@ def leave_encounter(participant: CombatParticipant) -> None:
     - the encounter type is not OPEN_ENCOUNTER, or
     - the participant is not ACTIVE.
     """
+    from world.combat.berserk_compulsion import reject_if_berserk  # noqa: PLC0415
+
+    reject_if_berserk(participant, "leave")
     enc = CombatEncounter.objects.select_for_update().get(pk=participant.encounter_id)
     if enc.status != RoundStatus.BETWEEN_ROUNDS:
         msg = (
@@ -1589,8 +1592,10 @@ def declare_flee(participant: CombatParticipant) -> CombatRoundAction:
     round resolution (_resolve_flee); the participant remains ACTIVE until
     the check succeeds.
     """
+    from world.combat.berserk_compulsion import reject_if_berserk  # noqa: PLC0415
     from world.vitals.services import is_dead  # noqa: PLC0415
 
+    reject_if_berserk(participant, "flee")
     encounter = participant.encounter
 
     # Encounter status check
@@ -2333,8 +2338,10 @@ def declare_parley(
     decisive success, calms the opponent (Calm condition → NEUTRAL allegiance).
     This function only records the declaration.
     """
+    from world.combat.berserk_compulsion import reject_if_berserk  # noqa: PLC0415
     from world.vitals.services import is_dead  # noqa: PLC0415
 
+    reject_if_berserk(participant, "parley")
     encounter = participant.encounter
     if encounter.status != RoundStatus.DECLARING:
         msg = (
@@ -10219,6 +10226,13 @@ def resolve_round(  # noqa: PLR0915 - orchestration function; already at the
     )
     if not already_selected:
         select_npc_actions(enc)
+
+    # Berserk compulsion (#2845): rage-driven participants who declared nothing
+    # get their simplest damaging technique auto-declared. Idempotent — a
+    # participant who steered their own rage (declared an attack) is skipped.
+    from world.combat.berserk_compulsion import select_berserk_actions  # noqa: PLC0415
+
+    select_berserk_actions(enc)
 
     enc.status = RoundStatus.RESOLVING
     enc.save(update_fields=["status"])

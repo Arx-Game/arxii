@@ -357,6 +357,80 @@ def ensure_appetite_distinctions() -> tuple:
     return blood, essence
 
 
+def ensure_moonlit_unease_condition() -> "ConditionTemplate":
+    """Idempotently seed the Cani Moonlit Unease condition (#2845).
+
+    A heightened-alert flavor state — mechanically inert in v1 (PLACEHOLDER);
+    applied/removed by the moon reconcile sweep while a Cani stands under the
+    open night moon.
+    """
+    from world.conditions.constants import DurationType
+    from world.conditions.models import ConditionCategory, ConditionTemplate
+    from world.species.moon_constants import MOONLIT_UNEASE_NAME
+
+    category, _created = ConditionCategory.objects.get_or_create(
+        name="Instinct",
+        defaults={"description": "Instinctive species states.", "is_negative": False},
+    )
+    template, _created = ConditionTemplate.objects.get_or_create(
+        name=MOONLIT_UNEASE_NAME,
+        defaults={
+            "category": category,
+            "description": "PLACEHOLDER: the moon watches, and the blood remembers (#2845).",
+            "player_description": (
+                "The moonlight prickles along your spine — something in you "
+                "will not settle while it watches."
+            ),
+            "observer_description": "is restless and watchful under the moonlight.",
+            "default_duration_type": DurationType.UNTIL_CURED,
+            "is_stackable": False,
+        },
+    )
+    return template
+
+
+def ensure_moon_bound_distinction() -> "Distinction":
+    """Idempotently seed the Moon-Bound distinction (#2845).
+
+    Tag-identified anchor (ADR-0179 pattern): Lycans stamp it innately via
+    ``SpeciesGiftGrant.drawback_distinction``. Cost 0 — the moon's price is
+    the control check, not CG points.
+    """
+    from world.distinctions.models import (
+        Distinction,
+        DistinctionCategory,
+        DistinctionTag,
+    )
+    from world.species.moon_constants import MOON_BOUND_SLUG, MOON_BOUND_TAG
+
+    category, _created = DistinctionCategory.objects.get_or_create(
+        slug="drawbacks",
+        defaults={
+            "name": "Drawbacks",
+            "description": "PLACEHOLDER: disadvantages that reimburse CG points.",
+        },
+    )
+    tag, _created = DistinctionTag.objects.get_or_create(
+        slug=MOON_BOUND_TAG, defaults={"name": "Moon-Bound"}
+    )
+    distinction, _created = Distinction.objects.get_or_create(
+        slug=MOON_BOUND_SLUG,
+        defaults={
+            "name": "Moon-Bound",
+            "description": (
+                "PLACEHOLDER: the moon pulls at the beast in you — under a bright "
+                "open night sky, control is a thing you must hold, not a thing "
+                "you have."
+            ),
+            "category": category,
+            "cost_per_rank": 0,
+            "max_rank": 1,
+        },
+    )
+    distinction.tags.add(tag)
+    return distinction
+
+
 def ensure_ravenous_condition() -> "ConditionTemplate":
     """Idempotently seed the Ravenous hunger condition (#2853).
 
