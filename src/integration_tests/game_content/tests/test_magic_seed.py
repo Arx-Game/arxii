@@ -909,11 +909,14 @@ class SeedEndureHallowedGroundCheckTests(TestCase):
         _seed_endure_hallowed_ground_check()
         # The checks spine (world.seeds.checks) is the single authority for the
         # global resolution charts. The diff=0 chart carries the spine's even
-        # bands (Failure / Partial Success / Success), NOT the old placeholder.
+        # bands (Failure / Partial Success / Success / Critical Success), NOT
+        # the old placeholder.
         chart = ResultChart.objects.get(rank_difference=0)
         outcomes_for_chart = ResultChartOutcome.objects.filter(chart=chart)
         outcome_names = {ro.outcome.name for ro in outcomes_for_chart.select_related("outcome")}
-        self.assertEqual(outcome_names, {"Failure", "Partial Success", "Success"})
+        self.assertEqual(
+            outcome_names, {"Failure", "Partial Success", "Success", "Critical Success"}
+        )
         # The full outcome catalog the magic backfire pools fetch must exist.
         catalog = set(CheckOutcome.objects.values_list("name", flat=True))
         self.assertGreaterEqual(

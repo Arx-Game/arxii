@@ -158,7 +158,10 @@ class LevelOpposedOffenseJourneyTests(TestCase):
         self.assertGreaterEqual(success_level, 0)
 
     def test_high_level_attacker_lands_markedly_better_against_a_low_level_target(self) -> None:
-        rolls = [10, 50, 99]
+        # Rolls chosen to span the outcome tiers at rank_diff +3 (Very Easy)
+        # and rank_diff 0 (Even): roll 20 → Success vs Failure (diff 2),
+        # roll 50 → Success vs Partial, roll 85 → Crit vs Success.
+        rolls = [20, 50, 85]
         against_low_opp = [
             self._offense_success_level(pc_level=15, opp_level=1, roll=roll) for roll in rolls
         ]
