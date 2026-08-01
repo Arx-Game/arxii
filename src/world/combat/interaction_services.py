@@ -16,10 +16,12 @@ from typing import TYPE_CHECKING
 
 from world.combat.constants import ClashResolution, EncounterOutcome
 from world.magic.narration import power_outcome_clause, signature_clause
-from world.scenes.constants import InteractionMode
+from world.scenes.constants import InteractionMode, InteractionVisibility
 from world.scenes.models import Interaction
 
 if TYPE_CHECKING:
+    from evennia.objects.models import ObjectDB
+
     from world.combat.models import (
         ClashContribution,
         CombatEncounter,
@@ -30,7 +32,10 @@ if TYPE_CHECKING:
     from world.combat.types import ActionOutcome
     from world.conditions.types import DamageInteractionResult
     from world.magic.models import FuryTier
+    from world.magic.services.cast_observation import CastAudience
     from world.magic.types.power_ledger import PowerLedger
+    from world.scenes.models import Persona
+    from world.scenes.types import InteractionPayload
 
 
 def create_action_interaction(
@@ -434,6 +439,7 @@ def broadcast_action_outcome(
     *,
     encounter: CombatEncounter,
     narration: str,
+    audience: CastAudience | None = None,
 ) -> Interaction | None:
     """Persist a Narrator-authored OUTCOME interaction and broadcast it.
 
@@ -443,6 +449,16 @@ def broadcast_action_outcome(
     broadcast goes to every object in the encounter room via the existing
     interaction WebSocket payload. When the encounter has no room, the
     interaction is still persisted (durable) but not broadcast.
+
+    Args:
+        audience: Who perceived this outcome, from ``resolve_cast_audience``
+            (#2734). ``None`` -- the default, and what every non-cast caller
+            passes -- keeps the room-wide broadcast byte-identical to its
+            pre-#2734 behaviour. A concealed audience instead poses
+            PERCEIVED_ONLY to ``audience.full`` and, when anyone marginally
+            detected the cast, emits a second unattributed line to
+            ``audience.vague``. Mirrors ``scenes.cast_services``'
+            ``create_cast_outcome_pose``.
     """
     if not narration:
         return None
@@ -455,24 +471,70 @@ def broadcast_action_outcome(
     )
 
     narrator = get_or_create_narrator_persona()
+    concealed = audience is not None and audience.concealed
     interaction = create_interaction(
         persona=narrator,
         content=narration,
         mode=InteractionMode.OUTCOME,
         scene=encounter.scene,
+        receivers=audience.full if concealed else None,
+        visibility=(
+            InteractionVisibility.PERCEIVED_ONLY if concealed else InteractionVisibility.DEFAULT
+        ),
     )
 
     room = encounter.room
     if room is None:
         return interaction
 
-    payload = _build_interaction_payload(
-        interaction_id=interaction.pk,
-        persona=narrator,
-        content=interaction.content,
-        mode=interaction.mode,
-        timestamp=interaction.timestamp.isoformat(),
-        scene_id=interaction.scene_id,
-    )
-    _broadcast_to_location(room, payload)
+    def _payload(source: Interaction) -> InteractionPayload:
+        return _build_interaction_payload(
+            interaction_id=source.pk,
+            persona=narrator,
+            content=source.content,
+            mode=source.mode,
+            timestamp=source.timestamp.isoformat(),
+            scene_id=source.scene_id,
+        )
+
+    if not concealed:
+        _broadcast_to_location(room, _payload(interaction))
+        return interaction
+
+    # Concealed: deliberately NOT _broadcast_to_location. Live delivery has to match
+    # the persisted receiver rows, or the scene log would hide what the WebSocket
+    # already showed. push_interaction can't do it here -- it keys off the writer's
+    # location, and the Narrator persona has no presence in the room.
+    from world.magic.narration import render_vague_cast_narration  # noqa: PLC0415
+    from world.scenes.interaction_services import _send_to_objects  # noqa: PLC0415
+
+    _send_to_objects(_characters_for(audience.full), _payload(interaction))
+
+    if audience.vague:
+        # No target_personas on the vague line: naming the target would leak the
+        # attribution this detection tier exists to withhold (ADR-0170).
+        vague_interaction = create_interaction(
+            persona=narrator,
+            content=render_vague_cast_narration(),
+            mode=InteractionMode.OUTCOME,
+            scene=encounter.scene,
+            receivers=audience.vague,
+            visibility=InteractionVisibility.PERCEIVED_ONLY,
+        )
+        _send_to_objects(_characters_for(audience.vague), _payload(vague_interaction))
+
     return interaction
+
+
+def _characters_for(personas: list[Persona]) -> list[ObjectDB]:  # noqa: OBJECTDB_PARAM
+    """The characters behind these personas, for direct WebSocket delivery.
+
+    Skips personas whose sheet has no character object rather than failing the
+    whole broadcast for one unbacked persona.
+    """
+    characters = []
+    for persona in personas:
+        character = persona.character_sheet.character
+        if character is not None:
+            characters.append(character)
+    return characters

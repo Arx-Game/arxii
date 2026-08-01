@@ -42,6 +42,7 @@ if TYPE_CHECKING:
     from world.magic.models import FuryTier, Technique
     from world.magic.models.anima import CharacterAnima
     from world.magic.models.techniques import AbstractDamageProfile
+    from world.magic.services.cast_observation import CastAudience
     from world.magic.types import TechniqueUseResult
     from world.magic.types.power_ledger import PowerLedger
     from world.mechanics.models import ObjectProperty
@@ -7328,6 +7329,8 @@ def _record_and_broadcast_pc_action(  # noqa: PLR0913
     )
     from world.scenes.interaction_services import push_interaction  # noqa: PLC0415
 
+    audience = _resolve_combat_cast_audience(participant, technique)
+
     # Only the attack path returns a CombatTechniqueResult (which carries fury);
     # the non-attack path returns a CombatTechniqueResolution with no fury field.
     fury_committed = (
@@ -7343,6 +7346,15 @@ def _record_and_broadcast_pc_action(  # noqa: PLR0913
         action.interaction = interaction
         action.interaction_timestamp = interaction.timestamp
         action.save(update_fields=["interaction", "interaction_timestamp"])
+        if audience is not None and audience.concealed:
+            # Before push_interaction, which reads .visibility to decide whether to
+            # broadcast room-wide. Concealing after the push would leak the technique
+            # name live and hide it only on scene-log re-read.
+            from world.magic.services.cast_observation import (  # noqa: PLC0415
+                conceal_action_interaction,
+            )
+
+            conceal_action_interaction(interaction, audience)
         push_interaction(interaction)
         if combat_result is not None:
             from world.scenes.power_ledger_services import persist_power_ledger  # noqa: PLC0415
@@ -7366,7 +7378,37 @@ def _record_and_broadcast_pc_action(  # noqa: PLR0913
         signature_snippet=signature_snippet,
         interaction_result=interaction_result,
     )
-    broadcast_action_outcome(encounter=participant.encounter, narration=narration)
+    broadcast_action_outcome(
+        encounter=participant.encounter, narration=narration, audience=audience
+    )
+
+
+def _resolve_combat_cast_audience(
+    participant: CombatParticipant,
+    technique: Technique,
+) -> CastAudience | None:
+    """Who perceived this action, or None when concealment does not apply (#2734).
+
+    Returns None — running no queries and no checks — for a mundane technique.
+    ``Technique.gift`` is non-null, so a martial maneuver still hangs off a Gift;
+    ``Gift.is_magical`` is what separates a working from a sword swing, and only a
+    working can be concealed. A Path of Whispers adept's blade is plainly visible
+    (Tehom's ruling, 2026-08-01).
+
+    For a magical cast this delegates to the shipped #2710 service, which itself
+    early-returns an unconcealed audience whenever the caster's style imposes no
+    concealment — the overwhelmingly common case, and the reason an ordinary
+    encounter costs nothing extra.
+    """
+    if not technique.gift.is_magical:
+        return None
+
+    from world.magic.services.cast_observation import resolve_cast_audience  # noqa: PLC0415
+
+    # No cast_openly equivalent in combat: CombatRoundAction has no such field, so a
+    # combat cast always resolves at the caster's style concealment. A deliberate
+    # in-combat reveal is its own UX surface (out of scope, #2734).
+    return resolve_cast_audience(caster=participant.character_sheet.character)
 
 
 def _maybe_suggest_entrance_dramatic_moment(
