@@ -252,14 +252,25 @@ class EventModification(SharedMemoryModel):
         return f"Modifications for {self.event.name}"
 
 
-class EventCatering(SharedMemoryModel):
-    """One dish or drink set out at an event (#2852).
+class CateringRole(models.TextChoices):
+    """What an item did at an event's table (#2869)."""
 
-    A snapshot row: the contributed consumable is consumed at cater time (the
-    money sink — crafted or bought, it's gone), and what remains is the
-    record — template + quality tier at contribution — that the completion
-    hook sums into the host's Hospitality prestige. Rich preparations are
-    money out, grandeur in.
+    CONTAINER = "container", "Catering Vessel"
+    PROVISION = "provision", "Provision"
+
+
+class EventCatering(SharedMemoryModel):
+    """One item's service at an event's table — vessel or provision (#2869).
+
+    Nothing is consumed: the row is a permanent tag on a still-real item.
+    A container flagged for an event earns a CONTAINER row; every consumable
+    put into it earns a PROVISION row, and PROVISION quality is what the
+    completion hook sums into the host's Hospitality prestige.
+
+    The tag outlives the occasion by design. Food taken back out stays
+    tagged (setting it out was the contribution), and a vessel that serves
+    ten banquets carries ten rows — so a well-travelled amphora tells its
+    own story on examine.
     """
 
     event = models.ForeignKey(
@@ -267,31 +278,37 @@ class EventCatering(SharedMemoryModel):
         on_delete=models.CASCADE,
         related_name="catering",
     )
-    item_template = models.ForeignKey(
-        "items.ItemTemplate",
-        on_delete=models.PROTECT,
-        related_name="catering_contributions",
-        help_text="What was served (snapshot of the consumed instance's template).",
+    item_instance = models.ForeignKey(
+        "items.ItemInstance",
+        on_delete=models.CASCADE,
+        related_name="catering_uses",
+        help_text="The vessel or provision itself — still a real item in the world.",
     )
-    quality_tier = models.ForeignKey(
-        "items.QualityTier",
-        on_delete=models.PROTECT,
-        null=True,
-        blank=True,
-        related_name="catering_contributions",
-        help_text="Quality of the consumed instance at contribution (null = common fare).",
+    role = models.CharField(
+        max_length=16,
+        choices=CateringRole.choices,
+        help_text="CONTAINER (a flagged vessel) or PROVISION (a consumable set out in one).",
     )
     contributed_by = models.ForeignKey(
         "scenes.Persona",
         on_delete=models.PROTECT,
+        null=True,
+        blank=True,
         related_name="catering_contributions",
-        help_text="Who set the dish out (provenance).",
+        help_text="Who flagged the vessel or set the dish out (provenance).",
     )
     created_at = models.DateTimeField(auto_now_add=True)
 
     class Meta:
         verbose_name = "Event Catering"
         verbose_name_plural = "Event Catering"
+        ordering = ["-created_at"]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["event", "item_instance"],
+                name="events_catering_unique_item_per_event",
+            ),
+        ]
 
     def __str__(self) -> str:
-        return f"{self.item_template} at {self.event}"
+        return f"{self.item_instance} at {self.event} ({self.role})"

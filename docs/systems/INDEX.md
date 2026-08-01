@@ -4013,9 +4013,15 @@ Items, equipment, inventory, and currency. Spec D PR1 shipped facets, equip/uneq
   skill/CheckType (wits+Cooking, Brewing spec), first LIVE QualityTier ladder
   (Common/Fine/Masterwork), stationless ITEM_CREATE recipes (Hearty Stew, Honeyed Wine) +
   ingredients + skill caps. Event catering: `EventCatering` snapshot rows
-  (`events.services.cater_event` consumes the instance — the money sink); at
-  `complete_event` the quality sum mints the host's Hospitality deed via
-  `create_solo_deed` (`_award_catering_prestige` — the one event-completion reward hook).
+  (#2869 reshaped: `designate_catering_container` flags a vessel — banquet table,
+  amphora, tray — and the `put_in` path tags any consumable set out in it via
+  `tag_catered_provision`; nothing is consumed, and the tag is permanent and deduped
+  per (event, item), so food taken back out still counts and shuffling cannot farm
+  prestige); at `complete_event` the tagged provisions' quality sum mints the host's
+  Hospitality deed via `create_solo_deed` (`_award_catering_prestige` — the one
+  event-completion reward hook). Items carry their catering history on examine
+  ("This amphora was used for catering at ..."), rendered through the
+  `return_appearance` sections pattern. Telnet: `event cater <container>`.
 services, and equipment-modifier integration. Spec D PR2 (#1031) added the generic
 crafting framework and check-driven facet/style attachment. #2211 added the ITEM_CREATE
 mint pipeline; #2240 made it playable web-first: `ItemCreateCraftViewSet` serves

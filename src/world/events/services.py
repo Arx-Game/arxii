@@ -10,6 +10,7 @@ from django.utils import timezone
 from evennia_extensions.models import ObjectDisplayData
 from world.events.constants import EventStatus, InvitationTargetType
 from world.events.models import (
+    CateringRole,
     Event,
     EventCatering,
     EventHost,
@@ -240,47 +241,104 @@ CATERING_DEED_MINIMUM_SCORE = 2
 HOSPITALITY_SOURCE_TYPE_NAME = "Hospitality"
 
 
-def cater_event(
-    event: Event, contributor: "ObjectDB", item_instance: "ItemInstance"
+def designate_catering_container(
+    event: Event, contributor: "ObjectDB", container_instance: "ItemInstance"
 ) -> EventCatering:
-    """Set a consumable out at *event*, consuming it (#2852 — the sink).
+    """Flag a container as catering for *event* (#2869).
 
-    Any character present may contribute; the prestige accrues to the event's
-    primary host at completion. The instance must be a consumable (food/drink/
-    delicacy — anything with charges and an on-use pool); it is destroyed
-    here and survives only as the catering snapshot row.
+    The vessel keeps living its life — it is not consumed, moved, or locked.
+    From here on, any consumable put into it tags for this event and counts
+    toward the host's Hospitality prestige. Re-flagging is idempotent.
     """
     if event.status not in (EventStatus.SCHEDULED, EventStatus.ACTIVE):
         raise EventError(EventError.CATER_INVALID)
-    template = item_instance.template
-    if not template.is_consumable:
-        raise EventError(EventError.CATER_NOT_CONSUMABLE)
-    sheet = contributor.character_sheet
-    persona = sheet.active_persona or sheet.primary_persona if sheet is not None else None
+    if not container_instance.template.is_container:
+        raise EventError(EventError.CATER_NOT_CONTAINER)
+    persona = _contributor_persona(contributor)
     if persona is None:
         raise EventError(EventError.CATER_NO_PERSONA)
-    row = EventCatering.objects.create(
+    row, _created = EventCatering.objects.get_or_create(
         event=event,
-        item_template=template,
-        quality_tier=item_instance.quality_tier,
-        contributed_by=persona,
+        item_instance=container_instance,
+        defaults={"role": CateringRole.CONTAINER, "contributed_by": persona},
     )
-    game_object = item_instance.game_object
-    item_instance.delete()
-    if game_object is not None:
-        game_object.delete()
     return row
 
 
+def catering_event_for_container(container_instance: "ItemInstance") -> Event | None:
+    """The open event this container is currently catering, if any (#2869)."""
+    row = (
+        EventCatering.objects.filter(
+            item_instance=container_instance,
+            role=CateringRole.CONTAINER,
+            event__status__in=(EventStatus.SCHEDULED, EventStatus.ACTIVE),
+        )
+        .select_related("event")
+        .order_by("-created_at")
+        .first()
+    )
+    return row.event if row is not None else None
+
+
+def tag_catered_provision(
+    item_instance: "ItemInstance",
+    container_instance: "ItemInstance",
+    contributor: "ObjectDB | None" = None,
+) -> EventCatering | None:
+    """Tag a consumable set out in a catering vessel (#2869).
+
+    Called from the put-in path. Non-consumables and un-flagged containers
+    are silently ignored — putting a knife in a banquet table is just
+    storage. The tag is permanent and deduped per (event, item): taking the
+    dish back out (or eating it) never untags it, and shuffling it in and
+    out cannot farm prestige.
+    """
+    if not item_instance.template.is_consumable:
+        return None
+    event = catering_event_for_container(container_instance)
+    if event is None:
+        return None
+    row, _created = EventCatering.objects.get_or_create(
+        event=event,
+        item_instance=item_instance,
+        defaults={
+            "role": CateringRole.PROVISION,
+            "contributed_by": _contributor_persona(contributor),
+        },
+    )
+    return row
+
+
+def catering_history(item_instance: "ItemInstance") -> list[EventCatering]:
+    """Every event this item has served at, newest first (#2869) — the souvenir."""
+    return list(EventCatering.objects.filter(item_instance=item_instance).select_related("event"))
+
+
+def _contributor_persona(contributor: "ObjectDB | None"):
+    """The acting persona behind a catering act, or None."""
+    if contributor is None:
+        return None
+    sheet = contributor.character_sheet
+    if sheet is None:
+        return None
+    return sheet.active_persona or sheet.primary_persona
+
+
 def _catering_score(event: Event) -> int:
-    """Sum of quality multipliers over the catered spread, capped (#2852)."""
-    rows = list(event.catering.select_related("quality_tier")[:CATERING_PRESTIGE_ITEM_CAP])
+    """Sum of quality multipliers over the tagged provisions, capped (#2869).
+
+    Reads the live items — the spread is whatever was set out, whether or
+    not it is still sitting in the vessel when the night ends.
+    """
+    rows = list(
+        event.catering.filter(role=CateringRole.PROVISION).select_related(
+            "item_instance__quality_tier"
+        )[:CATERING_PRESTIGE_ITEM_CAP]
+    )
     total = 0.0
     for row in rows:
-        multiplier = (
-            float(row.quality_tier.stat_multiplier) if row.quality_tier is not None else 1.0
-        )
-        total += multiplier
+        tier = row.item_instance.quality_tier
+        total += float(tier.stat_multiplier) if tier is not None else 1.0
     return round(total)
 
 

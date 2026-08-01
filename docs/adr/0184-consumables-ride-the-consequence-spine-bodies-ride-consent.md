@@ -1,6 +1,6 @@
 # ADR-0184: Consumables ride the consequence spine; unconscious bodies ride consent
 
-**Status:** Accepted (built #2852)
+**Status:** Accepted (built #2852); catering half **superseded by ADR-0186** (#2869)
 
 **Decision.** Every edible is pure content: three new `EffectType`s on the
 authored-consequence spine (`RESTORE_FATIGUE` via the new `recover_fatigue`

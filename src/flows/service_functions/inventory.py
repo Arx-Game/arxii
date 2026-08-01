@@ -482,6 +482,12 @@ def put_in(
     # Item moved off the character (now nested in the container's game_object),
     # so the carried-items cache for the character is stale.
     character.obj.carried_items.invalidate()
+    # #2869: a consumable set out in a flagged catering vessel tags for that
+    # event (permanently) and counts toward the host's Hospitality prestige.
+    # Silently a no-op for ordinary storage.
+    from world.events.services import tag_catered_provision  # noqa: PLC0415
+
+    tag_catered_provision(item.instance, container.instance, character.obj)
 
 
 @transaction.atomic

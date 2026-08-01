@@ -521,14 +521,14 @@ respond_invitation = RespondInvitationAction()
 
 @dataclass
 class CaterEventAction(Action):
-    """Set a consumable out at the room's event (#2852 — the grandeur sink).
+    """Flag a container as catering for the room's event (#2869).
 
-    Consumes a held food/drink instance into the event's catering record; at
-    completion the spread's quality total mints the host's Hospitality deed.
+    The vessel keeps living its life; from here on any consumable put into
+    it tags for the event and feeds the host's Hospitality prestige.
     """
 
     key: str = "event_cater"
-    name: str = "Set Out Food"
+    name: str = "Set Out for Catering"
     icon: str = "utensils"
     category: str = "events"
     action_category: ActionCategory = ActionCategory.SOCIAL
@@ -545,9 +545,8 @@ class CaterEventAction(Action):
     ) -> ActionResult:
         from world.events.constants import EventStatus  # noqa: PLC0415
         from world.events.models import Event  # noqa: PLC0415
-        from world.events.services import cater_event  # noqa: PLC0415
+        from world.events.services import designate_catering_container  # noqa: PLC0415
         from world.events.types import EventError  # noqa: PLC0415
-        from world.items.models import ItemInstance  # noqa: PLC0415
 
         room = actor.location
         profile = room.room_profile if room is not None else None
@@ -563,28 +562,49 @@ class CaterEventAction(Action):
         )
         if event is None:
             return ActionResult(success=False, message="There is no event here.")
-        item = kwargs.get("item_instance")
-        if item is None:
-            item_name = (kwargs.get("item_name") or "").strip()
-            if item_name:
-                item = (
-                    ItemInstance.objects.filter(
-                        holder_character_sheet=actor.character_sheet,
-                        game_object__db_key__iexact=item_name,
-                    ).first()
-                    or ItemInstance.objects.filter(
-                        holder_character_sheet=actor.character_sheet,
-                        template__name__iexact=item_name,
-                    ).first()
-                )
-        if item is None:
-            return ActionResult(success=False, message="Set out what?")
-        template_name = item.template.name
+        container = kwargs.get("container")
+        if container is None:
+            container = _find_local_item(actor, (kwargs.get("container_name") or "").strip())
+        if container is None:
+            return ActionResult(success=False, message="Flag which container for catering?")
+        name = container.display_name
         try:
-            cater_event(event, actor, item)
+            designate_catering_container(event, actor, container)
         except EventError as exc:
             return ActionResult(success=False, message=exc.user_message)
         return ActionResult(
             success=True,
-            message=f"You set out {template_name} for {event.name}.",
+            message=(
+                f"{name} is set out for {event.name}. Anything edible placed in it "
+                "will be remembered as part of the spread."
+            ),
         )
+
+
+def _find_local_item(actor: ObjectDB, name: str):
+    """A held-or-present ItemInstance by name (catering vessels are often furniture)."""
+    from world.items.models import ItemInstance  # noqa: PLC0415
+
+    if not name:
+        return None
+    sheet = actor.character_sheet
+    held = ItemInstance.objects.filter(
+        holder_character_sheet=sheet, template__name__iexact=name
+    ).first()
+    if held is not None:
+        return held
+    room = actor.location
+    if room is None:
+        return None
+    from django.core.exceptions import ObjectDoesNotExist  # noqa: PLC0415
+
+    for obj in room.contents:
+        try:
+            instance = obj.item_instance
+        except (AttributeError, ObjectDoesNotExist):
+            continue
+        if instance is not None and name.lower() in (instance.display_name or "").lower():
+            return instance
+    return ItemInstance.objects.filter(
+        game_object__db_location=room, template__name__iexact=name
+    ).first()

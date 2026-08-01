@@ -1,6 +1,12 @@
 from django.contrib import admin
 
-from world.events.models import Event, EventHost, EventInvitation, EventModification
+from world.events.models import (
+    Event,
+    EventCatering,
+    EventHost,
+    EventInvitation,
+    EventModification,
+)
 
 
 class EventHostInline(admin.TabularInline):
@@ -15,6 +21,12 @@ class EventInvitationInline(admin.TabularInline):
     raw_id_fields = ["target_persona", "target_organization", "target_society", "invited_by"]
 
 
+class EventCateringInline(admin.TabularInline):
+    model = EventCatering
+    extra = 0
+    raw_id_fields = ["item_instance", "contributed_by"]
+
+
 class EventModificationInline(admin.StackedInline):
     model = EventModification
     extra = 0
@@ -26,5 +38,21 @@ class EventAdmin(admin.ModelAdmin):
     list_filter = ["status", "is_public", "time_phase"]
     search_fields = ["name", "description"]
     raw_id_fields = ["location"]
-    inlines = [EventHostInline, EventInvitationInline, EventModificationInline]
+    inlines = [
+        EventHostInline,
+        EventInvitationInline,
+        EventCateringInline,
+        EventModificationInline,
+    ]
     readonly_fields = ["created_at", "updated_at"]
+
+
+@admin.register(EventCatering)
+class EventCateringAdmin(admin.ModelAdmin):
+    """The catering tags — which vessels and dishes served at which events (#2869)."""
+
+    list_display = ["item_instance", "event", "role", "contributed_by", "created_at"]
+    list_filter = ["role"]
+    search_fields = ["event__name"]
+    raw_id_fields = ["event", "item_instance", "contributed_by"]
+    readonly_fields = ["created_at"]

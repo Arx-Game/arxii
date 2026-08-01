@@ -52,6 +52,7 @@ _SUBVERB_COMPLETE = "complete"
 _SUBVERB_CANCEL = "cancel"
 _SUBVERB_INVITE = "invite"
 _SUBVERB_RSVP = "rsvp"
+_SUBVERB_CATER = "cater"
 _LIFECYCLE_SUBVERBS = frozenset(
     {_SUBVERB_SCHEDULE, _SUBVERB_START, _SUBVERB_COMPLETE, _SUBVERB_CANCEL}
 )
@@ -207,6 +208,8 @@ class CmdEvent(ArxCommand):
                 self._dispatch_invite(rest)
             elif subverb == _SUBVERB_RSVP:
                 self._dispatch_rsvp(rest)
+            elif subverb == _SUBVERB_CATER:
+                self._dispatch_cater(rest)
             else:
                 self.msg(self._usage())
         except CommandError as err:
@@ -288,6 +291,17 @@ class CmdEvent(ArxCommand):
         )
         if result.message:
             self.msg(result.message)
+
+    def _dispatch_cater(self, rest: str) -> None:
+        """``event cater <container>`` — flag a vessel for the room's event (#2869)."""
+        from actions.definitions.events import CaterEventAction  # noqa: PLC0415
+
+        container_name = rest.strip()
+        if not container_name:
+            msg = "Usage: event cater <container>"
+            raise CommandError(msg)
+        result = CaterEventAction().run(actor=self.caller, container_name=container_name)
+        self.msg(result.message)
 
     def _dispatch_rsvp(self, rest: str) -> None:
         """``event rsvp <id> accept|decline`` (the invitee acts as their persona)."""
@@ -545,5 +559,5 @@ class CmdEvent(ArxCommand):
         return (
             "Usage: event [list|show <id>|create name=… room=… when=…|"
             "schedule <id>|start <id>|complete <id>|cancel <id>|"
-            "invite <id> persona=…|rsvp <id> accept|decline]"
+            "invite <id> persona=…|rsvp <id> accept|decline|cater <container>]"
         )
