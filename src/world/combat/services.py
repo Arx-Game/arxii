@@ -48,6 +48,7 @@ if TYPE_CHECKING:
     from world.mechanics.models import ObjectProperty
     from world.scenes.models import Interaction, Persona
     from world.stories.models import Story
+    from world.traits.models import CheckOutcome
     from world.vitals.models import CharacterVitals
 
     PerformCheckFn = Callable[..., CheckResult]
@@ -65,7 +66,12 @@ from flows.events.payloads import (
     EncounterCompletedPayload,
 )
 from world.checks.constants import ModifierSourceKind
-from world.checks.services import collect_check_modifiers, level_opposition, perform_check
+from world.checks.services import (
+    collect_check_modifiers,
+    level_opposition,
+    perform_check,
+    perform_check_with_modifiers,
+)
 from world.checks.types import ModifierContribution
 from world.combat.constants import (
     ABSORPTION_CAP_PER_MOMENT,
@@ -76,6 +82,7 @@ from world.combat.constants import (
     CHARGE_DAMAGE_BONUS,
     CHARGE_MAX_HOPS,
     COMBO_MIN_SLOTS,
+    CONCENTRATION_CHECK_TYPE_NAME,
     DEFENSE_CRITICAL_MULTIPLIER,
     DEFENSE_FULL_MULTIPLIER,
     DEFENSE_NO_DAMAGE_THRESHOLD,
@@ -95,6 +102,10 @@ from world.combat.constants import (
     PENETRATION_CHECK_TYPE_NAME,
     REACTIONS_PER_ROUND,
     SENT_FLYING_IMPACT_FRACTION,
+    SUSTAINED_BASE_ABSORPTION,
+    SUSTAINED_GENERIC_TELEGRAPH,
+    SUSTAINED_MAX_ABSORPTION,
+    SUSTAINED_MIN_ABSORPTION,
     WINDUP_BLIND_DOWNGRADE,
     WINDUP_CALLED_OUT_DOWNGRADE,
     WINDUP_DOWNGRADE_STEP,
@@ -115,6 +126,7 @@ from world.combat.constants import (
     PaceMode,
     ParticipantStatus,
     StrikeDelivery,
+    SustainedKind,
     TargetingMode,
     TargetSelection,
     wind_penalty,
@@ -143,6 +155,7 @@ from world.combat.models import (
     FleeTierModifier,
     PendingOpponentAttack,
     RoundChallengeDeclaration,
+    SustainedAction,
     ThreatPool,
     ThreatPoolEntry,
     ThreatRecord,
@@ -306,6 +319,58 @@ def get_penetration_check_type() -> CheckType:
     from world.checks.models import CheckType  # noqa: PLC0415
 
     return CheckType.objects.get(name=PENETRATION_CHECK_TYPE_NAME)
+
+
+def get_concentration_check_type() -> CheckType:
+    """Return the seeded 'Concentration' CheckType rolled at sustained-action
+    declaration (#2705).
+
+    Uses get() — never get_or_create — because this is authored content; a
+    chartless fabricated row would silently break the resolution pipeline.
+    If the seed is missing, CheckType.DoesNotExist propagates loudly (a real
+    misconfiguration), not masked. Mirrors ``get_penetration_check_type``.
+    """
+    from world.checks.models import CheckType  # noqa: PLC0415
+
+    return CheckType.objects.get(name=CONCENTRATION_CHECK_TYPE_NAME)
+
+
+def roll_sustained_absorption_budget(
+    participant: CombatParticipant,
+) -> tuple[int, CheckOutcome | None]:
+    """Roll Concentration once to set a sustained action's absorption budget (#2705).
+
+    Uses ``perform_check_with_modifiers`` — NOT plain ``perform_check`` — because
+    only the ``_with_modifiers`` wrapper calls ``collect_check_modifiers``, which
+    folds in ``ConditionCheckModifier`` rows via ``condition_contributions``. 26
+    authored Concentration modifier rows exist across the lore fixtures (blinded,
+    stressed, focused, etc.) and they are the entire payoff of rolling this check
+    at all — a plain ``perform_check`` call would silently make every one of them
+    inert for sustained actions.
+
+    ``budget = clamp(SUSTAINED_BASE_ABSORPTION + result.success_level, MIN, MAX)``.
+    The clamp exists because ``CheckOutcome.success_level`` is an authored
+    -10..+10 field with no lore fixture pinning its ladder (no ``CheckOutcome``
+    row is authored in the lore repo at all — they're built ad hoc by seeds/
+    factories with varying ranges). Without the clamp a wide authored ladder
+    would produce an absurd absorption budget; clamping to
+    ``[SUSTAINED_MIN_ABSORPTION, SUSTAINED_MAX_ABSORPTION]`` preserves the
+    spec's intended ladder (Crit Fail 0 ... Crit Success 4) under any chart.
+
+    Returns the clamped budget and the CheckOutcome the roll produced (or None
+    if the check produced no outcome), so the caller can snapshot the outcome
+    on the SustainedAction row.
+    """
+    result = perform_check_with_modifiers(
+        participant.character_sheet.character,
+        get_concentration_check_type(),
+        target_difficulty=0,
+    )
+    budget = max(
+        SUSTAINED_MIN_ABSORPTION,
+        min(SUSTAINED_MAX_ABSORPTION, SUSTAINED_BASE_ABSORPTION + result.success_level),
+    )
+    return budget, result.outcome
 
 
 def get_flee_config() -> FleeConfig:
@@ -3056,6 +3121,41 @@ def expire_pulls_for_round(encounter: CombatEncounter) -> None:
         recompute_max_health_with_threads(p.character_sheet)
 
 
+def _validate_no_pending_sustained(
+    participant: CombatParticipant, encounter: CombatEncounter
+) -> None:
+    """Raise if *participant* is still holding a SustainedAction together (#2705, D2).
+
+    Sustaining occupies your action: you cannot hold a ritual together or wind
+    up a technique and also declare something new. This is structural, not
+    merely thematic — ``CombatRoundAction``'s ``unique_action_per_participant_
+    per_round`` constraint means maturation (which clones the declaring action
+    into the maturation round) would collide with a same-round declaration if
+    this were allowed.
+
+    Filters ``resolves_round__gt`` (not ``__gte``): a row maturing THIS round is
+    consumed by maturation during RESOLVING, before declaration can happen
+    again for ``round_number`` — declaration only runs during DECLARING — so a
+    row with ``resolves_round == round_number`` cannot exist at declaration
+    time.
+
+    Excludes ``declared_round == round_number``: that row is THIS round's own
+    in-progress commitment, not a prior one blocking a new declaration — a
+    player amending their current round's declaration must still reach
+    ``_sync_sustained_technique_declaration``'s delete-then-recreate idempotence,
+    never this gate. Only a commitment declared in a STRICTLY earlier round
+    (``declared_round < round_number``) blocks.
+    """
+    pending = SustainedAction.objects.filter(
+        participant=participant,
+        declared_round__lt=encounter.round_number,
+        resolves_round__gt=encounter.round_number,
+    ).first()
+    if pending is not None:
+        msg = f"Cannot declare an action: you are still holding {pending.subject_name} together."
+        raise ValueError(msg)
+
+
 def _validate_passive_slot(
     focused_category: str | None,
     *,
@@ -3241,6 +3341,9 @@ def declare_action(  # noqa: PLR0913 - action declaration requires all slot fiel
             msg = "You must acknowledge the lethal risk of this duel before acting."
             raise ValueError(msg)
 
+    # Sustaining occupies your action (#2705, D2) — see _validate_no_pending_sustained.
+    _validate_no_pending_sustained(participant, encounter)
+
     # Passive slot validation (only when a focused category is declared)
     _validate_passive_slot(
         focused_category,
@@ -3301,7 +3404,51 @@ def declare_action(  # noqa: PLR0913 - action declaration requires all slot fiel
             "cast_position_b": cast_position_b,
         },
     )
+
+    _sync_sustained_technique_declaration(participant, action, focused_action)
+
     return action
+
+
+def _sync_sustained_technique_declaration(
+    participant: CombatParticipant,
+    action: CombatRoundAction,
+    technique: Technique | None,
+) -> SustainedAction | None:
+    """Create (or clear) this round's SustainedAction commitment for *technique* (#2705).
+
+    Called unconditionally from ``declare_action`` (no branch there — keeps its
+    cyclomatic complexity down) so re-declaration is always synced: any
+    existing SustainedAction for ``(participant, declared_round=encounter.
+    round_number)`` is deleted first — a player re-declaring the same round's
+    action, whether to the same winding-up technique or to something else
+    entirely, must never stack a second row — and a new one is created only
+    when ``technique`` is set and ``technique.windup_rounds > 0``. Rolls
+    Concentration once (via ``roll_sustained_absorption_budget``) each time a
+    commitment is (re-)declared.
+    """
+    encounter = participant.encounter
+    SustainedAction.objects.filter(
+        participant=participant, declared_round=encounter.round_number
+    ).delete()
+
+    if technique is None or technique.windup_rounds <= 0:
+        return None
+
+    budget, outcome = roll_sustained_absorption_budget(participant)
+    sustained = SustainedAction.objects.create(
+        encounter=encounter,
+        participant=participant,
+        sustained_kind=SustainedKind.TECHNIQUE,
+        technique=technique,
+        declared_action=action,
+        declared_round=encounter.round_number,
+        resolves_round=encounter.round_number + technique.windup_rounds,
+        absorption_budget=budget,
+        outcome_snapshot=outcome,
+    )
+    _broadcast_sustained_telegraph(sustained)
+    return sustained
 
 
 def _equipped_weapon_archetype(character: Character) -> str | None:
@@ -4406,6 +4553,22 @@ def _broadcast_windup_fizzled(pending: PendingOpponentAttack, *, reason: str = "
             f"{pending.opponent.name}'s wind-up is broken entirely — the perfect chain cancels it!"
         )
     _dual_dispatch_combat_narration(pending.encounter, narration)
+
+
+def _broadcast_sustained_telegraph(sustained: SustainedAction) -> None:
+    """Announce a newly-declared PC sustained action (#2705).
+
+    Minimal telegraph, routed through the same ``_dual_dispatch_combat_narration``
+    the NPC wind-up telegraph uses. Task 3 generalises the PC-side broadcast
+    helpers (erosion, broken, held) alongside this one — do not refactor the
+    existing ``_broadcast_windup_*`` helpers here; this is deliberately its own
+    minimal function until that generalisation pass.
+    """
+    character_name = str(sustained.participant.character_sheet.character)
+    narration = SUSTAINED_GENERIC_TELEGRAPH.format(
+        character=character_name, subject=sustained.subject_name
+    )
+    _dual_dispatch_combat_narration(sustained.encounter, narration)
 
 
 def _create_pending_opponent_attack(
