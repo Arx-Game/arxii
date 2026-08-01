@@ -26738,6 +26738,8 @@ export interface components {
        *     surface the affordance.
        */
       readonly can_steal: boolean;
+      /** @description The crafted mechanical line + persona credits, or None (#2878). */
+      readonly crafted_provenance: string | null;
     };
     /** @description Read serializer for ItemStyle (GET list/detail). */
     ItemStyleRead: {

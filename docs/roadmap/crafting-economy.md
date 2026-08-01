@@ -1,5 +1,33 @@
 # Crafting, Fashion & Economy
 
+## Built (2026-08-01, #2878 — crafting expressiveness)
+
+The Accents/quality/prestige arc (spec on #2878; ADR-0187):
+
+- **12-rung QualityTier ladder** (Poor→Legendary; PLACEHOLDER names pending
+  Apostate's rename pass) + the separate 7-rung benefit-only **AccentLevel**
+  adverb ladder. **Thread caps**: reachable rung = base (9 quality / 4 accent)
+  + one per Thread woven into the crafting skill — divine+ is Gifted-only.
+- **Material grade** (`ItemTemplate.material_grade`) feeds the quality score
+  (`skill-capped roll + grade`) — materials are potential, never performance
+  (ADR-0187, rejecting Arx 1's material→stat ladder and per-tier difficulty).
+- **Accents** (`ItemAccent`): crafter-chosen per-instance style axes (allure,
+  menace, …) — each raises craft difficulty and rolls its own thread-capped
+  check; read by `crafted_modifier_value`, the equipment walk, and fashion
+  presentations. Examine renders the mechanical line + #2066 dual-provenance
+  credits (`crafted_provenance_line`, web + telnet shared).
+- **Refinement projects** (`ITEM_REFINEMENT`, instant-completion): the
+  deterministic guaranteed long road — no per-cycle rolls; threshold = value ×
+  target rung; the crossing contribution needs a sufficiently thread-capped
+  contributor (the master gate).
+- **Prestige & fame**: worn-instance pricing folded into
+  `recompute_persona_prestige_from_items`; first-making fame to both maker and
+  designer personas, scaled by quality + accents (generalizes #2243).
+- **Generic material ladders** seeded (`crafting_materials` cluster, 21 graded
+  templates). Named canon materials (alaricite, steelsilk, …) await Apostate's
+  row-by-row curation worksheet; gems stay in the gem economy; drug herbs are
+  the #2862 natives.
+
 ## Built (2026-07-07, #2066 — the market)
 
 - Two-tier commerce shipped: capital **market squares** (NPC material/

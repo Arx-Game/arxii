@@ -71,3 +71,30 @@ _Avoid_: take (as a synonym), pickpocket, loot (as a verb for a live owner's ite
   consumer reads the same flag. A non-revealing garment fully covers the body
   regions it is equipped over. _Avoid:_ skimpy (flavor, not the field), a
   separate coverage-percentage model.
+
+- **Accent** — a style axis the crafter worked into a specific piece at the
+  forge (#2878): an `ItemAccent` row (instance × styleable `ModifierTarget` ×
+  `AccentLevel`). Chosen per-instance, never recipe/template data; each Accent
+  rolls its own check at craft time and its realized rung is thread-capped.
+  Feeds `crafted_modifier_value` and flatters fashion presentations.
+  _Avoid_: Styling (collides with `Style`), Finish, Touch, Aura, enchantment
+  (that's facets).
+- **Accent ladder** — the benefit-only 7-rung `AccentLevel` ladder (slightly →
+  legendarily); the adverbs ARE the display grammar ("a quite menacing
+  accent"). Separate from `QualityTier` by design — Accents have no "poor"
+  end. _Avoid_: reusing QualityTier rows for accent levels.
+- **Material grade** — `ItemTemplate.material_grade`: the quality-score head
+  start a material contributes when consumed in crafting (#2878, ADR-0187).
+  Materials are potential, never performance — no material→stat table, ever.
+  _Avoid_: material tier multiplier, material stat scaling.
+- **Quality rung** — a `QualityTier.sort_order` position on the 12-rung ladder
+  (1–9 mundane-reachable; 10 divine / 11 transcendent / 12 legendary are
+  thread-gated: base cap + one rung per Thread woven into the crafting
+  skill). _Avoid_: level (ambiguous with character level).
+- **Refinement project** — the guaranteed long road (#2878): an
+  `ITEM_REFINEMENT` project (instant-completion, `ItemRefinementDetails`)
+  whose funded threshold deterministically applies +1 to an Accent or the
+  base quality rung. NO per-cycle rolls; threshold scales with item value ×
+  target rung; the threshold-crossing contribution needs a contributor whose
+  thread-capped ceiling reaches the goal (the master gate). _Avoid_:
+  refine-attempt rolls (Arx 1's shape, explicitly rejected).

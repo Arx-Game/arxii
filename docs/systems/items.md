@@ -483,9 +483,13 @@ handler — no schema change required.
 
 | Name | Type | Values |
 |------|------|--------|
-| `CraftingRecipeKind` | TextChoices | `FACET_ATTACH`, `STYLE_ATTACH` |
+| `CraftingRecipeKind` | TextChoices | `FACET_ATTACH`, `STYLE_ATTACH`, `ITEM_CREATE`, `GEM_CUT` (corrected 2026-08-01) |
 | `CostConsumption` | TextChoices | `NONE`, `PARTIAL`, `FULL` |
 | `PARTIAL_FRACTION` | float | `0.5` (fraction of AP/Anima consumed on PARTIAL outcomes) |
+| `BASE_MAX_QUALITY_RUNG` / `BASE_MAX_ACCENT_LEVEL` | int | `9` / `4` — thread-capped ceilings (#2878): +1 rung per Thread on the recipe's skill; divine+ is Gifted-only |
+| `ACCENT_DIFFICULTY_STEP` / `ACCENT_SCORE_PER_LEVEL` | int | `5` / `15` — each requested Accent raises craft difficulty; accent-check score ÷ divisor = realized rung (PLACEHOLDER) |
+| `REFINEMENT_VALUE_PER_PROGRESS` / `REFINEMENT_TIME_LIMIT_DAYS` | int | `100` / `365` — refinement threshold = item value × target rung ÷ 100 progress (PLACEHOLDER) |
+| `CRAFTING_FAME_ACCENT_WEIGHT` | float | `0.2` — per-accent-rung multiplier on first-making fame (PLACEHOLDER) |
 
 ### Models (`crafting/models.py` — registered under the `items` app)
 
@@ -581,14 +585,60 @@ Returns `{"action_points": n, "anima": n, "materials": k}`.
 
 ### Quality Resolution (`crafting/quality.py`)
 
-`resolve_capped_tier(*, recipe, crafter_character, check_result) -> QualityTier`:
+`resolve_capped_tier(*, recipe, crafter_character, check_result, material_grade_bonus=0) -> QualityTier`:
 
 1. `compute_quality_score(check_result, step=recipe.success_level_step,
    min_success_level=recipe.min_success_level)` →
-   `check_result.total_points + max(0, success_level - min_success_level) * step`.
+   `check_result.total_points + max(0, success_level - min_success_level) * step`,
+   **plus `material_grade_bonus`** (#2878, ADR-0187): the quantity-weighted mean
+   `material_grade` of the STAGED allocations — the material's head start toward
+   one fixed quality landscape (divine silk is a master's good day; divine plain
+   cloth a near-impossible legend).
 2. Look up crafter's `skill_trait` rank; find the highest `CraftingSkillCap` band ≤ rank.
 3. If a cap exists, clamp score to `cap_tier.numeric_max`.
-4. `QualityTier.for_score(score)` → final tier.
+4. **Thread ceiling** (#2878): clamp to the top of the highest quality rung ≤
+   `BASE_MAX_QUALITY_RUNG + active TRAIT threads on the recipe's skill`
+   (`thread_count_for_skill`). No-op when the ladder has no rows above the
+   allowed rung (short test ladders).
+5. `QualityTier.for_score(score)` → final tier.
+
+### Accents, refinement, prestige & fame (#2878)
+
+- **Ladders**: the live `QualityTier` seed is the 12-rung Poor→Legendary ladder
+  (rung = `sort_order`; 10 divine / 11 transcendent / 12 legendary are
+  thread-gated); `AccentLevel` is the separate benefit-only 7-rung adverb
+  ladder (slightly→legendarily). Both seeded by the `provisioning` cluster.
+- **Accents** (`ItemAccent`: instance × styleable `ModifierTarget` ×
+  `AccentLevel`): crafter-chosen at craft time via
+  `run_crafting_recipe(accent_targets=…)` — each raises difficulty by
+  `ACCENT_DIFFICULTY_STEP` and rolls its OWN check after the piece resolves
+  (`_resolve_accents`); realized rung is thread-capped. Read by
+  `crafted_modifier_value` (adds the rung on top of recipe modifiers; the
+  equipment-walk prefetch covers `cached_item_accents`) and by
+  `_worn_accent_bonus` (flatters `present_outfit` fashion presentations).
+  Axes are data: `ModifierTarget.is_styleable` (+ `styleable_adjective` for
+  the display grammar). `Style.axis_lean` tags silhouettes for vogue rotation.
+- **Examine layer**: `crafted_provenance_line`
+  (`items/services/crafted_display.py`) renders "Of divine quality, quite
+  menacing and slightly alluring. Crafted by X, designed by Y." — shared by
+  the telnet appearance section and the `crafted_provenance` serializer
+  field. Credits read ItemInstance's #2066 dual-provenance fields.
+- **Refinement** (`crafting/refinement.py`): `ITEM_REFINEMENT` projects on the
+  projects accumulator (instant-completion; `ItemRefinementDetails`).
+  Deterministic — no per-cycle rolls; threshold = value × target rung ÷ 100;
+  the crossing contribution needs a contributor whose thread-capped ceiling
+  reaches the goal (`RefinementAwaitsMaster` — the master gate). Wrap applies
+  +1 Accent/quality (instance + `CraftedItemRecipe` snapshot together).
+- **Prestige**: `recompute_persona_prestige_from_items` prices worn instances
+  (value × quality multiplier ÷ `PRESTIGE_VALUE_DIVISOR` + accent rungs ×
+  `ACCENT_PRESTIGE_WEIGHT` + `legend_value`) on the same equip-event recompute.
+- **Fame at first making** (`crafting/reward.py`): `award_crafting_fame` mints
+  solo legend deeds to BOTH maker and designer personas (ITEM_CREATE path
+  only), valued `base × (multiplier − 1) × (1 + weight × Σ accent rungs)` —
+  the old hard masterwork threshold is emergent, not authored.
+- **Generic materials** (`world/seeds/crafting_materials.py`, cluster
+  `crafting_materials`): 5 categories + 21 graded ladder templates; named
+  canon materials await the curation worksheet (#2878 Phase F).
 
 ### Shared Material Helper (`services/materials.py`)
 

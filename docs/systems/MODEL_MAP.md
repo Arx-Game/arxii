@@ -4039,6 +4039,10 @@
   - itemstyle_attachments <- items.ItemStyle
   - crafted_item_recipes <- items.CraftedItemRecipe
 
+### AccentLevel
+**Pointed to by:**
+  - item_accents <- items.ItemAccent
+
 ### MaterialCategory
 **Pointed to by:**
   - templates <- items.ItemTemplate
@@ -4117,6 +4121,8 @@
   - outfit_slots <- items.OutfitSlot
   - mantle <- items.Mantle
   - crafted_recipes <- items.CraftedItemRecipe
+  - accents <- items.ItemAccent
+  - refinement_projects <- items.ItemRefinementDetails
   - gem_instance_details <- items.GemInstanceDetails
   - adornments <- items.Adornment
   - adorned_on <- items.Adornment
@@ -4226,6 +4232,8 @@
   - trendsetter_crownings <- items.Trendsetter
 
 ### Style
+**Foreign Keys:**
+  - axis_lean -> mechanics.ModifierTarget [FK] (nullable)
 **Pointed to by:**
   - motif_usages <- magic.MotifResonanceStyle
   - item_attachments <- items.ItemStyle
@@ -4308,6 +4316,18 @@
   - item_instance -> items.ItemInstance [FK]
   - recipe -> items.CraftingRecipe [FK]
   - quality_tier -> items.QualityTier [FK]
+
+### ItemAccent
+**Foreign Keys:**
+  - item_instance -> items.ItemInstance [FK]
+  - target -> mechanics.ModifierTarget [FK]
+  - level -> items.AccentLevel [FK]
+
+### ItemRefinementDetails
+**Foreign Keys:**
+  - project -> projects.Project [OneToOne]
+  - item_instance -> items.ItemInstance [FK]
+  - accent_target -> mechanics.ModifierTarget [FK] (nullable)
 
 ### LabStationDetails
 **Foreign Keys:**
@@ -5777,7 +5797,10 @@
   - character_modifiers <- mechanics.CharacterModifier
   - gated_by_conditions <- relationships.RelationshipCondition
   - reward_definitions <- achievements.RewardDefinition
+  - leaning_styles <- items.Style
   - fashion_style_bonuses <- items.FashionStyleBonus
+  - item_accents <- items.ItemAccent
+  - refinement_projects <- items.ItemRefinementDetails
   - covenant_level_bonuses <- covenants.CovenantLevelBonus
   - vow_stat_scalings <- covenants.VowStatScaling
   - covenant_role_bonuses <- covenants.CovenantRoleBonus
@@ -6921,6 +6944,7 @@
   - cleanup_details <- areas.CleanupProjectDetails
   - frame_job_details <- justice.FrameJobDetails
   - ransom_captivities <- captivity.Captivity
+  - item_refinement_details <- items.ItemRefinementDetails
   - city_defense_details <- battles.CityDefenseDetails
   - war_funding_details <- battles.WarFundingDetails
   - contributions <- projects.Contribution
