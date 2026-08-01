@@ -35,7 +35,14 @@ from world.magic.constants import (
                              # INTENSITY_BUMP, VITAL_BONUS, CAPABILITY_GRANT,
                              # NARRATIVE_ONLY, ASSUME_ALTERNATE_SELF (drives
                              # transformation via target_form + depth band)
-    VitalBonusTarget,        # MAX_HEALTH, DAMAGE_TAKEN_REDUCTION
+    VitalBonusTarget,        # MAX_HEALTH, DAMAGE_TAKEN_REDUCTION, DEATH_SAVE,
+                             # KNOCKOUT_RESIST, PERMANENT_WOUND_RESIST — plus
+                             # SHIP_HULL / SHIP_HANDLING / SHIP_ARMAMENT, which
+                             # name a VESSEL's stats, not a person's, and are
+                             # read only by world/ships/sanctum_bonus.py off
+                             # TargetKind.SANCTUM rows (#2736, ADR-0188).
+                             # SHIP_VITAL_BONUS_TARGETS is the membership set;
+                             # passive_vital_bonuses returns 0 for them.
     RitualExecutionKind,     # SERVICE, FLOW
     PendingAlterationStatus, # OPEN, RESOLVED, STAFF_CLEARED
     AlterationTier,

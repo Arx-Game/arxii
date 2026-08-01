@@ -1883,6 +1883,49 @@ the design rationale.
 
 ---
 
+## Ship sanctum grants ride the authored ThreadPullEffect catalog (#2736) — DONE (2026-08-01)
+
+Both halves of what a ship's sanctum confers were placeholders written in code, and
+both are now authored content on the existing pull-effect catalog. No new model — the
+mapping table already existed and `world/ships/sanctum_bonus.py`'s own docstring already
+named it as the source; `battle_bridge.py` was ignoring the sibling it documented.
+
+**What was built:**
+
+- **`VitalBonusTarget` gains `SHIP_HULL` / `SHIP_HANDLING` / `SHIP_ARMAMENT`** — the
+  three stats of a *vessel*, deliberately on the character-vital enum so one authored
+  row set covers a resonance's whole contribution to a ship. `SHIP_VITAL_BONUS_TARGETS`
+  is the membership set; `CharacterThreadHandler.passive_vital_bonuses` returns 0 for
+  them, because the weaver owns their `SANCTUM` thread personally and would otherwise
+  reach a ship-stat row as a personal bonus. Forward guard — no caller passes one today.
+- **`ship_sanctum_bonus`** — was `hull = handling = armament = Σ thread levels`, so
+  every sanctified ship sailed identically. Now sums the authored `SHIP_*`
+  `VITAL_BONUS` rows per target, scaled by thread depth. Siege Deck armament (#675)
+  unchanged.
+- **`ship_sanctum_capabilities` → `ship_sanctum_capability_grants`** — was minting a
+  `CapabilityType` named `sanctum_<resonance>` at a flat 1 (a provenance, not a
+  capacity; off the ADR-0164 ladder; and a gameplay path writing into the
+  `CONTENT_MODELS` corpus — the #2724 defect class). Now returns
+  `list[ShipCapabilityGrant]` resolved off authored `CAPABILITY_GRANT` rows and curved
+  by `apply_capability_curve`. Renamed because the consumer needs the granting thread's
+  level, which `list[Resonance]` discarded.
+
+**Three things the approved spec did not anticipate**, all recorded in ADR-0188:
+`threadpulleffect_lookup_key` admits one row per key, so content authors **two** rows
+per resonance split by `min_thread_level` (0 stat / 3 capability) rather than one; the
+hardcoded level-3 floor moved from code to the authored `min_thread_level`; and
+`apply_capability_curve` is inert at `power <= 0`, so a ship needs a power figure of its
+own — the **sanctum's installed level**, already the basis of the anchor cap.
+
+**Content not yet written.** Zero `magic.threadpulleffect` rows exist in the lore repo,
+so every ship sanctum grant is currently inert by design. The twelve-resonance mapping
+is a separate lore-repo PR; merge order is arxii first, since `VitalBonusTarget` must
+accept the ship targets before rows naming them will load.
+
+See ADR-0188 and `docs/systems/ships.md` ("Ship-as-sanctum").
+
+---
+
 ## Notes
 
 ### Cross-reference: Aspect Focus & Path Evolution
