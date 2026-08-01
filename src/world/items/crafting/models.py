@@ -382,6 +382,28 @@ class CraftedItemRecipe(SharedMemoryModel):
         related_name="crafted_item_recipes",
         help_text="Quality tier resolved at craft time, used to scale modifier outcomes.",
     )
+    crafter_persona = models.ForeignKey(
+        "scenes.Persona",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="crafted_works",
+        help_text=(
+            "The persona credited as the maker (#2878). Persona-scoped, never "
+            "sheet-scoped: a masked artisan's work is credited to the mask."
+        ),
+    )
+    designer_persona = models.ForeignKey(
+        "scenes.Persona",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="designed_works",
+        help_text=(
+            "The persona credited with the design when a commission split "
+            "designer from maker (#2878). Null = the crafter designed it."
+        ),
+    )
 
     class Meta:
         app_label = "items"
@@ -394,6 +416,48 @@ class CraftedItemRecipe(SharedMemoryModel):
 
     def __str__(self) -> str:
         return f"{self.item_instance} ← {self.recipe.name} ({self.quality_tier.name})"
+
+
+class ItemAccent(SharedMemoryModel):
+    """A style axis the crafter worked into a specific piece (#2878).
+
+    Per-instance, chosen at the forge (or added later by refinement) — never
+    recipe or template data: "sexy recipe vs terrifying recipe" is exactly the
+    shape this model rejects. Each Accent rolled its own check at craft time;
+    ``level`` is how strongly the intent realized. Read alongside the
+    recipe-derived modifiers by ``ItemInstance.crafted_modifier_value``.
+    """
+
+    item_instance = models.ForeignKey(
+        "items.ItemInstance",
+        on_delete=models.CASCADE,
+        related_name="accents",
+    )
+    target = models.ForeignKey(
+        "mechanics.ModifierTarget",
+        on_delete=models.PROTECT,
+        related_name="item_accents",
+        help_text="The styleable axis (is_styleable=True): allure, menace, …",
+    )
+    level = models.ForeignKey(
+        "items.AccentLevel",
+        on_delete=models.PROTECT,
+        related_name="item_accents",
+        help_text="How strongly the accent realized (its own roll at craft time).",
+    )
+
+    class Meta:
+        app_label = "items"
+        ordering = ["target__name"]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["item_instance", "target"],
+                name="items_itemaccent_unique_per_target",
+            )
+        ]
+
+    def __str__(self) -> str:
+        return f"{self.item_instance}: {self.level.name} {self.target.name}"
 
 
 class LabStationDetails(SharedMemoryModel):

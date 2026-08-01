@@ -44,6 +44,15 @@ PARTIAL_FRACTION: float = 0.5
 BASE_MAX_QUALITY_RUNG: int = 9
 BASE_MAX_ACCENT_LEVEL: int = 4
 
+#: Each Accent the crafter works into a piece raises the craft difficulty by
+#: this much (#2878) — ambition is priced in probability, and "alluring AND
+#: menacing" is a master's flex. PLACEHOLDER tuning.
+ACCENT_DIFFICULTY_STEP: int = 5
+
+#: Accent-check quality score → AccentLevel rung divisor (#2878). A score of
+#: 15-29 realizes level 1, 30-44 level 2, … PLACEHOLDER tuning.
+ACCENT_SCORE_PER_LEVEL: int = 15
+
 #: Station durability ceiling scales linearly with RoomFeatureInstance.level.
 #: L1 Lab = 20 crafting attempts before breaking, L5 = 100.
 LAB_BASE_DURABILITY_PER_LEVEL: int = 20

@@ -8,6 +8,7 @@ from typing import TYPE_CHECKING
 if TYPE_CHECKING:
     from evennia_extensions.models import Media
     from world.conditions.models import DamageType
+    from world.items.crafting.models import ItemAccent
     from world.mechanics.models import ModifierTarget
 
 from django.core.exceptions import ValidationError
@@ -891,6 +892,10 @@ class ItemInstance(SharedMemoryModel):
         ``CharacterEquipmentHandler``) and their nested
         ``recipe.cached_modifier_outcomes``, computing each value as:
             base_value + round(quality_scale_factor * quality_tier.stat_multiplier)
+
+        Accents (#2878) add on top: each ``ItemAccent`` on this instance whose
+        axis matches contributes its ladder rung (small single digits by
+        design — gear colors a character without being the character).
         """
         total = 0
         for crafted in self.cached_crafted_recipes:
@@ -899,12 +904,27 @@ class ItemInstance(SharedMemoryModel):
                     total += outcome.base_value + round(
                         outcome.quality_scale_factor * crafted.quality_tier.stat_multiplier
                     )
+        for accent in self.cached_item_accents:
+            if accent.target_id == target.pk:
+                total += accent.level.level
         return total
 
     @property
     def display_image(self) -> Media | None:
         """Return custom image if set, otherwise template image."""
         return self.image or self.template.image
+
+    @cached_property
+    def cached_item_accents(self) -> list[ItemAccent]:
+        """Accents worked into this piece (#2878).
+
+        Targeted by Prefetch(..., to_attr=). When prefetched, Django populates
+        this directly. When accessed without prefetch, falls back to a fresh
+        query.
+
+        To invalidate: del instance.cached_item_accents
+        """
+        return list(self.accents.select_related("target", "level"))
 
     @cached_property
     def cached_item_facets(self) -> list[ItemFacet]:

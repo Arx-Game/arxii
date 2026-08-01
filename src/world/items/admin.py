@@ -2,6 +2,7 @@
 
 from django.contrib import admin
 
+from world.items.crafting.models import ItemAccent
 from world.items.models import (
     AccentLevel,
     Adornment,
@@ -96,6 +97,13 @@ class OrgGemStockAdmin(admin.ModelAdmin):
 class AccentLevelAdmin(admin.ModelAdmin):
     list_display = ["level", "name"]
     ordering = ["level"]
+
+
+@admin.register(ItemAccent)
+class ItemAccentAdmin(admin.ModelAdmin):
+    list_display = ["item_instance", "target", "level"]
+    list_filter = ["target", "level"]
+    raw_id_fields = ["item_instance"]  # large ItemInstance table
 
 
 @admin.register(QualityTier)

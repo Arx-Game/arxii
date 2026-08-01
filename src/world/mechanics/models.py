@@ -113,6 +113,14 @@ class ModifierTarget(NaturalKeyMixin, SharedMemoryModel):
         default=True,
         help_text="Whether this modifier target is currently active in the game",
     )
+    is_styleable = models.BooleanField(
+        default=False,
+        help_text=(
+            "Crafters may work this axis into a piece as an Accent at craft "
+            "time (#2878) — e.g. allure, menace. Data designation, never an "
+            "enum: adding a styleable axis is a row flip, not a migration."
+        ),
+    )
     target_trait = models.ForeignKey(
         "traits.Trait",
         on_delete=models.SET_NULL,

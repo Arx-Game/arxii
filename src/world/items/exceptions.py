@@ -438,3 +438,12 @@ class BlendNotSupported(ItemError):
 
     user_message = "Those can't be blended together."
     SAFE_MESSAGES: ClassVar[frozenset[str]] = frozenset({"Those can't be blended together."})
+
+
+class InvalidAccentTarget(ItemError):
+    """An Accent was requested on a non-styleable or duplicate axis (#2878)."""
+
+    user_message = "That quality can't be worked into a piece."
+    SAFE_MESSAGES: ClassVar[frozenset[str]] = frozenset(
+        {"That quality can't be worked into a piece."}
+    )

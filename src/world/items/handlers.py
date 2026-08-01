@@ -70,6 +70,7 @@ class CharacterEquipmentHandler:
             from world.items.crafting.models import (  # noqa: PLC0415
                 CraftedItemRecipe,
                 CraftingRecipeModifier,
+                ItemAccent,
             )
             from world.items.models import (  # noqa: PLC0415
                 EquippedItem,
@@ -120,6 +121,11 @@ class CharacterEquipmentHandler:
                             )
                         ),
                         to_attr="cached_crafted_recipes",
+                    ),
+                    Prefetch(
+                        "item_instance__accents",
+                        queryset=ItemAccent.objects.select_related("target", "level"),
+                        to_attr="cached_item_accents",
                     ),
                 )
             )
