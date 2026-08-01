@@ -410,6 +410,16 @@ class Technique(NaturalKeyMixin, DiscoverableContent, SharedMemoryModel):
         blank=True,
         help_text="Description of what this technique does.",
     )
+    windup_rounds = models.PositiveSmallIntegerField(
+        default=0,
+        help_text=(
+            "Rounds this technique winds up before it lands (#2705). 0 (default) is "
+            "today's resolve-immediately behavior, so every existing technique is "
+            "unchanged. > 0 creates a SustainedAction at declaration instead of "
+            "resolving the same round; the commitment can be broken by landing hits "
+            "before it matures."
+        ),
+    )
     # === Clash fields (Task 1.5) ===
     clash_capable = models.BooleanField(
         default=False,

@@ -77,6 +77,15 @@ class RitualCheckConfig(SharedMemoryModel):
             "target (e.g. a non-founder dissolving a Sanctum). NULL = no distinction."
         ),
     )
+    sustained_rounds = models.PositiveSmallIntegerField(
+        default=0,
+        help_text=(
+            "Rounds this ritual takes to conduct when performed inside a combat "
+            "encounter (#2705). 0 (default) fires immediately, as every ritual does "
+            "today. > 0 creates a SustainedAction that matures this many rounds later "
+            "and can be broken by landing hits."
+        ),
+    )
 
     class Meta:
         verbose_name = "Ritual Check Config"
