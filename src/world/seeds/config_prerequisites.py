@@ -153,10 +153,16 @@ def _projects_rows() -> None:
 def _ships_rows() -> None:
     """The `speed` CapabilityType `materialize_ship_as_battle_vehicle` FKs by name.
 
-    Per-resonance sanctum capability names (`battle_bridge.py:101`,
-    `f"sanctum_{resonance.name.lower()}"`) are derived from `Resonance` rows at
-    runtime, not a fixed literal — deliberately NOT registered here; that set cannot
-    be enumerated at press time and is not a code-required row.
+    This is the only capability the ship bridge creates, and it belongs here because
+    it IS a fixed literal a code path FKs by name.
+
+    #2724 noted that the bridge also minted a per-resonance `sanctum_<resonance>`
+    capability and declined to register it — a set derived from `Resonance` rows at
+    runtime cannot be enumerated at press time and is not a code-required row. #2736
+    removed that minting outright: sanctum grants now come from authored
+    `ThreadPullEffect` rows naming already-authored capabilities, so there is nothing
+    left to register or to decline (ADR-0188). Kept as a note because "why isn't the
+    sanctum capability here" is a reasonable question to ask of this function.
     """
     from world.conditions.models import CapabilityType  # noqa: PLC0415
     from world.ships.constants import SPEED_CAPABILITY_NAME  # noqa: PLC0415
