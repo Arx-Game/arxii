@@ -12,6 +12,10 @@ MASTERWORK_STAT_MULTIPLIER_THRESHOLD: Decimal = Decimal("1.5")
 #: PLACEHOLDER — the tuning pass sets the real fame weight.
 MASTERWORK_DEED_BASE_VALUE: int = 10
 
+#: Per-Accent-rung multiplier on the first-making fame value (#2878).
+#: PLACEHOLDER — the tuning pass sets the real weight.
+CRAFTING_FAME_ACCENT_WEIGHT: float = 0.2
+
 
 class CraftingRecipeKind(models.TextChoices):
     """What a CraftingRecipe produces / how it is applied.

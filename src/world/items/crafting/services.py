@@ -585,22 +585,8 @@ def _record_crafted_recipe(  # noqa: PLR0913 — orchestrator context passthroug
     for equipped in EquippedItem.objects.filter(item_instance=target_item):
         equipped.character.equipped_items.invalidate()
 
-    # A masterwork-quality craft makes its maker a little famous (#2243).
-    from world.character_sheets.models import CharacterSheet  # noqa: PLC0415
-    from world.items.crafting.reward import (  # noqa: PLC0415
-        award_masterwork_renown,
-        is_masterwork,
-    )
-
-    crafter_sheet = CharacterSheet.objects.filter(character=crafter_character).first()
-    if tier is not None and is_masterwork(tier) and crafter_sheet is not None:
-        assert isinstance(target_item, ItemInstance)  # noqa: S101
-        award_masterwork_renown(
-            crafter_character_sheet=crafter_sheet,
-            tier=tier,
-            item_label=str(target_item.template),
-            item_instance=target_item,
-        )
+    # Fame at first making moved to run_crafting_recipe step 10d (#2878) —
+    # it scales with Accents, which resolve after this record step.
     return crafted_recipe
 
 
@@ -783,6 +769,19 @@ def run_crafting_recipe(  # noqa: PLR0913
             target_item=accent_host,
             accent_targets=accents_requested,
             difficulty=difficulty,
+        )
+
+    # --- 10d. Fame at first making (#2878, generalizes #2243) ---
+    if attached and tier is not None and isinstance(accent_host, ItemInstance):
+        from world.items.crafting.reward import award_crafting_fame  # noqa: PLC0415
+
+        award_crafting_fame(
+            crafter_persona=crafted_recipe.crafter_persona if crafted_recipe else None,
+            designer_persona=crafted_recipe.designer_persona if crafted_recipe else None,
+            tier=tier,
+            accents=accents,
+            item_label=str(accent_host.template),
+            item_instance=accent_host,
         )
 
     return CraftRunResult(

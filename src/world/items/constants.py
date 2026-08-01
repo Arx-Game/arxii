@@ -62,6 +62,12 @@ class OwnershipEventType(models.TextChoices):
 # provenance the soft-delete cleanup must never destroy (#1025). Deliberately
 # excludes CREATED (origin) and ACTIVATED/CONSUMED (every consumed item has
 # these, so counting them would make the purge a no-op).
+# Worn-item prestige coefficients (#2878, PLACEHOLDER tuning): a piece adds
+# (value × quality multiplier) ÷ divisor + weight × Σ accent rungs + legend
+# to the wearer's denormalized prestige_from_items on the equip recompute.
+PRESTIGE_VALUE_DIVISOR = 100
+ACCENT_PRESTIGE_WEIGHT = 5
+
 PROVENANCE_EVENT_TYPES = frozenset(
     {
         OwnershipEventType.GIVEN,
