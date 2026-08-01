@@ -15,6 +15,7 @@ from core_management.content_fixtures import (
     _resolve_natural_key_fields,
     build_all,
     load_entries,
+    load_world_content,
     parse_content_file,
     write_fixtures,
 )
@@ -1098,3 +1099,124 @@ class LoadEntriesCaseInsensitiveUpsertTest(TestCase):
         existing.refresh_from_db()
         assert existing.description == "new"
         assert ConditionTemplate.objects.filter(name__iexact="fire ward").count() == 1
+
+
+class HouseAspectContentLoadTest(TestCase):
+    """#2868 — the Inferna Quiddity catalog loads from the content repo's shape.
+
+    Proves the whole chain the lore repo depends on: a markdown codex entry
+    under a two-level ``Realms > Inferna > House Quiddities`` subject path, and
+    a ``societies.houseaspectoption`` fixture whose ``codex_entry`` is that
+    entry's four-arg natural key. Nothing here may need a pk.
+    """
+
+    QUIDDITY_MD = """---
+name: "The Leviathan"
+subject: ["Realms", ["Realms", null, "Inferna"], "House Quiddities"]
+summary: "The rarest Quiddity and believed the oldest."
+---
+
+## Lore
+
+A Princess of the Leviathan is given a healthy amount of distance by her peers.
+"""
+
+    def setUp(self) -> None:
+        self.content = tempfile.TemporaryDirectory()
+        self.addCleanup(self.content.cleanup)
+        self.root = Path(self.content.name)
+        _write(
+            self.root,
+            "content/codex_entries/house-quiddities/the-leviathan.md",
+            self.QUIDDITY_MD,
+        )
+        _write(
+            self.root,
+            "fixtures/codex/taxonomy.json",
+            json.dumps(
+                [
+                    {
+                        "model": "codex.codexcategory",
+                        "fields": {"name": "Realms", "description": "", "display_order": 1},
+                    },
+                    {
+                        "model": "codex.codexsubject",
+                        "fields": {
+                            "category": ["Realms"],
+                            "parent": None,
+                            "name": "Inferna",
+                            "description": "",
+                            "display_order": 0,
+                        },
+                    },
+                    {
+                        "model": "codex.codexsubject",
+                        "fields": {
+                            "category": ["Realms"],
+                            "parent": ["Realms", None, "Inferna"],
+                            "name": "House Quiddities",
+                            "description": "",
+                            "display_order": 0,
+                        },
+                    },
+                ]
+            ),
+        )
+        _write(
+            self.root,
+            "fixtures/societies/house_aspects.json",
+            json.dumps(
+                [
+                    {
+                        "model": "societies.houseaspectdefinition",
+                        "fields": {
+                            "name": "House Quiddity",
+                            "prompt": "What drives your house?",
+                            "min_picks": 1,
+                            "max_picks": 1,
+                            "display_order": 0,
+                        },
+                    },
+                    {
+                        "model": "societies.houseaspectoption",
+                        "fields": {
+                            "definition": ["House Quiddity"],
+                            "name": "The Leviathan",
+                            "description": "A reputation for ferocity it does little to correct.",
+                            "codex_entry": [
+                                "Realms",
+                                ["Realms", None, "Inferna"],
+                                "House Quiddities",
+                                "The Leviathan",
+                            ],
+                            "is_active": True,
+                            "display_order": 6,
+                        },
+                    },
+                ]
+            ),
+        )
+
+    def test_option_loads_with_its_codex_entry_resolved(self) -> None:
+        """Via ``load_world_content`` — the markdown domains load BEFORE
+        ``fixtures/``, so both the entry (needs its subjects) and the option
+        (needs the entry) resolve only on the deferred-retry pass.
+        """
+        from world.societies.houses.models import HouseAspectOption
+
+        outcome = load_world_content(self.root)
+        assert not outcome.skipped, outcome.skipped
+        option = HouseAspectOption.objects.get(name="The Leviathan")
+        assert option.definition.name == "House Quiddity"
+        assert option.codex_entry is not None
+        assert option.codex_entry.name == "The Leviathan"
+        assert option.codex_entry.subject.name == "House Quiddities"
+        assert option.codex_entry.subject.parent.name == "Inferna"
+
+    def test_reload_upserts_rather_than_duplicating(self) -> None:
+        from world.societies.houses.models import HouseAspectOption
+
+        load_world_content(self.root)
+        outcome = load_world_content(self.root)
+        assert outcome.created == 0, (outcome.created, outcome.updated)
+        assert HouseAspectOption.objects.filter(name="The Leviathan").count() == 1
