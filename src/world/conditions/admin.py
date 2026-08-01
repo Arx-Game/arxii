@@ -13,6 +13,7 @@ from world.conditions.models import (
     ConditionStage,
     ConditionTemplate,
     DamageType,
+    HazardResponseState,
 )
 
 # =============================================================================
@@ -312,3 +313,18 @@ class ConditionInstanceAdmin(admin.ModelAdmin):
             },
         ),
     ]
+
+
+@admin.register(HazardResponseState)
+class HazardResponseStateAdmin(admin.ModelAdmin):
+    """The hazard prompt's per-instance state — why someone was auto-fled (#2846)."""
+
+    list_display = [
+        "condition_instance",
+        "prompted_at",
+        "damage_observations",
+        "responded_at",
+        "endured_until",
+    ]
+    raw_id_fields = ["condition_instance"]
+    readonly_fields = ["prompted_at"]

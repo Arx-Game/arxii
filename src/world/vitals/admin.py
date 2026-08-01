@@ -1,6 +1,6 @@
 from django.contrib import admin
 
-from world.vitals.models import CharacterVitals, VitalsConsequenceConfig
+from world.vitals.models import CarriedBody, CharacterVitals, VitalsConsequenceConfig
 
 
 @admin.register(CharacterVitals)
@@ -33,3 +33,12 @@ class VitalsConsequenceConfigAdmin(admin.ModelAdmin):
     def has_add_permission(self, request: object) -> bool:  # noqa: ARG002
         """Prevent adding a second config — there can be only one."""
         return not VitalsConsequenceConfig.objects.exists()
+
+
+@admin.register(CarriedBody)
+class CarriedBodyAdmin(admin.ModelAdmin):
+    """Who is currently carrying whom (#2852) — transient, but worth seeing."""
+
+    list_display = ["carrier", "carried", "created_at"]
+    raw_id_fields = ["carrier", "carried"]
+    readonly_fields = ["created_at"]

@@ -403,6 +403,7 @@ from actions.definitions.speaker_queue import (
     OpenSpeakerQueueAction,
     SkipSpeakerAction,
 )
+from actions.definitions.species_gm import ApplyShadeUndeathAction
 from actions.definitions.story_builder import (
     CloseSceneRoomAction,
     CreateStoryAreaAction,
@@ -792,6 +793,7 @@ _ALL_ACTIONS: list[Action] = [
     CreateBattleAction(),
     StageBattleMapAction(),
     StartGangTurfAction(),
+    ApplyShadeUndeathAction(),
     SpawnBattleUnitsAction(),
     EnlistBattleParticipantAction(),
     BrowseBattleCatalogAction(),

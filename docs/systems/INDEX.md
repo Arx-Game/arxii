@@ -3990,6 +3990,15 @@ Unified modifier system — categories, types, sources, and per-character modifi
 ### Items & Equipment
 Items, equipment, inventory, and currency. Spec D PR1 shipped facets, equip/unequip
 
+- **#2862-review gap closures (#2869 follow-through):** telnet `endure`/`retreat`
+  (hazard prompt answers — the prompt now names them), `turf` / `turf push <crew>`
+  (turf status + the war's opening move), `makeshade <character>` (GM tool; the only
+  caller `apply_shade_undeath` has ever had), the `inventory` burden line
+  (encumbrance was invisible before), the `weather` and `justice_laws` seed clusters
+  (`world/seeds/weather_content.py`, `world/seeds/justice_laws.py` — the latter is
+  what makes crime mint heat at all), the Shade anchor + daily-drain production seed,
+  and admin for `MarketStall` (where a fence gets placed), `NeighborhoodTurf`,
+  `CarriedBody`, `AppetiteUpkeep`(+receipts), `FeedingRecord`, `HazardResponseState`.
 - **The underworld (#2862, ADR-0185):** the fence (`MarketStall.stall_kind=FENCE`,
   `sell_to_fence` — the first sell-to-NPC path; first consumer of `ItemTemplate.value`;
   first live heat producers for the dormant `contraband`/`smuggling` CrimeKinds, AreaLaw-

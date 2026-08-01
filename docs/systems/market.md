@@ -61,3 +61,22 @@ listings consume it unchanged.
 
 NPC sales are pure sinks (deflationary tenet); PC-to-PC trades move coin
 without minting; org-hosted stalls feed treasuries via the audited ledger.
+
+## The Fence (#2862, ADR-0185)
+
+The game's first **sell-to-NPC** path — the market is otherwise buy-only, and
+`ItemTemplate.value` had no consumer at all before this. A stall whose
+`stall_kind` is `FENCE` buys anything with a template value at `FENCE_RATE_PCT`
+(PLACEHOLDER 40%), paid as a coin **mint** (the inverse of the purchase sink),
+and asks no questions about provenance — that is what a fence is for.
+
+The price of dealing dirt is heat. `sell_to_fence` mints the previously-dormant
+`contraband` CrimeKind for vice (any template whose on-use pool carries an
+`INTOXICATE` effect) and `smuggling` for hot-provenance goods, both weighted by
+the winning `AreaLaw` at the stall's area — so neighborhood law posture, and
+eventually turf control, decides how dangerous a given deal is. Fenced goods
+leave the world: the fence is where hot trails go cold (reclamation of
+already-fenced items is a noted deferral).
+
+Surfaces: `market_sell_fence` action, telnet `market/fence <item>`, and
+`MarketStallAdmin` (staff place a fence by setting `stall_kind`).

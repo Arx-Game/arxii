@@ -1306,6 +1306,35 @@ def _seed_sun_sensitive_species() -> None:
         )
 
 
+def _seed_shade_content(appetite_factory) -> None:
+    """The Shade anchor distinction + its daily drain (#2853 "Shade content time").
+
+    Deferred at #2853 with the note that the Shade's upkeep "rides its own
+    distinction wiring at Shade content time"; #2862's review found nothing
+    ever created either row, so the undead half of the economy was unreachable.
+    """
+    from world.magic.models.appetites import AppetitePeriod, AppetiteUpkeep  # noqa: PLC0415
+    from world.species.appetites import SHADE_SLUG, SHADE_TAG  # noqa: PLC0415
+
+    shade = appetite_factory(
+        SHADE_SLUG,
+        tag=(SHADE_TAG, "Shade Undeath"),
+        name="Undeath: Shade",
+        desc="PLACEHOLDER: the cold that replaced your life — it leaks, daily, "
+        "and only stolen warmth answers it.",
+    )
+    if shade is None:
+        return
+    AppetiteUpkeep.objects.get_or_create(
+        distinction=shade,
+        defaults={
+            "period": AppetitePeriod.DAILY,
+            "amount": 1,
+            "floor_percent": 0,
+        },
+    )
+
+
 def _seed_appetite_content() -> None:
     """#2853: appetite distinctions, upkeep config, Vesperi, and species grants.
 
@@ -1386,6 +1415,11 @@ def _seed_appetite_content() -> None:
                 "floor_percent": 10,
             },
         )
+
+    # #2862 gap close: the Shade's own anchor + daily-drain config (see
+    # _seed_shade_content) — the undead branch previously had no production
+    # rows at all, only test factories, so a Shade could never drain.
+    _seed_shade_content(_appetite)
 
     khati = Species.objects.filter(name="Khati").first()
     if khati is not None:

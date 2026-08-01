@@ -370,3 +370,8 @@ class AudacityTuningAdmin(admin.ModelAdmin):
 
     def has_delete_permission(self, request, obj=None) -> bool:  # noqa: ARG002
         return False
+
+
+# The market submodule keeps its own admin next to its models; Django only
+# autoloads <app>/admin.py, so import it here to register those models (#2862).
+from world.items.market import admin as _market_admin  # noqa: E402, F401

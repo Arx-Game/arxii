@@ -19,6 +19,8 @@ class TestClusterRegistry(TestCase):
                 "relationship_scale",
                 "social_actions",
                 "provisioning",
+                "weather",
+                "justice_laws",
                 "underworld",
                 "social_combat",
                 "magic",

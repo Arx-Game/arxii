@@ -124,9 +124,9 @@ def _emit_prompt(instance: ConditionInstance) -> None:
         retreat_action=HAZARD_RETREAT_ACTION_KEY,
     )
     text = (
-        f"|r{template.name} is burning you ({stage_name}).|n You can flee to "
-        "safety, cover up, seek shade, or tough it out — if you do nothing, "
-        "your instincts will carry you to safety."
+        f"|r{template.name} is burning you ({stage_name}).|n |wretreat|n to "
+        "safety or |wendure|n it; covering up or reaching real shade also "
+        "ends it. If you do nothing, your instincts will carry you to safety."
     )
     try:
         character.msg(text)

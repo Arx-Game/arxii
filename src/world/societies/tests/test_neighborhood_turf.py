@@ -7,11 +7,7 @@ from django.test import TestCase
 from world.areas.constants import AreaLevel
 from world.areas.models import Area
 from world.societies.models import NeighborhoodTurf, Organization, OrganizationType
-from world.societies.turf_services import (
-    FLIP_START_GRIP,
-    apply_turf_push,
-    area_crime_value,
-)
+from world.societies.turf_services import FLIP_START_GRIP, apply_turf_push
 
 
 class TurfPushTest(TestCase):
@@ -55,7 +51,10 @@ class TurfPushTest(TestCase):
 
     def test_grip_writes_the_area_crime_stat(self):
         apply_turf_push(self.crew, self.area, 60)
-        self.assertEqual(area_crime_value(self.area), 30)
+        from world.locations.constants import StatKey
+        from world.locations.services import area_stat_total
+
+        self.assertEqual(area_stat_total(self.area, StatKey.CRIME), 30)
 
     def test_control_retargets_the_kickup_stream(self):
         from world.currency.constants import IncomeStreamKind

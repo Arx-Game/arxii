@@ -564,6 +564,26 @@ def ensure_shade_distinction() -> "Distinction":
     return distinction
 
 
+def ensure_shade_upkeep() -> None:
+    """The Shade's daily anima drain config (#2853 "Shade content time", #2862).
+
+    Deferred at #2853 with the note that it "rides its own distinction wiring
+    at Shade content time" — this is that wiring. Daily -1 down to a floor of
+    zero: undeath leaks, and unlike a vampire's weekly tithe it does not stop
+    at a dignified reserve.
+    """
+    from world.magic.models.appetites import AppetitePeriod, AppetiteUpkeep
+
+    AppetiteUpkeep.objects.get_or_create(
+        distinction=ensure_shade_distinction(),
+        defaults={
+            "period": AppetitePeriod.DAILY,
+            "amount": 1,
+            "floor_percent": 0,
+        },
+    )
+
+
 def apply_shade_undeath(character) -> None:
     """Apply the Shade condition + its anchor distinction to *character* (#2853).
 
@@ -575,6 +595,7 @@ def apply_shade_undeath(character) -> None:
     from world.distinctions.services import grant_distinction
     from world.distinctions.types import DistinctionOrigin
 
+    ensure_shade_upkeep()
     template = ensure_shade_condition()
     if not has_condition(character, template):
         apply_condition(character, template)
