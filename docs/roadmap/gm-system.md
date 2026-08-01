@@ -298,8 +298,44 @@ Deferred (premises verified in the #2127 spec's anti-reinvention pass):
 - Structured `CheckType`-draft proposals (today's `CatalogSuggestion
   proposal_kind=OTHER` covers the freeform ask).
 - Bounded per-invocation modifiers beyond #2118's edge/setback.
-- `ChallengeTemplate.severity` guidance (Decision 6 — different scale, guides a
-  content author rather than a live GM).
+- ~~`ChallengeTemplate.severity` guidance (Decision 6 — different scale, guides a
+  content author rather than a live GM).~~ Superseded by #2865: the "different
+  scale" turned out to be a defect, not a design. `severity` fed
+  `perform_check`'s `target_difficulty` directly, so it was always the same scale
+  as `DIFFICULTY_VALUES` — just authored as if it were a 1–5 rating, which put
+  every authored challenge at the bottom rank.
+
+### Phase 6b — Quick Challenge Placement ✅ (#2865, ADR-0110)
+Closes the gap #2857 opened: raising `InvokeCatalogCheckAction` to SENIOR funnelled
+JUNIOR/STARTING player GMs to `setsituation`, which needs a whole authored
+`SituationTemplate` — and zero were authored anywhere, nor could they be, since the
+situation and `gm.*` catalog models were absent from `CONTENT_MODELS`.
+
+Delivered:
+- **`PlaceChallengeAction`** (`place_challenge`, JUNIOR-gated) — place one authored
+  `ChallengeTemplate` against a GM-named target object, minting a standalone
+  `ChallengeInstance` (`situation_instance=None`) via the pre-existing
+  `instantiate_challenge`. Telnet: `setsituation challenge <template>=<target name>
+  [edge=<why>|setback=<why>]`.
+- **Per-instance band shift**: `ChallengeInstance.severity_adjustment` /
+  `adjustment_reason`, two DB `CheckConstraint`s (exactly one band, reason required),
+  read through `ChallengeInstance.effective_severity` by every resolution path. Band
+  helpers shared with `InvokeCatalogCheckAction` in `actions/definitions/gm_shift.py`.
+- **Severity scale correction**: `ChallengeTemplate.severity` documented and defaulted
+  in `DIFFICULTY_VALUES` points (`1` → `45`).
+- **Reveal fix**: `instantiate_challenge` honours the template's `discovery_type`
+  instead of hardcoding `is_revealed=True`, which silently defeated `DISCOVERABLE`.
+- **Discovery**: `FindSituationAction` searches `ChallengeTemplate` too — one
+  STARTING-tier browse for both placement verbs.
+- **Lore-repo home**: `mechanics.situationtemplate`/`situationchallengelink`/
+  `situationtraplink` and all four `gm.*` catalog models registered in
+  `CONTENT_MODELS` (natural keys added where the exporter needed them);
+  `seed_catalog_starter_content` converted to `authored_or_sample` per ADR-0168, so
+  the starter taxonomy is authored content rather than seeder invention.
+
+Still content-blocked: the catalog itself. A dozen or so reusable
+`ChallengeTemplate`s with authored approaches are a lore-repo authoring pass
+(tracked in the lore repo), and the code half is inert without them.
 
 ### Phase 7 — Story Areas & Story Rooms ✅ (#2450, epic #2436 slice 3, ADR-0141)
 A GM's own build-and-run space, layered on the #2436/#2449 staff world-builder grid

@@ -36,6 +36,7 @@ from world.mechanics.models import (
     SituationInstance,
     SituationTemplate,
 )
+from world.scenes.action_constants import DIFFICULTY_VALUES, DifficultyChoice
 
 
 class ChallengeCategoryTests(TestCase):
@@ -70,7 +71,10 @@ class ChallengeTemplateTests(TestCase):
 
     def test_defaults(self) -> None:
         self.assertEqual(self.template.challenge_type, ChallengeType.INHIBITOR)
-        self.assertEqual(self.template.severity, 1)
+        # Severity is in DIFFICULTY_VALUES points, not a 1-5 rating (#2865): it
+        # feeds perform_check's target_difficulty directly, so the old default of
+        # 1 put every unspecified challenge at the bottom rank.
+        self.assertEqual(self.template.severity, DIFFICULTY_VALUES[DifficultyChoice.NORMAL])
         self.assertEqual(self.template.discovery_type, DiscoveryType.OBVIOUS)
         self.assertIsNone(self.template.blocked_capability)
 

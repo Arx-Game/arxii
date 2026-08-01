@@ -357,14 +357,56 @@ point:
 
 Gated by `MinimumGMLevelPrerequisite(GMLevel.SENIOR)` (#2857 — staff bypass, else
 SENIOR-tier GM trust). JUNIOR/STARTING player GMs are funneled to
-`SetSituationAction` (`setsituation`), where checks emerge from authored
-situations with pre-set outcomes. The ad-hoc check is a staff/senior stopgap for
-impromptu moments no authored situation covers — it returns a bare graded result
-with no consequences. Telnet: `gm check [find
+`SetSituationAction` (`setsituation`) and `PlaceChallengeAction` (below), where
+checks emerge from authored content with pre-set outcomes. The ad-hoc check is a
+staff/senior stopgap for impromptu moments no authored challenge covers — it
+returns a bare graded result with no consequences. Telnet: `gm check [find
 <term>]` / `gm check <character> <check-type>=<band> [edge=<reason>|setback=<reason>]`
 (`commands/gm_ops.py`). Sibling actions `GMAwardAction` (`gm_award_progression`) and
 `GMApplyConditionAction` (`gm_apply_condition`) round out the GM adjudication toolkit — see
 `docs/systems/INDEX.md` and `docs/roadmap/gm-system.md`.
+
+---
+
+## Quick-Placing an Authored Challenge (#2865)
+
+The JUNIOR-tier path the SENIOR gate above left missing. `PlaceChallengeAction`
+(`actions/definitions/situations.py`, registry key `place_challenge`) places **one**
+authored `ChallengeTemplate` against a thing the GM names, without a
+pre-authored `SituationTemplate` to wrap it. Still catalog-only per ADR-0110: the
+GM picks an authored challenge and names what embodies it; the approaches offered,
+the consequences, and the discovery type are the template's own.
+
+- **Mints** a standalone `ChallengeInstance` with `situation_instance=None`, via the
+  pre-existing `instantiate_challenge` — the same shape the reactive combat
+  challenges (Interpose, Succor, Catch the Faller) have always used. The target
+  prop comes from `create_challenge_target_object`, shared with
+  `instantiate_situation` so the two paths cannot drift.
+- **Adaptation** is one band, with a required reason: `edge_reason` / `setback_reason`
+  (mutually exclusive) persist as `ChallengeInstance.severity_adjustment`
+  (±`DIFFICULTY_BAND_STEP`) and `adjustment_reason`. Two DB `CheckConstraint`s
+  enforce the pair — an arbitrary offset or an unreasoned shift cannot be stored.
+  Out of bounds refuses rather than clamping. `adjustment_reason` is GM-facing only
+  and never reaches `ChallengeInstanceSerializer`.
+- **Difficulty** is read through `ChallengeInstance.effective_severity`
+  (`template.severity + severity_adjustment`) by every resolution path in
+  `challenge_resolution.py`.
+- **Discovery** rides the same `FindSituationAction` (`setsituation find <term>`),
+  which searches `ChallengeTemplate` alongside `SituationTemplate` and
+  `SituationKind`.
+- Gated `MinimumGMLevelPrerequisite(GMLevel.JUNIOR)`, matching `SetSituationAction`
+  — it mints the same class of live row (ADR-0091). Telnet:
+  `setsituation challenge <template>=<target name> [edge=<why>|setback=<why>]`.
+
+### `ChallengeTemplate.severity` is in difficulty points
+
+`resolve_challenge` passes `severity` straight into `perform_check`'s
+`target_difficulty`, which every other caller feeds from `DIFFICULTY_VALUES` (15
+Trivial … 90 Harrowing). The field's default was `1`, so authored challenges
+resolved at the bottom rank and a ±15 band shift had no coherent unit against
+them. Since #2865 the default is `DIFFICULTY_VALUES[NORMAL]` and the field is
+documented as points, not a 1–5 rating. Authored rows in the lore repo are
+re-expressed on that scale as content work.
 
 ---
 

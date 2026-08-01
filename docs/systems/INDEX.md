@@ -1950,9 +1950,36 @@ GM at a given level may author (#2000, ADR-0097).
   `CatalogSuggestionViewSet` (`/api/gm/catalog-suggestions/`, list/retrieve/update,
   `IsAdminUser` — no create route, creation only through the Action). Starter
   taxonomy (Chase/Negotiation/Infiltration + a `SituationDifficultyGuide` row per
-  `RenownRisk` tier) seeded idempotently by `world.gm.factories
-  .seed_catalog_starter_content`, composed into the `"gm"` cluster seeder
-  alongside `seed_default_gm_level_caps`.
+  `RenownRisk` tier) provided by `world.gm.factories.seed_catalog_starter_content`,
+  composed into the `"gm"` cluster seeder alongside `seed_default_gm_level_caps`.
+  **Since #2865 that taxonomy is content-repo-owned**: `gm.situationkind`,
+  `gm.checktypesituationfit`, `gm.situationdifficultyguide` and
+  `gm.consequencepoolguide` are registered in `CONTENT_MODELS` (natural keys added
+  to the latter three), so `seed_catalog_starter_content` looks rows up via
+  `authored_or_sample` and invents only under `SEED_SAMPLE_CONTENT` (ADR-0168).
+  `mechanics.situationtemplate`/`situationchallengelink`/`situationtraplink` are
+  registered too — the situation catalog was previously unexportable even once
+  authored.
+- **Quick challenge placement (#2865, ADR-0110):** `PlaceChallengeAction` (key
+  `place_challenge`, `actions/definitions/situations.py`, gated
+  `MinimumGMLevelPrerequisite(GMLevel.JUNIOR)` — same floor as `SetSituationAction`,
+  it mints the same class of live row per ADR-0091) places ONE authored
+  `mechanics.ChallengeTemplate` against a GM-named target object, minting a
+  standalone `ChallengeInstance` (`situation_instance=None`) through the pre-existing
+  `instantiate_challenge`. The one adaptation permitted is a one-band shift with a
+  required reason, persisted as `ChallengeInstance.severity_adjustment` /
+  `adjustment_reason` (two DB `CheckConstraint`s; GM-facing only, never in
+  `ChallengeInstanceSerializer`) and read back through the new
+  `ChallengeInstance.effective_severity`. Band-shift helpers are shared with
+  `InvokeCatalogCheckAction` via `actions/definitions/gm_shift.py`.
+  `FindSituationAction` also searches `ChallengeTemplate` now, so one browse surface
+  covers both placement verbs. Telnet: `setsituation challenge
+  <template>=<target name> [edge=<why>|setback=<why>]`. Two fold-ins:
+  `ChallengeTemplate.severity` is re-expressed in `DIFFICULTY_VALUES` points (default
+  `1` → `45`; it feeds `perform_check`'s `target_difficulty` directly, so the old
+  scale resolved every authored challenge at the bottom rank), and
+  `instantiate_challenge` now honours `discovery_type` instead of hardcoding
+  `is_revealed=True`, which silently defeated `DiscoveryType.DISCOVERABLE`.
 - **Story areas & story rooms (#2450, epic #2436 slice 3, ADR-0141):** a GM's own
   build-and-run space, layered on the #2436/#2449 grid substrate. Models:
   `StoryArea` (sidecar per ADR-0010 — `gm.StoryArea.area` OneToOne to a
