@@ -106,7 +106,19 @@ class SecurityCheckKind(models.TextChoices):
 SECURITY_CHECK_TYPE_NAMES: dict[SecurityCheckKind, str] = {
     SecurityCheckKind.SNEAK: "Stealth",
     SecurityCheckKind.LOCKPICK: "Lockpick",
-    SecurityCheckKind.BREAK_AND_ENTER: "Break and Enter",
-    SecurityCheckKind.ESCAPE_THROUGH_WINDOW: "Escape Through Window",
+    SecurityCheckKind.BREAK_AND_ENTER: "Athletics",
+    SecurityCheckKind.ESCAPE_THROUGH_WINDOW: "Athletics",
     SecurityCheckKind.GUARD_DETECTION: "Guard Detection",
+}
+
+# #2757: stat_override per security kind. None = use the check's default stat.
+# BREAK_AND_ENTER and ESCAPE_THROUGH_WINDOW both resolve to the "Athletics"
+# CheckType but override the stat from the situation (strength for breaking,
+# agility for escaping).
+SECURITY_CHECK_STAT_OVERRIDE: dict[SecurityCheckKind, str | None] = {
+    SecurityCheckKind.SNEAK: None,
+    SecurityCheckKind.LOCKPICK: None,
+    SecurityCheckKind.BREAK_AND_ENTER: "strength",
+    SecurityCheckKind.ESCAPE_THROUGH_WINDOW: "agility",
+    SecurityCheckKind.GUARD_DETECTION: None,
 }

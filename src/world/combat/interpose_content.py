@@ -52,12 +52,12 @@ logger = logging.getLogger(__name__)
 INTERPOSE_CHALLENGE_NAME: str = "Interpose"
 INTERPOSABLE_PROPERTY_NAME: str = "interposable"
 
-# The "Melee Defense" CheckType is seeded by world.seeds.combat_checks
-# (ensure_melee_defense_check_type, #1994) — this module only looks it up
-# (mirrors the cross-module CheckType reference idiom in
-# world.seeds.social_actions._MELEE_DEFENSE_CHECK_NAME) and never creates it,
-# so a re-seed never risks a duplicate row under a different CheckCategory.
-MELEE_DEFENSE_CHECK_TYPE_NAME: str = "Melee Defense"
+# The "Melee Combat" CheckType is seeded by world.seeds.combat_checks
+# (ensure_melee_combat_check_type) — this module only looks it up
+# and never creates it, so a re-seed never risks a duplicate row under
+# a different CheckCategory. #2757: Melee Defense merged into Melee Combat;
+# the constant name is kept for backward compat but now resolves to "Melee Combat".
+MELEE_DEFENSE_CHECK_TYPE_NAME: str = "Melee Combat"  # #2757: merged with Melee Attack
 
 # Authored difficulty of the interpose challenge. Lives on
 # ChallengeTemplate.severity — never as a literal target_difficulty in engine code.
@@ -150,17 +150,18 @@ def _ensure_interpose_check_type() -> CheckType | None:
 
 
 def _get_melee_defense_check_type() -> CheckType | None:
-    """Look up the "Melee Defense" CheckType seeded by world.seeds.combat_checks.
+    """Look up the "Melee Combat" CheckType seeded by world.seeds.combat_checks.
 
     Returns None (never creates) when it hasn't been seeded yet — the twin
     approaches are skipped for that run rather than risking a duplicate
     CheckType row under the wrong CheckCategory (CheckType.name is only unique
-    together with category, not globally).
+    together with category, not globally). #2757: Melee Defense merged into
+    Melee Combat; the stat is agility via stat_override for defense.
     """
     check_type = CheckType.objects.filter(name=MELEE_DEFENSE_CHECK_TYPE_NAME).first()
     if check_type is None:
         logger.warning(
-            "Melee Defense CheckType not seeded; interpose best-of twins skipped "
+            "Melee Combat CheckType not seeded; interpose best-of twins skipped "
             "(run world.seeds.combat_checks.seed_combat_check_content() first)."
         )
     return check_type

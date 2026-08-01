@@ -1077,6 +1077,7 @@ def seed_character_creation_dev() -> None:
     ensure_somehow_always_broke_distinction()
     _seed_sun_sensitive_species()
     _seed_appetite_content()
+    _seed_moon_content()
     if not settings.SEED_SAMPLE_CONTENT:
         return
     # Named world content — authored in the content repo by maintainers, so
@@ -1429,6 +1430,79 @@ def _seed_appetite_content() -> None:
             species=species,
             gift=gift,
         )
+
+
+def _seed_moon_content() -> None:
+    """Moon-bound distinction + The Wolf's Fury Lycan gift grant (#2845).
+
+    Mirrors the appetite seeder: tag-anchored drawback distinction (ADR-0179),
+    MINOR gift, and a SpeciesGiftGrant stamping both on Lycans at CG. The gift
+    name was ruled by ApostateCD (TehomCD may rename in his species-gift pass).
+    """
+    from world.distinctions.models import (  # noqa: PLC0415
+        Distinction,
+        DistinctionCategory,
+        DistinctionTag,
+    )
+    from world.magic.constants import GiftKind  # noqa: PLC0415
+    from world.magic.models.gifts import Gift  # noqa: PLC0415
+    from world.seeds.sample_content import authored_or_sample  # noqa: PLC0415
+    from world.species.models import SpeciesGiftGrant  # noqa: PLC0415
+    from world.species.moon_constants import (  # noqa: PLC0415
+        MOON_BOUND_SLUG,
+        MOON_BOUND_TAG,
+        WOLFS_FURY_GIFT_NAME,
+    )
+
+    category = authored_or_sample(
+        DistinctionCategory,
+        {
+            "name": "Drawbacks",
+            "description": "PLACEHOLDER: disadvantages that reimburse CG points.",
+        },
+        slug="drawbacks",
+    )
+    if category is None:
+        return
+    tag_row = authored_or_sample(DistinctionTag, {"name": "Moon-Bound"}, slug=MOON_BOUND_TAG)
+    distinction = authored_or_sample(
+        Distinction,
+        {
+            "name": "Moon-Bound",
+            "description": (
+                "PLACEHOLDER: the moon pulls at the beast in you — under a bright "
+                "open night sky, control is a thing you must hold, not a thing you have."
+            ),
+            "category": category,
+            "cost_per_rank": 0,
+            "max_rank": 1,
+        },
+        slug=MOON_BOUND_SLUG,
+    )
+    if distinction is not None and tag_row is not None:
+        distinction.tags.add(tag_row)
+    lycan = Species.objects.filter(name="Lycan").first()
+    if lycan is None or distinction is None:
+        return
+    gift = authored_or_sample(
+        Gift,
+        {
+            "kind": GiftKind.MINOR,
+            "description": (
+                "PLACEHOLDER: the shapeshifter's gift — the battle form, and "
+                "mastery over the moon's pull as it is threaded up."
+            ),
+        },
+        name=WOLFS_FURY_GIFT_NAME,
+    )
+    if gift is None:
+        return
+    authored_or_sample(
+        SpeciesGiftGrant,
+        {"drawback_distinction": distinction, "cg_point_cost": 0},
+        species=lycan,
+        gift=gift,
+    )
 
 
 def _seed_cg_explanations() -> None:

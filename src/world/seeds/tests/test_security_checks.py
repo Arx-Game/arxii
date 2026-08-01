@@ -120,30 +120,27 @@ class SecurityCheckSeedTests(TestCase):
         assert not CheckTypeSpecialization.objects.filter(check_type=ct).exists()
         assert ct.category.name == "Exploration"
 
-    def test_break_and_enter_composition(self):
+    def test_athletics_composition(self):
+        """#2757: Break and Enter + Escape Through Window merged into Athletics."""
         from world.checks.models import CheckTypeSpecialization, CheckTypeTrait
 
-        ct = CheckType.objects.get(name="Break and Enter")
+        ct = CheckType.objects.get(name="Athletics")
         trait_names = set(
             CheckTypeTrait.objects.filter(check_type=ct).values_list("trait__name", flat=True)
         )
+        # Default stat is strength; agility comes via stat_override at call time
         assert trait_names == {"strength", "Athletics"}
-        assert not CheckTypeSpecialization.objects.filter(check_type=ct).exists()
-
-    def test_escape_through_window_composition(self):
-        from world.checks.models import CheckTypeSpecialization, CheckTypeTrait
-
-        ct = CheckType.objects.get(name="Escape Through Window")
-        trait_names = set(
-            CheckTypeTrait.objects.filter(check_type=ct).values_list("trait__name", flat=True)
-        )
-        assert trait_names == {"agility", "Athletics"}
         spec_names = set(
             CheckTypeSpecialization.objects.filter(check_type=ct).values_list(
                 "specialization__name", flat=True
             )
         )
         assert spec_names == {"Climbing"}
+
+    def test_no_separate_break_and_enter_or_escape_checks(self):
+        """#2757: merged CheckTypes no longer exist as separate rows."""
+        assert not CheckType.objects.filter(name="Break and Enter").exists()
+        assert not CheckType.objects.filter(name="Escape Through Window").exists()
 
     def test_guard_detection_composition(self):
         from world.checks.models import CheckTypeSpecialization, CheckTypeTrait
@@ -192,8 +189,7 @@ class SecurityCheckSeedTests(TestCase):
         seed_security_check_content()
         seed_security_check_content()
         assert CheckType.objects.filter(name="Lockpick").count() == 1
-        assert CheckType.objects.filter(name="Break and Enter").count() == 1
-        assert CheckType.objects.filter(name="Escape Through Window").count() == 1
+        assert CheckType.objects.filter(name="Athletics").count() == 1  # #2757: merged
         assert CheckType.objects.filter(name="Guard Detection").count() == 1
         assert CheckType.objects.filter(name="Forge Evidence").count() == 1
         assert CheckType.objects.filter(name="Gather Evidence").count() == 1

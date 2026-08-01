@@ -4136,6 +4136,7 @@ def ensure_conditions_content() -> None:
     Aggregates the existing poison seed with the charm/calm seed so callers have
     a single entry point for the condition content required by multiple systems.
     """
+    from world.conditions.berserk_content import ensure_berserk_content  # noqa: PLC0415
     from world.conditions.capability_content import (  # noqa: PLC0415
         ensure_at_will_shifting_capability,
     )
@@ -4146,5 +4147,6 @@ def ensure_conditions_content() -> None:
 
     ensure_poison_content()
     ensure_charm_content()
+    ensure_berserk_content()
     ensure_intoxication_content()
     ensure_at_will_shifting_capability()

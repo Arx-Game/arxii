@@ -81,8 +81,8 @@ class InterposeBestOfCheckRealPathTest(TestCase):
         idmapper_models.flush_cache()
 
         # ensure_interpose_content() must run AFTER seed_combat_check_content()
-        # so its Melee-Defense twin approaches aren't skipped (interpose_content
-        # warns + no-ops without a seeded "Melee Defense" CheckType).
+        # so its Melee Combat twin approaches aren't skipped (interpose_content
+        # warns + no-ops without a seeded "Melee Combat" CheckType).
         seed_combat_check_content()
         ensure_interpose_content()
 
@@ -250,8 +250,8 @@ class InterposeBestOfCheckRealPathTest(TestCase):
         )
         self.assertEqual(
             duelist_check_type,
-            "Melee Defense",
-            "a duelist-statted guardian must roll the Melee-Defense twin, not Reflexes",
+            "Melee Combat",
+            "a duelist-statted guardian must roll Melee Combat (agility override), not Reflexes",
         )
 
         # Reflexes-statted guardian: high wits, low agility/Melee Combat.

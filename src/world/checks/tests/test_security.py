@@ -77,7 +77,7 @@ class ResolveSecurityCheckTests(TestCase):
                 SecurityCheckKind.BREAK_AND_ENTER, self.character, target_difficulty=0
             )
         assert capture.check_type is not None
-        assert capture.check_type.name == "Break and Enter"
+        assert capture.check_type.name == "Athletics"  # #2757: merged from "Break and Enter"
 
     def test_escape_through_window_resolves(self):
         success = CheckOutcome.objects.filter(success_level__gt=0).first()
@@ -88,7 +88,7 @@ class ResolveSecurityCheckTests(TestCase):
                 target_difficulty=0,
             )
         assert capture.check_type is not None
-        assert capture.check_type.name == "Escape Through Window"
+        assert capture.check_type.name == "Athletics"  # #2757: merged from "Escape Through Window"
 
     def test_guard_detection_resolves(self):
         success = CheckOutcome.objects.filter(success_level__gt=0).first()

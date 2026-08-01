@@ -1224,8 +1224,9 @@ def wire_melee_attack_action_template():
 
     The combat-flavored sibling of the magic standalone cast template
     (``seeds_cast.ensure_technique_cast_content``). Carries the seeded
-    'Melee Attack' CheckType so physical techniques roll a combat check
-    (strength + Melee Combat) instead of the magic fallback. Also carries the
+    'Melee Combat' CheckType so physical techniques roll a combat check
+    (skill + situational stat, default strength + Melee Combat) instead
+    of the magic fallback (#2757: formerly 'Melee Attack'). Also carries the
     seeded 'Combat: Melee Offense' base ConsequencePool (#1995) — the combat
     sibling of the magic 'Magic: Technique Cast' base pool — so a standalone
     melee cast with no flavor chosen still resolves graded consequences rather
@@ -1244,7 +1245,7 @@ def wire_melee_attack_action_template():
     from world.combat.seeds_offense import ensure_melee_offense_pool
     from world.seeds.sample_content import authored_or_sample
 
-    # Resolve the 'Melee Attack' CheckType: prefer the authored seed
+    # Resolve the 'Melee Combat' CheckType: prefer the authored seed
     # (seed_combat_check_content writes the full composition); fall back to a
     # gated lookup so the wire function is self-sufficient in test setups
     # that haven't run the combat_checks seed (mirrors how
@@ -1254,8 +1255,8 @@ def wire_melee_attack_action_template():
         return None
     check_type = authored_or_sample(
         CheckType,
-        {"description": "A melee attack roll: strength + Melee Combat."},
-        name="Melee Attack",
+        {"description": "A melee combat roll: skill + situational stat (default strength)."},
+        name="Melee Combat",
         category=category,
     )
     if check_type is None:

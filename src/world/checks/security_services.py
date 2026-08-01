@@ -10,7 +10,11 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
-from world.checks.constants import SECURITY_CHECK_TYPE_NAMES, SecurityCheckKind
+from world.checks.constants import (
+    SECURITY_CHECK_STAT_OVERRIDE,
+    SECURITY_CHECK_TYPE_NAMES,
+    SecurityCheckKind,
+)
 from world.checks.services import perform_check
 
 if TYPE_CHECKING:
@@ -55,9 +59,11 @@ def resolve_security_check(
             "is not seeded or not active. Run the 'security' seed cluster."
         )
         raise ValueError(msg)
+    stat_override = SECURITY_CHECK_STAT_OVERRIDE.get(kind)
     return perform_check(
         actor,
         check_type,
         target_difficulty=target_difficulty,
         extra_modifiers=extra_modifiers,
+        stat_override=stat_override,
     )
