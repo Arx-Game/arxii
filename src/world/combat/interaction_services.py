@@ -302,6 +302,57 @@ def render_action_outcome_narration(  # noqa: PLR0913 - all params describe one 
     return _assemble_hit_line(head, tail, suffix)
 
 
+def render_unattributed_action_narration(
+    *,
+    target_label: str | None,
+    outcome: ActionOutcome,
+) -> str:
+    """Render what a concealed action *did*, with nothing that names who did it (#2734).
+
+    The effect-only sibling of ``render_action_outcome_narration``. Concealment hides
+    attribution, not the event: an observer who fails the detection roll still sees the
+    blow land, they just cannot say where it came from. Pure — no DB, no randomness.
+
+    Deliberately carries **none** of the three suffix clauses the attributed line
+    appends, each of which would give the game away:
+
+    * the signature clause is the caster's personal flourish — the single strongest
+      attribution tell there is (#1728);
+    * the power clause names "the working" / "the ward", telling an observer at this
+      tier that magic was involved when the whole point is that they cannot tell;
+    * the synergy clause narrates condition interplay that reads as authored magic.
+
+    Returns ``""`` for a target-less action (a self-buff has no outward event to
+    narrate); callers must skip emitting a pose on an empty string.
+
+    Examples:
+        "Corvin is struck for 24 damage."
+        "Corvin is struck for 40 damage, defeating them."
+        "Something lashes at Corvin and misses."
+    """
+    from world.combat.types import OpponentDamageResult  # noqa: PLC0415
+
+    if target_label is None:
+        return ""
+
+    total_damage = sum(dr.damage_dealt for dr in outcome.damage_results)
+    defeated = any(
+        isinstance(dr, OpponentDamageResult) and dr.defeated for dr in outcome.damage_results
+    )
+    knocked_out = any(c.knocked_out for c in outcome.damage_consequences)
+    dying = any(c.dying for c in outcome.damage_consequences)
+    wounds = [ct.name for c in outcome.damage_consequences for ct in c.wounds_applied]
+
+    if total_damage <= 0 and not wounds:
+        return f"Something lashes at {target_label} and misses."
+
+    head = f"{target_label} is struck for {total_damage} damage"
+    tail = _build_tail_clauses(
+        wounds=wounds, defeated=defeated, dying=dying, knocked_out=knocked_out
+    )
+    return _assemble_hit_line(head, tail, "")
+
+
 def render_combo_finisher_narration(
     *,
     combo_name: str,
@@ -440,6 +491,7 @@ def broadcast_action_outcome(
     encounter: CombatEncounter,
     narration: str,
     audience: CastAudience | None = None,
+    unattributed_narration: str = "",
 ) -> Interaction | None:
     """Persist a Narrator-authored OUTCOME interaction and broadcast it.
 
@@ -454,11 +506,15 @@ def broadcast_action_outcome(
         audience: Who perceived this outcome, from ``resolve_cast_audience``
             (#2734). ``None`` -- the default, and what every non-cast caller
             passes -- keeps the room-wide broadcast byte-identical to its
-            pre-#2734 behaviour. A concealed audience instead poses
-            PERCEIVED_ONLY to ``audience.full`` and, when anyone marginally
-            detected the cast, emits a second unattributed line to
-            ``audience.vague``. Mirrors ``scenes.cast_services``'
-            ``create_cast_outcome_pose``.
+            pre-#2734 behaviour. A concealed audience instead fans the outcome
+            out as up to three PERCEIVED_ONLY poses, one per attribution tier,
+            with no observer receiving more than one. Mirrors
+            ``scenes.cast_services``' ``create_cast_outcome_pose``.
+        unattributed_narration: The same event with nothing that names who did
+            it, from ``render_unattributed_action_narration``. Concealment hides
+            attribution, not the event, so this is what the lower two tiers read.
+            Empty means the working left nothing to perceive, and those tiers get
+            no pose at all.
     """
     if not narration:
         return None
@@ -510,18 +566,24 @@ def broadcast_action_outcome(
 
     _send_to_objects(_characters_for(audience.full), _payload(interaction))
 
-    if audience.vague:
-        # No target_personas on the vague line: naming the target would leak the
-        # attribution this detection tier exists to withhold (ADR-0170).
-        vague_interaction = create_interaction(
+    # No target_personas on either lower-tier pose: the FK drives "this pose is about
+    # you" surfacing, and naming the target alongside an unattributed line re-opens the
+    # attribution this tier exists to withhold (ADR-0170).
+    def _emit_tier(recipients: list[Persona], content: str) -> None:
+        if not recipients or not content:
+            return
+        tier_interaction = create_interaction(
             persona=narrator,
-            content=render_vague_cast_narration(),
+            content=content,
             mode=InteractionMode.OUTCOME,
             scene=encounter.scene,
-            receivers=audience.vague,
+            receivers=recipients,
             visibility=InteractionVisibility.PERCEIVED_ONLY,
         )
-        _send_to_objects(_characters_for(audience.vague), _payload(vague_interaction))
+        _send_to_objects(_characters_for(recipients), _payload(tier_interaction))
+
+    _emit_tier(audience.vague, render_vague_cast_narration(unattributed_narration))
+    _emit_tier(audience.effect_only, unattributed_narration)
 
     return interaction
 

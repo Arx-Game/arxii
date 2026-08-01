@@ -370,6 +370,19 @@ class Technique(NaturalKeyMixin, DiscoverableContent, SharedMemoryModel):
             "BFS may traverse. Ignored for SAME/ADJACENT/ANY."
         ),
     )
+    has_perceptible_effect = models.BooleanField(
+        default=True,
+        db_index=True,
+        help_text=(
+            "Whether working this technique produces something bystanders can see "
+            "happen, independent of whether they can tell who did it (#2734). True "
+            "for the overwhelming majority -- almost any condition produces some "
+            "visible effect. Set False only for a working that leaves nothing to "
+            "perceive at all (a silent binding, a curse laid at a distance): a "
+            "concealed cast of one of those is hidden outright from anyone who "
+            "fails detection, rather than narrated without attribution."
+        ),
+    )
     target_type = models.CharField(
         max_length=20,
         choices=ActionTargetType.choices,

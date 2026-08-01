@@ -7326,6 +7326,7 @@ def _record_and_broadcast_pc_action(  # noqa: PLR0913
         create_action_interaction,
         render_action_declaration_label,
         render_action_outcome_narration,
+        render_unattributed_action_narration,
     )
     from world.scenes.interaction_services import push_interaction  # noqa: PLC0415
 
@@ -7346,7 +7347,7 @@ def _record_and_broadcast_pc_action(  # noqa: PLR0913
         action.interaction = interaction
         action.interaction_timestamp = interaction.timestamp
         action.save(update_fields=["interaction", "interaction_timestamp"])
-        if audience is not None and audience.concealed:
+        if audience.concealed:
             # Before push_interaction, which reads .visibility to decide whether to
             # broadcast room-wide. Concealing after the push would leak the technique
             # name live and hide it only on scene-log re-read.
@@ -7378,37 +7379,38 @@ def _record_and_broadcast_pc_action(  # noqa: PLR0913
         signature_snippet=signature_snippet,
         interaction_result=interaction_result,
     )
+    # Rendered unconditionally rather than under `if audience.concealed`: it is a pure
+    # string build over data already in hand, and branching here would put the
+    # concealment decision in two places.
+    unattributed_narration = render_unattributed_action_narration(
+        target_label=target_label, outcome=outcome
+    )
     broadcast_action_outcome(
-        encounter=participant.encounter, narration=narration, audience=audience
+        encounter=participant.encounter,
+        narration=narration,
+        audience=audience,
+        unattributed_narration=unattributed_narration,
     )
 
 
 def _resolve_combat_cast_audience(
     participant: CombatParticipant,
     technique: Technique,
-) -> CastAudience | None:
-    """Who perceived this action, or None when concealment does not apply (#2734).
+) -> CastAudience:
+    """Who perceived this action, and how much of it they could attribute (#2734).
 
-    Returns None — running no queries and no checks — for a mundane technique.
-    ``Technique.gift`` is non-null, so a martial maneuver still hangs off a Gift;
-    ``Gift.is_magical`` is what separates a working from a sword swing, and only a
-    working can be concealed. A Path of Whispers adept's blade is plainly visible
-    (Tehom's ruling, 2026-08-01).
-
-    For a magical cast this delegates to the shipped #2710 service, which itself
-    early-returns an unconcealed audience whenever the caster's style imposes no
-    concealment — the overwhelmingly common case, and the reason an ordinary
-    encounter costs nothing extra.
+    Delegates to the shipped #2710 service, which early-returns an unconcealed
+    audience — no queries, no checks — whenever attribution cannot be hidden: a
+    SAME-reach technique (you are standing on your target), or a caster whose style
+    imposes no concealment. That is the overwhelmingly common case, and the reason an
+    ordinary encounter costs nothing extra.
     """
-    if not technique.gift.is_magical:
-        return None
-
     from world.magic.services.cast_observation import resolve_cast_audience  # noqa: PLC0415
 
     # No cast_openly equivalent in combat: CombatRoundAction has no such field, so a
     # combat cast always resolves at the caster's style concealment. A deliberate
     # in-combat reveal is its own UX surface (out of scope, #2734).
-    return resolve_cast_audience(caster=participant.character_sheet.character)
+    return resolve_cast_audience(caster=participant.character_sheet.character, technique=technique)
 
 
 def _maybe_suggest_entrance_dramatic_moment(

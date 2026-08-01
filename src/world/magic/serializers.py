@@ -199,6 +199,7 @@ class TechniqueSerializer(serializers.ModelSerializer):
             "target_type",
             "reach",
             "reach_hops",
+            "has_perceptible_effect",
             "tier",
             "target_spec",
         ]

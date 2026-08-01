@@ -137,15 +137,9 @@ def ensure_defend_content() -> None:
 
     # 4. DEFEND passive Technique with an ALLY TechniqueAppliedCondition.
     #    Technique requires gift, style, and effect_type — seed minimal rows.
-    # is_magical=False: this gift exists only because Technique.gift is non-null --
-    # a defensive stance is a martial skill, not a working, and must stay fully
-    # visible even when its user's path style conceals their casts (#2734).
     defend_gift, _ = Gift.objects.get_or_create(
         name=DEFEND_PASSIVE_NAME,
-        defaults={
-            "description": "Combat stances and protective techniques.",
-            "is_magical": False,
-        },
+        defaults={"description": "Combat stances and protective techniques."},
     )
     defend_effect_type, _ = EffectType.objects.get_or_create(
         name="Defensive Aura",

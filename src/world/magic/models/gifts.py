@@ -47,18 +47,6 @@ class Gift(NaturalKeyMixin, SharedMemoryModel):
             "species abilities and in-play powers are delivered as (ADR-0050)."
         ),
     )
-    is_magical = models.BooleanField(
-        default=True,
-        db_index=True,
-        help_text=(
-            "False for gifts that are merely a container for mundane techniques "
-            "(combat stances, martial maneuvers). Technique.gift is non-null, so "
-            "every technique needs a gift whether or not it is a working; this is "
-            "what separates the two (#2734). Orthogonal to kind (an acquisition "
-            "axis) and to Technique.action_category -- Charm is SOCIAL and magical, "
-            "Defend is PHYSICAL and mundane."
-        ),
-    )
     resonances = models.ManyToManyField(
         Resonance,
         blank=True,
