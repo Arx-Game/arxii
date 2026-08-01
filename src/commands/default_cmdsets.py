@@ -105,6 +105,7 @@ from commands.goals import CmdGoal  # #1350 — goal authoring namespace.
 from commands.grant_distinction import CmdGrantDistinction
 from commands.grant_item import CmdGrantItem
 from commands.guard import CmdGuard  # #2178
+from commands.hazard import CmdEndure, CmdRetreat  # #2846 gap close
 from commands.hire import CmdHire
 from commands.identification import CmdIdentify  # #1107
 from commands.imbue import CmdImbue
@@ -158,12 +159,14 @@ from commands.social.rivals import CmdRival, CmdRivals, CmdUnrival
 from commands.social.soul_tether import CmdSineater, CmdTether
 from commands.social.tidings import CmdTidings
 from commands.speaker_queue import CmdLine  # #2356
+from commands.species_gm import CmdMakeShade  # #2862 gap close
 from commands.sphinx import CmdSphinx  # #2640
 from commands.story import CmdStory
 from commands.story_rooms import CmdJoinRoom, CmdLeaveRoom, CmdSceneRoom  # #2450
 from commands.technique import CmdTechnique
 from commands.threads import CmdThreads
 from commands.travel import CmdTravel  # #2163
+from commands.turf import CmdTurf  # #2862 gap close
 from commands.vault import CmdVault
 from commands.voyages import CmdVoyage  # #1855
 from commands.wake import CmdWake  # #2287
@@ -334,6 +337,13 @@ class CharacterCmdSet(default_cmds.CharacterCmdSet):
             # #2852 — telnet faces of CarryBodyAction/SetDownBodyAction.
             CmdCarry,
             CmdSetDown,
+            # #2846 gap close — telnet answers to the hazard prompt.
+            CmdEndure,
+            CmdRetreat,
+            # #2862 gap close — telnet face of the turf war.
+            CmdTurf,
+            # #2862 gap close — GM tool that makes Shades reachable at all.
+            CmdMakeShade,
             # #2290 — telnet face of SleepAction; voluntarily sleep to enter the dream realm.
             CmdSleep,
             # #2287 — telnet face of RetireCharacterAction; lay a dead character to rest.

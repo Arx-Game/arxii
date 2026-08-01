@@ -296,3 +296,32 @@ All models registered with Django admin:
 - `SocietyReputationAdmin` / `OrganizationReputationAdmin` - With tier display
 - `LegendEntryAdmin` - With total value, spread count, `LegendSpreadInline`
 - `LegendSpreadAdmin` - With society reach tracking
+
+## Neighborhood Turf (#2862, ADR-0185)
+
+Who holds a crime neighborhood, and how firmly. `NeighborhoodTurf` is one row per
+NEIGHBORHOOD-level `Area`: `controlling_org` + `grip` (0-100). `turf_services
+.apply_turf_push(org, area, amount)` owns the arithmetic — uncontested ground is
+claimed outright, the holder's own pushes deepen grip, a rival's erode it, and grip
+breaking flips control to the pusher at a deliberately shallow `FLIP_START_GRIP`
+(freshly taken ground is loose).
+
+Control is consequential, which is what makes turf worth fighting for:
+
+- **Guard pressure** — grip writes an area-wide `StatKey.CRIME` cascade modifier
+  (`_sync_crime_modifier`), and `justice.pipeline.maybe_guard_encounter` scales its
+  trigger chance by it (via `locations.services.area_stat_total`). A tightly-held
+  patch is a *busier* patch for everyone.
+- **Revenue** — `CRIME_KICKUP` income streams on the area re-target to the
+  controller (per-row saves; never a bulk `.update()`, which the identity map
+  would not see).
+- **Retaliation** — a push against held ground opens a `Gang Retaliation` THREAT
+  crisis (CRIMINAL_ORG audience) against the *pusher*: pay tribute, run the
+  "Hold the Corner" mission, or wait and bleed grip.
+
+Gangs are ordinary `Organization` rows of the `gang` `OrganizationType`; an "NPC
+gang" is simply one with no player members, not a separate model. Pushes are fed
+by the GANG_TURF project machinery (`complete_gang_turf` tier completions ×
+`TURF_PUSH_FACTOR`) and by turf missions' PROJECT reward lines. Surfaces:
+`start_gang_turf` action, telnet `turf` / `turf push <crew>`. Seeded demo stage in
+`world/seeds/underworld.py`.

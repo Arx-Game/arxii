@@ -18,6 +18,7 @@ from world.societies.models import (
     LegendEvent,
     LegendSourceType,
     LegendSpread,
+    NeighborhoodTurf,
     Organization,
     OrganizationGiftGrant,
     OrganizationMembership,
@@ -719,3 +720,13 @@ class HouseClaimAdmin(admin.ModelAdmin):
         for claim in queryset:
             reject_house_claim(claim, reviewer=request.user)
         self.message_user(request, f"Rejected {queryset.count()} claim(s).")
+
+
+@admin.register(NeighborhoodTurf)
+class NeighborhoodTurfAdmin(admin.ModelAdmin):
+    """Who holds a crime neighborhood, and how firmly (#2862)."""
+
+    list_display = ["area", "controlling_org", "grip", "updated_at"]
+    search_fields = ["area__name", "controlling_org__name"]
+    raw_id_fields = ["area", "controlling_org"]
+    readonly_fields = ["updated_at"]

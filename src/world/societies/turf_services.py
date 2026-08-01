@@ -66,16 +66,6 @@ def apply_turf_push(organization: Organization, area: Area, amount: int) -> Neig
     return turf
 
 
-def area_crime_value(area: Area | None) -> int:
-    """Summed CRIME stat modifiers on *area* and its ancestors (the turf read)."""
-    from world.locations.constants import StatKey  # noqa: PLC0415
-    from world.locations.services import area_stat_total  # noqa: PLC0415
-
-    if area is None:
-        return 0
-    return max(0, area_stat_total(area, StatKey.CRIME))
-
-
 def _sync_crime_modifier(turf: NeighborhoodTurf) -> None:
     """The area-wide CRIME cascade row tracks grip — the dead stat's writer."""
     from world.locations.constants import (  # noqa: PLC0415

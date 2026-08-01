@@ -86,6 +86,11 @@ from world.magic.models import (
     Tradition,
     TraditionGiftGrant,
 )
+from world.magic.models.appetites import (
+    AppetiteUpkeep,
+    AppetiteUpkeepReceipt,
+    FeedingRecord,
+)
 from world.magic.models.dramatic_moment import (
     DramaticMomentSuggestion,
     DramaticMomentTag,
@@ -1334,3 +1339,71 @@ class TrainingOutcomeAwardAdmin(admin.ModelAdmin):
 
     list_display = ["outcome_tier", "dev_point_multiplier"]
     ordering = ["outcome_tier__success_level"]
+
+
+# --- Appetites (#2853) --------------------------------------------------------
+# AppetiteUpkeep is authored CONFIG (drain period, amount, floor) — staff had no
+# way to see or tune it before (#2862 review finding).
+
+
+@admin.register(AppetiteUpkeep)
+class AppetiteUpkeepAdmin(admin.ModelAdmin):
+    """The per-appetite drain config: how much, how often, down to what floor."""
+
+    list_display = ["distinction", "period", "amount", "floor_percent"]
+    list_filter = ["period"]
+    raw_id_fields = ["distinction"]
+
+
+@admin.register(AppetiteUpkeepReceipt)
+class AppetiteUpkeepReceiptAdmin(admin.ModelAdmin):
+    """Read-only audit of drains actually applied."""
+
+    list_display = ["character_sheet", "upkeep", "period_start", "drained", "drained_at"]
+    raw_id_fields = ["character_sheet", "upkeep"]
+    readonly_fields = [
+        "character_sheet",
+        "upkeep",
+        "period_start",
+        "drained",
+        "drained_at",
+    ]
+
+    def has_add_permission(self, request, obj=None) -> bool:  # noqa: ARG002
+        return False
+
+    def has_change_permission(self, request, obj=None) -> bool:  # noqa: ARG002
+        return False
+
+
+@admin.register(FeedingRecord)
+class FeedingRecordAdmin(admin.ModelAdmin):
+    """Read-only audit of feedings — who fed on whom, how deeply, and who died."""
+
+    list_display = [
+        "feeder_sheet",
+        "victim_sheet",
+        "amount_mode",
+        "anima_taken",
+        "lost_control",
+        "was_lethal",
+    ]
+    list_filter = ["amount_mode", "lost_control", "was_lethal"]
+    raw_id_fields = ["feeder_sheet", "victim_sheet", "scene"]
+    readonly_fields = [
+        "feeder_sheet",
+        "victim_sheet",
+        "scene",
+        "amount_mode",
+        "lost_control",
+        "anima_taken",
+        "glut_gained",
+        "victim_fatigue",
+        "was_lethal",
+    ]
+
+    def has_add_permission(self, request, obj=None) -> bool:  # noqa: ARG002
+        return False
+
+    def has_change_permission(self, request, obj=None) -> bool:  # noqa: ARG002
+        return False

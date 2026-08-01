@@ -237,9 +237,41 @@ class InventoryAction(Action):
         sdm = context.scene_data if context else SceneDataManager()
         caller_state = sdm.initialize_state_for_object(actor)
         items = caller_state.contents
+        burden = _burden_line(actor)
         if not items:
-            return ActionResult(success=True, message="You are not carrying anything.")
+            text = "You are not carrying anything."
+            return ActionResult(success=True, message=f"{text}\n{burden}" if burden else text)
 
         names = [it.get_display_name(looker=caller_state) for it in items]
         text = "You are carrying: " + ", ".join(names)
+        if burden:
+            text = f"{text}\n{burden}"
         return ActionResult(success=True, message=text)
+
+
+def _burden_line(actor: ObjectDB) -> str:
+    """How heavily laden the character is (#2862 gap close).
+
+    Encumbrance was previously invisible — a player only learned of it by
+    being told the load dragged at them, with no way to see how close the
+    wall was. Silent when unladen, since being under capacity costs nothing
+    and needs no commentary.
+    """
+    from world.items.services.encumbrance import (  # noqa: PLC0415
+        EncumbranceBand,
+        carried_load,
+        carry_capacity,
+        encumbrance_band,
+    )
+
+    band = encumbrance_band(actor)
+    if band is EncumbranceBand.FREE:
+        return ""
+    load = carried_load(actor)
+    capacity = carry_capacity(actor)
+    if band is EncumbranceBand.ENCUMBERED:
+        return f"|yYou are laden ({load}/{capacity}) — moving will tire you.|n"
+    return (
+        f"|rYou are massively overloaded ({load}/{capacity}) — every step costs "
+        "dearly, and if you tire out you will not be able to move at all.|n"
+    )

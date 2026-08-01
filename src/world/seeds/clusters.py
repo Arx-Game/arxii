@@ -101,6 +101,18 @@ def _seed_social() -> None:
     seed_social_check_content()
 
 
+def _seed_justice_laws() -> None:
+    from world.seeds.justice_laws import seed_baseline_area_laws  # noqa: PLC0415
+
+    seed_baseline_area_laws()
+
+
+def _seed_weather() -> None:
+    from world.seeds.weather_content import seed_weather_content  # noqa: PLC0415
+
+    seed_weather_content()
+
+
 def _seed_underworld() -> None:
     from world.seeds.underworld import seed_underworld_demo  # noqa: PLC0415
 
@@ -517,6 +529,8 @@ CLUSTER_SEEDERS: dict[str, Callable[[], None]] = {
     # #2862 — after security: the criminal missions roll the Gather Evidence
     # CheckType that cluster composes; seeding earlier would skip 5 graphs on
     # the first press and break idempotency.
+    "weather": _seed_weather,
+    "justice_laws": _seed_justice_laws,
     "underworld": _seed_underworld,
     # Perception: the Concealed condition primitive (#1225) — the seam Stealth
     # witness-reduction (#1464) and forms disguise-piercing will apply/clear.
@@ -645,7 +659,10 @@ def seeded_models_by_cluster() -> dict[str, list[type[Model]]]:
     from world.items.crafting.models import CraftingRecipe  # noqa: PLC0415
     from world.items.market.models import MarketSquare  # noqa: PLC0415
     from world.items.models import ItemTemplate, Style  # noqa: PLC0415
-    from world.justice.models import CrimeKind  # noqa: PLC0415
+    from world.justice.models import (  # noqa: PLC0415
+        AreaLaw,
+        CrimeKind,
+    )
     from world.magic.models import Affinity, Resonance, Ritual  # noqa: PLC0415
     from world.magic.models.techniques import Technique  # noqa: PLC0415
     from world.mechanics.models import ChallengeTemplate  # noqa: PLC0415
@@ -677,6 +694,7 @@ def seeded_models_by_cluster() -> dict[str, list[type[Model]]]:
     from world.species.models import Species  # noqa: PLC0415
     from world.tasking.models import TaskTemplate  # noqa: PLC0415
     from world.traits.models import ResultChart, Trait  # noqa: PLC0415
+    from world.weather.models import WeatherType  # noqa: PLC0415
     from world.worship.models import WorshippedBeing, WorshipTradition  # noqa: PLC0415
 
     return {
@@ -694,6 +712,11 @@ def seeded_models_by_cluster() -> dict[str, list[type[Model]]]:
         "provisioning": [CraftingRecipe],
         # Underworld (#2862): the turf-war stage — NPC gang + contested
         # neighborhood + Retaliation crisis type.
+        # Weather (#2845): the authored corpus — types, exposures, shelters,
+        # the transition graph, feast days.
+        "weather": [WeatherType],
+        # Justice laws (#2862): the baseline law set that makes heat mint at all.
+        "justice_laws": [AreaLaw],
         "underworld": [NeighborhoodTurf],
         # Investigation seeds the Search CheckType + Investigation skill (shared spine/skill
         # rows counted under "checks"); it still appears as a seeded cluster (#1705).
