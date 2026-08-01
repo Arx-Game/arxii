@@ -135,6 +135,11 @@ class RosterTenure(RelatedCacheClearingMixin, SharedMemoryModel):
         return f"{self.display_name} ({status})"
 
     class Meta:
+        # Newest tenure first. Declared here rather than restated at each call site so
+        # a prefetched ``tenures`` relation arrives already sorted — ``RosterEntry
+        # .cached_tenures`` can then read ``.all()`` and be served from the prefetch
+        # cache instead of issuing a per-entry ``order_by`` query (#2728).
+        ordering: ClassVar[list[str]] = ["-start_date"]
         unique_together: ClassVar[list[str]] = [
             "roster_entry",
             "player_number",

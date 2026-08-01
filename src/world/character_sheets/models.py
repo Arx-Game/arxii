@@ -770,8 +770,12 @@ class CharacterSheet(SharedMemoryModel):
         biggest matching tier (DORMANT > LONG_INACTIVE > INACTIVE >
         RECENT_INACTIVE) or None when the most recent signal is < 14 days old.
 
-        Callers iterating many sheets should ``prefetch_related``
-        ``roster_entry__tenures__player_data__account`` to amortize the chain.
+        Callers iterating many sheets must prefetch that chain or pay a round trip
+        per sheet; ``world.roster.services.activity.sweep_activity_states`` is the
+        reference — a ``Prefetch`` on ``roster_entry__tenures`` whose queryset
+        ``select_related``s ``player_data__account``. Note the shape matters: the
+        prefetch is only used if the reader asks for ``.all()``, which is why
+        ``RosterEntry.cached_tenures`` no longer restates an ``order_by`` (#2728).
         Single calls amortize cheaply via SharedMemoryModel's identity map.
         """
         last_signal = self._last_activity_signal_at()

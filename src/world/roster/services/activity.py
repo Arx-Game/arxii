@@ -15,6 +15,7 @@ from datetime import datetime, timedelta
 from typing import TYPE_CHECKING
 
 from django.db import transaction
+from django.db.models import Prefetch
 from django.utils import timezone
 
 if TYPE_CHECKING:
@@ -109,11 +110,16 @@ def sweep_activity_states() -> dict[str, int]:
     ``FROZEN`` is never touched by cron; ``HIATUS`` is the player's own exemption and
     is only ended here when it has expired.
 
+    **A swept character costs writes only.** Everything the loop reads is fetched in
+    bulk below, so the read cost is flat in the playerbase — pinned by the slope
+    guards in ``test_sweep_query_slope`` rather than left to inspection, because a
+    per-character read is invisible at ten characters and ruinous at a thousand.
+
     Returns a small telemetry dict so the scheduler can log per-tick volume.
     """
     from world.character_sheets.models import CharacterSheet  # noqa: PLC0415
     from world.character_sheets.types import ActivityState  # noqa: PLC0415
-    from world.roster.models import Roster  # noqa: PLC0415
+    from world.roster.models import Roster, RosterTenure  # noqa: PLC0415
     from world.roster.models.choices import RosterType  # noqa: PLC0415
 
     flipped_to_inactive = 0
@@ -123,7 +129,7 @@ def sweep_activity_states() -> dict[str, int]:
     now = timezone.now()
     on_active_shelf = CharacterSheet.objects.filter(
         roster_entry__roster__roster_type=RosterType.ACTIVE,
-    ).select_related("roster_entry__roster")
+    )
 
     # Resolved once, before any mutation: a release needs the Available shelf, and
     # discovering it is missing halfway through would leave a partially-swept run
@@ -131,16 +137,47 @@ def sweep_activity_states() -> dict[str, int]:
     # loudly — but it fails before touching anything.
     available_roster = Roster.objects.get(roster_type=RosterType.AVAILABLE)
 
+    # Everything the demotion loop reads is fetched in bulk, so a swept character
+    # costs writes only (#2728). Each piece earns its place:
+    #   roster_entry__roster   — the shelf, read by ``move_to_roster``
+    #   true_profile           — ``CharacterSheet.save`` persists it on every save (#1270)
+    #   tenures + their player — ``decay_tier`` walks tenure -> player_data -> account
+    #                            for the login signal, and ``RosterTenure``'s
+    #                            related-cache clearing touches both again on save
+    # ``to_attr`` fills ``RosterEntry.cached_tenures`` directly, which is what
+    # ``current_tenure`` reads — and it leaves Django's own prefetch cache alone, so
+    # ``entry.tenures`` stays a live relation for anyone else. The prefetch is scoped
+    # to this queryset rather than the shared base above because the hiatus pass needs
+    # none of it.
     inactive_tiers = _inactive_tiers()
-    demotable = on_active_shelf.filter(activity_state=ActivityState.ACTIVE)
+    demotable = (
+        on_active_shelf.filter(activity_state=ActivityState.ACTIVE)
+        .select_related("roster_entry__roster", "true_profile")
+        .prefetch_related(
+            Prefetch(
+                "roster_entry__tenures",
+                queryset=RosterTenure.objects.select_related("player_data__account"),
+                to_attr="cached_tenures",
+            ),
+        )
+    )
     for sheet in demotable.iterator(chunk_size=500):
-        if sheet.decay_tier not in inactive_tiers:
-            continue
-        sheet.activity_state = ActivityState.INACTIVE
-        sheet.save(update_fields=["activity_state", "updated_date"])
-        flipped_to_inactive += 1
-        if release_inactive_character(sheet, available_roster=available_roster):
-            released += 1
+        entry = current_roster_entry(sheet)
+        try:
+            if sheet.decay_tier not in inactive_tiers:
+                continue
+            sheet.activity_state = ActivityState.INACTIVE
+            sheet.save(update_fields=["activity_state", "updated_date"])
+            flipped_to_inactive += 1
+            if release_inactive_character(sheet, available_roster=available_roster):
+                released += 1
+        finally:
+            # The filled list lives on the RosterEntry instance, and SharedMemoryModel
+            # hands that same instance to every later reader in the process — so
+            # leaving it would pin a mid-sweep snapshot of the tenures indefinitely.
+            # The sweep cleans up after itself unconditionally, ``continue`` included.
+            if entry is not None:
+                entry.invalidate_tenure_cache()
 
     # Hiatus expiry runs AFTER demotion, deliberately. A player's decay clock keeps
     # running through their declared absence, so expiring a hiatus and demoting in
@@ -227,9 +264,9 @@ def release_inactive_character(
     tenure.end_date = timezone.now()
     tenure.save(update_fields=["end_date"])
     entry.move_to_roster(available_roster)
-    # cached_tenures memoises the pre-release state; the caller may go on to read
+    # The tenure caches memoise the pre-release state; the caller may go on to read
     # accepts_applications, which would otherwise still see an open tenure.
-    entry.__dict__.pop("cached_tenures", None)
+    entry.invalidate_tenure_cache()
     return True
 
 
