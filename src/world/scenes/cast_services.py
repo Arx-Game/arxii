@@ -303,36 +303,13 @@ def create_cast_outcome_pose(  # noqa: PLR0913 - all params describe one pose; c
 
 
 def _conceal_action_interaction(action_interaction: Interaction, audience: CastAudience) -> None:
-    """Set a concealed cast's ACTION row to PERCEIVED_ONLY with the resolved receivers.
-
-    #2710: this row's content is the technique name. Concealing only the OUTCOME pose
-    would still show every bystander "Ilyra — Whisper of Binding" in the scene log via
-    the ACTION row's ``technique_name``.
-    """
-    from world.scenes.interaction_services import accounts_for_personas  # noqa: PLC0415
-    from world.scenes.place_models import InteractionReceiver  # noqa: PLC0415
-
-    action_interaction.visibility = InteractionVisibility.PERCEIVED_ONLY
-    action_interaction.save(update_fields=["visibility"])
-    receiver_accounts = accounts_for_personas(audience.full)
-    # audience.full always includes the caster (resolve_cast_audience appends them),
-    # and unlike create_interaction's place-scoped auto-populate path (which excludes
-    # the writer via .exclude(pk=persona.pk)), we deliberately do NOT exclude them
-    # here. create_action_interaction_core builds this row via Interaction.objects.
-    # create(...) directly rather than through create_interaction, so it never pins
-    # writer_account_id — receiver membership is the caster's only route back to
-    # their own concealed ACTION row.
-    InteractionReceiver.objects.bulk_create(
-        [
-            InteractionReceiver(
-                interaction=action_interaction,
-                timestamp=action_interaction.timestamp,
-                persona=p,
-                account_id=receiver_accounts.get(p.pk),
-            )
-            for p in audience.full
-        ]
+    """Thin alias kept for this module's callers; the implementation moved to
+    ``world.magic.services.cast_observation`` in #2734 so combat can share it."""
+    from world.magic.services.cast_observation import (  # noqa: PLC0415
+        conceal_action_interaction,
     )
+
+    conceal_action_interaction(action_interaction, audience)
 
 
 def _resolve_and_pose_cast(  # noqa: PLR0913 - one cohesive cast resolution
