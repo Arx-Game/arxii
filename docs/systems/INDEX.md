@@ -1724,6 +1724,17 @@ Character lifecycle management with web-first applications and player anonymity.
   the flag — HIGH/LOW released, NONE and OCs never — and ends the tenure rather than
   deleting it, so `RosterApplication.approve` can re-seat a returning player onto their
   own row instead of renumbering them as a second player.
+- **Sweep cost is writes-only (#2728):** the cron's population is the whole active
+  playerbase, so its per-character cost is what matters. It `select_related`s the shelf
+  and `true_profile` and prefetches the tenures + player account via
+  `Prefetch(..., to_attr="cached_tenures")` — `decay_tier` otherwise walks
+  `roster_entry → current_tenure → player_data → account` per sheet.
+  `RosterEntry.cached_tenures` reads `.all()` (an `order_by` on a related manager always
+  re-queries, silently voiding a caller's prefetch; newest-first now lives in
+  `RosterTenure.Meta.ordering`). Because `SharedMemoryModel` reuses instances, any bulk
+  fill or tenure mutation must call `RosterEntry.invalidate_tenure_cache()` or the fill
+  answers with a stale snapshot for the life of the process — `test_sweep_query_slope`
+  guards both the slope and the cleanup.
 - **`RosterApplication` uniqueness (#2162):** a PENDING-only `UniqueConstraint` on
   `(player_data, character)` (was a status-blind `unique_together`, which blocked
   re-applying for a character after denial/withdrawal, not duplicate submissions —
