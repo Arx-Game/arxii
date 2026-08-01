@@ -235,9 +235,36 @@ class ObjectParent:
         board = _maybe_render_board_postings(self, looker)
         if board is not None:
             sections = [*sections, board]
+        catering = _maybe_render_catering_history(self)
+        if catering is not None:
+            sections = [*sections, catering]
         if sections:
             return base + "\n" + "\n".join(sections)
         return base
+
+
+def _maybe_render_catering_history(obj) -> str | None:
+    """The catering souvenir line(s) for an item, or None (#2869).
+
+    A vessel or dish that served at an event carries that memory for good —
+    "This amphora was used for catering at Big Bob's Nameday." A well-
+    travelled piece lists every occasion, newest first.
+    """
+    from django.core.exceptions import ObjectDoesNotExist
+
+    try:
+        instance = obj.item_instance
+    except (AttributeError, ObjectDoesNotExist):
+        return None
+    if instance is None:
+        return None
+    from world.events.services import catering_history
+
+    rows = catering_history(instance)
+    if not rows:
+        return None
+    name = instance.display_name
+    return "\n".join(f"|wThis {name} was used for catering at {row.event.name}.|n" for row in rows)
 
 
 def _maybe_render_ranking_display(obj, looker) -> str | None:
