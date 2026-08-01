@@ -1635,25 +1635,6 @@ def _active_pull_capability_grants(character_sheet: "CharacterSheet") -> dict[in
     return handler.active_pull_capability_grants()
 
 
-def _ephemeral_pull_capability_grants(character_sheet: "CharacterSheet") -> dict[int, int]:
-    """Non-combat paid-pull CAPABILITY_GRANT values from active Thread Surge conditions.
-
-    Reads EphemeralPullCapabilityGrant sidecar rows belonging to the character's active
-    (non-deleted) Thread Surge ConditionInstance. Folds via MAX per capability
-    (ADR-0034), mirroring _active_pull_capability_grants. Returns empty dict when
-    no active surges exist — the common case outside a scene with a pull.
-    """
-    from world.magic.models import EphemeralPullCapabilityGrant  # noqa: PLC0415
-
-    granted: dict[int, int] = {}
-    for row in EphemeralPullCapabilityGrant.objects.filter(
-        character_sheet=character_sheet,
-    ):
-        cap_id = row.capability_id
-        granted[cap_id] = max(granted.get(cap_id, 0), row.grant_value)
-    return granted
-
-
 def _inert_technique_capability_totals(
     grants: list["TechniqueCapabilityGrant"],
 ) -> dict[int, int]:
@@ -2167,13 +2148,7 @@ def get_effective_capability_value(
     technique_value = _technique_capability_values(character_sheet, action_ctx=action_ctx).get(
         capability.pk, 0
     )
-    # Combat and ephemeral pulls are mutually exclusive (combat requires an
-    # active encounter; ephemeral requires a SCENE-duration condition). MAX
-    # prevents double-counting if both somehow fired (#2840).
-    pull_value = max(
-        _active_pull_capability_grants(character_sheet).get(capability.pk, 0),
-        _ephemeral_pull_capability_grants(character_sheet).get(capability.pk, 0),
-    )
+    pull_value = _active_pull_capability_grants(character_sheet).get(capability.pk, 0)
     return max(
         0, baseline + modifier_total + condition_total + grant_floor + technique_value + pull_value
     )

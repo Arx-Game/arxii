@@ -946,29 +946,35 @@ stale rows on round advance and invalidates the per-character
 ### Non-Combat Ephemeral Pull CAPABILITY_GRANT (#2840) [BUILT & WIRED]
 
 Non-combat (ephemeral) thread pulls that resolve a `CAPABILITY_GRANT` effect
-confer capabilities for the duration of the scene, using the condition system
-as the persistence and duration layer — following the sunlight-exposure
-precedent (#2846) where conditions manage effects outside round-based structures.
+confer capabilities for the duration of the scene, using the standard condition
+capability path — the same `ConditionCapabilityEffect` → `get_capability_status`
+→ `get_effective_capability_value` path that any condition can use.
 
 **Mechanism:** when `spend_resonance_for_pull` runs in non-combat context and
 the resolved effects contain at least one `CAPABILITY_GRANT`, it calls
-`apply_ephemeral_pull_capability_grants` (`world/magic/services/ephemeral_pull.py`)
+`_apply_non_combat_capability_grants` (`world/magic/services/resonance.py`)
 which:
-1. Applies a "Thread Surge" `ConditionInstance` (`DurationType.SCENE`,
-   non-stackable, dispellable — seeded by `ensure_thread_surge_content()`).
-2. Writes `EphemeralPullCapabilityGrant` sidecar rows (FK to the
-   `ConditionInstance`) carrying the frozen curved magnitude per capability.
-   Upsert-with-MAX: a second pull for the same capability in the same scene
-   updates the existing sidecar to the larger value (ADR-0034).
+1. Gets the "Thread Surge" `ConditionTemplate` (SCENE duration, non-stackable,
+   dispellable — seeded by `ensure_thread_surge_content()`).
+2. Ensures the template has a `ConditionCapabilityEffect(value=1,
+   scales_with_severity=True)` row for each capability being granted (idempotent
+   `get_or_create`).
+3. Applies the condition with `severity = MAX frozen curved value` across the
+   pull's CAPABILITY_GRANT effects. The oracle computes
+   `int(1 * effective_severity)` = the frozen value.
 
-**Oracle integration:** `get_effective_capability_value`
-(`world/conditions/services.py`) folds ephemeral pull grants via MAX into the
-existing `pull_value` slot — mutually exclusive with combat pulls (a character
-is either in combat or not; MAX prevents double-counting if both somehow fired).
+This is fully generalized: the Thread Surge is just a condition that grants
+capabilities through the standard path. Any condition with
+`ConditionCapabilityEffect` rows can do the same — no custom oracle path, no
+sidecar model.
+
+**Known limitation:** all capabilities from one pull share the same severity
+(the MAX across effects). This is exact for the common case (one capability per
+pull) and a minor inaccuracy when a single pull grants multiple capabilities
+with different curved values.
 
 **Cleanup:** zero new code. `expire_scene_scoped_conditions` (called from
-`finish_scene_full`) already sweeps SCENE-duration conditions; the
-`EphemeralPullCapabilityGrant` FK CASCADE-deletes with the condition instance.
+`finish_scene_full`) already sweeps SCENE-duration conditions.
 
 **Dispel:** the Thread Surge condition has `can_be_dispelled=True`; a dispel
 technique can end the surge early via the existing `remove_condition` path.

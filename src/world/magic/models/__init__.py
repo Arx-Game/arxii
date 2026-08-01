@@ -21,7 +21,6 @@ Submodules (see Scope 6 §4.4):
 - motifs: Facet, Motif, MotifResonance, MotifResonanceAssociation
 - soulfray: SoulfrayConfig, MishapPoolTier, AnimaRitualBudgetAward
 - alterations: MagicalAlterationTemplate, PendingAlteration, MagicalAlterationEvent
-- ephemeral_pull: EphemeralPullCapabilityGrant (#2840)
 - threads: Thread, ThreadLevelUnlock, ThreadPullCost, ThreadXPLockedLevel,
   ThreadPullEffect
 - weaving: ThreadWeavingUnlock, CharacterThreadWeavingUnlock,
@@ -102,7 +101,6 @@ from world.magic.models.endorsement import (
     SceneEntryEndorsement,
     StylePresentationEndorsement,
 )
-from world.magic.models.ephemeral_pull import EphemeralPullCapabilityGrant
 from world.magic.models.fall_redemption import (
     CompromiseActType,
     ConversionType,
@@ -330,8 +328,6 @@ __all__ = [
     "EffectTypeManager",
     # endorsement — entry flourish (#545)
     "EntryFlourishRecord",
-    # ephemeral pull capability grant sidecar (#2840)
-    "EphemeralPullCapabilityGrant",
     "Facet",
     "FacetManager",
     "FallRedemptionConfig",

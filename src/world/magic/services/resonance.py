@@ -1388,14 +1388,12 @@ def spend_resonance_for_pull(  # noqa: PLR0913, C901
         recompute_max_health_with_threads(character_sheet)
 
     # #2840: non-combat CAPABILITY_GRANT effects are persisted via a Thread
-    # Surge condition + EphemeralPullCapabilityGrant sidecar rows, so the
-    # capability oracle can read them at arbitrary later times.
+    # Surge condition (SCENE duration) using the standard condition capability
+    # path. The frozen curved value is carried as the condition's severity;
+    # ConditionCapabilityEffect(value=1, scales_with_severity=True) on the
+    # template means the oracle computes int(1 * severity) = the frozen value.
     if not in_combat:
-        from world.magic.services.ephemeral_pull import (  # noqa: PLC0415
-            apply_ephemeral_pull_capability_grants,
-        )
-
-        apply_ephemeral_pull_capability_grants(character_sheet, resolved)
+        _apply_non_combat_capability_grants(character_sheet, resolved)
 
     # Phase 12-future: emit ThreadsPulled audit event when the event class
     # exists (spec §5.4 step 7). Currently a no-op.
@@ -1404,4 +1402,63 @@ def spend_resonance_for_pull(  # noqa: PLR0913, C901
         resonance_spent=cost.resonance_cost,
         anima_spent=anima_total,
         resolved_effects=resolved,
+    )
+
+
+def _apply_non_combat_capability_grants(
+    character_sheet: CharacterSheet,
+    resolved: list[ResolvedPullEffect],
+) -> None:
+    """Apply a Thread Surge condition for non-combat CAPABILITY_GRANT effects (#2840).
+
+    Uses the standard condition capability path: the Thread Surge template carries
+    ``ConditionCapabilityEffect(value=1, scales_with_severity=True)`` rows, and the
+    condition is applied with ``severity = MAX frozen curved value`` across the
+    pull's CAPABILITY_GRANT effects. The oracle computes
+    ``int(1 * effective_severity)`` = the frozen value via ``get_capability_status``.
+
+    All capabilities from one pull share the same severity (the MAX across the
+    pull's effects). This is a known limitation when a single pull grants multiple
+    capabilities with different curved values — the common case (one capability)
+    is exact.
+    """
+    from world.conditions.models import ConditionCapabilityEffect  # noqa: PLC0415
+    from world.conditions.services import apply_condition  # noqa: PLC0415
+    from world.magic.factories import ensure_thread_surge_content  # noqa: PLC0415
+
+    cap_effects = [
+        eff
+        for eff in resolved
+        if eff.kind == EffectKind.CAPABILITY_GRANT
+        and eff.granted_capability is not None
+        and eff.capability_grant_value is not None
+        and eff.capability_grant_value > 0
+    ]
+    if not cap_effects:
+        return
+
+    template = ensure_thread_surge_content()
+    if template is None:
+        return
+
+    # Ensure the template has a ConditionCapabilityEffect row for each
+    # capability being granted. These are idempotent (get_or_create) — the
+    # effect row persists on the template but only fires when an instance
+    # is active with scales_with_severity=True.
+    for eff in cap_effects:
+        ConditionCapabilityEffect.objects.get_or_create(
+            condition=template,
+            capability=eff.granted_capability,
+            defaults={"value": 1, "scales_with_severity": True},
+        )
+
+    # Apply with severity = MAX frozen value across all CAPABILITY_GRANT effects.
+    severity = max(eff.capability_grant_value for eff in cap_effects)
+    character = character_sheet.character
+    apply_condition(
+        character,
+        template,
+        severity=severity,
+        source_character=character,
+        source_description="Thread pull capability surge",
     )

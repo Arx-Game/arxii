@@ -884,9 +884,10 @@ class NonCombatCapabilityGrantPullTest(TestCase):
         )
 
     @override_settings(SEED_SAMPLE_CONTENT=True)
-    def test_non_combat_pull_creates_ephemeral_grant(self) -> None:
-        """spend_resonance_for_pull in non-combat context creates a sidecar row."""
-        from world.magic.models import EphemeralPullCapabilityGrant
+    def test_non_combat_pull_applies_capability_grant_condition(self) -> None:
+        """spend_resonance_for_pull in non-combat context applies a Thread Surge condition."""
+        from world.conditions.models import ConditionInstance
+        from world.magic.factories import ensure_thread_surge_content
 
         spend_resonance_for_pull(
             self.sheet,
@@ -898,15 +899,17 @@ class NonCombatCapabilityGrantPullTest(TestCase):
                 involved_traits=(self.thread.target_trait_id,),
             ),
         )
-        # Sidecar row created
-        grants = EphemeralPullCapabilityGrant.objects.filter(character_sheet=self.sheet)
-        self.assertEqual(grants.count(), 1)
-        self.assertEqual(grants[0].capability, self.cap)
-        self.assertGreater(grants[0].grant_value, 0)
+        # Thread Surge condition is active on the character
+        template = ensure_thread_surge_content()
+        instance = ConditionInstance.objects.get(
+            target=self.sheet.character,
+            condition=template,
+        )
+        self.assertGreater(instance.effective_severity, 0)
 
-    def test_combat_pull_does_not_create_ephemeral_grant(self) -> None:
+    def test_combat_pull_does_not_apply_thread_surge(self) -> None:
         """Combat pulls use CombatPullResolvedEffect, not the condition path."""
-        from world.magic.models import EphemeralPullCapabilityGrant
+        from world.conditions.models import ConditionInstance
 
         ctx = _setup_combat_context(sheet=self.sheet)
         pull_ctx = PullActionContext(
@@ -921,7 +924,10 @@ class NonCombatCapabilityGrantPullTest(TestCase):
             threads=[self.thread],
             action_context=pull_ctx,
         )
-        # No ephemeral sidecar rows in combat
-        self.assertEqual(
-            EphemeralPullCapabilityGrant.objects.filter(character_sheet=self.sheet).count(), 0
+        # No Thread Surge condition in combat
+        self.assertFalse(
+            ConditionInstance.objects.filter(
+                target=self.sheet.character,
+                condition__name="Thread Surge",
+            ).exists()
         )
