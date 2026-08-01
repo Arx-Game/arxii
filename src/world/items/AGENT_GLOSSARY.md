@@ -84,7 +84,7 @@ _Avoid_: take (as a synonym), pickpocket, loot (as a verb for a live owner's ite
   accent"). Separate from `QualityTier` by design — Accents have no "poor"
   end. _Avoid_: reusing QualityTier rows for accent levels.
 - **Material grade** — `ItemTemplate.material_grade`: the quality-score head
-  start a material contributes when consumed in crafting (#2878, ADR-0187).
+  start a material contributes when consumed in crafting (#2878, ADR-0188).
   Materials are potential, never performance — no material→stat table, ever.
   _Avoid_: material tier multiplier, material stat scaling.
 - **Quality rung** — a `QualityTier.sort_order` position on the 12-rung ladder

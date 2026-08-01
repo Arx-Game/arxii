@@ -1,4 +1,4 @@
-# ADR-0187: Materials are potential, never performance
+# ADR-0188: Materials are potential, never performance
 
 **Status:** Accepted (2026-08-01, #2878)
 

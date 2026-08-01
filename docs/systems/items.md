@@ -590,7 +590,7 @@ Returns `{"action_points": n, "anima": n, "materials": k}`.
 1. `compute_quality_score(check_result, step=recipe.success_level_step,
    min_success_level=recipe.min_success_level)` →
    `check_result.total_points + max(0, success_level - min_success_level) * step`,
-   **plus `material_grade_bonus`** (#2878, ADR-0187): the quantity-weighted mean
+   **plus `material_grade_bonus`** (#2878, ADR-0188): the quantity-weighted mean
    `material_grade` of the STAGED allocations — the material's head start toward
    one fixed quality landscape (divine silk is a master's good day; divine plain
    cloth a near-impossible legend).
