@@ -31,6 +31,7 @@ function makeWardrobe(id: number, name: string): ItemInstance {
     is_currency_instrument: false,
     suggested_value: 0,
     can_steal: false,
+    crafted_provenance: null,
     template: {
       id: id + 1000,
       name,

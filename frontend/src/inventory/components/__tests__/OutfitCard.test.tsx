@@ -16,6 +16,7 @@ function makeItem(id: number, name: string, color = '#4ade80'): ItemInstance {
     is_currency_instrument: false,
     suggested_value: 0,
     can_steal: false,
+    crafted_provenance: null,
     template: {
       id: id + 100,
       name,
