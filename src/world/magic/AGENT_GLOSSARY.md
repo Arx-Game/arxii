@@ -26,6 +26,9 @@ The stat + skill pair every one of a character's casts rolls, chosen explicitly 
 **Gift**:
 A thematic collection of Techniques (e.g. Pyromancy, Shadow Majesty), associated with a set of Resonances. A character acquires a Gift to gain access to its Techniques.
 
+**Mundane Gift**:
+A `Gift` with `is_magical=False` — a container that exists only because `Technique.gift` is non-null, so martial maneuvers (combat stances, defensive techniques) need somewhere to hang. Its techniques are **not workings**: they are never concealed by a caster's path style, and they short-circuit cast-observation before any detection roll. This axis is orthogonal to `kind` (MAJOR/MINOR is about *acquisition*; both are magical) and to `Technique.action_category` — Charm is SOCIAL and magical, Defend is PHYSICAL and mundane. _Avoid_: "non-magical gift", "martial gift". (#2734.)
+
 **Major Gift**:
 The Gift chosen at character creation — a character's primary magical calling (one per character). Same `Gift` model as a Minor Gift, distinguished by a `kind` column. (ADR-0050.)
 _Avoid_: main gift.

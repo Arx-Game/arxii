@@ -2133,12 +2133,38 @@ and `can_view_interaction` gates an **IC action** (can this persona react as a w
 A viewer's account being permitted to read a row and a viewer's *character* having
 witnessed the underlying event are different questions.
 
-**Combat casts are explicitly NOT covered — a scope boundary, not an oversight.**
-`world.combat.interaction_services.broadcast_action_outcome` (line ~433) still persists
-and broadcasts every combat OUTCOME pose room-wide, unconditionally, with no concealment
-check at all. `resolve_cast_audience` is only wired into the standalone (non-combat) cast
-path (`world/scenes/cast_services.py`). A Subtle-style caster's technique casts overtly
-the instant it lands in combat.
+**Combat casts ARE covered as of #2734** (they were a stated scope boundary of #2710).
+The seam is `world.combat.services._record_and_broadcast_pc_action` — the single site
+that poses a resolved focused action — **not** `broadcast_action_outcome`, which has
+~15 callers (flee outcomes, encounter-end lines, clash resolution, covenant
+insight/weakness) and must stay unconditional for all of them. It instead takes an
+optional `audience` kwarg; `None` (every non-cast caller) keeps the room-wide broadcast
+byte-identical. Concealed, it poses `PERCEIVED_ONLY` to `audience.full` and emits a
+second unattributed line to `audience.vague`, delivering live via `_send_to_objects`
+rather than `_broadcast_to_location` so the WebSocket matches the persisted receiver
+rows. The ACTION row (whose content is the technique name) is concealed through the
+shared `conceal_action_interaction`, which moved from `scenes/cast_services.py` to
+`world.magic.services.cast_observation` so both paths use one implementation.
+
+**Only magical casts are concealed.** `Technique.gift` is non-null, so a martial
+maneuver still hangs off a `Gift`; `Gift.is_magical` is what separates a working from a
+sword swing. A Path of Whispers adept's blade is plainly visible, and a mundane
+technique short-circuits before any query or detection check. Note this axis is
+orthogonal to both `GiftKind` (MAJOR/MINOR is about *acquisition*; both are magical) and
+`Technique.action_category` — Charm is SOCIAL and magical, Defend is PHYSICAL and
+mundane — which is why it needs its own field rather than being inferred.
+
+There is **no `cast_openly` equivalent in combat**: `cast_openly` is a
+`SceneActionRequest` field and `CombatRoundAction` has none, so a combat cast always
+resolves at the caster's style concealment. A deliberate in-combat reveal is its own UX
+surface, not built.
+
+A fourth read surface was closed alongside the three above:
+`ActionOutcomeDetailsView` (`world/combat/views_outcome_details.py`) gated on
+`can_view_encounter_effects` — *encounter*-level, which answers "may you see effects in
+this fight" but not "did you perceive THIS act" — so a concealed cast's effect rows were
+readable by anyone in the encounter who passed its interaction id. It now filters
+through `Interaction.objects.visible_to` first.
 
 **Content dependency — this feature ships INERT until authored, and every piece of that
 content lives in the lore repo, never as arxii seed data:**
