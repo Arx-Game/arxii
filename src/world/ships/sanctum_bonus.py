@@ -46,10 +46,16 @@ def _sanctum_for_ship(ship: ShipDetails) -> SanctumDetails | None:
     ``RoomProfile``s whose ``area`` matches the ship's backing ``Building``'s
     area. A ship has at most one sanctum room for MVP.
     """
-    return SanctumDetails.objects.filter(
-        feature_instance__room_profile__area=ship.building.area,
-        feature_instance__dissolved_at__isnull=True,
-    ).first()
+    return (
+        SanctumDetails.objects.filter(
+            feature_instance__room_profile__area=ship.building.area,
+            feature_instance__dissolved_at__isnull=True,
+        )
+        # feature_instance.level is the power figure the capability curve reads;
+        # joining it here keeps that a free attribute access, not a second query.
+        .select_related("feature_instance")
+        .first()
+    )
 
 
 def _best_level_by_resonance(sanctum: SanctumDetails) -> dict[int, int]:
@@ -69,22 +75,29 @@ def _best_level_by_resonance(sanctum: SanctumDetails) -> dict[int, int]:
     return best
 
 
-def _sanctum_rows(resonance_ids: list[int], effect_kind: str) -> list[ThreadPullEffect]:
+def _sanctum_rows(
+    resonance_ids: list[int], effect_kind: str, *, with_capability: bool = False
+) -> list[ThreadPullEffect]:
     """Fetch every authored tier-0 SANCTUM row of one effect kind, in ONE query.
 
     Batched across all the ship's resonances rather than queried per resonance: the
     per-grant N+1 is the shape #2708 review caught twice in
     ``world/magic/handlers.py`` (see its ``_passive_capability_grants_cache``
     docstring), and this is the same loop in a different app.
+
+    ``with_capability`` joins the granted ``CapabilityType``. Only the
+    CAPABILITY_GRANT caller needs it; the VITAL_BONUS caller would be paying for a
+    join onto a column its rows leave null.
     """
-    return list(
-        ThreadPullEffect.objects.filter(
-            target_kind=TargetKind.SANCTUM,
-            resonance_id__in=resonance_ids,
-            tier=0,
-            effect_kind=effect_kind,
-        ).select_related("capability_grant")
+    rows = ThreadPullEffect.objects.filter(
+        target_kind=TargetKind.SANCTUM,
+        resonance_id__in=resonance_ids,
+        tier=0,
+        effect_kind=effect_kind,
     )
+    if with_capability:
+        rows = rows.select_related("capability_grant")
+    return list(rows)
 
 
 def ship_sanctum_bonus(ship: ShipDetails) -> ShipStatBonus:
@@ -177,7 +190,9 @@ def ship_sanctum_capability_grants(ship: ShipDetails) -> list[ShipCapabilityGran
     if not level_by_resonance:
         return []
 
-    rows = _sanctum_rows(list(level_by_resonance), EffectKind.CAPABILITY_GRANT)
+    rows = _sanctum_rows(
+        list(level_by_resonance), EffectKind.CAPABILITY_GRANT, with_capability=True
+    )
     if not rows:
         return []
 
