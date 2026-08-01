@@ -57,6 +57,15 @@ def _fury_rows() -> None:
     _ensure_fury_check_type(get_fury_config().check_trait)
 
 
+def _moon_rows() -> None:
+    """The `moon_control` CheckType `reconcile_moon_pull` rolls by name (#2845)."""
+    from world.species.moon_sensitivity import (  # noqa: PLC0415
+        _ensure_moon_control_check_type,
+    )
+
+    _ensure_moon_control_check_type()
+
+
 def _spread_rows() -> None:
     """Performance/Persuasion Traits + Skills the `spread a tale` deed needs."""
     from world.societies.spread_services import ensure_spread_skills  # noqa: PLC0415
@@ -165,6 +174,7 @@ CONFIG_PREREQUISITES: dict[str, Callable[[], None]] = {
     "technique_cast": _technique_cast_rows,
     "fatigue": _fatigue_rows,
     "fury": _fury_rows,
+    "moon": _moon_rows,
     "spread": _spread_rows,
     "vitals": _vitals_rows,
     "conditions": _conditions_rows,

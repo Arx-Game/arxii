@@ -478,6 +478,9 @@ class CombatTechniqueResolver:
             if focused is not None
             else 0
         )
+        from world.combat.stat_mapping import weapon_stat_override  # noqa: PLC0415
+
+        stat_override = weapon_stat_override(character)
         return check_fn(
             character,
             self.offense_check_type,
@@ -485,6 +488,7 @@ class CombatTechniqueResolver:
             extra_modifiers=extra_modifiers,
             fatigue_penalty=penalty,
             situation_ctx=situation_ctx,
+            stat_override=stat_override,
         )
 
     def _sum_intensity_bump_pulls(self) -> int:
@@ -1548,6 +1552,9 @@ def leave_encounter(participant: CombatParticipant) -> None:
     - the encounter type is not OPEN_ENCOUNTER, or
     - the participant is not ACTIVE.
     """
+    from world.combat.berserk_compulsion import reject_if_berserk  # noqa: PLC0415
+
+    reject_if_berserk(participant, "leave")
     enc = CombatEncounter.objects.select_for_update().get(pk=participant.encounter_id)
     if enc.status != RoundStatus.BETWEEN_ROUNDS:
         msg = (
@@ -1585,8 +1592,10 @@ def declare_flee(participant: CombatParticipant) -> CombatRoundAction:
     round resolution (_resolve_flee); the participant remains ACTIVE until
     the check succeeds.
     """
+    from world.combat.berserk_compulsion import reject_if_berserk  # noqa: PLC0415
     from world.vitals.services import is_dead  # noqa: PLC0415
 
+    reject_if_berserk(participant, "flee")
     encounter = participant.encounter
 
     # Encounter status check
@@ -2329,8 +2338,10 @@ def declare_parley(
     decisive success, calms the opponent (Calm condition → NEUTRAL allegiance).
     This function only records the declaration.
     """
+    from world.combat.berserk_compulsion import reject_if_berserk  # noqa: PLC0415
     from world.vitals.services import is_dead  # noqa: PLC0415
 
+    reject_if_berserk(participant, "parley")
     encounter = participant.encounter
     if encounter.status != RoundStatus.DECLARING:
         msg = (
@@ -6427,6 +6438,8 @@ def resolve_npc_attack(
     # aspect match on this defense check) that sets the difficulty -- the
     # inverse of the offense/penetration sites, where the difficulty is
     # sourced from the side being acted upon.
+    from world.combat.stat_mapping import DEFENSE_STAT  # noqa: PLC0415
+
     result: CheckResult = perform_check_fn(
         character,
         check_type,
@@ -6437,6 +6450,7 @@ def resolve_npc_attack(
         ),
         extra_modifiers=breakdown.total,
         situation_ctx=situation_ctx,
+        stat_override=DEFENSE_STAT,
     )
 
     multiplier = _damage_multiplier_for_success(result.success_level)
@@ -10212,6 +10226,13 @@ def resolve_round(  # noqa: PLR0915 - orchestration function; already at the
     )
     if not already_selected:
         select_npc_actions(enc)
+
+    # Berserk compulsion (#2845): rage-driven participants who declared nothing
+    # get their simplest damaging technique auto-declared. Idempotent — a
+    # participant who steered their own rage (declared an attack) is skipped.
+    from world.combat.berserk_compulsion import select_berserk_actions  # noqa: PLC0415
+
+    select_berserk_actions(enc)
 
     enc.status = RoundStatus.RESOLVING
     enc.save(update_fields=["status"])

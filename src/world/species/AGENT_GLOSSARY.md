@@ -55,3 +55,19 @@ Domain-local vocabulary for `world.species`. Root terms live in
   and drives feeding restraint checks. In the desc footer it folds into the
   single worst-wins depletion clause. _Avoid:_ separate per-condition hunger
   lines (spam).
+- **Moon pull** — the felt instinct pressure on a moon-bound character
+  (`moon_pull.felt_moon_pull`: illumination × sky exposure − radiant shade;
+  NIGHT only). Only occlusion dampens it — clothing and modifier magic never
+  enter an instinct read. _Avoid:_ "moon exposure" (it is not a damage ladder).
+- **Moon-Bound** — the control-pressure anchor Distinction (`moon-bound` tag,
+  #2845/ADR-0183): holders roll `moon_control` (willpower + composure) under a
+  strong pull; failure forces the battle-form shift + shared Berserk. Lycans
+  innately via "The Wolf's Fury" grant. _Avoid:_ species-probed lycanthropy.
+- **Battle form** — a lycan's ALTERNATE `CharacterForm` + `FormCombatProfile`
+  stat suite (`moon_provisioning.ensure_lycan_battle_form`, lazily provisioned);
+  moon clarity scales the whole suite at shift time via `instance_value`, and
+  Wolf's-Fury thread level feeds `tuning_value`. _Avoid:_ a bespoke
+  transformation mechanic (it IS the forms alternate-self machinery).
+- **Moonlit Unease** — the Cani umbrella's flavor-only alertness condition under
+  the open night moon (`reconcile_cani_unease`). _Avoid:_ wolf-specific khati
+  subspecies (umbrella families only, ruled 2026-07-31).

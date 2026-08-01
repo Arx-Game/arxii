@@ -1,6 +1,7 @@
 """Check resolution service functions."""
 
 from decimal import Decimal
+import logging
 import random
 from typing import TYPE_CHECKING, NamedTuple, cast
 
@@ -39,6 +40,8 @@ if TYPE_CHECKING:
     from world.skills.models import Specialization
     from world.traits.handlers import TraitHandler
 
+logger = logging.getLogger(__name__)
+
 
 def perform_check(  # noqa: PLR0913 - optional effort/fatigue params extend existing signature
     character: "ObjectDB",
@@ -51,6 +54,7 @@ def perform_check(  # noqa: PLR0913 - optional effort/fatigue params extend exis
     *,
     situation_ctx: "SituationContext | None" = None,
     level_override: int | None = None,
+    stat_override: str | None = None,
 ) -> CheckResult:
     """
     Main check resolution function.
@@ -111,6 +115,7 @@ def perform_check(  # noqa: PLR0913 - optional effort/fatigue params extend exis
             specialization=specialization,
             situation_ctx=situation_ctx,
             level_override=level_override,
+            stat_override=stat_override,
         )
 
     breakdown = _compute_check_breakdown(
@@ -123,6 +128,7 @@ def perform_check(  # noqa: PLR0913 - optional effort/fatigue params extend exis
         specialization=specialization,
         situation_ctx=situation_ctx,
         level_override=level_override,
+        stat_override=stat_override,
     )
 
     roll = random.randint(1, 100)  # noqa: S311
@@ -148,6 +154,7 @@ def perform_check_with_modifiers(  # noqa: PLR0913 - mirrors perform_check signa
     scene: "Scene | None" = None,
     extra_contributions: "list[ModifierContribution] | None" = None,
     skip_fashion: bool = False,
+    stat_override: str | None = None,
 ) -> CheckResult:
     """Run a check with all character modifiers gathered automatically.
 
@@ -197,6 +204,7 @@ def perform_check_with_modifiers(  # noqa: PLR0913 - mirrors perform_check signa
             specialization=specialization,
             situation_ctx=situation_ctx,
             level_override=level_override,
+            stat_override=stat_override,
         )
     breakdown = collect_check_modifiers(
         sheet,
@@ -215,6 +223,7 @@ def perform_check_with_modifiers(  # noqa: PLR0913 - mirrors perform_check signa
         specialization=specialization,
         situation_ctx=situation_ctx,
         level_override=level_override,
+        stat_override=stat_override,
     )
 
 
@@ -229,6 +238,7 @@ def _build_forced_check_result(  # noqa: PLR0913 - mirrors perform_check signatu
     specialization: "Specialization | None" = None,
     situation_ctx: "SituationContext | None" = None,
     level_override: int | None = None,
+    stat_override: str | None = None,
 ) -> CheckResult:
     """Build a synthetic CheckResult for the test-rig forced-outcome path.
 
@@ -251,6 +261,7 @@ def _build_forced_check_result(  # noqa: PLR0913 - mirrors perform_check signatu
         specialization=specialization,
         situation_ctx=situation_ctx,
         level_override=level_override,
+        stat_override=stat_override,
     )
     outcome = _apply_outcome_guarantees(character, forced_outcome, breakdown.chart, situation_ctx)
     return _check_result(check_type, outcome, breakdown)
@@ -282,6 +293,7 @@ def _compute_check_breakdown(  # noqa: PLR0913 - keyword-only check params mirro
     specialization: "Specialization | None",
     situation_ctx: "SituationContext | None" = None,
     level_override: int | None = None,
+    stat_override: str | None = None,
 ) -> _CheckBreakdown:
     """Compute stat + skill + specialization + aspect + level points, ranks, and chart
 
@@ -306,7 +318,7 @@ def _compute_check_breakdown(  # noqa: PLR0913 - keyword-only check params mirro
         level = get_character_path_level(character)
     effort_modifier = EFFORT_CHECK_MODIFIER.get(effort_level, 0) if effort_level else 0
 
-    trait_points = _calculate_trait_points(handler, check_type)
+    trait_points = _calculate_trait_points(handler, check_type, stat_override=stat_override)
     specialization_points = _calculate_specialization_points(character, check_type, specialization)
     aspect_bonus = _calculate_aspect_bonus(character, check_type, level)
     level_points = LEVEL_POINTS_PER_LEVEL * level
@@ -644,6 +656,7 @@ def compute_check_rating(
     extra_modifiers: int = 0,
     *,
     level_override: int | None = None,
+    stat_override: str | None = None,
 ) -> int:
     """Return *character*'s pre-roll rating (total points) for *check_type* — no dice roll.
 
@@ -667,6 +680,7 @@ def compute_check_rating(
         fatigue_penalty=0,
         specialization=None,
         level_override=level_override,
+        stat_override=stat_override,
     )
     return breakdown.total_points
 
@@ -735,16 +749,38 @@ def _calculate_aspect_bonus(
     return bonus
 
 
-def _calculate_trait_points(handler: "TraitHandler", check_type: "CheckType") -> int:
-    """
-    Calculate weighted trait points for a check type.
+def _calculate_trait_points(
+    handler: "TraitHandler",
+    check_type: "CheckType",
+    *,
+    stat_override: str | None = None,
+) -> int:
+    """Calculate weighted trait points for a check type.
 
     For each CheckTypeTrait, multiply raw trait value by weight (truncated to int),
     then convert the weighted value to points via PointConversionRange, and sum.
+
+    When ``stat_override`` is set (#2757), STAT-type CheckTypeTrait rows are
+    skipped and the override stat's value is substituted in their place —
+    borrowing the weight from the check's first STAT-type trait so authored
+    stat weighting is preserved regardless of which stat is selected.
+    SKILL-type traits always contribute. ``None`` (the default) is
+    byte-identical to the pre-#2757 behavior. A check with 2+ STAT-type
+    traits logs a warning and ignores the override (the substitution would
+    lose a stat).
     """
     check_type_traits = check_type.traits.select_related("trait").all()  # type: ignore[attr-defined] — reverse FK manager from CheckTypeTrait
-    total = 0
 
+    if stat_override is not None:
+        overridden = _calculate_trait_points_with_override(
+            handler, check_type, check_type_traits, stat_override
+        )
+        if overridden is not None:
+            return overridden
+        # stat_count > 1: warning already logged, fall through to default.
+
+    # Default path: stat_override is None or was ignored — byte-identical to pre-#2757.
+    total = 0
     for ct_trait in check_type_traits:
         trait = cast(Trait, ct_trait.trait)
         trait_value = handler.get_trait_value(cast(str, trait.name))
@@ -752,7 +788,60 @@ def _calculate_trait_points(handler: "TraitHandler", check_type: "CheckType") ->
             weighted_value = int(trait_value * ct_trait.weight)
             if weighted_value > 0:
                 total += PointConversionRange.calculate_points(trait.trait_type, weighted_value)
+    return total
 
+
+def _calculate_trait_points_with_override(  # noqa: C901
+    handler: "TraitHandler",
+    check_type: "CheckType",
+    check_type_traits,
+    stat_override: str,
+) -> int | None:
+    """Compute trait points when a stat_override is active (#2757).
+
+    Returns the substituted total, or ``None`` when the override should be
+    ignored (the check has 2+ STAT-type traits — the substitution would lose
+    a stat). In the latter case a warning is logged and the caller falls
+    through to the default path.
+    """
+    # Count STAT traits and borrow the first STAT weight for the override.
+    stat_weight: Decimal = Decimal("1.0")
+    stat_count = 0
+    for ct_trait in check_type_traits:
+        trait = cast(Trait, ct_trait.trait)
+        if trait.trait_type == TraitType.STAT:
+            stat_count += 1
+            if stat_count == 1:
+                stat_weight = ct_trait.weight
+
+    if stat_count > 1:
+        logger.warning(
+            "stat_override=%r passed for check %r with %d STAT-type traits — "
+            "override ignored (would lose a stat).",
+            stat_override,
+            check_type.name,
+            stat_count,
+        )
+        return None
+
+    total = 0
+    # Substitute the override stat (borrowed weight if a STAT trait existed,
+    # or weight 1.0 if the check had no STAT traits).
+    override_value = handler.get_trait_value(stat_override)
+    if override_value > 0:
+        weighted_value = int(override_value * stat_weight)
+        if weighted_value > 0:
+            total += PointConversionRange.calculate_points(TraitType.STAT, weighted_value)
+    # Add all non-STAT (SKILL) traits from the check's own composition.
+    for ct_trait in check_type_traits:
+        trait = cast(Trait, ct_trait.trait)
+        if trait.trait_type == TraitType.STAT:
+            continue
+        trait_value = handler.get_trait_value(cast(str, trait.name))
+        if trait_value > 0:
+            weighted_value = int(trait_value * ct_trait.weight)
+            if weighted_value > 0:
+                total += PointConversionRange.calculate_points(trait.trait_type, weighted_value)
     return total
 
 
@@ -966,6 +1055,7 @@ def compute_resist_increment(
     resist_effort_level: str,
     *,
     level_override: int | None = None,
+    stat_override: str | None = None,
 ) -> int:
     """Compute how much a defender's active resistance raises difficulty.
 
@@ -1030,6 +1120,7 @@ def compute_resist_increment(
         composure_check_type,
         extra_modifiers=modifier,
         level_override=level_override,
+        stat_override=stat_override,
     )
     return max(0, rating)
 
@@ -1039,6 +1130,8 @@ def preview_check_difficulty(
     check_type: "CheckType",
     target_difficulty: int = 0,
     extra_modifiers: int = 0,
+    *,
+    stat_override: str | None = None,
 ) -> int:
     """
     Preview the rank difference for a check without rolling.
@@ -1060,6 +1153,7 @@ def preview_check_difficulty(
         effort_level=None,
         fatigue_penalty=0,
         specialization=None,
+        stat_override=stat_override,
     )
     return breakdown.rank_difference
 

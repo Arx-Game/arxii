@@ -78,7 +78,7 @@ def get_melee_offense_pool() -> ConsequencePool | None:
 
     ``checks.CheckType`` is content-repo-owned (#2698) — returns ``None``
     when ``wire_melee_attack_action_template()`` returns ``None`` (the
-    'Melee Attack' CheckType isn't authored).
+    'Melee Combat' CheckType isn't authored).
     """
     from world.combat.factories import wire_melee_attack_action_template  # noqa: PLC0415
 
