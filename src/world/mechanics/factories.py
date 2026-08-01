@@ -41,6 +41,7 @@ from world.mechanics.models import (
     SituationTrapLink,
     TraitCapabilityDerivation,
 )
+from world.scenes.action_constants import DIFFICULTY_VALUES, DifficultyChoice
 
 _CHECK_TYPE_FACTORY_PATH = "world.checks.factories.CheckTypeFactory"
 
@@ -383,7 +384,10 @@ class ChallengeTemplateFactory(DjangoModelFactory):
 
     name = factory.Sequence(lambda n: f"ChallengeTemplate{n}")
     description_template = factory.Faker("sentence")
-    severity = 1
+    # Severity is in DIFFICULTY_VALUES points, not a 1-5 rating (#2865). The old
+    # literal 1 put every factory-built challenge at the bottom rank, so tests
+    # exercised a difficulty no authored challenge should ever have.
+    severity = DIFFICULTY_VALUES[DifficultyChoice.NORMAL]
     goal = factory.Faker("sentence")
     category = factory.SubFactory(ChallengeCategoryFactory)
 
