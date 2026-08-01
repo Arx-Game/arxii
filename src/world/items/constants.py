@@ -119,6 +119,18 @@ class GearArchetype(models.TextChoices):
     OTHER = "other", "Other"
 
 
+class WeaponClass(models.TextChoices):
+    """Weight class for weapon stat-override granularity (#2858).
+
+    Aligns with the seeded Melee Combat specializations (Small/Medium/Heavy
+    Weapons). Blank = use the GearArchetype fallback in stat_mapping.
+    """
+
+    SMALL = "small", "Small"
+    MEDIUM = "medium", "Medium"
+    HEAVY = "heavy", "Heavy"
+
+
 # Archetype groupings for combat-stat gating (issue #508). SHIELD appears in
 # both: a shield can soak and (rarely) bash. LANCE (#1843) is a mounted-combat
 # weapon archetype — off-mount attacks take LANCE_UNMOUNTED_PENALTY.

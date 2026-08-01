@@ -41,16 +41,24 @@ class ItemsDevSeedResult:
 
 
 # ---------------------------------------------------------------------------
-# Template specs: (archetype, name, [(body_region, equipment_layer)], facet_capacity)
+# Template specs:
+#   (archetype, name, [(body_region, equipment_layer)], facet_capacity, weapon_class)
 # Layers: BASE = form-fitting base garment/armour layer.
 #         OVER  = outer piece worn over base.
 #         OUTER = outermost (cloaks, coats, full plate surcoat).
+# weapon_class is "" for everything that isn't a weapon, and for weapons whose
+# stat should keep following the coarse archetype map (#2858).
 # ---------------------------------------------------------------------------
 
 
-def _build_template_specs() -> list[tuple[str, str, list[tuple[str, str]], int]]:
+def _build_template_specs() -> list[tuple[str, str, list[tuple[str, str]], int, str]]:
     """Return the canonical template-spec list using actual constant values."""
-    from world.items.constants import BodyRegion, EquipmentLayer, GearArchetype  # noqa: PLC0415
+    from world.items.constants import (  # noqa: PLC0415
+        BodyRegion,
+        EquipmentLayer,
+        GearArchetype,
+        WeaponClass,
+    )
 
     return [
         (
@@ -58,18 +66,21 @@ def _build_template_specs() -> list[tuple[str, str, list[tuple[str, str]], int]]
             "Plate Cuirass",
             [(BodyRegion.TORSO, EquipmentLayer.OVER)],
             3,
+            "",
         ),
         (
             GearArchetype.MEDIUM_ARMOR,
             "Brigandine Vest",
             [(BodyRegion.TORSO, EquipmentLayer.BASE)],
             3,
+            "",
         ),
         (
             GearArchetype.LIGHT_ARMOR,
             "Studded Leather Jacket",
             [(BodyRegion.TORSO, EquipmentLayer.BASE)],
             3,
+            "",
         ),
         (
             GearArchetype.ROBE,
@@ -80,12 +91,14 @@ def _build_template_specs() -> list[tuple[str, str, list[tuple[str, str]], int]]
                 (BodyRegion.RIGHT_ARM, EquipmentLayer.BASE),
             ],
             4,
+            "",
         ),
         (
             GearArchetype.MELEE_ONE_HAND,
             "Longsword",
             [(BodyRegion.RIGHT_HAND, EquipmentLayer.BASE)],
             2,
+            WeaponClass.MEDIUM,
         ),
         (
             GearArchetype.MELEE_TWO_HAND,
@@ -95,24 +108,28 @@ def _build_template_specs() -> list[tuple[str, str, list[tuple[str, str]], int]]
                 (BodyRegion.LEFT_HAND, EquipmentLayer.BASE),
             ],
             2,
+            WeaponClass.HEAVY,
         ),
         (
             GearArchetype.SHIELD,
             "Kite Shield",
             [(BodyRegion.LEFT_HAND, EquipmentLayer.BASE)],
             2,
+            "",
         ),
         (
             GearArchetype.CLOTHING,
             "Fine Linen Shirt",
             [(BodyRegion.TORSO, EquipmentLayer.BASE)],
             2,
+            "",
         ),
         (
             GearArchetype.JEWELRY,
             "Silver Pendant",
             [(BodyRegion.NECK, EquipmentLayer.ACCESSORY)],
             2,
+            "",
         ),
         (
             GearArchetype.RANGED,
@@ -122,6 +139,7 @@ def _build_template_specs() -> list[tuple[str, str, list[tuple[str, str]], int]]
                 (BodyRegion.LEFT_HAND, EquipmentLayer.BASE),
             ],
             2,
+            WeaponClass.MEDIUM,
         ),
     ]
 
@@ -139,12 +157,13 @@ def seed_item_template_starter_catalog() -> ItemTemplateStarterCatalogResult:
     from world.items.models import ItemTemplate, TemplateSlot  # noqa: PLC0415
 
     templates: dict[str, ItemTemplate] = {}
-    for archetype, name, slot_specs, capacity in _build_template_specs():
+    for archetype, name, slot_specs, capacity, weapon_class in _build_template_specs():
         tmpl, _ = ItemTemplate.objects.get_or_create(
             name=name,
             defaults={
                 "gear_archetype": archetype,
                 "facet_capacity": capacity,
+                "weapon_class": weapon_class,
             },
         )
         for region, layer in slot_specs:

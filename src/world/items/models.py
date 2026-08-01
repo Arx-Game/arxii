@@ -30,6 +30,7 @@ from world.items.constants import (
     GearArchetype,
     OwnershipEventType,
     StyleAudacity,
+    WeaponClass,
 )
 from world.locations.constants import StatKey
 
@@ -364,6 +365,16 @@ class ItemTemplate(NaturalKeyMixin, SharedMemoryModel):
         help_text=(
             "Gear category. Drives covenant role × gear compatibility. "
             "Immutable across instances of this template."
+        ),
+    )
+    weapon_class = models.CharField(
+        max_length=10,
+        choices=WeaponClass.choices,
+        blank=True,
+        default="",
+        help_text=(
+            "Weight class for combat stat-override (small/medium/heavy). "
+            "Blank = fall back to gear_archetype mapping."
         ),
     )
     weapon_damage_type = models.ForeignKey(
