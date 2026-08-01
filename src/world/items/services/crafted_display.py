@@ -50,7 +50,10 @@ def crafted_provenance_line(instance: ItemInstance) -> str | None:
     sentences: list[str] = []
 
     quality = instance.quality_tier
-    accents = list(instance.accents.select_related("target", "level"))
+    # cached_item_accents (not a fresh query): free when the equipment-walk
+    # prefetch populated it, and cached on the idmapper instance thereafter —
+    # keeps the warm-list endpoints at their locked query counts.
+    accents = instance.cached_item_accents
     accent_prose = _join_prose([_accent_phrase(a) for a in accents])
     if quality is not None and accents:
         sentences.append(f"Of {quality.name.lower()} quality, {accent_prose}.")
