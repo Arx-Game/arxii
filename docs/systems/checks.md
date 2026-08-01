@@ -380,7 +380,7 @@ Check compositions are authored as seed data (the design tenet: **stat + skill (
 
 | Cluster | Checks | Composition |
 |---------|--------|-------------|
-| `combat_checks` (#1706, #2757) | `Melee Combat` | Melee Combat (skill) + situational stat (default: strength; combat system passes `stat_override` from weapon) |
+| `combat_checks` (#1706, #2757, #2858) | `Melee Combat` | Melee Combat (skill) + situational stat (default: strength; combat system passes `stat_override` from weapon — `ItemTemplate.weapon_class` first, `gear_archetype` as fallback) |
 | `combat` | `penetration` | willpower + intellect + Melee Combat |
 | `combat` | `flee` | agility + wits + Melee Combat |
 | `combat` | `Escalation Pace` | wits (single-stat resist) |

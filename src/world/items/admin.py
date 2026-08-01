@@ -159,6 +159,7 @@ class ItemTemplateAdmin(admin.ModelAdmin):
         "is_consumable",
         "is_craftable",
         "gear_archetype",
+        "weapon_class",
     ]
     search_fields = ["name"]
     list_select_related = ["minimum_quality_tier", "image"]
@@ -173,6 +174,7 @@ class ItemTemplateAdmin(admin.ModelAdmin):
                     "size",
                     "value",
                     "gear_archetype",
+                    "weapon_class",
                     "base_weapon_damage",
                     "weapon_damage_type",
                     "base_armor_soak",
