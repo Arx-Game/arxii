@@ -16,10 +16,12 @@ from typing import TYPE_CHECKING
 
 from world.combat.constants import ClashResolution, EncounterOutcome
 from world.magic.narration import power_outcome_clause, signature_clause
-from world.scenes.constants import InteractionMode
+from world.scenes.constants import InteractionMode, InteractionVisibility
 from world.scenes.models import Interaction
 
 if TYPE_CHECKING:
+    from evennia.objects.models import ObjectDB
+
     from world.combat.models import (
         ClashContribution,
         CombatEncounter,
@@ -30,7 +32,10 @@ if TYPE_CHECKING:
     from world.combat.types import ActionOutcome
     from world.conditions.types import DamageInteractionResult
     from world.magic.models import FuryTier
+    from world.magic.services.cast_observation import CastAudience
     from world.magic.types.power_ledger import PowerLedger
+    from world.scenes.models import Persona
+    from world.scenes.types import InteractionPayload
 
 
 def create_action_interaction(
@@ -297,6 +302,57 @@ def render_action_outcome_narration(  # noqa: PLR0913 - all params describe one 
     return _assemble_hit_line(head, tail, suffix)
 
 
+def render_unattributed_action_narration(
+    *,
+    target_label: str | None,
+    outcome: ActionOutcome,
+) -> str:
+    """Render what a concealed action *did*, with nothing that names who did it (#2734).
+
+    The effect-only sibling of ``render_action_outcome_narration``. Concealment hides
+    attribution, not the event: an observer who fails the detection roll still sees the
+    blow land, they just cannot say where it came from. Pure — no DB, no randomness.
+
+    Deliberately carries **none** of the three suffix clauses the attributed line
+    appends, each of which would give the game away:
+
+    * the signature clause is the caster's personal flourish — the single strongest
+      attribution tell there is (#1728);
+    * the power clause names "the working" / "the ward", telling an observer at this
+      tier that magic was involved when the whole point is that they cannot tell;
+    * the synergy clause narrates condition interplay that reads as authored magic.
+
+    Returns ``""`` for a target-less action (a self-buff has no outward event to
+    narrate); callers must skip emitting a pose on an empty string.
+
+    Examples:
+        "Corvin is struck for 24 damage."
+        "Corvin is struck for 40 damage, defeating them."
+        "Something lashes at Corvin and misses."
+    """
+    from world.combat.types import OpponentDamageResult  # noqa: PLC0415
+
+    if target_label is None:
+        return ""
+
+    total_damage = sum(dr.damage_dealt for dr in outcome.damage_results)
+    defeated = any(
+        isinstance(dr, OpponentDamageResult) and dr.defeated for dr in outcome.damage_results
+    )
+    knocked_out = any(c.knocked_out for c in outcome.damage_consequences)
+    dying = any(c.dying for c in outcome.damage_consequences)
+    wounds = [ct.name for c in outcome.damage_consequences for ct in c.wounds_applied]
+
+    if total_damage <= 0 and not wounds:
+        return f"Something lashes at {target_label} and misses."
+
+    head = f"{target_label} is struck for {total_damage} damage"
+    tail = _build_tail_clauses(
+        wounds=wounds, defeated=defeated, dying=dying, knocked_out=knocked_out
+    )
+    return _assemble_hit_line(head, tail, "")
+
+
 def render_combo_finisher_narration(
     *,
     combo_name: str,
@@ -434,6 +490,8 @@ def broadcast_action_outcome(
     *,
     encounter: CombatEncounter,
     narration: str,
+    audience: CastAudience | None = None,
+    unattributed_narration: str = "",
 ) -> Interaction | None:
     """Persist a Narrator-authored OUTCOME interaction and broadcast it.
 
@@ -443,6 +501,20 @@ def broadcast_action_outcome(
     broadcast goes to every object in the encounter room via the existing
     interaction WebSocket payload. When the encounter has no room, the
     interaction is still persisted (durable) but not broadcast.
+
+    Args:
+        audience: Who perceived this outcome, from ``resolve_cast_audience``
+            (#2734). ``None`` -- the default, and what every non-cast caller
+            passes -- keeps the room-wide broadcast byte-identical to its
+            pre-#2734 behaviour. A concealed audience instead fans the outcome
+            out as up to three PERCEIVED_ONLY poses, one per attribution tier,
+            with no observer receiving more than one. Mirrors
+            ``scenes.cast_services``' ``create_cast_outcome_pose``.
+        unattributed_narration: The same event with nothing that names who did
+            it, from ``render_unattributed_action_narration``. Concealment hides
+            attribution, not the event, so this is what the lower two tiers read.
+            Empty means the working left nothing to perceive, and those tiers get
+            no pose at all.
     """
     if not narration:
         return None
@@ -455,24 +527,76 @@ def broadcast_action_outcome(
     )
 
     narrator = get_or_create_narrator_persona()
+    concealed = audience is not None and audience.concealed
     interaction = create_interaction(
         persona=narrator,
         content=narration,
         mode=InteractionMode.OUTCOME,
         scene=encounter.scene,
+        receivers=audience.full if concealed else None,
+        visibility=(
+            InteractionVisibility.PERCEIVED_ONLY if concealed else InteractionVisibility.DEFAULT
+        ),
     )
 
     room = encounter.room
     if room is None:
         return interaction
 
-    payload = _build_interaction_payload(
-        interaction_id=interaction.pk,
-        persona=narrator,
-        content=interaction.content,
-        mode=interaction.mode,
-        timestamp=interaction.timestamp.isoformat(),
-        scene_id=interaction.scene_id,
-    )
-    _broadcast_to_location(room, payload)
+    def _payload(source: Interaction) -> InteractionPayload:
+        return _build_interaction_payload(
+            interaction_id=source.pk,
+            persona=narrator,
+            content=source.content,
+            mode=source.mode,
+            timestamp=source.timestamp.isoformat(),
+            scene_id=source.scene_id,
+        )
+
+    if not concealed:
+        _broadcast_to_location(room, _payload(interaction))
+        return interaction
+
+    # Concealed: deliberately NOT _broadcast_to_location. Live delivery has to match
+    # the persisted receiver rows, or the scene log would hide what the WebSocket
+    # already showed. push_interaction can't do it here -- it keys off the writer's
+    # location, and the Narrator persona has no presence in the room.
+    from world.magic.narration import render_vague_cast_narration  # noqa: PLC0415
+    from world.scenes.interaction_services import _send_to_objects  # noqa: PLC0415
+
+    _send_to_objects(_characters_for(audience.full), _payload(interaction))
+
+    # No target_personas on either lower-tier pose: the FK drives "this pose is about
+    # you" surfacing, and naming the target alongside an unattributed line re-opens the
+    # attribution this tier exists to withhold (ADR-0170).
+    def _emit_tier(recipients: list[Persona], content: str) -> None:
+        if not recipients or not content:
+            return
+        tier_interaction = create_interaction(
+            persona=narrator,
+            content=content,
+            mode=InteractionMode.OUTCOME,
+            scene=encounter.scene,
+            receivers=recipients,
+            visibility=InteractionVisibility.PERCEIVED_ONLY,
+        )
+        _send_to_objects(_characters_for(recipients), _payload(tier_interaction))
+
+    _emit_tier(audience.vague, render_vague_cast_narration(unattributed_narration))
+    _emit_tier(audience.effect_only, unattributed_narration)
+
     return interaction
+
+
+def _characters_for(personas: list[Persona]) -> list[ObjectDB]:  # noqa: OBJECTDB_PARAM
+    """The characters behind these personas, for direct WebSocket delivery.
+
+    Skips personas whose sheet has no character object rather than failing the
+    whole broadcast for one unbacked persona.
+    """
+    characters = []
+    for persona in personas:
+        character = persona.character_sheet.character
+        if character is not None:
+            characters.append(character)
+    return characters

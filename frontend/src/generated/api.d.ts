@@ -33259,6 +33259,8 @@ export interface components {
       reach?: components['schemas']['TechniqueReachEnum'];
       /** @description When reach=REACH_N, the maximum number of passable edges BFS may traverse. Ignored for SAME/ADJACENT/ANY. */
       reach_hops?: number;
+      /** @description Whether working this technique produces something bystanders can see happen, independent of whether they can tell who did it (#2734). True for the overwhelming majority -- almost any condition produces some visible effect. Set False only for a working that leaves nothing to perceive at all (a silent binding, a curse laid at a distance): a concealed cast of one of those is hidden outright from anyone who fails detection, rather than narrated without attribution. */
+      has_perceptible_effect?: boolean;
     };
     /** @description Serialize tenure galleries. */
     PatchedTenureGalleryRequest: {
@@ -38063,6 +38065,8 @@ export interface components {
       reach?: components['schemas']['TechniqueReachEnum'];
       /** @description When reach=REACH_N, the maximum number of passable edges BFS may traverse. Ignored for SAME/ADJACENT/ANY. */
       reach_hops?: number;
+      /** @description Whether working this technique produces something bystanders can see happen, independent of whether they can tell who did it (#2734). True for the overwhelming majority -- almost any condition produces some visible effect. Set False only for a working that leaves nothing to perceive at all (a silent binding, a curse laid at a distance): a concealed cast of one of those is hidden outright from anyone who fails detection, rather than narrated without attribution. */
+      has_perceptible_effect?: boolean;
       readonly tier: number;
       readonly target_spec: components['schemas']['TargetSpec'];
     };
@@ -38121,6 +38125,8 @@ export interface components {
       reach?: components['schemas']['TechniqueReachEnum'];
       /** @description When reach=REACH_N, the maximum number of passable edges BFS may traverse. Ignored for SAME/ADJACENT/ANY. */
       reach_hops?: number;
+      /** @description Whether working this technique produces something bystanders can see happen, independent of whether they can tell who did it (#2734). True for the overwhelming majority -- almost any condition produces some visible effect. Set False only for a working that leaves nothing to perceive at all (a silent binding, a curse laid at a distance): a concealed cast of one of those is hidden outright from anyone who fails detection, rather than narrated without attribution. */
+      has_perceptible_effect?: boolean;
     };
     /** @description Serializer for TechniqueStyle lookup records. */
     TechniqueStyle: {

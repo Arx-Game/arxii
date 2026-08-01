@@ -1,5 +1,12 @@
 # Cast observation is a per-observer resolution at the pose seam
 
+> **Superseded in part by ADR-0187 (#2734).** The tier *semantics* below — "`<= 0`
+> perceives nothing" — no longer hold: concealment hides attribution, not the event, and
+> the bottom tier now reads an unattributed effect line. Everything else here stands:
+> per-observer resolution at the pose seam, concealment as a magnitude, materialising the
+> audience as `InteractionReceiver` rows, the `PERCEIVED_ONLY` tier, and capabilities
+> folding in as a bonus rather than an auto-detect threshold.
+
 > Note: this ADR was drafted as 0167 and renumbered to 0170 when the branch rebased.
 > `main` had carried two ADR-0164 files and resolved that by renumbering the #2700
 > technique-style decision to 0167, then added 0168 and 0169 — so 0170 is the next

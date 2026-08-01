@@ -558,18 +558,25 @@ Powers, affinities, auras, resonances, threads-as-currency, rituals, and Mage Sc
   `"magic"`) — single seam; telnet `CmdTechnique` and web `POST /api/magic/techniques/author/`
   both converge here. Telnet: `technique draft|show|set|restrict|grant|damage|condition|price|author|discard`
   (`cmd:perm(Builder)` — staff/GM only).
-- **Cast observation (#2710, ADR-0170):** `resolve_cast_audience(*, caster,
-  cast_openly=False) -> CastAudience` (`world/magic/services/cast_observation.py`) — who
-  perceived a cast worked in a concealed `TechniqueStyle.cast_concealment` style, and in
-  how much detail (full/vague/nothing), resolved per co-located observer at cast time.
-  Materialised as `InteractionReceiver` rows under the new
-  `InteractionVisibility.PERCEIVED_ONLY` tier (writer + receivers + staff + scene GM;
-  stricter than `VERY_PRIVATE`, which admits no exception). Wired into standalone casts
-  only (`world/scenes/cast_services.py`); combat casts
-  (`world.combat.interaction_services.broadcast_action_outcome`) are NOT covered — see
-  magic.md's "Cast observation" section for the full mechanism, the three enforcement
-  points (`InteractionQuerySet.visible_to`, `SceneActionRequestViewSet.get_queryset`,
-  `can_view_interaction`), and the lore-repo content this stays inert without.
+- **Cast observation (#2710, ADR-0170; #2734, ADR-0187):** `resolve_cast_audience(*,
+  caster, technique, cast_openly=False) -> CastAudience`
+  (`world/magic/services/cast_observation.py`) — who perceived a cast worked in a
+  concealed `TechniqueStyle.cast_concealment` style, and **how much of it they could
+  attribute**, resolved per co-located observer at cast time. Concealment hides
+  attribution, not the event: `full` (caster + technique) / `vague` (the effect, plus
+  that it was a working) / `effect_only` (the effect alone). Only a technique with
+  `has_perceptible_effect=False` still hides outright; a `SAME`-reach technique is never
+  concealed at all, since contact gives the actor away. Materialised as
+  `InteractionReceiver` rows under the `InteractionVisibility.PERCEIVED_ONLY` tier
+  (writer + receivers + staff + scene GM; stricter than `VERY_PRIVATE`, which admits no
+  exception). Wired into **both** cast paths — standalone
+  (`world/scenes/cast_services.py`) and combat
+  (`world.combat.services._record_and_broadcast_pc_action`, **not**
+  `broadcast_action_outcome`, which has ~15 non-cast callers). See magic.md's "Cast
+  observation" section for the full mechanism, the four enforcement points
+  (`InteractionQuerySet.visible_to`, `SceneActionRequestViewSet.get_queryset`,
+  `can_view_interaction`, `ActionOutcomeDetailsView`), and the lore-repo content this
+  stays inert without.
 - **Source:** `src/world/magic/`
 - **Details:** [magic.md](magic.md) · cast lifecycle (How Magic Works):
   [technique-use-pipeline.md](../architecture/technique-use-pipeline.md) · power ledger +

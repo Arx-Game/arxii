@@ -34,13 +34,37 @@ def render_cast_outcome_narration(  # noqa: PLR0913 - stable caller signature
     return f"{base} {fizzle_note}" if fizzle_note else base
 
 
-def render_vague_cast_narration() -> str:
-    """The line a marginally-detecting observer gets for a concealed cast (#2710).
+def render_unattributed_cast_narration(target_label: str | None) -> str:
+    """What a concealed scene cast looked like to someone who cannot attribute it (#2734).
 
-    Deliberately carries no attribution — no caster, no technique, no outcome. The
-    observer registered that something was worked, and nothing more; naming either
-    party here would collapse the graded-detection tier into the full one.
+    The scene-path sibling of ``render_unattributed_action_narration``. Concealment
+    hides attribution, not the event — an observer who fails detection still sees
+    something take hold, they just cannot say who worked it or what it was.
+
+    Carries no caster, no technique name and no outcome label: the outcome label is
+    check vocabulary that only makes sense once you know a check was rolled, which is
+    exactly the knowledge this tier lacks.
+
+    Returns ``""`` for a target-less cast; callers must skip emitting on empty.
     """
+    if not target_label:
+        return ""
+    return f"Something takes hold of {target_label}."
+
+
+def render_vague_cast_narration(effect_line: str = "") -> str:
+    """The line a marginally-detecting observer gets for a concealed cast (#2710/#2734).
+
+    This tier knows a *working* happened — the thing the effect-only tier below it
+    cannot tell — but still cannot name the caster or the technique. When the cast had
+    a perceptible effect, that effect is folded in so this observer is never told
+    strictly less than someone who rolled worse; with nothing to see, it degrades to
+    the bare sensing line.
+
+    Naming either party here would collapse this tier into the full one.
+    """
+    if effect_line:
+        return f"{effect_line.rstrip('.')} — a working, though you cannot tell by whom."
     return "Something is being worked here — you cannot tell by whom."
 
 

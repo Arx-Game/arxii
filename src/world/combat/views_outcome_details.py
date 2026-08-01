@@ -16,6 +16,7 @@ from typing import TYPE_CHECKING
 
 from django.utils.functional import cached_property
 from drf_spectacular.utils import extend_schema
+from evennia.accounts.models import AccountDB
 from rest_framework import serializers, status
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.request import Request
@@ -264,6 +265,7 @@ class _RoundActionEffects:
 def _build_outcome_detail(
     action_interaction_id: int,
     user: object,
+    persona_ids: list[int] | None = None,
 ) -> ActionOutcomeDetail:
     """Derive effect rows from existing models for one ACTION Interaction.
 
@@ -276,6 +278,21 @@ def _build_outcome_detail(
         load_persisted_ledger,
         viewer_can_see_ledger,
     )
+
+    # Per-interaction read gate (#2734). The encounter-level checks below answer "may
+    # you see effects in this fight" — they cannot answer "did you perceive THIS act",
+    # so without this a concealed cast's effect rows (applied conditions, target
+    # status) were readable by anyone in the encounter who passed its id. Reuses the
+    # single source of truth for interaction read-visibility rather than restating it.
+    account = user if isinstance(user, AccountDB) else None
+    if (
+        not Interaction.objects.filter(pk=action_interaction_id)
+        .visible_to(account, persona_ids=persona_ids or [])
+        .exists()
+    ):
+        return ActionOutcomeDetail(
+            action_interaction_id=action_interaction_id, effects=[], power_ledger=None
+        )
 
     ledger = None
     _interaction = Interaction.objects.filter(pk=action_interaction_id).first()
@@ -416,5 +433,10 @@ class ActionOutcomeDetailsView(APIView):
         if not ids:
             return Response([], status=status.HTTP_200_OK)
 
-        details = [_build_outcome_detail(action_id, request.user) for action_id in ids]
+        from world.scenes.interaction_permissions import (  # noqa: PLC0415
+            get_account_personas,
+        )
+
+        persona_ids = get_account_personas(request) if request.user.is_authenticated else []
+        details = [_build_outcome_detail(action_id, request.user, persona_ids) for action_id in ids]
         return Response(OutcomeDetailSerializer(details, many=True).data, status=status.HTTP_200_OK)
