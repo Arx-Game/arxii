@@ -1872,14 +1872,17 @@ def ensure_thread_surge_content() -> object:
     from world.conditions.models import ConditionCategory, ConditionTemplate
     from world.seeds.sample_content import authored_or_sample
 
-    category, _ = ConditionCategory.objects.get_or_create(
-        name="Thread Surge",
-        defaults={
+    # ConditionCategory is content-repo-owned (#2698) — looked up rather than
+    # invented unless SEED_SAMPLE_CONTENT is on.
+    category = authored_or_sample(
+        ConditionCategory,
+        {
             "description": "Transient magical surges from thread pulls.",
             "is_negative": False,
             "alters_behavior": False,
             "display_order": 50,
         },
+        name="Thread Surge",
     )
     return authored_or_sample(
         ConditionTemplate,
