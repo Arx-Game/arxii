@@ -45668,7 +45668,11 @@ components:
       - option
     HouseAspectOption:
       type: object
-      description: One authored answer in an aspect catalog (#2079).
+      description: |-
+        One authored answer in an aspect catalog (#2079).
+
+        ``codex_entry_id`` (#2868) lets the CG option card link the option's lore
+        write-up — Inferna's House Quiddities each have one.
       properties:
         id:
           type: integer
@@ -45679,7 +45683,12 @@ components:
         description:
           type: string
           description: Player-facing blurb shown on the option card.
+        codex_entry_id:
+          type: integer
+          readOnly: true
+          nullable: true
       required:
+      - codex_entry_id
       - id
       - name
     HouseClaimStatus:
