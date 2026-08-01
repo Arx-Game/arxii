@@ -58373,6 +58373,15 @@ components:
           minimum: 0
           description: When reach=REACH_N, the maximum number of passable edges BFS
             may traverse. Ignored for SAME/ADJACENT/ANY.
+        has_perceptible_effect:
+          type: boolean
+          description: 'Whether working this technique produces something bystanders
+            can see happen, independent of whether they can tell who did it (#2734).
+            True for the overwhelming majority -- almost any condition produces some
+            visible effect. Set False only for a working that leaves nothing to perceive
+            at all (a silent binding, a curse laid at a distance): a concealed cast
+            of one of those is hidden outright from anyone who fails detection, rather
+            than narrated without attribution.'
     PatchedTenureGalleryRequest:
       type: object
       description: Serialize tenure galleries.
@@ -68179,6 +68188,15 @@ components:
           minimum: 0
           description: When reach=REACH_N, the maximum number of passable edges BFS
             may traverse. Ignored for SAME/ADJACENT/ANY.
+        has_perceptible_effect:
+          type: boolean
+          description: 'Whether working this technique produces something bystanders
+            can see happen, independent of whether they can tell who did it (#2734).
+            True for the overwhelming majority -- almost any condition produces some
+            visible effect. Set False only for a working that leaves nothing to perceive
+            at all (a silent binding, a curse laid at a distance): a concealed cast
+            of one of those is hidden outright from anyone who fails detection, rather
+            than narrated without attribution.'
         tier:
           type: integer
           readOnly: true
@@ -68308,6 +68326,15 @@ components:
           minimum: 0
           description: When reach=REACH_N, the maximum number of passable edges BFS
             may traverse. Ignored for SAME/ADJACENT/ANY.
+        has_perceptible_effect:
+          type: boolean
+          description: 'Whether working this technique produces something bystanders
+            can see happen, independent of whether they can tell who did it (#2734).
+            True for the overwhelming majority -- almost any condition produces some
+            visible effect. Set False only for a working that leaves nothing to perceive
+            at all (a silent binding, a curse laid at a distance): a concealed cast
+            of one of those is hidden outright from anyone who fails detection, rather
+            than narrated without attribution.'
       required:
       - anima_cost
       - effect_type
