@@ -141,7 +141,6 @@ def craft_create_item(  # noqa: PLR0913 — orchestrator passthrough (#2878 acce
     custom_name: str = "",
     custom_description: str = "",
     accent_targets: list | None = None,
-    designer_persona: object | None = None,
 ) -> ItemCreateResult:
     """Run the ITEM_CREATE recipe and map the result onto ``ItemCreateResult``.
 
@@ -180,7 +179,6 @@ def craft_create_item(  # noqa: PLR0913 — orchestrator passthrough (#2878 acce
             "custom_description": custom_description,
         },
         accent_targets=accent_targets,
-        designer_persona=designer_persona,
     )
     return ItemCreateResult(
         created=result.attached,

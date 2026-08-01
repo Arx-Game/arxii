@@ -23,6 +23,18 @@ def _accent_phrase(accent: ItemAccent) -> str:
     return f"{accent.level.name} {adjective}"
 
 
+def _primary_or_none(sheet: object | None) -> object | None:
+    """The sheet's PRIMARY persona, or None (broken invariant / no sheet)."""
+    if sheet is None:
+        return None
+    from world.scenes.models import Persona  # noqa: PLC0415
+
+    try:
+        return sheet.primary_persona
+    except Persona.DoesNotExist:
+        return None
+
+
 def _join_prose(parts: list[str]) -> str:
     if len(parts) <= 1:
         return parts[0] if parts else ""
@@ -47,20 +59,19 @@ def crafted_provenance_line(instance: ItemInstance) -> str | None:
     elif accents:
         sentences.append(f"{accent_prose[0].upper()}{accent_prose[1:]}.")
 
-    crafted = (
-        instance.crafted_recipes.select_related("crafter_persona", "designer_persona")
-        .exclude(crafter_persona=None, designer_persona=None)
-        .first()
+    # Credits: the #2066 dual-provenance fields on the instance, with the
+    # documented fallback (persona_display → sheet.primary_persona). Renders
+    # "Crafted by X, Designed by Y", collapsing when equal (#2066 convention).
+    maker = instance.crafter_persona_display or _primary_or_none(instance.crafter_character_sheet)
+    designer = instance.designer_persona_display or _primary_or_none(
+        instance.designer_character_sheet
     )
-    if crafted is not None:
-        maker = crafted.crafter_persona
-        designer = crafted.designer_persona
-        if designer is not None and maker is not None and designer.pk != maker.pk:
-            sentences.append(f"Designed by {designer.name}; crafted by {maker.name}.")
-        elif maker is not None:
-            sentences.append(f"Crafted by {maker.name}.")
-        elif designer is not None:
-            sentences.append(f"Designed by {designer.name}.")
+    if maker is not None and designer is not None and designer.pk != maker.pk:
+        sentences.append(f"Crafted by {maker.name}, designed by {designer.name}.")
+    elif maker is not None:
+        sentences.append(f"Crafted by {maker.name}.")
+    elif designer is not None:
+        sentences.append(f"Designed by {designer.name}.")
 
     if not sentences:
         return None

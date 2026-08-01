@@ -202,22 +202,31 @@ class RunWithAccentsTests(TestCase):
                 accent_targets=[plain],
             )
 
-    def test_maker_persona_credited(self) -> None:
+    def test_created_item_carries_dual_provenance(self) -> None:
+        from world.items.factories import CraftingRecipeFactory
+
         persona = self.sheet.primary_persona
-        item = ItemInstanceFactory(
-            template=ItemTemplateFactory(facet_capacity=3), holder_character_sheet=self.sheet
+        template = ItemTemplateFactory(is_craftable=True)
+        CraftingRecipeFactory(
+            kind=CraftingRecipeKind.ITEM_CREATE,
+            output_item_template=template,
+            requires_station=False,
+            check_type=self.recipe.check_type,
+            skill_trait=self.recipe.skill_trait,
+            min_success_level=1,
         )
         with force_check_outcome(CheckOutcomeFactory(name="AccOk", success_level=3)):
             result = run_crafting_recipe(
-                kind=CraftingRecipeKind.FACET_ATTACH,
+                kind=CraftingRecipeKind.ITEM_CREATE,
                 crafter_account=self.account,
                 crafter_character=self.character,
-                item_instance=item,
-                target=self._facet(),
+                output_overrides={"output_template": template},
             )
-        assert result.crafted_recipe is not None
-        self.assertEqual(result.crafted_recipe.crafter_persona, persona)
-        self.assertIsNone(result.crafted_recipe.designer_persona)
+        from world.items.models import ItemInstance
+
+        assert isinstance(result.row, ItemInstance)
+        self.assertEqual(result.row.crafter_persona_display, persona)
+        self.assertEqual(result.row.designer_persona_display, persona)
 
 
 class CraftedProvenanceLineTests(TestCase):
@@ -258,23 +267,18 @@ class CraftedProvenanceLineTests(TestCase):
         self.assertIn("quite menacing", line)
         self.assertIn("slightly alluring", line)
 
-    def test_credits_rendered(self) -> None:
-        from world.items.crafting.models import CraftedItemRecipe
+    def test_credits_rendered_from_dual_provenance(self) -> None:
         from world.items.services.crafted_display import crafted_provenance_line
         from world.scenes.factories import PersonaFactory
 
         maker = self.sheet.primary_persona
         designer = PersonaFactory()
-        CraftedItemRecipe.objects.create(
-            item_instance=self.item,
-            recipe=wire_enchanting_crafting(base_difficulty=0),
-            quality_tier=self.divine,
-            crafter_persona=maker,
-            designer_persona=designer,
-        )
+        self.item.crafter_persona_display = maker
+        self.item.designer_persona_display = designer
+        self.item.save(update_fields=["crafter_persona_display", "designer_persona_display"])
         line = crafted_provenance_line(self.item)
         assert line is not None
-        self.assertIn(f"Designed by {designer.name}; crafted by {maker.name}.", line)
+        self.assertIn(f"Crafted by {maker.name}, designed by {designer.name}.", line)
 
     def test_uncrafted_item_returns_none(self) -> None:
         from world.items.services.crafted_display import crafted_provenance_line

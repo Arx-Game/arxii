@@ -363,7 +363,8 @@ class CraftedItemRecipe(SharedMemoryModel):
 
     The quality_tier is the resolved crafting outcome quality (snapshotted at
     craft time). Modifier values are computed at read time from the recipe's
-    modifier outcomes × this quality tier.
+    modifier outcomes × this quality tier. Maker/designer credits live on
+    ItemInstance's #2066 dual-provenance fields, never here (#2878 dedup).
     """
 
     item_instance = models.ForeignKey(
@@ -381,28 +382,6 @@ class CraftedItemRecipe(SharedMemoryModel):
         on_delete=models.PROTECT,
         related_name="crafted_item_recipes",
         help_text="Quality tier resolved at craft time, used to scale modifier outcomes.",
-    )
-    crafter_persona = models.ForeignKey(
-        "scenes.Persona",
-        on_delete=models.SET_NULL,
-        null=True,
-        blank=True,
-        related_name="crafted_works",
-        help_text=(
-            "The persona credited as the maker (#2878). Persona-scoped, never "
-            "sheet-scoped: a masked artisan's work is credited to the mask."
-        ),
-    )
-    designer_persona = models.ForeignKey(
-        "scenes.Persona",
-        on_delete=models.SET_NULL,
-        null=True,
-        blank=True,
-        related_name="designed_works",
-        help_text=(
-            "The persona credited with the design when a commission split "
-            "designer from maker (#2878). Null = the crafter designed it."
-        ),
     )
 
     class Meta:

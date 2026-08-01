@@ -540,45 +540,27 @@ def _apply_station_wear(station: LabStationDetails | None) -> None:
     station.save(update_fields=["durability"])
 
 
-def _record_crafted_recipe(  # noqa: PLR0913 — orchestrator context passthrough
+def _record_crafted_recipe(
     *,
     recipe: CraftingRecipe,
-    crafter_character: ObjectDB,
     item_instance: ItemInstance | None,
     row: object | None,
     tier: QualityTier | None,
-    designer_persona: object | None = None,
 ) -> CraftedItemRecipe | None:
-    """Record the recipe on the item (#1567) and award masterwork renown (#2243).
+    """Record the recipe on the item (#1567).
 
     For ``ITEM_CREATE``, ``row`` is the newly created ItemInstance; for attach
     kinds, ``row`` is the attachment and ``item_instance`` is the item it was
-    attached to. Credits are persona-scoped (#2878): the maker is the
-    crafter's *active* persona (a masked artisan is credited as the mask);
-    ``designer_persona`` is set when a commission split designer from maker.
+    attached to. Maker/designer credits live on ItemInstance's #2066
+    dual-provenance fields (stamped by ItemCreateHandler), never here.
     """
     if row is None:
         return None
     target_item = item_instance if item_instance is not None else row
-    from world.character_sheets.models import CharacterSheet as _Sheet  # noqa: PLC0415
-    from world.scenes.models import Persona  # noqa: PLC0415
-    from world.scenes.services import active_persona_for_sheet  # noqa: PLC0415
-
-    maker_sheet = _Sheet.objects.filter(character=crafter_character).first()
-    try:
-        crafter_persona = active_persona_for_sheet(maker_sheet) if maker_sheet is not None else None
-    except Persona.DoesNotExist:
-        # Broken/absent PRIMARY invariant (factory sheets in tests, NPC-crafted
-        # goods): the craft still records, just uncredited.
-        crafter_persona = None
     crafted_recipe, _ = CraftedItemRecipe.objects.update_or_create(
         item_instance=target_item,
         recipe=recipe,
-        defaults={
-            "quality_tier": tier,
-            "crafter_persona": crafter_persona,
-            "designer_persona": designer_persona,
-        },
+        defaults={"quality_tier": tier},
     )
     # Invalidate the wearer's equipped_items handler cache if the item is
     # currently equipped — same pattern as attach_facet_to_item.
@@ -600,15 +582,14 @@ def run_crafting_recipe(  # noqa: PLR0913
     target: object | None = None,
     output_overrides: dict | None = None,
     accent_targets: list | None = None,
-    designer_persona: object | None = None,
 ) -> CraftRunResult:
     """Run a crafting attempt end-to-end for ``kind`` against ``target``.
 
     ``accent_targets`` (#2878) are styleable ``ModifierTarget`` rows the
     crafter chose to work into the piece. Each raises the craft difficulty by
     ``ACCENT_DIFFICULTY_STEP`` (ambition priced in probability) and rolls its
-    own check after the piece resolves. ``designer_persona`` credits a
-    commissioning designer distinct from the maker.
+    own check after the piece resolves. Credits render from ItemInstance's
+    #2066 dual-provenance fields.
 
     Pipeline (all inside one transaction):
 
@@ -749,11 +730,9 @@ def run_crafting_recipe(  # noqa: PLR0913
     crafted_recipe = (
         _record_crafted_recipe(
             recipe=recipe,
-            crafter_character=crafter_character,
             item_instance=item_instance,
             row=row,
             tier=tier,
-            designer_persona=designer_persona,
         )
         if attached
         else None
@@ -772,16 +751,18 @@ def run_crafting_recipe(  # noqa: PLR0913
         )
 
     # --- 10d. Fame at first making (#2878, generalizes #2243) ---
-    if attached and tier is not None and isinstance(accent_host, ItemInstance):
+    # First making = the ITEM_CREATE path (item_instance None, row is the new
+    # instance). Attach/enhancement kinds don't re-fame the original maker.
+    if attached and tier is not None and item_instance is None and isinstance(row, ItemInstance):
         from world.items.crafting.reward import award_crafting_fame  # noqa: PLC0415
 
         award_crafting_fame(
-            crafter_persona=crafted_recipe.crafter_persona if crafted_recipe else None,
-            designer_persona=crafted_recipe.designer_persona if crafted_recipe else None,
+            crafter_persona=row.crafter_persona_display,
+            designer_persona=row.designer_persona_display,
             tier=tier,
             accents=accents,
-            item_label=str(accent_host.template),
-            item_instance=accent_host,
+            item_label=str(row.template),
+            item_instance=row,
         )
 
     return CraftRunResult(
