@@ -186,8 +186,29 @@ class RosterEntry(SharedMemoryModel):
 
     @cached_property
     def cached_tenures(self) -> list[RosterTenure]:
-        """Cached list of tenures for this entry."""
-        return list(self.tenures.order_by("-start_date"))
+        """Cached list of tenures for this entry, newest first.
+
+        Doubles as the fill target for bulk callers: a ``cached_property`` stores its
+        value in the instance ``__dict__``, which is exactly where ``Prefetch(...,
+        to_attr="cached_tenures")`` writes. So a caller that prefetches the relation
+        primes this property directly and every ``current_tenure`` / ``first_tenure``
+        read below it comes back free (the weekly activity sweep does this, #2728).
+
+        Note the sort must agree between the two fill paths — the lazy one here and a
+        prefetch queryset — which is why newest-first lives in
+        ``RosterTenure.Meta.ordering`` rather than being restated at either site.
+        """
+        return list(self.tenures.all())
+
+    def invalidate_tenure_cache(self) -> None:
+        """Drop this instance's memoised tenures.
+
+        Mandatory after any tenure mutation, and after any bulk fill, because
+        ``SharedMemoryModel`` hands the *same* Python object back to the next reader:
+        a list left here outlives the operation that produced it and would go on
+        answering for the rest of the process (#2728).
+        """
+        self.__dict__.pop("cached_tenures", None)
 
     @property
     def current_tenure(self) -> RosterTenure | None:

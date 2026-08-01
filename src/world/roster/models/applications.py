@@ -106,7 +106,7 @@ class RosterApplication(SharedMemoryModel):
         # offered from. The authored activity_requirement lives on the entry and is
         # untouched by the move (#2728) — that is why it isn't on the Roster.
         entry.move_to_roster(Roster.objects.get(roster_type=RosterType.ACTIVE))
-        entry.__dict__.pop("cached_tenures", None)
+        entry.invalidate_tenure_cache()
 
         # Update application
         self.status = ApplicationStatus.APPROVED

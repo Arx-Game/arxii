@@ -74,6 +74,23 @@ running through a declared absence, so expiring and demoting in one tick would f
 and for a roster character, release — someone the instant their vacation ended,
 before they could log back in. Expiring last leaves them ACTIVE until the next run.
 
+**A swept character costs writes only.** The sweep's population is the whole active
+playerbase, so its per-character cost is the number that matters. Everything the loop
+reads is fetched in bulk — the shelf and `true_profile` via `select_related`, the
+tenures and their player account via `Prefetch(..., to_attr="cached_tenures")` —
+because `decay_tier` otherwise walks `roster_entry → current_tenure → player_data →
+account` once per sheet. `world.roster.tests.test_sweep_query_slope` pins this by
+measuring two population sizes: reads must not grow at all, writes must be exactly
+the four inherent row updates per released character.
+
+**Bulk callers must clear up after themselves.** `RosterEntry.cached_tenures` is a
+`cached_property`, so `to_attr="cached_tenures"` fills it directly (and leaves
+`entry.tenures` a live relation for everyone else). But `SharedMemoryModel` hands the
+same instance to the next reader in the process, so a fill left in place would answer
+with a mid-sweep snapshot indefinitely. Call `RosterEntry.invalidate_tenure_cache()`
+after any bulk fill and after any tenure mutation — the sweep does it for every
+character it examines, including ones it decides not to demote.
+
 ### Release is narrower than the flag
 
 | | Flagged INACTIVE at 30d | Auto-released |
@@ -117,7 +134,7 @@ definition of it.
 
 | Model | Purpose | Key Fields |
 |-------|---------|------------|
-| `RosterTenure` | Player-character relationship with anonymity | `player_data` (FK PlayerData), `roster_entry` (FK), `player_number`, `start_date`, `end_date` (null = current), `applied_date`, `approved_date`, `approved_by` (FK PlayerData), `photo_folder` |
+| `RosterTenure` | Player-character relationship with anonymity — `Meta.ordering = ["-start_date"]` (#2728), so the lazy and prefetched fills of `RosterEntry.cached_tenures` agree on sort without either restating it | `player_data` (FK PlayerData), `roster_entry` (FK), `player_number`, `start_date`, `end_date` (null = current), `applied_date`, `approved_date`, `approved_by` (FK PlayerData), `photo_folder` |
 | `RosterApplication` | Application workflow before tenures | `player_data` (FK PlayerData), `character` (FK CharacterSheet — retargeted from ObjectDB in #2608), `status` (TextChoices), `application_text`, `review_notes`, `reviewed_by` (FK PlayerData) |
 
 ### Settings & Media
