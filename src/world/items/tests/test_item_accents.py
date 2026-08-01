@@ -281,3 +281,22 @@ class CraftedProvenanceLineTests(TestCase):
 
         bare = ItemInstanceFactory(template=ItemTemplateFactory(), quality_tier=None)
         self.assertIsNone(crafted_provenance_line(bare))
+
+
+class WornAccentBonusTests(TestCase):
+    """Worn accent rungs flatter the fashion presentation check (#2878)."""
+
+    def test_sum_of_worn_accent_rungs(self) -> None:
+        from world.items.models import EquippedItem
+        from world.items.services.fashion_presentation import _worn_accent_bonus
+
+        _accent_ladder()
+        sheet = CharacterSheetFactory()
+        menace = ModifierTargetFactory(name="menace", is_styleable=True)
+        item = ItemInstanceFactory(template=ItemTemplateFactory(), holder_character_sheet=sheet)
+        EquippedItem.objects.create(character=sheet, item_instance=item)
+        ItemAccent.objects.create(
+            item_instance=item, target=menace, level=AccentLevel.objects.get(level=3)
+        )
+        sheet.character.equipped_items.invalidate()
+        self.assertEqual(_worn_accent_bonus(sheet), 3)

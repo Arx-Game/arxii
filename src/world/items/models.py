@@ -1640,6 +1640,18 @@ class Style(NaturalKeyMixin, SharedMemoryModel):
         help_text="How daring this style reads — scales its mechanical reward via "
         "AudacityTuning (#2029).",
     )
+    axis_lean = models.ForeignKey(
+        "mechanics.ModifierTarget",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="leaning_styles",
+        help_text=(
+            "The styleable axis this silhouette leans toward (#2878): alluring "
+            "styles → allure, dread styles → menace. Vogue rotation reads this "
+            "so 'what is in' can favor an axis some seasons. Null = neutral."
+        ),
+    )
 
     objects = NaturalKeyManager()
 

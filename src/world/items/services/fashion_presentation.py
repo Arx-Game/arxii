@@ -58,6 +58,19 @@ def _score_from_outcome(check_result: CheckResult) -> int:
     return max(0, check_result.success_level)
 
 
+def _worn_accent_bonus(presenter: CharacterSheet) -> int:
+    """Sum of accent rungs across the presenter's worn pieces (#2878).
+
+    Reads the cached equipment handler (whose prefetch covers
+    ``cached_item_accents``), so this is query-free in the presentation path.
+    """
+    total = 0
+    for equipped in presenter.character.equipped_items:
+        for accent in equipped.item_instance.cached_item_accents:
+            total += accent.level.level
+    return total
+
+
 def _difficulty_from_taste(society: Society) -> int:
     """Derive the presentation difficulty from the society's current taste.
 
@@ -118,6 +131,17 @@ def present_outfit(
                 source_kind=ModifierSourceKind.FASHION,
                 source_label="Fashion (host society)",
                 value=fashion_bonus,
+            )
+        )
+    # Accents worked into the worn pieces flatter the presentation (#2878):
+    # a very menacing gown SHOWS. Sum of worn accent rungs (small ints).
+    accent_bonus = _worn_accent_bonus(presenter)
+    if accent_bonus:
+        extra_contributions.append(
+            ModifierContribution(
+                source_kind=ModifierSourceKind.EQUIPMENT,
+                source_label="Accents",
+                value=accent_bonus,
             )
         )
 
