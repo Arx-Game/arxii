@@ -218,3 +218,66 @@ class RunWithAccentsTests(TestCase):
         assert result.crafted_recipe is not None
         self.assertEqual(result.crafted_recipe.crafter_persona, persona)
         self.assertIsNone(result.crafted_recipe.designer_persona)
+
+
+class CraftedProvenanceLineTests(TestCase):
+    """The examine layer renders ladders + credits as prose."""
+
+    def setUp(self) -> None:
+        _accent_ladder()
+        from world.items.factories import QualityTierFactory
+
+        self.divine = QualityTierFactory(
+            name="Divine", numeric_min=100, numeric_max=119, sort_order=10
+        )
+        self.sheet = CharacterSheetFactory()
+        self.item = ItemInstanceFactory(
+            template=ItemTemplateFactory(),
+            holder_character_sheet=self.sheet,
+            quality_tier=self.divine,
+        )
+
+    def test_quality_and_accents_grammar(self) -> None:
+        from world.items.services.crafted_display import crafted_provenance_line
+
+        menace = ModifierTargetFactory(
+            name="menace", is_styleable=True, styleable_adjective="menacing"
+        )
+        allure = ModifierTargetFactory(
+            name="allure", is_styleable=True, styleable_adjective="alluring"
+        )
+        ItemAccent.objects.create(
+            item_instance=self.item, target=menace, level=AccentLevel.objects.get(level=3)
+        )
+        ItemAccent.objects.create(
+            item_instance=self.item, target=allure, level=AccentLevel.objects.get(level=1)
+        )
+        line = crafted_provenance_line(self.item)
+        assert line is not None
+        self.assertIn("Of divine quality", line)
+        self.assertIn("quite menacing", line)
+        self.assertIn("slightly alluring", line)
+
+    def test_credits_rendered(self) -> None:
+        from world.items.crafting.models import CraftedItemRecipe
+        from world.items.services.crafted_display import crafted_provenance_line
+        from world.scenes.factories import PersonaFactory
+
+        maker = self.sheet.primary_persona
+        designer = PersonaFactory()
+        CraftedItemRecipe.objects.create(
+            item_instance=self.item,
+            recipe=wire_enchanting_crafting(base_difficulty=0),
+            quality_tier=self.divine,
+            crafter_persona=maker,
+            designer_persona=designer,
+        )
+        line = crafted_provenance_line(self.item)
+        assert line is not None
+        self.assertIn(f"Designed by {designer.name}; crafted by {maker.name}.", line)
+
+    def test_uncrafted_item_returns_none(self) -> None:
+        from world.items.services.crafted_display import crafted_provenance_line
+
+        bare = ItemInstanceFactory(template=ItemTemplateFactory(), quality_tier=None)
+        self.assertIsNone(crafted_provenance_line(bare))

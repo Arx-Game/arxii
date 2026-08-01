@@ -47,6 +47,8 @@ class ItemCreateResult:
     quality_tier: QualityTier | None
     consumed: dict | None = None
     consequence_label: str | None = None
+    # ItemAccent rows that realized (#2878); () when none requested/realized.
+    accents: tuple = ()
 
 
 @dataclass(frozen=True)

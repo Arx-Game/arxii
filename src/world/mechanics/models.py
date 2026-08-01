@@ -121,6 +121,16 @@ class ModifierTarget(NaturalKeyMixin, SharedMemoryModel):
             "enum: adding a styleable axis is a row flip, not a migration."
         ),
     )
+    styleable_adjective = models.CharField(
+        max_length=50,
+        blank=True,
+        default="",
+        help_text=(
+            "Adjective form used in item display grammar (#2878): menace → "
+            "'menacing', allure → 'alluring' ('a quite menacing breastplate'). "
+            "Blank falls back to the target name."
+        ),
+    )
     target_trait = models.ForeignKey(
         "traits.Trait",
         on_delete=models.SET_NULL,

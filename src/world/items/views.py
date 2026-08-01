@@ -1593,22 +1593,32 @@ class ItemCreateCraftViewSet(viewsets.ViewSet):
     def create(self, request: Request) -> Response:
         """Roll the crafting check and (on success) mint a new ItemInstance."""
         from actions.definitions.crafting import CreateItemAction  # noqa: PLC0415
+        from world.mechanics.models import ModifierTarget  # noqa: PLC0415
 
         template_pk = request.data.get("template")
         custom_name = request.data.get("custom_name", "")
         custom_description = request.data.get("custom_description", "")
+        accent_pks = request.data.get("accent_targets") or []
         if not template_pk:
             raise serializers.ValidationError({"template": "This field is required."})
         try:
             template = ItemTemplate.objects.get(pk=template_pk, is_active=True)
         except ItemTemplate.DoesNotExist as exc:
             raise NotFound from exc
+        accent_targets = list(
+            ModifierTarget.objects.filter(pk__in=accent_pks, is_styleable=True, is_active=True)
+        )
+        if len(accent_targets) != len(set(accent_pks)):
+            raise serializers.ValidationError(
+                {"accent_targets": "One or more accents are not styleable axes."}
+            )
         actor_sheet = _resolve_actor_sheet(request, body_key="crafter_sheet_id")
         action_result = CreateItemAction().run(
             actor=actor_sheet.character,
             output_template=template,
             custom_name=custom_name,
             custom_description=custom_description,
+            accent_targets=accent_targets,
         )
         if not action_result.success:
             raise serializers.ValidationError({"non_field_errors": [action_result.message]})
@@ -1620,6 +1630,10 @@ class ItemCreateCraftViewSet(viewsets.ViewSet):
                 "item_instance_id": result.item_instance.pk if result.item_instance else None,
                 "quality_tier": str(result.quality_tier) if result.quality_tier else None,
                 "consequence_label": result.consequence_label,
+                "accents": [
+                    {"target": a.target.name, "level": a.level.level, "adverb": a.level.name}
+                    for a in result.accents
+                ],
             },
             status=status_code,
         )

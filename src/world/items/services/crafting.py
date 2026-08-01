@@ -133,13 +133,15 @@ def craft_attach_style(
     )
 
 
-def craft_create_item(
+def craft_create_item(  # noqa: PLR0913 — orchestrator passthrough (#2878 accents)
     *,
     crafter_account: AccountDB,
     crafter_character: ObjectDB,
     output_template: ItemTemplate,
     custom_name: str = "",
     custom_description: str = "",
+    accent_targets: list | None = None,
+    designer_persona: object | None = None,
 ) -> ItemCreateResult:
     """Run the ITEM_CREATE recipe and map the result onto ``ItemCreateResult``.
 
@@ -177,6 +179,8 @@ def craft_create_item(
             "custom_name": custom_name,
             "custom_description": custom_description,
         },
+        accent_targets=accent_targets,
+        designer_persona=designer_persona,
     )
     return ItemCreateResult(
         created=result.attached,
@@ -185,4 +189,5 @@ def craft_create_item(
         quality_tier=result.quality_tier,
         consumed=result.consumed,
         consequence_label=result.consequence_label,
+        accents=result.accents,
     )

@@ -356,6 +356,9 @@ class ItemInstanceReadSerializer(serializers.ModelSerializer):
     # #2243: appraised worth (quality × base value + materials) — a pricing
     # *suggestion* for the market, never an enforced price.
     suggested_value = serializers.SerializerMethodField()
+    # #2878: the examine layer — "Of divine quality, quite menacing and
+    # slightly alluring. Designed by X; crafted by Y." Null for uncrafted items.
+    crafted_provenance = serializers.SerializerMethodField()
 
     class Meta:
         model = ItemInstance
@@ -376,6 +379,7 @@ class ItemInstanceReadSerializer(serializers.ModelSerializer):
             "access_policy",
             "is_currency_instrument",
             "can_steal",
+            "crafted_provenance",
         ]
         read_only_fields = fields
 
@@ -394,6 +398,14 @@ class ItemInstanceReadSerializer(serializers.ModelSerializer):
         from world.items.services.pricing import appraise  # noqa: PLC0415
 
         return appraise(obj)
+
+    def get_crafted_provenance(self, obj: ItemInstance) -> str | None:
+        """The crafted mechanical line + persona credits, or None (#2878)."""
+        from world.items.services.crafted_display import (  # noqa: PLC0415
+            crafted_provenance_line,
+        )
+
+        return crafted_provenance_line(obj)
 
     def get_is_currency_instrument(self, obj: ItemInstance) -> bool:
         """True iff ``obj`` is a minted coin (loose cache or grand coin, #1909).

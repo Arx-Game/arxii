@@ -196,6 +196,7 @@ class CreateItemAction(Action):
             return ActionResult(success=False, message="Create what?")
         custom_name = kwargs.get("custom_name", "")
         custom_description = kwargs.get("custom_description", "")
+        accent_targets = kwargs.get("accent_targets") or []
         crafter_account = get_account_for_character(actor)
         if crafter_account is None:
             return ActionResult(success=False, message=_NO_ACCOUNT_MSG)
@@ -206,6 +207,7 @@ class CreateItemAction(Action):
                 output_template=output_template,
                 custom_name=custom_name,
                 custom_description=custom_description,
+                accent_targets=accent_targets,
             )
         except _CRAFT_EXCEPTIONS as exc:
             return ActionResult(success=False, message=exc.user_message)
