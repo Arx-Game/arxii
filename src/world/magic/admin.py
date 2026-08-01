@@ -253,7 +253,9 @@ class TechniqueAdmin(admin.ModelAdmin):
         "anima_cost",
         "archetype_alignment",
     ]
-    list_filter = ["effect_type", "gift", "archetype_alignment"]
+    # has_perceptible_effect: True for nearly every technique, so filtering is how
+    # staff find the handful of imperceptible workings to audit them (#2734).
+    list_filter = ["effect_type", "gift", "archetype_alignment", "has_perceptible_effect"]
     filter_horizontal = ["restrictions", "target_prerequisites"]
     search_fields = ["name", "description"]
     readonly_fields = ["get_tier"]

@@ -222,18 +222,18 @@ def create_cast_outcome_pose(  # noqa: PLR0913 - all params describe one pose; c
     power_ledger: PowerLedger | None = None,
     fizzle_note: str | None = None,
     technique_name: str | None = None,
-) -> tuple[Interaction, Interaction | None]:
+) -> Interaction:
     """Author the Narrator OUTCOME pose(s) describing a resolved standalone cast (#2710).
 
-    Returns ``(pose, vague_pose)``. ``vague_pose`` is ``None`` unless the cast was
-    concealed AND at least one observer only marginally detected it.
+    Returns the **attributed** pose — the one the caller wires to
+    ``SceneActionRequest.result_interaction``. A concealed cast additionally mints one
+    pose per lower attribution tier (#2734); those are scene-linked but deliberately
+    unlinked from any per-request FK, since ``result_interaction`` is a ``OneToOne`` and
+    can only ever point at one row. Combat's broadcast poses work the same way.
 
-    Both poses are scene-linked but deliberately NOT wired to
-    ``SceneActionRequest.result_interaction`` — that FK is a ``OneToOne``, so it can
-    only ever point at one Interaction, and the caller already wires ``pose`` there.
-    Combat's broadcast poses are likewise unlinked from any per-request FK. The vague
-    pose also carries **no** ``target_personas`` — naming the target would leak the
-    attribution this detection tier is meant to withhold.
+    Only the attributed pose carries ``target_personas``: that FK drives "this pose is
+    about you" surfacing, and naming the target alongside an unattributed line re-opens
+    the attribution the lower tiers exist to withhold.
 
     Args:
         audience: Who perceived this cast, from ``resolve_cast_audience``. When
@@ -276,9 +276,12 @@ def create_cast_outcome_pose(  # noqa: PLR0913 - all params describe one pose; c
             mode=InteractionMode.OUTCOME,
             scene=scene,
             target_personas=[target_persona] if target_persona is not None else None,
-        ), None
+        )
 
-    from world.magic.narration import render_vague_cast_narration  # noqa: PLC0415
+    from world.magic.narration import (  # noqa: PLC0415
+        render_unattributed_cast_narration,
+        render_vague_cast_narration,
+    )
 
     pose = create_interaction(
         persona=get_or_create_narrator_persona(),
@@ -289,50 +292,39 @@ def create_cast_outcome_pose(  # noqa: PLR0913 - all params describe one pose; c
         target_personas=[target_persona] if target_persona is not None else None,
         visibility=InteractionVisibility.PERCEIVED_ONLY,
     )
-    vague_pose = None
-    if audience.vague:
-        vague_pose = create_interaction(
+
+    # Empty when the technique has no perceptible effect, which is also exactly when
+    # resolve_cast_audience leaves effect_only empty — the two agree by construction.
+    unattributed = render_unattributed_cast_narration(
+        target_persona.name if target_persona is not None else None
+    )
+
+    def _emit_tier(recipients: list[Persona], content: str) -> None:
+        if not recipients or not content:
+            return
+        create_interaction(
             persona=get_or_create_narrator_persona(),
-            content=render_vague_cast_narration(),
+            content=content,
             mode=InteractionMode.OUTCOME,
             scene=scene,
-            receivers=audience.vague,
+            receivers=recipients,
             visibility=InteractionVisibility.PERCEIVED_ONLY,
         )
-    return pose, vague_pose
+
+    _emit_tier(audience.vague, render_vague_cast_narration(unattributed))
+    _emit_tier(audience.effect_only, unattributed)
+
+    return pose
 
 
 def _conceal_action_interaction(action_interaction: Interaction, audience: CastAudience) -> None:
-    """Set a concealed cast's ACTION row to PERCEIVED_ONLY with the resolved receivers.
-
-    #2710: this row's content is the technique name. Concealing only the OUTCOME pose
-    would still show every bystander "Ilyra — Whisper of Binding" in the scene log via
-    the ACTION row's ``technique_name``.
-    """
-    from world.scenes.interaction_services import accounts_for_personas  # noqa: PLC0415
-    from world.scenes.place_models import InteractionReceiver  # noqa: PLC0415
-
-    action_interaction.visibility = InteractionVisibility.PERCEIVED_ONLY
-    action_interaction.save(update_fields=["visibility"])
-    receiver_accounts = accounts_for_personas(audience.full)
-    # audience.full always includes the caster (resolve_cast_audience appends them),
-    # and unlike create_interaction's place-scoped auto-populate path (which excludes
-    # the writer via .exclude(pk=persona.pk)), we deliberately do NOT exclude them
-    # here. create_action_interaction_core builds this row via Interaction.objects.
-    # create(...) directly rather than through create_interaction, so it never pins
-    # writer_account_id — receiver membership is the caster's only route back to
-    # their own concealed ACTION row.
-    InteractionReceiver.objects.bulk_create(
-        [
-            InteractionReceiver(
-                interaction=action_interaction,
-                timestamp=action_interaction.timestamp,
-                persona=p,
-                account_id=receiver_accounts.get(p.pk),
-            )
-            for p in audience.full
-        ]
+    """Thin alias kept for this module's callers; the implementation moved to
+    ``world.magic.services.cast_observation`` in #2734 so combat can share it."""
+    from world.magic.services.cast_observation import (  # noqa: PLC0415
+        conceal_action_interaction,
     )
+
+    conceal_action_interaction(action_interaction, audience)
 
 
 def _resolve_and_pose_cast(  # noqa: PLR0913 - one cohesive cast resolution
@@ -494,9 +486,11 @@ def _resolve_and_pose_cast(  # noqa: PLR0913 - one cohesive cast resolution
 
     from world.magic.services.cast_observation import resolve_cast_audience  # noqa: PLC0415
 
-    audience = resolve_cast_audience(caster=character, cast_openly=request.cast_openly)
+    audience = resolve_cast_audience(
+        caster=character, technique=technique, cast_openly=request.cast_openly
+    )
 
-    pose, _vague_pose = create_cast_outcome_pose(
+    pose = create_cast_outcome_pose(
         scene=scene,
         caster_persona=caster_persona,
         target_persona=target_persona,

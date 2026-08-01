@@ -326,8 +326,13 @@ class ConcealedCastJourneyTests(CastScenarioMixin):
             )
         )
 
-    def _concealed_audience(self, *, full, vague):
-        return CastAudience(concealed=True, full=list(full), vague=list(vague))
+    def _concealed_audience(self, *, full, vague, effect_only=()):
+        return CastAudience(
+            concealed=True,
+            full=list(full),
+            vague=list(vague),
+            effect_only=list(effect_only),
+        )
 
     def test_detector_sees_the_full_outcome_pose(self) -> None:
         """A strong detector reads exactly what an overt cast would have shown."""
@@ -341,10 +346,22 @@ class ConcealedCastJourneyTests(CastScenarioMixin):
         contents = [i.content for i in self._log_for(self.marginal)]
         self.assertEqual(contents, [render_vague_cast_narration()])
 
-    def test_bystander_sees_neither_interaction(self) -> None:
-        """The whole point. Nothing in their scene log, ever."""
+    def test_bystander_outside_every_tier_sees_nothing(self) -> None:
+        """Not in full, vague or effect_only: nothing in their scene log, ever."""
         self._cast(
             self._concealed_audience(full=[self.caster, self.detector], vague=[self.marginal])
+        )
+        self.assertEqual(self._log_for(self.bystander), [])
+
+    def test_self_targeted_cast_shows_the_effect_tier_nothing(self) -> None:
+        """A cast on nobody has no outward event, so effect_only gets no pose (#2734).
+
+        The bystander is deliberately IN ``effect_only`` here — the tier is populated
+        and still produces nothing, because the renderer returns an empty line for a
+        target-less cast and the router refuses to mint an empty pose.
+        """
+        self._cast(
+            self._concealed_audience(full=[self.caster], vague=[], effect_only=[self.bystander])
         )
         self.assertEqual(self._log_for(self.bystander), [])
 
@@ -378,7 +395,7 @@ class ConcealedCastJourneyTests(CastScenarioMixin):
 
     def test_unconcealed_cast_is_unchanged(self) -> None:
         """Zero concealment: DEFAULT visibility, no receiver rows, room-heard."""
-        self._cast(CastAudience(concealed=False, full=[], vague=[]))
+        self._cast(CastAudience(concealed=False, full=[], vague=[], effect_only=[]))
         pose = Interaction.objects.get(scene=self.scene, mode=InteractionMode.OUTCOME)
         self.assertEqual(pose.visibility, InteractionVisibility.DEFAULT)
         self.assertFalse(pose.receivers.exists())
@@ -463,8 +480,25 @@ class ConcealedCastRequestLeakTests(APITestCase, ConcealedCastJourneyTests):
 
     def test_unconcealed_request_still_lists_for_the_target(self) -> None:
         """No regression for the ordinary case."""
-        request = self._cast_at_target(CastAudience(concealed=False, full=[], vague=[]))
+        request = self._cast_at_target(
+            CastAudience(concealed=False, full=[], vague=[], effect_only=[])
+        )
         self.assertIn(request.pk, self._request_ids_visible_to(self.target))
+
+    def test_undetecting_target_still_sees_something_happened_to_them(self) -> None:
+        """The rework, from the victim's side (#2734).
+
+        They still cannot list the request, name the caster or name the technique —
+        that leak stays closed. What they no longer get is silence: a working landed
+        on them and their log says so.
+        """
+        self._cast_at_target(
+            self._concealed_audience(full=[self.caster], vague=[], effect_only=[self.target])
+        )
+        contents = [i.content for i in self._log_for(self.target)]
+        self.assertTrue(any(self.target.name in c for c in contents))
+        self.assertFalse(any(self.caster.name in c for c in contents))
+        self.assertFalse(any(self.technique.name in c for c in contents))
 
 
 class CastOpenlyTests(CastScenarioMixin):

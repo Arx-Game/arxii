@@ -177,16 +177,28 @@ a property of the caster's Path (ADR-0164), so concealment is too — the same c
 `Technique` is loud cast by one Path and concealed cast by another.
 _Avoid_: spell visibility, stealth casting.
 
-**Cast Audience** (#2710, ADR-0170):
-Who perceived a concealed cast, and in how much detail — resolved per co-located
-observer at cast time by `resolve_cast_audience`, never a single room-wide flag. Three
-tiers: the caster is always `full`; an observer who beats the detection check by enough
-(`success_level >= CAST_DETECTION_ATTRIBUTION_LEVEL`) is `full` (sees who cast what); a
-lesser success is `vague` (perceives something happened, not by whom); a failure
-perceives nothing. Materialised as `InteractionReceiver` rows under the
+**Cast Audience** (#2710, ADR-0170; reworked #2734, ADR-0187):
+Who perceived a concealed cast, and how much of it they could **attribute** — resolved
+per co-located observer at cast time by `resolve_cast_audience`, never a single
+room-wide flag. Concealment hides attribution, not the event: three tiers, and the
+caster is always `full`. `full` (`success_level >= CAST_DETECTION_ATTRIBUTION_LEVEL`)
+sees who cast what; `vague` (a lesser success) sees the effect and knows it was a
+working, but not by whom; `effect_only` (a failure) sees the effect with no sense that
+magic was involved. Materialised as `InteractionReceiver` rows under the
 `InteractionVisibility.PERCEIVED_ONLY` tier so a scene log replays what each viewer
 perceived at the time, not what they could detect if re-read today.
 _Avoid_: spell visibility, stealth casting.
+
+**Perceptible Effect** (#2734, ADR-0187):
+`Technique.has_perceptible_effect` — whether working this technique produces something
+bystanders can see happen, independent of whether they can tell who did it. `True` by
+default and for the overwhelming majority: almost any applied condition produces some
+visible effect. `False` marks the rare working that leaves nothing to perceive at all (a
+silent binding, a curse laid at a distance), and is the **only** case where a concealed
+cast still hides outright from an observer who fails detection instead of being narrated
+without attribution. Orthogonal to `cast_concealment`, which is a property of the
+*caster's style*, not of the technique.
+_Avoid_: visible spell, flashy technique, is_magical.
 
 **Mage Scar**:
 The player-facing name for a magical alteration imprinted on a character by magical exposure — a queued, tiered cosmetic-to-profound change carrying social, weakness, and resonance effects. Backend class and table names retain the `MagicalAlteration` naming.

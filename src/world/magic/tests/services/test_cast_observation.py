@@ -15,8 +15,9 @@ from world.character_sheets.factories import CharacterSheetFactory
 from world.checks.factories import CheckTypeFactory
 from world.checks.models import CheckType
 from world.classes.factories import CharacterClassLevelFactory, PathFactory
-from world.magic.constants import DETECT_CAST_CHECK_NAME
-from world.magic.factories import TechniqueStyleFactory
+from world.magic.constants import DETECT_CAST_CHECK_NAME, TechniqueReach
+from world.magic.factories import TechniqueFactory, TechniqueStyleFactory
+from world.magic.models import Technique
 from world.magic.services.cast_observation import resolve_cast_audience
 from world.progression.models import CharacterPathHistory
 from world.scenes.models import Persona
@@ -84,6 +85,11 @@ def _observer_in_room_with(caster: ObjectDB) -> ObjectDB:
     return observer
 
 
+def _ranged_technique(*, has_perceptible_effect: bool = True) -> Technique:
+    """A concealable working: worked at range, so contact never gives the caster away."""
+    return TechniqueFactory(reach=TechniqueReach.ANY, has_perceptible_effect=has_perceptible_effect)
+
+
 def _persona_of(character: ObjectDB) -> Persona:
     """The persona resolve_cast_audience would attribute this character's cast to."""
     return active_persona_for_sheet(character.sheet_data)
@@ -123,24 +129,40 @@ class ResolveCastAudienceTests(TestCase):
         caster = _caster_on_path_with_style(cast_concealment=0)
         _observer_in_room_with(caster)
         with patch("world.magic.services.cast_observation.perform_check_with_modifiers") as rolled:
-            audience = resolve_cast_audience(caster=caster)
+            audience = resolve_cast_audience(caster=caster, technique=_ranged_technique())
+        self.assertFalse(audience.concealed)
+        rolled.assert_not_called()
+
+    def test_contact_range_technique_is_never_concealed(self) -> None:
+        """You have to be standing on someone to stab or touch them (#2734).
+
+        Checked before the style lookup, so a melee action on a maximally concealed
+        caster costs neither the path query nor a roll per observer.
+        """
+        caster = _caster_on_path_with_style(cast_concealment=25)
+        _observer_in_room_with(caster)
+        melee = TechniqueFactory(reach=TechniqueReach.SAME)
+        with patch("world.magic.services.cast_observation.perform_check_with_modifiers") as rolled:
+            audience = resolve_cast_audience(caster=caster, technique=melee)
         self.assertFalse(audience.concealed)
         rolled.assert_not_called()
 
     def test_no_path_is_treated_as_overt(self) -> None:
         """Pathless characters and NPCs behave exactly as they do today."""
         caster = CharacterFactory()
-        audience = resolve_cast_audience(caster=caster)
+        audience = resolve_cast_audience(caster=caster, technique=_ranged_technique())
         self.assertFalse(audience.concealed)
 
     def test_cast_openly_waives_concealment(self) -> None:
         caster = _caster_on_path_with_style(cast_concealment=25)
-        audience = resolve_cast_audience(caster=caster, cast_openly=True)
+        audience = resolve_cast_audience(
+            caster=caster, technique=_ranged_technique(), cast_openly=True
+        )
         self.assertFalse(audience.concealed)
 
     def test_caster_always_perceives_their_own_cast(self) -> None:
         caster = _caster_on_path_with_style(cast_concealment=25)
-        audience = resolve_cast_audience(caster=caster)
+        audience = resolve_cast_audience(caster=caster, technique=_ranged_technique())
         self.assertTrue(audience.concealed)
         self.assertIn(_persona_of(caster), audience.full)
 
@@ -148,24 +170,44 @@ class ResolveCastAudienceTests(TestCase):
         caster = _caster_on_path_with_style(cast_concealment=25)
         observer = _observer_in_room_with(caster)
         with _forced_success_level(2):
-            audience = resolve_cast_audience(caster=caster)
+            audience = resolve_cast_audience(caster=caster, technique=_ranged_technique())
         self.assertIn(_persona_of(observer), audience.full)
         self.assertNotIn(_persona_of(observer), audience.vague)
+        self.assertNotIn(_persona_of(observer), audience.effect_only)
 
     def test_marginal_detection_lands_in_vague(self) -> None:
         caster = _caster_on_path_with_style(cast_concealment=25)
         observer = _observer_in_room_with(caster)
         with _forced_success_level(1):
-            audience = resolve_cast_audience(caster=caster)
+            audience = resolve_cast_audience(caster=caster, technique=_ranged_technique())
         self.assertIn(_persona_of(observer), audience.vague)
         self.assertNotIn(_persona_of(observer), audience.full)
+        self.assertNotIn(_persona_of(observer), audience.effect_only)
 
-    def test_failed_detection_lands_in_neither(self) -> None:
+    def test_failed_detection_still_sees_what_happened(self) -> None:
+        """The rework in one test: concealment hides attribution, not the event.
+
+        Pre-#2734 this observer landed in no tier at all and the cast vanished from
+        their feed — which in combat meant taking a wound with nothing to explain it.
+        """
         caster = _caster_on_path_with_style(cast_concealment=25)
         observer = _observer_in_room_with(caster)
         with _forced_success_level(0):
-            audience = resolve_cast_audience(caster=caster)
+            audience = resolve_cast_audience(caster=caster, technique=_ranged_technique())
         persona = _persona_of(observer)
+        self.assertIn(persona, audience.effect_only)
+        self.assertNotIn(persona, audience.full)
+        self.assertNotIn(persona, audience.vague)
+
+    def test_imperceptible_working_hides_outright_from_a_failed_roll(self) -> None:
+        """The one case that still vanishes: nothing happened that anyone could see."""
+        caster = _caster_on_path_with_style(cast_concealment=25)
+        observer = _observer_in_room_with(caster)
+        technique = _ranged_technique(has_perceptible_effect=False)
+        with _forced_success_level(0):
+            audience = resolve_cast_audience(caster=caster, technique=technique)
+        persona = _persona_of(observer)
+        self.assertNotIn(persona, audience.effect_only)
         self.assertNotIn(persona, audience.full)
         self.assertNotIn(persona, audience.vague)
 
@@ -178,15 +220,32 @@ class ResolveCastAudienceTests(TestCase):
             patch("world.magic.services.cast_observation.level_opposition", return_value=20),
         ):
             rolled.return_value = _check_result_with_success_level(0)
-            resolve_cast_audience(caster=caster)
+            resolve_cast_audience(caster=caster, technique=_ranged_technique())
         self.assertEqual(rolled.call_args.kwargs["target_difficulty"], 45)
 
-    def test_missing_detection_check_type_fails_closed(self) -> None:
-        """ADR-0033: a misconfiguration must hide, never leak."""
+    def test_missing_detection_check_type_fails_closed_on_attribution_only(self) -> None:
+        """ADR-0033: a misconfiguration must never leak *who cast it*.
+
+        It must also not erase the event. Before #2734 an unauthored detection
+        CheckType blinded the whole room, which in combat meant every participant's
+        feed silently dropped the action.
+        """
         caster = _caster_on_path_with_style(cast_concealment=25)
         observer = _observer_in_room_with(caster)
         CheckType.objects.filter(name=DETECT_CAST_CHECK_NAME).delete()
-        audience = resolve_cast_audience(caster=caster)
+        audience = resolve_cast_audience(caster=caster, technique=_ranged_technique())
         self.assertTrue(audience.concealed)
         self.assertNotIn(_persona_of(observer), audience.full)
         self.assertNotIn(_persona_of(observer), audience.vague)
+        self.assertIn(_persona_of(observer), audience.effect_only)
+
+    def test_missing_check_type_hides_an_imperceptible_working_entirely(self) -> None:
+        """Fail-closed keeps its old shape where there is genuinely nothing to see."""
+        caster = _caster_on_path_with_style(cast_concealment=25)
+        _observer_in_room_with(caster)
+        CheckType.objects.filter(name=DETECT_CAST_CHECK_NAME).delete()
+        audience = resolve_cast_audience(
+            caster=caster, technique=_ranged_technique(has_perceptible_effect=False)
+        )
+        self.assertTrue(audience.concealed)
+        self.assertEqual(audience.effect_only, [])
