@@ -392,16 +392,15 @@ class TestCreateCastOutcomePoseLedgerClause(TestCase):
             technique_result=None,
         )
 
-        pose, vague_pose = create_cast_outcome_pose(
+        pose = create_cast_outcome_pose(
             scene=scene,
             caster_persona=caster,
             target_persona=None,
             technique=technique,
             result=result,
             power_ledger=ledger,
-            audience=CastAudience(concealed=False, full=[], vague=[]),
+            audience=CastAudience(concealed=False, full=[], vague=[], effect_only=[]),
         )
-        self.assertIsNone(vague_pose)
         self.assertTrue(
             pose.content.endswith("— the place's resonance swells the working."),
             f"OUTCOME pose missing environment clause: {pose.content!r}",
