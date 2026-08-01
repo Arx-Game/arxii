@@ -53,6 +53,18 @@ ACCENT_DIFFICULTY_STEP: int = 5
 #: 15-29 realizes level 1, 30-44 level 2, … PLACEHOLDER tuning.
 ACCENT_SCORE_PER_LEVEL: int = 15
 
+#: Refinement (#2878, guaranteed long road): the progress threshold to raise a
+#: piece one rung is ``max(1, item value × target rung // 100)`` — money
+#: contributions convert at the projects app's 1 progress per 100 coppers, so
+#: total coin ≈ item value × target rung: the road gets longer and costlier as
+#: the target rises, and refining alaricite costs alaricite money. No rolls —
+#: the accumulator is deterministic (Apostate's ruling). PLACEHOLDER curve.
+REFINEMENT_VALUE_PER_PROGRESS: int = 100
+
+#: Refinement time horizon: instant-completion means the deadline only prunes
+#: abandoned projects on the cron sweep. PLACEHOLDER.
+REFINEMENT_TIME_LIMIT_DAYS: int = 365
+
 #: Station durability ceiling scales linearly with RoomFeatureInstance.level.
 #: L1 Lab = 20 crafting attempts before breaking, L5 = 100.
 LAB_BASE_DURABILITY_PER_LEVEL: int = 20

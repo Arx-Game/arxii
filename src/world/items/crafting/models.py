@@ -460,6 +460,49 @@ class ItemAccent(SharedMemoryModel):
         return f"{self.item_instance}: {self.level.name} {self.target.name}"
 
 
+class ItemRefinementDetails(SharedMemoryModel):
+    """Per-kind details for an ITEM_REFINEMENT project (#2878).
+
+    Follows the RANSOM pattern: the consumer app owns the details model and
+    points at ``projects.Project`` (ADR-0010 specific→general). The project is
+    the deterministic accumulator — AP and coin contributions advance progress
+    with **no rolls** (Apostate's ruling: roll-to-see-failure gacha is
+    unsatisfying; the road is guaranteed but gets longer/costlier per rung).
+    On threshold the instant-completion handler applies +1 to the goal:
+    ``accent_target`` set = raise (or add) that Accent; null = raise the
+    piece's base quality rung. The reachable rung is capped by the
+    highest-capped contributor (master-and-atelier: the final, crossing
+    contribution needs a sufficiently thread-woven crafter on the project).
+    """
+
+    project = models.OneToOneField(
+        "projects.Project",
+        on_delete=models.CASCADE,
+        primary_key=True,
+        related_name="item_refinement_details",
+    )
+    item_instance = models.ForeignKey(
+        "items.ItemInstance",
+        on_delete=models.CASCADE,
+        related_name="refinement_projects",
+    )
+    accent_target = models.ForeignKey(
+        "mechanics.ModifierTarget",
+        on_delete=models.PROTECT,
+        null=True,
+        blank=True,
+        related_name="refinement_projects",
+        help_text="The Accent axis being raised/added; null = base quality.",
+    )
+
+    class Meta:
+        app_label = "items"
+
+    def __str__(self) -> str:
+        goal = self.accent_target.name if self.accent_target else "quality"
+        return f"Refinement of {self.item_instance} ({goal})"
+
+
 class LabStationDetails(SharedMemoryModel):
     """Per-Lab durability state — the crafting-station economy (#1234).
 

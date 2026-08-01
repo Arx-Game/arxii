@@ -21,3 +21,15 @@ class ItemsConfig(AppConfig):
             RoomFeatureServiceStrategy.LAB,
             handle_lab_progression,
         )
+
+        # Item refinement (#2878): deterministic instant-completion projects —
+        # the funded threshold IS the success; no outcome roll.
+        from world.items.crafting.refinement import resolve_item_refinement  # noqa: PLC0415
+        from world.projects.constants import ProjectKind  # noqa: PLC0415
+        from world.projects.services import (  # noqa: PLC0415
+            register_instant_completion_kind,
+            register_kind_handler,
+        )
+
+        register_kind_handler(ProjectKind.ITEM_REFINEMENT, resolve_item_refinement)
+        register_instant_completion_kind(ProjectKind.ITEM_REFINEMENT)

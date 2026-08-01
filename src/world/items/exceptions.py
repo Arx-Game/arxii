@@ -447,3 +447,21 @@ class InvalidAccentTarget(ItemError):
     SAFE_MESSAGES: ClassVar[frozenset[str]] = frozenset(
         {"That quality can't be worked into a piece."}
     )
+
+
+class RefinementNotPossible(ItemError):
+    """A refinement project can't be started for this goal (#2878)."""
+
+    user_message = "That piece can't be refined toward that goal."
+    SAFE_MESSAGES: ClassVar[frozenset[str]] = frozenset(
+        {"That piece can't be refined toward that goal."}
+    )
+
+
+class RefinementAwaitsMaster(ItemError):
+    """The crossing contribution needs a sufficiently capped crafter (#2878)."""
+
+    user_message = "This work awaits a master's hand to finish."
+    SAFE_MESSAGES: ClassVar[frozenset[str]] = frozenset(
+        {"This work awaits a master's hand to finish."}
+    )

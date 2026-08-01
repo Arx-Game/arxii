@@ -29,6 +29,7 @@ class ProjectKind(models.TextChoices):
     ROOM_DEFENSE_INSTALLATION = "ROOM_DEFENSE_INSTALLATION", "Room Defense Installation"
     RESEARCH = "RESEARCH", "Research"
     RANSOM = "RANSOM", "Ransom"
+    ITEM_REFINEMENT = "ITEM_REFINEMENT", "Item Refinement"
     SHIP_CONSTRUCTION = "SHIP_CONSTRUCTION", "Ship Construction"
     SHIP_UPGRADE = "SHIP_UPGRADE", "Ship Upgrade"
     SHIP_REPAIR = "SHIP_REPAIR", "Ship Repair"
