@@ -1,1 +1,1 @@
-0055_itemtemplate_weapon_class
+0056_accentlevel_itemtemplate_material_grade

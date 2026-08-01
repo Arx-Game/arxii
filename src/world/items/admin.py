@@ -3,6 +3,7 @@
 from django.contrib import admin
 
 from world.items.models import (
+    AccentLevel,
     Adornment,
     AudacityTuning,
     CommonGemBucket,
@@ -89,6 +90,12 @@ class OrgGemStockAdmin(admin.ModelAdmin):
     list_display = ["organization", "tier", "value"]
     list_filter = ["tier"]
     raw_id_fields = ["organization"]  # large Organization table
+
+
+@admin.register(AccentLevel)
+class AccentLevelAdmin(admin.ModelAdmin):
+    list_display = ["level", "name"]
+    ordering = ["level"]
 
 
 @admin.register(QualityTier)

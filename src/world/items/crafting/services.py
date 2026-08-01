@@ -25,7 +25,7 @@ from world.checks.consequence_resolution import (
 from world.checks.services import perform_check_with_modifiers
 from world.checks.types import ResolutionContext
 from world.items.crafting.constants import CraftingRecipeKind
-from world.items.crafting.cost import consume_cost, stage_and_assert_affordable
+from world.items.crafting.cost import StagedCost, consume_cost, stage_and_assert_affordable
 from world.items.crafting.models import CraftedItemRecipe, CraftingRecipe, CraftingSkillCap
 from world.items.crafting.quality import resolve_capped_tier
 from world.items.crafting.registry import get_handler
@@ -438,6 +438,24 @@ def _resolve_crafter_sheet(
     return CharacterSheet.objects.get(character=crafter_character)
 
 
+def _material_grade_bonus(staged: StagedCost) -> int:
+    """Quantity-weighted mean ``material_grade`` of the staged materials (#2878).
+
+    The grade term is computed from what the craft *draws on* (the staged
+    allocations), not what the consequence ultimately consumed — a merciful
+    consumption outcome must not change the quality of the finished piece.
+    Bucket spends (common-gem bulk, Build 0b) carry no grade.
+    """
+    total = 0
+    weight = 0
+    for inst, amount in staged.material_allocations:
+        total += inst.template.material_grade * amount
+        weight += amount
+    if weight == 0:
+        return 0
+    return round(total / weight)
+
+
 def _apply_station_wear(station: LabStationDetails | None) -> None:
     """Decrement the station's durability by 1, unconditionally (#1234)."""
     if station is None:
@@ -616,6 +634,7 @@ def run_crafting_recipe(  # noqa: PLR0913
             recipe=recipe,
             crafter_character=crafter_character,
             check_result=check_result,
+            material_grade_bonus=_material_grade_bonus(staged),
         )
         # Thread the crafter_character into output_overrides so ItemCreateHandler
         # can resolve the CharacterSheet for provenance stamping.

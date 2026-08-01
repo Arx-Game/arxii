@@ -107,6 +107,34 @@ class QualityTier(SharedMemoryModel):
         return ordered.last()
 
 
+class AccentLevel(SharedMemoryModel):
+    """Benefit-only quality ladder for crafted Accents (#2878).
+
+    Deliberately separate from ``QualityTier``: an Accent is a value-add the
+    crafter works into a piece (allure, menace, …), so the ladder has no
+    "poor" end — level 1 is already a benefit. The adverb names double as
+    display grammar ("a quite menacing accent"). The reachable rung is
+    thread-capped (``world.items.crafting.constants.BASE_MAX_ACCENT_LEVEL``
+    plus one per thread woven into the crafting skill).
+    """
+
+    level = models.PositiveSmallIntegerField(
+        unique=True,
+        help_text="Rung on the accent ladder (1 = slightly … 7 = legendarily).",
+    )
+    name = models.CharField(
+        max_length=50,
+        unique=True,
+        help_text="Adverb used in display grammar (e.g. 'quite', 'extremely').",
+    )
+
+    class Meta:
+        ordering = ["level"]
+
+    def __str__(self) -> str:
+        return f"{self.name} ({self.level})"
+
+
 class MaterialCategory(SharedMemoryModel):
     """A crafting-equivalence class of materials (e.g. "Precious Gemstones").
 
@@ -213,6 +241,16 @@ class ItemTemplate(NaturalKeyMixin, SharedMemoryModel):
         help_text=(
             "Optional crafting-equivalence class this template belongs to "
             "(e.g. Precious Gemstones). Null = not a categorised material."
+        ),
+    )
+    material_grade = models.PositiveSmallIntegerField(
+        default=0,
+        help_text=(
+            "Quality-score head start this material contributes when consumed "
+            "in crafting (#2878): the crafted piece's quality score is the "
+            "skill-capped roll plus the staged materials' quantity-weighted "
+            "mean grade. 0 for non-materials. Materials never scale item "
+            "stats directly — grade reaches everything through quality."
         ),
     )
     supports_open_close = models.BooleanField(

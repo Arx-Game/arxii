@@ -148,9 +148,12 @@ The enchant-and-attach flow for facets and styles is fully playable end-to-end.
   (costs, affordability, skill-capped max tier, failure risk) with no mutation;
   exposed as `GET /api/items/item-facets/quote/` and `GET /api/items/item-styles/quote/`.
 
-- **Seeded by** `wire_enchanting_crafting()` (FactoryBoy chain doubling as integration-test
-  setUp and seed data): Enchanting skill trait + CheckType + FACET_ATTACH + STYLE_ATTACH
-  recipes + a cap ladder + a consequence pool.
+- **Test-wired only, NOT seeded** (corrected 2026-08-01, #2878 verify pass):
+  `wire_enchanting_crafting()` is a FactoryBoy chain in `world/items/factories.py`
+  referenced solely by test setUp — no `world/seeds/` cluster calls it. FACET_ATTACH,
+  STYLE_ATTACH, and GEM_CUT recipes have **no production seed path**; only
+  ITEM_CREATE has seeded content (the #2852 provisioning cluster). A live deployment
+  raises `CraftingNotConfigured` for the other three kinds until content lands.
 
 **Deferred to follow-up issues:**
 - ~~Item-creation pipeline (crafted items with stats, facets, fashion properties)~~ — **DONE (#2195).** `CraftingRecipeKind.ITEM_CREATE` + `ItemCreateHandler` mints a new `ItemInstance` from a recipe's `output_item_template`, with player-authored name/description, quality-scaled stats via `CraftingRecipeModifier`, `OwnershipEvent.CREATED` provenance, and physical `ObjectDB` materialization. `run_crafting_recipe` accepts `item_instance=None` for ITEM_CREATE; `build_crafting_quote` resolves by `(kind, output_template)`. `CreateItemAction` (telnet `craft create` + `POST /api/items/crafting/create/`) is the shared seam.

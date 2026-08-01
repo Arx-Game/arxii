@@ -36,6 +36,14 @@ class CostConsumption(models.TextChoices):
 #: Fraction of ingredient cost charged for PARTIAL consumption outcomes.
 PARTIAL_FRACTION: float = 0.5
 
+#: Thread-capped crafting ceilings (#2878). A crafter's reachable rung on each
+#: ladder is the base below plus one per thread woven into the recipe's
+#: ``skill_trait``. Rung = ``QualityTier.sort_order`` (ladder seeded 1..12,
+#: divine = 10) and ``AccentLevel.level`` (1..7). The mundane ceiling
+#: deliberately stops short of divine: divine and above require the Gifted.
+BASE_MAX_QUALITY_RUNG: int = 9
+BASE_MAX_ACCENT_LEVEL: int = 4
+
 #: Station durability ceiling scales linearly with RoomFeatureInstance.level.
 #: L1 Lab = 20 crafting attempts before breaking, L5 = 100.
 LAB_BASE_DURABILITY_PER_LEVEL: int = 20
