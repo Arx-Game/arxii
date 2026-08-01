@@ -644,10 +644,16 @@ class HouseTemplateAdmin(admin.ModelAdmin):
 
 
 class HouseAspectOptionInline(admin.TabularInline):
-    """#2079 — the catalog rows behind a definition."""
+    """#2079 — the catalog rows behind a definition.
+
+    ``codex_entry`` (#2868) binds an option to its lore write-up; ``raw_id``
+    rather than autocomplete, matching ``SpeciesAdmin``'s codex field.
+    """
 
     model = HouseAspectOption
     extra = 0
+    fields = ("name", "description", "codex_entry", "is_active", "display_order")
+    raw_id_fields = ("codex_entry",)
 
 
 @admin.register(HouseAspectDefinition)

@@ -204,6 +204,9 @@ CONTENT_MODELS: frozenset[str] = frozenset(
         "relationships.relationshiptrack",
         # skills
         "skills.skill",
+        # societies
+        "societies.houseaspectdefinition",
+        "societies.houseaspectoption",
         # species
         "species.language",
         "species.species",

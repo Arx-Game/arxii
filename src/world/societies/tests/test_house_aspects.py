@@ -1,9 +1,12 @@
-"""Tests for regional house aspects + features (#2079)."""
+"""Tests for regional house aspects + features (#2079, #2868)."""
 
+from django.core import serializers as django_serializers
 from django.db import IntegrityError, transaction
+from django.db.models import ProtectedError
 from django.test import TestCase
 
 from world.character_sheets.factories import CharacterSheetFactory
+from world.codex.factories import CodexEntryFactory
 from world.societies.houses.creator import (
     approve_house_claim,
     materialize_house_claim,
@@ -47,6 +50,71 @@ class AspectModelTests(TestCase):
             HouseFeature.objects.create(
                 name="Other TEST", slug="hearth-right-test", description="x"
             )
+
+
+class AspectCodexLinkTests(TestCase):
+    """#2868 — an option binds the CodexEntry carrying its write-up."""
+
+    @classmethod
+    def setUpTestData(cls):
+        cls.entry = CodexEntryFactory(name="The Leviathan TEST")
+        cls.definition = HouseAspectDefinition.objects.create(
+            name="House Quiddity TEST", prompt="What drives your house?"
+        )
+        cls.option = HouseAspectOption.objects.create(
+            definition=cls.definition, name="Leviathan TEST", codex_entry=cls.entry
+        )
+
+    def test_codex_entry_is_optional(self):
+        unbound = HouseAspectOption.objects.create(
+            definition=self.definition, name="Unwritten TEST"
+        )
+        self.assertIsNone(unbound.codex_entry)
+
+    def test_reverse_accessor(self):
+        self.assertEqual(list(self.entry.house_aspect_options.all()), [self.option])
+
+    def test_bound_entry_is_protected(self):
+        """PROTECT: deleting a linked entry must not silently orphan the catalog."""
+        with transaction.atomic(), self.assertRaises(ProtectedError):
+            self.entry.delete()
+
+
+class AspectNaturalKeyTests(TestCase):
+    """#2868 — the catalog is lore-repo content, so it must round-trip."""
+
+    @classmethod
+    def setUpTestData(cls):
+        cls.definition = HouseAspectDefinition.objects.create(
+            name="House Quiddity NK TEST", prompt="What drives your house?"
+        )
+        cls.option = HouseAspectOption.objects.create(
+            definition=cls.definition, name="Glamour NK TEST"
+        )
+
+    def test_definition_natural_key_is_name(self):
+        self.assertEqual(self.definition.natural_key(), ("House Quiddity NK TEST",))
+
+    def test_definition_round_trip(self):
+        found = HouseAspectDefinition.objects.get_by_natural_key(*self.definition.natural_key())
+        self.assertEqual(found.pk, self.definition.pk)
+
+    def test_option_natural_key_includes_definition(self):
+        self.assertEqual(self.option.natural_key(), ("House Quiddity NK TEST", "Glamour NK TEST"))
+
+    def test_option_round_trip(self):
+        found = HouseAspectOption.objects.get_by_natural_key(*self.option.natural_key())
+        self.assertEqual(found.pk, self.option.pk)
+
+    def test_option_serializes_without_raw_pks(self):
+        data = django_serializers.serialize(
+            "json",
+            [self.option],
+            use_natural_foreign_keys=True,
+            use_natural_primary_keys=True,
+        )
+        self.assertIn("House Quiddity NK TEST", data)
+        self.assertNotIn(f'"definition": {self.definition.pk}', data)
 
 
 class AspectTestData(HouseCreatorTestData):

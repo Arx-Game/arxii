@@ -26059,12 +26059,18 @@ export interface components {
       option: string;
       description: string;
     };
-    /** @description One authored answer in an aspect catalog (#2079). */
+    /**
+     * @description One authored answer in an aspect catalog (#2079).
+     *
+     *     ``codex_entry_id`` (#2868) lets the CG option card link the option's lore
+     *     write-up — Inferna's House Quiddities each have one.
+     */
     HouseAspectOption: {
       readonly id: number;
       name: string;
       /** @description Player-facing blurb shown on the option card. */
       description?: string;
+      readonly codex_entry_id: number | null;
     };
     /** @description The draft's house claim, as CG shows it (#1884 Phase D, #2079). */
     HouseClaimStatus: {

@@ -152,6 +152,7 @@ def _seed_house_creator(*, realm, society, crown, law) -> None:
     from world.areas.constants import AreaLevel  # noqa: PLC0415
     from world.areas.models import Area  # noqa: PLC0415
     from world.roster.models import Family  # noqa: PLC0415
+    from world.seeds.sample_content import authored_or_sample  # noqa: PLC0415
     from world.societies.houses.constants import TitleTier  # noqa: PLC0415
     from world.societies.houses.models import (  # noqa: PLC0415
         Domain,
@@ -184,24 +185,31 @@ def _seed_house_creator(*, realm, society, crown, law) -> None:
     )
     template.holdings.add(farmland)
 
-    # #2079 — one exemplar aspect definition + feature proving the loop;
-    # real regional catalogs arrive from the per-region content brainstorms.
-    virtue, _ = HouseAspectDefinition.objects.get_or_create(
+    # #2079 — one exemplar aspect definition + feature proving the loop.
+    # #2868: the aspect catalog is now content-repo-owned, so it is looked up
+    # and only invented under SEED_SAMPLE_CONTENT. When the content repo
+    # authors real catalogs (Inferna's Quiddities), this placeholder is absent
+    # and the template simply carries no aspect definitions from the seeder.
+    virtue = authored_or_sample(
+        HouseAspectDefinition,
+        {"prompt": "PLACEHOLDER: which virtue did your house cling to?"},
         name="House Virtue PLACEHOLDER",
-        defaults={"prompt": "PLACEHOLDER: which virtue did your house cling to?"},
     )
-    for order, (option_name, blurb) in enumerate(
-        [
-            ("Fortitude PLACEHOLDER", "PLACEHOLDER: endurance without breaking."),
-            ("Candor PLACEHOLDER", "PLACEHOLDER: truth spoken plainly."),
-            ("Charity PLACEHOLDER", "PLACEHOLDER: the open hand."),
-        ]
-    ):
-        HouseAspectOption.objects.get_or_create(
-            definition=virtue,
-            name=option_name,
-            defaults={"description": blurb, "display_order": order},
-        )
+    if virtue is not None:
+        for order, (option_name, blurb) in enumerate(
+            [
+                ("Fortitude PLACEHOLDER", "PLACEHOLDER: endurance without breaking."),
+                ("Candor PLACEHOLDER", "PLACEHOLDER: truth spoken plainly."),
+                ("Charity PLACEHOLDER", "PLACEHOLDER: the open hand."),
+            ]
+        ):
+            authored_or_sample(
+                HouseAspectOption,
+                {"description": blurb, "display_order": order},
+                definition=virtue,
+                name=option_name,
+            )
+        template.aspect_definitions.add(virtue)
     hearth, _ = HouseFeature.objects.get_or_create(
         slug="hearth-right-placeholder",
         defaults={
@@ -209,7 +217,6 @@ def _seed_house_creator(*, realm, society, crown, law) -> None:
             "description": "PLACEHOLDER: guests under the house's roof are sacrosanct.",
         },
     )
-    template.aspect_definitions.add(virtue)
     template.features.add(hearth)
 
     seat_area, _ = Area.objects.get_or_create(

@@ -124,11 +124,25 @@ houses a unique creation experience (ADR-0101):
   player-facing prompt, `min_picks`/`max_picks`) attaches to templates via
   `HouseTemplate.aspect_definitions` (M2M — both Inferna templates can share
   "House Vice" while only the Cinderi template carries a diaspora choice);
-  `HouseAspectOption` rows are its admin-editable catalog. **Catalog-only by
+  `HouseAspectOption` rows are its catalog. **Catalog-only by
   design** — no free-text answer path (ADR-0101). `HouseClaimAspect` records
   the founder's picks; `_validate_aspect_picks` refuses submission unless
   every attached definition is answered within [min, max] with active options
   of that definition.
+  - **The catalog is lore-repo content (#2868).** Both models carry
+    `NaturalKeyMixin` (definition keys on `name`; option on `definition` +
+    `name`) and are registered in `CONTENT_MODELS`, so the rows are authored in
+    the content repo and imported — the seeder may no longer invent them
+    (`_seed_house_creator` uses `authored_or_sample`, #2698/ADR-0168). Its
+    `PLACEHOLDER` catalog only appears under `ARXII_SEED_SAMPLE_CONTENT`.
+  - **`HouseAspectOption.codex_entry` (#2868)** binds an option to the
+    `CodexEntry` carrying its write-up — Inferna's seven House Quiddities each
+    have one. Same shape as `Species.codex_entry` (PROTECT, nullable); exposed
+    to CG as `codex_entry_id` on `HouseAspectOptionSerializer` so the option
+    card can link its lore. This is a *property of the catalog row*, NOT a
+    grant: picking a Quiddity does not award the entry to a character, which is
+    what the `*CodexGrant` models do. `HouseAspectDefinition` has no such FK —
+    the definition is the question the founder answers, not a lore subject.
 - **Feature** — a structural cultural FACT, no player input.
   `HouseFeature` (name, unique `slug` as the stable code anchor, player-facing
   description) attaches via `HouseTemplate.features`; at CG it orients the

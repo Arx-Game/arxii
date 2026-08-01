@@ -2049,6 +2049,7 @@
   - crossing_options <- magic.CrossingOption
   - ritual_grants <- magic.CodexEntryRitualGrant
   - progression_milestones <- magic.MagicProgressionMilestone
+  - house_aspect_options <- societies.HouseAspectOption
   - unlocks <- codex.CodexEntry
   - character_knowledge <- codex.CharacterCodexKnowledge
   - teaching_offers <- codex.CodexTeachingOffer
@@ -8578,6 +8579,7 @@
 ### HouseAspectOption
 **Foreign Keys:**
   - definition -> societies.HouseAspectDefinition [FK]
+  - codex_entry -> codex.CodexEntry [FK] (nullable)
 
 ### HouseFeature
 **Pointed to by:**

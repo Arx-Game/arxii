@@ -12,6 +12,7 @@ union-bound (CK2 rule: a spouse dies, the pact dies) with coded commitments.
 from django.db import models
 from evennia.utils.idmapper.models import SharedMemoryModel
 
+from core.natural_keys import NaturalKeyManager, NaturalKeyMixin
 from world.societies.houses.constants import (
     CRISIS_INCOME_FACTORS,
     DOMAIN_PROSPERITY_BASELINE,
@@ -976,13 +977,17 @@ class HouseClaim(SharedMemoryModel):
         return f"House {self.house_name} claim ({self.get_status_display()})"
 
 
-class HouseAspectDefinition(SharedMemoryModel):
+class HouseAspectDefinition(NaturalKeyMixin, SharedMemoryModel):
     """An authored, required catalog choice for houses of a template (#2079).
 
     Catalog-only by design: there is no free-text answer path. The normalized
     option list IS the thematic fence (see ADR-0101). Attach to templates via
     ``HouseTemplate.aspect_definitions``; a definition shared by two templates
     shares one catalog — a diverged catalog means a second definition.
+
+    Authored content (#2868): the definition and its options are the lore
+    repo's to write, so both carry a natural key and are registered in
+    ``CONTENT_MODELS``. The seeder may no longer invent them.
     """
 
     name = models.CharField(max_length=120, unique=True)
@@ -993,6 +998,11 @@ class HouseAspectDefinition(SharedMemoryModel):
     max_picks = models.PositiveSmallIntegerField(default=1)
     display_order = models.PositiveSmallIntegerField(default=0)
 
+    objects = NaturalKeyManager()
+
+    class NaturalKeyConfig:
+        fields = ["name"]
+
     class Meta:
         ordering = ["display_order", "name"]
 
@@ -1000,8 +1010,16 @@ class HouseAspectDefinition(SharedMemoryModel):
         return self.name
 
 
-class HouseAspectOption(SharedMemoryModel):
-    """One authored answer in a definition's catalog (#2079). PLACEHOLDER content."""
+class HouseAspectOption(NaturalKeyMixin, SharedMemoryModel):
+    """One authored answer in a definition's catalog (#2079).
+
+    Inferna's seven House Quiddities are options on one definition. Each is a
+    piece of authored lore in its own right, so an option may bind the
+    ``CodexEntry`` that carries its write-up — the same shape as
+    ``Species.codex_entry`` (#2868). The link is a property of the catalog row,
+    NOT a grant: picking a Quiddity for your house does not award the entry to
+    a character, which is what the ``*CodexGrant`` models are for.
+    """
 
     definition = models.ForeignKey(
         HouseAspectDefinition, on_delete=models.CASCADE, related_name="options"
@@ -1010,8 +1028,22 @@ class HouseAspectOption(SharedMemoryModel):
     description = models.TextField(
         blank=True, help_text="Player-facing blurb shown on the option card."
     )
+    codex_entry = models.ForeignKey(
+        "codex.CodexEntry",
+        on_delete=models.PROTECT,
+        null=True,
+        blank=True,
+        related_name="house_aspect_options",
+        help_text="Lore entry this option is bound to, if any.",
+    )
     is_active = models.BooleanField(default=True)
     display_order = models.PositiveSmallIntegerField(default=0)
+
+    objects = NaturalKeyManager()
+
+    class NaturalKeyConfig:
+        fields = ["definition", "name"]
+        dependencies = ["societies.HouseAspectDefinition"]
 
     class Meta:
         ordering = ["definition", "display_order", "name"]
