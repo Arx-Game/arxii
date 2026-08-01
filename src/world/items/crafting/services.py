@@ -383,6 +383,7 @@ def _gate_station(
     ``CraftingStationBroken`` if at 0 durability. Returns the resolved station
     (or None when no station is required).
     """
+    _gate_required_feature(recipe, crafter_character)
     if not recipe.requires_station:
         return None
     station = _resolve_active_lab_station(crafter_character)
@@ -391,6 +392,38 @@ def _gate_station(
     if station.is_broken:
         raise CraftingStationBroken
     return station
+
+
+def _gate_required_feature(recipe: CraftingRecipe, crafter_character: ObjectDB) -> None:
+    """Require an active room feature of ``recipe.required_feature_kind`` (#2862).
+
+    Generalizes the LAB hardcode: a recipe may name any RoomFeatureKind (e.g.
+    the Workshop of Iniquity gating illicit refinement). Presence-only — no
+    durability concept outside the LAB path.
+    """
+    if recipe.required_feature_kind_id is None:
+        return
+    from django.core.exceptions import ObjectDoesNotExist  # noqa: PLC0415
+
+    from world.room_features.models import RoomFeatureInstance  # noqa: PLC0415
+
+    room = crafter_character.location
+    try:
+        room_profile = room.room_profile if room is not None else None
+    except (AttributeError, ObjectDoesNotExist):
+        room_profile = None
+    if room_profile is None:
+        raise CraftingStationRequired
+    present = (
+        RoomFeatureInstance.objects.filter(
+            room_profile=room_profile,
+            feature_kind_id=recipe.required_feature_kind_id,
+        )
+        .active()
+        .exists()
+    )
+    if not present:
+        raise CraftingStationRequired
 
 
 def _resolve_crafter_sheet(

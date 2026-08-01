@@ -312,6 +312,25 @@ def makeover_category() -> SocialConsentCategory:
     return category
 
 
+def body_handling_category() -> SocialConsentCategory:
+    """Lazy seeded row for the body-handling gate (#2852) — default-deny.
+
+    Another character picking up and carrying your unconscious body is the
+    strongest body-autonomy call there is, so it defaults to allowlist even
+    when the intent is rescue — you opt your stretcher-bearers in. Robbing an
+    unconscious body stays under the existing ``theft`` category.
+    """
+    category, _ = SocialConsentCategory.objects.get_or_create(
+        key="body-handling",
+        defaults={
+            "name": "Body Handling",
+            "description": "Carrying or moving your unconscious character's body.",
+            "default_mode": ConsentMode.ALLOWLIST,
+        },
+    )
+    return category
+
+
 def receiving_stolen_goods_category() -> SocialConsentCategory:
     """Lazy seeded row for the hot-goods receipt gate (#1985) — default-deny.
 

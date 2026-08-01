@@ -1875,6 +1875,56 @@ class Proclamation(SharedMemoryModel):
 # ---------------------------------------------------------------------------
 
 
+class NeighborhoodTurf(SharedMemoryModel):
+    """Who holds a crime neighborhood, and how hard (#2862).
+
+    The control state the gang-turf project machinery finally moves: one row
+    per NEIGHBORHOOD-level Area worth fighting over. ``grip`` is the
+    controller's hold (0-100); pushes from rivals erode it and control flips
+    when it breaks. Control is consequential: the area's ``StatKey.CRIME``
+    modifier tracks grip (guard pressure scales off it), and the area's
+    CRIME_KICKUP income streams re-target to the controller.
+    """
+
+    area = models.OneToOneField(
+        "areas.Area",
+        on_delete=models.CASCADE,
+        related_name="turf",
+        help_text="The contested neighborhood (NEIGHBORHOOD level, clean()-enforced).",
+    )
+    controlling_org = models.ForeignKey(
+        Organization,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="held_turf",
+        help_text="Who runs this patch; null = contested ground, nobody collects.",
+    )
+    grip = models.PositiveSmallIntegerField(
+        default=0,
+        help_text="The controller's hold, 0-100. Rival pushes erode it; control flips at 0.",
+    )
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        verbose_name = "Neighborhood Turf"
+        verbose_name_plural = "Neighborhood Turf"
+
+    def clean(self) -> None:
+        from world.areas.constants import AreaLevel  # noqa: PLC0415
+
+        super().clean()
+        if self.area_id and self.area.level != AreaLevel.NEIGHBORHOOD:
+            from django.core.exceptions import ValidationError  # noqa: PLC0415
+
+            msg = "Turf exists only at NEIGHBORHOOD-level areas."
+            raise ValidationError(msg)
+
+    def __str__(self) -> str:
+        holder = self.controlling_org or "contested"
+        return f"{self.area} turf ({holder}, grip {self.grip})"
+
+
 class GangTurfDetails(SharedMemoryModel):
     """Per-(GANG_TURF Project) details payload (#1891).
 

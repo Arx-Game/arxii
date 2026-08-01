@@ -17,3 +17,21 @@ GM-facing authoring tool built after it: build the catalog, make it fast to sear
 invention itself, not just its consequences.
 
 > Status: accepted · Source: issue #2118 (rev 2 ruling by Tehom, 2026-07-09)
+
+## Addendum: ad-hoc check gate raised to SENIOR (#2857)
+
+The catalog discipline this ADR establishes prevents GMs from inventing
+*mechanics* (no free-form stat/skill, no integer difficulty, no consequence-pool
+reference). But the Arx I failure mode was broader: GMs inventing *stakes and
+outcomes* — asking players to "make a check" with arbitrary consequences narrated
+afterward. `InvokeCatalogCheckAction` already prevents consequence-pool
+selection/composition, but the GM narrates whatever they want post-roll.
+
+The fix is gating, not mechanics: `InvokeCatalogCheckAction`'s prerequisite was
+raised from `IsSceneGMPrerequisite` (any scene GM) to
+`MinimumGMLevelPrerequisite(GMLevel.SENIOR)`. Player GMs below SENIOR trust are
+funneled to `SetSituationAction`, where checks emerge from authored situations
+with pre-set outcomes. The ad-hoc check remains as a staff/senior stopgap for
+impromptu moments. The long-term direction is a lightweight "quick challenge"
+path within the situation system, so the ad-hoc check becomes unnecessary for
+everyone.

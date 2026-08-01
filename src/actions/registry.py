@@ -147,6 +147,7 @@ from actions.definitions.endorsements import (
 from actions.definitions.estates import WillReadingAction
 from actions.definitions.events import (
     CancelEventAction,
+    CaterEventAction,
     CompleteEventAction,
     CreateEventAction,
     InviteToEventAction,
@@ -248,6 +249,7 @@ from actions.definitions.market import (
     BuyWareAction,
     FinishWareAction,
     ListWareAction,
+    SellToFenceAction,
     ServiceCraftAction,
     SetServiceOfferAction,
 )
@@ -434,14 +436,17 @@ from actions.definitions.tasking import (
 from actions.definitions.technique_authoring import AuthorTechniqueAction
 from actions.definitions.threads import WeaveThreadAction
 from actions.definitions.traps import DisarmTrapAction
+from actions.definitions.turf import StartGangTurfAction
 from actions.definitions.vault import (
     VaultAccessAddAction,
     VaultAccessListAction,
     VaultAccessRemoveAction,
 )
 from actions.definitions.vitals import (
+    CarryBodyAction,
     GiveDeathKudosAction,
     RetireCharacterAction,
+    SetDownBodyAction,
     WakeAction,
 )
 from actions.definitions.voyages import (
@@ -670,6 +675,7 @@ _ALL_ACTIONS: list[Action] = [
     CancelEventAction(),
     InviteToEventAction(),
     RespondInvitationAction(),
+    CaterEventAction(),
     ManageTrainingAction(),
     PurchaseUnlockAction(),
     ClaimKudosAction(),
@@ -741,6 +747,7 @@ _ALL_ACTIONS: list[Action] = [
     StartDefenseInstallationAction(),
     FundRoomWardAction(),
     BuyStockAction(),
+    SellToFenceAction(),
     BuyWareAction(),
     ListWareAction(),
     FinishWareAction(),
@@ -784,6 +791,7 @@ _ALL_ACTIONS: list[Action] = [
     # #2010 — GM battle staging: JUNIOR-gated catalog-pick-to-live-Battle actions.
     CreateBattleAction(),
     StageBattleMapAction(),
+    StartGangTurfAction(),
     SpawnBattleUnitsAction(),
     EnlistBattleParticipantAction(),
     BrowseBattleCatalogAction(),
@@ -829,6 +837,8 @@ _ALL_ACTIONS: list[Action] = [
     ClearRoomListenersAction(),
     # #2287 — death & unconsciousness core slice.
     WakeAction(),
+    CarryBodyAction(),
+    SetDownBodyAction(),
     # #2290 — dream realm.
     SleepAction(),
     DescendAction(),

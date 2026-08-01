@@ -31,6 +31,7 @@ _USAGE_CLAIM = "Usage: gm claim <request-id>"
 _USAGE_CHECK = (
     "Usage: gm check [find <term>] | gm check <character> <check-type>=<band>"
     " [edge=<reason>|setback=<reason>]"
+    " (requires Senior GM+; use 'setsituation' for consequential checks)"
 )
 _USAGE_AWARD = (
     "Usage: gm award <character> xp=<amount> [reason=<text>]"
@@ -61,8 +62,9 @@ class CmdGMDashboard(ArxCommand):
     Usage:
       gm dashboard
       gm claim <request-id>
-      gm check [find <term>]
-      gm check <character> <check-type>=<band> [edge=<reason>|setback=<reason>]
+      gm check [find <term>]                    (requires Senior GM+)
+      gm check <character> <check-type>=<band>  [edge=<reason>|setback=<reason>]
+        (requires Senior GM+; use 'setsituation' for consequential checks)
       gm award <character> xp=<amount> [reason=<text>]
       gm award <character> dev=<trait> amount=<n> [reason=<text>]
       gm award <character> hare=<organization> reason=<text>

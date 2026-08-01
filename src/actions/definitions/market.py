@@ -316,3 +316,63 @@ def _resolve_craft_target(recipe_kind: str, target_id: object) -> object | None:
 
         return Style.objects.filter(pk=target_id).first()
     return None
+
+
+@dataclass
+class SellToFenceAction(_MarketAction):
+    """Sell a held item to a fence stall (#2862). Kwargs: ``stall_id``, ``item_name``.
+
+    The fence pays a cut rate, asks nothing about provenance, and dealing
+    vice through it mints heat weighted by the local AreaLaw.
+    """
+
+    key: str = "market_sell_fence"
+    name: str = "Fence"
+    icon: str = "hand-coins"
+
+    def execute(
+        self, actor: ObjectDB, context: ActionContext | None = None, **kwargs: Any
+    ) -> ActionResult:
+        from world.items.market.models import MarketStall  # noqa: PLC0415
+        from world.items.market.services import (  # noqa: PLC0415
+            MarketServiceError,
+            sell_to_fence,
+        )
+        from world.items.models import ItemInstance  # noqa: PLC0415
+
+        persona = _active_persona(actor)
+        if persona is None:
+            return ActionResult(success=False, message=_MSG_NO_PERSONA)
+        stall = MarketStall.objects.filter(
+            pk=kwargs.get("stall_id"), stall_kind=MarketStall.StallKind.FENCE
+        ).first()
+        if stall is None:
+            stall = MarketStall.objects.filter(stall_kind=MarketStall.StallKind.FENCE).first()
+        if stall is None:
+            return ActionResult(success=False, message="No fence will see you.")
+        item_name = (kwargs.get("item_name") or "").strip()
+        sheet = actor.character_sheet
+        instance = None
+        if item_name:
+            instance = (
+                ItemInstance.objects.filter(
+                    holder_character_sheet=sheet,
+                    game_object__db_key__iexact=item_name,
+                ).first()
+                or ItemInstance.objects.filter(
+                    holder_character_sheet=sheet,
+                    template__name__iexact=item_name,
+                ).first()
+            )
+        if instance is None:
+            return ActionResult(success=False, message="Fence what?")
+        template_name = instance.template.name
+        try:
+            price = sell_to_fence(persona, stall, instance)
+        except MarketServiceError as exc:
+            return ActionResult(success=False, message=exc.user_message)
+        return ActionResult(
+            success=True,
+            message=f"The fence counts out {price} coppers for {template_name}. No names.",
+            data={"price": price},
+        )

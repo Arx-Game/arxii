@@ -655,6 +655,13 @@ Check resolution engine — converts trait values to ranks and rolls against res
 ### Conditions
 Persistent states that modify capabilities, checks, and resistances with stage progression and interactions.
 
+- **Intoxication (#2852, ADR-0184):** `intoxication_content.ensure_intoxication_content`
+  (Intoxicated staged Tipsy/Drunk/Sodden/Blackout, IC-clock expiry; Hungover with a
+  willpower `ConditionModifierEffect` — the #2845 moon impairment predicate's food) +
+  `intoxication_service.imbibe` (the one drink seam: advance severity by potency; past
+  Blackout roll `fatigue_endurance_physical`, failure = built Unconscious + Hungover).
+  Fired by the `INTOXICATE` consequence effect; drugs are future content on the same seam.
+
 - **Models:** `ConditionCategory` (`alters_behavior` bool — marks behavior-altering categories
   such as compulsion, charm, fear; used by `technique_alters_behavior` to gate consent;
   `grants_intangibility` bool — marks intangibility categories; `is_untargetable` queries this),
@@ -1885,7 +1892,9 @@ GM at a given level may author (#2000, ADR-0097).
   three catalog-only Actions in `actions/definitions/gm_adjudication.py`:
   `InvokeCatalogCheckAction` (key `gm_invoke_check` — invokes an authored `CheckType` at a
   `DifficultyChoice` band via `perform_check`, plus a `find`/list catalog-search mode; never an
-  integer difficulty or a consequence-pool reference), `GMAwardAction` (key
+  integer difficulty or a consequence-pool reference; #2857: gated on
+  `MinimumGMLevelPrerequisite(GMLevel.SENIOR)` — a staff/senior stopgap; JUNIOR/STARTING
+  player GMs are funneled to `SetSituationAction`), `GMAwardAction` (key
   `gm_award_progression` — `award_xp`/`award_development_points` with
   `ProgressionReason.GM_AWARD`, gated additionally on `MinimumGMLevelPrerequisite(GMLevel
   .JUNIOR)`; `award_type="favor_token"` (#2428) mints a Golden Hare from an org via
@@ -3980,6 +3989,33 @@ Unified modifier system — categories, types, sources, and per-character modifi
 
 ### Items & Equipment
 Items, equipment, inventory, and currency. Spec D PR1 shipped facets, equip/unequip
+
+- **The underworld (#2862, ADR-0185):** the fence (`MarketStall.stall_kind=FENCE`,
+  `sell_to_fence` — the first sell-to-NPC path; first consumer of `ItemTemplate.value`;
+  first live heat producers for the dormant `contraband`/`smuggling` CrimeKinds, AreaLaw-
+  weighted); Dust/Haze intoxicant ladders (`condition_template` override on INTOXICATE —
+  Dusted's pass-out reaches the dream realm via the built Unconscious rule; Hazed cannot
+  drop anyone); `CraftingRecipe.required_feature_kind` (LAB hardcode generalized — drug
+  refinement gates on the Workshop of Iniquity); `NeighborhoodTurf` + `turf_services`
+  (grip/flip; writes `StatKey.CRIME`, re-targets CRIME_KICKUP, provokes Retaliation
+  crises; the orphaned gang-turf project machinery finally moves state via
+  `complete_gang_turf` + `start_gang_turf` action); guard pressure scales with area
+  CRIME (`area_stat_total` in locations services); 7 RESTRICTED criminal missions on a
+  covert board + first `MissionCategory` rows + the standing smuggling route
+  (`TaskTemplate` + linked mission — the dual-execution bridge); seeds in
+  `world/seeds/underworld.py` (cluster `underworld`), all PLACEHOLDER.
+- **Consumables + cooking (#2852, ADR-0184):** three consequence EffectTypes
+  (`RESTORE_FATIGUE` → new `fatigue.services.recover_fatigue`; `RESTORE_ANIMA` clamped —
+  consumption, never regeneration; `INTOXICATE` → `imbibe`) make every edible pure content:
+  a consumable ItemTemplate + deterministic on-use pool (`seed_consumable_catalog` — bread,
+  stew, wine, ale, firebrandy, Cardian Ambrosia, all PLACEHOLDER). Cooking tradeskill
+  activation (`world/seeds/provisioning_checks.py`, cluster `provisioning`): Cooking
+  skill/CheckType (wits+Cooking, Brewing spec), first LIVE QualityTier ladder
+  (Common/Fine/Masterwork), stationless ITEM_CREATE recipes (Hearty Stew, Honeyed Wine) +
+  ingredients + skill caps. Event catering: `EventCatering` snapshot rows
+  (`events.services.cater_event` consumes the instance — the money sink); at
+  `complete_event` the quality sum mints the host's Hospitality deed via
+  `create_solo_deed` (`_award_catering_prestige` — the one event-completion reward hook).
 services, and equipment-modifier integration. Spec D PR2 (#1031) added the generic
 crafting framework and check-driven facet/style attachment. #2211 added the ITEM_CREATE
 mint pipeline; #2240 made it playable web-first: `ItemCreateCraftViewSet` serves
@@ -5755,6 +5791,15 @@ madness/death), thread-gated dreamwalking with escape lever, and the deep dreami
 ### Vitals
 Character mortality, health tracking, and the acute-peril dying state. System-agnostic — called by
 combat, poison, spells, exhaustion, and any damage source.
+
+- **Body carrying (#2852, ADR-0184):** `CarriedBody` (O2O carrier/carried) +
+  `carry_services.pick_up_body`/`set_down_body`/`carried_body_follow` (at_post_move hook
+  brings the body along; releases when the carried can act). PC bodies gated on the
+  `body-handling` consent category (`world.consent.services.body_handling_category`,
+  makeover-precedent allowlist default); NPCs open. Robbing a downed body:
+  steal-path-only reach widening in `flows.service_functions.inventory`
+  (`_unconscious_holder_reachable` — worn gear excluded; theft consent unchanged).
+  Surfaces: `carry_body`/`set_down_body` actions, telnet `carry <name>`/`setdown`.
 
 - **Models:** `CharacterVitals` (OneToOne on CharacterSheet; fields: `life_state`
   (`CharacterLifeState`: ALIVE/DEAD — the binary mortality axis), `health`, `max_health`,

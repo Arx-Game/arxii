@@ -328,3 +328,37 @@ class WoundDetails(SharedMemoryModel):
 
     def __str__(self) -> str:
         return f"WoundDetails(instance={self.condition_instance_id}, damage={self.damage_taken})"
+
+
+class CarriedBody(SharedMemoryModel):
+    """One character carrying another's unconscious (or dead) body (#2852).
+
+    Exists only while the carry holds: created by ``pick_up_body``, deleted by
+    ``set_down_body`` or automatically when the carried character can act
+    again. The carrier's movement brings the carried along (see the
+    ``at_post_move`` hook on the character typeclass — companion-follow
+    precedent). One carry per carrier and per carried at a time.
+    """
+
+    carrier = models.OneToOneField(
+        "character_sheets.CharacterSheet",
+        on_delete=models.CASCADE,
+        related_name="carrying_body",
+        help_text="The character doing the carrying.",
+    )
+    carried = models.OneToOneField(
+        "character_sheets.CharacterSheet",
+        on_delete=models.CASCADE,
+        related_name="carried_by",
+        help_text="The character being carried.",
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    objects = ArxSharedMemoryManager()
+
+    class Meta:
+        verbose_name = "Carried Body"
+        verbose_name_plural = "Carried Bodies"
+
+    def __str__(self) -> str:
+        return f"{self.carrier} carrying {self.carried}"

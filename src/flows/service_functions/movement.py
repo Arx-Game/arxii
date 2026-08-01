@@ -97,6 +97,15 @@ def check_exit_traversal(
         msg = "You cannot go that way."
         raise CommandError(msg)
 
+    # Encumbrance hard stop (#2862): ONLY the extreme combination refuses —
+    # far-too-heavy load AND an exhausted physical pool — and the message
+    # names both causes so nobody is ever mysteriously stuck.
+    from world.items.services.encumbrance import movement_blocked_message  # noqa: PLC0415
+
+    blocked = movement_blocked_message(caller.obj)
+    if blocked is not None:
+        raise CommandError(blocked)
+
     # Check if the exit has a destination
     if not hasattr(exit.obj, "destination") or not exit.obj.destination:
         msg = "That exit doesn't lead anywhere."
@@ -145,9 +154,13 @@ def traverse_exit(
     # returning when at_failed_traverse exists -- this task doesn't change
     # that existing control flow, only avoids reacting on a failed move.
     if caller.obj.location == destination.obj:
+        from world.items.services.encumbrance import charge_move_fatigue  # noqa: PLC0415
         from world.room_features.services import react_to_unauthorized_entry  # noqa: PLC0415
 
         react_to_unauthorized_entry(caller.obj, destination.obj)
+        # Encumbrance move cost (#2862): free under capacity, always; above
+        # it the room costs physical fatigue and says so.
+        charge_move_fatigue(caller.obj)
 
 
 hooks = {

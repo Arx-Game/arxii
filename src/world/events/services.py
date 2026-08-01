@@ -1,6 +1,7 @@
 """Service functions for event lifecycle, invitations, and visibility."""
 
 from datetime import datetime, timedelta
+from typing import TYPE_CHECKING
 
 from django.db import transaction
 from django.db.models import Q, QuerySet
@@ -8,7 +9,18 @@ from django.utils import timezone
 
 from evennia_extensions.models import ObjectDisplayData
 from world.events.constants import EventStatus, InvitationTargetType
-from world.events.models import Event, EventHost, EventInvitation, EventModification
+from world.events.models import (
+    Event,
+    EventCatering,
+    EventHost,
+    EventInvitation,
+    EventModification,
+)
+
+if TYPE_CHECKING:
+    from evennia.objects.models import ObjectDB
+
+    from world.items.models import ItemInstance
 from world.events.types import EventError
 from world.game_clock.constants import TimePhase
 from world.game_clock.models import GameClock
@@ -214,7 +226,89 @@ def complete_event(event: Event) -> Event:
         event.status = EventStatus.COMPLETED
         event.ended_at = timezone.now()
         event.save(update_fields=["status", "ended_at", "updated_at"])
+        _award_catering_prestige(event)
     return event
+
+
+# --- Event catering → host prestige (#2852) ---------------------------------
+# Mirrors the ceremony finish→prestige precedent: the one reward hook on event
+# completion. Magnitudes PLACEHOLDER.
+
+CATERING_PRESTIGE_ITEM_CAP = 12
+CATERING_DEED_BASE_PER_POINT = 3
+CATERING_DEED_MINIMUM_SCORE = 2
+HOSPITALITY_SOURCE_TYPE_NAME = "Hospitality"
+
+
+def cater_event(
+    event: Event, contributor: "ObjectDB", item_instance: "ItemInstance"
+) -> EventCatering:
+    """Set a consumable out at *event*, consuming it (#2852 — the sink).
+
+    Any character present may contribute; the prestige accrues to the event's
+    primary host at completion. The instance must be a consumable (food/drink/
+    delicacy — anything with charges and an on-use pool); it is destroyed
+    here and survives only as the catering snapshot row.
+    """
+    if event.status not in (EventStatus.SCHEDULED, EventStatus.ACTIVE):
+        raise EventError(EventError.CATER_INVALID)
+    template = item_instance.template
+    if not template.is_consumable:
+        raise EventError(EventError.CATER_NOT_CONSUMABLE)
+    sheet = contributor.character_sheet
+    persona = sheet.active_persona or sheet.primary_persona if sheet is not None else None
+    if persona is None:
+        raise EventError(EventError.CATER_NO_PERSONA)
+    row = EventCatering.objects.create(
+        event=event,
+        item_template=template,
+        quality_tier=item_instance.quality_tier,
+        contributed_by=persona,
+    )
+    game_object = item_instance.game_object
+    item_instance.delete()
+    if game_object is not None:
+        game_object.delete()
+    return row
+
+
+def _catering_score(event: Event) -> int:
+    """Sum of quality multipliers over the catered spread, capped (#2852)."""
+    rows = list(event.catering.select_related("quality_tier")[:CATERING_PRESTIGE_ITEM_CAP])
+    total = 0.0
+    for row in rows:
+        multiplier = (
+            float(row.quality_tier.stat_multiplier) if row.quality_tier is not None else 1.0
+        )
+        total += multiplier
+    return round(total)
+
+
+def _award_catering_prestige(event: Event) -> None:
+    """Mint the host's Hospitality deed from the catered spread, if any."""
+    from world.societies.models import LegendSourceType  # noqa: PLC0415
+    from world.societies.services import create_solo_deed  # noqa: PLC0415
+
+    score = _catering_score(event)
+    if score < CATERING_DEED_MINIMUM_SCORE:
+        return
+    host = (
+        EventHost.objects.filter(event=event, is_primary=True).select_related("persona").first()
+        or EventHost.objects.filter(event=event).select_related("persona").first()
+    )
+    if host is None or host.persona is None:
+        return
+    source_type, _created = LegendSourceType.objects.get_or_create(
+        name=HOSPITALITY_SOURCE_TYPE_NAME,
+        defaults={"description": "PLACEHOLDER: deeds of the table — hosting done grandly (#2852)."},
+    )
+    create_solo_deed(
+        host.persona,
+        f"Set a lavish table at {event.name}",
+        source_type,
+        score * CATERING_DEED_BASE_PER_POINT,
+        description="PLACEHOLDER: a spread remembered longer than the speeches.",
+    )
 
 
 def cancel_event(event: Event) -> Event:

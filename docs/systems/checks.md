@@ -355,8 +355,12 @@ point:
 - **Discovery**: `find`/list mode (no target) searches the catalog by name, stat+skill trait, or
   description snippet — the paved road to finding the right check instead of inventing one.
 
-Gated by `IsSceneGMPrerequisite` (`actions/prerequisites.py` — staff bypass, else
-`Scene.is_gm(actor.active_account)` on the actor's active scene). Telnet: `gm check [find
+Gated by `MinimumGMLevelPrerequisite(GMLevel.SENIOR)` (#2857 — staff bypass, else
+SENIOR-tier GM trust). JUNIOR/STARTING player GMs are funneled to
+`SetSituationAction` (`setsituation`), where checks emerge from authored
+situations with pre-set outcomes. The ad-hoc check is a staff/senior stopgap for
+impromptu moments no authored situation covers — it returns a bare graded result
+with no consequences. Telnet: `gm check [find
 <term>]` / `gm check <character> <check-type>=<band> [edge=<reason>|setback=<reason>]`
 (`commands/gm_ops.py`). Sibling actions `GMAwardAction` (`gm_award_progression`) and
 `GMApplyConditionAction` (`gm_apply_condition`) round out the GM adjudication toolkit — see

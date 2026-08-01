@@ -1621,3 +1621,26 @@ def set_room_display_data(  # noqa: PLR0913 — staff bypass adds one flag to th
         profile, _ = RoomProfile.objects.get_or_create(objectdb=room)
         profile.is_public = is_public
         profile.save(update_fields=["is_public"])
+
+
+_AREA_ANCESTOR_WALK_CAP = 10  # defensive bound on parent-chain traversal
+
+
+def area_stat_total(area: Area | None, stat_key: str) -> int:
+    """Summed area-level modifier rows for *stat_key* on *area* + ancestors (#2862).
+
+    The area-scoped sibling of the per-room cascade resolve — for callers that
+    hold an Area but no room (e.g. the justice pressure ladder reading
+    ``StatKey.CRIME``, written by neighborhood turf control).
+    """
+    from world.locations.models import LocationValueModifier  # noqa: PLC0415
+
+    total = 0
+    seen = 0
+    node = area
+    while node is not None and seen < _AREA_ANCESTOR_WALK_CAP:
+        rows = LocationValueModifier.objects.filter(area=node, stat_key=stat_key)
+        total += sum(row.value for row in rows)
+        node = node.parent
+        seen += 1
+    return total

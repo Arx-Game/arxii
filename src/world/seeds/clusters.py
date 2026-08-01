@@ -101,6 +101,18 @@ def _seed_social() -> None:
     seed_social_check_content()
 
 
+def _seed_underworld() -> None:
+    from world.seeds.underworld import seed_underworld_demo  # noqa: PLC0415
+
+    seed_underworld_demo()
+
+
+def _seed_provisioning() -> None:
+    from world.seeds.provisioning_checks import seed_provisioning_content  # noqa: PLC0415
+
+    seed_provisioning_content()
+
+
 def _seed_investigation() -> None:
     from world.seeds.investigation_checks import seed_investigation_check_content  # noqa: PLC0415
 
@@ -407,6 +419,7 @@ CLUSTER_SEEDERS: dict[str, Callable[[], None]] = {
     # Persuasion/Performance skills + their specializations (#1688). After "checks" so the
     # resolution spine exists; authoritative, so it corrects the placeholder stat+stat seed.
     "social": _seed_social,
+    "provisioning": _seed_provisioning,
     # Investigation: the Search check (perception + Investigation) + the Investigation skill.
     # After "checks" for the resolution spine; authoritative (#1705).
     "investigation": _seed_investigation,
@@ -501,6 +514,10 @@ CLUSTER_SEEDERS: dict[str, Callable[[], None]] = {
     # CheckTypes (#2180). After "stealth" (reuses its Stealth skill for SNEAK)
     # and "investigation" (reuses its Investigation skill for Guard Detection).
     "security": _seed_security,
+    # #2862 — after security: the criminal missions roll the Gather Evidence
+    # CheckType that cluster composes; seeding earlier would skip 5 graphs on
+    # the first press and break idempotency.
+    "underworld": _seed_underworld,
     # Perception: the Concealed condition primitive (#1225) — the seam Stealth
     # witness-reduction (#1464) and forms disguise-piercing will apply/clear.
     "perception": _seed_perception,
@@ -625,6 +642,7 @@ def seeded_models_by_cluster() -> dict[str, list[type[Model]]]:
     from world.conditions.models import ConditionTemplate  # noqa: PLC0415
     from world.consent.models import SocialConsentCategory  # noqa: PLC0415
     from world.gm.models import GMLevelCap, GMRewardConfig, SituationKind  # noqa: PLC0415
+    from world.items.crafting.models import CraftingRecipe  # noqa: PLC0415
     from world.items.market.models import MarketSquare  # noqa: PLC0415
     from world.items.models import ItemTemplate, Style  # noqa: PLC0415
     from world.justice.models import CrimeKind  # noqa: PLC0415
@@ -652,6 +670,7 @@ def seeded_models_by_cluster() -> dict[str, list[type[Model]]]:
         Title,
     )
     from world.societies.models import (  # noqa: PLC0415
+        NeighborhoodTurf,
         PropagandaCampaignTier,
         StanceArchetype,
     )
@@ -669,6 +688,13 @@ def seeded_models_by_cluster() -> dict[str, list[type[Model]]]:
         # Social: seeds Persuasion/Performance skills + their specializations + the
         # stat+skill(+spec) social CheckType compositions (#1688).
         "social": [Specialization],
+        # Provisioning (#2852): the Cooking tradeskill + food/drink recipes + the
+        # first live QualityTier ladder. Skill/CheckType rows counted under "checks";
+        # the recipe rows are the representative content.
+        "provisioning": [CraftingRecipe],
+        # Underworld (#2862): the turf-war stage — NPC gang + contested
+        # neighborhood + Retaliation crisis type.
+        "underworld": [NeighborhoodTurf],
         # Investigation seeds the Search CheckType + Investigation skill (shared spine/skill
         # rows counted under "checks"); it still appears as a seeded cluster (#1705).
         "investigation": [],

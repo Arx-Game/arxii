@@ -622,6 +622,39 @@ def steal_permitted(taker_sheet: CharacterSheet | None, item_instance: ItemInsta
 
 
 @transaction.atomic
+def _unconscious_holder_reachable(character: CharacterState, item: ItemState) -> bool:
+    """Steal-path-only reach widening (#2852): rob a downed body.
+
+    An item on another character's person is normally unreachable (its
+    location is the holder, not the room). While the holder is co-located and
+    cannot act (unconscious or dead), the STEAL path — never plain get —
+    treats their belongings as reachable; the theft consent category still
+    gates PC victims exactly as for any other steal.
+    """
+    from django.core.exceptions import ObjectDoesNotExist  # noqa: PLC0415
+
+    from world.vitals.services import can_act  # noqa: PLC0415
+
+    holder = item.instance.game_object.location
+    if holder is None or holder == character.obj:
+        return False
+    if holder.location is None or holder.location != character.obj.location:
+        return False
+    try:
+        holder_sheet = holder.character_sheet
+    except (AttributeError, ObjectDoesNotExist):
+        return False
+    if holder_sheet is None:
+        return False
+    if not can_act(holder_sheet):
+        from world.items.models import EquippedItem  # noqa: PLC0415
+
+        # Worn gear stays on the body (stripping it is an unequip problem, not
+        # a reach problem) — only carried belongings are robbable in v1.
+        return not EquippedItem.objects.filter(item_instance=item.instance).exists()
+    return False
+
+
 def steal(character: CharacterState, item: ItemState) -> None:
     """Take an item that plain take refuses (#1909) — with consequences.
 
@@ -630,7 +663,7 @@ def steal(character: CharacterState, item: ItemState) -> None:
     ``concealed=True`` rolls Stealth to shed witnesses (#1824), so an
     unwitnessed theft spreads cold until discovered.
     """
-    if not item.can_take(taker=character):
+    if not item.can_take(taker=character) and not _unconscious_holder_reachable(character, item):
         raise NotReachable
     # getattr, not direct access: sheet-less actors (GM/staff/companion tooling)
     # have no reverse CharacterSheet row and must reach ``steal_permitted`` with

@@ -89,7 +89,7 @@ class GMOpsAdjudicationTestBase(TestCase):
         self.scene = SceneFactory(location=self.room)
 
         self.gm_actor, self.gm_account = _pc_in_room(self.room, db_key="GMOpsGM")
-        GMProfileFactory(account=self.gm_account, level=GMLevel.JUNIOR)
+        GMProfileFactory(account=self.gm_account, level=GMLevel.SENIOR)
         SceneParticipationFactory(scene=self.scene, account=self.gm_account, is_gm=True)
         self.gm_actor.msg = MagicMock()
 
@@ -151,7 +151,7 @@ class CmdGMCheckTests(GMOpsAdjudicationTestBase):
         messages = _run_cmd(
             self.player_actor, f"check {self.target.key} {self.check_type.name}=hard"
         )
-        self.assertTrue(any("scene's GM or staff" in m for m in messages))
+        self.assertTrue(any("GM trust required" in m for m in messages))
 
 
 class CmdGMAwardTests(GMOpsAdjudicationTestBase):

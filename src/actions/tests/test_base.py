@@ -367,6 +367,7 @@ class ActionRegistryTests(TestCase):
             "event_cancel",
             "event_invite",
             "respond_invitation",
+            "event_cater",
             "sanctum_install",
             "sanctum_homecoming",
             "sanctum_purging",
@@ -392,6 +393,8 @@ class ActionRegistryTests(TestCase):
             "start_defense_installation",
             "fund_room_ward",
             "market_buy_stock",
+            "market_sell_fence",
+            "start_gang_turf",
             "market_buy_ware",
             "market_list_ware",
             "market_finish_ware",
@@ -474,6 +477,8 @@ class ActionRegistryTests(TestCase):
             "clear_room_listeners",
             # #2287 — death & unconsciousness core slice.
             "wake",
+            "carry_body",
+            "set_down_body",
             "retire",
             "death_kudos",
             # #2289 — ceremonies.

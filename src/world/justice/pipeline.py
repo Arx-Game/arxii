@@ -118,7 +118,15 @@ def maybe_guard_encounter(
     ).exists():
         return None
     rng = rng or random
-    if rng.random() * 100 >= _TRIGGER_PCT.get(trigger, 0):
+    # #2862: neighborhood crime pressure scales guard attention — the CRIME
+    # cascade stat (written by turf control) finally gets its reader. A grip-50
+    # neighborhood (+25 CRIME) fires 25% more often.
+    from world.locations.constants import StatKey  # noqa: PLC0415
+    from world.locations.services import area_stat_total  # noqa: PLC0415
+
+    crime = max(0, area_stat_total(area, StatKey.CRIME))
+    pct = _TRIGGER_PCT.get(trigger, 0) * (100 + crime) / 100
+    if rng.random() * 100 >= pct:
         return None
     return GuardEncounter.objects.create(persona=persona, area=area, trigger=trigger)
 

@@ -1,1 +1,1 @@
-0036_stancearchetype_proclamation_edictkind_domainedict
+0037_neighborhoodturf

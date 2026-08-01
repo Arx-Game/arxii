@@ -58,6 +58,7 @@ class CmdMarket(ArxCommand):
             "finish": self._finish,
             "offer": self._offer,
             "commission": self._commission,
+            "fence": self._fence,
         }
         for switch in switches:
             handler = handlers.get(switch)
@@ -105,6 +106,12 @@ class CmdMarket(ArxCommand):
                 for ware in ware_rows
             )
         self.msg("\n".join(lines))
+
+    def _fence(self, args: str) -> None:
+        if not args:
+            msg = "Usage: market/fence <held item name>"
+            raise CommandError(msg)
+        self._run("market_sell_fence", item_name=args)
 
     def _buy_stock(self, args: str) -> None:
         if not args.isdigit():
