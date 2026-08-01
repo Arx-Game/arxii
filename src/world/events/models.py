@@ -250,3 +250,48 @@ class EventModification(SharedMemoryModel):
 
     def __str__(self) -> str:
         return f"Modifications for {self.event.name}"
+
+
+class EventCatering(SharedMemoryModel):
+    """One dish or drink set out at an event (#2852).
+
+    A snapshot row: the contributed consumable is consumed at cater time (the
+    money sink — crafted or bought, it's gone), and what remains is the
+    record — template + quality tier at contribution — that the completion
+    hook sums into the host's Hospitality prestige. Rich preparations are
+    money out, grandeur in.
+    """
+
+    event = models.ForeignKey(
+        Event,
+        on_delete=models.CASCADE,
+        related_name="catering",
+    )
+    item_template = models.ForeignKey(
+        "items.ItemTemplate",
+        on_delete=models.PROTECT,
+        related_name="catering_contributions",
+        help_text="What was served (snapshot of the consumed instance's template).",
+    )
+    quality_tier = models.ForeignKey(
+        "items.QualityTier",
+        on_delete=models.PROTECT,
+        null=True,
+        blank=True,
+        related_name="catering_contributions",
+        help_text="Quality of the consumed instance at contribution (null = common fare).",
+    )
+    contributed_by = models.ForeignKey(
+        "scenes.Persona",
+        on_delete=models.PROTECT,
+        related_name="catering_contributions",
+        help_text="Who set the dish out (provenance).",
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        verbose_name = "Event Catering"
+        verbose_name_plural = "Event Catering"
+
+    def __str__(self) -> str:
+        return f"{self.item_template} at {self.event}"

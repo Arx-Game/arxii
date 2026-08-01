@@ -306,9 +306,9 @@ class TutorialChainJourneyE2ETests(TestCase):
         _run(self.pc, "opportunities")  # the `opportunities` surface
         self.assertIn(self.t4.name, _said(self.pc))
 
-        board_giver = MissionGiver.objects.get(
-            giver_kind=GiverKind.BOARD, target__db_location=self.room
-        )
+        # #2862 added a second BOARD giver (the covert Back Room Wall) in the
+        # same canonical room — disambiguate by the template this leg takes.
+        board_giver = MissionGiver.objects.get(giver_kind=GiverKind.BOARD, templates=self.t4)
         postings = postings_for_giver(board_giver, self.pc)
         ordinal = next(i for i, p in enumerate(postings, start=1) if p.template_id == self.t4.pk)
         _run(self.pc, f"take {ordinal}")  # the `take` surface

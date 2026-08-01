@@ -92,6 +92,18 @@ class CraftingRecipe(SharedMemoryModel):
             "opt out without a schema change."
         ),
     )
+    required_feature_kind = models.ForeignKey(
+        "room_features.RoomFeatureKind",
+        on_delete=models.PROTECT,
+        null=True,
+        blank=True,
+        related_name="gated_recipes",
+        help_text=(
+            "When set, the crafter's room must carry an active RoomFeatureInstance "
+            "of this kind (#2862 — generalizes the LAB hardcode; e.g. the Workshop "
+            "of Iniquity gates illicit refinement). Independent of requires_station."
+        ),
+    )
     output_item_template = models.ForeignKey(
         "items.ItemTemplate",
         on_delete=models.PROTECT,

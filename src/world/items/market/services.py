@@ -27,7 +27,7 @@ if TYPE_CHECKING:
 
     from world.currency.models import CharacterPurse
     from world.items.crafting.services import CraftRunResult
-    from world.items.models import ItemInstance
+    from world.items.models import ItemInstance, ItemTemplate
     from world.scenes.models import Persona
 
 
@@ -308,3 +308,91 @@ def dual_provenance_line(instance: ItemInstance) -> str:
     if crafter is None:
         return f"Designed by {designer.name}"
     return f"Crafted by {crafter.name}, Designed by {designer.name}"
+
+
+# --- The fence (#2862) --------------------------------------------------------
+# The first sell-to-NPC path in the game: a FENCE-kind stall pays a cut rate
+# for anything with a template value, asks no questions about provenance, and
+# minting heat is the price of dealing vice — weighted by the local AreaLaw
+# (the seeded-but-dormant `contraband`/`smuggling` CrimeKinds get their first
+# live producers here). Fenced goods leave the world (v1: reclamation of
+# already-fenced items is deferred; the fence is where hot trails go cold).
+
+FENCE_RATE_PCT = 40  # PLACEHOLDER — the fence's cut of template value.
+CONTRABAND_CRIME_SLUG = "contraband"
+SMUGGLING_CRIME_SLUG = "smuggling"
+
+
+def sell_to_fence(seller: Persona, stall: MarketStall, instance: ItemInstance) -> int:
+    """Sell *instance* to the fence at *stall*; returns the coppers paid.
+
+    Raises MarketServiceError on a non-fence stall, an unheld item, or a
+    worthless template. Vice (an INTOXICATE on-use effect) mints ``contraband`` heat;
+    hot-provenance goods mint ``smuggling`` heat; honest goods mint nothing —
+    all weighted by the winning AreaLaw at the stall's area, so turf posture
+    decides how dangerous the deal is (#2862).
+    """
+    from world.items.services.provenance import (  # noqa: PLC0415
+        has_unresolved_stolen_provenance,
+    )
+
+    if stall.stall_kind != MarketStall.StallKind.FENCE:
+        msg = "not a fence stall"
+        raise MarketServiceError(msg, user_message="That stall does not buy.")
+    holder = instance.holder_character_sheet
+    seller_sheet = seller.character_sheet
+    if holder is None or seller_sheet is None or holder.pk != seller_sheet.pk:
+        msg = "seller does not hold the item"
+        raise MarketServiceError(msg, user_message="You can only fence what you hold.")
+    value = instance.template.value or 0
+    price = value * FENCE_RATE_PCT // 100
+    if price <= 0:
+        msg = "worthless template"
+        raise MarketServiceError(
+            msg, user_message="The fence turns it over once and pushes it back."
+        )
+    from world.currency.services import transfer  # noqa: PLC0415
+
+    transfer(amount=price, reason=f"fence: {instance.template.name}", to_purse=_purse(seller))
+    MarketSale.objects.create(
+        kind=MarketSale.SaleKind.FENCE,
+        buyer_persona=None,
+        seller_persona=seller,
+        item_instance=None,
+        price=price,
+    )
+    is_vice = _template_is_vice(instance.template)
+    is_hot = has_unresolved_stolen_provenance(instance)
+    game_object = instance.game_object
+    instance.delete()
+    if game_object is not None:
+        game_object.delete()
+    if is_vice:
+        _accrue_fence_heat(seller, stall, CONTRABAND_CRIME_SLUG)
+    elif is_hot:
+        _accrue_fence_heat(seller, stall, SMUGGLING_CRIME_SLUG)
+    return price
+
+
+def _template_is_vice(template: ItemTemplate) -> bool:
+    """Whether the template's on-use pool carries an INTOXICATE effect."""
+    from world.checks.constants import EffectType  # noqa: PLC0415
+    from world.checks.models import ConsequenceEffect  # noqa: PLC0415
+
+    if template.on_use_pool_id is None:
+        return False
+    return ConsequenceEffect.objects.filter(
+        consequence__pool_entries__pool_id=template.on_use_pool_id,
+        effect_type=EffectType.INTOXICATE,
+    ).exists()
+
+
+def _accrue_fence_heat(seller: Persona, stall: MarketStall, crime_slug: str) -> None:
+    """Best-effort heat mint for a dirty fence deal; never blocks the sale."""
+    from world.justice.models import CrimeKind  # noqa: PLC0415
+    from world.justice.services import accrue_heat  # noqa: PLC0415
+
+    crime = CrimeKind.objects.filter(slug=crime_slug).first()
+    if crime is None:
+        return
+    accrue_heat(persona=seller, crime_kind=crime, area=stall.square.area)

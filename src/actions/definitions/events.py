@@ -517,3 +517,74 @@ event_complete = CompleteEventAction()
 event_cancel = CancelEventAction()
 event_invite = InviteToEventAction()
 respond_invitation = RespondInvitationAction()
+
+
+@dataclass
+class CaterEventAction(Action):
+    """Set a consumable out at the room's event (#2852 — the grandeur sink).
+
+    Consumes a held food/drink instance into the event's catering record; at
+    completion the spread's quality total mints the host's Hospitality deed.
+    """
+
+    key: str = "event_cater"
+    name: str = "Set Out Food"
+    icon: str = "utensils"
+    category: str = "events"
+    action_category: ActionCategory = ActionCategory.SOCIAL
+    target_type: TargetType = TargetType.SELF
+
+    def get_prerequisites(self) -> list[Prerequisite]:
+        return [HasCharacterSheetPrerequisite()]
+
+    def execute(
+        self,
+        actor: ObjectDB,
+        context: ActionContext | None = None,
+        **kwargs: Any,
+    ) -> ActionResult:
+        from world.events.constants import EventStatus  # noqa: PLC0415
+        from world.events.models import Event  # noqa: PLC0415
+        from world.events.services import cater_event  # noqa: PLC0415
+        from world.events.types import EventError  # noqa: PLC0415
+        from world.items.models import ItemInstance  # noqa: PLC0415
+
+        room = actor.location
+        profile = room.room_profile if room is not None else None
+        if profile is None:
+            return ActionResult(success=False, message="There is no event here.")
+        event = (
+            Event.objects.filter(
+                location=profile,
+                status__in=[EventStatus.SCHEDULED, EventStatus.ACTIVE],
+            )
+            .order_by("-scheduled_real_time")
+            .first()
+        )
+        if event is None:
+            return ActionResult(success=False, message="There is no event here.")
+        item = kwargs.get("item_instance")
+        if item is None:
+            item_name = (kwargs.get("item_name") or "").strip()
+            if item_name:
+                item = (
+                    ItemInstance.objects.filter(
+                        holder_character_sheet=actor.character_sheet,
+                        game_object__db_key__iexact=item_name,
+                    ).first()
+                    or ItemInstance.objects.filter(
+                        holder_character_sheet=actor.character_sheet,
+                        template__name__iexact=item_name,
+                    ).first()
+                )
+        if item is None:
+            return ActionResult(success=False, message="Set out what?")
+        template_name = item.template.name
+        try:
+            cater_event(event, actor, item)
+        except EventError as exc:
+            return ActionResult(success=False, message=exc.user_message)
+        return ActionResult(
+            success=True,
+            message=f"You set out {template_name} for {event.name}.",
+        )

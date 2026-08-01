@@ -27,6 +27,7 @@ from commands.assets import CmdIntroduce
 from commands.battle import CmdBattle
 from commands.canon_review import CmdCanonReview
 from commands.captivity import CmdDemandRansom
+from commands.carry import CmdCarry, CmdSetDown  # #2852
 from commands.ceremonies import CmdCeremony
 from commands.combat import CmdClashCommit, CmdDeclareTechnique
 from commands.combat_maneuvers import CmdCombat
@@ -330,6 +331,9 @@ class CharacterCmdSet(default_cmds.CharacterCmdSet):
             CmdSelect,
             # #2287 — telnet face of WakeAction; attempt to wake from unconsciousness.
             CmdWake,
+            # #2852 — telnet faces of CarryBodyAction/SetDownBodyAction.
+            CmdCarry,
+            CmdSetDown,
             # #2290 — telnet face of SleepAction; voluntarily sleep to enter the dream realm.
             CmdSleep,
             # #2287 — telnet face of RetireCharacterAction; lay a dead character to rest.

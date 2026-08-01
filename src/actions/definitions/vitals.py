@@ -207,3 +207,68 @@ class WakeAction(Action):
         # Fall through to Unconscious wake arc (#2287)
         result = attempt_wake(sheet)
         return ActionResult(success=result.woke, message=result.message)
+
+
+@dataclass
+class CarryBodyAction(Action):
+    """Pick up and carry a downed character's body (#2852).
+
+    The target must be co-located and unable to act (unconscious or dead).
+    PC bodies are gated on the body-handling consent category (a
+    body-autonomy call, allowlist default); NPC bodies are open. The carried
+    body follows the carrier's movement until set down or until the carried
+    character can act again.
+    """
+
+    key: str = "carry_body"
+    name: str = "Carry"
+    icon: str = "person-standing"
+    category: str = "vitals"
+    target_type: TargetType = TargetType.SINGLE
+
+    def execute(
+        self,
+        actor: ObjectDB,
+        context: ActionContext | None = None,
+        **kwargs: Any,
+    ) -> ActionResult:
+        from world.vitals.carry_services import CarryError, pick_up_body  # noqa: PLC0415
+
+        target = kwargs.get("target")
+        if target is None:
+            target_name = kwargs.get("target_name")
+            if target_name:
+                found = actor.search(target_name, quiet=True)
+                target = found[0] if found else None
+        if target is None:
+            return ActionResult(success=False, message="Carry whom?")
+        try:
+            pick_up_body(actor, target)
+        except CarryError as exc:
+            return ActionResult(success=False, message=exc.user_message)
+        return ActionResult(success=True, message=f"You are now carrying {target.key}.")
+
+
+@dataclass
+class SetDownBodyAction(Action):
+    """Set down the body you are carrying (#2852)."""
+
+    key: str = "set_down_body"
+    name: str = "Set Down"
+    icon: str = "person-standing"
+    category: str = "vitals"
+    target_type: TargetType = TargetType.SELF
+
+    def execute(
+        self,
+        actor: ObjectDB,
+        context: ActionContext | None = None,
+        **kwargs: Any,
+    ) -> ActionResult:
+        from world.vitals.carry_services import CarryError, set_down_body  # noqa: PLC0415
+
+        try:
+            set_down_body(actor)
+        except CarryError as exc:
+            return ActionResult(success=False, message=exc.user_message)
+        return ActionResult(success=True, message="You set the body down.")

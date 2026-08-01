@@ -201,6 +201,25 @@ def apply_fatigue(
     return actual_cost
 
 
+def recover_fatigue(character_sheet: CharacterSheet, category: str, amount: int) -> int:
+    """Reduce one fatigue pool by up to *amount*, floored at zero (#2852).
+
+    The partial-recovery seam food and drink restore through — before this,
+    fatigue only went up (``apply_fatigue``) or all the way to zero at dawn
+    (``reset_fatigue``). Returns the amount actually recovered.
+    """
+    if amount <= 0:
+        return 0
+    pool = get_or_create_fatigue_pool(character_sheet)
+    current = pool.get_current(category)
+    recovered = min(current, amount)
+    if recovered <= 0:
+        return 0
+    pool.set_current(category, current - recovered)
+    pool.save()
+    return recovered
+
+
 _TECHNIQUE_COLLAPSE_ZONES = {FatigueZone.OVEREXERTED, FatigueZone.EXHAUSTED}
 _DEFAULT_BASE_RATIO = 25
 _DEFAULT_STRAIN_RATIO = 50
