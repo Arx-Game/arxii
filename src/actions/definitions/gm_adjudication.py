@@ -138,6 +138,12 @@ class InvokeCatalogCheckAction(Action):
     -- it never selects, composes, or fires a ``ConsequenceOutcome``/consequence
     pool, and no parameter on this action could.
 
+    Gated on ``MinimumGMLevelPrerequisite(GMLevel.SENIOR)`` — the ad-hoc check
+    is a staff/senior stopgap for impromptu moments no authored situation covers.
+    Player GMs below SENIOR trust should use ``SetSituationAction``
+    (``setsituation``), where checks emerge from authored situations with pre-set
+    outcomes (ADR-0110).
+
     Two modes, discriminated by the ``target`` kwarg:
     - No ``target``: discovery/find mode. Optional ``query`` searches the catalog
       by name, stat+skill trait, or description snippet; omitted lists the head of
@@ -157,7 +163,7 @@ class InvokeCatalogCheckAction(Action):
     objectdb_target_kwargs: ClassVar[frozenset[str]] = frozenset({"target"})
 
     def get_prerequisites(self) -> list[Prerequisite]:
-        return [IsSceneGMPrerequisite()]
+        return [MinimumGMLevelPrerequisite(GMLevel.SENIOR)]
 
     def execute(
         self,
