@@ -1048,11 +1048,17 @@ class CGExplanationsSerializer:
 
 
 class HouseAspectOptionSerializer(serializers.ModelSerializer):
-    """One authored answer in an aspect catalog (#2079)."""
+    """One authored answer in an aspect catalog (#2079).
+
+    ``codex_entry_id`` (#2868) lets the CG option card link the option's lore
+    write-up — Inferna's House Quiddities each have one.
+    """
+
+    codex_entry_id = serializers.IntegerField(read_only=True, allow_null=True)
 
     class Meta:
         model = HouseAspectOption
-        fields = ["id", "name", "description"]
+        fields = ["id", "name", "description", "codex_entry_id"]
 
 
 class HouseAspectDefinitionSerializer(serializers.ModelSerializer):
