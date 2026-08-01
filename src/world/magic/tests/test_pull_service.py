@@ -5,7 +5,7 @@ from __future__ import annotations
 from decimal import Decimal
 
 from django.db import IntegrityError
-from django.test import TestCase
+from django.test import TestCase, override_settings
 
 from world.character_sheets.factories import CharacterSheetFactory
 from world.combat.factories import (
@@ -852,3 +852,82 @@ class SpendResonanceForPullInertEffectsTests(TestCase):
         )
         cr.refresh_from_db()
         assert cr.balance == before  # no charge-for-nothing
+
+
+class NonCombatCapabilityGrantPullTest(TestCase):
+    """Non-combat pulls with CAPABILITY_GRANT create condition + sidecar (#2840)."""
+
+    def setUp(self) -> None:
+        from world.conditions.factories import CapabilityTypeFactory
+
+        self.sheet = CharacterSheetFactory()
+        CharacterAnimaFactory(character=self.sheet, current=10, maximum=10)
+        self.resonance = ResonanceFactory()
+        CharacterResonanceFactory(
+            character_sheet=self.sheet,
+            resonance=self.resonance,
+            balance=10,
+            lifetime_earned=10,
+        )
+        self.cap = CapabilityTypeFactory()
+        ThreadPullCostFactory(tier=1, resonance_cost=2, anima_per_thread=1)
+        self.thread = ThreadFactory(owner=self.sheet, resonance=self.resonance, level=10)
+        ThreadPullEffectFactory(
+            target_kind=self.thread.target_kind,
+            resonance=self.resonance,
+            tier=0,
+            min_thread_level=0,
+            effect_kind=EffectKind.CAPABILITY_GRANT,
+            flat_bonus_amount=None,
+            capability_grant=self.cap,
+            capability_grant_value=1,
+        )
+
+    @override_settings(SEED_SAMPLE_CONTENT=True)
+    def test_non_combat_pull_applies_capability_grant_condition(self) -> None:
+        """spend_resonance_for_pull in non-combat context applies a Thread Surge condition."""
+        from world.conditions.models import ConditionInstance
+        from world.magic.factories import ensure_thread_surge_content
+
+        spend_resonance_for_pull(
+            self.sheet,
+            self.resonance,
+            tier=1,
+            threads=[self.thread],
+            action_context=PullActionContext(
+                combat_encounter=None,
+                involved_traits=(self.thread.target_trait_id,),
+            ),
+        )
+        # Thread Surge condition is active on the character
+        template = ensure_thread_surge_content()
+        instance = ConditionInstance.objects.get(
+            target=self.sheet.character,
+            condition=template,
+        )
+        self.assertGreater(instance.effective_severity, 0)
+
+    def test_combat_pull_does_not_apply_thread_surge(self) -> None:
+        """Combat pulls use CombatPullResolvedEffect, not the condition path."""
+        from world.conditions.models import ConditionInstance
+
+        ctx = _setup_combat_context(sheet=self.sheet)
+        pull_ctx = PullActionContext(
+            combat_encounter=ctx.combat_encounter,
+            participant=ctx.participant,
+            involved_traits=(self.thread.target_trait_id,),
+        )
+        spend_resonance_for_pull(
+            self.sheet,
+            self.resonance,
+            tier=1,
+            threads=[self.thread],
+            action_context=pull_ctx,
+        )
+        # No Thread Surge condition in combat
+        self.assertFalse(
+            ConditionInstance.objects.filter(
+                target=self.sheet.character,
+                condition__name="Thread Surge",
+            ).exists()
+        )

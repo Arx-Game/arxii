@@ -1851,6 +1851,53 @@ class DramaticMomentSuggestionFactory(factory.django.DjangoModelFactory):
     confirmed_tag = None
 
 
+THREAD_SURGE_NAME = "Thread Surge"
+
+
+def ensure_thread_surge_content() -> object:
+    """Idempotently seed the "Thread Surge" ConditionTemplate (#2840).
+
+    A SCENE-duration, non-stackable, dispellable condition that serves as the
+    lifecycle tracker for non-combat CAPABILITY_GRANT thread pulls. The
+    condition itself carries no ConditionCapabilityEffect rows — the frozen
+    per-pull values live on EphemeralPullCapabilityGrant sidecar rows FK'd to
+    the condition instance.
+
+    Self-contained: get-or-creates its own "Thread Surge" condition. Returns
+    ``None`` when the template isn't authored in the content repo and
+    ``SEED_SAMPLE_CONTENT`` is off (#2698) — ConditionTemplate is
+    content-repo-owned. Callers must handle ``None``.
+    """
+    from world.conditions.constants import DurationType
+    from world.conditions.models import ConditionCategory, ConditionTemplate
+    from world.seeds.sample_content import authored_or_sample
+
+    # ConditionCategory is content-repo-owned (#2698) — looked up rather than
+    # invented unless SEED_SAMPLE_CONTENT is on.
+    category = authored_or_sample(
+        ConditionCategory,
+        {
+            "description": "Transient magical surges from thread pulls.",
+            "is_negative": False,
+            "alters_behavior": False,
+            "display_order": 50,
+        },
+        name="Thread Surge",
+    )
+    return authored_or_sample(
+        ConditionTemplate,
+        {
+            "category": category,
+            "default_duration_type": DurationType.SCENE,
+            "default_duration_value": 0,
+            "is_stackable": False,
+            "can_be_dispelled": True,
+            "observer_description": "",
+        },
+        name=THREAD_SURGE_NAME,
+    )
+
+
 def ensure_dramatic_entrance_content() -> object:
     """Idempotently seed the "Grand Entrance" DramaticMomentType (#2183).
 

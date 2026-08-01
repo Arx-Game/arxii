@@ -943,6 +943,42 @@ A CombatPull is considered *active* while `round_number == encounter.round_numbe
 stale rows on round advance and invalidates the per-character
 `CharacterCombatPullHandler` cache.
 
+### Non-Combat Ephemeral Pull CAPABILITY_GRANT (#2840) [BUILT & WIRED]
+
+Non-combat (ephemeral) thread pulls that resolve a `CAPABILITY_GRANT` effect
+confer capabilities for the duration of the scene, using the standard condition
+capability path — the same `ConditionCapabilityEffect` → `get_capability_status`
+→ `get_effective_capability_value` path that any condition can use.
+
+**Mechanism:** when `spend_resonance_for_pull` runs in non-combat context and
+the resolved effects contain at least one `CAPABILITY_GRANT`, it calls
+`_apply_non_combat_capability_grants` (`world/magic/services/resonance.py`)
+which:
+1. Gets the "Thread Surge" `ConditionTemplate` (SCENE duration, non-stackable,
+   dispellable — seeded by `ensure_thread_surge_content()`).
+2. Ensures the template has a `ConditionCapabilityEffect(value=1,
+   scales_with_severity=True)` row for each capability being granted (idempotent
+   `get_or_create`).
+3. Applies the condition with `severity = MAX frozen curved value` across the
+   pull's CAPABILITY_GRANT effects. The oracle computes
+   `int(1 * effective_severity)` = the frozen value.
+
+This is fully generalized: the Thread Surge is just a condition that grants
+capabilities through the standard path. Any condition with
+`ConditionCapabilityEffect` rows can do the same — no custom oracle path, no
+sidecar model.
+
+**Known limitation:** all capabilities from one pull share the same severity
+(the MAX across effects). This is exact for the common case (one capability per
+pull) and a minor inaccuracy when a single pull grants multiple capabilities
+with different curved values.
+
+**Cleanup:** zero new code. `expire_scene_scoped_conditions` (called from
+`finish_scene_full`) already sweeps SCENE-duration conditions.
+
+**Dispel:** the Thread Surge condition has `can_be_dispelled=True`; a dispel
+technique can end the surge early via the existing `remove_condition` path.
+
 ### Target-Aware Pulls — Court Regard Modulation (#1831 — ADR-0086) [BUILT & WIRED]
 
 Thread pulls are **target-aware**: the live target the pull's action is directed at
