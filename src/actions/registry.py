@@ -381,7 +381,7 @@ from actions.definitions.signature import (
     SignatureListAction,
     SignatureSetAction,
 )
-from actions.definitions.situations import SetSituationAction
+from actions.definitions.situations import PlaceChallengeAction, SetSituationAction
 from actions.definitions.social import (
     blackmail,
     boon,
@@ -584,6 +584,7 @@ _ALL_ACTIONS: list[Action] = [
     GMPlaceInPositionAction(),
     SetTheStageAction(),
     SetSituationAction(),
+    PlaceChallengeAction(),
     PerformRitualAction(),
     AuthorTechniqueAction(),
     ImbueAction(),

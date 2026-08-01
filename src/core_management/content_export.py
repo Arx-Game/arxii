@@ -148,6 +148,13 @@ CONTENT_MODELS: frozenset[str] = frozenset(
         "flows.flowdefinition",
         "flows.flowstepdefinition",
         "flows.triggerdefinition",
+        # gm — the scenario catalog a GM browses when adapting authored content
+        # (#2127/#2865). Registered so a fresh install can ship a usable JUNIOR-GM
+        # catalog from the lore repo instead of per-server database state.
+        "gm.situationkind",
+        "gm.checktypesituationfit",
+        "gm.situationdifficultyguide",
+        "gm.consequencepoolguide",
         # items
         "items.itemtemplateproperty",
         # magic
@@ -189,6 +196,9 @@ CONTENT_MODELS: frozenset[str] = frozenset(
         "mechanics.prerequisite",
         "mechanics.property",
         "mechanics.propertycategory",
+        "mechanics.situationtemplate",
+        "mechanics.situationchallengelink",
+        "mechanics.situationtraplink",
         # missions
         "missions.missioncategory",
         "missions.missiontemplate",

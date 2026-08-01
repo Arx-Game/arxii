@@ -24,6 +24,17 @@ if TYPE_CHECKING:
 _TARGET_OBJECT_TYPECLASS = "typeclasses.objects.Object"
 
 
+def create_challenge_target_object(name: str) -> ObjectDB:
+    """Mint the bare prop that embodies a challenge in the world.
+
+    Shared by ``instantiate_situation`` (which names it from the authored
+    ``SituationChallengeLink.target_object_name``) and ``PlaceChallengeAction``
+    (which takes the name from the placing GM, #2865), so the two paths cannot
+    drift on typeclass.
+    """
+    return ObjectDB.objects.create(db_key=name, db_typeclass_path=_TARGET_OBJECT_TYPECLASS)
+
+
 def instantiate_situation(template: SituationTemplate, location: ObjectDB) -> SituationInstance:
     """Mint a SituationInstance at ``location`` and materialize its authored content.
 
@@ -54,10 +65,7 @@ def instantiate_situation(template: SituationTemplate, location: ObjectDB) -> Si
                 )
 
         for challenge_link in template.challenge_links.all():
-            target = ObjectDB.objects.create(
-                db_key=challenge_link.target_object_name,
-                db_typeclass_path=_TARGET_OBJECT_TYPECLASS,
-            )
+            target = create_challenge_target_object(challenge_link.target_object_name)
             instantiate_challenge(
                 challenge_link.challenge_template,
                 location=location,

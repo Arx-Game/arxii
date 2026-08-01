@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from django.db import IntegrityError
-from django.test import TestCase
+from django.test import TestCase, override_settings
 
 from world.checks.factories import CheckCategoryFactory, CheckTypeFactory
 from world.gm.constants import CatalogSuggestionProposalKind, GMLevel
@@ -132,7 +132,17 @@ class CatalogSuggestionModelTests(TestCase):
         assert refetched.situation_kind is None
 
 
+@override_settings(SEED_SAMPLE_CONTENT=True)
 class SeedCatalogStarterContentTests(TestCase):
+    """The sample-content path for the starter taxonomy.
+
+    ``gm.situationkind``/``gm.situationdifficultyguide`` are content-repo-owned
+    (``CONTENT_MODELS``, #2865), so the seeder only invents rows under
+    ``SEED_SAMPLE_CONTENT`` — this suite asserts on the sample set, so it opts in.
+    The default-off behavior (author it or get nothing) is covered by
+    :class:`SeedCatalogStarterContentWithoutSamplingTests` below.
+    """
+
     def test_creates_starter_kinds(self) -> None:
         kinds = seed_catalog_starter_content()
         assert set(kinds.keys()) == {"Chase", "Negotiation", "Infiltration"}
@@ -167,3 +177,34 @@ class SeedCatalogStarterContentTests(TestCase):
         assert SituationDifficultyGuide.objects.count() == first_guide_count
         for name, kind in second.items():
             assert kind.pk == first_pks[name]
+
+
+@override_settings(SEED_SAMPLE_CONTENT=False)
+class SeedCatalogStarterContentWithoutSamplingTests(TestCase):
+    """With sampling off, the seeder authors nothing (#2865, ADR-0168).
+
+    The taxonomy is content-repo-owned now, so a press against a database with
+    no authored catalog must leave the tables empty rather than invent rows that
+    would land in the next export indistinguishable from authored work.
+    """
+
+    def test_invents_nothing(self) -> None:
+        kinds = seed_catalog_starter_content()
+
+        assert kinds == {}
+        assert SituationKind.objects.count() == 0
+        assert SituationDifficultyGuide.objects.count() == 0
+
+    def test_authored_kind_is_reused_never_overwritten(self) -> None:
+        """An authored kind is found and returned as-is, not duplicated or rewritten."""
+        authored = SituationKindFactory(name="Chase", minimum_gm_level=GMLevel.SENIOR)
+
+        kinds = seed_catalog_starter_content()
+
+        assert set(kinds) == {"Chase"}
+        assert kinds["Chase"].pk == authored.pk
+        # The authored row wins: the sample's STARTING tier never overwrites it.
+        assert kinds["Chase"].minimum_gm_level == GMLevel.SENIOR
+        assert SituationKind.objects.count() == 1
+        # Its guides are content too, so they stay unauthored rather than sampled.
+        assert SituationDifficultyGuide.objects.count() == 0
