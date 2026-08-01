@@ -2057,23 +2057,47 @@ When `concealed` is False, `full`/`vague` are empty and the caller poses to the 
 room exactly as before #2710.
 
 **Resolution:**
-1. `_concealment_for(caster, cast_openly=)` reads `cast_concealment` off the caster's
-   current Path's `TechniqueStyle` (`world.progression.selectors
-   .current_path_for_character`). Returns 0 (overt — no query, no check, byte-identical
-   to pre-#2710 behavior) when the caster has no Path, the Path has no style, or
-   `cast_openly=True` (the caster's own one-way waiver).
+**Concealment hides attribution, not the event** (ADR-0187, #2734). Failing the
+detection roll does not delete the cast from your feed — you still see what happened,
+you just cannot say who did it. The tiers are a ladder of attribution:
+
+0. Two free short-circuits run first, before any query: `cast_openly=True` (the caster's
+   own one-way waiver) and a `SAME`-reach technique. Contact gives the actor away — you
+   have to be standing on someone to stab or touch them — so a melee working is
+   attributed no matter how subtly its caster works magic. This, not "is it magical", is
+   what makes a sword swing unconcealable.
+1. `_concealment_for(caster)` reads `cast_concealment` off the caster's current Path's
+   `TechniqueStyle` (`world.progression.selectors.current_path_for_character`). Returns 0
+   (overt — no check, byte-identical to pre-#2710 behavior) when the caster has no Path
+   or the Path has no style.
 2. When `cast_concealment > 0`, the caster is unconditionally added to `full` — a caster
    always knows what they just cast.
 3. `world.checks.models.CheckType.objects.filter(name=DETECT_CAST_CHECK_NAME,
-   is_active=True)` resolves the detection check. **Missing this row fails CLOSED**
-   (ADR-0033): the cast is concealed from everyone but the caster, logged as a warning,
-   rather than leaking to the whole room.
+   is_active=True)` resolves the detection check. **Missing this row fails CLOSED on
+   attribution** (ADR-0033): nobody can name the caster, logged as a warning — but a
+   perceptible working is still narrated to the room, since erasing every combat event
+   from every participant's feed is a different failure, not a safe default.
 4. Difficulty = `cast_concealment + level_opposition(check_type, level=<caster's path
    level>, character=caster)` (ADR-0166 — level is a two-sided check term).
 5. Every character co-located with the caster (excluding the caster) rolls
    `perform_check(observer, check_type, target_difficulty=difficulty)`:
    `success_level >= CAST_DETECTION_ATTRIBUTION_LEVEL` (2) → `full` (sees who cast what);
-   `== 1` → `vague` (perceives *something* happened, not by whom); `<= 0` → nothing.
+   `== 1` → `vague` (sees the effect and knows it was *a working*, not by whom);
+   `<= 0` → `effect_only` (sees the effect, with no sense that magic was involved).
+6. **`Technique.has_perceptible_effect`** (BooleanField, default `True`) is the one thing
+   that still vanishes outright. A working that leaves nothing to perceive — a silent
+   binding, a curse laid at a distance — leaves `effect_only` empty, and the pre-#2734
+   hide-entirely behaviour holds for it alone. The default is `True` because almost any
+   applied condition produces something a bystander would see.
+
+No observer receives more than one pose, and no tier is told strictly less than a tier
+that rolled worse — the `vague` line folds the effect in rather than replacing it.
+`render_unattributed_action_narration` / `render_unattributed_cast_narration` build the
+unattributed line, and deliberately carry **none** of the attributed line's suffix
+clauses: the signature clause is the caster's personal flourish (#1728) and the single
+strongest attribution tell there is, the power clause names "the working"/"the ward"
+(telling an `effect_only` observer that magic was involved), and the synergy clause
+narrates condition interplay that reads as authored magic.
 
 **The `PERCEIVED_ONLY` privacy tier** (`world.scenes.constants.InteractionVisibility`)
 is how the resolved audience is persisted. It sits between `DEFAULT` and `VERY_PRIVATE`:
@@ -2083,10 +2107,12 @@ read guarantee only (`InteractionQuerySet.visible_to`'s `gm_visible` branch); a 
 GM is denied on the REST object-access permission (`CanViewInteraction`) and the
 reaction-witness gate (`can_view_interaction`), both staff-only. `VERY_PRIVATE` is
 stricter and admits no exception, staff included; the two tiers are deliberately not
-interchangeable (ADR-0170). `world.scenes.cast_services.create_cast_outcome_pose` writes up to two
-Narrator OUTCOME poses when concealed — a `full`-tier pose (receivers = `audience.full`)
-and, only if `audience.vague` is non-empty, a second attribution-free `vague`-tier pose
-(no `target_personas`, so the vague line cannot leak who was targeted either).
+interchangeable (ADR-0170). `world.scenes.cast_services.create_cast_outcome_pose` writes up to three
+Narrator OUTCOME poses when concealed — one per non-empty tier, each with that tier's
+personas as receivers. Only the `full` pose carries `target_personas`: that FK drives
+"this pose is about you" surfacing, and naming the target alongside an unattributed line
+re-opens the attribution the lower tiers exist to withhold. It returns the attributed
+pose, the one the caller wires to `SceneActionRequest.result_interaction`.
 `_resolve_and_pose_cast` additionally sets the caster's own ACTION-mode Interaction to
 `PERCEIVED_ONLY` with receivers = `audience.full` — concealing only the OUTCOME pose
 would still show every bystander "Ilyra — Whisper of Binding" in the scene log via the
@@ -2138,21 +2164,21 @@ The seam is `world.combat.services._record_and_broadcast_pc_action` — the sing
 that poses a resolved focused action — **not** `broadcast_action_outcome`, which has
 ~15 callers (flee outcomes, encounter-end lines, clash resolution, covenant
 insight/weakness) and must stay unconditional for all of them. It instead takes an
-optional `audience` kwarg; `None` (every non-cast caller) keeps the room-wide broadcast
-byte-identical. Concealed, it poses `PERCEIVED_ONLY` to `audience.full` and emits a
-second unattributed line to `audience.vague`, delivering live via `_send_to_objects`
-rather than `_broadcast_to_location` so the WebSocket matches the persisted receiver
-rows. The ACTION row (whose content is the technique name) is concealed through the
-shared `conceal_action_interaction`, which moved from `scenes/cast_services.py` to
-`world.magic.services.cast_observation` so both paths use one implementation.
+optional `audience` kwarg plus an `unattributed_narration` string; `None`/`""` (every
+non-cast caller) keeps the room-wide broadcast byte-identical. Concealed, it fans the
+outcome out as one `PERCEIVED_ONLY` pose per non-empty tier, delivering live via
+`_send_to_objects` rather than `_broadcast_to_location` so the WebSocket matches the
+persisted receiver rows. The ACTION row (whose content is the technique name) is
+concealed through the shared `conceal_action_interaction`, which moved from
+`scenes/cast_services.py` to `world.magic.services.cast_observation` so both paths use
+one implementation.
 
-**Only magical casts are concealed.** `Technique.gift` is non-null, so a martial
-maneuver still hangs off a `Gift`; `Gift.is_magical` is what separates a working from a
-sword swing. A Path of Whispers adept's blade is plainly visible, and a mundane
-technique short-circuits before any query or detection check. Note this axis is
-orthogonal to both `GiftKind` (MAJOR/MINOR is about *acquisition*; both are magical) and
-`Technique.action_category` — Charm is SOCIAL and magical, Defend is PHYSICAL and
-mundane — which is why it needs its own field rather than being inferred.
+**Combat is why the model is an attribution ladder rather than an existence dial.** It is
+the one place where hiding the pose erases something the player has no other way to
+learn: vitals are viewer-scoped (`world/combat/serializers.py`'s `_can_view_vitals`) and
+no damage path emits a separate "you take N damage" message, so the OUTCOME pose is the
+only channel. Under the pre-#2734 model a concealed working could wound, knock out or
+drop a PC whose feed showed an empty round and a health bar that silently moved.
 
 There is **no `cast_openly` equivalent in combat**: `cast_openly` is a
 `SceneActionRequest` field and `CombatRoundAction` has none, so a combat cast always

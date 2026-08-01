@@ -399,11 +399,11 @@ cast time, not a boolean on the Technique or the Interaction.
 - `TechniqueStyle.cast_concealment` (`PositiveSmallIntegerField`, default 0) — the
   style's difficulty floor for being noticed while casting. 0 = overt; every existing
   style defaults to 0, so nothing changes until content authors a non-zero value.
-- `resolve_cast_audience(*, caster, cast_openly=False) -> CastAudience`
+- `resolve_cast_audience(*, caster, technique, cast_openly=False) -> CastAudience`
   (`world/magic/services/cast_observation.py`) — per co-located observer, rolls the
   detection `CheckType` against `cast_concealment + level_opposition(caster)` (ADR-0166)
-  and sorts into full attribution / vague unattributed / nothing. Fails CLOSED
-  (ADR-0033) when the detection `CheckType` is unauthored.
+  and sorts into full attribution / vague unattributed / effect-only. Fails CLOSED
+  (ADR-0033) on attribution when the detection `CheckType` is unauthored.
 - `InteractionVisibility.PERCEIVED_ONLY` — the new privacy tier the resolved audience is
   materialised into (writer + `InteractionReceiver` rows + staff + scene GM), sitting
   between `DEFAULT` and the stricter, no-exception `VERY_PRIVATE`.
@@ -419,17 +419,56 @@ cast time, not a boolean on the Technique or the Interaction.
   section.
 
 **Explicitly deferred — not a gap, a scope boundary:**
-- **Combat casts are not covered.** `world.combat.interaction_services
-  .broadcast_action_outcome` still persists and broadcasts every combat OUTCOME pose
-  room-wide, unconditionally. A Subtle-style caster's technique casts overtly the
-  instant it lands in combat. Bringing combat casts under the same concealment model is
-  future work, not filed as a gap here — it needs its own design pass (combat has its
-  own broadcast/round machinery this feature never touched).
 - **Ships inert until content authors it.** The detection `CheckType`
   (`DETECT_CAST_CHECK_NAME`, `"Perception"`), a `CheckTypeCapabilityModifier` row
   bridging a magic-detection capability into that check, and per-style
   `cast_concealment` values are all lore-repo content — arxii authors no seed data for
   any of them.
+
+---
+
+## Cast concealment hides attribution, not the event (#2734 — BUILT, 2026-08-01)
+
+Extending #2710's seam into combat exposed the model as wrong, not merely incomplete.
+Concealment was an *existence* dial: failing detection deleted the cast from your feed.
+In combat that meant a concealed working could wound, knock out or drop a PC whose feed
+showed an empty round and a health bar that silently moved — vitals are viewer-scoped and
+no damage path emits its own message, so the OUTCOME pose is the only channel that tells
+a player what happened to them.
+
+It is now an attribution ladder. A concealed cast is a sniper shot: the room may not know
+where it came from, but nobody's head explodes in secret.
+
+**Built:**
+- `CastAudience.effect_only` — the third tier, reading the effect with no sense that
+  magic was involved. `vague` folds the effect line in too, so no tier is told strictly
+  less than one that rolled worse, and no observer ever receives two poses.
+- `Technique.has_perceptible_effect` (BooleanField, default `True`) — the only case that
+  still hides outright: a working that leaves nothing to perceive. Default `True`
+  because almost any applied condition produces something a bystander would see.
+- `resolve_cast_audience` takes the technique and short-circuits to unconcealed, with no
+  query and no roll, for a `SAME`-reach technique. Contact gives the actor away — this,
+  not "is it magical", is what makes a sword swing unconcealable.
+- `render_unattributed_action_narration` / `render_unattributed_cast_narration` — the
+  effect without the actor, carrying none of the attributed line's signature, power or
+  synergy suffix clauses (each leaks exactly what the lower tiers withhold).
+- Combat wired at `_record_and_broadcast_pc_action`, **not** `broadcast_action_outcome`
+  (~15 non-cast callers: flee, encounter-end, clash, challenge, covenant insight); that
+  function takes optional `audience` + `unattributed_narration`, and the defaults keep
+  every existing caller byte-identical.
+- A fourth read surface closed: `ActionOutcomeDetailsView` gated on
+  `can_view_encounter_effects` — *encounter*-level, which answers "may you see effects in
+  this fight" but not "did you perceive THIS act" — so a concealed cast's effect rows
+  were readable by anyone in the encounter who passed its interaction id. Now filtered
+  through `Interaction.objects.visible_to`.
+- Fail-closed now fails closed on **attribution only**: unauthored detection content can
+  no longer silently erase combat events from every participant's feed.
+- `Gift.is_magical` (added in the first cut of this issue) was dropped — every Gift is
+  magical by definition. Full record: ADR-0187.
+
+**Known wart, not addressed here:** `world/combat/defend_content.py` seeds a `Gift`
+purely as a container for combat stances, because `Technique.gift` is non-null and
+techniques need somewhere to hang. Making that FK nullable is its own change.
 
 ---
 
