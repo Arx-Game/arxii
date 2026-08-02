@@ -30,7 +30,15 @@ class OutcomeDisplay:
 
 @dataclass
 class CheckResult:
-    """Result from a check resolution. No roll numbers exposed."""
+    """Result from a check resolution.
+
+    ``effective_roll`` (the clamped d100 after rollmod) is carried for
+    server-side magnitude seams — crafting's quality-luck term (#2886) reads
+    it so the SAME roll that picked the outcome band also sets how far above
+    or below par the result lands. It is never player-serialized; 0 means
+    "no roll happened" (forced test outcomes, defaulted duck-types) and
+    contributes no luck.
+    """
 
     check_type: CheckType
     outcome: CheckOutcome | None
@@ -44,6 +52,7 @@ class CheckResult:
     specialization_points: int = 0  # #1688 — points from owned specializations (stat+skill+spec)
     capability_points: int = 0  # #2505 — weighted authored CheckTypeCapabilityModifier points
     level_points: int = 0  # #2707 — LEVEL_POINTS_PER_LEVEL x class level, on every check
+    effective_roll: int = 0  # #2886 — the clamped d100; 0 = no roll (forced/duck-typed)
 
     @property
     def outcome_name(self) -> str:

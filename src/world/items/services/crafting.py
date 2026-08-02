@@ -26,13 +26,27 @@ if TYPE_CHECKING:
 
 
 def compute_quality_score(check_result: CheckResult, *, step: int, min_success_level: int) -> int:
-    """Quality score = total_points + (success_level - min_success_level) * step.
+    """Quality score = total_points + graded bonus + the roll's luck (#2886).
 
-    Reads only ``total_points`` and ``success_level`` off the CheckResult.
-    The graded outcome shifts the score above the crafter's raw skill points.
+    The graded outcome shifts the score above the crafter's raw skill points,
+    and the SAME d100 that picked the band adds a luck spread
+    (``(effective_roll − offset) ÷ divisor``, ≈ −9…+11) — a deterministic
+    result every craft is unsatisfying, and refinement exists precisely to
+    grind away a cold roll (Apostate's ruling, 2026-08-02). ``effective_roll``
+    of 0 (forced test outcomes) contributes no luck.
     """
+    from world.items.crafting.constants import (  # noqa: PLC0415
+        QUALITY_LUCK_DIVISOR,
+        QUALITY_LUCK_OFFSET,
+    )
+
     bonus = max(0, check_result.success_level - min_success_level) * step
-    return check_result.total_points + bonus
+    luck = (
+        (check_result.effective_roll - QUALITY_LUCK_OFFSET) // QUALITY_LUCK_DIVISOR
+        if check_result.effective_roll
+        else 0
+    )
+    return check_result.total_points + bonus + luck
 
 
 def craft_attach_facet(

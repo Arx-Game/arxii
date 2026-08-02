@@ -57,6 +57,18 @@ ACCENT_DIFFICULTY_STEP: int = 5
 #: 15-29 realizes level 1, 30-44 level 2, … PLACEHOLDER tuning.
 ACCENT_SCORE_PER_LEVEL: int = 15
 
+#: Quality-luck spread (#2886): the craft's own d100 feeds the score as
+#: ``(effective_roll − offset) ÷ divisor`` ≈ −9…+11 — a hot roll punches a
+#: band or two above par, a cold success under-delivers (refinement grinds
+#: it away). PLACEHOLDER tuning.
+QUALITY_LUCK_OFFSET: int = 45
+QUALITY_LUCK_DIVISOR: int = 5
+
+#: Each thread woven into the crafting skill adds this to the craft AND
+#: accent checks (#2886) — threads are an edge on the roll, not just the
+#: ceiling. PLACEHOLDER tuning.
+THREAD_CRAFT_CHECK_BONUS: int = 10
+
 #: Refinement (#2878, guaranteed long road): the progress threshold to raise a
 #: piece one rung is ``max(1, item value × target rung // 100)`` — money
 #: contributions convert at the projects app's 1 progress per 100 coppers, so

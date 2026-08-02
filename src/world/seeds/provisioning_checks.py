@@ -72,7 +72,18 @@ _QUALITY_TIERS = (
 #: The 3-row placeholder ladder this 12-rung ladder replaces; deleted on seed.
 _LEGACY_TIER_NAMES = ("Common", "Masterwork")
 # (min skill value, tier name) — the cook's skill caps output quality.
-_SKILL_CAP_LADDER = ((0, "Average"), (40, "Fine"), (80, "Perfect"))
+# Retuned for the 12-rung ladder (#2886): caps sit ~1-2 rungs above a
+# crafter's typical score so a hot roll can genuinely punch upward (the
+# "wow" outcome, Apostate's ruling 2026-08-02) while a novice with great
+# materials still squanders them. Trait values are the internal ×10 scale
+# (player-facing 3.0 = 30). PLACEHOLDER tuning.
+_SKILL_CAP_LADDER = (
+    (0, "Well-Crafted"),
+    (20, "Fine"),
+    (30, "Exceptional"),
+    (40, "Superb"),
+    (55, "Perfect"),
+)
 
 # The benefit-only Accent ladder (#2878): 7 adverbs, thread-gated past
 # BASE_MAX_ACCENT_LEVEL. Content lands in the Accents phase; the ladder is

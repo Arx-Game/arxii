@@ -160,3 +160,51 @@ class RecycleTests(TestCase):
         with self.assertRaises(RecycleNeedsGMApproval):
             recycle_item(item_instance=self.item, actor_sheet=self.sheet)
         self.assertEqual(RecycleRequest.objects.get(pk=request.pk).status, "denied")
+
+
+class QualityLuckTests(TestCase):
+    """The craft's own d100 spreads the quality score (#2886)."""
+
+    def test_hot_and_cold_rolls_shift_the_score(self) -> None:
+        from types import SimpleNamespace
+
+        from world.items.services.crafting import compute_quality_score
+
+        hot = SimpleNamespace(total_points=50, success_level=1, effective_roll=100)
+        cold = SimpleNamespace(total_points=50, success_level=1, effective_roll=1)
+        par = SimpleNamespace(total_points=50, success_level=1, effective_roll=45)
+        base = compute_quality_score(par, step=10, min_success_level=1)
+        self.assertEqual(base, 50)
+        self.assertEqual(compute_quality_score(hot, step=10, min_success_level=1), 61)
+        self.assertEqual(compute_quality_score(cold, step=10, min_success_level=1), 41)
+
+    def test_no_roll_means_no_luck(self) -> None:
+        from types import SimpleNamespace
+
+        from world.items.services.crafting import compute_quality_score
+
+        forced = SimpleNamespace(total_points=50, success_level=1, effective_roll=0)
+        self.assertEqual(compute_quality_score(forced, step=10, min_success_level=1), 50)
+
+
+class ThreadCheckEdgeTests(TestCase):
+    """Woven threads add to the craft roll, not just the ceiling (#2886)."""
+
+    def test_thread_contribution_built_per_thread(self) -> None:
+        from world.items.crafting.services import _thread_check_contributions
+        from world.items.factories import wire_enchanting_crafting
+        from world.magic.factories import ThreadFactory
+
+        recipe = wire_enchanting_crafting(base_difficulty=0)
+        sheet = CharacterSheetFactory()
+        self.assertEqual(_thread_check_contributions(sheet.character, recipe), [])
+        ThreadFactory(owner=sheet, target_trait=recipe.skill_trait)
+        ThreadFactory(
+            owner=sheet,
+            target_trait=recipe.skill_trait,
+            resonance__name="SecondResonance",
+        )
+        contribs = _thread_check_contributions(sheet.character, recipe)
+        self.assertEqual(len(contribs), 1)
+        self.assertEqual(contribs[0].value, 20)
+        self.assertEqual(contribs[0].source_label, "Woven threads")

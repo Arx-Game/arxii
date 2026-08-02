@@ -490,6 +490,31 @@ def _accent_rung_for_score(score: int, *, cap: int) -> object | None:
     return AccentLevel.objects.filter(level__lte=rung).order_by("-level").first()
 
 
+def _thread_check_contributions(crafter_character: ObjectDB, recipe: CraftingRecipe) -> list:
+    """Woven threads are an edge on the roll, not just the ceiling (#2886).
+
+    ``THREAD_CRAFT_CHECK_BONUS`` per active TRAIT thread on the recipe's
+    skill, delivered as a CHARACTER contribution on the craft AND accent
+    checks — the Gifted artisan's hands are simply better, exactly as the
+    thread caps already say their ceiling is higher.
+    """
+    from world.checks.constants import ModifierSourceKind  # noqa: PLC0415
+    from world.checks.types import ModifierContribution  # noqa: PLC0415
+    from world.items.crafting.constants import THREAD_CRAFT_CHECK_BONUS  # noqa: PLC0415
+    from world.items.crafting.quality import thread_count_for_skill  # noqa: PLC0415
+
+    threads = thread_count_for_skill(crafter_character, recipe.skill_trait)
+    if threads <= 0:
+        return []
+    return [
+        ModifierContribution(
+            source_kind=ModifierSourceKind.CHARACTER,
+            source_label="Woven threads",
+            value=threads * THREAD_CRAFT_CHECK_BONUS,
+        )
+    ]
+
+
 def _resolve_accents(
     *,
     recipe: CraftingRecipe,
@@ -511,9 +536,15 @@ def _resolve_accents(
     from world.items.services.crafting import compute_quality_score  # noqa: PLC0415
 
     cap = BASE_MAX_ACCENT_LEVEL + thread_count_for_skill(crafter_character, recipe.skill_trait)
+    thread_contribs = _thread_check_contributions(crafter_character, recipe)
     realized: list[ItemAccent] = []
     for target in accent_targets:
-        result = perform_check_with_modifiers(crafter_character, recipe.check_type, difficulty)
+        result = perform_check_with_modifiers(
+            crafter_character,
+            recipe.check_type,
+            difficulty,
+            extra_contributions=thread_contribs or None,
+        )
         if result.success_level < recipe.min_success_level:
             continue
         score = compute_quality_score(
@@ -679,8 +710,14 @@ def run_crafting_recipe(  # noqa: PLR0913
         crafter_character_sheet=crafter_sheet,
     )
 
-    # --- 5. Roll (accent-raised difficulty, #2878) ---
-    check_result = perform_check_with_modifiers(crafter_character, recipe.check_type, difficulty)
+    # --- 5. Roll (accent-raised difficulty #2878; thread edge #2886) ---
+    thread_contribs = _thread_check_contributions(crafter_character, recipe)
+    check_result = perform_check_with_modifiers(
+        crafter_character,
+        recipe.check_type,
+        difficulty,
+        extra_contributions=thread_contribs or None,
+    )
 
     # --- 6. Station wear (#1234) — unconditional, regardless of roll outcome ---
     _apply_station_wear(station)
