@@ -274,6 +274,17 @@ non-`redirect` protective flavor (`world.magic.services.targeting.protective_fla
 instead rolls the guardian's own cast check and pays anima, not fatigue (ADR-0118). The
 combat per-app glossary has the full entry. _Avoid_: guardian ward, protect action.
 
+**Sustained Action** (#2705, ADR-0190):
+The PC-side mirror of the combat per-app glossary's Wind-up entry: a `SustainedAction`
+row commits a PC to a multi-round technique wind-up or a ritual conducted under fire,
+declared once and matured later — Concentration is rolled ONCE at declaration to set an
+`absorption_budget` (clamped `2 + success_level`), and a held commitment resolves at full
+effect or fizzles entirely (no damage ramp, unlike the NPC-side wind-up). Spans both
+`world.combat` (the model + round seam) and `world.magic` (the deferred-ritual dispatch);
+full entries: [combat AGENT_GLOSSARY](src/world/combat/AGENT_GLOSSARY.md),
+`docs/systems/magic.md`'s "Sustained rituals" section. _Avoid_: channeled action, casting
+time.
+
 **Rampart** (#2209, epic #2040 decision 3):
 A projected living barrier covering a `Position` — one shared `integrity` pool, an
 authored elemental profile (Stone/Wind/Fire/Thorn), map-rendered crack state. Owned by

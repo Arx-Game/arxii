@@ -16,6 +16,7 @@ from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any, ClassVar
 
 from actions.base import Action
+from actions.definitions.gm_shift import resolve_band_shift
 from actions.prerequisites import IsSceneGMPrerequisite, MinimumGMLevelPrerequisite, Prerequisite
 from actions.types import ActionContext, ActionResult, TargetType
 from commands.exceptions import CommandError
@@ -27,11 +28,6 @@ if TYPE_CHECKING:
     from evennia.objects.models import ObjectDB
 
     from world.checks.models import CheckType
-
-# Ascending TRIVIAL..HARROWING order -- DIFFICULTY_VALUES is authored in this order
-# and dicts preserve insertion order, so this is the single source of truth for
-# "one band up/down" shifts (Decision 3: at most one band, never an integer offset).
-_DIFFICULTY_ORDER: tuple[str, ...] = tuple(DIFFICULTY_VALUES.keys())
 
 _CATALOG_HINT = "No such check -- try `gm check find <term>`."
 _FIND_RESULT_LIMIT = 15
@@ -86,43 +82,6 @@ def _search_catalog(query: str) -> list[CheckType]:
     return list(
         qs.order_by("category__display_order", "display_order", "name")[:_FIND_RESULT_LIMIT]
     )
-
-
-def _shift_band(band: str, *, easier: bool) -> str | None:
-    """Shift *band* exactly one step toward TRIVIAL (easier) or HARROWING (harder).
-
-    Returns ``None`` when the shift would go out of bounds -- callers must refuse
-    rather than clamp (Decision 3).
-    """
-    index = _DIFFICULTY_ORDER.index(band)
-    new_index = index - 1 if easier else index + 1
-    if new_index < 0 or new_index >= len(_DIFFICULTY_ORDER):
-        return None
-    return _DIFFICULTY_ORDER[new_index]
-
-
-def _resolve_shift(
-    difficulty: str, edge_reason: str, setback_reason: str
-) -> tuple[str, str] | ActionResult:
-    """Return ``(effective_band, shift_note)`` for *difficulty*, or a failure result.
-
-    Extracted from ``InvokeCatalogCheckAction._invoke`` to keep its own
-    return-statement count low (PLR0911) -- mirrors the
-    ``_resolve_add_opponent_inputs`` pattern in ``gm_combat.py``.
-    """
-    if edge_reason and setback_reason:
-        return ActionResult(success=False, message="Shift with edge or setback, not both.")
-    if edge_reason:
-        shifted = _shift_band(difficulty, easier=True)
-        if shifted is None:
-            return ActionResult(success=False, message="Already at the easiest band.")
-        return shifted, f" [edge -> {DifficultyChoice(shifted).label}: {edge_reason}]"
-    if setback_reason:
-        shifted = _shift_band(difficulty, easier=False)
-        if shifted is None:
-            return ActionResult(success=False, message="Already at the hardest band.")
-        return shifted, f" [setback -> {DifficultyChoice(shifted).label}: {setback_reason}]"
-    return difficulty, ""
 
 
 @dataclass
@@ -214,7 +173,7 @@ class InvokeCatalogCheckAction(Action):
         edge_reason = str(kwargs.get("edge_reason") or "").strip()
         setback_reason = str(kwargs.get("setback_reason") or "").strip()
 
-        shift_result = _resolve_shift(difficulty, edge_reason, setback_reason)
+        shift_result = resolve_band_shift(difficulty, edge_reason, setback_reason)
         if isinstance(shift_result, ActionResult):
             return shift_result
         effective_band, shift_note = shift_result

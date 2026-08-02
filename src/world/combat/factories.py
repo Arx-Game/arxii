@@ -30,6 +30,7 @@ from world.combat.constants import (
     RiskLevel,
     SelectionType,
     StakesLevel,
+    SustainedKind,
     TargetingMode,
     TargetSelection,
 )
@@ -64,12 +65,14 @@ from world.combat.models import (
     RiskScalingModifier,
     StakesLevelRequirement,
     StrainConfig,
+    SustainedAction,
     ThreatPool,
     ThreatPoolEntry,
     ThreatRecord,
 )
 from world.gm.constants import GMLevel
 from world.magic.constants import EffectKind
+from world.magic.factories import TechniqueFactory
 
 # Factory-path string for the CharacterSheet sub-factory, referenced by
 # multiple factories below. Centralized to avoid the duplicated-literal
@@ -369,6 +372,22 @@ class PendingOpponentAttackFactory(factory_django.DjangoModelFactory):
     declared_round = 1
     resolves_round = 2
     called_out = False
+
+
+class SustainedActionFactory(factory_django.DjangoModelFactory):
+    """Factory for SustainedAction (#2705)."""
+
+    class Meta:
+        model = SustainedAction
+
+    encounter = factory.SubFactory(CombatEncounterFactory)
+    participant = factory.SubFactory(CombatParticipantFactory)
+    sustained_kind = SustainedKind.TECHNIQUE
+    technique = factory.SubFactory(TechniqueFactory)
+    ritual = None
+    declared_round = 1
+    resolves_round = 2
+    absorption_budget = 3
 
 
 # =============================================================================

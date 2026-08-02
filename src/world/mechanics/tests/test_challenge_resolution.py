@@ -3,6 +3,7 @@
 from typing import cast
 from unittest.mock import MagicMock, patch
 
+from django.db.utils import IntegrityError
 from django.test import TestCase
 from evennia.objects.models import ObjectDB
 
@@ -32,6 +33,11 @@ from world.mechanics.types import (
     CapabilitySource,
     ChallengeResolutionError,
     ChallengeResolutionResult,
+)
+from world.scenes.action_constants import (
+    DIFFICULTY_BAND_STEP,
+    DIFFICULTY_VALUES,
+    DifficultyChoice,
 )
 from world.traits.factories import CheckOutcomeFactory
 
@@ -851,3 +857,99 @@ class InstantiateChallengeTests(TestCase):
         second = instantiate_challenge(template, location=room, target_object=room)
 
         self.assertNotEqual(first.pk, second.pk)
+
+    def test_discoverable_template_mints_unrevealed(self):
+        """is_revealed follows the authored discovery_type (#2865).
+
+        It used to be hardcoded True, which silently defeated DISCOVERABLE on
+        every template minted through this path.
+        """
+        from evennia_extensions.factories import ObjectDBFactory
+        from world.mechanics.constants import DiscoveryType
+
+        template = ChallengeTemplateFactory(discovery_type=DiscoveryType.DISCOVERABLE)
+        room = ObjectDBFactory()
+
+        instance = instantiate_challenge(template, location=room, target_object=room)
+
+        self.assertFalse(instance.is_revealed)
+
+
+class EffectiveSeverityTests(TestCase):
+    """A GM's per-instance band shift is what resolution rolls against (#2865)."""
+
+    @classmethod
+    def setUpTestData(cls) -> None:
+        cls.character = CharacterSheetFactory(character__db_key="AdjustedChar").character
+        cls.location = ObjectDBFactory(db_key="AdjustedRoom")
+        cls.capability = CapabilityTypeFactory(name="pry_adjusted")
+        cls.prop = PropertyFactory(name="barred_adjusted")
+        cls.application = ApplicationFactory(
+            name="PryAdjusted",
+            capability=cls.capability,
+            target_property=cls.prop,
+        )
+        cls.template = ChallengeTemplateFactory(
+            name="Adjusted Gate",
+            severity=DIFFICULTY_VALUES[DifficultyChoice.NORMAL],
+        )
+        cls.approach = ChallengeApproachFactory(
+            challenge_template=cls.template,
+            application=cls.application,
+            display_name="Pry it open",
+        )
+        cls.source = _make_source(
+            capability_name="pry_adjusted",
+            capability_id=cls.capability.id,
+        )
+
+    def _instance(self, **overrides) -> ChallengeInstance:
+        return ChallengeInstance.objects.create(
+            template=self.template,
+            location=self.location,
+            target_object=self.location,
+            **overrides,
+        )
+
+    def test_effective_severity_defaults_to_the_authored_value(self) -> None:
+        instance = self._instance()
+
+        assert instance.severity_adjustment == 0
+        assert instance.effective_severity == DIFFICULTY_VALUES[DifficultyChoice.NORMAL]
+
+    def test_effective_severity_folds_in_a_setback(self) -> None:
+        instance = self._instance(
+            severity_adjustment=DIFFICULTY_BAND_STEP,
+            adjustment_reason="braced from the far side",
+        )
+
+        assert instance.effective_severity == DIFFICULTY_VALUES[DifficultyChoice.HARD]
+
+    def test_resolution_rolls_against_the_adjusted_difficulty(self) -> None:
+        """resolve_challenge reads effective_severity, not template.severity."""
+        from world.mechanics.challenge_resolution import resolve_challenge
+
+        instance = self._instance(
+            severity_adjustment=DIFFICULTY_BAND_STEP,
+            adjustment_reason="braced from the far side",
+        )
+
+        with patch(
+            "world.mechanics.challenge_resolution.perform_check",
+            return_value=MagicMock(outcome=CheckOutcomeFactory(name="AdjOutcome")),
+        ) as spy:
+            resolve_challenge(self.character, instance, self.approach, self.source)
+
+        assert spy.call_args.kwargs["target_difficulty"] == DIFFICULTY_VALUES[DifficultyChoice.HARD]
+
+    def test_adjustment_without_a_reason_is_rejected_by_the_database(self) -> None:
+        with self.assertRaises(IntegrityError):
+            self._instance(severity_adjustment=DIFFICULTY_BAND_STEP)
+
+    def test_arbitrary_offset_is_rejected_by_the_database(self) -> None:
+        """Exactly one band either way -- never a freehand number."""
+        with self.assertRaises(IntegrityError):
+            self._instance(
+                severity_adjustment=DIFFICULTY_BAND_STEP + 1,
+                adjustment_reason="a little bit harder",
+            )

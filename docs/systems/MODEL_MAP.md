@@ -2114,6 +2114,7 @@
   - opponents <- combat.CombatOpponent
   - participants <- combat.CombatParticipant
   - pending_opponent_attacks <- combat.PendingOpponentAttack
+  - sustained_actions <- combat.SustainedAction
   - combat_pulls <- combat.CombatPull
   - challenge_declarations <- combat.RoundChallengeDeclaration
   - clashes <- combat.Clash
@@ -2217,6 +2218,7 @@
   - mirror_surface <- combat.CombatOpponent
   - round_actions <- combat.CombatRoundAction
   - incoming_attacks <- combat.CombatOpponentAction
+  - sustained_actions <- combat.SustainedAction
   - combat_pulls <- combat.CombatPull
   - challenge_declarations <- combat.RoundChallengeDeclaration
   - break_contributions <- combat.BreakBarContribution
@@ -2271,6 +2273,15 @@
   - opponent -> combat.CombatOpponent [FK]
   - threat_entry -> combat.ThreatPoolEntry [FK]
   - target -> combat.CombatParticipant [FK] (nullable)
+
+### SustainedAction
+**Foreign Keys:**
+  - encounter -> combat.CombatEncounter [FK]
+  - participant -> combat.CombatParticipant [FK]
+  - ritual -> magic.Ritual [FK] (nullable)
+  - technique -> magic.Technique [FK] (nullable)
+  - declared_action -> combat.CombatRoundAction [FK] (nullable)
+  - outcome_snapshot -> traits.CheckOutcome [FK] (nullable)
 
 ### CombatPull
 **Foreign Keys:**
@@ -2502,6 +2513,7 @@
 - `end_encounter(encounter: 'CombatEncounter') -> 'CombatEncounter' — GM force-end: completes as ABANDONED (#876 §8).`
 - `expire_pulls_for_round(encounter: 'CombatEncounter') -> 'None' — Delete all CombatPull rows from prior rounds and recompute affected max_health.`
 - `get_clash_config() -> 'ClashConfig' — Get-or-create the ClashConfig singleton (pk=1).`
+- `get_concentration_check_type() -> 'CheckType' — Return the seeded 'Concentration' CheckType rolled at sustained-action`
 - `get_fatigue_penalty(character_sheet: 'CharacterSheet', category: 'str') -> 'int' — Return the check penalty for the current fatigue zone.`
 - `get_flee_config() -> 'FleeConfig' — Return the seeded FleeConfig singleton (#878).`
 - `get_or_create_threat_record(encounter: 'CombatEncounter', opponent: 'CombatOpponent', participant: 'CombatParticipant') -> 'ThreatRecord' — Get or create the ThreatRecord for an (opponent, participant) pairing (#2020).`
@@ -2518,18 +2530,21 @@
 - `maybe_resolve_on_ready(encounter: 'CombatEncounter') -> 'RoundResolutionResult | None' — Resolve the round early when every ACTIVE participant is ready (#2120).`
 - `minimum_break_bar_threshold() -> 'int' — Pacing floor for a boss's break-bar threshold (#2642, batch-3 F-7a).`
 - `perform_check(character: 'ObjectDB', check_type: 'CheckType', target_difficulty: int = 0, extra_modifiers: int = 0, effort_level: str | None = None, fatigue_penalty: int = 0, specialization: 'Specialization | None' = None, *, situation_ctx: 'SituationContext | None' = None, level_override: int | None = None, stat_override: str | int | None = None) -> world.checks.types.CheckResult — Main check resolution function.`
+- `perform_check_with_modifiers(character: 'ObjectDB', check_type: 'CheckType', target_difficulty: int = 0, extra_modifiers: int = 0, effort_level: str | None = None, fatigue_penalty: int = 0, specialization: 'Specialization | None' = None, *, situation_ctx: 'SituationContext | None' = None, level_override: int | None = None, scene: 'Scene | None' = None, extra_contributions: 'list[ModifierContribution] | None' = None, skip_fashion: bool = False, stat_override: str | int | None = None) -> world.checks.types.CheckResult — Run a check with all character modifiers gathered automatically.`
 - `remove_participant(participant: 'CombatParticipant') -> 'None' — Remove a participant: status write + combat engagement teardown (#872).`
 - `resolve_cast_position_params(participant: 'CombatParticipant', technique: 'Technique', position_params: 'dict[str, int]') -> 'dict[str, Position | None]' — Validate declared cast positions against the encounter's room + technique reach.`
 - `resolve_combat_technique(*, participant: 'CombatParticipant', action: 'CombatRoundAction', fatigue_category: 'str', offense_check_type: 'CheckType', offense_check_fn: 'PerformCheckFn | None') -> 'CombatTechniqueResult' — Route a damage-path combat technique through use_technique.`
 - `resolve_npc_attack(opponent_action: 'CombatOpponentAction', participant: 'CombatParticipant', check_type: 'CheckType', *, perform_check_fn: 'PerformCheckFn | None' = None) -> 'DefenseResult' — Resolve one NPC attack against one PC via a defensive check.`
 - `resolve_round(encounter: 'CombatEncounter', *, defense_check_fn: 'PerformCheckFn | None' = None, defense_check_type: 'CheckType | None' = None, offense_check_fn: 'PerformCheckFn | None' = None) -> 'RoundResolutionResult' — Orchestrate a full combat round: detect combos -> resolve -> consequences.`
 - `revert_combo_upgrade(action: 'CombatRoundAction') -> 'None' — Remove a combo upgrade from a round action, reverting to normal.`
+- `roll_sustained_absorption_budget(participant: 'CombatParticipant') -> 'tuple[int, CheckOutcome | None]' — Roll Concentration once to set a sustained action's absorption budget (#2705).`
 - `run_combo_detection(encounter: 'CombatEncounter', round_number: 'int') -> 'list[AvailableCombo]' — Public entry point for combo detection during the DECLARING phase.`
 - `select_npc_actions(encounter: 'CombatEncounter') -> 'list[CombatOpponentAction]' — Select and create NPC actions for the current round.`
 - `spawn_from_creature_template(encounter: 'CombatEncounter', template: 'CreatureTemplate', *, position: 'Position | None' = None, acting_account: 'AccountDB | None' = None) -> 'CombatOpponent' — Spawn a CombatOpponent from a CreatureTemplate bestiary entry (#2016).`
 - `swarm_attack_count(swarm_count: 'int', bodies_per_attack: 'int', active_pc_count: 'int') -> 'int' — Attacks a swarm makes this round — scales with remaining bodies (#875).`
 - `swarm_kills(raw_damage: 'int', body_toughness: 'int') -> 'int' — Bodies a single landing attack clears from a swarm (#875).`
 - `toggle_action_ready(action: 'CombatRoundAction') -> 'CombatRoundAction' — Flip the ready flag on a round action and persist it.`
+- `try_declare_sustained_ritual(*, sheet: 'CharacterSheet', ritual: 'Ritual', kwargs: 'dict[str, Any]') -> 'SustainedAction | None' — Defer a combat-cast ritual across rounds instead of dispatching now (#2705, Task 5).`
 - `upgrade_action_to_combo(action: 'CombatRoundAction', combo: 'ComboDefinition') -> 'None' — Mark a PC's round action as upgraded to a combo.`
 - `wind_penalty(felt: int) -> int — The missile check penalty for a room's felt WIND exposure (#1555).`
 

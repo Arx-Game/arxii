@@ -15,7 +15,7 @@ still imports nothing from `ships` (ADR-0010) — the hook is registered *by* sh
 its own app-ready time, not called *into* by battles. Rejected: a conditional
 import/dispatch inside `conclude_battle` itself, which would have made `battles`
 aware of every downstream consumer of its conclusion event. (2) A ship's sanctum
-bonus (`ship_sanctum_bonus`/`ship_sanctum_capabilities`) is **snapshotted once at
+bonus (`ship_sanctum_bonus`/`ship_sanctum_capability_grants`) is **snapshotted once at
 `materialize_ship_as_battle_vehicle` time**, not read live during battle rounds —
 a battle can run for many rounds and a live pull-gate would need the ship's real
 room state reachable mid-battle, which the ephemeral `BattleVehicle`/`BattlePlace`

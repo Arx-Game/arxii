@@ -1,5 +1,7 @@
 """Constants for scene action requests."""
 
+from itertools import pairwise
+
 from django.db import models
 
 
@@ -56,6 +58,22 @@ DIFFICULTY_VALUES: dict[str, int] = {
     DifficultyChoice.DAUNTING: 75,
     DifficultyChoice.HARROWING: 90,
 }
+
+#: Points between two adjacent difficulty bands (#2865). Derived from the table
+#: above rather than re-typed as a literal, so re-tuning the bands can never
+#: leave a stale step behind. The bands are evenly spaced by construction; the
+#: assertion pins that so a future uneven table fails loudly at import instead of
+#: silently making "one band harder" mean different things at different bands.
+_DIFFICULTY_POINTS: tuple[int, ...] = tuple(DIFFICULTY_VALUES.values())
+DIFFICULTY_BAND_STEP: int = _DIFFICULTY_POINTS[1] - _DIFFICULTY_POINTS[0]
+assert all(  # noqa: S101 -- import-time invariant on an authored constant table
+    hi - lo == DIFFICULTY_BAND_STEP for lo, hi in pairwise(_DIFFICULTY_POINTS)
+), "DIFFICULTY_VALUES bands must stay evenly spaced for DIFFICULTY_BAND_STEP to be meaningful."
+
+#: Lowest and highest authored difficulty in points — the bounds a per-instance
+#: severity adjustment may not shift a challenge past (refuse, never clamp).
+MIN_DIFFICULTY_POINTS: int = _DIFFICULTY_POINTS[0]
+MAX_DIFFICULTY_POINTS: int = _DIFFICULTY_POINTS[-1]
 
 
 class CastPullTier(models.IntegerChoices):

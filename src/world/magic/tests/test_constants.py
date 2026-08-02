@@ -1,6 +1,7 @@
 from django.test import SimpleTestCase
 
 from world.magic.constants import (
+    SHIP_VITAL_BONUS_TARGETS,
     EffectKind,
     RitualExecutionKind,
     SoulTetherRole,
@@ -46,16 +47,34 @@ class EffectKindTests(SimpleTestCase):
 
 
 class VitalBonusTargetTests(SimpleTestCase):
+    CHARACTER_TARGETS = {
+        "MAX_HEALTH",
+        "DAMAGE_TAKEN_REDUCTION",
+        "DEATH_SAVE",
+        "KNOCKOUT_RESIST",
+        "PERMANENT_WOUND_RESIST",
+    }
+    SHIP_TARGETS = {"SHIP_HULL", "SHIP_HANDLING", "SHIP_ARMAMENT"}
+
     def test_vital_bonus_targets(self):
         self.assertEqual(
             set(VitalBonusTarget.values),
-            {
-                "MAX_HEALTH",
-                "DAMAGE_TAKEN_REDUCTION",
-                "DEATH_SAVE",
-                "KNOCKOUT_RESIST",
-                "PERMANENT_WOUND_RESIST",
-            },
+            self.CHARACTER_TARGETS | self.SHIP_TARGETS,
+        )
+
+    def test_ship_targets_are_partitioned_from_character_vitals(self) -> None:
+        """``SHIP_VITAL_BONUS_TARGETS`` is exactly the non-character half (#2736).
+
+        The ship targets name a *vessel's* stats and are read only by
+        ``world/ships/sanctum_bonus.py``; every character-side reader must skip them.
+        A new member added to this enum belongs in exactly one half, and the
+        membership set is what ``passive_vital_bonuses`` gates on — so an addition
+        that lands in neither would silently be treated as a character vital.
+        """
+        self.assertEqual(set(SHIP_VITAL_BONUS_TARGETS), self.SHIP_TARGETS)
+        self.assertEqual(
+            set(VitalBonusTarget.values) - set(SHIP_VITAL_BONUS_TARGETS),
+            self.CHARACTER_TARGETS,
         )
 
 

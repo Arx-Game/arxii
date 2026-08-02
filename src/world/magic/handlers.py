@@ -8,13 +8,14 @@ call ``.invalidate()`` after mutation.
 
 from __future__ import annotations
 
+from decimal import Decimal
 import logging
 from typing import TYPE_CHECKING
 
 from django.db.models import Prefetch
 from django.utils.functional import cached_property
 
-from world.magic.constants import EffectKind, TargetKind
+from world.magic.constants import SHIP_VITAL_BONUS_TARGETS, EffectKind, TargetKind
 from world.magic.models import CharacterResonance, Thread, ThreadPullEffect
 from world.magic.models.techniques import Technique
 from world.magic.services.pull_effects import get_pull_effects_for_thread
@@ -124,7 +125,19 @@ class CharacterThreadHandler:
         single query keyed by ``(target_kind, resonance_id)`` pairs, then
         apply per-thread level multipliers in Python to avoid N+1 queries.
         Pulled (tier 1+) contributions live on ``CharacterCombatPullHandler``.
+
+        **Ship targets are not character vitals (#2736).** ``VitalBonusTarget`` also
+        carries ``SHIP_HULL``/``SHIP_HANDLING``/``SHIP_ARMAMENT``, authored on
+        ``TargetKind.SANCTUM`` rows and read by ``world/ships/sanctum_bonus.py``. A
+        character who wove a Sanctum thread onto a ship owns that thread personally, so
+        those rows are reachable from here — the early return is what keeps a ship's
+        hull rating from being paid out as a personal vital. No caller passes a ship
+        target today, so this is a forward guard rather than a live-defect fix; it is
+        here because the leak is silent (a wrong number, not an error) if one ever does.
         """
+        if vital_target in SHIP_VITAL_BONUS_TARGETS:
+            return 0
+
         threads = self._all
         if not threads:
             return 0
@@ -165,20 +178,7 @@ class CharacterThreadHandler:
             )
 
         # --- GIFT threads: prefer gift-specific, fall back to null (per-thread) ---
-        total = 0
-        for t in gift_threads:
-            rows = get_pull_effects_for_thread(
-                t,
-                tier=0,
-                effect_kind=EffectKind.VITAL_BONUS,
-                vital_target=vital_target,
-            )
-            level = t.level
-            multiplier = thread_level_multiplier(level)
-            for row in rows:
-                if row.min_thread_level > level or row.vital_bonus_amount is None:
-                    continue
-                total += row.vital_bonus_amount * multiplier
+        total = self._gift_vital_bonus_total(gift_threads, vital_target)
 
         # --- Non-GIFT: sum contributions ---
         for row in non_gift_effects:
@@ -192,6 +192,32 @@ class CharacterThreadHandler:
         # rounding to the nearest int is fairer to the player than flooring, and
         # this method's return type is `int`.
         return round(total)
+
+    @staticmethod
+    def _gift_vital_bonus_total(gift_threads: list[Thread], vital_target: str) -> Decimal | int:
+        """Sum tier-0 VITAL_BONUS for GIFT threads, gift-specific rows preferred.
+
+        Extracted from ``passive_vital_bonuses`` to keep that method under the
+        complexity ceiling. GIFT threads cannot join the batched non-GIFT query: each
+        needs ``get_pull_effects_for_thread``'s gift-specific-then-null preference, or
+        one gift's authored row would leak onto another gift's thread. Returns an
+        unrounded running total — the caller rounds once, after folding in the non-GIFT
+        half.
+        """
+        total: Decimal | int = 0
+        for t in gift_threads:
+            rows = get_pull_effects_for_thread(
+                t,
+                tier=0,
+                effect_kind=EffectKind.VITAL_BONUS,
+                vital_target=vital_target,
+            )
+            multiplier = thread_level_multiplier(t.level)
+            for row in rows:
+                if row.min_thread_level > t.level or row.vital_bonus_amount is None:
+                    continue
+                total += row.vital_bonus_amount * multiplier
+        return total
 
     def passive_damage_type_resistance(self, damage_type: DamageType) -> int:
         """Sum flat tier-0 RESISTANCE for one damage type across owned threads (#1580).

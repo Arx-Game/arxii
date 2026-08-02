@@ -1,19 +1,39 @@
+"""Unit tests for the phantom-Evennia-migration filter in our makemigrations.
+
+These exercise ``Command.write_migration_files`` directly. That is useful but
+**narrow**, and the narrowness had teeth: because they import the class rather
+than ask Django which class it runs, they passed happily for the entire period
+(#2885) when Django was running ``django_linear_migrations``' command instead
+and this filter never executed at all. ``test_command_resolution.py`` is the
+companion that closes that gap — keep both.
+
+They used to be skipped by default as "demonstration, not regression", which
+meant a broken filter would also have gone unnoticed. They run normally now:
+they are fast, they are pure unit tests, and a filter this load-bearing deserves
+a standing guard.
 """
-Test for the makemigrations fix that prevents phantom Evennia migrations.
 
-This test is SKIPPED BY DEFAULT because it's not testing for regressions,
-but rather demonstrating that our fix solves the original problem.
-
-To run this test explicitly:
-    python src/core_management/tests/run_phantom_migration_test.py
-"""
-
-import unittest
 from unittest.mock import MagicMock, patch
 
+from django.test import SimpleTestCase
 
-@unittest.skip("Phantom migration test - run explicitly to verify fix works")
-class TestMakemigrationsEvenniaFix(unittest.TestCase):
+from core_management.management.commands.makemigrations import Command
+
+
+def _fake_migration(name: str, dependencies: list | None = None) -> MagicMock:
+    """A stand-in for a ``django.db.migrations.Migration``.
+
+    ``write_migration_files`` reads ``.name`` and rewrites ``.dependencies``, so
+    a plain dict or string will not do — which is how these fixtures were
+    written before, and why they errored the moment the skip came off.
+    """
+    migration = MagicMock()
+    migration.name = name
+    migration.dependencies = list(dependencies or [])
+    return migration
+
+
+class TestMakemigrationsEvenniaFix(SimpleTestCase):
     """
     Test that verifies our makemigrations command prevents phantom Evennia migrations.
 
@@ -26,27 +46,37 @@ class TestMakemigrationsEvenniaFix(unittest.TestCase):
         self.mock_stdout = MagicMock()
         self.mock_style = MagicMock()
         self.mock_style.WARNING.return_value = "WARNING: "
+        # write_migration_files kicks off MODEL_MAP.md regeneration in a daemon
+        # thread whenever it keeps any change. Harmless in production, but in a
+        # unit test it is a slow, racy side effect on real files — stub the
+        # thread out rather than the function, so the call is still made.
+        thread = patch("core_management.management.commands.makemigrations.threading.Thread")
+        self.mock_thread = thread.start()
+        self.addCleanup(thread.stop)
+        # write_migration_files also builds a real MigrationLoader to resolve the
+        # graph leaf it rewrites excluded-app dependencies onto. That needs a
+        # database connection, which these unit tests have no business opening —
+        # so stub it here (SimpleTestCase would otherwise refuse the query, which
+        # is the correct refusal). Tests that assert on dependency rewriting
+        # re-patch it locally with the leaf they care about.
+        loader = patch("core_management.management.commands.makemigrations.MigrationLoader")
+        self.mock_loader = loader.start()
+        self.addCleanup(loader.stop)
+        self.mock_loader.return_value.graph.leaf_nodes.return_value = [
+            ("objects", "0013_defaultobject_alter_objectdb_id_defaultcharacter_and_more"),
+        ]
 
     def test_makemigrations_prevents_evennia_phantom_migrations(self):
         """Test that our makemigrations command prevents phantom Evennia migrations."""
-        # Import our custom command
-        try:
-            from core_management.management.commands.makemigrations import Command
-        except ImportError:
-            self.skipTest(
-                "Cannot import makemigrations command - Django not configured",
-            )
-
-        # Create a command instance
         command = Command()
         command.stdout = self.mock_stdout
         command.style = self.mock_style
 
         # Mock changes that would include Evennia apps (the problematic scenario)
         fake_changes = {
-            "objects": [{"fake": "proxy_model_operation"}],
-            "accounts": [{"fake": "proxy_model_operation"}],
-            "test_phantom_migration_app": [{"real": "model_operation"}],
+            "objects": [_fake_migration("0014_defaultobject_and_more")],
+            "accounts": [_fake_migration("0013_defaultaccount_and_more")],
+            "test_phantom_migration_app": [_fake_migration("0001_initial")],
         }
 
         # Mock the parent write_migration_files to capture what gets passed
@@ -80,13 +110,6 @@ class TestMakemigrationsEvenniaFix(unittest.TestCase):
 
     def test_replaces_dependencies_for_excluded_apps(self):
         """Test dependencies on excluded apps use existing migrations."""
-        try:
-            from core_management.management.commands.makemigrations import Command
-        except ImportError:
-            self.skipTest(
-                "Cannot import makemigrations command - Django not configured",
-            )
-
         command = Command()
         command.stdout = self.mock_stdout
         command.style = self.mock_style
@@ -123,13 +146,6 @@ class TestMakemigrationsEvenniaFix(unittest.TestCase):
 
     def test_does_not_replace_existing_dependency(self):
         """Test existing dependencies on excluded apps remain unchanged."""
-        try:
-            from core_management.management.commands.makemigrations import Command
-        except ImportError:
-            self.skipTest(
-                "Cannot import makemigrations command - Django not configured",
-            )
-
         command = Command()
         command.stdout = self.mock_stdout
         command.style = self.mock_style
@@ -166,13 +182,6 @@ class TestMakemigrationsEvenniaFix(unittest.TestCase):
 
     def test_excluded_apps_list_comprehensive(self):
         """Test that our EXCLUDED_APPS list covers the problematic Evennia apps."""
-        try:
-            from core_management.management.commands.makemigrations import Command
-        except ImportError:
-            self.skipTest(
-                "Cannot import makemigrations command - Django not configured",
-            )
-
         command = Command()
 
         # Verify all critical Evennia apps are excluded
@@ -200,18 +209,11 @@ class TestMakemigrationsEvenniaFix(unittest.TestCase):
         This test patches out our EXCLUDED_APPS to show that without
         the fix, phantom migrations would be created.
         """
-        try:
-            from core_management.management.commands.makemigrations import Command
-        except ImportError:
-            self.skipTest(
-                "Cannot import makemigrations command - Django not configured",
-            )
-
         # Simulate the problematic changes Django detects
         fake_changes = {
-            "objects": ["CreateModel for DefaultObject"],
-            "accounts": ["CreateModel for DefaultAccount"],
-            "test_phantom_migration_app": ["CreateModel for TestModel"],
+            "objects": [_fake_migration("0014_defaultobject_and_more")],
+            "accounts": [_fake_migration("0013_defaultaccount_and_more")],
+            "test_phantom_migration_app": [_fake_migration("0001_initial")],
         }
 
         # Test WITHOUT our fix (empty EXCLUDED_APPS)
@@ -262,8 +264,3 @@ class TestMakemigrationsEvenniaFix(unittest.TestCase):
             assert "test_phantom_migration_app" in call_args, (
                 "Our custom app should still get through"
             )
-
-
-if __name__ == "__main__":
-    # Allow running this test file directly to execute the skipped tests
-    unittest.main(verbosity=2)

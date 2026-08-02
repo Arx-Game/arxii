@@ -566,7 +566,15 @@ admin all converge on the same service layer.
   payload column: `FLAT_BONUS` / `INTENSITY_BUMP` / `VITAL_BONUS` (+ `vital_target`) /
   `CAPABILITY_GRANT` (FK to `CapabilityType`) / `NARRATIVE_ONLY`. Tier 0 is
   always-on passive; tiers 1–3 are paid pulls. `clean()` + CheckConstraints
-  enforce payload/effect_kind shape. **Relationship pull content (#2021):**
+  enforce payload/effect_kind shape. **Ship sanctum content (#2736, ADR-0188):**
+  tier-0 `SANCTUM` rows are also what a ship's sanctum grants the *vessel* —
+  `VITAL_BONUS` with a `SHIP_HULL`/`SHIP_HANDLING`/`SHIP_ARMAMENT` `vital_target`
+  for the stat lean, `CAPABILITY_GRANT` for the capacity. Two rows per resonance,
+  split by `min_thread_level` (0 and 3), because `threadpulleffect_lookup_key`
+  admits one row per `(target_kind, resonance, tier, min_thread_level)`. Read by
+  `world/ships/sanctum_bonus.py`; the character-side `passive_vital_bonuses` skips
+  the three ship targets. Zero rows authored in the lore repo today, so the ship
+  grant is currently inert. **Relationship pull content (#2021):**
   `ensure_relationship_pull_content()` seeds survivability-skewed rows for
   `RELATIONSHIP_TRACK` (one 4-tier chain per canonical resonance: Light/Sanctity/
   Radiance/Dissolution). Tier 0: VITAL_BONUS(DAMAGE_TAKEN_REDUCTION). Tier 1:

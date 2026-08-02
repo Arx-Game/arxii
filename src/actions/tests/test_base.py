@@ -221,6 +221,7 @@ class ActionRegistryTests(TestCase):
             "gm_place_in_position",
             "set_the_stage",
             "set_situation",
+            "place_challenge",
             "start_round",
             "join_round",
             "leave_round",

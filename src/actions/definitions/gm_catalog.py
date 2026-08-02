@@ -15,6 +15,7 @@ from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any
 
 from actions.base import Action
+from actions.definitions.gm_shift import difficulty_label
 from actions.prerequisites import MinimumGMLevelPrerequisite, Prerequisite
 from actions.types import ActionContext, ActionResult, TargetType
 from commands.exceptions import CommandError
@@ -32,7 +33,7 @@ if TYPE_CHECKING:
     from evennia.objects.models import ObjectDB
 
     from world.gm.models import SituationKind
-    from world.mechanics.models import SituationTemplate
+    from world.mechanics.models import ChallengeTemplate, SituationTemplate
 
 _FIND_RESULT_LIMIT = 15
 _DESCRIPTION_SNIPPET_LEN = 80
@@ -51,6 +52,17 @@ def _format_template_row(template: SituationTemplate) -> str:
     return f"{row} -- {snippet}" if snippet else row
 
 
+def _format_challenge_row(template: ChallengeTemplate) -> str:
+    """Format a ChallengeTemplate listing row, leading with its difficulty band.
+
+    The band is what a GM about to ``setsituation challenge`` needs at a glance —
+    it is the number ``resolve_challenge`` will roll against.
+    """
+    snippet = _description_snippet(template.goal or template.description_template)
+    row = f"[{template.pk}] {template.name} ({difficulty_label(template.severity)})"
+    return f"{row} -- {snippet}" if snippet else row
+
+
 def _search_situation_templates(query: str, *, limit: int = _FIND_RESULT_LIMIT) -> list:
     from django.db.models import Q  # noqa: PLC0415
 
@@ -60,6 +72,27 @@ def _search_situation_templates(query: str, *, limit: int = _FIND_RESULT_LIMIT) 
     query = query.strip()
     if query:
         qs = qs.filter(Q(name__icontains=query) | Q(description_template__icontains=query))
+    return list(qs.order_by("name")[:limit])
+
+
+def _search_challenge_templates(query: str, *, limit: int = _FIND_RESULT_LIMIT) -> list:
+    """Search authored ``ChallengeTemplate``s by name, description, or goal (#2865).
+
+    The same browse surface covers both what ``SetSituationAction`` and
+    ``PlaceChallengeAction`` can place -- deliberately not a second browser.
+    """
+    from django.db.models import Q  # noqa: PLC0415
+
+    from world.mechanics.models import ChallengeTemplate  # noqa: PLC0415
+
+    qs = ChallengeTemplate.objects.all()
+    query = query.strip()
+    if query:
+        qs = qs.filter(
+            Q(name__icontains=query)
+            | Q(description_template__icontains=query)
+            | Q(goal__icontains=query)
+        )
     return list(qs.order_by("name")[:limit])
 
 
@@ -190,15 +223,18 @@ def _format_kind_results(
 
 @dataclass
 class FindSituationAction(Action):
-    """STARTING-tier GM action: search situations by name or SituationKind (#2127).
+    """STARTING-tier GM action: search situations, challenges, or SituationKinds (#2127).
 
     Extends #2118's ``gm check find`` shape to situations: search
-    ``SituationTemplate`` by name/description, and (independently, by the same
-    search term) any ``SituationKind`` whose name matches -- surfacing its
-    proven-fit ``CheckType``s, authored ``SituationDifficultyGuide`` rows, and
-    advisory ``ConsequencePoolGuide`` text. Read-only: no field or kwarg on this
-    Action writes a `SituationTemplate`, `SituationKind`, or `consequence_pool`
-    FK anywhere.
+    ``SituationTemplate`` by name/description, ``ChallengeTemplate`` by
+    name/description/goal (#2865 -- so one browse surface covers both what
+    ``SetSituationAction`` and ``PlaceChallengeAction`` can place), and
+    (independently, by the same search term) any ``SituationKind`` whose name
+    matches -- surfacing its proven-fit ``CheckType``s, authored
+    ``SituationDifficultyGuide`` rows, and advisory ``ConsequencePoolGuide``
+    text. Read-only: no field or kwarg on this Action writes a
+    `SituationTemplate`, `ChallengeTemplate`, `SituationKind`, or
+    `consequence_pool` FK anywhere.
 
     Gated ``MinimumGMLevelPrerequisite(GMLevel.STARTING)`` -- lower than
     ``SetSituationAction``'s JUNIOR floor, since browsing mutates nothing.
@@ -232,6 +268,7 @@ class FindSituationAction(Action):
 
         actor_level_index = _actor_breadth_index(actor)
         templates = _search_situation_templates(query)
+        challenges = _search_challenge_templates(query)
         kinds = _search_situation_kinds(query, actor_level_index)
 
         lines: list[str] = []
@@ -241,6 +278,15 @@ class FindSituationAction(Action):
             lines.extend(_format_template_row(t) for t in templates)
         elif query:
             lines.append(f"No situation templates matched {query!r}.")
+
+        if challenges:
+            if lines:
+                lines.append("")
+            header = f"Challenges matching {query!r}:" if query else "Challenge catalog:"
+            lines.append(header)
+            lines.extend(_format_challenge_row(c) for c in challenges)
+        elif query:
+            lines.append(f"No challenge templates matched {query!r}.")
 
         lines.extend(_format_kind_results(kinds, risk, lines, query))
 

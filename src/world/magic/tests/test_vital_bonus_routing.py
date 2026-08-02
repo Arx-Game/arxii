@@ -17,6 +17,7 @@ from django.db.models.deletion import ProtectedError
 from django.test import TestCase
 from django.test.utils import CaptureQueriesContext
 
+from evennia_extensions.factories import RoomProfileFactory
 from world.character_sheets.factories import CharacterSheetFactory
 from world.combat.factories import (
     CombatEncounterFactory,
@@ -24,18 +25,19 @@ from world.combat.factories import (
     CombatPullFactory,
     CombatPullResolvedEffectFactory,
 )
-from world.magic.constants import EffectKind, VitalBonusTarget
+from world.magic.constants import EffectKind, SanctumSlotKind, TargetKind, VitalBonusTarget
 from world.magic.factories import (
     ResonanceFactory,
     ThreadFactory,
     ThreadPullEffectFactory,
 )
-from world.magic.models import Thread
+from world.magic.models import SanctumDetails, SanctumOwnerMode, Thread
 from world.magic.services import (
     apply_damage_reduction_from_threads,
     recompute_max_health_with_threads,
     seed_thread_survivability_tuning,
 )
+from world.room_features.factories import RoomFeatureInstanceFactory
 from world.vitals.models import CharacterVitals
 from world.vitals.services import recompute_max_health
 
@@ -517,3 +519,86 @@ class SurvivabilityBaselineRoutingTests(TestCase):
             apply_damage_reduction_from_threads(self.sheet.character, 30)
         n6 = len(ctx.captured_queries)
         self.assertEqual(n3, n6)  # no N+1 — independent of thread count
+
+
+class ShipVitalTargetGuardTests(TestCase):
+    """A ship-stat VITAL_BONUS row never pays out as a personal vital (#2736).
+
+    ``VitalBonusTarget`` carries three ship stats alongside the five character
+    vitals, authored on the same ``TargetKind.SANCTUM`` rows that grant a ship its
+    capability. A character who wove that Sanctum thread owns it *personally*, so the
+    row is reachable from ``passive_vital_bonuses`` — the guard is what stops a ship's
+    hull rating being paid out to the person who consecrated it.
+    """
+
+    @staticmethod
+    def _weaver_of(resonance):
+        """Return a fresh sheet holding a level-20 SANCTUM thread on ``resonance``.
+
+        A fresh sheet per case, not a shared one: ``uniq_thread_sanctum_personal_own_active``
+        allows a character exactly one active PERSONAL_OWN Sanctum thread.
+        """
+        sheet = CharacterSheetFactory()
+        sanctum = SanctumDetails.objects.create(
+            feature_instance=RoomFeatureInstanceFactory(room_profile=RoomProfileFactory()),
+            resonance_type=resonance,
+            owner_mode=SanctumOwnerMode.PERSONAL,
+        )
+        ThreadFactory(
+            owner=sheet,
+            resonance=resonance,
+            target_kind=TargetKind.SANCTUM,
+            target_trait=None,
+            target_sanctum_details=sanctum,
+            slot_kind=SanctumSlotKind.PERSONAL_OWN,
+            level=20,
+        )
+        return sheet
+
+    @staticmethod
+    def _author_row(resonance, vital_target: str, amount: int = 7) -> None:
+        ThreadPullEffectFactory(
+            target_kind=TargetKind.SANCTUM,
+            resonance=resonance,
+            tier=0,
+            min_thread_level=0,
+            effect_kind=EffectKind.VITAL_BONUS,
+            flat_bonus_amount=None,  # threadpulleffect_vital_bonus_payload constraint
+            vital_target=vital_target,
+            vital_bonus_amount=amount,
+        )
+
+    def test_ship_targets_return_zero_for_the_weaver(self) -> None:
+        """SHIP_HULL/HANDLING/ARMAMENT rows contribute nothing to the character.
+
+        One resonance per target, because ``threadpulleffect_lookup_key`` admits a
+        single row per ``(target_kind, resonance, tier, min_thread_level)`` — which
+        is also why a resonance leans into exactly one ship stat, never three.
+        """
+        for target in (
+            VitalBonusTarget.SHIP_HULL,
+            VitalBonusTarget.SHIP_HANDLING,
+            VitalBonusTarget.SHIP_ARMAMENT,
+        ):
+            with self.subTest(target=target):
+                resonance = ResonanceFactory()
+                sheet = self._weaver_of(resonance)
+                self._author_row(resonance, target)
+
+                self.assertEqual(sheet.character.threads.passive_vital_bonuses(target), 0)
+
+    def test_same_thread_still_pays_a_character_vital(self) -> None:
+        """Control: the zero above is the guard, not an inert test setup.
+
+        The identical Sanctum thread and row shape, authored against a *character*
+        vital, does pay out — so a future change that broke the thread wiring rather
+        than the guard would fail here instead of passing silently.
+        """
+        resonance = ResonanceFactory()
+        sheet = self._weaver_of(resonance)
+        self._author_row(resonance, VitalBonusTarget.MAX_HEALTH)
+
+        self.assertEqual(
+            sheet.character.threads.passive_vital_bonuses(VitalBonusTarget.MAX_HEALTH),
+            14,  # amount 7 x thread_level_multiplier(20) == 2
+        )

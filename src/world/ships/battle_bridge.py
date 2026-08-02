@@ -29,11 +29,7 @@ from world.conditions.models import CapabilityType
 from world.military.models import MilitaryUnitCapability
 from world.ships.constants import DAMAGED_HULL_DISCOUNT, SPEED_CAPABILITY_NAME
 from world.ships.models import ShipDeployment, ShipDetails
-from world.ships.sanctum_bonus import ship_sanctum_bonus, ship_sanctum_capabilities
-
-# PLACEHOLDER magnitude for a level-3 sanctum-granted capability row — a
-# per-resonance/per-effect balance pass is a later content pass.
-SANCTUM_CAPABILITY_VALUE = 1
+from world.ships.sanctum_bonus import ship_sanctum_bonus, ship_sanctum_capability_grants
 
 
 @transaction.atomic
@@ -51,6 +47,11 @@ def materialize_ship_as_battle_vehicle(
     ``ShipDeployment``, then overwrites the hull integrity ceiling and grants
     speed/strength/sanctum capabilities from the ship's persistent + sanctum
     stats.
+
+    Both sanctum contributions — the stat bonus and the capabilities — are resolved
+    in ``world/ships/sanctum_bonus.py`` off the authored ``ThreadPullEffect`` catalog.
+    This function only writes what it is handed; it invents no capability and no
+    magnitude (#2736).
 
     Args:
         ship: The persistent ship being deployed.
@@ -96,15 +97,18 @@ def materialize_ship_as_battle_vehicle(
     vehicle.unit.military_unit.strength = ship.effective_armament() + bonus.armament
     vehicle.unit.military_unit.save(update_fields=["strength"])
 
-    # Level-3 sanctum threads each unlock a PLACEHOLDER capability row.
-    for resonance in ship_sanctum_capabilities(ship):
-        capability, _ = CapabilityType.objects.get_or_create(
-            name=f"sanctum_{resonance.name.lower()}"
-        )
+    # Sanctum threads confer whatever the authored catalog says they confer (#2736).
+    # This loop deliberately mints nothing: it writes only capabilities that already
+    # exist as authored content. The pre-#2736 version get_or_create'd a
+    # `sanctum_<resonance>` CapabilityType per resonance, which grew the exported
+    # content corpus by a row per resonance any player ever levelled — the #2724
+    # defect class — and named a *provenance* where every other capability names a
+    # *capacity*. See ADR-0188.
+    for grant in ship_sanctum_capability_grants(ship):
         MilitaryUnitCapability.objects.update_or_create(
             unit=vehicle.unit.military_unit,
-            capability=capability,
-            defaults={"value": SANCTUM_CAPABILITY_VALUE},
+            capability=grant.capability,
+            defaults={"value": grant.value},
         )
 
     return vehicle

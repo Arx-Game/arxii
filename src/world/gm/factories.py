@@ -240,15 +240,16 @@ class CatalogSuggestionFactory(factory_django.DjangoModelFactory):
     status = SubmissionStatus.OPEN
 
 
-# --- Seed the starter catalog taxonomy (#2127, Big Button acceptance) ------
+# --- Sample starter catalog taxonomy (#2127; content-repo-owned since #2865) --
 #
-# Idempotent: plain get_or_create per row (the FactoryBoy django_get_or_create
-# gotcha silently drops non-lookup kwargs on a pre-existing row, so this uses
-# direct ORM calls, mirroring seed_default_gm_level_caps above). A starter set
-# of three common GM scene archetypes with a difficulty guide at every
-# RenownRisk tier -- CheckTypeSituationFit/ConsequencePoolGuide rows are left
-# for staff to author in admin once real CheckType/ConsequencePool catalogs
-# exist to link against (both are advisory/admin-authored content, ADR-0022).
+# ``gm.situationkind`` and ``gm.situationdifficultyguide`` joined
+# ``CONTENT_MODELS`` in #2865, so the content repo owns them and this seeder may
+# no longer invent rows (ADR-0168): every write below goes through
+# ``authored_or_sample``, which finds the authored row when the lore repo has one
+# and creates a sample only under ``SEED_SAMPLE_CONTENT``. A starter set of three
+# common GM scene archetypes with a difficulty guide at every RenownRisk tier --
+# CheckTypeSituationFit/ConsequencePoolGuide rows are left for authoring against
+# real CheckType/ConsequencePool catalogs (both are advisory content, ADR-0022).
 
 _STARTER_SITUATION_KINDS: dict[str, dict[str, str]] = {
     "Chase": {
@@ -329,27 +330,35 @@ _STARTER_DIFFICULTY_GUIDES: dict[str, list[tuple[str, str, str]]] = {
 
 
 def seed_catalog_starter_content() -> dict[str, SituationKind]:
-    """Create (or retrieve) the starter ``SituationKind`` set + difficulty guides.
+    """Retrieve the starter ``SituationKind`` set + difficulty guides, or sample them.
 
     Idempotent -- safe to call multiple times (e.g. from ``arx seed dev`` or test
     setup) without creating duplicate rows or new pks. Returns the kinds keyed by
-    name so callers/tests can chain further authoring off them.
+    name so callers/tests can chain further authoring off them; a kind the content
+    repo does not author is simply absent from the returned mapping (and its
+    difficulty guides are skipped) unless ``SEED_SAMPLE_CONTENT`` is on.
     """
+    from world.seeds.sample_content import authored_or_sample
+
     kinds: dict[str, SituationKind] = {}
     for name, field_defaults in _STARTER_SITUATION_KINDS.items():
-        kind, _ = SituationKind.objects.get_or_create(name=name, defaults=field_defaults)
-        kinds[name] = kind
+        kind = authored_or_sample(SituationKind, field_defaults, name=name)
+        if kind is not None:
+            kinds[name] = kind
 
     for name, rows in _STARTER_DIFFICULTY_GUIDES.items():
-        kind = kinds[name]
+        kind = kinds.get(name)
+        if kind is None:
+            continue
         for risk, recommended_difficulty, guidance_text in rows:
-            SituationDifficultyGuide.objects.get_or_create(
-                situation_kind=kind,
-                risk=risk,
-                defaults={
+            authored_or_sample(
+                SituationDifficultyGuide,
+                {
                     "recommended_difficulty": recommended_difficulty,
                     "guidance_text": guidance_text,
                 },
+                situation_kind=kind,
+                risk=risk,
             )
 
     return kinds
