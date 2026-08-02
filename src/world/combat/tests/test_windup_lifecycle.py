@@ -139,7 +139,17 @@ class WindupCooldownBookkeepingTests(TestCase):
         opponent = CombatOpponentFactory(encounter=encounter, threat_pool=pool)
         CombatParticipantFactory(encounter=encounter)
 
-        select_npc_actions(encounter)
+        # `_create_pending_opponent_attack`'s entry pick is a weighted RNG roll
+        # (`random.choices`, services.py). Weights of 100 vs 1 make the filler
+        # win roughly 1 run in 101 — enough to flake CI and bounce a PR from the
+        # merge queue. This test is about cooldown bookkeeping, not about the
+        # roll, so pin the selection instead of relying on the odds.
+        def _pick_windup(population, weights=None, k=1):
+            return [next(entry for entry in population if entry.pk == windup_entry.pk)]
+
+        with mock.patch("world.combat.services.random.choices", side_effect=_pick_windup):
+            select_npc_actions(encounter)
+
         self.assertTrue(
             PendingOpponentAttack.objects.filter(
                 opponent=opponent, threat_entry=windup_entry
