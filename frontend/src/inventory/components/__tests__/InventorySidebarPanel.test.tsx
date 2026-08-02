@@ -35,6 +35,7 @@ function makeItem(overrides: Partial<ItemInstance> = {}): ItemInstance {
     suggested_value: 0,
     can_steal: false,
     crafted_provenance: null,
+    accents: [],
     template: {
       id: 10,
       name: 'Linen Tunic',

@@ -14198,6 +14198,69 @@ paths:
               schema:
                 $ref: '#/components/schemas/ItemInstanceRead'
           description: ''
+  /api/items/inventory/{id}/recycle/:
+    post:
+      operationId: items_inventory_recycle_create
+      description: |-
+        Destroy an owned piece for a fraction of its materials (#2886).
+
+        Story-protected items (legend attached) 400 with the GM sign-off
+        message until an approved RecycleRequest exists. The frontend
+        confirms before calling — recycling is irreversible.
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: string
+        required: true
+      tags:
+      - items
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          description: No response body
+  /api/items/inventory/{id}/remove-accent/:
+    post:
+      operationId: items_inventory_remove_accent_create
+      description: |-
+        Strip one worked-in Accent off an owned piece (#2886). No refund.
+
+        Body: ``{"accent_target": <ModifierTarget pk>}``. The frontend
+        confirms before calling — removal is irreversible.
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: string
+        required: true
+      tags:
+      - items
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          description: No response body
+  /api/items/inventory/{id}/request-recycle-approval/:
+    post:
+      operationId: items_inventory_request_recycle_approval_create
+      description: |-
+        File (or return the existing pending) GM sign-off request (#2886).
+
+        Offered by the frontend when a recycle attempt is story-blocked.
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: string
+        required: true
+      tags:
+      - items
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          description: No response body
   /api/items/inventory/{id}/use/:
     post:
       operationId: items_inventory_use_create
@@ -46888,6 +46951,32 @@ components:
       description: |-
         * `incapacitated` - Character Incapacitated
         * `near_death` - Character Near Death
+    ItemAccentRead:
+      type: object
+      description: One worked-in Accent on a piece (#2886) — the removal UI's row
+        shape.
+      properties:
+        target:
+          type: integer
+          readOnly: true
+        name:
+          type: string
+          readOnly: true
+        adjective:
+          type: string
+          readOnly: true
+        level:
+          type: integer
+          readOnly: true
+        adverb:
+          type: string
+          readOnly: true
+      required:
+      - adjective
+      - adverb
+      - level
+      - name
+      - target
     ItemFacetRead:
       type: object
       description: Read serializer for ItemFacet (GET list/detail).
@@ -47025,7 +47114,13 @@ components:
           nullable: true
           description: The crafted mechanical line + persona credits, or None (#2878).
           readOnly: true
+        accents:
+          type: array
+          items:
+            $ref: '#/components/schemas/ItemAccentRead'
+          readOnly: true
       required:
+      - accents
       - access_policy
       - can_steal
       - charges

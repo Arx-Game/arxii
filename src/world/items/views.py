@@ -671,6 +671,21 @@ class ItemInstanceViewSet(viewsets.ViewSet):
             raise serializers.ValidationError({"non_field_errors": [action_result.message]})
         return Response({"salvaged": action_result.data.get("salvaged", [])})
 
+    @extend_schema(request=None, responses={200: None})
+    @action(detail=True, methods=[HTTPMethod.POST], url_path="request-recycle-approval")
+    def request_recycle_approval(self, request: Request, pk: str | None = None) -> Response:
+        """File (or return the existing pending) GM sign-off request (#2886).
+
+        Offered by the frontend when a recycle attempt is story-blocked.
+        """
+        from world.items.services.recycle import (  # noqa: PLC0415
+            request_recycle_approval as request_approval,
+        )
+
+        item = self._owned_item_or_404(request, pk)
+        row = request_approval(item_instance=item, actor_sheet=item.holder_character_sheet)
+        return Response({"status": row.status})
+
 
 @extend_schema(tags=["items"])
 class EquippedItemViewSet(viewsets.ViewSet):
