@@ -12,26 +12,22 @@ from world.battles.constants import (
 )
 from world.battles.factories import BattleFactory, BattleSideFactory
 from world.battles.models import Fortification
+from world.conditions.factories import CapabilityTypeFactory
 from world.conditions.models import CapabilityType
-from world.magic.constants import SanctumSlotKind, TargetKind
-from world.magic.factories import ResonanceFactory, ThreadFactory
-from world.magic.models import SanctumDetails, SanctumOwnerMode
+from world.magic.constants import VitalBonusTarget
+from world.magic.factories import ResonanceFactory
 from world.military.models import MilitaryUnitCapability
 from world.room_features.factories import RoomFeatureInstanceFactory
 from world.ships.battle_bridge import materialize_ship_as_battle_vehicle
 from world.ships.constants import DAMAGED_HULL_DISCOUNT, SPEED_CAPABILITY_NAME
 from world.ships.factories import ShipDetailsFactory
 from world.ships.models import ShipDeployment
-
-
-def _sanctum_for_ship(ship) -> SanctumDetails:
-    room_profile = RoomProfileFactory(area=ship.building.area)
-    feature_instance = RoomFeatureInstanceFactory(room_profile=room_profile)
-    return SanctumDetails.objects.create(
-        feature_instance=feature_instance,
-        resonance_type=ResonanceFactory(),
-        owner_mode=SanctumOwnerMode.PERSONAL,
-    )
+from world.ships.tests._sanctum_catalog import (
+    author_capability_row as _author_capability_row,
+    author_stat_row as _author_stat_row,
+    sanctum_for_ship as _sanctum_for_ship,
+    weave as _weave,
+)
 
 
 class MaterializeShipAsBattleVehicleTests(TestCase):
@@ -88,25 +84,22 @@ class MaterializeShipAsBattleVehicleTests(TestCase):
         deployment = ShipDeployment.objects.get(ship=ship, battle=self.battle)
         self.assertEqual(deployment.vehicle, vehicle)
 
-    def test_level_3_sanctum_thread_adds_bonus_and_capability(self) -> None:
+    def test_sanctum_thread_applies_the_authored_stat_row_and_capability(self) -> None:
+        """The bridge writes what the catalog resolved — hull bonus and capability (#2736)."""
         ship = ShipDetailsFactory()
         ship.building.fortification_level = 1
         ship.building.save()
         sanctum = _sanctum_for_ship(ship)
         resonance = ResonanceFactory()
-        ThreadFactory(
-            target_kind=TargetKind.SANCTUM,
-            target_trait=None,
-            target_sanctum_details=sanctum,
-            slot_kind=SanctumSlotKind.PERSONAL_OWN,
-            resonance=resonance,
-            level=3,
-        )
+        capability = CapabilityTypeFactory(name="traversal")
+        _weave(sanctum, resonance, level=10)
+        _author_stat_row(resonance, VitalBonusTarget.SHIP_HULL, 3)
+        _author_capability_row(resonance, capability, base=2)
 
         vehicle = materialize_ship_as_battle_vehicle(ship=ship, battle=self.battle, side=self.side)
 
         vehicle.unit.refresh_from_db()
-        # Hull: base + (fortification_level + bonus.hull) * per-level bonus.
+        # Hull: base + (fortification_level + authored hull bonus) * per-level bonus.
         fortification = Fortification.objects.get(place=vehicle.place, kind=FortificationKind.HULL)
         level = ship.building.fortification_level + 3
         expected_integrity = (
@@ -114,17 +107,59 @@ class MaterializeShipAsBattleVehicleTests(TestCase):
         )
         self.assertEqual(fortification.max_integrity, expected_integrity)
 
-        # Handling and armament both get the sanctum bonus applied.
+        # The hull row feeds hull ONLY — handling and armament are untouched, where the
+        # retired placeholder gave all three the same number.
         speed = CapabilityType.objects.get(name=SPEED_CAPABILITY_NAME)
-        self.assertEqual(vehicle.unit.effective_capability(speed), ship.effective_handling() + 3)
-        self.assertEqual(vehicle.unit.strength, ship.effective_armament() + 3)
+        self.assertEqual(vehicle.unit.effective_capability(speed), ship.effective_handling())
+        self.assertEqual(vehicle.unit.strength, ship.effective_armament())
 
-        # A level-3 capability row exists for the resonance.
         self.assertTrue(
             MilitaryUnitCapability.objects.filter(
                 unit=vehicle.unit.military_unit,
-                capability__name=f"sanctum_{resonance.name.lower()}",
+                capability=capability,
             ).exists()
+        )
+
+    def test_deploying_a_threaded_ship_mints_no_capability_type(self) -> None:
+        """The #2724 corpus-pollution regression: deployment must author nothing.
+
+        Before #2736 this call get_or_create'd a ``sanctum_<resonance>`` CapabilityType,
+        so every resonance a player ever levelled added an authored-looking row to the
+        exported content corpus — named after other content, so the set could never be
+        enumerated ahead of time.
+
+        ``speed`` is pre-created here because the bridge legitimately get_or_create's it:
+        it is a single, enumerable row registered in ``seeds/config_prerequisites.py``,
+        which is exactly what the resonance-named ones could never be.
+        """
+        ship = ShipDetailsFactory()
+        sanctum = _sanctum_for_ship(ship)
+        resonance = ResonanceFactory()
+        _weave(sanctum, resonance, level=10)
+        _author_capability_row(resonance, CapabilityTypeFactory(), base=2)
+        CapabilityTypeFactory(name=SPEED_CAPABILITY_NAME)
+        before = CapabilityType.objects.count()
+
+        materialize_ship_as_battle_vehicle(ship=ship, battle=self.battle, side=self.side)
+
+        self.assertEqual(CapabilityType.objects.count(), before)
+
+    def test_unauthored_resonance_grants_no_capability(self) -> None:
+        """A woven resonance with no authored row is inert, not an error."""
+        ship = ShipDetailsFactory()
+        sanctum = _sanctum_for_ship(ship)
+        _weave(sanctum, ResonanceFactory(), level=10)
+
+        vehicle = materialize_ship_as_battle_vehicle(ship=ship, battle=self.battle, side=self.side)
+
+        speed = CapabilityType.objects.get(name=SPEED_CAPABILITY_NAME)
+        self.assertEqual(
+            list(
+                MilitaryUnitCapability.objects.filter(unit=vehicle.unit.military_unit).exclude(
+                    capability=speed
+                )
+            ),
+            [],
         )
 
 

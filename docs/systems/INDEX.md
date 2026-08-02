@@ -3452,15 +3452,21 @@ the hull stat IS `Building.fortification_level`, reused not duplicated. Full det
   `needs_repair`). All four completion handlers registered via
   `world.projects.services.register_kind_handler` at `ShipsConfig.ready()`.
 - **Ship-as-sanctum** (`world.ships.sanctum_bonus`): `ship_sanctum_bonus(ship) ->
-  ShipStatBonus` / `ship_sanctum_capabilities(ship) -> list[Resonance]` read the
-  ship's installed `SanctumDetails`' woven SANCTUM threads (at most one sanctum
-  room per ship for MVP) — snapshotted at materialize time, not read live.
+  ShipStatBonus` / `ship_sanctum_capability_grants(ship) -> list[ShipCapabilityGrant]`
+  read the ship's installed `SanctumDetails`' woven SANCTUM threads (at most one sanctum
+  room per ship for MVP) — snapshotted at materialize time, not read live. Both halves
+  are **authored content**: tier-0 `TargetKind.SANCTUM` `ThreadPullEffect` rows, the
+  stat bonus via `VITAL_BONUS` + a `SHIP_HULL`/`SHIP_HANDLING`/`SHIP_ARMAMENT`
+  `vital_target`, the capability via `CAPABILITY_GRANT` curved by
+  `apply_capability_curve`. Unauthored resonance = inert, never an error (ADR-0188,
+  #2736). Zero rows authored in the lore repo today.
 - **Combat bridge** (`world.ships.battle_bridge`):
   `materialize_ship_as_battle_vehicle(ship, battle, side, place_name=None) ->
   BattleVehicle` — one-way snapshot of persistent stats (+ sanctum bonus) into a
   `create_battle_vehicle`-built `BattleVehicle` (hull integrity, `speed`
-  capability, `strength`, level-3+ sanctum capability rows); links a
-  `ShipDeployment`. From there REPOSITION/BREACH/sinking/ejection run through
+  capability, `strength`, the sanctum's authored capability rows); links a
+  `ShipDeployment`. Mints no `CapabilityType` — it writes only what the catalog
+  resolved (ADR-0188). From there REPOSITION/BREACH/sinking/ejection run through
   unmodified `world.battles` machinery — see [battles.md](battles.md#battlevehicle).
 - **Repair writeback** (`world.ships.battle_wiring`): `apply_ship_battle_outcome`
   registered as a **battle-conclusion hook**

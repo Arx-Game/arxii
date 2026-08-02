@@ -46,7 +46,7 @@ from world.battles.services import (
 from world.character_sheets.factories import CharacterSheetFactory
 from world.conditions.factories import ensure_drowning_damage_type
 from world.conditions.models import CapabilityType
-from world.magic.constants import SanctumSlotKind, TargetKind
+from world.magic.constants import SanctumSlotKind, TargetKind, VitalBonusTarget
 from world.magic.factories import (
     CharacterAnimaFactory,
     CharacterTechniqueFactory,
@@ -63,6 +63,7 @@ from world.ships.battle_bridge import materialize_ship_as_battle_vehicle
 from world.ships.constants import HANDLING_PER_LEVEL, SPEED_CAPABILITY_NAME
 from world.ships.factories import ShipTypeFactory
 from world.ships.models import ShipConstructionDetails, ShipDetails, ShipUpgradeDetails
+from world.ships.tests._sanctum_catalog import author_stat_row
 from world.vitals.factories import CharacterVitalsFactory
 
 
@@ -161,6 +162,11 @@ class ShipJourneyE2ETests(TestCase):
             resonance=sanctum_resonance,
             level=3,
         )
+        # Since #2736 the shrine grants only what the catalog authors, so the journey
+        # has to author the row it expects to sail better for. 10 x
+        # thread_level_multiplier(3) == 10 x 0.3 == 3 — the same +3 this test asserted
+        # when the bonus was the hardcoded sum of thread levels.
+        author_stat_row(sanctum_resonance, VitalBonusTarget.SHIP_HANDLING, 10)
 
         # -- Step 4: materialize the ship (+ an enemy ship) into a Battle -------
         battle = BattleFactory(round_limit=20)
