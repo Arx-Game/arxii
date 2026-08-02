@@ -103,10 +103,28 @@ class ResolveAccentsTests(TestCase):
     """_resolve_accents rolls one check per axis and records what realized."""
 
     def setUp(self) -> None:
+        from world.traits.factories import CharacterTraitValueFactory
+        from world.traits.models import Trait
+
         _accent_ladder()
         self.recipe = wire_enchanting_crafting(base_difficulty=0)
         self.sheet = CharacterSheetFactory()
         self.character = self.sheet.character
+        # The −50 ambition penalty (#2886) eats an unskilled crafter's score
+        # entirely — give this one real hands so a forced success realizes.
+        # (Points need the seeded conversion table; wire it like production.)
+        from world.traits.factories import PointConversionRangeFactory
+        from world.traits.models import TraitType
+
+        for trait_type in (TraitType.SKILL, TraitType.STAT):
+            PointConversionRangeFactory(
+                trait_type=trait_type, min_value=1, max_value=100, points_per_level=1
+            )
+        CharacterTraitValueFactory(
+            character=self.sheet,
+            trait=Trait.objects.get(name="Enchanting"),
+            value=60,
+        )
         self.item = ItemInstanceFactory(
             template=ItemTemplateFactory(), holder_character_sheet=self.sheet
         )

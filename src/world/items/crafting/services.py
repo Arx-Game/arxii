@@ -785,14 +785,28 @@ def run_crafting_recipe(  # noqa: PLR0913
     # --- 9. Apply the consequence's effects ---
     apply_resolution(pending, ResolutionContext(character=crafter_character))
 
-    # --- 10. Resolve quality + apply via the handler on sufficient success ---
-    if check_result.success_level >= recipe.min_success_level:
+    # --- 10. Resolve quality + apply via the handler ---
+    # A making NEVER fails to create (#2886, Apostate): the prose a player
+    # writes into an item is the one unrecoverable ingredient, and losing it
+    # feels worse than any lost time/AP/coin/materials (which the consequence
+    # pool still charges). A failed ITEM_CREATE lands at the ladder's floor —
+    # the player then chooses: recycle and retry, or refine it up the long
+    # road. Attach kinds keep failure semantics (nothing is lost there).
+    produced = check_result.success_level >= recipe.min_success_level
+    if produced:
         tier = resolve_capped_tier(
             recipe=recipe,
             crafter_character=crafter_character,
             check_result=check_result,
             material_grade_bonus=_material_grade_bonus(staged),
         )
+    elif kind == CraftingRecipeKind.ITEM_CREATE:
+        from world.items.models import QualityTier  # noqa: PLC0415
+
+        tier = QualityTier.objects.order_by("sort_order").first()
+    else:
+        tier = None
+    if tier is not None:
         # Thread the crafter_character into output_overrides so ItemCreateHandler
         # can resolve the CharacterSheet for provenance stamping.
         if output_overrides is not None:
@@ -806,7 +820,6 @@ def run_crafting_recipe(  # noqa: PLR0913
         )
         attached = True
     else:
-        tier = None
         row = None
         attached = False
 

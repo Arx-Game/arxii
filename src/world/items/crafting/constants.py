@@ -49,10 +49,12 @@ BASE_MAX_QUALITY_RUNG: int = 9
 BASE_MAX_ACCENT_LEVEL: int = 4
 
 #: Each Accent the crafter works into a piece SUBTRACTS this many points from
-#: the craft and accent checks (#2886, replacing the rank-quantized difficulty
-#: step): ambition smoothly lowers both the odds AND the quality score, so
-#: choosing an accent is a genuinely hard call. PLACEHOLDER tuning.
-ACCENT_CHECK_PENALTY: int = 15
+#: the craft and accent checks, stacking (#2886, replacing the rank-quantized
+#: difficulty step). 50 is deliberate (Apostate): one accent knocks a
+#: competent crafter down a full rank band, so accents are master-tier
+#: statements and pushing a skill toward 100 through levels genuinely
+#: matters — a leveled master absorbs one or two; a journeyman absorbs none.
+ACCENT_CHECK_PENALTY: int = 50
 
 #: Craft-time AP/anima cost multiplies by this per accent (#2886, "doubles
 #: per, stacking") — the forge-side twin of the refinement doubling.

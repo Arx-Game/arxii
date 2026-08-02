@@ -487,7 +487,7 @@ handler — no schema change required.
 | `CostConsumption` | TextChoices | `NONE`, `PARTIAL`, `FULL` |
 | `PARTIAL_FRACTION` | float | `0.5` (fraction of AP/Anima consumed on PARTIAL outcomes) |
 | `BASE_MAX_QUALITY_RUNG` / `BASE_MAX_ACCENT_LEVEL` | int | `9` / `4` — thread-capped ceilings (#2878): +1 rung per Thread on the recipe's skill; divine+ is Gifted-only |
-| `ACCENT_CHECK_PENALTY` / `ACCENT_SCORE_PER_LEVEL` | int | `15` / `15` — each Accent subtracts points from every roll (#2886, smooth ambition price); accent-check score ÷ divisor = realized rung (PLACEHOLDER) |
+| `ACCENT_CHECK_PENALTY` / `ACCENT_SCORE_PER_LEVEL` | int | `50` / `15` — each Accent subtracts 50 points from every roll, stacking (#2886: accents are master-tier statements; skill-toward-100 levels matter); accent-check score ÷ divisor = realized rung (PLACEHOLDER) |
 | `ACCENT_CRAFT_COST_BASE` / `REFINEMENT_PACE_MULTIPLIER` | int | `2` / `4` — AP/anima ×2 per accent at the forge; refinement thresholds steepened to weeks-per-rung (PLACEHOLDER) |
 | `QUALITY_LUCK_OFFSET` / `QUALITY_LUCK_DIVISOR` / `THREAD_CRAFT_CHECK_BONUS` | int | `45` / `5` / `10` — the craft's own d100 spreads the score ≈ −9…+11; each woven thread adds +10 to craft and accent rolls (#2886) |
 | `REFINEMENT_VALUE_PER_PROGRESS` / `REFINEMENT_TIME_LIMIT_DAYS` | int | `100` / `365` — refinement threshold = item value × target rung ÷ 100 progress (PLACEHOLDER) |
