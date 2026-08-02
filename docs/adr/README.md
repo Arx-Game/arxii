@@ -196,10 +196,11 @@ treat those names as hints to confirm, not gospel.
 - [0158 — The percentage-bounding model is the only buff-multiplier lane, forever; vow-keyed stacking weights; execute prices off pre-hit health](0158-bounded-percent-lane-vow-keyed-stacking-pre-hit-execute.md) (#2643; related ADR-0149, ADR-0151, ADR-0152, ADR-0153, ADR-0154, ADR-0007, ADR-0010)
 - [0159 — Secondary vows scale Layers 2/4 by a potency dial; Layers 1/3 stay strictly primary-only](0159-secondary-vow-layer-split-and-potency-dial.md) (#2641; related ADR-0149, ADR-0151, ADR-0152, ADR-0153)
 - [0160 — Boss fights get their three-act shape from diversity-weighted break accrual, a proportional lieutenant gate, and a Soulfray-derived pacing floor](0160-boss-fight-structure-diversity-weighted-accrual.md) (#2642; related ADR-0007)
-- [0161 — Telegraphed wind-ups downgrade, never mid-round-interrupt; a 1-reaction budget plus a 2-answer absorption cap](0161-telegraphed-windups-downgrade-not-cancel-reaction-budget.md) (#2637, #2639; extends ADR-0118; related ADR-0060, ADR-0151)
+- [0161 — Telegraphed wind-ups downgrade, never mid-round-interrupt; a 1-reaction budget plus a 2-answer absorption cap](0161-telegraphed-windups-downgrade-not-cancel-reaction-budget.md) (#2637, #2639; extends ADR-0118; related ADR-0060, ADR-0151; extended by ADR-0190)
 - [0162 — Sent Flying clones the plummet pattern: marker + reactable window + explicit end-of-round resolution](0162-sent-flying-clones-the-plummet-pattern.md) (#2638; extends ADR-0161; related ADR-0118, ADR-0151)
 - [0164 — Capability values share one uncapped ladder; blocking is emergent arithmetic, not a flag](0164-capability-value-ladder-and-emergent-blocking.md) (#2704; related ADR-0143, ADR-0034)
 - [0169 — Capability magnitude curves geometrically with contextual power, uncapped](0169-capability-magnitude-curves-geometrically-with-contextual-power.md) (#2708; builds on ADR-0164, ADR-0034; related ADR-0144)
+- [0190 — PC sustained actions extend ADR-0161's pre-armed shape, with a rolled — not ramped — budget](0190-pc-sustained-actions-absorption-budget.md) (#2705; extends ADR-0161; related ADR-0007, ADR-0118)
 
 ### Gift & resonance economy
 - [0050 — Gifts are Major or Minor; species abilities are a species-granted Minor Gift](0050-gifts-are-major-or-minor-species-abilities-are-minor-gifts.md)

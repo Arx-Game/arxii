@@ -231,6 +231,13 @@ button — rides the existing PC-attack-lands-damage moment (`_apply_windup_inte
 called from `_resolve_pc_action`). Distinct from `ALLY_INTERCEPTED_FOR_ME`'s guardian
 INTERPOSE — this interception is offensive (a PC striking the winding-up opponent), not
 protective. (#2637, ADR-0161.)
+
+The PC-side sibling (#2705, ADR-0190) reuses this exact `downgrades` vocabulary for a
+`SustainedAction` — any landing hit on a sustaining PC adds a flat downgrade
+(`_apply_sustained_erosion_rider`, no blind/called-out split, since a PC's commitment is
+telegraphed publicly the moment it's declared) until `downgrades >= absorption_budget`
+breaks it. See `world/combat/AGENT_GLOSSARY.md`'s Sustained Action / Absorption Budget
+entries for the full PC-side shape.
 _Avoid_: cancel, interrupt (a single interception downgrades; it does not by itself cancel).
 
 **Callout (wind-up)**:

@@ -74,6 +74,40 @@ outcome** (a closed issue or a "SHIPPED" line is not proof). See the ledger's go
   next round, a third answer on one payload declines). In-PR investigation found
   `select_npc_actions` had zero production callers — `resolve_round` now auto-selects
   as a conservative fallback when a round has no NPC selection yet (see ADR-0161).
+- **PC sustained actions — the wind-up mirror, for a PC's own commitments (#2705,
+  ADR-0190, extends ADR-0161), SQLite tier, journey-proven.** A `Technique.windup_rounds
+  > 0` technique, or a ritual whose `RitualCheckConfig.sustained_rounds > 0`, defers
+  instead of resolving same-round: declaring rolls Concentration ONCE
+  (`perform_check_with_modifiers`, so the 26 authored `ConditionCheckModifier` rows on
+  Concentration actually apply) to set an `absorption_budget = clamp(2 +
+  success_level, 0, 4)`, then telegraphs a `SustainedAction`. Every landing hit on the
+  sustaining participant adds a downgrade (`world/combat/tests/test_sustained_erosion.py`);
+  at maturation the commitment either holds — a winding-up technique clones its declaring
+  `CombatRoundAction` into the maturation round (resetting `from_entrance`/`maneuver`/
+  `item_instance`, preserving `confirm_soulfray_risk` and the cast geometry FKs), a
+  ritual dispatches its authored SERVICE/FLOW/CEREMONY payload via the newly-shared
+  `dispatch_ritual` — or breaks with no refund when `downgrades > 0 and downgrades >=
+  absorption_budget` (a landing hit is required, not just the floor — a Critical-Failure
+  budget of 0 breaks on the first hit, never an untouched commitment;
+  `world/combat/tests/test_sustained_maturation.py`). Sustaining occupies the
+  participant's action: `declare_action` raises while a not-yet-matured commitment is
+  still pending, whichever round it was declared in — including its own maturation round
+  and a same-round RITUAL commitment (`world/combat/tests/test_sustained_declaration.py`,
+  `world/combat/tests/test_sustained_ritual_declaration.py`). Unlike the NPC
+  side there is no damage ramp — full effect or nothing (ADR-0190, D1). A ritual is
+  invoked, not declared, so it reaches the same deferral through a separate door,
+  `try_declare_sustained_ritual` (`PerformRitualAction.execute()`, after components are
+  consumed and before dispatch); a ritual invoked with non-empty kwargs never defers
+  (ADR-0007 — no JSON field to replay them at maturation) and dispatches immediately, as
+  today (`world/magic/tests/test_perform_ritual_action_sustained.py`,
+  `world/combat/tests/test_sustained_ritual_declaration.py`). An encounter completing
+  early (last enemy down, GM-abandoned, everyone flees) breaks every still-pending
+  `SustainedAction` via `cleanup_completed_encounter` instead of orphaning it
+  (`world/combat/tests/test_cleanup_completed_encounter.py`) — post-launch adversarial-
+  review hardening (#2705), five fixes: the off-by-one maturation-round guard gap, an
+  unscoped delete that stranded a sustained ritual's consumed components, orphaned rows
+  on early completion, a stale `from_entrance`/`maneuver`/`item_instance` maturation
+  clone, and a budget-0 commitment breaking even when never hit.
 - **Sent Flying — consequence events in flight (#2638, ADR-0162), SQLite tier
   (except the marker-application/plummet-handoff paths, tagged postgres for the same
   `apply_condition` DISTINCT ON reason the plummet suite already carries), journey-proven.**
