@@ -19,7 +19,12 @@ _interception_rider` uses on the NPC side.
 
 **D1 — No damage ramp on the PC side.** A held `SustainedAction` resolves at **full** effect
 while `downgrades < absorption_budget`, and fizzles entirely — no partial resolution — at
-`downgrades >= absorption_budget`. This is a deliberate divergence from the NPC side, not an
+`downgrades > 0 and downgrades >= absorption_budget`. The `downgrades > 0` guard matters at
+the floor: a Critical-Failure roll clamps `absorption_budget` to 0, and without it `0 >= 0`
+would fizzle the commitment at maturation even if the participant was never touched. The
+approved spec's own test seam is explicit that a budget of 0 breaks on the participant's
+**first landing hit**, not on an untouched commitment reaching maturation in total safety —
+a hit is required either way. This is a deliberate divergence from the NPC side, not an
 oversight: on the NPC side `x(1 - 0.25*downgrades)` (the `damage_scale` ramp) *is* the
 gradation, because nothing about a wind-up ever rolls a check — the ramp is the only signal
 of "how hurt was this commitment." On the PC side the Concentration roll already supplied
@@ -48,9 +53,22 @@ thematic — you cannot hold a ritual together and also swing a sword — it is 
 name="unique_action_per_participant_per_round")`, and maturation clones the declaring
 action's fields into a brand-new row for the maturation round. If a same-round declaration
 were allowed while a commitment was pending, that clone would collide with it. The guard
-excludes the *current* round's own in-progress declaration (re-declaring the same round
-replaces, never stacks, via `_sync_sustained_technique_declaration`'s delete-then-recreate)
-— only a commitment declared in a strictly earlier round blocks.
+filters `resolves_round__gte` (not `__gt`): the round lifecycle is DECLARING(R) *then*
+`resolve_round(R)`, so a row maturing THIS round is not yet consumed while declaration is
+happening — `__gt` let a second action be declared for the maturing participant's own
+maturation round, and `_mature_sustained_technique`'s bare `.objects.create()` for that same
+`(participant, round_number)` collided with `unique_action_per_participant_per_round`,
+raising an uncaught `IntegrityError` that aborted `resolve_round` for the entire encounter
+(#2705 adversarial review, Fix 1). The guard excludes the *current* round's own in-progress
+TECHNIQUE declaration (re-declaring the same round replaces, never stacks, via
+`_sync_sustained_technique_declaration`'s delete-then-recreate) — but never excludes a
+same-round RITUAL row that way, because a ritual is declared through
+`try_declare_sustained_ritual`, not `declare_action`, so there is no sync step here that
+would replace it (Fix 2b) — one cannot conduct a ritual and also swing a sword in the same
+round. `_sync_sustained_technique_declaration`'s own delete is likewise scoped to
+`sustained_kind=TECHNIQUE` (Fix 2a): before that scoping, declaring anything else the same
+round as a sustained ritual silently deleted the ritual's row — components already consumed,
+no refund, no narration.
 
 **The ritual-path corollary to D2, found during implementation.** A ritual is invoked
 through `PerformRitualAction`, not through `declare_action` — so D2's raise-based guard never

@@ -15,22 +15,43 @@ for standalone technique casts.
 from __future__ import annotations
 
 import re
+from unittest import mock
 
 from django.test import TestCase
 
 from world.checks.factories import CheckCategoryFactory, CheckTypeFactory
 from world.checks.test_helpers import force_check_outcome
 from world.combat.constants import CONCENTRATION_CHECK_TYPE_NAME, SustainedKind
-from world.combat.factories import CombatEncounterFactory, CombatParticipantFactory
-from world.combat.models import CombatEncounter, CombatParticipant, SustainedAction
-from world.combat.services import declare_action, roll_sustained_absorption_budget
+from world.combat.factories import (
+    CombatEncounterFactory,
+    CombatOpponentFactory,
+    CombatParticipantFactory,
+    SustainedActionFactory,
+)
+from world.combat.models import (
+    CombatEncounter,
+    CombatParticipant,
+    CombatRoundAction,
+    SustainedAction,
+)
+from world.combat.services import (
+    _sync_sustained_technique_declaration,
+    declare_action,
+    resolve_round,
+    roll_sustained_absorption_budget,
+)
 from world.conditions.factories import (
     ConditionCheckModifierFactory,
     ConditionInstanceFactory,
     ConditionTemplateFactory,
 )
 from world.fatigue.constants import EffortLevel
-from world.magic.factories import EffectTypeFactory, GiftFactory, TechniqueFactory
+from world.magic.factories import (
+    EffectTypeFactory,
+    GiftFactory,
+    RitualFactory,
+    TechniqueFactory,
+)
 from world.scenes.constants import RoundStatus
 from world.traits.factories import (
     CheckOutcomeFactory,
@@ -169,6 +190,121 @@ class SustainedTechniqueDeclarationTests(_SustainedTestBase):
 
         with self.assertRaisesRegex(ValueError, re.escape(sustained.subject_name)):
             declare_action(self.participant, effort_level=EffortLevel.MEDIUM)
+
+    @mock.patch("world.scenes.interaction_services._broadcast_to_location")
+    @mock.patch("world.combat.services._run_combat_technique_pipeline")
+    def test_declaring_on_own_maturation_round_raises_and_resolve_round_survives(
+        self,
+        mock_pipeline,
+        mock_broadcast,  # noqa: ARG002
+    ) -> None:
+        """Off-by-one regression (#2705 adversarial review, Fix 1).
+
+        The guard used to filter ``resolves_round__gt``, so the participant's
+        OWN maturation round (``resolves_round == round_number``) was open:
+        ``declare_action`` would succeed there, ``update_or_create`` would
+        make a ``CombatRoundAction(participant, round_number)``, and
+        ``_mature_sustained_technique``'s bare ``.objects.create()`` for that
+        same ``(participant, round_number)`` would then collide with
+        ``unique_action_per_participant_per_round`` -- an uncaught
+        ``IntegrityError`` that aborts ``resolve_round`` for the entire
+        encounter, not just this participant.
+
+        ``_run_combat_technique_pipeline`` is patched (mirrors
+        ``test_sustained_maturation.SustainedDeclaringRoundSkipTests``) so the
+        matured clone's own resolution doesn't need a fully-wired magic
+        action_template/check pipeline -- this test only cares that maturation
+        itself does not crash on the round-3 boundary.
+        """
+        from world.combat.types import CombatTechniqueResult
+        from world.magic.types import TechniqueUseResult
+
+        mock_pipeline.return_value = CombatTechniqueResult(
+            damage_results=[],
+            applied_conditions=[],
+            technique_use_result=mock.MagicMock(spec=TechniqueUseResult),
+        )
+
+        # An ACTIVE ENEMY opponent with no threat_pool keeps
+        # _check_encounter_completion from closing the encounter (an
+        # encounter with zero active ENEMY opponents auto-completes) while
+        # select_npc_actions skips it entirely (it excludes
+        # threat_pool__isnull=True) -- this test only wants to exercise
+        # sustained-action maturation, not the full completion/aftermath path.
+        CombatOpponentFactory(encounter=self.encounter, threat_pool=None)
+
+        technique = TechniqueFactory(
+            gift=self.gift, effect_type=self.effect_type_buff, windup_rounds=2
+        )
+        declare_action(self.participant, focused_action=technique, effort_level=EffortLevel.MEDIUM)
+        sustained = SustainedAction.objects.get()
+        self.assertEqual(sustained.resolves_round, 3)
+
+        # Advance straight to round 3 -- the participant's own maturation
+        # round -- while still DECLARING.
+        self.encounter.round_number = 3
+        self.encounter.save(update_fields=["round_number"])
+
+        with self.assertRaisesRegex(ValueError, re.escape(sustained.subject_name)):
+            declare_action(self.participant, effort_level=EffortLevel.MEDIUM)
+
+        # Before the fix, the block above would not have raised at all, and
+        # this call would crash with an IntegrityError. After the fix, no
+        # colliding round-3 CombatRoundAction was ever created, so maturation
+        # cleanly clones the declaring action into round 3.
+        resolve_round(self.encounter)
+
+        self.assertFalse(SustainedAction.objects.filter(pk=sustained.pk).exists())
+
+
+class SustainedTechniqueSyncScopingTests(_SustainedTestBase):
+    """Fix 2a (#2705 adversarial review): the sync's blanket delete must be
+    scoped to ``sustained_kind=TECHNIQUE`` — a RITUAL row for the same
+    ``(participant, declared_round)`` is created through a completely
+    different seam (``try_declare_sustained_ritual``, not ``declare_action``)
+    and must survive being synced against.
+
+    Exercises ``_sync_sustained_technique_declaration`` directly rather than
+    through ``declare_action`` — Fix 2b's extension of
+    ``_validate_no_pending_sustained`` now blocks a same-round RITUAL
+    commitment from ever reaching this sync step via the real
+    ``declare_action`` path, so the scoping itself can only be proven at this
+    level (defense in depth: both the guard AND the scoped delete are
+    independently correct).
+    """
+
+    def setUp(self) -> None:
+        super().setUp()
+        self.encounter = _make_declaring_encounter(round_number=1)
+        self.participant = _make_participant(self.encounter)
+
+    def test_sync_does_not_delete_a_same_round_ritual_commitment(self) -> None:
+        ritual = RitualFactory()
+        ritual_sustained = SustainedActionFactory(
+            encounter=self.encounter,
+            participant=self.participant,
+            sustained_kind=SustainedKind.RITUAL,
+            technique=None,
+            ritual=ritual,
+            declared_action=None,
+            declared_round=self.encounter.round_number,
+            resolves_round=self.encounter.round_number + 2,
+            absorption_budget=3,
+        )
+
+        action = CombatRoundAction.objects.create(
+            participant=self.participant,
+            round_number=self.encounter.round_number,
+            is_ready=False,
+        )
+
+        # Simulates declare_action's unconditional sync call with no
+        # (non-windup) technique focused — the shape that, pre-fix, deleted
+        # ANY same-round SustainedAction regardless of kind.
+        _sync_sustained_technique_declaration(self.participant, action, None)
+
+        self.assertTrue(SustainedAction.objects.filter(pk=ritual_sustained.pk).exists())
+        self.assertEqual(SustainedAction.objects.get().sustained_kind, SustainedKind.RITUAL)
 
 
 class SustainedAbsorptionLadderTests(_SustainedTestBase):

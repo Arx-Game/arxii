@@ -5370,15 +5370,26 @@ reactive maneuvers (COVER, INTERPOSE, DEFEND stance), and clash-of-wills.
     resolve-immediately behavior, unchanged for every existing row.
   - **Declaration (technique):** `_validate_no_pending_sustained` (`world/combat/
     services.py`) raises `ValueError` in `declare_action` when the participant is still
-    holding an EARLIER round's commitment (`declared_round < round_number,
-    resolves_round > round_number` — excludes the current round's own in-progress
-    commitment, which is the re-declaration case, not a block). Structural, not just
-    thematic: `CombatRoundAction`'s `unique_action_per_participant_per_round`
-    constraint means a same-round declaration on top of a pending commitment would
-    collide with maturation's clone. `_sync_sustained_technique_declaration` runs
-    unconditionally from `declare_action`, deleting any existing same-round
-    `SustainedAction` first (re-declare replaces, never stacks), then creating a new
-    one only when `technique.windup_rounds > 0`.
+    holding a not-yet-matured commitment (`resolves_round__gte round_number` — a row
+    maturing THIS round still blocks, since maturation only consumes it during
+    RESOLVING and declaration only runs during DECLARING; `__gt` alone left that
+    boundary open and let a colliding same-round `CombatRoundAction` get declared,
+    which crashed `resolve_round` on `unique_action_per_participant_per_round` at
+    maturation — #2705 adversarial review, Fix 1). Excludes only a TECHNIQUE row with
+    `declared_round == round_number` — the current round's own in-progress
+    commitment, which is the re-declaration case handled by
+    `_sync_sustained_technique_declaration`'s delete-then-recreate, not a block. A
+    same-round RITUAL row is never excluded that way (Fix 2b): a ritual is declared
+    through `try_declare_sustained_ritual`, not `declare_action`, so there's no sync
+    step here to replace it — one cannot conduct a ritual and also swing a sword the
+    same round. Structural, not just thematic: `CombatRoundAction`'s
+    `unique_action_per_participant_per_round` constraint means a same-round
+    declaration on top of a pending commitment would collide with maturation's clone.
+    `_sync_sustained_technique_declaration` runs unconditionally from `declare_action`,
+    deleting any existing same-round **TECHNIQUE-kind** `SustainedAction` first
+    (re-declare replaces, never stacks; scoped to TECHNIQUE since Fix 2a — an unscoped
+    delete used to silently strand a same-round sustained ritual's already-consumed
+    components), then creating a new one only when `technique.windup_rounds > 0`.
   - **Declaration (ritual):** `try_declare_sustained_ritual` (`world/combat/
     services.py`), called from `PerformRitualAction.execute()`
     (`actions/definitions/ritual.py`) after components are validated/consumed and
@@ -5415,7 +5426,11 @@ reactive maneuvers (COVER, INTERPOSE, DEFEND stance), and clash-of-wills.
     before the round's `CombatRoundAction` rows are queried, so a matured technique's
     cloned row is picked up by the normal PC pipeline unmodified.
     `_mature_one_sustained_action` breaks (no refund — the cost stands) when
-    `downgrades >= absorption_budget` or the holder can no longer hold it together
+    `downgrades > 0 and downgrades >= absorption_budget` (requires an actual landing
+    hit, not just the floor — a Critical-Failure budget of 0 must break on the
+    participant's FIRST HIT, not fizzle an untouched commitment in total safety at
+    maturation; `downgrades >= budget` alone let `0 >= 0` fire with zero hits taken —
+    #2705 adversarial review, Fix 5) or the holder can no longer hold it together
     (left the encounter / died, distinct "comes to nothing" narration); otherwise
     TECHNIQUE clones `declared_action`'s fields into a brand-new `CombatRoundAction`
     row via `.objects.create()` from a field dict (deliberately NOT the plan's literal
@@ -5423,11 +5438,30 @@ reactive maneuvers (COVER, INTERPOSE, DEFEND stance), and clash-of-wills.
     and re-saving reassigns a new pk to the SAME cached Python object without updating
     the idmapper's cache entry for the ORIGINAL pk, so a later `.objects.get(pk=
     <declaring round's pk>)` would silently return the maturation round's data; see
-    the docstring in `services.py` for the full trap), copying `CombatRoundActionTarget`
-    rows via `bulk_create`; RITUAL dispatches via `dispatch_ritual`
-    (`world/magic/services/ritual_dispatch.py`), catching only the same ritual-surface
-    exceptions `PerformRitualAction` already catches (a content-authoring gap in one
-    participant's ritual must not abort round resolution for everyone).
+    the docstring in `services.py` for the full trap), resetting `from_entrance`
+    (else a windup declared as a dramatic entrance spuriously re-fires
+    `_maybe_suggest_entrance_dramatic_moment` N rounds later — Fix 4) and `maneuver`/
+    `item_instance` (belong to the declaring round's action shape, not the matured
+    cast) while deliberately PRESERVING `confirm_soulfray_risk` and the cast geometry
+    FKs (`cast_destination`/`cast_position_a`/`cast_position_b`/
+    `redirect_opponent_target`/`redirect_object_target` — these describe the declared
+    cast itself), copying `CombatRoundActionTarget` rows via `bulk_create`; RITUAL
+    dispatches via `dispatch_ritual` (`world/magic/services/ritual_dispatch.py`),
+    catching only the same ritual-surface exceptions `PerformRitualAction` already
+    catches (a content-authoring gap in one participant's ritual must not abort round
+    resolution for everyone).
+  - **Encounter-completion teardown (#2705 adversarial review, Fix 3):**
+    `cleanup_completed_encounter` — the seam every production completion path
+    (`complete_encounter`, called from round-resolution auto-complete, `end_encounter`,
+    duel completion) unconditionally reaches — calls
+    `_break_pending_sustained_actions(encounter)` first, breaking (broadcast + delete,
+    no refund) every `SustainedAction` still on the board when the encounter ends
+    early. Before this, an encounter completing before a commitment's `resolves_round`
+    arrived (last enemy killed mid-ritual, GM abandons, everyone flees) orphaned the
+    row forever — it never matured, never narrated, and a RITUAL row's already-
+    consumed components bought nothing. `PendingOpponentAttack` (the NPC mirror) has
+    the same pre-existing gap, deliberately NOT fixed here — out of scope, no
+    consumed-cost consequence.
   - **The declaring round is skipped**, not resolved: `resolve_round` collects
     `SustainedAction.objects.filter(declared_round=round_number)`'s participant ids and
     excludes them from that round's PC resolution loop — that round's

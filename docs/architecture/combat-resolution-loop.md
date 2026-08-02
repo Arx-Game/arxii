@@ -1419,11 +1419,19 @@ already supplies the gradation the NPC-side ramp exists to fake.
 
 ```
 declare_action (PC declaration, still DECLARING)
-  _validate_no_pending_sustained → raise ValueError if an EARLIER round's
-    SustainedAction is still pending (D2 — sustaining occupies your action)
+  _validate_no_pending_sustained → raise ValueError if a not-yet-matured
+    SustainedAction is still pending (resolves_round__gte round_number — a row
+    maturing THIS round still blocks; D2 — sustaining occupies your action).
+    Excludes only a TECHNIQUE row with declared_round == round_number (this
+    round's own in-progress declaration, replaced by the sync step below); a
+    same-round RITUAL row is never excluded — a ritual is declared through a
+    different seam entirely, so there's no sync step to replace it here.
   focused_action.windup_rounds > 0?
     yes → _sync_sustained_technique_declaration
-            → delete any same-round SustainedAction first (re-declare, never stack)
+            → delete any same-round TECHNIQUE-kind SustainedAction first
+              (re-declare, never stack — scoped to TECHNIQUE so a same-round
+              RITUAL commitment, which the guard above already blocked
+              anyway, is never silently stranded)
             → roll_sustained_absorption_budget(participant)
                  perform_check_with_modifiers(character, Concentration CheckType)
                  budget = clamp(2 + result.success_level, 0, 4)   # D3
@@ -1460,8 +1468,11 @@ apply_damage_to_participant (any landed hit on the sustaining participant)
 # ...round advances until resolves_round == round_number...
 
 _mature_sustained_actions (resolve_round, right after _mature_pending_opponent_attacks)
-  downgrades >= absorption_budget?
+  downgrades > 0 AND downgrades >= absorption_budget?         # requires an actual hit
     yes → _broadcast_sustained_broken; sustained.delete()      # cost stands, no refund
+          (NOT downgrades >= budget alone — a Critical-Failure budget of 0 must
+          break on the FIRST landing hit, not fizzle an untouched commitment in
+          total safety at maturation; #2705 adversarial review, Fix 5)
   participant left/died?
     yes → _broadcast_sustained_broken(reason="comes to nothing"); delete
   kind == TECHNIQUE → _mature_sustained_technique
@@ -1469,12 +1480,30 @@ _mature_sustained_actions (resolve_round, right after _mature_pending_opponent_a
     (built via .objects.create() from a field dict, NOT clone.pk=None — mutating the
     idmapper-cached original in place would poison the cache for the declaring round's
     real pk; see the docstring at services.py for the full rationale)
+    reset from_entrance=False, maneuver=None, item_instance=None (declaring-round-
+    scoped fields — else a windup declared as a dramatic entrance re-fires the
+    entrance moment N rounds later; Fix 4); PRESERVE confirm_soulfray_risk and the
+    cast geometry FKs (cast_destination/cast_position_a/cast_position_b/
+    redirect_opponent_target/redirect_object_target) — they describe the cast itself
     copy CombatRoundActionTarget rows; _broadcast_sustained_held; delete
   kind == RITUAL → _mature_sustained_ritual
     dispatch_ritual(ritual, performer_sheet)                   # the extracted switch,
     catch ritual-surface exceptions only → broken, no refund   # shared with the
     else → _broadcast_sustained_held; delete                   # non-combat cast path
 ```
+
+### Early completion breaks every pending commitment (#2705 adversarial review, Fix 3)
+
+An encounter can complete (victory, defeat, flee, GM-abandoned) before a
+`SustainedAction`'s `resolves_round` ever arrives. `cleanup_completed_encounter` —
+reached unconditionally by `complete_encounter`, the single completion seam every
+production path (round-resolution auto-complete, `end_encounter`, duel completion)
+funnels through — now calls `_break_pending_sustained_actions(encounter)` first,
+which breaks (broadcast + delete, no refund) every `SustainedAction` still on the
+board for that encounter. Before this fix the row was orphaned forever: it never
+matured, never narrated, and a RITUAL row's already-consumed components bought
+nothing. `PendingOpponentAttack` (the NPC mirror) has the same pre-existing gap,
+deliberately left alone — out of scope, and it has no consumed-cost consequence.
 
 ### The reaction economy fire seam (#2639, F-10c)
 

@@ -156,6 +156,118 @@ class SustainedMaturationCloneTests(_SustainedMaturationTestBase):
         self.assertEqual(refetched.round_number, 1)
 
 
+class SustainedMaturationStaleFieldResetTests(_SustainedMaturationTestBase):
+    """Fix 4 (#2705 adversarial review): the maturation clone must not carry
+    stale per-round fields forward from the declaring round.
+
+    ``from_entrance`` is the concrete bug: ``_resolve_pc_action`` fires
+    ``_maybe_suggest_entrance_dramatic_moment`` whenever ``action.from_entrance``
+    is true, so a windup declared as a dramatic entrance would spuriously
+    re-fire an entrance moment N rounds later at maturation. ``maneuver`` /
+    ``item_instance`` belong to the declaring round's action shape (a
+    sustained commitment is never itself a maneuver), not to the matured
+    cast, so they are reset too.
+    """
+
+    def setUp(self) -> None:
+        super().setUp()
+        self.encounter = CombatEncounterFactory(status=RoundStatus.RESOLVING, round_number=2)
+        self.participant = _make_participant(self.encounter)
+        self.technique = self._make_technique(windup_rounds=2)
+
+    @mock.patch("world.scenes.interaction_services._broadcast_to_location")
+    def test_from_entrance_is_reset_on_the_clone(self, mock_broadcast) -> None:  # noqa: ARG002
+        declared_action = CombatRoundAction.objects.create(
+            participant=self.participant,
+            round_number=1,
+            focused_action=self.technique,
+            is_ready=False,
+            from_entrance=True,
+        )
+        SustainedActionFactory(
+            encounter=self.encounter,
+            participant=self.participant,
+            technique=self.technique,
+            declared_action=declared_action,
+            declared_round=1,
+            resolves_round=2,
+            absorption_budget=3,
+            downgrades=0,
+        )
+
+        _mature_sustained_actions(self.encounter, round_number=2)
+
+        clone = CombatRoundAction.objects.get(participant=self.participant, round_number=2)
+        self.assertFalse(clone.from_entrance)
+        # The declaring round's own row is untouched -- still True.
+        original_reread = CombatRoundAction.objects.get(pk=declared_action.pk)
+        self.assertTrue(original_reread.from_entrance)
+
+    @mock.patch("world.scenes.interaction_services._broadcast_to_location")
+    def test_maneuver_and_item_instance_are_reset_on_the_clone(self, mock_broadcast) -> None:  # noqa: ARG002
+        from world.combat.constants import CombatManeuver
+        from world.items.factories import ItemInstanceFactory
+
+        item = ItemInstanceFactory()
+        declared_action = CombatRoundAction.objects.create(
+            participant=self.participant,
+            round_number=1,
+            focused_action=self.technique,
+            is_ready=False,
+            maneuver=CombatManeuver.USE_ITEM,
+            item_instance=item,
+        )
+        SustainedActionFactory(
+            encounter=self.encounter,
+            participant=self.participant,
+            technique=self.technique,
+            declared_action=declared_action,
+            declared_round=1,
+            resolves_round=2,
+            absorption_budget=3,
+            downgrades=0,
+        )
+
+        _mature_sustained_actions(self.encounter, round_number=2)
+
+        clone = CombatRoundAction.objects.get(participant=self.participant, round_number=2)
+        self.assertIsNone(clone.maneuver)
+        self.assertIsNone(clone.item_instance_id)
+        # The declaring round's own row is untouched.
+        original_reread = CombatRoundAction.objects.get(pk=declared_action.pk)
+        self.assertEqual(original_reread.maneuver, CombatManeuver.USE_ITEM)
+        self.assertEqual(original_reread.item_instance_id, item.pk)
+
+    @mock.patch("world.scenes.interaction_services._broadcast_to_location")
+    def test_confirm_soulfray_risk_and_cast_geometry_are_preserved(
+        self,
+        mock_broadcast,  # noqa: ARG002
+    ) -> None:
+        """Deliberate PRESERVE, not reset — the flip side of the reset list."""
+        declared_action = CombatRoundAction.objects.create(
+            participant=self.participant,
+            round_number=1,
+            focused_action=self.technique,
+            is_ready=False,
+            confirm_soulfray_risk=True,
+        )
+        SustainedActionFactory(
+            encounter=self.encounter,
+            participant=self.participant,
+            technique=self.technique,
+            declared_action=declared_action,
+            declared_round=1,
+            resolves_round=2,
+            absorption_budget=3,
+            downgrades=0,
+        )
+
+        _mature_sustained_actions(self.encounter, round_number=2)
+
+        clone = CombatRoundAction.objects.get(participant=self.participant, round_number=2)
+        self.assertTrue(clone.confirm_soulfray_risk)
+
+
 class SustainedMaturationExtraTargetsTests(_SustainedMaturationTestBase):
     def setUp(self) -> None:
         super().setUp()
@@ -287,6 +399,78 @@ class SustainedMaturationBrokenTests(_SustainedMaturationTestBase):
         _mature_one_sustained_action(sustained, round_number=2)
 
         self.assertEqual(CombatRoundAction.objects.filter(participant=self.participant).count(), 1)
+
+
+# ---------------------------------------------------------------------------
+# Fix 5 (#2705 adversarial review): a budget-0 commitment must not break at
+# maturation unless it was actually hit -- downgrades > 0 AND >= budget.
+# ---------------------------------------------------------------------------
+
+
+class SustainedMaturationZeroBudgetTests(_SustainedMaturationTestBase):
+    def setUp(self) -> None:
+        super().setUp()
+        self.encounter = CombatEncounterFactory(status=RoundStatus.RESOLVING, round_number=2)
+        self.participant = _make_participant(self.encounter)
+        self.technique = self._make_technique(windup_rounds=2)
+        self.declared_action = CombatRoundAction.objects.create(
+            participant=self.participant,
+            round_number=1,
+            focused_action=self.technique,
+            is_ready=False,
+        )
+
+    @mock.patch("world.scenes.interaction_services._broadcast_to_location")
+    def test_zero_budget_zero_downgrades_holds_and_resolves(self, mock_broadcast) -> None:  # noqa: ARG002
+        """Untouched (never hit) commitment: 0 >= 0 alone must NOT break it.
+
+        Before the fix, ``downgrades >= absorption_budget`` fired on
+        ``0 >= 0`` even though the participant was never touched, fizzling
+        the commitment in total safety -- something the approved spec never
+        intended (its own test seam requires a landing hit first).
+        """
+        sustained = SustainedActionFactory(
+            encounter=self.encounter,
+            participant=self.participant,
+            technique=self.technique,
+            declared_action=self.declared_action,
+            declared_round=1,
+            resolves_round=2,
+            absorption_budget=0,
+            downgrades=0,
+        )
+
+        _mature_one_sustained_action(sustained, round_number=2)
+
+        self.assertFalse(SustainedAction.objects.filter(pk=sustained.pk).exists())
+        clone = CombatRoundAction.objects.filter(
+            participant=self.participant, round_number=2
+        ).first()
+        self.assertIsNotNone(clone)
+        self.assertTrue(clone.is_ready)
+
+    @mock.patch("world.scenes.interaction_services._broadcast_to_location")
+    def test_zero_budget_one_downgrade_breaks(self, mock_broadcast) -> None:
+        """A single landing hit against a budget of 0 is already >= budget --
+        breaks, exactly as the approved spec's test seam requires."""
+        sustained = SustainedActionFactory(
+            encounter=self.encounter,
+            participant=self.participant,
+            technique=self.technique,
+            declared_action=self.declared_action,
+            declared_round=1,
+            resolves_round=2,
+            absorption_budget=0,
+            downgrades=1,
+        )
+
+        _mature_one_sustained_action(sustained, round_number=2)
+
+        self.assertFalse(SustainedAction.objects.filter(pk=sustained.pk).exists())
+        self.assertFalse(
+            CombatRoundAction.objects.filter(participant=self.participant, round_number=2).exists()
+        )
+        self.assertTrue(mock_broadcast.called)
 
 
 # ---------------------------------------------------------------------------

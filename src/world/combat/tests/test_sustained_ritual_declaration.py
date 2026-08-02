@@ -13,6 +13,8 @@ same-round-replacement idempotence Task 2 established for techniques.
 
 from __future__ import annotations
 
+import re
+
 from django.test import TestCase
 
 from world.character_sheets.factories import CharacterSheetFactory
@@ -194,3 +196,37 @@ class SustainedRitualInertnessTests(_SustainedRitualDeclarationBase):
         # Still exactly the one technique-side commitment; no ritual row added.
         self.assertEqual(SustainedAction.objects.count(), 1)
         self.assertEqual(SustainedAction.objects.get().sustained_kind, SustainedKind.TECHNIQUE)
+
+
+class SustainedRitualBlocksCombatDeclarationTests(_SustainedRitualDeclarationBase):
+    """Fix 2b (#2705 adversarial review): a not-yet-matured RITUAL commitment
+    blocks ANY combat declaration in the same round it was declared — you
+    cannot conduct a ritual and also swing a sword (D2).
+
+    Before the fix, ``_validate_no_pending_sustained`` excluded
+    ``declared_round == round_number`` unconditionally, so a same-round
+    RITUAL commitment never blocked ``declare_action`` at all; instead
+    ``_sync_sustained_technique_declaration``'s unscoped delete silently
+    discarded the ritual row (its already-consumed components gone, no
+    narration, zero effect) — see Fix 2a's scoping in
+    ``test_sustained_declaration.SustainedTechniqueSyncScopingTests``.
+    """
+
+    def setUp(self) -> None:
+        super().setUp()
+        self.encounter = _make_declaring_encounter(round_number=1)
+        self.participant = _make_active_participant(self.encounter)
+        self.ritual = _make_sustained_ritual(sustained_rounds=2)
+
+    def test_ritual_pending_same_round_blocks_combat_declaration(self) -> None:
+        sustained = try_declare_sustained_ritual(
+            sheet=self.participant.character_sheet, ritual=self.ritual, kwargs={}
+        )
+        self.assertIsNotNone(sustained)
+
+        with self.assertRaisesRegex(ValueError, re.escape(self.ritual.name)):
+            declare_action(self.participant, effort_level=EffortLevel.MEDIUM)
+
+        # The ritual commitment survives untouched — not silently deleted.
+        self.assertEqual(SustainedAction.objects.count(), 1)
+        self.assertTrue(SustainedAction.objects.filter(pk=sustained.pk).exists())

@@ -3134,24 +3134,44 @@ def _validate_no_pending_sustained(
     into the maturation round) would collide with a same-round declaration if
     this were allowed.
 
-    Filters ``resolves_round__gt`` (not ``__gte``): a row maturing THIS round is
-    consumed by maturation during RESOLVING, before declaration can happen
-    again for ``round_number`` — declaration only runs during DECLARING — so a
-    row with ``resolves_round == round_number`` cannot exist at declaration
-    time.
+    Filters ``resolves_round__gte`` (not ``__gt``): the round lifecycle is
+    DECLARING(R) *then* ``resolve_round(R)`` — a row maturing THIS round is
+    NOT yet consumed while declaration is happening, because maturation only
+    runs from ``resolve_round``, during RESOLVING. A ``__gt`` filter would
+    therefore let a second action be declared for the maturing participant's
+    own maturation round; ``update_or_create`` would create a
+    ``CombatRoundAction(participant, round_number)`` row, and
+    ``_mature_sustained_technique``'s bare ``.objects.create()`` for that same
+    ``(participant, round_number)`` would then collide with
+    ``unique_action_per_participant_per_round`` and raise an uncaught
+    ``IntegrityError`` that aborts ``resolve_round`` for the entire encounter
+    (#2705 adversarial review, Fix 1). ``__gte`` closes the gap: a row with
+    ``resolves_round == round_number`` blocks declaration exactly like one
+    still further out.
 
-    Excludes ``declared_round == round_number``: that row is THIS round's own
-    in-progress commitment, not a prior one blocking a new declaration — a
-    player amending their current round's declaration must still reach
-    ``_sync_sustained_technique_declaration``'s delete-then-recreate idempotence,
-    never this gate. Only a commitment declared in a STRICTLY earlier round
-    (``declared_round < round_number``) blocks.
+    Excludes a TECHNIQUE row with ``declared_round == round_number``: that row
+    is THIS round's own in-progress commitment, not a prior one blocking a new
+    declaration — a player amending their current round's declaration must
+    still reach ``_sync_sustained_technique_declaration``'s delete-then-recreate
+    idempotence, never this gate. A RITUAL row is never excluded this way even
+    when ``declared_round == round_number``: a ritual is declared through
+    ``try_declare_sustained_ritual`` (``PerformRitualAction``), a completely
+    different seam from ``declare_action`` — there is no sync step here that
+    will replace it, so a same-round ritual commitment must still block a
+    combat declaration (Fix 2b; conducting a ritual and swinging a sword in the
+    same round is not allowed, D2).
     """
-    pending = SustainedAction.objects.filter(
-        participant=participant,
-        declared_round__lt=encounter.round_number,
-        resolves_round__gt=encounter.round_number,
-    ).first()
+    pending = (
+        SustainedAction.objects.filter(
+            participant=participant,
+            resolves_round__gte=encounter.round_number,
+        )
+        .exclude(
+            declared_round=encounter.round_number,
+            sustained_kind=SustainedKind.TECHNIQUE,
+        )
+        .first()
+    )
     if pending is not None:
         msg = f"Cannot declare an action: you are still holding {pending.subject_name} together."
         raise ValueError(msg)
@@ -3420,17 +3440,33 @@ def _sync_sustained_technique_declaration(
 
     Called unconditionally from ``declare_action`` (no branch there — keeps its
     cyclomatic complexity down) so re-declaration is always synced: any
-    existing SustainedAction for ``(participant, declared_round=encounter.
-    round_number)`` is deleted first — a player re-declaring the same round's
-    action, whether to the same winding-up technique or to something else
-    entirely, must never stack a second row — and a new one is created only
-    when ``technique`` is set and ``technique.windup_rounds > 0``. Rolls
+    existing TECHNIQUE-kind SustainedAction for ``(participant, declared_round=
+    encounter.round_number)`` is deleted first — a player re-declaring the same
+    round's action, whether to the same winding-up technique or to something
+    else entirely, must never stack a second row — and a new one is created
+    only when ``technique`` is set and ``technique.windup_rounds > 0``. Rolls
     Concentration once (via ``roll_sustained_absorption_budget``) each time a
     commitment is (re-)declared.
+
+    Scoped to ``sustained_kind=SustainedKind.TECHNIQUE`` (#2705 adversarial
+    review, Fix 2a): a RITUAL row for the same ``(participant, declared_round)``
+    is created through a completely different seam
+    (``try_declare_sustained_ritual``, called from ``PerformRitualAction`` —
+    never from ``declare_action``), and its components were already consumed
+    at declaration. An unscoped delete here would silently strand a sustained
+    ritual's already-consumed components the moment the player declared
+    anything else that same round — no narration, no refund, the commitment
+    simply vanishes. ``_validate_no_pending_sustained`` (called earlier in
+    ``declare_action``) now blocks that combat declaration outright while a
+    RITUAL commitment is pending (Fix 2b), so in practice this delete should
+    never even see a RITUAL row for this participant — but scoping it
+    correctly here is the actual fix; the validation is defense in depth.
     """
     encounter = participant.encounter
     SustainedAction.objects.filter(
-        participant=participant, declared_round=encounter.round_number
+        participant=participant,
+        declared_round=encounter.round_number,
+        sustained_kind=SustainedKind.TECHNIQUE,
     ).delete()
 
     if technique is None or technique.windup_rounds <= 0:
@@ -4868,7 +4904,22 @@ def _mature_sustained_technique(sustained: SustainedAction, round_number: int) -
     the declaring round's resolution — a stale FK here would misattribute this
     round's narration to that one), ``combo_upgrade`` (a combo detected against
     the DECLARING round's board has no bearing on the maturation round's board),
-    and ``succor_resolution`` (a cached Succor outcome is round-scoped).
+    ``succor_resolution`` (a cached Succor outcome is round-scoped), ``from_
+    entrance`` (a windup declared as a dramatic technique entrance must not
+    spuriously re-fire ``_maybe_suggest_entrance_dramatic_moment`` N rounds
+    later — ``_resolve_pc_action`` fires that suggestion whenever
+    ``action.from_entrance`` is true, #2705 adversarial review, Fix 4), and
+    ``maneuver`` / ``item_instance`` (a maneuver and the item it uses belong to
+    the DECLARING round's action shape — a sustained commitment is never itself
+    a maneuver — not to the matured cast).
+
+    **Deliberately PRESERVED, not reset:** ``confirm_soulfray_risk`` (the
+    player's consent for THIS specific cast — it does not expire at maturation,
+    it IS what the player is committing to) and the cast geometry FKs
+    (``cast_destination``, ``cast_position_a``, ``cast_position_b``,
+    ``redirect_opponent_target``, ``redirect_object_target``) — these describe
+    the declared cast itself, not per-round resolution bookkeeping, so they
+    carry forward unchanged into the maturation round.
 
     Does **not** delete a pre-existing same-round row to make room: decision D2
     (enforced by ``_validate_no_pending_sustained``) means one cannot exist while
@@ -4913,6 +4964,9 @@ def _mature_sustained_technique(sustained: SustainedAction, round_number: int) -
     fields["interaction_timestamp"] = None
     fields["combo_upgrade_id"] = None
     fields["succor_resolution"] = None
+    fields["from_entrance"] = False
+    fields["maneuver"] = None
+    fields["item_instance_id"] = None
     clone = CombatRoundAction.objects.create(**fields)
 
     if extra_target_opponent_ids:
@@ -4985,10 +5039,17 @@ def _mature_one_sustained_action(sustained: SustainedAction, round_number: int) 
     NPC side there is no damage ramp (D1, ADR-0188) — a held commitment resolves
     at full effect or not at all.
 
-    1. ``downgrades >= absorption_budget`` -> broken. **The cost stands — nothing
-       is refunded.** Components/anima were charged at declaration (rituals,
-       Task 5); the spec's ruling is that a broken sustain is simply spent, which
-       is what makes committing to one real stakes rather than a free retry.
+    1. ``downgrades > 0 and downgrades >= absorption_budget`` -> broken. **The
+       cost stands — nothing is refunded.** Components/anima were charged at
+       declaration (rituals, Task 5); the spec's ruling is that a broken
+       sustain is simply spent, which is what makes committing to one real
+       stakes rather than a free retry. Requires ``downgrades > 0``, not just
+       ``>=``, so that a Critical-Failure budget of 0 breaks on the participant's
+       FIRST LANDING HIT (``_apply_sustained_erosion_rider`` takes it to
+       ``downgrades=1``, already ``>= 0``) rather than at maturation regardless
+       of whether the participant was ever touched — ``0 >= 0`` alone would
+       fizzle an untouched commitment in total safety, which the approved spec
+       never intended (#2705 adversarial review, Fix 5).
     2. The holder can no longer hold it together (left the encounter or died) ->
        broken, distinct "comes to nothing" narration.
     3. ``SustainedKind.TECHNIQUE`` -> clone the declaring action into this round.
@@ -4999,7 +5060,7 @@ def _mature_one_sustained_action(sustained: SustainedAction, round_number: int) 
     """
     from world.vitals.services import is_dead  # noqa: PLC0415
 
-    if sustained.downgrades >= sustained.absorption_budget:
+    if sustained.downgrades > 0 and sustained.downgrades >= sustained.absorption_budget:
         _broadcast_sustained_broken(sustained)
         sustained.delete()
         return
@@ -8600,6 +8661,43 @@ def _check_boss_transitions(
     return transitions
 
 
+def _break_pending_sustained_actions(encounter: CombatEncounter) -> None:
+    """Break every still-pending PC ``SustainedAction`` when its encounter ends early.
+
+    Neither ``complete_encounter`` nor this function used to clear
+    ``SustainedAction`` rows: an encounter that completes (victory, defeat,
+    flee, GM-abandoned) before a commitment's ``resolves_round`` ever arrives
+    left the row orphaned forever — it never matures, never narrates, and
+    (RITUAL kind) its already-consumed components bought nothing (#2705
+    adversarial review, Fix 3). Mirrors the "cost stands" ruling
+    ``_mature_one_sustained_action`` applies to a downgrades-exceeded break —
+    nothing is refunded here either, only broadcast + delete.
+
+    Called from ``cleanup_completed_encounter``, not ``complete_encounter``
+    directly: every production completion path (round-resolution auto-complete,
+    the GM end endpoint via ``end_encounter``, duel completion) funnels through
+    ``complete_encounter``, which unconditionally calls
+    ``cleanup_completed_encounter`` — the same seam that already tears down
+    every other encounter-scoped commitment (Audere, engagements, escalation
+    triggers, UNTIL_END_OF_COMBAT conditions). Traced, not guessed: the only
+    other callers of ``cleanup_completed_encounter`` are tests exercising it in
+    isolation.
+
+    ``PendingOpponentAttack`` (the NPC mirror) has the same pre-existing gap —
+    deliberately NOT fixed here: out of scope for this issue, and it has no
+    consumed-cost consequence (an NPC wind-up never spends anything at
+    declaration the way a sustained ritual's components do).
+    """
+    rows = list(
+        SustainedAction.objects.filter(encounter=encounter).select_related(
+            "participant__character_sheet__character", "ritual", "technique"
+        )
+    )
+    for sustained in rows:
+        _broadcast_sustained_broken(sustained)
+        sustained.delete()
+
+
 def cleanup_completed_encounter(encounter: CombatEncounter) -> None:
     """Delete encounter-ephemeral CombatNPC ObjectDBs. Persistent NPCs and PCs
     are never touched. Layer 5 of the multi-layer guard: defensive re-check
@@ -8608,7 +8706,12 @@ def cleanup_completed_encounter(encounter: CombatEncounter) -> None:
     CombatOpponent rows are preserved (historical record). Only the ephemeral
     ObjectDB is destroyed; the SET_NULL FK behavior nulls
     CombatOpponent.objectdb after deletion.
+
+    Also breaks any still-pending PC ``SustainedAction`` for this encounter
+    (#2705 adversarial review, Fix 3) — see ``_break_pending_sustained_actions``.
     """
+    _break_pending_sustained_actions(encounter)
+
     # Sweep covenant rite buffs for this encounter (stamps completed_at on the
     # rite instances in addition to removing their granted condition).
     from world.covenants.services import complete_rites_for_encounter  # noqa: PLC0415
