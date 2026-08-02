@@ -6,6 +6,11 @@
 // the character sheet mount (Task 6) import it from here.
 export type { GlimpseTagOption } from '@/magic/components/glimpse/glimpseTypes';
 
+// Single definition lives in the magic module (#2898) — every technique
+// surface imports the same shape rather than re-declaring it.
+import type { TechniqueEffectSummary } from '@/magic/types';
+export type { TechniqueEffectSummary } from '@/magic/types';
+
 export interface StartingArea {
   id: number;
   name: string;
@@ -461,6 +466,12 @@ export interface CGTechniqueOption {
   category: 'attack' | 'defense' | 'buff' | 'debuff' | 'utility';
   codex_entry_id: number | null;
   is_tradition_technique: boolean;
+  /**
+   * The shared effect block (#2898) — cost, reach, targeting, hostility, and
+   * the plain-words summary line. CG is where a technique pick is least
+   * reversible, so this is the surface that most needs it.
+   */
+  effect_summary: TechniqueEffectSummary;
 }
 
 // =============================================================================

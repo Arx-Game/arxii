@@ -23,6 +23,24 @@ import type {
   CharacterSheetDistinction,
 } from '@/character_sheets/api';
 import type { GlimpseTagOption } from './glimpse/glimpseTypes';
+import type { TechniqueEffectSummary } from '../types';
+
+/** Minimal mock effect_summary (#2898). */
+const mockEffectSummary: TechniqueEffectSummary = {
+  relationship: 'enemy',
+  hostile: false,
+  target_type: 'single',
+  reach: 'same',
+  reach_hops: 0,
+  arena: 'physical',
+  anima_cost: 5,
+  applies: [],
+  removes: [],
+  damage: [],
+  grants: [],
+  summary: 'Cast on an enemy, in melee range, in the physical arena. Costs 5 anima.',
+  is_underspecified: false,
+};
 
 vi.mock('@/character_sheets/queries', () => ({
   useCharacterSheetQuery: vi.fn(),
@@ -172,6 +190,7 @@ function makeMagic(overrides: Partial<CharacterSheetMagic> = {}): CharacterSheet
             level: 3,
             style: 'Manifestation',
             description: 'A burst of fire.',
+            effect_summary: mockEffectSummary,
           },
         ],
       },

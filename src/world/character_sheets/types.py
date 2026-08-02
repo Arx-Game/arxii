@@ -9,6 +9,8 @@ from typing import TypedDict
 
 from django.db import models
 
+from world.magic.types.technique_effects import TechniqueEffectPayload
+
 # --- API response shape TypedDicts ---
 
 
@@ -146,6 +148,9 @@ class TechniqueEntry(TypedDict):
     level: int
     style: str
     description: str
+    #: What the technique actually does (#2898) — the same block CG, the magic
+    #: API, and the in-scene cast list carry, so the sheet can't drift from them.
+    effect_summary: TechniqueEffectPayload
 
 
 class GiftEntry(TypedDict):

@@ -380,10 +380,11 @@ def _render_magic_section(command: Command) -> list[str]:
     lines = ["|wYour spellbook:|n"]
     for gift in magic["gifts"]:
         lines.append(f"  |w{gift['name']}|n")
-        lines.extend(
-            f"    {technique['name']} (level {technique['level']})"
-            for technique in gift["techniques"]
-        )
+        for technique in gift["techniques"]:
+            # #2898: the list used to stop at name + level, so a player could read
+            # their own spellbook without learning what a single technique did.
+            lines.append(f"    {technique['name']} (level {technique['level']})")
+            lines.append(f"      {technique['effect_summary']['summary']}")
         if gift["resonances"]:
             lines.append(f"    resonances: {', '.join(gift['resonances'])}")
     motif = magic["motif"]

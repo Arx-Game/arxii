@@ -73,6 +73,10 @@ from world.magic.models import (
     MotifResonanceAssociation,
     MotifResonanceStyle,
     Ritual,
+    TechniqueAppliedCondition,
+    TechniqueCapabilityGrant,
+    TechniqueDamageProfile,
+    TechniqueRemovedCondition,
 )
 from world.progression.models import CharacterPathHistory
 from world.roster.models import RosterTenure
@@ -680,7 +684,36 @@ _MAGIC_PREFETCH_RELATED: tuple[str | Prefetch, ...] = (
     ),
     Prefetch(
         "character_techniques",
-        queryset=CharacterTechnique.objects.select_related("technique__gift"),
+        # effect_type is select_related because is_technique_hostile reads its
+        # base_power; the three payload prefetches land on the cached_property
+        # names summarize_technique_effects reads, so building the effect summary
+        # for the whole spellbook stays inside this section's zero-extra-query
+        # guarantee (#2898).
+        queryset=CharacterTechnique.objects.select_related(
+            "technique__gift",
+            "technique__effect_type",
+        ).prefetch_related(
+            Prefetch(
+                "technique__condition_applications",
+                queryset=TechniqueAppliedCondition.objects.select_related("condition"),
+                to_attr="cached_condition_applications",
+            ),
+            Prefetch(
+                "technique__removed_conditions",
+                queryset=TechniqueRemovedCondition.objects.select_related("condition"),
+                to_attr="cached_removed_conditions",
+            ),
+            Prefetch(
+                "technique__damage_profiles",
+                queryset=TechniqueDamageProfile.objects.select_related("damage_type"),
+                to_attr="cached_damage_profiles",
+            ),
+            Prefetch(
+                "technique__capability_grants",
+                queryset=TechniqueCapabilityGrant.objects.select_related("capability"),
+                to_attr="cached_capability_grants",
+            ),
+        ),
         to_attr="cached_character_techniques",
     ),
     Prefetch(
@@ -734,6 +767,9 @@ def _build_magic_gifts(sheet: CharacterSheet) -> list[GiftEntry]:
                 level=tech.level,
                 style=style_name,
                 description=tech.description,
+                # Cached on the Technique row, so the whole spellbook costs one
+                # build per distinct technique however many characters read it (#2898).
+                effect_summary=tech.cached_effect_summary,
             )
         )
 

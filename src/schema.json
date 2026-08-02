@@ -36742,10 +36742,15 @@ components:
           description: True when this technique came from the tradition's special
             technique set.
           readOnly: true
+        effect_summary:
+          allOf:
+          - $ref: '#/components/schemas/TechniqueEffectSummary'
+          readOnly: true
       required:
       - category
       - codex_entry_id
       - description
+      - effect_summary
       - id
       - is_tradition_technique
       - name
@@ -36807,6 +36812,23 @@ components:
         * `pending` - Pending
         * `cleared` - Cleared
         * `changes_requested` - Changes requested
+    CapabilityEffect:
+      type: object
+      description: One Capability a technique grants (#2898).
+      properties:
+        name:
+          type: string
+          readOnly: true
+        description:
+          type: string
+          readOnly: true
+        base_value:
+          type: integer
+          readOnly: true
+      required:
+      - base_value
+      - description
+      - name
     CapabilityType:
       type: object
       description: Serializer for capability types.
@@ -36897,11 +36919,21 @@ components:
       - tier
     CastableTechnique:
       type: object
-      description: Serializes a Technique for the castable-techniques list endpoint.
+      description: |-
+        Serializes a Technique for the castable-techniques list endpoint.
+
+        Takes ``Technique`` rows — which is what ``castable_techniques_for_sheet``,
+        its only source, returns. ``get_hostile`` and ``get_target_spec`` used to
+        carry a ``CharacterTechnique`` branch as well, but neither could ever run:
+        the declared ``name`` / ``anima_cost`` / ``tier`` fields raise on a link long
+        before a method field is reached. Dropped rather than left claiming support
+        that was never there (#2898).
       properties:
         id:
           type: integer
         name:
+          type: string
+        description:
           type: string
         anima_cost:
           type: integer
@@ -36928,9 +36960,15 @@ components:
             Returns None for SELF-targeting techniques (no picker needed). For other
             cardinalities, returns the same shape as actions.serializers.TargetSpecSerializer.
           readOnly: true
+        effect_summary:
+          allOf:
+          - $ref: '#/components/schemas/TechniqueEffectSummary'
+          readOnly: true
       required:
       - anima_cost
       - control
+      - description
+      - effect_summary
       - hostile
       - id
       - intensity
@@ -39290,6 +39328,31 @@ components:
       - id
       - is_negative
       - name
+    ConditionEffect:
+      type: object
+      description: One condition a technique applies or strips (#2898).
+      properties:
+        name:
+          type: string
+          readOnly: true
+        description:
+          type: string
+          readOnly: true
+        target_kind:
+          type: string
+          readOnly: true
+        minimum_success_level:
+          type: integer
+          readOnly: true
+        stack_count:
+          type: integer
+          readOnly: true
+      required:
+      - description
+      - minimum_success_level
+      - name
+      - stack_count
+      - target_kind
     ConditionInstance:
       type: object
       description: |-
@@ -40911,6 +40974,28 @@ components:
         * `granted` - Granted
         * `denied` - Denied
         * `escalated` - Escalated
+    DamageEffect:
+      type: object
+      description: One damage profile a technique resolves (#2898).
+      properties:
+        damage_type:
+          type: string
+          readOnly: true
+          nullable: true
+        base_damage:
+          type: integer
+          readOnly: true
+        uses_equipped_weapon:
+          type: boolean
+          readOnly: true
+        minimum_success_level:
+          type: integer
+          readOnly: true
+      required:
+      - base_damage
+      - damage_type
+      - minimum_success_level
+      - uses_equipped_weapon
     DamageType:
       type: object
       description: Serializer for damage types.
@@ -58365,6 +58450,15 @@ components:
         description:
           type: string
           description: Description of what this technique does.
+        action_category:
+          allOf:
+          - $ref: '#/components/schemas/ActionCategoryEnum'
+          description: |-
+            Physical/social/mental arena this technique acts in (drives combat slot + fatigue routing).
+
+            * `physical` - Physical
+            * `social` - Social
+            * `mental` - Mental
         reach:
           allOf:
           - $ref: '#/components/schemas/TechniqueReachEnum'
@@ -68170,6 +68264,15 @@ components:
         description:
           type: string
           description: Description of what this technique does.
+        action_category:
+          allOf:
+          - $ref: '#/components/schemas/ActionCategoryEnum'
+          description: |-
+            Physical/social/mental arena this technique acts in (drives combat slot + fatigue routing).
+
+            * `physical` - Physical
+            * `social` - Social
+            * `mental` - Mental
         target_type:
           allOf:
           - $ref: '#/components/schemas/TechniqueTargetTypeEnum'
@@ -68213,8 +68316,13 @@ components:
           allOf:
           - $ref: '#/components/schemas/TargetSpec'
           readOnly: true
+        effect_summary:
+          allOf:
+          - $ref: '#/components/schemas/TechniqueEffectSummary'
+          readOnly: true
       required:
       - anima_cost
+      - effect_summary
       - effect_type
       - gift
       - id
@@ -68264,6 +68372,77 @@ components:
       - initiator_persona
       - scene
       - technique_id
+    TechniqueEffectSummary:
+      type: object
+      description: |-
+        What a technique does — the ONE shape every technique surface shares (#2898).
+
+        Serializes ``Technique.cached_effect_summary``. CG, the magic API, the
+        in-scene cast list and the character sheet all embed this block, so they
+        cannot drift apart the way four independent payloads did; each keeps only its
+        own surface-specific extras alongside it.
+      properties:
+        relationship:
+          type: string
+          readOnly: true
+        hostile:
+          type: boolean
+          readOnly: true
+        target_type:
+          type: string
+          readOnly: true
+        reach:
+          type: string
+          readOnly: true
+        reach_hops:
+          type: integer
+          readOnly: true
+        arena:
+          type: string
+          readOnly: true
+        anima_cost:
+          type: integer
+          readOnly: true
+        applies:
+          type: array
+          items:
+            $ref: '#/components/schemas/ConditionEffect'
+          readOnly: true
+        removes:
+          type: array
+          items:
+            $ref: '#/components/schemas/ConditionEffect'
+          readOnly: true
+        damage:
+          type: array
+          items:
+            $ref: '#/components/schemas/DamageEffect'
+          readOnly: true
+        grants:
+          type: array
+          items:
+            $ref: '#/components/schemas/CapabilityEffect'
+          readOnly: true
+        summary:
+          type: string
+          readOnly: true
+        is_underspecified:
+          type: boolean
+          readOnly: true
+      required:
+      - anima_cost
+      - applies
+      - arena
+      - damage
+      - grants
+      - hostile
+      - is_underspecified
+      - reach
+      - reach_hops
+      - relationship
+      - removes
+      - summary
+      - target_type
     TechniqueReachEnum:
       enum:
       - same
@@ -68319,6 +68498,15 @@ components:
         description:
           type: string
           description: Description of what this technique does.
+        action_category:
+          allOf:
+          - $ref: '#/components/schemas/ActionCategoryEnum'
+          description: |-
+            Physical/social/mental arena this technique acts in (drives combat slot + fatigue routing).
+
+            * `physical` - Physical
+            * `social` - Social
+            * `mental` - Mental
         reach:
           allOf:
           - $ref: '#/components/schemas/TechniqueReachEnum'

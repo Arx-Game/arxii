@@ -5,6 +5,7 @@
  */
 
 import type { CodexEntryDetail } from '@/codex/types';
+import type { TechniqueEffectSummary } from '@/magic/types';
 import type {
   Beginnings,
   Build,
@@ -524,6 +525,23 @@ export const mockCGGiftOptions: CGGiftOption[] = [
   },
 ];
 
+/** Minimal mock effect_summary (#2898) — shared by every technique fixture below. */
+export const mockTechniqueEffectSummary: TechniqueEffectSummary = {
+  relationship: 'enemy',
+  hostile: false,
+  target_type: 'single',
+  reach: 'same',
+  reach_hops: 0,
+  arena: 'physical',
+  anima_cost: 5,
+  applies: [],
+  removes: [],
+  damage: [],
+  grants: [],
+  summary: 'Cast on an enemy, in melee range, in the physical arena. Costs 5 anima.',
+  is_underspecified: false,
+};
+
 export const mockCGTechniqueOptionPool: CGTechniqueOption = {
   id: 10,
   name: 'Shadow Strike',
@@ -531,6 +549,7 @@ export const mockCGTechniqueOptionPool: CGTechniqueOption = {
   category: 'attack',
   codex_entry_id: null,
   is_tradition_technique: false,
+  effect_summary: mockTechniqueEffectSummary,
 };
 
 export const mockCGTechniqueOptionSignature: CGTechniqueOption = {
@@ -540,6 +559,7 @@ export const mockCGTechniqueOptionSignature: CGTechniqueOption = {
   category: 'utility',
   codex_entry_id: 20,
   is_tradition_technique: true,
+  effect_summary: mockTechniqueEffectSummary,
 };
 
 export const mockCGTechniqueOptions: CGTechniqueOption[] = [
@@ -552,6 +572,7 @@ export const mockCGTechniqueOptions: CGTechniqueOption[] = [
     category: 'defense',
     codex_entry_id: null,
     is_tradition_technique: false,
+    effect_summary: mockTechniqueEffectSummary,
   },
 ];
 

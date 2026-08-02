@@ -25,6 +25,7 @@ import { Button } from '@/components/ui/button';
 import { useCharacterSheetQuery } from '@/character_sheets/queries';
 import type { CharacterSheetAura } from '@/character_sheets/api';
 import { MotifStylePanel } from './MotifStylePanel';
+import { TechniqueEffectSummaryDisplay } from './TechniqueEffectSummary';
 import { GlimpseEditorDialog } from './glimpse/GlimpseEditorDialog';
 
 interface Props {
@@ -106,6 +107,11 @@ export function SpellbookTab({ characterId, isMyCharacter }: Props) {
                     {technique.description && (
                       <p className="text-sm text-muted-foreground">{technique.description}</p>
                     )}
+                    <TechniqueEffectSummaryDisplay
+                      summary={technique.effect_summary}
+                      variant="full"
+                      className="mt-1"
+                    />
                   </div>
                 ))}
               </CardContent>

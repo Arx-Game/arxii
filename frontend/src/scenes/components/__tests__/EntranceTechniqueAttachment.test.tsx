@@ -9,6 +9,24 @@ import { describe, expect, it, vi, beforeEach } from 'vitest';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import type { ReactNode } from 'react';
 import type { CastableTechnique } from '../../actionTypes';
+import type { TechniqueEffectSummary } from '@/magic/types';
+
+/** Minimal mock effect_summary (#2898). */
+const mockEffectSummary: TechniqueEffectSummary = {
+  relationship: 'self',
+  hostile: false,
+  target_type: 'self',
+  reach: 'any',
+  reach_hops: 0,
+  arena: 'physical',
+  anima_cost: 5,
+  applies: [],
+  removes: [],
+  damage: [],
+  grants: [],
+  summary: 'Cast on yourself, anywhere in the room, in the physical arena. Costs 5 anima.',
+  is_underspecified: false,
+};
 
 const mockUseCastableTechniques = vi.fn();
 
@@ -22,6 +40,7 @@ function makeTechnique(overrides: Partial<CastableTechnique> = {}): CastableTech
   return {
     id: 1,
     name: 'Thunderclap Entrance',
+    description: 'A crack of thunder announces your arrival.',
     anima_cost: 5,
     tier: 1,
     intensity: 3,
@@ -30,6 +49,7 @@ function makeTechnique(overrides: Partial<CastableTechnique> = {}): CastableTech
     target_type: 'self',
     reach: 'any',
     target_spec: null,
+    effect_summary: mockEffectSummary,
     ...overrides,
   };
 }

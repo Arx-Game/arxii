@@ -22,6 +22,7 @@ import {
 } from '../actionQueries';
 import { fetchScene, sceneKeys } from '../queries';
 import { PowerLedgerPanel } from '@/magic/components/PowerLedgerPanel';
+import { TechniqueEffectSummaryDisplay } from '@/magic/components/TechniqueEffectSummary';
 import { ThreadPullPicker } from '@/magic/components/threads/ThreadPullPicker';
 import { useCastPullSelection } from '../hooks/useCastPullSelection';
 import { extractErrorMessage } from '@/lib/errors';
@@ -597,22 +598,28 @@ export function ActionPanel({ sceneId }: Props) {
                             key={tech.id}
                             type="button"
                             onClick={() => handleTechniqueSelect(tech)}
-                            className={`flex w-full items-center justify-between rounded px-2 py-1 text-left text-xs hover:bg-muted/50 ${
+                            className={`flex w-full flex-col gap-0.5 rounded px-2 py-1 text-left text-xs hover:bg-muted/50 ${
                               isSelected ? 'bg-muted font-semibold ring-1 ring-primary/40' : ''
                             }`}
                           >
-                            <span className="flex items-center gap-1">
-                              {tech.hostile && (
-                                <AlertTriangle
-                                  aria-label="Hostile — may trigger combat"
-                                  className="h-3 w-3 shrink-0 text-amber-400"
-                                />
-                              )}
-                              {tech.name}
+                            <span className="flex w-full items-center justify-between">
+                              <span className="flex items-center gap-1">
+                                {tech.hostile && (
+                                  <AlertTriangle
+                                    aria-label="Hostile — may trigger combat"
+                                    className="h-3 w-3 shrink-0 text-amber-400"
+                                  />
+                                )}
+                                {tech.name}
+                              </span>
+                              <span className="ml-2 shrink-0 text-muted-foreground">
+                                {tech.anima_cost} anima
+                              </span>
                             </span>
-                            <span className="ml-2 shrink-0 text-muted-foreground">
-                              {tech.anima_cost} anima
-                            </span>
+                            <TechniqueEffectSummaryDisplay
+                              summary={tech.effect_summary}
+                              variant="compact"
+                            />
                           </button>
                         );
                       })}
@@ -622,6 +629,17 @@ export function ActionPanel({ sceneId }: Props) {
                   {!castLedgerResult && selectedTechnique && (
                     <div className="space-y-2 rounded border border-muted p-2">
                       <p className="text-xs font-medium">{selectedTechnique.name}</p>
+
+                      {selectedTechnique.description && (
+                        <p className="text-xs text-muted-foreground">
+                          {selectedTechnique.description}
+                        </p>
+                      )}
+
+                      <TechniqueEffectSummaryDisplay
+                        summary={selectedTechnique.effect_summary}
+                        variant="full"
+                      />
 
                       {selectedTechnique.hostile && (
                         <p className="flex items-center gap-1 text-xs text-amber-500">

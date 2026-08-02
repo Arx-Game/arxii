@@ -10,6 +10,7 @@
 import { Badge } from '@/components/ui/badge';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { CodexTerm } from '@/codex/components/CodexTerm';
+import { TechniqueEffectSummaryDisplay } from '@/magic/components/TechniqueEffectSummary';
 import { cn } from '@/lib/utils';
 import { CheckCircle2, Loader2 } from 'lucide-react';
 import { useEffect } from 'react';
@@ -151,8 +152,12 @@ export function TechniqueSelector({ draft, giftId }: TechniqueSelectorProps) {
                       </Badge>
                     )}
                   </CardHeader>
-                  <CardContent className="px-3 pb-3 pt-0">
+                  <CardContent className="space-y-2 px-3 pb-3 pt-0">
                     <CardDescription className="text-xs">{technique.description}</CardDescription>
+                    <TechniqueEffectSummaryDisplay
+                      summary={technique.effect_summary}
+                      variant="full"
+                    />
                   </CardContent>
                 </Card>
               );

@@ -322,6 +322,18 @@ check", "auto-pull". Full entry: [magic AGENT_GLOSSARY](src/world/magic/AGENT_GL
 ("Ambient Activation"); capability-oracle framing (the `action_ctx` param it feeds) in
 [conditions AGENT_GLOSSARY](src/world/conditions/AGENT_GLOSSARY.md) ("Agency oracle").
 
+**Effect Summary** (#2898):
+What a Technique actually does, derived on read from its four payload tables and cached on
+the row — never a stored field. One serialized block (`effect_summary`) shared by every
+technique surface across four apps (`magic`, `character_creation`, `scenes`,
+`character_sheets`), carrying a **plain-words line** authored server-side so the web client
+and telnet show the same sentence. Its two authoring-gap flags (**underspecified** — nothing
+derivable; **ambiguous** — payload rows disagree about who the technique targets) are
+reported rather than guessed around. _Avoid_: re-wording the sentence client-side; an
+`is_self_buff`-style stored relationship. Full entry:
+[magic AGENT_GLOSSARY](src/world/magic/AGENT_GLOSSARY.md) ("Effect Summary",
+"Underspecified Technique").
+
 **Intensity vs Power**:
 **Intensity** is the authored tier/magnitude band of a technique's effect; **Power** is the
 realized force a particular casting brings to bear. Keep them distinct — they are not synonyms. _Avoid_: using "power" for "intensity".

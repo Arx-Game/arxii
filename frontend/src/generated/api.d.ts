@@ -21961,6 +21961,7 @@ export interface components {
       readonly codex_entry_id: number | null;
       /** @description True when this technique came from the tradition's special technique set. */
       readonly is_tradition_technique: boolean;
+      readonly effect_summary: components['schemas']['TechniqueEffectSummary'];
     };
     /**
      * @description Read/response serializer for CanonReview (#2003).
@@ -21991,6 +21992,12 @@ export interface components {
      * @enum {string}
      */
     CanonReviewStatusEnum: 'pending' | 'cleared' | 'changes_requested';
+    /** @description One Capability a technique grants (#2898). */
+    CapabilityEffect: {
+      readonly name: string;
+      readonly description: string;
+      readonly base_value: number;
+    };
     /** @description Serializer for capability types. */
     CapabilityType: {
       readonly id: number;
@@ -22023,10 +22030,20 @@ export interface components {
       tier: number;
       thread_ids: number[];
     };
-    /** @description Serializes a Technique for the castable-techniques list endpoint. */
+    /**
+     * @description Serializes a Technique for the castable-techniques list endpoint.
+     *
+     *     Takes ``Technique`` rows — which is what ``castable_techniques_for_sheet``,
+     *     its only source, returns. ``get_hostile`` and ``get_target_spec`` used to
+     *     carry a ``CharacterTechnique`` branch as well, but neither could ever run:
+     *     the declared ``name`` / ``anima_cost`` / ``tier`` fields raise on a link long
+     *     before a method field is reached. Dropped rather than left claiming support
+     *     that was never there (#2898).
+     */
     CastableTechnique: {
       id: number;
       name: string;
+      description: string;
       anima_cost: number;
       tier: number;
       intensity: number;
@@ -22043,6 +22060,7 @@ export interface components {
       readonly target_spec: {
         [key: string]: unknown;
       } | null;
+      readonly effect_summary: components['schemas']['TechniqueEffectSummary'];
     };
     /**
      * @description For staff triaging GM scenario-catalog suggestions (#2127).
@@ -23063,6 +23081,14 @@ export interface components {
       readonly is_negative: boolean;
       readonly display_order: number;
     };
+    /** @description One condition a technique applies or strips (#2898). */
+    ConditionEffect: {
+      readonly name: string;
+      readonly description: string;
+      readonly target_kind: string;
+      readonly minimum_success_level: number;
+      readonly stack_count: number;
+    };
     /**
      * @description Serializer for active condition instances.
      *
@@ -23831,6 +23857,13 @@ export interface components {
      * @enum {string}
      */
     CustodyClearanceStatusEnum: 'pending' | 'granted' | 'denied' | 'escalated';
+    /** @description One damage profile a technique resolves (#2898). */
+    DamageEffect: {
+      readonly damage_type: string | null;
+      readonly base_damage: number;
+      readonly uses_equipped_weapon: boolean;
+      readonly minimum_success_level: number;
+    };
     /** @description Serializer for damage types. */
     DamageType: {
       readonly id: number;
@@ -33249,6 +33282,14 @@ export interface components {
       /** @description Description of what this technique does. */
       description?: string;
       /**
+       * @description Physical/social/mental arena this technique acts in (drives combat slot + fatigue routing).
+       *
+       *     * `physical` - Physical
+       *     * `social` - Social
+       *     * `mental` - Mental
+       */
+      action_category?: components['schemas']['ActionCategoryEnum'];
+      /**
        * @description Positional reach: which positions this technique can target (SAME=melee, ADJACENT=reach, ANY=ranged).
        *
        *     * `same` - Same position
@@ -38046,6 +38087,14 @@ export interface components {
       /** @description Description of what this technique does. */
       description?: string;
       /**
+       * @description Physical/social/mental arena this technique acts in (drives combat slot + fatigue routing).
+       *
+       *     * `physical` - Physical
+       *     * `social` - Social
+       *     * `mental` - Mental
+       */
+      action_category?: components['schemas']['ActionCategoryEnum'];
+      /**
        * @description Per-technique target cardinality (how many / how selected). Relationship (self/ally/enemy) is derived from condition target_kinds + hostility, not stored here.
        *
        *     * `self` - Self
@@ -38069,6 +38118,7 @@ export interface components {
       has_perceptible_effect?: boolean;
       readonly tier: number;
       readonly target_spec: components['schemas']['TargetSpec'];
+      readonly effect_summary: components['schemas']['TechniqueEffectSummary'];
     };
     /** @description Validate input for the standalone technique cast endpoint. */
     TechniqueCastCreateRequest: {
@@ -38086,6 +38136,29 @@ export interface components {
       use_base_form: boolean;
       /** @default false */
       cast_openly: boolean;
+    };
+    /**
+     * @description What a technique does — the ONE shape every technique surface shares (#2898).
+     *
+     *     Serializes ``Technique.cached_effect_summary``. CG, the magic API, the
+     *     in-scene cast list and the character sheet all embed this block, so they
+     *     cannot drift apart the way four independent payloads did; each keeps only its
+     *     own surface-specific extras alongside it.
+     */
+    TechniqueEffectSummary: {
+      readonly relationship: string;
+      readonly hostile: boolean;
+      readonly target_type: string;
+      readonly reach: string;
+      readonly reach_hops: number;
+      readonly arena: string;
+      readonly anima_cost: number;
+      readonly applies: components['schemas']['ConditionEffect'][];
+      readonly removes: components['schemas']['ConditionEffect'][];
+      readonly damage: components['schemas']['DamageEffect'][];
+      readonly grants: components['schemas']['CapabilityEffect'][];
+      readonly summary: string;
+      readonly is_underspecified: boolean;
     };
     /**
      * @description * `same` - Same position
@@ -38114,6 +38187,14 @@ export interface components {
       anima_cost: number;
       /** @description Description of what this technique does. */
       description?: string;
+      /**
+       * @description Physical/social/mental arena this technique acts in (drives combat slot + fatigue routing).
+       *
+       *     * `physical` - Physical
+       *     * `social` - Social
+       *     * `mental` - Mental
+       */
+      action_category?: components['schemas']['ActionCategoryEnum'];
       /**
        * @description Positional reach: which positions this technique can target (SAME=melee, ADJACENT=reach, ANY=ranged).
        *

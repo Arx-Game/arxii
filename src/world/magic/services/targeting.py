@@ -165,13 +165,28 @@ def derive_target_relationship(technique: Technique) -> ConditionTargetKind:
     1. ENEMY — if the technique is hostile (deals damage or applies ENEMY conditions).
     2. ALLY — if any condition_application has target_kind=ALLY.
     3. SELF — fallback (no hostile traits, no ALLY conditions).
+
+    Exactly one relationship comes back, so a technique whose payload rows carry
+    more than one distinct ``target_kind`` gets an answer that is a guess — see
+    ``technique_relationship_is_ambiguous`` (``services/technique_effects.py``),
+    which reports that case rather than guessing again here. This function gates
+    live cast targeting; its answers are deliberately unchanged by #2898.
+
+    Reads the technique's ``cached_*`` payload lists rather than its own
+    ``.filter().exists()`` queries (#2898), sharing the one query per payload
+    table that every other reader on the row already paid.
     """
     if is_technique_hostile(technique):
         return ConditionTargetKind.ENEMY
-    if technique.condition_applications.filter(target_kind=ConditionTargetKind.ALLY).exists():
+    if any(
+        row.target_kind == ConditionTargetKind.ALLY
+        for row in technique.cached_condition_applications
+    ):
         return ConditionTargetKind.ALLY
     # Cleansing a condition off an ally (dispelling an ally's debuff) resolves ALLY (#1585).
-    if technique.removed_conditions.filter(target_kind=ConditionTargetKind.ALLY).exists():
+    if any(
+        row.target_kind == ConditionTargetKind.ALLY for row in technique.cached_removed_conditions
+    ):
         return ConditionTargetKind.ALLY
     return ConditionTargetKind.SELF
 

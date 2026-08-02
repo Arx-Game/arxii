@@ -4,6 +4,7 @@ import { vi } from 'vitest';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import type { ReactNode } from 'react';
 import type { PlayerActionsResponse } from '../actionTypes';
+import type { TechniqueEffectSummary } from '@/magic/types';
 
 vi.mock('../actionQueries', async (importOriginal) => {
   // Keep the real toastDispositionMessage (it only depends on 'sonner', mocked
@@ -166,6 +167,25 @@ function makeAction(
   };
 }
 
+// #2898: every castable-technique payload carries the shared effect block. Declared
+// once here so a future field on the block needs one edit, not eight — these fixtures
+// go through `as unknown as`, so tsc cannot catch a missing one for us.
+const CASTABLE_EFFECT_SUMMARY: TechniqueEffectSummary = {
+  relationship: 'ally',
+  hostile: false,
+  target_type: 'single',
+  reach: 'any',
+  reach_hops: 1,
+  arena: 'physical',
+  anima_cost: 3,
+  applies: [],
+  removes: [],
+  damage: [],
+  grants: [],
+  summary: 'Cast on an ally, anywhere in the room, in the physical arena.',
+  is_underspecified: false,
+};
+
 const MOCK_ACTIONS: PlayerActionsResponse = {
   count: 3,
   next: null,
@@ -231,6 +251,8 @@ describe('ActionPanel', () => {
           intensity: 2,
           control: 1,
           hostile: false,
+          description: 'A test technique.',
+          effect_summary: CASTABLE_EFFECT_SUMMARY,
         },
       ],
       isLoading: false,
@@ -598,6 +620,8 @@ describe('ActionPanel', () => {
           intensity: 2,
           control: 1,
           hostile: false,
+          description: 'A test technique.',
+          effect_summary: CASTABLE_EFFECT_SUMMARY,
         },
         {
           id: 11,
@@ -607,6 +631,8 @@ describe('ActionPanel', () => {
           intensity: 4,
           control: 2,
           hostile: true,
+          description: 'A test technique.',
+          effect_summary: CASTABLE_EFFECT_SUMMARY,
         },
       ],
       isLoading: false,
@@ -1117,6 +1143,8 @@ describe('ActionPanel', () => {
           intensity: 3,
           control: 1,
           hostile: false,
+          description: 'A test technique.',
+          effect_summary: CASTABLE_EFFECT_SUMMARY,
           target_type: 'area',
           reach: 'any',
           target_spec: {
@@ -1182,6 +1210,8 @@ describe('ActionPanel', () => {
           intensity: 2,
           control: 2,
           hostile: false,
+          description: 'A test technique.',
+          effect_summary: CASTABLE_EFFECT_SUMMARY,
           target_type: 'filtered_group',
           reach: 'any',
           target_spec: {
@@ -1248,6 +1278,8 @@ describe('ActionPanel', () => {
           intensity: 2,
           control: 2,
           hostile: false,
+          description: 'A test technique.',
+          effect_summary: CASTABLE_EFFECT_SUMMARY,
           target_type: 'filtered_group',
           reach: 'any',
           target_spec: {
@@ -1327,6 +1359,8 @@ describe('ActionPanel', () => {
           intensity: 2,
           control: 1,
           hostile: false,
+          description: 'A test technique.',
+          effect_summary: CASTABLE_EFFECT_SUMMARY,
           target_type: 'single',
           reach: 'any',
           target_spec: {
@@ -1384,6 +1418,8 @@ describe('ActionPanel', () => {
           intensity: 1,
           control: 2,
           hostile: false,
+          description: 'A test technique.',
+          effect_summary: CASTABLE_EFFECT_SUMMARY,
           target_type: 'self',
           reach: 'any',
           target_spec: {
