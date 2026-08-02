@@ -46,11 +46,13 @@ class ItemsDevSeedResult:
 # Layers: BASE = form-fitting base garment/armour layer.
 #         OVER  = outer piece worn over base.
 #         OUTER = outermost (cloaks, coats, full plate surcoat).
-# weapon_class is a str | None: the WeaponClass row *name* to resolve (Task 4
-# of #2879 wires the actual lookup/creation), or None for everything that
-# isn't a weapon, and for weapons that should keep following the coarse
-# archetype map. None is the field's blank sentinel now (nullable FK,
-# #2879) — it was "" under the old CharField (#2858).
+# weapon_class is a str | None: the WeaponClass row *name* to resolve, via
+# seed_item_template_starter_catalog()'s weapon_classes lookup, to a model
+# instance for the template's weapon_class FK. None for everything that
+# isn't a weapon, and for weapons intentionally left unclassified (falling
+# back to the coarse gear_archetype map). None is the field's blank
+# sentinel now (nullable FK, #2879) — it was "" under the old CharField
+# (#2858).
 # ---------------------------------------------------------------------------
 
 
@@ -100,7 +102,7 @@ def _build_template_specs() -> list[tuple[str, str, list[tuple[str, str]], int, 
             "Longsword",
             [(BodyRegion.RIGHT_HAND, EquipmentLayer.BASE)],
             2,
-            None,
+            "Balanced blade",
         ),
         (
             GearArchetype.MELEE_TWO_HAND,
@@ -110,7 +112,7 @@ def _build_template_specs() -> list[tuple[str, str, list[tuple[str, str]], int, 
                 (BodyRegion.LEFT_HAND, EquipmentLayer.BASE),
             ],
             2,
-            None,
+            "Heavy blade",
         ),
         (
             GearArchetype.SHIELD,
@@ -141,7 +143,7 @@ def _build_template_specs() -> list[tuple[str, str, list[tuple[str, str]], int, 
                 (BodyRegion.LEFT_HAND, EquipmentLayer.BASE),
             ],
             2,
-            None,
+            "Hunting bow",
         ),
     ]
 
@@ -156,16 +158,28 @@ def seed_item_template_starter_catalog() -> ItemTemplateStarterCatalogResult:
     Returns:
         ItemTemplateStarterCatalogResult with archetype-value → template mapping.
     """
-    from world.items.models import ItemTemplate, TemplateSlot  # noqa: PLC0415
+    from world.items.models import ItemTemplate, TemplateSlot, WeaponClass  # noqa: PLC0415
+
+    weapon_classes = {
+        "Balanced blade": {"strength_tenths": 5, "default_damage": 5},
+        "Heavy blade": {"strength_tenths": 7, "default_damage": 7},
+        "Hunting bow": {"strength_tenths": 5, "default_damage": 4},
+    }
+    weapon_class_rows: dict[str, WeaponClass] = {}
+    for name, fields in weapon_classes.items():
+        row, _ = WeaponClass.objects.get_or_create(name=name, defaults=fields)
+        weapon_class_rows[name] = row
 
     templates: dict[str, ItemTemplate] = {}
-    for archetype, name, slot_specs, capacity, weapon_class in _build_template_specs():
+    for archetype, name, slot_specs, capacity, weapon_class_name in _build_template_specs():
         tmpl, _ = ItemTemplate.objects.get_or_create(
             name=name,
             defaults={
                 "gear_archetype": archetype,
                 "facet_capacity": capacity,
-                "weapon_class": weapon_class,
+                "weapon_class": weapon_class_rows.get(weapon_class_name)
+                if weapon_class_name
+                else None,
             },
         )
         for region, layer in slot_specs:
