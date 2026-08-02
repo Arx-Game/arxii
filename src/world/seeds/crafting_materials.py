@@ -99,6 +99,24 @@ _ACCENT_AXES = (
 #: Symmetric accent oppositions (#2886): Dramatic ⊥ Unassuming.
 _ACCENT_EXCLUSIONS = (("dramatic", "unassuming"),)
 
+# The ratified archetype matrix (Apostate 2026-08-02): function accents are
+# garment-only (except unassuming plate — bland enough to get lost in a
+# crowd); presence accents span everything worn including jewelry; menace
+# touches weapons and jewelry (spiked torcs); regal weapons are ornate.
+_GARMENTS = ("clothing", "robe", "light_armor")
+_ALL_ARMOR = ("light_armor", "medium_armor", "heavy_armor")
+_WORN = ("clothing", "robe", "jewelry", *_ALL_ARMOR)
+_WEAPONS = ("melee_one_hand", "melee_two_hand", "ranged", "thrown", "shield", "lance")
+_ACCENT_ARCHETYPES = {
+    "allure": _WORN,
+    "menace": (*_WORN, *_WEAPONS),
+    "regal": (*_WORN, *_WEAPONS),
+    "dramatic": _WORN,
+    "stealthy": _GARMENTS,
+    "unassuming": ("clothing", "robe", *_ALL_ARMOR),
+    "nimble": _GARMENTS,
+}
+
 
 def seed_accent_axes() -> None:
     """Mark the seven ratified accent axes styleable + author their grammar.
@@ -144,6 +162,19 @@ def seed_accent_axes() -> None:
         targets[name] = target
 
     _ensure_accent_exclusions(targets)
+    _ensure_accent_archetype_allowances(targets)
+
+
+def _ensure_accent_archetype_allowances(targets: dict) -> None:
+    """Upsert the ratified accent × archetype allowlist (#2886)."""
+    from world.items.crafting.models import AccentArchetypeAllowance  # noqa: PLC0415
+
+    for name, archetypes in _ACCENT_ARCHETYPES.items():
+        target = targets.get(name)
+        if target is None:
+            continue
+        for archetype in archetypes:
+            AccentArchetypeAllowance.objects.get_or_create(target=target, gear_archetype=archetype)
 
 
 def _ensure_accent_exclusions(targets: dict) -> None:

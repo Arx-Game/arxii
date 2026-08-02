@@ -49,6 +49,7 @@ if TYPE_CHECKING:
     from evennia.objects.models import ObjectDB
 
     from world.character_sheets.models import CharacterSheet
+    from world.checks.types import CheckResult
     from world.items.crafting.models import CraftedItemRecipe, LabStationDetails
     from world.items.models import QualityTier
     from world.traits.models import CheckOutcome
@@ -445,20 +446,34 @@ def _resolve_crafter_sheet(
 
 
 def _validate_accent_targets(
-    accent_targets: list | None, item_instance: ItemInstance | None = None
+    accent_targets: list | None,
+    item_instance: ItemInstance | None = None,
+    template: object | None = None,
 ) -> list:
-    """Reject non-styleable, inactive, duplicate, or mutually-excluded axes.
+    """Reject non-styleable, inactive, duplicate, excluded, or misplaced axes.
 
     Exclusion pairs (#2886, e.g. Dramatic ⊥ Unassuming) are checked across the
-    request AND the item's existing accents when a host item is given.
+    request AND the item's existing accents when a host item is given; the
+    archetype allowlist (no stealthy jewelry) is checked against the piece's
+    ``gear_archetype`` when a template is resolvable.
     """
-    from world.items.crafting.models import AccentExclusion, ItemAccent  # noqa: PLC0415
+    from world.items.crafting.models import (  # noqa: PLC0415
+        AccentArchetypeAllowance,
+        AccentExclusion,
+        ItemAccent,
+    )
     from world.items.exceptions import InvalidAccentTarget  # noqa: PLC0415
 
+    if template is None and item_instance is not None:
+        template = item_instance.template
     targets = list(accent_targets or [])
     seen_pks = set()
     for target in targets:
         if not target.is_styleable or not target.is_active or target.pk in seen_pks:
+            raise InvalidAccentTarget
+        if template is not None and not AccentArchetypeAllowance.permits(
+            target, template.gear_archetype
+        ):
             raise InvalidAccentTarget
         seen_pks.add(target.pk)
     if seen_pks:
@@ -583,6 +598,37 @@ def _resolve_accents(
         )
         realized.append(accent)
     return tuple(realized)
+
+
+def _resolve_outcome_tier(
+    *,
+    kind: CraftingRecipeKind,
+    recipe: CraftingRecipe,
+    crafter_character: ObjectDB,
+    check_result: CheckResult,
+    staged: StagedCost,
+) -> QualityTier | None:
+    """The tier this attempt lands at — a making NEVER fails to create (#2886).
+
+    The prose a player writes into an item is the one unrecoverable
+    ingredient, and losing it feels worse than any lost time/AP/coin/
+    materials (which the consequence pool still charges). A failed
+    ITEM_CREATE therefore lands at the ladder's floor — the player then
+    chooses: recycle and retry, or refine it up the long road. Attach kinds
+    keep failure semantics (None — nothing is lost there).
+    """
+    if check_result.success_level >= recipe.min_success_level:
+        return resolve_capped_tier(
+            recipe=recipe,
+            crafter_character=crafter_character,
+            check_result=check_result,
+            material_grade_bonus=_material_grade_bonus(staged),
+        )
+    if kind == CraftingRecipeKind.ITEM_CREATE:
+        from world.items.models import QualityTier  # noqa: PLC0415
+
+        return QualityTier.objects.order_by("sort_order").first()
+    return None
 
 
 def _material_grade_bonus(staged: StagedCost) -> int:
@@ -715,7 +761,10 @@ def run_crafting_recipe(  # noqa: PLR0913
     # priced as a POINTS PENALTY on the rolls (#2886 — the rank-quantized
     # difficulty step was a step function; a penalty bites smoothly) plus a
     # per-accent doubling of the craft's AP/anima cost.
-    accents_requested = _validate_accent_targets(accent_targets, item_instance)
+    create_template = (output_overrides or {}).get("output_template")
+    accents_requested = _validate_accent_targets(
+        accent_targets, item_instance, template=create_template
+    )
     from world.items.crafting.constants import ACCENT_CRAFT_COST_BASE  # noqa: PLC0415
 
     difficulty = recipe.base_difficulty
@@ -786,26 +835,13 @@ def run_crafting_recipe(  # noqa: PLR0913
     apply_resolution(pending, ResolutionContext(character=crafter_character))
 
     # --- 10. Resolve quality + apply via the handler ---
-    # A making NEVER fails to create (#2886, Apostate): the prose a player
-    # writes into an item is the one unrecoverable ingredient, and losing it
-    # feels worse than any lost time/AP/coin/materials (which the consequence
-    # pool still charges). A failed ITEM_CREATE lands at the ladder's floor —
-    # the player then chooses: recycle and retry, or refine it up the long
-    # road. Attach kinds keep failure semantics (nothing is lost there).
-    produced = check_result.success_level >= recipe.min_success_level
-    if produced:
-        tier = resolve_capped_tier(
-            recipe=recipe,
-            crafter_character=crafter_character,
-            check_result=check_result,
-            material_grade_bonus=_material_grade_bonus(staged),
-        )
-    elif kind == CraftingRecipeKind.ITEM_CREATE:
-        from world.items.models import QualityTier  # noqa: PLC0415
-
-        tier = QualityTier.objects.order_by("sort_order").first()
-    else:
-        tier = None
+    tier = _resolve_outcome_tier(
+        kind=kind,
+        recipe=recipe,
+        crafter_character=crafter_character,
+        check_result=check_result,
+        staged=staged,
+    )
     if tier is not None:
         # Thread the crafter_character into output_overrides so ItemCreateHandler
         # can resolve the CharacterSheet for provenance stamping.

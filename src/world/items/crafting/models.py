@@ -481,6 +481,45 @@ class AccentExclusion(SharedMemoryModel):
         return None
 
 
+class AccentArchetypeAllowance(SharedMemoryModel):
+    """Where an accent axis may be worked in, by gear archetype (#2886).
+
+    Allowlist semantics: a target with ANY rows is allowed only on the listed
+    archetypes; a target with none is unrestricted (custom axes stay usable
+    until curated). Apostate's ratified matrix: function accents (stealthy,
+    unassuming, nimble) are garment-only — except unassuming plate, which can
+    get lost in a crowd; presence accents span everything worn including
+    jewelry; menace touches weapons (and jewelry — spiked torcs); regal
+    weapons are ornate. Data rows, never an enum.
+    """
+
+    target = models.ForeignKey(
+        "mechanics.ModifierTarget",
+        on_delete=models.CASCADE,
+        related_name="accent_archetype_allowances",
+    )
+    gear_archetype = models.CharField(max_length=40)
+
+    class Meta:
+        app_label = "items"
+        ordering = ["target__name", "gear_archetype"]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["target", "gear_archetype"],
+                name="items_accentarchetypeallowance_unique",
+            )
+        ]
+
+    def __str__(self) -> str:
+        return f"{self.target.name} on {self.gear_archetype}"
+
+    @classmethod
+    def permits(cls, target: object, gear_archetype: str) -> bool:
+        """True when ``target`` may be accented onto this archetype."""
+        rows = list(cls.objects.filter(target=target).values_list("gear_archetype", flat=True))
+        return not rows or gear_archetype in rows
+
+
 class ItemRefinementDetails(SharedMemoryModel):
     """Per-kind details for an ITEM_REFINEMENT project (#2878).
 

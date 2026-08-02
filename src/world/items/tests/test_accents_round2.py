@@ -208,3 +208,35 @@ class ThreadCheckEdgeTests(TestCase):
         self.assertEqual(len(contribs), 1)
         self.assertEqual(contribs[0].value, 20)
         self.assertEqual(contribs[0].source_label, "Woven threads")
+
+
+class AccentArchetypeAllowanceTests(TestCase):
+    """No stealthy jewelry (#2886): the ratified archetype allowlist."""
+
+    def setUp(self) -> None:
+        _accent_ladder()
+        from world.items.crafting.models import AccentArchetypeAllowance
+
+        self.stealthy = ModifierTargetFactory(name="stealthy", is_styleable=True)
+        for archetype in ("clothing", "robe", "light_armor"):
+            AccentArchetypeAllowance.objects.create(target=self.stealthy, gear_archetype=archetype)
+
+    def test_disallowed_archetype_rejected(self) -> None:
+        from world.items.constants import GearArchetype
+
+        jewelry = ItemTemplateFactory(gear_archetype=GearArchetype.JEWELRY)
+        with self.assertRaises(InvalidAccentTarget):
+            _validate_accent_targets([self.stealthy], template=jewelry)
+
+    def test_allowed_archetype_passes(self) -> None:
+        from world.items.constants import GearArchetype
+
+        cloak = ItemTemplateFactory(gear_archetype=GearArchetype.CLOTHING)
+        self.assertEqual(_validate_accent_targets([self.stealthy], template=cloak), [self.stealthy])
+
+    def test_unlisted_target_is_unrestricted(self) -> None:
+        from world.items.constants import GearArchetype
+
+        custom = ModifierTargetFactory(name="custom-axis", is_styleable=True)
+        jewelry = ItemTemplateFactory(gear_archetype=GearArchetype.JEWELRY)
+        self.assertEqual(_validate_accent_targets([custom], template=jewelry), [custom])

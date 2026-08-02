@@ -146,8 +146,15 @@ def start_item_refinement(
     ):
         raise InvalidAccentTarget
     if accent_target is not None:
-        from world.items.crafting.models import AccentExclusion  # noqa: PLC0415
+        from world.items.crafting.models import (  # noqa: PLC0415
+            AccentArchetypeAllowance,
+            AccentExclusion,
+        )
 
+        if not AccentArchetypeAllowance.permits(
+            accent_target, item_instance.template.gear_archetype
+        ):
+            raise InvalidAccentTarget
         existing = set(
             ItemAccent.objects.filter(item_instance=item_instance).values_list(
                 "target_id", flat=True

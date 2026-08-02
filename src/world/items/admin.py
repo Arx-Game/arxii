@@ -2,7 +2,7 @@
 
 from django.contrib import admin
 
-from world.items.crafting.models import AccentExclusion, ItemAccent
+from world.items.crafting.models import AccentArchetypeAllowance, AccentExclusion, ItemAccent
 from world.items.models import (
     AccentLevel,
     Adornment,
@@ -110,6 +110,12 @@ class ItemAccentAdmin(admin.ModelAdmin):
 @admin.register(AccentExclusion)
 class AccentExclusionAdmin(admin.ModelAdmin):
     list_display = ["target_a", "target_b"]
+
+
+@admin.register(AccentArchetypeAllowance)
+class AccentArchetypeAllowanceAdmin(admin.ModelAdmin):
+    list_display = ["target", "gear_archetype"]
+    list_filter = ["target"]
 
 
 @admin.register(RecycleRequest)
