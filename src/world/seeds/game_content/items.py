@@ -46,18 +46,20 @@ class ItemsDevSeedResult:
 # Layers: BASE = form-fitting base garment/armour layer.
 #         OVER  = outer piece worn over base.
 #         OUTER = outermost (cloaks, coats, full plate surcoat).
-# weapon_class is "" for everything that isn't a weapon, and for weapons whose
-# stat should keep following the coarse archetype map (#2858).
+# weapon_class is a str | None: the WeaponClass row *name* to resolve (Task 4
+# of #2879 wires the actual lookup/creation), or None for everything that
+# isn't a weapon, and for weapons that should keep following the coarse
+# archetype map. None is the field's blank sentinel now (nullable FK,
+# #2879) — it was "" under the old CharField (#2858).
 # ---------------------------------------------------------------------------
 
 
-def _build_template_specs() -> list[tuple[str, str, list[tuple[str, str]], int, str]]:
+def _build_template_specs() -> list[tuple[str, str, list[tuple[str, str]], int, str | None]]:
     """Return the canonical template-spec list using actual constant values."""
     from world.items.constants import (  # noqa: PLC0415
         BodyRegion,
         EquipmentLayer,
         GearArchetype,
-        WeaponClass,
     )
 
     return [
@@ -66,21 +68,21 @@ def _build_template_specs() -> list[tuple[str, str, list[tuple[str, str]], int, 
             "Plate Cuirass",
             [(BodyRegion.TORSO, EquipmentLayer.OVER)],
             3,
-            "",
+            None,
         ),
         (
             GearArchetype.MEDIUM_ARMOR,
             "Brigandine Vest",
             [(BodyRegion.TORSO, EquipmentLayer.BASE)],
             3,
-            "",
+            None,
         ),
         (
             GearArchetype.LIGHT_ARMOR,
             "Studded Leather Jacket",
             [(BodyRegion.TORSO, EquipmentLayer.BASE)],
             3,
-            "",
+            None,
         ),
         (
             GearArchetype.ROBE,
@@ -91,14 +93,14 @@ def _build_template_specs() -> list[tuple[str, str, list[tuple[str, str]], int, 
                 (BodyRegion.RIGHT_ARM, EquipmentLayer.BASE),
             ],
             4,
-            "",
+            None,
         ),
         (
             GearArchetype.MELEE_ONE_HAND,
             "Longsword",
             [(BodyRegion.RIGHT_HAND, EquipmentLayer.BASE)],
             2,
-            WeaponClass.MEDIUM,
+            None,
         ),
         (
             GearArchetype.MELEE_TWO_HAND,
@@ -108,28 +110,28 @@ def _build_template_specs() -> list[tuple[str, str, list[tuple[str, str]], int, 
                 (BodyRegion.LEFT_HAND, EquipmentLayer.BASE),
             ],
             2,
-            WeaponClass.HEAVY,
+            None,
         ),
         (
             GearArchetype.SHIELD,
             "Kite Shield",
             [(BodyRegion.LEFT_HAND, EquipmentLayer.BASE)],
             2,
-            "",
+            None,
         ),
         (
             GearArchetype.CLOTHING,
             "Fine Linen Shirt",
             [(BodyRegion.TORSO, EquipmentLayer.BASE)],
             2,
-            "",
+            None,
         ),
         (
             GearArchetype.JEWELRY,
             "Silver Pendant",
             [(BodyRegion.NECK, EquipmentLayer.ACCESSORY)],
             2,
-            "",
+            None,
         ),
         (
             GearArchetype.RANGED,
@@ -139,7 +141,7 @@ def _build_template_specs() -> list[tuple[str, str, list[tuple[str, str]], int, 
                 (BodyRegion.LEFT_HAND, EquipmentLayer.BASE),
             ],
             2,
-            WeaponClass.MEDIUM,
+            None,
         ),
     ]
 
