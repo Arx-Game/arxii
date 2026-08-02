@@ -197,6 +197,30 @@ class SustainedRitualInertnessTests(_SustainedRitualDeclarationBase):
         self.assertEqual(SustainedAction.objects.count(), 1)
         self.assertEqual(SustainedAction.objects.get().sustained_kind, SustainedKind.TECHNIQUE)
 
+    def test_own_maturation_round_still_counts_as_holding(self) -> None:
+        """The ``resolves_round__gte`` boundary: a commitment maturing THIS round
+        is still held during DECLARING (``resolve_round`` has not run yet), so the
+        ritual path must not stack a second live commitment on top of it."""
+        encounter = _make_declaring_encounter(round_number=1)
+        participant = _make_active_participant(encounter)
+        gift = GiftFactory()
+        effect_type = EffectTypeFactory(base_power=None)
+        technique = TechniqueFactory(gift=gift, effect_type=effect_type, windup_rounds=2)
+        declare_action(participant, focused_action=technique, effort_level=EffortLevel.MEDIUM)
+
+        # Advance to the technique's own maturation round (resolves_round == 3).
+        encounter.round_number = 3
+        encounter.save(update_fields=["round_number"])
+
+        ritual = _make_sustained_ritual(sustained_rounds=2)
+        result = try_declare_sustained_ritual(
+            sheet=participant.character_sheet, ritual=ritual, kwargs={}
+        )
+
+        self.assertIsNone(result)
+        self.assertEqual(SustainedAction.objects.count(), 1)
+        self.assertEqual(SustainedAction.objects.get().sustained_kind, SustainedKind.TECHNIQUE)
+
 
 class SustainedRitualBlocksCombatDeclarationTests(_SustainedRitualDeclarationBase):
     """Fix 2b (#2705 adversarial review): a not-yet-matured RITUAL commitment

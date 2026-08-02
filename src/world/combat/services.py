@@ -3509,7 +3509,7 @@ def try_declare_sustained_ritual(
     - ``kwargs`` is empty (see below);
     - the participant is not already holding an earlier-round commitment —
       mirrors ``_validate_no_pending_sustained``'s D2 guard
-      (``declared_round < round_number``, ``resolves_round > round_number``).
+      (``declared_round < round_number``, ``resolves_round >= round_number``).
       Unlike that function this does not raise: a ritual invocation is not
       the round-declaration seam, so blocking it outright would strand the
       components already consumed inside the same atomic transaction. Instead
@@ -3558,10 +3558,16 @@ def try_declare_sustained_ritual(
     if encounter.status != RoundStatus.DECLARING:
         return None
 
+    # ``resolves_round__gte``, not ``__gt``: a commitment maturing THIS round is
+    # still being held during DECLARING — ``resolve_round`` has not run yet, so
+    # it has not matured. With ``__gt`` a player could stack a second live
+    # commitment on their own maturation round, which the "cannot stack two
+    # parallel commitments" invariant below forbids. Same off-by-one that made
+    # ``_validate_no_pending_sustained`` crash ``resolve_round``.
     already_holding = SustainedAction.objects.filter(
         participant=participant,
         declared_round__lt=encounter.round_number,
-        resolves_round__gt=encounter.round_number,
+        resolves_round__gte=encounter.round_number,
     ).exists()
     if already_holding:
         return None
