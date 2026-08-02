@@ -7,10 +7,20 @@ import logging
 logger = logging.getLogger(__name__)
 
 
-def ensure_cleanup_content() -> None:
-    """Seed CLEANUP project kind content.
+def ensure_cleanup_content():
+    """Seed CLEANUP project-kind config. Returns the resonance, or None.
 
-    Creates resonance award, contribution methods, and celestial resonance.
+    Content-repo-owned rows are looked up, never invented (#2698/ADR-0168):
+    ``Affinity`` and ``Resonance`` are both in ``CONTENT_MODELS``, so this
+    function may not create them. When the resonance is absent the config that
+    hangs off it is still seeded — the award and contribution methods are
+    mechanical config, not content — and the caller gets ``None``.
+
+    Before #2890 this ``get_or_create``d an Affinity named "Celestial" and a
+    Resonance named "Hope". "Hope" is not one of the twenty-four canonical
+    resonances, so had this function ever been wired into a seed cluster it would
+    have invented a resonance and shipped it as lore on the next export.
+
     Idempotent — safe to call multiple times.
     """
     from world.magic.models.affinity import Affinity, Resonance  # noqa: PLC0415
@@ -19,21 +29,25 @@ def ensure_cleanup_content() -> None:
         ContributionMethod,
         ProjectKindResonanceAward,
     )
+    from world.seeds.sample_content import authored_or_sample  # noqa: PLC0415
 
-    # Celestial resonance for the project FK (self-contained, get-or-create).
-    celestial, _ = Affinity.objects.get_or_create(
+    celestial = authored_or_sample(
+        Affinity,
+        {"description": "The celestial affinity — light, hope, civic virtue."},
         name="Celestial",
-        defaults={"description": "The celestial affinity — light, hope, civic virtue."},
     )
-    resonance, _ = Resonance.objects.get_or_create(
-        name="Hope",
-        defaults={
-            "affinity": celestial,
-            "description": "The resonance of hope and public service.",
-        },
-    )
+    resonance = None
+    if celestial is not None:
+        resonance = authored_or_sample(
+            Resonance,
+            {
+                "affinity": celestial,
+                "description": "The resonance of hope and public service.",
+            },
+            name="Hope",
+        )
 
-    # ProjectKindResonanceAward — celestial resonance per contribution.
+    # ProjectKindResonanceAward — config, so seeded regardless of the resonance.
     ProjectKindResonanceAward.objects.update_or_create(
         kind=ProjectKind.CLEANUP,
         defaults={"resonance_award_amount": 5},
@@ -68,4 +82,5 @@ def ensure_cleanup_content() -> None:
         )
 
     logger.info("CLEANUP seed content ensured.")
+    return resonance
     return resonance

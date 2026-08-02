@@ -3,7 +3,7 @@
 from datetime import timedelta
 
 from django.db import IntegrityError
-from django.test import TestCase
+from django.test import TestCase, override_settings
 from django.utils import timezone
 
 from world.areas.cleanup_services import (
@@ -297,6 +297,7 @@ class CleanupE2ETests(TestCase):
         aq = AreaQuality.objects.get(area=self.area)
         self.assertGreater(aq.quality, AREA_QUALITY_NORMAL)
 
+    @override_settings(SEED_SAMPLE_CONTENT=True)  # ensure_cleanup_content gates on #2698
     def test_contributor_gets_resonance(self):
         from world.areas.seeds import ensure_cleanup_content
         from world.magic.models.aura import CharacterResonance
