@@ -6,8 +6,15 @@ core_management.content_export. Writes one JSON file per content model
 to CONTENT_REPO_PATH/fixtures/<app_label>/<model_name>.json.
 
 Usage:
-    uv run python tools/export_content.py            # export to content repo
+    uv run python tools/export_content.py            # export; withhold new rows
     uv run python tools/export_content.py --check    # dry-run: show what would be written
+    uv run python tools/export_content.py --allow-additions   # also push newly authored rows
+
+By default the export refuses to ADD rows the content repo does not already
+have, and lists them instead (#2890). That is what stops a database seeded with
+ARXII_SEED_SAMPLE_CONTENT from laundering sample rows into the corpus as lore.
+Pass --allow-additions when you genuinely authored new content and want it
+pushed.
 """
 
 from __future__ import annotations
@@ -41,6 +48,11 @@ def main() -> int:
         help="dry-run: show what would be written, write nothing",
     )
     parser.add_argument(
+        "--allow-additions",
+        action="store_true",
+        help="also write rows the content repo does not have yet (new authored content)",
+    )
+    parser.add_argument(
         "--content-path",
         default=None,
         help="override the content checkout location (default: CONTENT_REPO_PATH)",
@@ -69,16 +81,16 @@ def main() -> int:
         _run_grid_check()
         return 0
 
-    model_ok = _run_model_export(content_root)
+    model_ok = _run_model_export(content_root, allow_additions=args.allow_additions)
     grid_ok = _run_grid_export(content_root)
     return 0 if (model_ok and grid_ok) else 1
 
 
-def _run_model_export(content_root: Path) -> bool:
+def _run_model_export(content_root: Path, *, allow_additions: bool = False) -> bool:
     """Export content models; print the report. Returns True iff no errors."""
     from core_management.content_export import export_to_content_repo  # noqa: PLC0415
 
-    result = export_to_content_repo(content_root)
+    result = export_to_content_repo(content_root, allow_additions=allow_additions)
     for path in result.written:
         print(f"wrote {path.relative_to(content_root)}")
     if result.skipped:
@@ -89,8 +101,29 @@ def _run_model_export(content_root: Path) -> bool:
         print(f"\nErrors ({len(result.errors)}):")
         for err in result.errors:
             print(f"  {err}", file=sys.stderr)
+    _print_addition_report(result)
     print(f"OK: {result.total_records} records -> {len(result.written)} file(s).")
     return not result.errors
+
+
+def _print_addition_report(result) -> None:
+    """Print the rows the export added, and the rows it declined to add (#2890)."""
+    if result.added:
+        print(f"\nAdded {result.added_count} new row(s) to the corpus:")
+        for label, keys in sorted(result.added.items()):
+            print(f"  {label}: {len(keys)}")
+            for key in keys:
+                print(f"    + {key}")
+    if result.withheld:
+        print(
+            f"\nWITHHELD {result.withheld_count} row(s) the content repo does not have. "
+            "Re-run with --allow-additions to push them, or leave them if they are "
+            "sample/seed rows (#2890):"
+        )
+        for label, keys in sorted(result.withheld.items()):
+            print(f"  {label}: {len(keys)}")
+            for key in keys:
+                print(f"    ? {key}")
 
 
 def _run_grid_export(content_root: Path) -> bool:
