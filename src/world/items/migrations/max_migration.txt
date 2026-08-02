@@ -1,1 +1,1 @@
-0055_itemtemplate_weapon_class
+0056_weaponclass_alter_itemtemplate_weapon_class

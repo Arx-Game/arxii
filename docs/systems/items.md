@@ -32,12 +32,13 @@ from world.items.constants import (
 |-------|---------|------------|
 | `QualityTier` | Color-coded quality levels with stat scaling | `name`, `color_hex`, `numeric_min`, `numeric_max`, `stat_multiplier`, `sort_order` |
 | `InteractionType` | Extensible item actions (eat, wield, study, etc.) | `name` (internal), `label` (player-facing), `description` |
+| `WeaponClass` (#2879) | Weighted strength/agility blend for a weapon archetype — replaces the #2858 small/medium/heavy override so an off-stat weapon still contributes a proportional slice of offense instead of being all-or-nothing | `name` (unique), `strength_tenths` (0-10; strength's share of the blend, agility gets the remainder), `gear_archetype` (advisory only — `ItemTemplate.gear_archetype` stays authoritative for physics gates), `default_damage` |
 
 ### Item Archetypes
 
 | Model | Purpose | Key Fields |
 |-------|---------|------------|
-| `ItemTemplate` | Archetype definition for an item type | `name`, `description`, `weight`, `size`, `value`, `is_active`, `is_revealing` (#2846 — a garment whose covered regions still expose skin: contributes no sun coverage in `world.species.sun_exposure`; the future tattoo/skin-visibility consumer reads the same flag), container fields, stacking fields, consumable fields, crafting fields, `interactions` (M2M to InteractionType), `minimum_quality_tier` (FK), `tied_resonance` (FK to `magic.Resonance`, nullable — marks a template as a *touchstone*) + `resonance_tier` (FK to `magic.ResonanceTier`, nullable — potency floor; `CheckConstraint` requires both set together or both null, #707) |
+| `ItemTemplate` | Archetype definition for an item type | `name`, `description`, `weight`, `size`, `value`, `is_active`, `is_revealing` (#2846 — a garment whose covered regions still expose skin: contributes no sun coverage in `world.species.sun_exposure`; the future tattoo/skin-visibility consumer reads the same flag), container fields, stacking fields, consumable fields, crafting fields, `interactions` (M2M to InteractionType), `minimum_quality_tier` (FK), `tied_resonance` (FK to `magic.Resonance`, nullable — marks a template as a *touchstone*) + `resonance_tier` (FK to `magic.ResonanceTier`, nullable — potency floor; `CheckConstraint` requires both set together or both null, #707), `weapon_class` (FK to `WeaponClass`, `PROTECT`, nullable — #2879; null falls back to the coarser `gear_archetype` stat map; see `world.combat.stat_mapping.weapon_stat_override`) |
 | `TemplateSlot` | Body region + layer an item occupies | `template` (FK), `body_region`, `equipment_layer`, `covers_lower_layers` |
 | `TemplateInteraction` | Flavor text for a specific interaction on a template | `template` (FK), `interaction_type` (FK), `flavor_text` |
 

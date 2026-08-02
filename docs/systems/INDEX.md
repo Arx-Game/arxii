@@ -4117,7 +4117,9 @@ then choose lawful seizure vs steal-back; linked from the inventory sidebar). Th
 holder is never notified a claim exists.
 
 - **Models:**
-  - `QualityTier`, `InteractionType`, `ItemTemplate`, `TemplateSlot`, `ItemInstance`,
+  - `QualityTier`, `InteractionType`, `ItemTemplate`, `WeaponClass` (#2879 — weighted
+    strength/agility blend for `ItemTemplate.weapon_class`, replaces the small/medium/heavy
+    override; see `world.combat.stat_mapping`), `TemplateSlot`, `ItemInstance`,
     `TemplateInteraction`, `EquippedItem`, `OwnershipEvent`, `CurrencyBalance`
   - `ItemFacet` (Spec D §4.2) — through-model linking `ItemInstance` ↔ `Facet` with
     `attachment_quality_tier`; unique per (item_instance, facet)
