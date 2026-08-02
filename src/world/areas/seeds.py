@@ -83,4 +83,3 @@ def ensure_cleanup_content():
 
     logger.info("CLEANUP seed content ensured.")
     return resonance
-    return resonance
