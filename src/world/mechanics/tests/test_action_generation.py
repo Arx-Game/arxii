@@ -16,6 +16,7 @@ from world.mechanics.factories import (
 from world.mechanics.models import ChallengeInstance
 from world.mechanics.services import get_available_actions
 from world.mechanics.types import CapabilitySource
+from world.scenes.action_constants import DIFFICULTY_BAND_STEP
 
 
 def _make_source(  # noqa: PLR0913
@@ -95,6 +96,37 @@ class ActionGenerationTests(TestCase):
         assert action.challenge_name == "Wooden Door"
         assert action.display_name == "Burn it down"
         assert action.challenge_instance_id == self.challenge_instance.id
+
+    def test_difficulty_indicator_reflects_the_gm_band_shift(self) -> None:
+        """The player-facing indicator reads effective_severity, not template.severity.
+
+        A GM's setback must be visible BEFORE the player commits (#2865) — showing
+        the unshifted band and then rolling against the shifted one is a
+        risk-transparency lie, and risk transparency is a stated design principle
+        of the challenge system.
+        """
+        self.challenge_instance.severity_adjustment = DIFFICULTY_BAND_STEP
+        self.challenge_instance.adjustment_reason = "braced from the far side"
+        self.challenge_instance.save()
+        self.addCleanup(self._clear_adjustment)
+
+        source = _make_source(
+            capability_name="fire_control_ag",
+            capability_id=self.capability.id,
+            value=10,
+        )
+        with patch(
+            "world.mechanics.services._get_difficulty_indicator_for_check",
+            return_value=DifficultyIndicator.MODERATE,
+        ) as spy:
+            get_available_actions(self.character, self.location, capability_sources=[source])
+
+        assert spy.call_args.args[2] == self.template.severity + DIFFICULTY_BAND_STEP
+
+    def _clear_adjustment(self) -> None:
+        self.challenge_instance.severity_adjustment = 0
+        self.challenge_instance.adjustment_reason = ""
+        self.challenge_instance.save()
 
     def test_no_matching_capability(self) -> None:
         """Character without matching capability sees no Actions."""

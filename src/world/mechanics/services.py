@@ -1495,10 +1495,14 @@ def _build_action_for_source(  # noqa: PLR0913
 
     difficulty = None
     if prereq_met:
+        # ci.effective_severity, not template.severity (#2865): a GM who placed this
+        # instance may have shifted it one band. The indicator is what the player
+        # reads BEFORE committing, so it must be the number resolution will roll
+        # against — showing the unshifted band would be a risk-transparency lie.
         difficulty = _get_difficulty_indicator_for_check(
             character,
             approach.check_type,
-            template.severity,
+            ci.effective_severity,
         )
         if difficulty == DifficultyIndicator.IMPOSSIBLE:
             return None

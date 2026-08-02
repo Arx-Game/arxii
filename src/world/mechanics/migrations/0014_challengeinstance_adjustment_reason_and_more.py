@@ -8,7 +8,7 @@ class Migration(migrations.Migration):
         ("actions", "0011_actiontemplate_difficulty_tier_modifier"),
         ("checks", "0030_consequenceeffect_anima_amount_and_more"),
         ("mechanics", "0013_alter_characterchallengerecord_character_and_more"),
-        ("objects", "0014_defaultobject_defaultcharacter_defaultexit_and_more"),
+        ("objects", "0013_defaultobject_alter_objectdb_id_defaultcharacter_and_more"),
     ]
 
     operations = [
