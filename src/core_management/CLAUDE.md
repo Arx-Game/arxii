@@ -74,3 +74,26 @@ Two modules, guarding different things — both run in the normal suite (`arx te
 **Why the second one could not have caught #2885:** it imports the command class and exercises it, so it passes whether or not Django ever runs that class. That is precisely the blind spot the first module closes. A test that asserts on *behaviour of a class* is not a test that the class is *wired up*.
 
 Both were `@unittest.skip`ped until #2885, on the reasoning that they were demonstration rather than regression tests. See `tests/README.md`.
+
+
+## Content export: additions are withheld by default (#2890, ADR-0191)
+
+`content_export.export_to_content_repo` may **update** rows the content repo already
+has, but by default it will not **add** rows it doesn't. A row whose natural key is
+absent from the target fixture is withheld and reported in `ExportResult.withheld`;
+`allow_additions=True` pushes it and reports it in `ExportResult.added`.
+
+This exists because `SEED_SAMPLE_CONTENT` is a legitimate path — it gives a third
+party with no content repo a bootable starter set — and once those rows exist
+nothing told them apart from authored ones. An export shipped twelve invented
+resonances into the corpus as lore while 22 real ones were missing.
+
+Three cases bypass the gate, deliberately: a model with no fixture file yet, a model
+whose `NaturalKeyMixin.identity_fields()` is `None`, and a prose domain whose
+directory holds no entries. The last is the one to watch — prose domains write one
+file per entry, so "file absent" means "new entry", which on a virgin corpus is true
+of every entry; the gate keys on the **domain**, not the entry, and
+`ExportAdditionGateProseDomainTests` pins that.
+
+Entry points: `--allow-additions` on `tools/export_content.py`, and a checkbox on the
+admin export page.
