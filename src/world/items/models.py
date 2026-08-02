@@ -191,7 +191,11 @@ class WeaponClass(NaturalKeyMixin, SharedMemoryModel):
     )
     default_damage = models.PositiveIntegerField(
         default=0,
-        help_text="Reference damage at Common quality; authored templates set their own.",
+        help_text=(
+            "Reference damage at Common quality, for content authors gridding out the "
+            "weapon-class catalog (e.g. future ItemTemplate.base_weapon_damage authoring). "
+            "Not read by any code path today."
+        ),
     )
 
     objects = NaturalKeyManager()
@@ -202,6 +206,12 @@ class WeaponClass(NaturalKeyMixin, SharedMemoryModel):
 
     class Meta:
         ordering = ["name"]
+        constraints = [
+            models.CheckConstraint(
+                check=models.Q(strength_tenths__lte=10),
+                name="items_weaponclass_strength_tenths_max_ten",
+            ),
+        ]
 
     def __str__(self) -> str:
         return self.name

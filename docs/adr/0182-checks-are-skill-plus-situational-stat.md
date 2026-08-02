@@ -41,7 +41,7 @@ Social, investigation, resist, and multi-stat checks stay separate.
   targeting is covered by equipment-level and capability-level mechanisms.
 - The weapon→stat mapping is authored content, not engine logic — it can be
   refined from the coarse initial `GearArchetype` mapping to a finer weapon-class
-  mapping in a content follow-up. **Done (#2858, superseded #2879 — see ADR-0188):**
+  mapping in a content follow-up. **Done (#2858, superseded #2879 — see ADR-0189):**
   `ItemTemplate.weapon_class` now FKs to a `WeaponClass` lookup table carrying a
   weighted strength/agility blend (replacing #2858's small/medium/heavy override),
   taking precedence over the archetype map, with null falling back to it, so the

@@ -64,7 +64,12 @@ class Migration(migrations.Migration):
                     "default_damage",
                     models.PositiveIntegerField(
                         default=0,
-                        help_text="Reference damage at Common quality; authored templates set their own.",
+                        help_text=(
+                            "Reference damage at Common quality, for content authors gridding "
+                            "out the weapon-class catalog (e.g. future "
+                            "ItemTemplate.base_weapon_damage authoring). Not read by any code "
+                            "path today."
+                        ),
                     ),
                 ),
             ],
@@ -73,7 +78,18 @@ class Migration(migrations.Migration):
             },
             bases=(core.natural_keys.NaturalKeyMixin, models.Model),
         ),
-        migrations.AlterField(
+        # NOTE: RemoveField + AddField (not AlterField) is deliberate. This column starts
+        # as a CharField(default="", blank=True) (see 0055) and ends as a ForeignKey. Django's
+        # AlterField would emit an in-place `ALTER COLUMN ... TYPE bigint USING
+        # weapon_class_id::bigint`, which fails on any populated table with existing rows
+        # (empty-string values can't cast to bigint). Dropping and re-adding the column is
+        # still schema-only (no RunPython backfill, ADR-0013 compliant) — it just avoids
+        # the impossible type-cast. See final-branch-review Critical #1 (#2879).
+        migrations.RemoveField(
+            model_name="itemtemplate",
+            name="weapon_class",
+        ),
+        migrations.AddField(
             model_name="itemtemplate",
             name="weapon_class",
             field=models.ForeignKey(
@@ -83,6 +99,13 @@ class Migration(migrations.Migration):
                 on_delete=django.db.models.deletion.PROTECT,
                 related_name="item_templates",
                 to="items.weaponclass",
+            ),
+        ),
+        migrations.AddConstraint(
+            model_name="weaponclass",
+            constraint=models.CheckConstraint(
+                condition=models.Q(("strength_tenths__lte", 10)),
+                name="items_weaponclass_strength_tenths_max_ten",
             ),
         ),
     ]

@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from django.test import TestCase
+from django.test import TestCase, override_settings
 
 from world.character_sheets.factories import CharacterSheetFactory
 from world.combat.stat_mapping import DEFENSE_STAT, weapon_stat_override
@@ -125,3 +125,90 @@ class WeaponStatOverrideBlendTests(TestCase):
 
     def test_no_weapon_returns_none(self):
         self.assertIsNone(weapon_stat_override(self.character))
+
+
+@override_settings(SEED_SAMPLE_CONTENT=True)  # seed_combat_check_content gates on #2698
+class WeaponClassCheckResolutionEndToEndTests(TestCase):
+    """Cross the Task 2 (weapon_stat_override)/Task 3 (perform_check blend) seam (#2879).
+
+    Every other test in this module (and in world/checks/tests/test_stat_override.py)
+    exercises one side of the seam in isolation: weapon_stat_override's return value,
+    or perform_check's blend arithmetic given an already-known int. Neither proves the
+    two actually compose — that equipping a real, seeded WeaponClass produces a check
+    rating that reflects its blend weight. This test equips the real seeded "Heavy
+    blade" WeaponClass (strength_tenths=7, via seed_item_template_starter_catalog's
+    Greatsword) and feeds weapon_stat_override's own return value straight into
+    perform_check on the real seeded "Melee Combat" CheckType.
+    """
+
+    def setUp(self):
+        super().setUp()
+        from evennia.utils.idmapper import models as idmapper_models
+
+        idmapper_models.flush_cache()
+
+        from world.seeds.combat_checks import seed_combat_check_content
+        from world.traits.factories import CheckSystemSetupFactory
+        from world.traits.models import ResultChart
+
+        seed_combat_check_content()
+        CheckSystemSetupFactory.create()
+        ResultChart.clear_cache()
+
+        from world.traits.models import PointConversionRange, TraitType
+
+        PointConversionRange.objects.get_or_create(
+            trait_type=TraitType.STAT,
+            min_value=1,
+            defaults={"max_value": 100, "points_per_level": 1},
+        )
+        PointConversionRange.objects.get_or_create(
+            trait_type=TraitType.SKILL,
+            min_value=1,
+            defaults={"max_value": 100, "points_per_level": 1},
+        )
+
+        self.character = CharacterSheetFactory().character
+
+    def test_seeded_weapon_class_blend_reaches_perform_check(self):
+        from world.checks.models import CheckType
+        from world.checks.services import perform_check
+        from world.seeds.game_content.items import seed_item_template_starter_catalog
+
+        catalog = seed_item_template_starter_catalog()
+        greatsword = catalog.templates[GearArchetype.MELEE_TWO_HAND]
+        self.assertEqual(greatsword.weapon_class.name, "Heavy blade")
+        self.assertEqual(greatsword.weapon_class.strength_tenths, 7)
+        # The starter catalog doesn't set base_weapon_damage (that's authored
+        # separately); _select_equipped_weapon requires positive effective damage
+        # to consider an equipped item a weapon at all.
+        greatsword.base_weapon_damage = greatsword.weapon_class.default_damage
+        greatsword.save()
+
+        inst = ItemInstanceFactory(template=greatsword, durability=30)
+        EquippedItem.objects.create(
+            character=self.character.sheet_data,
+            item_instance=inst,
+            body_region=BodyRegion.RIGHT_HAND,
+            equipment_layer=EquipmentLayer.BASE,
+        )
+        self.character.equipped_items.invalidate()
+
+        # weapon_stat_override reads the equipped Greatsword's WeaponClass and
+        # returns its strength_tenths weight directly.
+        stat_override = weapon_stat_override(self.character)
+        self.assertEqual(stat_override, 7)
+
+        self.character.traits.set_trait_value("strength", 10)
+        self.character.traits.set_trait_value("agility", 3)
+
+        melee_check = CheckType.objects.get(name="Melee Combat")
+        result_blended = perform_check(self.character, melee_check, stat_override=stat_override)
+        result_pure_strength = perform_check(self.character, melee_check, stat_override=10)
+
+        # strength_tenths=7: (10*7 + 3*3) / 10 = 7.9 -> int truncation via
+        # PointConversionRange gives a lower stat contribution than pure strength
+        # (10*10 + 3*0)/10 = 10 would. If the WeaponClass's weight never reached
+        # perform_check (composition broken), both calls would be identical.
+        self.assertLess(result_blended.trait_points, result_pure_strength.trait_points)
+        self.assertGreater(result_blended.trait_points, 0)

@@ -30,11 +30,14 @@ through 9/1) without either coarse buckets or an explosion of enum members. Remo
 
 ## Consequences
 
-Existing `ItemTemplate` rows using the small/medium/heavy override (only 2 of the seed
-catalog's reference templates) were reclassified to named `WeaponClass` rows; no data
-migration was needed since the dev DB carries no other meaningful `weapon_class` values
-pre-production (ADR-0013). Authoring the full weapon-class catalog for every real
-`ItemTemplate` (the issue's 15-class grid) is deferred to a lore-repo content follow-up.
+Existing `ItemTemplate` rows using the small/medium/heavy override (3 of the seed
+catalog's reference templates — Longsword, Greatsword, Recurve Bow) were reclassified to
+named `WeaponClass` rows; no data migration was needed since the dev DB carries no other
+meaningful `weapon_class` values pre-production (ADR-0013). The weapon-class catalog is
+admin/seeder-authored content, like the rest of the reference item catalog
+(`world/seeds/game_content/items.py`'s `get_or_create` pattern) — not lore-repo content:
+`items.WeaponClass` and `items.ItemTemplate` are not in `CONTENT_MODELS`, so authoring the
+full 15-class grid there would first require adding both to that registry.
 
 > Status: accepted · Source: #2858, #2879 · Confidence: built and wired —
 > `world.items.models.WeaponClass`, `ItemTemplate.weapon_class`,

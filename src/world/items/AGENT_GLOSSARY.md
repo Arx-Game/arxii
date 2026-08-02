@@ -17,8 +17,12 @@ A discrete, color-coded quality level (Common=white, Fine=green, Masterwork=purp
 _Avoid_: grade, rarity, quality level
 
 **GearArchetype**:
-A coarse equipment categorization (Light/Medium/Heavy Armor, Robe, one- or two-handed Melee, Ranged, Thrown, Shield, Jewelry, Clothing) used to gate covenant-role compatibility and combat-stat eligibility.
+A coarse equipment categorization (Light/Medium/Heavy Armor, Robe, one- or two-handed Melee, Ranged, Thrown, Shield, Jewelry, Clothing) used to gate covenant-role compatibility and physics gates (wind penalty, lance maneuvers, hands). The combat stat-override fallback for a weapon `ItemTemplate` with no `WeaponClass` set (#2879) — when `WeaponClass` is set, it takes precedence for the strength/agility blend instead.
 _Avoid_: gear type, equipment class, item category
+
+**WeaponClass** (#2879):
+A named strength/agility blend classification for a weapon `ItemTemplate` (e.g. "Longsword", "Recurve Bow"), replacing the earlier small/medium/heavy override. Carries `strength_tenths` (0-10; agility's share is 10 minus it) — strength 10 is a pure-strength weapon like a maul, 0 is pure agility like a crossbow. `ItemTemplate.weapon_class` FKs to it (nullable, `PROTECT`); null falls back to the coarser `GearArchetype` stat map. The check-resolution seam substitutes the blended value for the check's STAT trait. Evocative names double as player-facing vocabulary. See `world/items/models.py` (`WeaponClass`) and `world/combat/stat_mapping.py` (the fallback lookup).
+_Avoid_: weapon type, weapon tier, weapon category
 
 **CraftingRecipe**:
 The top-level record that drives one crafting workflow, unique per recipe kind, bundling the check configuration, resource costs, success thresholds, and default consumption policy for crafting attempts.

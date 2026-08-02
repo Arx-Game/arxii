@@ -18,6 +18,7 @@ from world.classes.models import PathAspect
 from world.fatigue.constants import EFFORT_CHECK_MODIFIER
 from world.progression.models import CharacterPathHistory
 from world.progression.services.skill_development import get_character_path_level
+from world.traits.constants import PrimaryStat
 from world.traits.models import (
     CheckOutcome,
     CheckRank,
@@ -96,6 +97,12 @@ def perform_check(  # noqa: PLR0913 - optional effort/fatigue params extend exis
             path), raising the outcome to the effective floor when it landed
             below one and announcing only when a guarantee actually altered
             the outcome — see ``_apply_outcome_guarantees``.
+        stat_override: (#2757; ``int`` form #2879) substitutes for the check's STAT
+            trait when the check has at most one STAT-type trait. A ``str`` names a
+            single trait to substitute directly. An ``int`` (0-10) instead blends
+            strength/agility by that weight in tenths — 10 = pure strength, 0 = pure
+            agility — via ``(strength * w + agility * (10 - w)) / 10``. ``None``
+            (the default) is byte-identical to pre-#2757 behavior.
     """
     # Test-rig seam (NOT a production code path).
     from world.checks.test_helpers import _consume_forced_outcome, _record_capture  # noqa: PLC0415
@@ -834,8 +841,8 @@ def _calculate_trait_points_with_override(  # noqa: C901
     if isinstance(stat_override, int):
         # #2879: weighted strength/agility blend. strength_tenths is the
         # weight (0-10); agility's share is 10 minus it.
-        strength_value = handler.get_trait_value("strength")
-        agility_value = handler.get_trait_value("agility")
+        strength_value = handler.get_trait_value(PrimaryStat.STRENGTH.value)
+        agility_value = handler.get_trait_value(PrimaryStat.AGILITY.value)
         override_value = (
             strength_value * stat_override + agility_value * (10 - stat_override)
         ) / Decimal(10)
