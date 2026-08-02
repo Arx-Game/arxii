@@ -15,6 +15,13 @@ arx manage makemigrations
 arx manage makemigrations traits
 ```
 
+**The guard depends on `INSTALLED_APPS` order (#2885).** `django_linear_migrations`
+ships a `makemigrations` too, and Django resolves the command in favour of the app
+listed **earliest** — so `core_management` must precede it. Listed the other way
+round, this whole section is a lie: the command runs, prints no warning, writes the
+phantom, and hands CI a `NodeNotFoundError` (see the phantom-dependency section
+below). `core_management.tests.test_command_resolution` is the standing guard.
+
 **Details**: See `core_management/CLAUDE.md` for full technical documentation of the solution.
 
 ### makemigrations in a fresh worktree (no local dev DB)
@@ -149,7 +156,13 @@ If the merge commit itself times out on pre-commit (ty/ruff over hundreds of fil
 
 **Symptom:** `NodeNotFoundError: Migration <app>.NNNN dependencies reference nonexistent parent node ('objects', '0014_defaultobject_...')`. Backend shards and `api-types-drift` build their schema from model state (`tools/build_schema.py`, migrations disabled entirely) so they don't hit this; it now surfaces at the `ty` job's "Check migrations match models" step, `pre-commit`'s "Check Django migrations" hook, and the nightly migration-replay workflow's migrate/check steps. Local SQLite tests pass because the dev venv happens to have the phantom migration.
 
-**Cause:** `.venv/.../evennia/objects/migrations/0012-0014` are venv-only phantoms (not git-tracked — a stray `makemigrations` once generated them into the Evennia library dir). Regenerating a project migration can bake a dependency on the latest *local* phantom objects migration even though the `arx manage` wrapper suppresses phantom migration *files*. CI's clean Evennia install only ships `objects` migrations up to **0013**, so the dependency dangles.
+**Cause:** `.venv/.../evennia/objects/migrations/0014_*` is a venv-only phantom (not git-tracked). CI's clean Evennia install only ships `objects` migrations up to **0013**, so a dependency on 0014 dangles.
+
+**Root cause, fixed in #2885:** this used to say the phantom came from "a stray `makemigrations`" and that the wrapper "suppresses phantom migration *files*" regardless. Neither was quite right. `core_management`'s filter — the thing that suppresses them — **was never running**: `django_linear_migrations` also ships a `makemigrations`, it was listed earlier in `INSTALLED_APPS`, and Django's `get_commands()` resolves in favour of the *earliest*-listed app (it walks `reversed(apps.get_app_configs())` and `update()`s). So every `arx manage makemigrations` wrote the phantom into the venv and then depended on it. The apps are now ordered the other way, and `core_management.tests.test_command_resolution` pins it.
+
+Two consequences worth knowing:
+- **A venv that generated a migration before #2885 still has the stray file.** It is a *new* file rather than a modified one, so the shared uv cache is not poisoned; delete it and diff the directory against another checkout's venv to confirm you are back to stock. (Do not "fix" Evennia's vendored code — see the never-edit-dependency-code rule in CLAUDE.md.)
+- **Migrations authored in that window may still carry the bad dependency.** The fix below still applies to them.
 
 **Fix:** find the canonical CI-present dep with `git grep "('objects'," origin/main` (currently `0013_defaultobject_alter_objectdb_id_defaultcharacter_and_more`) and repoint the bad dependency line to it — a one-line edit in the new migration's `dependencies`.
 
