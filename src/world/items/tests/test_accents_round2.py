@@ -240,3 +240,55 @@ class AccentArchetypeAllowanceTests(TestCase):
         custom = ModifierTargetFactory(name="custom-axis", is_styleable=True)
         jewelry = ItemTemplateFactory(gear_archetype=GearArchetype.JEWELRY)
         self.assertEqual(_validate_accent_targets([custom], template=jewelry), [custom])
+
+
+class AdditiveSpecializationTests(TestCase):
+    """Skill 50 + spec 50 crafts like skill 100 (#2886, Apostate's ruling)."""
+
+    def test_specialization_raises_the_quality_cap(self) -> None:
+        from types import SimpleNamespace
+
+        from world.character_sheets.factories import CharacterSheetFactory
+        from world.items.crafting.quality import resolve_capped_tier
+        from world.items.factories import (
+            CraftingRecipeFactory,
+            CraftingSkillCapFactory,
+            QualityTierFactory,
+        )
+        from world.skills.factories import (
+            CharacterSpecializationValueFactory,
+            SpecializationFactory,
+        )
+        from world.traits.factories import CharacterTraitValueFactory, TraitFactory
+        from world.traits.models import TraitCategory, TraitType
+
+        low = QualityTierFactory(name="Low", numeric_min=0, numeric_max=59, sort_order=1)
+        high = QualityTierFactory(name="High", numeric_min=60, numeric_max=200, sort_order=2)
+        skill = TraitFactory(
+            name="Smithcraft", trait_type=TraitType.SKILL, category=TraitCategory.CRAFTING
+        )
+        spec = SpecializationFactory(name="Bladesmithing")
+        recipe = CraftingRecipeFactory(
+            success_level_step=10,
+            min_success_level=1,
+            skill_trait=skill,
+            specialization=spec,
+        )
+        CraftingSkillCapFactory(recipe=recipe, min_skill_value=0, max_quality_tier=low)
+        CraftingSkillCapFactory(recipe=recipe, min_skill_value=80, max_quality_tier=high)
+        sheet = CharacterSheetFactory()
+        CharacterTraitValueFactory(character=sheet, trait=skill, value=50)
+        result = SimpleNamespace(total_points=150, success_level=1, effective_roll=0)
+
+        # Skill 50 alone: capped by the low band.
+        tier = resolve_capped_tier(
+            recipe=recipe, crafter_character=sheet.character, check_result=result
+        )
+        self.assertEqual(tier, low)
+
+        # Skill 50 + spec 50 = 100 ≥ the 80 band: the high cap opens.
+        CharacterSpecializationValueFactory(character=sheet, specialization=spec, value=50)
+        tier = resolve_capped_tier(
+            recipe=recipe, crafter_character=sheet.character, check_result=result
+        )
+        self.assertEqual(tier, high)

@@ -70,6 +70,19 @@ class CraftingRecipe(SharedMemoryModel):
         related_name="+",
         help_text="Trait (skill) whose rank gates or boosts this recipe. Optional.",
     )
+    specialization = models.ForeignKey(
+        "skills.Specialization",
+        on_delete=models.PROTECT,
+        null=True,
+        blank=True,
+        related_name="+",
+        help_text=(
+            "Specialization this recipe exercises (#2886, e.g. Honeyed Wine → "
+            "Brewing). Additive with the skill everywhere: its value joins the "
+            "craft/accent rolls AND the quality-cap lookup, so skill 50 + spec "
+            "50 crafts like skill 100 (Apostate's ruling)."
+        ),
+    )
     action_point_cost = models.PositiveIntegerField(
         default=0,
         help_text="Action points spent when initiating a crafting attempt.",

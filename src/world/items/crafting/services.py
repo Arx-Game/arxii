@@ -581,6 +581,7 @@ def _resolve_accents(
             crafter_character,
             recipe.check_type,
             difficulty,
+            specialization=recipe.specialization,
             extra_contributions=accent_contribs or None,
         )
         if result.success_level < recipe.min_success_level:
@@ -795,6 +796,7 @@ def run_crafting_recipe(  # noqa: PLR0913
         crafter_character,
         recipe.check_type,
         difficulty,
+        specialization=recipe.specialization,
         extra_contributions=craft_contribs or None,
     )
 

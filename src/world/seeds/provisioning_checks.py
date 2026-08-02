@@ -25,6 +25,10 @@ COOKING_SKILL_NAME = "Cooking"
 COOKING_CHECK_NAME = "Cooking"
 BREWING_SPECIALIZATION_NAME = "Brewing"
 
+# Recipes exercising a specialization (#2886 — spec is additive with the
+# skill on the roll AND the quality cap; Apostate: 50+50 ≡ 100).
+_RECIPE_SPECIALIZATIONS = {"Honeyed Wine": BREWING_SPECIALIZATION_NAME}
+
 # (output template name, ((ingredient template name, quantity), ...), workshop_gated)
 _RECIPE_ROWS = (
     ("Hearty Stew", (("Sack of Grain", 1), ("Wild Herbs", 1)), False),
@@ -200,6 +204,16 @@ def _ensure_quality_tiers() -> dict[str, object]:
     return tiers
 
 
+def _recipe_specialization(output_name: str):
+    """The Specialization row a recipe exercises, or None (#2886)."""
+    from world.skills.models import Specialization  # noqa: PLC0415
+
+    spec_name = _RECIPE_SPECIALIZATIONS.get(output_name)
+    if spec_name is None:
+        return None
+    return Specialization.objects.filter(name=spec_name).first()
+
+
 def _ensure_recipes(check_type, tiers: dict[str, object]) -> None:
     """The example ITEM_CREATE recipes + ingredients + skill caps."""
     from world.items.crafting.constants import CraftingRecipeKind  # noqa: PLC0415
@@ -239,6 +253,7 @@ def _ensure_recipes(check_type, tiers: dict[str, object]) -> None:
                 "check_type": check_type,
                 "skill_trait": skill_trait,
                 "base_difficulty": 20 if workshop_gated else 10,
+                "specialization": _recipe_specialization(output_name),
                 "success_level_step": 10,
                 "min_success_level": 1,
                 "action_point_cost": 2,
