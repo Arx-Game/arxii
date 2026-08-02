@@ -28,6 +28,7 @@ from world.magic.models.gifts import Gift
 
 if TYPE_CHECKING:
     from world.magic.models.power_config import CapabilityPowerConfig
+    from world.magic.types.technique_effects import TechniqueEffectPayload
 
 # App-qualified model paths repeated across FK references; centralized for dedup.
 _TECHNIQUE_MODEL = "magic.Technique"
@@ -558,33 +559,42 @@ class Technique(NaturalKeyMixin, DiscoverableContent, SharedMemoryModel):
     def cached_damage_profiles(self) -> list:
         """Damage profiles for this technique. Supports Prefetch(to_attr=).
 
+        ``damage_type`` is select_related so a display or resolution pass that
+        walks it costs no extra query (#2898).
+
         To invalidate: ``del instance.cached_damage_profiles``.
         """
-        return list(self.damage_profiles.all())
+        return list(self.damage_profiles.select_related("damage_type"))
 
     @cached_property
     def cached_capability_grants(self) -> list:
         """Capability grants for this technique. Supports Prefetch(to_attr=).
 
+        ``capability`` is select_related for the same reason as above (#2898).
+
         To invalidate: ``del instance.cached_capability_grants``.
         """
-        return list(self.capability_grants.all())
+        return list(self.capability_grants.select_related("capability"))
 
     @cached_property
     def cached_condition_applications(self) -> list:
         """Applied conditions for this technique. Supports Prefetch(to_attr=).
 
+        ``condition`` is select_related for the same reason as above (#2898).
+
         To invalidate: ``del instance.cached_condition_applications``.
         """
-        return list(self.condition_applications.all())
+        return list(self.condition_applications.select_related("condition"))
 
     @cached_property
     def cached_removed_conditions(self) -> list:
         """Removed conditions (dispel payloads) for this technique. Supports Prefetch.
 
+        ``condition`` is select_related for the same reason as above (#2898).
+
         To invalidate: ``del instance.cached_removed_conditions``.
         """
-        return list(self.removed_conditions.all())
+        return list(self.removed_conditions.select_related("condition"))
 
     @cached_property
     def cached_target_prerequisites(self) -> list:
@@ -636,11 +646,32 @@ class Technique(NaturalKeyMixin, DiscoverableContent, SharedMemoryModel):
     def is_lock_applying(self) -> bool:
         """Return True if this technique applies any ConditionTemplate flagged as a clash-lock.
 
-        The technique's applied conditions are reachable via condition_applications
-        (TechniqueAppliedCondition through model). Returns False when no lock-flagged
-        condition is found.
+        Reads ``cached_condition_applications`` (whose ``condition`` is
+        select_related) rather than issuing its own ``.filter().exists()``, so
+        this shares the one query every other payload reader already paid (#2898).
+        Returns False when no lock-flagged condition is found.
         """
-        return self.condition_applications.filter(condition__is_clash_lock=True).exists()
+        return any(row.condition.is_clash_lock for row in self.cached_condition_applications)
+
+    @cached_property
+    def cached_effect_summary(self) -> "TechniqueEffectPayload":
+        """What this technique actually does, as the shape every surface shows (#2898).
+
+        Built once per instance from the four payload tables and the two existing
+        derivations (``derive_target_relationship`` / ``is_technique_hostile``).
+        Because concrete models here are SharedMemoryModels, a technique fetched by
+        pk anywhere in the process answers CG, the magic API, the in-scene cast
+        list, the character sheet, and telnet from this one build.
+
+        To invalidate after editing payload rows: ``del instance.cached_effect_summary``
+        (``invalidate_technique_payload_caches`` does this alongside the payload
+        lists it feeds on).
+        """
+        from world.magic.services.technique_effects import (  # noqa: PLC0415
+            summarize_technique_effects,
+        )
+
+        return summarize_technique_effects(self)
 
 
 class TechniqueFunctionTagManager(NaturalKeyManager):

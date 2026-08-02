@@ -26,6 +26,7 @@ from world.magic.models import (
     TechniqueTierBudget,
     TechniqueTreatment,
 )
+from world.magic.services.technique_effects import invalidate_technique_payload_caches
 from world.magic.types.technique_builder import (
     TechniqueCostBreakdown,
     TechniqueCostLine,
@@ -410,6 +411,10 @@ def build_technique(design: TechniqueDesignInput, *, creator) -> Technique:
             target_kind=spec.target_kind,
             minimum_success_level=spec.minimum_success_level,
         )
+    # The payload rows above are what every display and resolution surface reads
+    # off the technique; drop the per-instance caches so the first read after this
+    # build sees them (#2898).
+    invalidate_technique_payload_caches(tech)
     return tech
 
 
