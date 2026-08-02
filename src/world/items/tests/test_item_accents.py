@@ -17,7 +17,7 @@ from evennia_extensions.factories import AccountFactory, RoomProfileFactory
 from world.character_sheets.factories import CharacterSheetFactory
 from world.checks.test_helpers import force_check_outcome
 from world.items.crafting.constants import (
-    ACCENT_DIFFICULTY_STEP,
+    ACCENT_CHECK_PENALTY,
     BASE_MAX_ACCENT_LEVEL,
     CraftingRecipeKind,
 )
@@ -169,7 +169,9 @@ class RunWithAccentsTests(TestCase):
 
         return FacetFactory()
 
-    def test_accents_raise_main_roll_difficulty(self) -> None:
+    def test_accents_penalize_the_rolls_not_the_difficulty(self) -> None:
+        from world.items.crafting.services import _accent_penalty_contributions
+
         item = ItemInstanceFactory(
             template=ItemTemplateFactory(facet_capacity=3), holder_character_sheet=self.sheet
         )
@@ -182,10 +184,12 @@ class RunWithAccentsTests(TestCase):
                 target=self._facet(),
                 accent_targets=[self.menace, self.allure],
             )
-        self.assertEqual(
-            capture.target_difficulty,
-            self.recipe.base_difficulty + 2 * ACCENT_DIFFICULTY_STEP,
-        )
+        # Difficulty stays authored (#2886): ambition is a points penalty,
+        # not the rank-quantized difficulty ladder.
+        self.assertEqual(capture.target_difficulty, self.recipe.base_difficulty)
+        contribs = _accent_penalty_contributions(2)
+        self.assertEqual(len(contribs), 1)
+        self.assertEqual(contribs[0].value, -(2 * ACCENT_CHECK_PENALTY))
 
     def test_invalid_accent_rejected_before_rolling(self) -> None:
         item = ItemInstanceFactory(

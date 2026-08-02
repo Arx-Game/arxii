@@ -515,6 +515,28 @@ def _thread_check_contributions(crafter_character: ObjectDB, recipe: CraftingRec
     ]
 
 
+def _accent_penalty_contributions(accent_count: int) -> list:
+    """The ambition penalty (#2886): −ACCENT_CHECK_PENALTY per accent chosen.
+
+    Applied to the craft roll AND every accent roll — each accent worked in
+    makes the whole piece harder to realize well, smoothly (points, not the
+    rank-quantized difficulty ladder).
+    """
+    from world.checks.constants import ModifierSourceKind  # noqa: PLC0415
+    from world.checks.types import ModifierContribution  # noqa: PLC0415
+    from world.items.crafting.constants import ACCENT_CHECK_PENALTY  # noqa: PLC0415
+
+    if accent_count <= 0:
+        return []
+    return [
+        ModifierContribution(
+            source_kind=ModifierSourceKind.CHARACTER,
+            source_label="Accent ambition",
+            value=-(ACCENT_CHECK_PENALTY * accent_count),
+        )
+    ]
+
+
 def _resolve_accents(
     *,
     recipe: CraftingRecipe,
@@ -536,14 +558,15 @@ def _resolve_accents(
     from world.items.services.crafting import compute_quality_score  # noqa: PLC0415
 
     cap = BASE_MAX_ACCENT_LEVEL + thread_count_for_skill(crafter_character, recipe.skill_trait)
-    thread_contribs = _thread_check_contributions(crafter_character, recipe)
+    accent_contribs = _thread_check_contributions(crafter_character, recipe)
+    accent_contribs += _accent_penalty_contributions(len(accent_targets))
     realized: list[ItemAccent] = []
     for target in accent_targets:
         result = perform_check_with_modifiers(
             crafter_character,
             recipe.check_type,
             difficulty,
-            extra_contributions=thread_contribs or None,
+            extra_contributions=accent_contribs or None,
         )
         if result.success_level < recipe.min_success_level:
             continue
@@ -634,9 +657,10 @@ def run_crafting_recipe(  # noqa: PLR0913
     """Run a crafting attempt end-to-end for ``kind`` against ``target``.
 
     ``accent_targets`` (#2878) are styleable ``ModifierTarget`` rows the
-    crafter chose to work into the piece. Each raises the craft difficulty by
-    ``ACCENT_DIFFICULTY_STEP`` (ambition priced in probability) and rolls its
-    own check after the piece resolves. Credits render from ItemInstance's
+    crafter chose to work into the piece. Each subtracts
+    ``ACCENT_CHECK_PENALTY`` points from every roll and doubles the craft's
+    AP/anima cost (#2886 — ambition priced smoothly), then rolls its own
+    check after the piece resolves. Credits render from ItemInstance's
     #2066 dual-provenance fields.
 
     Pipeline (all inside one transaction):
@@ -687,11 +711,15 @@ def run_crafting_recipe(  # noqa: PLR0913
     # Recipe-knowledge gate (#2242) — a gated recipe needs a learned pattern.
     _check_recipe_knowledge(recipe, crafter_character)
 
-    # Accent validation (#2878) — before any staging or rolling.
+    # Accent validation (#2878) — before any staging or rolling. Ambition is
+    # priced as a POINTS PENALTY on the rolls (#2886 — the rank-quantized
+    # difficulty step was a step function; a penalty bites smoothly) plus a
+    # per-accent doubling of the craft's AP/anima cost.
     accents_requested = _validate_accent_targets(accent_targets, item_instance)
-    from world.items.crafting.constants import ACCENT_DIFFICULTY_STEP  # noqa: PLC0415
+    from world.items.crafting.constants import ACCENT_CRAFT_COST_BASE  # noqa: PLC0415
 
-    difficulty = recipe.base_difficulty + ACCENT_DIFFICULTY_STEP * len(accents_requested)
+    difficulty = recipe.base_difficulty
+    accent_cost_multiplier = ACCENT_CRAFT_COST_BASE ** len(accents_requested)
 
     # --- 2. Pre-validate (never waste a roll) ---
     handler = get_handler(kind)
@@ -708,15 +736,17 @@ def run_crafting_recipe(  # noqa: PLR0913
         recipe=recipe,
         crafter_character=crafter_character,
         crafter_character_sheet=crafter_sheet,
+        cost_multiplier=accent_cost_multiplier,
     )
 
-    # --- 5. Roll (accent-raised difficulty #2878; thread edge #2886) ---
-    thread_contribs = _thread_check_contributions(crafter_character, recipe)
+    # --- 5. Roll (thread edge + accent ambition penalty, #2886) ---
+    craft_contribs = _thread_check_contributions(crafter_character, recipe)
+    craft_contribs += _accent_penalty_contributions(len(accents_requested))
     check_result = perform_check_with_modifiers(
         crafter_character,
         recipe.check_type,
         difficulty,
-        extra_contributions=thread_contribs or None,
+        extra_contributions=craft_contribs or None,
     )
 
     # --- 6. Station wear (#1234) — unconditional, regardless of roll outcome ---

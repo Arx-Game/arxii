@@ -48,10 +48,15 @@ PARTIAL_FRACTION: float = 0.5
 BASE_MAX_QUALITY_RUNG: int = 9
 BASE_MAX_ACCENT_LEVEL: int = 4
 
-#: Each Accent the crafter works into a piece raises the craft difficulty by
-#: this much (#2878) — ambition is priced in probability, and "alluring AND
-#: menacing" is a master's flex. PLACEHOLDER tuning.
-ACCENT_DIFFICULTY_STEP: int = 5
+#: Each Accent the crafter works into a piece SUBTRACTS this many points from
+#: the craft and accent checks (#2886, replacing the rank-quantized difficulty
+#: step): ambition smoothly lowers both the odds AND the quality score, so
+#: choosing an accent is a genuinely hard call. PLACEHOLDER tuning.
+ACCENT_CHECK_PENALTY: int = 15
+
+#: Craft-time AP/anima cost multiplies by this per accent (#2886, "doubles
+#: per, stacking") — the forge-side twin of the refinement doubling.
+ACCENT_CRAFT_COST_BASE: int = 2
 
 #: Accent-check quality score → AccentLevel rung divisor (#2878). A score of
 #: 15-29 realizes level 1, 30-44 level 2, … PLACEHOLDER tuning.
@@ -68,6 +73,12 @@ QUALITY_LUCK_DIVISOR: int = 5
 #: accent checks (#2886) — threads are an edge on the roll, not just the
 #: ceiling. PLACEHOLDER tuning.
 THREAD_CRAFT_CHECK_BONUS: int = 10
+
+#: Refinement pace multiplier (#2886): steepens thresholds so raising a rung
+#: is weeks of investment and a full climb is months (Apostate: "people spend
+#: months on that — that's great"). Real-time pacing depends on AP regen and
+#: player income — retune against those once live. PLACEHOLDER.
+REFINEMENT_PACE_MULTIPLIER: int = 4
 
 #: Refinement (#2878, guaranteed long road): the progress threshold to raise a
 #: piece one rung is ``max(1, item value × target rung // 100)`` — money

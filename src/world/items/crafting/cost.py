@@ -60,6 +60,7 @@ def stage_and_assert_affordable(
     recipe: CraftingRecipe,
     crafter_character: ObjectDB,
     crafter_character_sheet: CharacterSheet,
+    cost_multiplier: int = 1,
 ) -> StagedCost:
     """Assert the crafter can afford ``recipe`` and return a ``StagedCost`` snapshot.
 
@@ -85,8 +86,8 @@ def stage_and_assert_affordable(
     from world.action_points.models import ActionPointPool  # noqa: PLC0415
     from world.magic.models import CharacterAnima  # noqa: PLC0415
 
-    # --- AP check ---
-    ap_cost = recipe.action_point_cost
+    # --- AP check (cost_multiplier: accents double AP/anima per, #2886) ---
+    ap_cost = recipe.action_point_cost * cost_multiplier
     if ap_cost > 0:
         pool = ActionPointPool.get_or_create_for_character(crafter_character)
         if pool.current < ap_cost:
@@ -94,7 +95,7 @@ def stage_and_assert_affordable(
             raise CraftingCostUnaffordable(msg)
 
     # --- Anima check ---
-    anima_cost = recipe.anima_cost
+    anima_cost = recipe.anima_cost * cost_multiplier
     if anima_cost > 0:
         anima_row = CharacterAnima.objects.filter(character_id=crafter_character.pk).first()
         current_anima = anima_row.current if anima_row is not None else 0

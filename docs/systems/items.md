@@ -487,7 +487,9 @@ handler — no schema change required.
 | `CostConsumption` | TextChoices | `NONE`, `PARTIAL`, `FULL` |
 | `PARTIAL_FRACTION` | float | `0.5` (fraction of AP/Anima consumed on PARTIAL outcomes) |
 | `BASE_MAX_QUALITY_RUNG` / `BASE_MAX_ACCENT_LEVEL` | int | `9` / `4` — thread-capped ceilings (#2878): +1 rung per Thread on the recipe's skill; divine+ is Gifted-only |
-| `ACCENT_DIFFICULTY_STEP` / `ACCENT_SCORE_PER_LEVEL` | int | `5` / `15` — each requested Accent raises craft difficulty; accent-check score ÷ divisor = realized rung (PLACEHOLDER) |
+| `ACCENT_CHECK_PENALTY` / `ACCENT_SCORE_PER_LEVEL` | int | `15` / `15` — each Accent subtracts points from every roll (#2886, smooth ambition price); accent-check score ÷ divisor = realized rung (PLACEHOLDER) |
+| `ACCENT_CRAFT_COST_BASE` / `REFINEMENT_PACE_MULTIPLIER` | int | `2` / `4` — AP/anima ×2 per accent at the forge; refinement thresholds steepened to weeks-per-rung (PLACEHOLDER) |
+| `QUALITY_LUCK_OFFSET` / `QUALITY_LUCK_DIVISOR` / `THREAD_CRAFT_CHECK_BONUS` | int | `45` / `5` / `10` — the craft's own d100 spreads the score ≈ −9…+11; each woven thread adds +10 to craft and accent rolls (#2886) |
 | `REFINEMENT_VALUE_PER_PROGRESS` / `REFINEMENT_TIME_LIMIT_DAYS` | int | `100` / `365` — refinement threshold = item value × target rung ÷ 100 progress (PLACEHOLDER) |
 | `CRAFTING_FAME_ACCENT_WEIGHT` | float | `0.2` — per-accent-rung multiplier on first-making fame (PLACEHOLDER) |
 
@@ -611,7 +613,8 @@ Returns `{"action_points": n, "anima": n, "materials": k}`.
 - **Accents** (`ItemAccent`: instance × styleable `ModifierTarget` ×
   `AccentLevel`): crafter-chosen at craft time via
   `run_crafting_recipe(accent_targets=…)` — each raises difficulty by
-  `ACCENT_DIFFICULTY_STEP` and rolls its OWN check after the piece resolves
+  `ACCENT_CHECK_PENALTY` points on every roll (and doubles AP/anima per
+  accent) and rolls its OWN check after the piece resolves
   (`_resolve_accents`); realized rung is thread-capped. Read by
   `crafted_modifier_value` (adds the rung on top of recipe modifiers; the
   equipment-walk prefetch covers `cached_item_accents`) and by

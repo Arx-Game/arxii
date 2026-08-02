@@ -27,6 +27,7 @@ from world.items.crafting.constants import (
     ACCENT_REFINEMENT_COST_BASE,
     BASE_MAX_ACCENT_LEVEL,
     BASE_MAX_QUALITY_RUNG,
+    REFINEMENT_PACE_MULTIPLIER,
     REFINEMENT_TIME_LIMIT_DAYS,
     REFINEMENT_VALUE_PER_PROGRESS,
 )
@@ -111,13 +112,17 @@ def _max_project_cap(
 
 
 def refinement_threshold(item_instance: ItemInstance, goal_rung: int) -> int:
-    """Progress to wrap: value × rung ÷ 100, doubled per existing accent.
+    """Progress to wrap: value × rung × pace ÷ 100, doubled per accent.
 
     Each accent on the piece doubles the road (#2886, Apostate's ruling): a
     heavily accented piece is a finished statement — reworking it approaches
     commissioning anew. PLACEHOLDER curve.
     """
-    base = max(1, (item_instance.template.value * goal_rung) // REFINEMENT_VALUE_PER_PROGRESS)
+    base = max(
+        1,
+        (item_instance.template.value * goal_rung * REFINEMENT_PACE_MULTIPLIER)
+        // REFINEMENT_VALUE_PER_PROGRESS,
+    )
     return base * (ACCENT_REFINEMENT_COST_BASE ** item_instance.accents.count())
 
 

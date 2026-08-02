@@ -64,17 +64,17 @@ class RefinementDoublingTests(TestCase):
         item = ItemInstanceFactory(
             template=ItemTemplateFactory(value=1000), holder_character_sheet=sheet
         )
-        self.assertEqual(refinement_threshold(item, 1), 10)
+        self.assertEqual(refinement_threshold(item, 1), 40)  # pace ×4
         menace = ModifierTargetFactory(name="menace", is_styleable=True)
         allure = ModifierTargetFactory(name="allure", is_styleable=True)
         ItemAccent.objects.create(
             item_instance=item, target=menace, level=AccentLevel.objects.get(level=1)
         )
-        self.assertEqual(refinement_threshold(item, 1), 20)
+        self.assertEqual(refinement_threshold(item, 1), 80)
         ItemAccent.objects.create(
             item_instance=item, target=allure, level=AccentLevel.objects.get(level=1)
         )
-        self.assertEqual(refinement_threshold(item, 1), 40)
+        self.assertEqual(refinement_threshold(item, 1), 160)
 
 
 class RemoveAccentTests(TestCase):
