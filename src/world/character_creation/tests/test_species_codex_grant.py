@@ -87,6 +87,20 @@ class FinalizeSpeciesCodexTests(TestCase):
 
         self.assertEqual(self._known_entry_ids(sheet), set())
 
+    def test_species_without_any_entry_is_a_noop_on_a_sheet_with_no_roster_entry(self):
+        """The regression CI caught: don't touch sheet.roster_entry with nothing to grant.
+
+        ``world.species.tests.test_provision_species_gifts`` finalizes a sheet that
+        has no RosterEntry, which was safe before #2880 only because the old code
+        returned on a null ``codex_entry_id`` before ever reading the relation.
+        """
+        unbound = SpeciesFactory(name="GrantNoRosterEntry", codex_entry=None)
+        sheet = CharacterSheetFactory(species=unbound)
+
+        _finalize_species_codex(sheet)  # must not raise RelatedObjectDoesNotExist
+
+        self.assertEqual(CharacterCodexKnowledge.objects.count(), 0)
+
     def test_double_call_creates_one_row_per_entry(self):
         sheet = self._sheet_for(self.kind)
 

@@ -1428,10 +1428,18 @@ def _finalize_species_codex(sheet: CharacterSheet) -> None:
     if species is None:
         return
 
+    entries = species.codex_entries
+    if not entries:
+        return
+
     from world.codex.services import grant_codex_entry  # noqa: PLC0415
 
+    # Resolved only once there is something to grant: a species whose whole
+    # lineage has a null codex_entry must stay a no-op on a sheet that has no
+    # RosterEntry yet, which is the shape isolated unit tests build. The
+    # pre-#2880 version got this for free by returning on codex_entry_id.
     roster_entry = sheet.roster_entry
-    for entry in species.codex_entries:
+    for entry in entries:
         grant_codex_entry(roster_entry, entry)
 
 
