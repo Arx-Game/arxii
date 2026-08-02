@@ -7,6 +7,7 @@ draft management and character finalization.
 
 from __future__ import annotations
 
+from collections.abc import Iterable
 from datetime import timedelta
 import logging
 from typing import TYPE_CHECKING, Any
@@ -1311,32 +1312,40 @@ def _finalize_gift_and_techniques(draft: CharacterDraft, sheet: CharacterSheet) 
     )
 
 
+def _grant_codex_entries(sheet: CharacterSheet, entry_ids: Iterable[int]) -> None:
+    """Grant every entry in ``entry_ids`` to the sheet's character, as KNOWN.
+
+    One shared body for the six CG grant sources (beginnings, path, distinction,
+    tradition, species, gift resonance), all of which previously carried their
+    own ``get_or_create`` with ``status=KNOWN``. That is what made them skip the
+    KNOWN-transition hook — see ``world.codex.services.grant_codex_entry``, which
+    is the only sanctioned way to land a character on KNOWN.
+    """
+    from world.codex.models import CodexEntry  # noqa: PLC0415
+    from world.codex.services import grant_codex_entry  # noqa: PLC0415
+
+    entry_ids = list(entry_ids)
+    if not entry_ids:
+        return
+
+    roster_entry = sheet.roster_entry
+    for entry in CodexEntry.objects.filter(pk__in=entry_ids):
+        grant_codex_entry(roster_entry, entry)
+
+
 def _finalize_tradition_codex_grants(draft: CharacterDraft, sheet: CharacterSheet) -> None:
     """Step 3: apply tradition codex grants. No-op without a selected tradition."""
     if not draft.selected_tradition:
         return
 
-    from world.codex.constants import CodexKnowledgeStatus  # noqa: PLC0415
-    from world.codex.models import (  # noqa: PLC0415
-        CharacterCodexKnowledge,
-        TraditionCodexGrant,
-    )
+    from world.codex.models import TraditionCodexGrant  # noqa: PLC0415
 
-    grant_entry_ids = list(
+    _grant_codex_entries(
+        sheet,
         TraditionCodexGrant.objects.filter(tradition=draft.selected_tradition).values_list(
             "entry_id", flat=True
-        )
+        ),
     )
-    if not grant_entry_ids:
-        return
-
-    roster_entry = sheet.roster_entry
-    for entry_id in grant_entry_ids:
-        CharacterCodexKnowledge.objects.get_or_create(
-            roster_entry=roster_entry,
-            entry_id=entry_id,
-            defaults={"status": CodexKnowledgeStatus.KNOWN},
-        )
 
 
 def _finalize_path_codex_grants(draft: CharacterDraft, sheet: CharacterSheet) -> None:
@@ -1349,22 +1358,12 @@ def _finalize_path_codex_grants(draft: CharacterDraft, sheet: CharacterSheet) ->
     if not draft.selected_path:
         return
 
-    from world.codex.constants import CodexKnowledgeStatus  # noqa: PLC0415
-    from world.codex.models import CharacterCodexKnowledge, PathCodexGrant  # noqa: PLC0415
+    from world.codex.models import PathCodexGrant  # noqa: PLC0415
 
-    grant_entry_ids = list(
-        PathCodexGrant.objects.filter(path=draft.selected_path).values_list("entry_id", flat=True)
+    _grant_codex_entries(
+        sheet,
+        PathCodexGrant.objects.filter(path=draft.selected_path).values_list("entry_id", flat=True),
     )
-    if not grant_entry_ids:
-        return
-
-    roster_entry = sheet.roster_entry
-    for entry_id in grant_entry_ids:
-        CharacterCodexKnowledge.objects.get_or_create(
-            roster_entry=roster_entry,
-            entry_id=entry_id,
-            defaults={"status": CodexKnowledgeStatus.KNOWN},
-        )
 
 
 def _finalize_beginnings_codex_grants(draft: CharacterDraft, sheet: CharacterSheet) -> None:
@@ -1376,27 +1375,14 @@ def _finalize_beginnings_codex_grants(draft: CharacterDraft, sheet: CharacterShe
     if not draft.selected_beginnings:
         return
 
-    from world.codex.constants import CodexKnowledgeStatus  # noqa: PLC0415
-    from world.codex.models import (  # noqa: PLC0415
-        BeginningsCodexGrant,
-        CharacterCodexKnowledge,
-    )
+    from world.codex.models import BeginningsCodexGrant  # noqa: PLC0415
 
-    grant_entry_ids = list(
+    _grant_codex_entries(
+        sheet,
         BeginningsCodexGrant.objects.filter(beginnings=draft.selected_beginnings).values_list(
             "entry_id", flat=True
-        )
+        ),
     )
-    if not grant_entry_ids:
-        return
-
-    roster_entry = sheet.roster_entry
-    for entry_id in grant_entry_ids:
-        CharacterCodexKnowledge.objects.get_or_create(
-            roster_entry=roster_entry,
-            entry_id=entry_id,
-            defaults={"status": CodexKnowledgeStatus.KNOWN},
-        )
 
 
 def _finalize_distinction_codex_grants(draft: CharacterDraft, sheet: CharacterSheet) -> None:
@@ -1408,11 +1394,7 @@ def _finalize_distinction_codex_grants(draft: CharacterDraft, sheet: CharacterSh
     if not distinctions_data:
         return
 
-    from world.codex.constants import CodexKnowledgeStatus  # noqa: PLC0415
-    from world.codex.models import (  # noqa: PLC0415
-        CharacterCodexKnowledge,
-        DistinctionCodexGrant,
-    )
+    from world.codex.models import DistinctionCodexGrant  # noqa: PLC0415
 
     distinction_ids = {
         d["distinction_id"]  # noqa: STRING_LITERAL
@@ -1422,21 +1404,12 @@ def _finalize_distinction_codex_grants(draft: CharacterDraft, sheet: CharacterSh
     if not distinction_ids:
         return
 
-    grant_entry_ids = list(
+    _grant_codex_entries(
+        sheet,
         DistinctionCodexGrant.objects.filter(distinction_id__in=distinction_ids).values_list(
             "entry_id", flat=True
-        )
+        ),
     )
-    if not grant_entry_ids:
-        return
-
-    roster_entry = sheet.roster_entry
-    for entry_id in grant_entry_ids:
-        CharacterCodexKnowledge.objects.get_or_create(
-            roster_entry=roster_entry,
-            entry_id=entry_id,
-            defaults={"status": CodexKnowledgeStatus.KNOWN},
-        )
 
 
 def _finalize_species_codex(sheet: CharacterSheet) -> None:
@@ -1455,15 +1428,11 @@ def _finalize_species_codex(sheet: CharacterSheet) -> None:
     if species is None:
         return
 
-    from world.codex.constants import CodexKnowledgeStatus  # noqa: PLC0415
-    from world.codex.models import CharacterCodexKnowledge  # noqa: PLC0415
+    from world.codex.services import grant_codex_entry  # noqa: PLC0415
 
+    roster_entry = sheet.roster_entry
     for entry in species.codex_entries:
-        CharacterCodexKnowledge.objects.get_or_create(
-            roster_entry=sheet.roster_entry,
-            entry_id=entry.pk,
-            defaults={"status": CodexKnowledgeStatus.KNOWN},
-        )
+        grant_codex_entry(roster_entry, entry)
 
 
 def _finalize_resonance_codex(draft: CharacterDraft, sheet: CharacterSheet) -> None:
@@ -1476,8 +1445,6 @@ def _finalize_resonance_codex(draft: CharacterDraft, sheet: CharacterSheet) -> N
     if not resonance_id:
         return
 
-    from world.codex.constants import CodexKnowledgeStatus  # noqa: PLC0415
-    from world.codex.models import CharacterCodexKnowledge  # noqa: PLC0415
     from world.magic.models import Resonance  # noqa: PLC0415
 
     try:
@@ -1487,11 +1454,7 @@ def _finalize_resonance_codex(draft: CharacterDraft, sheet: CharacterSheet) -> N
     if resonance.codex_entry_id is None:
         return
 
-    CharacterCodexKnowledge.objects.get_or_create(
-        roster_entry=sheet.roster_entry,
-        entry_id=resonance.codex_entry_id,
-        defaults={"status": CodexKnowledgeStatus.KNOWN},
-    )
+    _grant_codex_entries(sheet, [resonance.codex_entry_id])
 
 
 def _finalize_anima_ritual(draft: CharacterDraft, sheet: CharacterSheet) -> None:

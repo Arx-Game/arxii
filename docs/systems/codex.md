@@ -57,6 +57,41 @@ its own entry *and* every ancestor's — see `docs/systems/species.md`.
 
 ---
 
+## Granting an entry: one path only (#2880)
+
+**`world.codex.services.grant_codex_entry(roster_entry, entry, *, learned_from=None)` is
+the only sanctioned way to land a character on KNOWN.** It returns
+`(knowledge, newly_known)` and is idempotent.
+
+Landing on KNOWN is not just a column value — it stamps `learned_at` and fires
+`world.stories.services.reactivity.on_codex_entry_unlocked`, so `CODEX_ENTRY_UNLOCKED`
+beats re-evaluate. That hook lives on `CharacterCodexKnowledge.add_progress`, which #939
+chose deliberately: *"a separate service wrapper used to carry the hook and every caller
+bypassed it; reactivity now lives on the only path."*
+
+The bypass came back anyway. `add_progress` returns early unless the row is UNCOVERED,
+and seven callers were creating rows with `status=KNOWN` directly — all six
+character-creation grants (beginnings, path, distinction, tradition, species, gift
+resonance) and the crossing ceremony. Those characters got the column value and neither
+the timestamp nor the hook. `grant_codex_entry` therefore does **not** set the status
+itself: it opens the row UNCOVERED and pushes progress past the threshold, keeping the
+transition on the one path that carries the reactivity.
+
+Two callers deliberately create UNCOVERED rows and must keep doing so, because they mean
+"you can start researching this," not "you know this":
+
+- the `GRANT_CODEX` consequence effect (`world.mechanics.effect_handlers`) — a scene hands
+  you a lead, not the answer;
+- `CodexTeachingOffer.accept` — the learner has paid AP and now has to make progress.
+
+**Not yet wired: achievements.** `CodexEntry` does not inherit
+`world.achievements.models.DiscoverableContent` (Technique, ComboDefinition and
+SignatureMotifBonus do), so no codex entry can carry a `discovery_achievement`, and
+nothing calls `announce_access_change` or `increment_stat` for codex knowledge.
+`grant_codex_entry` is the seam that would carry it.
+
+---
+
 ## Key Methods
 
 ### CodexSubject

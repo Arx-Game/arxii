@@ -142,15 +142,9 @@ def _grant_codex_target(clue: Clue, roster_entry: RosterEntry) -> None:
     if entry is None:
         return
 
-    from world.codex.constants import CodexKnowledgeStatus  # noqa: PLC0415
-    from world.codex.models import CharacterCodexKnowledge  # noqa: PLC0415
+    from world.codex.services import grant_codex_entry  # noqa: PLC0415
 
-    knowledge, _ = CharacterCodexKnowledge.objects.get_or_create(
-        roster_entry=roster_entry,
-        entry=entry,
-        defaults={"status": CodexKnowledgeStatus.UNCOVERED},
-    )
-    knowledge.add_progress(entry.learn_threshold)
+    grant_codex_entry(roster_entry, entry)
 
 
 def _grant_rescue_target(clue: Clue, roster_entry: RosterEntry) -> None:

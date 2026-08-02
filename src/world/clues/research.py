@@ -140,17 +140,10 @@ def resolve_research(project: Project, outcome_tier: CheckOutcome | None) -> Non
     if entry is None:
         return
 
-    from world.codex.constants import CodexKnowledgeStatus  # noqa: PLC0415
-    from world.codex.models import CharacterCodexKnowledge  # noqa: PLC0415
+    from world.codex.services import grant_codex_entry  # noqa: PLC0415
 
     for roster_entry in _distinct_contributor_roster_entries(project):
-        knowledge, _ = CharacterCodexKnowledge.objects.get_or_create(
-            roster_entry=roster_entry,
-            entry=entry,
-            defaults={"status": CodexKnowledgeStatus.UNCOVERED},
-        )
-        # Push past the threshold so the entry lands KNOWN (and fires the stories hook).
-        knowledge.add_progress(entry.learn_threshold)
+        grant_codex_entry(roster_entry, entry)
 
 
 def _resolve_secret_research(project: Project, clue: Clue) -> None:
