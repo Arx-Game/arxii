@@ -259,32 +259,22 @@ class TechniqueCastCreateSerializer(serializers.Serializer):
         return attrs
 
 
-def _resolve_technique(obj: object) -> Technique | None:
-    """Return the ``Technique`` behind a castable-list row, or ``None``.
-
-    The list yields ``Technique`` rows in some call paths and ``CharacterTechnique``
-    links in others, so every field that reads the technique goes through here.
-    """
-    from world.magic.models.techniques import (  # noqa: PLC0415
-        CharacterTechnique,
-        Technique,
-    )
-
-    if isinstance(obj, Technique):
-        return obj
-    if isinstance(obj, CharacterTechnique):
-        return obj.technique
-    return None
-
-
 class CastableTechniqueSerializer(serializers.Serializer):
-    """Serializes a Technique for the castable-techniques list endpoint."""
+    """Serializes a Technique for the castable-techniques list endpoint.
+
+    Takes ``Technique`` rows — which is what ``castable_techniques_for_sheet``,
+    its only source, returns. ``get_hostile`` and ``get_target_spec`` used to
+    carry a ``CharacterTechnique`` branch as well, but neither could ever run:
+    the declared ``name`` / ``anima_cost`` / ``tier`` fields raise on a link long
+    before a method field is reached. Dropped rather than left claiming support
+    that was never there (#2898).
+    """
 
     id = serializers.IntegerField()
     name = serializers.CharField()
     # #2898: this list dropped the description entirely, so the same technique a
     # player chose by its prose was unrecognisable in the cast list.
-    description = serializers.SerializerMethodField()
+    description = serializers.CharField()
     anima_cost = serializers.IntegerField()
     tier = serializers.IntegerField()
     intensity = serializers.IntegerField()
@@ -295,26 +285,16 @@ class CastableTechniqueSerializer(serializers.Serializer):
     target_spec = serializers.SerializerMethodField()
     effect_summary = serializers.SerializerMethodField()
 
-    def get_description(self, obj: object) -> str:
-        technique = _resolve_technique(obj)
-        return technique.description if technique is not None else ""
-
     @extend_schema_field(TechniqueEffectSummarySerializer)
-    def get_effect_summary(self, obj: object) -> dict | None:
+    def get_effect_summary(self, obj: Technique) -> dict:
         """The shared effect block (#2898) — same shape as CG, magic API, and sheet."""
-        technique = _resolve_technique(obj)
-        if technique is None:
-            return None
-        return TechniqueEffectSummarySerializer(technique.cached_effect_summary).data
+        return TechniqueEffectSummarySerializer(obj.cached_effect_summary).data
 
-    def get_hostile(self, obj: object) -> bool:
+    def get_hostile(self, obj: Technique) -> bool:
         # Read off the same summary the block ships, so the two can never disagree.
-        technique = _resolve_technique(obj)
-        if technique is None:
-            return False
-        return technique.cached_effect_summary["hostile"]
+        return obj.cached_effect_summary["hostile"]
 
-    def get_target_spec(self, obj: object) -> dict | None:
+    def get_target_spec(self, obj: Technique) -> dict | None:
         """Derive and serialize the TargetSpec for this technique.
 
         Returns None for SELF-targeting techniques (no picker needed). For other
@@ -322,11 +302,7 @@ class CastableTechniqueSerializer(serializers.Serializer):
         """
         from actions.player_interface import _target_spec_for_technique_action  # noqa: PLC0415
 
-        technique = _resolve_technique(obj)
-        if technique is None:
-            return None
-
-        spec = _target_spec_for_technique_action(technique.pk)
+        spec = _target_spec_for_technique_action(obj.pk)
         if spec is None:
             return None
         return {
