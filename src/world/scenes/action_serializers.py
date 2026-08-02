@@ -9,6 +9,7 @@ from rest_framework import serializers
 
 from world.combat.cast_seed import encounter_requiring_risk_acknowledgement
 from world.fatigue.constants import EffortLevel
+from world.magic.serializers import TechniqueEffectSummarySerializer
 from world.magic.services.hostility import is_technique_hostile
 from world.scenes.action_constants import (
     ActionDelivery,
@@ -21,6 +22,7 @@ from world.scenes.action_constants import (
 from world.scenes.action_models import SceneActionRequest, SceneActionTarget
 
 if TYPE_CHECKING:
+    from world.magic.models.techniques import Technique
     from world.scenes.models import Scene
 
 
@@ -257,11 +259,32 @@ class TechniqueCastCreateSerializer(serializers.Serializer):
         return attrs
 
 
+def _resolve_technique(obj: object) -> Technique | None:
+    """Return the ``Technique`` behind a castable-list row, or ``None``.
+
+    The list yields ``Technique`` rows in some call paths and ``CharacterTechnique``
+    links in others, so every field that reads the technique goes through here.
+    """
+    from world.magic.models.techniques import (  # noqa: PLC0415
+        CharacterTechnique,
+        Technique,
+    )
+
+    if isinstance(obj, Technique):
+        return obj
+    if isinstance(obj, CharacterTechnique):
+        return obj.technique
+    return None
+
+
 class CastableTechniqueSerializer(serializers.Serializer):
     """Serializes a Technique for the castable-techniques list endpoint."""
 
     id = serializers.IntegerField()
     name = serializers.CharField()
+    # #2898: this list dropped the description entirely, so the same technique a
+    # player chose by its prose was unrecognisable in the cast list.
+    description = serializers.SerializerMethodField()
     anima_cost = serializers.IntegerField()
     tier = serializers.IntegerField()
     intensity = serializers.IntegerField()
@@ -270,19 +293,26 @@ class CastableTechniqueSerializer(serializers.Serializer):
     target_type = serializers.CharField()
     reach = serializers.CharField()
     target_spec = serializers.SerializerMethodField()
+    effect_summary = serializers.SerializerMethodField()
+
+    def get_description(self, obj: object) -> str:
+        technique = _resolve_technique(obj)
+        return technique.description if technique is not None else ""
+
+    @extend_schema_field(TechniqueEffectSummarySerializer)
+    def get_effect_summary(self, obj: object) -> dict | None:
+        """The shared effect block (#2898) — same shape as CG, magic API, and sheet."""
+        technique = _resolve_technique(obj)
+        if technique is None:
+            return None
+        return TechniqueEffectSummarySerializer(technique.cached_effect_summary).data
 
     def get_hostile(self, obj: object) -> bool:
-        from world.magic.models.techniques import Technique  # noqa: PLC0415
-        from world.magic.services.hostility import is_technique_hostile  # noqa: PLC0415
-
-        if isinstance(obj, Technique):
-            return is_technique_hostile(obj)
-        # obj may be a CharacterTechnique — fall back to its technique.
-        from world.magic.models.techniques import CharacterTechnique  # noqa: PLC0415
-
-        if isinstance(obj, CharacterTechnique):
-            return is_technique_hostile(obj.technique)
-        return False
+        # Read off the same summary the block ships, so the two can never disagree.
+        technique = _resolve_technique(obj)
+        if technique is None:
+            return False
+        return technique.cached_effect_summary["hostile"]
 
     def get_target_spec(self, obj: object) -> dict | None:
         """Derive and serialize the TargetSpec for this technique.
@@ -291,19 +321,12 @@ class CastableTechniqueSerializer(serializers.Serializer):
         cardinalities, returns the same shape as actions.serializers.TargetSpecSerializer.
         """
         from actions.player_interface import _target_spec_for_technique_action  # noqa: PLC0415
-        from world.magic.models.techniques import (  # noqa: PLC0415
-            CharacterTechnique,
-            Technique,
-        )
 
-        if isinstance(obj, Technique):
-            technique_id = obj.pk
-        elif isinstance(obj, CharacterTechnique):
-            technique_id = obj.technique_id
-        else:
+        technique = _resolve_technique(obj)
+        if technique is None:
             return None
 
-        spec = _target_spec_for_technique_action(technique_id)
+        spec = _target_spec_for_technique_action(technique.pk)
         if spec is None:
             return None
         return {

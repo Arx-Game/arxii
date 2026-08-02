@@ -171,10 +171,65 @@ class RestrictionSerializer(serializers.ModelSerializer):
 # =============================================================================
 
 
+class ConditionEffectSerializer(serializers.Serializer):
+    """One condition a technique applies or strips (#2898)."""
+
+    name = serializers.CharField(read_only=True)
+    description = serializers.CharField(read_only=True)
+    target_kind = serializers.CharField(read_only=True)
+    minimum_success_level = serializers.IntegerField(read_only=True)
+    stack_count = serializers.IntegerField(read_only=True)
+
+
+class DamageEffectSerializer(serializers.Serializer):
+    """One damage profile a technique resolves (#2898)."""
+
+    damage_type = serializers.CharField(read_only=True, allow_null=True)
+    base_damage = serializers.IntegerField(read_only=True)
+    uses_equipped_weapon = serializers.BooleanField(read_only=True)
+    minimum_success_level = serializers.IntegerField(read_only=True)
+
+
+class CapabilityEffectSerializer(serializers.Serializer):
+    """One Capability a technique grants (#2898)."""
+
+    name = serializers.CharField(read_only=True)
+    description = serializers.CharField(read_only=True)
+    base_value = serializers.IntegerField(read_only=True)
+
+
+class TechniqueEffectSummarySerializer(serializers.Serializer):
+    """What a technique does — the ONE shape every technique surface shares (#2898).
+
+    Serializes ``Technique.cached_effect_summary``. CG, the magic API, the
+    in-scene cast list and the character sheet all embed this block, so they
+    cannot drift apart the way four independent payloads did; each keeps only its
+    own surface-specific extras alongside it.
+    """
+
+    relationship = serializers.CharField(read_only=True)
+    hostile = serializers.BooleanField(read_only=True)
+    target_type = serializers.CharField(read_only=True)
+    reach = serializers.CharField(read_only=True)
+    reach_hops = serializers.IntegerField(read_only=True)
+    arena = serializers.CharField(read_only=True)
+    anima_cost = serializers.IntegerField(read_only=True)
+    applies = ConditionEffectSerializer(many=True, read_only=True)
+    removes = ConditionEffectSerializer(many=True, read_only=True)
+    damage = DamageEffectSerializer(many=True, read_only=True)
+    grants = CapabilityEffectSerializer(many=True, read_only=True)
+    summary = serializers.CharField(read_only=True)
+    is_underspecified = serializers.BooleanField(read_only=True)
+
+
 class TechniqueSerializer(serializers.ModelSerializer):
     """Serializer for Technique records with intensity and control stats."""
 
     tier = serializers.IntegerField(read_only=True)
+    effect_summary = TechniqueEffectSummarySerializer(
+        source="cached_effect_summary",
+        read_only=True,
+    )
     restriction_ids = serializers.PrimaryKeyRelatedField(
         source="restrictions",
         many=True,
@@ -196,12 +251,14 @@ class TechniqueSerializer(serializers.ModelSerializer):
             "control",
             "anima_cost",
             "description",
+            "action_category",
             "target_type",
             "reach",
             "reach_hops",
             "has_perceptible_effect",
             "tier",
             "target_spec",
+            "effect_summary",
         ]
         read_only_fields = ["target_type"]
 
