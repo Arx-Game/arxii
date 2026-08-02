@@ -27,6 +27,7 @@ the one specialization engine, fall/redemption, Covenant of the Court.
 | Resonance / progression feedback | ✅ by design | earned from RP perception (endorsements), **not** from casting — see "By design" below |
 | Distinctions grant/shape resonance (standing + potency) | ✅ built | `#1834` — `DistinctionResonanceGrant` + `reconcile_distinction_resonance_grants`; see `magic-build-history.md` |
 | **A real character actually being able to cast** | ✅ wired | `#1306` — shared template + per-character check; see below |
+| **A player being able to find out what a technique does** | ✅ built | `#2898` — one derived `effect_summary` block (plain-words line + structured effects) on all four surfaces + telnet; see below |
 
 The backend cast→pose→log→outcome loop is fully wired and resolves end-to-end (verified
 by tracing + a throwaway smoke test). The remaining frontier is **assembly, content, and
@@ -79,16 +80,49 @@ magic." Each is a filed issue — work these, not micro-hardening tickets.
    - Resonance → aspect mapping (all magic checks still use the Arcana aspect).
    - Relocate `AppliedConditionResult` out of `world/combat/types.py`.
    - Standalone hostile/behavior-altering FILTERED_GROUP multi-consent state machine.
-3. **🟠 #1307 — seed produces no playable character or scene** (`priority:next`). The
+3. **✅ #2898 — RESOLVED: techniques now show what they do** (`level:1` → done). Four
+   technique payloads had grown independently and disagreed, and every one of them stopped
+   at the `Technique` row — so the fields players could see (`level`, `intensity`, `control`,
+   `anima_cost`, `reach`, `target_type`) were the ones identical across all 272 authored
+   techniques, and the four sibling tables that actually differentiate them (793 capability
+   grants, 168 applied conditions, 62 damage profiles, 27 removals) reached nobody.
+   - **One derivation, composed not reinvented:** `summarize_technique_effects`
+     (`world/magic/services/technique_effects.py`) reads the four payload tables and calls
+     the two derivations that already existed — `is_technique_hostile` and
+     `derive_target_relationship`. The issue proposed building the relationship half; it was
+     already `[BUILT & WIRED]` as the gate `validate_cast_target` runs. No model field added.
+   - **One serialized shape:** `TechniqueEffectSummarySerializer` embedded as
+     `effect_summary` by all four surfaces. CG — thinnest of the four at the moment the pick
+     is least reversible — gains cost, reach, targeting and hostility in one field; the
+     in-scene cast list gains the `description` it never had.
+   - **Plain words, both faces:** the `summary` line ("Cast on an ally, anywhere in the room,
+     in the physical arena. Costs 5 anima. Applies Guarded.") is authored server-side, so the
+     web client and telnet render the identical sentence and clients never re-derive it.
+   - **Telnet parity for the play verbs:** bare `cast` is now the cast list (it raised a usage
+     error before — telnet had no way to learn what a technique does at all), and
+     `sheet/magic` prints the same line. Both share `castable_techniques_for_sheet` with the
+     web endpoint.
+   - **Everything caches onto the row:** `Technique.cached_effect_summary`, plus three
+     derivations that were issuing a query per call (`is_technique_hostile` ×3, called up to
+     six times per cast path; `derive_target_relationship` ×2; `is_lock_applying` ×1) rewritten
+     to read the cached payload lists.
+   - **Authoring gaps reported, not guessed at:** `technique_relationship_is_ambiguous` (the
+     #2764 self-teleport-that-Flanks-an-enemy shape) and `technique_is_underspecified`, both
+     on `TechniqueAdmin`. `derive_target_relationship`'s live answers are unchanged.
+
+   **Still open (content, not engine):** the 86 techniques with no derivable relationship
+   need conditions authored in the lore repo. Display now makes the gap visible — that was
+   the point — but the authoring itself is out of scope per the issue.
+4. **🟠 #1307 — seed produces no playable character or scene** (`priority:next`). The
    "Big Button" (`world/seeds/database.py:seed_dev_database`, #651) seeds rules content
    only — 0 CharacterSheets / Personas / Scenes. Needs a playable-slice path (demo
    character via `create_character_with_sheet` + CG finalize, placed in a scene). Child
    of epic #1220.
-4. **🟡 #1308 — the web cast loop is never tested live** (`priority:next`). Frontend cast
+5. **🟡 #1308 — the web cast loop is never tested live** (`priority:next`). Frontend cast
    tests mock `castTechnique`; backend tested only at service level. No test drives
    `POST /api/action-requests/cast/` against a seeded + CG'd character. Add one as the
    regression guard. Cross-refs #617.
-5. **🟢 #1309 — frictionless scene start** (`priority:later`). Casting needs an active
+6. **🟢 #1309 — frictionless scene start** (`priority:later`). Casting needs an active
    scene; a player should be able to start/auto-join one without staff setup (the
    "implicit scene start" intent).
 

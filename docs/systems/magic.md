@@ -134,7 +134,8 @@ cardinality of who this technique can target:
 
 The targeting *relationship* (who is eligible: SELF/ALLY/ENEMY) is **derived** from the
 technique's authored condition `target_kind`s and hostility — it is not stored here.
-See `derive_target_relationship` in `world/magic/services/targeting.py`.
+See `derive_target_relationship` in `world/magic/services/targeting.py`, and
+"Technique effect summary" below for the display-side block that reads it.
 
 **Intensity and Control:** These are base/static values on the technique. Runtime casting
 values (after resonance bonuses, combat escalation, audere states) are tracked by a
@@ -633,7 +634,7 @@ Lives on `world/conditions/models.py:ConditionCategory`.
 
 | Function | Purpose |
 |----------|---------|
-| `derive_target_relationship(technique) -> ConditionTargetKind` | ENEMY if hostile; ALLY if any condition has `target_kind=ALLY`; else SELF |
+| `derive_target_relationship(technique) -> ConditionTargetKind` | ENEMY if hostile; ALLY if any condition has `target_kind=ALLY`; else SELF. Reads the technique's `cached_*` payload lists rather than its own `.filter().exists()` queries (#2898). Exactly one relationship comes back, so a technique whose payload rows disagree gets a guess — see `technique_relationship_is_ambiguous` below. |
 | `technique_alters_behavior(technique) -> bool` | True if any applied condition's `category.alters_behavior` is True |
 | `cast_requires_consent(technique) -> bool` | True iff `technique_alters_behavior` — **behavior only**, not blanket benign |
 | `validate_cast_target(*, technique, initiator_persona, target_personas)` | Raises `InvalidCastTarget` on cardinality or relationship violations |
@@ -649,6 +650,74 @@ Lives on `world/conditions/models.py:ConditionCategory`.
   that combatant's encounter (#2226, ADR-0119) — via
   `seat_caster_for_benign_intervention`, called post-resolution on both the
   immediate and consent-accept paths. Risk acknowledgement is automatic.
+
+### Technique effect summary (#2898)
+
+Every mechanical difference between one technique and another lives in four sibling
+tables, and until #2898 none of them reached any player-facing surface. All four
+technique payloads stopped at the `Technique` row — which is where the *least*
+differentiation lives, since the authored catalog is near-uniform on `level`,
+`intensity`, `control`, `anima_cost`, `reach` and `target_type`.
+
+**The derivation** — `summarize_technique_effects(technique) -> TechniqueEffectPayload`
+(`world/magic/services/technique_effects.py`; wire shapes in
+`world/magic/types/technique_effects.py`). It reads `cached_capability_grants` /
+`cached_condition_applications` / `cached_damage_profiles` / `cached_removed_conditions`
+and **composes the two derivations that already existed** — `is_technique_hostile`
+(`services/hostility.py`) and `derive_target_relationship` (`services/targeting.py`) —
+rather than restating them. No model field is added: `Technique.target_type`'s own help
+text records that relationship is derived, never stored.
+
+The payload carries `relationship` / `hostile` / `target_type` / `reach` / `reach_hops` /
+`arena` (`action_category`) / `anima_cost`, the four effect lists, `is_underspecified`,
+and `summary` — the plain-words line, e.g. *"Cast on an ally, anywhere in the room, in the
+physical arena. Costs 5 anima. Applies Guarded."* The sentence is authored server-side and
+is byte-identical on the web and over telnet; clients render it, never re-derive it.
+
+**Caching.** `Technique.cached_effect_summary` holds the built payload on the row, so a
+technique fetched by pk anywhere in the process answers every surface from the identity
+map after one build. The same rule made three query-per-call derivations read the cached
+lists instead: `is_technique_hostile` (3 queries, called up to 6× per cast path),
+`derive_target_relationship` (2), and `Technique.is_lock_applying` (1). The `cached_*`
+lists `select_related` their `condition` / `damage_type` / `capability` FKs so the display
+walk costs nothing further. **Any path that writes payload rows must call
+`invalidate_technique_payload_caches(technique)`** — `build_technique` and
+`TechniqueAdmin.save_related` do.
+
+**One serialized shape.** `TechniqueEffectSummarySerializer` (`world/magic/serializers.py`)
+is embedded as `effect_summary` by all four surfaces, which keep only their own extras:
+
+| Surface | Serializer | Also gained |
+|---|---|---|
+| Magic API | `TechniqueSerializer` | `action_category` |
+| Character creation | `CGTechniqueOptionSerializer` | — (the block carries cost / reach / targeting / hostility, every one of CG's gaps) |
+| In-scene cast list | `CastableTechniqueSerializer` | **`description`** — the list previously shipped numbers and no prose |
+| Character sheet (web + telnet) | `TechniqueEntry` via `_build_magic_gifts` | — |
+
+`CastableTechniqueSerializer.hostile` reads off the same summary, so the top-level flag
+and the block cannot disagree.
+
+**Telnet.** Bare `cast` is the cast list (it raised a usage error before);
+`sheet/magic` prints the summary line under each technique. Both, and the web
+`castable-techniques` endpoint, read `castable_techniques_for_sheet`
+(`world/scenes/cast_services.py`) so the two faces of "what can I cast" can't diverge.
+
+**Authoring gaps are reported, not guessed at.** A technique whose authored condition is a
+*side effect* rather than its point derives the wrong relationship — a self-teleport that
+applies Flanked to an enemy derives as enemy-targeted, silently, and looks correct (found
+while authoring #2764). Authored data carries no signal separating the point of a technique
+from a side effect, so an override would mean the stored field this system rules out, and a
+heuristic would be a second silent guess. Instead:
+
+- `technique_relationship_is_ambiguous(technique)` — the applied + removed rows carry more
+  than one distinct `target_kind`, so the single derived relationship is a guess.
+- `technique_is_underspecified(technique)` — no condition, no removal, no damage profile,
+  so relationship isn't derivable at all. Display renders this as "effects not yet
+  catalogued" rather than a blank; 86 of 272 authored techniques were in this state.
+
+`technique_effect_authoring_gaps()` collects both; `TechniqueAdmin` surfaces them as the
+`Targets` / `Gap` columns and an "authoring gap" filter. `derive_target_relationship`'s own
+answers are deliberately unchanged — it gates live cast targeting.
 
 **Shared condition application** (`world/magic/services/condition_application.py`):
 `apply_technique_conditions(*, technique, success_level, eff_intensity, targets_by_kind, source_character, applied_condition_rows=None)`

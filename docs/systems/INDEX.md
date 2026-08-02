@@ -135,6 +135,32 @@ Powers, affinities, auras, resonances, threads-as-currency, rituals, and Mage Sc
     magic.md "Technique Entrance" + "Dramatic Moment Suggestion" for the full deferral
     matrix (inline / hostile-seeded / PENDING-consent / soulfray-gated) and the
     combat-side `from_entrance` marker + benign-intervention join (see Combat section).
+  - **Technique effect summary (#2898):** the one block every technique surface
+    shows. `summarize_technique_effects(technique) -> TechniqueEffectPayload`
+    (`services/technique_effects.py`, types in `types/technique_effects.py`)
+    reads the four payload tables — `TechniqueCapabilityGrant` /
+    `TechniqueAppliedCondition` / `TechniqueDamageProfile` /
+    `TechniqueRemovedCondition` — none of which reached any display surface
+    before, and renders both structured data and a plain-words line ("Cast on an
+    ally, anywhere in the room, in the physical arena. Costs 5 anima. Applies
+    Guarded."). It **composes** `is_technique_hostile` and
+    `derive_target_relationship` rather than restating them; no model field is
+    added (`Technique.target_type`'s help text forbids a stored relationship).
+    Cached on the row as `Technique.cached_effect_summary`; drop it with
+    `invalidate_technique_payload_caches` after writing payload rows.
+    Serialized once by `TechniqueEffectSummarySerializer` (`serializers.py`) and
+    embedded as `effect_summary` on all four surfaces: `TechniqueSerializer`,
+    `CGTechniqueOptionSerializer`, `CastableTechniqueSerializer` (which also
+    gained `description`), and `TechniqueEntry` via `_build_magic_gifts`.
+    Telnet: bare `cast` is the cast list, `sheet/magic` prints the same line;
+    both and the web castable-techniques endpoint read
+    `castable_techniques_for_sheet` (`world/scenes/cast_services.py`).
+    Authoring gaps are reported, not guessed at —
+    `technique_relationship_is_ambiguous` (payload rows carry more than one
+    `target_kind`, so the derived relationship is a guess) and
+    `technique_is_underspecified` (nothing authored at all), collected by
+    `technique_effect_authoring_gaps()` and surfaced on `TechniqueAdmin` as
+    columns + a filter. See magic.md "Technique effect summary".
   - **Ritual Liturgy (#1352):** `RitualLiturgy` (OneToOne → `Ritual`; `opening_call`
     TextField — the officiant's authored ceremonial words; public, non-spoiler).
     Seeded alongside the Ritual of the Durance via `RitualLiturgyFactory`.
