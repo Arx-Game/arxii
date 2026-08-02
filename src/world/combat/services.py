@@ -104,6 +104,7 @@ from world.combat.constants import (
     SENT_FLYING_IMPACT_FRACTION,
     SUSTAINED_BASE_ABSORPTION,
     SUSTAINED_GENERIC_TELEGRAPH,
+    SUSTAINED_HIT_DOWNGRADE,
     SUSTAINED_MAX_ABSORPTION,
     SUSTAINED_MIN_ABSORPTION,
     WINDUP_BLIND_DOWNGRADE,
@@ -4529,19 +4530,35 @@ def _find_windup_caller(encounter: CombatEncounter) -> CombatParticipant | None:
     return None
 
 
+def _broadcast_commitment_line(encounter: CombatEncounter, narration: str) -> None:
+    """Shared dispatch core for either side's multi-round commitment (#2637 NPC, #2705 PC).
+
+    ``PendingOpponentAttack`` (NPC wind-up) and ``SustainedAction`` (PC sustain)
+    each narrate from a different subject — an ``opponent.name`` vs a
+    participant's character name plus ``sustained.subject_name`` — so a single
+    row-polymorphic helper would just branch on type at every call. What both
+    rows genuinely share is the *dispatch*: one narration line, broadcast to
+    both the WS interaction payload and the telnet room. That is the only
+    thing this function generalises; every ``_broadcast_windup_*`` /
+    ``_broadcast_sustained_*`` wrapper below builds its own narration text and
+    calls this once.
+    """
+    _dual_dispatch_combat_narration(encounter, narration)
+
+
 def _broadcast_windup_telegraph(pending: PendingOpponentAttack, *, caller_name: str | None) -> None:
     """Announce a newly-declared wind-up (#2637 design 2, 6)."""
     template = pending.threat_entry.windup_telegraph or WINDUP_GENERIC_TELEGRAPH
     narration = template.format(opponent=pending.opponent.name)
     if caller_name:
         narration = f"{narration} — {caller_name} calls it!"
-    _dual_dispatch_combat_narration(pending.encounter, narration)
+    _broadcast_commitment_line(pending.encounter, narration)
 
 
 def _broadcast_windup_wreck(pending: PendingOpponentAttack, attacker_name: str) -> None:
     """Announce a PC hit staggering a winding-up opponent (#2637 design 4)."""
     narration = f"{attacker_name}'s strike staggers {pending.opponent.name}'s wind-up!"
-    _dual_dispatch_combat_narration(pending.encounter, narration)
+    _broadcast_commitment_line(pending.encounter, narration)
 
 
 def _broadcast_windup_fizzled(pending: PendingOpponentAttack, *, reason: str = "") -> None:
@@ -4552,23 +4569,64 @@ def _broadcast_windup_fizzled(pending: PendingOpponentAttack, *, reason: str = "
         narration = (
             f"{pending.opponent.name}'s wind-up is broken entirely — the perfect chain cancels it!"
         )
-    _dual_dispatch_combat_narration(pending.encounter, narration)
+    _broadcast_commitment_line(pending.encounter, narration)
 
 
 def _broadcast_sustained_telegraph(sustained: SustainedAction) -> None:
     """Announce a newly-declared PC sustained action (#2705).
 
-    Minimal telegraph, routed through the same ``_dual_dispatch_combat_narration``
-    the NPC wind-up telegraph uses. Task 3 generalises the PC-side broadcast
-    helpers (erosion, broken, held) alongside this one — do not refactor the
-    existing ``_broadcast_windup_*`` helpers here; this is deliberately its own
-    minimal function until that generalisation pass.
+    Always ``SUSTAINED_GENERIC_TELEGRAPH`` — unlike the NPC wind-up side,
+    neither ``Technique`` nor ``Ritual`` authors a per-subject telegraph line
+    (there is no analogous field), so there is nothing to fall back FROM.
     """
     character_name = str(sustained.participant.character_sheet.character)
     narration = SUSTAINED_GENERIC_TELEGRAPH.format(
         character=character_name, subject=sustained.subject_name
     )
-    _dual_dispatch_combat_narration(sustained.encounter, narration)
+    _broadcast_commitment_line(sustained.encounter, narration)
+
+
+def _broadcast_sustained_erosion(sustained: SustainedAction) -> None:
+    """Announce a landing hit chipping away at a PC's sustained action (#2705).
+
+    The PC-side sibling of ``_broadcast_windup_wreck``. No called-out variant:
+    a PC wind-up is public by construction (it is announced the round it is
+    declared, via ``_broadcast_sustained_telegraph``), never a designed reveal
+    the way an unflagged NPC wind-up is — so there is only ever one erosion
+    line, not a blind/called-out pair.
+    """
+    character_name = str(sustained.participant.character_sheet.character)
+    narration = f"{character_name}'s hold on {sustained.subject_name} takes a blow!"
+    _broadcast_commitment_line(sustained.encounter, narration)
+
+
+def _broadcast_sustained_broken(sustained: SustainedAction, *, reason: str = "") -> None:
+    """Announce a PC sustained action breaking before it matures (#2705).
+
+    The PC-side sibling of ``_broadcast_windup_fizzled``. Fires when
+    ``downgrades >= absorption_budget`` at maturation, or when the
+    participant can no longer hold the commitment together (left/died).
+    """
+    character_name = str(sustained.participant.character_sheet.character)
+    if reason:
+        narration = f"{character_name}'s hold on {sustained.subject_name} {reason}!"
+    else:
+        narration = f"{character_name}'s hold on {sustained.subject_name} breaks entirely!"
+    _broadcast_commitment_line(sustained.encounter, narration)
+
+
+def _broadcast_sustained_held(sustained: SustainedAction) -> None:
+    """Announce a PC sustained action holding through to maturation (#2705).
+
+    No NPC-side analogue — a wind-up that matures resolves as an attack, which
+    narrates through the normal NPC-attack broadcast path, not a dedicated
+    "held" line. A held sustained action has no such downstream narration of
+    its own (the cloned technique/dispatched ritual resolves silently into the
+    normal PC pipeline), so this line is the only announcement it gets.
+    """
+    character_name = str(sustained.participant.character_sheet.character)
+    narration = f"{character_name} completes {sustained.subject_name}!"
+    _broadcast_commitment_line(sustained.encounter, narration)
 
 
 def _create_pending_opponent_attack(
@@ -4732,6 +4790,37 @@ def _apply_windup_interception_rider(
     pending.downgrades += increment
     pending.save(update_fields=["downgrades"])
     _broadcast_windup_wreck(pending, str(attacker_participant.character_sheet.character))
+
+
+def _apply_sustained_erosion_rider(participant: CombatParticipant, damage_dealt: int) -> None:
+    """A landing hit on a sustaining PC adds a downgrade to their commitment (#2705).
+
+    The PC-side sibling of ``_apply_windup_interception_rider``. Only fires on
+    ``damage_dealt > 0`` — a fully-mitigated hit does not erode anything.
+    Matches a NOT-YET-MATURED row (``resolves_round__gte`` the current round)
+    for the same reason the windup rider does: a ``SustainedAction`` maturing
+    THIS round is already resolved and deleted by ``_mature_sustained_actions``
+    before PC damage resolves this round, so this can only ever reach a future
+    one.
+
+    Unlike the NPC side there is no ``called_out``/blind split: a PC's
+    sustained action is telegraphed publicly the moment it is declared (see
+    ``_broadcast_sustained_telegraph``), so there is nothing to "call out" —
+    every landing hit erodes by the same flat ``SUSTAINED_HIT_DOWNGRADE``.
+    """
+    if damage_dealt <= 0:
+        return
+
+    sustained = SustainedAction.objects.filter(
+        participant=participant,
+        resolves_round__gte=participant.encounter.round_number,
+    ).first()
+    if sustained is None:
+        return
+
+    sustained.downgrades += SUSTAINED_HIT_DOWNGRADE
+    sustained.save(update_fields=["downgrades"])
+    _broadcast_sustained_erosion(sustained)
 
 
 # ---------------------------------------------------------------------------
@@ -5880,6 +5969,13 @@ def apply_damage_to_participant(  # noqa: PLR0913
         death_eligible=death_eligible,
         force_death=force_death,
     )
+
+    # A sustained action's absorption budget is eroded by the FINAL applied
+    # damage — after rampart interception, pre-apply interceptors, thread
+    # resistance, armor soak, position cover, condition interactions, and the
+    # execute multiplier have all run. Placing this any earlier would erode on
+    # damage that never actually landed (#2705).
+    _apply_sustained_erosion_rider(participant, effective_damage)
 
     return ParticipantDamageResult(
         damage_dealt=effective_damage,
