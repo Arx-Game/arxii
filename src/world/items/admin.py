@@ -28,6 +28,7 @@ from world.items.models import (
     Style,
     TemplateInteraction,
     TemplateSlot,
+    WeaponClass,
 )
 
 
@@ -108,6 +109,12 @@ class QualityTierAdmin(admin.ModelAdmin):
 class InteractionTypeAdmin(admin.ModelAdmin):
     list_display = ["name", "label", "description"]
     search_fields = ["name", "label"]
+
+
+@admin.register(WeaponClass)
+class WeaponClassAdmin(admin.ModelAdmin):
+    list_display = ("name", "strength_tenths", "gear_archetype", "default_damage")
+    search_fields = ("name",)
 
 
 class TemplateSlotInline(admin.TabularInline):

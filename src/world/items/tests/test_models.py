@@ -18,6 +18,7 @@ from world.items.models import (
     OwnershipEvent,
     TemplateInteraction,
     TemplateSlot,
+    WeaponClass,
 )
 from world.mechanics.factories import PropertyFactory
 from world.roster.factories import MediaFactory
@@ -503,3 +504,15 @@ class IsLoreCriticalTests(TestCase):
         OwnershipEvent.objects.create(item_instance=inst, event_type=OwnershipEventType.ACTIVATED)
         OwnershipEvent.objects.create(item_instance=inst, event_type=OwnershipEventType.CONSUMED)
         self.assertFalse(inst.is_lore_critical)
+
+
+class WeaponClassTests(TestCase):
+    def test_strength_tenths_bounds(self):
+        wc = WeaponClass.objects.create(name="Test Blade", strength_tenths=5)
+        wc.full_clean()  # should not raise
+        self.assertEqual(wc.strength_tenths, 5)
+
+    def test_natural_key_round_trip(self):
+        wc = WeaponClass.objects.create(name="Test Blade", strength_tenths=5)
+        self.assertEqual(wc.natural_key(), ("Test Blade",))
+        self.assertEqual(WeaponClass.objects.get_by_natural_key("Test Blade"), wc)

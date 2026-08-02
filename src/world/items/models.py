@@ -30,7 +30,6 @@ from world.items.constants import (
     GearArchetype,
     OwnershipEventType,
     StyleAudacity,
-    WeaponClass,
 )
 from world.locations.constants import StatKey
 
@@ -156,6 +155,56 @@ class InteractionType(SharedMemoryModel):
 
     def __str__(self) -> str:
         return self.label
+
+
+class WeaponClass(NaturalKeyMixin, SharedMemoryModel):
+    """Weighted strength/agility blend for a weapon archetype (#2879).
+
+    Replaces the #2858 small/medium/heavy override: rather than picking one
+    stat wholesale, a template's WeaponClass blends strength and agility by
+    weight at the check-resolution seam (world.combat.stat_mapping). Evocative
+    names double as player-facing vocabulary ("a crossbow is a precision
+    weapon").
+    """
+
+    name = models.CharField(max_length=60, unique=True)
+    strength_tenths = models.PositiveSmallIntegerField(
+        validators=[MinValueValidator(0), MaxValueValidator(10)],
+        help_text=(
+            "Strength's share of the blend, in tenths (0-10). Agility's share "
+            "is 10 minus this value. 10 = pure strength (e.g. a maul), 0 = "
+            "pure agility (e.g. a crossbow — stored mechanical energy, no "
+            "physical pull)."
+        ),
+    )
+    gear_archetype = models.CharField(
+        max_length=20,
+        choices=GearArchetype.choices,
+        blank=True,
+        default="",
+        help_text=(
+            "Typical archetype for this weapon class, advisory only. "
+            "ItemTemplate.gear_archetype remains authoritative for physics "
+            "gates (wind penalty, lance maneuvers, hands, covenant gear "
+            "compatibility) — this field does not drive them."
+        ),
+    )
+    default_damage = models.PositiveIntegerField(
+        default=0,
+        help_text="Reference damage at Common quality; authored templates set their own.",
+    )
+
+    objects = NaturalKeyManager()
+
+    class NaturalKeyConfig:
+        fields = ["name"]
+        lookup_table = True
+
+    class Meta:
+        ordering = ["name"]
+
+    def __str__(self) -> str:
+        return self.name
 
 
 class ItemTemplate(NaturalKeyMixin, SharedMemoryModel):
@@ -367,14 +416,15 @@ class ItemTemplate(NaturalKeyMixin, SharedMemoryModel):
             "Immutable across instances of this template."
         ),
     )
-    weapon_class = models.CharField(
-        max_length=10,
-        choices=WeaponClass.choices,
+    weapon_class = models.ForeignKey(
+        "items.WeaponClass",
+        on_delete=models.PROTECT,
+        null=True,
         blank=True,
-        default="",
+        related_name="item_templates",
         help_text=(
-            "Weight class for combat stat-override (small/medium/heavy). "
-            "Blank = fall back to gear_archetype mapping."
+            "Weighted strength/agility blend for combat stat-override (#2879). "
+            "Null = fall back to gear_archetype mapping."
         ),
     )
     weapon_damage_type = models.ForeignKey(
