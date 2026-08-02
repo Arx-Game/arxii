@@ -76,6 +76,17 @@ class StatOverrideTests(TestCase):
             name="stat_override_melee_combat",
             defaults={"trait_type": TraitType.SKILL, "category": TraitCategory.COMBAT},
         )
+        # Real strength/agility traits (#2879) — the int-blend path hardcodes these two
+        # literal names (matching every other caller's convention, e.g. stat_mapping.py's
+        # DEFENSE_STAT = "agility"), distinct from the stat_override_* stand-ins above.
+        cls.strength_trait, _ = Trait.objects.get_or_create(
+            name="strength",
+            defaults={"trait_type": TraitType.STAT, "category": TraitCategory.PHYSICAL},
+        )
+        cls.agility_trait, _ = Trait.objects.get_or_create(
+            name="agility",
+            defaults={"trait_type": TraitType.STAT, "category": TraitCategory.PHYSICAL},
+        )
 
         cls.category = CheckCategoryFactory(name="stat_override_test")
 
@@ -83,6 +94,7 @@ class StatOverrideTests(TestCase):
         Trait.flush_instance_cache()
         CharacterTraitValue.flush_instance_cache()
         ResultChart.clear_cache()
+        self.handler = self.character.traits
 
     def _make_combat_check(self) -> object:
         """A check with strength (stat) + Melee Combat (skill)."""
@@ -188,3 +200,26 @@ class StatOverrideTests(TestCase):
         self.assertGreater(rating_default, rating_override)
         # But the skill portion keeps the override rating positive
         self.assertGreater(rating_override, 0)
+
+    def test_int_stat_override_blends_strength_and_agility(self):
+        """An int stat_override (#2879) substitutes a str/agi blend."""
+        self.handler.set_trait_value("strength", 10)
+        self.handler.set_trait_value("agility", 4)
+        ct = CheckTypeFactory(name="stat_override_blend", category=self.category)
+        CheckTypeTraitFactory(check_type=ct, trait=self.strength_trait, weight=Decimal("1.0"))
+        # strength_tenths=5 (even blend): (10*5 + 4*5) / 10 = 7
+        result_blend = perform_check(self.character, ct, stat_override=5)
+        result_explicit = perform_check(
+            self.character, ct, stat_override=None
+        )  # rolls raw strength (10) unblended, for contrast
+        self.assertNotEqual(result_blend.total_points, result_explicit.total_points)
+
+    def test_pure_strength_int_override_matches_string_override(self):
+        """strength_tenths=10 (pure strength) must match the plain-string path."""
+        self.handler.set_trait_value("strength", 7)
+        self.handler.set_trait_value("agility", 3)
+        ct = CheckTypeFactory(name="stat_override_pure", category=self.category)
+        CheckTypeTraitFactory(check_type=ct, trait=self.strength_trait, weight=Decimal("1.0"))
+        result_int = perform_check(self.character, ct, stat_override=10)
+        result_str = perform_check(self.character, ct, stat_override="strength")
+        self.assertEqual(result_int.total_points, result_str.total_points)

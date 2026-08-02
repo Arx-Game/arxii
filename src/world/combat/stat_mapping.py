@@ -1,24 +1,18 @@
 """Weapon→stat mapping for combat checks (#2757, #2858, #2879).
 
 The calling system determines which stat a combat check rolls from the
-equipped weapon. This is authored content — a simple mapping to a stat
-name. ``None`` means "use the check's default stat" (no override).
+equipped weapon. ``None`` means "use the check's default stat" (no override).
 
-``GearArchetype`` only distinguishes one-handed from two-handed, so a
-rapier and a warhammer both read as ``MELEE_ONE_HAND`` and both roll
-agility — the warhammer-wielder gets no mechanical credit for their
-strength. #2858's small/medium/heavy ``WeaponClass`` override, meant to
-add that missing granularity, was retired by #2879 in favor of a proper
-``WeaponClass`` lookup table (``world.items.models.WeaponClass``,
-``strength_tenths``) that blends strength/agility by weight instead of
-picking one stat wholesale.
+Two mappings. ``GearArchetype`` only distinguishes one-handed from two-handed,
+so a rapier and a warhammer both read as ``MELEE_ONE_HAND`` and both roll
+agility — the warhammer-wielder gets no mechanical credit for their strength.
+``WeaponClass`` (#2879) adds the missing granularity: a weighted
+strength/agility blend, so an off-stat weapon is never worthless and every
+weapon can express a mix rather than a binary pick.
 
-Stopgap (Task 1 of #2879's plan): ``ItemTemplate.weapon_class`` is now a
-nullable FK to that table, but this module doesn't consume it yet — every
-weapon currently falls back to the archetype map below. The blend
-substitution (``weapon_class.strength_tenths``) lands in a follow-up task
-that also threads an ``int`` ``stat_override`` through
-``world.checks.services``.
+``WeaponClass`` takes precedence when set. Templates leave it null until
+authored, and null falls back to the archetype map — so the finer mapping
+rolls out per-template as content lands, with no backfill.
 """
 
 from __future__ import annotations
@@ -44,18 +38,22 @@ WEAPON_ARCHETYPE_STAT_MAP: dict[str, str | None] = {
 DEFENSE_STAT: str = "agility"
 
 
-def weapon_stat_override(character: CharacterType) -> str | None:
-    """Return the stat name for the character's equipped weapon, or None.
+def weapon_stat_override(character: CharacterType) -> str | int | None:
+    """Return the stat override for the character's equipped weapon, or None.
 
-    Uses the strongest equipped weapon's ``gear_archetype`` (#2757).
-    ``weapon_class`` (#2879) isn't consumed here yet — see the module
-    docstring. Returns ``None`` when the character has no weapon or the
-    archetype map doesn't cover it — the caller then uses the check's
-    default stat.
+    Prefers the strongest equipped weapon's ``weapon_class`` (#2879) — returns
+    its ``strength_tenths`` (0-10; the check-resolution seam in
+    ``world.checks.services`` blends strength/agility at that weight) — and
+    falls back to its ``gear_archetype`` (#2757) when the template hasn't been
+    classified. Returns ``None`` when the character has no weapon or neither
+    map covers it — the caller then uses the check's default stat.
     """
     from world.combat.services import _select_equipped_weapon  # noqa: PLC0415
 
     inst = _select_equipped_weapon(character)
     if inst is None:
         return None
+    weapon_class = inst.template.weapon_class
+    if weapon_class is not None:
+        return weapon_class.strength_tenths
     return WEAPON_ARCHETYPE_STAT_MAP.get(inst.template.gear_archetype)
