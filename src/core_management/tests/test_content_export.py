@@ -1443,3 +1443,151 @@ class GearArchetypeCompatibilityContentExportTests(TestCase):
         compat.refresh_from_db()
         assert compat.covenant_role_id == role.pk
         assert compat.gear_archetype == GearArchetype.HEAVY_ARMOR
+
+
+class ExportAdditionGateTests(TestCase):
+    """The export refuses to ADD rows the corpus doesn't have (#2890).
+
+    A database seeded with ``SEED_SAMPLE_CONTENT`` holds rows
+    ``authored_or_sample`` created deliberately, and nothing downstream told them
+    apart from authored ones — so an export shipped invented names as lore. These
+    pin the boundary that stops it.
+    """
+
+    def setUp(self) -> None:
+        self.tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(self.tmp.cleanup)
+        self.root = Path(self.tmp.name)
+        self.effect_path = self.root / "fixtures" / "magic" / "effecttype.json"
+
+    @staticmethod
+    def _make_effect(name: str):
+        from world.magic.models import EffectType
+
+        return EffectType.objects.create(name=name, description=f"{name} for export tests.")
+
+    def _exported_names(self) -> list[str]:
+        data = json.loads(self.effect_path.read_text(encoding="utf-8"))
+        return [r["fields"]["name"] for r in data]
+
+    def test_first_export_of_an_absent_file_writes_everything(self) -> None:
+        """No fixture file yet = a genuinely new model; blocking would make it unseedable."""
+        self._make_effect("Gate Baseline")
+
+        result = export_to_content_repo(self.root)
+
+        self.assertIn("Gate Baseline", self._exported_names())
+        self.assertNotIn("magic.effecttype", result.withheld)
+
+    def test_row_the_corpus_lacks_is_withheld_by_default(self) -> None:
+        """The whole point: a row absent from the corpus is reported, not written."""
+        self._make_effect("Gate Baseline")
+        export_to_content_repo(self.root)  # establishes the corpus file
+
+        self._make_effect("Invented By Sampling")
+        result = export_to_content_repo(self.root)
+
+        self.assertNotIn("Invented By Sampling", self._exported_names())
+        self.assertIn("Gate Baseline", self._exported_names())
+        self.assertEqual(result.withheld_count, 1)
+        self.assertIn("magic.effecttype", result.withheld)
+
+    def test_allow_additions_pushes_the_new_row(self) -> None:
+        """The authoring path: staff wrote a real row and want it in the corpus."""
+        self._make_effect("Gate Baseline")
+        export_to_content_repo(self.root)
+
+        self._make_effect("Genuinely Authored")
+        result = export_to_content_repo(self.root, allow_additions=True)
+
+        self.assertIn("Genuinely Authored", self._exported_names())
+        self.assertEqual(result.withheld_count, 0)
+        self.assertEqual(result.added_count, 1)
+
+    def test_editing_a_known_row_still_round_trips(self) -> None:
+        """The gate blocks additions only — edits to rows the corpus knows still export."""
+        effect = self._make_effect("Gate Baseline")
+        export_to_content_repo(self.root)
+
+        effect.description = "Edited after the corpus knew this row."
+        effect.save()
+        export_to_content_repo(self.root)
+
+        data = json.loads(self.effect_path.read_text(encoding="utf-8"))
+        row = next(r for r in data if r["fields"]["name"] == "Gate Baseline")
+        self.assertEqual(row["fields"]["description"], "Edited after the corpus knew this row.")
+
+    def test_all_rows_withheld_leaves_the_corpus_file_intact(self) -> None:
+        """Writing "[]" would empty the file — the opposite of protecting content.
+
+        Simulates the shape that caused this issue: a corpus holding authored rows
+        and a database holding only invented ones.
+        """
+        from world.magic.models import EffectType
+
+        self._make_effect("Authored Only In Corpus")
+        export_to_content_repo(self.root)
+        before = self.effect_path.read_text(encoding="utf-8")
+
+        EffectType.objects.filter(name="Authored Only In Corpus").delete()
+        self._make_effect("Invented By Sampling")
+        result = export_to_content_repo(self.root)
+
+        self.assertEqual(self.effect_path.read_text(encoding="utf-8"), before)
+        self.assertIn("Authored Only In Corpus", self._exported_names())
+        self.assertEqual(result.withheld_count, 1)
+
+
+class ExportAdditionGateProseDomainTests(TestCase):
+    """The gate keys on the domain, not the entry, for prose domains (#2890).
+
+    Prose domains write one markdown file per entry, so "the file doesn't exist"
+    means "new entry" — and on a virgin corpus that is true of *every* entry.
+    Deciding per entry therefore withholds the whole corpus on a fresh checkout,
+    which is what a first draft of this gate did: it silently stopped every
+    StartingArea and CodexEntry from exporting, and surfaced only as an unrelated
+    load-sequencing test losing its deferred-FK resolution.
+    """
+
+    def setUp(self) -> None:
+        self.tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(self.tmp.cleanup)
+        self.root = Path(self.tmp.name)
+        self.domain = self.root / "content" / "starting_areas"
+
+    @staticmethod
+    def _make_starting_area(name: str):
+        from world.character_creation.models import StartingArea
+
+        return StartingArea.objects.create(name=name, description=f"{name} description.")
+
+    def test_first_export_writes_every_entry(self) -> None:
+        """An empty domain directory is a first export, not a corpus to protect."""
+        self._make_starting_area("Prose Gate Baseline")
+
+        result = export_to_content_repo(self.root)
+
+        self.assertTrue(any(self.domain.rglob("*.md")))
+        self.assertNotIn("character_creation.startingarea", result.withheld)
+
+    def test_new_entry_withheld_once_the_domain_has_content(self) -> None:
+        """Once the domain holds entries, a new one is an addition like any other."""
+        self._make_starting_area("Prose Gate Baseline")
+        export_to_content_repo(self.root)
+        before = {p.name for p in self.domain.rglob("*.md")}
+
+        self._make_starting_area("Invented By Sampling")
+        result = export_to_content_repo(self.root)
+
+        self.assertEqual({p.name for p in self.domain.rglob("*.md")}, before)
+        self.assertIn("character_creation.startingarea", result.withheld)
+
+    def test_allow_additions_writes_the_new_entry(self) -> None:
+        self._make_starting_area("Prose Gate Baseline")
+        export_to_content_repo(self.root)
+
+        self._make_starting_area("Genuinely Authored")
+        export_to_content_repo(self.root, allow_additions=True)
+
+        names = {p.stem for p in self.domain.rglob("*.md")}
+        self.assertIn("genuinely-authored", names)

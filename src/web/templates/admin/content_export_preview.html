@@ -85,6 +85,18 @@
     <form method="post" action="{% url 'admin_content_export_run' %}">
       {% csrf_token %}
       <p>
+        <label>
+          <input type="checkbox" name="allow_additions">
+          Also push rows the content repo doesn't have yet
+        </label>
+      </p>
+      <p class="help">
+        Leave this unticked unless you authored new content here. Unticked, the export
+        updates rows the content repo already knows and lists anything new without
+        writing it &mdash; which is what stops sample rows from a seeded database being
+        pushed as though they were authored lore.
+      </p>
+      <p>
         <input type="submit" value="Export to content repo" class="default">
         <a href="{% url 'admin_game_setup' %}" class="button">Cancel</a>
       </p>

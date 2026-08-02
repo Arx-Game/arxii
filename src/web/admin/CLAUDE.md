@@ -53,7 +53,8 @@ the working-tree diff in between.
 - `content_export_views.py` — `content_export_preview` (GET, model inventory
   + record counts from `core_management.content_export.CONTENT_MODELS`, plus a
   `_grid_preview_context()` block showing authored area/room counts) and
-  `content_export_run` (POST, superuser-only) — drives
+  `content_export_run` (POST, superuser-only; carries an **"Also push rows the
+  content repo doesn't have yet"** checkbox, off by default — see ADR-0191) — drives
   `core_management.content_export.export_to_content_repo` (flat
   natural-key-serialized fixtures) **and**
   `core_management.grid_export.export_grid_bundles` (the graph-aware

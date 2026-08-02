@@ -62,7 +62,10 @@ class Resonance(NaturalKeyMixin, SharedMemoryModel):
     name = models.CharField(
         max_length=100,
         unique=True,
-        help_text="Resonance name (e.g., 'Bene', 'Praedari', 'Sylva').",
+        help_text=(
+            "Resonance name. The canonical set is authored in the content repo — "
+            "do not invent one here."
+        ),
     )
     description = models.TextField(
         blank=True,

@@ -445,6 +445,11 @@ def count_natural_key_args(model: type, _seen: set[type] | None = None) -> int:
     return count
 
 
+#: A natural key of just the primary key identifies nothing across an export
+#: boundary — the export writes no pk. See ``NaturalKeyMixin.identity_fields``.
+_PK_ONLY_IDENTITY = ["pk"]
+
+
 class NaturalKeyMixin:
     """
     Mixin that adds natural_key() method based on NaturalKeyConfig.
@@ -486,6 +491,32 @@ class NaturalKeyMixin:
             new_key = _index_key(self.natural_key())
             index[new_key] = self.pk
             self._nk_index_key = new_key
+
+    @classmethod
+    def identity_fields(cls) -> list[str] | None:
+        """Return the field names that identify a row, or None if there are none.
+
+        None means this model's rows have no identity that survives an export
+        boundary, and a caller comparing rows across one must degrade gracefully
+        rather than raise. Two cases return it: no ``NaturalKeyConfig`` at all,
+        and a config keyed on ``["pk"]`` — the export writes no pk, so such a key
+        identifies nothing on the far side (see ``CONTENT_MODELS``' note in
+        ``core_management/content_export.py``, where three singletons were
+        de-registered for exactly that).
+
+        Distinct from ``natural_key()``, which returns a bound instance's *values*
+        and raises when the config is missing. This answers the class-level
+        question "can rows of this model be identified at all", which #2890's
+        export addition gate has to ask before it can diff anything.
+        """
+        # hasattr + attribute access, matching ``natural_key()`` below rather than
+        # reaching for getattr with a literal name.
+        if not hasattr(cls, "NaturalKeyConfig"):
+            return None
+        fields = cls.NaturalKeyConfig.fields
+        if not fields or list(fields) == _PK_ONLY_IDENTITY:
+            return None
+        return list(fields)
 
     def natural_key(self) -> tuple[Any, ...]:
         """Return natural key tuple for this object.

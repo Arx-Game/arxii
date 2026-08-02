@@ -131,8 +131,13 @@ def content_export_run(request: HttpRequest) -> HttpResponse:
     )
     from core_management.grid_export import export_grid_bundles  # noqa: PLC0415
 
+    # Off by default: the export withholds rows the corpus does not already have,
+    # so a database seeded with sample content cannot launder them in as lore
+    # (#2890). Ticking the box is the authoring path for genuinely new rows.
+    allow_additions = bool(request.POST.get("allow_additions"))
+
     try:
-        result = export_to_content_repo()
+        result = export_to_content_repo(allow_additions=allow_additions)
     except ContentExportError as exc:
         messages.error(request, str(exc))
         return HttpResponseRedirect(reverse("admin_game_setup"))
@@ -143,6 +148,22 @@ def content_export_run(request: HttpRequest) -> HttpResponse:
         f"{len(result.written)} file(s), {len(result.skipped)} skipped, "
         f"{len(result.errors)} error(s).",
     )
+    if result.added:
+        messages.success(
+            request,
+            f"Added {result.added_count} new row(s): "
+            + ", ".join(f"{label} ({len(keys)})" for label, keys in sorted(result.added.items())),
+        )
+    if result.withheld:
+        messages.warning(
+            request,
+            f"Withheld {result.withheld_count} row(s) the content repo does not have — "
+            "re-run with 'allow additions' to push them, or leave them if they are "
+            "sample/seed rows: "
+            + ", ".join(
+                f"{label} ({len(keys)})" for label, keys in sorted(result.withheld.items())
+            ),
+        )
     for err in result.errors:
         messages.error(request, err)
 

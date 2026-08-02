@@ -576,8 +576,12 @@ admin all converge on the same service layer.
   the three ship targets. Zero rows authored in the lore repo today, so the ship
   grant is currently inert. **Relationship pull content (#2021):**
   `ensure_relationship_pull_content()` seeds survivability-skewed rows for
-  `RELATIONSHIP_TRACK` (one 4-tier chain per canonical resonance: Light/Sanctity/
-  Radiance/Dissolution). Tier 0: VITAL_BONUS(DAMAGE_TAKEN_REDUCTION). Tier 1:
+  `RELATIONSHIP_TRACK` (one 4-tier chain per resonance, for the four the magic-story
+  slice uses: Light/Sanctity/Radiance/Dissolution). **These four are sample names, NOT
+  canonical resonances** — they are created only under `SEED_SAMPLE_CONTENT` and this
+  bullet used to call them "canonical", which is how they ended up in the lore corpus
+  masquerading as authored content (#2890). The canonical set is 24 resonances in 12
+  opposed pairs, authored in the content repo. Tier 0: VITAL_BONUS(DAMAGE_TAKEN_REDUCTION). Tier 1:
   VITAL_BONUS(DEATH_SAVE). Tier 2: RESISTANCE (all damage types). Tier 3:
   VITAL_BONUS(KNOCKOUT_RESIST). `apply_target_modulation` now handles
   `RELATIONSHIP_CAPSTONE` in addition to `RELATIONSHIP_TRACK` —
