@@ -150,6 +150,11 @@ def _ensure_cooking_check():
         {"trait_type": TraitType.STAT, "category": TraitCategory.MENTAL, "is_public": True},
         name="wits",
     )
+    agility = authored_or_sample(
+        Trait,
+        {"trait_type": TraitType.STAT, "category": TraitCategory.PHYSICAL, "is_public": True},
+        name="agility",
+    )
     category = authored_or_sample(
         CheckCategory,
         {"description": "Trade and craft checks.", "display_order": 40},
@@ -167,10 +172,14 @@ def _ensure_cooking_check():
     CheckTypeTrait.objects.get_or_create(
         check_type=check_type, trait=skill_trait, defaults={"weight": Decimal("1.00")}
     )
-    if wits is not None:
-        CheckTypeTrait.objects.get_or_create(
-            check_type=check_type, trait=wits, defaults={"weight": Decimal("0.50")}
-        )
+    # Stat side = the AVERAGE of wits and agility (#2886, Apostate — echoing
+    # Arx 1's higher-of-wits-and-dex; the average is what weighted rows can
+    # express). update_or_create so the pre-ruling wits-0.50 rows retune.
+    for stat in (wits, agility):
+        if stat is not None:
+            CheckTypeTrait.objects.update_or_create(
+                check_type=check_type, trait=stat, defaults={"weight": Decimal("0.25")}
+            )
     return check_type
 
 

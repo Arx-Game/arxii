@@ -217,8 +217,11 @@ def seed_craft_skills() -> None:
     """Seed the ratified crafting skills + one PLACEHOLDER CheckType each.
 
     Mirrors the Cooking pattern: content-owned rows via ``authored_or_sample``
-    (no-ops without the authored spine); every CheckType is wits 0.50 + the
-    skill 1.00 — PLACEHOLDER stat pairings pending the tuning pass.
+    (no-ops without the authored spine). Stat side per Apostate's ruling
+    (2026-08-02, echoing Arx 1's higher-of-wits-and-dex): the AVERAGE of wits
+    and agility — wits 0.25 + agility 0.25, the same total stat share as a
+    single stat at 0.50, expressible with the existing weighted-trait rows
+    (higher-of would need a new mechanism). Skill 1.00.
     """
     from decimal import Decimal  # noqa: PLC0415
 
@@ -231,6 +234,11 @@ def seed_craft_skills() -> None:
         Trait,
         {"trait_type": TraitType.STAT, "category": TraitCategory.MENTAL, "is_public": True},
         name="wits",
+    )
+    agility = authored_or_sample(
+        Trait,
+        {"trait_type": TraitType.STAT, "category": TraitCategory.PHYSICAL, "is_public": True},
+        name="agility",
     )
     category = authored_or_sample(
         CheckCategory,
@@ -265,7 +273,8 @@ def seed_craft_skills() -> None:
         CheckTypeTrait.objects.get_or_create(
             check_type=check_type, trait=skill_trait, defaults={"weight": Decimal("1.00")}
         )
-        if wits is not None:
-            CheckTypeTrait.objects.get_or_create(
-                check_type=check_type, trait=wits, defaults={"weight": Decimal("0.50")}
-            )
+        for stat in (wits, agility):
+            if stat is not None:
+                CheckTypeTrait.objects.update_or_create(
+                    check_type=check_type, trait=stat, defaults={"weight": Decimal("0.25")}
+                )
