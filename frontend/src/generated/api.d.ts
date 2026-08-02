@@ -35055,7 +35055,7 @@ export interface components {
     /** @description Serializer for Resonance records. */
     Resonance: {
       readonly id: number;
-      /** @description Resonance name (e.g., 'Bene', 'Praedari', 'Sylva'). */
+      /** @description Resonance name. The canonical set is authored in the content repo — do not invent one here. */
       readonly name: string;
       /** @description Which affinity this resonance contributes to. */
       readonly affinity: number;
