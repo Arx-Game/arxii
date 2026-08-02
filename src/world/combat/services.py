@@ -4756,6 +4756,142 @@ def _mature_pending_opponent_attacks(encounter: CombatEncounter, round_number: i
         _mature_one_pending_attack(encounter, pending, round_number)
 
 
+def _mature_sustained_technique(sustained: SustainedAction, round_number: int) -> None:
+    """Clone the declaring ``CombatRoundAction`` into the maturation round (#2705).
+
+    ``declared_action`` is null only in a data-integrity gap — it must always be
+    set at TECHNIQUE declaration time (see ``_sync_sustained_technique_declaration``)
+    — treated as a broken commitment rather than silently dropped.
+
+    Resets the per-round/resolution fields that would otherwise carry stale state
+    forward from the DECLARING round: ``is_ready`` (flips True so the matured
+    action behaves like a normal ready declaration), ``interaction`` /
+    ``interaction_timestamp`` (the ACTION-mode Interaction, if any, belongs to
+    the declaring round's resolution — a stale FK here would misattribute this
+    round's narration to that one), ``combo_upgrade`` (a combo detected against
+    the DECLARING round's board has no bearing on the maturation round's board),
+    and ``succor_resolution`` (a cached Succor outcome is round-scoped).
+
+    Does **not** delete a pre-existing same-round row to make room: decision D2
+    (enforced by ``_validate_no_pending_sustained``) means one cannot exist while
+    this commitment is pending — an ``IntegrityError`` here would mean D2's
+    invariant broke elsewhere, and surfacing that beats silently discarding a
+    player's declaration.
+
+    **Deliberate deviation from the plan's literal ``clone.pk = None`` recipe**
+    (verified with a scratch repro during implementation — a real bug, not a
+    style preference): ``CombatRoundAction`` is a ``SharedMemoryModel``
+    (idmapper identity map). Nulling ``pk``/``id`` on the fetched ``original``
+    instance and re-``save()``-ing it reassigns a NEW pk to that SAME cached
+    Python object, but the idmapper's cache entry for the ORIGINAL pk is never
+    updated — it keeps pointing at this now-mutated object. Any later
+    ``CombatRoundAction.objects.get(pk=<declaring round's pk>)`` in the same
+    process (audit views, admin, a future round's queries) would silently
+    return the MATURATION round's data instead of the true declaring-round
+    row, for the remaining life of the process. Building a plain field dict
+    and calling ``.objects.create()`` instead sidesteps this entirely — the
+    fetched ``original`` instance and its cache entry are never touched, and a
+    genuinely new instance/row is created for the new pk. The field dict is
+    built from ``original._meta.concrete_fields`` rather than a hardcoded
+    list so a future field addition to ``CombatRoundAction`` is copied
+    automatically instead of silently dropped.
+    """
+    if sustained.declared_action_id is None:
+        _broadcast_sustained_broken(sustained, reason="comes to nothing")
+        sustained.delete()
+        return
+
+    original = sustained.declared_action
+    extra_target_opponent_ids = list(original.extra_targets.values_list("opponent_id", flat=True))
+
+    fields = {
+        field.attname: getattr(original, field.attname)
+        for field in original._meta.concrete_fields  # noqa: SLF001
+        if not field.primary_key
+    }
+    fields["round_number"] = round_number
+    fields["is_ready"] = True
+    fields["interaction_id"] = None
+    fields["interaction_timestamp"] = None
+    fields["combo_upgrade_id"] = None
+    fields["succor_resolution"] = None
+    clone = CombatRoundAction.objects.create(**fields)
+
+    if extra_target_opponent_ids:
+        CombatRoundActionTarget.objects.bulk_create(
+            [
+                CombatRoundActionTarget(action=clone, opponent_id=opponent_id)
+                for opponent_id in extra_target_opponent_ids
+            ]
+        )
+
+    _broadcast_sustained_held(sustained)
+    sustained.delete()
+
+
+def _mature_one_sustained_action(sustained: SustainedAction, round_number: int) -> None:
+    """Resolve a single matured ``SustainedAction``: break, lose-holder, or hold (#2705).
+
+    Mirrors ``_mature_one_pending_attack``'s three-way branch shape. Unlike the
+    NPC side there is no damage ramp (D1, ADR-0188) — a held commitment resolves
+    at full effect or not at all.
+
+    1. ``downgrades >= absorption_budget`` -> broken. **The cost stands — nothing
+       is refunded.** Components/anima were charged at declaration (rituals,
+       Task 5); the spec's ruling is that a broken sustain is simply spent, which
+       is what makes committing to one real stakes rather than a free retry.
+    2. The holder can no longer hold it together (left the encounter or died) ->
+       broken, distinct "comes to nothing" narration.
+    3. ``SustainedKind.TECHNIQUE`` -> clone the declaring action into this round.
+    4. ``SustainedKind.RITUAL`` -> not implemented yet; Task 5 fills this branch
+       in. Deliberately raises rather than shipping a silent no-op that would
+       strand a player's declared-and-charged ritual forever.
+    """
+    from world.vitals.services import is_dead  # noqa: PLC0415
+
+    if sustained.downgrades >= sustained.absorption_budget:
+        _broadcast_sustained_broken(sustained)
+        sustained.delete()
+        return
+
+    participant = sustained.participant
+    if participant.status != ParticipantStatus.ACTIVE or is_dead(participant.character_sheet):
+        _broadcast_sustained_broken(sustained, reason="comes to nothing")
+        sustained.delete()
+        return
+
+    if sustained.sustained_kind == SustainedKind.TECHNIQUE:
+        _mature_sustained_technique(sustained, round_number)
+        return
+
+    msg = "Ritual sustained-action maturation is not implemented yet (#2705 Task 5)."
+    raise NotImplementedError(msg)
+
+
+def _mature_sustained_actions(encounter: CombatEncounter, round_number: int) -> None:
+    """Mature every PC ``SustainedAction`` whose commitment resolves this round (#2705).
+
+    The PC-side sibling of ``_mature_pending_opponent_attacks`` — called from
+    ``resolve_round`` immediately after it, in the same pass, BEFORE the
+    round's ``CombatRoundAction`` rows are queried into ``pc_actions``, so a
+    held technique's cloned row is picked up by the normal PC pipeline
+    unmodified in the same pass.
+    """
+    rows = list(
+        SustainedAction.objects.filter(
+            encounter=encounter,
+            resolves_round=round_number,
+        ).select_related(
+            "participant__character_sheet__character",
+            "ritual",
+            "technique",
+            "declared_action",
+        )
+    )
+    for sustained in rows:
+        _mature_one_sustained_action(sustained, round_number)
+
+
 def _apply_windup_interception_rider(
     target: CombatOpponent,
     outcome: ActionOutcome,
@@ -8263,12 +8399,23 @@ def _resolve_actions(  # noqa: PLR0913 - resolution needs all check params
     defense_check_type: CheckType | None,
     defense_check_fn: PerformCheckFn | None,
     offense_check_fn: PerformCheckFn | None,
+    *,
+    sustaining_participant_ids: frozenset[int] = frozenset(),
 ) -> list[ActionOutcome]:
-    """Iterate resolution order and resolve each entity's action."""
+    """Iterate resolution order and resolve each entity's action.
+
+    ``sustaining_participant_ids`` (#2705) — participants who declared a new
+    ``SustainedAction`` THIS round. Their ``CombatRoundAction`` row on the
+    board is the declaration of the commitment, not an action to resolve —
+    the commitment resolves later, at maturation. Precomputed by the caller
+    (one query); this loop only checks membership.
+    """
     outcomes: list[ActionOutcome] = []
     for entity_type, entity in resolution_order:
         if entity_type == ENTITY_TYPE_PC:
             if not isinstance(entity, CombatParticipant):
+                continue
+            if entity.pk in sustaining_participant_ids:
                 continue
             action = pc_actions.get(entity.pk)
             if action is not None:
@@ -10557,6 +10704,23 @@ def resolve_round(  # noqa: PLR0915 - orchestration function; already at the
     # synthesized action is picked up in the same pass. ---
     _mature_pending_opponent_attacks(enc, round_number)
 
+    # --- Sustained-action maturation (#2705): same placement rationale as the
+    # wind-up maturation above — before the round's CombatRoundAction rows are
+    # queried below, so a held technique's cloned action is picked up by the
+    # normal PC pipeline in this same pass. ---
+    _mature_sustained_actions(enc, round_number)
+
+    # --- Sustaining participants declared their commitment THIS round, not an
+    # action to resolve THIS round (#2705, D2) — the CombatRoundAction row on
+    # the board right now is that declaration, not something to run through
+    # _resolve_actions. One query, no loop queries. ---
+    sustaining_participant_ids = frozenset(
+        SustainedAction.objects.filter(
+            encounter=enc,
+            declared_round=round_number,
+        ).values_list("participant_id", flat=True)
+    )
+
     # --- Build action lookups ---
     pc_actions: dict[int, CombatRoundAction] = {}
     for action in (
@@ -10626,6 +10790,7 @@ def resolve_round(  # noqa: PLR0915 - orchestration function; already at the
         defense_check_type,
         defense_check_fn,
         offense_check_fn,
+        sustaining_participant_ids=sustaining_participant_ids,
     )
 
     # --- Combo post-resolution: joint narration + discovery + use-count (#2017) ---
