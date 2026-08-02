@@ -79,6 +79,7 @@ def seed_crafting_materials() -> None:
         len(_MATERIALS),
     )
     seed_accent_axes()
+    seed_craft_skills()
 
 
 # The ratified accent vocabulary (#2886, Apostate 2026-08-02): seven axes.
@@ -190,3 +191,81 @@ def _ensure_accent_exclusions(targets: dict) -> None:
         )
         if not exists:
             AccentExclusion.objects.create(target_a=a, target_b=b)
+
+
+# The ratified craft-skill taxonomy (#2886, Apostate 2026-08-02) — professions
+# organized for character identity, recipes typed by broad output kinds, never
+# materials. Bows live under Weaponsmithing; leather armor under Armorsmithing
+# (leather garments fall to Tailoring); Jewelcrafting spans metal AND gem;
+# Carpentry also feeds house-building (a building-project contribution seam,
+# future content); Alchemy is the discovery-minigame dream (mix-and-match
+# component matrix → discoverable materials — its own future spec); Cooking
+# (Brewing) already exists; drugs may roll Cooking OR Alchemy per recipe.
+# (skill name, tooltip PLACEHOLDER, display_order)
+_CRAFT_SKILLS = (
+    ("Weaponsmithing", "Blades, hafts, and bows — every instrument of war.", 41),
+    ("Armorsmithing", "Plate, mail, and hardened leather — everything that turns a blow.", 42),
+    ("Jewelcrafting", "Metal and gem alike — rings, torcs, crowns, and settings.", 43),
+    ("Tailoring", "Cloth and soft leather — finery to fieldwear.", 44),
+    ("Carpentry", "Furniture, fittings, and the bones of houses.", 45),
+    ("Alchemy", "Components mixed toward discovery — remedies, poisons, and stranger things.", 46),
+    ("Artistry", "Painting, sculpture, and works that exist to be seen.", 47),
+)
+
+
+def seed_craft_skills() -> None:
+    """Seed the ratified crafting skills + one PLACEHOLDER CheckType each.
+
+    Mirrors the Cooking pattern: content-owned rows via ``authored_or_sample``
+    (no-ops without the authored spine); every CheckType is wits 0.50 + the
+    skill 1.00 — PLACEHOLDER stat pairings pending the tuning pass.
+    """
+    from decimal import Decimal  # noqa: PLC0415
+
+    from world.checks.models import CheckCategory, CheckType, CheckTypeTrait  # noqa: PLC0415
+    from world.seeds.sample_content import authored_or_sample  # noqa: PLC0415
+    from world.skills.models import Skill  # noqa: PLC0415
+    from world.traits.models import Trait, TraitCategory, TraitType  # noqa: PLC0415
+
+    wits = authored_or_sample(
+        Trait,
+        {"trait_type": TraitType.STAT, "category": TraitCategory.MENTAL, "is_public": True},
+        name="wits",
+    )
+    category = authored_or_sample(
+        CheckCategory,
+        {"description": "Trade and craft checks.", "display_order": 40},
+        name="Crafting",
+    )
+    if category is None:
+        return
+    for name, tooltip, order in _CRAFT_SKILLS:
+        skill_trait = authored_or_sample(
+            Trait,
+            {"trait_type": TraitType.SKILL, "category": TraitCategory.CRAFTING, "is_public": True},
+            name=name,
+        )
+        if skill_trait is None:
+            continue
+        authored_or_sample(
+            Skill,
+            {"tooltip": f"PLACEHOLDER: {tooltip}", "display_order": order, "is_active": True},
+            trait=skill_trait,
+        )
+        check_type = authored_or_sample(
+            CheckType,
+            {
+                "category": category,
+                "description": f"PLACEHOLDER: the {name} craft check.",
+            },
+            name=name,
+        )
+        if check_type is None:
+            continue
+        CheckTypeTrait.objects.get_or_create(
+            check_type=check_type, trait=skill_trait, defaults={"weight": Decimal("1.00")}
+        )
+        if wits is not None:
+            CheckTypeTrait.objects.get_or_create(
+                check_type=check_type, trait=wits, defaults={"weight": Decimal("0.50")}
+            )
