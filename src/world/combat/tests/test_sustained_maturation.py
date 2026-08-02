@@ -357,21 +357,60 @@ class SustainedMaturationLostHolderTests(_SustainedMaturationTestBase):
 
 
 # ---------------------------------------------------------------------------
-# RITUAL branch: not implemented until Task 5
+# RITUAL branch (#2705 Task 5): dispatch_ritual, break on content-surface
+# exception, downgrades>=budget never dispatches at all.
 # ---------------------------------------------------------------------------
 
 
-class SustainedMaturationRitualNotImplementedTests(TestCase):
+class SustainedMaturationRitualTests(TestCase):
+    def setUp(self) -> None:
+        self.encounter = CombatEncounterFactory(status=RoundStatus.RESOLVING, round_number=2)
+        self.participant = _make_participant(self.encounter)
+        self.ritual = RitualFactory()
+
+    @mock.patch("world.magic.services.ritual_dispatch.dispatch_ritual")
     @mock.patch("world.scenes.interaction_services._broadcast_to_location")
-    def test_ritual_kind_raises_not_implemented(self, mock_broadcast) -> None:  # noqa: ARG002
-        encounter = CombatEncounterFactory(status=RoundStatus.RESOLVING, round_number=2)
-        participant = _make_participant(encounter)
+    def test_held_ritual_dispatches_exactly_once_and_row_deleted(
+        self, mock_broadcast, mock_dispatch
+    ) -> None:
         sustained = SustainedActionFactory(
-            encounter=encounter,
-            participant=participant,
+            encounter=self.encounter,
+            participant=self.participant,
             sustained_kind=SustainedKind.RITUAL,
             technique=None,
-            ritual=RitualFactory(),
+            ritual=self.ritual,
+            declared_action=None,
+            declared_round=1,
+            resolves_round=2,
+            absorption_budget=3,
+            downgrades=1,
+        )
+
+        _mature_one_sustained_action(sustained, round_number=2)
+
+        mock_dispatch.assert_called_once_with(
+            ritual=self.ritual, performer_sheet=self.participant.character_sheet
+        )
+        self.assertFalse(SustainedAction.objects.filter(pk=sustained.pk).exists())
+        self.assertTrue(mock_broadcast.called)
+
+    @mock.patch("world.magic.services.ritual_dispatch.dispatch_ritual")
+    @mock.patch("world.scenes.interaction_services._broadcast_to_location")
+    def test_content_surface_exception_breaks_without_aborting_resolution(
+        self, mock_broadcast, mock_dispatch
+    ) -> None:
+        """A caught ritual-surface exception at maturation breaks THIS
+        commitment only — it must not propagate and abort round resolution
+        for every other combatant."""
+        from world.magic.exceptions import ResonanceInsufficient
+
+        mock_dispatch.side_effect = ResonanceInsufficient()
+        sustained = SustainedActionFactory(
+            encounter=self.encounter,
+            participant=self.participant,
+            sustained_kind=SustainedKind.RITUAL,
+            technique=None,
+            ritual=self.ritual,
             declared_action=None,
             declared_round=1,
             resolves_round=2,
@@ -379,8 +418,39 @@ class SustainedMaturationRitualNotImplementedTests(TestCase):
             downgrades=0,
         )
 
-        with self.assertRaises(NotImplementedError):
-            _mature_one_sustained_action(sustained, round_number=2)
+        _mature_one_sustained_action(sustained, round_number=2)
+
+        mock_dispatch.assert_called_once()
+        self.assertFalse(SustainedAction.objects.filter(pk=sustained.pk).exists())
+        self.assertTrue(mock_broadcast.called)
+
+    @mock.patch("world.magic.services.ritual_dispatch.dispatch_ritual")
+    @mock.patch("world.scenes.interaction_services._broadcast_to_location")
+    def test_downgrades_equal_to_budget_never_dispatches(
+        self, mock_broadcast, mock_dispatch
+    ) -> None:
+        """The generic downgrades>=budget break (shared with TECHNIQUE) fires
+        before the RITUAL branch is ever reached — dispatch_ritual is not
+        called, and the already-consumed components stay spent (nothing here
+        restores them)."""
+        sustained = SustainedActionFactory(
+            encounter=self.encounter,
+            participant=self.participant,
+            sustained_kind=SustainedKind.RITUAL,
+            technique=None,
+            ritual=self.ritual,
+            declared_action=None,
+            declared_round=1,
+            resolves_round=2,
+            absorption_budget=2,
+            downgrades=2,
+        )
+
+        _mature_one_sustained_action(sustained, round_number=2)
+
+        mock_dispatch.assert_not_called()
+        self.assertFalse(SustainedAction.objects.filter(pk=sustained.pk).exists())
+        self.assertTrue(mock_broadcast.called)
 
 
 # ---------------------------------------------------------------------------

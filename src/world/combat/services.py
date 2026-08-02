@@ -10,7 +10,7 @@ from decimal import Decimal
 import logging
 import math
 import random
-from typing import TYPE_CHECKING, TypeVar
+from typing import TYPE_CHECKING, Any, TypeVar
 
 from django.db import transaction
 from django.db.models import F, Prefetch, Q, Sum
@@ -39,7 +39,7 @@ if TYPE_CHECKING:
     )
     from world.covenants.models import CovenantRole
     from world.items.models import ItemInstance
-    from world.magic.models import FuryTier, Technique
+    from world.magic.models import FuryTier, Ritual, Technique
     from world.magic.models.anima import CharacterAnima
     from world.magic.models.techniques import AbstractDamageProfile
     from world.magic.services.cast_observation import CastAudience
@@ -3452,6 +3452,104 @@ def _sync_sustained_technique_declaration(
     return sustained
 
 
+def try_declare_sustained_ritual(
+    *,
+    sheet: CharacterSheet,
+    ritual: Ritual,
+    kwargs: dict[str, Any],
+) -> SustainedAction | None:
+    """Defer a combat-cast ritual across rounds instead of dispatching now (#2705, Task 5).
+
+    Called by ``PerformRitualAction.execute()`` after components are validated
+    and consumed (so a broken commitment is genuinely spent — components are
+    never refunded, mirroring ``_mature_one_sustained_action``'s TECHNIQUE
+    ruling) and before dispatch. Returns ``None`` — "not sustained, dispatch
+    immediately as today" — unless ALL of the following hold:
+
+    - the performer resolves to an ACTIVE ``CombatParticipant`` whose
+      encounter is currently DECLARING;
+    - ``ritual.check_config_or_none`` is not ``None`` and its
+      ``sustained_rounds > 0``;
+    - ``kwargs`` is empty (see below);
+    - the participant is not already holding an earlier-round commitment —
+      mirrors ``_validate_no_pending_sustained``'s D2 guard
+      (``declared_round < round_number``, ``resolves_round > round_number``).
+      Unlike that function this does not raise: a ritual invocation is not
+      the round-declaration seam, so blocking it outright would strand the
+      components already consumed inside the same atomic transaction. Instead
+      it falls through to immediate dispatch, same as any other inert case —
+      a player cannot stack two parallel sustained commitments, but a ritual
+      cast while one is already pending simply isn't deferred.
+
+    **The ADR-0007 kwargs guard.** A ``SustainedAction`` is a DB row with
+    fixed columns; persisting an arbitrary per-cast kwargs dict to replay at
+    maturation would need a JSON field, which ADR-0007 forbids. A ritual
+    invoked with non-empty kwargs (e.g. a ``thread`` target) therefore cannot
+    be deferred — it dispatches immediately, exactly as it would outside
+    combat. Rituals authored with ``sustained_rounds > 0`` are expected to be
+    no-kwargs SERVICE/FLOW calls for this reason.
+
+    When it fires: rolls the absorption budget once
+    (``roll_sustained_absorption_budget``, the same helper the TECHNIQUE
+    declaration path uses), creates the ``SustainedAction`` (kind RITUAL,
+    ``declared_action=None`` — a ritual is declared through
+    ``PerformRitualAction``, not the combat round-declaration seam),
+    broadcasts the telegraph, and returns the row. Same same-round-
+    replacement idempotence as ``_sync_sustained_technique_declaration``: any
+    existing ``SustainedAction`` for ``(participant, declared_round=this
+    round)`` is replaced, never stacked, so re-performing the ritual the same
+    round does not accumulate duplicate commitments.
+    """
+    if kwargs:
+        return None
+
+    check_config = ritual.check_config_or_none
+    if check_config is None or check_config.sustained_rounds <= 0:
+        return None
+
+    participant = (
+        CombatParticipant.objects.filter(
+            character_sheet=sheet,
+            status=ParticipantStatus.ACTIVE,
+        )
+        .select_related("encounter")
+        .first()
+    )
+    if participant is None:
+        return None
+
+    encounter = participant.encounter
+    if encounter.status != RoundStatus.DECLARING:
+        return None
+
+    already_holding = SustainedAction.objects.filter(
+        participant=participant,
+        declared_round__lt=encounter.round_number,
+        resolves_round__gt=encounter.round_number,
+    ).exists()
+    if already_holding:
+        return None
+
+    SustainedAction.objects.filter(
+        participant=participant, declared_round=encounter.round_number
+    ).delete()
+
+    budget, outcome = roll_sustained_absorption_budget(participant)
+    sustained = SustainedAction.objects.create(
+        encounter=encounter,
+        participant=participant,
+        sustained_kind=SustainedKind.RITUAL,
+        ritual=ritual,
+        declared_action=None,
+        declared_round=encounter.round_number,
+        resolves_round=encounter.round_number + check_config.sustained_rounds,
+        absorption_budget=budget,
+        outcome_snapshot=outcome,
+    )
+    _broadcast_sustained_telegraph(sustained)
+    return sustained
+
+
 def _equipped_weapon_archetype(character: Character) -> str | None:
     """The ``gear_archetype`` of character's strongest equipped weapon, or None."""
     inst = _select_equipped_weapon(character)
@@ -4829,6 +4927,57 @@ def _mature_sustained_technique(sustained: SustainedAction, round_number: int) -
     sustained.delete()
 
 
+def _mature_sustained_ritual(sustained: SustainedAction) -> None:
+    """Dispatch the held ritual at maturation, or break on a content-surface error (#2705).
+
+    The RITUAL sibling of ``_mature_sustained_technique``. Components were
+    already validated and consumed at declaration
+    (``PerformRitualAction._validate_components``, before
+    ``try_declare_sustained_ritual`` ever creates this row) — so a caught
+    failure here still deletes the row with no refund, the same "the cost
+    stands" ruling ``_mature_one_sustained_action`` applies to the
+    downgrades-exceeded break one level up.
+
+    Catches only the same ritual-surface exceptions ``PerformRitualAction``
+    itself catches (``RitualComponentError`` / ``ResonanceInsufficient`` /
+    ``AnchorCapExceeded`` / ``InvalidImbueAmount`` / ``XPInsufficient`` /
+    ``GhostTutorError``) — a content-authoring gap in ONE participant's
+    ritual must not abort round resolution for every other combatant.
+    Deliberately does NOT catch bare ``Exception`` (no defensive
+    error-papering, CLAUDE.md) — an unexpected crash here should surface
+    loudly, not be swallowed into a generic broken-ritual line.
+    """
+    from world.magic.exceptions import (  # noqa: PLC0415
+        AnchorCapExceeded,
+        GhostTutorError,
+        InvalidImbueAmount,
+        ResonanceInsufficient,
+        RitualComponentError,
+        XPInsufficient,
+    )
+    from world.magic.services.ritual_dispatch import dispatch_ritual  # noqa: PLC0415
+
+    try:
+        dispatch_ritual(
+            ritual=sustained.ritual,
+            performer_sheet=sustained.participant.character_sheet,
+        )
+    except (
+        RitualComponentError,
+        ResonanceInsufficient,
+        AnchorCapExceeded,
+        InvalidImbueAmount,
+        XPInsufficient,
+        GhostTutorError,
+    ):
+        _broadcast_sustained_broken(sustained, reason="fizzles")
+        sustained.delete()
+        return
+
+    _broadcast_sustained_held(sustained)
+    sustained.delete()
+
+
 def _mature_one_sustained_action(sustained: SustainedAction, round_number: int) -> None:
     """Resolve a single matured ``SustainedAction``: break, lose-holder, or hold (#2705).
 
@@ -4843,9 +4992,10 @@ def _mature_one_sustained_action(sustained: SustainedAction, round_number: int) 
     2. The holder can no longer hold it together (left the encounter or died) ->
        broken, distinct "comes to nothing" narration.
     3. ``SustainedKind.TECHNIQUE`` -> clone the declaring action into this round.
-    4. ``SustainedKind.RITUAL`` -> not implemented yet; Task 5 fills this branch
-       in. Deliberately raises rather than shipping a silent no-op that would
-       strand a player's declared-and-charged ritual forever.
+    4. ``SustainedKind.RITUAL`` -> dispatch the ritual's authored execution
+       payload (Task 5's ``_mature_sustained_ritual``); a caught content-surface
+       exception breaks the commitment instead of raising through round
+       resolution.
     """
     from world.vitals.services import is_dead  # noqa: PLC0415
 
@@ -4864,8 +5014,7 @@ def _mature_one_sustained_action(sustained: SustainedAction, round_number: int) 
         _mature_sustained_technique(sustained, round_number)
         return
 
-    msg = "Ritual sustained-action maturation is not implemented yet (#2705 Task 5)."
-    raise NotImplementedError(msg)
+    _mature_sustained_ritual(sustained)
 
 
 def _mature_sustained_actions(encounter: CombatEncounter, round_number: int) -> None:

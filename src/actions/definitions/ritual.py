@@ -6,9 +6,16 @@ dual dispatch (SERVICE → service function; FLOW → FlowDefinition) into a sin
 (`world.magic.views.RitualPerformView`) converge on this action's `run()`, so
 ritual performance no longer bypasses the action layer (G3 closure, #1331).
 
-All `world.magic` / `world.items` imports are done lazily inside `execute()` to
-avoid import cycles (the action registry is imported very early; magic models
-pull in much of the world graph).
+The dispatch switch itself (SERVICE/FLOW/CEREMONY) lives in
+`world.magic.services.ritual_dispatch.dispatch_ritual` (#2705 Task 5) — split
+out so a ritual conducted across combat rounds can consume its components at
+declaration and dispatch later at maturation without a second copy of the
+switch. `world.combat.services.try_declare_sustained_ritual` is the deferral
+gate this action calls between component consumption and dispatch.
+
+All `world.magic` / `world.items` / `world.combat` imports are done lazily
+inside `execute()` to avoid import cycles (the action registry is imported
+very early; magic/combat models pull in much of the world graph).
 """
 
 from __future__ import annotations
@@ -57,6 +64,7 @@ class PerformRitualAction(Action):
         """Perform the ritual, returning a structured result."""
         from django.db import transaction  # noqa: PLC0415
 
+        from world.combat.services import try_declare_sustained_ritual  # noqa: PLC0415
         from world.magic.constants import RitualExecutionKind  # noqa: PLC0415
         from world.magic.exceptions import (  # noqa: PLC0415
             AnchorCapExceeded,
@@ -66,6 +74,7 @@ class PerformRitualAction(Action):
             RitualComponentError,
             XPInsufficient,
         )
+        from world.magic.services.ritual_dispatch import dispatch_ritual  # noqa: PLC0415
 
         ritual = kwargs.pop("ritual", None)
         if ritual is None:
@@ -78,13 +87,23 @@ class PerformRitualAction(Action):
             with transaction.atomic():
                 self._validate_components(ritual, components, sheet)
 
-                if ritual.execution_kind == RitualExecutionKind.CEREMONY:
-                    result = self._begin_ceremony(ritual, sheet)
-                elif ritual.execution_kind == RitualExecutionKind.SERVICE:
-                    result = self._dispatch_service(ritual, sheet, kwargs)
-                else:
-                    self._dispatch_flow(ritual, sheet, kwargs)
-                    result = None
+                # Components are consumed above — that is what makes a broken
+                # sustained ritual genuinely spent (#2705, D2/Task 5). Must run
+                # AFTER consumption and BEFORE dispatch.
+                sustained = try_declare_sustained_ritual(sheet=sheet, ritual=ritual, kwargs=kwargs)
+                if sustained is not None:
+                    return ActionResult(
+                        success=True,
+                        message=f"You begin {ritual.name}, holding it together.",
+                        data={
+                            "execution_kind": ritual.execution_kind,
+                            "sustained_rounds": (
+                                sustained.resolves_round - sustained.declared_round
+                            ),
+                        },
+                    )
+
+                result = dispatch_ritual(ritual=ritual, performer_sheet=sheet, **kwargs)
         except (
             RitualComponentError,
             ResonanceInsufficient,
@@ -121,54 +140,3 @@ class PerformRitualAction(Action):
         resolve_and_consume_ritual_components(
             ritual=ritual, components=components, performer_sheet=performer_sheet
         )
-
-    def _dispatch_service(self, ritual: Any, sheet: Any, kwargs: dict[str, Any]) -> Any:
-        """Import and call the ritual's service function.
-
-        Convention: the service functions take ``character_sheet=`` as their
-        first kwarg (e.g. ``spend_resonance_for_imbuing``), not ``actor=``.
-        The ``ritual`` instance is also forwarded so service functions that
-        need to resolve authored data linked to the ritual (e.g. a
-        ``TechniqueGrant``) can do so. Service functions should accept
-        ``**kwargs`` to absorb parameters they don't use.
-        """
-        import importlib  # noqa: PLC0415
-
-        module_path, func_name = ritual.service_function_path.rsplit(".", 1)
-        module = importlib.import_module(module_path)
-        func = getattr(module, func_name)
-        return func(character_sheet=sheet, ritual=ritual, **kwargs)
-
-    def _begin_ceremony(self, ritual: Any, sheet: Any) -> Any:
-        """Create a PendingRitualEffect for a CEREMONY-kind ritual.
-
-        Raises RitualComponentError (with a dynamic user_message) if a pending
-        effect already exists — caught by the caller's except block.
-        """
-        from world.magic.exceptions import RitualComponentError  # noqa: PLC0415
-        from world.magic.models import PendingRitualEffect  # noqa: PLC0415
-
-        if PendingRitualEffect.objects.filter(character=sheet, ritual=ritual).exists():
-            exc = RitualComponentError()
-            exc.user_message = f"A {ritual.name} is already in progress."
-            raise exc
-        return PendingRitualEffect.objects.create(character=sheet, ritual=ritual)
-
-    def _dispatch_flow(self, ritual: Any, sheet: Any, kwargs: dict[str, Any]) -> None:
-        """Execute the ritual's FlowDefinition via a manual FlowExecution run."""
-        from flows.flow_execution import FlowExecution  # noqa: PLC0415
-        from flows.flow_stack import FlowStack  # noqa: PLC0415
-        from flows.scene_data_manager import SceneDataManager  # noqa: PLC0415
-        from flows.trigger_handler import DispatchResult  # noqa: PLC0415
-
-        stack = FlowStack(owner=sheet, originating_event="RitualPerformed")
-        flow_context = SceneDataManager()
-        execution = FlowExecution(
-            flow_definition=ritual.flow,
-            context=flow_context,
-            flow_stack=stack,
-            origin=None,
-            variable_mapping={"actor": sheet, **kwargs},
-            dispatch_result=DispatchResult(),
-        )
-        stack.execute_flow(execution)
