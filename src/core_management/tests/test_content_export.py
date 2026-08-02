@@ -223,6 +223,57 @@ class ContentExportTests(TestCase):
             f"Second round-trip created {created_again} new records (expected 0)"
         )
 
+    def test_gm_scenario_catalog_round_trips(self) -> None:
+        """A situation with its links + the GM guidance rows reload as a no-op (#2865).
+
+        Before this, ``mechanics.situationtemplate`` and every ``gm.*`` catalog
+        model were absent from ``CONTENT_MODELS`` entirely — an authored GM
+        catalog had nowhere to live but per-server database state, so a fresh
+        install shipped a JUNIOR GM tier with nothing to place.
+        """
+        from world.gm.factories import (
+            CheckTypeSituationFitFactory,
+            ConsequencePoolGuideFactory,
+            SituationDifficultyGuideFactory,
+            SituationKindFactory,
+        )
+        from world.mechanics.factories import (
+            SituationChallengeLinkFactory,
+            SituationTemplateFactory,
+            SituationTrapLinkFactory,
+        )
+
+        situation = SituationTemplateFactory(name="Round Trip Situation")
+        SituationChallengeLinkFactory(
+            situation_template=situation,
+            challenge_template__name="Round Trip Challenge",
+            target_object_name="the barred gate",
+        )
+        SituationTrapLinkFactory(situation_template=situation, name="the pressure plate")
+
+        from world.checks.factories import CheckTypeFactory
+
+        kind = SituationKindFactory(name="Round Trip Kind")
+        CheckTypeSituationFitFactory(
+            situation_kind=kind, check_type=CheckTypeFactory(name="Round Trip Check")
+        )
+        SituationDifficultyGuideFactory(situation_kind=kind)
+        ConsequencePoolGuideFactory(situation_kind=kind)
+
+        from core_management.content_fixtures import build_all, load_entries
+
+        result = export_to_content_repo(self.root)
+        assert result.errors == []
+
+        exported = (self.root / "fixtures" / "gm" / "situationkind.json").read_text(
+            encoding="utf-8"
+        )
+        assert "Round Trip Kind" in exported
+
+        load_result = build_all(self.root)
+        created, _updated, _ = load_entries(load_result)
+        assert created == 0, f"Round-trip created {created} new records (expected 0)"
+
     def test_content_models_all_have_natural_key(self) -> None:
         """Every model in the allowlist must have NaturalKeyMixin."""
         from django.apps import apps

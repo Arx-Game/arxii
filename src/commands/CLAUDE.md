@@ -534,8 +534,13 @@ actions, backends, and service functions.
   <term>` (#2127) extends the same command with a STARTING-tier-or-higher browse mode, mirroring
   `gm check find`'s shape: dispatches `FindSituationAction` (`actions/definitions/gm_catalog.py`)
   instead, searching `SituationTemplate` by name/description and any matching `SituationKind`
-  (breadth-filtered on `minimum_gm_level`) — read-only, never instantiates anything. No business
-  logic in the command.
+  (breadth-filtered on `minimum_gm_level`) — read-only, never instantiates anything. `find` also
+  lists matching `ChallengeTemplate`s (#2865). `setsituation challenge <name|id>=<target name>
+  [edge=<why>|setback=<why>]` (#2865) dispatches `PlaceChallengeAction` (key `place_challenge`) —
+  place ONE authored challenge on a named thing in the room, the lightweight sibling of a full
+  situation. The target name runs free up to the first `edge=`/`setback=` token, so a multi-word
+  name needs no quoting; both tokens together are left for the Action to refuse (one refusal
+  message, not two). No business logic in the command.
 - **`persona.py`**: `CmdPersona` (`persona`, alias `wear-face`, #1347) — list, create, or switch
   faces. Bare `persona`/`persona list` renders all the caller's personas (marking the active one
   `◄ active`). `persona <name>`/`wear-face <name>` resolves the name among the caller's own faces

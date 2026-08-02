@@ -329,6 +329,21 @@ They do not use the command system, dispatchers, or handlers.
   commits instantly via `perform_portal_travel()` (anima debit, broadcasts,
   `move_object`) and returns, skipping `find_route()`/hop-pacing entirely;
   `None` falls through to the walking path unchanged.
+  `situations.py` (#1895/#2865, `category="gm"`, both `target_type=SELF`, both gated
+  `MinimumGMLevelPrerequisite(GMLevel.JUNIOR)` since both mint live `ChallengeInstance`
+  rows per ADR-0091): `SetSituationAction` (key `set_situation`) instantiates a whole
+  authored `SituationTemplate` at `actor.location` via `instantiate_situation`;
+  `PlaceChallengeAction` (key `place_challenge`, #2865) places ONE authored
+  `ChallengeTemplate` against a GM-named target object via the pre-existing
+  `instantiate_challenge`, minting a standalone `ChallengeInstance`
+  (`situation_instance=None`) — the lightweight path #2857's SENIOR gate on
+  `InvokeCatalogCheckAction` left missing. Kwargs: `challenge_template_id`,
+  `target_object_name`, and mutually exclusive `edge_reason`/`setback_reason`, which
+  persist as `ChallengeInstance.severity_adjustment`/`adjustment_reason` (DB-constrained
+  to exactly one `DIFFICULTY_BAND_STEP` either way, reason required). The whole placement
+  runs in one `transaction.atomic()`. Band-shift resolution + bounds live in
+  `actions/definitions/gm_shift.py`, shared with `InvokeCatalogCheckAction` — do NOT
+  re-derive them. Telnet for both is `commands/setsituation.py`.
   `portals.py` (#2222, `category="magic"`) — the anchor-lifecycle pair, kept out of
   `movement.py`: `InstallPortalAnchorAction` (key `"portal_anchor_install"`,
   `target_type=SELF`) installs a `PortalAnchor` of a given `kind` in the actor's

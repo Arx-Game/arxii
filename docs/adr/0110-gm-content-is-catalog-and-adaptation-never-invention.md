@@ -35,3 +35,35 @@ with pre-set outcomes. The ad-hoc check remains as a staff/senior stopgap for
 impromptu moments. The long-term direction is a lightweight "quick challenge"
 path within the situation system, so the ad-hoc check becomes unnecessary for
 everyone.
+
+## Addendum: the quick-challenge path is built (#2865)
+
+The "long-term direction" the #2857 addendum named is now the code path.
+`PlaceChallengeAction` (`place_challenge`, JUNIOR-gated, telnet
+`setsituation challenge <template>=<target name>`) places one authored
+`ChallengeTemplate` against a thing the GM names, minting a standalone
+`ChallengeInstance` with no `SituationInstance` wrapper. The JUNIOR funnel
+therefore no longer opens onto an empty room.
+
+Three alternatives were rejected. **Inline mini-situation assembly** — composing a
+challenge, an approach and a consequence pool live — is precisely the invention
+this ADR gates, so a "lightweight" surface that allowed it would reopen the hole
+the gate exists to close. **A family of one-challenge `SituationTemplate`s** would
+have needed no new code but forces every impromptu beat to be pre-authored as a
+situation row for no mechanical gain. **Gating the band shift by GM level** was
+rejected because the shift is already bounded to one band and carries a stated
+reason on the row; a second trust axis on top of the placement gate buys nothing.
+
+What the quick path may adapt is unchanged from this ADR's core rule: exactly one
+band, with a required reason, stored on the instance
+(`ChallengeInstance.severity_adjustment` / `adjustment_reason`, both DB-constrained)
+so the number resolution rolls against and the number the audit trail shows can
+never disagree. Everything else — which approaches are offered, what consequences
+follow, whether the challenge is visible at all — stays the authored template's.
+
+The same PR registered the situation and `gm.*` catalog models in
+`CONTENT_MODELS`. That is the other half of "build the catalog": a catalog that
+cannot be exported to the lore repo is per-server database state, and every fresh
+install starts with a dead JUNIOR tier no matter how good the gating is.
+
+> Status: accepted · Source: issue #2865 (spec approved 2026-08-01)

@@ -16,8 +16,14 @@ from evennia_extensions.factories import CharacterFactory, ObjectDBFactory
 from world.character_sheets.factories import CharacterSheetFactory
 from world.gm.constants import GMLevel
 from world.gm.factories import GMProfileFactory, SituationKindFactory
-from world.mechanics.factories import SituationTemplateFactory
+from world.mechanics.factories import ChallengeTemplateFactory, SituationTemplateFactory
+from world.mechanics.models import ChallengeInstance
 from world.roster.factories import RosterEntryFactory, RosterTenureFactory
+from world.scenes.action_constants import (
+    DIFFICULTY_BAND_STEP,
+    DIFFICULTY_VALUES,
+    DifficultyChoice,
+)
 
 
 class SetSituationParseTests(TestCase):
@@ -107,3 +113,57 @@ class SetSituationFindTests(TestCase):
         SituationTemplateFactory(name="Never Instantiated")
         _run_cmd(self.gm_actor, "find Never")
         self.assertEqual(SituationInstance.objects.count(), 0)
+
+    def test_find_lists_challenge_templates_too(self) -> None:
+        """One browse surface covers both placement verbs (#2865)."""
+        challenge = ChallengeTemplateFactory(name="The Barred Way")
+        messages = _run_cmd(self.gm_actor, "find Barred")
+        self.assertTrue(any(challenge.name in m for m in messages))
+
+
+class SetSituationChallengeTests(TestCase):
+    """``setsituation challenge <template>=<target>`` (#2865)."""
+
+    def setUp(self) -> None:
+        self.room = _room(db_key="PlaceChallengeRoom")
+        self.template = ChallengeTemplateFactory(
+            name="A Barred Way",
+            severity=DIFFICULTY_VALUES[DifficultyChoice.NORMAL],
+        )
+
+    def test_junior_gm_places_the_challenge(self) -> None:
+        actor = _gm_in_room(self.room, GMLevel.JUNIOR, db_key="PlacerGM")
+
+        _run_cmd(actor, "challenge A Barred Way=the barred gate")
+
+        instance = ChallengeInstance.objects.get(template=self.template)
+        self.assertEqual(instance.target_object.db_key, "the barred gate")
+        self.assertIsNone(instance.situation_instance)
+
+    def test_starting_gm_is_refused_at_the_command_level(self) -> None:
+        actor = _gm_in_room(self.room, GMLevel.STARTING, db_key="TooJuniorGM")
+
+        messages = _run_cmd(actor, "challenge A Barred Way=the barred gate")
+
+        self.assertTrue(any("Junior GM" in m for m in messages))
+        self.assertEqual(ChallengeInstance.objects.count(), 0)
+
+    def test_setback_token_is_parsed_off_a_multiword_target_name(self) -> None:
+        actor = _gm_in_room(self.room, GMLevel.JUNIOR, db_key="ShiftingGM")
+
+        _run_cmd(
+            actor,
+            "challenge A Barred Way=the barred gate setback=braced from the far side",
+        )
+
+        instance = ChallengeInstance.objects.get(template=self.template)
+        self.assertEqual(instance.target_object.db_key, "the barred gate")
+        self.assertEqual(instance.severity_adjustment, DIFFICULTY_BAND_STEP)
+        self.assertEqual(instance.adjustment_reason, "braced from the far side")
+
+    def test_missing_equals_raises(self) -> None:
+        actor = _gm_in_room(self.room, GMLevel.JUNIOR, db_key="SloppyGM")
+
+        _run_cmd(actor, "challenge A Barred Way")
+
+        self.assertEqual(ChallengeInstance.objects.count(), 0)

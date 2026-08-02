@@ -22189,6 +22189,7 @@ export interface components {
       /** @description Template string with {variables} for instance-specific text. */
       description_template?: string;
       goal?: string;
+      /** @description Authored difficulty in DIFFICULTY_VALUES points (15 Trivial .. 90 Harrowing), passed straight to perform_check's target_difficulty. NOT a 1-5 rating: the old default of 1 resolved every authored challenge at the bottom rank (#2865). */
       severity?: number;
       challenge_type?: components['schemas']['ChallengeTypeEnum'];
       discovery_type?: components['schemas']['DiscoveryTypeEnum'];
@@ -22202,6 +22203,7 @@ export interface components {
       name: string;
       category: number;
       readonly category_name: string;
+      /** @description Authored difficulty in DIFFICULTY_VALUES points (15 Trivial .. 90 Harrowing), passed straight to perform_check's target_difficulty. NOT a 1-5 rating: the old default of 1 resolved every authored challenge at the bottom rank (#2865). */
       severity?: number;
       challenge_type?: components['schemas']['ChallengeTypeEnum'];
       discovery_type?: components['schemas']['DiscoveryTypeEnum'];
