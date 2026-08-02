@@ -640,6 +640,28 @@ Returns `{"action_points": n, "anima": n, "materials": k}`.
   `crafting_materials`): 5 categories + 21 graded ladder templates; named
   canon materials await the curation worksheet (#2878 Phase F).
 
+### Accent lifecycle & recycling (#2886)
+
+- **Vocabulary** (Apostate-ratified 2026-08-02, seeded by `seed_accent_axes`):
+  allure, menace, regal (the courtly family on one axis), dramatic, stealthy,
+  unassuming, nimble. CheckType wiring is fill-if-found; unmatched families
+  stay authored-but-dormant (flagged skill-list holes).
+- **`AccentExclusion`** (data rows): symmetric oppositions — Dramatic ⊥
+  Unassuming — enforced across craft requests, the host item's existing
+  accents, and refinement accent goals.
+- **Refinement doubling**: threshold × `ACCENT_REFINEMENT_COST_BASE ** accent
+  count` — heavily accented pieces approach commission cost to rework.
+- **`remove_item_accent`** (`services/recycle.py`): owner-only, no refund,
+  prestige recomputes if worn. `RemoveAccentAction` +
+  `POST /api/items/inventory/<id>/remove-accent/`; the frontend confirms.
+- **`recycle_item`**: owner-only salvage (`SALVAGE_FRACTION` of recipe
+  material quantities) + destruction via the #1025 footprint rules.
+  **Story-protected**: legend-bearing items need an APPROVED
+  `RecycleRequest` (GM sign-off; admin-surfaced until a GM panel lands).
+  `RecycleItemAction` + `POST .../recycle/` +
+  `POST .../request-recycle-approval/`; the item detail panel carries the
+  confirm dialogs (`ItemLifecycleControls`).
+
 ### Shared Material Helper (`services/materials.py`)
 
 Used by both crafting (`stage_and_assert_affordable`) and the ritual path
