@@ -881,6 +881,60 @@ themselves (no shop system exists) is documented in `docs/systems/items.md`
 (`grant_touchstone_item_to_character`). See ADR-0087 for the extension-vs-parallel-model
 decision and the `client_hosted` dispatch discovery.
 
+### Sustained rituals — conducting a ritual under fire (#2705, ADR-0190)
+
+`RitualCheckConfig.sustained_rounds` (PositiveSmallInt, default 0) marks a ritual as
+conductable across combat rounds rather than firing the instant it's invoked — 0 (the
+default) is today's fire-immediately behavior, unchanged for every existing ritual. This
+is the PC-side sibling of `world.combat`'s telegraphed-wind-up mechanism (ADR-0161): the
+combat-domain model (`world.combat.models.SustainedAction`) and its declaration/erosion/
+maturation machinery are documented in full in `docs/systems/INDEX.md`'s combat section
+and `docs/architecture/combat-resolution-loop.md` — this entry covers only the ritual-side
+seam.
+
+- **The dispatch switch is extracted, not duplicated.** `dispatch_ritual(*, ritual,
+  performer_sheet, **kwargs)` (`world/magic/services/ritual_dispatch.py`) is the
+  SERVICE/FLOW/CEREMONY switch pulled verbatim out of `PerformRitualAction`
+  (`actions/definitions/ritual.py`) so a ritual dispatched at maturation — several
+  rounds after the components were consumed — shares the exact same switch the
+  synchronous non-combat path uses, instead of a second copy drifting out of sync.
+  `PerformRitualAction.execute()` now calls `dispatch_ritual(...)` where it used to
+  branch inline; behavior-preserving (the pre-existing ritual action/service tests are
+  the oracle — none of them changed).
+- **The deferral gate.** `try_declare_sustained_ritual(*, sheet, ritual, kwargs)`
+  (`world.combat.services`) is called from `PerformRitualAction.execute()` after
+  `_validate_components` (components are consumed there — a broken sustained ritual is
+  genuinely spent, never refunded) and before `dispatch_ritual`. Returns `None` — "not
+  sustained, dispatch immediately as today" — unless the performer resolves to an
+  ACTIVE `CombatParticipant` in a DECLARING encounter, `ritual.check_config_or_none
+  .sustained_rounds > 0`, `kwargs` is empty, and the performer isn't already holding an
+  earlier round's commitment. When it fires, it rolls the absorption budget (the same
+  Concentration-check helper the TECHNIQUE side uses — see INDEX.md), creates a
+  `SustainedAction(sustained_kind=RITUAL, declared_action=None)` — null because a
+  ritual is invoked through `PerformRitualAction`, not the combat round-declaration
+  seam a TECHNIQUE commitment clones from — and returns a success `ActionResult`
+  ("You begin `<ritual>`, holding it together.") instead of the ritual's normal result.
+- **The ADR-0007 kwargs guard.** A `SustainedAction` is a fixed-column DB row; a ritual
+  invoked with non-empty `kwargs` (e.g. a `thread` target) cannot be deferred, because
+  persisting an arbitrary per-cast kwargs dict to replay at maturation would need a
+  JSON field, which ADR-0007 forbids. Such a ritual dispatches immediately, exactly as
+  it would outside combat — rituals authored with `sustained_rounds > 0` are expected
+  to be no-kwargs SERVICE/FLOW calls for this reason. Not raised, not blocked: this is
+  a silent fall-through, the same as every other "not sustained" case.
+  `try_declare_sustained_ritual`'s already-holding check also does not raise (unlike
+  the TECHNIQUE-side `declare_action` guard) — a ritual invocation is not the
+  round-declaration seam, so blocking outright would strand the components already
+  consumed inside the same atomic transaction.
+- **Maturation.** At `resolves_round`, `_mature_sustained_ritual` (`world.combat
+  .services`) calls `dispatch_ritual(ritual=sustained.ritual,
+  performer_sheet=sustained.participant.character_sheet)`, catching only the same
+  ritual-surface exceptions `PerformRitualAction` itself catches
+  (`RitualComponentError`/`ResonanceInsufficient`/`AnchorCapExceeded`/
+  `InvalidImbueAmount`/`XPInsufficient`/`GhostTutorError`) — a content-authoring gap in
+  one participant's ritual must not abort round resolution for every other combatant.
+  A caught failure still deletes the `SustainedAction` with no refund (components were
+  already spent at declaration).
+
 ### ThreadWeaving Acquisition (Spec A §2.1 / §4.2)
 
 How a character gains the *right* to weave threads on a given anchor scope.
