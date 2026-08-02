@@ -2,7 +2,7 @@
 // Legacy scene action types (now slimmed — fetchSceneActions has been removed)
 // ---------------------------------------------------------------------------
 
-import type { PowerLedger } from '@/magic/types';
+import type { PowerLedger, TechniqueEffectSummary } from '@/magic/types';
 
 export interface TechniqueOption {
   id: number;
@@ -368,6 +368,8 @@ export interface SpeakerQueue {
 export interface CastableTechnique {
   id: number;
   name: string;
+  /** Prose description (#2898) — previously absent from this list entirely. */
+  description: string;
   anima_cost: number;
   tier: number;
   intensity: number;
@@ -380,6 +382,8 @@ export interface CastableTechnique {
   reach: string;
   /** Target picker spec — null for SELF-targeting techniques. */
   target_spec: TargetSpec | null;
+  /** The shared effect block (#2898) — cost, reach, targeting, hostility, plain-words summary. */
+  effect_summary: TechniqueEffectSummary;
 }
 
 export interface CastPullRequestBody {

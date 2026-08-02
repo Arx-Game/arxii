@@ -9,6 +9,7 @@ from rest_framework import serializers
 
 from world.combat.cast_seed import encounter_requiring_risk_acknowledgement
 from world.fatigue.constants import EffortLevel
+from world.magic.models.techniques import Technique
 from world.magic.serializers import TechniqueEffectSummarySerializer
 from world.magic.services.hostility import is_technique_hostile
 from world.scenes.action_constants import (
@@ -22,7 +23,6 @@ from world.scenes.action_constants import (
 from world.scenes.action_models import SceneActionRequest, SceneActionTarget
 
 if TYPE_CHECKING:
-    from world.magic.models.techniques import Technique
     from world.scenes.models import Scene
 
 
@@ -186,9 +186,6 @@ def _validate_pull_declaration(attrs: dict, *, hostile_check: bool = False) -> d
     pull = attrs["pull"]
 
     if hostile_check:
-        from world.magic.models import Technique  # noqa: PLC0415
-        from world.magic.services.hostility import is_technique_hostile  # noqa: PLC0415
-
         try:
             technique = Technique.objects.select_related("effect_type").get(
                 pk=attrs["technique_id"]

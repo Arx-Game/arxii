@@ -12,6 +12,7 @@
 import { useMemo, useState } from 'react';
 import { Loader2, Wand2, X } from 'lucide-react';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
+import { TechniqueEffectSummaryDisplay } from '@/magic/components/TechniqueEffectSummary';
 import { useCastableTechniques } from '../actionQueries';
 import { TargetPicker, type TargetCandidate } from './TargetPicker';
 import type { CastableTechnique } from '../actionTypes';
@@ -120,22 +121,28 @@ export function EntranceTechniqueAttachment({
                   key={technique.id}
                   type="button"
                   data-testid={`entrance-technique-option-${technique.id}`}
-                  className="flex w-full items-center gap-2 rounded px-2 py-1.5 text-left text-sm hover:bg-accent hover:text-accent-foreground"
+                  className="flex w-full flex-col gap-0.5 rounded px-2 py-1.5 text-left text-sm hover:bg-accent hover:text-accent-foreground"
                   onClick={() => handlePick(technique)}
                 >
-                  <Wand2 className="h-3.5 w-3.5 shrink-0" />
-                  <span className="flex-1 truncate">{technique.name}</span>
-                  {technique.hostile && (
-                    <span
-                      className="text-xs text-destructive"
-                      title="Hostile — may seed or feed a combat encounter"
-                    >
-                      ⚔
+                  <span className="flex w-full items-center gap-2">
+                    <Wand2 className="h-3.5 w-3.5 shrink-0" />
+                    <span className="flex-1 truncate">{technique.name}</span>
+                    {technique.hostile && (
+                      <span
+                        className="text-xs text-destructive"
+                        title="Hostile — may seed or feed a combat encounter"
+                      >
+                        ⚔
+                      </span>
+                    )}
+                    <span className="text-xs text-muted-foreground">
+                      {technique.anima_cost} anima
                     </span>
-                  )}
-                  <span className="text-xs text-muted-foreground">
-                    {technique.anima_cost} anima
                   </span>
+                  <TechniqueEffectSummaryDisplay
+                    summary={technique.effect_summary}
+                    variant="compact"
+                  />
                 </button>
               ))}
             </div>

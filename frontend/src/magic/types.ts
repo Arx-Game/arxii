@@ -465,3 +465,66 @@ export interface TechniqueDesignRequest {
   }[];
   character_id?: number;
 }
+
+// ---------------------------------------------------------------------------
+// Technique effect summary — the ONE shared shape every technique surface
+// embeds (#2898). Backend: `TechniqueEffectSummarySerializer`
+// (src/world/magic/serializers.py), serializing `Technique.cached_effect_summary`.
+// Declared once here, hand-rolled rather than re-exported per-endpoint from the
+// generated schema, so CG's `CGTechniqueOption`, the in-scene cast list's
+// `CastableTechnique`, the character sheet's `CharacterSheetTechnique`, and this
+// module's own `Technique` all embed the identical shape instead of four
+// independently-drifting copies (the bug #2898 exists to fix).
+// ---------------------------------------------------------------------------
+
+/** One condition a technique applies or strips. */
+export interface TechniqueConditionEffect {
+  name: string;
+  description: string;
+  target_kind: string;
+  minimum_success_level: number;
+  stack_count: number;
+}
+
+/** One damage profile a technique resolves. */
+export interface TechniqueDamageEffect {
+  /** null = untyped damage. */
+  damage_type: string | null;
+  base_damage: number;
+  uses_equipped_weapon: boolean;
+  minimum_success_level: number;
+}
+
+/** One Capability a technique grants. */
+export interface TechniqueCapabilityEffect {
+  name: string;
+  description: string;
+  base_value: number;
+}
+
+/**
+ * What a technique does. `summary` is the plain-words line authored
+ * server-side (identical over telnet) — render it verbatim, never re-derive
+ * or re-word it client-side. `is_underspecified` is true when nothing is
+ * authored yet (86 of 272 techniques, at time of writing) — render a muted
+ * "not yet catalogued" state, never blank space.
+ */
+export interface TechniqueEffectSummary {
+  /** "self" | "ally" | "enemy" */
+  relationship: string;
+  hostile: boolean;
+  /** "self" | "single" | "area" | "filtered_group" */
+  target_type: string;
+  /** "same" | "adjacent" | "any" | "reach_n" */
+  reach: string;
+  reach_hops: number;
+  /** "physical" | "social" | "mental" */
+  arena: string;
+  anima_cost: number;
+  applies: TechniqueConditionEffect[];
+  removes: TechniqueConditionEffect[];
+  damage: TechniqueDamageEffect[];
+  grants: TechniqueCapabilityEffect[];
+  summary: string;
+  is_underspecified: boolean;
+}
