@@ -140,11 +140,6 @@ def _unlock_codex(sheet: CharacterSheet, codex_entry: CodexEntry) -> None:
     if roster_entry is None:
         return
 
-    from world.codex.constants import CodexKnowledgeStatus  # noqa: PLC0415
-    from world.codex.models import CharacterCodexKnowledge  # noqa: PLC0415
+    from world.codex.services import grant_codex_entry  # noqa: PLC0415
 
-    CharacterCodexKnowledge.objects.get_or_create(
-        roster_entry=roster_entry,
-        entry=codex_entry,
-        defaults={"status": CodexKnowledgeStatus.KNOWN},
-    )
+    grant_codex_entry(roster_entry, codex_entry)

@@ -1,7 +1,7 @@
 """Codex service functions.
 
-Link resolution for inline ``[[wikilink]]`` cross-references in codex entry
-content fields.
+Granting entries to characters, and link resolution for inline ``[[wikilink]]``
+cross-references in codex entry content fields.
 """
 
 from __future__ import annotations
@@ -10,15 +10,62 @@ import re
 from typing import TYPE_CHECKING
 
 from world.codex.constants import CodexKnowledgeStatus
-from world.codex.models import CodexEntry
+from world.codex.models import CharacterCodexKnowledge, CodexEntry
 
 if TYPE_CHECKING:
     from world.codex.models import CodexSubject
-    from world.roster.models import RosterEntry
+    from world.roster.models import RosterEntry, RosterTenure
 
 #: Regex matching ``[[Entry Name]]`` wikilink syntax in content fields.
 #: Captures everything between the brackets (excluding closing brackets).
 WIKILINK_RE = re.compile(r"\[\[([^\]]+)\]\]")
+
+
+def grant_codex_entry(
+    roster_entry: RosterEntry,
+    entry: CodexEntry,
+    *,
+    learned_from: RosterTenure | None = None,
+) -> tuple[CharacterCodexKnowledge, bool]:
+    """Grant ``entry`` to ``roster_entry`` as fully KNOWN. Idempotent.
+
+    **Every caller that means "this character now knows this" must come through
+    here rather than creating a ``CharacterCodexKnowledge`` row itself.** The
+    KNOWN transition is not just a column value: it stamps ``learned_at`` and
+    fires the stories reactivity hook so ``CODEX_ENTRY_UNLOCKED`` beats
+    re-evaluate. That hook lives on ``CharacterCodexKnowledge.add_progress``,
+    which #939 chose deliberately — "a separate service wrapper used to carry
+    the hook and every caller bypassed it; reactivity now lives on the only
+    path".
+
+    The bypass came back anyway (#2880), because ``add_progress`` returns early
+    unless the row is UNCOVERED, and seven callers were creating rows with
+    ``status=KNOWN`` directly: all six character-creation grants (beginnings,
+    path, distinction, tradition, species, gift resonance) and the crossing
+    ceremony. Those characters got the column value and neither the timestamp
+    nor the hook. So this wrapper does not set the status itself — it opens the
+    row UNCOVERED and pushes progress past the threshold, which is the same
+    thing clue research already did, and which keeps the transition on the one
+    path that carries the reactivity.
+
+    Returns ``(knowledge, newly_known)``; ``newly_known`` is False when the
+    character already knew the entry, which is what makes repeat calls safe.
+
+    **Not for "the character can now start researching this."** Two callers
+    deliberately create UNCOVERED rows and must keep doing so: the
+    ``GRANT_CODEX`` consequence effect (a scene hands you a lead, not the
+    answer) and ``CodexTeachingOffer.accept`` (the learner has paid AP and now
+    has to make progress).
+    """
+    knowledge, _ = CharacterCodexKnowledge.objects.get_or_create(
+        roster_entry=roster_entry,
+        entry=entry,
+        defaults={
+            "status": CodexKnowledgeStatus.UNCOVERED,
+            "learned_from": learned_from,
+        },
+    )
+    return knowledge, knowledge.add_progress(entry.learn_threshold)
 
 
 def resolve_codex_links(

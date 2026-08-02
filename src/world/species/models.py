@@ -7,6 +7,8 @@ This module contains:
 - Language: Languages available in the game
 """
 
+from typing import TYPE_CHECKING
+
 from django.core.exceptions import ValidationError
 from django.db import models
 from django.utils.functional import cached_property
@@ -14,6 +16,9 @@ from evennia.utils.idmapper.models import SharedMemoryModel
 
 from core.natural_keys import NaturalKeyManager, NaturalKeyMixin
 from world.traits.constants import PrimaryStat
+
+if TYPE_CHECKING:
+    from world.codex.models import CodexEntry
 
 
 class Species(NaturalKeyMixin, SharedMemoryModel):
@@ -103,6 +108,40 @@ class Species(NaturalKeyMixin, SharedMemoryModel):
     def is_subspecies(self) -> bool:
         """Return True if this species has a parent."""
         return self.parent_id is not None
+
+    @property
+    def lineage(self) -> list["Species"]:
+        """This species followed by every ancestor, nearest first.
+
+        The chain is at most two deep in practice (a Khati kind under Khati, an
+        elf line under Elf) and every row is served by the idmapper cache after
+        the first read, so the walk is cheap enough to do inline.
+
+        A ``parent`` cycle would be a data defect rather than a modelled state;
+        the seen-set keeps it from hanging whatever produced it.
+        """
+        chain: list[Species] = []
+        seen: set[int] = set()
+        current: Species | None = self
+        while current is not None and current.pk not in seen:
+            seen.add(current.pk)
+            chain.append(current)
+            current = current.parent
+        return chain
+
+    @property
+    def codex_entries(self) -> list["CodexEntry"]:
+        """Every codex entry a character of this species is owed (#2880).
+
+        The species tier is authored so that the umbrella entry (Khati, Elf,
+        Infernal) carries what the kinds share and each kind entry carries the
+        kind, which only works if a subspecies character receives both. Species
+        with ``codex_entry`` still null — Saurian, pending design — drop out
+        rather than contributing a None.
+        """
+        return [
+            species.codex_entry for species in self.lineage if species.codex_entry_id is not None
+        ]
 
     @cached_property
     def cached_stat_bonuses(self) -> list["SpeciesStatBonus"]:
