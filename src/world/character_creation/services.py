@@ -1440,22 +1440,30 @@ def _finalize_distinction_codex_grants(draft: CharacterDraft, sheet: CharacterSh
 
 
 def _finalize_species_codex(sheet: CharacterSheet) -> None:
-    """Grant the species's codex entry, if any. Idempotent via get_or_create."""
+    """Grant the codex entries owed to the character's species (#2880).
+
+    ``Species.codex_entries`` walks ``Species.parent``, so a Vulpi character
+    receives the Khati umbrella entry alongside the Vulpi one. Reading only the
+    leaf's own entry — which is what this did before — left the three umbrella
+    entries (Khati, Elf, Infernal) reachable by nobody who picked a subspecies.
+    Idempotent via get_or_create.
+    """
     try:
         species = sheet.species
     except AttributeError:
         return
-    if species is None or species.codex_entry_id is None:
+    if species is None:
         return
 
     from world.codex.constants import CodexKnowledgeStatus  # noqa: PLC0415
     from world.codex.models import CharacterCodexKnowledge  # noqa: PLC0415
 
-    CharacterCodexKnowledge.objects.get_or_create(
-        roster_entry=sheet.roster_entry,
-        entry_id=species.codex_entry_id,
-        defaults={"status": CodexKnowledgeStatus.KNOWN},
-    )
+    for entry in species.codex_entries:
+        CharacterCodexKnowledge.objects.get_or_create(
+            roster_entry=sheet.roster_entry,
+            entry_id=entry.pk,
+            defaults={"status": CodexKnowledgeStatus.KNOWN},
+        )
 
 
 def _finalize_resonance_codex(draft: CharacterDraft, sheet: CharacterSheet) -> None:

@@ -50,6 +50,11 @@ from world.codex.constants import CodexKnowledgeStatus
 | `DistinctionCodexGrant` | Codex entries granted by a Distinction | `distinction`, `entry` |
 | `TraditionCodexGrant` | Codex entries granted by a Tradition | `tradition`, `entry` |
 
+Species are the exception: there is no `SpeciesCodexGrant` table. `Species.codex_entry`
+is a plain nullable FK on the species row (one entry per species, not many), and
+`_finalize_species_codex` walks `Species.parent` so a subspecies character receives
+its own entry *and* every ancestor's — see `docs/systems/species.md`.
+
 ---
 
 ## Key Methods
