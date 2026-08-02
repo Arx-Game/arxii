@@ -24,6 +24,7 @@ from typing import TYPE_CHECKING
 from django.utils import timezone
 
 from world.items.crafting.constants import (
+    ACCENT_REFINEMENT_COST_BASE,
     BASE_MAX_ACCENT_LEVEL,
     BASE_MAX_QUALITY_RUNG,
     REFINEMENT_TIME_LIMIT_DAYS,
@@ -110,8 +111,14 @@ def _max_project_cap(
 
 
 def refinement_threshold(item_instance: ItemInstance, goal_rung: int) -> int:
-    """Progress required to wrap: value × rung ÷ 100 (PLACEHOLDER curve)."""
-    return max(1, (item_instance.template.value * goal_rung) // REFINEMENT_VALUE_PER_PROGRESS)
+    """Progress to wrap: value × rung ÷ 100, doubled per existing accent.
+
+    Each accent on the piece doubles the road (#2886, Apostate's ruling): a
+    heavily accented piece is a finished statement — reworking it approaches
+    commissioning anew. PLACEHOLDER curve.
+    """
+    base = max(1, (item_instance.template.value * goal_rung) // REFINEMENT_VALUE_PER_PROGRESS)
+    return base * (ACCENT_REFINEMENT_COST_BASE ** item_instance.accents.count())
 
 
 def start_item_refinement(
@@ -133,6 +140,16 @@ def start_item_refinement(
         not accent_target.is_styleable or not accent_target.is_active
     ):
         raise InvalidAccentTarget
+    if accent_target is not None:
+        from world.items.crafting.models import AccentExclusion  # noqa: PLC0415
+
+        existing = set(
+            ItemAccent.objects.filter(item_instance=item_instance).values_list(
+                "target_id", flat=True
+            )
+        )
+        if AccentExclusion.conflict_exists([*existing, accent_target.pk]) is not None:
+            raise InvalidAccentTarget
     if not _goal_exists(item_instance, accent_target):
         raise RefinementNotPossible
     duplicate = ItemRefinementDetails.objects.filter(

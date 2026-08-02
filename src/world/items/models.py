@@ -30,6 +30,7 @@ from world.items.constants import (
     EquipmentLayer,
     GearArchetype,
     OwnershipEventType,
+    RecycleRequestStatus,
     StyleAudacity,
     WeaponClass,
 )
@@ -1275,6 +1276,55 @@ class OwnershipEvent(SharedMemoryModel):
     def __str__(self) -> str:
         display = self.item_instance.display_name if self.item_instance else "deleted"
         return f"{display}: {self.get_event_type_display()}"
+
+
+class RecycleRequest(SharedMemoryModel):
+    """A GM sign-off request to recycle a story-significant item (#2886).
+
+    Recycling is owner-only and normally immediate; an item with legend
+    attached (linked deeds) is story-protected and needs an APPROVED row
+    here before ``recycle_item`` will destroy it. GM resolution goes through
+    ``resolve_recycle_request`` (admin-surfaced for now; a GM panel later).
+    """
+
+    item_instance = models.ForeignKey(
+        "items.ItemInstance",
+        on_delete=models.CASCADE,
+        related_name="recycle_requests",
+    )
+    requested_by = models.ForeignKey(
+        "character_sheets.CharacterSheet",
+        on_delete=models.CASCADE,
+        related_name="recycle_requests",
+    )
+    status = models.CharField(
+        max_length=20,
+        choices=RecycleRequestStatus.choices,
+        default=RecycleRequestStatus.PENDING,
+    )
+    resolved_by = models.ForeignKey(
+        "gm.GMProfile",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="resolved_recycle_requests",
+        help_text="The GM who signed off (or denied). Null while pending.",
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+    resolved_at = models.DateTimeField(null=True, blank=True)
+
+    class Meta:
+        ordering = ["-created_at"]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["item_instance", "requested_by"],
+                condition=models.Q(status="pending"),
+                name="items_recyclerequest_one_pending_per_requester",
+            )
+        ]
+
+    def __str__(self) -> str:
+        return f"Recycle {self.item_instance} ({self.status})"
 
 
 class ItemAttachment(SharedMemoryModel):

@@ -444,8 +444,15 @@ def _resolve_crafter_sheet(
     return CharacterSheet.objects.get(character=crafter_character)
 
 
-def _validate_accent_targets(accent_targets: list | None) -> list:
-    """Reject non-styleable, inactive, or duplicate Accent axes (#2878)."""
+def _validate_accent_targets(
+    accent_targets: list | None, item_instance: ItemInstance | None = None
+) -> list:
+    """Reject non-styleable, inactive, duplicate, or mutually-excluded axes.
+
+    Exclusion pairs (#2886, e.g. Dramatic ⊥ Unassuming) are checked across the
+    request AND the item's existing accents when a host item is given.
+    """
+    from world.items.crafting.models import AccentExclusion, ItemAccent  # noqa: PLC0415
     from world.items.exceptions import InvalidAccentTarget  # noqa: PLC0415
 
     targets = list(accent_targets or [])
@@ -454,6 +461,16 @@ def _validate_accent_targets(accent_targets: list | None) -> list:
         if not target.is_styleable or not target.is_active or target.pk in seen_pks:
             raise InvalidAccentTarget
         seen_pks.add(target.pk)
+    if seen_pks:
+        combined = set(seen_pks)
+        if item_instance is not None:
+            combined |= set(
+                ItemAccent.objects.filter(item_instance=item_instance).values_list(
+                    "target_id", flat=True
+                )
+            )
+        if AccentExclusion.conflict_exists(list(combined)) is not None:
+            raise InvalidAccentTarget
     return targets
 
 
@@ -640,7 +657,7 @@ def run_crafting_recipe(  # noqa: PLR0913
     _check_recipe_knowledge(recipe, crafter_character)
 
     # Accent validation (#2878) — before any staging or rolling.
-    accents_requested = _validate_accent_targets(accent_targets)
+    accents_requested = _validate_accent_targets(accent_targets, item_instance)
     from world.items.crafting.constants import ACCENT_DIFFICULTY_STEP  # noqa: PLC0415
 
     difficulty = recipe.base_difficulty + ACCENT_DIFFICULTY_STEP * len(accents_requested)

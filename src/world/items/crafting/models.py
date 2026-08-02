@@ -439,6 +439,48 @@ class ItemAccent(SharedMemoryModel):
         return f"{self.item_instance}: {self.level.name} {self.target.name}"
 
 
+class AccentExclusion(SharedMemoryModel):
+    """A symmetric pair of accent axes that cannot coexist on one item (#2886).
+
+    Data rows, never an enum: "Dramatic and Unassuming are opposites" is a
+    content ruling, and future oppositions are row inserts. Store each pair
+    once; ``conflict_exists`` checks both orientations.
+    """
+
+    target_a = models.ForeignKey(
+        "mechanics.ModifierTarget",
+        on_delete=models.CASCADE,
+        related_name="accent_exclusions_a",
+    )
+    target_b = models.ForeignKey(
+        "mechanics.ModifierTarget",
+        on_delete=models.CASCADE,
+        related_name="accent_exclusions_b",
+    )
+
+    class Meta:
+        app_label = "items"
+        ordering = ["pk"]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["target_a", "target_b"],
+                name="items_accentexclusion_unique_pair",
+            )
+        ]
+
+    def __str__(self) -> str:
+        return f"{self.target_a.name} ⊥ {self.target_b.name}"
+
+    @classmethod
+    def conflict_exists(cls, target_pks: list[int]) -> tuple[int, int] | None:
+        """The first excluded (a, b) pk pair present in ``target_pks``, or None."""
+        pks = set(target_pks)
+        for row in cls.objects.all():
+            if row.target_a_id in pks and row.target_b_id in pks:
+                return (row.target_a_id, row.target_b_id)
+        return None
+
+
 class ItemRefinementDetails(SharedMemoryModel):
     """Per-kind details for an ITEM_REFINEMENT project (#2878).
 

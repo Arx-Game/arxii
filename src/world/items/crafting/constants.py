@@ -65,6 +65,10 @@ ACCENT_SCORE_PER_LEVEL: int = 15
 #: the accumulator is deterministic (Apostate's ruling). PLACEHOLDER curve.
 REFINEMENT_VALUE_PER_PROGRESS: int = 100
 
+#: Each accent on a piece multiplies its refinement threshold by this
+#: (#2886): 2 accents = 4× the road. PLACEHOLDER tuning.
+ACCENT_REFINEMENT_COST_BASE: int = 2
+
 #: Refinement time horizon: instant-completion means the deadline only prunes
 #: abandoned projects on the cron sweep. PLACEHOLDER.
 REFINEMENT_TIME_LIMIT_DAYS: int = 365

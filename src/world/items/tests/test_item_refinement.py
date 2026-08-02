@@ -158,8 +158,10 @@ class MasterGateTests(TestCase):
             item_instance=self.item, initiator_persona=self.persona, accent_target=self.menace
         )
         # Goal rung 5 > mundane cap 4 and no threads anywhere on the project.
+        # (Threshold is 1000×5÷100 = 50, doubled to 100 by the existing accent
+        # — #2886 — so 10000 coppers is the crossing contribution.)
         with self.assertRaises(RefinementAwaitsMaster):
-            self._fund(project, 5000)
+            self._fund(project, 10000)
         project.refresh_from_db()
         self.assertEqual(project.status, ProjectStatus.ACTIVE)
         self.assertEqual(project.current_progress, 0)
@@ -169,7 +171,7 @@ class MasterGateTests(TestCase):
         project = start_item_refinement(
             item_instance=self.item, initiator_persona=self.persona, accent_target=self.menace
         )
-        self._fund(project, 5000)
+        self._fund(project, 10000)  # 50-progress threshold doubled by the accent (#2886)
         project.refresh_from_db()
         self.assertEqual(project.status, ProjectStatus.COMPLETED)
         accent = ItemAccent.objects.get(item_instance=self.item, target=self.menace)
