@@ -23,7 +23,7 @@ import type {
   CharacterSheetDistinction,
 } from '@/character_sheets/api';
 import type { GlimpseTagOption } from './glimpse/glimpseTypes';
-import type { TechniqueEffectSummary } from '../types';
+import type { TechniqueEffectSummary, TechniqueForm, TechniqueSignature } from '../types';
 
 /** Minimal mock effect_summary (#2898). */
 const mockEffectSummary: TechniqueEffectSummary = {
@@ -40,6 +40,21 @@ const mockEffectSummary: TechniqueEffectSummary = {
   grants: [],
   summary: 'Cast on an enemy, in melee range, in the physical arena. Costs 5 anima.',
   is_underspecified: false,
+};
+
+/** The base form every caster always has (#2901). */
+const mockBaseForm: TechniqueForm = {
+  variant_id: null,
+  name: 'Flare',
+  resonance_id: null,
+  resonance_name: '',
+  intensity: 6,
+  control: 4,
+  is_default: true,
+  is_locked: false,
+  unlock_thread_level: 0,
+  thread_level: 0,
+  effect_summary: mockEffectSummary,
 };
 
 vi.mock('@/character_sheets/queries', () => ({
@@ -191,6 +206,8 @@ function makeMagic(overrides: Partial<CharacterSheetMagic> = {}): CharacterSheet
             style: 'Manifestation',
             description: 'A burst of fire.',
             effect_summary: mockEffectSummary,
+            forms: [mockBaseForm],
+            signature: null,
           },
         ],
       },
@@ -421,5 +438,78 @@ describe('SpellbookTab', () => {
       // it calls the link (not unlink) side.
       expect(toggleDistinction).toHaveBeenCalledWith(7, false);
     });
+  });
+});
+
+describe('SpellbookTab technique forms (#2901)', () => {
+  const variantForm: TechniqueForm = {
+    variant_id: 7,
+    name: 'Ashfall Flare',
+    resonance_id: 2,
+    resonance_name: 'Cinder',
+    intensity: 8,
+    control: 3,
+    is_default: true,
+    is_locked: false,
+    unlock_thread_level: 3,
+    thread_level: 3,
+    effect_summary: mockEffectSummary,
+  };
+
+  const lockedForm: TechniqueForm = {
+    ...variantForm,
+    variant_id: 9,
+    name: 'Cinderfall Rite',
+    is_default: false,
+    is_locked: true,
+    unlock_thread_level: 6,
+  };
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mockMotifStyleQueries();
+    mockGlimpseQueries();
+  });
+
+  function renderWithForms(forms: TechniqueForm[], signature: TechniqueSignature | null = null) {
+    const magic = makeMagic();
+    magic.gifts[0].techniques[0].forms = forms;
+    magic.gifts[0].techniques[0].signature = signature;
+    mockPayload(magic);
+    renderWithProviders(<SpellbookTab characterId={1} isMyCharacter={false} />);
+  }
+
+  it('says nothing when the base form is all there is', () => {
+    renderWithForms([{ ...mockBaseForm, is_default: true }]);
+    expect(screen.queryByTestId('technique-forms')).not.toBeInTheDocument();
+  });
+
+  it('lists the base form alongside an unlocked variant, marking the default', () => {
+    renderWithForms([{ ...mockBaseForm, is_default: false }, variantForm]);
+
+    expect(screen.getByTestId('technique-forms')).toBeInTheDocument();
+    expect(screen.getByText('base form')).toBeInTheDocument();
+    expect(screen.getByText('Ashfall Flare (Cinder)')).toBeInTheDocument();
+    expect(screen.getByText('default')).toBeInTheDocument();
+    expect(screen.getByText(/intensity 8, control 3/)).toBeInTheDocument();
+  });
+
+  it('shows the next form as a goal rather than hiding it', () => {
+    renderWithForms([mockBaseForm, lockedForm]);
+
+    expect(screen.getByText('Not yet yours')).toBeInTheDocument();
+    expect(screen.getByText('Cinderfall Rite (Cinder), at thread level 6')).toBeInTheDocument();
+  });
+
+  it('renders the signature as a delta, not another form row', () => {
+    renderWithForms([mockBaseForm], {
+      name: 'Sparks Answer Her Name',
+      narrative_snippet: 'the sparks answer her name',
+      intensity_delta: 1,
+    });
+
+    expect(screen.getByTestId('technique-signature')).toBeInTheDocument();
+    expect(screen.getByText(/\+1 intensity/)).toBeInTheDocument();
+    expect(screen.queryAllByTestId('technique-form')).toHaveLength(0);
   });
 });

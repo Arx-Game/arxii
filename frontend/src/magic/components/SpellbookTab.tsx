@@ -23,7 +23,8 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { useCharacterSheetQuery } from '@/character_sheets/queries';
-import type { CharacterSheetAura } from '@/character_sheets/api';
+import type { CharacterSheetAura, CharacterSheetTechnique } from '@/character_sheets/api';
+import type { TechniqueForm } from '@/magic/types';
 import { MotifStylePanel } from './MotifStylePanel';
 import { TechniqueEffectSummaryDisplay } from './TechniqueEffectSummary';
 import { GlimpseEditorDialog } from './glimpse/GlimpseEditorDialog';
@@ -33,6 +34,92 @@ interface Props {
   characterId: number;
   /** True when the viewer owns this character — gates the workbench link-outs. */
   isMyCharacter: boolean;
+}
+
+/**
+ * Which forms of one technique this caster can work (#2901).
+ *
+ * A variant does not replace the technique, so this is a list: the base form,
+ * each unlocked resonance-specialized form, and one step ahead as a goal. The
+ * sheet describes, so it carries the whole catalogue; the in-scene cast list
+ * carries only a compact affordance.
+ *
+ * Silent when the caster has only the base form and nothing ahead of them —
+ * a one-item list would say nothing the technique's own name did not.
+ */
+function TechniqueForms({ technique }: { technique: CharacterSheetTechnique }) {
+  const unlocked = technique.forms.filter((form) => !form.is_locked);
+  const locked = technique.forms.filter((form) => form.is_locked);
+  const { signature } = technique;
+
+  if (unlocked.length <= 1 && locked.length === 0 && !signature) return null;
+
+  const label = (form: TechniqueForm) =>
+    form.variant_id === null ? 'base form' : `${form.name} (${form.resonance_name})`;
+
+  return (
+    <div className="mt-2 space-y-2 border-t pt-2" data-testid="technique-forms">
+      {(unlocked.length > 1 || locked.length > 0) && (
+        <div className="space-y-1">
+          <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
+            Forms you can work
+          </p>
+          {unlocked.map((form) => (
+            <div key={form.variant_id ?? 'base'} data-testid="technique-form">
+              <div className="flex flex-wrap items-center gap-2">
+                <span className="text-sm">{label(form)}</span>
+                {form.is_default && (
+                  <Badge variant="secondary" className="text-xs">
+                    default
+                  </Badge>
+                )}
+                <span className="text-xs text-muted-foreground">
+                  intensity {form.intensity}, control {form.control}
+                </span>
+              </div>
+              {form.variant_id !== null && (
+                <TechniqueEffectSummaryDisplay
+                  summary={form.effect_summary}
+                  variant="compact"
+                  className="mt-0.5"
+                />
+              )}
+            </div>
+          ))}
+        </div>
+      )}
+
+      {locked.length > 0 && (
+        <div className="space-y-1">
+          <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
+            Not yet yours
+          </p>
+          {locked.map((form) => (
+            <p
+              key={form.variant_id ?? 'base'}
+              className="text-sm text-muted-foreground"
+              data-testid="technique-form-locked"
+            >
+              {label(form)}, at thread level {form.unlock_thread_level}
+            </p>
+          ))}
+        </div>
+      )}
+
+      {signature && (
+        <p className="text-sm" data-testid="technique-signature">
+          <span className="font-medium">Signature:</span> {signature.name} (
+          {signature.intensity_delta >= 0 ? '+' : ''}
+          {signature.intensity_delta} intensity)
+          {signature.narrative_snippet && (
+            <span className="block text-xs italic text-muted-foreground">
+              {signature.narrative_snippet}
+            </span>
+          )}
+        </p>
+      )}
+    </div>
+  );
 }
 
 /** The affinity with the highest share, as a qualitative label — never the raw percentage. */
@@ -112,6 +199,7 @@ export function SpellbookTab({ characterId, isMyCharacter }: Props) {
                       variant="full"
                       className="mt-1"
                     />
+                    <TechniqueForms technique={technique} />
                   </div>
                 ))}
               </CardContent>

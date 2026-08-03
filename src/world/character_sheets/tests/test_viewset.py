@@ -2125,9 +2125,18 @@ class TestCharacterSheetQueryCount(TestCase):
                 for the whole spellbook, not four per technique: the alternative
                 was showing the player a technique list that says nothing about
                 what any of the techniques do.
+        38.    technique variants prefetch (#2901 — the resonance-specialized forms
+                each known technique offers, select_related onto the resonance that
+                labels them). One fixed query, and it carries no payload prefetch of
+                its own: each form's effect summary is cached on its TechniqueVariant
+                row, so it is built once per variant for the process rather than once
+                per sheet read.
+        39.    character.threads (CharacterThreadHandler._all, #2901) — which of
+                those variants this caster has actually unlocked. A per-Character
+                cached handler, so one query however many techniques are known.
         """
         url = f"/api/character-sheets/{self.character.pk}/"
-        with self.assertNumQueries(37):
+        with self.assertNumQueries(39):
             response = self.client.get(url)
         assert response.status_code == 200
         # Verify all sections are populated
@@ -2346,7 +2355,15 @@ class TestPrefetchCompleteness(TestCase):
         #      rows via the handler; not part of _MAGIC_PREFETCH_RELATED (a per-Character
         #      handler, not a CharacterSheet-rooted prefetch), so it costs its one cached
         #      query here — not an N+1, since the handler is called once.
-        with self.assertNumQueries(2):
+        #   3. character.threads (CharacterThreadHandler._all, #2901) —
+        #      available_technique_forms reads the caster's threads to decide which
+        #      forms of each known technique are reachable. Same shape as (2): a
+        #      per-Character cached handler rather than a CharacterSheet-rooted
+        #      prefetch, so it costs exactly one query however many techniques the
+        #      spellbook holds. The per-form effect summaries are cached on their
+        #      own TechniqueVariant rows and the variants themselves are prefetched,
+        #      so nothing else here scales with technique or variant count.
+        with self.assertNumQueries(3):
             _build_magic(sheet)
 
     def test_story_zero_queries(self) -> None:

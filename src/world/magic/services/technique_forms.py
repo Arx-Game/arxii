@@ -39,6 +39,7 @@ from world.magic.types.technique_effects import (
 )
 
 if TYPE_CHECKING:
+    from world.character_sheets.models import CharacterSheet
     from world.magic.models.techniques import CharacterTechnique, Technique
     from world.magic.models.threads import Thread
 
@@ -144,6 +145,7 @@ def available_technique_forms(
     technique: Technique,
     *,
     character_technique: CharacterTechnique | None = None,
+    sheet: CharacterSheet | None = None,
 ) -> list[TechniqueFormPayload]:
     """Every form of ``technique`` that ``character`` can work, plus the next locked one.
 
@@ -155,6 +157,10 @@ def available_technique_forms(
     A caster with no thread on the technique's gift gets the base form alone,
     marked default. So does a sheetless character (an NPC), which has no threads
     at all.
+
+    ``sheet`` lets a caller that already holds the ``CharacterSheet`` — the two
+    display surfaces both do, and both call this once per known technique — hand
+    it in rather than have every call re-``SELECT`` the row it is standing on.
     """
     from world.magic.services.techniques import _get_character_sheet  # noqa: PLC0415
     from world.magic.specialization.services import (  # noqa: PLC0415
@@ -162,7 +168,8 @@ def available_technique_forms(
         resolve_specialized_variant,
     )
 
-    sheet = _get_character_sheet(character)
+    if sheet is None:
+        sheet = _get_character_sheet(character)
     if sheet is None:
         return [_base_form(technique, is_default=True)]
 

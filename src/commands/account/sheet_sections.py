@@ -21,6 +21,8 @@ if TYPE_CHECKING:
     from evennia import Command
 
     from world.character_sheets.models import CharacterSheet
+    from world.character_sheets.types import TechniqueEntry
+    from world.magic.types.technique_effects import TechniqueFormPayload
     from world.roster.models import ParentageEdge as ParentageEdgeType
     from world.secrets.models import Secret, SecretKnowledge
 
@@ -360,6 +362,54 @@ def _render_distinction_section(command: Command) -> list[str]:
     return lines
 
 
+def _form_label(form: TechniqueFormPayload) -> str:
+    """One form's headline: what it is called and how to reach it.
+
+    The base form is always castable as ``cast <tech> base``; a specialized form
+    is reached with ``cast <tech> variant=<resonance>``, so the resonance name
+    doubles as the token a player types.
+    """
+    if form["variant_id"] is None:
+        return "base form"
+    return f"{form['name']} ({form['resonance_name']})"
+
+
+def _render_technique_forms(technique: TechniqueEntry) -> list[str]:
+    """The caster's forms of one technique, plus any signature flourish (#2901).
+
+    Silent when the caster has only the base form and nothing ahead of them:
+    a character with no thread on the gift would otherwise read a one-item
+    "forms" list saying nothing the technique's own name did not already say.
+    """
+    forms = technique["forms"]
+    unlocked = [f for f in forms if not f["is_locked"]]
+    locked = [f for f in forms if f["is_locked"]]
+    signature = technique["signature"]
+
+    lines: list[str] = []
+    if len(unlocked) > 1 or locked:
+        lines.append("      Forms you can work:")
+        for form in unlocked:
+            marker = " |w(default)|n" if form["is_default"] else ""
+            lines.append(f"        {_form_label(form)}{marker}")
+            lines.append(f"          intensity {form['intensity']}, control {form['control']}")
+            if form["variant_id"] is not None:
+                lines.append(f"          {form['effect_summary']['summary']}")
+    if locked:
+        lines.append("      Not yet yours:")
+        lines.extend(
+            f"        {_form_label(form)}, at thread level {form['unlock_thread_level']}"
+            for form in locked
+        )
+    if signature:
+        delta = signature["intensity_delta"]
+        sign = "+" if delta >= 0 else ""
+        lines.append(f"      Signature: {signature['name']} ({sign}{delta} intensity)")
+        if signature["narrative_snippet"]:
+            lines.append(f"        {signature['narrative_snippet']}")
+    return lines
+
+
 def _render_magic_section(command: Command) -> list[str]:
     """The magic section (#1446): the active character's spellbook/status view.
 
@@ -385,6 +435,7 @@ def _render_magic_section(command: Command) -> list[str]:
             # their own spellbook without learning what a single technique did.
             lines.append(f"    {technique['name']} (level {technique['level']})")
             lines.append(f"      {technique['effect_summary']['summary']}")
+            lines.extend(_render_technique_forms(technique))
         if gift["resonances"]:
             lines.append(f"    resonances: {', '.join(gift['resonances'])}")
     motif = magic["motif"]
