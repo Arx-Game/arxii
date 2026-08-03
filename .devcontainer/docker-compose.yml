@@ -90,7 +90,13 @@ services:
       # libedit, so the same panes have no history and up-arrow just emits ^[[A.
       # Setting SHELL here fixes both at once (zellij reads $SHELL for pane
       # shells). Same rationale as TERM above: container-wide, survives rebuilds.
-      SHELL: /bin/bash
+      #
+      # The value is zsh rather than bash because zsh + oh-my-zsh is the default
+      # interactive shell (see .devcontainer/zshrc). This is not a revert of the
+      # fix above — the bug was the *absence* of SHELL, not its value, and bash
+      # keeps its own equivalent setup (shell-extras.sh) for `devcontainer exec`,
+      # `bash -lc` and agent tooling.
+      SHELL: /bin/zsh
     # Forward the brainstorm-server port so http://localhost:49200/ in the
     # Windows browser reaches the in-container server. The skill's
     # start-server.sh defaults to binding 127.0.0.1; pass --host 0.0.0.0

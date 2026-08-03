@@ -422,9 +422,11 @@ dc-build:
     bash .devcontainer/sync-env.sh
     devcontainer up --workspace-folder . --build-no-cache --remove-existing-container
 
-# Open a shell INSIDE the app container (this is where you run `claude`)
+# Open a shell INSIDE the app container (this is where you run `claude`).
+# zsh explicitly: `devcontainer exec` ignores $SHELL, so without naming it here
+# dc-shell would drop you in bash while dc-attach panes get zsh.
 dc-shell:
-    devcontainer exec --workspace-folder . bash
+    devcontainer exec --workspace-folder . zsh
 
 # Reattaches to <name> if it exists, creates it otherwise. Detach on purpose
 # with Ctrl-o d; agents inside keep running. See docs/devcontainer-setup.md

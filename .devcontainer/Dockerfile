@@ -166,3 +166,47 @@ RUN gh completion -s bash > /usr/local/share/arxii/completions/gh.bash \
 # atuin must bind Ctrl-R after fzf, and both append to PROMPT_COMMAND.
 COPY --chown=vscode:vscode .devcontainer/shell-extras.sh /usr/local/share/arxii/shell-extras.sh
 RUN echo 'source /usr/local/share/arxii/shell-extras.sh' >> ~/.bashrc
+
+# zsh + oh-my-zsh is the DEFAULT interactive shell (SHELL=/bin/zsh in
+# docker-compose.yml; zellij takes its pane shell from $SHELL). bash keeps its
+# own setup above -- `devcontainer exec`, `bash -lc` and agent tooling still land
+# there, and it should not be a downgrade. zsh itself is already in the base
+# image; only the framework and plugins are added here.
+#
+# zsh and oh-my-zsh itself come from the base devcontainer image, which already
+# installs both (~/.oh-my-zsh plus a stock ~/.zshrc that the COPY below
+# replaces). Its version therefore moves with the base image tag, like gh and
+# zsh do -- do not re-clone it here. Only the three custom plugins are added,
+# pinned to tags/commits and cloned shallow.
+#
+# oh-my-zsh's own updater is disabled in zshrc for the same reason atuin's is:
+# it would reach github.com on a schedule and hang against the egress firewall.
+ARG ZSH_AUTOSUGGESTIONS_VERSION=v0.7.1
+ARG ZSH_SYNTAX_HIGHLIGHTING_VERSION=0.8.0
+ARG FZF_TAB_COMMIT=24105b15714bfec37989ed5c5b6e60f572253019
+RUN git clone -q --depth 1 --branch "${ZSH_AUTOSUGGESTIONS_VERSION}" \
+      https://github.com/zsh-users/zsh-autosuggestions.git \
+      /home/vscode/.oh-my-zsh/custom/plugins/zsh-autosuggestions \
+ && git clone -q --depth 1 --branch "${ZSH_SYNTAX_HIGHLIGHTING_VERSION}" \
+      https://github.com/zsh-users/zsh-syntax-highlighting.git \
+      /home/vscode/.oh-my-zsh/custom/plugins/zsh-syntax-highlighting \
+ && git init -q /home/vscode/.oh-my-zsh/custom/plugins/fzf-tab \
+ && git -C /home/vscode/.oh-my-zsh/custom/plugins/fzf-tab remote add origin \
+      https://github.com/Aloxaf/fzf-tab.git \
+ && git -C /home/vscode/.oh-my-zsh/custom/plugins/fzf-tab fetch -q --depth 1 origin "${FZF_TAB_COMMIT}" \
+ && git -C /home/vscode/.oh-my-zsh/custom/plugins/fzf-tab checkout -q FETCH_HEAD
+
+# zsh completions are autoloaded by compinit from fpath, so unlike the bash side
+# these are plain `_<cmd>` files and cost nothing until first use.
+USER root
+RUN mkdir -p /usr/local/share/arxii/zsh-completions \
+ && chown -R vscode:vscode /usr/local/share/arxii
+USER vscode
+RUN gh completion -s zsh > /usr/local/share/arxii/zsh-completions/_gh \
+ && ~/.local/bin/mise completion zsh > /usr/local/share/arxii/zsh-completions/_mise \
+ && ~/.local/bin/mise exec -C /tmp/mise -- just --completions zsh \
+      > /usr/local/share/arxii/zsh-completions/_just \
+ && ~/.local/bin/mise exec -C /tmp/mise -- uv generate-shell-completion zsh \
+      > /usr/local/share/arxii/zsh-completions/_uv
+
+COPY --chown=vscode:vscode .devcontainer/zshrc /home/vscode/.zshrc
