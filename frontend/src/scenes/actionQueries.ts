@@ -358,6 +358,9 @@ export async function castTechnique(
     target_persona_ids?: number[];
     strain_commitment?: number;
     pull?: CastPullRequestBody;
+    /** #2901: which form to work — omit for the default. */
+    use_base_form?: boolean;
+    preferred_resonance_id?: number | null;
   }
 ): Promise<CastResponse> {
   const body: CastRequestBody = {
@@ -376,6 +379,12 @@ export async function castTechnique(
   }
   if (params.pull !== undefined) {
     body.pull = params.pull;
+  }
+  if (params.use_base_form) {
+    body.use_base_form = true;
+  }
+  if (params.preferred_resonance_id != null) {
+    body.preferred_resonance_id = params.preferred_resonance_id;
   }
   const res = await apiFetch('/api/action-requests/cast/', {
     method: 'POST',

@@ -4,7 +4,7 @@ import { vi } from 'vitest';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import type { ReactNode } from 'react';
 import type { PlayerActionsResponse } from '../actionTypes';
-import type { TechniqueEffectSummary } from '@/magic/types';
+import type { TechniqueEffectSummary, TechniqueForm } from '@/magic/types';
 
 vi.mock('../actionQueries', async (importOriginal) => {
   // Keep the real toastDispositionMessage (it only depends on 'sonner', mocked
@@ -186,6 +186,21 @@ const CASTABLE_EFFECT_SUMMARY: TechniqueEffectSummary = {
   is_underspecified: false,
 };
 
+/** The base form every caster always has (#2901). */
+const CASTABLE_BASE_FORM: TechniqueForm = {
+  variant_id: null,
+  name: 'Ember Touch',
+  resonance_id: null,
+  resonance_name: '',
+  intensity: 2,
+  control: 1,
+  is_default: true,
+  is_locked: false,
+  unlock_thread_level: 0,
+  thread_level: 0,
+  effect_summary: CASTABLE_EFFECT_SUMMARY,
+};
+
 const MOCK_ACTIONS: PlayerActionsResponse = {
   count: 3,
   next: null,
@@ -253,6 +268,7 @@ describe('ActionPanel', () => {
           hostile: false,
           description: 'A test technique.',
           effect_summary: CASTABLE_EFFECT_SUMMARY,
+          forms: [CASTABLE_BASE_FORM],
         },
       ],
       isLoading: false,
@@ -299,6 +315,105 @@ describe('ActionPanel', () => {
     // Select the technique
     await user.click(screen.getByText('Ember Touch'));
   }
+
+  /** Ember Touch with a second, unlocked form (#2901). */
+  function mockEmberTouchWithVariant() {
+    vi.mocked(useCastableTechniques).mockReturnValue({
+      data: [
+        {
+          id: 10,
+          name: 'Ember Touch',
+          anima_cost: 3,
+          tier: 1,
+          intensity: 2,
+          control: 1,
+          hostile: false,
+          description: 'A test technique.',
+          effect_summary: CASTABLE_EFFECT_SUMMARY,
+          forms: [
+            { ...CASTABLE_BASE_FORM, is_default: false },
+            {
+              ...CASTABLE_BASE_FORM,
+              variant_id: 55,
+              name: 'Ashfall Touch',
+              resonance_id: 4,
+              resonance_name: 'Cinder',
+              is_default: true,
+              unlock_thread_level: 3,
+              thread_level: 3,
+            },
+          ],
+        },
+      ],
+      isLoading: false,
+    } as unknown as ReturnType<typeof useCastableTechniques>);
+  }
+
+  async function openCastDialogWithVariant(user: ReturnType<typeof userEvent.setup>) {
+    vi.mocked(fetchAvailableActions).mockResolvedValue(MOCK_ACTIONS);
+    mockEmberTouchWithVariant();
+    await mockRosterWithPersona();
+
+    render(<ActionPanel sceneId="42" />, { wrapper: createWrapper() });
+    await user.click(screen.getByRole('button'));
+    await waitFor(() => {
+      expect(screen.getByText('Cast')).toBeInTheDocument();
+    });
+    await user.click(screen.getByText('Cast'));
+    await waitFor(() => {
+      expect(screen.getAllByText('Ember Touch').length).toBeGreaterThan(0);
+    });
+    await user.click(screen.getAllByText('Ember Touch')[0]);
+  }
+
+  it('shows no form picker when only the base form is reachable (#2901)', async () => {
+    const user = userEvent.setup();
+    await openCastDialogWithEmberTouch(user);
+
+    await waitFor(() => {
+      expect(screen.getByRole('button', { name: /cast ember touch/i })).toBeInTheDocument();
+    });
+    expect(screen.queryByTestId('technique-form-picker')).not.toBeInTheDocument();
+  });
+
+  it('offers the caster their alternate forms and sends the pick (#2901)', async () => {
+    vi.mocked(castTechnique).mockResolvedValue({ id: 99, status: 'pending' });
+    const user = userEvent.setup();
+    await openCastDialogWithVariant(user);
+
+    await waitFor(() => {
+      expect(screen.getByTestId('technique-form-picker')).toBeInTheDocument();
+    });
+    // Opting back to the base form is the whole point of `use_base_form`.
+    await user.click(screen.getByRole('button', { name: /base form/i }));
+    await user.click(screen.getByRole('button', { name: /^cast ember touch$/i }));
+
+    await waitFor(() => {
+      expect(castTechnique).toHaveBeenCalledWith(
+        '42',
+        expect.objectContaining({ technique_id: 10, use_base_form: true })
+      );
+    });
+  });
+
+  it('sends the resonance when a specialized form is picked (#2901)', async () => {
+    vi.mocked(castTechnique).mockResolvedValue({ id: 99, status: 'pending' });
+    const user = userEvent.setup();
+    await openCastDialogWithVariant(user);
+
+    await waitFor(() => {
+      expect(screen.getByTestId('technique-form-picker')).toBeInTheDocument();
+    });
+    await user.click(screen.getByRole('button', { name: /ashfall touch/i }));
+    await user.click(screen.getByRole('button', { name: /^cast ember touch$/i }));
+
+    await waitFor(() => {
+      expect(castTechnique).toHaveBeenCalledWith(
+        '42',
+        expect.objectContaining({ technique_id: 10, preferred_resonance_id: 4 })
+      );
+    });
+  });
 
   it('renders actions after opening the panel', async () => {
     vi.mocked(fetchAvailableActions).mockResolvedValue(MOCK_ACTIONS);
@@ -622,6 +737,7 @@ describe('ActionPanel', () => {
           hostile: false,
           description: 'A test technique.',
           effect_summary: CASTABLE_EFFECT_SUMMARY,
+          forms: [CASTABLE_BASE_FORM],
         },
         {
           id: 11,
@@ -633,6 +749,7 @@ describe('ActionPanel', () => {
           hostile: true,
           description: 'A test technique.',
           effect_summary: CASTABLE_EFFECT_SUMMARY,
+          forms: [CASTABLE_BASE_FORM],
         },
       ],
       isLoading: false,
@@ -1145,6 +1262,7 @@ describe('ActionPanel', () => {
           hostile: false,
           description: 'A test technique.',
           effect_summary: CASTABLE_EFFECT_SUMMARY,
+          forms: [CASTABLE_BASE_FORM],
           target_type: 'area',
           reach: 'any',
           target_spec: {
@@ -1212,6 +1330,7 @@ describe('ActionPanel', () => {
           hostile: false,
           description: 'A test technique.',
           effect_summary: CASTABLE_EFFECT_SUMMARY,
+          forms: [CASTABLE_BASE_FORM],
           target_type: 'filtered_group',
           reach: 'any',
           target_spec: {
@@ -1280,6 +1399,7 @@ describe('ActionPanel', () => {
           hostile: false,
           description: 'A test technique.',
           effect_summary: CASTABLE_EFFECT_SUMMARY,
+          forms: [CASTABLE_BASE_FORM],
           target_type: 'filtered_group',
           reach: 'any',
           target_spec: {
@@ -1361,6 +1481,7 @@ describe('ActionPanel', () => {
           hostile: false,
           description: 'A test technique.',
           effect_summary: CASTABLE_EFFECT_SUMMARY,
+          forms: [CASTABLE_BASE_FORM],
           target_type: 'single',
           reach: 'any',
           target_spec: {
@@ -1420,6 +1541,7 @@ describe('ActionPanel', () => {
           hostile: false,
           description: 'A test technique.',
           effect_summary: CASTABLE_EFFECT_SUMMARY,
+          forms: [CASTABLE_BASE_FORM],
           target_type: 'self',
           reach: 'any',
           target_spec: {
