@@ -120,7 +120,7 @@ class CharacterSkillValueModelTests(TestCase):
         assert csv.rust_points == 0
 
     def test_character_skill_display_value(self):
-        """Display value should be value / 10."""
+        """Skills display their true stored value (ADR-0193)."""
         from world.skills.models import CharacterSkillValue
 
         csv = CharacterSkillValue.objects.create(
@@ -128,7 +128,7 @@ class CharacterSkillValueModelTests(TestCase):
             skill=self.skill,
             value=25,
         )
-        assert csv.display_value == 2.5
+        assert csv.display_value == 25
 
     def test_character_skill_unique_constraint(self):
         """Character can only have one value per skill."""
@@ -192,7 +192,7 @@ class CharacterSpecializationValueModelTests(TestCase):
         # No rust_points - specializations are immune
 
     def test_character_specialization_display_value(self):
-        """Display value should be value / 10."""
+        """Specializations display their true stored value, like skills (ADR-0193)."""
         from world.skills.models import CharacterSpecializationValue
 
         csw = CharacterSpecializationValue.objects.create(
@@ -200,7 +200,7 @@ class CharacterSpecializationValueModelTests(TestCase):
             specialization=self.spec,
             value=15,
         )
-        assert csw.display_value == 1.5
+        assert csw.display_value == 15
 
 
 class SkillPointBudgetModelTests(TestCase):

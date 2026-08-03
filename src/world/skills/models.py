@@ -171,9 +171,10 @@ class CharacterSkillValue(SharedMemoryModel):
         return f"{character.key}: {self.skill.name} = {self.display_value}"
 
     @property
-    def display_value(self) -> float:
-        """Display value as shown to players (e.g., 2.5 for value 25)."""
-        return round(self.value / 10, 1)
+    def display_value(self) -> int:
+        """Skills display their true stored value (#2894) — development moves
+        them by single points, so 25 shows as 25, never 2.5."""
+        return cast(int, self.value)
 
 
 class CharacterSpecializationValue(SharedMemoryModel):
@@ -216,9 +217,9 @@ class CharacterSpecializationValue(SharedMemoryModel):
         return f"{character.key}: {self.specialization} = {self.display_value}"
 
     @property
-    def display_value(self) -> float:
-        """Display value as shown to players (e.g., 1.5 for value 15)."""
-        return round(self.value / 10, 1)
+    def display_value(self) -> int:
+        """Specializations display their true stored value, like skills (#2894)."""
+        return cast(int, self.value)
 
 
 class SkillPointBudget(SharedMemoryModel):

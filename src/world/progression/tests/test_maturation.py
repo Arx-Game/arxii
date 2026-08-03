@@ -66,14 +66,15 @@ class MaturationServiceTests(TestCase):
 
     def test_spend_raises_stat_value_and_consumes_lowest_milestone(self):
         sheet = self._sheet(matured=21)
-        CharacterTraitValue.objects.create(character=sheet, trait=self.stat, value=3)
+        # Stat storage is internal ×10 (#2894): display 3 = 30.
+        CharacterTraitValue.objects.create(character=sheet, trait=self.stat, value=30)
 
         spend = spend_maturation_point(sheet, self.stat)
 
         self.assertEqual(spend.milestone_year, 21)
         self.assertTrue(spend.is_active)
         value = CharacterTraitValue.objects.get(character=sheet, trait=self.stat).value
-        self.assertEqual(value, 4)
+        self.assertEqual(value, 40)
         self.assertEqual(available_points(sheet), 0)
 
     def test_spend_without_points_raises(self):
@@ -82,8 +83,8 @@ class MaturationServiceTests(TestCase):
             spend_maturation_point(sheet, self.stat)
 
     def test_spend_past_stage_cap_raises(self):
-        sheet = self._sheet(matured=21)  # level 1 -> PROSPECT cap 5
-        CharacterTraitValue.objects.create(character=sheet, trait=self.stat, value=5)
+        sheet = self._sheet(matured=21)  # level 1 -> PROSPECT cap 5 display dots
+        CharacterTraitValue.objects.create(character=sheet, trait=self.stat, value=50)
         with self.assertRaises(MaturationCapReachedError):
             spend_maturation_point(sheet, self.stat)
 
@@ -94,17 +95,21 @@ class MaturationServiceTests(TestCase):
 
     def test_reversal_deactivates_spends_and_reaging_reactivates(self):
         sheet = self._sheet(matured=24)  # milestones 21, 24
-        CharacterTraitValue.objects.create(character=sheet, trait=self.stat, value=1)
+        CharacterTraitValue.objects.create(character=sheet, trait=self.stat, value=10)
         spend_maturation_point(sheet, self.stat)
         spend_maturation_point(sheet, self.stat)
-        self.assertEqual(CharacterTraitValue.objects.get(character=sheet, trait=self.stat).value, 3)
+        self.assertEqual(
+            CharacterTraitValue.objects.get(character=sheet, trait=self.stat).value, 30
+        )
 
         # True age-reversal magic winds back to 22: year 24's point lifts off.
         sheet.matured_years = 22
         sheet.save()
         sync_maturation_spends(sheet)
 
-        self.assertEqual(CharacterTraitValue.objects.get(character=sheet, trait=self.stat).value, 2)
+        self.assertEqual(
+            CharacterTraitValue.objects.get(character=sheet, trait=self.stat).value, 20
+        )
         self.assertEqual(
             MaturationSpend.objects.filter(character_sheet=sheet, is_active=True).count(), 1
         )
@@ -115,5 +120,7 @@ class MaturationServiceTests(TestCase):
         sheet.save()
         sync_maturation_spends(sheet)
 
-        self.assertEqual(CharacterTraitValue.objects.get(character=sheet, trait=self.stat).value, 3)
+        self.assertEqual(
+            CharacterTraitValue.objects.get(character=sheet, trait=self.stat).value, 30
+        )
         self.assertEqual(available_points(sheet), 0)

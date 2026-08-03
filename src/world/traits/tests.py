@@ -65,7 +65,8 @@ class TraitModelTests(TestCase):
         )
 
         assert trait_value.value == 25
-        assert trait_value.display_value == 2.5
+        # strength is a STAT: display ÷10, floored (ADR-0193)
+        assert trait_value.display_value == 2
 
     def test_trait_rank_description(self):
         """Test trait rank descriptions."""
@@ -76,7 +77,7 @@ class TraitModelTests(TestCase):
             description="Someone with exceptional physical strength",
         )
 
-        assert rank_desc.display_value == 3.0
+        assert rank_desc.display_value == 3
         assert "Powerful Warrior" in str(rank_desc)
 
     def test_trait_case_insensitive_lookup(self):
@@ -267,10 +268,10 @@ class TraitHandlerTests(TestCase):
         assert value == 35
 
     def test_get_display_value(self):
-        """Test getting display values."""
+        """Skills display their true stored value (ADR-0193) — never divided."""
         self.handler.set_trait_value("swords", 25)
         display = self.handler.get_trait_display_value("swords")
-        assert display == 2.5
+        assert display == 25
 
     def test_calculate_check_points(self):
         """Test calculating check points."""

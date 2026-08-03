@@ -6,15 +6,15 @@ and keep models.py focused on model definitions.
 
 from django.db import models
 
-from world.traits.constants import PrimaryStat
+# STAT_DISPLAY_DIVISOR's canonical definition lives in world.traits.constants (#2894);
+# re-exported here for the CG modules that convert display allocations to internal scale.
+from world.traits.constants import STAT_DISPLAY_DIVISOR, PrimaryStat  # noqa: F401
 
-# Primary stat constants (1-5 scale)
+# Primary stat constants (1-5 DISPLAY scale — draft_data holds display values;
+# finalization multiplies by STAT_DISPLAY_DIVISOR when writing CharacterTraitValue)
 STAT_MIN_VALUE = 1  # Minimum stat value
 STAT_MAX_VALUE = 5  # Maximum stat value during character creation
 STAT_DEFAULT_VALUE = 2  # Default starting value
-
-# Internal divisor for converting distinction effect values (stored as 10/20/etc.) to display scale
-STAT_DISPLAY_DIVISOR = 10
 
 # Age constraints for character creation
 AGE_MIN = 18

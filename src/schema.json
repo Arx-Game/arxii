@@ -71395,8 +71395,7 @@ components:
         trait_type:
           type: string
         display_value:
-          type: number
-          format: double
+          type: integer
       required:
       - display_value
       - name

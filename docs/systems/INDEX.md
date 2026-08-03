@@ -611,12 +611,18 @@ Powers, affinities, auras, resonances, threads-as-currency, rituals, and Mage Sc
 ### Traits
 Character statistics and dice rolling mechanics.
 
+- **Scale (ADR-0193, #2894):** storage is the fine-grained 1-100 range for all
+  trait values. Skills display their TRUE stored value (35 reads 35 — never
+  divided); stats display single-digit and store ×10 (strength 2 = stored 20),
+  converted at the edge via `display_trait_value` / `STAT_DISPLAY_DIVISOR`.
+  CG finalization converts stat dots ×10 and bridges CG skills into
+  `CharacterTraitValue` rows.
 - **Models:** `Trait`, `CharacterTraitValue`, `PointConversionRange`, `CheckRank`, `ResultChart`, `ResultChartOutcome`
 - **Handlers:** `TraitHandler` (via `character.traits`), `StatHandler` (via `character.stats`)
 - **Key Functions:**
   - `character.traits.get_trait_value(name)` — with modifiers applied
   - `character.traits.get_base_trait_value(name)` — raw, no modifiers
-  - `character.traits.get_trait_display_value(name)` — 1.0-10.0 scale
+  - `character.traits.get_trait_display_value(name)` — stats ÷10, skills true value
   - `character.traits.get_traits_by_type(type)` — dict[name → value]
   - `character.traits.calculate_check_points(trait_names)` — weighted points
   - `character.stats.get_stat(name)` — internal value
@@ -1567,7 +1573,7 @@ XP, kudos, development points, and unlock system. Contains the most explicit pre
 - **Models:** `ExperiencePointsData`, `XPTransaction`, `CharacterXP`, `DevelopmentPoints`, `DevelopmentTransaction`, `KudosPointsData`, `KudosTransaction`, `CharacterUnlock`, `XPCostChart`, `XPCostEntry`, `CharacterPathHistory`, `PathIntent` (player's declared next-path preference — one per character sheet; FK to `CharacterSheet` + `Path`), `KudosDifficultyWeight` (staff-tunable band→multiplier for good-sport kudos; one row per `DifficultyChoice`), `WeeklySocialEngagement` (per-account weekly pending-kudos accumulator; `pending_points`, `granted`, `game_week` FK; `distinct_initiators` is a derived property counting child rows), `WeeklyEngagementInitiator` (child row recording each unique initiator toward a ledger; `UniqueConstraint(ledger, initiator_account)`),
   **Class-Level Advancement (#1352):** `AbstractClassLevelAdvancement` (abstract base shared by `ClassLevelAdvancement` and `AudereMajoraCrossing`; carries `scene`, `declaration_interaction`, `level_before`, `level_after`, `created_at`), `ClassLevelAdvancement` (within-tier Durance receipt — `character_sheet`, `character_class`, `officiant`, `ritual`, `witnesses` M2M → `scenes.Persona`),
   **Training Site (#1700):** `DuranceTrainingSite` (room + trainer-of-record pair; enables site-convened sessions — `room_profile` FK → `RoomProfile`, `officiant` FK → `CharacterSheet`, `training_path` FK → `Path` (nullable), `is_active`; unique `(room_profile, officiant)`),
-  **Maturation Points (#2756, ADR-0172):** `MaturationStatCap` (authored per-`PathStage` stat cap, seeded 5/6/11/16/21/26 PLACEHOLDER) + `MaturationSpend` (sheet FK, trait FK, `milestone_year`, `is_active` — active iff `milestone_year <= sheet.matured_years`; unique per (sheet, milestone_year)). Services in `progression/services/maturation.py`: `milestone_count` / `available_points` / `spend_maturation_point` (+1 raw stat value, stage-capped) / `sync_maturation_spends` (reversal deactivates, re-aging reactivates — every `matured_years` writer outside the birthday tick must call it)
+  **Maturation Points (#2756, ADR-0172):** `MaturationStatCap` (authored per-`PathStage` stat cap, seeded 5/6/11/16/21/26 PLACEHOLDER) + `MaturationSpend` (sheet FK, trait FK, `milestone_year`, `is_active` — active iff `milestone_year <= sheet.matured_years`; unique per (sheet, milestone_year)). Services in `progression/services/maturation.py`: `milestone_count` / `available_points` / `spend_maturation_point` (+1 display dot = +10 internal, stage-capped; caps are authored in display dots and convert at the comparison — ADR-0193) / `sync_maturation_spends` (reversal deactivates, re-aging reactivates — every `matured_years` writer outside the birthday tick must call it)
 - **Unlock Requirements** (all have `is_met_by_character(character) -> tuple[bool, str]`):
   - `TraitRequirement` — checks CharacterTraitValue
   - `LevelRequirement` — checks character_class_levels
@@ -4096,7 +4102,8 @@ Items, equipment, inventory, and currency. Spec D PR1 shipped facets, equip/uneq
   a consumable ItemTemplate + deterministic on-use pool (`seed_consumable_catalog` — bread,
   stew, wine, ale, firebrandy, Cardian Ambrosia, all PLACEHOLDER). Cooking tradeskill
   activation (`world/seeds/provisioning_checks.py`, cluster `provisioning`): Cooking
-  skill/CheckType (wits+Cooking, Brewing spec), first LIVE QualityTier ladder
+  skill/CheckType (wits+agility avg + Cooking, Brewing spec linked as a
+  `CheckTypeSpecialization` row at weight 1.0 — #2894), first LIVE QualityTier ladder
   (Common/Fine/Masterwork), stationless ITEM_CREATE recipes (Hearty Stew, Honeyed Wine) +
   ingredients + skill caps. Event catering: `EventCatering` snapshot rows
   (#2869 reshaped: `designate_catering_container` flags a vessel — banquet table,

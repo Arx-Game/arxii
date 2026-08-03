@@ -21,6 +21,7 @@ from evennia.objects.models import ObjectDB
 from evennia_extensions.models import PlayerData
 from world.character_creation.constants import (
     PATH_OF_THE_CHOSEN_NAME,
+    STAT_DISPLAY_DIVISOR,
     ApplicationStatus,
     CommentType,
     OriginStoryState,
@@ -745,9 +746,13 @@ def _create_stat_values(
         trait.name: trait
         for trait in _trait_cls.objects.filter(name__in=stat_names, trait_type=_trait_type_cls.STAT)
     }
+    # Draft allocations are display-scale (1-5); storage is internal ×10 (#2894)
+    # so checks, modifiers, and DP level-ups all read one scale.
     trait_values = [
         _character_trait_value_cls(
-            character=character.sheet_data, trait=traits_by_name[name], value=value
+            character=character.sheet_data,
+            trait=traits_by_name[name],
+            value=value * STAT_DISPLAY_DIVISOR,
         )
         for name, value in stats.items()
         if name in traits_by_name
@@ -803,7 +808,9 @@ def _apply_post_cg_bonuses(
     """Apply post-CG stat bonuses from the draft (reserved for future use).
 
     NOTE: This is reserved for future functionality where other CG stages might
-    modify stats beyond the normal 1-5 range. Not currently used.
+    modify stats beyond the normal 1-5 display range. Not currently used.
+    Bonuses are display-scale (+1 = one stat dot) and convert to internal
+    scale here, like ``_create_stat_values`` (#2894).
 
     Args:
         character: The newly created ``ObjectDB`` character.
@@ -818,7 +825,7 @@ def _apply_post_cg_bonuses(
             character_id=character.pk, trait__name=stat_name
         ).first()
         if trait_value:
-            trait_value.value += int(bonus)
+            trait_value.value += int(bonus) * STAT_DISPLAY_DIVISOR
             trait_value.save()
 
 
@@ -1155,22 +1162,34 @@ def _apply_form_trait_descriptors(
 
 
 def _create_skill_values(character: ObjectDB, draft: CharacterDraft) -> None:
-    """Create CharacterSkillValue and CharacterSpecializationValue records from draft."""
+    """Create CharacterSkillValue and CharacterSpecializationValue records from draft.
+
+    Also writes the matching ``CharacterTraitValue`` row for each skill (#2894):
+    ``perform_check`` reads only trait values, so without this bridge a freshly
+    finalized character contributed zero skill points to every check until the
+    DP path happened to seed a trait row (at 10, ignoring the CG allocation).
+    Skill values are already stored (and displayed) at their true 1-100 value,
+    so the number carries over verbatim — no conversion, unlike stats — and
+    ``DevelopmentPoints.award_points`` increments the same row from the CG
+    level onward.
+    """
     from world.skills.models import (  # noqa: PLC0415
         CharacterSkillValue,
         CharacterSpecializationValue,
         Skill,
         Specialization,
     )
+    from world.traits.models import CharacterTraitValue  # noqa: PLC0415
 
     skills_data = draft.draft_data.get("skills", {})
     specializations_data = draft.draft_data.get("specializations", {})
 
-    # Create skill values
+    # Create skill values + the trait-row bridge the check engine reads
+    skill_trait_values = []
     for skill_id, value in skills_data.items():
         if value > 0:
             try:
-                skill = Skill.objects.get(pk=int(skill_id))
+                skill = Skill.objects.select_related("trait").get(pk=int(skill_id))
                 CharacterSkillValue.objects.create(
                     character=character.sheet_data,
                     skill=skill,
@@ -1178,12 +1197,18 @@ def _create_skill_values(character: ObjectDB, draft: CharacterDraft) -> None:
                     development_points=0,
                     rust_points=0,
                 )
+                skill_trait_values.append(
+                    CharacterTraitValue(
+                        character=character.sheet_data, trait=skill.trait, value=value
+                    )
+                )
             except Skill.DoesNotExist:
                 logger.warning(
                     "Invalid skill ID %s in draft for character %s",
                     skill_id,
                     character.key,
                 )
+    CharacterTraitValue.objects.bulk_create(skill_trait_values)
 
     # Create specialization values
     for spec_id, value in specializations_data.items():

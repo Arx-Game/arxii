@@ -125,8 +125,9 @@ def has_specialization(
 ) -> bool:
     """Whether a character owns a specialization at ``minimum_rank`` or better (#1688).
 
-    Ranks are display values (1.0, 2.0, …) stored ×10, so rank 1 is a stored value of 10. Gates
-    surfacing of spec-only options (e.g. the gossip option only appears at Gossip ≥ 1).
+    A rank is ten points of stored value (rank 1 = value 10 — the same rung
+    boundaries XP unlocks cross). Gates surfacing of spec-only options
+    (e.g. the gossip option only appears at Gossip rank ≥ 1).
     """
     return _get_spec_value(character, specialization) >= minimum_rank * 10
 

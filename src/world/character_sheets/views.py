@@ -119,6 +119,7 @@ class CharacterSheetViewSet(RetrieveModelMixin, GenericViewSet):
             milestone_count,
             stat_cap_for,
         )
+        from world.traits.constants import STAT_DISPLAY_DIVISOR  # noqa: PLC0415
         from world.traits.models import CharacterTraitValue, Trait, TraitType  # noqa: PLC0415
 
         sheet = self.get_object()
@@ -126,8 +127,10 @@ class CharacterSheetViewSet(RetrieveModelMixin, GenericViewSet):
         earned = milestone_count(sheet.matured_years)
         next_milestone = MATURATION_START_YEAR + earned * MATURATION_INTERVAL_YEARS
         cap = stat_cap_for(sheet)
+        # Stats store internal ×10 (#2894); the panel speaks display dots, the
+        # same scale the caps are authored in.
         values = {
-            tv.trait_id: tv.value
+            tv.trait_id: tv.value // STAT_DISPLAY_DIVISOR
             for tv in CharacterTraitValue.objects.filter(
                 character=sheet, trait__trait_type=TraitType.STAT
             )

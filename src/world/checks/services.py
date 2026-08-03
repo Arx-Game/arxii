@@ -881,6 +881,12 @@ def _calculate_specialization_points(
     art) adds its owner's value. A character who doesn't own the spec contributes 0 (so a
     non-specialist simply rolls stat + skill). Specialization values scale like skills, so they
     convert through the same ``PointConversionRange`` as a SKILL trait.
+
+    The runtime branch applies no weight **by design** (#2894): a spec is fully
+    additive with its skill (Apostate: 50 skill + 50 spec ≡ 100 skill), i.e.
+    weight 1.0 — which is also ``CheckTypeSpecialization.weight``'s default, so
+    authored and runtime paths agree unless a check author deliberately tunes a
+    row's weight.
     """
     from world.skills.services import get_specialization_value  # noqa: PLC0415 — avoid app cycle
 

@@ -434,14 +434,14 @@ class CmdProgressionUnlock(DispatchCommand):
             return ["No skill breakthroughs available."]
         lines = ["", "Skill breakthroughs:"]
         for prospect in prospects:
-            rating = prospect.next_rating / 10
+            # Skills display their true stored value (ADR-0193): rung 20 reads 20.
+            rating = prospect.next_rating
             if prospect.authored:
                 lines.append(
-                    f"[skill] {prospect.skill.name} breakthrough to {rating:.1f}: "
-                    f"{prospect.xp_cost} XP"
+                    f"[skill] {prospect.skill.name} breakthrough to {rating}: {prospect.xp_cost} XP"
                 )
             else:
                 lines.append(
-                    f"[skill] {prospect.skill.name} at threshold {rating:.1f}: not yet authored"
+                    f"[skill] {prospect.skill.name} at threshold {rating}: not yet authored"
                 )
         return lines

@@ -164,7 +164,9 @@ class TraitRequirementAdmin(admin.ModelAdmin):
     ]
 
     def minimum_value_display(self, obj):
-        return f"{obj.minimum_value / 10:.1f}"
+        from world.traits.models import display_trait_value  # noqa: PLC0415
+
+        return str(display_trait_value(obj.trait.trait_type, obj.minimum_value))
 
     minimum_value_display.short_description = "Min Value"
 

@@ -13,7 +13,6 @@ from django.core.exceptions import ObjectDoesNotExist
 from django.db import transaction
 
 from world.action_points.models import ActionPointPool
-from world.character_creation.constants import STAT_MAX_VALUE
 from world.character_sheets.models import CharacterSheet
 from world.checks.models import CheckCategory, CheckType, CheckTypeTrait
 from world.checks.services import perform_check_with_modifiers
@@ -34,7 +33,7 @@ from world.fatigue.constants import (
 )
 from world.fatigue.models import FatiguePool
 from world.fatigue.types import FatigueCollapseResult, RestResult
-from world.traits.constants import PrimaryStat
+from world.traits.constants import STAT_DISPLAY_DIVISOR, PrimaryStat
 from world.traits.services import ensure_stat_trait
 
 if TYPE_CHECKING:
@@ -54,16 +53,12 @@ def get_or_create_fatigue_pool(character_sheet: CharacterSheet) -> FatiguePool:
 def _get_display_stat_value(character_sheet: CharacterSheet, stat_name: str) -> int:
     """Get a stat's display value (1-5 scale) from the trait handler.
 
-    Handles both storage conventions:
-    - Legacy characters: values stored as 10-50 (internal scale), divided by 10
-    - CG-simplified characters: values stored as 1-5 (display scale), used directly
-
-    Values > 5 are assumed to be internal scale. Values 1-5 are display scale.
+    Storage is internal ×10 (#2894 — CG writes 10-50 like every other writer),
+    so display is a plain ÷10. Capacity constants are tuned for display-scale
+    input.
     """
     raw_value = character_sheet.character.traits.get_trait_value(stat_name)
-    if raw_value > STAT_MAX_VALUE:
-        return raw_value // 10
-    return raw_value
+    return raw_value // STAT_DISPLAY_DIVISOR
 
 
 def get_fatigue_capacity(
