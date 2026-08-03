@@ -92,12 +92,8 @@ if command -v atuin >/dev/null 2>&1; then
     eval "$(atuin init bash --disable-up-arrow --disable-ai)"
 fi
 
-# --------------------------------------------------------------------------
-# zoxide -- `z <fragment>` jumps to a previously visited directory
-# --------------------------------------------------------------------------
-# Mainly for worktrees: `z shell-tooling` beats typing
-# .claude/worktrees/devcontainer-shell-tooling. `zi` opens an fzf picker when
-# several directories match. Plain `cd` is untouched.
-if command -v zoxide >/dev/null 2>&1; then
-    eval "$(zoxide init bash)"
-fi
+# No directory-jumping (`z`) here: that is oh-my-zsh's z plugin, which is
+# zsh-only. bash is the fallback shell for `devcontainer exec`, `bash -lc` and
+# agent tooling rather than a place anyone navigates by hand, so it is not worth
+# a second implementation. Atuin's Ctrl-R is shared between the two shells and
+# records cwd, which covers finding your way back to a path from here.

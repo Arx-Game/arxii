@@ -21,6 +21,13 @@ zstyle ':omz:update' mode disabled
 
 # Deliberately short list. Ordering is load order and matters:
 #   git                    — the alias pack (gst/gco/gd/...)
+#   z                      — `z <fragment>` jumps to a previously visited
+#                            directory. This is agkozak/zsh-z, a native-zsh
+#                            implementation with no awk/sed/date subprocesses,
+#                            NOT the older rupa/z script. Chosen over zoxide to
+#                            avoid carrying another pinned binary: it is a wash
+#                            on speed, and `z frag<TAB>` gets an fzf picker via
+#                            fzf-tab, which is what `zi` would have provided.
 #   fzf-tab                — replaces the completion menu with an fzf picker.
 #                            Must come after compinit (oh-my-zsh runs it) and
 #                            before any plugin that wraps ZLE widgets, i.e.
@@ -29,9 +36,15 @@ zstyle ':omz:update' mode disabled
 #   zsh-syntax-highlighting— must be LAST; it wraps every widget defined so far
 #
 # NOT enabled, on purpose:
-#   z / autojump  — duplicate zoxide and fight over the name `z`
+#   autojump      — duplicates z and fights over the same job
 #   fzf           — its Ctrl-R binding would shadow atuin's (see below)
-plugins=(git fzf-tab zsh-autosuggestions zsh-syntax-highlighting)
+plugins=(git z fzf-tab zsh-autosuggestions zsh-syntax-highlighting)
+
+# The z plugin's datafile, on the arxii-shell-history volume rather than its
+# ~/.z default -- otherwise the jump database would reset on every
+# `just dc-build`, which is exactly the problem the volume exists to solve.
+# Read at plugin load time, so it must be set before oh-my-zsh.sh.
+export ZSHZ_DATA=/home/vscode/.local/state/arxii/z
 
 # Completions for gh/just/uv/mise, generated at image-build time (Dockerfile).
 # Must be on fpath BEFORE oh-my-zsh.sh, which is what runs compinit. Unlike the
@@ -83,12 +96,4 @@ if command -v atuin >/dev/null 2>&1; then
     eval "$(atuin init zsh --disable-up-arrow --disable-ai)"
 fi
 
-# --------------------------------------------------------------------------
-# zoxide -- `z <fragment>` jumps to a previously visited directory
-# --------------------------------------------------------------------------
-# Mainly for worktrees: `z shell-tooling` beats typing
-# .claude/worktrees/devcontainer-shell-tooling. `zi` opens an fzf picker when
-# several directories match. Plain `cd` is untouched.
-if command -v zoxide >/dev/null 2>&1; then
-    eval "$(zoxide init zsh)"
-fi
+# Directory jumping is the `z` plugin above, not a separate binary.

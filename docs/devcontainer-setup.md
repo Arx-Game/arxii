@@ -207,11 +207,18 @@ Edit either file and `just dc-build`; a hand-edit inside the container is lost o
 next rebuild, because `/home/vscode` is image state rather than a named volume.
 
 oh-my-zsh runs a deliberately short plugin list: `git` (the `gst`/`gco`/`gd` alias
-pack), `fzf-tab`, `zsh-autosuggestions`, `zsh-syntax-highlighting`. That order is load
-order and matters — see the comments in `zshrc` before changing it. omz's `z` and
-`fzf` plugins are deliberately **not** enabled: they would duplicate zoxide and steal
-`Ctrl-R` from atuin respectively. zsh and oh-my-zsh itself come from the base
-devcontainer image; only the three custom plugins are pinned here.
+pack), `z`, `fzf-tab`, `zsh-autosuggestions`, `zsh-syntax-highlighting`. That order is
+load order and matters — see the comments in `zshrc` before changing it. omz's `fzf`
+plugin is deliberately **not** enabled: its `Ctrl-R` binding would shadow atuin's.
+zsh and oh-my-zsh itself come from the base devcontainer image; only the three custom
+plugins are pinned here.
+
+Directory jumping is the `z` plugin rather than a separate zoxide binary. omz ships
+[agkozak/zsh-z](https://github.com/agkozak/zsh-z), a native-zsh implementation with no
+`awk`/`sed` subprocesses — a wash with zoxide on speed, one less pinned dependency,
+and `z frag<TAB>` gets an fzf picker through fzf-tab. It is zsh-only, so bash has no
+`z`; that shell exists for `devcontainer exec` and scripts rather than hand
+navigation, and atuin records cwd for finding your way back.
 
 | Key | Does |
 |---|---|
@@ -221,8 +228,8 @@ devcontainer image; only the three custom plugins are pinned here.
 | `Ctrl-R` | atuin: fuzzy search over full history, with exit code, duration and cwd |
 | `Ctrl-T` | fzf: pick a file, insert its path at the cursor |
 | `Alt-C` | fzf: pick a subdirectory and `cd` into it |
-| `z <fragment>` | zoxide: jump to a previously visited directory, e.g. `z shell-tooling` |
-| `zi` | zoxide: same, but pick from an fzf list when several match |
+| `z <fragment>` | jump to a previously visited directory, e.g. `z shell-tooling` (zsh only) |
+| `z <fragment>`+`Tab` | same, but pick from an fzf list when several match |
 
 Up-arrow is deliberately left as the shell's own history — atuin's full-screen TUI is
 wanted on `Ctrl-R`, not on every "previous command". Change that by dropping
@@ -233,8 +240,9 @@ contacts a network service, so it needs no `init-firewall.sh` allowlist entry. I
 `?`-key AI binding is disabled for the same reason.
 
 History persists across `just dc-build` via two named volumes —
-`arxii-shell-history` (the bash and zsh `HISTFILE`s) and `arxii-atuin` (atuin's SQLite
-database). History is unlimited and flushed after every command, so several zellij
+`arxii-shell-history` (the bash and zsh `HISTFILE`s, plus the `z` plugin's jump
+database via `ZSHZ_DATA`) and `arxii-atuin` (atuin's SQLite database). History is
+unlimited and flushed after every command, so several zellij
 tabs interleave instead of the last one to exit overwriting the rest.
 
 Tab completion is installed for `gh`, `just`, `uv` and `mise`, generated at image

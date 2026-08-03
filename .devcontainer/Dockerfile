@@ -115,21 +115,20 @@ RUN curl -fsSL "https://github.com/zellij-org/zellij/releases/download/v${ZELLIJ
 # the zellij pattern above: build-time network is unrestricted, so none of these
 # download hosts need an init-firewall.sh allowlist entry, and nothing here
 # contacts a network service at runtime (see the atuin config below).
-#   atuin  — SQLite-backed Ctrl-R history search, replacing bash's 1000-entry file
-#   fzf    — Ctrl-T / Alt-C fuzzy file and directory pickers
-#   zoxide — `z <fragment>` jumps to a previously visited directory
-# Wiring lives in shell-extras.sh; see that file for the keybinding decisions.
+#   atuin — SQLite-backed Ctrl-R history search, replacing bash's 1000-entry file
+#   fzf   — Ctrl-T / Alt-C fuzzy file and directory pickers, and the picker
+#           behind fzf-tab and `z <fragment><TAB>` on the zsh side
+# Directory jumping is deliberately NOT a binary here: oh-my-zsh's z plugin
+# (agkozak/zsh-z, native zsh) does the same job with nothing extra to pin.
+# Wiring lives in shell-extras.sh and zshrc; see those for keybinding decisions.
 ARG ATUIN_VERSION=18.18.1
 ARG FZF_VERSION=0.74.2
-ARG ZOXIDE_VERSION=0.10.0
 RUN curl -fsSL "https://github.com/atuinsh/atuin/releases/download/v${ATUIN_VERSION}/atuin-x86_64-unknown-linux-musl.tar.gz" \
       | tar -xz -C /tmp \
  && mv "/tmp/atuin-x86_64-unknown-linux-musl/atuin" /home/vscode/.local/bin/atuin \
  && rm -rf /tmp/atuin-x86_64-unknown-linux-musl \
  && curl -fsSL "https://github.com/junegunn/fzf/releases/download/v${FZF_VERSION}/fzf-${FZF_VERSION}-linux_amd64.tar.gz" \
-      | tar -xz -C /home/vscode/.local/bin fzf \
- && curl -fsSL "https://github.com/ajeetdsouza/zoxide/releases/download/v${ZOXIDE_VERSION}/zoxide-${ZOXIDE_VERSION}-x86_64-unknown-linux-musl.tar.gz" \
-      | tar -xz -C /home/vscode/.local/bin zoxide
+      | tar -xz -C /home/vscode/.local/bin fzf
 
 # Pre-create the mountpoints for the shell-state volumes (docker-compose.yml) as
 # vscode, so they inherit vscode ownership instead of being created root-owned on
