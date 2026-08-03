@@ -14,8 +14,8 @@ class CmdSelect(ArxCommand):
     """Resolve a pending selection.
 
     Usage:
-      select              — list your pending selections
-      select <option>     — choose an option by id or ordinal number
+      select              - list your pending selections
+      select <option>     - choose an option by id or ordinal number
 
     Generic: resolves any PendingSelection regardless of source.
     The first consumer is the Sage's weakness reading (#2665).

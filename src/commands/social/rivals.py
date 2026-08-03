@@ -49,13 +49,13 @@ def _target_tenure(command: ArxCommand, name: str) -> tuple[object, RosterTenure
 
 
 class CmdRival(ArxCommand):
-    """Declare an IC rival — the antagonism-consent counterpart to a friend.
+    """Declare an IC rival, the antagonism-consent counterpart to a friend.
 
     Usage:
-      rival <character>     — declare them your rival from THIS character
+      rival <character>     - declare them your rival from THIS character
 
-    A rivalry is **double opt-in**: it only becomes *mutual* — and only then may either of you
-    aim your rivals-mode antagonism at the other — once they've declared you back. Out-of-band
+    A rivalry is **double opt-in**: it only becomes *mutual*, and only then may either of you
+    aim your rivals-mode antagonism at the other, once they've declared you back. Out-of-band
     from IC affection; per-character (re-roster-safe, alt-private).
     """
 

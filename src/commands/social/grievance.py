@@ -36,11 +36,11 @@ class CmdGrievance(ArxCommand):
     """Register a grievance against someone whose secret wronged you.
 
     When a secret in which you are the wronged party comes to light, you decide how it lands on
-    your regard for whoever's responsible — from a quiet hurt to an unforgivable betrayal.
+    your regard for whoever's responsible, from a quiet hurt to an unforgivable betrayal.
 
     Usage:
-      +grievance                       — secrets you may answer + the available responses
-      +grievance <secret> = <response> — register your chosen response (by number or name)
+      +grievance                       - secrets you may answer + the available responses
+      +grievance <secret> = <response> - register your chosen response (by number or name)
 
     Examples:
       +grievance

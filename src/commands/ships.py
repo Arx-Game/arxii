@@ -77,17 +77,17 @@ class CmdShip(DispatchCommand):
     """Commission, upgrade, repair, or check a ship.
 
     Usage:
-        ship                                        — status hub
-        ship status [ship_id=<n>]                    — status hub, or a
+        ship                                        - status hub
+        ship status [ship_id=<n>]                    - status hub, or a
                                                         specific ship's report
         ship commission ship_type=<name> [covenant=<name>] name=<ship name>
-                                                      — commission a new ship
+                                                      - commission a new ship
         ship upgrade stat=handling|armament|hull
-             level=<n> [ship_id=<n>]                   — raise a ship stat
-        ship repair [ship_id=<n>]                      — start repairs
+             level=<n> [ship_id=<n>]                   - raise a ship stat
+        ship repair [ship_id=<n>]                      - start repairs
 
     ``name=`` greedily consumes the rest of the line so a ship name may
-    contain spaces — it must come last on the ``commission`` line (mirrors
+    contain spaces, so it must come last on the ``commission`` line (mirrors
     ``sanctum homecoming``'s ``narrative=`` placement).
     """
 

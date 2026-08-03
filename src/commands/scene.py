@@ -72,7 +72,7 @@ class CmdScene(ArxCommand):
         ``scene finish``
 
     **Grant GM status to a present approved GM:**
-        ``scene gm <name>`` (#2113) — fallback when auto-enrollment misses a table-owning
+        ``scene gm <name>`` (#2113) - fallback when auto-enrollment misses a table-owning
         GM's session (pickup games, guest players, an Assistant GM); the actor must already
         administer the scene and the target must hold a GMProfile.
 
@@ -81,10 +81,10 @@ class CmdScene(ArxCommand):
         Example: ``scene round strict quorum=70 cap=2 lock=on``
 
     **Shelter an ally:**
-        ``scene succor <ally>`` — shelter an ally from an environmental hazard this round.
+        ``scene succor <ally>`` - shelter an ally from an environmental hazard this round.
 
     **Guard an ally:**
-        ``scene interpose <ally>`` — guard an ally from sudden non-combat harm this round.
+        ``scene interpose <ally>`` - guard an ally from sudden non-combat harm this round.
 
     **Show scene status:**
         ``scene`` or ``scene status``

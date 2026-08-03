@@ -29,14 +29,14 @@ _STAFF_PERM = "Builder"
 class CmdFunctionary(ArxCommand):
     """List, place, or remove the Functionaries standing in your current room (#1766).
 
-    A Functionary is a non-piloted NPC that anchors a room's gameplay loops — ``hire`` it to
+    A Functionary is a non-piloted NPC that anchors a room's gameplay loops; ``hire`` it to
     reach its services. ``<role>`` is an ``NPCRole`` name or id; the optional ``=<name>``
     gives the placement its own display name (e.g. 'Old Marta' for a Barkeep role).
 
     Usage:
-      functionary                        — list functionaries here
-      functionary place <role>[=<name>]  — (staff) place a functionary of <role> here
-      functionary remove <role>          — (staff) remove the <role> functionary here
+      functionary                        - list functionaries here
+      functionary place <role>[=<name>]  - (staff) place a functionary of <role> here
+      functionary remove <role>          - (staff) remove the <role> functionary here
     """
 
     key = "functionary"

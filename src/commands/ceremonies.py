@@ -14,17 +14,17 @@ _SUBVERB_SHOW = "show"
 
 
 class CmdCeremony(ArxCommand):
-    """Conduct a ceremony — a rite bookending freeform RP.
+    """Conduct a ceremony, a rite bookending freeform RP.
 
     Usage:
-        ceremony/funeral <name>[,<name2>…][=<being>]   — open a funeral for the dead
-        ceremony/blessing [<name>,…][=<being>]         — open a blessing
-        ceremony/sermon [<name>,…][=<being>]           — open a sermon
-        ceremony/offering <item>[,<item2>…]            — sacrifice items (officiant)
-        ceremony/speech <name>[=<honoree>]             — recognize a speaker (officiant)
-        ceremony/finish                                — conclude and tally (officiant)
-        ceremony/abandon                               — abandon unfinished (officiant/staff)
-        ceremony                                       — show the rite underway here
+        ceremony/funeral <name>[,<name2>…][=<being>]   - open a funeral for the dead
+        ceremony/blessing [<name>,…][=<being>]         - open a blessing
+        ceremony/sermon [<name>,…][=<being>]           - open a sermon
+        ceremony/offering <item>[,<item2>…]            - sacrifice items (officiant)
+        ceremony/speech <name>[=<honoree>]             - recognize a speaker (officiant)
+        ceremony/finish                                - conclude and tally (officiant)
+        ceremony/abandon                               - abandon unfinished (officiant/staff)
+        ceremony                                       - show the rite underway here
 
     The rite is performed in the name of your public worship unless ``=<being>``
     names another. Space form (``ceremony funeral …``) works too.

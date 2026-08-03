@@ -24,8 +24,8 @@ class CmdWear(ArxCommand):
     """Equip an item from your inventory, or wear a saved outfit.
 
     Telnet grammars:
-        ``wear <item>``                 — equip an item from your inventory
-        ``wear outfit <name>``          — apply a saved outfit by name
+        ``wear <item>``                 - equip an item from your inventory
+        ``wear outfit <name>``          - apply a saved outfit by name
     """
 
     key = "wear"
@@ -96,7 +96,7 @@ class CmdPut(ArxCommand):
 
 
 class CmdWithdraw(ArxCommand):
-    """Take an item out of a container in your inventory — or pull loose coins.
+    """Take an item out of a container in your inventory, or pull loose coins.
 
     Uses the key ``withdraw`` to avoid colliding with ``CmdGet``'s ``take``
     alias. The ``withdraw`` command key is already spoken for here, so the
@@ -105,8 +105,8 @@ class CmdWithdraw(ArxCommand):
     ``from <container>`` branch) rather than a second colliding command.
 
     Telnet grammars:
-        ``withdraw <item> from <container>`` — take an item out (``TakeOutAction``)
-        ``withdraw coins <amount>``          — e.g. ``withdraw coins 3s 5c``;
+        ``withdraw <item> from <container>`` - take an item out (``TakeOutAction``)
+        ``withdraw coins <amount>``          - e.g. ``withdraw coins 3s 5c``;
         pulls coppers from your purse as a carriable loose-coin cache
         (``WithdrawCoinsAction``).
     """
@@ -145,8 +145,8 @@ class CmdUse(ArxCommand):
     """Use an item from your inventory, optionally on a target.
 
     Telnet grammars:
-        ``use <item>``              — use the item on yourself / its default effect
-        ``use <item> on <target>``  — direct the item at a specific target
+        ``use <item>``              - use the item on yourself / its default effect
+        ``use <item> on <target>``  - direct the item at a specific target
     """
 
     key = "use"

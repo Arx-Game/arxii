@@ -54,10 +54,10 @@ class CmdLabStation(DispatchCommand):
     """Interact with the Lab crafting station in your current room.
 
     Usage:
-        station                       — status hub
-        station install [level=<n>]   — start an install project (default level=1)
-        station upgrade level=<n>     — start an upgrade project to level <n>
-        station repair points=<n>     — pay coppers to restore durability
+        station                       - status hub
+        station install [level=<n>]   - start an install project (default level=1)
+        station upgrade level=<n>     - start an upgrade project to level <n>
+        station repair points=<n>     - pay coppers to restore durability
     """
 
     key = "station"

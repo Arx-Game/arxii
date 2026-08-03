@@ -62,17 +62,17 @@ class CmdMission(ArxCommand):
     """Play a mission: inspect your journal, resolve beats, or run a group decision.
 
     **Read:**
-        ``mission`` / ``mission list``   — your mission journal
-        ``mission beat <id>``            — the current beat + numbered options
+        ``mission`` / ``mission list``   - your mission journal
+        ``mission beat <id>``            - the current beat + numbered options
 
     **Single-player:**
-        ``mission resolve <id> <n>``     — choose option n at the current beat
-        ``mission abandon <id>``         — abandon an ACTIVE run (contract holder)
-        ``mission tale <id> <text>``     — write your epilogue for a completed run
+        ``mission resolve <id> <n>``     - choose option n at the current beat
+        ``mission abandon <id>``         - abandon an ACTIVE run (contract holder)
+        ``mission tale <id> <text>``     - write your epilogue for a completed run
 
     **Group decision (two stages):**
-        ``mission pick <id> <n>``        — submit your stage-1 pick
-        ``mission vote <id> <n>``        — cast your stage-2 vote
+        ``mission pick <id> <n>``        - submit your stage-1 pick
+        ``mission vote <id> <n>``        - cast your stage-2 vote
     """
 
     key = "mission"

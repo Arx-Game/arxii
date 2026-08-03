@@ -48,15 +48,15 @@ def _target_tenure(command: ArxCommand, name: str) -> tuple[object, RosterTenure
 
 
 class CmdFriend(ArxCommand):
-    """Add an OOC friend — a trusted RP partner.
+    """Add an OOC friend, a trusted RP partner.
 
     Usage:
-      friend <character>       — friend them from THIS character (default)
-      friend/all <character>   — friend them from ALL your characters
+      friend <character>       - friend them from THIS character (default)
+      friend/all <character>   - friend them from ALL your characters
 
     A friend gets a login/logoff alert for you (a watch list) and may be allowed to act on you under
     the friends consent mode. Friendships are per-character: `friend/all` adds one for each of your
-    characters, each removable on its own. Out-of-character — separate from IC relationships.
+    characters, each removable on its own. Out-of-character, separate from IC relationships.
     """
 
     key = "+friend"

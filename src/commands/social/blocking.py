@@ -39,7 +39,7 @@ def _target_persona(command: ArxCommand, name: str) -> tuple[object, Persona]:
 class CmdBlock(ArxCommand):
     """Block a character so you can't see or be targeted by them.
 
-    A reason is required and goes to staff — and a block only clears a full cron cycle after you
+    A reason is required and goes to staff, and a block only clears a full cron cycle after you
     lift it, so blocks are deliberate.
 
     Usage:

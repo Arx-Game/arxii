@@ -38,13 +38,13 @@ class CmdDeposit(ArxCommand):
 
 
 class CmdSteal(ArxCommand):
-    """Take an item that plain ``get``/``withdraw`` refuses — with consequences (#1909).
+    """Take an item that plain ``get``/``withdraw`` refuses - with consequences (#1909).
 
     Telnet grammars (mirrors ``CmdGet``):
-        ``steal <item>``                  — from the room or a character present
-        ``steal <item> from <container>`` — from inside a container
+        ``steal <item>``                  - from the room or a character present
+        ``steal <item> from <container>`` - from inside a container
 
-    Unlike ``CmdGet``, this always dispatches ``StealAction`` — there is no
+    Unlike ``CmdGet``, this always dispatches ``StealAction`` - there is no
     plain-take fallback here.
     """
 

@@ -29,7 +29,7 @@ class CmdEndure(ArxCommand):
       endure
 
     You stay exactly where you are and take what comes. Your instincts stop
-    dragging you to safety for a while — which is the point, and the risk.
+    dragging you to safety for a while, which is the point, and the risk.
     """
 
     key = "endure"
@@ -45,7 +45,7 @@ class CmdRetreat(ArxCommand):
     Usage:
       retreat
 
-    The same pathing your instincts would use if you froze — taken
+    The same pathing your instincts would use if you froze, taken
     deliberately, and immediately.
     """
 

@@ -38,7 +38,7 @@ _CRIER_HEADER = "|wThe crier calls out the news of the day:|n"
 class CmdTidings(ArxCommand):
     """Catch up on the tidings your character's circles would have heard.
 
-    Deeds your societies celebrate and scandals they whisper about, newest first — scoped to the
+    Deeds your societies celebrate and scandals they whisper about, newest first, scoped to the
     societies and organizations your active character belongs to. In a room with a notice board
     or town crier, ``tidings local`` reads the local slice instead.
 

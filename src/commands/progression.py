@@ -89,8 +89,8 @@ class CmdTraining(DispatchCommand):
     """Manage your weekly skill-training allocations.
 
     Usage:
-        training                       — list current allocations and AP budget
-        training list                  — same as bare ``training``
+        training                       - list current allocations and AP budget
+        training list                  - same as bare ``training``
         training add skill=<id> ap=<n> [mentor=<id>]
         training add spec=<id> ap=<n> [mentor=<id>]
         training update id=<id> ap=<n> [mentor=<id>]
@@ -249,12 +249,12 @@ class CmdProgressionUnlock(DispatchCommand):
     """Browse and purchase progression unlocks with XP.
 
     Usage:
-        progression unlocks             — list available class-level, thread XP-lock, and
+        progression unlocks             - list available class-level, thread XP-lock, and
                                            skill-breakthrough unlocks
-        progression unlock class=<id>   — purchase a class-level unlock
+        progression unlock class=<id>   - purchase a class-level unlock
         progression unlock thread=<id> level=<n>
-                                        — purchase a thread XP-lock boundary
-        progression unlock skill=<id>   — purchase a skill breakthrough (clears an XP-boundary
+                                        - purchase a thread XP-lock boundary
+        progression unlock skill=<id>   - purchase a skill breakthrough (clears an XP-boundary
                                            plateau so training resumes; #2115)
     """
 

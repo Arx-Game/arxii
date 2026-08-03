@@ -43,11 +43,11 @@ class CmdLearn(DispatchCommand):
     """Spend XP to unlock gifts and accept teaching offers.
 
     Usage:
-        learn                    — show the learning hub (open unlocks + offers)
-        learn status             — (same)
-        learn gift <id>          — purchase a GiftUnlock (id = GiftUnlock pk)
-        learn technique <id>     — accept a TechniqueTeachingOffer (id = offer pk)
-        learn thread <id>        — accept a ThreadWeavingTeachingOffer (id = offer pk)
+        learn                    - show the learning hub (open unlocks + offers)
+        learn status             - (same)
+        learn gift <id>          - purchase a GiftUnlock (id = GiftUnlock pk)
+        learn technique <id>     - accept a TechniqueTeachingOffer (id = offer pk)
+        learn thread <id>        - accept a ThreadWeavingTeachingOffer (id = offer pk)
     """
 
     key = "learn"

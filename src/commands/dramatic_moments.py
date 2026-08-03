@@ -39,11 +39,11 @@ class CmdMoment(ArxCommand):
     """List and resolve dramatic-moment suggestions; tag dramatic moments.
 
     Usage:
-        moment suggestions   — list PENDING suggestions for the active scene here
-        moment confirm <id>  — confirm a suggestion (mints the dramatic-moment tag)
-        moment dismiss <id>  — dismiss a suggestion
-        moment tag <char>=<type> — tag a character's dramatic moment (GM)
-        moment tag list      — list available dramatic-moment types (GM)
+        moment suggestions   - list PENDING suggestions for the active scene here
+        moment confirm <id>  - confirm a suggestion (mints the dramatic-moment tag)
+        moment dismiss <id>  - dismiss a suggestion
+        moment tag <char>=<type> - tag a character's dramatic moment (GM)
+        moment tag list      - list available dramatic-moment types (GM)
 
     GM-gated: only the active scene's GM, owner, or staff may list, confirm,
     dismiss, or tag.

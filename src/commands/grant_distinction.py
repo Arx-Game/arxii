@@ -28,7 +28,7 @@ class CmdGrantDistinction(ArxCommand):
 
     Grants the named distinction at rank 1 (or the given rank); a character
     who already holds it advances one rank instead. ``/remove`` sheds a
-    held distinction. Catalog-only — the slug must name an existing active
+    held distinction. Catalog-only: the slug must name an existing active
     Distinction.
 
     XP is charged on the sign-based model: beneficial distinctions cost XP

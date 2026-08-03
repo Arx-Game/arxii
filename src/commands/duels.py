@@ -43,12 +43,12 @@ class CmdDuel(DispatchCommand):
     """Issue or answer a PC-vs-PC duel challenge.
 
     Usage:
-        duel                        — show your pending challenges + duel state
-        duel challenge <name>       — challenge a co-located character to a duel
-        duel accept [id]            — accept a pending challenge directed at you
-        duel decline [id]           — decline a pending challenge directed at you
-        duel withdraw [id]          — rescind a pending challenge you issued
-        duel risk                   — acknowledge the lethal risk of your duel
+        duel                        - show your pending challenges + duel state
+        duel challenge <name>       - challenge a co-located character to a duel
+        duel accept [id]            - accept a pending challenge directed at you
+        duel decline [id]           - decline a pending challenge directed at you
+        duel withdraw [id]          - rescind a pending challenge you issued
+        duel risk                   - acknowledge the lethal risk of your duel
 
     The optional ``id`` selects a specific pending challenge when you have more
     than one; without it the command acts on your single pending challenge. To

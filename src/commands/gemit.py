@@ -32,7 +32,7 @@ _USAGE = (
 class CmdGemit(ArxCommand):
     """Broadcast a hand-authored gemit to a chosen reach (staff).
 
-    The message is sent verbatim — write it exactly as players should see it, colour codes
+    The message is sent verbatim; write it exactly as players should see it, colour codes
     included. Game-wide reaches everyone online; the scoped forms reach only the members of the
     named societies / organizations (multiple, comma-separated).
 

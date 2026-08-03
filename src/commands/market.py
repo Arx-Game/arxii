@@ -32,7 +32,7 @@ _USAGE = (
 
 
 class CmdMarket(ArxCommand):
-    """Trade in the market square — stock, unfinished wares, crafting services."""
+    """Trade in the market square: stock, unfinished wares, crafting services."""
 
     key = "market"
     locks = "cmd:all()"

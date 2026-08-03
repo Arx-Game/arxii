@@ -66,11 +66,11 @@ class CmdDefense(DispatchCommand):
     """Install, upgrade, or fund an exit/room defense.
 
     Usage:
-        defense                              — status hub
+        defense                              - status hub
         defense install <bars|ward|alarm> [level=<n>]
         defense install ward level=<n> resonance=<name> [condition=<name>] [damage=<n>]
         defense upgrade <bars|ward|alarm> level=<n>
-        defense fund amount=<n>              — fund the room's ward
+        defense fund amount=<n>              - fund the room's ward
     """
 
     key = "defense"

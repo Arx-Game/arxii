@@ -25,7 +25,7 @@ CMD_UNHIDE = "unhide"
 
 
 class CmdAfk(ArxCommand):
-    """Mark yourself away — or back again.
+    """Mark yourself away, or back again.
 
     While away you show as ``away`` on ``who`` no matter how recently you typed. The marker is
     transient: it clears when you toggle it off or the server reloads.
@@ -50,10 +50,10 @@ class CmdAfk(ArxCommand):
 
 
 class CmdHide(ArxCommand):
-    """Appear offline — or come back online.
+    """Appear offline, or come back online.
 
     While hidden you drop off ``where`` and ``who`` and others can't page you: they get the same
-    response as if you were offline. The exception is your allowlist — friends on it still see you
+    response as if you were offline. The exception is your allowlist: friends on it still see you
     and can page you, and you can page them. Mail, missions, and chat channels all keep working,
     and people in your own room always see you; this is just for some peace and quiet at a
     distance. Your choice persists across logins.

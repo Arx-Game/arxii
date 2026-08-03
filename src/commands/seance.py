@@ -18,12 +18,12 @@ class CmdSeance(ArxCommand):
     """Answer a pending seance's call to speak again.
 
     Usage:
-        seance                    — list your pending seance offers
-        seance offers             — same as bare `seance`
-        seance accept <id>        — answer the seance's call
-        seance decline <id>       — decline the seance's call
+        seance                    - list your pending seance offers
+        seance offers             - same as bare `seance`
+        seance accept <id>        - answer the seance's call
+        seance decline <id>       - decline the seance's call
 
-    A retired character's account still receives these — you don't need to
+    A retired character's account still receives these; you don't need to
     be playing anyone to answer.
     """
 

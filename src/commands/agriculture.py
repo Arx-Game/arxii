@@ -16,7 +16,7 @@ from commands.command import ArxCommand
 class CmdHarvest(ArxCommand):
     """Collect the food a field here has grown into your domain's stores.
 
-    Stand where a field is. Collection rolls a check — a bad roll loses some
+    Stand where a field is. Collection rolls a check; a bad roll loses some
     (or all) of the haul, and a full granary caps what lands.
 
     Usage:

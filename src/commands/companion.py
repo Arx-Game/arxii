@@ -61,24 +61,24 @@ _ORDER_WITH = "with"
 
 
 class CmdCompanion(DispatchCommand):
-    """Manage your bonded companions — bind, release, fight, deploy, order, mount (#1918,
+    """Manage your bonded companions: bind, release, fight, deploy, order, mount (#1918,
     #1921, #1843).
 
     Usage:
-        companion                             — list active companions + capacity
-        companion status                      — (same)
-        companion list                        — (same)
+        companion                             - list active companions + capacity
+        companion status                      - (same)
+        companion list                        - (same)
         companion bind archetype=<name|id> gift=<name|id> name=<text>
-                                              — bind a new companion
-        companion release <name|id>           — release a bonded companion
-        companion fight <name|id>             — commit a companion into combat
-        companion deploy <name|id>            — deploy a companion into a battle
+                                              - bind a new companion
+        companion release <name|id>           - release a bonded companion
+        companion fight <name|id>             - commit a companion into combat
+        companion deploy <name|id>            - deploy a companion into a battle
         companion order <name> attack <target> [with <ability>]
-                                              — direct a deployed companion
-        companion order <name> hold           — tell a companion to hold
-        companion order <name> defend <ally>  — tell a companion to defend an ally
-        companion mount <name|id>             — mount a ridable companion
-        companion dismount                    — dismount your current mount
+                                              - direct a deployed companion
+        companion order <name> hold           - tell a companion to hold
+        companion order <name> defend <ally>  - tell a companion to defend an ally
+        companion mount <name|id>             - mount a ridable companion
+        companion dismount                    - dismount your current mount
 
     ``name=`` must be the final token on ``bind`` (it greedily consumes the rest
     of the line so names with spaces work).

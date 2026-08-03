@@ -23,10 +23,10 @@ class CmdForm(DispatchCommand):
     """List, shift into, or revert your alternate selves.
 
     Usage:
-        form                       — list your alternate selves; marks the active one
-        form list                  — same as bare ``form``
-        form shift <name|id>       — assume the named alternate self
-        form revert                — revert to your true self
+        form                       - list your alternate selves; marks the active one
+        form list                  - same as bare ``form``
+        form shift <name|id>       - assume the named alternate self
+        form revert                - revert to your true self
     """
 
     key = "form"

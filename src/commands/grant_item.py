@@ -27,7 +27,7 @@ class CmdGrantItem(ArxCommand):
     """Grant a specific item template to a character (GM).
 
     Creates one ItemInstance of the named template, held by the target
-    character. Use for story-earned narrative grants (loot, GM rewards) —
+    character. Use for story-earned narrative grants (loot, GM rewards):
     there is no shop system to buy these from instead.
 
     Requires JUNIOR-tier GM trust or higher (or staff).

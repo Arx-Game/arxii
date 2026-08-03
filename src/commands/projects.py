@@ -25,11 +25,11 @@ class CmdProject(ArxCommand):
     """View a project or contribute to it.
 
     Usage:
-      +project <id>                 — show a project's status
-      project/donate <id>=<amount>  — donate money from your purse
-      project/check <id>=<method>   — make a check-based contribution (spends AP)
-      project/story <id>=<text>     — record how you helped (your latest contribution)
-      project/launch <tier>=<name>  — launch a propaganda campaign (#1621);
+      +project <id>                 - show a project's status
+      project/donate <id>=<amount>  - donate money from your purse
+      project/check <id>=<method>   - make a check-based contribution (spends AP)
+      project/story <id>=<text>     - record how you helped (your latest contribution)
+      project/launch <tier>=<name>  - launch a propaganda campaign (#1621);
                                       bare project/launch lists the scales
     """
 

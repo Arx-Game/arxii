@@ -27,10 +27,10 @@ class CmdSphinx(ArxCommand):
     """Ask the Sphinx of Black Quartz to judge a vow.
 
     Usage:
-        sphinx <vow name>   — the Sphinx's three-tier verdict on your known
+        sphinx <vow name>   - the Sphinx's three-tier verdict on your known
                                techniques against that vow's authored demands
 
-    Soft gate: the Sphinx informs, it never blocks — you may still swear a
+    Soft gate: the Sphinx informs, it never blocks; you may still swear a
     vow it warns about.
     """
 

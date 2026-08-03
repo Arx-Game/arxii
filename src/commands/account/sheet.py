@@ -20,8 +20,8 @@ class CmdSheet(Command):  # ty: ignore[invalid-base]
     The sheet is the hub for a character; **sections** hang off it (mirroring the web tabs).
 
     Usage:
-        @sheet [character]            — the overview
-        sheet/<section> [character]   — a section (e.g. sheet/secret)
+        @sheet [character]            - the overview
+        sheet/<section> [character]   - a section (e.g. sheet/secret)
 
     Bare ``sheet`` shows the demographic overview. ``sheet/secret`` shows your secrets (or, with
     a character, the secrets you know about them). More sections (renown, relationships, society

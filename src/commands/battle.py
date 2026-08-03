@@ -135,25 +135,25 @@ class CmdBattle(ArxCommand):
     ``with <technique>``. ``rescue`` clears a Surrounded ally's peril instead
     of awarding victory points. ``strike side`` declares an army-wide SIDE-scope
     strike against the opposing side (command-hierarchy fan-out across every
-    active enemy unit) instead of a single unit — requires an engaged SUPREME
+    active enemy unit) instead of a single unit; requires an engaged SUPREME
     command_tier on your own side's covenant. ``strike place <name>`` is the
-    same fan-out narrowed to one front (``BattlePlace``) — requires an engaged
+    same fan-out narrowed to one front (``BattlePlace``) - requires an engaged
     SUBORDINATE or SUPREME command_tier. ``rout`` targets an enemy unit
     (ACTIVE only) to push it toward breaking. ``rally`` targets a unit on
-    *your own* side, including one that's already ROUTED — that's the whole
+    *your own* side, including one that's already ROUTED, which is the whole
     point of rallying it. ``repel``/``hold`` are PLACE-scope only, aimed at a
     front (``BattlePlace``) rather than a single unit or an entire side.
     ``breach``/``fortify`` target a specific ``Fortification`` at a front by
-    kind (``wall``/``gate``/``battlement``) — ``place <name> fortification
-    <kind>`` — since a front may carry more than one structure and a
+    kind (``wall``/``gate``/``battlement``) - ``place <name> fortification
+    <kind>`` - since a front may carry more than one structure and a
     Fortification has no name of its own.
-    ``set_environment`` casts battlefield weather (#1715) — the technique
+    ``set_environment`` casts battlefield weather (#1715) - the technique
     itself carries the weather type, so no separate weather argument is
     needed; with no target it casts at BATTLE scope (whole-battle-wide,
     requires an engaged SUPREME command_tier), or ``place <name>`` narrows it
     to a PLACE-scope local exception at that front only.
     ``duel <front> vs <boss name>`` opens a lethal Champion duel bound to that
-    front — requires an engaged Champion role for your side's covenant.
+    front; requires an engaged Champion role for your side's covenant.
     ``declare move <place>`` repositions yourself to a different front;
     ``declare move <unit> to <place>`` is a commander's order (requires an
     engaged SUBORDINATE or SUPREME command_tier, same as ``repel``/``hold``);
@@ -177,10 +177,10 @@ class CmdBattle(ArxCommand):
     ``BattleUnitTemplate`` copies onto a side, optionally at a named front;
     ``enlist`` adds a player character to a side (and optionally a front).
     ``maps``/``units`` browse the two catalogs by name (both search both
-    catalogs — a term matching only one shows only that section). ``create``/
+    catalogs, and a term matching only one shows only that section). ``create``/
     ``stage``/``spawn``/``enlist``/``maps``/``units`` act on **your own
-    most-recently-created, unresolved battle** — the one ``create`` just made
-    you the GM of — addressed by id, not by room.
+    most-recently-created, unresolved battle**, the one ``create`` just made
+    you the GM of, addressed by id, not by room.
     """
 
     key = "battle"

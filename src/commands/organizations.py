@@ -33,14 +33,14 @@ class CmdOrg(DispatchCommand):
     """Manage organization membership.
 
     Usage:
-        org                              — list subverbs
-        org invite <person> in <org>   — invite a co-located character
-        org apply <org>                  — apply to join an organization
-        org join <org>                   — accept a pending invitation
-        org leave <org>                  — leave an organization
-        org promote <person> in <org>    — promote a lower-ranked member
-        org demote <person> in <org>    — demote a lower-ranked member
-        org expel <person> in <org>     — forcibly remove a lower-ranked member
+        org                              - list subverbs
+        org invite <person> in <org>   - invite a co-located character
+        org apply <org>                  - apply to join an organization
+        org join <org>                   - accept a pending invitation
+        org leave <org>                  - leave an organization
+        org promote <person> in <org>    - promote a lower-ranked member
+        org demote <person> in <org>    - demote a lower-ranked member
+        org expel <person> in <org>     - forcibly remove a lower-ranked member
     """
 
     key = "org"

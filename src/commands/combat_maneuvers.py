@@ -66,28 +66,28 @@ class CmdCombat(_CombatCommandMixin, DispatchCommand):
     """Take a combat action other than casting or clashing.
 
     Usage:
-        combat                      — show your combat status + available actions
-        combat flee                 — declare a desperate flee this round
-        combat cover <ally>         — cover an ally's escape
-        combat interpose [ally] [with <technique>] [into <destination>] — guard an
+        combat                      - show your combat status + available actions
+        combat flee                 - declare a desperate flee this round
+        combat cover <ally>         - cover an ally's escape
+        combat interpose [ally] [with <technique>] [into <destination>] - guard an
                                      ally (or any ally) from harm, optionally carrying a
                                      known protective technique; a REDIRECT technique's
                                      saved damage destination (enemy name, object name,
-                                     or "away" — the default) is declared with "into"
-        combat succor <ally>        — shelter an ally from environmental hazards
-        combat use <item> [on <target>] — use a held on-use item this round
-        combat rally <ally>         — inspire an ally, bolstering their next action
-        combat demoralize <opp>     — break an opponent's nerve (morale damage)
-        combat taunt <opp>          — draw an NPC's aggro toward you
-        combat parley <opp>          — talk a wavering foe down mid-fight
-        combat charge <opp> with <technique> — mounted charge: close distance, then attack
-        combat joust with <technique> — mounted, lance-armed opposed pass (duels only)
-        combat join                 — join the fight in your room
-        combat leave                — leave an open encounter between rounds
-        combat ready                — toggle your declared action as ready
-        combat combo <name>         — chain your declared action into a combo
-        combat revert               — undo a combo upgrade
-        combat yield                — concede a duel
+                                     or "away", the default) is declared with "into"
+        combat succor <ally>        - shelter an ally from environmental hazards
+        combat use <item> [on <target>] - use a held on-use item this round
+        combat rally <ally>         - inspire an ally, bolstering their next action
+        combat demoralize <opp>     - break an opponent's nerve (morale damage)
+        combat taunt <opp>          - draw an NPC's aggro toward you
+        combat parley <opp>          - talk a wavering foe down mid-fight
+        combat charge <opp> with <technique> - mounted charge: close distance, then attack
+        combat joust with <technique> - mounted, lance-armed opposed pass (duels only)
+        combat join                 - join the fight in your room
+        combat leave                - leave an open encounter between rounds
+        combat ready                - toggle your declared action as ready
+        combat combo <name>         - chain your declared action into a combo
+        combat revert               - undo a combo upgrade
+        combat yield                - concede a duel
     """
 
     key = "combat"
