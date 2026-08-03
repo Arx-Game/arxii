@@ -130,3 +130,31 @@ class SettlementLadderTests(TestCase):
             character_sheet=self.sheet
         )
         assert stored == 2  # the stake was already spent; no refund
+
+
+class ShowcaseActionTests(TestCase):
+    @classmethod
+    def setUpTestData(cls):
+        from actions.definitions.fashion import ShowcaseAction
+
+        cls.action_cls = ShowcaseAction
+        cls.character = CharacterSheetFactory().character
+        cls.sheet = cls.character.sheet_data
+        cls.item = ItemInstanceFactory(holder_character_sheet=cls.sheet)
+
+    def test_piece_toggle_on_and_off(self):
+        result = self.action_cls().run(actor=self.character, mode="piece", item_id=self.item.pk)
+        assert result.success, result.message
+        state = ShowcaseState.objects.get(character_sheet=self.sheet)
+        assert state.is_active
+        assert state.item == self.item
+
+        result = self.action_cls().run(actor=self.character, mode="off")
+        assert result.success
+        state.refresh_from_db()
+        assert not state.is_active
+
+    def test_unowned_item_rejected(self):
+        stranger_item = ItemInstanceFactory()
+        result = self.action_cls().run(actor=self.character, mode="piece", item_id=stranger_item.pk)
+        assert not result.success

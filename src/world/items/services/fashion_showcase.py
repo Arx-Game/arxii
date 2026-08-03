@@ -51,6 +51,46 @@ def get_or_create_wallet(sheet: CharacterSheet) -> CachetWallet:
     return wallet
 
 
+def set_showcase_piece(sheet: CharacterSheet, item: object) -> ShowcaseState:
+    """Toggle the showcase onto one held/worn piece (#2907).
+
+    The item must belong to the sheet; ownership is asserted by the caller
+    (the Action resolves the item among the actor's own inventory).
+    """
+    state, _ = ShowcaseState.objects.get_or_create(
+        character_sheet=sheet, defaults={"mode": ShowcaseMode.PIECE}
+    )
+    state.mode = ShowcaseMode.PIECE
+    state.item = item
+    state.outfit = None
+    state.is_active = True
+    state.save()
+    return state
+
+
+def set_showcase_ensemble(sheet: CharacterSheet, outfit: object) -> ShowcaseState:
+    """Toggle the showcase onto a saved outfit as the ensemble statement (#2907)."""
+    state, _ = ShowcaseState.objects.get_or_create(
+        character_sheet=sheet, defaults={"mode": ShowcaseMode.ENSEMBLE}
+    )
+    state.mode = ShowcaseMode.ENSEMBLE
+    state.outfit = outfit
+    state.item = None
+    state.is_active = True
+    state.save()
+    return state
+
+
+def clear_showcase(sheet: CharacterSheet) -> bool:
+    """Turn the showcase toggle off; returns whether it was on."""
+    state = ShowcaseState.objects.filter(character_sheet=sheet, is_active=True).first()
+    if state is None:
+        return False
+    state.is_active = False
+    state.save(update_fields=["is_active"])
+    return True
+
+
 def record_showcase_showing(
     sheet: CharacterSheet,
     *,

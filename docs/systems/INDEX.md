@@ -4112,7 +4112,11 @@ Items, equipment, inventory, and currency. Spec D PR1 shipped facets, equip/uneq
   `effective_silhouette` resolves the fallback); `Style` re-ruled
   cultural/historical (`origin`, `era` current/ancient, `founder` persona FK —
   intent adjectives rejected as Accent-redundant); seed cluster `fashion`
-  (47 PLACEHOLDER forms + 9 registers). See docs/systems/items.md.
+  (47 PLACEHOLDER forms + 9 registers). Modeling economy: `CachetWallet` +
+  `ShowcaseState` toggle (`ShowcaseAction`/`CmdShowcase`), entrance
+  auto-stake → `FashionShowing` ledger → weekly-cron settlement
+  (`settle_fashion_showings`; never immediate), acclaim on items/outfits +
+  Silhouette/Style vogue momentum. See docs/systems/items.md.
 
 - **#2862-review gap closures (#2869 follow-through):** telnet `endure`/`retreat`
   (hazard prompt answers — the prompt now names them), `turf` / `turf push <crew>`

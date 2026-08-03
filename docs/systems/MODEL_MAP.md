@@ -1703,6 +1703,9 @@
   - recycle_requests <- items.RecycleRequest
   - outfits <- items.Outfit
   - fashion_presentations <- items.FashionPresentation
+  - cachet_wallet <- items.CachetWallet
+  - showcase_state <- items.ShowcaseState
+  - fashion_showings <- items.FashionShowing
   - mantle_clearances <- items.MantleLevelClearance
   - recipe_knowledge <- items.CharacterRecipeKnowledge
   - common_gem_buckets <- items.CommonGemBucket
@@ -4145,6 +4148,8 @@
   - item_styles <- items.ItemStyle
   - stored_outfits <- items.Outfit
   - outfit_slots <- items.OutfitSlot
+  - showcases <- items.ShowcaseState
+  - statement_showings <- items.FashionShowing
   - mantle <- items.Mantle
   - crafted_recipes <- items.CraftedItemRecipe
   - accents <- items.ItemAccent
@@ -4229,6 +4234,8 @@
 **Pointed to by:**
   - slots <- items.OutfitSlot
   - presentations <- items.FashionPresentation
+  - showcases <- items.ShowcaseState
+  - statement_showings <- items.FashionShowing
 
 ### OutfitSlot
 **Foreign Keys:**
@@ -4243,6 +4250,7 @@
   - perceiving_society -> societies.Society [FK]
 **Pointed to by:**
   - endorsements <- magic.PresentationEndorsement
+  - showings <- items.FashionShowing
 
 ### FacetVogueMomentum
 **Foreign Keys:**
@@ -4263,12 +4271,42 @@
   - bonuses <- items.FashionStyleBonus
   - trendsetter_crownings <- items.Trendsetter
 
+### CachetWallet
+**Foreign Keys:**
+  - character_sheet -> character_sheets.CharacterSheet [OneToOne]
+
+### ShowcaseState
+**Foreign Keys:**
+  - character_sheet -> character_sheets.CharacterSheet [OneToOne]
+  - outfit -> items.Outfit [FK] (nullable)
+  - item -> items.ItemInstance [FK] (nullable)
+
+### FashionShowing
+**Foreign Keys:**
+  - character_sheet -> character_sheets.CharacterSheet [FK]
+  - scene -> scenes.Scene [FK] (nullable)
+  - presentation -> items.FashionPresentation [FK] (nullable)
+  - statement_item -> items.ItemInstance [FK] (nullable)
+  - statement_outfit -> items.Outfit [FK] (nullable)
+  - statement_style -> items.Style [FK] (nullable)
+  - statement_silhouette -> items.Silhouette [FK] (nullable)
+
+### SilhouetteVogueMomentum
+**Foreign Keys:**
+  - silhouette -> items.Silhouette [OneToOne]
+
+### StyleVogueMomentum
+**Foreign Keys:**
+  - style -> items.Style [OneToOne]
+
 ### Silhouette
 **Foreign Keys:**
   - parent -> items.Silhouette [FK] (nullable)
 **Pointed to by:**
   - templates <- items.ItemTemplate
   - instances <- items.ItemInstance
+  - statement_showings <- items.FashionShowing
+  - vogue_momentum <- items.SilhouetteVogueMomentum
   - children <- items.Silhouette
 
 ### Style
@@ -4279,6 +4317,8 @@
   - motif_usages <- magic.MotifResonanceStyle
   - item_attachments <- items.ItemStyle
   - vogue_in <- items.FashionStyle
+  - statement_showings <- items.FashionShowing
+  - vogue_momentum_row <- items.StyleVogueMomentum
 
 ### FashionStyleBonus
 **Foreign Keys:**
@@ -7606,6 +7646,7 @@
   - relationshipdevelopment_set <- relationships.RelationshipDevelopment
   - relationshipcapstone_set <- relationships.RelationshipCapstone
   - affection_shifts <- relationships.AffectionShift
+  - fashion_showings <- items.FashionShowing
   - covenant_rite_instances <- covenants.CovenantRiteInstance
   - deaths <- vitals.CharacterVitals
   - miracle_performances <- worship.MiraclePerformance

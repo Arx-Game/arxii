@@ -664,6 +664,27 @@ Returns `{"action_points": n, "anima": n, "materials": k}`.
 - **Seeds** — cluster `fashion` (`world/seeds/fashion.py`): 47 PLACEHOLDER
   silhouettes with umbrellas + 9 cultural registers (6 current, 3 ancient).
 
+### Modeling economy: cachet + showcase + weekly settlement (#2907)
+
+- **`CachetWallet`** (sheet O2O) — cachet is REQUIRED to gain prestige from
+  showcasing. **`ShowcaseState`** (sheet O2O) — the persistent toggle:
+  ENSEMBLE (a saved Outfit; acclaim to the outfit, pushes its Style) or PIECE
+  (one item; heavy acclaim, pushes its Style AND Silhouette). Set via
+  `ShowcaseAction` (key `showcase`, registry) / telnet `CmdShowcase`
+  (`showcase <item>` / `showcase outfit <name>` / `showcase off`; bare =
+  status + balance).
+- **Entrance auto-spend** — `EntranceAction` calls `record_showcase_showing`
+  after the social check: stake deducts immediately (scene 1 / event 10),
+  creating a **`FashionShowing`** ledger row; never blocks the entrance.
+- **Weekly settlement** (`settle_fashion_showings`, registered in
+  `weekly_rollover_task`) — NEVER immediate (anti-farm): a good roll refunds
+  the stake, peer engagement pays +1, overwhelming +1 more, capped. Acclaim
+  (`ItemInstance.acclaim` / `Outfit.acclaim` — prestige-side, never legend)
+  and vogue momentum (`SilhouetteVogueMomentum` / `StyleVogueMomentum`,
+  global v1, decayed BEFORE settlement) move only on the engagement legs.
+  Engagement signal: `create_style_presentation_endorsement` bumps the
+  endorsee's unsettled showing (`record_showing_engagement`).
+
 ### Accent lifecycle & recycling (#2886)
 
 - **Vocabulary** (Apostate-ratified 2026-08-02, seeded by `seed_accent_axes`):
