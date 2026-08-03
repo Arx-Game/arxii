@@ -33,6 +33,7 @@ if TYPE_CHECKING:
 
     from world.character_sheets.models import CharacterSheet
     from world.magic.models.affinity import Resonance
+    from world.magic.types.technique_effects import TechniqueEffectPayload
 
 
 class AbstractSpecializedVariant(SharedMemoryModel):
@@ -250,6 +251,26 @@ class TechniqueVariant(AbstractSpecializedVariant):
         To invalidate: ``del instance.cached_condition_applications``.
         """
         return list(self.condition_applications.all())
+
+    @cached_property
+    def cached_effect_summary(self) -> TechniqueEffectPayload:
+        """What this *form* of the parent technique does (#2901).
+
+        The variant sibling of ``Technique.cached_effect_summary``. A resolved
+        form is fully determined by ``(parent_technique, variant)`` — no caster
+        input reaches it — so the summary caches on this row exactly the way the
+        base one caches on the ``Technique`` row, and a form shown to a hundred
+        casters costs one build.
+
+        To invalidate after editing payload rows:
+        ``invalidate_variant_payload_caches(variant)``.
+        """
+        from world.magic.services.technique_effects import (  # noqa: PLC0415
+            summarize_technique_effects,
+        )
+        from world.magic.specialization.services import _ResolvedTechnique  # noqa: PLC0415
+
+        return summarize_technique_effects(_ResolvedTechnique(self.parent_technique, variant=self))
 
     def discovery_narrative(
         self,
