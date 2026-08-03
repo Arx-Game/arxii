@@ -111,6 +111,7 @@ def weekly_rollover_task() -> None:
         ("domain edict upkeep", _run_edict_weekly_tick),
         ("social engagement kudos grant", _run_social_engagement_grant),
         ("idle table summary", _run_idle_table_summary),
+        ("fashion showcase settlement", _run_fashion_settlement),
     ]
 
     for name, processor in processors:
@@ -119,6 +120,13 @@ def weekly_rollover_task() -> None:
             logger.info("Weekly rollover: %s complete", name)
         except Exception:
             logger.exception("Weekly rollover: %s failed", name)
+
+
+def _run_fashion_settlement() -> None:
+    """Settle the week's cachet-staked showings + decay vogue momentum (#2907)."""
+    from world.items.services.fashion_showcase import settle_fashion_showings
+
+    settle_fashion_showings()
 
 
 def _run_weekly_economy() -> None:

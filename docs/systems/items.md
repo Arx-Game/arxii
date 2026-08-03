@@ -644,6 +644,47 @@ Returns `{"action_points": n, "anima": n, "materials": k}`.
   `crafting_materials`): 5 categories + 21 graded ladder templates; named
   canon materials await the curation worksheet (#2878 Phase F).
 
+### Fashion vocabulary: Silhouette + cultural Styles (#2907)
+
+- **`Silhouette`** — the wearable form (the fashion noun): umbrella hierarchy
+  (`parent`: boot → thigh-high boot), `WearFamily` grouping, `is_active`.
+  `ItemTemplate.silhouette` is the authored default; the crafter may pick a
+  same-family silhouette at making (`craft_create_item(silhouette_id=…)` →
+  `_resolve_silhouette_choice` validation → `ItemInstance.silhouette`);
+  `ItemInstance.effective_silhouette` resolves instance-over-template. The
+  crafted examine line renders the form via `silhouette_prose_noun` — "cut"
+  for garments, "setting" for jewelry, "silhouette" otherwise.
+  `InvalidSilhouetteChoice` covers bad picks. Read shape:
+  `SilhouetteReadSerializer` nested on the inventory item payload.
+- **`Style` re-ruled cultural/historical** — `origin` (PLACEHOLDER text),
+  `era` (`StyleEra`: current/ancient — ancient registers live outside all
+  starting knowledge and return through investigation), `founder` (persona FK
+  for icon-founded styles). Intent adjectives are Accent-redundant and are
+  rejected at authoring.
+- **Seeds** — cluster `fashion` (`world/seeds/fashion.py`): 47 PLACEHOLDER
+  silhouettes with umbrellas + 9 cultural registers (6 current, 3 ancient).
+
+### Modeling economy: cachet + showcase + weekly settlement (#2907)
+
+- **`CachetWallet`** (sheet O2O) — cachet is REQUIRED to gain prestige from
+  showcasing. **`ShowcaseState`** (sheet O2O) — the persistent toggle:
+  ENSEMBLE (a saved Outfit; acclaim to the outfit, pushes its Style) or PIECE
+  (one item; heavy acclaim, pushes its Style AND Silhouette). Set via
+  `ShowcaseAction` (key `showcase`, registry) / telnet `CmdShowcase`
+  (`showcase <item>` / `showcase outfit <name>` / `showcase off`; bare =
+  status + balance).
+- **Entrance auto-spend** — `EntranceAction` calls `record_showcase_showing`
+  after the social check: stake deducts immediately (scene 1 / event 10),
+  creating a **`FashionShowing`** ledger row; never blocks the entrance.
+- **Weekly settlement** (`settle_fashion_showings`, registered in
+  `weekly_rollover_task`) — NEVER immediate (anti-farm): a good roll refunds
+  the stake, peer engagement pays +1, overwhelming +1 more, capped. Acclaim
+  (`ItemInstance.acclaim` / `Outfit.acclaim` — prestige-side, never legend)
+  and vogue momentum (`SilhouetteVogueMomentum` / `StyleVogueMomentum`,
+  global v1, decayed BEFORE settlement) move only on the engagement legs.
+  Engagement signal: `create_style_presentation_endorsement` bumps the
+  endorsee's unsettled showing (`record_showing_engagement`).
+
 ### Accent lifecycle & recycling (#2886)
 
 - **Vocabulary** (Apostate-ratified 2026-08-02, seeded by `seed_accent_axes`):

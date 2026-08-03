@@ -27,6 +27,7 @@ from world.items.models import (
     PendingRareFind,
     QualityTier,
     RecycleRequest,
+    Silhouette,
     StreamCommonGemPool,
     Style,
     TemplateInteraction,
@@ -394,8 +395,16 @@ class FashionStyleAdmin(admin.ModelAdmin):
 
 @admin.register(Style)
 class StyleAdmin(admin.ModelAdmin):
-    list_display = ("name", "audacity")
-    list_filter = ("audacity",)
+    list_display = ("name", "origin", "era", "founder", "audacity")
+    list_filter = ("era", "audacity")
+    search_fields = ["name", "origin"]
+    autocomplete_fields = ["founder"]
+
+
+@admin.register(Silhouette)
+class SilhouetteAdmin(admin.ModelAdmin):
+    list_display = ("name", "wear_family", "parent", "is_active")
+    list_filter = ("wear_family", "is_active")
     search_fields = ["name"]
 
 

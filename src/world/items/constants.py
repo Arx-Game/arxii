@@ -117,6 +117,100 @@ class StyleAudacity(models.IntegerChoices):
     OUTRAGEOUS = 4, "Outrageous"
 
 
+class WearFamily(models.TextChoices):
+    """The broad wearable family a Silhouette belongs to (#2907).
+
+    Coarser than ``BodyRegion`` — this is fashion vocabulary, not equip
+    plumbing: a crafter-picked silhouette must belong to the same family as
+    the template's authored one, and the family selects the prose noun used
+    when describing the form ("cut" for garments, "setting" for jewelry,
+    "silhouette" otherwise — Apostate's ruling, 2026-08-03).
+    """
+
+    FOOTWEAR = "footwear", "Footwear"
+    LEGWEAR = "legwear", "Legwear"
+    TORSO_GARMENT = "torso_garment", "Torso Garment"
+    FULL_GARMENT = "full_garment", "Full Garment"
+    OUTERWEAR = "outerwear", "Outerwear"
+    HEADWEAR = "headwear", "Headwear"
+    HANDWEAR = "handwear", "Handwear"
+    JEWELRY = "jewelry", "Jewelry"
+    ACCESSORY = "accessory", "Accessory"
+
+
+# Wear families whose form is described as a "cut" in prose (garments).
+_CUT_FAMILIES = {
+    WearFamily.LEGWEAR,
+    WearFamily.TORSO_GARMENT,
+    WearFamily.FULL_GARMENT,
+    WearFamily.OUTERWEAR,
+}
+
+# Prose nouns for a piece's form, by wear family (#2907).
+PROSE_NOUN_CUT = "cut"
+PROSE_NOUN_SETTING = "setting"
+PROSE_NOUN_SILHOUETTE = "silhouette"
+
+
+def silhouette_prose_noun(family: str) -> str:
+    """The in-prose noun for a silhouette of this family (#2907).
+
+    Garments speak of their "cut", jewelry of its "setting", everything else
+    of its "silhouette". The model name stays Silhouette everywhere in code —
+    "cut" is reserved for gem cuts when the gem economy lands.
+    """
+    if family in _CUT_FAMILIES:
+        return PROSE_NOUN_CUT
+    if family == WearFamily.JEWELRY:
+        return PROSE_NOUN_SETTING
+    return PROSE_NOUN_SILHOUETTE
+
+
+class ShowcaseMode(models.TextChoices):
+    """What a showcasing character is highlighting (#2907).
+
+    ENSEMBLE: the whole outfit is the statement — acclaim lands on the Outfit
+    (pushing the outfit's Style vogue). PIECE: one item is the statement —
+    heavy acclaim on that item (pushing its Style AND Silhouette).
+    """
+
+    ENSEMBLE = "ensemble", "Ensemble"
+    PIECE = "piece", "Piece"
+
+
+# --- Cachet + weekly showcase settlement (#2907; PLACEHOLDER tuning) ---------
+# Cachet is REQUIRED to gain prestige from showcasing; it auto-spends when the
+# character makes an entrance while their showcase toggle is active. Cost
+# scales with the venue: a random scene stakes 1; a proper event stakes more
+# (an authored per-event degree ladder is an open design question — flat
+# event cost is the v1 guess).
+SHOWCASE_STAKE_SCENE = 1
+SHOWCASE_STAKE_EVENT = 10
+CACHET_STARTING_BALANCE = 3
+# Settlement ladder (Apostate's spec numbers, verbatim): a good roll refunds
+# the stake; real player engagement pays +1; overwhelming engagement +1 more.
+SETTLEMENT_ENGAGEMENT_BONUS = 1
+SETTLEMENT_OVERWHELMING_THRESHOLD = 3
+SETTLEMENT_MAX_PAYOUT_SCENE = 3
+# Vogue momentum gained by the statement's style/silhouette per settled payout
+# point, and the weekly decay multiplier (seasonal-slow — mirrors the facet
+# momentum pattern; guess flagged on #2907).
+VOGUE_PUSH_PER_PAYOUT = 1
+VOGUE_WEEKLY_DECAY = 0.85
+
+
+class StyleEra(models.TextChoices):
+    """When a Style's fashion language comes from (#2907).
+
+    CURRENT styles circulate in living regional cultures; ANCIENT ones are
+    dead languages — not in any starting knowledge, rediscovered through
+    investigation (Arx holds a wide spread of them).
+    """
+
+    CURRENT = "current", "Current"
+    ANCIENT = "ancient", "Ancient"
+
+
 class GearArchetype(models.TextChoices):
     """Gear categorization for covenant role compatibility.
 

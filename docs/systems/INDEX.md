@@ -4105,6 +4105,19 @@ Unified modifier system — categories, types, sources, and per-character modifi
 ### Items & Equipment
 Items, equipment, inventory, and currency. Spec D PR1 shipped facets, equip/unequip
 
+- **Fashion vocabulary (#2907):** `Silhouette` (the wearable FORM — umbrella
+  hierarchy, `WearFamily`, prose skins via `silhouette_prose_noun`: cut/garments,
+  setting/jewelry) with `ItemTemplate.silhouette` (authored default) +
+  `ItemInstance.silhouette` (family-validated crafter pick at making;
+  `effective_silhouette` resolves the fallback); `Style` re-ruled
+  cultural/historical (`origin`, `era` current/ancient, `founder` persona FK —
+  intent adjectives rejected as Accent-redundant); seed cluster `fashion`
+  (47 PLACEHOLDER forms + 9 registers). Modeling economy: `CachetWallet` +
+  `ShowcaseState` toggle (`ShowcaseAction`/`CmdShowcase`), entrance
+  auto-stake → `FashionShowing` ledger → weekly-cron settlement
+  (`settle_fashion_showings`; never immediate), acclaim on items/outfits +
+  Silhouette/Style vogue momentum. See docs/systems/items.md.
+
 - **#2862-review gap closures (#2869 follow-through):** telnet `endure`/`retreat`
   (hazard prompt answers — the prompt now names them), `turf` / `turf push <crew>`
   (turf status + the war's opening move), `makeshade <character>` (GM tool; the only

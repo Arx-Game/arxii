@@ -140,6 +140,7 @@ from commands.setsituation import CmdSetSituation
 from commands.setstage import CmdSetStage
 from commands.sheet_request import CmdSheetRequest  # #2628 — sheet-update requests.
 from commands.ships import CmdShip
+from commands.showcase import CmdShowcase  # #2907
 from commands.signature import CmdSignature
 from commands.social.accusations import CmdAccuse, CmdFrame
 from commands.social.blocking import (
@@ -459,6 +460,8 @@ class CharacterCmdSet(default_cmds.CharacterCmdSet):
             CmdCraft,
             # #1866 — outfit CRUD + wear/undress/present telnet namespace.
             CmdOutfit,
+            # #2907 — the persistent fashion-showcase toggle.
+            CmdShowcase,
             # #1866 — places join/leave telnet namespace.
             CmdPlaces,
             # #2356 — speaker queue (getinline) telnet namespace.

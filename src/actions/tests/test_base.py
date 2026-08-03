@@ -199,6 +199,7 @@ class ActionRegistryTests(TestCase):
             "remove_outfit_slot",
             "present_outfit",
             "judge_presentation",
+            "showcase",
             "traverse_exit",
             "travel_to",
             "stop_travel",

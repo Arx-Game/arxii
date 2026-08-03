@@ -1703,6 +1703,9 @@
   - recycle_requests <- items.RecycleRequest
   - outfits <- items.Outfit
   - fashion_presentations <- items.FashionPresentation
+  - cachet_wallet <- items.CachetWallet
+  - showcase_state <- items.ShowcaseState
+  - fashion_showings <- items.FashionShowing
   - mantle_clearances <- items.MantleLevelClearance
   - recipe_knowledge <- items.CharacterRecipeKnowledge
   - common_gem_buckets <- items.CommonGemBucket
@@ -4084,6 +4087,7 @@
   - tied_resonance -> magic.Resonance [FK] (nullable)
   - resonance_tier -> magic.ResonanceTier [FK] (nullable)
   - image -> evennia_extensions.Media [FK] (nullable)
+  - silhouette -> items.Silhouette [FK] (nullable)
   - weapon_class -> items.WeaponClass [FK] (nullable)
   - weapon_damage_type -> conditions.DamageType [FK] (nullable)
   - polish_category -> buildings.PolishCategory [FK] (nullable)
@@ -4120,6 +4124,7 @@
   - template -> items.ItemTemplate [FK]
   - game_object -> objects.ObjectDB [OneToOne] (nullable)
   - quality_tier -> items.QualityTier [FK] (nullable)
+  - silhouette -> items.Silhouette [FK] (nullable)
   - holder_character_sheet -> character_sheets.CharacterSheet [FK] (nullable)
   - crafter_character_sheet -> character_sheets.CharacterSheet [FK] (nullable)
   - attuned_to_character_sheet -> character_sheets.CharacterSheet [FK] (nullable)
@@ -4143,6 +4148,8 @@
   - item_styles <- items.ItemStyle
   - stored_outfits <- items.Outfit
   - outfit_slots <- items.OutfitSlot
+  - showcases <- items.ShowcaseState
+  - statement_showings <- items.FashionShowing
   - mantle <- items.Mantle
   - crafted_recipes <- items.CraftedItemRecipe
   - accents <- items.ItemAccent
@@ -4227,6 +4234,8 @@
 **Pointed to by:**
   - slots <- items.OutfitSlot
   - presentations <- items.FashionPresentation
+  - showcases <- items.ShowcaseState
+  - statement_showings <- items.FashionShowing
 
 ### OutfitSlot
 **Foreign Keys:**
@@ -4241,6 +4250,7 @@
   - perceiving_society -> societies.Society [FK]
 **Pointed to by:**
   - endorsements <- magic.PresentationEndorsement
+  - showings <- items.FashionShowing
 
 ### FacetVogueMomentum
 **Foreign Keys:**
@@ -4261,13 +4271,54 @@
   - bonuses <- items.FashionStyleBonus
   - trendsetter_crownings <- items.Trendsetter
 
+### CachetWallet
+**Foreign Keys:**
+  - character_sheet -> character_sheets.CharacterSheet [OneToOne]
+
+### ShowcaseState
+**Foreign Keys:**
+  - character_sheet -> character_sheets.CharacterSheet [OneToOne]
+  - outfit -> items.Outfit [FK] (nullable)
+  - item -> items.ItemInstance [FK] (nullable)
+
+### FashionShowing
+**Foreign Keys:**
+  - character_sheet -> character_sheets.CharacterSheet [FK]
+  - scene -> scenes.Scene [FK] (nullable)
+  - presentation -> items.FashionPresentation [FK] (nullable)
+  - statement_item -> items.ItemInstance [FK] (nullable)
+  - statement_outfit -> items.Outfit [FK] (nullable)
+  - statement_style -> items.Style [FK] (nullable)
+  - statement_silhouette -> items.Silhouette [FK] (nullable)
+
+### SilhouetteVogueMomentum
+**Foreign Keys:**
+  - silhouette -> items.Silhouette [OneToOne]
+
+### StyleVogueMomentum
+**Foreign Keys:**
+  - style -> items.Style [OneToOne]
+
+### Silhouette
+**Foreign Keys:**
+  - parent -> items.Silhouette [FK] (nullable)
+**Pointed to by:**
+  - templates <- items.ItemTemplate
+  - instances <- items.ItemInstance
+  - statement_showings <- items.FashionShowing
+  - vogue_momentum <- items.SilhouetteVogueMomentum
+  - children <- items.Silhouette
+
 ### Style
 **Foreign Keys:**
+  - founder -> scenes.Persona [FK] (nullable)
   - axis_lean -> mechanics.ModifierTarget [FK] (nullable)
 **Pointed to by:**
   - motif_usages <- magic.MotifResonanceStyle
   - item_attachments <- items.ItemStyle
   - vogue_in <- items.FashionStyle
+  - statement_showings <- items.FashionShowing
+  - vogue_momentum_row <- items.StyleVogueMomentum
 
 ### FashionStyleBonus
 **Foreign Keys:**
@@ -4309,6 +4360,7 @@
 **Foreign Keys:**
   - check_type -> checks.CheckType [FK] (nullable)
   - skill_trait -> traits.Trait [FK] (nullable)
+  - specialization -> skills.Specialization [FK] (nullable)
   - required_feature_kind -> room_features.RoomFeatureKind [FK] (nullable)
   - output_item_template -> items.ItemTemplate [FK] (nullable)
 **Pointed to by:**
@@ -4357,6 +4409,10 @@
 **Foreign Keys:**
   - target_a -> mechanics.ModifierTarget [FK]
   - target_b -> mechanics.ModifierTarget [FK]
+
+### AccentArchetypeAllowance
+**Foreign Keys:**
+  - target -> mechanics.ModifierTarget [FK]
 
 ### ItemRefinementDetails
 **Foreign Keys:**
@@ -5839,6 +5895,7 @@
   - item_accents <- items.ItemAccent
   - accent_exclusions_a <- items.AccentExclusion
   - accent_exclusions_b <- items.AccentExclusion
+  - accent_archetype_allowances <- items.AccentArchetypeAllowance
   - refinement_projects <- items.ItemRefinementDetails
   - covenant_level_bonuses <- covenants.CovenantLevelBonus
   - vow_stat_scalings <- covenants.VowStatScaling
@@ -7589,6 +7646,7 @@
   - relationshipdevelopment_set <- relationships.RelationshipDevelopment
   - relationshipcapstone_set <- relationships.RelationshipCapstone
   - affection_shifts <- relationships.AffectionShift
+  - fashion_showings <- items.FashionShowing
   - covenant_rite_instances <- covenants.CovenantRiteInstance
   - deaths <- vitals.CharacterVitals
   - miracle_performances <- worship.MiraclePerformance
@@ -7683,6 +7741,7 @@
   - exculpatory_submissions <- justice.ExculpatoryEvidence
   - ownership_records <- locations.LocationOwnership
   - tenancies <- locations.LocationTenancy
+  - founded_styles <- items.Style
   - trendsetter_crownings <- items.Trendsetter
   - market_stalls <- items.MarketStall
   - ware_listings <- items.WareListing

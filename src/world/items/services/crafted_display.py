@@ -62,6 +62,12 @@ def crafted_provenance_line(instance: ItemInstance) -> str | None:
     elif accents:
         sentences.append(f"{accent_prose[0].upper()}{accent_prose[1:]}.")
 
+    # Form (#2907): prose skin by wear family — garments have a "cut",
+    # jewelry a "setting", everything else a "silhouette".
+    silhouette = instance.effective_silhouette
+    if silhouette is not None:
+        sentences.append(f"Its {silhouette.prose_noun} is the {silhouette.name.lower()}.")
+
     # Credits: the #2066 dual-provenance fields on the instance, with the
     # documented fallback (persona_display → sheet.primary_persona). Renders
     # "Crafted by X, Designed by Y", collapsing when equal (#2066 convention).

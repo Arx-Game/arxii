@@ -131,6 +131,12 @@ def _seed_crafting_materials() -> None:
     seed_crafting_materials()
 
 
+def _seed_fashion() -> None:
+    from world.seeds.fashion import seed_fashion_vocabulary  # noqa: PLC0415
+
+    seed_fashion_vocabulary()
+
+
 def _seed_investigation() -> None:
     from world.seeds.investigation_checks import seed_investigation_check_content  # noqa: PLC0415
 
@@ -441,6 +447,9 @@ CLUSTER_SEEDERS: dict[str, Callable[[], None]] = {
     # Generic crafting-material ladders (#2878 Phase F): categories + graded
     # base templates. Named canon materials await Apostate's worksheet.
     "crafting_materials": _seed_crafting_materials,
+    # Fashion vocabulary (#2907): the Silhouette form catalog + cultural
+    # Style registers. All PLACEHOLDER pending Apostate's lore pass.
+    "fashion": _seed_fashion,
     # Investigation: the Search check (perception + Investigation) + the Investigation skill.
     # After "checks" for the resolution spine; authoritative (#1705).
     "investigation": _seed_investigation,
@@ -670,6 +679,7 @@ def seeded_models_by_cluster() -> dict[str, list[type[Model]]]:
     from world.items.models import (  # noqa: PLC0415
         ItemTemplate,
         MaterialCategory,
+        Silhouette,
         Style,
     )
     from world.justice.models import (  # noqa: PLC0415
@@ -726,6 +736,9 @@ def seeded_models_by_cluster() -> dict[str, list[type[Model]]]:
         # Generic material ladders (#2878 Phase F): graded base templates per
         # category; named canon rows await Apostate's worksheet.
         "crafting_materials": [MaterialCategory],
+        # Fashion vocabulary (#2907): the Silhouette form catalog + cultural
+        # Style registers (all PLACEHOLDER pending Apostate's lore pass).
+        "fashion": [Silhouette],
         # Underworld (#2862): the turf-war stage — NPC gang + contested
         # neighborhood + Retaliation crisis type.
         # Weather (#2845): the authored corpus — types, exposures, shelters,

@@ -21,6 +21,9 @@ from world.items.services.fashion_presentation import (
 if TYPE_CHECKING:
     from evennia.objects.models import ObjectDB
 
+# ShowcaseAction mode token for clearing the toggle (piece/ensemble ride ShowcaseMode).
+_MODE_OFF = "off"
+
 
 @dataclass
 class PresentOutfitAction(Action):
@@ -122,3 +125,65 @@ class JudgePresentationAction(Action):
         actor_state = sdm.initialize_state_for_object(actor)
         message_location(actor_state, "$You() $conj(nod) approvingly at the presentation.")
         return ActionResult(success=True, data={"endorsement": endorsement})
+
+
+@dataclass
+class ShowcaseAction(Action):
+    """Set or clear the persistent showcase toggle (#2907).
+
+    ``mode`` selects what the character is presenting: ``piece`` (one owned
+    item — heavy acclaim, pushes its style AND silhouette), ``ensemble`` (a
+    saved outfit — acclaim to the outfit, pushes its style), or ``off``.
+    Cachet then auto-spends whenever the character makes an entrance while
+    the toggle is active; settlement is at the weekly cron.
+    """
+
+    key: str = "showcase"
+    name: str = "Showcase"
+    icon: str = "star"
+    category: str = "items"
+    target_type: TargetType = TargetType.SELF
+
+    def execute(
+        self,
+        actor: ObjectDB,
+        context: ActionContext | None = None,
+        **kwargs: Any,
+    ) -> ActionResult:
+        from world.items.constants import ShowcaseMode  # noqa: PLC0415
+        from world.items.models import ItemInstance  # noqa: PLC0415
+        from world.items.services.fashion_showcase import (  # noqa: PLC0415
+            clear_showcase,
+            set_showcase_ensemble,
+            set_showcase_piece,
+        )
+
+        sheet = actor.sheet_data
+        mode = kwargs.get("mode")
+        if mode == _MODE_OFF:
+            was_on = clear_showcase(sheet)
+            msg = "You stop showcasing." if was_on else "You weren't showcasing anything."
+            return ActionResult(success=True, message=msg)
+        if mode == ShowcaseMode.PIECE:
+            item_id = kwargs.get("item_id")
+            item = ItemInstance.objects.filter(pk=item_id, holder_character_sheet=sheet).first()
+            if item is None:
+                return ActionResult(success=False, message="You don't hold that piece.")
+            set_showcase_piece(sheet, item)
+            return ActionResult(
+                success=True,
+                message=f"You begin showcasing {item.display_name} — your entrances "
+                "now stake cachet on it.",
+            )
+        if mode == ShowcaseMode.ENSEMBLE:
+            outfit_id = kwargs.get("outfit_id")
+            outfit = Outfit.objects.filter(pk=outfit_id, character_sheet=sheet).first()
+            if outfit is None:
+                return ActionResult(success=False, message="You have no such outfit.")
+            set_showcase_ensemble(sheet, outfit)
+            return ActionResult(
+                success=True,
+                message=f"You begin showcasing the {outfit.name} ensemble — your "
+                "entrances now stake cachet on it.",
+            )
+        return ActionResult(success=False, message="Showcase what? (a piece, an ensemble, or off)")

@@ -5,7 +5,12 @@ A node of hierarchical imagery or symbolism (Creatures > Mammals > Wolf; Materia
 _Avoid_: tag, theme, symbol
 
 **Style**:
-A staff-curated aesthetic vocabulary word (Seductive, Menacing, Regal) that an item can carry. Distinct from a Facet: a Style is an aesthetic adjective each character binds to a resonance of their choosing for a coherence bonus, where a Facet is fixed symbolic imagery — the same Style can mean different magic for different characters.
+A cultural/historical fashion register an item can carry (Arxian Court, Old-Regime — re-ruled #2907; intent adjectives like "Seductive" are Accent-redundant and rejected at authoring). A Style says where a piece's fashion LANGUAGE comes from — a regional culture, an era, an aesthetic school — never what the piece is trying to do (that's an Accent). Carries `origin`, `era` (current/ancient — ancient registers are investigation-rediscoverable), and a `founder` persona FK for icon-founded styles. Distinct from a Facet (fixed symbolic imagery); characters still bind Styles to resonances for coherence bonuses.
+_Avoid_: intent adjectives as style names, vibe words that shadow an accent axis
+
+**Silhouette**:
+The wearable FORM — the fashion noun (#2907): boot, thigh-high boot, stiletto heel. Umbrella hierarchy via `parent`; grouped by `WearFamily`; authored default on `ItemTemplate.silhouette` with a family-validated crafter pick at making stored on `ItemInstance.silhouette` (`effective_silhouette` resolves the fallback). Litmus test vs Style: if it changes the SHAPE it's a (sub-)silhouette; if it changes how the piece reads while the shape stays, it's a Style. Prose never says "silhouette" for garments/jewelry — `silhouette_prose_noun` gives "cut"/"setting" ("Cut" as a model name is reserved for future gem cuts).
+_Avoid_: Cut (reserved for gemstones), Form (collides with the forms app), shape
 _Avoid_: aesthetic, look, vibe
 
 **Audacity**:

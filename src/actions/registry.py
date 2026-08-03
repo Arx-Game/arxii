@@ -162,7 +162,11 @@ from actions.definitions.evidence import (
     ProduceCaseEvidenceAction,
     StartFrameJobAction,
 )
-from actions.definitions.fashion import JudgePresentationAction, PresentOutfitAction
+from actions.definitions.fashion import (
+    JudgePresentationAction,
+    PresentOutfitAction,
+    ShowcaseAction,
+)
 from actions.definitions.fatigue import RestAction
 from actions.definitions.forms import RevertFormAction, ShiftFormAction
 from actions.definitions.gift_acquisition import (
@@ -572,6 +576,7 @@ _ALL_ACTIONS: list[Action] = [
     RemoveOutfitSlotAction(),
     PresentOutfitAction(),
     JudgePresentationAction(),
+    ShowcaseAction(),
     PoseEndorseAction(),
     SceneEntryEndorseAction(),
     StylePresentationEndorseAction(),

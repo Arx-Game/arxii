@@ -31,7 +31,10 @@ from world.items.constants import (
     GearArchetype,
     OwnershipEventType,
     RecycleRequestStatus,
+    ShowcaseMode,
     StyleAudacity,
+    StyleEra,
+    WearFamily,
 )
 from world.locations.constants import StatKey
 
@@ -450,6 +453,18 @@ class ItemTemplate(NaturalKeyMixin, SharedMemoryModel):
             "Plain items = 0 or 1; fine items = 2-3; ceremonial = 4-5."
         ),
     )
+    silhouette = models.ForeignKey(
+        "items.Silhouette",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="templates",
+        help_text=(
+            "Authored default form for this template (#2907). A crafter may pick "
+            "a different silhouette of the SAME wear family at making (stored on "
+            "the ItemInstance); null = formless (consumables, materials)."
+        ),
+    )
     adornment_capacity = models.PositiveSmallIntegerField(
         default=0,
         help_text=(
@@ -782,6 +797,26 @@ class ItemInstance(SharedMemoryModel):
         blank=True,
         related_name="item_instances",
     )
+    silhouette = models.ForeignKey(
+        "items.Silhouette",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="instances",
+        help_text=(
+            "Crafter-picked form chosen at making (#2907), validated to the "
+            "template's wear family. Null = the template's authored default."
+        ),
+    )
+    acclaim = models.PositiveIntegerField(
+        default=0,
+        help_text=(
+            "Prestige-side fashion renown loaded by settled showings (#2907). "
+            "NEVER legend — acclaim is social esteem, persistent and compounding "
+            "(the Arx 1 model-once chain-destroy pathology is designed out); it "
+            "can also DROP on disasters."
+        ),
+    )
     quantity = models.PositiveIntegerField(
         default=1,
         help_text="Stack quantity for stackable items.",
@@ -974,6 +1009,15 @@ class ItemInstance(SharedMemoryModel):
     def display_image(self) -> Media | None:
         """Return custom image if set, otherwise template image."""
         return self.image or self.template.image
+
+    @property
+    def effective_silhouette(self) -> Silhouette | None:
+        """The form this piece actually has (#2907).
+
+        The crafter-picked instance silhouette when one was chosen at making,
+        else the template's authored default, else None (formless).
+        """
+        return self.silhouette or self.template.silhouette
 
     @cached_property
     def cached_item_accents(self) -> list[ItemAccent]:
@@ -1499,6 +1543,14 @@ class Outfit(SharedMemoryModel):
 
     name = models.CharField(max_length=100)
     description = models.TextField(blank=True)
+    acclaim = models.PositiveIntegerField(
+        default=0,
+        help_text=(
+            "Ensemble fashion renown from settled ENSEMBLE showings (#2907). "
+            "Composition-snapshot semantics (fame binds to the exact pieces) "
+            "are a flagged open item — v1 loads acclaim on the outfit row."
+        ),
+    )
     character_sheet = models.ForeignKey(
         _CHARACTER_SHEET_FK,
         on_delete=models.CASCADE,
@@ -1735,15 +1787,273 @@ class FashionStyle(NaturalKeyMixin, SharedMemoryModel):
         return self.name
 
 
-class Style(NaturalKeyMixin, SharedMemoryModel):
-    """A staff-curated aesthetic vocabulary word (e.g. "Seductive", "Menacing", "Regal").
+class CachetWallet(SharedMemoryModel):
+    """A character's fashion-attention currency (#2907).
 
-    Phase A of the magical-aesthetic-axis (#546). Later phases tag items with
-    styles and bind them to resonances.
+    Cachet is REQUIRED to gain prestige from showcasing: it auto-spends when
+    the character makes an entrance while their showcase toggle is active
+    (stake by venue), and the weekly settlement pays it back on the
+    roll/engagement ladder. Working name — Apostate may rename.
+    """
+
+    character_sheet = models.OneToOneField(
+        _CHARACTER_SHEET_FK,
+        on_delete=models.CASCADE,
+        primary_key=True,
+        related_name="cachet_wallet",
+    )
+    balance = models.PositiveIntegerField(default=3)
+
+    def __str__(self) -> str:
+        return f"CachetWallet({self.character_sheet_id}={self.balance})"
+
+
+class ShowcaseState(SharedMemoryModel):
+    """The persistent showcase toggle (#2907): what this character is presenting.
+
+    ENSEMBLE highlights a saved Outfit (acclaim to the outfit, pushes its
+    Style); PIECE highlights one item (heavy acclaim, pushes its Style AND
+    Silhouette). Entrances read this; mere movement never spends.
+    """
+
+    character_sheet = models.OneToOneField(
+        _CHARACTER_SHEET_FK,
+        on_delete=models.CASCADE,
+        primary_key=True,
+        related_name="showcase_state",
+    )
+    is_active = models.BooleanField(default=False)
+    mode = models.CharField(max_length=20, choices=ShowcaseMode.choices)
+    outfit = models.ForeignKey(
+        "items.Outfit",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="showcases",
+    )
+    item = models.ForeignKey(
+        "items.ItemInstance",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="showcases",
+    )
+
+    def __str__(self) -> str:
+        return f"ShowcaseState({self.character_sheet_id}, {self.mode}, active={self.is_active})"
+
+
+class FashionShowing(SharedMemoryModel):
+    """One cachet-staked showcase moment, settled at the weekly cron (#2907).
+
+    Created when a showcasing character makes an entrance (stake deducted
+    immediately); the weekly settlement evaluates THE WEEK — roll refund +
+    engagement bonuses (never immediate, the anti-farm keystone) — then loads
+    acclaim onto the statement and pushes vogue momentum.
+    """
+
+    character_sheet = models.ForeignKey(
+        _CHARACTER_SHEET_FK,
+        on_delete=models.CASCADE,
+        related_name="fashion_showings",
+    )
+    scene = models.ForeignKey(
+        "scenes.Scene",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="fashion_showings",
+    )
+    presentation = models.ForeignKey(
+        "items.FashionPresentation",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="showings",
+        help_text="Linked when the showing rides a present_outfit at an event.",
+    )
+    mode = models.CharField(max_length=20, choices=ShowcaseMode.choices)
+    statement_item = models.ForeignKey(
+        "items.ItemInstance",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="statement_showings",
+    )
+    statement_outfit = models.ForeignKey(
+        "items.Outfit",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="statement_showings",
+    )
+    statement_style = models.ForeignKey(
+        "items.Style",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="statement_showings",
+    )
+    statement_silhouette = models.ForeignKey(
+        "items.Silhouette",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="statement_showings",
+    )
+    stake = models.PositiveIntegerField()
+    roll_success = models.BooleanField(default=False)
+    engagement_count = models.PositiveIntegerField(
+        default=0,
+        help_text="Peer engagement events recorded before settlement (endorsements etc.).",
+    )
+    settled = models.BooleanField(default=False, db_index=True)
+    payout = models.PositiveIntegerField(default=0)
+    created_at = models.DateTimeField(auto_now_add=True, db_index=True)
+
+    class Meta:
+        ordering = ["-created_at"]
+        indexes = [models.Index(fields=["settled", "created_at"])]
+
+    def __str__(self) -> str:
+        return f"FashionShowing({self.character_sheet_id}, stake={self.stake})"
+
+
+class SilhouetteVogueMomentum(SharedMemoryModel):
+    """Accumulating vogue heat for a silhouette (#2907; global tracks v1).
+
+    Bumped by settled showings whose statement carried this form; cron-decayed
+    (seasonal-slow). Mirrors ``FacetVogueMomentum``'s pattern minus the
+    society scoping — per-society fashion scenes are an open design question.
+    """
+
+    silhouette = models.OneToOneField(
+        "items.Silhouette",
+        on_delete=models.CASCADE,
+        primary_key=True,
+        related_name="vogue_momentum",
+    )
+    points = models.IntegerField(default=0)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ["-points"]
+
+    def __str__(self) -> str:
+        return f"SilhouetteVogueMomentum({self.silhouette_id}={self.points})"
+
+
+class StyleVogueMomentum(SharedMemoryModel):
+    """Accumulating vogue heat for a cultural style register (#2907; global v1)."""
+
+    style = models.OneToOneField(
+        "items.Style",
+        on_delete=models.CASCADE,
+        primary_key=True,
+        related_name="vogue_momentum_row",
+    )
+    points = models.IntegerField(default=0)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ["-points"]
+
+    def __str__(self) -> str:
+        return f"StyleVogueMomentum({self.style_id}={self.points})"
+
+
+class Silhouette(NaturalKeyMixin, SharedMemoryModel):
+    """A wearable FORM — the fashion noun (#2907): boot, thigh-high boot, stiletto.
+
+    The missing noun of the three-layer grammar (Silhouette = what it IS,
+    Style = what fashion language it speaks, Accent = what it's doing, #2878).
+    Umbrella hierarchy via ``parent`` (boot -> thigh-high boot) so vogue can
+    run hot on a specific form or a whole family. Litmus test: if it changes
+    the SHAPE of the piece it's a (sub-)silhouette; if it changes how the
+    piece reads while the shape stays, it's a Style. Prose never says
+    "silhouette" for garments/jewelry — see ``silhouette_prose_noun``
+    ("cut"/"setting"). Rows are admin-editable content; starter set is
+    PLACEHOLDER pending Apostate's pass.
+    """
+
+    name = models.CharField(max_length=100, unique=True)
+    parent = models.ForeignKey(
+        "self",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="children",
+        help_text="Umbrella form this is a variant of (thigh-high boot -> boot).",
+    )
+    wear_family = models.CharField(
+        max_length=20,
+        choices=WearFamily.choices,
+        db_index=True,
+        help_text="The broad wearable family; crafter picks are validated within it.",
+    )
+    description = models.TextField(blank=True)
+    is_active = models.BooleanField(default=True)
+
+    objects = NaturalKeyManager()
+
+    class NaturalKeyConfig:
+        fields = ["name"]
+
+    class Meta:
+        ordering = ["wear_family", "name"]
+
+    def __str__(self) -> str:
+        return self.name
+
+    @property
+    def prose_noun(self) -> str:
+        """The in-prose noun for this form ("cut"/"setting"/"silhouette")."""
+        from world.items.constants import silhouette_prose_noun  # noqa: PLC0415
+
+        return silhouette_prose_noun(self.wear_family)
+
+
+class Style(NaturalKeyMixin, SharedMemoryModel):
+    """A cultural/historical fashion register (e.g. "Lycene", "Old-Regime").
+
+    Re-ruled #2907 (was: intent adjectives like "Seductive" — those are
+    Accent-redundant and are purged): a Style says where a piece's fashion
+    LANGUAGE comes from — a regional culture, an era, an aesthetic school —
+    never what the piece is trying to do (that's an Accent). Authoring
+    discipline: reject any proposed style that reads like an accent synonym.
     """
 
     name = models.CharField(max_length=100, unique=True)
     description = models.TextField(blank=True)
+    origin = models.CharField(
+        max_length=100,
+        blank=True,
+        help_text=(
+            "The regional culture or school this register comes from (#2907, "
+            "PLACEHOLDER free text pending a lore pass)."
+        ),
+    )
+    era = models.CharField(
+        max_length=20,
+        choices=StyleEra.choices,
+        default=StyleEra.CURRENT,
+        db_index=True,
+        help_text=(
+            "CURRENT circulates in living cultures; ANCIENT is a dead language "
+            "rediscovered through investigation (#2907)."
+        ),
+    )
+    founder = models.ForeignKey(
+        "scenes.Persona",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="founded_styles",
+        help_text=(
+            "The fashion icon who founded this style, when player-founded "
+            "(#2907) — every future showing in it is their walking legacy."
+        ),
+    )
     audacity = models.IntegerField(
         choices=StyleAudacity.choices,
         default=StyleAudacity.EXPRESSIVE,

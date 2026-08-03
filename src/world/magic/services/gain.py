@@ -731,7 +731,30 @@ def create_style_presentation_endorsement(
         source=GainSource.STYLE_PRESENTATION,
         style_presentation_endorsement=endorsement,
     )
+
+    _bump_showcase_engagement(endorsee_sheet, scene)
     return endorsement
+
+
+def _bump_showcase_engagement(endorsee_sheet: CharacterSheet, scene: Scene) -> None:
+    """Feed a style endorsement into the weekly showcase settlement (#2907).
+
+    A peer endorsing your style presentation IS the "other players positive
+    this" signal the settlement ladder reads — bump the endorsee's unsettled
+    showing in this scene (fallback: their latest unsettled showing this
+    week; coarse v1, guess flagged on #2907).
+    """
+    from world.items.models import FashionShowing  # noqa: PLC0415
+    from world.items.services.fashion_showcase import record_showing_engagement  # noqa: PLC0415
+
+    showing = (
+        FashionShowing.objects.filter(
+            character_sheet=endorsee_sheet, settled=False, scene=scene
+        ).first()
+        or FashionShowing.objects.filter(character_sheet=endorsee_sheet, settled=False).first()
+    )
+    if showing is not None:
+        record_showing_engagement(showing)
 
 
 @transaction.atomic

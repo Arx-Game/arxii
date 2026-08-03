@@ -343,6 +343,15 @@ class ItemAccentReadSerializer(serializers.Serializer):
         return obj.target.styleable_adjective or obj.target.name
 
 
+class SilhouetteReadSerializer(serializers.Serializer):
+    """A piece's form (#2907): name + family + the prose noun the UI should use."""
+
+    id = serializers.IntegerField(read_only=True)
+    name = serializers.CharField(read_only=True)
+    wear_family = serializers.CharField(read_only=True)
+    prose_noun = serializers.CharField(read_only=True)
+
+
 class ItemInstanceReadSerializer(serializers.ModelSerializer):
     """Read serializer for ItemInstance — used by the inventory listing.
 
@@ -375,6 +384,8 @@ class ItemInstanceReadSerializer(serializers.ModelSerializer):
     crafted_provenance = serializers.SerializerMethodField()
     # #2886: structured accent rows for the removal UI.
     accents = serializers.SerializerMethodField()
+    # #2907: the piece's form (crafter-picked or template default), null = formless.
+    silhouette = serializers.SerializerMethodField()
 
     class Meta:
         model = ItemInstance
@@ -397,6 +408,7 @@ class ItemInstanceReadSerializer(serializers.ModelSerializer):
             "can_steal",
             "crafted_provenance",
             "accents",
+            "silhouette",
         ]
         read_only_fields = fields
 
@@ -420,6 +432,14 @@ class ItemInstanceReadSerializer(serializers.ModelSerializer):
     def get_accents(self, obj: ItemInstance) -> list[dict]:
         """Structured accent rows (#2886): target pk/name/adjective + level/adverb."""
         return ItemAccentReadSerializer(obj.cached_item_accents, many=True).data
+
+    @extend_schema_field(SilhouetteReadSerializer(allow_null=True))
+    def get_silhouette(self, obj: ItemInstance) -> dict | None:
+        """The piece's effective form (#2907), or None for formless items."""
+        silhouette = obj.effective_silhouette
+        if silhouette is None:
+            return None
+        return SilhouetteReadSerializer(silhouette).data
 
     def get_crafted_provenance(self, obj: ItemInstance) -> str | None:
         """The crafted mechanical line + persona credits, or None (#2878)."""

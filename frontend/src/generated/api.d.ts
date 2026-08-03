@@ -26851,6 +26851,7 @@ export interface components {
       /** @description The crafted mechanical line + persona credits, or None (#2878). */
       readonly crafted_provenance: string | null;
       readonly accents: components['schemas']['ItemAccentRead'][];
+      readonly silhouette: components['schemas']['SilhouetteRead'] | null;
     };
     /** @description Read serializer for ItemStyle (GET list/detail). */
     ItemStyleRead: {
@@ -36239,6 +36240,13 @@ export interface components {
      * @enum {string}
      */
     SignEnum: 'positive' | 'negative';
+    /** @description A piece's form (#2907): name + family + the prose noun the UI should use. */
+    SilhouetteRead: {
+      readonly id: number;
+      readonly name: string;
+      readonly wear_family: string;
+      readonly prose_noun: string;
+    };
     /** @description Read serializer for SineatingOffer payloads returned by the request endpoint. */
     SineatingOffer: {
       /** @description Return sinner_sheet PK. */
