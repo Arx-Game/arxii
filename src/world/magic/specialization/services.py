@@ -489,6 +489,37 @@ class _ResolvedTechnique:
                 return payload
         return self.technique.cached_condition_applications
 
+    # ``cached_<payload>`` aliases (#2901). Every payload *reader* in the codebase
+    # — ``summarize_technique_effects``, ``is_technique_hostile``,
+    # ``derive_target_relationship`` — reads the ``cached_`` names, not the bare
+    # ones above. Without these aliases ``__getattr__`` forwards those reads
+    # straight to the parent ``Technique``, so a variant that swaps its damage
+    # rows summarises as the *base* form under the variant's name and nothing
+    # fails. The aliases make a payload read resolve the same way whether the
+    # caller asks for ``damage_profiles`` or ``cached_damage_profiles``.
+    @property
+    def cached_damage_profiles(self) -> list:
+        return self.damage_profiles
+
+    @property
+    def cached_capability_grants(self) -> list:
+        return self.capability_grants
+
+    @property
+    def cached_condition_applications(self) -> list:
+        return self.condition_applications
+
+    @property
+    def cached_removed_conditions(self) -> list:
+        """Dispel rows, always the parent's.
+
+        There is no ``TechniqueVariantRemovedCondition`` model, so a variant
+        cannot override which conditions the technique strips. Declared
+        explicitly rather than left to ``__getattr__`` so the asymmetry is
+        visible next to the three payloads a variant *can* override.
+        """
+        return self.technique.cached_removed_conditions
+
     # Pass-through for the cast pipeline's other technique reads.
     def __getattr__(self, item):
         return getattr(self.technique, item)

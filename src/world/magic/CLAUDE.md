@@ -784,6 +784,26 @@ regeneration step.
   `(parent_technique, resonance, unlock_thread_level)`.
 - `CovenantRole` — refactored to inherit `AbstractSpecializedVariant` (schema no-op;
   `parent_role` with `related_name="sub_roles"` is the variant parent).
+- `TechniqueVariant.cached_effect_summary` (#2901) — the per-form sibling of
+  `Technique.cached_effect_summary`. A resolved form is fully determined by
+  `(parent_technique, variant)` with no caster input, so it caches on the variant row;
+  invalidate with `invalidate_variant_payload_caches`.
+
+**Per-caster forms — `available_technique_forms` (#2901)**
+(`services/technique_forms.py`): the display counterpart to the resolver. A variant does
+NOT replace a technique — it makes an alternate version available — so the character sheet
+and the in-scene cast list carry a **list** (base form + each unlocked variant + the next
+locked one per resonance), never one collapsed answer. `technique_signature_payload`
+returns the signature beside it, never inside it (ADR-0072).
+**Invariant: every entry is produced by calling `resolve_specialized_variant`** once per
+candidate resonance — never by re-implementing `matching_variant`'s predicate. The
+`is_default` marker must come from the `preferred_resonance=None` call, since that is the
+path carrying the alt-self resonance override.
+**Trap this closed:** `_ResolvedTechnique` exposed `damage_profiles` etc. while every
+payload reader reads `cached_damage_profiles`, so `__getattr__` forwarded those to the
+parent and a variant summarised as the base form under the variant's name. All four
+`cached_*` names are now declared on it; `cached_removed_conditions` is parent-only
+because no `TechniqueVariantRemovedCondition` model exists.
 
 **Resolver — `resolve_specialized_variant(*, entity, character)`**
 (`world/magic/specialization/services.py`): the single specialization resolver.

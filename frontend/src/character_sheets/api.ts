@@ -11,7 +11,7 @@
  */
 
 import { apiFetch } from '@/evennia_replacements/api';
-import type { TechniqueEffectSummary } from '@/magic/types';
+import type { TechniqueEffectSummary, TechniqueForm, TechniqueSignature } from '@/magic/types';
 
 /** Mirrors `world.character_sheets.types.TechniqueEntry`. */
 export interface CharacterSheetTechnique {
@@ -21,6 +21,15 @@ export interface CharacterSheetTechnique {
   description: string;
   /** The shared effect block (#2898) — cost, reach, targeting, hostility, plain-words summary. */
   effect_summary: TechniqueEffectSummary;
+  /**
+   * Which forms of it this caster can work (#2901): base, each unlocked
+   * variant, and one step ahead. Always at least one entry. The sheet
+   * describes, so it carries the full catalogue; the cast list carries only a
+   * compact affordance.
+   */
+  forms: TechniqueForm[];
+  /** The signature flourish riding whichever form is chosen, if any. */
+  signature: TechniqueSignature | null;
 }
 
 /** Mirrors `world.character_sheets.types.GiftEntry`. */

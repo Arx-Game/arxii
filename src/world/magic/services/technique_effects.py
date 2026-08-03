@@ -50,6 +50,12 @@ if TYPE_CHECKING:
         AbstractCapabilityGrant,
         AbstractDamageProfile,
     )
+    from world.magic.specialization.services import _ResolvedTechnique
+
+    #: What the summariser accepts: an authored ``Technique`` row, or a resolved
+    #: *form* of one. Both answer the same ``cached_<payload>`` reads (#2901) —
+    #: ``_ResolvedTechnique`` aliases them onto the variant's payload.
+    SummarizableTechnique = Technique | _ResolvedTechnique
 
 
 # --------------------------------------------------------------------------- #
@@ -198,7 +204,7 @@ def _capability_payload(row: AbstractCapabilityGrant) -> CapabilityEffectPayload
     )
 
 
-def technique_is_underspecified(technique: Technique) -> bool:
+def technique_is_underspecified(technique: SummarizableTechnique) -> bool:
     """True when nothing about the technique's effect is derivable from authored data.
 
     No applied condition, no removal, and no damage profile means
@@ -214,7 +220,7 @@ def technique_is_underspecified(technique: Technique) -> bool:
     )
 
 
-def technique_relationship_is_ambiguous(technique: Technique) -> bool:
+def technique_relationship_is_ambiguous(technique: SummarizableTechnique) -> bool:
     """True when the technique's payload rows disagree about who it targets.
 
     ``derive_target_relationship`` must return exactly one relationship, so a
@@ -234,7 +240,7 @@ def technique_relationship_is_ambiguous(technique: Technique) -> bool:
     return len(kinds) > 1
 
 
-def summarize_technique_effects(technique: Technique) -> TechniqueEffectPayload:
+def summarize_technique_effects(technique: SummarizableTechnique) -> TechniqueEffectPayload:
     """Build the shared effect summary for *technique*.
 
     Reads the technique's ``cached_*`` payload lists and the two existing
@@ -300,6 +306,35 @@ def invalidate_technique_payload_caches(technique: Technique) -> None:
     """
     for attr in _PAYLOAD_CACHE_ATTRS:
         technique.__dict__.pop(attr, None)
+
+
+#: The cached_property names that go stale when a variant's payload rows change.
+#: A variant has no ``removed_conditions`` relation (no
+#: ``TechniqueVariantRemovedCondition`` model) and no ``is_lock_applying``, so
+#: this is deliberately shorter than ``_PAYLOAD_CACHE_ATTRS``.
+_VARIANT_PAYLOAD_CACHE_ATTRS = (
+    "cached_condition_applications",
+    "cached_damage_profiles",
+    "cached_capability_grants",
+    "cached_effect_summary",
+)
+
+
+def invalidate_variant_payload_caches(variant) -> None:
+    """Drop the per-instance payload caches on a ``TechniqueVariant`` (#2901).
+
+    The variant sibling of :func:`invalidate_technique_payload_caches`. Variants
+    are SharedMemoryModels too, so a variant that has already answered the form
+    list keeps that answer for the life of the process. Safe to call when
+    nothing was cached.
+
+    A variant's summary is built from its parent's scalar fields as well as its
+    own payload, so editing the *parent* invalidates the variant too: call this
+    for each of ``technique.cached_variants`` after
+    :func:`invalidate_technique_payload_caches`.
+    """
+    for attr in _VARIANT_PAYLOAD_CACHE_ATTRS:
+        variant.__dict__.pop(attr, None)
 
 
 def technique_effect_authoring_gaps() -> list[TechniqueAuthoringGap]:

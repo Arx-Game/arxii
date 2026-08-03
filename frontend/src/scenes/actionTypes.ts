@@ -2,7 +2,7 @@
 // Legacy scene action types (now slimmed — fetchSceneActions has been removed)
 // ---------------------------------------------------------------------------
 
-import type { PowerLedger, TechniqueEffectSummary } from '@/magic/types';
+import type { PowerLedger, TechniqueEffectSummary, TechniqueForm } from '@/magic/types';
 
 export interface TechniqueOption {
   id: number;
@@ -384,6 +384,14 @@ export interface CastableTechnique {
   target_spec: TargetSpec | null;
   /** The shared effect block (#2898) — cost, reach, targeting, hostility, plain-words summary. */
   effect_summary: TechniqueEffectSummary;
+  /**
+   * The forms of this technique the caster can work right now (#2901): the base
+   * form plus each unlocked resonance-specialized one. Always at least one
+   * entry, exactly one of which is `is_default`. Locked forms are omitted here
+   * (the character sheet shows those); pick one by sending its `resonance_id`
+   * as `preferred_resonance_id`, or the base form via `use_base_form`.
+   */
+  forms: TechniqueForm[];
 }
 
 export interface CastPullRequestBody {
@@ -401,6 +409,13 @@ export interface CastRequestBody {
   target_persona_ids?: number[];
   strain_commitment?: number;
   pull?: CastPullRequestBody;
+  /** Cast the unspecialized base form (#1581) — telnet's `cast <tech> base`. */
+  use_base_form?: boolean;
+  /**
+   * Work the form specialized to this resonance (#2901) — telnet's
+   * `cast <tech> variant=<resonance>`. Omit for the default form.
+   */
+  preferred_resonance_id?: number | null;
 }
 
 /** Immediate-path cast result (EnhancedSceneActionResultSerializer). */

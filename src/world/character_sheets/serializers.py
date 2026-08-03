@@ -77,6 +77,11 @@ from world.magic.models import (
     TechniqueCapabilityGrant,
     TechniqueDamageProfile,
     TechniqueRemovedCondition,
+    TechniqueVariant,
+)
+from world.magic.services.technique_forms import (
+    available_technique_forms,
+    technique_signature_payload,
 )
 from world.progression.models import CharacterPathHistory
 from world.roster.models import RosterTenure
@@ -713,6 +718,17 @@ _MAGIC_PREFETCH_RELATED: tuple[str | Prefetch, ...] = (
                 queryset=TechniqueCapabilityGrant.objects.select_related("capability"),
                 to_attr="cached_capability_grants",
             ),
+            # #2901: the per-caster form list walks the technique's variants.
+            # select_related("resonance") because each form is labelled by the
+            # resonance a player passes to `cast ... variant=<resonance>`; the
+            # variants' own payload rows are NOT prefetched here because each
+            # form's summary is cached on its TechniqueVariant row and so is
+            # built once per variant for the whole process, not per sheet read.
+            Prefetch(
+                "technique__variants",
+                queryset=TechniqueVariant.objects.select_related("resonance"),
+                to_attr="cached_variants",
+            ),
         ),
         to_attr="cached_character_techniques",
     ),
@@ -758,6 +774,7 @@ def _build_magic_gifts(sheet: CharacterSheet) -> list[GiftEntry]:
     )
 
     # Build a lookup of techniques by gift_id from prefetched character_techniques
+    character = sheet.character
     techniques_by_gift: dict[int, list[TechniqueEntry]] = {}
     for ct in sheet.cached_character_techniques:
         tech = ct.technique
@@ -770,6 +787,14 @@ def _build_magic_gifts(sheet: CharacterSheet) -> list[GiftEntry]:
                 # Cached on the Technique row, so the whole spellbook costs one
                 # build per distinct technique however many characters read it (#2898).
                 effect_summary=tech.cached_effect_summary,
+                # Which forms of it this caster can work (#2901). Reads the
+                # prefetched variants + the cached threads handler, and each
+                # form's own summary is cached on its TechniqueVariant row, so
+                # this adds no query per technique.
+                forms=available_technique_forms(
+                    character, tech, character_technique=ct, sheet=sheet
+                ),
+                signature=technique_signature_payload(character, tech),
             )
         )
 

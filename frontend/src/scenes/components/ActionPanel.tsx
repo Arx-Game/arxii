@@ -68,6 +68,84 @@ const DEFAULT_EFFORT = 'medium';
  * and renders each PlayerAction with optional enhancement list, strain slider,
  * and target picker — all sourced from inline fields on the action.
  */
+/**
+ * Which form the player picked, if any (#2901).
+ *
+ * `null` is "left the default alone", which is NOT the same as picking the base
+ * form: when a variant is the default, choosing the base form is a real
+ * instruction (`use_base_form`) and must not collapse back to "no pick". The
+ * base form has no variant id of its own, hence the sentinel rather than null.
+ */
+type FormChoice = number | 'base' | null;
+
+/**
+ * The cast-request fields naming which form to work (#2901).
+ *
+ * Sends nothing when the player left the default alone — the server resolves
+ * the same form a bare `cast` would. The base form maps to `use_base_form`; a
+ * specialized form is named by its resonance, the same token telnet takes as
+ * `variant=<resonance>`.
+ */
+function formSelection(
+  technique: CastableTechnique,
+  choice: FormChoice
+): { use_base_form?: boolean; preferred_resonance_id?: number | null } {
+  if (choice === null) return {};
+  if (choice === 'base') return { use_base_form: true };
+  const form = technique.forms.find((f) => f.variant_id === choice);
+  if (!form) return {};
+  return { preferred_resonance_id: form.resonance_id };
+}
+
+/**
+ * Lets the caster pick among the forms of the selected technique (#2901).
+ *
+ * Renders nothing when only one form is reachable — a picker with a single
+ * option is noise. Before this the `base` and `variant=<resonance>` options
+ * existed only as undocumented telnet syntax, and the web could not reach the
+ * second one at all.
+ */
+function TechniqueFormPicker({
+  technique,
+  choice,
+  onSelect,
+}: {
+  technique: CastableTechnique;
+  choice: FormChoice;
+  onSelect: (choice: FormChoice) => void;
+}) {
+  if (technique.forms.length < 2) return null;
+
+  const defaultForm = technique.forms.find((f) => f.is_default);
+  const active: FormChoice = choice ?? (defaultForm ? (defaultForm.variant_id ?? 'base') : null);
+
+  return (
+    <div className="space-y-1" data-testid="technique-form-picker">
+      <p className="text-xs font-medium">Form</p>
+      <div className="flex flex-wrap gap-1">
+        {technique.forms.map((form) => {
+          const key: FormChoice = form.variant_id ?? 'base';
+          const isActive = key === active;
+          return (
+            <button
+              key={key}
+              type="button"
+              onClick={() => onSelect(key)}
+              aria-pressed={isActive}
+              className={`rounded border px-2 py-1 text-xs ${
+                isActive ? 'border-primary bg-primary/10' : 'border-muted text-muted-foreground'
+              }`}
+            >
+              {form.variant_id === null ? 'base form' : `${form.name} (${form.resonance_name})`}
+              {form.is_default && ' \u2022 default'}
+            </button>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
 export function ActionPanel({ sceneId }: Props) {
   const navigate = useNavigate();
   const [open, setOpen] = useState(false);
@@ -91,6 +169,9 @@ export function ActionPanel({ sceneId }: Props) {
   /** Selected persona ids for FILTERED_GROUP multi-cast. */
   const [castTargetPersonaIds, setCastTargetPersonaIds] = useState<number[]>([]);
   const [castPickingTarget, setCastPickingTarget] = useState(false);
+  // #2901: which form of the selected technique to work. null = the default
+  // form, which is what a bare cast does; the base form is variant_id null.
+  const [selectedForm, setSelectedForm] = useState<FormChoice>(null);
   const [castLedgerResult, setCastLedgerResult] = useState<CastResponse | null>(null);
 
   const queryClient = useQueryClient();
@@ -158,6 +239,7 @@ export function ActionPanel({ sceneId }: Props) {
     onSuccess: (data) => {
       invalidateActionOutcomeQueries();
       setSelectedTechnique(null);
+      setSelectedForm(null);
       setCastTargetPersonaId(null);
       setCastTargetPersonaIds([]);
       setCastPickingTarget(false);
@@ -350,6 +432,7 @@ export function ActionPanel({ sceneId }: Props) {
       performCast.mutate({
         technique_id: selectedTechnique.id,
         target_persona_ids: castTargetPersonaIds,
+        ...formSelection(selectedTechnique, selectedForm),
         ...payload,
       });
     } else {
@@ -357,6 +440,7 @@ export function ActionPanel({ sceneId }: Props) {
       performCast.mutate({
         technique_id: selectedTechnique.id,
         target_persona: castTargetPersonaId ?? null,
+        ...formSelection(selectedTechnique, selectedForm),
         ...payload,
       });
     }
@@ -639,6 +723,12 @@ export function ActionPanel({ sceneId }: Props) {
                       <TechniqueEffectSummaryDisplay
                         summary={selectedTechnique.effect_summary}
                         variant="full"
+                      />
+
+                      <TechniqueFormPicker
+                        technique={selectedTechnique}
+                        choice={selectedForm}
+                        onSelect={setSelectedForm}
                       />
 
                       {selectedTechnique.hostile && (

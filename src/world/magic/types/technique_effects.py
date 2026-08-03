@@ -81,6 +81,57 @@ class TechniqueEffectPayload(TypedDict):
     is_underspecified: bool
 
 
+class TechniqueFormPayload(TypedDict):
+    """One form of a technique that a specific caster can work (#2901).
+
+    #2898's ``TechniqueEffectPayload`` describes the *authored* technique, which
+    is the whole story for the two catalog surfaces. A caster who has woven a
+    GIFT thread also reaches resonance-specialized forms of the same technique,
+    and the base form remains available alongside them (``cast <tech> base``).
+    This is one entry in that list.
+
+    Built by ``world.magic.services.technique_forms.available_technique_forms``.
+    """
+
+    #: ``TechniqueVariant`` pk, or ``None`` for the base form.
+    variant_id: int | None
+    #: What the form is called: the variant's ``name_override``, else the
+    #: technique's own name.
+    name: str
+    #: ``Resonance`` pk this form manifests through, or ``None`` for the base
+    #: form (which is resonance-agnostic).
+    resonance_id: int | None
+    #: Display name of that resonance, or ``""`` for the base form. Doubles as
+    #: the token a player passes to ``cast <tech> variant=<resonance>``.
+    resonance_name: str
+    intensity: int
+    control: int
+    #: True for the form a bare ``cast <tech>`` works right now. Exactly one
+    #: entry in a list carries this.
+    is_default: bool
+    #: True when the caster cannot work this form yet. Locked entries carry the
+    #: authored numbers so the deepening reads as a goal, and are omitted from
+    #: the in-scene cast list.
+    is_locked: bool
+    #: Thread level that unlocks this form; 0 for the base form.
+    unlock_thread_level: int
+    #: The caster's current level on the thread this form resolves through.
+    thread_level: int
+    effect_summary: TechniqueEffectPayload
+
+
+class TechniqueSignaturePayload(TypedDict):
+    """The signature flourish riding whichever form the caster works (#2901).
+
+    A signature is an ADDITIVE modifier, never a sibling form (ADR-0072), so it
+    is a single field beside the form list rather than an entry inside it.
+    """
+
+    name: str
+    narrative_snippet: str
+    intensity_delta: int
+
+
 @dataclass(frozen=True)
 class TechniqueAuthoringGap:
     """One technique whose authored payload cannot be read back with confidence.

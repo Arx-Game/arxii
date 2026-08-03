@@ -624,7 +624,7 @@ class SceneActionRequestViewSet(PuppetActorMixin, viewsets.ModelViewSet):
         - benign at another PC → PENDING consent request (201, no result yet)
         - hostile at another PC → seeds/feeds a combat encounter (201 with encounter summary)
         """
-        from world.magic.models import Technique  # noqa: PLC0415
+        from world.magic.models import Resonance, Technique  # noqa: PLC0415
 
         serializer = TechniqueCastCreateSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
@@ -689,6 +689,14 @@ class SceneActionRequestViewSet(PuppetActorMixin, viewsets.ModelViewSet):
         use_base_form: bool = vd.get("use_base_form", False)
         cast_openly: bool = vd.get("cast_openly", False)
 
+        # #2901: which form to work. Telnet has had `variant=<resonance>` since
+        # #1619; this is its web counterpart, so the `forms` list the cast API
+        # now ships is something a browser client can actually act on.
+        preferred_resonance = None
+        preferred_resonance_id = vd.get("preferred_resonance_id")
+        if preferred_resonance_id is not None:
+            preferred_resonance = get_object_or_404(Resonance, pk=preferred_resonance_id)
+
         try:
             cast_result = request_technique_cast(
                 scene=scene,
@@ -699,6 +707,7 @@ class SceneActionRequestViewSet(PuppetActorMixin, viewsets.ModelViewSet):
                 cast_pull=cast_pull,
                 supplied_personas=supplied_personas,
                 use_base_form=use_base_form,
+                preferred_resonance=preferred_resonance,
                 cast_openly=cast_openly,
             )
         except DjangoValidationError as exc:
@@ -764,7 +773,9 @@ class SceneActionRequestViewSet(PuppetActorMixin, viewsets.ModelViewSet):
         Requires ?initiator_persona=<id> query param. Returns only techniques
         with an action_template (castable standalone) known by that character.
         """
-        from world.scenes.cast_services import castable_techniques_for_sheet  # noqa: PLC0415
+        from world.scenes.cast_services import (  # noqa: PLC0415
+            castable_technique_links_for_sheet,
+        )
 
         initiator_persona_id_str = request.query_params.get("initiator_persona")  # noqa: USE_FILTERSET
         if not initiator_persona_id_str:
@@ -789,8 +800,22 @@ class SceneActionRequestViewSet(PuppetActorMixin, viewsets.ModelViewSet):
             )
 
         initiator_persona = get_object_or_404(Persona, pk=initiator_persona_id)
-        techniques = castable_techniques_for_sheet(initiator_persona.character_sheet_id)
-        return Response(CastableTechniqueSerializer(techniques, many=True).data)
+        sheet = initiator_persona.character_sheet
+        # One fetch, two uses: the techniques serialized, and the links the form
+        # list needs to spot a role-granted technique (#2901). The context keys
+        # let the per-row form build reuse the sheet and threads handler rather
+        # than re-resolving them per serialized row.
+        links = castable_technique_links_for_sheet(sheet.pk)
+        context = {
+            "character": sheet.character,
+            "character_sheet": sheet,
+            "character_techniques": {ct.technique_id: ct for ct in links},
+        }
+        return Response(
+            CastableTechniqueSerializer(
+                [ct.technique for ct in links], many=True, context=context
+            ).data
+        )
 
     @extend_schema(
         parameters=[

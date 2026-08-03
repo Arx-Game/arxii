@@ -36985,7 +36985,7 @@ components:
       description: |-
         Serializes a Technique for the castable-techniques list endpoint.
 
-        Takes ``Technique`` rows — which is what ``castable_techniques_for_sheet``,
+        Takes ``Technique`` rows — which is what ``castable_technique_links_for_sheet``,
         its only source, returns. ``get_hostile`` and ``get_target_spec`` used to
         carry a ``CharacterTechnique`` branch as well, but neither could ever run:
         the declared ``name`` / ``anima_cost`` / ``tier`` fields raise on a link long
@@ -37027,11 +37027,17 @@ components:
           allOf:
           - $ref: '#/components/schemas/TechniqueEffectSummary'
           readOnly: true
+        forms:
+          type: array
+          items:
+            $ref: '#/components/schemas/TechniqueForm'
+          readOnly: true
       required:
       - anima_cost
       - control
       - description
       - effect_summary
+      - forms
       - hostile
       - id
       - intensity
@@ -68466,6 +68472,9 @@ components:
         use_base_form:
           type: boolean
           default: false
+        preferred_resonance_id:
+          type: integer
+          nullable: true
         cast_openly:
           type: boolean
           default: false
@@ -68544,6 +68553,69 @@ components:
       - removes
       - summary
       - target_type
+    TechniqueForm:
+      type: object
+      description: |-
+        One form of a technique a given caster can work (#2901).
+
+        Serializes a ``TechniqueFormPayload`` from
+        ``world.magic.services.technique_forms.available_technique_forms``. Shared by
+        the character sheet (full catalogue, locked forms included) and the in-scene
+        cast list (unlocked only), so the two cannot describe the same character's
+        options differently.
+
+        ``resonance_name`` doubles as the token a player passes to
+        ``cast <technique> variant=<resonance>``; the base form (``variant_id`` null)
+        is reached with ``cast <technique> base``.
+      properties:
+        variant_id:
+          type: integer
+          readOnly: true
+          nullable: true
+        name:
+          type: string
+          readOnly: true
+        resonance_id:
+          type: integer
+          readOnly: true
+          nullable: true
+        resonance_name:
+          type: string
+          readOnly: true
+        intensity:
+          type: integer
+          readOnly: true
+        control:
+          type: integer
+          readOnly: true
+        is_default:
+          type: boolean
+          readOnly: true
+        is_locked:
+          type: boolean
+          readOnly: true
+        unlock_thread_level:
+          type: integer
+          readOnly: true
+        thread_level:
+          type: integer
+          readOnly: true
+        effect_summary:
+          allOf:
+          - $ref: '#/components/schemas/TechniqueEffectSummary'
+          readOnly: true
+      required:
+      - control
+      - effect_summary
+      - intensity
+      - is_default
+      - is_locked
+      - name
+      - resonance_id
+      - resonance_name
+      - thread_level
+      - unlock_thread_level
+      - variant_id
     TechniqueReachEnum:
       enum:
       - same

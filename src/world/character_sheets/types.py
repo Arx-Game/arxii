@@ -9,7 +9,11 @@ from typing import TypedDict
 
 from django.db import models
 
-from world.magic.types.technique_effects import TechniqueEffectPayload
+from world.magic.types.technique_effects import (
+    TechniqueEffectPayload,
+    TechniqueFormPayload,
+    TechniqueSignaturePayload,
+)
 
 # --- API response shape TypedDicts ---
 
@@ -151,6 +155,14 @@ class TechniqueEntry(TypedDict):
     #: What the technique actually does (#2898) — the same block CG, the magic
     #: API, and the in-scene cast list carry, so the sheet can't drift from them.
     effect_summary: TechniqueEffectPayload
+    #: Which forms of it this caster can work (#2901): the base form, each
+    #: unlocked resonance-specialized variant, and one step ahead. Always at
+    #: least one entry. The sheet describes, so it carries the full catalogue;
+    #: the in-scene cast list carries only a compact affordance.
+    forms: list[TechniqueFormPayload]
+    #: The signature flourish riding whichever form is chosen, or ``None``.
+    #: Additive, never a sibling form (ADR-0072), so it sits beside the list.
+    signature: TechniqueSignaturePayload | None
 
 
 class GiftEntry(TypedDict):

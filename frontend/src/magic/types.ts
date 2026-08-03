@@ -528,3 +528,49 @@ export interface TechniqueEffectSummary {
   summary: string;
   is_underspecified: boolean;
 }
+
+// ---------------------------------------------------------------------------
+// Per-caster technique forms (#2901). A variant does NOT replace a technique;
+// it makes an alternate version available, so this is a list rather than one
+// resolved answer. Declared beside `TechniqueEffectSummary` for the same
+// reason it was: the character sheet and the in-scene cast list both embed it,
+// and two hand-rolled copies would drift.
+// ---------------------------------------------------------------------------
+
+/**
+ * One form of a technique a caster can work. `resonance_name` doubles as the
+ * token a player passes to `cast <tech> variant=<resonance>`; the base form
+ * (`variant_id === null`) is reached with `cast <tech> base`.
+ *
+ * Exactly one entry in a list carries `is_default` — the form a bare
+ * `cast <tech>` works right now. `is_locked` entries are shown as a goal on
+ * the character sheet and omitted from the in-scene cast list.
+ */
+export interface TechniqueForm {
+  /** null = the base form. */
+  variant_id: number | null;
+  name: string;
+  /** null = the base form, which is resonance-agnostic. */
+  resonance_id: number | null;
+  /** "" for the base form. */
+  resonance_name: string;
+  intensity: number;
+  control: number;
+  is_default: boolean;
+  is_locked: boolean;
+  /** 0 for the base form. */
+  unlock_thread_level: number;
+  thread_level: number;
+  effect_summary: TechniqueEffectSummary;
+}
+
+/**
+ * The signature flourish riding whichever form is chosen. Additive, never a
+ * sibling form (ADR-0072), so render it as a delta beside the list rather than
+ * as another row in it.
+ */
+export interface TechniqueSignature {
+  name: string;
+  narrative_snippet: string;
+  intensity_delta: number;
+}

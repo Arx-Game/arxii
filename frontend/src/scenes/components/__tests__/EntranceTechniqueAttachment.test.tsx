@@ -50,6 +50,21 @@ function makeTechnique(overrides: Partial<CastableTechnique> = {}): CastableTech
     reach: 'any',
     target_spec: null,
     effect_summary: mockEffectSummary,
+    forms: [
+      {
+        variant_id: null,
+        name: 'Ember Touch',
+        resonance_id: null,
+        resonance_name: '',
+        intensity: 2,
+        control: 1,
+        is_default: true,
+        is_locked: false,
+        unlock_thread_level: 0,
+        thread_level: 0,
+        effect_summary: mockEffectSummary,
+      },
+    ],
     ...overrides,
   };
 }

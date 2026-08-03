@@ -89,20 +89,25 @@ class TechniqueEffectSummaryOnEverySurfaceTests(TestCase):
         self.assertEqual(data["hostile"], data["effect_summary"]["hostile"])
 
     def test_castable_list_is_fed_technique_rows(self):
-        """castable_techniques_for_sheet — the list's only source — yields Techniques.
+        """The cast list serializer receives ``Technique`` rows, never links.
 
         The serializer previously carried a CharacterTechnique branch in two
         method fields that could never run; its declared ``name`` field raises on
         a link first. This pins the shape the serializer actually receives.
+
+        Reads ``castable_technique_links_for_sheet`` (#2901 made it the one seam —
+        the form list needs the link to spot a role-granted technique) and asserts
+        what the serializer is handed: ``ct.technique``.
         """
         from world.character_sheets.factories import CharacterSheetFactory
         from world.magic.factories import CharacterTechniqueFactory
-        from world.magic.models.techniques import Technique
-        from world.scenes.cast_services import castable_techniques_for_sheet
+        from world.magic.models.techniques import CharacterTechnique, Technique
+        from world.scenes.cast_services import castable_technique_links_for_sheet
 
         sheet = CharacterSheetFactory()
         CharacterTechniqueFactory(character=sheet, technique=self.technique)
 
-        rows = castable_techniques_for_sheet(sheet.pk)
+        links = castable_technique_links_for_sheet(sheet.pk)
 
-        self.assertTrue(all(isinstance(row, Technique) for row in rows))
+        self.assertTrue(all(isinstance(link, CharacterTechnique) for link in links))
+        self.assertTrue(all(isinstance(link.technique, Technique) for link in links))
