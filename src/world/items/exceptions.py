@@ -438,3 +438,59 @@ class BlendNotSupported(ItemError):
 
     user_message = "Those can't be blended together."
     SAFE_MESSAGES: ClassVar[frozenset[str]] = frozenset({"Those can't be blended together."})
+
+
+class InvalidAccentTarget(ItemError):
+    """An Accent was requested on a non-styleable or duplicate axis (#2878)."""
+
+    user_message = "That quality can't be worked into a piece."
+    SAFE_MESSAGES: ClassVar[frozenset[str]] = frozenset(
+        {"That quality can't be worked into a piece."}
+    )
+
+
+class RefinementNotPossible(ItemError):
+    """A refinement project can't be started for this goal (#2878)."""
+
+    user_message = "That piece can't be refined toward that goal."
+    SAFE_MESSAGES: ClassVar[frozenset[str]] = frozenset(
+        {"That piece can't be refined toward that goal."}
+    )
+
+
+class RefinementAwaitsMaster(ItemError):
+    """The crossing contribution needs a sufficiently capped crafter (#2878)."""
+
+    user_message = "This work awaits a master's hand to finish."
+    SAFE_MESSAGES: ClassVar[frozenset[str]] = frozenset(
+        {"This work awaits a master's hand to finish."}
+    )
+
+
+class NotItemOwner(ItemError):
+    """The actor does not hold the item (#2886 owner-only lifecycle acts)."""
+
+    user_message = "That isn't yours to alter."
+    SAFE_MESSAGES: ClassVar[frozenset[str]] = frozenset({"That isn't yours to alter."})
+
+
+class AccentNotPresent(ItemError):
+    """The item carries no such accent (#2886)."""
+
+    user_message = "That piece bears no such accent."
+    SAFE_MESSAGES: ClassVar[frozenset[str]] = frozenset({"That piece bears no such accent."})
+
+
+class RecycleNeedsGMApproval(ItemError):
+    """A story-significant item needs a GM sign-off to recycle (#2886)."""
+
+    user_message = (
+        "That piece carries a story the world remembers — a GM must sign off "
+        "before it can be unmade."
+    )
+    SAFE_MESSAGES: ClassVar[frozenset[str]] = frozenset(
+        {
+            "That piece carries a story the world remembers — a GM must sign off "
+            "before it can be unmade."
+        }
+    )

@@ -70,6 +70,19 @@ class CraftingRecipe(SharedMemoryModel):
         related_name="+",
         help_text="Trait (skill) whose rank gates or boosts this recipe. Optional.",
     )
+    specialization = models.ForeignKey(
+        "skills.Specialization",
+        on_delete=models.PROTECT,
+        null=True,
+        blank=True,
+        related_name="+",
+        help_text=(
+            "Specialization this recipe exercises (#2886, e.g. Honeyed Wine → "
+            "Brewing). Additive with the skill everywhere: its value joins the "
+            "craft/accent rolls AND the quality-cap lookup, so skill 50 + spec "
+            "50 crafts like skill 100 (Apostate's ruling)."
+        ),
+    )
     action_point_cost = models.PositiveIntegerField(
         default=0,
         help_text="Action points spent when initiating a crafting attempt.",
@@ -363,7 +376,8 @@ class CraftedItemRecipe(SharedMemoryModel):
 
     The quality_tier is the resolved crafting outcome quality (snapshotted at
     craft time). Modifier values are computed at read time from the recipe's
-    modifier outcomes × this quality tier.
+    modifier outcomes × this quality tier. Maker/designer credits live on
+    ItemInstance's #2066 dual-provenance fields, never here (#2878 dedup).
     """
 
     item_instance = models.ForeignKey(
@@ -394,6 +408,172 @@ class CraftedItemRecipe(SharedMemoryModel):
 
     def __str__(self) -> str:
         return f"{self.item_instance} ← {self.recipe.name} ({self.quality_tier.name})"
+
+
+class ItemAccent(SharedMemoryModel):
+    """A style axis the crafter worked into a specific piece (#2878).
+
+    Per-instance, chosen at the forge (or added later by refinement) — never
+    recipe or template data: "sexy recipe vs terrifying recipe" is exactly the
+    shape this model rejects. Each Accent rolled its own check at craft time;
+    ``level`` is how strongly the intent realized. Read alongside the
+    recipe-derived modifiers by ``ItemInstance.crafted_modifier_value``.
+    """
+
+    item_instance = models.ForeignKey(
+        "items.ItemInstance",
+        on_delete=models.CASCADE,
+        related_name="accents",
+    )
+    target = models.ForeignKey(
+        "mechanics.ModifierTarget",
+        on_delete=models.PROTECT,
+        related_name="item_accents",
+        help_text="The styleable axis (is_styleable=True): allure, menace, …",
+    )
+    level = models.ForeignKey(
+        "items.AccentLevel",
+        on_delete=models.PROTECT,
+        related_name="item_accents",
+        help_text="How strongly the accent realized (its own roll at craft time).",
+    )
+
+    class Meta:
+        app_label = "items"
+        ordering = ["target__name"]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["item_instance", "target"],
+                name="items_itemaccent_unique_per_target",
+            )
+        ]
+
+    def __str__(self) -> str:
+        return f"{self.item_instance}: {self.level.name} {self.target.name}"
+
+
+class AccentExclusion(SharedMemoryModel):
+    """A symmetric pair of accent axes that cannot coexist on one item (#2886).
+
+    Data rows, never an enum: "Dramatic and Unassuming are opposites" is a
+    content ruling, and future oppositions are row inserts. Store each pair
+    once; ``conflict_exists`` checks both orientations.
+    """
+
+    target_a = models.ForeignKey(
+        "mechanics.ModifierTarget",
+        on_delete=models.CASCADE,
+        related_name="accent_exclusions_a",
+    )
+    target_b = models.ForeignKey(
+        "mechanics.ModifierTarget",
+        on_delete=models.CASCADE,
+        related_name="accent_exclusions_b",
+    )
+
+    class Meta:
+        app_label = "items"
+        ordering = ["pk"]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["target_a", "target_b"],
+                name="items_accentexclusion_unique_pair",
+            )
+        ]
+
+    def __str__(self) -> str:
+        return f"{self.target_a.name} ⊥ {self.target_b.name}"
+
+    @classmethod
+    def conflict_exists(cls, target_pks: list[int]) -> tuple[int, int] | None:
+        """The first excluded (a, b) pk pair present in ``target_pks``, or None."""
+        pks = set(target_pks)
+        for row in cls.objects.all():
+            if row.target_a_id in pks and row.target_b_id in pks:
+                return (row.target_a_id, row.target_b_id)
+        return None
+
+
+class AccentArchetypeAllowance(SharedMemoryModel):
+    """Where an accent axis may be worked in, by gear archetype (#2886).
+
+    Allowlist semantics: a target with ANY rows is allowed only on the listed
+    archetypes; a target with none is unrestricted (custom axes stay usable
+    until curated). Apostate's ratified matrix: function accents (stealthy,
+    unassuming, nimble) are garment-only — except unassuming plate, which can
+    get lost in a crowd; presence accents span everything worn including
+    jewelry; menace touches weapons (and jewelry — spiked torcs); regal
+    weapons are ornate. Data rows, never an enum.
+    """
+
+    target = models.ForeignKey(
+        "mechanics.ModifierTarget",
+        on_delete=models.CASCADE,
+        related_name="accent_archetype_allowances",
+    )
+    gear_archetype = models.CharField(max_length=40)
+
+    class Meta:
+        app_label = "items"
+        ordering = ["target__name", "gear_archetype"]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["target", "gear_archetype"],
+                name="items_accentarchetypeallowance_unique",
+            )
+        ]
+
+    def __str__(self) -> str:
+        return f"{self.target.name} on {self.gear_archetype}"
+
+    @classmethod
+    def permits(cls, target: object, gear_archetype: str) -> bool:
+        """True when ``target`` may be accented onto this archetype."""
+        rows = list(cls.objects.filter(target=target).values_list("gear_archetype", flat=True))
+        return not rows or gear_archetype in rows
+
+
+class ItemRefinementDetails(SharedMemoryModel):
+    """Per-kind details for an ITEM_REFINEMENT project (#2878).
+
+    Follows the RANSOM pattern: the consumer app owns the details model and
+    points at ``projects.Project`` (ADR-0010 specific→general). The project is
+    the deterministic accumulator — AP and coin contributions advance progress
+    with **no rolls** (Apostate's ruling: roll-to-see-failure gacha is
+    unsatisfying; the road is guaranteed but gets longer/costlier per rung).
+    On threshold the instant-completion handler applies +1 to the goal:
+    ``accent_target`` set = raise (or add) that Accent; null = raise the
+    piece's base quality rung. The reachable rung is capped by the
+    highest-capped contributor (master-and-atelier: the final, crossing
+    contribution needs a sufficiently thread-woven crafter on the project).
+    """
+
+    project = models.OneToOneField(
+        "projects.Project",
+        on_delete=models.CASCADE,
+        primary_key=True,
+        related_name="item_refinement_details",
+    )
+    item_instance = models.ForeignKey(
+        "items.ItemInstance",
+        on_delete=models.CASCADE,
+        related_name="refinement_projects",
+    )
+    accent_target = models.ForeignKey(
+        "mechanics.ModifierTarget",
+        on_delete=models.PROTECT,
+        null=True,
+        blank=True,
+        related_name="refinement_projects",
+        help_text="The Accent axis being raised/added; null = base quality.",
+    )
+
+    class Meta:
+        app_label = "items"
+
+    def __str__(self) -> str:
+        goal = self.accent_target.name if self.accent_target else "quality"
+        return f"Refinement of {self.item_instance} ({goal})"
 
 
 class LabStationDetails(SharedMemoryModel):

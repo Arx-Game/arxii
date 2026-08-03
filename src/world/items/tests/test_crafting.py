@@ -44,7 +44,9 @@ class ComputeQualityScoreTests(TestCase):
     def _result(self, *, total_points: int, success_level: int):
         from types import SimpleNamespace
 
-        return SimpleNamespace(total_points=total_points, success_level=success_level)
+        return SimpleNamespace(
+            total_points=total_points, success_level=success_level, effective_roll=0
+        )
 
     def test_score_is_points_plus_stepped_success(self) -> None:
         from world.items.services.crafting import compute_quality_score

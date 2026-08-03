@@ -8,6 +8,7 @@ from typing import TYPE_CHECKING
 if TYPE_CHECKING:
     from evennia_extensions.models import Media
     from world.conditions.models import DamageType
+    from world.items.crafting.models import ItemAccent
     from world.mechanics.models import ModifierTarget
 
 from django.core.exceptions import ValidationError
@@ -29,6 +30,7 @@ from world.items.constants import (
     EquipmentLayer,
     GearArchetype,
     OwnershipEventType,
+    RecycleRequestStatus,
     StyleAudacity,
 )
 from world.locations.constants import StatKey
@@ -104,6 +106,34 @@ class QualityTier(SharedMemoryModel):
         if first is not None and score < first.numeric_min:
             return first
         return ordered.last()
+
+
+class AccentLevel(SharedMemoryModel):
+    """Benefit-only quality ladder for crafted Accents (#2878).
+
+    Deliberately separate from ``QualityTier``: an Accent is a value-add the
+    crafter works into a piece (allure, menace, …), so the ladder has no
+    "poor" end — level 1 is already a benefit. The adverb names double as
+    display grammar ("a quite menacing accent"). The reachable rung is
+    thread-capped (``world.items.crafting.constants.BASE_MAX_ACCENT_LEVEL``
+    plus one per thread woven into the crafting skill).
+    """
+
+    level = models.PositiveSmallIntegerField(
+        unique=True,
+        help_text="Rung on the accent ladder (1 = slightly … 7 = legendarily).",
+    )
+    name = models.CharField(
+        max_length=50,
+        unique=True,
+        help_text="Adverb used in display grammar (e.g. 'quite', 'extremely').",
+    )
+
+    class Meta:
+        ordering = ["level"]
+
+    def __str__(self) -> str:
+        return f"{self.name} ({self.level})"
 
 
 class MaterialCategory(SharedMemoryModel):
@@ -272,6 +302,16 @@ class ItemTemplate(NaturalKeyMixin, SharedMemoryModel):
         help_text=(
             "Optional crafting-equivalence class this template belongs to "
             "(e.g. Precious Gemstones). Null = not a categorised material."
+        ),
+    )
+    material_grade = models.PositiveSmallIntegerField(
+        default=0,
+        help_text=(
+            "Quality-score head start this material contributes when consumed "
+            "in crafting (#2878): the crafted piece's quality score is the "
+            "skill-capped roll plus the staged materials' quantity-weighted "
+            "mean grade. 0 for non-materials. Materials never scale item "
+            "stats directly — grade reaches everything through quality."
         ),
     )
     supports_open_close = models.BooleanField(
@@ -913,6 +953,10 @@ class ItemInstance(SharedMemoryModel):
         ``CharacterEquipmentHandler``) and their nested
         ``recipe.cached_modifier_outcomes``, computing each value as:
             base_value + round(quality_scale_factor * quality_tier.stat_multiplier)
+
+        Accents (#2878) add on top: each ``ItemAccent`` on this instance whose
+        axis matches contributes its ladder rung (small single digits by
+        design — gear colors a character without being the character).
         """
         total = 0
         for crafted in self.cached_crafted_recipes:
@@ -921,12 +965,27 @@ class ItemInstance(SharedMemoryModel):
                     total += outcome.base_value + round(
                         outcome.quality_scale_factor * crafted.quality_tier.stat_multiplier
                     )
+        for accent in self.cached_item_accents:
+            if accent.target_id == target.pk:
+                total += accent.level.level
         return total
 
     @property
     def display_image(self) -> Media | None:
         """Return custom image if set, otherwise template image."""
         return self.image or self.template.image
+
+    @cached_property
+    def cached_item_accents(self) -> list[ItemAccent]:
+        """Accents worked into this piece (#2878).
+
+        Targeted by Prefetch(..., to_attr=). When prefetched, Django populates
+        this directly. When accessed without prefetch, falls back to a fresh
+        query.
+
+        To invalidate: del instance.cached_item_accents
+        """
+        return list(self.accents.select_related("target", "level"))
 
     @cached_property
     def cached_item_facets(self) -> list[ItemFacet]:
@@ -1277,6 +1336,55 @@ class OwnershipEvent(SharedMemoryModel):
     def __str__(self) -> str:
         display = self.item_instance.display_name if self.item_instance else "deleted"
         return f"{display}: {self.get_event_type_display()}"
+
+
+class RecycleRequest(SharedMemoryModel):
+    """A GM sign-off request to recycle a story-significant item (#2886).
+
+    Recycling is owner-only and normally immediate; an item with legend
+    attached (linked deeds) is story-protected and needs an APPROVED row
+    here before ``recycle_item`` will destroy it. GM resolution goes through
+    ``resolve_recycle_request`` (admin-surfaced for now; a GM panel later).
+    """
+
+    item_instance = models.ForeignKey(
+        "items.ItemInstance",
+        on_delete=models.CASCADE,
+        related_name="recycle_requests",
+    )
+    requested_by = models.ForeignKey(
+        "character_sheets.CharacterSheet",
+        on_delete=models.CASCADE,
+        related_name="recycle_requests",
+    )
+    status = models.CharField(
+        max_length=20,
+        choices=RecycleRequestStatus.choices,
+        default=RecycleRequestStatus.PENDING,
+    )
+    resolved_by = models.ForeignKey(
+        "gm.GMProfile",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="resolved_recycle_requests",
+        help_text="The GM who signed off (or denied). Null while pending.",
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+    resolved_at = models.DateTimeField(null=True, blank=True)
+
+    class Meta:
+        ordering = ["-created_at"]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["item_instance", "requested_by"],
+                condition=models.Q(status="pending"),
+                name="items_recyclerequest_one_pending_per_requester",
+            )
+        ]
+
+    def __str__(self) -> str:
+        return f"Recycle {self.item_instance} ({self.status})"
 
 
 class ItemAttachment(SharedMemoryModel):
@@ -1641,6 +1749,18 @@ class Style(NaturalKeyMixin, SharedMemoryModel):
         default=StyleAudacity.EXPRESSIVE,
         help_text="How daring this style reads — scales its mechanical reward via "
         "AudacityTuning (#2029).",
+    )
+    axis_lean = models.ForeignKey(
+        "mechanics.ModifierTarget",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="leaning_styles",
+        help_text=(
+            "The styleable axis this silhouette leans toward (#2878): alluring "
+            "styles → allure, dread styles → menace. Vogue rotation reads this "
+            "so 'what is in' can favor an axis some seasons. Null = neutral."
+        ),
     )
 
     objects = NaturalKeyManager()

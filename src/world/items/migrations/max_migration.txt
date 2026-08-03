@@ -1,1 +1,1 @@
-0056_weaponclass_alter_itemtemplate_weapon_class
+0063_craftingrecipe_specialization

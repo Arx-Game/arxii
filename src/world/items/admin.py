@@ -2,7 +2,9 @@
 
 from django.contrib import admin
 
+from world.items.crafting.models import AccentArchetypeAllowance, AccentExclusion, ItemAccent
 from world.items.models import (
+    AccentLevel,
     Adornment,
     AudacityTuning,
     CommonGemBucket,
@@ -24,6 +26,7 @@ from world.items.models import (
     OwnershipEvent,
     PendingRareFind,
     QualityTier,
+    RecycleRequest,
     StreamCommonGemPool,
     Style,
     TemplateInteraction,
@@ -90,6 +93,40 @@ class OrgGemStockAdmin(admin.ModelAdmin):
     list_display = ["organization", "tier", "value"]
     list_filter = ["tier"]
     raw_id_fields = ["organization"]  # large Organization table
+
+
+@admin.register(AccentLevel)
+class AccentLevelAdmin(admin.ModelAdmin):
+    list_display = ["level", "name"]
+    ordering = ["level"]
+
+
+@admin.register(ItemAccent)
+class ItemAccentAdmin(admin.ModelAdmin):
+    list_display = ["item_instance", "target", "level"]
+    list_filter = ["target", "level"]
+    raw_id_fields = ["item_instance"]  # large ItemInstance table
+
+
+@admin.register(AccentExclusion)
+class AccentExclusionAdmin(admin.ModelAdmin):
+    list_display = ["target_a", "target_b"]
+
+
+@admin.register(AccentArchetypeAllowance)
+class AccentArchetypeAllowanceAdmin(admin.ModelAdmin):
+    list_display = ["target", "gear_archetype"]
+    list_filter = ["target"]
+
+
+@admin.register(RecycleRequest)
+class RecycleRequestAdmin(admin.ModelAdmin):
+    """GM sign-off surface for story-protected recycling (#2886) — approve or
+    deny by editing status + resolved_by until a GM panel lands."""
+
+    list_display = ["item_instance", "requested_by", "status", "created_at", "resolved_by"]
+    list_filter = ["status"]
+    raw_id_fields = ["item_instance", "requested_by"]  # large tables
 
 
 @admin.register(QualityTier)

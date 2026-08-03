@@ -144,7 +144,7 @@ def perform_check(  # noqa: PLR0913 - optional effort/fatigue params extend exis
     outcome = _get_outcome_for_roll(breakdown.chart, effective_roll) if breakdown.chart else None
     outcome = _apply_outcome_guarantees(character, outcome, breakdown.chart, situation_ctx)
 
-    return _check_result(check_type, outcome, breakdown)
+    return _check_result(check_type, outcome, breakdown, effective_roll=effective_roll)
 
 
 def perform_check_with_modifiers(  # noqa: PLR0913 - mirrors perform_check signature
@@ -693,7 +693,10 @@ def compute_check_rating(
 
 
 def _check_result(
-    check_type: "CheckType", outcome: "CheckOutcome | None", breakdown: _CheckBreakdown
+    check_type: "CheckType",
+    outcome: "CheckOutcome | None",
+    breakdown: _CheckBreakdown,
+    effective_roll: int = 0,
 ) -> CheckResult:
     """Assemble a CheckResult from a breakdown + the resolved (rolled or forced) outcome."""
     return CheckResult(
@@ -709,6 +712,7 @@ def _check_result(
         specialization_points=breakdown.specialization_points,
         capability_points=breakdown.capability_points,
         level_points=breakdown.level_points,
+        effective_roll=effective_roll,
     )
 
 

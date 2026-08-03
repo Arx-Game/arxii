@@ -238,9 +238,35 @@ class ObjectParent:
         catering = _maybe_render_catering_history(self)
         if catering is not None:
             sections = [*sections, catering]
+        provenance = _maybe_render_crafted_provenance(self)
+        if provenance is not None:
+            sections = [*sections, provenance]
         if sections:
             return base + "\n" + "\n".join(sections)
         return base
+
+
+def _maybe_render_crafted_provenance(obj) -> str | None:
+    """The crafted mechanical line + credits for an item, or None (#2878).
+
+    "Of divine quality, quite menacing and slightly alluring. Designed by X;
+    crafted by Y." — the examine layer at the bottom of the desc, shared with
+    the web serializer via ``crafted_provenance_line``.
+    """
+    from django.core.exceptions import ObjectDoesNotExist
+
+    try:
+        instance = obj.item_instance
+    except (AttributeError, ObjectDoesNotExist):
+        return None
+    if instance is None:
+        return None
+    from world.items.services.crafted_display import crafted_provenance_line
+
+    line = crafted_provenance_line(instance)
+    if line is None:
+        return None
+    return f"|w{line}|n"
 
 
 def _maybe_render_catering_history(obj) -> str | None:

@@ -9008,6 +9008,72 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
+  '/api/items/inventory/{id}/recycle/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /**
+     * @description Destroy an owned piece for a fraction of its materials (#2886).
+     *
+     *     Story-protected items (legend attached) 400 with the GM sign-off
+     *     message until an approved RecycleRequest exists. The frontend
+     *     confirms before calling — recycling is irreversible.
+     */
+    post: operations['items_inventory_recycle_create'];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/items/inventory/{id}/remove-accent/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /**
+     * @description Strip one worked-in Accent off an owned piece (#2886). No refund.
+     *
+     *     Body: ``{"accent_target": <ModifierTarget pk>}``. The frontend
+     *     confirms before calling — removal is irreversible.
+     */
+    post: operations['items_inventory_remove_accent_create'];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/items/inventory/{id}/request-recycle-approval/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /**
+     * @description File (or return the existing pending) GM sign-off request (#2886).
+     *
+     *     Offered by the frontend when a recycle attempt is story-blocked.
+     */
+    post: operations['items_inventory_request_recycle_approval_create'];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   '/api/items/inventory/{id}/use/': {
     parameters: {
       query?: never;
@@ -26702,6 +26768,14 @@ export interface components {
      * @enum {string}
      */
     InterventionTriggerEnum: 'incapacitated' | 'near_death';
+    /** @description One worked-in Accent on a piece (#2886) — the removal UI's row shape. */
+    ItemAccentRead: {
+      readonly target: number;
+      readonly name: string;
+      readonly adjective: string;
+      readonly level: number;
+      readonly adverb: string;
+    };
     /** @description Read serializer for ItemFacet (GET list/detail). */
     ItemFacetRead: {
       readonly id: number;
@@ -26773,6 +26847,9 @@ export interface components {
        *     surface the affordance.
        */
       readonly can_steal: boolean;
+      /** @description The crafted mechanical line + persona credits, or None (#2878). */
+      readonly crafted_provenance: string | null;
+      readonly accents: components['schemas']['ItemAccentRead'][];
     };
     /** @description Read serializer for ItemStyle (GET list/detail). */
     ItemStyleRead: {
@@ -51584,6 +51661,66 @@ export interface operations {
         content: {
           'application/json': components['schemas']['ItemInstanceRead'];
         };
+      };
+    };
+  };
+  items_inventory_recycle_create: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        id: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description No response body */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+    };
+  };
+  items_inventory_remove_accent_create: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        id: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description No response body */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+    };
+  };
+  items_inventory_request_recycle_approval_create: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        id: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description No response body */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
       };
     };
   };

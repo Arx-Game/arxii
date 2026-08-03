@@ -615,6 +615,77 @@ class ItemInstanceViewSet(viewsets.ViewSet):
             ).data
         )
 
+    def _owned_item_or_404(self, request: Request, pk: str | None) -> ItemInstance:
+        """Resolve an in-play item the requester holds, or 404 (#2886)."""
+        user = cast(AccountDB, request.user)
+        item_pk = _parse_int_param(pk)
+        if item_pk is None:
+            raise NotFound
+        try:
+            item = ItemInstance.objects.in_play().select_related("template").get(pk=item_pk)
+        except ItemInstance.DoesNotExist as exc:
+            raise NotFound from exc
+        if not user.is_staff and not _user_holds_item(user, item):
+            raise NotFound
+        return item
+
+    @extend_schema(request=None, responses={200: None})
+    @action(detail=True, methods=[HTTPMethod.POST], url_path="remove-accent")
+    def remove_accent(self, request: Request, pk: str | None = None) -> Response:
+        """Strip one worked-in Accent off an owned piece (#2886). No refund.
+
+        Body: ``{"accent_target": <ModifierTarget pk>}``. The frontend
+        confirms before calling — removal is irreversible.
+        """
+        from actions.definitions.crafting import RemoveAccentAction  # noqa: PLC0415
+        from world.mechanics.models import ModifierTarget  # noqa: PLC0415
+
+        item = self._owned_item_or_404(request, pk)
+        target_pk = _parse_int_param(request.data.get("accent_target"))
+        target = ModifierTarget.objects.filter(pk=target_pk).first() if target_pk else None
+        if target is None:
+            raise serializers.ValidationError({"accent_target": "This field is required."})
+        actor = item.holder_character_sheet.character
+        action_result = RemoveAccentAction().run(
+            actor=actor, item_instance=item, accent_target=target
+        )
+        if not action_result.success:
+            raise serializers.ValidationError({"non_field_errors": [action_result.message]})
+        return Response({"removed": target.name})
+
+    @extend_schema(request=None, responses={200: None})
+    @action(detail=True, methods=[HTTPMethod.POST], url_path="recycle")
+    def recycle(self, request: Request, pk: str | None = None) -> Response:
+        """Destroy an owned piece for a fraction of its materials (#2886).
+
+        Story-protected items (legend attached) 400 with the GM sign-off
+        message until an approved RecycleRequest exists. The frontend
+        confirms before calling — recycling is irreversible.
+        """
+        from actions.definitions.crafting import RecycleItemAction  # noqa: PLC0415
+
+        item = self._owned_item_or_404(request, pk)
+        actor = item.holder_character_sheet.character
+        action_result = RecycleItemAction().run(actor=actor, item_instance=item)
+        if not action_result.success:
+            raise serializers.ValidationError({"non_field_errors": [action_result.message]})
+        return Response({"salvaged": action_result.data.get("salvaged", [])})
+
+    @extend_schema(request=None, responses={200: None})
+    @action(detail=True, methods=[HTTPMethod.POST], url_path="request-recycle-approval")
+    def request_recycle_approval(self, request: Request, pk: str | None = None) -> Response:
+        """File (or return the existing pending) GM sign-off request (#2886).
+
+        Offered by the frontend when a recycle attempt is story-blocked.
+        """
+        from world.items.services.recycle import (  # noqa: PLC0415
+            request_recycle_approval as request_approval,
+        )
+
+        item = self._owned_item_or_404(request, pk)
+        row = request_approval(item_instance=item, actor_sheet=item.holder_character_sheet)
+        return Response({"status": row.status})
+
 
 @extend_schema(tags=["items"])
 class EquippedItemViewSet(viewsets.ViewSet):
@@ -1593,22 +1664,32 @@ class ItemCreateCraftViewSet(viewsets.ViewSet):
     def create(self, request: Request) -> Response:
         """Roll the crafting check and (on success) mint a new ItemInstance."""
         from actions.definitions.crafting import CreateItemAction  # noqa: PLC0415
+        from world.mechanics.models import ModifierTarget  # noqa: PLC0415
 
         template_pk = request.data.get("template")
         custom_name = request.data.get("custom_name", "")
         custom_description = request.data.get("custom_description", "")
+        accent_pks = request.data.get("accent_targets") or []
         if not template_pk:
             raise serializers.ValidationError({"template": "This field is required."})
         try:
             template = ItemTemplate.objects.get(pk=template_pk, is_active=True)
         except ItemTemplate.DoesNotExist as exc:
             raise NotFound from exc
+        accent_targets = list(
+            ModifierTarget.objects.filter(pk__in=accent_pks, is_styleable=True, is_active=True)
+        )
+        if len(accent_targets) != len(set(accent_pks)):
+            raise serializers.ValidationError(
+                {"accent_targets": "One or more accents are not styleable axes."}
+            )
         actor_sheet = _resolve_actor_sheet(request, body_key="crafter_sheet_id")
         action_result = CreateItemAction().run(
             actor=actor_sheet.character,
             output_template=template,
             custom_name=custom_name,
             custom_description=custom_description,
+            accent_targets=accent_targets,
         )
         if not action_result.success:
             raise serializers.ValidationError({"non_field_errors": [action_result.message]})
@@ -1620,6 +1701,10 @@ class ItemCreateCraftViewSet(viewsets.ViewSet):
                 "item_instance_id": result.item_instance.pk if result.item_instance else None,
                 "quality_tier": str(result.quality_tier) if result.quality_tier else None,
                 "consequence_label": result.consequence_label,
+                "accents": [
+                    {"target": a.target.name, "level": a.level.level, "adverb": a.level.name}
+                    for a in result.accents
+                ],
             },
             status=status_code,
         )

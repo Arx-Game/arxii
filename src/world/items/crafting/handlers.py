@@ -209,8 +209,16 @@ class ItemCreateHandler(CraftingHandler):
         custom_name = overrides.get("custom_name", "")
         custom_description = overrides.get("custom_description", "")
         crafter_character = overrides.get("crafter_character")
+        from world.scenes.models import Persona  # noqa: PLC0415
+        from world.scenes.services import active_persona_for_sheet  # noqa: PLC0415
+
         crafter_sheet = CharacterSheet.objects.get(character=crafter_character)
-        active_persona = crafter_sheet.primary_persona
+        try:
+            # The face at the forge signs the work (#981) — a masked artisan's
+            # mark is the mask, never the face beneath.
+            active_persona = active_persona_for_sheet(crafter_sheet)
+        except Persona.DoesNotExist:
+            active_persona = None
 
         instance = _ItemInstance.objects.create(
             template=output_template,

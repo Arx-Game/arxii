@@ -196,6 +196,7 @@ class CreateItemAction(Action):
             return ActionResult(success=False, message="Create what?")
         custom_name = kwargs.get("custom_name", "")
         custom_description = kwargs.get("custom_description", "")
+        accent_targets = kwargs.get("accent_targets") or []
         crafter_account = get_account_for_character(actor)
         if crafter_account is None:
             return ActionResult(success=False, message=_NO_ACCOUNT_MSG)
@@ -206,7 +207,82 @@ class CreateItemAction(Action):
                 output_template=output_template,
                 custom_name=custom_name,
                 custom_description=custom_description,
+                accent_targets=accent_targets,
             )
         except _CRAFT_EXCEPTIONS as exc:
             return ActionResult(success=False, message=exc.user_message)
         return ActionResult(success=True, data={"result": result})
+
+
+@dataclass
+class RemoveAccentAction(Action):
+    """Strip one worked-in Accent off an owned piece (#2886). No refund."""
+
+    key: str = "craft_remove_accent"
+    name: str = "Remove Accent"
+    icon: str = "eraser"
+    category: str = "items"
+    target_type: TargetType = TargetType.SELF
+
+    def get_prerequisites(self) -> list[Prerequisite]:
+        return [OwnsItemInstancePrerequisite()]
+
+    def execute(
+        self,
+        actor: ObjectDB,
+        context: ActionContext | None = None,
+        **kwargs: Any,
+    ) -> ActionResult:
+        from world.items.services.recycle import remove_item_accent  # noqa: PLC0415
+
+        item_instance: ItemInstance | None = kwargs.get("item_instance")
+        target = kwargs.get("accent_target")
+        if item_instance is None or target is None:
+            return ActionResult(success=False, message="Remove which accent, from what?")
+        try:
+            remove_item_accent(
+                item_instance=item_instance,
+                target=target,
+                actor_sheet=item_instance.holder_character_sheet,
+            )
+        except _CRAFT_EXCEPTIONS as exc:
+            return ActionResult(success=False, message=exc.user_message)
+        return ActionResult(success=True, data={})
+
+
+@dataclass
+class RecycleItemAction(Action):
+    """Destroy an owned piece for a fraction of its materials (#2886).
+
+    Story-protected items (legend attached) need a GM-approved RecycleRequest
+    first — the action surfaces that as its failure message.
+    """
+
+    key: str = "recycle_item"
+    name: str = "Recycle Item"
+    icon: str = "recycle"
+    category: str = "items"
+    target_type: TargetType = TargetType.SELF
+
+    def get_prerequisites(self) -> list[Prerequisite]:
+        return [OwnsItemInstancePrerequisite()]
+
+    def execute(
+        self,
+        actor: ObjectDB,
+        context: ActionContext | None = None,
+        **kwargs: Any,
+    ) -> ActionResult:
+        from world.items.services.recycle import recycle_item  # noqa: PLC0415
+
+        item_instance: ItemInstance | None = kwargs.get("item_instance")
+        if item_instance is None:
+            return ActionResult(success=False, message="Recycle what?")
+        try:
+            result = recycle_item(
+                item_instance=item_instance,
+                actor_sheet=item_instance.holder_character_sheet,
+            )
+        except _CRAFT_EXCEPTIONS as exc:
+            return ActionResult(success=False, message=exc.user_message)
+        return ActionResult(success=True, data={"salvaged": list(result.salvaged)})

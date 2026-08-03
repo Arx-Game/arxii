@@ -125,6 +125,12 @@ def _seed_provisioning() -> None:
     seed_provisioning_content()
 
 
+def _seed_crafting_materials() -> None:
+    from world.seeds.crafting_materials import seed_crafting_materials  # noqa: PLC0415
+
+    seed_crafting_materials()
+
+
 def _seed_investigation() -> None:
     from world.seeds.investigation_checks import seed_investigation_check_content  # noqa: PLC0415
 
@@ -432,6 +438,9 @@ CLUSTER_SEEDERS: dict[str, Callable[[], None]] = {
     # resolution spine exists; authoritative, so it corrects the placeholder stat+stat seed.
     "social": _seed_social,
     "provisioning": _seed_provisioning,
+    # Generic crafting-material ladders (#2878 Phase F): categories + graded
+    # base templates. Named canon materials await Apostate's worksheet.
+    "crafting_materials": _seed_crafting_materials,
     # Investigation: the Search check (perception + Investigation) + the Investigation skill.
     # After "checks" for the resolution spine; authoritative (#1705).
     "investigation": _seed_investigation,
@@ -658,7 +667,11 @@ def seeded_models_by_cluster() -> dict[str, list[type[Model]]]:
     from world.gm.models import GMLevelCap, GMRewardConfig, SituationKind  # noqa: PLC0415
     from world.items.crafting.models import CraftingRecipe  # noqa: PLC0415
     from world.items.market.models import MarketSquare  # noqa: PLC0415
-    from world.items.models import ItemTemplate, Style  # noqa: PLC0415
+    from world.items.models import (  # noqa: PLC0415
+        ItemTemplate,
+        MaterialCategory,
+        Style,
+    )
     from world.justice.models import (  # noqa: PLC0415
         AreaLaw,
         CrimeKind,
@@ -710,6 +723,9 @@ def seeded_models_by_cluster() -> dict[str, list[type[Model]]]:
         # first live QualityTier ladder. Skill/CheckType rows counted under "checks";
         # the recipe rows are the representative content.
         "provisioning": [CraftingRecipe],
+        # Generic material ladders (#2878 Phase F): graded base templates per
+        # category; named canon rows await Apostate's worksheet.
+        "crafting_materials": [MaterialCategory],
         # Underworld (#2862): the turf-war stage — NPC gang + contested
         # neighborhood + Retaliation crisis type.
         # Weather (#2845): the authored corpus — types, exposures, shelters,

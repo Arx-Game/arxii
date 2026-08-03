@@ -25,9 +25,11 @@ from __future__ import annotations
 import logging
 
 from django.db import transaction
+from django.db.models import Prefetch
 
 from evennia_extensions.models import RoomProfile
 from world.buildings.polish_services import apply_room_polish_delta
+from world.items.crafting.models import ItemAccent
 from world.items.models import EquippedItem, ItemInstance, RoomItem
 from world.scenes.models import Persona
 
@@ -96,6 +98,26 @@ def _flow_item_polish(item_instance: ItemInstance, room: RoomProfile, *, delta_s
     )
 
 
+def _item_worth_prestige(instance: ItemInstance) -> int:
+    """Prestige a single worn piece confers beyond its polish (#2878).
+
+    Expensive items are much higher prestige (Apostate's ruling): material
+    value scaled by quality, plus each Accent's rung, plus the item's own
+    legend. All coefficients PLACEHOLDER — the tuning pass sets real weights.
+    """
+    from world.items.constants import (  # noqa: PLC0415
+        ACCENT_PRESTIGE_WEIGHT,
+        PRESTIGE_VALUE_DIVISOR,
+    )
+
+    multiplier = (
+        float(instance.quality_tier.stat_multiplier) if instance.quality_tier is not None else 1.0
+    )
+    worth = int(instance.template.value * multiplier) // PRESTIGE_VALUE_DIVISOR
+    accents = ACCENT_PRESTIGE_WEIGHT * sum(a.level.level for a in instance.cached_item_accents)
+    return worth + accents + instance.legend_value
+
+
 def recompute_persona_prestige_from_items(persona: Persona) -> int:
     """Sum equipped-item polish into the persona's prestige_from_items.
 
@@ -113,13 +135,22 @@ def recompute_persona_prestige_from_items(persona: Persona) -> int:
     if sheet is None or sheet.character_id is None:
         return persona.prestige_from_items
     total = 0
-    equipped = EquippedItem.objects.filter(character_id=sheet.character_id).select_related(
-        "item_instance__template"
+    equipped = (
+        EquippedItem.objects.filter(character_id=sheet.character_id)
+        .select_related("item_instance__template", "item_instance__quality_tier")
+        .prefetch_related(
+            Prefetch(
+                "item_instance__accents",
+                queryset=ItemAccent.objects.select_related("target", "level"),
+                to_attr="cached_item_accents",
+            )
+        )
     )
     for slot in equipped:
         template = slot.item_instance.template
         if template.polish_value > 0 and template.polish_category_id is not None:
             total += template.polish_value
+        total += _item_worth_prestige(slot.item_instance)
     if total == persona.prestige_from_items:
         return total
     persona.prestige_from_items = total

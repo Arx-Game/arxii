@@ -2,8 +2,9 @@
 
 Activates the built-and-wired crafting engine for provisioning: the Cooking
 skill (+ Brewing specialization) and its CheckType (wits + Cooking), the
-first LIVE QualityTier ladder (Common/Fine/Masterwork previously existed only
-in test factories), example ITEM_CREATE recipes (Hearty Stew, Honeyed Wine —
+live QualityTier ladder (the 12-rung #2878 ladder, Poor→Legendary; quality
+tiers previously existed only in test factories) plus the 7-rung AccentLevel
+ladder, example ITEM_CREATE recipes (Hearty Stew, Honeyed Wine —
 ``requires_station=False``: kitchens, not labs), ingredient templates, and
 skill-cap ladders so output quality clamps to the cook's skill. Quality
 matters downstream: the event catering loop (#2852) sums quality multipliers
@@ -23,6 +24,10 @@ logger = logging.getLogger(__name__)
 COOKING_SKILL_NAME = "Cooking"
 COOKING_CHECK_NAME = "Cooking"
 BREWING_SPECIALIZATION_NAME = "Brewing"
+
+# Recipes exercising a specialization (#2886 — spec is additive with the
+# skill on the roll AND the quality cap; Apostate: 50+50 ≡ 100).
+_RECIPE_SPECIALIZATIONS = {"Honeyed Wine": BREWING_SPECIALIZATION_NAME}
 
 # (output template name, ((ingredient template name, quantity), ...), workshop_gated)
 _RECIPE_ROWS = (
@@ -48,14 +53,54 @@ _INGREDIENT_CATEGORY = {
     "Hazeleaf": "Botanical",
 }
 
-# (tier name, numeric_min, numeric_max, stat_multiplier, sort_order)
+# The 12-rung quality ladder (#2878). Rung = sort_order; 1-9 are mundane-
+# reachable (Arx 1's adjectives, PLACEHOLDER names pending Apostate's rename
+# pass — rows are admin-editable), 10 divine / 11 transcendent / 12 legendary
+# are thread-gated (see crafting.constants.BASE_MAX_QUALITY_RUNG). Bands and
+# multipliers are PLACEHOLDER tuning.
+# (tier name, numeric_min, numeric_max, stat_multiplier, sort_order, color_hex)
 _QUALITY_TIERS = (
-    ("Common", 0, 29, "1.00", 0),
-    ("Fine", 30, 69, "1.25", 1),
-    ("Masterwork", 70, 9999, "1.60", 2),
+    ("Poor", 0, 9, "0.80", 1, "#9E9E9E"),
+    ("Mediocre", 10, 19, "0.90", 2, "#B0BEC5"),
+    ("Average", 20, 29, "1.00", 3, "#E0E0E0"),
+    ("Above Average", 30, 39, "1.05", 4, "#C8E6C9"),
+    ("Well-Crafted", 40, 49, "1.10", 5, "#A5D6A7"),
+    ("Fine", 50, 59, "1.20", 6, "#66BB6A"),
+    ("Exceptional", 60, 69, "1.30", 7, "#42A5F5"),
+    ("Superb", 70, 79, "1.45", 8, "#7E57C2"),
+    ("Perfect", 80, 99, "1.60", 9, "#AB47BC"),
+    ("Divine", 100, 119, "1.80", 10, "#FFD54F"),
+    ("Transcendent", 120, 149, "2.00", 11, "#FF8A65"),
+    ("Legendary", 150, 9999, "2.30", 12, "#FF5252"),
 )
+#: The 3-row placeholder ladder this 12-rung ladder replaces; deleted on seed.
+_LEGACY_TIER_NAMES = ("Common", "Masterwork")
 # (min skill value, tier name) — the cook's skill caps output quality.
-_SKILL_CAP_LADDER = ((0, "Common"), (40, "Fine"), (80, "Masterwork"))
+# Retuned for the 12-rung ladder (#2886): caps sit ~1-2 rungs above a
+# crafter's typical score so a hot roll can genuinely punch upward (the
+# "wow" outcome, Apostate's ruling 2026-08-02) while a novice with great
+# materials still squanders them. Trait values are the internal ×10 scale
+# (player-facing 3.0 = 30). PLACEHOLDER tuning.
+_SKILL_CAP_LADDER = (
+    (0, "Well-Crafted"),
+    (20, "Fine"),
+    (30, "Exceptional"),
+    (40, "Superb"),
+    (55, "Perfect"),
+)
+
+# The benefit-only Accent ladder (#2878): 7 adverbs, thread-gated past
+# BASE_MAX_ACCENT_LEVEL. Content lands in the Accents phase; the ladder is
+# seeded with the quality ladder because they are tuned together.
+_ACCENT_LEVELS = (
+    (1, "slightly"),
+    (2, "modestly"),
+    (3, "quite"),
+    (4, "very"),
+    (5, "extremely"),
+    (6, "amazingly"),
+    (7, "legendarily"),
+)
 
 
 def seed_provisioning_content() -> None:
@@ -105,6 +150,11 @@ def _ensure_cooking_check():
         {"trait_type": TraitType.STAT, "category": TraitCategory.MENTAL, "is_public": True},
         name="wits",
     )
+    agility = authored_or_sample(
+        Trait,
+        {"trait_type": TraitType.STAT, "category": TraitCategory.PHYSICAL, "is_public": True},
+        name="agility",
+    )
     category = authored_or_sample(
         CheckCategory,
         {"description": "Trade and craft checks.", "display_order": 40},
@@ -122,30 +172,55 @@ def _ensure_cooking_check():
     CheckTypeTrait.objects.get_or_create(
         check_type=check_type, trait=skill_trait, defaults={"weight": Decimal("1.00")}
     )
-    if wits is not None:
-        CheckTypeTrait.objects.get_or_create(
-            check_type=check_type, trait=wits, defaults={"weight": Decimal("0.50")}
-        )
+    # Stat side = the AVERAGE of wits and agility (#2886, Apostate — echoing
+    # Arx 1's higher-of-wits-and-dex; the average is what weighted rows can
+    # express). update_or_create so the pre-ruling wits-0.50 rows retune.
+    for stat in (wits, agility):
+        if stat is not None:
+            CheckTypeTrait.objects.update_or_create(
+                check_type=check_type, trait=stat, defaults={"weight": Decimal("0.25")}
+            )
     return check_type
 
 
 def _ensure_quality_tiers() -> dict[str, object]:
-    """The first live QualityTier ladder (test-factory values promoted)."""
-    from world.items.models import QualityTier  # noqa: PLC0415
+    """The live 12-rung QualityTier ladder + the 7-rung Accent ladder (#2878).
+
+    ``update_or_create`` (not get_or_create) so band/multiplier retunes land on
+    re-seed, and so the legacy 3-row ladder's overlapping bands are corrected
+    in place. Legacy rows whose names left the ladder are deleted (dev-only
+    data; a ProtectedError would mean real crafted rows point at them — that
+    aborts the seed loudly rather than leaving overlapping bands).
+    """
+    from world.items.models import AccentLevel, QualityTier  # noqa: PLC0415
 
     tiers: dict[str, object] = {}
-    for name, low, high, multiplier, order in _QUALITY_TIERS:
-        tier, _created = QualityTier.objects.get_or_create(
+    for name, low, high, multiplier, order, color in _QUALITY_TIERS:
+        tier, _created = QualityTier.objects.update_or_create(
             name=name,
             defaults={
                 "numeric_min": low,
                 "numeric_max": high,
                 "stat_multiplier": Decimal(multiplier),
                 "sort_order": order,
+                "color_hex": color,
             },
         )
         tiers[name] = tier
+    QualityTier.objects.filter(name__in=_LEGACY_TIER_NAMES).delete()
+    for level, name in _ACCENT_LEVELS:
+        AccentLevel.objects.update_or_create(level=level, defaults={"name": name})
     return tiers
+
+
+def _recipe_specialization(output_name: str):
+    """The Specialization row a recipe exercises, or None (#2886)."""
+    from world.skills.models import Specialization  # noqa: PLC0415
+
+    spec_name = _RECIPE_SPECIALIZATIONS.get(output_name)
+    if spec_name is None:
+        return None
+    return Specialization.objects.filter(name=spec_name).first()
 
 
 def _ensure_recipes(check_type, tiers: dict[str, object]) -> None:
@@ -187,6 +262,7 @@ def _ensure_recipes(check_type, tiers: dict[str, object]) -> None:
                 "check_type": check_type,
                 "skill_trait": skill_trait,
                 "base_difficulty": 20 if workshop_gated else 10,
+                "specialization": _recipe_specialization(output_name),
                 "success_level_step": 10,
                 "min_success_level": 1,
                 "action_point_cost": 2,

@@ -5,7 +5,7 @@ from decimal import Decimal
 from django.test import TestCase
 
 from world.character_sheets.factories import CharacterSheetFactory
-from world.items.crafting.reward import award_masterwork_renown, is_masterwork
+from world.items.crafting.reward import award_crafting_fame, crafting_deed_value, is_masterwork
 from world.items.factories import ItemInstanceFactory, ItemTemplateFactory, QualityTierFactory
 from world.items.services.pricing import appraise
 from world.societies.models import LegendEntry
@@ -30,7 +30,9 @@ class AppraiseTests(TestCase):
         self.assertEqual(appraise(instance), 35)
 
 
-class MasterworkRenownTests(TestCase):
+class CraftingFameTests(TestCase):
+    """Fame at first making (#2878): generalizes the #2243 masterwork threshold."""
+
     def test_is_masterwork_by_stat_multiplier(self):
         fine = QualityTierFactory(name="Fine", stat_multiplier=Decimal("1.5"))
         superb = QualityTierFactory(name="Superb", stat_multiplier=Decimal("2.0"))
@@ -40,39 +42,51 @@ class MasterworkRenownTests(TestCase):
         self.assertFalse(is_masterwork(plain))
         self.assertFalse(is_masterwork(None))
 
-    def test_masterwork_grants_the_maker_a_legend_deed(self):
-        sheet = CharacterSheetFactory()
-        tier = QualityTierFactory(name="Superb", stat_multiplier=Decimal("2.0"))
+    def test_baseline_work_is_worth_no_fame(self):
+        plain = QualityTierFactory(name="Plain", stat_multiplier=Decimal("1.0"))
+        self.assertEqual(crafting_deed_value(plain), 0)
 
-        before = LegendEntry.objects.count()
-        award_masterwork_renown(crafter_character_sheet=sheet, tier=tier, item_label="Blade")
+    def test_fame_scales_with_quality_and_accents(self):
+        from types import SimpleNamespace
 
-        self.assertEqual(LegendEntry.objects.count(), before + 1)
-        entry = LegendEntry.objects.latest("id")
-        self.assertEqual(entry.persona, sheet.primary_persona)
-        self.assertIn("masterwork", entry.title.lower())
+        superb = QualityTierFactory(name="Superb", stat_multiplier=Decimal("2.0"))
+        bare = crafting_deed_value(superb)
+        accented = crafting_deed_value(superb, [SimpleNamespace(level=SimpleNamespace(level=4))])
+        self.assertGreater(bare, 0)
+        self.assertGreater(accented, bare)
 
-    def test_masterwork_with_item_instance_links_deed(self):
-        sheet = CharacterSheetFactory()
+    def test_fame_credits_both_maker_and_designer_personas(self):
+        maker_sheet = CharacterSheetFactory()
+        designer_sheet = CharacterSheetFactory()
         tier = QualityTierFactory(name="Superb", stat_multiplier=Decimal("2.0"))
         instance = ItemInstanceFactory()
 
-        award_masterwork_renown(
-            crafter_character_sheet=sheet,
+        before = LegendEntry.objects.count()
+        award_crafting_fame(
+            crafter_persona=maker_sheet.primary_persona,
+            designer_persona=designer_sheet.primary_persona,
             tier=tier,
             item_label="Blade",
             item_instance=instance,
         )
 
-        entry = LegendEntry.objects.latest("id")
-        self.assertIn(entry, instance.legend_deeds.all())
+        self.assertEqual(LegendEntry.objects.count(), before + 2)
+        personas = set(LegendEntry.objects.order_by("-id")[:2].values_list("persona", flat=True))
+        self.assertEqual(
+            personas,
+            {maker_sheet.primary_persona.pk, designer_sheet.primary_persona.pk},
+        )
+        self.assertEqual(instance.legend_deeds.count(), 2)
         self.assertGreater(instance.legend_value, 0)
 
-    def test_masterwork_without_item_instance_still_works(self):
+    def test_baseline_work_mints_nothing(self):
         sheet = CharacterSheetFactory()
-        tier = QualityTierFactory(name="Superb", stat_multiplier=Decimal("2.0"))
-
+        plain = QualityTierFactory(name="Plain", stat_multiplier=Decimal("1.0"))
         before = LegendEntry.objects.count()
-        award_masterwork_renown(crafter_character_sheet=sheet, tier=tier, item_label="Blade")
-
-        self.assertEqual(LegendEntry.objects.count(), before + 1)
+        award_crafting_fame(
+            crafter_persona=sheet.primary_persona,
+            designer_persona=None,
+            tier=plain,
+            item_label="Rag",
+        )
+        self.assertEqual(LegendEntry.objects.count(), before)

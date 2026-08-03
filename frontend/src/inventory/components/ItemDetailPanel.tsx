@@ -43,6 +43,7 @@ import type { ContainerAccessPolicy, ItemInstance, UseItemResult } from '../type
 import { useItemFacets, useQualityTiers, useRemoveItemFacet } from '../hooks/useItemFacets';
 import { useUseItem } from '../hooks/useUseItem';
 import { AttachFacetDialog } from './AttachFacetDialog';
+import { ItemLifecycleControls } from './ItemLifecycleControls';
 
 const ACCESS_POLICY_LABELS: Record<ContainerAccessPolicy, string> = {
   open: 'Open — anyone may take contents',
@@ -132,6 +133,9 @@ export function ItemDetailPanel({
               onOpenChange={setAttachOpen}
               itemInstanceId={item.id}
             />
+            <div className="border-t px-6 py-4">
+              <ItemLifecycleControls item={item} onRecycled={() => onOpenChange(false)} />
+            </div>
           </>
         ) : (
           <SheetHeader className="p-6">

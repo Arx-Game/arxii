@@ -1,5 +1,40 @@
 # Crafting, Fashion & Economy
 
+## Built (2026-08-02, #2886 — accents round 2)
+
+- The ratified accent vocabulary (7 axes) + `AccentExclusion` oppositions;
+  each accent doubles refinement cost; owner-only accent removal and item
+  **recycling** (fraction-salvage, GM sign-off gate for legend-bearing
+  pieces) with confirm dialogs on the item panel. Items finally have a sink.
+
+## Built (2026-08-01, #2878 — crafting expressiveness)
+
+The Accents/quality/prestige arc (spec on #2878; ADR-0192):
+
+- **12-rung QualityTier ladder** (Poor→Legendary; PLACEHOLDER names pending
+  Apostate's rename pass) + the separate 7-rung benefit-only **AccentLevel**
+  adverb ladder. **Thread caps**: reachable rung = base (9 quality / 4 accent)
+  + one per Thread woven into the crafting skill — divine+ is Gifted-only.
+- **Material grade** (`ItemTemplate.material_grade`) feeds the quality score
+  (`skill-capped roll + grade`) — materials are potential, never performance
+  (ADR-0192, rejecting Arx 1's material→stat ladder and per-tier difficulty).
+- **Accents** (`ItemAccent`): crafter-chosen per-instance style axes (allure,
+  menace, …) — each raises craft difficulty and rolls its own thread-capped
+  check; read by `crafted_modifier_value`, the equipment walk, and fashion
+  presentations. Examine renders the mechanical line + #2066 dual-provenance
+  credits (`crafted_provenance_line`, web + telnet shared).
+- **Refinement projects** (`ITEM_REFINEMENT`, instant-completion): the
+  deterministic guaranteed long road — no per-cycle rolls; threshold = value ×
+  target rung; the crossing contribution needs a sufficiently thread-capped
+  contributor (the master gate).
+- **Prestige & fame**: worn-instance pricing folded into
+  `recompute_persona_prestige_from_items`; first-making fame to both maker and
+  designer personas, scaled by quality + accents (generalizes #2243).
+- **Generic material ladders** seeded (`crafting_materials` cluster, 21 graded
+  templates). Named canon materials (alaricite, steelsilk, …) await Apostate's
+  row-by-row curation worksheet; gems stay in the gem economy; drug herbs are
+  the #2862 natives.
+
 ## Built (2026-07-07, #2066 — the market)
 
 - Two-tier commerce shipped: capital **market squares** (NPC material/
@@ -148,9 +183,12 @@ The enchant-and-attach flow for facets and styles is fully playable end-to-end.
   (costs, affordability, skill-capped max tier, failure risk) with no mutation;
   exposed as `GET /api/items/item-facets/quote/` and `GET /api/items/item-styles/quote/`.
 
-- **Seeded by** `wire_enchanting_crafting()` (FactoryBoy chain doubling as integration-test
-  setUp and seed data): Enchanting skill trait + CheckType + FACET_ATTACH + STYLE_ATTACH
-  recipes + a cap ladder + a consequence pool.
+- **Test-wired only, NOT seeded** (corrected 2026-08-01, #2878 verify pass):
+  `wire_enchanting_crafting()` is a FactoryBoy chain in `world/items/factories.py`
+  referenced solely by test setUp — no `world/seeds/` cluster calls it. FACET_ATTACH,
+  STYLE_ATTACH, and GEM_CUT recipes have **no production seed path**; only
+  ITEM_CREATE has seeded content (the #2852 provisioning cluster). A live deployment
+  raises `CraftingNotConfigured` for the other three kinds until content lands.
 
 **Deferred to follow-up issues:**
 - ~~Item-creation pipeline (crafted items with stats, facets, fashion properties)~~ — **DONE (#2195).** `CraftingRecipeKind.ITEM_CREATE` + `ItemCreateHandler` mints a new `ItemInstance` from a recipe's `output_item_template`, with player-authored name/description, quality-scaled stats via `CraftingRecipeModifier`, `OwnershipEvent.CREATED` provenance, and physical `ObjectDB` materialization. `run_crafting_recipe` accepts `item_instance=None` for ITEM_CREATE; `build_crafting_quote` resolves by `(kind, output_template)`. `CreateItemAction` (telnet `craft create` + `POST /api/items/crafting/create/`) is the shared seam.
