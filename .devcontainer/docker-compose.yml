@@ -76,6 +76,15 @@ services:
       # just recipes), not just interactive login shells.
       TERM: xterm-256color
       COLORTERM: truecolor
+      # `devcontainer exec` (what `just dc-shell`/`dc-attach` run on) provides no
+      # SHELL, so zellij falls back to /bin/sh — dash on this image. Dash never
+      # sources ~/.bashrc, so `mise activate` never runs and the mise node bin dir
+      # stays off PATH: inside a `just dc-attach` pane, `claude`, `just`, `uv` and
+      # `python` are all "command not found". Ubuntu's dash is also built without
+      # libedit, so the same panes have no history and up-arrow just emits ^[[A.
+      # Setting SHELL here fixes both at once (zellij reads $SHELL for pane
+      # shells). Same rationale as TERM above: container-wide, survives rebuilds.
+      SHELL: /bin/bash
     # Forward the brainstorm-server port so http://localhost:49200/ in the
     # Windows browser reaches the in-container server. The skill's
     # start-server.sh defaults to binding 127.0.0.1; pass --host 0.0.0.0
