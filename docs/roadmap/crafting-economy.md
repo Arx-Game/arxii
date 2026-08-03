@@ -1,5 +1,12 @@
 # Crafting, Fashion & Economy
 
+## Built (2026-08-02, #2886 — accents round 2)
+
+- The ratified accent vocabulary (7 axes) + `AccentExclusion` oppositions;
+  each accent doubles refinement cost; owner-only accent removal and item
+  **recycling** (fraction-salvage, GM sign-off gate for legend-bearing
+  pieces) with confirm dialogs on the item panel. Items finally have a sink.
+
 ## Built (2026-08-01, #2878 — crafting expressiveness)
 
 The Accents/quality/prestige arc (spec on #2878; ADR-0192):

@@ -17,7 +17,7 @@ from evennia_extensions.factories import AccountFactory, RoomProfileFactory
 from world.character_sheets.factories import CharacterSheetFactory
 from world.checks.test_helpers import force_check_outcome
 from world.items.crafting.constants import (
-    ACCENT_DIFFICULTY_STEP,
+    ACCENT_CHECK_PENALTY,
     BASE_MAX_ACCENT_LEVEL,
     CraftingRecipeKind,
 )
@@ -103,10 +103,28 @@ class ResolveAccentsTests(TestCase):
     """_resolve_accents rolls one check per axis and records what realized."""
 
     def setUp(self) -> None:
+        from world.traits.factories import CharacterTraitValueFactory
+        from world.traits.models import Trait
+
         _accent_ladder()
         self.recipe = wire_enchanting_crafting(base_difficulty=0)
         self.sheet = CharacterSheetFactory()
         self.character = self.sheet.character
+        # The −50 ambition penalty (#2886) eats an unskilled crafter's score
+        # entirely — give this one real hands so a forced success realizes.
+        # (Points need the seeded conversion table; wire it like production.)
+        from world.traits.factories import PointConversionRangeFactory
+        from world.traits.models import TraitType
+
+        for trait_type in (TraitType.SKILL, TraitType.STAT):
+            PointConversionRangeFactory(
+                trait_type=trait_type, min_value=1, max_value=100, points_per_level=1
+            )
+        CharacterTraitValueFactory(
+            character=self.sheet,
+            trait=Trait.objects.get(name="Enchanting"),
+            value=60,
+        )
         self.item = ItemInstanceFactory(
             template=ItemTemplateFactory(), holder_character_sheet=self.sheet
         )
@@ -169,7 +187,9 @@ class RunWithAccentsTests(TestCase):
 
         return FacetFactory()
 
-    def test_accents_raise_main_roll_difficulty(self) -> None:
+    def test_accents_penalize_the_rolls_not_the_difficulty(self) -> None:
+        from world.items.crafting.services import _accent_penalty_contributions
+
         item = ItemInstanceFactory(
             template=ItemTemplateFactory(facet_capacity=3), holder_character_sheet=self.sheet
         )
@@ -182,10 +202,12 @@ class RunWithAccentsTests(TestCase):
                 target=self._facet(),
                 accent_targets=[self.menace, self.allure],
             )
-        self.assertEqual(
-            capture.target_difficulty,
-            self.recipe.base_difficulty + 2 * ACCENT_DIFFICULTY_STEP,
-        )
+        # Difficulty stays authored (#2886): ambition is a points penalty,
+        # not the rank-quantized difficulty ladder.
+        self.assertEqual(capture.target_difficulty, self.recipe.base_difficulty)
+        contribs = _accent_penalty_contributions(2)
+        self.assertEqual(len(contribs), 1)
+        self.assertEqual(contribs[0].value, -(2 * ACCENT_CHECK_PENALTY))
 
     def test_invalid_accent_rejected_before_rolling(self) -> None:
         item = ItemInstanceFactory(

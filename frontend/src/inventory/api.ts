@@ -155,6 +155,47 @@ export async function postUseItem(itemId: number): Promise<UseItemResult> {
   return (await res.json()) as UseItemResult;
 }
 
+export interface RemoveAccentResult {
+  removed: string;
+}
+
+export interface RecycleResult {
+  salvaged: [string, number][];
+}
+
+export async function postRemoveAccent(
+  itemId: number,
+  accentTarget: number
+): Promise<RemoveAccentResult> {
+  const res = await apiFetch(`${BASE_URL}/inventory/${itemId}/remove-accent/`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ accent_target: accentTarget }),
+  });
+  if (!res.ok) {
+    throw new Error(await readError(res, 'Failed to remove accent'));
+  }
+  return (await res.json()) as RemoveAccentResult;
+}
+
+export async function postRecycleItem(itemId: number): Promise<RecycleResult> {
+  const res = await apiFetch(`${BASE_URL}/inventory/${itemId}/recycle/`, { method: 'POST' });
+  if (!res.ok) {
+    throw new Error(await readError(res, 'Failed to recycle item'));
+  }
+  return (await res.json()) as RecycleResult;
+}
+
+export async function postRequestRecycleApproval(itemId: number): Promise<{ status: string }> {
+  const res = await apiFetch(`${BASE_URL}/inventory/${itemId}/request-recycle-approval/`, {
+    method: 'POST',
+  });
+  if (!res.ok) {
+    throw new Error(await readError(res, 'Failed to request GM sign-off'));
+  }
+  return (await res.json()) as { status: string };
+}
+
 export async function listEquipped(characterId: number): Promise<EquippedItem[]> {
   return fetchAllPages<EquippedItem>(
     `${BASE_URL}/equipped-items/?character=${characterId}`,

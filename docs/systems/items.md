@@ -488,7 +488,9 @@ handler — no schema change required.
 | `CostConsumption` | TextChoices | `NONE`, `PARTIAL`, `FULL` |
 | `PARTIAL_FRACTION` | float | `0.5` (fraction of AP/Anima consumed on PARTIAL outcomes) |
 | `BASE_MAX_QUALITY_RUNG` / `BASE_MAX_ACCENT_LEVEL` | int | `9` / `4` — thread-capped ceilings (#2878): +1 rung per Thread on the recipe's skill; divine+ is Gifted-only |
-| `ACCENT_DIFFICULTY_STEP` / `ACCENT_SCORE_PER_LEVEL` | int | `5` / `15` — each requested Accent raises craft difficulty; accent-check score ÷ divisor = realized rung (PLACEHOLDER) |
+| `ACCENT_CHECK_PENALTY` / `ACCENT_SCORE_PER_LEVEL` | int | `50` / `15` — each Accent subtracts 50 points from every roll, stacking (#2886: accents are master-tier statements; skill-toward-100 levels matter); accent-check score ÷ divisor = realized rung (PLACEHOLDER) |
+| `ACCENT_CRAFT_COST_BASE` / `REFINEMENT_PACE_MULTIPLIER` | int | `2` / `4` — AP/anima ×2 per accent at the forge; refinement thresholds steepened to weeks-per-rung (PLACEHOLDER) |
+| `QUALITY_LUCK_OFFSET` / `QUALITY_LUCK_DIVISOR` / `THREAD_CRAFT_CHECK_BONUS` | int | `45` / `5` / `10` — the craft's own d100 spreads the score ≈ −9…+11; each woven thread adds +10 to craft and accent rolls (#2886) |
 | `REFINEMENT_VALUE_PER_PROGRESS` / `REFINEMENT_TIME_LIMIT_DAYS` | int | `100` / `365` — refinement threshold = item value × target rung ÷ 100 progress (PLACEHOLDER) |
 | `CRAFTING_FAME_ACCENT_WEIGHT` | float | `0.2` — per-accent-rung multiplier on first-making fame (PLACEHOLDER) |
 
@@ -612,7 +614,8 @@ Returns `{"action_points": n, "anima": n, "materials": k}`.
 - **Accents** (`ItemAccent`: instance × styleable `ModifierTarget` ×
   `AccentLevel`): crafter-chosen at craft time via
   `run_crafting_recipe(accent_targets=…)` — each raises difficulty by
-  `ACCENT_DIFFICULTY_STEP` and rolls its OWN check after the piece resolves
+  `ACCENT_CHECK_PENALTY` points on every roll (and doubles AP/anima per
+  accent) and rolls its OWN check after the piece resolves
   (`_resolve_accents`); realized rung is thread-capped. Read by
   `crafted_modifier_value` (adds the rung on top of recipe modifiers; the
   equipment-walk prefetch covers `cached_item_accents`) and by
@@ -640,6 +643,28 @@ Returns `{"action_points": n, "anima": n, "materials": k}`.
 - **Generic materials** (`world/seeds/crafting_materials.py`, cluster
   `crafting_materials`): 5 categories + 21 graded ladder templates; named
   canon materials await the curation worksheet (#2878 Phase F).
+
+### Accent lifecycle & recycling (#2886)
+
+- **Vocabulary** (Apostate-ratified 2026-08-02, seeded by `seed_accent_axes`):
+  allure, menace, regal (the courtly family on one axis), dramatic, stealthy,
+  unassuming, nimble. CheckType wiring is fill-if-found; unmatched families
+  stay authored-but-dormant (flagged skill-list holes).
+- **`AccentExclusion`** (data rows): symmetric oppositions — Dramatic ⊥
+  Unassuming — enforced across craft requests, the host item's existing
+  accents, and refinement accent goals.
+- **Refinement doubling**: threshold × `ACCENT_REFINEMENT_COST_BASE ** accent
+  count` — heavily accented pieces approach commission cost to rework.
+- **`remove_item_accent`** (`services/recycle.py`): owner-only, no refund,
+  prestige recomputes if worn. `RemoveAccentAction` +
+  `POST /api/items/inventory/<id>/remove-accent/`; the frontend confirms.
+- **`recycle_item`**: owner-only salvage (`SALVAGE_FRACTION` of recipe
+  material quantities) + destruction via the #1025 footprint rules.
+  **Story-protected**: legend-bearing items need an APPROVED
+  `RecycleRequest` (GM sign-off; admin-surfaced until a GM panel lands).
+  `RecycleItemAction` + `POST .../recycle/` +
+  `POST .../request-recycle-approval/`; the item detail panel carries the
+  confirm dialogs (`ItemLifecycleControls`).
 
 ### Shared Material Helper (`services/materials.py`)
 

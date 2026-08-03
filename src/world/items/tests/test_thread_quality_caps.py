@@ -31,7 +31,7 @@ from world.traits.models import TraitCategory, TraitType
 
 
 def _check_result(*, total_points: int, success_level: int) -> SimpleNamespace:
-    return SimpleNamespace(total_points=total_points, success_level=success_level)
+    return SimpleNamespace(total_points=total_points, success_level=success_level, effective_roll=0)
 
 
 class MaterialGradeBonusTests(TestCase):

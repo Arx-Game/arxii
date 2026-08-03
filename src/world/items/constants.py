@@ -79,6 +79,19 @@ PROVENANCE_EVENT_TYPES = frozenset(
 )
 
 
+class RecycleRequestStatus(models.TextChoices):
+    """Lifecycle of a GM sign-off request to recycle a story-significant item (#2886)."""
+
+    PENDING = "pending", "Pending"
+    APPROVED = "approved", "Approved"
+    DENIED = "denied", "Denied"
+
+
+#: Fraction of a crafted item's recipe material quantities returned on recycle
+#: (#2886). PLACEHOLDER tuning.
+SALVAGE_FRACTION = 0.5
+
+
 class ContainerAccessPolicy(models.TextChoices):
     """Who may take items out of a container (#1909). Steal bypasses with consequences."""
 

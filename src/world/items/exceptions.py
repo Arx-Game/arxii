@@ -465,3 +465,32 @@ class RefinementAwaitsMaster(ItemError):
     SAFE_MESSAGES: ClassVar[frozenset[str]] = frozenset(
         {"This work awaits a master's hand to finish."}
     )
+
+
+class NotItemOwner(ItemError):
+    """The actor does not hold the item (#2886 owner-only lifecycle acts)."""
+
+    user_message = "That isn't yours to alter."
+    SAFE_MESSAGES: ClassVar[frozenset[str]] = frozenset({"That isn't yours to alter."})
+
+
+class AccentNotPresent(ItemError):
+    """The item carries no such accent (#2886)."""
+
+    user_message = "That piece bears no such accent."
+    SAFE_MESSAGES: ClassVar[frozenset[str]] = frozenset({"That piece bears no such accent."})
+
+
+class RecycleNeedsGMApproval(ItemError):
+    """A story-significant item needs a GM sign-off to recycle (#2886)."""
+
+    user_message = (
+        "That piece carries a story the world remembers — a GM must sign off "
+        "before it can be unmade."
+    )
+    SAFE_MESSAGES: ClassVar[frozenset[str]] = frozenset(
+        {
+            "That piece carries a story the world remembers — a GM must sign off "
+            "before it can be unmade."
+        }
+    )

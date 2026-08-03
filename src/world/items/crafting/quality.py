@@ -43,6 +43,20 @@ def thread_count_for_skill(crafter_character: ObjectDB, skill_trait: Trait | Non
     ).count()
 
 
+def _recipe_specialization_value(crafter_character: ObjectDB, recipe: CraftingRecipe) -> int:
+    """The crafter's value in the recipe's specialization, or 0 (#2886).
+
+    Specialization is ADDITIVE with the skill everywhere (Apostate: skill 50 +
+    spec 50 ≡ skill 100) — this feeds the cap lookup; the roll gets it via
+    the runtime-specialization path in perform_check.
+    """
+    if recipe.specialization_id is None:
+        return 0
+    from world.skills.services import get_specialization_value  # noqa: PLC0415
+
+    return get_specialization_value(crafter_character, recipe.specialization)
+
+
 def _thread_ceiling_clamp(score: int, allowed_rung: int) -> int:
     """Clamp ``score`` to the top of the highest quality rung ≤ ``allowed_rung``.
 
@@ -69,6 +83,7 @@ def resolve_capped_tier(
     crafter_character: ObjectDB,
     check_result: CheckResult,
     material_grade_bonus: int = 0,
+    thread_count: int | None = None,
 ) -> QualityTier:
     """Compute the quality tier for a crafting outcome, clamped by skill cap.
 
@@ -112,11 +127,16 @@ def resolve_capped_tier(
 
     if recipe.skill_trait is not None:
         skill = crafter_character.traits.get_trait_value(recipe.skill_trait.name)
+        skill += _recipe_specialization_value(crafter_character, recipe)
         cap_tier = CraftingSkillCap.for_skill(recipe, skill)
         if cap_tier is not None:
             score = min(score, cap_tier.numeric_max)
 
-    threads = thread_count_for_skill(crafter_character, recipe.skill_trait)
+    threads = (
+        thread_count
+        if thread_count is not None
+        else thread_count_for_skill(crafter_character, recipe.skill_trait)
+    )
     score = _thread_ceiling_clamp(score, BASE_MAX_QUALITY_RUNG + threads)
 
     tier = QualityTier.for_score(score)

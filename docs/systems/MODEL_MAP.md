@@ -1700,6 +1700,7 @@
   - equipped_items <- items.EquippedItem
   - items_given_away <- items.OwnershipEvent
   - items_received <- items.OwnershipEvent
+  - recycle_requests <- items.RecycleRequest
   - outfits <- items.Outfit
   - fashion_presentations <- items.FashionPresentation
   - mantle_clearances <- items.MantleLevelClearance
@@ -3848,6 +3849,7 @@
   - stake_outcomes <- stories.StakeOutcome
   - custody_requests <- stories.CustodyClearance
   - owned_instances <- instances.InstancedRoom
+  - resolved_recycle_requests <- items.RecycleRequest
   - tables <- gm.GMTable
   - invites_created <- gm.GMRosterInvite
   - level_changes <- gm.GMLevelChange
@@ -4135,6 +4137,7 @@
   - equipped_slots <- items.EquippedItem
   - room_placement <- items.RoomItem
   - ownership_events <- items.OwnershipEvent
+  - recycle_requests <- items.RecycleRequest
   - item_facets <- items.ItemFacet
   - item_styles <- items.ItemStyle
   - stored_outfits <- items.Outfit
@@ -4193,6 +4196,12 @@
   - to_persona_display -> scenes.Persona [FK] (nullable)
 **Pointed to by:**
   - trace_steps <- items.ClaimTraceStep
+
+### RecycleRequest
+**Foreign Keys:**
+  - item_instance -> items.ItemInstance [FK]
+  - requested_by -> character_sheets.CharacterSheet [FK]
+  - resolved_by -> gm.GMProfile [FK] (nullable)
 
 ### ItemFacet
 **Foreign Keys:**
@@ -4342,6 +4351,11 @@
   - item_instance -> items.ItemInstance [FK]
   - target -> mechanics.ModifierTarget [FK]
   - level -> items.AccentLevel [FK]
+
+### AccentExclusion
+**Foreign Keys:**
+  - target_a -> mechanics.ModifierTarget [FK]
+  - target_b -> mechanics.ModifierTarget [FK]
 
 ### ItemRefinementDetails
 **Foreign Keys:**
@@ -5820,6 +5834,8 @@
   - leaning_styles <- items.Style
   - fashion_style_bonuses <- items.FashionStyleBonus
   - item_accents <- items.ItemAccent
+  - accent_exclusions_a <- items.AccentExclusion
+  - accent_exclusions_b <- items.AccentExclusion
   - refinement_projects <- items.ItemRefinementDetails
   - covenant_level_bonuses <- covenants.CovenantLevelBonus
   - vow_stat_scalings <- covenants.VowStatScaling

@@ -102,3 +102,11 @@ _Avoid_: take (as a synonym), pickpocket, loot (as a verb for a live owner's ite
   target rung; the threshold-crossing contribution needs a contributor whose
   thread-capped ceiling reaches the goal (the master gate). _Avoid_:
   refine-attempt rolls (Arx 1's shape, explicitly rejected).
+
+- **Accent exclusion** — a symmetric `AccentExclusion` pair that cannot coexist
+  on one item (#2886): Dramatic ⊥ Unassuming. Data rows, never an enum.
+  _Avoid_: hardcoded pair checks.
+- **Recycle (item)** — owner-only destruction for `SALVAGE_FRACTION` of the
+  recipe's materials (#2886). **Story-protected** items (active legend deeds)
+  need an APPROVED `RecycleRequest` (GM sign-off) first. _Avoid_: junk,
+  disenchant, salvage-as-a-skill (it's a lifecycle act, not a craft).
