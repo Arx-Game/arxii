@@ -68,16 +68,16 @@ class RefinementProjectTests(TestCase):
         donate_to_item_refinement(project, donor_persona=self.persona, amount=coppers)
 
     def test_threshold_scales_with_value_and_rung(self) -> None:
-        # New accent: rung 1 → 1000 × 1 / 100 = 10 progress.
-        self.assertEqual(refinement_threshold(self.item, 1), 10)
-        # Quality: rung 4 → 1000 × 4 / 100 = 40 progress.
-        self.assertEqual(refinement_threshold(self.item, 4), 40)
+        # New accent: rung 1 → 1000 × 1 × pace(4) / 100 = 40 progress.
+        self.assertEqual(refinement_threshold(self.item, 1), 40)
+        # Quality: rung 4 → 1000 × 4 × 4 / 100 = 160 progress.
+        self.assertEqual(refinement_threshold(self.item, 4), 160)
 
     def test_fund_new_accent_completes_deterministically(self) -> None:
         project = start_item_refinement(
             item_instance=self.item, initiator_persona=self.persona, accent_target=self.menace
         )
-        self._fund(project, 1000)  # 10 progress = threshold
+        self._fund(project, 4000)  # 40 progress = threshold (pace ×4)
         project.refresh_from_db()
         self.assertEqual(project.status, ProjectStatus.COMPLETED)
         accent = ItemAccent.objects.get(item_instance=self.item, target=self.menace)
@@ -93,7 +93,7 @@ class RefinementProjectTests(TestCase):
         project = start_item_refinement(
             item_instance=self.item, initiator_persona=self.persona, accent_target=None
         )
-        self._fund(project, 4000)  # rung 4 → 40 progress
+        self._fund(project, 16000)  # rung 4 → 160 progress (pace ×4)
         project.refresh_from_db()
         self.item.refresh_from_db()
         self.assertEqual(project.status, ProjectStatus.COMPLETED)
@@ -158,8 +158,10 @@ class MasterGateTests(TestCase):
             item_instance=self.item, initiator_persona=self.persona, accent_target=self.menace
         )
         # Goal rung 5 > mundane cap 4 and no threads anywhere on the project.
+        # (Threshold is 1000×5×4÷100 = 200, doubled to 400 by the existing
+        # accent — so 40000 coppers is the crossing contribution.)
         with self.assertRaises(RefinementAwaitsMaster):
-            self._fund(project, 5000)
+            self._fund(project, 40000)
         project.refresh_from_db()
         self.assertEqual(project.status, ProjectStatus.ACTIVE)
         self.assertEqual(project.current_progress, 0)
@@ -169,7 +171,7 @@ class MasterGateTests(TestCase):
         project = start_item_refinement(
             item_instance=self.item, initiator_persona=self.persona, accent_target=self.menace
         )
-        self._fund(project, 5000)
+        self._fund(project, 40000)  # 200-progress threshold doubled by the accent (#2886)
         project.refresh_from_db()
         self.assertEqual(project.status, ProjectStatus.COMPLETED)
         accent = ItemAccent.objects.get(item_instance=self.item, target=self.menace)

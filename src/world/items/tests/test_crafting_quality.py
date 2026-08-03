@@ -25,7 +25,7 @@ from world.traits.models import TraitCategory, TraitType
 
 def _check_result(*, total_points: int, success_level: int) -> SimpleNamespace:
     """Build a minimal duck-typed CheckResult for compute_quality_score."""
-    return SimpleNamespace(total_points=total_points, success_level=success_level)
+    return SimpleNamespace(total_points=total_points, success_level=success_level, effective_roll=0)
 
 
 class _QualityResolutionBase(TestCase):

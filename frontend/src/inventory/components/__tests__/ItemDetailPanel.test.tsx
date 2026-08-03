@@ -19,6 +19,12 @@ vi.mock('../../hooks/useItemFacets', () => ({
 
 vi.mock('../../hooks/useUseItem', () => ({ useUseItem: vi.fn() }));
 
+vi.mock('../../hooks/useItemLifecycle', () => ({
+  useRemoveAccent: () => ({ mutate: vi.fn(), isPending: false }),
+  useRecycleItem: () => ({ mutate: vi.fn(), isPending: false, isError: false, error: null }),
+  useRequestRecycleApproval: () => ({ mutate: vi.fn() }),
+}));
+
 vi.mock('@/character-creation/queries', () => ({
   useFacets: vi.fn(),
 }));
@@ -115,6 +121,7 @@ function makeItem(overrides: Partial<ItemInstance> = {}): ItemInstance {
     suggested_value: 0,
     can_steal: false,
     crafted_provenance: null,
+    accents: [],
     template: {
       id: 70,
       name: 'Silver Brooch',

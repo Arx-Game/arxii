@@ -92,12 +92,16 @@ class ItemCreationCraftTests(TestCase):
         self.assertIsNotNone(result.crafted_recipe)
         self.assertEqual(result.crafted_recipe.item_instance, instance)
 
-    def test_failure_creates_no_item(self) -> None:
+    def test_failure_still_creates_at_the_floor(self) -> None:
+        """A making never fails to create (#2886, Apostate): the prose a
+        player writes into an item is the one unrecoverable ingredient. A
+        failed roll lands the piece at the ladder's floor tier — discard
+        (recycle) and retry, or refine it up, is the player's choice."""
         from world.checks.test_helpers import force_check_outcome
         from world.items.constants import OwnershipEventType
         from world.items.crafting.constants import CraftingRecipeKind
         from world.items.crafting.services import run_crafting_recipe
-        from world.items.models import ItemInstance, OwnershipEvent
+        from world.items.models import ItemInstance, OwnershipEvent, QualityTier
         from world.traits.factories import CheckOutcomeFactory
 
         botch = CheckOutcomeFactory(name="ItemCreateBotch", success_level=-5)
@@ -116,11 +120,12 @@ class ItemCreationCraftTests(TestCase):
                 },
             )
 
-        self.assertFalse(result.attached)
-        self.assertIsNone(result.row)
-        # No ItemInstance or OwnershipEvent.CREATED was created.
-        self.assertFalse(ItemInstance.objects.filter(template=template).exists())
-        self.assertFalse(
+        floor = QualityTier.objects.order_by("sort_order").first()
+        self.assertTrue(result.attached)
+        instance = ItemInstance.objects.filter(template=template).first()
+        assert instance is not None
+        self.assertEqual(instance.quality_tier, floor)
+        self.assertTrue(
             OwnershipEvent.objects.filter(event_type=OwnershipEventType.CREATED).exists()
         )
 

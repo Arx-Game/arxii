@@ -25,6 +25,10 @@ COOKING_SKILL_NAME = "Cooking"
 COOKING_CHECK_NAME = "Cooking"
 BREWING_SPECIALIZATION_NAME = "Brewing"
 
+# Recipes exercising a specialization (#2886 — spec is additive with the
+# skill on the roll AND the quality cap; Apostate: 50+50 ≡ 100).
+_RECIPE_SPECIALIZATIONS = {"Honeyed Wine": BREWING_SPECIALIZATION_NAME}
+
 # (output template name, ((ingredient template name, quantity), ...), workshop_gated)
 _RECIPE_ROWS = (
     ("Hearty Stew", (("Sack of Grain", 1), ("Wild Herbs", 1)), False),
@@ -72,7 +76,18 @@ _QUALITY_TIERS = (
 #: The 3-row placeholder ladder this 12-rung ladder replaces; deleted on seed.
 _LEGACY_TIER_NAMES = ("Common", "Masterwork")
 # (min skill value, tier name) — the cook's skill caps output quality.
-_SKILL_CAP_LADDER = ((0, "Average"), (40, "Fine"), (80, "Perfect"))
+# Retuned for the 12-rung ladder (#2886): caps sit ~1-2 rungs above a
+# crafter's typical score so a hot roll can genuinely punch upward (the
+# "wow" outcome, Apostate's ruling 2026-08-02) while a novice with great
+# materials still squanders them. Trait values are the internal ×10 scale
+# (player-facing 3.0 = 30). PLACEHOLDER tuning.
+_SKILL_CAP_LADDER = (
+    (0, "Well-Crafted"),
+    (20, "Fine"),
+    (30, "Exceptional"),
+    (40, "Superb"),
+    (55, "Perfect"),
+)
 
 # The benefit-only Accent ladder (#2878): 7 adverbs, thread-gated past
 # BASE_MAX_ACCENT_LEVEL. Content lands in the Accents phase; the ladder is
@@ -135,6 +150,11 @@ def _ensure_cooking_check():
         {"trait_type": TraitType.STAT, "category": TraitCategory.MENTAL, "is_public": True},
         name="wits",
     )
+    agility = authored_or_sample(
+        Trait,
+        {"trait_type": TraitType.STAT, "category": TraitCategory.PHYSICAL, "is_public": True},
+        name="agility",
+    )
     category = authored_or_sample(
         CheckCategory,
         {"description": "Trade and craft checks.", "display_order": 40},
@@ -152,10 +172,14 @@ def _ensure_cooking_check():
     CheckTypeTrait.objects.get_or_create(
         check_type=check_type, trait=skill_trait, defaults={"weight": Decimal("1.00")}
     )
-    if wits is not None:
-        CheckTypeTrait.objects.get_or_create(
-            check_type=check_type, trait=wits, defaults={"weight": Decimal("0.50")}
-        )
+    # Stat side = the AVERAGE of wits and agility (#2886, Apostate — echoing
+    # Arx 1's higher-of-wits-and-dex; the average is what weighted rows can
+    # express). update_or_create so the pre-ruling wits-0.50 rows retune.
+    for stat in (wits, agility):
+        if stat is not None:
+            CheckTypeTrait.objects.update_or_create(
+                check_type=check_type, trait=stat, defaults={"weight": Decimal("0.25")}
+            )
     return check_type
 
 
@@ -187,6 +211,16 @@ def _ensure_quality_tiers() -> dict[str, object]:
     for level, name in _ACCENT_LEVELS:
         AccentLevel.objects.update_or_create(level=level, defaults={"name": name})
     return tiers
+
+
+def _recipe_specialization(output_name: str):
+    """The Specialization row a recipe exercises, or None (#2886)."""
+    from world.skills.models import Specialization  # noqa: PLC0415
+
+    spec_name = _RECIPE_SPECIALIZATIONS.get(output_name)
+    if spec_name is None:
+        return None
+    return Specialization.objects.filter(name=spec_name).first()
 
 
 def _ensure_recipes(check_type, tiers: dict[str, object]) -> None:
@@ -228,6 +262,7 @@ def _ensure_recipes(check_type, tiers: dict[str, object]) -> None:
                 "check_type": check_type,
                 "skill_trait": skill_trait,
                 "base_difficulty": 20 if workshop_gated else 10,
+                "specialization": _recipe_specialization(output_name),
                 "success_level_step": 10,
                 "min_success_level": 1,
                 "action_point_cost": 2,

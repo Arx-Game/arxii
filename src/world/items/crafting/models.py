@@ -70,6 +70,19 @@ class CraftingRecipe(SharedMemoryModel):
         related_name="+",
         help_text="Trait (skill) whose rank gates or boosts this recipe. Optional.",
     )
+    specialization = models.ForeignKey(
+        "skills.Specialization",
+        on_delete=models.PROTECT,
+        null=True,
+        blank=True,
+        related_name="+",
+        help_text=(
+            "Specialization this recipe exercises (#2886, e.g. Honeyed Wine → "
+            "Brewing). Additive with the skill everywhere: its value joins the "
+            "craft/accent rolls AND the quality-cap lookup, so skill 50 + spec "
+            "50 crafts like skill 100 (Apostate's ruling)."
+        ),
+    )
     action_point_cost = models.PositiveIntegerField(
         default=0,
         help_text="Action points spent when initiating a crafting attempt.",
@@ -437,6 +450,87 @@ class ItemAccent(SharedMemoryModel):
 
     def __str__(self) -> str:
         return f"{self.item_instance}: {self.level.name} {self.target.name}"
+
+
+class AccentExclusion(SharedMemoryModel):
+    """A symmetric pair of accent axes that cannot coexist on one item (#2886).
+
+    Data rows, never an enum: "Dramatic and Unassuming are opposites" is a
+    content ruling, and future oppositions are row inserts. Store each pair
+    once; ``conflict_exists`` checks both orientations.
+    """
+
+    target_a = models.ForeignKey(
+        "mechanics.ModifierTarget",
+        on_delete=models.CASCADE,
+        related_name="accent_exclusions_a",
+    )
+    target_b = models.ForeignKey(
+        "mechanics.ModifierTarget",
+        on_delete=models.CASCADE,
+        related_name="accent_exclusions_b",
+    )
+
+    class Meta:
+        app_label = "items"
+        ordering = ["pk"]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["target_a", "target_b"],
+                name="items_accentexclusion_unique_pair",
+            )
+        ]
+
+    def __str__(self) -> str:
+        return f"{self.target_a.name} ⊥ {self.target_b.name}"
+
+    @classmethod
+    def conflict_exists(cls, target_pks: list[int]) -> tuple[int, int] | None:
+        """The first excluded (a, b) pk pair present in ``target_pks``, or None."""
+        pks = set(target_pks)
+        for row in cls.objects.all():
+            if row.target_a_id in pks and row.target_b_id in pks:
+                return (row.target_a_id, row.target_b_id)
+        return None
+
+
+class AccentArchetypeAllowance(SharedMemoryModel):
+    """Where an accent axis may be worked in, by gear archetype (#2886).
+
+    Allowlist semantics: a target with ANY rows is allowed only on the listed
+    archetypes; a target with none is unrestricted (custom axes stay usable
+    until curated). Apostate's ratified matrix: function accents (stealthy,
+    unassuming, nimble) are garment-only — except unassuming plate, which can
+    get lost in a crowd; presence accents span everything worn including
+    jewelry; menace touches weapons (and jewelry — spiked torcs); regal
+    weapons are ornate. Data rows, never an enum.
+    """
+
+    target = models.ForeignKey(
+        "mechanics.ModifierTarget",
+        on_delete=models.CASCADE,
+        related_name="accent_archetype_allowances",
+    )
+    gear_archetype = models.CharField(max_length=40)
+
+    class Meta:
+        app_label = "items"
+        ordering = ["target__name", "gear_archetype"]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["target", "gear_archetype"],
+                name="items_accentarchetypeallowance_unique",
+            )
+        ]
+
+    def __str__(self) -> str:
+        return f"{self.target.name} on {self.gear_archetype}"
+
+    @classmethod
+    def permits(cls, target: object, gear_archetype: str) -> bool:
+        """True when ``target`` may be accented onto this archetype."""
+        rows = list(cls.objects.filter(target=target).values_list("gear_archetype", flat=True))
+        return not rows or gear_archetype in rows
 
 
 class ItemRefinementDetails(SharedMemoryModel):

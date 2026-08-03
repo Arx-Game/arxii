@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from drf_spectacular.utils import extend_schema_field
 from rest_framework import serializers
 
 from world.items.models import (
@@ -329,6 +330,19 @@ class ItemTemplateListSerializer(serializers.ModelSerializer):
         read_only_fields = fields
 
 
+class ItemAccentReadSerializer(serializers.Serializer):
+    """One worked-in Accent on a piece (#2886) — the removal UI's row shape."""
+
+    target = serializers.IntegerField(source="target_id", read_only=True)
+    name = serializers.CharField(source="target.name", read_only=True)
+    adjective = serializers.SerializerMethodField()
+    level = serializers.IntegerField(source="level.level", read_only=True)
+    adverb = serializers.CharField(source="level.name", read_only=True)
+
+    def get_adjective(self, obj: object) -> str:
+        return obj.target.styleable_adjective or obj.target.name
+
+
 class ItemInstanceReadSerializer(serializers.ModelSerializer):
     """Read serializer for ItemInstance — used by the inventory listing.
 
@@ -359,6 +373,8 @@ class ItemInstanceReadSerializer(serializers.ModelSerializer):
     # #2878: the examine layer — "Of divine quality, quite menacing and
     # slightly alluring. Designed by X; crafted by Y." Null for uncrafted items.
     crafted_provenance = serializers.SerializerMethodField()
+    # #2886: structured accent rows for the removal UI.
+    accents = serializers.SerializerMethodField()
 
     class Meta:
         model = ItemInstance
@@ -380,6 +396,7 @@ class ItemInstanceReadSerializer(serializers.ModelSerializer):
             "is_currency_instrument",
             "can_steal",
             "crafted_provenance",
+            "accents",
         ]
         read_only_fields = fields
 
@@ -398,6 +415,11 @@ class ItemInstanceReadSerializer(serializers.ModelSerializer):
         from world.items.services.pricing import appraise  # noqa: PLC0415
 
         return appraise(obj)
+
+    @extend_schema_field(serializers.ListSerializer(child=ItemAccentReadSerializer()))
+    def get_accents(self, obj: ItemInstance) -> list[dict]:
+        """Structured accent rows (#2886): target pk/name/adjective + level/adverb."""
+        return ItemAccentReadSerializer(obj.cached_item_accents, many=True).data
 
     def get_crafted_provenance(self, obj: ItemInstance) -> str | None:
         """The crafted mechanical line + persona credits, or None (#2878)."""

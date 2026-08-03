@@ -49,6 +49,7 @@ if TYPE_CHECKING:
     from evennia.objects.models import ObjectDB
 
     from world.character_sheets.models import CharacterSheet
+    from world.checks.types import CheckResult
     from world.items.crafting.models import CraftedItemRecipe, LabStationDetails
     from world.items.models import QualityTier
     from world.traits.models import CheckOutcome
@@ -444,16 +445,47 @@ def _resolve_crafter_sheet(
     return CharacterSheet.objects.get(character=crafter_character)
 
 
-def _validate_accent_targets(accent_targets: list | None) -> list:
-    """Reject non-styleable, inactive, or duplicate Accent axes (#2878)."""
+def _validate_accent_targets(
+    accent_targets: list | None,
+    item_instance: ItemInstance | None = None,
+    template: object | None = None,
+) -> list:
+    """Reject non-styleable, inactive, duplicate, excluded, or misplaced axes.
+
+    Exclusion pairs (#2886, e.g. Dramatic ⊥ Unassuming) are checked across the
+    request AND the item's existing accents when a host item is given; the
+    archetype allowlist (no stealthy jewelry) is checked against the piece's
+    ``gear_archetype`` when a template is resolvable.
+    """
+    from world.items.crafting.models import (  # noqa: PLC0415
+        AccentArchetypeAllowance,
+        AccentExclusion,
+        ItemAccent,
+    )
     from world.items.exceptions import InvalidAccentTarget  # noqa: PLC0415
 
+    if template is None and item_instance is not None:
+        template = item_instance.template
     targets = list(accent_targets or [])
     seen_pks = set()
     for target in targets:
         if not target.is_styleable or not target.is_active or target.pk in seen_pks:
             raise InvalidAccentTarget
+        if template is not None and not AccentArchetypeAllowance.permits(
+            target, template.gear_archetype
+        ):
+            raise InvalidAccentTarget
         seen_pks.add(target.pk)
+    if seen_pks:
+        combined = set(seen_pks)
+        if item_instance is not None:
+            combined |= set(
+                ItemAccent.objects.filter(item_instance=item_instance).values_list(
+                    "target_id", flat=True
+                )
+            )
+        if AccentExclusion.conflict_exists(list(combined)) is not None:
+            raise InvalidAccentTarget
     return targets
 
 
@@ -471,6 +503,60 @@ def _accent_rung_for_score(score: int, *, cap: int) -> object | None:
     if rung < 1:
         return None
     return AccentLevel.objects.filter(level__lte=rung).order_by("-level").first()
+
+
+def _thread_check_contributions(
+    crafter_character: ObjectDB, recipe: CraftingRecipe, thread_count: int | None = None
+) -> list:
+    """Woven threads are an edge on the roll, not just the ceiling (#2886).
+
+    ``THREAD_CRAFT_CHECK_BONUS`` per active TRAIT thread on the recipe's
+    skill, delivered as a CHARACTER contribution on the craft AND accent
+    checks — the Gifted artisan's hands are simply better, exactly as the
+    thread caps already say their ceiling is higher. Pass ``thread_count``
+    when already known (query discipline — one count per craft).
+    """
+    from world.checks.constants import ModifierSourceKind  # noqa: PLC0415
+    from world.checks.types import ModifierContribution  # noqa: PLC0415
+    from world.items.crafting.constants import THREAD_CRAFT_CHECK_BONUS  # noqa: PLC0415
+    from world.items.crafting.quality import thread_count_for_skill  # noqa: PLC0415
+
+    threads = (
+        thread_count
+        if thread_count is not None
+        else thread_count_for_skill(crafter_character, recipe.skill_trait)
+    )
+    if threads <= 0:
+        return []
+    return [
+        ModifierContribution(
+            source_kind=ModifierSourceKind.CHARACTER,
+            source_label="Woven threads",
+            value=threads * THREAD_CRAFT_CHECK_BONUS,
+        )
+    ]
+
+
+def _accent_penalty_contributions(accent_count: int) -> list:
+    """The ambition penalty (#2886): −ACCENT_CHECK_PENALTY per accent chosen.
+
+    Applied to the craft roll AND every accent roll — each accent worked in
+    makes the whole piece harder to realize well, smoothly (points, not the
+    rank-quantized difficulty ladder).
+    """
+    from world.checks.constants import ModifierSourceKind  # noqa: PLC0415
+    from world.checks.types import ModifierContribution  # noqa: PLC0415
+    from world.items.crafting.constants import ACCENT_CHECK_PENALTY  # noqa: PLC0415
+
+    if accent_count <= 0:
+        return []
+    return [
+        ModifierContribution(
+            source_kind=ModifierSourceKind.CHARACTER,
+            source_label="Accent ambition",
+            value=-(ACCENT_CHECK_PENALTY * accent_count),
+        )
+    ]
 
 
 def _resolve_accents(
@@ -494,9 +580,17 @@ def _resolve_accents(
     from world.items.services.crafting import compute_quality_score  # noqa: PLC0415
 
     cap = BASE_MAX_ACCENT_LEVEL + thread_count_for_skill(crafter_character, recipe.skill_trait)
+    accent_contribs = _thread_check_contributions(crafter_character, recipe)
+    accent_contribs += _accent_penalty_contributions(len(accent_targets))
     realized: list[ItemAccent] = []
     for target in accent_targets:
-        result = perform_check_with_modifiers(crafter_character, recipe.check_type, difficulty)
+        result = perform_check_with_modifiers(
+            crafter_character,
+            recipe.check_type,
+            difficulty,
+            specialization=recipe.specialization,
+            extra_contributions=accent_contribs or None,
+        )
         if result.success_level < recipe.min_success_level:
             continue
         score = compute_quality_score(
@@ -512,6 +606,39 @@ def _resolve_accents(
         )
         realized.append(accent)
     return tuple(realized)
+
+
+def _resolve_outcome_tier(  # noqa: PLR0913 — orchestrator context passthrough
+    *,
+    kind: CraftingRecipeKind,
+    recipe: CraftingRecipe,
+    crafter_character: ObjectDB,
+    check_result: CheckResult,
+    staged: StagedCost,
+    thread_count: int | None = None,
+) -> QualityTier | None:
+    """The tier this attempt lands at — a making NEVER fails to create (#2886).
+
+    The prose a player writes into an item is the one unrecoverable
+    ingredient, and losing it feels worse than any lost time/AP/coin/
+    materials (which the consequence pool still charges). A failed
+    ITEM_CREATE therefore lands at the ladder's floor — the player then
+    chooses: recycle and retry, or refine it up the long road. Attach kinds
+    keep failure semantics (None — nothing is lost there).
+    """
+    if check_result.success_level >= recipe.min_success_level:
+        return resolve_capped_tier(
+            recipe=recipe,
+            crafter_character=crafter_character,
+            check_result=check_result,
+            material_grade_bonus=_material_grade_bonus(staged),
+            thread_count=thread_count,
+        )
+    if kind == CraftingRecipeKind.ITEM_CREATE:
+        from world.items.models import QualityTier  # noqa: PLC0415
+
+        return QualityTier.objects.order_by("sort_order").first()
+    return None
 
 
 def _material_grade_bonus(staged: StagedCost) -> int:
@@ -586,9 +713,10 @@ def run_crafting_recipe(  # noqa: PLR0913
     """Run a crafting attempt end-to-end for ``kind`` against ``target``.
 
     ``accent_targets`` (#2878) are styleable ``ModifierTarget`` rows the
-    crafter chose to work into the piece. Each raises the craft difficulty by
-    ``ACCENT_DIFFICULTY_STEP`` (ambition priced in probability) and rolls its
-    own check after the piece resolves. Credits render from ItemInstance's
+    crafter chose to work into the piece. Each subtracts
+    ``ACCENT_CHECK_PENALTY`` points from every roll and doubles the craft's
+    AP/anima cost (#2886 — ambition priced smoothly), then rolls its own
+    check after the piece resolves. Credits render from ItemInstance's
     #2066 dual-provenance fields.
 
     Pipeline (all inside one transaction):
@@ -639,11 +767,18 @@ def run_crafting_recipe(  # noqa: PLR0913
     # Recipe-knowledge gate (#2242) — a gated recipe needs a learned pattern.
     _check_recipe_knowledge(recipe, crafter_character)
 
-    # Accent validation (#2878) — before any staging or rolling.
-    accents_requested = _validate_accent_targets(accent_targets)
-    from world.items.crafting.constants import ACCENT_DIFFICULTY_STEP  # noqa: PLC0415
+    # Accent validation (#2878) — before any staging or rolling. Ambition is
+    # priced as a POINTS PENALTY on the rolls (#2886 — the rank-quantized
+    # difficulty step was a step function; a penalty bites smoothly) plus a
+    # per-accent doubling of the craft's AP/anima cost.
+    create_template = (output_overrides or {}).get("output_template")
+    accents_requested = _validate_accent_targets(
+        accent_targets, item_instance, template=create_template
+    )
+    from world.items.crafting.constants import ACCENT_CRAFT_COST_BASE  # noqa: PLC0415
 
-    difficulty = recipe.base_difficulty + ACCENT_DIFFICULTY_STEP * len(accents_requested)
+    difficulty = recipe.base_difficulty
+    accent_cost_multiplier = ACCENT_CRAFT_COST_BASE ** len(accents_requested)
 
     # --- 2. Pre-validate (never waste a roll) ---
     handler = get_handler(kind)
@@ -660,10 +795,24 @@ def run_crafting_recipe(  # noqa: PLR0913
         recipe=recipe,
         crafter_character=crafter_character,
         crafter_character_sheet=crafter_sheet,
+        cost_multiplier=accent_cost_multiplier,
     )
 
-    # --- 5. Roll (accent-raised difficulty, #2878) ---
-    check_result = perform_check_with_modifiers(crafter_character, recipe.check_type, difficulty)
+    # --- 5. Roll (thread edge + accent ambition penalty, #2886) ---
+    from world.items.crafting.quality import thread_count_for_skill  # noqa: PLC0415
+
+    craft_thread_count = thread_count_for_skill(crafter_character, recipe.skill_trait)
+    craft_contribs = _thread_check_contributions(
+        crafter_character, recipe, thread_count=craft_thread_count
+    )
+    craft_contribs += _accent_penalty_contributions(len(accents_requested))
+    check_result = perform_check_with_modifiers(
+        crafter_character,
+        recipe.check_type,
+        difficulty,
+        specialization=recipe.specialization,
+        extra_contributions=craft_contribs or None,
+    )
 
     # --- 6. Station wear (#1234) — unconditional, regardless of roll outcome ---
     _apply_station_wear(station)
@@ -701,14 +850,16 @@ def run_crafting_recipe(  # noqa: PLR0913
     # --- 9. Apply the consequence's effects ---
     apply_resolution(pending, ResolutionContext(character=crafter_character))
 
-    # --- 10. Resolve quality + apply via the handler on sufficient success ---
-    if check_result.success_level >= recipe.min_success_level:
-        tier = resolve_capped_tier(
-            recipe=recipe,
-            crafter_character=crafter_character,
-            check_result=check_result,
-            material_grade_bonus=_material_grade_bonus(staged),
-        )
+    # --- 10. Resolve quality + apply via the handler ---
+    tier = _resolve_outcome_tier(
+        kind=kind,
+        recipe=recipe,
+        crafter_character=crafter_character,
+        check_result=check_result,
+        staged=staged,
+        thread_count=craft_thread_count,
+    )
+    if tier is not None:
         # Thread the crafter_character into output_overrides so ItemCreateHandler
         # can resolve the CharacterSheet for provenance stamping.
         if output_overrides is not None:
@@ -722,7 +873,6 @@ def run_crafting_recipe(  # noqa: PLR0913
         )
         attached = True
     else:
-        tier = None
         row = None
         attached = False
 

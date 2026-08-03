@@ -48,14 +48,39 @@ PARTIAL_FRACTION: float = 0.5
 BASE_MAX_QUALITY_RUNG: int = 9
 BASE_MAX_ACCENT_LEVEL: int = 4
 
-#: Each Accent the crafter works into a piece raises the craft difficulty by
-#: this much (#2878) — ambition is priced in probability, and "alluring AND
-#: menacing" is a master's flex. PLACEHOLDER tuning.
-ACCENT_DIFFICULTY_STEP: int = 5
+#: Each Accent the crafter works into a piece SUBTRACTS this many points from
+#: the craft and accent checks, stacking (#2886, replacing the rank-quantized
+#: difficulty step). 50 is deliberate (Apostate): one accent knocks a
+#: competent crafter down a full rank band, so accents are master-tier
+#: statements and pushing a skill toward 100 through levels genuinely
+#: matters — a leveled master absorbs one or two; a journeyman absorbs none.
+ACCENT_CHECK_PENALTY: int = 50
+
+#: Craft-time AP/anima cost multiplies by this per accent (#2886, "doubles
+#: per, stacking") — the forge-side twin of the refinement doubling.
+ACCENT_CRAFT_COST_BASE: int = 2
 
 #: Accent-check quality score → AccentLevel rung divisor (#2878). A score of
 #: 15-29 realizes level 1, 30-44 level 2, … PLACEHOLDER tuning.
 ACCENT_SCORE_PER_LEVEL: int = 15
+
+#: Quality-luck spread (#2886): the craft's own d100 feeds the score as
+#: ``(effective_roll − offset) ÷ divisor`` ≈ −9…+11 — a hot roll punches a
+#: band or two above par, a cold success under-delivers (refinement grinds
+#: it away). PLACEHOLDER tuning.
+QUALITY_LUCK_OFFSET: int = 45
+QUALITY_LUCK_DIVISOR: int = 5
+
+#: Each thread woven into the crafting skill adds this to the craft AND
+#: accent checks (#2886) — threads are an edge on the roll, not just the
+#: ceiling. PLACEHOLDER tuning.
+THREAD_CRAFT_CHECK_BONUS: int = 10
+
+#: Refinement pace multiplier (#2886): steepens thresholds so raising a rung
+#: is weeks of investment and a full climb is months (Apostate: "people spend
+#: months on that — that's great"). Real-time pacing depends on AP regen and
+#: player income — retune against those once live. PLACEHOLDER.
+REFINEMENT_PACE_MULTIPLIER: int = 4
 
 #: Refinement (#2878, guaranteed long road): the progress threshold to raise a
 #: piece one rung is ``max(1, item value × target rung // 100)`` — money
@@ -64,6 +89,10 @@ ACCENT_SCORE_PER_LEVEL: int = 15
 #: the target rises, and refining alaricite costs alaricite money. No rolls —
 #: the accumulator is deterministic (Apostate's ruling). PLACEHOLDER curve.
 REFINEMENT_VALUE_PER_PROGRESS: int = 100
+
+#: Each accent on a piece multiplies its refinement threshold by this
+#: (#2886): 2 accents = 4× the road. PLACEHOLDER tuning.
+ACCENT_REFINEMENT_COST_BASE: int = 2
 
 #: Refinement time horizon: instant-completion means the deadline only prunes
 #: abandoned projects on the cron sweep. PLACEHOLDER.
