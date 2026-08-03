@@ -161,6 +161,33 @@ Powers, affinities, auras, resonances, threads-as-currency, rituals, and Mage Sc
     `technique_is_underspecified` (nothing authored at all), collected by
     `technique_effect_authoring_gaps()` and surfaced on `TechniqueAdmin` as
     columns + a filter. See magic.md "Technique effect summary".
+  - **Per-caster technique forms (#2901):** the effect summary above describes
+    the *authored* technique, which is the whole story for the two catalog
+    surfaces (CG, the magic API) but not for the two per-character ones. A
+    variant does not replace a technique — it makes an alternate version
+    available — so the character sheet and the in-scene cast list carry a
+    **list** of forms, not one resolved answer.
+    `available_technique_forms(character, technique, *, character_technique=None,
+    sheet=None) -> list[TechniqueFormPayload]` (`services/technique_forms.py`)
+    returns the base form, each unlocked `TechniqueVariant` (at most one per GIFT
+    thread resonance — `matching_variant` shadows lower tiers), and the next
+    locked form per resonance as a visible goal.
+    `technique_signature_payload` returns the signature flourish beside it, never
+    inside it (ADR-0072). Every entry is derived by **calling
+    `resolve_specialized_variant`**, never by re-implementing its selection rule;
+    the `is_default` marker comes from the `preferred_resonance=None` call, the
+    path that folds in the active alt-self resonance override.
+    No per-caster cache exists or is needed: a resolved form is fully determined
+    by `(parent_technique, variant)`, so its summary caches on
+    `TechniqueVariant.cached_effect_summary` (drop it with
+    `invalidate_variant_payload_caches`). Serialized by
+    `TechniqueFormSerializer`; embedded as `forms` on `CastableTechniqueSerializer`
+    (unlocked only — the scene shows what you can work now) and on `TechniqueEntry`
+    via `_build_magic_gifts` (the full catalogue plus `signature`).
+    `preferred_resonance_id` on the cast request is the web counterpart to
+    telnet's `cast <tech> variant=<resonance>` (#1619); before #2901 the web had
+    `use_base_form` alone and could not reach a specialized form at all.
+    See magic.md "Per-caster technique forms".
   - **Ritual Liturgy (#1352):** `RitualLiturgy` (OneToOne → `Ritual`; `opening_call`
     TextField — the officiant's authored ceremonial words; public, non-spoiler).
     Seeded alongside the Ritual of the Durance via `RitualLiturgyFactory`.

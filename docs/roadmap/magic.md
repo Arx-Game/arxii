@@ -28,6 +28,7 @@ the one specialization engine, fall/redemption, Covenant of the Court.
 | Distinctions grant/shape resonance (standing + potency) | ✅ built | `#1834` — `DistinctionResonanceGrant` + `reconcile_distinction_resonance_grants`; see `magic-build-history.md` |
 | **A real character actually being able to cast** | ✅ wired | `#1306` — shared template + per-character check; see below |
 | **A player being able to find out what a technique does** | ✅ built | `#2898` — one derived `effect_summary` block (plain-words line + structured effects) on all four surfaces + telnet; see below |
+| **A player being able to find out which forms of it they can work** | ✅ built | `#2901` — `available_technique_forms`: base + each unlocked variant + one step ahead, on the sheet and the cast list; see below |
 
 The backend cast→pose→log→outcome loop is fully wired and resolves end-to-end (verified
 by tracing + a throwaway smoke test). The remaining frontier is **assembly, content, and
@@ -113,16 +114,42 @@ magic." Each is a filed issue — work these, not micro-hardening tickets.
    **Still open (content, not engine):** the 86 techniques with no derivable relationship
    need conditions authored in the lore repo. Display now makes the gap visible — that was
    the point — but the authoring itself is out of scope per the issue.
-4. **🟠 #1307 — seed produces no playable character or scene** (`priority:next`). The
+4. **✅ #2901 — RESOLVED: surfaces now show which forms a caster can work** (spawned by
+   #2898). #2898's block describes the *authored* technique, which is right for CG and the
+   magic API but not for the two per-character surfaces: a `TechniqueVariant` does not
+   replace a technique, it makes an alternate version available. Nothing anywhere enumerated
+   a caster's forms — `Technique.cached_variants` had no display caller — so a player could
+   pass `base` or `variant=<resonance>` to `cast` without any surface having told them those
+   forms existed.
+   - **A list, not one resolved answer:** `available_technique_forms`
+     (`world/magic/services/technique_forms.py`) returns the base form, each unlocked
+     variant (at most one per GIFT-thread resonance, since `matching_variant` shadows lower
+     tiers), and the next locked form per resonance as a visible goal. The signature rides
+     beside it as a delta, never as a sibling row (ADR-0072).
+   - **One resolver, reused not reinvented:** every entry comes from calling
+     `resolve_specialized_variant`; the `is_default` marker comes from the
+     `preferred_resonance=None` call specifically, because that is the path carrying the
+     alt-self resonance override.
+   - **The caching concern in the issue dissolved:** a resolved form takes no caster input,
+     so each form's summary caches on its `TechniqueVariant` row exactly as the base one
+     caches on the `Technique` row. Sheet 37 → 39 queries, telnet cast listing 5 → 7, all
+     fixed rather than per-technique.
+   - **A silent correctness bug closed on the way:** `_ResolvedTechnique` exposed
+     `damage_profiles` while every payload reader reads `cached_damage_profiles`, so
+     `__getattr__` forwarded those to the parent and a variant with its own payload
+     summarised as the base form under the variant's name.
+   - **Web parity:** `preferred_resonance_id` on the cast request — telnet has had
+     `variant=<resonance>` since #1619, and the web had no counterpart at all.
+5. **🟠 #1307 — seed produces no playable character or scene** (`priority:next`). The
    "Big Button" (`world/seeds/database.py:seed_dev_database`, #651) seeds rules content
    only — 0 CharacterSheets / Personas / Scenes. Needs a playable-slice path (demo
    character via `create_character_with_sheet` + CG finalize, placed in a scene). Child
    of epic #1220.
-5. **🟡 #1308 — the web cast loop is never tested live** (`priority:next`). Frontend cast
+6. **🟡 #1308 — the web cast loop is never tested live** (`priority:next`). Frontend cast
    tests mock `castTechnique`; backend tested only at service level. No test drives
    `POST /api/action-requests/cast/` against a seeded + CG'd character. Add one as the
    regression guard. Cross-refs #617.
-6. **🟢 #1309 — frictionless scene start** (`priority:later`). Casting needs an active
+7. **🟢 #1309 — frictionless scene start** (`priority:later`). Casting needs an active
    scene; a player should be able to start/auto-join one without staff setup (the
    "implicit scene start" intent).
 

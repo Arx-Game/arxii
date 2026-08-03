@@ -1259,6 +1259,85 @@ with variant deltas applied), or the raw parent `Technique` when no variant matc
 `resolve_effective_role` cache coherence). `resolve_effective_role` is now a one-line shim
 over this resolver — no parallel specialization systems (ADR-0016).
 
+### Per-caster technique forms (#2901)
+
+The specialization engine above answers *which* variant applies to a cast. It does
+not answer the question the two per-character display surfaces need: **which forms
+of this technique can this caster work at all.** A variant does not replace a
+technique — it makes an alternate version available, and `cast <tech> base` /
+`cast <tech> variant=<resonance>` both stay reachable — so a display that collapsed
+to one resolved form would misreport what the character can do. Until #2901 nothing
+anywhere enumerated a caster's forms: `Technique.cached_variants` had no display
+caller, and a player could pass `base` or `variant=` without any surface having told
+them those forms existed.
+
+`available_technique_forms(character, technique, *, character_technique=None,
+sheet=None) -> list[TechniqueFormPayload]` (`world/magic/services/technique_forms.py`)
+returns, in order:
+
+1. **The base form** — always present, `variant_id=None`.
+2. **Each unlocked specialized form** — at most one per GIFT-thread resonance,
+   because `matching_variant` picks the *highest* qualifying `unlock_thread_level`
+   per resonance and shadows the rest. A multi-resonance caster (#1619) gets one
+   entry per thread; a role-granted technique (#2022) resolves through its
+   COVENANT_ROLE thread instead.
+3. **The next locked form per resonance** — the lowest `unlock_thread_level`
+   strictly above the thread's current level, carried with `is_locked=True` so the
+   deepening reads as a goal. One step ahead, not the whole ladder.
+
+`technique_signature_payload(character, technique) -> TechniqueSignaturePayload | None`
+returns the signature flourish *beside* the list. A signature is an additive
+modifier on whichever form is chosen, never a sibling form (ADR-0072).
+
+**Three invariants hold this together.**
+
+*One resolver, never a second selection rule.* Each entry is produced by calling
+`resolve_specialized_variant` once per candidate resonance. Re-deriving
+`matching_variant`'s predicate in a display service would drift from the cast the
+first time either side changed (ADR-0055/ADR-0016).
+
+*The `is_default` marker comes from the resolver too.* A bare `cast <tech>` resolves
+with `preferred_resonance=None`, a path that folds in the active alt-self resonance
+override (`_active_alt_self_resonance`). A display assuming "default = the thread's
+own resonance" would mislabel a shifted character.
+
+*No per-caster cache exists or is needed.* A resolved form is fully determined by
+`(parent_technique, variant)` — no caster input reaches it — so each form's effect
+summary caches on `TechniqueVariant.cached_effect_summary` exactly as the base one
+caches on the `Technique` row. Invalidate with `invalidate_variant_payload_caches`
+(shorter than the technique's list: a variant has no `removed_conditions` relation).
+The only per-caster work is deciding which forms are reachable, and that reads two
+already-cached lists (`character.threads`, `technique.cached_variants`).
+
+**The `cached_*` alias fix.** Every payload *reader* —
+`summarize_technique_effects`, `is_technique_hostile`, `derive_target_relationship` —
+reads the `cached_<payload>` names, but `_ResolvedTechnique` originally exposed only
+the bare `damage_profiles` / `capability_grants` / `condition_applications`. Its
+`__getattr__` forwarded the `cached_` reads straight to the parent `Technique`, so a
+variant that swapped its damage rows summarised as the **base** form under the
+variant's name and nothing failed. `_ResolvedTechnique` now declares all four
+`cached_*` names; `cached_removed_conditions` is declared explicitly to make the
+asymmetry visible — there is no `TechniqueVariantRemovedCondition` model, so a
+variant can never override which conditions a technique strips.
+
+**Surfaces.** The sheet describes, the scene does:
+
+| Surface | Carries |
+|---|---|
+| `sheet/magic` (telnet) + web Magic tab (`SpellbookTab`) | The full catalogue: every unlocked form with its own effect summary and intensity/control, the next locked form, and the signature line. Silent when only the base form is reachable. |
+| bare `cast` (telnet) + web castable list (`ActionPanel`) | A compact `Forms: base \| Cinder (Ashfall Lash) (default)` affordance plus the structured `forms` payload driving the web picker. Locked forms omitted. |
+
+**The web could not choose a form at all before this.** `CastRequestSerializer`
+carried `use_base_form` (#1581) but no `preferred_resonance_id`, so telnet's
+`variant=<resonance>` (#1619) had no web counterpart; the Action kwarg
+(`actions/definitions/cast.py`) already existed, only the wire field was missing.
+#2901 adds it and forwards it from `SceneActionRequestViewSet.cast`.
+
+**Query cost.** Both read paths prefetch `technique__variants`
+(`select_related("resonance")`) and make one read of the cached threads handler.
+Both are fixed regardless of how many techniques or variants are involved: the
+character sheet went 37 → 39 queries, the telnet cast listing 5 → 7.
+
 **Cast-time variant wiring [BUILT & WIRED, #1581]:** `resolve_specialized_variant` is called
 at two cast seams so unlocked variants shape every cast automatically: (1)
 `get_runtime_technique_stats` (`world/magic/services/techniques.py`) — combat runtime stats;
