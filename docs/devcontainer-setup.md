@@ -455,6 +455,14 @@ or `NET_RAW` capabilities. Verify the `cap_add` block in
 This can happen if the container was started with raw `docker compose up` instead of
 `just dc-up`. Run `just dc-down` then `just dc-up` to re-provision.
 
+**`claude`/`just`/`uv` not found, or up-arrow prints `^[[A`, inside a `dc-attach`
+pane** — the pane is running `/bin/sh` (dash) instead of bash, so `~/.bashrc` never
+ran and `mise activate` never put the toolchain on `PATH`; dash also has no line
+editing, hence the dead arrow keys. `docker-compose.yml` sets `SHELL: /bin/bash` to
+prevent this (zellij reads `$SHELL`, and `devcontainer exec` supplies none). If you
+land in such a pane anyway, `exec bash -l` recovers it; confirm the fix stuck with
+`ps -eo pid,args --forest` — pane shells should be `/bin/bash`.
+
 **`devcontainer: command not found`** — the CLI is not installed. Run:
 ```powershell
 npm install -g @devcontainers/cli
