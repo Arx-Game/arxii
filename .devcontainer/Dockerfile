@@ -110,3 +110,102 @@ RUN curl -fsS https://get.polytoken.dev | bash
 ARG ZELLIJ_VERSION=0.44.3
 RUN curl -fsSL "https://github.com/zellij-org/zellij/releases/download/v${ZELLIJ_VERSION}/zellij-x86_64-unknown-linux-musl.tar.gz" \
     | tar -xz -C /home/vscode/.local/bin zellij
+
+# Interactive-shell tooling. Pinned static binaries into ~/.local/bin, matching
+# the zellij pattern above: build-time network is unrestricted, so none of these
+# download hosts need an init-firewall.sh allowlist entry, and nothing here
+# contacts a network service at runtime (see the atuin config below).
+#   atuin — SQLite-backed Ctrl-R history search, replacing bash's 1000-entry file
+#   fzf   — Ctrl-T / Alt-C fuzzy file and directory pickers, and the picker
+#           behind fzf-tab and `z <fragment><TAB>` on the zsh side
+# Directory jumping is deliberately NOT a binary here: oh-my-zsh's z plugin
+# (agkozak/zsh-z, native zsh) does the same job with nothing extra to pin.
+# Wiring lives in shell-extras.sh and zshrc; see those for keybinding decisions.
+ARG ATUIN_VERSION=18.18.1
+ARG FZF_VERSION=0.74.2
+RUN curl -fsSL "https://github.com/atuinsh/atuin/releases/download/v${ATUIN_VERSION}/atuin-x86_64-unknown-linux-musl.tar.gz" \
+      | tar -xz -C /tmp \
+ && mv "/tmp/atuin-x86_64-unknown-linux-musl/atuin" /home/vscode/.local/bin/atuin \
+ && rm -rf /tmp/atuin-x86_64-unknown-linux-musl \
+ && curl -fsSL "https://github.com/junegunn/fzf/releases/download/v${FZF_VERSION}/fzf-${FZF_VERSION}-linux_amd64.tar.gz" \
+      | tar -xz -C /home/vscode/.local/bin fzf
+
+# Pre-create the mountpoints for the shell-state volumes (docker-compose.yml) as
+# vscode, so they inherit vscode ownership instead of being created root-owned on
+# first mount. Same rationale as the ~/.claude pre-create above.
+#   ~/.local/state/arxii  — HISTFILE (arxii-shell-history)
+#   ~/.local/share/atuin  — atuin's SQLite database (arxii-atuin)
+RUN mkdir -p /home/vscode/.local/state/arxii /home/vscode/.local/share/atuin
+
+# Atuin runs strictly local: no account, no sync, no update ping. Both defaults
+# are "true" upstream and both would be blocked by the egress firewall, turning
+# a shell start or a Ctrl-R into a timeout rather than an error.
+RUN mkdir -p /home/vscode/.config/atuin \
+ && printf '%s\n' \
+      '# Managed by .devcontainer/Dockerfile — edits are lost on `just dc-build`.' \
+      'auto_sync = false' \
+      'update_check = false' \
+      > /home/vscode/.config/atuin/config.toml
+
+# Generate shell completions once at build time. Doing this in shell-extras.sh
+# instead would spawn four subprocesses on every shell start. gh comes from apt;
+# just/uv/mise need mise's PATH, hence `mise exec`.
+USER root
+RUN mkdir -p /usr/local/share/arxii/completions \
+ && chown -R vscode:vscode /usr/local/share/arxii
+USER vscode
+RUN gh completion -s bash > /usr/local/share/arxii/completions/gh.bash \
+ && ~/.local/bin/mise completion bash > /usr/local/share/arxii/completions/mise.bash \
+ && ~/.local/bin/mise exec -C /tmp/mise -- just --completions bash \
+      > /usr/local/share/arxii/completions/just.bash \
+ && ~/.local/bin/mise exec -C /tmp/mise -- uv generate-shell-completion bash \
+      > /usr/local/share/arxii/completions/uv.bash
+
+# Source the interactive-shell setup LAST, after the mise activate line above:
+# atuin must bind Ctrl-R after fzf, and both append to PROMPT_COMMAND.
+COPY --chown=vscode:vscode .devcontainer/shell-extras.sh /usr/local/share/arxii/shell-extras.sh
+RUN echo 'source /usr/local/share/arxii/shell-extras.sh' >> ~/.bashrc
+
+# zsh + oh-my-zsh is the DEFAULT interactive shell (SHELL=/bin/zsh in
+# docker-compose.yml; zellij takes its pane shell from $SHELL). bash keeps its
+# own setup above -- `devcontainer exec`, `bash -lc` and agent tooling still land
+# there, and it should not be a downgrade. zsh itself is already in the base
+# image; only the framework and plugins are added here.
+#
+# zsh and oh-my-zsh itself come from the base devcontainer image, which already
+# installs both (~/.oh-my-zsh plus a stock ~/.zshrc that the COPY below
+# replaces). Its version therefore moves with the base image tag, like gh and
+# zsh do -- do not re-clone it here. Only the three custom plugins are added,
+# pinned to tags/commits and cloned shallow.
+#
+# oh-my-zsh's own updater is disabled in zshrc for the same reason atuin's is:
+# it would reach github.com on a schedule and hang against the egress firewall.
+ARG ZSH_AUTOSUGGESTIONS_VERSION=v0.7.1
+ARG ZSH_SYNTAX_HIGHLIGHTING_VERSION=0.8.0
+ARG FZF_TAB_COMMIT=24105b15714bfec37989ed5c5b6e60f572253019
+RUN git clone -q --depth 1 --branch "${ZSH_AUTOSUGGESTIONS_VERSION}" \
+      https://github.com/zsh-users/zsh-autosuggestions.git \
+      /home/vscode/.oh-my-zsh/custom/plugins/zsh-autosuggestions \
+ && git clone -q --depth 1 --branch "${ZSH_SYNTAX_HIGHLIGHTING_VERSION}" \
+      https://github.com/zsh-users/zsh-syntax-highlighting.git \
+      /home/vscode/.oh-my-zsh/custom/plugins/zsh-syntax-highlighting \
+ && git init -q /home/vscode/.oh-my-zsh/custom/plugins/fzf-tab \
+ && git -C /home/vscode/.oh-my-zsh/custom/plugins/fzf-tab remote add origin \
+      https://github.com/Aloxaf/fzf-tab.git \
+ && git -C /home/vscode/.oh-my-zsh/custom/plugins/fzf-tab fetch -q --depth 1 origin "${FZF_TAB_COMMIT}" \
+ && git -C /home/vscode/.oh-my-zsh/custom/plugins/fzf-tab checkout -q FETCH_HEAD
+
+# zsh completions are autoloaded by compinit from fpath, so unlike the bash side
+# these are plain `_<cmd>` files and cost nothing until first use.
+USER root
+RUN mkdir -p /usr/local/share/arxii/zsh-completions \
+ && chown -R vscode:vscode /usr/local/share/arxii
+USER vscode
+RUN gh completion -s zsh > /usr/local/share/arxii/zsh-completions/_gh \
+ && ~/.local/bin/mise completion zsh > /usr/local/share/arxii/zsh-completions/_mise \
+ && ~/.local/bin/mise exec -C /tmp/mise -- just --completions zsh \
+      > /usr/local/share/arxii/zsh-completions/_just \
+ && ~/.local/bin/mise exec -C /tmp/mise -- uv generate-shell-completion zsh \
+      > /usr/local/share/arxii/zsh-completions/_uv
+
+COPY --chown=vscode:vscode .devcontainer/zshrc /home/vscode/.zshrc

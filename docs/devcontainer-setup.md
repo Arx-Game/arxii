@@ -190,6 +190,64 @@ that baked copy, so workspace edits to `init-firewall.sh` only take effect after
 `just dc-build`. This passes `--build-no-cache --remove-existing-container` to the
 devcontainer CLI.
 
+### Shell setup
+
+**zsh + oh-my-zsh is the default interactive shell.** `just dc-shell` and every
+`just dc-attach` pane land in it (`SHELL` is pinned to `/bin/zsh` in
+`docker-compose.yml`, and zellij takes its pane shell from `$SHELL`). Config lives in
+`.devcontainer/zshrc`.
+
+bash keeps an equivalent setup in `.devcontainer/shell-extras.sh` — `devcontainer
+exec`, `bash -lc` and agent tooling still land in bash, and it should not be a
+downgrade. **Atuin's database is shared between the two**, so history recorded in a
+zsh pane is searchable from a bash shell and vice versa. The plain `HISTFILE`s are
+separate.
+
+Edit either file and `just dc-build`; a hand-edit inside the container is lost on the
+next rebuild, because `/home/vscode` is image state rather than a named volume.
+
+oh-my-zsh runs a deliberately short plugin list: `git` (the `gst`/`gco`/`gd` alias
+pack), `z`, `fzf-tab`, `zsh-autosuggestions`, `zsh-syntax-highlighting`. That order is
+load order and matters — see the comments in `zshrc` before changing it. omz's `fzf`
+plugin is deliberately **not** enabled: its `Ctrl-R` binding would shadow atuin's.
+zsh and oh-my-zsh itself come from the base devcontainer image; only the three custom
+plugins are pinned here.
+
+Directory jumping is the `z` plugin rather than a separate zoxide binary. omz ships
+[agkozak/zsh-z](https://github.com/agkozak/zsh-z), a native-zsh implementation with no
+`awk`/`sed` subprocesses — a wash with zoxide on speed, one less pinned dependency,
+and `z frag<TAB>` gets an fzf picker through fzf-tab. It is zsh-only, so bash has no
+`z`; that shell exists for `devcontainer exec` and scripts rather than hand
+navigation, and atuin records cwd for finding your way back.
+
+| Key | Does |
+|---|---|
+| `Tab` | fzf-tab: completion menu as an fzf picker (zsh only) |
+| `→` | Accept the inline autosuggestion (zsh only) |
+| `Up` | The shell's own history — one command back, no TUI |
+| `Ctrl-R` | atuin: fuzzy search over full history, with exit code, duration and cwd |
+| `Ctrl-T` | fzf: pick a file, insert its path at the cursor |
+| `Alt-C` | fzf: pick a subdirectory and `cd` into it |
+| `z <fragment>` | jump to a previously visited directory, e.g. `z shell-tooling` (zsh only) |
+| `z <fragment>`+`Tab` | same, but pick from an fzf list when several match |
+
+Up-arrow is deliberately left as the shell's own history — atuin's full-screen TUI is
+wanted on `Ctrl-R`, not on every "previous command". Change that by dropping
+`--disable-up-arrow` from the `atuin init` line in `zshrc` / `shell-extras.sh`.
+
+**atuin is local-only**: no account, no sync, and `update_check = false`. It never
+contacts a network service, so it needs no `init-firewall.sh` allowlist entry. Its
+`?`-key AI binding is disabled for the same reason.
+
+History persists across `just dc-build` via two named volumes —
+`arxii-shell-history` (the bash and zsh `HISTFILE`s, plus the `z` plugin's jump
+database via `ZSHZ_DATA`) and `arxii-atuin` (atuin's SQLite database). History is
+unlimited and flushed after every command, so several zellij
+tabs interleave instead of the last one to exit overwriting the rest.
+
+Tab completion is installed for `gh`, `just`, `uv` and `mise`, generated at image
+build time.
+
 ### Do not use raw docker commands for daily use
 
 `docker compose up` and `docker exec` skip the devcontainer hooks. That means:
@@ -456,12 +514,12 @@ This can happen if the container was started with raw `docker compose up` instea
 `just dc-up`. Run `just dc-down` then `just dc-up` to re-provision.
 
 **`claude`/`just`/`uv` not found, or up-arrow prints `^[[A`, inside a `dc-attach`
-pane** — the pane is running `/bin/sh` (dash) instead of bash, so `~/.bashrc` never
-ran and `mise activate` never put the toolchain on `PATH`; dash also has no line
-editing, hence the dead arrow keys. `docker-compose.yml` sets `SHELL: /bin/bash` to
-prevent this (zellij reads `$SHELL`, and `devcontainer exec` supplies none). If you
-land in such a pane anyway, `exec bash -l` recovers it; confirm the fix stuck with
-`ps -eo pid,args --forest` — pane shells should be `/bin/bash`.
+pane** — the pane is running `/bin/sh` (dash) instead of the configured shell, so no
+rc file ran and `mise activate` never put the toolchain on `PATH`; dash also has no
+line editing, hence the dead arrow keys. `docker-compose.yml` sets `SHELL: /bin/zsh`
+to prevent this (zellij reads `$SHELL`, and `devcontainer exec` supplies none). If you
+land in such a pane anyway, `exec zsh -l` recovers it; confirm the fix stuck with
+`ps -eo pid,args --forest` — pane shells should be `/bin/zsh`.
 
 **`devcontainer: command not found`** — the CLI is not installed. Run:
 ```powershell

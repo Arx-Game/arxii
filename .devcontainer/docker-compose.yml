@@ -32,6 +32,12 @@ services:
       # ~/.local/share/polytoken (XDG). Verify the session dir at first dc-build.
       - arxii-polytoken-config:/home/vscode/.config/polytoken
       - arxii-polytoken-data:/home/vscode/.local/share/polytoken
+      # Shell history, same rationale as the volumes above: /home/vscode is
+      # image state, so without these every rebuild starts from an empty
+      # history. HISTFILE is pointed at the first path by shell-extras.sh; the
+      # second is atuin's SQLite database.
+      - arxii-shell-history:/home/vscode/.local/state/arxii
+      - arxii-atuin:/home/vscode/.local/share/atuin
       # Shadow the host's src/.env (which points DATABASE_URL at a bare-metal
       # localhost Postgres) with a container-specific file. sync-env.sh
       # generates dev.env from src/.env with DATABASE_URL rewritten before
@@ -84,7 +90,13 @@ services:
       # libedit, so the same panes have no history and up-arrow just emits ^[[A.
       # Setting SHELL here fixes both at once (zellij reads $SHELL for pane
       # shells). Same rationale as TERM above: container-wide, survives rebuilds.
-      SHELL: /bin/bash
+      #
+      # The value is zsh rather than bash because zsh + oh-my-zsh is the default
+      # interactive shell (see .devcontainer/zshrc). This is not a revert of the
+      # fix above — the bug was the *absence* of SHELL, not its value, and bash
+      # keeps its own equivalent setup (shell-extras.sh) for `devcontainer exec`,
+      # `bash -lc` and agent tooling.
+      SHELL: /bin/zsh
     # Forward the brainstorm-server port so http://localhost:49200/ in the
     # Windows browser reaches the in-container server. The skill's
     # start-server.sh defaults to binding 127.0.0.1; pass --host 0.0.0.0
@@ -139,3 +151,5 @@ volumes:
   arxii-claude-home:
   arxii-polytoken-config:
   arxii-polytoken-data:
+  arxii-shell-history:
+  arxii-atuin:

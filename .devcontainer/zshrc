@@ -1,0 +1,99 @@
+# Interactive zsh setup for the arxii devcontainer -- the default shell you get
+# in a `just dc-shell` or `just dc-attach` pane (SHELL is pinned to /bin/zsh in
+# docker-compose.yml, and zellij takes its pane shell from $SHELL).
+#
+# Installed to /home/vscode/.zshrc by the Dockerfile. Edit this file and
+# `just dc-build`; a hand-edit inside the container is lost on the next rebuild,
+# because /home/vscode is image state rather than a named volume.
+#
+# bash keeps its own equivalent (shell-extras.sh) -- `devcontainer exec`, `bash -lc`
+# and agent tooling all still land in bash, and it should not be a downgrade.
+# Atuin's database is shared between the two, so history recorded in a zsh pane is
+# searchable from bash and vice versa.
+
+export ZSH="$HOME/.oh-my-zsh"
+ZSH_THEME="robbyrussell"
+
+# oh-my-zsh's self-updater would reach github.com on a schedule, which the egress
+# firewall drops -- turning a shell start into a hang rather than an error.
+# Versions are pinned in the Dockerfile and move on `just dc-build`.
+zstyle ':omz:update' mode disabled
+
+# Deliberately short list. Ordering is load order and matters:
+#   git                    — the alias pack (gst/gco/gd/...)
+#   z                      — `z <fragment>` jumps to a previously visited
+#                            directory. This is agkozak/zsh-z, a native-zsh
+#                            implementation with no awk/sed/date subprocesses,
+#                            NOT the older rupa/z script. Chosen over zoxide to
+#                            avoid carrying another pinned binary: it is a wash
+#                            on speed, and `z frag<TAB>` gets an fzf picker via
+#                            fzf-tab, which is what `zi` would have provided.
+#   fzf-tab                — replaces the completion menu with an fzf picker.
+#                            Must come after compinit (oh-my-zsh runs it) and
+#                            before any plugin that wraps ZLE widgets, i.e.
+#                            before autosuggestions and syntax-highlighting.
+#   zsh-autosuggestions    — inline ghost-text from history
+#   zsh-syntax-highlighting— must be LAST; it wraps every widget defined so far
+#
+# NOT enabled, on purpose:
+#   autojump      — duplicates z and fights over the same job
+#   fzf           — its Ctrl-R binding would shadow atuin's (see below)
+plugins=(git z fzf-tab zsh-autosuggestions zsh-syntax-highlighting)
+
+# The z plugin's datafile, on the arxii-shell-history volume rather than its
+# ~/.z default -- otherwise the jump database would reset on every
+# `just dc-build`, which is exactly the problem the volume exists to solve.
+# Read at plugin load time, so it must be set before oh-my-zsh.sh.
+export ZSHZ_DATA=/home/vscode/.local/state/arxii/z
+
+# Completions for gh/just/uv/mise, generated at image-build time (Dockerfile).
+# Must be on fpath BEFORE oh-my-zsh.sh, which is what runs compinit. Unlike the
+# bash side these cost nothing at startup: zsh autoloads a _<cmd> file only when
+# you actually complete that command.
+fpath=(/usr/local/share/arxii/zsh-completions $fpath)
+
+source "$ZSH/oh-my-zsh.sh"
+
+# --------------------------------------------------------------------------
+# History
+# --------------------------------------------------------------------------
+# After oh-my-zsh, which sets its own history options.
+# HISTFILE lives on the arxii-shell-history volume (docker-compose.yml) so it
+# survives `just dc-build`; bash's file sits beside it under the same volume.
+HISTFILE=/home/vscode/.local/state/arxii/zsh_history
+HISTSIZE=1000000
+SAVEHIST=1000000
+# INC_APPEND_HISTORY writes each command as it runs, so several zellij tabs
+# interleave instead of the last one to exit overwriting the rest. Deliberately
+# not SHARE_HISTORY: that also *imports* other sessions' commands into this
+# shell's up-arrow, which makes plain recall unpredictable.
+setopt EXTENDED_HISTORY INC_APPEND_HISTORY HIST_IGNORE_DUPS HIST_IGNORE_SPACE
+setopt HIST_REDUCE_BLANKS HIST_VERIFY
+
+# --------------------------------------------------------------------------
+# mise -- puts python/node/uv/just/claude on PATH per-directory
+# --------------------------------------------------------------------------
+eval "$(~/.local/bin/mise activate zsh)"
+
+# --------------------------------------------------------------------------
+# fzf -- Ctrl-T (insert file path), Alt-C (cd into subdirectory)
+# --------------------------------------------------------------------------
+# ORDER MATTERS: fzf must load BEFORE atuin. Both bind Ctrl-R and the last
+# binding wins; with fzf second, its Ctrl-R silently shadows atuin's, leaving
+# atuin recording history that can never be searched.
+if command -v fzf >/dev/null 2>&1; then
+    source <(fzf --zsh)
+fi
+
+# --------------------------------------------------------------------------
+# atuin -- Ctrl-R history search, backed by SQLite
+# --------------------------------------------------------------------------
+# --disable-up-arrow: up-arrow stays zsh's own history search. Atuin's
+#   full-screen TUI is deliberate on Ctrl-R but too heavy for "previous command".
+# --disable-ai: atuin otherwise binds the bare `?` key to an LLM round-trip,
+#   which would also hit the egress firewall.
+if command -v atuin >/dev/null 2>&1; then
+    eval "$(atuin init zsh --disable-up-arrow --disable-ai)"
+fi
+
+# Directory jumping is the `z` plugin above, not a separate binary.
