@@ -284,7 +284,7 @@ FASHION_VOGUE_DECAY_RATE = 0.05  # proportional momentum lost per decay tick (fl
 
 # Seasonal trendsetter ceremony (#514)
 FASHION_TREND_FACET_COUNT = 3  # how many top facets define the new vogue
-FASHION_LIVING_STYLE_NAME_TEMPLATE = "{society} — Current Vogue"
+FASHION_LIVING_STYLE_NAME_TEMPLATE = "{society} - Current Vogue"
 FASHION_SEASON_INTERVAL = timedelta(days=30)  # seasonal ceremony cadence (real time)
 FASHION_VOGUE_DECAY_INTERVAL = timedelta(hours=8)  # momentum decay cadence (matches renown decay)
 

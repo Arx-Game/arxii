@@ -28,7 +28,7 @@ def make_title(raw: dict) -> str:
     basename = fp.rsplit("/", 1)[-1] if "/" in fp else fp
     line = raw.get("line")
     location = f"{basename}:{line}" if line else basename
-    title = f"[sonarcloud:{tier}] {rule}: {msg} — {location}"
+    title = f"[sonarcloud:{tier}] {rule}: {msg} - {location}"
     return title[:120]
 
 

@@ -1009,7 +1009,7 @@ def _seed_resonance_environment_consequence_pools() -> None:
 #: Descriptions narrate WHY an abyssal place empowers an abyssal caster.
 _ABYSSAL_BOON_SPECS: list[dict[str, str]] = [
     {
-        "name": "Abyssal Resonance — Minor Attunement",
+        "name": "Abyssal Resonance - Minor Attunement",
         "band": "low",
         "description": (
             "The dissolution that permeates this place recognises the caster's touch. "
@@ -1026,7 +1026,7 @@ _ABYSSAL_BOON_SPECS: list[dict[str, str]] = [
         ),
     },
     {
-        "name": "Abyssal Resonance — Deep Attunement",
+        "name": "Abyssal Resonance - Deep Attunement",
         "band": "high",
         "description": (
             "The concentrated dissolution saturating this place and the caster's own "

@@ -202,7 +202,7 @@ def ensure_court_grant_role(covenant: Covenant) -> NPCRole:
     config = get_court_grant_config()
 
     role = NPCRole.objects.create(
-        name=f"{covenant.name} — Court Master's Grant",
+        name=f"{covenant.name} - Court Master's Grant",
         faction_affiliation=covenant.organization,
     )
     offer = NPCServiceOffer.objects.create(

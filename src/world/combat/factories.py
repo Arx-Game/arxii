@@ -925,7 +925,7 @@ class BossFightScenarioFactory:
             vulnerability_intensity_bonus=2,
         )
 
-        pool_p2 = ThreatPoolFactory(name="Boss Threat Pool — Phase 2+")
+        pool_p2 = ThreatPoolFactory(name="Boss Threat Pool - Phase 2+")
         add_template = CreatureTemplate.objects.create(
             name="Boss Fight Add",
             tier=OpponentTier.MOOK,
