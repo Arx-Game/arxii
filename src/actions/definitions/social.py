@@ -370,6 +370,22 @@ class EntranceAction(_SocialTemplateAction):
                 prompt = "Use |wflourish <resonance>|n to declare your entrance."
                 result.message = f"{result.message}\n{prompt}" if result.message else prompt
 
+        # Showcase stake (#2907): an entrance made while showcasing spends
+        # cachet automatically — settlement waits for the weekly cron. Never
+        # blocks the entrance; no toggle or empty wallet = nothing recorded.
+        from world.items.services.fashion_showcase import (  # noqa: PLC0415
+            record_showcase_showing,
+        )
+
+        loc = actor.location
+        scene = loc.active_scene if loc is not None and hasattr(loc, "active_scene") else None
+        showing = record_showcase_showing(
+            actor.sheet_data, scene=scene, roll_success=result.success
+        )
+        if showing is not None:
+            note = f"(Showcase staked: {showing.stake} cachet — settles at the week's end.)"
+            result.message = f"{result.message}\n{note}" if result.message else note
+
         return result
 
     def _execute_technique_entrance(  # noqa: PLR0913 - mirrors CastTechniqueAction.execute

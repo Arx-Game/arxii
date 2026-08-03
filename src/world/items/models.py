@@ -31,6 +31,7 @@ from world.items.constants import (
     GearArchetype,
     OwnershipEventType,
     RecycleRequestStatus,
+    ShowcaseMode,
     StyleAudacity,
     StyleEra,
     WearFamily,
@@ -807,6 +808,15 @@ class ItemInstance(SharedMemoryModel):
             "template's wear family. Null = the template's authored default."
         ),
     )
+    acclaim = models.PositiveIntegerField(
+        default=0,
+        help_text=(
+            "Prestige-side fashion renown loaded by settled showings (#2907). "
+            "NEVER legend — acclaim is social esteem, persistent and compounding "
+            "(the Arx 1 model-once chain-destroy pathology is designed out); it "
+            "can also DROP on disasters."
+        ),
+    )
     quantity = models.PositiveIntegerField(
         default=1,
         help_text="Stack quantity for stackable items.",
@@ -1533,6 +1543,14 @@ class Outfit(SharedMemoryModel):
 
     name = models.CharField(max_length=100)
     description = models.TextField(blank=True)
+    acclaim = models.PositiveIntegerField(
+        default=0,
+        help_text=(
+            "Ensemble fashion renown from settled ENSEMBLE showings (#2907). "
+            "Composition-snapshot semantics (fame binds to the exact pieces) "
+            "are a flagged open item — v1 loads acclaim on the outfit row."
+        ),
+    )
     character_sheet = models.ForeignKey(
         _CHARACTER_SHEET_FK,
         on_delete=models.CASCADE,
@@ -1767,6 +1785,181 @@ class FashionStyle(NaturalKeyMixin, SharedMemoryModel):
 
     def __str__(self) -> str:
         return self.name
+
+
+class CachetWallet(SharedMemoryModel):
+    """A character's fashion-attention currency (#2907).
+
+    Cachet is REQUIRED to gain prestige from showcasing: it auto-spends when
+    the character makes an entrance while their showcase toggle is active
+    (stake by venue), and the weekly settlement pays it back on the
+    roll/engagement ladder. Working name — Apostate may rename.
+    """
+
+    character_sheet = models.OneToOneField(
+        _CHARACTER_SHEET_FK,
+        on_delete=models.CASCADE,
+        primary_key=True,
+        related_name="cachet_wallet",
+    )
+    balance = models.PositiveIntegerField(default=3)
+
+    def __str__(self) -> str:
+        return f"CachetWallet({self.character_sheet_id}={self.balance})"
+
+
+class ShowcaseState(SharedMemoryModel):
+    """The persistent showcase toggle (#2907): what this character is presenting.
+
+    ENSEMBLE highlights a saved Outfit (acclaim to the outfit, pushes its
+    Style); PIECE highlights one item (heavy acclaim, pushes its Style AND
+    Silhouette). Entrances read this; mere movement never spends.
+    """
+
+    character_sheet = models.OneToOneField(
+        _CHARACTER_SHEET_FK,
+        on_delete=models.CASCADE,
+        primary_key=True,
+        related_name="showcase_state",
+    )
+    is_active = models.BooleanField(default=False)
+    mode = models.CharField(max_length=20, choices=ShowcaseMode.choices)
+    outfit = models.ForeignKey(
+        "items.Outfit",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="showcases",
+    )
+    item = models.ForeignKey(
+        "items.ItemInstance",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="showcases",
+    )
+
+    def __str__(self) -> str:
+        return f"ShowcaseState({self.character_sheet_id}, {self.mode}, active={self.is_active})"
+
+
+class FashionShowing(SharedMemoryModel):
+    """One cachet-staked showcase moment, settled at the weekly cron (#2907).
+
+    Created when a showcasing character makes an entrance (stake deducted
+    immediately); the weekly settlement evaluates THE WEEK — roll refund +
+    engagement bonuses (never immediate, the anti-farm keystone) — then loads
+    acclaim onto the statement and pushes vogue momentum.
+    """
+
+    character_sheet = models.ForeignKey(
+        _CHARACTER_SHEET_FK,
+        on_delete=models.CASCADE,
+        related_name="fashion_showings",
+    )
+    scene = models.ForeignKey(
+        "scenes.Scene",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="fashion_showings",
+    )
+    presentation = models.ForeignKey(
+        "items.FashionPresentation",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="showings",
+        help_text="Linked when the showing rides a present_outfit at an event.",
+    )
+    mode = models.CharField(max_length=20, choices=ShowcaseMode.choices)
+    statement_item = models.ForeignKey(
+        "items.ItemInstance",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="statement_showings",
+    )
+    statement_outfit = models.ForeignKey(
+        "items.Outfit",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="statement_showings",
+    )
+    statement_style = models.ForeignKey(
+        "items.Style",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="statement_showings",
+    )
+    statement_silhouette = models.ForeignKey(
+        "items.Silhouette",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="statement_showings",
+    )
+    stake = models.PositiveIntegerField()
+    roll_success = models.BooleanField(default=False)
+    engagement_count = models.PositiveIntegerField(
+        default=0,
+        help_text="Peer engagement events recorded before settlement (endorsements etc.).",
+    )
+    settled = models.BooleanField(default=False, db_index=True)
+    payout = models.PositiveIntegerField(default=0)
+    created_at = models.DateTimeField(auto_now_add=True, db_index=True)
+
+    class Meta:
+        ordering = ["-created_at"]
+        indexes = [models.Index(fields=["settled", "created_at"])]
+
+    def __str__(self) -> str:
+        return f"FashionShowing({self.character_sheet_id}, stake={self.stake})"
+
+
+class SilhouetteVogueMomentum(SharedMemoryModel):
+    """Accumulating vogue heat for a silhouette (#2907; global tracks v1).
+
+    Bumped by settled showings whose statement carried this form; cron-decayed
+    (seasonal-slow). Mirrors ``FacetVogueMomentum``'s pattern minus the
+    society scoping — per-society fashion scenes are an open design question.
+    """
+
+    silhouette = models.OneToOneField(
+        "items.Silhouette",
+        on_delete=models.CASCADE,
+        primary_key=True,
+        related_name="vogue_momentum",
+    )
+    points = models.IntegerField(default=0)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ["-points"]
+
+    def __str__(self) -> str:
+        return f"SilhouetteVogueMomentum({self.silhouette_id}={self.points})"
+
+
+class StyleVogueMomentum(SharedMemoryModel):
+    """Accumulating vogue heat for a cultural style register (#2907; global v1)."""
+
+    style = models.OneToOneField(
+        "items.Style",
+        on_delete=models.CASCADE,
+        primary_key=True,
+        related_name="vogue_momentum_row",
+    )
+    points = models.IntegerField(default=0)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ["-points"]
+
+    def __str__(self) -> str:
+        return f"StyleVogueMomentum({self.style_id}={self.points})"
 
 
 class Silhouette(NaturalKeyMixin, SharedMemoryModel):

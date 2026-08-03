@@ -166,6 +166,39 @@ def silhouette_prose_noun(family: str) -> str:
     return PROSE_NOUN_SILHOUETTE
 
 
+class ShowcaseMode(models.TextChoices):
+    """What a showcasing character is highlighting (#2907).
+
+    ENSEMBLE: the whole outfit is the statement — acclaim lands on the Outfit
+    (pushing the outfit's Style vogue). PIECE: one item is the statement —
+    heavy acclaim on that item (pushing its Style AND Silhouette).
+    """
+
+    ENSEMBLE = "ensemble", "Ensemble"
+    PIECE = "piece", "Piece"
+
+
+# --- Cachet + weekly showcase settlement (#2907; PLACEHOLDER tuning) ---------
+# Cachet is REQUIRED to gain prestige from showcasing; it auto-spends when the
+# character makes an entrance while their showcase toggle is active. Cost
+# scales with the venue: a random scene stakes 1; a proper event stakes more
+# (an authored per-event degree ladder is an open design question — flat
+# event cost is the v1 guess).
+SHOWCASE_STAKE_SCENE = 1
+SHOWCASE_STAKE_EVENT = 10
+CACHET_STARTING_BALANCE = 3
+# Settlement ladder (Apostate's spec numbers, verbatim): a good roll refunds
+# the stake; real player engagement pays +1; overwhelming engagement +1 more.
+SETTLEMENT_ENGAGEMENT_BONUS = 1
+SETTLEMENT_OVERWHELMING_THRESHOLD = 3
+SETTLEMENT_MAX_PAYOUT_SCENE = 3
+# Vogue momentum gained by the statement's style/silhouette per settled payout
+# point, and the weekly decay multiplier (seasonal-slow — mirrors the facet
+# momentum pattern; guess flagged on #2907).
+VOGUE_PUSH_PER_PAYOUT = 1
+VOGUE_WEEKLY_DECAY = 0.85
+
+
 class StyleEra(models.TextChoices):
     """When a Style's fashion language comes from (#2907).
 
