@@ -75,6 +75,20 @@ The magic system for Arx II. Power flows from identity and connection.
 
 ### Gifts & Techniques
 - `Gift` - Thematic collections of magical techniques (M2M to Resonance — the **supported set**: a weave constraint, not the cast-time value; the cast reads the character's GIFT-thread resonance via `gift_resonances_for`, ADR-0052). Carries a `kind` column (`GiftKind`: `MAJOR` = the one CG-chosen gift, `MINOR` = shared/acquirable — species abilities and in-play powers are delivered as Minor Gifts; ADR-0050, #1577)
+- **Gift lineage (#2891, ADR-0192)** — `Gift.parent` (self-FK, PROTECT, `related_name="children"`)
+  hangs a gift beneath an umbrella gift. **Holding a gift reaches the techniques of that gift and
+  of every ancestor, and the GIFT thread on the held gift is the thread for all of them** — one
+  `CharacterGift`, one thread, one technique cap, so a subspecies character doesn't pay the Rite
+  of Imbuing twice. Model surface: `Gift.lineage` / `lineage_ids` / `inherited_techniques`
+  (mirrors `Species.lineage`, cycle-safe seen-set). `Gift.cached_techniques` still means the
+  gift's OWN techniques — it is the `Prefetch(to_attr=)` target for the gift API; don't widen it.
+  Service seams: `resolve_owned_gift(sheet, gift)` (`services/gift_acquisition.py`) answers both
+  "does the learner own this?" and "which gift's thread and cap govern it?"; `gift_threads_for`
+  (`specialization/services.py`) returns the GIFT threads covering a gift. Deliberately NOT
+  lineage-aware: `cg_catalog` (authored at technique granularity), `CharacterTechniqueHandler
+  ._state` (explicit `CharacterTechnique` rows), `GiftSerializer.techniques`. A *different* axis
+  from `species.SpeciesGiftGrant.inheritable`, which walks the species chain — both are needed.
+  See `docs/systems/magic.md`'s "Gift lineage" section for the full call-site table.
 - **Content pipeline (#2486):** the catalog (`Gift`/`Technique` + grant tables
   `PathGiftGrant`/`TraditionGiftGrant`/`species.SpeciesGiftGrant` + `Technique`'s payload
   rows) is lore-repo exportable via `CONTENT_MODELS` with natural keys —

@@ -26,6 +26,7 @@ from world.magic.exceptions import (
 from world.magic.services.gift_acquisition import (
     count_techniques_for_gift,
     get_technique_cap_for_gift,
+    resolve_owned_gift,
 )
 
 if TYPE_CHECKING:
@@ -101,13 +102,15 @@ def learn_technique(  # noqa: PLR0913
         ValueError: Learner already knows this technique.
     """
     from world.magic.models import (  # noqa: PLC0415
-        CharacterGift,
         CharacterTechnique,
         TechniqueProgress,
     )
 
-    # 1. Gift-owned precondition.
-    if not CharacterGift.objects.filter(character=learner, gift=technique.gift).exists():
+    # 1. Gift-owned precondition. Ownership walks the gift lineage (#2891): a
+    # character holding a child gift reaches its ancestors' techniques too, so
+    # an exact `gift=technique.gift` match would refuse every inherited one.
+    owned_gift = resolve_owned_gift(learner, technique.gift)
+    if owned_gift is None:
         raise GiftNotOwned
 
     # 3. Duplicate check.
@@ -115,9 +118,10 @@ def learn_technique(  # noqa: PLR0913
         msg = f"{learner} already knows {technique.name}."
         raise ValueError(msg)
 
-    # 4. Cap check.
-    current_count = count_techniques_for_gift(learner, technique.gift)
-    cap = get_technique_cap_for_gift(learner, technique.gift)
+    # 4. Cap check — against the gift the learner actually holds, since that is
+    # where their one GIFT thread hangs and what its cap covers.
+    current_count = count_techniques_for_gift(learner, owned_gift)
+    cap = get_technique_cap_for_gift(learner, owned_gift)
     if current_count >= cap:
         raise TechniqueCapExceeded
 

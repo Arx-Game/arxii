@@ -37,12 +37,15 @@ class OrganizationGiftGrantHandler:
         Only gifts matching the thread's resonance are included, so a member
         weaving a Fire resonance thread does not get techniques from a
         Shadow-only gift.
+
+        A granted gift carries its ancestors' techniques with it (#2891) — the
+        same invariant that applies when a character holds the gift.
         """
         techniques = []
         for grant in self._rows:
             gift = grant.gift
             if any(r.pk == resonance.pk for r in gift.cached_resonances):
-                techniques.extend(gift.cached_techniques)
+                techniques.extend(gift.inherited_techniques)
         return techniques
 
     def anchor_cap_for(self, resonance) -> int:

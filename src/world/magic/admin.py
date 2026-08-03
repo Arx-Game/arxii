@@ -441,8 +441,9 @@ class CharacterResonanceAdmin(admin.ModelAdmin):
 
 @admin.register(Gift)
 class GiftAdmin(admin.ModelAdmin):
-    autocomplete_fields = ["creator"]
-    list_display = ["name"]
+    autocomplete_fields = ["creator", "parent"]
+    list_display = ["name", "kind", "parent"]
+    list_filter = ["kind"]
     search_fields = ["name", "description"]
     filter_horizontal = ["resonances"]
 

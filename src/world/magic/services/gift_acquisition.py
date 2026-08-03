@@ -138,8 +138,37 @@ def spend_xp_on_gift_unlock(
 # ---------------------------------------------------------------------------
 
 
+def resolve_owned_gift(sheet: CharacterSheet, gift: Gift) -> Gift | None:
+    """The gift the character actually holds that reaches ``gift``'s techniques (#2891).
+
+    ``gift`` itself when it is directly held; otherwise the held descendant gift
+    whose lineage contains ``gift`` — a Vulpi holder reaching a Khati technique.
+    ``None`` when the character reaches ``gift`` by no route.
+
+    This is the single answer to both "does the learner own this?" and "which
+    gift's thread and cap govern this technique?". The two questions have the
+    same answer and must not drift apart: the whole point of ``Gift.parent`` is
+    that a subspecies character carries ONE ``CharacterGift`` and ONE GIFT
+    thread, so the held gift is what caps and thread depth are read from.
+    """
+    from world.magic.models import CharacterGift  # noqa: PLC0415
+
+    held = [cg.gift for cg in CharacterGift.objects.filter(character=sheet).select_related("gift")]
+    # A direct hold wins over reaching it through a descendant.
+    for candidate in held:
+        if candidate.pk == gift.pk:
+            return candidate
+    return next((candidate for candidate in held if gift.pk in candidate.lineage_ids), None)
+
+
 def count_techniques_for_gift(sheet: CharacterSheet, gift: Gift) -> int:
     """Count CharacterTechnique + in-progress TechniqueProgress rows for ``gift``.
+
+    Counts every technique drawing on ``gift``'s thread — its own and its
+    ancestors' (#2891). One thread means one cap: an inherited Khati technique
+    is not a second budget alongside the Vulpi ones. Callers pass the *held*
+    gift (see ``resolve_owned_gift``), so the lineage walked here is the held
+    gift's.
 
     Variants (TechniqueVariant) are derived on read (ADR-0055) — they are
     never stored as CharacterTechnique rows, so all CharacterTechnique rows
@@ -154,13 +183,14 @@ def count_techniques_for_gift(sheet: CharacterSheet, gift: Gift) -> int:
         TechniqueProgress,
     )
 
+    lineage_ids = gift.lineage_ids
     learned = CharacterTechnique.objects.filter(
         character=sheet,
-        technique__gift=gift,
+        technique__gift_id__in=lineage_ids,
     ).count()
     in_progress = TechniqueProgress.objects.filter(
         character_sheet=sheet,
-        technique__gift=gift,
+        technique__gift_id__in=lineage_ids,
     ).count()
     return learned + in_progress
 
@@ -288,6 +318,10 @@ def charge_and_learn(  # noqa: PLR0913 - shared core for two front doors; params
     a not-yet-acquired gift costs more AP (config.first_technique_ap_multiplier)
     and requires a CharacterGiftUnlock receipt (the XP gate).
 
+    "Have the gift" means reaching it through ``resolve_owned_gift`` (#2891): a
+    character holding a child gift already reaches its ancestors' techniques, so
+    an inherited technique needs no receipt and mints no second gift or thread.
+
     The Unbound magic-learning AP surcharge (#2442) is applied per-session
     by ``contribute_to_technique_progress``, not to the meter total.
 
@@ -328,7 +362,6 @@ def charge_and_learn(  # noqa: PLR0913 - shared core for two front doors; params
         TechniqueCapExceeded,
     )
     from world.magic.models import (  # noqa: PLC0415
-        CharacterGift,
         CharacterResonance,
         CharacterTechnique,
         TechniqueProgress,
@@ -350,8 +383,17 @@ def charge_and_learn(  # noqa: PLR0913 - shared core for two front doors; params
         msg = f"{sheet} already knows {technique.name}."
         raise ValueError(msg)
 
-    # 2. Check if learner has the gift.
-    has_gift = CharacterGift.objects.filter(character=sheet, gift=gift).exists()
+    # 2. Check if learner reaches the gift — directly, or through a held
+    # descendant gift whose lineage contains it (#2891). Without the lineage
+    # walk a Vulpi holder learning a shared Khati technique would read as
+    # not-having-the-gift here, and step 4 would mint a SECOND CharacterGift
+    # and a second GIFT thread — the exact double AP+XP cost Gift.parent
+    # exists to remove.
+    owned_gift = resolve_owned_gift(sheet, gift)
+    has_gift = owned_gift is not None
+    # Caps and thread depth are read from the gift the character actually
+    # holds, since that is where their one GIFT thread hangs.
+    cap_gift = owned_gift if owned_gift is not None else gift
 
     # 3. Compute total_required from base_ap_cost × existing multipliers.
     config = get_gift_acquisition_config()
@@ -381,8 +423,8 @@ def charge_and_learn(  # noqa: PLR0913 - shared core for two front doors; params
         grant_gift_to_character(sheet, gift, resonance=resonance)
 
     # 5. Check technique cap (after acquisition so the thread exists for depth).
-    current_count = count_techniques_for_gift(sheet, gift)
-    cap = get_technique_cap_for_gift(sheet, gift)
+    current_count = count_techniques_for_gift(sheet, cap_gift)
+    cap = get_technique_cap_for_gift(sheet, cap_gift)
     if current_count >= cap:
         raise TechniqueCapExceeded
 

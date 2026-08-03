@@ -31,8 +31,12 @@ The Gift chosen at character creation — a character's primary magical calling 
 _Avoid_: main gift.
 
 **Minor Gift**:
-A smaller, shared, more-easily-acquired Gift (e.g. Sight → Soulsight/Magesight; Travel → teleportation). **Species abilities (vampire/lycan/khati) are delivered as species-granted Minor Gifts.** (ADR-0050.)
+A smaller, shared, more-easily-acquired Gift (e.g. Sight → Soulsight/Magesight; Travel → teleportation). **Species abilities (vampire/lycan/khati) are delivered as species-granted Minor Gifts.** (ADR-0050.) A species gets **one** Minor Gift, with its techniques under it; shared material between sibling species lives in an umbrella Gift the kinds' gifts hang beneath — see **Gift lineage**. (#2891.)
 _Avoid_: lesser gift, sub-gift.
+
+**Gift lineage**:
+A Gift followed by every ancestor Gift, nearest first, walked through `Gift.parent` (self-FK, PROTECT). **Holding a Gift reaches the Techniques of that Gift and of every ancestor, and the character's Gift-thread on the held Gift is the thread for all of them** — one `CharacterGift`, one Thread, one technique cap. Shared species material (the Khati senses, the Infernal fire-resistance) lives once in an umbrella Gift; each kind's Gift hangs beneath it. `Gift.lineage` / `Gift.lineage_ids` / `Gift.inherited_techniques` are the model surface (`Gift.cached_techniques` still means the Gift's OWN techniques); `resolve_owned_gift` and `gift_threads_for` are the service seams. Distinct from `SpeciesGiftGrant.inheritable`, which walks the **species** chain rather than the Gift chain — both axes exist and both are needed. (#2891, ADR-0192.)
+_Avoid_: gift tree, gift hierarchy, parent gift chain, gift inheritance.
 
 **Tradition**:
 A school of magical practice. Every character has exactly one — the self-taught `Unbound` tradition is a real Tradition row, not a NULL special-case. A Tradition gates which Gifts are pickable at CG via `TraditionGiftGrant` rows (tradition × gift, plus a `special_techniques` M2M of that tradition's unique extras for the gift); non-Unbound traditions are further gated at tradition selection by `BeginningTradition.required_distinction`. Organizations may serve as a Tradition's teaching structure — many orgs per tradition (chapters, academies) — via the nullable `Organization.tradition` FK (specific→general, ADR-0010; `Tradition` itself stays dependency-free). (#2426, ADR-0136.)

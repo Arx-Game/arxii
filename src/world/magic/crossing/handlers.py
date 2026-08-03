@@ -56,9 +56,12 @@ def _parents_for(thread: Thread) -> Iterable:  # noqa: PLR0911
         return []
     if thread.target_kind == TargetKind.GIFT:
         if thread.target_gift_id is not None:
-            # Read the gift's cached techniques list rather than
-            # ``gift.techniques.all()`` per project cached-property rule.
-            return thread.target_gift.cached_techniques
+            # The gift's own techniques AND its ancestors' (#2891) — a thread on
+            # a child gift is the only thread its holder has, so variants on the
+            # inherited techniques must be discoverable from it. Reads the
+            # derived list rather than ``gift.techniques.all()`` per project
+            # cached-property rule.
+            return thread.target_gift.inherited_techniques
         return []
     if thread.target_kind == TargetKind.ORGANIZATION:
         if thread.target_organization_id is not None:

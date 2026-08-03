@@ -165,13 +165,37 @@ def _active_alt_self_resonance(sheet: CharacterSheet) -> Resonance | None:
     return alt.resonance
 
 
+def gift_threads_for(character, gift: Gift) -> list:
+    """The character's GIFT threads that cover ``gift`` (#2891).
+
+    A thread covers ``gift`` when its ``target_gift`` is ``gift`` itself or a
+    descendant of it — a Vulpi thread covers the Khati techniques Vulpi inherits.
+    Without the lineage test, every cast-time read of an inherited technique
+    would find no thread and fall back to the ancestor gift's authored defaults.
+
+    Reads the cached ``character.threads`` handler with a list-comp filter, not a
+    fresh ``Thread.objects.filter()`` — per project cached-property rule. A
+    direct hold sorts first so it wins when a character somehow holds both.
+    """
+    covering = [
+        t
+        for t in character.threads.all()
+        if t.target_kind == TargetKind.GIFT
+        and t.target_gift_id is not None
+        and gift.pk in t.target_gift.lineage_ids
+    ]
+    covering.sort(key=lambda t: t.target_gift_id != gift.pk)
+    return covering
+
+
 def gift_resonances_for(character, gift: Gift) -> list[Resonance]:
     """The resonance(s) this gift manifests as FOR THIS character.
 
-    Derived on read from the character's active GIFT thread on ``gift``: the
-    thread's resonance if one exists, else ``gift.resonances`` (the supported
+    Derived on read from the character's active GIFT thread covering ``gift``:
+    the thread's resonance if one exists, else ``gift.resonances`` (the supported
     set). Replaces ``technique.gift.resonances.all()`` at the four cast sites
-    (#1578).
+    (#1578). "Covering" walks the gift lineage (#2891) — a Vulpi thread manifests
+    the Khati techniques Vulpi inherits, at the Vulpi thread's resonance.
 
     When an ``AlternateSelf`` with a ``resonance`` is active, that resonance
     overrides the thread's (#1619) — the gift manifests as the alt-self's
@@ -205,11 +229,7 @@ def gift_resonances_for(character, gift: Gift) -> list[Resonance]:
     # place that decides which variant manifests. This avoids an extra DB
     # query in gift_resonances_for (which is called from multiple cast sites)
     # and keeps the query-scaling budget intact.
-    gift_threads = [
-        t
-        for t in character.threads.all()
-        if t.target_kind == TargetKind.GIFT and t.target_gift_id == gift.pk
-    ]
+    gift_threads = gift_threads_for(character, gift)
     if gift_threads:
         return [t.resonance for t in gift_threads]
     return gift.cached_resonances
@@ -267,6 +287,50 @@ def resolve_specialized_variant(
     return entity
 
 
+def _role_thread_for(character, character_technique):
+    """The COVENANT_ROLE thread for the role that granted ``character_technique`` (#2022).
+
+    A role-granted technique specializes by the vow's depth, not the personal
+    gift's depth.
+    """
+    role_source = character_technique.role_source
+    return next(
+        (
+            t
+            for t in character.threads.all()
+            if t.target_kind == TargetKind.COVENANT_ROLE
+            and t.target_covenant_role_id == role_source.covenant_role_id
+            and t.retired_at is None
+        ),
+        None,
+    )
+
+
+def _gift_thread_for_variant(character, technique: Technique, *, preferred_resonance):
+    """The GIFT thread whose level and resonance govern ``technique``'s variant.
+
+    Covering threads are those on the technique's own gift OR on a descendant
+    gift the character holds (#2891) — an inherited technique specializes from
+    the child gift's thread, since that is the only thread its holder has.
+
+    #1619: when ``preferred_resonance`` is set (the cast-time picker), prefer the
+    covering thread at that resonance, falling back to any covering thread so the
+    level is still read.
+    """
+    if technique.gift_id is None:
+        return None
+    covering = gift_threads_for(character, technique.gift)
+    if not covering:
+        return None
+    if preferred_resonance is None:
+        return covering[0]
+    at_resonance = next(
+        (t for t in covering if t.resonance_id == preferred_resonance.pk),
+        None,
+    )
+    return at_resonance if at_resonance is not None else covering[0]
+
+
 def _resolve_technique_variant(
     technique: Technique,
     character,
@@ -305,51 +369,10 @@ def _resolve_technique_variant(
         return technique
 
     if use_role_thread:
-        # Read the COVENANT_ROLE thread for the role that granted this technique.
-        role_source = character_technique.role_source
-        thread = next(
-            (
-                t
-                for t in character.threads.all()
-                if t.target_kind == TargetKind.COVENANT_ROLE
-                and t.target_covenant_role_id == role_source.covenant_role_id
-                and t.retired_at is None
-            ),
-            None,
-        )
-    # #1619: When preferred_resonance is set (cast-time picker), find the
-    # GIFT thread at that resonance. Fall back to the first GIFT thread on
-    # the gift if none matches (so the level is still read).
-    elif preferred_resonance is not None:
-        thread = next(
-            (
-                t
-                for t in character.threads.all()
-                if t.target_kind == TargetKind.GIFT
-                and t.target_gift_id == technique.gift_id
-                and t.resonance_id == preferred_resonance.pk
-            ),
-            None,
-        )
-        if thread is None:
-            # No thread at the preferred resonance — fall back to any
-            # GIFT thread on this gift (the level is still meaningful).
-            thread = next(
-                (
-                    t
-                    for t in character.threads.all()
-                    if t.target_kind == TargetKind.GIFT and t.target_gift_id == technique.gift_id
-                ),
-                None,
-            )
+        thread = _role_thread_for(character, character_technique)
     else:
-        thread = next(
-            (
-                t
-                for t in character.threads.all()
-                if t.target_kind == TargetKind.GIFT and t.target_gift_id == technique.gift_id
-            ),
-            None,
+        thread = _gift_thread_for_variant(
+            character, technique, preferred_resonance=preferred_resonance
         )
     if thread is None:
         return technique

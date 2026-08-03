@@ -15,7 +15,12 @@ Powers, affinities, auras, resonances, threads-as-currency, rituals, and Mage Sc
 - **Models:**
   - **Identity/aura/techniques:** `Affinity`, `Resonance`, `CharacterAura`,
     `CharacterResonance` (reshaped Spec A §2.2 — `balance` + `lifetime_earned`),
-    `Gift`, `CharacterGift`, `Technique`, `CharacterTechnique`,
+    `Gift` (self-FK `parent`, PROTECT — **gift lineage** (#2891, ADR-0192): holding a
+    gift reaches its ancestors' techniques on ONE thread and ONE cap, so shared species
+    material lives once in an umbrella gift; `Gift.lineage` / `lineage_ids` /
+    `inherited_techniques`, `resolve_owned_gift`, `gift_threads_for`. Distinct axis from
+    `species.SpeciesGiftGrant.inheritable`, which walks the *species* chain — both exist),
+    `CharacterGift`, `Technique`, `CharacterTechnique`,
     `TechniqueStyle`, `EffectType`, `Restriction`, `IntensityTier`,
     `TechniqueCapabilityGrant`,
     `TechniqueFunctionTag` (#2443, NK `(technique, function)`, lore-repo content —
