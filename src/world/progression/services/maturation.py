@@ -19,6 +19,7 @@ from world.progression.exceptions import (
 )
 from world.progression.models import MaturationSpend, MaturationStatCap
 from world.progression.services.skill_development import get_character_path_level
+from world.traits.constants import STAT_DISPLAY_DIVISOR
 from world.traits.models import CharacterTraitValue, Trait, TraitType
 
 if TYPE_CHECKING:
@@ -88,11 +89,12 @@ def spend_maturation_point(sheet: "CharacterSheet", trait: Trait) -> MaturationS
     trait_value, _ = CharacterTraitValue.objects.get_or_create(
         character=sheet, trait=trait, defaults={"value": 0}
     )
+    # Caps are authored in display dots; stat storage is internal ×10 (#2894).
     cap = stat_cap_for(sheet)
-    if cap is not None and trait_value.value >= cap:
+    if cap is not None and trait_value.value >= cap * STAT_DISPLAY_DIVISOR:
         raise MaturationCapReachedError(MaturationCapReachedError.user_message)
 
-    trait_value.value += 1
+    trait_value.value += STAT_DISPLAY_DIVISOR
     trait_value.save()
     return MaturationSpend.objects.create(
         character_sheet=sheet,
@@ -116,7 +118,7 @@ def sync_maturation_spends(sheet: "CharacterSheet") -> int:
         should_be_active = spend.milestone_year <= sheet.matured_years
         if spend.is_active == should_be_active:
             continue
-        delta = 1 if should_be_active else -1
+        delta = STAT_DISPLAY_DIVISOR if should_be_active else -STAT_DISPLAY_DIVISOR
         trait_value, _ = CharacterTraitValue.objects.get_or_create(
             character=sheet, trait=spend.trait, defaults={"value": 0}
         )

@@ -15,7 +15,7 @@ from django.db import models
 from evennia.objects.models import ObjectDB
 from evennia.utils.idmapper.models import SharedMemoryModel
 
-from world.traits.models import CharacterTraitValue
+from world.traits.models import CharacterTraitValue, display_trait_value
 
 # XP Cost System
 
@@ -231,7 +231,7 @@ class TraitRatingUnlock(SharedMemoryModel):
 
     def __str__(self) -> str:
         rating = cast(int, self.target_rating)
-        return f"{self.trait.name} Rating {rating / RATING_DIVISOR:.1f}"
+        return f"{self.trait.name} Rating {display_trait_value(self.trait.trait_type, rating)}"
 
 
 # Abstract Requirements System
@@ -348,23 +348,24 @@ class TraitRequirement(AbstractClassLevelRequirement):
                     True,
                     f"Has {self.trait.name} {trait_value.display_value}",
                 )
+            needed = display_trait_value(self.trait.trait_type, cast(int, self.minimum_value))
             return (
                 False,
-                f"Need {self.trait.name} {cast(int, self.minimum_value) / RATING_DIVISOR:.1f}, "
-                f"have {trait_value.display_value}",
+                f"Need {self.trait.name} {needed}, have {trait_value.display_value}",
             )
         except ObjectDoesNotExist:
+            needed = display_trait_value(self.trait.trait_type, cast(int, self.minimum_value))
             return (
                 False,
-                (
-                    f"Need {self.trait.name} "
-                    f"{cast(int, self.minimum_value) / RATING_DIVISOR:.1f}, trait not set"
-                ),
+                f"Need {self.trait.name} {needed}, trait not set",
             )
 
     def __str__(self) -> str:
         minimum_value = cast(int, self.minimum_value)
-        return f"Trait: {self.trait.name} >= {minimum_value / RATING_DIVISOR:.1f}"
+        return (
+            f"Trait: {self.trait.name} >= "
+            f"{display_trait_value(self.trait.trait_type, minimum_value)}"
+        )
 
 
 class LevelRequirement(AbstractClassLevelRequirement):

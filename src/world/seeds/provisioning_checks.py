@@ -118,7 +118,12 @@ def seed_provisioning_content() -> None:
 
 def _ensure_cooking_check():
     """The Cooking CheckType (wits + Cooking skill), content-owned rows."""
-    from world.checks.models import CheckCategory, CheckType, CheckTypeTrait  # noqa: PLC0415
+    from world.checks.models import (  # noqa: PLC0415
+        CheckCategory,
+        CheckType,
+        CheckTypeSpecialization,
+        CheckTypeTrait,
+    )
     from world.seeds.sample_content import authored_or_sample  # noqa: PLC0415
     from world.skills.models import Skill, Specialization  # noqa: PLC0415
     from world.traits.models import Trait, TraitCategory, TraitType  # noqa: PLC0415
@@ -139,8 +144,9 @@ def _ensure_cooking_check():
         },
         trait=skill_trait,
     )
+    brewing = None
     if skill is not None:
-        Specialization.objects.get_or_create(
+        brewing, _created = Specialization.objects.get_or_create(
             parent_skill=skill,
             name=BREWING_SPECIALIZATION_NAME,
             defaults={"display_order": 0, "is_active": True},
@@ -172,6 +178,15 @@ def _ensure_cooking_check():
     CheckTypeTrait.objects.get_or_create(
         check_type=check_type, trait=skill_trait, defaults={"weight": Decimal("1.00")}
     )
+    # Brewing rides the check as an authored specialization row (#2894 — the
+    # Specialization existed but was never linked, so it contributed nothing).
+    # Weight 1.0: spec is fully additive with the skill (Apostate: 50+50 ≡ 100).
+    if brewing is not None:
+        CheckTypeSpecialization.objects.get_or_create(
+            check_type=check_type,
+            specialization=brewing,
+            defaults={"weight": Decimal("1.00")},
+        )
     # Stat side = the AVERAGE of wits and agility (#2886, Apostate — echoing
     # Arx 1's higher-of-wits-and-dex; the average is what weighted rows can
     # express). update_or_create so the pre-ruling wits-0.50 rows retune.

@@ -8,7 +8,12 @@ from typing import NamedTuple
 
 from django.db import models
 
-from world.traits.models import TraitCategory, TraitType
+# STAT_DISPLAY_DIVISOR (#2894, ADR-0193): stats store internal ×10 and display
+# single-digit; skills store AND display their true 1-100 value (development
+# moves them by single points). Canonical definition lives in
+# world.traits.models (this module imports models, so it can't be defined here);
+# re-exported for the many display-edge consumers.
+from world.traits.models import STAT_DISPLAY_DIVISOR, TraitCategory, TraitType  # noqa: F401
 
 
 class PrimaryStat(models.TextChoices):

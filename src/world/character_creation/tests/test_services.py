@@ -229,21 +229,21 @@ class CharacterFinalizationTests(FinalizationTestMixin, TestCase):
         trait_values = CharacterTraitValue.objects.filter(character_id=character.pk)
         assert trait_values.count() == 12
 
-        # Verify specific values directly from database (1-5 scale)
+        # Verify specific values directly from database — stored internal ×10 (#2894)
         strength_value = CharacterTraitValue.objects.get(
             character_id=character.pk, trait=self.stats["strength"]
         )
-        assert strength_value.value == 2
+        assert strength_value.value == 20
 
         agility_value = CharacterTraitValue.objects.get(
             character_id=character.pk, trait=self.stats["agility"]
         )
-        assert agility_value.value == 2
+        assert agility_value.value == 20
 
         willpower_value = CharacterTraitValue.objects.get(
             character_id=character.pk, trait=self.stats["willpower"]
         )
-        assert willpower_value.value == 2
+        assert willpower_value.value == 20
 
     def test_staff_add_to_roster_stamps_staff_provenance(self):
         """add_to_roster (staff direct-add) records STAFF provenance + the actor (#1506)."""
@@ -335,16 +335,16 @@ class CharacterFinalizationTests(FinalizationTestMixin, TestCase):
         sheet = CharacterSheet.objects.get(character=character)
         assert sheet is not None
 
-        # Verify stats were created with correct values (1-5 scale)
+        # Verify stats were created with correct values — internal ×10 (#2894)
         strength_value = CharacterTraitValue.objects.get(
             character_id=character.pk, trait=self.stats["strength"]
         )
-        assert strength_value.value == 2
+        assert strength_value.value == 20
 
         willpower_value = CharacterTraitValue.objects.get(
             character_id=character.pk, trait=self.stats["willpower"]
         )
-        assert willpower_value.value == 2
+        assert willpower_value.value == 20
 
     def test_finalize_origin_story_from_slots(self) -> None:
         """Finalize assembles Profile.background from origin slots (#2478)."""

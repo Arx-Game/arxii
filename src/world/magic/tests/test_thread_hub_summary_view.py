@@ -270,7 +270,7 @@ class ThreadHubSummaryPickerDataTests(APITestCase):
         CharacterTraitValueFactory(
             character=cls.character.sheet_data,
             trait=cls.trait,
-            value=30,  # display_value = 3.0
+            value=30,  # SKILL trait: displays true value 30 (ADR-0193)
         )
 
         # TECHNIQUE unlock + matching CharacterTechnique
@@ -308,7 +308,7 @@ class ThreadHubSummaryPickerDataTests(APITestCase):
         self.assertEqual(len(traits), 1)
         self.assertEqual(traits[0]["trait_id"], self.trait.pk)
         self.assertEqual(traits[0]["name"], "Persuasion")
-        self.assertAlmostEqual(float(traits[0]["display_value"]), 3.0, places=1)
+        self.assertEqual(traits[0]["display_value"], 30)
 
     def test_trait_with_zero_value_excluded(self) -> None:
         """Trait unlock exists but character's value is 0 → not in weavable_traits."""

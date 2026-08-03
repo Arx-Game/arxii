@@ -20,6 +20,7 @@ from world.traits.models import (
     PointConversionRange,
     Trait,
     TraitType,
+    display_trait_value,
 )
 
 
@@ -37,8 +38,8 @@ class DefaultTraitValue:
         self.value = 0
 
     @property
-    def display_value(self) -> float:
-        return 0.0
+    def display_value(self) -> int:
+        return 0
 
     def __str__(self) -> str:
         return f"Default: {self.trait_name} = 0"
@@ -219,18 +220,19 @@ class TraitHandler:
             return 0
         return get_modifier_total(sheet, target) + get_condition_modifier_total(sheet, target)
 
-    def get_trait_display_value(self, trait_name: str) -> float:
+    def get_trait_display_value(self, trait_name: str) -> int:
         """
-        Get the display value (1.0-10.0 scale) for a trait.
+        Get the display value for a trait (#2894): stats ÷10, skills true value.
 
         Args:
             trait_name: Name of the trait
 
         Returns:
-            Display value rounded to 1 decimal place
+            The value as players see it (modifiers included).
         """
         value = self.get_trait_value(trait_name)
-        return round(value / 10, 1)
+        trait = Trait.get_by_name(trait_name)
+        return display_trait_value(trait.trait_type if trait else TraitType.OTHER, value)
 
     def set_trait_value(self, trait_name: str, value: int) -> bool:
         """

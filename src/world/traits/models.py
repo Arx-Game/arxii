@@ -31,6 +31,24 @@ class TraitType(models.TextChoices):
     OTHER = "other", "Other"
 
 
+# The stat display divisor (#2894, ADR-0193). STATS store internal ×10 (stat 2
+# → stored 20) and display single-digit (÷10). SKILLS store and display their
+# true 1-100 value — development moves them by single points (11…19) and XP
+# unlocks cross the ×10 rung boundaries — so skill display is the stored value,
+# never divided. Convert stat display at the edge with this divisor; never
+# write a display-scale stat to CharacterTraitValue.
+# (Defined here, not in constants.py, because constants.py imports this module;
+# constants.py re-exports it.)
+STAT_DISPLAY_DIVISOR = 10
+
+
+def display_trait_value(trait_type: str, value: int) -> int:
+    """A trait value as players see it: stats ÷10, everything else true value."""
+    if trait_type == TraitType.STAT:
+        return value // STAT_DISPLAY_DIVISOR
+    return value
+
+
 def _trait_type_label(trait_type: str) -> str:
     """Return the display label for a trait type."""
     try:
@@ -188,10 +206,9 @@ class TraitRankDescription(NaturalKeyMixin, SharedMemoryModel):
         return f"{self.trait.name}: {self.label} ({self.display_value})"
 
     @property
-    def display_value(self) -> float:
-        """Display value as shown to players (e.g., 2.0 for value 20)."""
-        value = cast(int, self.value)
-        return round(value / 10, 1)
+    def display_value(self) -> int:
+        """Display value as shown to players: stats ÷10, skills true value (#2894)."""
+        return display_trait_value(self.trait.trait_type, cast(int, self.value))
 
 
 class CharacterTraitValue(SharedMemoryModel):
@@ -229,10 +246,9 @@ class CharacterTraitValue(SharedMemoryModel):
         return f"{self.character}: {self.trait.name} = {self.display_value}"
 
     @property
-    def display_value(self) -> float:
-        """Display value as shown to players (e.g., 2.5 for value 25)."""
-        value = cast(int, self.value)
-        return round(value / 10, 1)
+    def display_value(self) -> int:
+        """Display value as shown to players: stats ÷10, skills true value (#2894)."""
+        return display_trait_value(self.trait.trait_type, cast(int, self.value))
 
     def save(self, *args: Any, **kwargs: Any) -> None:
         """Override save to update character's trait handler cache."""

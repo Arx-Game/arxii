@@ -2791,7 +2791,8 @@ class _WeavableTraitSerializer(serializers.Serializer):
     trait_id = serializers.IntegerField()
     name = serializers.CharField()
     trait_type = serializers.CharField()
-    display_value = serializers.FloatField()
+    # Stats ÷10, skills true value (#2894) — always whole numbers now.
+    display_value = serializers.IntegerField()
 
 
 class _WeavableTechniqueSerializer(serializers.Serializer):

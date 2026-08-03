@@ -39770,7 +39770,6 @@ export interface components {
       trait_id: number;
       name: string;
       trait_type: string;
-      /** Format: double */
       display_value: number;
     };
   };

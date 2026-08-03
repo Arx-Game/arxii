@@ -83,7 +83,7 @@ expands seed data in this public repo (TehomCD ruling, 2026-07-17).
 | 4 | Distinctions | `traits_complete` flag set; CG points >= 0 |
 | 5 | Path | Path selected (`get_path_errors`) |
 | 6 | Gift | Tradition, gift, >=1 technique(s), gift resonance, and Anima Check stat/skill all selected and valid (`compute_magic_errors`, 5-branch return-first gate); renders the `GiftStage` funnel component (#2426 Task 10) |
-| 7 | Attributes & Skills | All 12 primary stats present, valid range (1-5), points remaining = 0; skill point allocation validated against budget (moved in from Path, #2426 Task 9) |
+| 7 | Attributes & Skills | All 12 primary stats present, valid range (1-5), points remaining = 0; skill point allocation validated against budget (moved in from Path, #2426 Task 9). Draft allocations are display-scale; finalization stores stats ×10 and bridges each CG skill into a matching `CharacterTraitValue` row so checks and DP progression read them (ADR-0193, #2894) |
 | 8 | Appearance | Age, height band, height inches, build all set |
 | 9 | Identity | `first_name` in draft_data |
 | 10 | Final Touches | Always complete (goals are optional) |

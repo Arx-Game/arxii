@@ -328,8 +328,7 @@ class ShouldCheckCollapseTests(TestCase):
         _setup_stat(char, "stamina", 30, TraitCategory.PHYSICAL)
         _setup_stat(char, "willpower", 20, TraitCategory.META)
         pool = get_or_create_fatigue_pool(self.sheet)
-        # capacity = 30*10 + 20*3 = 360... wait, that's display scale
-        # stamina display=3, so capacity = 3*10 + 2*3 = 36
+        # stamina display 3, willpower display 2: capacity = 3*10 + 2*3 = 36
         pool.set_current("physical", 40)  # 111% of 36 → exhausted
         pool.save()
         result = should_check_collapse(self.sheet, ActionCategory.PHYSICAL, EffortLevel.MEDIUM)
