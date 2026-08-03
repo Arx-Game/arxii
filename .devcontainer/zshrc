@@ -97,3 +97,16 @@ if command -v atuin >/dev/null 2>&1; then
 fi
 
 # Directory jumping is the `z` plugin above, not a separate binary.
+#
+# `z` only knows directories this shell has already visited, and worktrees are
+# usually created by an agent or another session -- so the one you most want to
+# reach is often the one `z` has never heard of. These named directories cover
+# that first visit: `cd ~wt/<TAB>` opens the fzf-tab picker over every worktree,
+# after which `z 2462` works for the rest of the day.
+#
+# hash -d, not an alias: a named directory works in argument position too
+# (`rg TODO ~wt/feature-2734-*/`), tab-completes as a path, and zsh substitutes
+# it back when PRINTING paths -- so the prompt shows ~wt/feature-2462-... rather
+# than the full string. An alias only ever expands as the first word.
+hash -d wt=/workspaces/arxii/.claude/worktrees
+hash -d arxii=/workspaces/arxii
