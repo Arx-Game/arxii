@@ -32,6 +32,12 @@ services:
       # ~/.local/share/polytoken (XDG). Verify the session dir at first dc-build.
       - arxii-polytoken-config:/home/vscode/.config/polytoken
       - arxii-polytoken-data:/home/vscode/.local/share/polytoken
+      # Shell history, same rationale as the volumes above: /home/vscode is
+      # image state, so without these every rebuild starts from an empty
+      # history. HISTFILE is pointed at the first path by shell-extras.sh; the
+      # second is atuin's SQLite database.
+      - arxii-shell-history:/home/vscode/.local/state/arxii
+      - arxii-atuin:/home/vscode/.local/share/atuin
       # Shadow the host's src/.env (which points DATABASE_URL at a bare-metal
       # localhost Postgres) with a container-specific file. sync-env.sh
       # generates dev.env from src/.env with DATABASE_URL rewritten before
@@ -139,3 +145,5 @@ volumes:
   arxii-claude-home:
   arxii-polytoken-config:
   arxii-polytoken-data:
+  arxii-shell-history:
+  arxii-atuin:

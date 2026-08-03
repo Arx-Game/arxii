@@ -110,3 +110,59 @@ RUN curl -fsS https://get.polytoken.dev | bash
 ARG ZELLIJ_VERSION=0.44.3
 RUN curl -fsSL "https://github.com/zellij-org/zellij/releases/download/v${ZELLIJ_VERSION}/zellij-x86_64-unknown-linux-musl.tar.gz" \
     | tar -xz -C /home/vscode/.local/bin zellij
+
+# Interactive-shell tooling. Pinned static binaries into ~/.local/bin, matching
+# the zellij pattern above: build-time network is unrestricted, so none of these
+# download hosts need an init-firewall.sh allowlist entry, and nothing here
+# contacts a network service at runtime (see the atuin config below).
+#   atuin  — SQLite-backed Ctrl-R history search, replacing bash's 1000-entry file
+#   fzf    — Ctrl-T / Alt-C fuzzy file and directory pickers
+#   zoxide — `z <fragment>` jumps to a previously visited directory
+# Wiring lives in shell-extras.sh; see that file for the keybinding decisions.
+ARG ATUIN_VERSION=18.18.1
+ARG FZF_VERSION=0.74.2
+ARG ZOXIDE_VERSION=0.10.0
+RUN curl -fsSL "https://github.com/atuinsh/atuin/releases/download/v${ATUIN_VERSION}/atuin-x86_64-unknown-linux-musl.tar.gz" \
+      | tar -xz -C /tmp \
+ && mv "/tmp/atuin-x86_64-unknown-linux-musl/atuin" /home/vscode/.local/bin/atuin \
+ && rm -rf /tmp/atuin-x86_64-unknown-linux-musl \
+ && curl -fsSL "https://github.com/junegunn/fzf/releases/download/v${FZF_VERSION}/fzf-${FZF_VERSION}-linux_amd64.tar.gz" \
+      | tar -xz -C /home/vscode/.local/bin fzf \
+ && curl -fsSL "https://github.com/ajeetdsouza/zoxide/releases/download/v${ZOXIDE_VERSION}/zoxide-${ZOXIDE_VERSION}-x86_64-unknown-linux-musl.tar.gz" \
+      | tar -xz -C /home/vscode/.local/bin zoxide
+
+# Pre-create the mountpoints for the shell-state volumes (docker-compose.yml) as
+# vscode, so they inherit vscode ownership instead of being created root-owned on
+# first mount. Same rationale as the ~/.claude pre-create above.
+#   ~/.local/state/arxii  — HISTFILE (arxii-shell-history)
+#   ~/.local/share/atuin  — atuin's SQLite database (arxii-atuin)
+RUN mkdir -p /home/vscode/.local/state/arxii /home/vscode/.local/share/atuin
+
+# Atuin runs strictly local: no account, no sync, no update ping. Both defaults
+# are "true" upstream and both would be blocked by the egress firewall, turning
+# a shell start or a Ctrl-R into a timeout rather than an error.
+RUN mkdir -p /home/vscode/.config/atuin \
+ && printf '%s\n' \
+      '# Managed by .devcontainer/Dockerfile — edits are lost on `just dc-build`.' \
+      'auto_sync = false' \
+      'update_check = false' \
+      > /home/vscode/.config/atuin/config.toml
+
+# Generate shell completions once at build time. Doing this in shell-extras.sh
+# instead would spawn four subprocesses on every shell start. gh comes from apt;
+# just/uv/mise need mise's PATH, hence `mise exec`.
+USER root
+RUN mkdir -p /usr/local/share/arxii/completions \
+ && chown -R vscode:vscode /usr/local/share/arxii
+USER vscode
+RUN gh completion -s bash > /usr/local/share/arxii/completions/gh.bash \
+ && ~/.local/bin/mise completion bash > /usr/local/share/arxii/completions/mise.bash \
+ && ~/.local/bin/mise exec -C /tmp/mise -- just --completions bash \
+      > /usr/local/share/arxii/completions/just.bash \
+ && ~/.local/bin/mise exec -C /tmp/mise -- uv generate-shell-completion bash \
+      > /usr/local/share/arxii/completions/uv.bash
+
+# Source the interactive-shell setup LAST, after the mise activate line above:
+# atuin must bind Ctrl-R after fzf, and both append to PROMPT_COMMAND.
+COPY --chown=vscode:vscode .devcontainer/shell-extras.sh /usr/local/share/arxii/shell-extras.sh
+RUN echo 'source /usr/local/share/arxii/shell-extras.sh' >> ~/.bashrc

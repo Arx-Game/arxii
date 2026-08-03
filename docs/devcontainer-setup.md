@@ -190,6 +190,38 @@ that baked copy, so workspace edits to `init-firewall.sh` only take effect after
 `just dc-build`. This passes `--build-no-cache --remove-existing-container` to the
 devcontainer CLI.
 
+### Shell setup
+
+Interactive shells are configured by `.devcontainer/shell-extras.sh`, baked into the
+image and sourced from the last line of `~/.bashrc`. Edit that file and
+`just dc-build`; a hand-edit inside the container is lost on the next rebuild,
+because `/home/vscode` is image state rather than a named volume.
+
+| Key | Does |
+|---|---|
+| `Up` | Vanilla bash history — one command back, no TUI |
+| `Ctrl-R` | atuin: fuzzy search over full history, with exit code, duration and cwd |
+| `Ctrl-T` | fzf: pick a file, insert its path at the cursor |
+| `Alt-C` | fzf: pick a subdirectory and `cd` into it |
+| `z <fragment>` | zoxide: jump to a previously visited directory, e.g. `z shell-tooling` |
+| `zi` | zoxide: same, but pick from an fzf list when several match |
+
+Up-arrow is deliberately left as plain bash — atuin's full-screen TUI is wanted on
+`Ctrl-R`, not on every "previous command". Change that by dropping
+`--disable-up-arrow` from the `atuin init` line in `shell-extras.sh`.
+
+**atuin is local-only**: no account, no sync, and `update_check = false`. It never
+contacts a network service, so it needs no `init-firewall.sh` allowlist entry. Its
+`?`-key AI binding is disabled for the same reason.
+
+History persists across `just dc-build` via two named volumes —
+`arxii-shell-history` (bash's `HISTFILE`) and `arxii-atuin` (atuin's SQLite
+database). History is unlimited and flushed after every command, so several zellij
+tabs interleave instead of the last one to exit overwriting the rest.
+
+Tab completion is installed for `gh`, `just`, `uv` and `mise`, generated at image
+build time.
+
 ### Do not use raw docker commands for daily use
 
 `docker compose up` and `docker exec` skip the devcontainer hooks. That means:
