@@ -47,6 +47,24 @@ class Gift(NaturalKeyMixin, SharedMemoryModel):
             "species abilities and in-play powers are delivered as (ADR-0050)."
         ),
     )
+    # on_delete=PROTECT, deliberately unlike Species.parent and Facet.parent,
+    # which both CASCADE (#2891, ADR-0192). A child gift is not a taxonomy leaf
+    # that is meaningless without its parent — it is a self-standing playable
+    # gift that characters hold (CharacterGift) and thread (Thread.target_gift).
+    # Cascading from the umbrella would delete gifts carrying live character
+    # state; PROTECT forces the author to re-parent the kinds first.
+    parent = models.ForeignKey(
+        "self",
+        on_delete=models.PROTECT,
+        null=True,
+        blank=True,
+        related_name="children",
+        help_text=(
+            "Umbrella gift this gift hangs beneath. A character holding this gift "
+            "also reaches the parent's techniques, on one thread "
+            "(e.g. Vulpi.parent = Khati)."
+        ),
+    )
     resonances = models.ManyToManyField(
         Resonance,
         blank=True,
@@ -93,8 +111,61 @@ class Gift(NaturalKeyMixin, SharedMemoryModel):
 
     @cached_property
     def cached_techniques(self) -> list:
-        """Techniques for this gift. Supports Prefetch(to_attr=)."""
+        """Techniques for this gift. Supports Prefetch(to_attr=).
+
+        This gift's OWN techniques — deliberately not widened to the lineage,
+        because it is the ``Prefetch(to_attr="cached_techniques")`` target for
+        the gift API. Use ``inherited_techniques`` for "everything a holder of
+        this gift reaches."
+        """
         return list(self.techniques.all())
+
+    @property
+    def lineage(self) -> list["Gift"]:
+        """This gift followed by every ancestor gift, nearest first (#2891).
+
+        Mirrors ``Species.lineage``: the chain is one or two deep in practice (a
+        Khati kind under Khati, an elf line under Elf) and every row is served by
+        the idmapper cache after the first read, so the walk is cheap enough to
+        do inline.
+
+        A ``parent`` cycle would be a data defect rather than a modelled state;
+        the seen-set keeps it from hanging whatever produced it.
+        """
+        chain: list[Gift] = []
+        seen: set[int] = set()
+        current: Gift | None = self
+        while current is not None and current.pk not in seen:
+            seen.add(current.pk)
+            chain.append(current)
+            current = current.parent
+        return chain
+
+    @property
+    def lineage_ids(self) -> frozenset[int]:
+        """pks of ``lineage`` — membership tests without re-walking the chain."""
+        return frozenset(gift.pk for gift in self.lineage)
+
+    @property
+    def inherited_techniques(self) -> list:
+        """Every technique a holder of this gift reaches (#2891).
+
+        This gift's own techniques first, then each ancestor's, nearest ancestor
+        first. De-duplicated by pk so a diamond (should a gift ever be reachable
+        twice) yields each technique once.
+
+        This is the pool read; ``cached_techniques`` stays the own-techniques
+        accessor the gift API prefetches into.
+        """
+        techniques: list = []
+        seen: set[int] = set()
+        for gift in self.lineage:
+            for technique in gift.cached_techniques:
+                if technique.pk in seen:
+                    continue
+                seen.add(technique.pk)
+                techniques.append(technique)
+        return techniques
 
 
 class CharacterGift(SharedMemoryModel):
