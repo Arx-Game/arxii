@@ -47218,6 +47218,11 @@ components:
           items:
             $ref: '#/components/schemas/ItemAccentRead'
           readOnly: true
+        silhouette:
+          allOf:
+          - $ref: '#/components/schemas/SilhouetteRead'
+          nullable: true
+          readOnly: true
       required:
       - accents
       - access_policy
@@ -47235,6 +47240,7 @@ components:
       - is_usable
       - quality_tier
       - quantity
+      - silhouette
       - suggested_value
       - template
     ItemStyleRead:
@@ -64477,6 +64483,28 @@ components:
       description: |-
         * `positive` - Positive
         * `negative` - Negative
+    SilhouetteRead:
+      type: object
+      description: 'A piece''s form (#2907): name + family + the prose noun the UI
+        should use.'
+      properties:
+        id:
+          type: integer
+          readOnly: true
+        name:
+          type: string
+          readOnly: true
+        wear_family:
+          type: string
+          readOnly: true
+        prose_noun:
+          type: string
+          readOnly: true
+      required:
+      - id
+      - name
+      - prose_noun
+      - wear_family
     SineatingOffer:
       type: object
       description: Read serializer for SineatingOffer payloads returned by the request

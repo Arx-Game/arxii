@@ -4084,6 +4084,7 @@
   - tied_resonance -> magic.Resonance [FK] (nullable)
   - resonance_tier -> magic.ResonanceTier [FK] (nullable)
   - image -> evennia_extensions.Media [FK] (nullable)
+  - silhouette -> items.Silhouette [FK] (nullable)
   - weapon_class -> items.WeaponClass [FK] (nullable)
   - weapon_damage_type -> conditions.DamageType [FK] (nullable)
   - polish_category -> buildings.PolishCategory [FK] (nullable)
@@ -4120,6 +4121,7 @@
   - template -> items.ItemTemplate [FK]
   - game_object -> objects.ObjectDB [OneToOne] (nullable)
   - quality_tier -> items.QualityTier [FK] (nullable)
+  - silhouette -> items.Silhouette [FK] (nullable)
   - holder_character_sheet -> character_sheets.CharacterSheet [FK] (nullable)
   - crafter_character_sheet -> character_sheets.CharacterSheet [FK] (nullable)
   - attuned_to_character_sheet -> character_sheets.CharacterSheet [FK] (nullable)
@@ -4261,8 +4263,17 @@
   - bonuses <- items.FashionStyleBonus
   - trendsetter_crownings <- items.Trendsetter
 
+### Silhouette
+**Foreign Keys:**
+  - parent -> items.Silhouette [FK] (nullable)
+**Pointed to by:**
+  - templates <- items.ItemTemplate
+  - instances <- items.ItemInstance
+  - children <- items.Silhouette
+
 ### Style
 **Foreign Keys:**
+  - founder -> scenes.Persona [FK] (nullable)
   - axis_lean -> mechanics.ModifierTarget [FK] (nullable)
 **Pointed to by:**
   - motif_usages <- magic.MotifResonanceStyle
@@ -4309,6 +4320,7 @@
 **Foreign Keys:**
   - check_type -> checks.CheckType [FK] (nullable)
   - skill_trait -> traits.Trait [FK] (nullable)
+  - specialization -> skills.Specialization [FK] (nullable)
   - required_feature_kind -> room_features.RoomFeatureKind [FK] (nullable)
   - output_item_template -> items.ItemTemplate [FK] (nullable)
 **Pointed to by:**
@@ -4357,6 +4369,10 @@
 **Foreign Keys:**
   - target_a -> mechanics.ModifierTarget [FK]
   - target_b -> mechanics.ModifierTarget [FK]
+
+### AccentArchetypeAllowance
+**Foreign Keys:**
+  - target -> mechanics.ModifierTarget [FK]
 
 ### ItemRefinementDetails
 **Foreign Keys:**
@@ -5839,6 +5855,7 @@
   - item_accents <- items.ItemAccent
   - accent_exclusions_a <- items.AccentExclusion
   - accent_exclusions_b <- items.AccentExclusion
+  - accent_archetype_allowances <- items.AccentArchetypeAllowance
   - refinement_projects <- items.ItemRefinementDetails
   - covenant_level_bonuses <- covenants.CovenantLevelBonus
   - vow_stat_scalings <- covenants.VowStatScaling
@@ -7683,6 +7700,7 @@
   - exculpatory_submissions <- justice.ExculpatoryEvidence
   - ownership_records <- locations.LocationOwnership
   - tenancies <- locations.LocationTenancy
+  - founded_styles <- items.Style
   - trendsetter_crownings <- items.Trendsetter
   - market_stalls <- items.MarketStall
   - ware_listings <- items.WareListing

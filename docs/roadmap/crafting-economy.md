@@ -7,6 +7,23 @@
   **recycling** (fraction-salvage, GM sign-off gate for legend-bearing
   pieces) with confirm dialogs on the item panel. Items finally have a sink.
 
+## Built (2026-08-03, #2907 — fashion vocabulary, Phase A/B)
+
+The Silhouette/Style layers of the fashion arc (spec on #2907; design capture
+in the private design repo):
+
+- **`Silhouette`** — the wearable form as a first-class catalog (umbrella
+  hierarchy, wear families, cut/setting/silhouette prose skins); authored
+  template default + family-validated crafter pick at making; crafted examine
+  renders the form. Seed cluster `fashion` (PLACEHOLDER starter set).
+- **`Style` re-ruled cultural/historical** — origin/era/founder; intent
+  adjectives rejected as Accent-redundant. Ancient registers await the
+  investigation-rediscovery loop.
+- Remaining phases (issue #2907): cachet + showcase toggle + weekly-cron
+  settlement, silhouette/style vogue momentum, item/outfit acclaim, and the
+  deferred own-spec items (Beginnings knowledge packages, icon style-founding,
+  earn-back loops, NPC-renown input).
+
 ## Built (2026-08-01, #2878 — crafting expressiveness)
 
 The Accents/quality/prestige arc (spec on #2878; ADR-0192):

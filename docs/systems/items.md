@@ -644,6 +644,26 @@ Returns `{"action_points": n, "anima": n, "materials": k}`.
   `crafting_materials`): 5 categories + 21 graded ladder templates; named
   canon materials await the curation worksheet (#2878 Phase F).
 
+### Fashion vocabulary: Silhouette + cultural Styles (#2907)
+
+- **`Silhouette`** — the wearable form (the fashion noun): umbrella hierarchy
+  (`parent`: boot → thigh-high boot), `WearFamily` grouping, `is_active`.
+  `ItemTemplate.silhouette` is the authored default; the crafter may pick a
+  same-family silhouette at making (`craft_create_item(silhouette_id=…)` →
+  `_resolve_silhouette_choice` validation → `ItemInstance.silhouette`);
+  `ItemInstance.effective_silhouette` resolves instance-over-template. The
+  crafted examine line renders the form via `silhouette_prose_noun` — "cut"
+  for garments, "setting" for jewelry, "silhouette" otherwise.
+  `InvalidSilhouetteChoice` covers bad picks. Read shape:
+  `SilhouetteReadSerializer` nested on the inventory item payload.
+- **`Style` re-ruled cultural/historical** — `origin` (PLACEHOLDER text),
+  `era` (`StyleEra`: current/ancient — ancient registers live outside all
+  starting knowledge and return through investigation), `founder` (persona FK
+  for icon-founded styles). Intent adjectives are Accent-redundant and are
+  rejected at authoring.
+- **Seeds** — cluster `fashion` (`world/seeds/fashion.py`): 47 PLACEHOLDER
+  silhouettes with umbrellas + 9 cultural registers (6 current, 3 ancient).
+
 ### Accent lifecycle & recycling (#2886)
 
 - **Vocabulary** (Apostate-ratified 2026-08-02, seeded by `seed_accent_axes`):
