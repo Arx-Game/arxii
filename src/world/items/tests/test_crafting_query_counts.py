@@ -267,10 +267,13 @@ class CraftAttachFacetQueryCountTests(TestCase):
                     facet=self.facet,
                 )
             executed = len(ctx.captured_queries)
+            # #2886 added two bounded queries to the attach path: one Thread
+            # count (shared by the roll contribution AND the quality ceiling —
+            # deduped) and the thread-ceiling probe. Band 79-81 → 81-83.
             self.assertTrue(
-                79 <= executed <= 81,
-                f"{executed} queries executed, expected 80 ±1 identity-map "
-                f"wobble (band 79-81). A jump of >=3 means a per-row N+1.",
+                81 <= executed <= 83,
+                f"{executed} queries executed, expected 82 ±1 identity-map "
+                f"wobble (band 81-83). A jump of >=3 means a per-row N+1.",
             )
 
         self.assertTrue(result.attached)

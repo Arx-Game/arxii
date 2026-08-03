@@ -83,6 +83,7 @@ def resolve_capped_tier(
     crafter_character: ObjectDB,
     check_result: CheckResult,
     material_grade_bonus: int = 0,
+    thread_count: int | None = None,
 ) -> QualityTier:
     """Compute the quality tier for a crafting outcome, clamped by skill cap.
 
@@ -131,7 +132,11 @@ def resolve_capped_tier(
         if cap_tier is not None:
             score = min(score, cap_tier.numeric_max)
 
-    threads = thread_count_for_skill(crafter_character, recipe.skill_trait)
+    threads = (
+        thread_count
+        if thread_count is not None
+        else thread_count_for_skill(crafter_character, recipe.skill_trait)
+    )
     score = _thread_ceiling_clamp(score, BASE_MAX_QUALITY_RUNG + threads)
 
     tier = QualityTier.for_score(score)

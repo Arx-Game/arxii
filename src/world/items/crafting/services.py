@@ -505,20 +505,27 @@ def _accent_rung_for_score(score: int, *, cap: int) -> object | None:
     return AccentLevel.objects.filter(level__lte=rung).order_by("-level").first()
 
 
-def _thread_check_contributions(crafter_character: ObjectDB, recipe: CraftingRecipe) -> list:
+def _thread_check_contributions(
+    crafter_character: ObjectDB, recipe: CraftingRecipe, thread_count: int | None = None
+) -> list:
     """Woven threads are an edge on the roll, not just the ceiling (#2886).
 
     ``THREAD_CRAFT_CHECK_BONUS`` per active TRAIT thread on the recipe's
     skill, delivered as a CHARACTER contribution on the craft AND accent
     checks — the Gifted artisan's hands are simply better, exactly as the
-    thread caps already say their ceiling is higher.
+    thread caps already say their ceiling is higher. Pass ``thread_count``
+    when already known (query discipline — one count per craft).
     """
     from world.checks.constants import ModifierSourceKind  # noqa: PLC0415
     from world.checks.types import ModifierContribution  # noqa: PLC0415
     from world.items.crafting.constants import THREAD_CRAFT_CHECK_BONUS  # noqa: PLC0415
     from world.items.crafting.quality import thread_count_for_skill  # noqa: PLC0415
 
-    threads = thread_count_for_skill(crafter_character, recipe.skill_trait)
+    threads = (
+        thread_count
+        if thread_count is not None
+        else thread_count_for_skill(crafter_character, recipe.skill_trait)
+    )
     if threads <= 0:
         return []
     return [
@@ -601,13 +608,14 @@ def _resolve_accents(
     return tuple(realized)
 
 
-def _resolve_outcome_tier(
+def _resolve_outcome_tier(  # noqa: PLR0913 — orchestrator context passthrough
     *,
     kind: CraftingRecipeKind,
     recipe: CraftingRecipe,
     crafter_character: ObjectDB,
     check_result: CheckResult,
     staged: StagedCost,
+    thread_count: int | None = None,
 ) -> QualityTier | None:
     """The tier this attempt lands at — a making NEVER fails to create (#2886).
 
@@ -624,6 +632,7 @@ def _resolve_outcome_tier(
             crafter_character=crafter_character,
             check_result=check_result,
             material_grade_bonus=_material_grade_bonus(staged),
+            thread_count=thread_count,
         )
     if kind == CraftingRecipeKind.ITEM_CREATE:
         from world.items.models import QualityTier  # noqa: PLC0415
@@ -790,7 +799,12 @@ def run_crafting_recipe(  # noqa: PLR0913
     )
 
     # --- 5. Roll (thread edge + accent ambition penalty, #2886) ---
-    craft_contribs = _thread_check_contributions(crafter_character, recipe)
+    from world.items.crafting.quality import thread_count_for_skill  # noqa: PLC0415
+
+    craft_thread_count = thread_count_for_skill(crafter_character, recipe.skill_trait)
+    craft_contribs = _thread_check_contributions(
+        crafter_character, recipe, thread_count=craft_thread_count
+    )
     craft_contribs += _accent_penalty_contributions(len(accents_requested))
     check_result = perform_check_with_modifiers(
         crafter_character,
@@ -843,6 +857,7 @@ def run_crafting_recipe(  # noqa: PLR0913
         crafter_character=crafter_character,
         check_result=check_result,
         staged=staged,
+        thread_count=craft_thread_count,
     )
     if tier is not None:
         # Thread the crafter_character into output_overrides so ItemCreateHandler
