@@ -273,7 +273,7 @@ class TechniqueCastCreateSerializer(serializers.Serializer):
 class CastableTechniqueSerializer(serializers.Serializer):
     """Serializes a Technique for the castable-techniques list endpoint.
 
-    Takes ``Technique`` rows — which is what ``castable_techniques_for_sheet``,
+    Takes ``Technique`` rows — which is what ``castable_technique_links_for_sheet``,
     its only source, returns. ``get_hostile`` and ``get_target_spec`` used to
     carry a ``CharacterTechnique`` branch as well, but neither could ever run:
     the declared ``name`` / ``anima_cost`` / ``tier`` fields raise on a link long

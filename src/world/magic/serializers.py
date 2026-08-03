@@ -249,18 +249,6 @@ class TechniqueFormSerializer(serializers.Serializer):
     effect_summary = TechniqueEffectSummarySerializer(read_only=True)
 
 
-class TechniqueSignatureSerializer(serializers.Serializer):
-    """The signature flourish riding whichever form is worked (#2901).
-
-    Additive, never a sibling form (ADR-0072), so it serializes beside a form
-    list rather than as an entry inside one.
-    """
-
-    name = serializers.CharField(read_only=True)
-    narrative_snippet = serializers.CharField(read_only=True)
-    intensity_delta = serializers.IntegerField(read_only=True)
-
-
 class TechniqueSerializer(serializers.ModelSerializer):
     """Serializer for Technique records with intensity and control stats."""
 

@@ -712,7 +712,7 @@ class CmdDeclareTechnique(_CombatCommandMixin, DispatchCommand):
         error, and the sheet's magic section printed name and level only, so a
         player could not find out what any technique did from any telnet surface.
         This is the telnet face of the web castable-techniques list; both read
-        ``castable_techniques_for_sheet``.
+        ``castable_technique_links_for_sheet``.
         """
         if (self.args or "").strip():
             super().func()

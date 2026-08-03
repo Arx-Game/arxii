@@ -22099,7 +22099,7 @@ export interface components {
     /**
      * @description Serializes a Technique for the castable-techniques list endpoint.
      *
-     *     Takes ``Technique`` rows — which is what ``castable_techniques_for_sheet``,
+     *     Takes ``Technique`` rows — which is what ``castable_technique_links_for_sheet``,
      *     its only source, returns. ``get_hostile`` and ``get_target_spec`` used to
      *     carry a ``CharacterTechnique`` branch as well, but neither could ever run:
      *     the declared ``name`` / ``anima_cost`` / ``tier`` fields raise on a link long
@@ -22127,6 +22127,7 @@ export interface components {
         [key: string]: unknown;
       } | null;
       readonly effect_summary: components['schemas']['TechniqueEffectSummary'];
+      readonly forms: components['schemas']['TechniqueForm'][];
     };
     /**
      * @description For staff triaging GM scenario-catalog suggestions (#2127).
@@ -38211,6 +38212,7 @@ export interface components {
       pull?: components['schemas']['CastPullRequestRequest'] | null;
       /** @default false */
       use_base_form: boolean;
+      preferred_resonance_id?: number | null;
       /** @default false */
       cast_openly: boolean;
     };
@@ -38236,6 +38238,32 @@ export interface components {
       readonly grants: components['schemas']['CapabilityEffect'][];
       readonly summary: string;
       readonly is_underspecified: boolean;
+    };
+    /**
+     * @description One form of a technique a given caster can work (#2901).
+     *
+     *     Serializes a ``TechniqueFormPayload`` from
+     *     ``world.magic.services.technique_forms.available_technique_forms``. Shared by
+     *     the character sheet (full catalogue, locked forms included) and the in-scene
+     *     cast list (unlocked only), so the two cannot describe the same character's
+     *     options differently.
+     *
+     *     ``resonance_name`` doubles as the token a player passes to
+     *     ``cast <technique> variant=<resonance>``; the base form (``variant_id`` null)
+     *     is reached with ``cast <technique> base``.
+     */
+    TechniqueForm: {
+      readonly variant_id: number | null;
+      readonly name: string;
+      readonly resonance_id: number | null;
+      readonly resonance_name: string;
+      readonly intensity: number;
+      readonly control: number;
+      readonly is_default: boolean;
+      readonly is_locked: boolean;
+      readonly unlock_thread_level: number;
+      readonly thread_level: number;
+      readonly effect_summary: components['schemas']['TechniqueEffectSummary'];
     };
     /**
      * @description * `same` - Same position

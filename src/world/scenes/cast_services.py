@@ -145,14 +145,6 @@ def castable_technique_links_for_sheet(character_sheet_id: int) -> list[Characte
     return list(char_techniques)
 
 
-def castable_techniques_for_sheet(character_sheet_id: int) -> list[Technique]:
-    """The techniques behind ``castable_technique_links_for_sheet``, same order.
-
-    The narrow face for callers that never need the link.
-    """
-    return [ct.technique for ct in castable_technique_links_for_sheet(character_sheet_id)]
-
-
 def derive_cast_difficulty(technique: Technique) -> int:
     """Difficulty for a standalone cast, sourced from the technique's authored intensity."""
     intensity = technique.intensity or 1
