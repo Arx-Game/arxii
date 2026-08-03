@@ -266,7 +266,7 @@ class SetRoundModeAction(Action):
         if scene is None:
             return ActionResult(
                 success=False,
-                message="Mode ordering needs an active scene here — start one first.",
+                message="Mode ordering needs an active scene here; start one first.",
             )
 
         if not actor_can_administer_scene(actor, scene):

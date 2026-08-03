@@ -123,7 +123,7 @@ class CmdForm(DispatchCommand):
             lines.append("You have no alternate selves.")
 
         if not sheet.in_control:
-            lines.append("You are not in control — revert is blocked.")
+            lines.append("You are not in control; revert is blocked.")
 
         self.msg("\n".join(lines))
 

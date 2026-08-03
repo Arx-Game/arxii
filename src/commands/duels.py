@@ -147,11 +147,11 @@ class CmdDuel(DispatchCommand):
         if participant is not None:
             if participant.encounter.is_lethal:
                 lines.append(
-                    "You are in a lethal duel — duel risk to acknowledge the risk, "
+                    "You are in a lethal duel; duel risk to acknowledge the risk, "
                     "combat yield to concede."
                 )
             else:
-                lines.append("You are in a duel — combat yield to concede.")
+                lines.append("You are in a duel; combat yield to concede.")
         if incoming is None and outgoing is None and participant is None:
             lines.append("You have no pending duel challenges.")
         self.msg("\n".join(lines))

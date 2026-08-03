@@ -206,7 +206,7 @@ class SeduceAction(_SocialTemplateAction):
     icon: str = "flame"
     template_name: str = "Seduce"
     description: str = (
-        "Press an attraction further — a harder roll than a flirt, with a deeper hold."
+        "Press an attraction further: a harder roll than a flirt, with a deeper hold."
     )
 
 
@@ -216,7 +216,7 @@ class BlackmailAction(_SocialTemplateAction):
     name: str = "Blackmail"
     icon: str = "lock"
     template_name: str = "Blackmail"
-    description: str = "Press a secret you hold over them — comply, or see it exposed."
+    description: str = "Press a secret you hold over them: comply, or see it exposed."
 
     def get_prerequisites(self) -> list[Prerequisite]:
         from actions.prerequisites import BlackmailAmmoPrerequisite  # noqa: PLC0415
@@ -256,7 +256,7 @@ class BoonAction(_SocialTemplateAction):
     icon: str = "gift"
     template_name: str = "Boon"
     description: str = (
-        "Press someone to grant you a boon — money, an item, or a deed, named up front."
+        "Press someone to grant you a boon: money, an item, or a deed, named up front."
     )
     # Fulfillment does NOT live in execute(): the consent paths never call it (the
     # Blackmail mint asymmetry). The `boon` resolver registered by

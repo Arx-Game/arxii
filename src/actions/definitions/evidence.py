@@ -122,7 +122,7 @@ class DisposeEvidenceAction(Action):
             )
         return ActionResult(
             success=True,
-            message="PLACEHOLDER The evidence is gone — as far as anyone can prove.",
+            message="PLACEHOLDER The evidence is gone, as far as anyone can prove.",
         )
 
 
@@ -283,12 +283,12 @@ class ExamineEvidenceAction(Action):
             return ActionResult(
                 success=True,
                 message=(
-                    "PLACEHOLDER Something IS off — the seams of a forger's hand. "
+                    "PLACEHOLDER Something IS off: the seams of a forger's hand. "
                     "You've found a thread worth pulling."
                 ),
                 data={"evidence_id": evidence.pk},
             )
         return ActionResult(
             success=True,
-            message="PLACEHOLDER Nothing is off about it — the evidence is what it seems.",
+            message="PLACEHOLDER Nothing is off about it; the evidence is what it seems.",
         )

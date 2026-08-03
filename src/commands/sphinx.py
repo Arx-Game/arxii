@@ -73,7 +73,7 @@ class CmdSphinx(ArxCommand):
             lines.append("The vow would lie dormant in places:")
             lines.extend(self._uncovered_lines(verdict))
         else:
-            lines.append("The vow will not take — yet.")
+            lines.append("The vow will not take. Yet.")
             lines.extend(self._uncovered_lines(verdict))
             lines.extend(self._shopping_lines(verdict))
 

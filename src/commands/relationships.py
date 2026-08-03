@@ -359,7 +359,7 @@ class CmdRelationship(ArxCommand):
                     return writeup_type, int(pk_str)
         msg = (
             f"Invalid writeup reference '{ref}'. "
-            "Use u<id> (update), d<id> (development), or c<id> (capstone) — "
+            "Use u<id> (update), d<id> (development), or c<id> (capstone); "
             "labels shown by 'relationship show <name|#>'."
         )
         raise CommandError(msg)
@@ -539,7 +539,7 @@ class CmdRelationship(ArxCommand):
             lines.append("|wTracks:|n")
             for prog in progress:
                 tier = prog.current_tier
-                tier_name = tier.name if tier else "—"
+                tier_name = tier.name if tier else "-"
                 lines.append(
                     f"  {prog.track.name}: {prog.developed_points} permanent / "
                     f"{prog.temporary_points} temporary (cap {prog.capacity}, tier {tier_name})"

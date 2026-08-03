@@ -18,9 +18,9 @@ if TYPE_CHECKING:
 
 _USAGE = (
     "Usage:\n"
-    "  functionary                        — list functionaries here\n"
-    "  functionary place <role>[=<name>]  — (staff) place a functionary of <role> here\n"
-    "  functionary remove <role>          — (staff) remove the <role> functionary here"
+    "  functionary                        - list functionaries here\n"
+    "  functionary place <role>[=<name>]  - (staff) place a functionary of <role> here\n"
+    "  functionary remove <role>          - (staff) remove the <role> functionary here"
 )
 
 _STAFF_PERM = "Builder"

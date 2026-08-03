@@ -274,7 +274,7 @@ class TransferFoodAction(Action):
         if result.cancelled:
             return ActionResult(
                 success=False,
-                message="The transfer was thwarted — the food remains in the granary.",
+                message="The transfer was thwarted; the food remains in the granary.",
                 data={"cancelled": True},
             )
 

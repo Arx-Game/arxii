@@ -225,7 +225,7 @@ class CmdTraining(DispatchCommand):
                 if allocation.skill is not None:
                     target = allocation.skill.name
                     if allocation.skill.pk in gated_skill_ids:
-                        plateau = " [at threshold — breakthrough required]"
+                        plateau = " [at threshold: breakthrough required]"
                 else:
                     target = allocation.specialization.name
                 mentor = f" (mentor: {allocation.mentor.name})" if allocation.mentor else ""

@@ -504,7 +504,7 @@ class CmdMission(ArxCommand):
         if beat.flavor_text:
             lines.append(beat.flavor_text)
         if not beat.options:
-            lines.append("(No options here — follow where the compass points.)")
+            lines.append("(No options here; follow where the compass points.)")
         for i, opt in enumerate(beat.options, 1):
             suffix = f" [{opt.check_type_name}]" if opt.check_type_name else ""
             lines.append(f"  {i}) {opt.label}{suffix}")

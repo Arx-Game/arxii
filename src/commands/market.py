@@ -102,7 +102,7 @@ class CmdMarket(ArxCommand):
             )
             lines.extend(
                 f"    [{ware.pk}] {ware.item_instance.display_name} — {ware.price}c "
-                "(unfinished — you name and describe it)"
+                "(unfinished: you name and describe it)"
                 for ware in ware_rows
             )
         self.msg("\n".join(lines))

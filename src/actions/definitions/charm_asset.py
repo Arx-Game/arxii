@@ -72,7 +72,7 @@ class CharmAssetAction(Action):
         if target_character.db_account is not None or target_character.sessions.count() > 0:
             return _ActionResult(
                 success=False,
-                message="They're being played — you can't charm them into service.",
+                message="They're being played; you can't charm them into service.",
             )
 
         try:

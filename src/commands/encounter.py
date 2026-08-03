@@ -12,14 +12,14 @@ from commands.namespace import ArxNamespaceCommand
 
 _USAGE = (
     "Usage: encounter <subcommand>\n"
-    "  encounter begin                         — begin a new round\n"
-    "  encounter resolve                       — resolve the current round\n"
-    "  encounter add <name> <tier> [pool]      — add an NPC opponent\n"
-    "  encounter default <tier>                — preview opponent defaults\n"
-    "  encounter addpc <character>             — add a PC to the encounter\n"
-    "  encounter removepc <participant>        — remove a PC from the encounter\n"
-    "  encounter pause                         — pause/resume the encounter\n"
-    "  encounter end                           — force-end the encounter"
+    "  encounter begin                         - begin a new round\n"
+    "  encounter resolve                       - resolve the current round\n"
+    "  encounter add <name> <tier> [pool]      - add an NPC opponent\n"
+    "  encounter default <tier>                - preview opponent defaults\n"
+    "  encounter addpc <character>             - add a PC to the encounter\n"
+    "  encounter removepc <participant>        - remove a PC from the encounter\n"
+    "  encounter pause                         - pause/resume the encounter\n"
+    "  encounter end                           - force-end the encounter"
 )
 
 _ADD_USAGE = "Usage: encounter add <name> <tier> [pool]"

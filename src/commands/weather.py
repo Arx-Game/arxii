@@ -67,7 +67,7 @@ class CmdTime(ArxCommand):
         if account is not None and is_category_muted(
             account=account, category=NarrativeCategory.WEATHER
         ):
-            lines.append("|x(weather echoes squelched — `weather unsquelch` to resume)|n")
+            lines.append("|x(weather echoes squelched; `weather unsquelch` to resume)|n")
 
         self.msg("\n".join(lines))
 

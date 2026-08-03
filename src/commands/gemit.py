@@ -23,9 +23,9 @@ if TYPE_CHECKING:
 
 _USAGE = (
     "Usage:\n"
-    "  gemit <message>                          — game-wide\n"
-    "  gemit/society <name>[,<name>] = <message> — to those societies' members\n"
-    "  gemit/org <name>[,<name>] = <message>     — to those organizations' members"
+    "  gemit <message>                          - game-wide\n"
+    "  gemit/society <name>[,<name>] = <message> - to those societies' members\n"
+    "  gemit/org <name>[,<name>] = <message>     - to those organizations' members"
 )
 
 

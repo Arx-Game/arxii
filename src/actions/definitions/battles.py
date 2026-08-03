@@ -359,7 +359,7 @@ class ChallengeChampionDuelAction(Action):
             return ActionResult(success=False, message=exc.user_message)
         except (TypeError, ValueError):
             return ActionResult(
-                success=False, message="Could not open the duel — check the opponent details."
+                success=False, message="Could not open the duel; check the opponent details."
             )
 
         return ActionResult(

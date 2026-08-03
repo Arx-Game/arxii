@@ -388,7 +388,7 @@ class CollectHarvestAction(Action):
         if clue is None:
             return ActionResult(
                 success=True,
-                message="Your agent has little of substance — talk, but nothing solid.",
+                message="Your agent has little of substance: talk, but nothing solid.",
             )
         return ActionResult(success=True, message=f"Your agent leans close: {clue.name}.")
 

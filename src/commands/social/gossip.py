@@ -142,7 +142,7 @@ class CmdGossip(ArxCommand):
             self.msg(exc.user_message)
             return
         if not result.success:
-            self.msg("Your effort falls flat — the rumor doesn't take.")
+            self.msg("Your effort falls flat; the rumor doesn't take.")
             return
         verbed = "spread" if verb == _PLANT else "quieted"
         extra = " |R(now public knowledge!)|n" if result.went_public else ""

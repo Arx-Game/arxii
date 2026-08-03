@@ -87,7 +87,7 @@ class HazardEndureAction(Action):
         mark_endured(instance, until=_endure_deadline())
         return ActionResult(
             success=True,
-            message=("You grit your teeth and endure — you will not be moved, whatever it costs."),
+            message=("You grit your teeth and endure; you will not be moved, whatever it costs."),
             broadcast=f"{actor.key} stands firm against the elements.",
         )
 
@@ -117,7 +117,7 @@ class HazardRetreatAction(Action):
         if not flee_to_sun_refuge(actor):
             return ActionResult(
                 success=False,
-                message="There is no reachable shelter nearby — you must make do here.",
+                message="There is no reachable shelter nearby; you must make do here.",
             )
         mark_responded(instance)
         return ActionResult(success=True, message="You retreat to cover.")

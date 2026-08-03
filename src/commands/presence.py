@@ -88,9 +88,9 @@ class CmdHide(ArxCommand):
         set_appear_offline(tenure=tenure, value=target)
         if target:
             self.msg(
-                "You are now |yhidden|n — appearing offline. You're off where/who and "
+                "You are now |yhidden|n, appearing offline. You're off where/who and "
                 "unpageable except to your allowlist; mail, missions, and channels still work, "
                 "and people in your room still see you. Type unhide to come back."
             )
         else:
-            self.msg("You are no longer hidden — you appear online again.")
+            self.msg("You are no longer hidden; you appear online again.")

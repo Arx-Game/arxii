@@ -22,13 +22,13 @@ if TYPE_CHECKING:
 
 _USAGE = (
     "Usage:\n"
-    "  gmtable [list]                  — your tables\n"
-    "  gmtable create <name>[=<desc>]  — create a table you own\n"
-    "  gmtable members <id>            — list a table's members\n"
-    "  gmtable invite <id>=<persona>   — add a persona to your table\n"
-    "  gmtable kick <membership-id>    — remove a member\n"
-    "  gmtable archive <id>            — archive a table (staff)\n"
-    "  gmtable transfer <id>=<account> — reassign a table to another GM (staff)"
+    "  gmtable [list]                  - your tables\n"
+    "  gmtable create <name>[=<desc>]  - create a table you own\n"
+    "  gmtable members <id>            - list a table's members\n"
+    "  gmtable invite <id>=<persona>   - add a persona to your table\n"
+    "  gmtable kick <membership-id>    - remove a member\n"
+    "  gmtable archive <id>            - archive a table (staff)\n"
+    "  gmtable transfer <id>=<account> - reassign a table to another GM (staff)"
 )
 _NOT_GM = "Only GMs may manage tables."
 _NO_PROFILE = "You need a GM profile to own a table."

@@ -11,9 +11,9 @@ from commands.command import ArxCommand
 from commands.exceptions import CommandError
 
 _USAGE = (
-    "Usage: showcase — status; showcase <item name or #id> — highlight one "
-    "piece; showcase outfit <name or #id> — highlight an ensemble; "
-    "showcase off — stop."
+    "Usage: showcase - status; showcase <item name or #id> - highlight one "
+    "piece; showcase outfit <name or #id> - highlight an ensemble; "
+    "showcase off - stop."
 )
 
 _SUBVERB_OFF = "off"

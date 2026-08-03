@@ -113,7 +113,7 @@ def _burglary_crime_kind():
         slug="burglary",
         defaults={
             "name": "Burglary",
-            "description": "Breaking in to take — walls breached, locks forced.",
+            "description": "Breaking in to take: walls breached, locks forced.",
         },
     )
     return kind

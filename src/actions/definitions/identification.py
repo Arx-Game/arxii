@@ -50,7 +50,7 @@ if TYPE_CHECKING:
 
 _NO_TARGET_MESSAGE = "Identify whom?"
 _NOT_PRESENT_MESSAGE = "They aren't here."
-_NOTHING_TO_SEE_MESSAGE = "Their face is their own — there is no mask to see through."
+_NOTHING_TO_SEE_MESSAGE = "Their face is their own; there is no mask to see through."
 
 
 def _resolve_persona_pk_to_character(persona_id: Any) -> ObjectDB | None:

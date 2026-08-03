@@ -28,16 +28,16 @@ _LOCK_ON = {"on", "true", "yes", "1"}
 
 _USAGE = (
     "Usage: scene <subcommand>\n"
-    "  scene start [name]                — start a scene here\n"
-    "  scene finish                      — finish the active scene\n"
-    "  scene gm <name>                   — grant GM status to a present approved GM\n"
+    "  scene start [name]                - start a scene here\n"
+    "  scene finish                      - finish the active scene\n"
+    "  scene gm <name>                   - grant GM status to a present approved GM\n"
     "  scene round [open|pose_order|strict] [quorum=<pct>] [cap=<n>] [lock=on/off]\n"
-    "  scene succor <ally>               — shelter an ally from a hazard this round\n"
-    "  scene interpose <ally>            — guard an ally from sudden non-combat harm this round\n"
-    "  scene decisive <beat-id>          — mark the next check as decisive for a beat\n"
-    "  scene decisive cancel             — cancel the pending decisive marker\n"
-    "  scene decisive status             — show pending decisive marker\n"
-    "  scene / scene status              — show active scene + round status"
+    "  scene succor <ally>               - shelter an ally from a hazard this round\n"
+    "  scene interpose <ally>            - guard an ally from sudden non-combat harm this round\n"
+    "  scene decisive <beat-id>          - mark the next check as decisive for a beat\n"
+    "  scene decisive cancel             - cancel the pending decisive marker\n"
+    "  scene decisive status             - show pending decisive marker\n"
+    "  scene / scene status              - show active scene + round status"
 )
 
 

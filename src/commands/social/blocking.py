@@ -216,7 +216,7 @@ class CmdBlockList(ArxCommand):
         lines += [
             f"  {b.blocked_persona.name}"
             + (" (all my characters)" if b.account_level else "")
-            + (" — lifting" if b.pending_removal_at is not None else "")
+            + (" - lifting" if b.pending_removal_at is not None else "")
             for b in blocks
         ] or ["  (none)"]
         lines.append("|wMuted:|n")

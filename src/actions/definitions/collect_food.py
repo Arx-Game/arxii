@@ -89,7 +89,7 @@ class CollectFoodAction(Action):
         if result.cancelled:
             return ActionResult(
                 success=False,
-                message="Your collection attempt was thwarted — the food remains in the field.",
+                message="Your collection attempt was thwarted; the food remains in the field.",
                 data={
                     "gathered": result.gathered,
                     "landed": result.landed,

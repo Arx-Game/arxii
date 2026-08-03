@@ -198,7 +198,7 @@ class WakeAction(Action):
                 return ActionResult(
                     success=True,
                     message=(
-                        "You wake — but not where you fell asleep."
+                        "You wake, but not where you fell asleep."
                         " The dream has carried you elsewhere."
                     ),
                 )

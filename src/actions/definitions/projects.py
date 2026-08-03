@@ -85,7 +85,7 @@ class DonateToProjectAction(Action):
             return _ActionResult(success=False, message=str(exc))
 
         target = project.threshold_target
-        progress = f"{project.current_progress}/{target}" if target is not None else "—"
+        progress = f"{project.current_progress}/{target}" if target is not None else "-"
         return _ActionResult(
             success=True,
             message=(
@@ -161,7 +161,7 @@ class CheckContributeAction(Action):
         succeeded = outcome is not None and outcome.success_level >= 0
         verb = "advances" if succeeded else "fails to advance"
         target = project.threshold_target
-        progress = f"{project.current_progress}/{target}" if target is not None else "—"
+        progress = f"{project.current_progress}/{target}" if target is not None else "-"
         return _ActionResult(
             success=True,
             message=(

@@ -407,7 +407,7 @@ class CmdCombat(_CombatCommandMixin, DispatchCommand):
         warning = get_soulfray_warning(character)
         if warning is None:
             return []
-        risk = " — |rdeath risk|n" if warning.has_death_risk else ""
+        risk = " - |rdeath risk|n" if warning.has_death_risk else ""
         return [f"Soulfray: {warning.stage_name}{risk}"]
 
     def _fury_and_berserk_lines(self, character: Any, action: Any) -> list[str]:

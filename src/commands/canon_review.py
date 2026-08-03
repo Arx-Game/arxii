@@ -24,9 +24,9 @@ if TYPE_CHECKING:
 
 _USAGE = (
     "Usage:\n"
-    "  canonreview list                       — pending reviews (oldest first)\n"
-    "  canonreview clear <id> [notes=<text>]   — approve a pending review\n"
-    "  canonreview changes <id> notes=<text>   — request changes with notes"
+    "  canonreview list                       - pending reviews (oldest first)\n"
+    "  canonreview clear <id> [notes=<text>]   - approve a pending review\n"
+    "  canonreview changes <id> notes=<text>   - request changes with notes"
 )
 _CHANGES_USAGE = "Usage: canonreview changes <id> notes=<text>"
 _MULTIWORD_KEYS = frozenset({"notes"})

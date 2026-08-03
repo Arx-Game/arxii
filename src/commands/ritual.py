@@ -365,7 +365,7 @@ class CmdRitual(ArxCommand):
         if not RitualSession.objects.filter(pk=session_id).exists():
             self.caller.msg(
                 f"You declined session #{session_id}. The session was dissolved "
-                "— the threshold can no longer be met."
+                "; the threshold can no longer be met."
             )
         else:
             self.caller.msg(f"You declined ritual session #{session_id}.")
