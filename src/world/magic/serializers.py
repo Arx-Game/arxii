@@ -222,6 +222,45 @@ class TechniqueEffectSummarySerializer(serializers.Serializer):
     is_underspecified = serializers.BooleanField(read_only=True)
 
 
+class TechniqueFormSerializer(serializers.Serializer):
+    """One form of a technique a given caster can work (#2901).
+
+    Serializes a ``TechniqueFormPayload`` from
+    ``world.magic.services.technique_forms.available_technique_forms``. Shared by
+    the character sheet (full catalogue, locked forms included) and the in-scene
+    cast list (unlocked only), so the two cannot describe the same character's
+    options differently.
+
+    ``resonance_name`` doubles as the token a player passes to
+    ``cast <technique> variant=<resonance>``; the base form (``variant_id`` null)
+    is reached with ``cast <technique> base``.
+    """
+
+    variant_id = serializers.IntegerField(read_only=True, allow_null=True)
+    name = serializers.CharField(read_only=True)
+    resonance_id = serializers.IntegerField(read_only=True, allow_null=True)
+    resonance_name = serializers.CharField(read_only=True)
+    intensity = serializers.IntegerField(read_only=True)
+    control = serializers.IntegerField(read_only=True)
+    is_default = serializers.BooleanField(read_only=True)
+    is_locked = serializers.BooleanField(read_only=True)
+    unlock_thread_level = serializers.IntegerField(read_only=True)
+    thread_level = serializers.IntegerField(read_only=True)
+    effect_summary = TechniqueEffectSummarySerializer(read_only=True)
+
+
+class TechniqueSignatureSerializer(serializers.Serializer):
+    """The signature flourish riding whichever form is worked (#2901).
+
+    Additive, never a sibling form (ADR-0072), so it serializes beside a form
+    list rather than as an entry inside one.
+    """
+
+    name = serializers.CharField(read_only=True)
+    narrative_snippet = serializers.CharField(read_only=True)
+    intensity_delta = serializers.IntegerField(read_only=True)
+
+
 class TechniqueSerializer(serializers.ModelSerializer):
     """Serializer for Technique records with intensity and control stats."""
 

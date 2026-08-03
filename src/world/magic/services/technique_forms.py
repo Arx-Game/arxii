@@ -94,6 +94,16 @@ def _base_form(technique: Technique, *, is_default: bool) -> TechniqueFormPayloa
     )
 
 
+def base_technique_form(technique: Technique) -> list[TechniqueFormPayload]:
+    """The form list for a reader with no caster in scope.
+
+    A one-entry list holding the base form, marked default. Used by the schema
+    -generation path and any surface that describes a technique rather than a
+    character's reach into it, so ``forms`` is never an absent field.
+    """
+    return [_base_form(technique, is_default=True)]
+
+
 def _variant_form(
     technique: Technique,
     variant,

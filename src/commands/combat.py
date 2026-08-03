@@ -69,6 +69,9 @@ _STRAIN_PREFIX = "strain="
 _POSITION_PREFIX = "position="
 # Keyword prefix used to parse variant=<resonance> from cast command args (#1619).
 _VARIANT_PREFIX = "variant="
+# Below this many reachable forms, the bare-`cast` listing says nothing about them
+# (#2901) — naming a single option is no help, and the list is already dense.
+_MIN_FORMS_WORTH_LISTING = 2
 # Keyword prefix used to parse position_a=<name>,position_b=<name> pair tokens from
 # cast command args (#2206) — arrives as a single whitespace token, kept whole (not
 # stripped) so _resolve_position_params's `val.startswith("position_a=")` branch fires.
@@ -718,20 +721,59 @@ class CmdDeclareTechnique(_CombatCommandMixin, DispatchCommand):
 
     def _castable_listing(self) -> list[str]:
         """Lines for the bare-``cast`` listing: every castable technique and what it does."""
-        from world.scenes.cast_services import castable_techniques_for_sheet  # noqa: PLC0415
+        from world.magic.services.technique_forms import (  # noqa: PLC0415
+            available_technique_forms,
+        )
+        from world.scenes.cast_services import (  # noqa: PLC0415
+            castable_technique_links_for_sheet,
+        )
 
-        techniques = castable_techniques_for_sheet(self.caller.sheet_data.pk)
-        if not techniques:
+        sheet = self.caller.sheet_data
+        # The links rather than the bare techniques: the form list needs them to
+        # spot a role-granted technique (#2901), and this way it is one fetch.
+        links = {ct.technique_id: ct for ct in castable_technique_links_for_sheet(sheet.pk)}
+        if not links:
             return ["You know no techniques you can cast."]
         lines = ["|wYou can cast:|n"]
-        for technique in techniques:
+        for link in links.values():
+            technique = link.technique
             lines.append(f"  |w{technique.name}|n")
             lines.append(f"    {technique.cached_effect_summary['summary']}")
             if technique.description:
                 lines.append(f"    {technique.description}")
+            forms_line = self._forms_line(
+                available_technique_forms(
+                    self.caller, technique, character_technique=link, sheet=sheet
+                )
+            )
+            if forms_line:
+                lines.append(f"    {forms_line}")
         lines.append("")
         lines.append("Use |wcast <technique> [at <target>]|n to work one.")
         return lines
+
+    @staticmethod
+    def _forms_line(forms: list) -> str:
+        """One compact line naming the caster's alternate forms, or ``""`` (#2901).
+
+        The cast list is already dense, so this is an affordance rather than a
+        catalogue: enough to reveal that ``base`` and ``variant=<resonance>``
+        exist and what they are called. The sheet carries the full block,
+        including forms not yet unlocked.
+
+        Silent when only the base form is reachable, since naming one option is
+        no help.
+        """
+        unlocked = [form for form in forms if not form["is_locked"]]
+        if len(unlocked) < _MIN_FORMS_WORTH_LISTING:
+            return ""
+        parts = []
+        for form in unlocked:
+            label = "base" if form["variant_id"] is None else f"{form['resonance_name']}"
+            if form["variant_id"] is not None:
+                label = f"{label} ({form['name']})"
+            parts.append(f"{label} (default)" if form["is_default"] else label)
+        return "Forms: " + " | ".join(parts)
 
     def resolve_action_ref(self) -> ActionRef:
         """Build a SCENE_ADAPTIVE ``ActionRef`` for the named technique.

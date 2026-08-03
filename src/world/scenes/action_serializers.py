@@ -10,8 +10,15 @@ from rest_framework import serializers
 from world.combat.cast_seed import encounter_requiring_risk_acknowledgement
 from world.fatigue.constants import EffortLevel
 from world.magic.models.techniques import Technique
-from world.magic.serializers import TechniqueEffectSummarySerializer
+from world.magic.serializers import (
+    TechniqueEffectSummarySerializer,
+    TechniqueFormSerializer,
+)
 from world.magic.services.hostility import is_technique_hostile
+from world.magic.services.technique_forms import (
+    available_technique_forms,
+    base_technique_form,
+)
 from world.scenes.action_constants import (
     ActionDelivery,
     ActionRequestStatus,
@@ -245,6 +252,13 @@ class TechniqueCastCreateSerializer(serializers.Serializer):
     fury_anchor_id = serializers.IntegerField(required=False, allow_null=True, default=None)
     pull = CastPullRequestSerializer(required=False, allow_null=True)
     use_base_form = serializers.BooleanField(required=False, default=False)
+    # #2901: telnet has offered `variant=<resonance>` since #1619, but the web
+    # request carried only `use_base_form` — so a multi-resonance caster could
+    # reach the base form or the default form from a browser and nothing else.
+    # The Action kwarg already existed (actions/definitions/cast.py); this is the
+    # wire field that was missing, and the cast list's `forms` payload is
+    # unusable without it.
+    preferred_resonance_id = serializers.IntegerField(required=False, allow_null=True, default=None)
     cast_openly = serializers.BooleanField(required=False, default=False)
 
     def validate(self, attrs: dict) -> dict:
@@ -281,11 +295,36 @@ class CastableTechniqueSerializer(serializers.Serializer):
     reach = serializers.CharField()
     target_spec = serializers.SerializerMethodField()
     effect_summary = serializers.SerializerMethodField()
+    forms = serializers.SerializerMethodField()
 
     @extend_schema_field(TechniqueEffectSummarySerializer)
     def get_effect_summary(self, obj: Technique) -> dict:
         """The shared effect block (#2898) — same shape as CG, magic API, and sheet."""
         return TechniqueEffectSummarySerializer(obj.cached_effect_summary).data
+
+    @extend_schema_field(TechniqueFormSerializer(many=True))
+    def get_forms(self, obj: Technique) -> list[dict]:
+        """The forms this caster can work right now (#2901).
+
+        Locked forms are filtered out here: the scene shows what you can do, the
+        sheet shows what you are becoming. Returns just the base form when the
+        serializer has no character in context (the schema-generation path), so
+        the field is never absent.
+        """
+        character = self.context.get("character")
+        if character is None:
+            return list(TechniqueFormSerializer(base_technique_form(obj), many=True).data)
+        forms = available_technique_forms(
+            character,
+            obj,
+            character_technique=self.context.get("character_techniques", {}).get(obj.pk),
+            sheet=self.context.get("character_sheet"),
+        )
+        return list(
+            TechniqueFormSerializer(
+                [form for form in forms if not form["is_locked"]], many=True
+            ).data
+        )
 
     def get_hostile(self, obj: Technique) -> bool:
         # Read off the same summary the block ships, so the two can never disagree.

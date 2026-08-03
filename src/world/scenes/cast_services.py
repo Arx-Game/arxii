@@ -75,18 +75,25 @@ if TYPE_CHECKING:
 _PULL_FIZZLE_NOTE = "The declared thread pull fizzles — its committed resonance is spent."
 
 
-def castable_techniques_for_sheet(character_sheet_id: int) -> list[Technique]:
-    """Techniques *character_sheet_id* knows that can be cast standalone.
+def castable_technique_links_for_sheet(character_sheet_id: int) -> list[CharacterTechnique]:
+    """``CharacterTechnique`` links for what *character_sheet_id* can cast standalone.
 
     Known (a ``CharacterTechnique`` link) and castable (an ``action_template``),
-    by name. Shared by the web castable-techniques endpoint and the telnet cast
-    list so the two faces of "what can I cast" cannot drift (#2898) — the drift
-    between four independently-built technique payloads is what that issue exists
-    to close.
+    by technique name. Shared by the web castable-techniques endpoint and the
+    telnet cast list so the two faces of "what can I cast" cannot drift (#2898) —
+    the drift between four independently-built technique payloads is what that
+    issue exists to close.
 
     The payload tables are prefetched onto the cached_property names the effect
     summary reads, so rendering the whole list costs a fixed handful of queries
     rather than one per technique per table.
+
+    The *link* rather than the bare technique, because the caster's form list
+    needs it (#2901): a role-granted technique (``CharacterTechnique
+    .role_source``) specializes by the covenant vow's depth rather than the
+    personal gift's (#2022). Callers wanting only the techniques use
+    ``castable_techniques_for_sheet``; callers wanting both read this once and
+    derive, rather than paying for the same rows twice.
     """
     from world.magic.models.techniques import (  # noqa: PLC0415
         TechniqueAppliedCondition,
@@ -94,6 +101,7 @@ def castable_techniques_for_sheet(character_sheet_id: int) -> list[Technique]:
         TechniqueDamageProfile,
         TechniqueRemovedCondition,
     )
+    from world.magic.specialization.models import TechniqueVariant  # noqa: PLC0415
 
     char_techniques = (
         CharacterTechnique.objects.filter(
@@ -122,10 +130,27 @@ def castable_techniques_for_sheet(character_sheet_id: int) -> list[Technique]:
                 queryset=TechniqueCapabilityGrant.objects.select_related("capability"),
                 to_attr="cached_capability_grants",
             ),
+            # #2901: the caster's form list walks each technique's variants.
+            # select_related("resonance") because the resonance name is the token
+            # a player passes to `cast ... variant=<resonance>`.
+            Prefetch(
+                "technique__variants",
+                queryset=TechniqueVariant.objects.select_related("resonance"),
+                to_attr="cached_variants",
+            ),
         )
+        .select_related("role_source")
         .order_by("technique__name")
     )
-    return [ct.technique for ct in char_techniques]
+    return list(char_techniques)
+
+
+def castable_techniques_for_sheet(character_sheet_id: int) -> list[Technique]:
+    """The techniques behind ``castable_technique_links_for_sheet``, same order.
+
+    The narrow face for callers that never need the link.
+    """
+    return [ct.technique for ct in castable_technique_links_for_sheet(character_sheet_id)]
 
 
 def derive_cast_difficulty(technique: Technique) -> int:
