@@ -15,7 +15,7 @@ from world.checks.outcome_utils import (
 )
 from world.checks.services import perform_check
 from world.checks.types import PendingResolution, ResolutionContext
-from world.mechanics.constants import ResolutionType
+from world.mechanics.constants import DiscoveryType, ResolutionType
 from world.mechanics.models import (
     ApproachConsequence,
     ChallengeInstance,
@@ -55,13 +55,20 @@ def instantiate_challenge(
 
     No SituationInstance involved — mirrors the direct-mint pattern
     ``positioning/plummet.py`` uses for the "Catch the Faller" challenge.
+
+    ``is_revealed`` follows the template's authored ``discovery_type`` (#2865).
+    It used to be hardcoded ``True``, which silently defeated
+    ``DiscoveryType.DISCOVERABLE`` on every authored template this function
+    minted — a GM staging a hidden beat got it revealed anyway. Every reactive
+    combat challenge minted through here (Interpose, Succor, Catch the Faller)
+    is authored OBVIOUS, so their behavior is unchanged.
     """
     return ChallengeInstance.objects.create(
         template=template,
         location=location,
         target_object=target_object,
         is_active=True,
-        is_revealed=True,
+        is_revealed=template.discovery_type == DiscoveryType.OBVIOUS,
     )
 
 
@@ -93,10 +100,12 @@ def resolve_challenge(
     template = challenge_instance.template
 
     # 2-3. Fold the capability source's value into extra_modifiers, then perform check.
+    # effective_severity, not template.severity: a GM who placed this instance may
+    # have shifted it one band with a stated reason (#2865).
     check_result = perform_check(
         character,
         approach.check_type,
-        target_difficulty=template.severity,
+        target_difficulty=challenge_instance.effective_severity,
         extra_modifiers=extra_modifiers + capability_source.value,
     )
 
@@ -316,7 +325,7 @@ def _resolve_via_template(
     pending = start_action_resolution(
         character=character,
         template=action_template,
-        target_difficulty=challenge_instance.template.severity,
+        target_difficulty=challenge_instance.effective_severity,
         context=context,
     )
 

@@ -35,10 +35,16 @@ to the persistent side.
   `ShipDeployment` row's narrative sense, not the verb for this operation).
 - **Ship-as-sanctum** — a ship's deck room can carry an ordinary `SanctumDetails`
   installation exactly like any other room; `ship_sanctum_bonus`/
-  `ship_sanctum_capabilities` read its woven SANCTUM threads into a
-  `ShipStatBonus` and level-3+ capability grants, snapshotted at materialize
-  time (never a live pull-gate during battle — ADR-0086). A ship has at most one
-  sanctum room for MVP. _Avoid:_ ship sanctuary, blessed ship.
+  `ship_sanctum_capability_grants` read its woven SANCTUM threads against the authored
+  `ThreadPullEffect` catalog, yielding a `ShipStatBonus` and a list of
+  `ShipCapabilityGrant`, snapshotted at materialize time (never a live pull-gate during
+  battle — ADR-0086). A ship has at most one sanctum room for MVP. _Avoid:_ ship
+  sanctuary, blessed ship.
+- **Ship capability grant** (`ShipCapabilityGrant`) — one capability a ship's sanctum
+  confers, already resolved to a magnitude on the ADR-0164 ladder. Names a **capacity**
+  the vessel gains (`traversal`, `barrier`), never the resonance it came from — a
+  provenance-named capability is the thing ADR-0188 exists to forbid. _Avoid:_
+  `sanctum_<resonance>` capability, sanctum capability flag.
 - **needs_repair** — the persistent damage flag `ShipDetails` carries after its
   materialized `BattleVehicle`'s hull was breached in battle, written back by
   the `apply_ship_battle_outcome` battle-conclusion hook on `conclude_battle`.

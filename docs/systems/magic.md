@@ -35,7 +35,14 @@ from world.magic.constants import (
                              # INTENSITY_BUMP, VITAL_BONUS, CAPABILITY_GRANT,
                              # NARRATIVE_ONLY, ASSUME_ALTERNATE_SELF (drives
                              # transformation via target_form + depth band)
-    VitalBonusTarget,        # MAX_HEALTH, DAMAGE_TAKEN_REDUCTION
+    VitalBonusTarget,        # MAX_HEALTH, DAMAGE_TAKEN_REDUCTION, DEATH_SAVE,
+                             # KNOCKOUT_RESIST, PERMANENT_WOUND_RESIST — plus
+                             # SHIP_HULL / SHIP_HANDLING / SHIP_ARMAMENT, which
+                             # name a VESSEL's stats, not a person's, and are
+                             # read only by world/ships/sanctum_bonus.py off
+                             # TargetKind.SANCTUM rows (#2736, ADR-0188).
+                             # SHIP_VITAL_BONUS_TARGETS is the membership set;
+                             # passive_vital_bonuses returns 0 for them.
     RitualExecutionKind,     # SERVICE, FLOW
     PendingAlterationStatus, # OPEN, RESOLVED, STAFF_CLEARED
     AlterationTier,
@@ -127,7 +134,8 @@ cardinality of who this technique can target:
 
 The targeting *relationship* (who is eligible: SELF/ALLY/ENEMY) is **derived** from the
 technique's authored condition `target_kind`s and hostility — it is not stored here.
-See `derive_target_relationship` in `world/magic/services/targeting.py`.
+See `derive_target_relationship` in `world/magic/services/targeting.py`, and
+"Technique effect summary" below for the display-side block that reads it.
 
 **Intensity and Control:** These are base/static values on the technique. Runtime casting
 values (after resonance bonuses, combat escalation, audere states) are tracked by a
@@ -626,7 +634,7 @@ Lives on `world/conditions/models.py:ConditionCategory`.
 
 | Function | Purpose |
 |----------|---------|
-| `derive_target_relationship(technique) -> ConditionTargetKind` | ENEMY if hostile; ALLY if any condition has `target_kind=ALLY`; else SELF |
+| `derive_target_relationship(technique) -> ConditionTargetKind` | ENEMY if hostile; ALLY if any condition has `target_kind=ALLY`; else SELF. Reads the technique's `cached_*` payload lists rather than its own `.filter().exists()` queries (#2898). Exactly one relationship comes back, so a technique whose payload rows disagree gets a guess — see `technique_relationship_is_ambiguous` below. |
 | `technique_alters_behavior(technique) -> bool` | True if any applied condition's `category.alters_behavior` is True |
 | `cast_requires_consent(technique) -> bool` | True iff `technique_alters_behavior` — **behavior only**, not blanket benign |
 | `validate_cast_target(*, technique, initiator_persona, target_personas)` | Raises `InvalidCastTarget` on cardinality or relationship violations |
@@ -642,6 +650,74 @@ Lives on `world/conditions/models.py:ConditionCategory`.
   that combatant's encounter (#2226, ADR-0119) — via
   `seat_caster_for_benign_intervention`, called post-resolution on both the
   immediate and consent-accept paths. Risk acknowledgement is automatic.
+
+### Technique effect summary (#2898)
+
+Every mechanical difference between one technique and another lives in four sibling
+tables, and until #2898 none of them reached any player-facing surface. All four
+technique payloads stopped at the `Technique` row — which is where the *least*
+differentiation lives, since the authored catalog is near-uniform on `level`,
+`intensity`, `control`, `anima_cost`, `reach` and `target_type`.
+
+**The derivation** — `summarize_technique_effects(technique) -> TechniqueEffectPayload`
+(`world/magic/services/technique_effects.py`; wire shapes in
+`world/magic/types/technique_effects.py`). It reads `cached_capability_grants` /
+`cached_condition_applications` / `cached_damage_profiles` / `cached_removed_conditions`
+and **composes the two derivations that already existed** — `is_technique_hostile`
+(`services/hostility.py`) and `derive_target_relationship` (`services/targeting.py`) —
+rather than restating them. No model field is added: `Technique.target_type`'s own help
+text records that relationship is derived, never stored.
+
+The payload carries `relationship` / `hostile` / `target_type` / `reach` / `reach_hops` /
+`arena` (`action_category`) / `anima_cost`, the four effect lists, `is_underspecified`,
+and `summary` — the plain-words line, e.g. *"Cast on an ally, anywhere in the room, in the
+physical arena. Costs 5 anima. Applies Guarded."* The sentence is authored server-side and
+is byte-identical on the web and over telnet; clients render it, never re-derive it.
+
+**Caching.** `Technique.cached_effect_summary` holds the built payload on the row, so a
+technique fetched by pk anywhere in the process answers every surface from the identity
+map after one build. The same rule made three query-per-call derivations read the cached
+lists instead: `is_technique_hostile` (3 queries, called up to 6× per cast path),
+`derive_target_relationship` (2), and `Technique.is_lock_applying` (1). The `cached_*`
+lists `select_related` their `condition` / `damage_type` / `capability` FKs so the display
+walk costs nothing further. **Any path that writes payload rows must call
+`invalidate_technique_payload_caches(technique)`** — `build_technique` and
+`TechniqueAdmin.save_related` do.
+
+**One serialized shape.** `TechniqueEffectSummarySerializer` (`world/magic/serializers.py`)
+is embedded as `effect_summary` by all four surfaces, which keep only their own extras:
+
+| Surface | Serializer | Also gained |
+|---|---|---|
+| Magic API | `TechniqueSerializer` | `action_category` |
+| Character creation | `CGTechniqueOptionSerializer` | — (the block carries cost / reach / targeting / hostility, every one of CG's gaps) |
+| In-scene cast list | `CastableTechniqueSerializer` | **`description`** — the list previously shipped numbers and no prose |
+| Character sheet (web + telnet) | `TechniqueEntry` via `_build_magic_gifts` | — |
+
+`CastableTechniqueSerializer.hostile` reads off the same summary, so the top-level flag
+and the block cannot disagree.
+
+**Telnet.** Bare `cast` is the cast list (it raised a usage error before);
+`sheet/magic` prints the summary line under each technique. Both, and the web
+`castable-techniques` endpoint, read `castable_techniques_for_sheet`
+(`world/scenes/cast_services.py`) so the two faces of "what can I cast" can't diverge.
+
+**Authoring gaps are reported, not guessed at.** A technique whose authored condition is a
+*side effect* rather than its point derives the wrong relationship — a self-teleport that
+applies Flanked to an enemy derives as enemy-targeted, silently, and looks correct (found
+while authoring #2764). Authored data carries no signal separating the point of a technique
+from a side effect, so an override would mean the stored field this system rules out, and a
+heuristic would be a second silent guess. Instead:
+
+- `technique_relationship_is_ambiguous(technique)` — the applied + removed rows carry more
+  than one distinct `target_kind`, so the single derived relationship is a guess.
+- `technique_is_underspecified(technique)` — no condition, no removal, no damage profile,
+  so relationship isn't derivable at all. Display renders this as "effects not yet
+  catalogued" rather than a blank; 86 of 272 authored techniques were in this state.
+
+`technique_effect_authoring_gaps()` collects both; `TechniqueAdmin` surfaces them as the
+`Targets` / `Gap` columns and an "authoring gap" filter. `derive_target_relationship`'s own
+answers are deliberately unchanged — it gates live cast targeting.
 
 **Shared condition application** (`world/magic/services/condition_application.py`):
 `apply_technique_conditions(*, technique, success_level, eff_intensity, targets_by_kind, source_character, applied_condition_rows=None)`
@@ -873,6 +949,60 @@ hasn't claimed the item's `tied_resonance`. Narrative acquisition of touchstones
 themselves (no shop system exists) is documented in `docs/systems/items.md`
 (`grant_touchstone_item_to_character`). See ADR-0087 for the extension-vs-parallel-model
 decision and the `client_hosted` dispatch discovery.
+
+### Sustained rituals — conducting a ritual under fire (#2705, ADR-0190)
+
+`RitualCheckConfig.sustained_rounds` (PositiveSmallInt, default 0) marks a ritual as
+conductable across combat rounds rather than firing the instant it's invoked — 0 (the
+default) is today's fire-immediately behavior, unchanged for every existing ritual. This
+is the PC-side sibling of `world.combat`'s telegraphed-wind-up mechanism (ADR-0161): the
+combat-domain model (`world.combat.models.SustainedAction`) and its declaration/erosion/
+maturation machinery are documented in full in `docs/systems/INDEX.md`'s combat section
+and `docs/architecture/combat-resolution-loop.md` — this entry covers only the ritual-side
+seam.
+
+- **The dispatch switch is extracted, not duplicated.** `dispatch_ritual(*, ritual,
+  performer_sheet, **kwargs)` (`world/magic/services/ritual_dispatch.py`) is the
+  SERVICE/FLOW/CEREMONY switch pulled verbatim out of `PerformRitualAction`
+  (`actions/definitions/ritual.py`) so a ritual dispatched at maturation — several
+  rounds after the components were consumed — shares the exact same switch the
+  synchronous non-combat path uses, instead of a second copy drifting out of sync.
+  `PerformRitualAction.execute()` now calls `dispatch_ritual(...)` where it used to
+  branch inline; behavior-preserving (the pre-existing ritual action/service tests are
+  the oracle — none of them changed).
+- **The deferral gate.** `try_declare_sustained_ritual(*, sheet, ritual, kwargs)`
+  (`world.combat.services`) is called from `PerformRitualAction.execute()` after
+  `_validate_components` (components are consumed there — a broken sustained ritual is
+  genuinely spent, never refunded) and before `dispatch_ritual`. Returns `None` — "not
+  sustained, dispatch immediately as today" — unless the performer resolves to an
+  ACTIVE `CombatParticipant` in a DECLARING encounter, `ritual.check_config_or_none
+  .sustained_rounds > 0`, `kwargs` is empty, and the performer isn't already holding an
+  earlier round's commitment. When it fires, it rolls the absorption budget (the same
+  Concentration-check helper the TECHNIQUE side uses — see INDEX.md), creates a
+  `SustainedAction(sustained_kind=RITUAL, declared_action=None)` — null because a
+  ritual is invoked through `PerformRitualAction`, not the combat round-declaration
+  seam a TECHNIQUE commitment clones from — and returns a success `ActionResult`
+  ("You begin `<ritual>`, holding it together.") instead of the ritual's normal result.
+- **The ADR-0007 kwargs guard.** A `SustainedAction` is a fixed-column DB row; a ritual
+  invoked with non-empty `kwargs` (e.g. a `thread` target) cannot be deferred, because
+  persisting an arbitrary per-cast kwargs dict to replay at maturation would need a
+  JSON field, which ADR-0007 forbids. Such a ritual dispatches immediately, exactly as
+  it would outside combat — rituals authored with `sustained_rounds > 0` are expected
+  to be no-kwargs SERVICE/FLOW calls for this reason. Not raised, not blocked: this is
+  a silent fall-through, the same as every other "not sustained" case.
+  `try_declare_sustained_ritual`'s already-holding check also does not raise (unlike
+  the TECHNIQUE-side `declare_action` guard) — a ritual invocation is not the
+  round-declaration seam, so blocking outright would strand the components already
+  consumed inside the same atomic transaction.
+- **Maturation.** At `resolves_round`, `_mature_sustained_ritual` (`world.combat
+  .services`) calls `dispatch_ritual(ritual=sustained.ritual,
+  performer_sheet=sustained.participant.character_sheet)`, catching only the same
+  ritual-surface exceptions `PerformRitualAction` itself catches
+  (`RitualComponentError`/`ResonanceInsufficient`/`AnchorCapExceeded`/
+  `InvalidImbueAmount`/`XPInsufficient`/`GhostTutorError`) — a content-authoring gap in
+  one participant's ritual must not abort round resolution for every other combatant.
+  A caught failure still deletes the `SustainedAction` with no refund (components were
+  already spent at declaration).
 
 ### ThreadWeaving Acquisition (Spec A §2.1 / §4.2)
 

@@ -135,6 +135,32 @@ Powers, affinities, auras, resonances, threads-as-currency, rituals, and Mage Sc
     magic.md "Technique Entrance" + "Dramatic Moment Suggestion" for the full deferral
     matrix (inline / hostile-seeded / PENDING-consent / soulfray-gated) and the
     combat-side `from_entrance` marker + benign-intervention join (see Combat section).
+  - **Technique effect summary (#2898):** the one block every technique surface
+    shows. `summarize_technique_effects(technique) -> TechniqueEffectPayload`
+    (`services/technique_effects.py`, types in `types/technique_effects.py`)
+    reads the four payload tables — `TechniqueCapabilityGrant` /
+    `TechniqueAppliedCondition` / `TechniqueDamageProfile` /
+    `TechniqueRemovedCondition` — none of which reached any display surface
+    before, and renders both structured data and a plain-words line ("Cast on an
+    ally, anywhere in the room, in the physical arena. Costs 5 anima. Applies
+    Guarded."). It **composes** `is_technique_hostile` and
+    `derive_target_relationship` rather than restating them; no model field is
+    added (`Technique.target_type`'s help text forbids a stored relationship).
+    Cached on the row as `Technique.cached_effect_summary`; drop it with
+    `invalidate_technique_payload_caches` after writing payload rows.
+    Serialized once by `TechniqueEffectSummarySerializer` (`serializers.py`) and
+    embedded as `effect_summary` on all four surfaces: `TechniqueSerializer`,
+    `CGTechniqueOptionSerializer`, `CastableTechniqueSerializer` (which also
+    gained `description`), and `TechniqueEntry` via `_build_magic_gifts`.
+    Telnet: bare `cast` is the cast list, `sheet/magic` prints the same line;
+    both and the web castable-techniques endpoint read
+    `castable_techniques_for_sheet` (`world/scenes/cast_services.py`).
+    Authoring gaps are reported, not guessed at —
+    `technique_relationship_is_ambiguous` (payload rows carry more than one
+    `target_kind`, so the derived relationship is a guess) and
+    `technique_is_underspecified` (nothing authored at all), collected by
+    `technique_effect_authoring_gaps()` and surfaced on `TechniqueAdmin` as
+    columns + a filter. See magic.md "Technique effect summary".
   - **Ritual Liturgy (#1352):** `RitualLiturgy` (OneToOne → `Ritual`; `opening_call`
     TextField — the officiant's authored ceremonial words; public, non-spoiler).
     Seeded alongside the Ritual of the Durance via `RitualLiturgyFactory`.
@@ -1950,9 +1976,36 @@ GM at a given level may author (#2000, ADR-0097).
   `CatalogSuggestionViewSet` (`/api/gm/catalog-suggestions/`, list/retrieve/update,
   `IsAdminUser` — no create route, creation only through the Action). Starter
   taxonomy (Chase/Negotiation/Infiltration + a `SituationDifficultyGuide` row per
-  `RenownRisk` tier) seeded idempotently by `world.gm.factories
-  .seed_catalog_starter_content`, composed into the `"gm"` cluster seeder
-  alongside `seed_default_gm_level_caps`.
+  `RenownRisk` tier) provided by `world.gm.factories.seed_catalog_starter_content`,
+  composed into the `"gm"` cluster seeder alongside `seed_default_gm_level_caps`.
+  **Since #2865 that taxonomy is content-repo-owned**: `gm.situationkind`,
+  `gm.checktypesituationfit`, `gm.situationdifficultyguide` and
+  `gm.consequencepoolguide` are registered in `CONTENT_MODELS` (natural keys added
+  to the latter three), so `seed_catalog_starter_content` looks rows up via
+  `authored_or_sample` and invents only under `SEED_SAMPLE_CONTENT` (ADR-0168).
+  `mechanics.situationtemplate`/`situationchallengelink`/`situationtraplink` are
+  registered too — the situation catalog was previously unexportable even once
+  authored.
+- **Quick challenge placement (#2865, ADR-0110):** `PlaceChallengeAction` (key
+  `place_challenge`, `actions/definitions/situations.py`, gated
+  `MinimumGMLevelPrerequisite(GMLevel.JUNIOR)` — same floor as `SetSituationAction`,
+  it mints the same class of live row per ADR-0091) places ONE authored
+  `mechanics.ChallengeTemplate` against a GM-named target object, minting a
+  standalone `ChallengeInstance` (`situation_instance=None`) through the pre-existing
+  `instantiate_challenge`. The one adaptation permitted is a one-band shift with a
+  required reason, persisted as `ChallengeInstance.severity_adjustment` /
+  `adjustment_reason` (two DB `CheckConstraint`s; GM-facing only, never in
+  `ChallengeInstanceSerializer`) and read back through the new
+  `ChallengeInstance.effective_severity`. Band-shift helpers are shared with
+  `InvokeCatalogCheckAction` via `actions/definitions/gm_shift.py`.
+  `FindSituationAction` also searches `ChallengeTemplate` now, so one browse surface
+  covers both placement verbs. Telnet: `setsituation challenge
+  <template>=<target name> [edge=<why>|setback=<why>]`. Two fold-ins:
+  `ChallengeTemplate.severity` is re-expressed in `DIFFICULTY_VALUES` points (default
+  `1` → `45`; it feeds `perform_check`'s `target_difficulty` directly, so the old
+  scale resolved every authored challenge at the bottom rank), and
+  `instantiate_challenge` now honours `discovery_type` instead of hardcoding
+  `is_revealed=True`, which silently defeated `DiscoveryType.DISCOVERABLE`.
 - **Story areas & story rooms (#2450, epic #2436 slice 3, ADR-0141):** a GM's own
   build-and-run space, layered on the #2436/#2449 grid substrate. Models:
   `StoryArea` (sidecar per ADR-0010 — `gm.StoryArea.area` OneToOne to a
@@ -3425,15 +3478,21 @@ the hull stat IS `Building.fortification_level`, reused not duplicated. Full det
   `needs_repair`). All four completion handlers registered via
   `world.projects.services.register_kind_handler` at `ShipsConfig.ready()`.
 - **Ship-as-sanctum** (`world.ships.sanctum_bonus`): `ship_sanctum_bonus(ship) ->
-  ShipStatBonus` / `ship_sanctum_capabilities(ship) -> list[Resonance]` read the
-  ship's installed `SanctumDetails`' woven SANCTUM threads (at most one sanctum
-  room per ship for MVP) — snapshotted at materialize time, not read live.
+  ShipStatBonus` / `ship_sanctum_capability_grants(ship) -> list[ShipCapabilityGrant]`
+  read the ship's installed `SanctumDetails`' woven SANCTUM threads (at most one sanctum
+  room per ship for MVP) — snapshotted at materialize time, not read live. Both halves
+  are **authored content**: tier-0 `TargetKind.SANCTUM` `ThreadPullEffect` rows, the
+  stat bonus via `VITAL_BONUS` + a `SHIP_HULL`/`SHIP_HANDLING`/`SHIP_ARMAMENT`
+  `vital_target`, the capability via `CAPABILITY_GRANT` curved by
+  `apply_capability_curve`. Unauthored resonance = inert, never an error (ADR-0188,
+  #2736). Zero rows authored in the lore repo today.
 - **Combat bridge** (`world.ships.battle_bridge`):
   `materialize_ship_as_battle_vehicle(ship, battle, side, place_name=None) ->
   BattleVehicle` — one-way snapshot of persistent stats (+ sanctum bonus) into a
   `create_battle_vehicle`-built `BattleVehicle` (hull integrity, `speed`
-  capability, `strength`, level-3+ sanctum capability rows); links a
-  `ShipDeployment`. From there REPOSITION/BREACH/sinking/ejection run through
+  capability, `strength`, the sanctum's authored capability rows); links a
+  `ShipDeployment`. Mints no `CapabilityType` — it writes only what the catalog
+  resolved (ADR-0188). From there REPOSITION/BREACH/sinking/ejection run through
   unmodified `world.battles` machinery — see [battles.md](battles.md#battlevehicle).
 - **Repair writeback** (`world.ships.battle_wiring`): `apply_ship_battle_outcome`
   registered as a **battle-conclusion hook**
@@ -4084,7 +4143,9 @@ then choose lawful seizure vs steal-back; linked from the inventory sidebar). Th
 holder is never notified a claim exists.
 
 - **Models:**
-  - `QualityTier`, `InteractionType`, `ItemTemplate`, `TemplateSlot`, `ItemInstance`,
+  - `QualityTier`, `InteractionType`, `ItemTemplate`, `WeaponClass` (#2879 — weighted
+    strength/agility blend for `ItemTemplate.weapon_class`, replaces the small/medium/heavy
+    override; see `world.combat.stat_mapping`), `TemplateSlot`, `ItemInstance`,
     `TemplateInteraction`, `EquippedItem`, `OwnershipEvent`, `CurrencyBalance`
   - `ItemFacet` (Spec D §4.2) — through-model linking `ItemInstance` ↔ `Facet` with
     `attachment_quality_tier`; unique per (item_instance, facet)
@@ -5318,6 +5379,135 @@ reactive maneuvers (COVER, INTERPOSE, DEFEND stance), and clash-of-wills.
     when the round has no NPC selection of EITHER shape yet — no `CombatOpponentAction` AND
     no `PendingOpponentAttack` declared this round — a conservative, idempotent fallback;
     any explicit prior selection (staff, simulation, tests) is left alone.
+- **PC sustained actions (#2705; ADR-0190 — extends ADR-0161's pre-armed shape to the
+  PC side):**
+  - `SustainedAction` (`world/combat/models.py`) — the PC-side mirror of
+    `PendingOpponentAttack`, placed immediately after it. `sustained_kind`
+    (`SustainedKind`: RITUAL/TECHNIQUE) discriminates a `ritual`/`technique` FK pair
+    (exactly one non-null, enforced by `clean()` + two DB `CheckConstraint`s), plus
+    `declared_action` (nullable — set for TECHNIQUE, null for RITUAL, since a ritual is
+    declared through `PerformRitualAction`, not the combat declaration seam),
+    `declared_round`/`resolves_round` (`CheckConstraint resolves_round > declared_round`),
+    `absorption_budget` (written once at declaration), `outcome_snapshot` (FK →
+    `traits.CheckOutcome`, so logs/UI can say WHY the budget is what it is), `downgrades`.
+    `subject_name` property (`ritual.name` or `technique.name`) lets the broadcast
+    helpers stay kind-agnostic.
+  - `Technique.windup_rounds` (`world/magic/models/techniques.py`, PositiveSmallInt,
+    default 0) / `RitualCheckConfig.sustained_rounds` (`world/magic/models/
+    ritual_check_config.py`, same shape) — authored data; 0 is today's
+    resolve-immediately behavior, unchanged for every existing row.
+  - **Declaration (technique):** `_validate_no_pending_sustained` (`world/combat/
+    services.py`) raises `ValueError` in `declare_action` when the participant is still
+    holding a not-yet-matured commitment (`resolves_round__gte round_number` — a row
+    maturing THIS round still blocks, since maturation only consumes it during
+    RESOLVING and declaration only runs during DECLARING; `__gt` alone left that
+    boundary open and let a colliding same-round `CombatRoundAction` get declared,
+    which crashed `resolve_round` on `unique_action_per_participant_per_round` at
+    maturation — #2705 adversarial review, Fix 1). Excludes only a TECHNIQUE row with
+    `declared_round == round_number` — the current round's own in-progress
+    commitment, which is the re-declaration case handled by
+    `_sync_sustained_technique_declaration`'s delete-then-recreate, not a block. A
+    same-round RITUAL row is never excluded that way (Fix 2b): a ritual is declared
+    through `try_declare_sustained_ritual`, not `declare_action`, so there's no sync
+    step here to replace it — one cannot conduct a ritual and also swing a sword the
+    same round. Structural, not just thematic: `CombatRoundAction`'s
+    `unique_action_per_participant_per_round` constraint means a same-round
+    declaration on top of a pending commitment would collide with maturation's clone.
+    `_sync_sustained_technique_declaration` runs unconditionally from `declare_action`,
+    deleting any existing same-round **TECHNIQUE-kind** `SustainedAction` first
+    (re-declare replaces, never stacks; scoped to TECHNIQUE since Fix 2a — an unscoped
+    delete used to silently strand a same-round sustained ritual's already-consumed
+    components), then creating a new one only when `technique.windup_rounds > 0`.
+  - **Declaration (ritual):** `try_declare_sustained_ritual` (`world/combat/
+    services.py`), called from `PerformRitualAction.execute()`
+    (`actions/definitions/ritual.py`) after components are validated/consumed and
+    before dispatch — components stay spent even if the commitment later breaks.
+    Returns `None` (dispatch immediately, exactly as today) unless the performer is an
+    ACTIVE `CombatParticipant` in a DECLARING encounter, `ritual.check_config_or_none
+    .sustained_rounds > 0`, `kwargs` is empty (a ritual invoked with per-cast kwargs
+    can't be deferred — persisting them would need a JSON field, which ADR-0007
+    forbids), and the performer isn't already holding an earlier commitment. Unlike
+    the declare-action guard this does NOT raise on that last case — a ritual
+    invocation isn't the round-declaration seam, so blocking outright would strand
+    components already consumed inside the same atomic transaction; it just falls
+    through to immediate dispatch.
+  - **The budget roll:** `get_concentration_check_type()` (mirrors
+    `get_penetration_check_type` — `CheckType.objects.get(name="Concentration")`,
+    never `get_or_create`) + `roll_sustained_absorption_budget(participant)` — rolls
+    via `perform_check_with_modifiers` (NOT plain `perform_check` — only the
+    `_with_modifiers` wrapper folds in `ConditionCheckModifier`, and the 26 authored
+    Concentration modifier rows across 9 lore fixtures are the entire payoff of
+    rolling this check at all), then `budget = clamp(SUSTAINED_BASE_ABSORPTION (2) +
+    result.success_level, SUSTAINED_MIN_ABSORPTION (0), SUSTAINED_MAX_ABSORPTION (4))`
+    (`world/combat/constants.py`). Clamped because `CheckOutcome.success_level` is an
+    authored -10..+10 field with no lore-authored ladder to pin it — Base 2 puts a
+    clean Success at 3, landing exactly on ADR-0161's `WINDUP_FIZZLE_DOWNGRADES`.
+  - **Erosion:** `_apply_sustained_erosion_rider(participant, damage_dealt)`, called
+    from `apply_damage_to_participant` once the final applied damage is known — the
+    PC-side sibling of `_apply_windup_interception_rider`. `damage_dealt > 0` on a
+    participant with a not-yet-matured `SustainedAction` (`resolves_round__gte`
+    current round) adds a flat `SUSTAINED_HIT_DOWNGRADE` (1) — no called-out split
+    (a PC's sustain is telegraphed publicly the moment it's declared, so there's
+    nothing to "call out").
+  - **Maturation:** `_mature_sustained_actions(encounter, round_number)` runs in
+    `resolve_round` immediately after `_mature_pending_opponent_attacks`, same pass,
+    before the round's `CombatRoundAction` rows are queried, so a matured technique's
+    cloned row is picked up by the normal PC pipeline unmodified.
+    `_mature_one_sustained_action` breaks (no refund — the cost stands) when
+    `downgrades > 0 and downgrades >= absorption_budget` (requires an actual landing
+    hit, not just the floor — a Critical-Failure budget of 0 must break on the
+    participant's FIRST HIT, not fizzle an untouched commitment in total safety at
+    maturation; `downgrades >= budget` alone let `0 >= 0` fire with zero hits taken —
+    #2705 adversarial review, Fix 5) or the holder can no longer hold it together
+    (left the encounter / died, distinct "comes to nothing" narration); otherwise
+    TECHNIQUE clones `declared_action`'s fields into a brand-new `CombatRoundAction`
+    row via `.objects.create()` from a field dict (deliberately NOT the plan's literal
+    `clone.pk = None` recipe — mutating the idmapper-cached fetched instance in place
+    and re-saving reassigns a new pk to the SAME cached Python object without updating
+    the idmapper's cache entry for the ORIGINAL pk, so a later `.objects.get(pk=
+    <declaring round's pk>)` would silently return the maturation round's data; see
+    the docstring in `services.py` for the full trap), resetting `from_entrance`
+    (else a windup declared as a dramatic entrance spuriously re-fires
+    `_maybe_suggest_entrance_dramatic_moment` N rounds later — Fix 4) and `maneuver`/
+    `item_instance` (belong to the declaring round's action shape, not the matured
+    cast) while deliberately PRESERVING `confirm_soulfray_risk` and the cast geometry
+    FKs (`cast_destination`/`cast_position_a`/`cast_position_b`/
+    `redirect_opponent_target`/`redirect_object_target` — these describe the declared
+    cast itself), copying `CombatRoundActionTarget` rows via `bulk_create`; RITUAL
+    dispatches via `dispatch_ritual` (`world/magic/services/ritual_dispatch.py`),
+    catching only the same ritual-surface exceptions `PerformRitualAction` already
+    catches (a content-authoring gap in one participant's ritual must not abort round
+    resolution for everyone).
+  - **Encounter-completion teardown (#2705 adversarial review, Fix 3):**
+    `cleanup_completed_encounter` — the seam every production completion path
+    (`complete_encounter`, called from round-resolution auto-complete, `end_encounter`,
+    duel completion) unconditionally reaches — calls
+    `_break_pending_sustained_actions(encounter)` first, breaking (broadcast + delete,
+    no refund) every `SustainedAction` still on the board when the encounter ends
+    early. Before this, an encounter completing before a commitment's `resolves_round`
+    arrived (last enemy killed mid-ritual, GM abandons, everyone flees) orphaned the
+    row forever — it never matured, never narrated, and a RITUAL row's already-
+    consumed components bought nothing. `PendingOpponentAttack` (the NPC mirror) has
+    the same pre-existing gap, deliberately NOT fixed here — out of scope, no
+    consumed-cost consequence.
+  - **The declaring round is skipped**, not resolved: `resolve_round` collects
+    `SustainedAction.objects.filter(declared_round=round_number)`'s participant ids and
+    excludes them from that round's PC resolution loop — that round's
+    `CombatRoundAction` is the declaration, not an action to resolve yet.
+  - **Ritual dispatch extraction:** `dispatch_ritual` (`world/magic/services/
+    ritual_dispatch.py`) — the SERVICE/FLOW/CEREMONY switch extracted verbatim out of
+    `PerformRitualAction._dispatch_service`/`_begin_ceremony`/`_dispatch_flow`, so a
+    ritual conducted over combat rounds can dispatch at maturation through the exact
+    same switch the synchronous non-combat path uses, with no second copy. Behavior-
+    preserving — the pre-existing ritual action/service tests are its oracle; none
+    changed.
+  - **Broadcasts:** `_broadcast_sustained_telegraph`/`_broadcast_sustained_erosion`/
+    `_broadcast_sustained_broken`/`_broadcast_sustained_held`
+    (`world/combat/services.py`) — PC wrappers alongside the existing `_broadcast_
+    windup_*` NPC ones, both funneling into a shared `_broadcast_commitment_line`
+    core (`_dual_dispatch_combat_narration`); the two rows carry different subjects
+    (`opponent.name` vs a participant's character + `subject_name`), so only the
+    dispatch is shared, not a row-polymorphic narration builder.
 - **Sent Flying — consequence events in flight (#2638; ADR-0162 — clones #1228's plummet
   pattern: marker + reactable window + explicit resolution):**
   - `ThreatPoolEntry.sends_flying` (bool, default False) — authored data on existing threat

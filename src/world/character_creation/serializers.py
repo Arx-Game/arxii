@@ -31,6 +31,7 @@ from world.distinctions.models import Distinction
 from world.forms.models import Build, HeightBand
 from world.forms.serializers import BuildSerializer, HeightBandSerializer
 from world.magic.models import Gift, GlimpseTag, Technique, Tradition
+from world.magic.serializers import TechniqueEffectSummarySerializer
 from world.mechanics.constants import GOAL_CATEGORY_NAME
 from world.roster.models import Family, KinSlotPool, Kinsperson
 from world.roster.serializers import FamilySerializer
@@ -317,6 +318,13 @@ class CGTechniqueOptionSerializer(serializers.ModelSerializer):
     category = serializers.CharField(source="effect_type.category", read_only=True)
     codex_entry_id = serializers.IntegerField(read_only=True, allow_null=True)
     is_tradition_technique = serializers.SerializerMethodField()
+    # #2898: CG was the thinnest surface of the four — no cost, no reach, no
+    # targeting, no hostility — at the moment the pick is least reversible. The
+    # shared effect block carries all of it, so this one field closes every gap.
+    effect_summary = TechniqueEffectSummarySerializer(
+        source="cached_effect_summary",
+        read_only=True,
+    )
 
     class Meta:
         model = Technique
@@ -327,6 +335,7 @@ class CGTechniqueOptionSerializer(serializers.ModelSerializer):
             "category",
             "codex_entry_id",
             "is_tradition_technique",
+            "effect_summary",
         ]
         read_only_fields = fields
 

@@ -10,8 +10,8 @@ import django.db.models.deletion
 
 class Migration(migrations.Migration):
     dependencies = [
-        ("items", "0056_accentlevel_itemtemplate_material_grade"),
-        ("mechanics", "0014_modifiertarget_is_styleable"),
+        ("items", "0057_accentlevel_itemtemplate_material_grade"),
+        ("mechanics", "0015_modifiertarget_is_styleable"),
         ("scenes", "0058_sceneactionrequest_cast_openly"),
     ]
 

@@ -1337,9 +1337,15 @@ A clean INTERPOSE after DEFEND zeroes the remaining half.
 **Status: BUILT** (ADR-0161 — extends the pre-armed-declaration shape ADR-0118
 established for guardian reactions to a symmetric NPC-side commitment)
 
+**PC-side sibling BUILT (#2705, ADR-0190 — extends ADR-0161 to the PC side):**
+`SustainedAction` mirrors `PendingOpponentAttack` for a PC's own multi-round
+commitment — a winding-up `Technique` or a ritual conducted under fire. See the
+dedicated flow diagram below.
+
 ### `resolve_round` ordering change
 
-Two new steps bracket the existing per-round pipeline:
+Two new steps bracket the existing per-round pipeline (a third, PC-side, joins
+them at #2705):
 
 ```
 enc.status != DECLARING? raise
@@ -1349,17 +1355,23 @@ enc.status = RESOLVING; enc.save(...)
 round_number = enc.round_number
 _fire_round_start(enc, round_number)
 # ...vulnerability countdown...
-_mature_pending_opponent_attacks(enc, round_number)  # NEW — before the query below
+_mature_pending_opponent_attacks(enc, round_number)  # NEW (#2637) — before the query below
+_mature_sustained_actions(enc, round_number)         # NEW (#2705) — same pass, right after
 # --- Build action lookups (queries CombatOpponentAction for this round) ---
 _resolve_passive_actions(...)
 _refresh_participant_trigger_handlers(...)
 _ensure_reactive_challenges(...)
-_resolve_actions(...)  # PC loop calls _apply_windup_interception_rider after each landed hit
+_resolve_actions(...)  # PC loop calls _apply_windup_interception_rider AND
+                        # _apply_sustained_erosion_rider after each landed hit
 ```
 
-Maturation runs BEFORE the `CombatOpponentAction` query so a wind-up that matures THIS
-round is picked up by the normal NPC-resolution pipeline in the same pass — no second
-resolution pass, no special-cased NPC action type downstream of that query.
+Maturation runs BEFORE the `CombatOpponentAction` query so a wind-up (or, for
+#2705, a held technique) that matures THIS round is picked up by the normal
+resolution pipeline in the same pass — no second resolution pass, no
+special-cased action type downstream of that query. Participants whose
+`SustainedAction` was declared THIS round (not maturing) are skipped in the PC
+resolution loop — the declaring round's `CombatRoundAction` row is the
+declaration itself, not an action to resolve.
 
 ### Wind-up declare → telegraph → wreck → mature flow
 
@@ -1398,6 +1410,100 @@ _mature_pending_opponent_attacks (top of resolve_round, resolves_round == round_
   # resolve_npc_attack / the flat-damage path both read damage_scale, multiplying it
   # in AFTER opponent.damage_multiplier (a Decimal field) to avoid a Decimal*float TypeError
 ```
+
+### PC sustained action declare → erode → mature/break flow (#2705)
+
+The PC-side mirror of the wind-up flow above. No damage ramp (ADR-0190, D1) — a held
+commitment resolves at full effect or not at all, because the Concentration roll below
+already supplies the gradation the NPC-side ramp exists to fake.
+
+```
+declare_action (PC declaration, still DECLARING)
+  _validate_no_pending_sustained → raise ValueError if a not-yet-matured
+    SustainedAction is still pending (resolves_round__gte round_number — a row
+    maturing THIS round still blocks; D2 — sustaining occupies your action).
+    Excludes only a TECHNIQUE row with declared_round == round_number (this
+    round's own in-progress declaration, replaced by the sync step below); a
+    same-round RITUAL row is never excluded — a ritual is declared through a
+    different seam entirely, so there's no sync step to replace it here.
+  focused_action.windup_rounds > 0?
+    yes → _sync_sustained_technique_declaration
+            → delete any same-round TECHNIQUE-kind SustainedAction first
+              (re-declare, never stack — scoped to TECHNIQUE so a same-round
+              RITUAL commitment, which the guard above already blocked
+              anyway, is never silently stranded)
+            → roll_sustained_absorption_budget(participant)
+                 perform_check_with_modifiers(character, Concentration CheckType)
+                 budget = clamp(2 + result.success_level, 0, 4)   # D3
+            → SustainedAction.objects.create(kind=TECHNIQUE, declared_action=action,
+                          declared_round=N, resolves_round=N+windup_rounds,
+                          absorption_budget=budget, outcome_snapshot=result.outcome)
+            → _broadcast_sustained_telegraph
+    no  → CombatRoundAction.objects.update_or_create(...)   # unchanged
+
+# PerformRitualAction (Task 5) reaches the same SustainedAction shape through a
+# different door — a ritual is invoked, not declared, so the D2 guard doesn't see it:
+PerformRitualAction.execute()
+  _validate_components → consume components (a broken sustain is genuinely spent)
+  try_declare_sustained_ritual(sheet, ritual, kwargs)
+    kwargs non-empty (ADR-0007 — no JSON field to replay them at maturation)?  → None, dispatch now
+    ritual.check_config_or_none.sustained_rounds > 0 AND encounter DECLARING
+      AND not already holding an earlier commitment?
+        yes → same roll_sustained_absorption_budget → SustainedAction(kind=RITUAL,
+              declared_action=None) → _broadcast_sustained_telegraph
+        no  → None, dispatch immediately as today (falls through, does not raise —
+              raising would strand the components already consumed)
+
+# ...zero or more rounds pass; the SustainedAction just sits there...
+
+apply_damage_to_participant (any landed hit on the sustaining participant)
+  damage_dealt > 0?
+    yes → _apply_sustained_erosion_rider
+            → sustained = SustainedAction.objects.filter(participant=...,
+                          resolves_round__gte=round_number).first()
+            → sustained.downgrades += 1                       # flat — no called-out split;
+            → _broadcast_sustained_erosion                    # a PC commitment is public
+                                                                # by construction (#2705)
+
+# ...round advances until resolves_round == round_number...
+
+_mature_sustained_actions (resolve_round, right after _mature_pending_opponent_attacks)
+  downgrades > 0 AND downgrades >= absorption_budget?         # requires an actual hit
+    yes → _broadcast_sustained_broken; sustained.delete()      # cost stands, no refund
+          (NOT downgrades >= budget alone — a Critical-Failure budget of 0 must
+          break on the FIRST landing hit, not fizzle an untouched commitment in
+          total safety at maturation; #2705 adversarial review, Fix 5)
+  participant left/died?
+    yes → _broadcast_sustained_broken(reason="comes to nothing"); delete
+  kind == TECHNIQUE → _mature_sustained_technique
+    clone declared_action's fields into a NEW CombatRoundAction row for round N
+    (built via .objects.create() from a field dict, NOT clone.pk=None — mutating the
+    idmapper-cached original in place would poison the cache for the declaring round's
+    real pk; see the docstring at services.py for the full rationale)
+    reset from_entrance=False, maneuver=None, item_instance=None (declaring-round-
+    scoped fields — else a windup declared as a dramatic entrance re-fires the
+    entrance moment N rounds later; Fix 4); PRESERVE confirm_soulfray_risk and the
+    cast geometry FKs (cast_destination/cast_position_a/cast_position_b/
+    redirect_opponent_target/redirect_object_target) — they describe the cast itself
+    copy CombatRoundActionTarget rows; _broadcast_sustained_held; delete
+  kind == RITUAL → _mature_sustained_ritual
+    dispatch_ritual(ritual, performer_sheet)                   # the extracted switch,
+    catch ritual-surface exceptions only → broken, no refund   # shared with the
+    else → _broadcast_sustained_held; delete                   # non-combat cast path
+```
+
+### Early completion breaks every pending commitment (#2705 adversarial review, Fix 3)
+
+An encounter can complete (victory, defeat, flee, GM-abandoned) before a
+`SustainedAction`'s `resolves_round` ever arrives. `cleanup_completed_encounter` —
+reached unconditionally by `complete_encounter`, the single completion seam every
+production path (round-resolution auto-complete, `end_encounter`, duel completion)
+funnels through — now calls `_break_pending_sustained_actions(encounter)` first,
+which breaks (broadcast + delete, no refund) every `SustainedAction` still on the
+board for that encounter. Before this fix the row was orphaned forever: it never
+matured, never narrated, and a RITUAL row's already-consumed components bought
+nothing. `PendingOpponentAttack` (the NPC mirror) has the same pre-existing gap,
+deliberately left alone — out of scope, and it has no consumed-cost consequence.
 
 ### The reaction economy fire seam (#2639, F-10c)
 

@@ -55,6 +55,7 @@ from world.combat.constants import (
     StakesLevel,
     StrikeDelivery,
     SurgeTriggerKind,
+    SustainedKind,
     TargetingMode,
     TargetSelection,
 )
@@ -1662,6 +1663,137 @@ class PendingOpponentAttack(SharedMemoryModel):
     def __str__(self) -> str:
         return (
             f"PendingOpponentAttack({self.opponent.name}: {self.threat_entry.name}, "
+            f"resolves round {self.resolves_round})"
+        )
+
+
+class SustainedAction(SharedMemoryModel):
+    """A PC's multi-round commitment: a ritual under fire, or a winding-up technique (#2705).
+
+    The PC-side mirror of ``PendingOpponentAttack``. Declared in one round,
+    matures ``resolves_round - declared_round`` rounds later. ``absorption_budget``
+    is written once at declaration from a ``Concentration`` check; every landing
+    hit on the participant adds a downgrade, and the commitment breaks when
+    ``downgrades >= absorption_budget``.
+
+    Extends ADR-0161's pre-armed shape rather than reopening it: Concentration is
+    rolled ONCE, at declaration — there is still no mid-round check inserted into
+    the resolution loop. Unlike the NPC row there is no damage ramp; a held action
+    resolves at full effect or not at all (ADR-0188).
+    """
+
+    encounter = models.ForeignKey(
+        CombatEncounter,
+        on_delete=models.CASCADE,
+        related_name="sustained_actions",
+    )
+    participant = models.ForeignKey(
+        CombatParticipant,
+        on_delete=models.CASCADE,
+        related_name="sustained_actions",
+    )
+    sustained_kind = models.CharField(max_length=16, choices=SustainedKind.choices)
+    ritual = models.ForeignKey(
+        "magic.Ritual",
+        on_delete=models.PROTECT,
+        null=True,
+        blank=True,
+        related_name="+",
+        help_text="Set for SustainedKind.RITUAL; null otherwise.",
+    )
+    technique = models.ForeignKey(
+        TECHNIQUE_MODEL,
+        on_delete=models.PROTECT,
+        null=True,
+        blank=True,
+        related_name="+",
+        help_text="Set for SustainedKind.TECHNIQUE; null otherwise.",
+    )
+    declared_action = models.ForeignKey(
+        CombatRoundAction,
+        on_delete=models.CASCADE,
+        null=True,
+        blank=True,
+        related_name="+",
+        help_text=(
+            "The declaring round action, cloned into the maturation round when the "
+            "commitment holds. Set for TECHNIQUE; null for RITUAL (a ritual is "
+            "declared through PerformRitualAction, not the combat declaration seam)."
+        ),
+    )
+    declared_round = models.PositiveIntegerField()
+    resolves_round = models.PositiveIntegerField()
+    absorption_budget = models.PositiveSmallIntegerField(
+        help_text=(
+            "How many landing hits this commitment survives. Written once at "
+            "declaration from the Concentration roll; never recomputed."
+        ),
+    )
+    outcome_snapshot = models.ForeignKey(
+        "traits.CheckOutcome",
+        on_delete=models.PROTECT,
+        null=True,
+        blank=True,
+        related_name="+",
+        help_text=(
+            "The declaration-time Concentration outcome, so logs and UI can say WHY "
+            "the budget is what it is instead of showing a bare number. Null only "
+            "when the check produced no outcome row."
+        ),
+    )
+    downgrades = models.PositiveSmallIntegerField(default=0)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["resolves_round", "pk"]
+        constraints = [
+            models.CheckConstraint(
+                check=Q(resolves_round__gt=F("declared_round")),
+                name="sustainedaction_resolves_after_declared",
+            ),
+            # Exactly-one payload per kind — the ThreadPullEffect shape
+            # (world/magic/models/threads.py:203+), mirrored from clean().
+            models.CheckConstraint(
+                check=(
+                    ~Q(sustained_kind="RITUAL")
+                    | (Q(ritual__isnull=False) & Q(technique__isnull=True))
+                ),
+                name="sustainedaction_ritual_payload",
+            ),
+            models.CheckConstraint(
+                check=(
+                    ~Q(sustained_kind="TECHNIQUE")
+                    | (Q(technique__isnull=False) & Q(ritual__isnull=True))
+                ),
+                name="sustainedaction_technique_payload",
+            ),
+        ]
+
+    def clean(self) -> None:
+        """Mirror the DB payload CheckConstraints so form/admin validation fails early."""
+        super().clean()
+        if self.sustained_kind == SustainedKind.RITUAL:
+            if self.ritual_id is None or self.technique_id is not None:
+                msg = "A RITUAL SustainedAction must set ritual and leave technique null."
+                raise ValidationError(msg)
+        elif self.sustained_kind == SustainedKind.TECHNIQUE:
+            if self.technique_id is None or self.ritual_id is not None:
+                msg = "A TECHNIQUE SustainedAction must set technique and leave ritual null."
+                raise ValidationError(msg)
+
+    @property
+    def subject_name(self) -> str:
+        """The name of whatever this commitment is holding together.
+
+        Used by the broadcast helpers so they never branch on ``sustained_kind``.
+        """
+        if self.sustained_kind == SustainedKind.RITUAL:
+            return self.ritual.name
+        return self.technique.name
+
+    def __str__(self) -> str:
+        return (
+            f"SustainedAction({self.participant}: {self.subject_name}, "
             f"resolves round {self.resolves_round})"
         )
 

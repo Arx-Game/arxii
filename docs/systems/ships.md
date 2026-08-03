@@ -80,18 +80,41 @@ idempotent via the same `applied_at`-claim idiom used across `world.buildings`.
 ## Ship-as-sanctum (`world.ships.sanctum_bonus`)
 
 A ship has at most one sanctum room for MVP — the sanctum system needs no ship
-awareness of its own; `ship_sanctum_bonus(ship)` / `ship_sanctum_capabilities(ship)`
-locate the active `SanctumDetails` installed on one of the ship's rooms (matched
-by `feature_instance.room_profile.area == ship.building.area`) and read its woven
-SANCTUM `Thread`s:
+awareness of its own; `ship_sanctum_bonus(ship)` /
+`ship_sanctum_capability_grants(ship)` locate the active `SanctumDetails` installed on
+one of the ship's rooms (matched by
+`feature_instance.room_profile.area == ship.building.area`) and read its woven SANCTUM
+`Thread`s.
 
-- **`ship_sanctum_bonus(ship) -> ShipStatBonus`** — sums active woven SANCTUM
-  thread levels into a `ShipStatBonus(hull, handling, armament)`. PLACEHOLDER
-  mapping: all three fields equal the summed thread levels — a per-resonance
-  split is a later content pass.
-- **`ship_sanctum_capabilities(ship) -> list[Resonance]`** — the distinct
-  resonances of woven SANCTUM threads at level ≥ 3, each unlocking a
-  PLACEHOLDER `BattleUnitCapability` at materialize time (see below).
+Since #2736 **both helpers read the authored `ThreadPullEffect` catalog** — the same
+lookup table the character-side thread handler reads, keyed
+`(target_kind, resonance, tier, min_thread_level)`. A resonance with no authored row
+grants nothing, and that is not an error (ADR-0188).
+
+- **`ship_sanctum_bonus(ship) -> ShipStatBonus`** — sums the tier-0 SANCTUM
+  `VITAL_BONUS` rows whose `vital_target` is `SHIP_HULL` / `SHIP_HANDLING` /
+  `SHIP_ARMAMENT`, each scaled by the deepest thread on that resonance
+  (`thread_level_multiplier`). Contributions from different resonances **sum** — these
+  are stat points from independent sources. The Siege Deck armament bonus (#675) is
+  added on top, independent of any sanctum.
+- **`ship_sanctum_capability_grants(ship) -> list[ShipCapabilityGrant]`** — for each
+  woven resonance, the tier-0 SANCTUM `CAPABILITY_GRANT` row with the **highest
+  qualifying** `min_thread_level` wins, its `capability_grant_value` run through
+  `apply_capability_curve`. Two resonances granting the same capability fold via MAX
+  (ADR-0034 individuation). There is no hardcoded level floor: the authored
+  `min_thread_level` is the gate, so content can author a deeper second unlock without
+  a code change. `CapabilityPowerConfig` is fetched once per call, never per grant.
+
+**The curve's `power` is the sanctum's installed level.** `apply_capability_curve`
+returns `base` unchanged when `power <= 0`, so thread depth (which enters as
+`sensitivity`) does nothing on its own. The shrine's own level is the vessel's figure —
+it is already the basis of the anchor cap (`feature_instance.level x 10`) and belongs to
+the ship rather than to whichever character consecrated it.
+
+**Authoring shape:** two rows per resonance, not one. `threadpulleffect_lookup_key`
+admits a single row per `(target_kind, resonance, tier, min_thread_level)`, so the stat
+row is authored at `min_thread_level=0` and the capability row at `min_thread_level=3`.
+Zero such rows exist in the lore repo today, so every sanctum grant is currently inert.
 
 The bonus is **snapshotted at materialize time, not read live** during battle —
 see ADR-0086.
@@ -112,8 +135,12 @@ battle deployment:
 3. A `speed` `BattleUnitCapability` is set to `ship.effective_handling() +
    bonus.handling` — read by REPOSITION (`world.battles.resolution`).
 4. `BattleUnit.strength` is set to `ship.effective_armament() + bonus.armament`.
-5. Each level-3+ sanctum resonance grants a PLACEHOLDER
-   `sanctum_<resonance>` `BattleUnitCapability`.
+5. Each capability the sanctum's authored rows confer is written as a
+   `BattleUnitCapability` at the curved value. This step **mints nothing** — it writes
+   only capabilities that already exist as authored content. Before #2736 it
+   `get_or_create`'d a `sanctum_<resonance>` `CapabilityType` per resonance at a flat 1,
+   growing the exported content corpus by a row per resonance any player ever
+   levelled (ADR-0188).
 
 From here the ship is an ordinary `BattleVehicle` — REPOSITION/BREACH/sinking/
 ejection all run through the existing `world.battles` machinery unmodified (see

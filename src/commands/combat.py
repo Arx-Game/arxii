@@ -148,8 +148,11 @@ class CmdDeclareTechnique(_CombatCommandMixin, DispatchCommand):
     """Cast a technique — works both in and out of combat.
 
     Usage:
+        cast
         cast <technique> [at <target>] [effort=<level>] [secondary] [base] [openly]
         declare <technique> [at <target>] [effort=<level>] [secondary] [base] [openly]
+
+    Bare ``cast`` lists everything you can cast, with what each one does.
 
     Outside combat: casts the technique immediately in the active scene.
     In a DECLARING combat round: declares the technique for this round;
@@ -698,6 +701,37 @@ class CmdDeclareTechnique(_CombatCommandMixin, DispatchCommand):
         )
 
     # -- DispatchCommand interface ---------------------------------------------
+
+    def func(self) -> None:
+        """Dispatch the cast, or list what the caller can cast when given no argument.
+
+        Telnet had no cast list at all before #2898 — bare ``cast`` raised a usage
+        error, and the sheet's magic section printed name and level only, so a
+        player could not find out what any technique did from any telnet surface.
+        This is the telnet face of the web castable-techniques list; both read
+        ``castable_techniques_for_sheet``.
+        """
+        if (self.args or "").strip():
+            super().func()
+            return
+        self.msg("\n".join(self._castable_listing()))
+
+    def _castable_listing(self) -> list[str]:
+        """Lines for the bare-``cast`` listing: every castable technique and what it does."""
+        from world.scenes.cast_services import castable_techniques_for_sheet  # noqa: PLC0415
+
+        techniques = castable_techniques_for_sheet(self.caller.sheet_data.pk)
+        if not techniques:
+            return ["You know no techniques you can cast."]
+        lines = ["|wYou can cast:|n"]
+        for technique in techniques:
+            lines.append(f"  |w{technique.name}|n")
+            lines.append(f"    {technique.cached_effect_summary['summary']}")
+            if technique.description:
+                lines.append(f"    {technique.description}")
+        lines.append("")
+        lines.append("Use |wcast <technique> [at <target>]|n to work one.")
+        return lines
 
     def resolve_action_ref(self) -> ActionRef:
         """Build a SCENE_ADAPTIVE ``ActionRef`` for the named technique.

@@ -424,6 +424,38 @@ WINDUP_BLIND_DOWNGRADE: int = 1
 WINDUP_GENERIC_TELEGRAPH: str = "{opponent} begins something enormous..."
 
 # ---------------------------------------------------------------------------
+# PC sustained actions (#2705) — extends ADR-0161's shape to the PC side
+# ---------------------------------------------------------------------------
+
+
+class SustainedKind(models.TextChoices):
+    """What kind of commitment a SustainedAction is holding together."""
+
+    RITUAL = "RITUAL", "Ritual"
+    TECHNIQUE = "TECHNIQUE", "Technique"
+
+
+# Name of the authored CheckType rolled once at declaration to set the budget.
+CONCENTRATION_CHECK_TYPE_NAME: str = "Concentration"
+
+# absorption_budget = clamp(BASE + CheckResult.success_level, MIN, MAX).
+# BASE 2 puts a clean Success at 3 — exactly ADR-0161's WINDUP_FIZZLE_DOWNGRADES,
+# so a competent PC's sustained action is as durable as an NPC's telegraphed
+# wind-up. Clamped because CheckOutcome.success_level is an authored -10..+10
+# field and no lore fixture pins the ladder (see #2705 plan, D3).
+SUSTAINED_BASE_ABSORPTION: int = 2
+SUSTAINED_MIN_ABSORPTION: int = 0
+SUSTAINED_MAX_ABSORPTION: int = 4
+
+# Downgrades added per landing hit on a sustaining participant. No called-out
+# analogue: a PC wind-up is public by construction, never a designed reveal.
+SUSTAINED_HIT_DOWNGRADE: int = 1
+
+# Fallback telegraph when the technique/ritual authors no line.
+# {character} and {subject} are substituted at broadcast time.
+SUSTAINED_GENERIC_TELEGRAPH: str = "{character} begins {subject}, holding it together..."
+
+# ---------------------------------------------------------------------------
 # Sent flying (#2638) — the plummet-pattern's first "in-flight" consequence
 # ---------------------------------------------------------------------------
 

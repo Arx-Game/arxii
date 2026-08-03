@@ -34,6 +34,11 @@ from world.mechanics.constants import (
     PropertyHolder,
     ResolutionType,
 )
+from world.scenes.action_constants import (
+    DIFFICULTY_BAND_STEP,
+    DIFFICULTY_VALUES,
+    DifficultyChoice,
+)
 
 _DAMAGE_TYPE_MODEL_PATH = "conditions.DamageType"
 _CONSEQUENCE_POOL_MODEL = "actions.ConsequencePool"
@@ -882,7 +887,14 @@ class ChallengeTemplate(NaturalKeyMixin, SharedMemoryModel):
         related_name="challenge_templates",
         blank=True,
     )
-    severity = models.PositiveIntegerField(default=1)
+    severity = models.PositiveIntegerField(
+        default=DIFFICULTY_VALUES[DifficultyChoice.NORMAL],
+        help_text=(
+            "Authored difficulty in DIFFICULTY_VALUES points (15 Trivial .. 90 Harrowing), "
+            "passed straight to perform_check's target_difficulty. NOT a 1-5 rating: the "
+            "old default of 1 resolved every authored challenge at the bottom rank (#2865)."
+        ),
+    )
     goal = models.TextField(blank=True)
     category = models.ForeignKey(
         ChallengeCategory,
@@ -1140,8 +1152,13 @@ class SituationTemplate(NaturalKeyMixin, SharedMemoryModel):
         return list(self.challenge_links.select_related("challenge_template"))
 
 
-class SituationChallengeLink(SharedMemoryModel):
-    """Through-table linking Challenges to Situations with ordering and dependencies."""
+class SituationChallengeLink(NaturalKeyMixin, SharedMemoryModel):
+    """Through-table linking Challenges to Situations with ordering and dependencies.
+
+    NK is (situation_template, challenge_template) — the pre-existing
+    ``situation_challenge_unique`` constraint already enforces exactly that, so
+    registering the link in ``CONTENT_MODELS`` (#2865) needed no new DB constraint.
+    """
 
     situation_template = models.ForeignKey(
         SituationTemplate,
@@ -1170,6 +1187,8 @@ class SituationChallengeLink(SharedMemoryModel):
         related_name="dependents",
     )
 
+    objects = NaturalKeyManager()
+
     class Meta:
         ordering = ["display_order"]
         constraints = [
@@ -1179,11 +1198,15 @@ class SituationChallengeLink(SharedMemoryModel):
             ),
         ]
 
+    class NaturalKeyConfig:
+        fields = ["situation_template", "challenge_template"]
+        dependencies = ["mechanics.SituationTemplate", "mechanics.ChallengeTemplate"]
+
     def __str__(self) -> str:
         return f"{self.situation_template.name} → {self.challenge_template.name}"
 
 
-class SituationTrapLink(SharedMemoryModel):
+class SituationTrapLink(NaturalKeyMixin, SharedMemoryModel):
     """Authored trap blueprint carried by a SituationTemplate.
 
     Instantiated into a real ``room_features.Trap`` row by
@@ -1192,6 +1215,12 @@ class SituationTrapLink(SharedMemoryModel):
     ``position`` (traps minted from a link are always room-wide), no
     ``depends_on`` (traps are independent hazards, not a sequenced chain
     like SituationChallengeLink).
+
+    NK is (situation_template, name). Unlike its challenge sibling this link had
+    no uniqueness of its own, so registering it in ``CONTENT_MODELS`` (#2865)
+    added the ``situation_trap_link_unique_name`` constraint the natural key
+    needs — two identically-named traps on one situation were never meaningful
+    (``instantiate_situation`` would mint two indistinguishable Trap rows).
     """
 
     situation_template = models.ForeignKey(
@@ -1218,6 +1247,20 @@ class SituationTrapLink(SharedMemoryModel):
     detect_difficulty = models.PositiveIntegerField(default=0)
     disarm_difficulty = models.PositiveIntegerField(default=0)
     is_hidden = models.BooleanField(default=True)
+
+    objects = NaturalKeyManager()
+
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(
+                fields=["situation_template", "name"],
+                name="situation_trap_link_unique_name",
+            ),
+        ]
+
+    class NaturalKeyConfig:
+        fields = ["situation_template", "name"]
+        dependencies = ["mechanics.SituationTemplate"]
 
     def __str__(self) -> str:
         return f"{self.situation_template.name} — trap: {self.name}"
@@ -1298,10 +1341,50 @@ class ChallengeInstance(SharedMemoryModel):
     )
     is_active = models.BooleanField(default=True)
     is_revealed = models.BooleanField(default=True)
+    severity_adjustment = models.SmallIntegerField(
+        default=0,
+        help_text=(
+            "Signed one-band shift a GM applied when placing this challenge (#2865), in "
+            "DIFFICULTY_VALUES points. Folded into the template's severity at resolution. "
+            "Constrained to exactly one band either way — never an arbitrary offset."
+        ),
+    )
+    adjustment_reason = models.CharField(
+        max_length=200,
+        blank=True,
+        help_text=(
+            "Why the GM shifted the band. Required whenever severity_adjustment is "
+            "non-zero, and GM-facing only — never surfaced to players."
+        ),
+    )
     created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        constraints = [
+            models.CheckConstraint(
+                condition=models.Q(
+                    severity_adjustment__in=[-DIFFICULTY_BAND_STEP, 0, DIFFICULTY_BAND_STEP]
+                ),
+                name="challenge_instance_adjustment_one_band",
+            ),
+            models.CheckConstraint(
+                condition=models.Q(severity_adjustment=0) | ~models.Q(adjustment_reason=""),
+                name="challenge_instance_adjustment_needs_reason",
+            ),
+        ]
 
     def __str__(self) -> str:
         return f"{self.template.name} at {self.location.db_key}"
+
+    @property
+    def effective_severity(self) -> int:
+        """Authored severity plus this instance's GM band shift, in difficulty points.
+
+        The single reader of ``severity_adjustment`` — every resolution path takes its
+        ``target_difficulty`` from here so a placed challenge and a situation-minted one
+        cannot drift apart.
+        """
+        return self.template.severity + self.severity_adjustment
 
 
 class CharacterChallengeRecord(SharedMemoryModel):

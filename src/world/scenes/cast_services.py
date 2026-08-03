@@ -22,6 +22,7 @@ from typing import TYPE_CHECKING
 
 from django.core.exceptions import ValidationError
 from django.db import transaction
+from django.db.models import Prefetch
 from django.utils import timezone
 
 from actions.services import start_action_resolution
@@ -72,6 +73,59 @@ if TYPE_CHECKING:
     from world.scenes.models import Interaction, Persona, Scene
 
 _PULL_FIZZLE_NOTE = "The declared thread pull fizzles — its committed resonance is spent."
+
+
+def castable_techniques_for_sheet(character_sheet_id: int) -> list[Technique]:
+    """Techniques *character_sheet_id* knows that can be cast standalone.
+
+    Known (a ``CharacterTechnique`` link) and castable (an ``action_template``),
+    by name. Shared by the web castable-techniques endpoint and the telnet cast
+    list so the two faces of "what can I cast" cannot drift (#2898) — the drift
+    between four independently-built technique payloads is what that issue exists
+    to close.
+
+    The payload tables are prefetched onto the cached_property names the effect
+    summary reads, so rendering the whole list costs a fixed handful of queries
+    rather than one per technique per table.
+    """
+    from world.magic.models.techniques import (  # noqa: PLC0415
+        TechniqueAppliedCondition,
+        TechniqueCapabilityGrant,
+        TechniqueDamageProfile,
+        TechniqueRemovedCondition,
+    )
+
+    char_techniques = (
+        CharacterTechnique.objects.filter(
+            character_id=character_sheet_id,
+            technique__action_template__isnull=False,
+        )
+        .select_related("technique", "technique__action_template", "technique__effect_type")
+        .prefetch_related(
+            Prefetch(
+                "technique__condition_applications",
+                queryset=TechniqueAppliedCondition.objects.select_related("condition"),
+                to_attr="cached_condition_applications",
+            ),
+            Prefetch(
+                "technique__removed_conditions",
+                queryset=TechniqueRemovedCondition.objects.select_related("condition"),
+                to_attr="cached_removed_conditions",
+            ),
+            Prefetch(
+                "technique__damage_profiles",
+                queryset=TechniqueDamageProfile.objects.select_related("damage_type"),
+                to_attr="cached_damage_profiles",
+            ),
+            Prefetch(
+                "technique__capability_grants",
+                queryset=TechniqueCapabilityGrant.objects.select_related("capability"),
+                to_attr="cached_capability_grants",
+            ),
+        )
+        .order_by("technique__name")
+    )
+    return [ct.technique for ct in char_techniques]
 
 
 def derive_cast_difficulty(technique: Technique) -> int:

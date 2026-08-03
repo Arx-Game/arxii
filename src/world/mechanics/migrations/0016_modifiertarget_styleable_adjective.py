@@ -5,7 +5,7 @@ from django.db import migrations, models
 
 class Migration(migrations.Migration):
     dependencies = [
-        ("mechanics", "0014_modifiertarget_is_styleable"),
+        ("mechanics", "0015_modifiertarget_is_styleable"),
     ]
 
     operations = [

@@ -47,12 +47,22 @@ DATABASES = {
 }
 
 INSTALLED_APPS += [
+    # ORDER IS LOAD-BEARING between these two (#2885). Both apps ship a
+    # `makemigrations` command, and Django's get_commands() walks
+    # `reversed(apps.get_app_configs())` calling dict.update() — so the app
+    # listed EARLIEST here wins, not the latest. core_management must therefore
+    # come first for its phantom-Evennia-migration filter to run at all; it
+    # subclasses django_linear_migrations' command, so the #991 sentinel below
+    # still applies. Listed the other way round, the filter is silently inert
+    # and every generated migration depends on a phantom Evennia migration that
+    # exists only in the venv that made it. `core_management.tests
+    # .test_command_resolution` pins this — don't reorder without reading it.
+    "core_management",  # Add our management app for custom commands
     # Enforces one migration leaf per app via a per-app max_migration.txt
     # sentinel (#991). Two parallel branches that each add a migration both
     # bump that file, so the second surfaces as a git conflict at PR time
     # instead of a silent "multiple leaf nodes" failure in the merge queue.
     "django_linear_migrations",
-    "core_management",  # Add our management app for custom commands
     "web.admin.apps.AdminConfig",  # Custom admin functionality
     "flows.apps.FlowsConfig",
     "actions.apps.ActionsConfig",

@@ -97,6 +97,11 @@ from world.magic.models.dramatic_moment import (
     DramaticMomentType,
 )
 from world.magic.services.glimpse import refresh_glimpse_state
+from world.magic.services.technique_effects import (
+    invalidate_technique_payload_caches,
+    technique_effect_authoring_gaps,
+    technique_relationship_is_ambiguous,
+)
 
 
 @admin.register(Affinity)
@@ -240,6 +245,44 @@ class TechniqueFunctionTagInline(admin.TabularInline):
     extra = 1
 
 
+#: Query-string values for TechniqueAuthoringGapFilter's two gap kinds.
+_GAP_UNDERSPECIFIED = "underspecified"
+_GAP_AMBIGUOUS = "ambiguous"
+
+
+class TechniqueAuthoringGapFilter(admin.SimpleListFilter):
+    """Find techniques whose authored effect data can't be read back (#2898).
+
+    The player-facing half of #2898 renders these gaps as "not yet catalogued";
+    this is how the people who author the content find them. Membership is
+    computed in Python via ``technique_effect_authoring_gaps`` — the ambiguity
+    test compares distinct ``target_kind`` values across two relations, which is
+    not worth an annotation for an admin filter over a catalog this size.
+    """
+
+    title = "authoring gap"
+    parameter_name = "authoring_gap"
+
+    #: Django passes both hook arguments positionally, so the leading underscores
+    #: mark them unused without needing a suppression.
+    def lookups(self, _request, _model_admin):
+        return [
+            (_GAP_UNDERSPECIFIED, "No effects authored"),
+            (_GAP_AMBIGUOUS, "Mixed targeting (relationship is a guess)"),
+        ]
+
+    def queryset(self, _request, queryset):
+        value = self.value()
+        if value not in {_GAP_UNDERSPECIFIED, _GAP_AMBIGUOUS}:
+            return queryset
+        gaps = technique_effect_authoring_gaps()
+        if value == _GAP_UNDERSPECIFIED:
+            pks = [gap.technique_id for gap in gaps if gap.is_underspecified]
+        else:
+            pks = [gap.technique_id for gap in gaps if gap.relationship_is_ambiguous]
+        return queryset.filter(pk__in=pks)
+
+
 @admin.register(Technique)
 class TechniqueAdmin(admin.ModelAdmin):
     list_display = [
@@ -252,13 +295,21 @@ class TechniqueAdmin(admin.ModelAdmin):
         "control",
         "anima_cost",
         "archetype_alignment",
+        "get_relationship",
+        "get_authoring_gap",
     ]
     # has_perceptible_effect: True for nearly every technique, so filtering is how
     # staff find the handful of imperceptible workings to audit them (#2734).
-    list_filter = ["effect_type", "gift", "archetype_alignment", "has_perceptible_effect"]
+    list_filter = [
+        "effect_type",
+        "gift",
+        "archetype_alignment",
+        "has_perceptible_effect",
+        TechniqueAuthoringGapFilter,
+    ]
     filter_horizontal = ["restrictions", "target_prerequisites"]
     search_fields = ["name", "description"]
-    readonly_fields = ["get_tier"]
+    readonly_fields = ["get_tier", "get_effect_summary"]
     autocomplete_fields = ["creator", "effect_type", "gift"]
     list_select_related = ["gift", "effect_type"]
     inlines = [
@@ -271,6 +322,37 @@ class TechniqueAdmin(admin.ModelAdmin):
     @admin.display(description="Tier")
     def get_tier(self, obj: Technique) -> int:
         return obj.tier
+
+    @admin.display(description="Targets")
+    def get_relationship(self, obj: Technique) -> str:
+        """The relationship the cast gate derives from this technique's payload rows."""
+        return obj.cached_effect_summary["relationship"]
+
+    @admin.display(description="Gap")
+    def get_authoring_gap(self, obj: Technique) -> str:
+        """Flag the two states where the derived effect can't be trusted (#2898)."""
+        gaps = []
+        if obj.cached_effect_summary["is_underspecified"]:
+            gaps.append("no effects authored")
+        if technique_relationship_is_ambiguous(obj):
+            gaps.append("mixed targeting")
+        return ", ".join(gaps) or "—"
+
+    @admin.display(description="What this does")
+    def get_effect_summary(self, obj: Technique) -> str:
+        """The same plain-words line players read on every surface."""
+        return obj.cached_effect_summary["summary"]
+
+    def save_related(self, request, form, formsets, change):
+        """Rebuild the derived effect caches after an inline payload edit (#2898).
+
+        Techniques are SharedMemoryModels, so the instance that answered a display
+        question earlier in the process keeps that answer until told otherwise —
+        an admin edit to a capability grant or removal row would otherwise leave
+        every surface showing the pre-edit summary.
+        """
+        super().save_related(request, form, formsets, change)
+        invalidate_technique_payload_caches(form.instance)
 
 
 @admin.register(CharacterAura)

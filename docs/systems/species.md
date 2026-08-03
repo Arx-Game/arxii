@@ -115,6 +115,20 @@ Species uses a single-level parent/child hierarchy:
 
 Access control for which species are available in CG is handled by `Beginnings.allowed_species` in the `character_creation` app, not in this model.
 
+### Codex entries follow the hierarchy (#2880)
+
+`Species.codex_entry` is a nullable FK to one `codex.CodexEntry`. The grant at CG
+finalize (`character_creation.services._finalize_species_codex`) does **not** read
+that field directly — it reads `Species.codex_entries`, which walks `Species.lineage`
+(the species followed by every ancestor, nearest first) and collects each non-null
+entry. So a Vulpi character is granted the Vulpi entry *and* the Khati umbrella entry.
+
+This is what makes the authored split work: the umbrella entry (Khati, Elf, Infernal)
+carries what the kinds share, and each kind entry carries the kind. Reading only the
+leaf's own field — the pre-#2880 behavior — left the three umbrella entries reachable
+by nobody who picked a subspecies. Ancestors whose `codex_entry` is still null drop
+out rather than contributing a `None`.
+
 ## Appetites (#2853, ADR-0182)
 
 Hunger is tag-anchored like sun sensitivity: `Appetite: Blood` (Vampire, Dhampir),
@@ -168,6 +182,12 @@ species.get_stat_bonuses_dict()
 # Access children (subspecies)
 species.children.all()
 
+# The species and every ancestor, nearest first (cycle-safe)
+species.lineage  # [Vulpi, Khati]
+
+# Every codex entry a character of this species is owed (#2880)
+species.codex_entries  # [<CodexEntry: The Vulpi>, <CodexEntry: The Khati>]
+
 # Access starting languages
 species.starting_languages.all()
 
@@ -192,7 +212,7 @@ str(bonus)  # "Infernal: -1 Charm"
 
 ## Integration Points
 
-- **Forms System** (`world.forms`): `SpeciesFormTrait` links species to available physical appearance traits and options for CG — the per-species **palette**; `is_required=True` marks species identity markers (horns for True Infernals) that CG must fill.
+- **Forms System** (`world.forms`): `SpeciesFormTrait` links species to available physical appearance traits and options for CG — the per-species **palette**; `is_required=True` marks species identity markers (horns and a tail for Infernals) that CG must fill.
 - **Character Creation** (`world.character_creation`): `Beginnings.allowed_species` controls which species are selectable during character creation.
 - **Traits System** (`world.traits`): `SpeciesStatBonus.stat` uses `PrimaryStat` choices from `world.traits.constants`.
 - **Heredity / Parent Dominance** (#2815): a child's species derives from its parents via `world.roster.services.heredity` — maternal by default, flipping to the father's line only when his power band strictly exceeds hers, with chimeric (unique authored `Species` rows) possible only when both parents are Grand+ (level 16+). Cross-species parents unlock *their actual colors* for the child in CG; palettes are broad with pointed per-species exclusions, and wearing an excluded color is the visible tell of cross-line blood. See `docs/systems/kinship.md` and ADR-0173. NB: "crossing" remains the magic-progression term — this system's vocabulary is "Parent Dominance" / "power band".

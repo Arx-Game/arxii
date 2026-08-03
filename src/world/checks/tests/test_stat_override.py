@@ -76,6 +76,17 @@ class StatOverrideTests(TestCase):
             name="stat_override_melee_combat",
             defaults={"trait_type": TraitType.SKILL, "category": TraitCategory.COMBAT},
         )
+        # Real strength/agility traits (#2879) — the int-blend path hardcodes these two
+        # literal names (matching every other caller's convention, e.g. stat_mapping.py's
+        # DEFENSE_STAT = "agility"), distinct from the stat_override_* stand-ins above.
+        cls.strength_trait, _ = Trait.objects.get_or_create(
+            name="strength",
+            defaults={"trait_type": TraitType.STAT, "category": TraitCategory.PHYSICAL},
+        )
+        cls.agility_trait, _ = Trait.objects.get_or_create(
+            name="agility",
+            defaults={"trait_type": TraitType.STAT, "category": TraitCategory.PHYSICAL},
+        )
 
         cls.category = CheckCategoryFactory(name="stat_override_test")
 
@@ -83,6 +94,7 @@ class StatOverrideTests(TestCase):
         Trait.flush_instance_cache()
         CharacterTraitValue.flush_instance_cache()
         ResultChart.clear_cache()
+        self.handler = self.character.traits
 
     def _make_combat_check(self) -> object:
         """A check with strength (stat) + Melee Combat (skill)."""
@@ -188,3 +200,61 @@ class StatOverrideTests(TestCase):
         self.assertGreater(rating_default, rating_override)
         # But the skill portion keeps the override rating positive
         self.assertGreater(rating_override, 0)
+
+    def test_int_stat_override_blends_strength_and_agility(self):
+        """An int stat_override (#2879) substitutes an EXACT str/agi blend value.
+
+        Asserting an exact trait_points value (rather than assertNotEqual against
+        the unblended default) is deliberate: if the agility term were silently
+        dropped from the blend formula (e.g. collapsing to
+        ``strength * weight / 10``), the result would still differ from the
+        unblended default and a mere assertNotEqual would still pass. Only an
+        exact expected value proves agility's term is actually load-bearing.
+        (trait_points, not total_points, isolates the substituted stat term from
+        the guaranteed per-check level-points floor.)
+        """
+        self.handler.set_trait_value("strength", 10)
+        self.handler.set_trait_value("agility", 4)
+        ct = CheckTypeFactory(name="stat_override_blend", category=self.category)
+        CheckTypeTraitFactory(check_type=ct, trait=self.strength_trait, weight=Decimal("1.0"))
+        # strength_tenths=5 (even blend): (10*5 + 4*5) / 10 = 7 -> 7 stat points
+        # (PointConversionRange: min_value=1, max_value=100, points_per_level=1, so a
+        # trait value of 7 converts to exactly 7 points). If the agility term were
+        # dropped (bug: strength * weight / 10 == 5), this would instead be 5.
+        result_blend = perform_check(self.character, ct, stat_override=5)
+        self.assertEqual(result_blend.trait_points, 7)
+
+        # Same strength, DIFFERENT agility, same partial weight — must differ. This
+        # is the "two otherwise-identical checks" proof that agility's term moves
+        # the result: if it didn't, both would land on strength alone (5 points).
+        self.handler.set_trait_value("agility", 8)
+        result_more_agility = perform_check(self.character, ct, stat_override=5)
+        # (10*5 + 8*5) / 10 = 9 -> 9 stat points
+        self.assertEqual(result_more_agility.trait_points, 9)
+        self.assertNotEqual(result_blend.trait_points, result_more_agility.trait_points)
+
+    def test_zero_int_stat_override_is_pure_agility(self):
+        """stat_override=0 (pure agility weight) is not mistaken for falsy/None (#2879).
+
+        0 is a valid weight (pure agility, e.g. a crossbow) — the checks-services
+        layer must treat it as "blend at weight 0", never as "no override".
+        """
+        self.handler.set_trait_value("strength", 10)
+        self.handler.set_trait_value("agility", 4)
+        ct = CheckTypeFactory(name="stat_override_zero", category=self.category)
+        CheckTypeTraitFactory(check_type=ct, trait=self.strength_trait, weight=Decimal("1.0"))
+        # strength_tenths=0 (pure agility): (10*0 + 4*10) / 10 = 4 -> 4 stat points.
+        # If 0 were treated as falsy/None, this would fall through to the default
+        # path and use the raw "strength" CheckTypeTrait value (10) instead.
+        result = perform_check(self.character, ct, stat_override=0)
+        self.assertEqual(result.trait_points, 4)
+
+    def test_pure_strength_int_override_matches_string_override(self):
+        """strength_tenths=10 (pure strength) must match the plain-string path."""
+        self.handler.set_trait_value("strength", 7)
+        self.handler.set_trait_value("agility", 3)
+        ct = CheckTypeFactory(name="stat_override_pure", category=self.category)
+        CheckTypeTraitFactory(check_type=ct, trait=self.strength_trait, weight=Decimal("1.0"))
+        result_int = perform_check(self.character, ct, stat_override=10)
+        result_str = perform_check(self.character, ct, stat_override="strength")
+        self.assertEqual(result_int.total_points, result_str.total_points)

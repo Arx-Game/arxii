@@ -274,6 +274,17 @@ non-`redirect` protective flavor (`world.magic.services.targeting.protective_fla
 instead rolls the guardian's own cast check and pays anima, not fatigue (ADR-0118). The
 combat per-app glossary has the full entry. _Avoid_: guardian ward, protect action.
 
+**Sustained Action** (#2705, ADR-0190):
+The PC-side mirror of the combat per-app glossary's Wind-up entry: a `SustainedAction`
+row commits a PC to a multi-round technique wind-up or a ritual conducted under fire,
+declared once and matured later — Concentration is rolled ONCE at declaration to set an
+`absorption_budget` (clamped `2 + success_level`), and a held commitment resolves at full
+effect or fizzles entirely (no damage ramp, unlike the NPC-side wind-up). Spans both
+`world.combat` (the model + round seam) and `world.magic` (the deferred-ritual dispatch);
+full entries: [combat AGENT_GLOSSARY](src/world/combat/AGENT_GLOSSARY.md),
+`docs/systems/magic.md`'s "Sustained rituals" section. _Avoid_: channeled action, casting
+time.
+
 **Rampart** (#2209, epic #2040 decision 3):
 A projected living barrier covering a `Position` — one shared `integrity` pool, an
 authored elemental profile (Stone/Wind/Fire/Thorn), map-rendered crack state. Owned by
@@ -310,6 +321,18 @@ items, real current room, the technique/trait actually in play). _Avoid_: "passi
 check", "auto-pull". Full entry: [magic AGENT_GLOSSARY](src/world/magic/AGENT_GLOSSARY.md)
 ("Ambient Activation"); capability-oracle framing (the `action_ctx` param it feeds) in
 [conditions AGENT_GLOSSARY](src/world/conditions/AGENT_GLOSSARY.md) ("Agency oracle").
+
+**Effect Summary** (#2898):
+What a Technique actually does, derived on read from its four payload tables and cached on
+the row — never a stored field. One serialized block (`effect_summary`) shared by every
+technique surface across four apps (`magic`, `character_creation`, `scenes`,
+`character_sheets`), carrying a **plain-words line** authored server-side so the web client
+and telnet show the same sentence. Its two authoring-gap flags (**underspecified** — nothing
+derivable; **ambiguous** — payload rows disagree about who the technique targets) are
+reported rather than guessed around. _Avoid_: re-wording the sentence client-side; an
+`is_self_buff`-style stored relationship. Full entry:
+[magic AGENT_GLOSSARY](src/world/magic/AGENT_GLOSSARY.md) ("Effect Summary",
+"Underspecified Technique").
 
 **Intensity vs Power**:
 **Intensity** is the authored tier/magnitude band of a technique's effect; **Power** is the

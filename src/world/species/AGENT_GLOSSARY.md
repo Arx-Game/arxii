@@ -14,9 +14,15 @@ Domain-local vocabulary for `world.species`. Root terms live in
   light-blue eyes); wearing an excluded color is the visible tell of
   cross-line blood. _Avoid:_ "human-exclusive colors" (retired first-pass
   framing).
+- **Species lineage** — `Species.lineage`: the species followed by every
+  ancestor via `parent`, nearest first. What `codex_entries` walks so a
+  subspecies character is granted the umbrella entry too (#2880). Still
+  taxonomy, not a character's ancestry. _Avoid:_ "ancestry", "family tree"
+  (those are the roster kinship graph).
 - **Required trait** — `SpeciesFormTrait.is_required=True`: a species
-  identity marker (horns + tail for True Infernals, wings for Daeva, fangs
-  for vampires) that CG must fill. Species identity is protected by required
+  identity marker (horns + tail for Infernals, wings for Daeva, fangs
+  for vampires) that CG must fill. ("True Infernal" is a retired term and the
+  species row was deleted in #2880 — the mainline is plain `Infernal`.) Species identity is protected by required
   structural traits, never by rationing colors.
 - **Chimeric species** — a unique authored `Species` row (with its own codex
   entry) for a true halfbreed, possible only when both parents are Grand+

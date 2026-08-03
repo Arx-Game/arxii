@@ -20,12 +20,21 @@ from django.db.migrations.loader import MigrationLoader
 # this command keeps both behaviors: our phantom-Evennia-migration filtering
 # (write_migration_files, below) AND linear-migrations' max_migration.txt
 # sentinel update (#991). Both core_management and django_linear_migrations
-# register a `makemigrations` command; Django picks the one from the app listed
-# last in INSTALLED_APPS (core_management), so this subclass MUST be the one
-# that carries the sentinel logic — hence the reparent. linear-migrations
-# overrides handle() and spies on the migrations actually written, so our
-# filtering (which drops excluded apps before they're written) composes
-# correctly: only the first-party migrations we keep get a sentinel.
+# register a `makemigrations` command, and only one can win.
+#
+# Which one wins is decided ENTIRELY by INSTALLED_APPS order, and the rule is
+# the counter-intuitive direction: Django's get_commands() iterates
+# `reversed(apps.get_app_configs())` and dict.update()s as it goes, so the app
+# listed EARLIEST in INSTALLED_APPS is applied LAST and wins. This comment used
+# to assert the opposite ("the app listed last"), and the settings order matched
+# that mistaken reading — so from the day django_linear_migrations was added
+# until #2885, this command was never the one Django ran. The filter below was
+# dead code, and every migration generated in that window depended on a phantom
+# Evennia migration that exists only in the venv that produced it.
+#
+# linear-migrations overrides handle() and spies on the migrations actually
+# written, so our filtering (which drops excluded apps before they're written)
+# composes correctly: only the first-party migrations we keep get a sentinel.
 from django_linear_migrations.management.commands.makemigrations import (
     Command as BaseCommand,
 )

@@ -1,5 +1,8 @@
 """Tests for cleanup_completed_encounter — Layer 5 of the multi-layer identity guard."""
 
+from unittest import mock
+
+from django.test import TestCase
 from evennia import create_object
 from evennia.utils.test_resources import EvenniaTestCase
 
@@ -153,3 +156,70 @@ class CleanupCompletedEncounterTests(EvenniaTestCase):
 
         # Layer 5 guard saved the persistent ObjectDB
         self.assertTrue(ObjectDB.objects.filter(pk=sheet_od_pk).exists())
+
+
+class CleanupCompletedEncounterSustainedActionTests(TestCase):
+    """Fix 3 (#2705 adversarial review): an encounter that completes early
+    (kill the last enemy, GM abandons it, everyone flees) must break any
+    still-pending PC ``SustainedAction`` instead of orphaning it forever —
+    it would otherwise never mature, never narrate, and (RITUAL kind) its
+    already-consumed components would have bought nothing."""
+
+    @mock.patch("world.scenes.interaction_services._broadcast_to_location")
+    def test_cleanup_breaks_live_sustained_ritual(self, mock_broadcast) -> None:
+        from world.combat.constants import SustainedKind
+        from world.combat.factories import (
+            CombatEncounterFactory,
+            CombatParticipantFactory,
+            SustainedActionFactory,
+        )
+        from world.combat.models import SustainedAction
+        from world.combat.services import cleanup_completed_encounter
+        from world.magic.factories import RitualFactory
+
+        encounter = CombatEncounterFactory(round_number=3)
+        participant = CombatParticipantFactory(encounter=encounter)
+        ritual = RitualFactory()
+        sustained = SustainedActionFactory(
+            encounter=encounter,
+            participant=participant,
+            sustained_kind=SustainedKind.RITUAL,
+            technique=None,
+            ritual=ritual,
+            declared_action=None,
+            declared_round=3,
+            resolves_round=5,
+            absorption_budget=3,
+        )
+
+        cleanup_completed_encounter(encounter)
+
+        self.assertEqual(SustainedAction.objects.count(), 0)
+        self.assertFalse(SustainedAction.objects.filter(pk=sustained.pk).exists())
+        self.assertTrue(mock_broadcast.called)
+
+    @mock.patch("world.scenes.interaction_services._broadcast_to_location")
+    def test_cleanup_breaks_live_sustained_technique(self, mock_broadcast) -> None:
+        from world.combat.factories import (
+            CombatEncounterFactory,
+            CombatParticipantFactory,
+            SustainedActionFactory,
+        )
+        from world.combat.models import SustainedAction
+        from world.combat.services import cleanup_completed_encounter
+
+        encounter = CombatEncounterFactory(round_number=3)
+        participant = CombatParticipantFactory(encounter=encounter)
+        sustained = SustainedActionFactory(
+            encounter=encounter,
+            participant=participant,
+            declared_round=3,
+            resolves_round=5,
+            absorption_budget=3,
+        )
+
+        cleanup_completed_encounter(encounter)
+
+        self.assertEqual(SustainedAction.objects.count(), 0)
+        self.assertFalse(SustainedAction.objects.filter(pk=sustained.pk).exists())
+        self.assertTrue(mock_broadcast.called)

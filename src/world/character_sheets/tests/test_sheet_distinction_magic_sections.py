@@ -83,6 +83,42 @@ class SheetMagicSectionTests(TestCase):
         lines = SHEET_SECTIONS["magic"](_command_for(self.character))
         self.assertEqual(lines, ["Nothing is known of your magic."])
 
+    def test_lists_what_each_technique_does(self) -> None:
+        """#2898 — the section used to print name and level and nothing else, so a
+        player could read their own spellbook without learning what any of it did."""
+        from world.conditions.factories import ConditionTemplateFactory
+        from world.magic.factories import (
+            BinaryEffectTypeFactory,
+            CharacterTechniqueFactory,
+            TechniqueAppliedConditionFactory,
+            TechniqueFactory,
+        )
+        from world.magic.models.techniques import ConditionTargetKind
+
+        gift = GiftFactory(name="Emberweaving")
+        CharacterGiftFactory(character=self.sheet, gift=gift)
+        technique = TechniqueFactory(
+            name="Ward of Ash",
+            gift=gift,
+            effect_type=BinaryEffectTypeFactory(),
+            damage_profile=False,
+            anima_cost=5,
+        )
+        TechniqueAppliedConditionFactory(
+            technique=technique,
+            condition=ConditionTemplateFactory(name="Guarded"),
+            target_kind=ConditionTargetKind.ALLY,
+        )
+        CharacterTechniqueFactory(character=self.sheet, technique=technique)
+
+        lines = SHEET_SECTIONS["magic"](_command_for(self.character))
+        text = "\n".join(lines)
+
+        self.assertIn("Ward of Ash", text)
+        self.assertIn("Cast on an ally", text)
+        self.assertIn("Costs 5 anima.", text)
+        self.assertIn("Applies Guarded.", text)
+
     def test_lists_resonance_balances(self) -> None:
         """#2032 — claimed resonances render with balance + lifetime earned."""
         CharacterResonanceFactory(

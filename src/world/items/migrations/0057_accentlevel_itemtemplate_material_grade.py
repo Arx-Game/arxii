@@ -5,7 +5,7 @@ from django.db import migrations, models
 
 class Migration(migrations.Migration):
     dependencies = [
-        ("items", "0055_itemtemplate_weapon_class"),
+        ("items", "0056_weaponclass_alter_itemtemplate_weapon_class"),
     ]
 
     operations = [

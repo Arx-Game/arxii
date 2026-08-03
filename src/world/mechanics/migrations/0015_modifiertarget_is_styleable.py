@@ -5,7 +5,7 @@ from django.db import migrations, models
 
 class Migration(migrations.Migration):
     dependencies = [
-        ("mechanics", "0013_alter_characterchallengerecord_character_and_more"),
+        ("mechanics", "0014_challengeinstance_adjustment_reason_and_more"),
     ]
 
     operations = [

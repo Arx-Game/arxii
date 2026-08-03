@@ -101,6 +101,40 @@ The two budgets gating the shared interpose fire seam (`_dispatch_interpose_acti
 _Avoid_: reaction points, action economy (this is specifically the interpose-family reaction
 budget, not a general action-point system).
 
+**Sustained Action** (#2705, ADR-0190):
+The PC-side mirror of Wind-up: a `SustainedAction` row committing a PC to a multi-round
+technique wind-up (`Technique.windup_rounds > 0`) or a ritual conducted under fire
+(`RitualCheckConfig.sustained_rounds > 0`), declared in one round and maturing
+`resolves_round - declared_round` rounds later. Pre-armed, not a mid-round interrupt — the
+same declaration-time-commitment shape Wind-up mirrors from Interpose/ADR-0118, extended to
+the PC side rather than reopened (ADR-0161 still governs: Concentration is rolled ONCE, at
+declaration, never per landing hit). Sustaining occupies the participant's action — a new
+declaration is blocked while an earlier round's `SustainedAction` is still pending
+(`_validate_no_pending_sustained`), because `CombatRoundAction`'s
+`unique_action_per_participant_per_round` constraint means a same-round declaration would
+collide with maturation's clone. Unlike Wind-up there is no damage ramp: a held commitment
+resolves at full effect or fizzles entirely — see Absorption Budget, below. A PC's own
+sustained action erodes the same way an NPC's wind-up does — a landing hit adds a
+`downgrades` — see `world/covenants/AGENT_GLOSSARY.md`'s Interception (wind-up) entry, which
+covers both sides' shared downgrade vocabulary.
+_Avoid_: channeled action, casting time (a caster's own resolution delay, not an authored
+multi-round commitment), concentration (that's the CheckType rolled to set the budget, not
+the commitment itself).
+
+**Absorption Budget** (#2705, ADR-0190):
+`SustainedAction.absorption_budget` — how many landing hits a sustained action survives
+before it breaks with no refund. Written once at declaration from a single Concentration
+roll (`roll_sustained_absorption_budget`, via `perform_check_with_modifiers` so the 26
+authored `ConditionCheckModifier` rows on Concentration actually apply — plain
+`perform_check` would silently make them inert): `clamp(SUSTAINED_BASE_ABSORPTION (2) +
+CheckResult.success_level, SUSTAINED_MIN_ABSORPTION (0), SUSTAINED_MAX_ABSORPTION (4))`.
+Clamped because `CheckOutcome.success_level` is an authored -10..+10 field with no
+lore-authored ladder pinning it; Base 2 puts a clean Success at 3, exactly matching
+ADR-0161's `WINDUP_FIZZLE_DOWNGRADES` — a competent PC's commitment is as durable as an
+NPC's telegraphed wind-up. Never recomputed after declaration.
+_Avoid_: absorption cap (that's `ABSORPTION_CAP_PER_MOMENT`, the unrelated per-landing-hit
+Reaction Economy budget above), damage threshold, HP.
+
 **Clash**:
 The reserved combat primitive for a multi-round contest in which two sides pour magical energy into overpowering each other (the "beam-struggle" trope) — the clash of wills. Modelled by `Clash` with a flavor discriminator (CLASH / LOCK / WARD / BREAK). The word "clash" is reserved for this feature and must not name any other concept.
 _Avoid_: contest, struggle, beam struggle, push (colloquial in code for Clash's tug-of-war progress — see `clash.py` — but ambiguous with Strain and Knockback; prefer "clash"); backfire / rejection / dissonance for unrelated opposing-resonance effects

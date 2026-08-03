@@ -512,12 +512,16 @@ class SituationKind(NaturalKeyMixin, SharedMemoryModel):
         return self.name
 
 
-class CheckTypeSituationFit(SharedMemoryModel):
+class CheckTypeSituationFit(NaturalKeyMixin, SharedMemoryModel):
     """A ``checks.CheckType`` proven to fit a ``SituationKind`` (through model).
 
     The "translatable across contexts" record from Decision 1 -- the same check
     can be proven to fit more than one kind, and a kind lists every check proven
     to fit it, regardless of which app's per-type listing is browsing.
+
+    NK is (check_type, situation_kind) -- the pre-existing ``unique_together``
+    already enforces exactly that, so registering this row in ``CONTENT_MODELS``
+    (#2865) needed no new DB constraint.
     """
 
     check_type = models.ForeignKey(
@@ -536,17 +540,23 @@ class CheckTypeSituationFit(SharedMemoryModel):
         help_text="Why this check fits this kind of scene -- shown in browse results.",
     )
 
+    objects = NaturalKeyManager()
+
     class Meta:
         verbose_name = "Check Type Situation Fit"
         verbose_name_plural = "Check Type Situation Fits"
         unique_together = ["check_type", "situation_kind"]
         ordering = ["situation_kind__name", "check_type__name"]
 
+    class NaturalKeyConfig:
+        fields = ["check_type", "situation_kind"]
+        dependencies = ["checks.CheckType", "gm.SituationKind"]
+
     def __str__(self) -> str:
         return f"{self.check_type.name} fits {self.situation_kind.name}"
 
 
-class SituationDifficultyGuide(SharedMemoryModel):
+class SituationDifficultyGuide(NaturalKeyMixin, SharedMemoryModel):
     """Authored difficulty recommendation for a ``SituationKind`` at a given risk.
 
     Targets the live ``DifficultyChoice`` band surface a GM actually picks
@@ -564,11 +574,17 @@ class SituationDifficultyGuide(SharedMemoryModel):
     recommended_difficulty = models.CharField(max_length=20, choices=DifficultyChoice.choices)
     guidance_text = models.TextField(blank=True, default="")
 
+    objects = NaturalKeyManager()
+
     class Meta:
         verbose_name = "Situation Difficulty Guide"
         verbose_name_plural = "Situation Difficulty Guides"
         unique_together = ["situation_kind", "risk"]
         ordering = ["situation_kind__name", "risk"]
+
+    class NaturalKeyConfig:
+        fields = ["situation_kind", "risk"]
+        dependencies = ["gm.SituationKind"]
 
     def __str__(self) -> str:
         return (
@@ -577,7 +593,7 @@ class SituationDifficultyGuide(SharedMemoryModel):
         )
 
 
-class ConsequencePoolGuide(SharedMemoryModel):
+class ConsequencePoolGuide(NaturalKeyMixin, SharedMemoryModel):
     """Advisory text on which ``ConsequencePool`` fits a ``SituationKind`` (Decision 7).
 
     ADVISORY ONLY -- nothing anywhere reads this row to select, compose, or
@@ -607,11 +623,17 @@ class ConsequencePoolGuide(SharedMemoryModel):
         help_text="Whether this is the suggested default pool for this kind.",
     )
 
+    objects = NaturalKeyManager()
+
     class Meta:
         verbose_name = "Consequence Pool Guide"
         verbose_name_plural = "Consequence Pool Guides"
         unique_together = ["situation_kind", "pool"]
         ordering = ["situation_kind__name", "-is_default", "pool__name"]
+
+    class NaturalKeyConfig:
+        fields = ["situation_kind", "pool"]
+        dependencies = ["gm.SituationKind", "actions.ConsequencePool"]
 
     def __str__(self) -> str:
         return f"{self.situation_kind.name} -> {self.pool.name} (advisory)"

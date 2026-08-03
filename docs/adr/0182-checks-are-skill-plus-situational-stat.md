@@ -41,10 +41,12 @@ Social, investigation, resist, and multi-stat checks stay separate.
   targeting is covered by equipment-level and capability-level mechanisms.
 - The weapon→stat mapping is authored content, not engine logic — it can be
   refined from the coarse initial `GearArchetype` mapping to a finer weapon-class
-  mapping in a content follow-up. **Done (#2858):** `ItemTemplate.weapon_class`
-  (small/medium/heavy) now takes precedence over the archetype map, with blank
-  falling back to it, so the refinement rolls out per-template as content is
-  authored rather than as an engine change.
+  mapping in a content follow-up. **Done (#2858, superseded #2879 — see ADR-0189):**
+  `ItemTemplate.weapon_class` now FKs to a `WeaponClass` lookup table carrying a
+  weighted strength/agility blend (replacing #2858's small/medium/heavy override),
+  taking precedence over the archetype map, with null falling back to it, so the
+  refinement rolls out per-template as content is authored rather than as an
+  engine change.
 - The GM ad-hoc check model (ADR-0110) uses the default stat — the question of
   whether GMs should select from a stat palette or whether checks should emerge
   from authored situations is a separate follow-up.

@@ -2119,9 +2119,15 @@ class TestCharacterSheetQueryCount(TestCase):
                 select_related onto the catalog tag)
          33.   origin_slots prefetch (#2478 — origin-story slot answers for
                 the guided-flow "finish your origin story" affordance)
+        34-37. technique payload prefetches (#2898 — applied conditions, removed
+                conditions, damage profiles, capability grants, each landing on the
+                cached_property name the effect summary reads). Four fixed queries
+                for the whole spellbook, not four per technique: the alternative
+                was showing the player a technique list that says nothing about
+                what any of the techniques do.
         """
         url = f"/api/character-sheets/{self.character.pk}/"
-        with self.assertNumQueries(33):
+        with self.assertNumQueries(37):
             response = self.client.get(url)
         assert response.status_code == 200
         # Verify all sections are populated

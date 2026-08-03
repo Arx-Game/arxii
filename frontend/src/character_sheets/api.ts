@@ -11,6 +11,7 @@
  */
 
 import { apiFetch } from '@/evennia_replacements/api';
+import type { TechniqueEffectSummary } from '@/magic/types';
 
 /** Mirrors `world.character_sheets.types.TechniqueEntry`. */
 export interface CharacterSheetTechnique {
@@ -18,6 +19,8 @@ export interface CharacterSheetTechnique {
   level: number;
   style: string;
   description: string;
+  /** The shared effect block (#2898) — cost, reach, targeting, hostility, plain-words summary. */
+  effect_summary: TechniqueEffectSummary;
 }
 
 /** Mirrors `world.character_sheets.types.GiftEntry`. */

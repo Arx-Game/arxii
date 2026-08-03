@@ -148,6 +148,13 @@ CONTENT_MODELS: frozenset[str] = frozenset(
         "flows.flowdefinition",
         "flows.flowstepdefinition",
         "flows.triggerdefinition",
+        # gm — the scenario catalog a GM browses when adapting authored content
+        # (#2127/#2865). Registered so a fresh install can ship a usable JUNIOR-GM
+        # catalog from the lore repo instead of per-server database state.
+        "gm.situationkind",
+        "gm.checktypesituationfit",
+        "gm.situationdifficultyguide",
+        "gm.consequencepoolguide",
         # items
         "items.itemtemplateproperty",
         # magic
@@ -189,6 +196,9 @@ CONTENT_MODELS: frozenset[str] = frozenset(
         "mechanics.prerequisite",
         "mechanics.property",
         "mechanics.propertycategory",
+        "mechanics.situationtemplate",
+        "mechanics.situationchallengelink",
+        "mechanics.situationtraplink",
         # missions
         "missions.missioncategory",
         "missions.missiontemplate",
@@ -262,16 +272,33 @@ EXPORT_FILTERS: dict[str, dict[str, object]] = {
 }
 
 
-def _write_markdown_entries(root: Path, spec: dict, serialized: str) -> list[Path]:
+def _write_markdown_entries(
+    root: Path, spec: dict, serialized: str, *, allow_additions: bool = False
+) -> tuple[list[Path], list[str]]:
     """Write one markdown file per record for a prose domain (#2688).
 
     Existing files are overwritten; files with no corresponding row are left
     alone rather than deleted. Deleting is how an export destroys authored
     content when the database is a subset of the repo (see the content repo's
     own README), so removing an entry stays a deliberate manual act.
+
+    The addition gate (#2890) applies here too, and a prose domain expresses it
+    without a natural-key diff: an entry's file either exists or it does not.
+
+    **The gate keys on the domain, not the entry.** If the domain directory holds
+    no entries yet, this is a first export and every entry is written — the same
+    rule the JSON path applies to a model with no fixture file. Deciding per entry
+    instead would withhold the entire corpus on a virgin checkout, since on a
+    fresh root no entry file exists by definition.
+
+    Returns ``(written, withheld_names)``.
     """
     domain_dir = root / spec["domain"]
+    domain_has_entries = domain_dir.exists() and any(domain_dir.rglob("*.md"))
+    gate_on = not allow_additions and domain_has_entries
+
     written: list[Path] = []
+    withheld: list[str] = []
     for record in json.loads(serialized):
         fields = record["fields"]
         out_dir = domain_dir
@@ -280,11 +307,14 @@ def _write_markdown_entries(root: Path, spec: dict, serialized: str) -> list[Pat
             value = fields.get(subdir_key)
             if isinstance(value, list) and value:
                 out_dir = domain_dir / content_slug(str(value[-1]))
-        out_dir.mkdir(parents=True, exist_ok=True)
         out_path = out_dir / f"{content_slug(fields['name'])}.md"
+        if gate_on and not out_path.exists():
+            withheld.append(str(fields.get("name", out_path.stem)))
+            continue
+        out_dir.mkdir(parents=True, exist_ok=True)
         out_path.write_text(render_entry_markdown(fields, spec), encoding="utf-8")
         written.append(out_path)
-    return written
+    return written, withheld
 
 
 @dataclass
@@ -295,14 +325,101 @@ class ExportResult:
     skipped: list[str] = field(default_factory=list)  # model labels with 0 rows
     errors: list[str] = field(default_factory=list)
     total_records: int = 0
+    #: model label -> natural keys the export declined to add (#2890). Populated
+    #: only when ``allow_additions`` is False, which is the default.
+    withheld: dict[str, list[str]] = field(default_factory=dict)
+    #: model label -> natural keys the export added to the corpus (#2890).
+    #: Populated only when ``allow_additions`` is True.
+    added: dict[str, list[str]] = field(default_factory=dict)
+
+    @property
+    def withheld_count(self) -> int:
+        """Total rows the export declined to add across all models."""
+        return sum(len(keys) for keys in self.withheld.values())
+
+    @property
+    def added_count(self) -> int:
+        """Total rows the export added across all models."""
+        return sum(len(keys) for keys in self.added.values())
 
 
-def export_to_content_repo(content_root: Path | None = None) -> ExportResult:
+def _natural_key_fields(model: type) -> list[str] | None:
+    """Return the field names forming ``model``'s natural key, or None.
+
+    None means the model has no ``NaturalKeyConfig`` and its rows cannot be
+    identified across an export boundary — the addition gate has to let that
+    model through untouched rather than guess.
+    """
+    from core.natural_keys import NaturalKeyMixin  # noqa: PLC0415
+
+    if not issubclass(model, NaturalKeyMixin):
+        return None
+    return model.identity_fields()
+
+
+def _record_key(record_fields: dict, key_fields: list[str]) -> str:
+    """Return a stable string identity for one serialized record.
+
+    Compares *serialized* field values rather than model-level
+    ``natural_key()`` tuples, so both sides of the diff are produced by the same
+    serializer settings and cannot disagree about how an FK is represented.
+    """
+    return json.dumps([record_fields.get(f) for f in key_fields], sort_keys=True)
+
+
+def _existing_record_keys(out_path: Path, key_fields: list[str]) -> set[str] | None:
+    """Return the natural keys already in the corpus file, or None if absent.
+
+    None distinguishes "this model has no fixture file yet" (a genuinely new
+    model, where every row is a first export and blocking would make the model
+    impossible to seed) from "the file exists and is empty".
+    """
+    if not out_path.exists():
+        return None
+    try:
+        records = json.loads(out_path.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return None
+    if not isinstance(records, list):
+        return None
+    return {
+        _record_key(r["fields"], key_fields)
+        for r in records
+        if isinstance(r, dict) and isinstance(r.get("fields"), dict)
+    }
+
+
+def export_to_content_repo(
+    content_root: Path | None = None, *, allow_additions: bool = False
+) -> ExportResult:
     """Serialize content models and write fixture JSON to the lore repo.
 
     Writes one file per model to ``<content_root>/fixtures/<app_label>/<model_name>.json``.
     Models with zero rows are skipped (the file is not written). Existing files
     are overwritten.
+
+    **The addition gate (#2890, default ON).** A row whose natural key is not
+    already in the corpus file is an *addition*, and by default an addition is
+    withheld: written nowhere, and reported in ``result.withheld``. Rows the
+    corpus already knows are exported as before, so edits still round-trip.
+
+    This exists because a database seeded with ``SEED_SAMPLE_CONTENT`` holds
+    sample rows that ``authored_or_sample`` created on purpose, and nothing
+    downstream distinguished them from authored ones — so an export laundered
+    invented names into the corpus as lore. That happened: twelve resonances
+    shipped, none authored, one of them (Praedari) carrying a canonically wrong
+    affinity, while 22 real ones were missing entirely.
+
+    The gate is deliberately not sample-specific. Anything a test, a stray
+    script, or a half-finished import left in a content table is caught by the
+    same rule, and no per-model column or provenance table is needed to do it.
+
+    ``allow_additions=True`` is the authoring path: a staff member who wrote new
+    rows in admin passes it to push them, and gets them listed in
+    ``result.added``. Two cases bypass the gate because blocking them would be
+    wrong rather than safe: a model whose fixture file does not exist yet (a
+    genuinely new model — every row is a first export), and a model with no
+    usable ``NaturalKeyConfig`` (its rows have no identity to diff on).
 
     Requires Django to be configured.
     """
@@ -319,7 +436,6 @@ def export_to_content_repo(content_root: Path | None = None) -> ExportResult:
         raise ContentExportError(msg)
 
     result = ExportResult()
-    fixtures_dir = root / "fixtures"
 
     for model_label in sorted(CONTENT_MODELS):
         app_label, model_name = model_label.split(".")
@@ -350,19 +466,94 @@ def export_to_content_repo(content_root: Path | None = None) -> ExportResult:
             result.errors.append(f"{model_label}: serialization failed: {exc}")
             continue
 
-        spec = MARKDOWN_EXPORT_DOMAINS.get(model_label)
-        if spec is not None:
-            # Prose domain (#2688): write per-entry markdown and emit NO JSON,
-            # so the generated file cannot compete with the markdown source.
-            result.written.extend(_write_markdown_entries(root, spec, data))
-            result.total_records += count
-            continue
-
-        out_dir = fixtures_dir / app_label
-        out_dir.mkdir(parents=True, exist_ok=True)
-        out_path = out_dir / f"{model_name}.json"
-        out_path.write_text(data + "\n", encoding="utf-8")
-        result.written.append(out_path)
-        result.total_records += count
+        _write_one_model(model, data, root, result, allow_additions=allow_additions)
 
     return result
+
+
+def _write_one_model(
+    model: type,
+    data: str,
+    root: Path,
+    result: ExportResult,
+    *,
+    allow_additions: bool,
+) -> None:
+    """Write one model's serialized rows, applying the addition gate (#2890).
+
+    Extracted from ``export_to_content_repo`` to keep that function under the
+    complexity ceiling; mutates ``result`` in place, as the inlined body did.
+    """
+    model_label = model._meta.label_lower  # noqa: SLF001 — Django's public-ish Meta API
+    app_label, model_name = model_label.split(".")
+    count = len(json.loads(data))
+
+    spec = MARKDOWN_EXPORT_DOMAINS.get(model_label)
+    if spec is not None:
+        # Prose domain (#2688): write per-entry markdown and emit NO JSON,
+        # so the generated file cannot compete with the markdown source.
+        written, withheld = _write_markdown_entries(
+            root, spec, data, allow_additions=allow_additions
+        )
+        result.written.extend(written)
+        if withheld:
+            result.withheld[model_label] = withheld
+        result.total_records += count - len(withheld)
+        return
+
+    out_dir = root / "fixtures" / app_label
+    out_path = out_dir / f"{model_name}.json"
+
+    records, withheld, added = _apply_addition_gate(
+        json.loads(data), model, out_path, allow_additions=allow_additions
+    )
+    if withheld:
+        result.withheld[model_label] = withheld
+    if added:
+        result.added[model_label] = added
+    if not records:
+        # Every row was withheld. Writing "[]" here would empty the corpus file
+        # outright — the opposite of what a gate meant to protect authored
+        # content should do. Creating an empty file is no better.
+        return
+
+    out_dir.mkdir(parents=True, exist_ok=True)
+    out_path.write_text(json.dumps(records, indent=2) + "\n", encoding="utf-8")
+    result.written.append(out_path)
+    result.total_records += len(records)
+
+
+def _apply_addition_gate(
+    records: list[dict],
+    model: type,
+    out_path: Path,
+    *,
+    allow_additions: bool,
+) -> tuple[list[dict], list[str], list[str]]:
+    """Split serialized records into (kept, withheld_keys, added_keys) (#2890).
+
+    Returns every record unchanged when the model has no usable natural key or
+    has no fixture file yet — see ``export_to_content_repo``'s docstring for why
+    those two cases bypass the gate rather than being blocked by it.
+    """
+    key_fields = _natural_key_fields(model)
+    if key_fields is None:
+        return records, [], []
+
+    existing = _existing_record_keys(out_path, key_fields)
+    if existing is None:
+        return records, [], []
+
+    kept: list[dict] = []
+    new_keys: list[str] = []
+    for record in records:
+        key = _record_key(record.get("fields", {}), key_fields)
+        if key in existing:
+            kept.append(record)
+        else:
+            new_keys.append(key)
+            if allow_additions:
+                kept.append(record)
+    if allow_additions:
+        return kept, [], new_keys
+    return kept, new_keys, []

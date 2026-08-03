@@ -2,7 +2,7 @@
 
 ## Built (2026-08-01, #2878 — crafting expressiveness)
 
-The Accents/quality/prestige arc (spec on #2878; ADR-0188):
+The Accents/quality/prestige arc (spec on #2878; ADR-0192):
 
 - **12-rung QualityTier ladder** (Poor→Legendary; PLACEHOLDER names pending
   Apostate's rename pass) + the separate 7-rung benefit-only **AccentLevel**
@@ -10,7 +10,7 @@ The Accents/quality/prestige arc (spec on #2878; ADR-0188):
   + one per Thread woven into the crafting skill — divine+ is Gifted-only.
 - **Material grade** (`ItemTemplate.material_grade`) feeds the quality score
   (`skill-capped roll + grade`) — materials are potential, never performance
-  (ADR-0188, rejecting Arx 1's material→stat ladder and per-tier difficulty).
+  (ADR-0192, rejecting Arx 1's material→stat ladder and per-tier difficulty).
 - **Accents** (`ItemAccent`): crafter-chosen per-instance style axes (allure,
   menace, …) — each raises craft difficulty and rolls its own thread-capped
   check; read by `crafted_modifier_value`, the equipment walk, and fashion

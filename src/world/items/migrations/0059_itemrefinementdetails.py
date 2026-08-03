@@ -6,8 +6,8 @@ import django.db.models.deletion
 
 class Migration(migrations.Migration):
     dependencies = [
-        ("items", "0057_crafteditemrecipe_crafter_persona_and_more"),
-        ("mechanics", "0015_modifiertarget_styleable_adjective"),
+        ("items", "0058_crafteditemrecipe_crafter_persona_and_more"),
+        ("mechanics", "0016_modifiertarget_styleable_adjective"),
         ("projects", "0024_alter_contributionmethod_kind_alter_project_kind_and_more"),
     ]
 

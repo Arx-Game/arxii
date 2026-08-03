@@ -211,11 +211,42 @@ Tunable via playtest.
 
 
 class VitalBonusTarget(models.TextChoices):
+    """What a ``VITAL_BONUS`` ``ThreadPullEffect`` row raises (#1175, #2736).
+
+    The first five are *character* vitals, read by ``CharacterThreadHandler
+    .passive_vital_bonuses`` and by ``survivability_baseline``'s per-target
+    ``ThreadSurvivabilityTuning`` row.
+
+    ``SHIP_*`` are the odd ones out: they name the three stats of a **vessel**, not
+    of a person, and are read only by ``world/ships/sanctum_bonus.py``'s
+    ``ship_sanctum_bonus`` off ``TargetKind.SANCTUM`` rows (#2736). They live on this
+    enum rather than a parallel one because a ship's sanctum grant is authored on the
+    same ``ThreadPullEffect`` row as its capability grant — one mapping table, one
+    content pass. The character-side reader skips them explicitly; see
+    ``SHIP_VITAL_BONUS_TARGETS`` below.
+    """
+
     MAX_HEALTH = "MAX_HEALTH", "Max Health"
     DAMAGE_TAKEN_REDUCTION = "DAMAGE_TAKEN_REDUCTION", "Damage Taken Reduction"
     DEATH_SAVE = "DEATH_SAVE", "Death Save"
     KNOCKOUT_RESIST = "KNOCKOUT_RESIST", "Knockout Resist"
     PERMANENT_WOUND_RESIST = "PERMANENT_WOUND_RESIST", "Permanent Wound Resist"
+    SHIP_HULL = "SHIP_HULL", "Ship Hull"
+    SHIP_HANDLING = "SHIP_HANDLING", "Ship Handling"
+    SHIP_ARMAMENT = "SHIP_ARMAMENT", "Ship Armament"
+
+
+#: The ``VitalBonusTarget`` members that describe a vessel rather than a person (#2736).
+#: A character-side vital reader must skip these — a character who wove a Sanctum thread
+#: onto a ship owns that thread personally, so without the skip a ship-stat row would be
+#: read as a personal bonus.
+SHIP_VITAL_BONUS_TARGETS: frozenset[str] = frozenset(
+    {
+        VitalBonusTarget.SHIP_HULL,
+        VitalBonusTarget.SHIP_HANDLING,
+        VitalBonusTarget.SHIP_ARMAMENT,
+    }
+)
 
 
 class RitualExecutionKind(models.TextChoices):

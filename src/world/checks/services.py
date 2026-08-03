@@ -18,6 +18,7 @@ from world.classes.models import PathAspect
 from world.fatigue.constants import EFFORT_CHECK_MODIFIER
 from world.progression.models import CharacterPathHistory
 from world.progression.services.skill_development import get_character_path_level
+from world.traits.constants import PrimaryStat
 from world.traits.models import (
     CheckOutcome,
     CheckRank,
@@ -54,7 +55,7 @@ def perform_check(  # noqa: PLR0913 - optional effort/fatigue params extend exis
     *,
     situation_ctx: "SituationContext | None" = None,
     level_override: int | None = None,
-    stat_override: str | None = None,
+    stat_override: str | int | None = None,
 ) -> CheckResult:
     """
     Main check resolution function.
@@ -96,6 +97,12 @@ def perform_check(  # noqa: PLR0913 - optional effort/fatigue params extend exis
             path), raising the outcome to the effective floor when it landed
             below one and announcing only when a guarantee actually altered
             the outcome — see ``_apply_outcome_guarantees``.
+        stat_override: (#2757; ``int`` form #2879) substitutes for the check's STAT
+            trait when the check has at most one STAT-type trait. A ``str`` names a
+            single trait to substitute directly. An ``int`` (0-10) instead blends
+            strength/agility by that weight in tenths — 10 = pure strength, 0 = pure
+            agility — via ``(strength * w + agility * (10 - w)) / 10``. ``None``
+            (the default) is byte-identical to pre-#2757 behavior.
     """
     # Test-rig seam (NOT a production code path).
     from world.checks.test_helpers import _consume_forced_outcome, _record_capture  # noqa: PLC0415
@@ -154,7 +161,7 @@ def perform_check_with_modifiers(  # noqa: PLR0913 - mirrors perform_check signa
     scene: "Scene | None" = None,
     extra_contributions: "list[ModifierContribution] | None" = None,
     skip_fashion: bool = False,
-    stat_override: str | None = None,
+    stat_override: str | int | None = None,
 ) -> CheckResult:
     """Run a check with all character modifiers gathered automatically.
 
@@ -238,7 +245,7 @@ def _build_forced_check_result(  # noqa: PLR0913 - mirrors perform_check signatu
     specialization: "Specialization | None" = None,
     situation_ctx: "SituationContext | None" = None,
     level_override: int | None = None,
-    stat_override: str | None = None,
+    stat_override: str | int | None = None,
 ) -> CheckResult:
     """Build a synthetic CheckResult for the test-rig forced-outcome path.
 
@@ -293,7 +300,7 @@ def _compute_check_breakdown(  # noqa: PLR0913 - keyword-only check params mirro
     specialization: "Specialization | None",
     situation_ctx: "SituationContext | None" = None,
     level_override: int | None = None,
-    stat_override: str | None = None,
+    stat_override: str | int | None = None,
 ) -> _CheckBreakdown:
     """Compute stat + skill + specialization + aspect + level points, ranks, and chart
 
@@ -656,7 +663,7 @@ def compute_check_rating(
     extra_modifiers: int = 0,
     *,
     level_override: int | None = None,
-    stat_override: str | None = None,
+    stat_override: str | int | None = None,
 ) -> int:
     """Return *character*'s pre-roll rating (total points) for *check_type* — no dice roll.
 
@@ -753,7 +760,7 @@ def _calculate_trait_points(
     handler: "TraitHandler",
     check_type: "CheckType",
     *,
-    stat_override: str | None = None,
+    stat_override: str | int | None = None,
 ) -> int:
     """Calculate weighted trait points for a check type.
 
@@ -767,7 +774,9 @@ def _calculate_trait_points(
     SKILL-type traits always contribute. ``None`` (the default) is
     byte-identical to the pre-#2757 behavior. A check with 2+ STAT-type
     traits logs a warning and ignores the override (the substitution would
-    lose a stat).
+    lose a stat). An ``int`` (0-10, #2879) blends strength/agility at that
+    strength weight instead of naming a single trait — see
+    :func:`_calculate_trait_points_with_override`.
     """
     check_type_traits = check_type.traits.select_related("trait").all()  # type: ignore[attr-defined] — reverse FK manager from CheckTypeTrait
 
@@ -795,14 +804,16 @@ def _calculate_trait_points_with_override(  # noqa: C901
     handler: "TraitHandler",
     check_type: "CheckType",
     check_type_traits,
-    stat_override: str,
+    stat_override: str | int,
 ) -> int | None:
     """Compute trait points when a stat_override is active (#2757).
 
     Returns the substituted total, or ``None`` when the override should be
     ignored (the check has 2+ STAT-type traits — the substitution would lose
     a stat). In the latter case a warning is logged and the caller falls
-    through to the default path.
+    through to the default path. An ``int`` (0-10, #2879) blends
+    ``"strength"``/``"agility"`` at that strength weight instead of naming a
+    single trait via the ``str`` path.
     """
     # Count STAT traits and borrow the first STAT weight for the override.
     stat_weight: Decimal = Decimal("1.0")
@@ -827,7 +838,16 @@ def _calculate_trait_points_with_override(  # noqa: C901
     total = 0
     # Substitute the override stat (borrowed weight if a STAT trait existed,
     # or weight 1.0 if the check had no STAT traits).
-    override_value = handler.get_trait_value(stat_override)
+    if isinstance(stat_override, int):
+        # #2879: weighted strength/agility blend. strength_tenths is the
+        # weight (0-10); agility's share is 10 minus it.
+        strength_value = handler.get_trait_value(PrimaryStat.STRENGTH.value)
+        agility_value = handler.get_trait_value(PrimaryStat.AGILITY.value)
+        override_value = (
+            strength_value * stat_override + agility_value * (10 - stat_override)
+        ) / Decimal(10)
+    else:
+        override_value = handler.get_trait_value(stat_override)
     if override_value > 0:
         weighted_value = int(override_value * stat_weight)
         if weighted_value > 0:
@@ -1055,7 +1075,7 @@ def compute_resist_increment(
     resist_effort_level: str,
     *,
     level_override: int | None = None,
-    stat_override: str | None = None,
+    stat_override: str | int | None = None,
 ) -> int:
     """Compute how much a defender's active resistance raises difficulty.
 
@@ -1131,7 +1151,7 @@ def preview_check_difficulty(
     target_difficulty: int = 0,
     extra_modifiers: int = 0,
     *,
-    stat_override: str | None = None,
+    stat_override: str | int | None = None,
 ) -> int:
     """
     Preview the rank difference for a check without rolling.

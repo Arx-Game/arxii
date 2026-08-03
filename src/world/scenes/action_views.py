@@ -764,7 +764,7 @@ class SceneActionRequestViewSet(PuppetActorMixin, viewsets.ModelViewSet):
         Requires ?initiator_persona=<id> query param. Returns only techniques
         with an action_template (castable standalone) known by that character.
         """
-        from world.magic.models.techniques import CharacterTechnique  # noqa: PLC0415
+        from world.scenes.cast_services import castable_techniques_for_sheet  # noqa: PLC0415
 
         initiator_persona_id_str = request.query_params.get("initiator_persona")  # noqa: USE_FILTERSET
         if not initiator_persona_id_str:
@@ -789,18 +789,7 @@ class SceneActionRequestViewSet(PuppetActorMixin, viewsets.ModelViewSet):
             )
 
         initiator_persona = get_object_or_404(Persona, pk=initiator_persona_id)
-        sheet_id = initiator_persona.character_sheet_id
-
-        char_techniques = (
-            CharacterTechnique.objects.filter(
-                character_id=sheet_id,
-                technique__action_template__isnull=False,
-            )
-            .select_related("technique", "technique__action_template", "technique__effect_type")
-            .order_by("technique__name")
-        )
-
-        techniques = [ct.technique for ct in char_techniques]
+        techniques = castable_techniques_for_sheet(initiator_persona.character_sheet_id)
         return Response(CastableTechniqueSerializer(techniques, many=True).data)
 
     @extend_schema(
