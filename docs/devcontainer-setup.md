@@ -213,6 +213,12 @@ plugin is deliberately **not** enabled: its `Ctrl-R` binding would shadow atuin'
 zsh and oh-my-zsh itself come from the base devcontainer image; only the three custom
 plugins are pinned here.
 
+**Reaching a worktree** is a two-move habit. `z 2462` matches the issue number
+anywhere in the path and is what you want most of the time — but `z` only knows
+directories the shell has already visited, and worktrees are usually created by an
+agent or another session. For that first visit use `cd ~wt/<TAB>`, which opens the
+fzf-tab picker over every worktree; `z` learns it from there.
+
 Directory jumping is the `z` plugin rather than a separate zoxide binary. omz ships
 [agkozak/zsh-z](https://github.com/agkozak/zsh-z), a native-zsh implementation with no
 `awk`/`sed` subprocesses — a wash with zoxide on speed, one less pinned dependency,
@@ -228,8 +234,9 @@ navigation, and atuin records cwd for finding your way back.
 | `Ctrl-R` | atuin: fuzzy search over full history, with exit code, duration and cwd |
 | `Ctrl-T` | fzf: pick a file, insert its path at the cursor |
 | `Alt-C` | fzf: pick a subdirectory and `cd` into it |
-| `z <fragment>` | jump to a previously visited directory, e.g. `z shell-tooling` (zsh only) |
+| `z <fragment>` | jump to a previously visited directory, e.g. `z 2462` (zsh only) |
 | `z <fragment>`+`Tab` | same, but pick from an fzf list when several match |
+| `~wt` / `~arxii` | named directories for the worktree root and the workspace (zsh only) |
 
 Up-arrow is deliberately left as the shell's own history — atuin's full-screen TUI is
 wanted on `Ctrl-R`, not on every "previous command". Change that by dropping
