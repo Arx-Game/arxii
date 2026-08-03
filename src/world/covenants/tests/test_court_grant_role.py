@@ -43,7 +43,7 @@ class EnsureCourtGrantRoleTests(TestCase):
         cleanly instead of permanently failing.
         """
         covenant = CovenantFactory(covenant_type=CovenantType.COURT)
-        expected_name = f"{covenant.name} — Court Master's Grant"
+        expected_name = f"{covenant.name} - Court Master's Grant"
 
         with (
             mock.patch(

@@ -61,6 +61,26 @@ repos:
         language: system
         pass_filenames: true
         types: [python]
+      - id: identifier-dashes
+        name: Reject em-dashes in names, keys and slugs (lookup bug)
+        entry: uv run python tools/lint_identifier_dashes.py
+        language: system
+        pass_filenames: true
+        types_or: [python, json]
+        # Ruled 2026-08-03 (Tehom): "we should NOT have em dashes in natural
+        # keys/names ever ... a search by keyboard wouldn't match them because
+        # people are entering a hyphen and it's an em-dash."
+        #
+        # NOT the prose/AI-voice rule; that one lives in the deslop skill and is
+        # softer. This is correctness: a name IS a lookup key here (the dominant
+        # pattern is an exact `Model.objects.get(name=...)`), so a name carrying
+        # a character no keyboard produces is a row nobody can find, and
+        # `get_or_create` on the hyphenated spelling silently makes a DUPLICATE.
+        #
+        # Repo-wide from day one rather than rolled out app-by-app like
+        # objectdb-param: the whole codebase already passes, so there is no debt
+        # to phase in, and the failure mode is silent in both directions.
+        # Suppress a genuine external key with `# noqa: IDENT_DASH` plus a reason.
       - id: objectdb-param
         name: Reject ObjectDB-typed args and model FKs
         entry: uv run python tools/lint_objectdb_param.py

@@ -40,13 +40,13 @@ Cascade math for the High celestial room (magnitude=80):
   backfire_difficulty = 30 + round(80 * 0.500) = 70
 
 ALIGNED room (Abyssal/Dissolution, magnitude=60):
-  60 >= HIGH band threshold (min_magnitude=40) → "Abyssal Resonance — Deep Attunement"
+  60 >= HIGH band threshold (min_magnitude=40) → "Abyssal Resonance - Deep Attunement"
 
 Test data dependencies (seeded by seed_starter_magic_story):
 - ConditionTemplate "Singed", "Burning", "Tempered Against Light",
   "Hallowed Burn", "Cast Disrupted"
-- ConditionTemplate "Abyssal Resonance — Minor Attunement" (min_magnitude=1)
-- ConditionTemplate "Abyssal Resonance — Deep Attunement" (min_magnitude=40)
+- ConditionTemplate "Abyssal Resonance - Minor Attunement" (min_magnitude=1)
+- ConditionTemplate "Abyssal Resonance - Deep Attunement" (min_magnitude=40)
 - ResonanceAlignmentBoonTier rows on pair #5 (Abyssal→Abyssal)
 - Room "The Hallowed Threshold (Low)"   — Celestial cascade magnitude 10
 - Room "The Hallowed Threshold (High)"  — Celestial cascade magnitude 80
@@ -126,10 +126,10 @@ class MagicStoryPipelineTests(ResonanceCacheIsolationMixin, EvenniaTestCase):
 
         # ALIGNED boon templates seeded by T13
         cls.minor_attunement_template = ConditionTemplate.objects.get(
-            name="Abyssal Resonance — Minor Attunement"
+            name="Abyssal Resonance - Minor Attunement"
         )
         cls.deep_attunement_template = ConditionTemplate.objects.get(
-            name="Abyssal Resonance — Deep Attunement"
+            name="Abyssal Resonance - Deep Attunement"
         )
 
         # Store PKs for Evennia ObjectDB rooms — re-fetched in setUp to avoid DbHolder deepcopy.
@@ -551,13 +551,13 @@ class MagicStoryPipelineTests(ResonanceCacheIsolationMixin, EvenniaTestCase):
         """Abyssal caster moves into Abyssal Sanctum (ALIGNED/AMPLIFY) → boon applied.
 
         Uses the REAL movement hook (at_post_move) rather than a direct service call.
-        magnitude=60 ≥ HIGH band threshold (min_magnitude=40) → "Abyssal Resonance —
+        magnitude=60 ≥ HIGH band threshold (min_magnitude=40) → "Abyssal Resonance -
         Deep Attunement" is selected. No perform_check is ever issued (ALIGNED path does
         not trigger backfire). StoryProgress remains at "Stepping Into Light" — ALIGNED
         does not satisfy any hallowed-threshold beat.
 
         Assertions:
-          - "Abyssal Resonance — Deep Attunement" ConditionInstance on caster.
+          - "Abyssal Resonance - Deep Attunement" ConditionInstance on caster.
           - Exactly one boon ConditionInstance (no stacking).
           - No OPPOSED reaction conditions applied.
           - StoryProgress still at "Stepping Into Light".
@@ -577,7 +577,7 @@ class MagicStoryPipelineTests(ResonanceCacheIsolationMixin, EvenniaTestCase):
             "ALIGNED path must not call perform_check; force_check_outcome should be unused",
         )
 
-        # "Abyssal Resonance — Deep Attunement" (band = HIGH, min_magnitude=40,
+        # "Abyssal Resonance - Deep Attunement" (band = HIGH, min_magnitude=40,
         # seeded Abyssal Sanctum magnitude=60 ≥ 40) must be applied.
         boon_instances = self._boon_instances_on_caster()
         self.assertEqual(
@@ -588,7 +588,7 @@ class MagicStoryPipelineTests(ResonanceCacheIsolationMixin, EvenniaTestCase):
         self.assertEqual(
             boon_instances[0].condition_id,
             self.deep_attunement_template.pk,
-            "Expected 'Abyssal Resonance — Deep Attunement' (HIGH band, magnitude 60 ≥ 40)",
+            "Expected 'Abyssal Resonance - Deep Attunement' (HIGH band, magnitude 60 ≥ 40)",
         )
 
         # No OPPOSED reaction conditions should have been applied.

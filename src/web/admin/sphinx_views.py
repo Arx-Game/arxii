@@ -30,7 +30,7 @@ def sphinx_audit(request: HttpRequest) -> HttpResponse:
     from world.covenants.sphinx import audit_vow_coverage  # noqa: PLC0415
 
     context = {
-        "title": "Sphinx of Black Quartz — Coverage Audit",
+        "title": "Sphinx of Black Quartz - Coverage Audit",
         "rows": audit_vow_coverage(),
     }
     return render(request, "admin/sphinx_audit.html", context)

@@ -263,6 +263,16 @@ Database design:
 Code quality (always-on; full list in `django_notes.md`):
 
 - **No relative imports** — absolute only (`from world.roster.models import Roster`).
+- **Never an em/en-dash in a name, key, slug or natural key.** Ruled 2026-08-03: a name
+  *is* a lookup key here (the dominant pattern is an exact
+  `Model.objects.get(name=...)`), and an em-dash is not on anyone's keyboard — so the row
+  becomes unfindable by player search, staff admin and hand-authored fixture references
+  alike, and `get_or_create` on the hyphenated spelling silently creates a **duplicate**.
+  Use a hyphen. Enforced repo-wide by `tools/lint_identifier_dashes.py`
+  (`identifier-dashes` hook) over both Python identifier strings and fixture identity
+  fields; `# noqa: IDENT_DASH` suppresses, and must say why. This is a *correctness* rule
+  and is distinct from the softer prose/AI-voice em-dash rule, which lives in the deslop
+  skill and covers `description`-style fields only.
 - **Never edit dependency code.** `site-packages` (Evennia included) is read-only; every
   linter, quality sweep, or fix pass must exclude Django apps we don't own — flag an
   upstream problem, never "fix" it in the vendored copy. Worktree venvs hardlink from

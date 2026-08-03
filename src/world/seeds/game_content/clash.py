@@ -187,7 +187,7 @@ class ClashContent:
 
         # Boss-held window condition — applied by LOCK resolution's PC_DECISIVE consequence.
         boss_held_condition, _ = ConditionTemplate.objects.get_or_create(
-            name="Boss Held — Suppress Window (Clash Test)",
+            name="Boss Held - Suppress Window (Clash Test)",
             defaults={
                 "category": cond_category,
                 "description": (
@@ -245,7 +245,7 @@ class ClashContent:
         # Consequence with a stable (outcome_tier, label) natural key.
         lock_decisive_consequence, _ = Consequence.objects.get_or_create(
             outcome_tier=decisive_outcome,
-            label="Lock Resolution: PC Decisive — Apply Boss Held (Clash Test)",
+            label="Lock Resolution: PC Decisive - Apply Boss Held (Clash Test)",
             defaults={
                 "mechanical_description": (
                     "Decisive lock win: boss is held, opening a combo window."
@@ -280,7 +280,7 @@ class ClashContent:
         marginal_outcome = check_outcomes[2]  # success_level=2 → PC_MARGINAL
         lock_marginal_consequence, _ = Consequence.objects.get_or_create(
             outcome_tier=marginal_outcome,
-            label="Lock Resolution: PC Marginal — Apply Boss Held (Clash Test)",
+            label="Lock Resolution: PC Marginal - Apply Boss Held (Clash Test)",
             defaults={
                 "mechanical_description": (
                     "Marginal lock win: boss is partially held, opening a combo window."
