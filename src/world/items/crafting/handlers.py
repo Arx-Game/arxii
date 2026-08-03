@@ -225,6 +225,9 @@ class ItemCreateHandler(CraftingHandler):
             quality_tier=quality_tier,
             custom_name=custom_name,
             custom_description=custom_description,
+            # Crafter-picked form (#2907), pre-validated to the template's wear
+            # family in run_crafting_recipe. None = template's authored default.
+            silhouette=overrides.get("silhouette"),
             holder_character_sheet=crafter_sheet,
             crafter_character_sheet=crafter_sheet,
             crafter_persona_display=active_persona,

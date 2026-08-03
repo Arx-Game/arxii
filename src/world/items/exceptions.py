@@ -449,6 +449,19 @@ class InvalidAccentTarget(ItemError):
     )
 
 
+class InvalidSilhouetteChoice(ItemError):
+    """A silhouette pick that doesn't fit the piece's wear family (#2907)."""
+
+    user_message = "That form does not suit this kind of piece."
+    SAFE_MESSAGES: ClassVar[frozenset[str]] = frozenset(
+        {
+            "That form does not suit this kind of piece.",
+            "That silhouette does not exist.",
+            "That item has no form to reshape.",
+        }
+    )
+
+
 class RefinementNotPossible(ItemError):
     """A refinement project can't be started for this goal (#2878)."""
 

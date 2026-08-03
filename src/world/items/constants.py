@@ -117,6 +117,67 @@ class StyleAudacity(models.IntegerChoices):
     OUTRAGEOUS = 4, "Outrageous"
 
 
+class WearFamily(models.TextChoices):
+    """The broad wearable family a Silhouette belongs to (#2907).
+
+    Coarser than ``BodyRegion`` — this is fashion vocabulary, not equip
+    plumbing: a crafter-picked silhouette must belong to the same family as
+    the template's authored one, and the family selects the prose noun used
+    when describing the form ("cut" for garments, "setting" for jewelry,
+    "silhouette" otherwise — Apostate's ruling, 2026-08-03).
+    """
+
+    FOOTWEAR = "footwear", "Footwear"
+    LEGWEAR = "legwear", "Legwear"
+    TORSO_GARMENT = "torso_garment", "Torso Garment"
+    FULL_GARMENT = "full_garment", "Full Garment"
+    OUTERWEAR = "outerwear", "Outerwear"
+    HEADWEAR = "headwear", "Headwear"
+    HANDWEAR = "handwear", "Handwear"
+    JEWELRY = "jewelry", "Jewelry"
+    ACCESSORY = "accessory", "Accessory"
+
+
+# Wear families whose form is described as a "cut" in prose (garments).
+_CUT_FAMILIES = {
+    WearFamily.LEGWEAR,
+    WearFamily.TORSO_GARMENT,
+    WearFamily.FULL_GARMENT,
+    WearFamily.OUTERWEAR,
+}
+
+# Prose nouns for a piece's form, by wear family (#2907).
+PROSE_NOUN_CUT = "cut"
+PROSE_NOUN_SETTING = "setting"
+PROSE_NOUN_SILHOUETTE = "silhouette"
+
+
+def silhouette_prose_noun(family: str) -> str:
+    """The in-prose noun for a silhouette of this family (#2907).
+
+    Garments speak of their "cut", jewelry of its "setting", everything else
+    of its "silhouette". The model name stays Silhouette everywhere in code —
+    "cut" is reserved for gem cuts when the gem economy lands.
+    """
+    if family in _CUT_FAMILIES:
+        return PROSE_NOUN_CUT
+    if family == WearFamily.JEWELRY:
+        return PROSE_NOUN_SETTING
+    return PROSE_NOUN_SILHOUETTE
+
+
+class StyleEra(models.TextChoices):
+    """When a Style's fashion language comes from (#2907).
+
+    CURRENT styles circulate in living regional cultures; ANCIENT ones are
+    dead languages — not in any starting knowledge, rediscovered through
+    investigation (Arx holds a wide spread of them).
+    """
+
+    CURRENT = "current", "Current"
+    ANCIENT = "ancient", "Ancient"
+
+
 class GearArchetype(models.TextChoices):
     """Gear categorization for covenant role compatibility.
 

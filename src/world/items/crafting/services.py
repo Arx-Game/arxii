@@ -445,6 +445,39 @@ def _resolve_crafter_sheet(
     return CharacterSheet.objects.get(character=crafter_character)
 
 
+def _resolve_silhouette_choice(output_overrides: dict | None) -> None:
+    """Resolve + validate the crafter's silhouette pick (#2907), in place.
+
+    Turns ``output_overrides["silhouette_id"]`` into a ``Silhouette`` under the
+    ``"silhouette"`` key for the ITEM_CREATE handler. A pick must share the
+    template's authored silhouette's wear family (a boots recipe can yield a
+    thigh-high boot, never a circlet); a template with no authored silhouette
+    is formless and accepts no pick. No pick = template's default applies.
+    """
+    from world.items.exceptions import InvalidSilhouetteChoice  # noqa: PLC0415
+    from world.items.models import Silhouette  # noqa: PLC0415
+
+    if not output_overrides:
+        return
+    silhouette_id = output_overrides.pop("silhouette_id", None)
+    if silhouette_id is None:
+        return
+    template = output_overrides.get("output_template")
+    try:
+        chosen = Silhouette.objects.get(pk=silhouette_id, is_active=True)
+    except Silhouette.DoesNotExist as exc:
+        msg = "That silhouette does not exist."
+        raise InvalidSilhouetteChoice(msg) from exc
+    authored = template.silhouette if template is not None else None
+    if authored is None:
+        msg = "That item has no form to reshape."
+        raise InvalidSilhouetteChoice(msg)
+    if chosen.wear_family != authored.wear_family:
+        msg = "That form does not suit this kind of piece."
+        raise InvalidSilhouetteChoice(msg)
+    output_overrides["silhouette"] = chosen
+
+
 def _validate_accent_targets(
     accent_targets: list | None,
     item_instance: ItemInstance | None = None,
@@ -775,6 +808,8 @@ def run_crafting_recipe(  # noqa: PLR0913
     accents_requested = _validate_accent_targets(
         accent_targets, item_instance, template=create_template
     )
+    # Silhouette pick (#2907) — validated before any staging or rolling.
+    _resolve_silhouette_choice(output_overrides)
     from world.items.crafting.constants import ACCENT_CRAFT_COST_BASE  # noqa: PLC0415
 
     difficulty = recipe.base_difficulty

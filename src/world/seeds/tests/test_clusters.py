@@ -20,6 +20,7 @@ class TestClusterRegistry(TestCase):
                 "social_actions",
                 "provisioning",
                 "crafting_materials",
+                "fashion",
                 "weather",
                 "justice_laws",
                 "underworld",
