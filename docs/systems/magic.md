@@ -69,7 +69,7 @@ and the 5-axis Thread model no longer exist.
 | `IntensityTier` | Power effect thresholds | `name`, `threshold`, `control_modifier`, `description` |
 | `Restriction` | Limitations that grant power bonuses | `name`, `description`, `power_bonus` |
 | `Facet` | Hierarchical imagery/symbolism (Category > Subcategory > Specific) | `name`, `parent` (self-FK), `description` |
-| `Gift` | Thematic collections of techniques | `name`, `description`, `resonances` (M2M to `Resonance` — the **supported set**: a weave constraint, not the cast-time value; the cast reads the character's GIFT-thread resonance via `gift_resonances_for`, ADR-0052), `creator` (FK to CharacterSheet), `kind` (`GiftKind`: `MAJOR` = the one CG-chosen gift, `MINOR` = shared/acquirable; ADR-0050) |
+| `Gift` | Thematic collections of techniques | `name`, `description`, `resonances` (M2M to `Resonance` — the **supported set**: a weave constraint, not the cast-time value; the cast reads the character's GIFT-thread resonance via `gift_resonances_for`, ADR-0052), `creator` (FK to CharacterSheet), `kind` (`GiftKind`: `MAJOR` = the one CG-chosen gift, `MINOR` = shared/acquirable; ADR-0050), `parent` (self-FK, PROTECT, `related_name="children"` — the umbrella gift this one hangs beneath; see "Gift lineage" below, #2891, ADR-0192) |
 | `Affinity` | CELESTIAL / PRIMAL / ABYSSAL | `name`, optional OneToOne `modifier_target` |
 | `Resonance` | Identity resonance tags | `name`, `affinity` FK, `opposite` self-OneToOne, optional `modifier_target` OneToOne |
 
@@ -142,6 +142,78 @@ values (after resonance bonuses, combat escalation, audere states) are tracked b
 separate casting handler. When intensity exceeds control at runtime, effects become
 unpredictable and anima cost spikes. If anima cost exceeds the character's pool, the
 excess deals damage to the caster.
+
+### Gift lineage — one thread reaches its ancestors' techniques (#2891, ADR-0192) [BUILT & WIRED]
+
+`Gift.parent` (self-FK, `on_delete=PROTECT`, `related_name="children"`) hangs a gift
+beneath an umbrella gift. **The invariant: holding a gift reaches the techniques of that
+gift and of every ancestor, and the character's GIFT thread on the held gift is the thread
+for all of them.** A Vulpi character holds ONE `CharacterGift` and threads ONE GIFT thread,
+and that thread reaches both the Vulpi-specific techniques and the shared Khati ones.
+
+The shape exists because the alternative — two `SpeciesGiftGrant` rows, the shipped
+Vampire/Dhampir pattern (#2692) — gives the character two threads, and thread level rises
+through the Rite of Imbuing, which charges AP per rite (`_charge_imbue_ap`,
+`services/resonance.py`) plus XP at locked boundaries (`cross_thread_xp_lock`,
+`services/threads.py`). Every Khati, Elf, Infernal and Vampire would pay twice for what a
+Human pays once.
+
+**`SpeciesGiftGrant.inheritable` is a different axis and stays.** `inheritable` walks the
+*species* chain (`Species.parent`); `Gift.parent` walks the *gift* chain. `Dhampir.parent =
+Vampire`, so Vampire's grant still propagates to Dhampir. Both are needed.
+
+**Model surface** (`models/gifts.py`) — mirrors `Species.lineage` / `Species.codex_entries`
+(`world/species/models.py`, PR #2897) rather than inventing a second walk:
+
+| Property | Returns |
+|---|---|
+| `Gift.lineage` | This gift then every ancestor, nearest first. Cycle-safe via a seen-set (a `parent` cycle is a data defect, not a modelled state). |
+| `Gift.lineage_ids` | `frozenset` of `lineage` pks — membership tests without re-walking. |
+| `Gift.inherited_techniques` | Own techniques first, then each ancestor's, nearest first, de-duplicated by pk. **The pool read.** |
+| `Gift.cached_techniques` | Unchanged: this gift's OWN techniques. It is the `Prefetch(to_attr="cached_techniques")` target for the gift API — do not widen it. |
+
+**Resolver** — `resolve_owned_gift(sheet, gift) -> Gift | None`
+(`services/gift_acquisition.py`) returns the gift the character actually holds that reaches
+`gift`: `gift` itself when directly held, otherwise the held descendant whose lineage
+contains it. It is the single answer to both "does the learner own this?" and "which gift's
+thread and cap govern this technique?" — the two questions have the same answer and must not
+drift apart.
+
+**Lineage-aware call sites:**
+
+| Site | Behaviour |
+|---|---|
+| `learn_technique` (`services/technique_acquisition.py`) | Ownership resolves through `resolve_owned_gift`; cap and count run against the *held* gift. |
+| `charge_and_learn` (`services/gift_acquisition.py`) | Same. Critically, a child-gift holder is NOT treated as not-having-the-gift, so the teaching/Academy path demands no `GiftUnlock` receipt and mints no second `CharacterGift` or thread. |
+| `count_techniques_for_gift` | Counts `technique__gift_id__in=gift.lineage_ids` — one thread, one cap; inherited techniques are not a second budget. |
+| `get_technique_cap_for_gift` / `_gift_thread_depth` | Unchanged; always called with the held gift, whose thread exists. |
+| `gift_threads_for(character, gift)` (`specialization/services.py`) | GIFT threads *covering* `gift` — on `gift` itself or on a descendant. A direct hold sorts first. |
+| `gift_resonances_for` | Reads `gift_threads_for`, so an inherited technique manifests at the character's thread resonance instead of the ancestor's authored supported set. |
+| `_resolve_technique_variant` | Reads `gift_threads_for` via `_gift_thread_for_variant`, so an inherited technique specializes at the child thread's level. |
+| `crossing/handlers._parents_for` | GIFT branch returns `thread.target_gift.inherited_techniques` — variant discovery on a child thread sees the inherited techniques. |
+| `societies/handlers.acquired_techniques_for` | A granted gift carries its ancestors' techniques with it. |
+
+**Deliberately NOT lineage-aware** (verified against code, #2891):
+
+- `cg_catalog.get_gift_options` / `get_technique_options` — availability comes from authored
+  `TraditionGiftGrant.special_techniques` / `PathGiftGrant.starter_techniques` rows at
+  *technique* granularity, never from `gift.techniques`, so a child gift whose pool is
+  authored inherited techniques is already included.
+- `CharacterTechniqueHandler._state` (`handlers.py`) — reads explicit `CharacterTechnique`
+  rows. Once an inherited technique is learned the row exists. Inheritance is an
+  acquisition-eligibility concern, not an inventory one.
+- `GiftSerializer.techniques` — still the gift's own techniques (paired with the annotated
+  `technique_count`). Inert today because no authored gift has a parent yet; widening it is
+  display work that belongs with the content PR that first makes a parented gift visible.
+
+**Authoring:** `parent` is set in `GiftAdmin` (autocomplete) or by natural key in a lore
+fixture (`"parent": ["Khati"]`). `magic.gift` is already in `CONTENT_MODELS` with
+`NaturalKeyMixin(fields=["name"])`, so `parent` exports and loads with no new wiring — but a
+self-FK natural key resolves at load time, so **the umbrella gift must appear before its
+children in the fixture file.**
+
+Content (#2764) authors the gifts, techniques and grant rows; this issue ships the mechanism
+only.
 
 ### Technique Authoring Draft Workbench (#1496) [BUILT & WIRED]
 

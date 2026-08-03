@@ -2097,6 +2097,7 @@
   - entry -> codex.CodexEntry [FK]
 
 ### Service Functions
+- `grant_codex_entry(roster_entry: 'RosterEntry', entry: 'CodexEntry', *, learned_from: 'RosterTenure | None' = None) -> 'tuple[CharacterCodexKnowledge, bool]' — Grant ``entry`` to ``roster_entry`` as fully KNOWN. Idempotent.`
 - `resolve_codex_links(content: 'str | None', subject: 'CodexSubject', roster_entry: 'RosterEntry | None') -> 'list[dict]' — Parse ``[[Entry Name]]`` wikilinks from content and resolve to link refs.`
 
 
@@ -4800,11 +4801,13 @@
 
 ### Gift
 **Foreign Keys:**
+  - parent -> magic.Gift [FK] (nullable)
   - creator -> character_sheets.CharacterSheet [FK] (nullable)
   - codex_entry -> codex.CodexEntry [FK] (nullable)
   - resonances -> magic.Resonance [M2M]
 **Pointed to by:**
   - species_grants <- species.SpeciesGiftGrant
+  - children <- magic.Gift
   - character_grants <- magic.CharacterGift
   - techniques <- magic.Technique
   - gift_unlocks <- magic.GiftUnlock
