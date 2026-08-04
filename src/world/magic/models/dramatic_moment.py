@@ -117,7 +117,7 @@ class DramaticMomentTag(SharedMemoryModel):
         null=True,
         blank=True,
         related_name="dramatic_moment_tags",
-        db_constraint=False,  # scenes_interaction is partitioned (composite PK)
+        db_constraint=False,  # arxii_interaction is partitioned (composite PK)
         help_text="The pose that earned this moment; nullable for non-pose tags.",
     )
     interaction_timestamp = models.DateTimeField(
@@ -177,7 +177,7 @@ class DramaticMomentSuggestion(SharedMemoryModel):
         null=True,
         blank=True,
         related_name="dramatic_moment_suggestions",
-        db_constraint=False,  # scenes_interaction is partitioned (composite PK)
+        db_constraint=False,  # arxii_interaction is partitioned (composite PK)
         help_text="The entrance pose that triggered this suggestion; nullable.",
     )
     interaction_timestamp = models.DateTimeField(

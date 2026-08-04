@@ -5,7 +5,7 @@ resolution — both combat damage resolution and challenge resolution write one.
 A ViewSet exposes it with the roulette recomputed on read.
 
 The `combat_interaction` FK is declared db_constraint=False because
-scenes_interaction is range-partitioned by timestamp.  No composite FK
+arxii_interaction is range-partitioned by timestamp.  No composite FK
 constraint (interaction_id, interaction_timestamp) is created at the DB level
 for this table — unlike CombatRoundAction/ClashContribution, the raw-SQL
 migration for that constraint has deliberately been omitted here because the
@@ -73,7 +73,7 @@ class ConsequenceOutcome(SharedMemoryModel):
     modifier_total = models.IntegerField(default=0)
     summary = models.CharField(max_length=255, blank=True)
 
-    # combat_interaction: FK to the partitioned scenes_interaction table.
+    # combat_interaction: FK to the partitioned arxii_interaction table.
     # db_constraint=False because Django cannot express the required composite
     # FK (interaction_id, interaction_timestamp) against a range-partitioned
     # table.  No raw-SQL migration adds a DB-level composite FK constraint here;
@@ -96,7 +96,7 @@ class ConsequenceOutcome(SharedMemoryModel):
         db_index=True,
         help_text=(
             "Denormalized from combat_interaction.timestamp. Required because "
-            "scenes_interaction is range-partitioned by timestamp. "
+            "arxii_interaction is range-partitioned by timestamp. "
             "No DB-level composite FK constraint is enforced — integrity is "
             "maintained by the writer setting both columns atomically."
         ),

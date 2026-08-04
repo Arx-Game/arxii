@@ -1,7 +1,7 @@
 """Detect drift between the Interaction model and the partition SQL.
 
 `src/world/scenes/sql/partition_interaction_forward.sql` (and its reverse
-counterpart) hand-rolls a `CREATE TABLE scenes_interaction (...)` because
+counterpart) hand-rolls a `CREATE TABLE arxii_interaction (...)` because
 PostgreSQL range partitioning isn't expressible through Django's
 makemigrations. That SQL is a frozen snapshot — if a developer adds a column
 to `Interaction` and doesn't update the SQL, the column gets created by
@@ -40,11 +40,13 @@ REVERSE_SQL = SRC_DIR / "world/scenes/sql/partition_interaction_reverse.sql"
 # Columns that live on the current Interaction model but MUST NOT appear in the
 # partition SQL, because they are added AFTER the partition migration runs.
 #
-# The partition SQL (scenes/0004) rewrites scenes_interaction from scratch by
-# renaming the existing table to _old, CREATE-ing a partitioned replacement, and
-# copying rows via INSERT ... SELECT ... FROM scenes_interaction_old. That SQL is
-# a frozen snapshot of the schema AS OF migration 0004 — only columns that exist
-# on scenes_interaction_old at that point may be referenced.
+# The partition SQL (originally scenes/0004, now applied via
+# tools/build_schema.py's SQL_FILES list post-#2906) rewrites arxii_interaction
+# from scratch by renaming the existing table to _old, CREATE-ing a
+# partitioned replacement, and copying rows via
+# INSERT ... SELECT ... FROM arxii_interaction_old. That SQL is a frozen
+# snapshot of the schema AS OF the original migration 0004 — only columns
+# that exist on arxii_interaction_old at that point may be referenced.
 #
 # `fury_committed_id` is a FK to magic.FuryTier, which is only created in
 # magic/0033. It therefore CANNOT be a pre-partition column; it is added later by
@@ -91,10 +93,10 @@ _COLUMN_LINE_RE = re.compile(r"^\s*([a-z_][a-z0-9_]*|\"[a-z_]+\")\s+\S")
 
 
 def _columns_from_create_table(sql_text: str) -> set[str]:
-    """Parse the CREATE TABLE scenes_interaction (...) column names out of SQL."""
-    # Find the CREATE TABLE scenes_interaction block.
+    """Parse the CREATE TABLE arxii_interaction (...) column names out of SQL."""
+    # Find the CREATE TABLE arxii_interaction block.
     match = re.search(
-        r"CREATE TABLE scenes_interaction\s*\(([^;]+?)\)(\s+PARTITION BY[^;]*)?;",
+        r"CREATE TABLE arxii_interaction\s*\(([^;]+?)\)(\s+PARTITION BY[^;]*)?;",
         sql_text,
         re.IGNORECASE | re.DOTALL,
     )
@@ -119,9 +121,9 @@ def _columns_from_create_table(sql_text: str) -> set[str]:
 
 
 def _columns_from_insert(sql_text: str) -> set[str]:
-    """Parse the explicit column list from `INSERT INTO scenes_interaction (...)`."""
+    """Parse the explicit column list from `INSERT INTO arxii_interaction (...)`."""
     match = re.search(
-        r"INSERT INTO scenes_interaction\s*\(([^)]+)\)",
+        r"INSERT INTO arxii_interaction\s*\(([^)]+)\)",
         sql_text,
         re.IGNORECASE,
     )

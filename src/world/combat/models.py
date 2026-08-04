@@ -1472,7 +1472,7 @@ class CombatRoundAction(CommittingDeclaration, SharedMemoryModel):
         db_index=True,
         help_text=(
             "Denormalized from interaction.timestamp. Required because "
-            "scenes_interaction is range-partitioned by timestamp — the composite "
+            "arxii_interaction is range-partitioned by timestamp — the composite "
             "FK constraint targets (interaction_id, interaction_timestamp). "
             "Populated atomically with interaction_id by create_action_interaction."
         ),
@@ -3099,7 +3099,7 @@ class ClashContribution(SharedMemoryModel):
         db_index=True,
         help_text=(
             "Denormalized from interaction.timestamp. Required because "
-            "scenes_interaction is range-partitioned by timestamp — the composite "
+            "arxii_interaction is range-partitioned by timestamp — the composite "
             "FK constraint targets (interaction_id, interaction_timestamp). "
             "Populated atomically with interaction_id by create_action_interaction."
         ),

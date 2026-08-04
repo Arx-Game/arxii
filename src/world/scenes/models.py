@@ -1247,7 +1247,7 @@ class InteractionPowerLedgerEntry(SharedMemoryModel):
     Child of the ACTION-mode Interaction the cast/action resolved into. The
     transient ``world.magic.types.power_ledger.PowerLedger`` is copied here at
     resolution time so the per-stage breakdown is re-viewable from the log.
-    FK uses ``db_constraint=False`` because ``scenes_interaction`` is partitioned.
+    FK uses ``db_constraint=False`` because ``arxii_interaction`` is partitioned.
     """
 
     interaction = models.ForeignKey(

@@ -1,5 +1,5 @@
 -- Composite FK constraints from combat tables onto the partitioned
--- scenes_interaction (id, timestamp). Mirrors the constraints added in
+-- arxii_interaction (id, timestamp). Mirrors the constraints added in
 -- scenes/sql/partition_interaction_forward.sql for InteractionReceiver et al.
 --
 -- Both Django FKs were declared db_constraint=False on the model side because
@@ -8,17 +8,17 @@
 -- write path can set interaction_id + interaction_timestamp in the same
 -- save() / transaction without ordering concerns.
 --
--- Referenced by: combat/migrations/0004_interaction_fk_composites.py.
--- If migrations are squashed, this SQL file must be preserved and re-referenced.
+-- Referenced by: tools/build_schema.py's SQL_FILES list (the #2906 single-app
+-- collapse squashed the per-app migration that used to RunSQL this file).
 
-ALTER TABLE combat_combatroundaction
+ALTER TABLE arxii_combatroundaction
     ADD CONSTRAINT combat_roundaction_interaction_fk
     FOREIGN KEY (interaction_id, interaction_timestamp)
-    REFERENCES scenes_interaction (id, "timestamp")
+    REFERENCES arxii_interaction (id, "timestamp")
     ON DELETE SET NULL DEFERRABLE INITIALLY DEFERRED;
 
-ALTER TABLE combat_clashcontribution
+ALTER TABLE arxii_clashcontribution
     ADD CONSTRAINT combat_clashcontribution_interaction_fk
     FOREIGN KEY (interaction_id, interaction_timestamp)
-    REFERENCES scenes_interaction (id, "timestamp")
+    REFERENCES arxii_interaction (id, "timestamp")
     ON DELETE SET NULL DEFERRABLE INITIALLY DEFERRED;

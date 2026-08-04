@@ -1,7 +1,7 @@
 """Tests for the CombatRoundAction.interaction FK + interaction_timestamp denorm.
 
 The FK is declared db_constraint=False on the model — the partitioned target
-table (scenes_interaction) requires a composite FK on (id, timestamp), which
+table (arxii_interaction) requires a composite FK on (id, timestamp), which
 is added separately in raw SQL. This test confirms the ORM-level wiring
 (nullable, related_name, attach/detach) without exercising the DB-level
 constraint.
@@ -76,7 +76,7 @@ class CombatRoundActionInteractionDBConstraintTests(TestCase):
     """The single-column FK should NOT exist at the DB level (db_constraint=False)."""
 
     def test_no_single_column_fk_on_interaction_id(self) -> None:
-        # Look for any FK constraint on combat_combatroundaction that targets
+        # Look for any FK constraint on arxii_combatroundaction that targets
         # only interaction_id (single-column). The composite FK
         # (interaction_id, interaction_timestamp) is created by the raw-SQL
         # migration and is allowed; what we want to confirm absent is the
@@ -90,7 +90,7 @@ class CombatRoundActionInteractionDBConstraintTests(TestCase):
                     ON tc.constraint_name = kcu.constraint_name
                     AND tc.table_schema = kcu.table_schema
                 WHERE tc.constraint_type = 'FOREIGN KEY'
-                    AND tc.table_name = 'combat_combatroundaction'
+                    AND tc.table_name = 'arxii_combatroundaction'
                 ORDER BY tc.constraint_name, kcu.ordinal_position
                 """
             )
@@ -119,7 +119,7 @@ class CombatRoundActionInteractionDBConstraintTests(TestCase):
                     ON tc.constraint_name = kcu.constraint_name
                     AND tc.table_schema = kcu.table_schema
                 WHERE tc.constraint_type = 'FOREIGN KEY'
-                    AND tc.table_name = 'combat_clashcontribution'
+                    AND tc.table_name = 'arxii_clashcontribution'
                 ORDER BY tc.constraint_name, kcu.ordinal_position
                 """
             )

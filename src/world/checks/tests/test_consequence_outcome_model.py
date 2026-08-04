@@ -1,7 +1,7 @@
 """Tests for ConsequenceOutcome and ConsequenceOutcomeModifier models.
 
 The FK to scenes.Interaction is declared db_constraint=False because
-scenes_interaction is range-partitioned — the composite FK on (id, timestamp)
+arxii_interaction is range-partitioned — the composite FK on (id, timestamp)
 is added by a raw-SQL migration, not Django's ORM.  These tests confirm the
 ORM wiring only; the postgres-tagged test covers the CheckConstraint.
 """

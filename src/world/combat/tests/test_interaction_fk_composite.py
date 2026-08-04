@@ -1,7 +1,7 @@
 """Tests for the composite FK constraints added via raw SQL.
 
 The composite FKs `(interaction_id, interaction_timestamp) REFERENCES
-scenes_interaction (id, timestamp)` are PostgreSQL-only artifacts (SQLite cannot
+arxii_interaction (id, timestamp)` are PostgreSQL-only artifacts (SQLite cannot
 express them, and the schema isn't even built on the SQLite inner-loop tier).
 
 PG replicates a parent composite FK into one child FK constraint per partition
@@ -50,11 +50,11 @@ class CompositeFKExistsTests(TestCase):
             return frozenset(row[0] for row in cursor.fetchall())
 
     def test_combat_round_action_has_composite_fk(self) -> None:
-        cols = self._named_fk_columns("combat_combatroundaction", _NAMED_FK_ROUND_ACTION)
+        cols = self._named_fk_columns("arxii_combatroundaction", _NAMED_FK_ROUND_ACTION)
         self.assertEqual(cols, frozenset({"interaction_id", "interaction_timestamp"}))
 
     def test_clash_contribution_has_composite_fk(self) -> None:
-        cols = self._named_fk_columns("combat_clashcontribution", _NAMED_FK_CLASH_CONTRIBUTION)
+        cols = self._named_fk_columns("arxii_clashcontribution", _NAMED_FK_CLASH_CONTRIBUTION)
         self.assertEqual(cols, frozenset({"interaction_id", "interaction_timestamp"}))
 
 
