@@ -147,14 +147,19 @@ jobs:
           # shard-3 (~343s): world.combat half 1 (~178s) + world.items (68)
           #   + world.checks (35) + world.gm (24) + world.seeds (15)
           #   + world.fatigue (10) + world.assets (7) + world.action_points (5)
-          #   + core (3)
+          #   + core (3) + world.tests (2026-08-04, #2906 single-app-collapse
+          #   aggregator completeness guard — world/tests/test_aggregators.py.
+          #   Not "world" itself: that bare label would make unittest's
+          #   directory-based discovery recurse the ENTIRE world/ tree,
+          #   double-running every world.* shard — see the matching skip in
+          #   tools/lint_shard_coverage.py's discover_apps_on_disk().)
           - name: shard-3
             split_app: world.combat
             split_part: 1
             split_of: 2
             apps: >-
               world.items world.checks world.gm world.seeds world.fatigue
-              world.assets world.action_points world.tasking core
+              world.assets world.action_points world.tasking core world.tests
           # shard-4 (~344s): world.combat half 2 (~178s) + world.covenants (65)
           #   + world.conditions (37) + world.locations (24) + world.justice (15)
           #   + world.game_clock (9) + world.narrative (7) + world.consent (6)

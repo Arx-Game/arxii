@@ -10,4 +10,13 @@ class ProjectsConfig(AppConfig):
     default_auto_field = "django.db.models.BigAutoField"
 
     def ready(self) -> None:
-        """App ready - no DB queries at import time."""
+        ready()
+
+
+def ready() -> None:
+    """App ready - no DB queries at import time.
+
+    Extracted to module level (#2906) so the single-app aggregator
+    (``world.apps.ArxiiConfig.ready``) can call it directly once
+    ``world.projects`` stops being its own installed app.
+    """

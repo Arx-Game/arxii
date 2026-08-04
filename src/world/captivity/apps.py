@@ -7,13 +7,22 @@ class CaptivityConfig(AppConfig):
     verbose_name = "Captivity"
 
     def ready(self) -> None:
-        """Register the RANSOM project-kind handler + instant-completion (#1500)."""
-        from world.captivity.ransom_project import resolve_ransom_project  # noqa: PLC0415
-        from world.projects.constants import ProjectKind  # noqa: PLC0415
-        from world.projects.services import (  # noqa: PLC0415
-            register_instant_completion_kind,
-            register_kind_handler,
-        )
+        ready()
 
-        register_kind_handler(ProjectKind.RANSOM, resolve_ransom_project)
-        register_instant_completion_kind(ProjectKind.RANSOM)
+
+def ready() -> None:
+    """Register the RANSOM project-kind handler + instant-completion (#1500).
+
+    Extracted to module level (#2906) so the single-app aggregator
+    (``world.apps.ArxiiConfig.ready``) can call it directly once
+    ``world.captivity`` stops being its own installed app.
+    """
+    from world.captivity.ransom_project import resolve_ransom_project  # noqa: PLC0415
+    from world.projects.constants import ProjectKind  # noqa: PLC0415
+    from world.projects.services import (  # noqa: PLC0415
+        register_instant_completion_kind,
+        register_kind_handler,
+    )
+
+    register_kind_handler(ProjectKind.RANSOM, resolve_ransom_project)
+    register_instant_completion_kind(ProjectKind.RANSOM)
