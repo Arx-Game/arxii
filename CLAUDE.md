@@ -78,7 +78,12 @@ back from the creating command's own stdout.
   re-tests the PR on top of the latest main and merges in order; a human
   approval is the only remaining gate. A migration collision shows up as the
   loser being bounced from the queue (others keep flowing) — fix it with
-  `arx manage makemigrations --merge` (or renumber), push, re-enqueue.
+  `arx manage makemigrations --merge` (or renumber), push, re-enqueue. Since
+  #2906 collapsed every first-party app into one (`arxii`), there is exactly
+  one `max_migration.txt` sentinel repo-wide (`src/world/migrations/`), not
+  one per app - any two branches that both add a model or field now land in
+  that same file, so this collision is more likely, not less; the fix is the
+  same either way (see ADR-0195).
 - **No `cd &&` compound commands.** Use `git -C /path <command>` for git, or
   absolute paths / a tool's own directory flag otherwise. (Claude Code on Windows
   flags every `cd && <command>` for manual approval as a bare-repo-attack
@@ -302,8 +307,14 @@ no-backwards-compat, `# noqa` policy + custom-linter tokens) live in `django_not
 - Use FactoryBoy for all test data with `setUpTestData`; focus tests on application
   logic, not Django built-ins. The `django_get_or_create` gotcha (silently drops
   non-lookup kwargs when the row pre-exists) + the `_create` fix: see `django_notes.md`.
-- **New apps: avoid multiple migrations during development** — see
-  `docs/evennia-quirks.md`.
+- **A new first-party subsystem is a new sub-package of the existing `world` app,
+  never a new Django app.** #2906 collapsed all 66 `world.*` apps (+ the models
+  folded in from `actions`/`flows`/`behaviors`/`evennia_extensions`/`web.admin`)
+  into one: package `world`, label `arxii` (ADR-0195). A new `world/<name>/`
+  sub-package needs its `models.py` added to `world/models.py`'s import
+  aggregator (guarded by `world/tests/test_aggregators.py`) and, if it registers
+  a `ready()` hook, an entry in `world/apps.py`'s call list. See
+  `docs/evennia-quirks.md` for the migration-generation workflow.
 - **SharedMemoryModel** (see ADR-0008) — all concrete models use it (import from
   `evennia.utils.idmapper.models`, **never** `evennia.utils.models`). It's the
   identity-map cache: trust it; don't reinvent `resolve_*`/`batch_fetch_*` helpers

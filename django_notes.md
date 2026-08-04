@@ -27,36 +27,25 @@ class StoryStatus(Enum):
 - Native Django integration
 - Better IDE support and type checking
 
-## Migration Management for New Apps
+## Migration Management for a New Subsystem
 
-**When developing a new app, avoid creating multiple migrations. Use the clean-slate approach:**
+**#2906 collapsed every first-party app into one** (package `world`, label
+`arxii`; see ADR-0195, `docs/evennia-quirks.md`). There is no longer a "new
+app" case: a new subsystem is a new `world/<name>/` sub-package with its own
+`models.py` (imported by `world/models.py`'s aggregator, guarded by
+`world/tests/test_aggregators.py`), and its migration lands in the single
+existing `src/world/migrations/` history via a normal
+`arx manage makemigrations arxii` - the same command used for every other
+model change, first-party-app-wide.
 
-```bash
-# 1. Fake-migrate app to zero (marks migrations as unapplied, preserves data)
-arx manage migrate app_name zero --fake
-
-# 2. Move any data migrations to temporary storage
-mkdir temp_migrations
-mv world/app_name/migrations/0*_data_*.py temp_migrations/
-
-# 3. Delete all remaining migration files (keep __init__.py)
-rm world/app_name/migrations/0*.py
-
-# 4. Regenerate clean initial migration
-arx manage makemigrations app_name
-
-# 5. Move data migrations back and fix dependencies
-mv temp_migrations/0*_data_*.py world/app_name/migrations/
-# Edit data migration dependencies to point to new 0001_initial.py
-
-# 6. Fake-apply the initial migration (tables already exist)
-arx manage migrate app_name --fake-initial
-
-# 7. Apply any remaining migrations normally
-arx manage migrate app_name
-```
-
-This prevents migration dependency issues and maintains clean history.
+The clean-slate fake-to-zero / delete-migrations / regenerate-`0001_initial`
+squash workflow this section used to prescribe (per app, before merging to
+main) is now obsolete for this case: there is one `0001_initial.py`,
+already flattened by the collapse, and re-squashing it defeats the point -
+see ADR-0195's rejection of periodic squash/regeneration as a standing
+strategy. **Do NOT drop or flush the database** and do not fake-zero
+`arxii` - the dev database holds fixture data and test state that is
+time-consuming to reconstruct.
 
 **IMPORTANT: Do NOT drop or flush the database.** The dev database contains fixture data
 and test state that is time-consuming to reconstruct. Use `--fake` and `--fake-initial`

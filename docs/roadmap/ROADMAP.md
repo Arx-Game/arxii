@@ -110,6 +110,21 @@ limits, IC-vs-UI placement, etc. — see [`design-tenets.md`](design-tenets.md).
 
 ### Recent Infrastructure Changes
 
+- **Single-app collapse (#2906, complete):** every first-party Django app (66 `world.*`
+  apps, plus 27 models folded in from `actions`/`flows`/`behaviors`/`evennia_extensions`/
+  `web.admin` via an explicit `Meta.app_label`) collapsed into one: package `world`,
+  label `arxii`. `world/` directories did not move - `world.magic`, `world.roster`, etc.
+  still work as import paths and `just test-fast world.<app>` targets - but there is now
+  one Django app, one `src/world/migrations/` history (`0001_initial.py`, 1026
+  `CreateModel`), and one `max_migration.txt` sentinel repo-wide. See ADR-0195 for the
+  full decision, the rejected periodic-squash alternative, and the consequences (dev DBs
+  must be rebuilt and reseeded; `core.app_domains.domain_of()` now supplies the
+  authoring-domain grouping `app_label` used to carry, for the admin index, the lore
+  repo's `fixtures/<domain>/` layout, and the admin pin/exclude keys; model names must
+  stay globally unique for `resolve_model_by_name`). Also renamed
+  `achievements.AchievementRequirement` to `AchievementStatRequirement` (Task 3) to
+  disambiguate it from the pre-existing, distinct `progression.AchievementRequirement`.
+
 - **Admin-hosted Game Tuning & Game Ops dashboards + content-repo load (#1220/#1221, complete):**
   - **Game Tuning** (`/admin/_tuning/`, `admin_tuning`) — four HTMX-fragment panels: check-engine
     probability distributions (`web/admin/tuning/checks_analytics.py`), a consequence-pool inspector
