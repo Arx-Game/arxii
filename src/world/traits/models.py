@@ -17,6 +17,7 @@ from django.db import models
 from evennia.utils.idmapper.models import SharedMemoryModel
 
 from core.natural_keys import NaturalKeyManager, NaturalKeyMixin
+from world.contributors.models import CreditedContent
 
 if TYPE_CHECKING:
     pass
@@ -85,7 +86,7 @@ class TraitCategory(models.TextChoices):
     OTHER = "other", "Other"
 
 
-class Trait(NaturalKeyMixin, SharedMemoryModel):
+class Trait(NaturalKeyMixin, CreditedContent, SharedMemoryModel):
     """
     Trait definition template with case-insensitive caching.
 

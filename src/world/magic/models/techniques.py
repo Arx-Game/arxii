@@ -22,6 +22,7 @@ from evennia.utils.idmapper.models import SharedMemoryModel
 from actions.constants import ActionCategory, ActionTargetType
 from core.natural_keys import NaturalKeyManager, NaturalKeyMixin
 from world.achievements.models import DiscoverableContent
+from world.contributors.models import CreditedContent
 from world.covenants.constants import RoleArchetype
 from world.magic.constants import TechniqueCategory, TechniqueFunction, TechniqueReach
 from world.magic.models.gifts import Gift
@@ -54,7 +55,7 @@ class EffectTypeManager(NaturalKeyManager):
     """Manager for EffectType with natural key support."""
 
 
-class EffectType(NaturalKeyMixin, SharedMemoryModel):
+class EffectType(NaturalKeyMixin, CreditedContent, SharedMemoryModel):
     """
     Type of magical effect.
 
@@ -111,7 +112,7 @@ class TechniqueStyleManager(NaturalKeyManager):
     """Manager for TechniqueStyle with natural key support."""
 
 
-class TechniqueStyle(NaturalKeyMixin, SharedMemoryModel):
+class TechniqueStyle(NaturalKeyMixin, CreditedContent, SharedMemoryModel):
     """
     How a practitioner works magic (Manifestation, Subtle, Prayer, Incantation…).
 
@@ -169,7 +170,7 @@ class RestrictionManager(NaturalKeyManager):
     """Manager for Restriction with natural key support."""
 
 
-class Restriction(NaturalKeyMixin, SharedMemoryModel):
+class Restriction(NaturalKeyMixin, CreditedContent, SharedMemoryModel):
     """
     A limitation that can be applied to techniques for power bonuses.
 
@@ -220,7 +221,7 @@ class IntensityTierManager(NaturalKeyManager):
     """Manager for IntensityTier with natural key support, plus cached_all() (#1846)."""
 
 
-class IntensityTier(NaturalKeyMixin, SharedMemoryModel):
+class IntensityTier(NaturalKeyMixin, CreditedContent, SharedMemoryModel):
     """
     Configurable thresholds for power intensity effects.
 
@@ -274,7 +275,7 @@ class TechniqueManager(NaturalKeyManager):
     """
 
 
-class Technique(NaturalKeyMixin, DiscoverableContent, SharedMemoryModel):
+class Technique(NaturalKeyMixin, DiscoverableContent, CreditedContent, SharedMemoryModel):
     """
     A specific magical ability within a Gift.
 

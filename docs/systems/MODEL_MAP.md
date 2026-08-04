@@ -123,6 +123,8 @@
 
 ### Media
 **Foreign Keys:**
+  - written_by -> contributors.ContentContributor [FK] (nullable)
+  - reviewed_by -> contributors.ContentContributor [FK] (nullable)
   - player_data -> evennia_extensions.PlayerData [FK] (nullable)
   - created_by -> evennia_extensions.Artist [FK] (nullable)
 **Pointed to by:**
@@ -159,6 +161,7 @@
 **Foreign Keys:**
   - account -> evennia.AccountDB [OneToOne]
   - profile_picture -> evennia_extensions.Media [FK] (nullable)
+  - contributor -> contributors.ContentContributor [OneToOne] (nullable)
 **Pointed to by:**
   - applications <- roster.RosterApplication
   - reviewed_applications <- roster.RosterApplication
@@ -232,6 +235,9 @@
 ## flows
 
 ### FlowDefinition
+**Foreign Keys:**
+  - written_by -> contributors.ContentContributor [FK] (nullable)
+  - reviewed_by -> contributors.ContentContributor [FK] (nullable)
 **Pointed to by:**
   - steps <- flows.FlowStepDefinition
   - triggerdefinition_set <- flows.TriggerDefinition
@@ -260,6 +266,8 @@
 
 ### TriggerDefinition
 **Foreign Keys:**
+  - written_by -> contributors.ContentContributor [FK] (nullable)
+  - reviewed_by -> contributors.ContentContributor [FK] (nullable)
   - flow_definition -> flows.FlowDefinition [FK]
 **Pointed to by:**
   - trigger_set <- flows.Trigger
@@ -276,12 +284,15 @@
 - `analyze_fixture(fixture_data: 'str') -> 'FixtureAnalysis' - Dry-run analysis comparing fixture JSON against the current database.`
 - `count_natural_key_args(model: 'type', _seen: 'set[type] | None' = None) -> 'int' - Recursively count how many args a model's natural key consumes.`
 - `execute_import(fixture_data: 'str', model_actions: 'dict[str, str]') -> 'ImportResult' - Execute an atomic import of fixture data.`
+- `resolve_model_by_name(model_key: 'str') -> 'type[models.Model]' - Resolve ``"<label>.<model_name>"`` (or a bare ``"<model_name>"``), mostly ignoring the label.`
 
 
 ## world.achievements
 
 ### Achievement
 **Foreign Keys:**
+  - written_by -> contributors.ContentContributor [FK] (nullable)
+  - reviewed_by -> contributors.ContentContributor [FK] (nullable)
   - prerequisite -> achievements.Achievement [FK] (nullable)
 **Pointed to by:**
   - next_in_chain <- achievements.Achievement
@@ -300,6 +311,8 @@
 
 ### AchievementStatRequirement
 **Foreign Keys:**
+  - written_by -> contributors.ContentContributor [FK] (nullable)
+  - reviewed_by -> contributors.ContentContributor [FK] (nullable)
   - achievement -> achievements.Achievement [FK]
   - stat -> achievements.StatDefinition [FK]
 
@@ -327,6 +340,8 @@
 
 ### RewardDefinition
 **Foreign Keys:**
+  - written_by -> contributors.ContentContributor [FK] (nullable)
+  - reviewed_by -> contributors.ContentContributor [FK] (nullable)
   - modifier_target -> mechanics.ModifierTarget [FK] (nullable)
   - distinction -> distinctions.Distinction [FK] (nullable)
 **Pointed to by:**
@@ -334,6 +349,9 @@
   - character_titles <- achievements.CharacterTitle
 
 ### StatDefinition
+**Foreign Keys:**
+  - written_by -> contributors.ContentContributor [FK] (nullable)
+  - reviewed_by -> contributors.ContentContributor [FK] (nullable)
 **Pointed to by:**
   - trackers <- achievements.StatTracker
   - requirements <- achievements.AchievementStatRequirement
@@ -531,6 +549,8 @@
 
 ### RampartElementProfile
 **Foreign Keys:**
+  - written_by -> contributors.ContentContributor [FK] (nullable)
+  - reviewed_by -> contributors.ContentContributor [FK] (nullable)
   - signature_damage_type -> conditions.DamageType [FK] (nullable)
   - signature_condition -> conditions.ConditionTemplate [FK] (nullable)
 **Pointed to by:**
@@ -1164,6 +1184,8 @@
 
 ### Beginnings
 **Foreign Keys:**
+  - written_by -> contributors.ContentContributor [FK] (nullable)
+  - reviewed_by -> contributors.ContentContributor [FK] (nullable)
   - art -> evennia_extensions.Media [FK] (nullable)
   - starting_area -> character_creation.StartingArea [FK]
   - heritage -> character_sheets.Heritage [FK] (nullable)
@@ -1182,6 +1204,9 @@
   - ritual_grants <- magic.BeginningsRitualGrant
 
 ### CGExplanation
+**Foreign Keys:**
+  - written_by -> contributors.ContentContributor [FK] (nullable)
+  - reviewed_by -> contributors.ContentContributor [FK] (nullable)
 
 ### CGPointBudget
 
@@ -1228,18 +1253,24 @@
 
 ### OriginTemplate
 **Foreign Keys:**
+  - written_by -> contributors.ContentContributor [FK] (nullable)
+  - reviewed_by -> contributors.ContentContributor [FK] (nullable)
   - beginning -> character_creation.Beginnings [FK]
 **Pointed to by:**
   - slots <- character_creation.OriginTemplateSlot
 
 ### OriginTemplateSlot
 **Foreign Keys:**
+  - written_by -> contributors.ContentContributor [FK] (nullable)
+  - reviewed_by -> contributors.ContentContributor [FK] (nullable)
   - template -> character_creation.OriginTemplate [FK]
 **Pointed to by:**
   - character_rows <- character_creation.CharacterOriginSlot
 
 ### StartingArea
 **Foreign Keys:**
+  - written_by -> contributors.ContentContributor [FK] (nullable)
+  - reviewed_by -> contributors.ContentContributor [FK] (nullable)
   - realm -> realms.Realm [FK] (nullable)
   - crest_art -> evennia_extensions.Media [FK] (nullable)
   - default_starting_room -> evennia_extensions.RoomProfile [FK] (nullable)
@@ -1524,12 +1555,17 @@
 ## world.checks
 
 ### CheckCategory
+**Foreign Keys:**
+  - written_by -> contributors.ContentContributor [FK] (nullable)
+  - reviewed_by -> contributors.ContentContributor [FK] (nullable)
 **Pointed to by:**
   - check_types <- checks.CheckType
   - condition_check_modifiers <- conditions.ConditionCheckModifier
 
 ### CheckType
 **Foreign Keys:**
+  - written_by -> contributors.ContentContributor [FK] (nullable)
+  - reviewed_by -> contributors.ContentContributor [FK] (nullable)
   - category -> checks.CheckCategory [FK]
   - owner_sheet -> character_sheets.CharacterSheet [FK] (nullable)
 **Pointed to by:**
@@ -1647,6 +1683,9 @@
 ## world.classes
 
 ### Aspect
+**Foreign Keys:**
+  - written_by -> contributors.ContentContributor [FK] (nullable)
+  - reviewed_by -> contributors.ContentContributor [FK] (nullable)
 **Pointed to by:**
   - check_type_aspects <- checks.CheckTypeAspect
   - path_aspects <- classes.PathAspect
@@ -1676,6 +1715,8 @@
 
 ### Path
 **Foreign Keys:**
+  - written_by -> contributors.ContentContributor [FK] (nullable)
+  - reviewed_by -> contributors.ContentContributor [FK] (nullable)
   - style -> magic.TechniqueStyle [FK] (nullable)
   - parent_paths -> classes.Path [M2M]
 **Pointed to by:**
@@ -1725,6 +1766,8 @@
 
 ### Clue
 **Foreign Keys:**
+  - written_by -> contributors.ContentContributor [FK] (nullable)
+  - reviewed_by -> contributors.ContentContributor [FK] (nullable)
   - target_codex_entry -> codex.CodexEntry [FK] (nullable)
   - target_mission -> missions.MissionTemplate [FK] (nullable)
   - target_captivity -> captivity.Captivity [FK] (nullable)
@@ -1785,11 +1828,16 @@
   - learned_from -> roster.RosterTenure [FK] (nullable)
 
 ### CodexCategory
+**Foreign Keys:**
+  - written_by -> contributors.ContentContributor [FK] (nullable)
+  - reviewed_by -> contributors.ContentContributor [FK] (nullable)
 **Pointed to by:**
   - subjects <- codex.CodexSubject
 
 ### CodexEntry
 **Foreign Keys:**
+  - written_by -> contributors.ContentContributor [FK] (nullable)
+  - reviewed_by -> contributors.ContentContributor [FK] (nullable)
   - subject -> codex.CodexSubject [FK]
   - modifier_target -> mechanics.ModifierTarget [OneToOne] (nullable)
   - art -> evennia_extensions.Media [FK] (nullable)
@@ -1817,6 +1865,8 @@
 
 ### CodexSubject
 **Foreign Keys:**
+  - written_by -> contributors.ContentContributor [FK] (nullable)
+  - reviewed_by -> contributors.ContentContributor [FK] (nullable)
   - category -> codex.CodexCategory [FK]
   - parent -> codex.CodexSubject [FK] (nullable)
 **Pointed to by:**
@@ -2097,6 +2147,8 @@
 
 ### CreatureTemplate
 **Foreign Keys:**
+  - written_by -> contributors.ContentContributor [FK] (nullable)
+  - reviewed_by -> contributors.ContentContributor [FK] (nullable)
   - threat_pool -> combat.ThreatPool [FK] (nullable)
 **Pointed to by:**
   - weakness_pool_entries <- covenants.WeaknessPoolEntry
@@ -2203,6 +2255,9 @@
   - outcome_snapshot -> traits.CheckOutcome [FK] (nullable)
 
 ### ThreatPool
+**Foreign Keys:**
+  - written_by -> contributors.ContentContributor [FK] (nullable)
+  - reviewed_by -> contributors.ContentContributor [FK] (nullable)
 **Pointed to by:**
   - entries <- combat.ThreatPoolEntry
   - opponents <- combat.CombatOpponent
@@ -2212,6 +2267,8 @@
 
 ### ThreatPoolEntry
 **Foreign Keys:**
+  - written_by -> contributors.ContentContributor [FK] (nullable)
+  - reviewed_by -> contributors.ContentContributor [FK] (nullable)
   - pool -> combat.ThreatPool [FK]
   - damage_type -> conditions.DamageType [FK] (nullable)
   - on_hit_consequence_pool -> actions.ConsequencePool [FK] (nullable)
@@ -2385,6 +2442,8 @@
 
 ### CapabilityType
 **Foreign Keys:**
+  - written_by -> contributors.ContentContributor [FK] (nullable)
+  - reviewed_by -> contributors.ContentContributor [FK] (nullable)
   - prerequisite -> mechanics.Prerequisite [FK] (nullable)
 **Pointed to by:**
   - check_type_modifiers <- checks.CheckTypeCapabilityModifier
@@ -2417,6 +2476,9 @@
   - capability -> conditions.CapabilityType [FK]
 
 ### ConditionCategory
+**Foreign Keys:**
+  - written_by -> contributors.ContentContributor [FK] (nullable)
+  - reviewed_by -> contributors.ContentContributor [FK] (nullable)
 **Pointed to by:**
   - conditions <- conditions.ConditionTemplate
 
@@ -2435,6 +2497,8 @@
 
 ### ConditionDamageInteraction
 **Foreign Keys:**
+  - written_by -> contributors.ContentContributor [FK] (nullable)
+  - reviewed_by -> contributors.ContentContributor [FK] (nullable)
   - condition -> conditions.ConditionTemplate [FK]
   - damage_type -> conditions.DamageType [FK]
   - applies_condition -> conditions.ConditionTemplate [FK] (nullable)
@@ -2480,6 +2544,8 @@
 
 ### ConditionStage
 **Foreign Keys:**
+  - written_by -> contributors.ContentContributor [FK] (nullable)
+  - reviewed_by -> contributors.ContentContributor [FK] (nullable)
   - condition -> conditions.ConditionTemplate [FK]
   - resist_check_type -> checks.CheckType [FK] (nullable)
   - consequence_pool -> actions.ConsequencePool [FK] (nullable)
@@ -2504,6 +2570,8 @@
 
 ### ConditionTemplate
 **Foreign Keys:**
+  - written_by -> contributors.ContentContributor [FK] (nullable)
+  - reviewed_by -> contributors.ContentContributor [FK] (nullable)
   - category -> conditions.ConditionCategory [FK]
   - cure_check_type -> checks.CheckType [FK] (nullable)
   - resist_check_type -> checks.CheckType [FK] (nullable)
@@ -2560,6 +2628,8 @@
 
 ### DamageType
 **Foreign Keys:**
+  - written_by -> contributors.ContentContributor [FK] (nullable)
+  - reviewed_by -> contributors.ContentContributor [FK] (nullable)
   - resonance -> magic.Resonance [OneToOne] (nullable)
   - wound_pool -> actions.ConsequencePool [FK] (nullable)
   - death_pool -> actions.ConsequencePool [FK] (nullable)
@@ -2744,6 +2814,13 @@
 - `theft_category() -> 'SocialConsentCategory' - Lazy seeded row for the theft/antagonism gate (#1909) — default-deny.`
 
 
+## world.contributors
+
+### ContentContributor
+**Pointed to by:**
+  - player_data <- evennia_extensions.PlayerData
+
+
 ## world.covenants
 
 ### CharacterCovenantRole
@@ -2835,6 +2912,8 @@
 
 ### CovenantRole
 **Foreign Keys:**
+  - written_by -> contributors.ContentContributor [FK] (nullable)
+  - reviewed_by -> contributors.ContentContributor [FK] (nullable)
   - resonance -> magic.Resonance [FK] (nullable)
   - discovery_achievement -> achievements.Achievement [FK] (nullable)
   - codex_entry -> codex.CodexEntry [FK] (nullable)
@@ -2884,6 +2963,8 @@
 
 ### InsightTableEntry
 **Foreign Keys:**
+  - written_by -> contributors.ContentContributor [FK] (nullable)
+  - reviewed_by -> contributors.ContentContributor [FK] (nullable)
   - condition -> conditions.ConditionTemplate [FK]
 
 ### MentorBond
@@ -2902,6 +2983,8 @@
 
 ### VowSituationalPerk
 **Foreign Keys:**
+  - written_by -> contributors.ContentContributor [FK] (nullable)
+  - reviewed_by -> contributors.ContentContributor [FK] (nullable)
   - covenant_role -> covenants.CovenantRole [FK]
   - check_type -> checks.CheckType [FK] (nullable)
   - mission_category -> missions.MissionCategory [FK] (nullable)
@@ -2925,6 +3008,8 @@
 
 ### WeaknessPoolEntry
 **Foreign Keys:**
+  - written_by -> contributors.ContentContributor [FK] (nullable)
+  - reviewed_by -> contributors.ContentContributor [FK] (nullable)
   - creature_template -> combat.CreatureTemplate [FK]
   - condition -> conditions.ConditionTemplate [FK]
 
@@ -3152,6 +3237,8 @@
 
 ### Distinction
 **Foreign Keys:**
+  - written_by -> contributors.ContentContributor [FK] (nullable)
+  - reviewed_by -> contributors.ContentContributor [FK] (nullable)
   - category -> distinctions.DistinctionCategory [FK]
   - parent_distinction -> distinctions.Distinction [FK] (nullable)
   - trust_category -> stories.TrustCategory [FK] (nullable)
@@ -3181,11 +3268,16 @@
   - npc_regard_seeds <- npc_services.DistinctionRegardSeed
 
 ### DistinctionCategory
+**Foreign Keys:**
+  - written_by -> contributors.ContentContributor [FK] (nullable)
+  - reviewed_by -> contributors.ContentContributor [FK] (nullable)
 **Pointed to by:**
   - distinctions <- distinctions.Distinction
 
 ### DistinctionEffect
 **Foreign Keys:**
+  - written_by -> contributors.ContentContributor [FK] (nullable)
+  - reviewed_by -> contributors.ContentContributor [FK] (nullable)
   - distinction -> distinctions.Distinction [FK]
   - target -> mechanics.ModifierTarget [FK]
 **Pointed to by:**
@@ -3598,11 +3690,15 @@
 
 ### CheckTypeSituationFit
 **Foreign Keys:**
+  - written_by -> contributors.ContentContributor [FK] (nullable)
+  - reviewed_by -> contributors.ContentContributor [FK] (nullable)
   - check_type -> checks.CheckType [FK]
   - situation_kind -> gm.SituationKind [FK]
 
 ### ConsequencePoolGuide
 **Foreign Keys:**
+  - written_by -> contributors.ContentContributor [FK] (nullable)
+  - reviewed_by -> contributors.ContentContributor [FK] (nullable)
   - situation_kind -> gm.SituationKind [FK]
   - pool -> actions.ConsequencePool [FK]
 
@@ -3694,9 +3790,14 @@
 
 ### SituationDifficultyGuide
 **Foreign Keys:**
+  - written_by -> contributors.ContentContributor [FK] (nullable)
+  - reviewed_by -> contributors.ContentContributor [FK] (nullable)
   - situation_kind -> gm.SituationKind [FK]
 
 ### SituationKind
+**Foreign Keys:**
+  - written_by -> contributors.ContentContributor [FK] (nullable)
+  - reviewed_by -> contributors.ContentContributor [FK] (nullable)
 **Pointed to by:**
   - check_fits <- gm.CheckTypeSituationFit
   - difficulty_guides <- gm.SituationDifficultyGuide
@@ -4538,6 +4639,9 @@
 ## world.magic
 
 ### Affinity
+**Foreign Keys:**
+  - written_by -> contributors.ContentContributor [FK] (nullable)
+  - reviewed_by -> contributors.ContentContributor [FK] (nullable)
 **Pointed to by:**
   - modifier_target <- mechanics.ModifierTarget
   - resonances <- magic.Resonance
@@ -4698,6 +4802,8 @@
 
 ### CompromiseActType
 **Foreign Keys:**
+  - written_by -> contributors.ContentContributor [FK] (nullable)
+  - reviewed_by -> contributors.ContentContributor [FK] (nullable)
   - target_resonance -> magic.Resonance [FK]
 
 ### CorruptionConfig
@@ -4758,6 +4864,8 @@
 
 ### DramaticMomentType
 **Foreign Keys:**
+  - written_by -> contributors.ContentContributor [FK] (nullable)
+  - reviewed_by -> contributors.ContentContributor [FK] (nullable)
   - resonance -> magic.Resonance [FK] (nullable)
   - archetypes -> societies.PhilosophicalArchetype [M2M]
 **Pointed to by:**
@@ -4765,6 +4873,9 @@
   - suggestions <- magic.DramaticMomentSuggestion
 
 ### EffectType
+**Foreign Keys:**
+  - written_by -> contributors.ContentContributor [FK] (nullable)
+  - reviewed_by -> contributors.ContentContributor [FK] (nullable)
 **Pointed to by:**
   - available_restrictions <- magic.Restriction
   - techniques <- magic.Technique
@@ -4782,6 +4893,8 @@
 
 ### Facet
 **Foreign Keys:**
+  - written_by -> contributors.ContentContributor [FK] (nullable)
+  - reviewed_by -> contributors.ContentContributor [FK] (nullable)
   - parent -> magic.Facet [FK] (nullable)
 **Pointed to by:**
   - children <- magic.Facet
@@ -4816,6 +4929,8 @@
 
 ### Gift
 **Foreign Keys:**
+  - written_by -> contributors.ContentContributor [FK] (nullable)
+  - reviewed_by -> contributors.ContentContributor [FK] (nullable)
   - parent -> magic.Gift [FK] (nullable)
   - creator -> character_sheets.CharacterSheet [FK] (nullable)
   - codex_entry -> codex.CodexEntry [FK] (nullable)
@@ -4850,6 +4965,8 @@
 
 ### GlimpseTag
 **Foreign Keys:**
+  - written_by -> contributors.ContentContributor [FK] (nullable)
+  - reviewed_by -> contributors.ContentContributor [FK] (nullable)
   - affinity -> magic.Affinity [FK] (nullable)
   - paths -> classes.Path [M2M]
 **Pointed to by:**
@@ -4866,6 +4983,9 @@
   - resonance -> magic.Resonance [FK] (nullable)
 
 ### IntensityTier
+**Foreign Keys:**
+  - written_by -> contributors.ContentContributor [FK] (nullable)
+  - reviewed_by -> contributors.ContentContributor [FK] (nullable)
 **Pointed to by:**
   - auderethreshold_set <- magic.AudereThreshold
 
@@ -4988,6 +5108,9 @@
   - installed_by -> scenes.Persona [FK] (nullable)
 
 ### PortalAnchorKind
+**Foreign Keys:**
+  - written_by -> contributors.ContentContributor [FK] (nullable)
+  - reviewed_by -> contributors.ContentContributor [FK] (nullable)
 **Pointed to by:**
   - travel_techniques <- magic.Technique
   - anchors <- magic.PortalAnchor
@@ -5018,6 +5141,8 @@
 
 ### Resonance
 **Foreign Keys:**
+  - written_by -> contributors.ContentContributor [FK] (nullable)
+  - reviewed_by -> contributors.ContentContributor [FK] (nullable)
   - affinity -> magic.Affinity [FK]
   - opposite -> magic.Resonance [OneToOne] (nullable)
   - codex_entry -> codex.CodexEntry [FK] (nullable)
@@ -5107,6 +5232,8 @@
 
 ### Restriction
 **Foreign Keys:**
+  - written_by -> contributors.ContentContributor [FK] (nullable)
+  - reviewed_by -> contributors.ContentContributor [FK] (nullable)
   - allowed_effect_types -> magic.EffectType [M2M]
 **Pointed to by:**
   - techniques <- magic.Technique
@@ -5114,6 +5241,8 @@
 
 ### Ritual
 **Foreign Keys:**
+  - written_by -> contributors.ContentContributor [FK] (nullable)
+  - reviewed_by -> contributors.ContentContributor [FK] (nullable)
   - flow -> flows.FlowDefinition [FK] (nullable)
   - author_account -> evennia.AccountDB [FK] (nullable)
   - site_property -> mechanics.Property [FK] (nullable)
@@ -5290,6 +5419,8 @@
 
 ### Technique
 **Foreign Keys:**
+  - written_by -> contributors.ContentContributor [FK] (nullable)
+  - reviewed_by -> contributors.ContentContributor [FK] (nullable)
   - discovery_achievement -> achievements.Achievement [FK] (nullable)
   - gift -> magic.Gift [FK]
   - effect_type -> magic.EffectType [FK]
@@ -5428,6 +5559,9 @@
   - technique -> magic.Technique [FK]
 
 ### TechniqueStyle
+**Foreign Keys:**
+  - written_by -> contributors.ContentContributor [FK] (nullable)
+  - reviewed_by -> contributors.ContentContributor [FK] (nullable)
 **Pointed to by:**
   - paths <- classes.Path
   - capability_requirements <- magic.StyleCapabilityRequirement
@@ -5547,6 +5681,9 @@
 ### TouchstoneCastConfig
 
 ### Tradition
+**Foreign Keys:**
+  - written_by -> contributors.ContentContributor [FK] (nullable)
+  - reviewed_by -> contributors.ContentContributor [FK] (nullable)
 **Pointed to by:**
   - available_beginnings <- character_creation.Beginnings
   - beginning_traditions <- character_creation.BeginningTradition
@@ -5629,6 +5766,8 @@
 
 ### Application
 **Foreign Keys:**
+  - written_by -> contributors.ContentContributor [FK] (nullable)
+  - reviewed_by -> contributors.ContentContributor [FK] (nullable)
   - capability -> conditions.CapabilityType [FK]
   - target_property -> mechanics.Property [FK]
   - required_effect_property -> mechanics.Property [FK] (nullable)
@@ -5643,6 +5782,8 @@
 
 ### ChallengeApproach
 **Foreign Keys:**
+  - written_by -> contributors.ContentContributor [FK] (nullable)
+  - reviewed_by -> contributors.ContentContributor [FK] (nullable)
   - challenge_template -> mechanics.ChallengeTemplate [FK]
   - application -> mechanics.Application [FK]
   - check_type -> checks.CheckType [FK]
@@ -5655,6 +5796,9 @@
   - scene_declarations <- scenes.SceneActionDeclaration
 
 ### ChallengeCategory
+**Foreign Keys:**
+  - written_by -> contributors.ContentContributor [FK] (nullable)
+  - reviewed_by -> contributors.ContentContributor [FK] (nullable)
 **Pointed to by:**
   - challenge_templates <- mechanics.ChallengeTemplate
   - situation_templates <- mechanics.SituationTemplate
@@ -5675,6 +5819,8 @@
 
 ### ChallengeTemplate
 **Foreign Keys:**
+  - written_by -> contributors.ContentContributor [FK] (nullable)
+  - reviewed_by -> contributors.ContentContributor [FK] (nullable)
   - category -> mechanics.ChallengeCategory [FK]
   - blocked_capability -> conditions.CapabilityType [FK] (nullable)
   - properties -> mechanics.Property [M2M]
@@ -5726,6 +5872,9 @@
   - check_type -> checks.CheckType [FK] (nullable)
 
 ### ModifierCategory
+**Foreign Keys:**
+  - written_by -> contributors.ContentContributor [FK] (nullable)
+  - reviewed_by -> contributors.ContentContributor [FK] (nullable)
 **Pointed to by:**
   - targets <- mechanics.ModifierTarget
 
@@ -5740,6 +5889,8 @@
 
 ### ModifierTarget
 **Foreign Keys:**
+  - written_by -> contributors.ContentContributor [FK] (nullable)
+  - reviewed_by -> contributors.ContentContributor [FK] (nullable)
   - category -> mechanics.ModifierCategory [FK]
   - target_trait -> traits.Trait [FK] (nullable)
   - target_affinity -> magic.Affinity [OneToOne] (nullable)
@@ -5777,6 +5928,8 @@
 
 ### Prerequisite
 **Foreign Keys:**
+  - written_by -> contributors.ContentContributor [FK] (nullable)
+  - reviewed_by -> contributors.ContentContributor [FK] (nullable)
   - property -> mechanics.Property [FK]
 **Pointed to by:**
   - capability_types <- conditions.CapabilityType
@@ -5786,6 +5939,8 @@
 
 ### Property
 **Foreign Keys:**
+  - written_by -> contributors.ContentContributor [FK] (nullable)
+  - reviewed_by -> contributors.ContentContributor [FK] (nullable)
   - category -> mechanics.PropertyCategory [FK]
 **Pointed to by:**
   - consequence_effects <- checks.ConsequenceEffect
@@ -5815,6 +5970,9 @@
   - personas <- scenes.Persona
 
 ### PropertyCategory
+**Foreign Keys:**
+  - written_by -> contributors.ContentContributor [FK] (nullable)
+  - reviewed_by -> contributors.ContentContributor [FK] (nullable)
 **Pointed to by:**
   - properties <- mechanics.Property
 
@@ -5847,6 +6005,8 @@
 
 ### SituationTemplate
 **Foreign Keys:**
+  - written_by -> contributors.ContentContributor [FK] (nullable)
+  - reviewed_by -> contributors.ContentContributor [FK] (nullable)
   - category -> mechanics.ChallengeCategory [FK]
   - challenges -> mechanics.ChallengeTemplate [M2M]
 **Pointed to by:**
@@ -5958,6 +6118,9 @@
   - challenge_categories -> mechanics.ChallengeCategory [M2M]
 
 ### MissionCategory
+**Foreign Keys:**
+  - written_by -> contributors.ContentContributor [FK] (nullable)
+  - reviewed_by -> contributors.ContentContributor [FK] (nullable)
 **Pointed to by:**
   - situational_perks <- covenants.VowSituationalPerk
   - templates <- missions.MissionTemplate
@@ -6039,6 +6202,8 @@
 
 ### MissionNode
 **Foreign Keys:**
+  - written_by -> contributors.ContentContributor [FK] (nullable)
+  - reviewed_by -> contributors.ContentContributor [FK] (nullable)
   - template -> missions.MissionTemplate [FK]
   - target_area -> areas.Area [FK] (nullable)
   - allowed_riders -> checks.Consequence [M2M]
@@ -6064,6 +6229,8 @@
 
 ### MissionOption
 **Foreign Keys:**
+  - written_by -> contributors.ContentContributor [FK] (nullable)
+  - reviewed_by -> contributors.ContentContributor [FK] (nullable)
   - node -> missions.MissionNode [FK]
   - authored_check_type -> checks.CheckType [FK] (nullable)
   - branch_target -> missions.MissionNode [FK] (nullable)
@@ -6074,6 +6241,8 @@
 
 ### MissionOptionRoute
 **Foreign Keys:**
+  - written_by -> contributors.ContentContributor [FK] (nullable)
+  - reviewed_by -> contributors.ContentContributor [FK] (nullable)
   - option -> missions.MissionOption [FK]
   - outcome_tier -> traits.CheckOutcome [FK] (nullable)
   - target_node -> missions.MissionNode [FK] (nullable)
@@ -6085,6 +6254,8 @@
 
 ### MissionOptionRouteCandidate
 **Foreign Keys:**
+  - written_by -> contributors.ContentContributor [FK] (nullable)
+  - reviewed_by -> contributors.ContentContributor [FK] (nullable)
   - route -> missions.MissionOptionRoute [FK]
   - target_node -> missions.MissionNode [FK]
   - consequence -> checks.Consequence [FK] (nullable)
@@ -6093,6 +6264,8 @@
 
 ### MissionOptionRouteReward
 **Foreign Keys:**
+  - written_by -> contributors.ContentContributor [FK] (nullable)
+  - reviewed_by -> contributors.ContentContributor [FK] (nullable)
   - route -> missions.MissionOptionRoute [FK] (nullable)
   - candidate -> missions.MissionOptionRouteCandidate [FK] (nullable)
   - resonance -> magic.Resonance [FK] (nullable)
@@ -6139,6 +6312,8 @@
 
 ### MissionTemplate
 **Foreign Keys:**
+  - written_by -> contributors.ContentContributor [FK] (nullable)
+  - reviewed_by -> contributors.ContentContributor [FK] (nullable)
   - created_in_era -> stories.Era [FK] (nullable)
   - report_to_role -> npc_services.NPCRole [FK] (nullable)
   - categories -> missions.MissionCategory [M2M]
@@ -6859,6 +7034,9 @@
 ## world.realms
 
 ### Realm
+**Foreign Keys:**
+  - written_by -> contributors.ContentContributor [FK] (nullable)
+  - reviewed_by -> contributors.ContentContributor [FK] (nullable)
 **Pointed to by:**
   - areas <- areas.Area
   - families <- roster.Family
@@ -6969,6 +7147,9 @@
   - track -> relationships.RelationshipTrack [FK]
 
 ### RelationshipTrack
+**Foreign Keys:**
+  - written_by -> contributors.ContentContributor [FK] (nullable)
+  - reviewed_by -> contributors.ContentContributor [FK] (nullable)
 **Pointed to by:**
   - thread_weaving_unlocks <- magic.ThreadWeavingUnlock
   - tiers <- relationships.RelationshipTier
@@ -7971,6 +8152,8 @@
 
 ### Skill
 **Foreign Keys:**
+  - written_by -> contributors.ContentContributor [FK] (nullable)
+  - reviewed_by -> contributors.ContentContributor [FK] (nullable)
   - trait -> traits.Trait [OneToOne]
 **Pointed to by:**
   - legend_spreads <- societies.LegendSpread
@@ -8128,12 +8311,17 @@
   - house_templates <- societies.HouseTemplate
 
 ### HouseAspectDefinition
+**Foreign Keys:**
+  - written_by -> contributors.ContentContributor [FK] (nullable)
+  - reviewed_by -> contributors.ContentContributor [FK] (nullable)
 **Pointed to by:**
   - templates <- societies.HouseTemplate
   - options <- societies.HouseAspectOption
 
 ### HouseAspectOption
 **Foreign Keys:**
+  - written_by -> contributors.ContentContributor [FK] (nullable)
+  - reviewed_by -> contributors.ContentContributor [FK] (nullable)
   - definition -> societies.HouseAspectDefinition [FK]
   - codex_entry -> codex.CodexEntry [FK] (nullable)
 
@@ -8509,12 +8697,17 @@
 ## world.species
 
 ### Language
+**Foreign Keys:**
+  - written_by -> contributors.ContentContributor [FK] (nullable)
+  - reviewed_by -> contributors.ContentContributor [FK] (nullable)
 **Pointed to by:**
   - beginnings <- character_creation.Beginnings
   - native_species <- species.Species
 
 ### Species
 **Foreign Keys:**
+  - written_by -> contributors.ContentContributor [FK] (nullable)
+  - reviewed_by -> contributors.ContentContributor [FK] (nullable)
   - parent -> species.Species [FK] (nullable)
   - codex_entry -> codex.CodexEntry [FK] (nullable)
   - starting_languages -> species.Language [M2M]
@@ -8922,6 +9115,9 @@
   - codex_entry -> codex.CodexEntry [FK] (nullable)
 
 ### TarotCard
+**Foreign Keys:**
+  - written_by -> contributors.ContentContributor [FK] (nullable)
+  - reviewed_by -> contributors.ContentContributor [FK] (nullable)
 **Pointed to by:**
   - profiles <- character_sheets.Profile
 
@@ -9055,6 +9251,9 @@
   - outcome -> traits.CheckOutcome [FK]
 
 ### Trait
+**Foreign Keys:**
+  - written_by -> contributors.ContentContributor [FK] (nullable)
+  - reviewed_by -> contributors.ContentContributor [FK] (nullable)
 **Pointed to by:**
   - check_type_traits <- checks.CheckTypeTrait
   - modifier_targets <- mechanics.ModifierTarget
@@ -9214,6 +9413,8 @@
 
 ### WeatherEmit
 **Foreign Keys:**
+  - written_by -> contributors.ContentContributor [FK] (nullable)
+  - reviewed_by -> contributors.ContentContributor [FK] (nullable)
   - weather_type -> weather.WeatherType [FK]
 
 ### WeatherTransition

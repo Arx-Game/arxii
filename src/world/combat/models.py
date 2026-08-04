@@ -59,6 +59,7 @@ from world.combat.constants import (
     TargetingMode,
     TargetSelection,
 )
+from world.contributors.models import CreditedContent
 from world.covenants.constants import RoleArchetype
 from world.fatigue.constants import EffortLevel
 from world.gm.constants import GMLevel
@@ -259,7 +260,7 @@ class CombatEncounter(AbstractRound):
         ).exists()
 
 
-class ThreatPool(NaturalKeyMixin, SharedMemoryModel):
+class ThreatPool(NaturalKeyMixin, CreditedContent, SharedMemoryModel):
     """Named collection of NPC actions."""
 
     class NaturalKeyConfig:
@@ -279,7 +280,7 @@ class ThreatPool(NaturalKeyMixin, SharedMemoryModel):
         return self.name
 
 
-class ThreatPoolEntry(NaturalKeyMixin, SharedMemoryModel):
+class ThreatPoolEntry(NaturalKeyMixin, CreditedContent, SharedMemoryModel):
     """One possible action an NPC can take."""
 
     class NaturalKeyConfig:
@@ -2569,7 +2570,7 @@ class CreatureTemplateManager(NaturalKeyManager):
     """Manager for CreatureTemplate with natural key support."""
 
 
-class CreatureTemplate(NaturalKeyMixin, SharedMemoryModel):
+class CreatureTemplate(NaturalKeyMixin, CreditedContent, SharedMemoryModel):
     """Bestiary entry for a spawnable creature (#2016).
 
     Thin — does not duplicate stat blocks (those come from OpponentTierTemplate

@@ -20,6 +20,7 @@ from django.utils.functional import cached_property
 from evennia.utils.idmapper.models import SharedMemoryModel
 
 from core.natural_keys import NaturalKeyManager, NaturalKeyMixin
+from world.contributors.models import CreditedContent
 from world.distinctions.types import (
     DistinctionOrigin,
     OtherStatus,
@@ -37,7 +38,7 @@ class DistinctionCategoryManager(NaturalKeyManager):
     """Manager for DistinctionCategory with natural key support."""
 
 
-class DistinctionCategory(NaturalKeyMixin, SharedMemoryModel):
+class DistinctionCategory(NaturalKeyMixin, CreditedContent, SharedMemoryModel):
     """
     A category for organizing distinctions.
 
@@ -118,7 +119,7 @@ class DistinctionManager(NaturalKeyManager):
     """Manager for Distinction with natural key support."""
 
 
-class Distinction(NaturalKeyMixin, SharedMemoryModel):
+class Distinction(NaturalKeyMixin, CreditedContent, SharedMemoryModel):
     """
     An individual advantage, disadvantage, or defining characteristic.
 
@@ -373,7 +374,7 @@ class DistinctionPrerequisite(NaturalKeyMixin, SharedMemoryModel):
         return f"Prerequisite for {self.distinction.name}"
 
 
-class DistinctionEffect(NaturalKeyMixin, SharedMemoryModel):
+class DistinctionEffect(NaturalKeyMixin, CreditedContent, SharedMemoryModel):
     """
     A mechanical effect granted by a distinction.
 

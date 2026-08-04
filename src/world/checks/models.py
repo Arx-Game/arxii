@@ -11,6 +11,7 @@ from world.checks.constants import EffectTarget, EffectType, PositionDestination
 
 # Import outcome models so migrations and admin discover them.
 from world.checks.outcome_models import ConsequenceOutcome, ConsequenceOutcomeModifier  # noqa: F401
+from world.contributors.models import CreditedContent
 
 
 class OutcomeTierAward(SharedMemoryModel):
@@ -36,7 +37,7 @@ class OutcomeTierAward(SharedMemoryModel):
         ordering = ["outcome_tier__success_level"]
 
 
-class CheckCategory(NaturalKeyMixin, SharedMemoryModel):
+class CheckCategory(NaturalKeyMixin, CreditedContent, SharedMemoryModel):
     """Grouping for check types (Social, Combat, Exploration, Magic)."""
 
     name = models.CharField(max_length=50, unique=True)
@@ -56,7 +57,7 @@ class CheckCategory(NaturalKeyMixin, SharedMemoryModel):
         return self.name
 
 
-class CheckType(NaturalKeyMixin, SharedMemoryModel):
+class CheckType(NaturalKeyMixin, CreditedContent, SharedMemoryModel):
     """Staff-defined check type with trait and aspect composition.
 
     A row may instead be synthesized per character (one per CharacterSheet, via

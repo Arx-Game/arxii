@@ -9,6 +9,7 @@ from world.codex.models import (
     CodexSubject,
     CodexTeachingOffer,
 )
+from world.contributors.admin import CREDIT_FIELDSET
 
 
 class CodexSubjectInline(admin.TabularInline):
@@ -116,6 +117,7 @@ class CodexEntryAdmin(admin.ModelAdmin):
                 "classes": ["collapse"],
             },
         ),
+        CREDIT_FIELDSET,
     )
     autocomplete_fields = ["modifier_target", "art"]
 

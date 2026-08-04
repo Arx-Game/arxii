@@ -20,6 +20,7 @@ from django.db import models
 from evennia.utils.idmapper.models import SharedMemoryModel
 
 from core.natural_keys import NaturalKeyManager, NaturalKeyMixin
+from world.contributors.models import CreditedContent
 from world.locations.constants import StatKey
 
 _CODEX_SUBJECT_FK = "arxii.CodexSubject"
@@ -269,7 +270,7 @@ class WeatherTypeShelter(NaturalKeyMixin, SharedMemoryModel):
         return f"{self.weather_type.name}: {self.damage_type.name} shelter {self.value:+d}"
 
 
-class WeatherEmit(NaturalKeyMixin, SharedMemoryModel):
+class WeatherEmit(NaturalKeyMixin, CreditedContent, SharedMemoryModel):
     """An atmospheric flavour line shown while a weather type holds (#1522).
 
     Seeded (later slice) from the Arx-1 emit corpus. Gated by IC season and time-of-day phase

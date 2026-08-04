@@ -12,6 +12,7 @@ from evennia.utils.idmapper.models import SharedMemoryModel
 
 from core.managers import ArxSharedMemoryManager
 from core.natural_keys import NaturalKeyManager, NaturalKeyMixin
+from world.contributors.models import CreditedContent
 from world.gm.constants import (
     CatalogSuggestionProposalKind,
     GMApplicationStatus,
@@ -473,7 +474,7 @@ class SituationKindManager(NaturalKeyManager):
     """
 
 
-class SituationKind(NaturalKeyMixin, SharedMemoryModel):
+class SituationKind(NaturalKeyMixin, CreditedContent, SharedMemoryModel):
     """Cross-cutting scenario taxonomy tag ("Chase", "Negotiation", "Infiltration").
 
     Not a reuse of ``mechanics.ChallengeCategory`` or ``checks.CheckCategory`` --
@@ -514,7 +515,7 @@ class SituationKind(NaturalKeyMixin, SharedMemoryModel):
         return self.name
 
 
-class CheckTypeSituationFit(NaturalKeyMixin, SharedMemoryModel):
+class CheckTypeSituationFit(NaturalKeyMixin, CreditedContent, SharedMemoryModel):
     """A ``checks.CheckType`` proven to fit a ``SituationKind`` (through model).
 
     The "translatable across contexts" record from Decision 1 -- the same check
@@ -558,7 +559,7 @@ class CheckTypeSituationFit(NaturalKeyMixin, SharedMemoryModel):
         return f"{self.check_type.name} fits {self.situation_kind.name}"
 
 
-class SituationDifficultyGuide(NaturalKeyMixin, SharedMemoryModel):
+class SituationDifficultyGuide(NaturalKeyMixin, CreditedContent, SharedMemoryModel):
     """Authored difficulty recommendation for a ``SituationKind`` at a given risk.
 
     Targets the live ``DifficultyChoice`` band surface a GM actually picks
@@ -595,7 +596,7 @@ class SituationDifficultyGuide(NaturalKeyMixin, SharedMemoryModel):
         )
 
 
-class ConsequencePoolGuide(NaturalKeyMixin, SharedMemoryModel):
+class ConsequencePoolGuide(NaturalKeyMixin, CreditedContent, SharedMemoryModel):
     """Advisory text on which ``ConsequencePool`` fits a ``SituationKind`` (Decision 7).
 
     ADVISORY ONLY -- nothing anywhere reads this row to select, compose, or

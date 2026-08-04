@@ -18,6 +18,7 @@ from evennia_extensions.constants import ExitKind, RoomEnclosure
 from evennia_extensions.mixins import RelatedCacheClearingMixin
 from server.conf.serversession import ServerSession
 from world.areas.constants import GridOrigin
+from world.contributors.models import CreditedContent
 from world.roster.models import ApplicationStatus, ApprovalScope, RosterApplication
 
 # Type for Evennia command callers - can be Account, Session, or ObjectDB instance
@@ -259,7 +260,7 @@ class Artist(SharedMemoryModel):
         verbose_name_plural = "Artists"
 
 
-class Media(NaturalKeyMixin, SharedMemoryModel):
+class Media(NaturalKeyMixin, CreditedContent, SharedMemoryModel):
     """Cloudinary-backed image: player-uploaded media or staff-authored game art.
 
     Player-owned rows set ``player_data`` and leave ``slug`` null (created live

@@ -15,6 +15,7 @@ from evennia.utils.idmapper.models import SharedMemoryModel
 
 from core.managers import ArxSharedMemoryManager
 from core.natural_keys import NaturalKeyManager, NaturalKeyMixin
+from world.contributors.models import CreditedContent
 from world.magic.constants import SoulTetherRole
 from world.relationships.constants import (
     DECAY_DAYS,
@@ -79,7 +80,7 @@ class RelationshipCondition(SharedMemoryModel):
         return list(self.gates_modifiers.all())
 
 
-class RelationshipTrack(NaturalKeyMixin, SharedMemoryModel):
+class RelationshipTrack(NaturalKeyMixin, CreditedContent, SharedMemoryModel):
     """
     A named axis along which a relationship can develop.
 

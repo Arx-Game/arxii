@@ -29,6 +29,7 @@ from world.conditions.constants import (
     TreatmentTargetKind,
 )
 from world.conditions.types import AdvancementResistFailureKind
+from world.contributors.models import CreditedContent
 
 if TYPE_CHECKING:
     from world.conditions.handlers import ConditionTemplateReactiveHandler
@@ -47,7 +48,7 @@ _POSITION_FK = "arxii.Position"
 # =============================================================================
 
 
-class ConditionCategory(NaturalKeyMixin, SharedMemoryModel):
+class ConditionCategory(NaturalKeyMixin, CreditedContent, SharedMemoryModel):
     """
     High-level condition groupings.
 
@@ -114,7 +115,7 @@ class CapabilityTypeManager(NaturalKeyManager):
     """Manager for CapabilityType with natural key support, plus cached_all() (#1871)."""
 
 
-class CapabilityType(NaturalKeyMixin, SharedMemoryModel):
+class CapabilityType(NaturalKeyMixin, CreditedContent, SharedMemoryModel):
     """
     Capabilities that can be restricted or enhanced by conditions.
 
@@ -152,7 +153,7 @@ class CapabilityType(NaturalKeyMixin, SharedMemoryModel):
         return self.name
 
 
-class DamageType(NaturalKeyMixin, SharedMemoryModel):
+class DamageType(NaturalKeyMixin, CreditedContent, SharedMemoryModel):
     """
     Types of damage that can be dealt or resisted.
 
@@ -213,7 +214,7 @@ class DamageType(NaturalKeyMixin, SharedMemoryModel):
 # =============================================================================
 
 
-class ConditionTemplate(NaturalKeyMixin, SharedMemoryModel):
+class ConditionTemplate(NaturalKeyMixin, CreditedContent, SharedMemoryModel):
     """
     Definition of a condition type.
 
@@ -528,7 +529,7 @@ class ConditionStageManager(NaturalKeyManager):
     """Manager for ConditionStage with natural key support, plus cached_all() (#1871)."""
 
 
-class ConditionStage(NaturalKeyMixin, SharedMemoryModel):
+class ConditionStage(NaturalKeyMixin, CreditedContent, SharedMemoryModel):
     """
     A stage in a progressive condition.
 
@@ -1100,7 +1101,7 @@ class ConditionDamageOverTime(NaturalKeyMixin, ConditionOrStageEffect):
 # =============================================================================
 
 
-class ConditionDamageInteraction(NaturalKeyMixin, SharedMemoryModel):
+class ConditionDamageInteraction(NaturalKeyMixin, CreditedContent, SharedMemoryModel):
     """
     Special interactions when a conditioned target takes specific damage.
 

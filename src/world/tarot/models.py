@@ -13,10 +13,11 @@ from evennia.utils.idmapper.models import SharedMemoryModel
 
 from core.managers import ArxSharedMemoryManager
 from core.natural_keys import NaturalKeyManager, NaturalKeyMixin
+from world.contributors.models import CreditedContent
 from world.tarot.constants import SUIT_SINGULAR, ArcanaType, TarotSuit
 
 
-class TarotCard(NaturalKeyMixin, SharedMemoryModel):
+class TarotCard(NaturalKeyMixin, CreditedContent, SharedMemoryModel):
     """
     A single tarot card from the 78-card deck.
 

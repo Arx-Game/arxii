@@ -11,9 +11,10 @@ from flows.filters.validator import validate_filter_schema
 from flows.flow_event import FlowEvent
 from flows.helpers.logic import resolve_self_placeholders
 from flows.models.flows import FlowDefinition
+from world.contributors.models import CreditedContent
 
 
-class TriggerDefinition(NaturalKeyMixin, SharedMemoryModel):
+class TriggerDefinition(NaturalKeyMixin, CreditedContent, SharedMemoryModel):
     """Reusable template describing when to launch another flow.
 
     ``base_filter_condition`` allows simple equality checks against event data to

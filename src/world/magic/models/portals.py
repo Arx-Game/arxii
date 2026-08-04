@@ -13,12 +13,13 @@ from django.db import models
 from evennia.utils.idmapper.models import SharedMemoryModel
 
 from core.natural_keys import NaturalKeyManager, NaturalKeyMixin
+from world.contributors.models import CreditedContent
 
 ROOM_PROFILE_MODEL = "arxii.RoomProfile"
 PERSONA_MODEL = "arxii.Persona"
 
 
-class PortalAnchorKind(NaturalKeyMixin, SharedMemoryModel):
+class PortalAnchorKind(NaturalKeyMixin, CreditedContent, SharedMemoryModel):
     """A staff-authored medium of portal travel (e.g. "Mirror").
 
     ``Technique.travel_anchor_kind`` points here to mark a technique as a

@@ -4,6 +4,7 @@ Django admin configuration for species app.
 
 from django.contrib import admin
 
+from world.contributors.admin import CREDIT_FIELDSET
 from world.species.models import (
     Language,
     Species,
@@ -69,6 +70,7 @@ class SpeciesAdmin(admin.ModelAdmin):
         ("Description", {"fields": ["description", "codex_entry"]}),
         ("Languages", {"fields": ["starting_languages"]}),
         ("Aging (#2756)", {"fields": ["eternal_youth", "decline_start_age"]}),
+        CREDIT_FIELDSET,
     ]
     raw_id_fields = ["codex_entry"]
 

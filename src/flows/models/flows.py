@@ -10,6 +10,7 @@ from flows.consts import ITEM_REF, OPERATOR_MAP, RESULT_VARIABLE_KEY, FlowAction
 from flows.execution.prompts import register_pending_prompt
 from flows.flow_event import FlowEvent
 from flows.helpers.logic import resolve_modifier
+from world.contributors.models import CreditedContent
 
 if TYPE_CHECKING:
     from flows.flow_execution import FlowExecution
@@ -42,7 +43,7 @@ def _resolve_emit_location(flow_execution: "FlowExecution") -> Any:
     return owner.location
 
 
-class FlowDefinition(NaturalKeyMixin, SharedMemoryModel):
+class FlowDefinition(NaturalKeyMixin, CreditedContent, SharedMemoryModel):
     """Represents a reusable definition for a flow, consisting of multiple steps."""
 
     name = models.CharField(max_length=255, unique=True)

@@ -10,13 +10,14 @@ from django.utils.functional import cached_property
 from evennia.utils.idmapper.models import SharedMemoryModel
 
 from core.natural_keys import NaturalKeyManager, NaturalKeyMixin
+from world.contributors.models import CreditedContent
 
 
 class AffinityManager(NaturalKeyManager):
     """Manager for Affinity with natural key support."""
 
 
-class Affinity(NaturalKeyMixin, SharedMemoryModel):
+class Affinity(NaturalKeyMixin, CreditedContent, SharedMemoryModel):
     """
     A magical affinity (Celestial, Abyssal, Primal).
 
@@ -50,7 +51,7 @@ class ResonanceManager(NaturalKeyManager):
     """Manager for Resonance with natural key support."""
 
 
-class Resonance(NaturalKeyMixin, SharedMemoryModel):
+class Resonance(NaturalKeyMixin, CreditedContent, SharedMemoryModel):
     """
     A magical resonance — a style tag that defines magical identity.
 

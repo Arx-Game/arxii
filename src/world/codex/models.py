@@ -14,10 +14,11 @@ from core.natural_keys import NaturalKeyManager, NaturalKeyMixin
 from world.action_points.models import ActionPointPool
 from world.codex.constants import CodexKnowledgeStatus
 from world.consent.models import VisibilityMixin
+from world.contributors.models import CreditedContent
 from world.roster.models import RosterEntry, RosterTenure
 
 
-class CodexCategory(NaturalKeyMixin, SharedMemoryModel):
+class CodexCategory(NaturalKeyMixin, CreditedContent, SharedMemoryModel):
     """
     Top-level category for lore.
 
@@ -56,7 +57,7 @@ class CodexCategory(NaturalKeyMixin, SharedMemoryModel):
         refresh_codex_breadcrumbs()
 
 
-class CodexSubject(NaturalKeyMixin, SharedMemoryModel):
+class CodexSubject(NaturalKeyMixin, CreditedContent, SharedMemoryModel):
     """
     A subject within a category. Nestable via parent FK.
 
@@ -160,7 +161,7 @@ def refresh_codex_breadcrumbs() -> None:
         cursor.execute("REFRESH MATERIALIZED VIEW codex_subjectbreadcrumb")
 
 
-class CodexEntry(NaturalKeyMixin, SharedMemoryModel):
+class CodexEntry(NaturalKeyMixin, CreditedContent, SharedMemoryModel):
     """
     An individual piece of lore that can be known/taught/learned.
     """

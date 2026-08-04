@@ -13,6 +13,7 @@ from django.db import models
 from evennia.utils.idmapper.models import SharedMemoryModel
 
 from core.natural_keys import NaturalKeyManager, NaturalKeyMixin
+from world.contributors.models import CreditedContent
 from world.societies.houses.constants import (
     CRISIS_INCOME_FACTORS,
     DOMAIN_PROSPERITY_BASELINE,
@@ -977,7 +978,7 @@ class HouseClaim(SharedMemoryModel):
         return f"House {self.house_name} claim ({self.get_status_display()})"
 
 
-class HouseAspectDefinition(NaturalKeyMixin, SharedMemoryModel):
+class HouseAspectDefinition(NaturalKeyMixin, CreditedContent, SharedMemoryModel):
     """An authored, required catalog choice for houses of a template (#2079).
 
     Catalog-only by design: there is no free-text answer path. The normalized
@@ -1010,7 +1011,7 @@ class HouseAspectDefinition(NaturalKeyMixin, SharedMemoryModel):
         return self.name
 
 
-class HouseAspectOption(NaturalKeyMixin, SharedMemoryModel):
+class HouseAspectOption(NaturalKeyMixin, CreditedContent, SharedMemoryModel):
     """One authored answer in a definition's catalog (#2079).
 
     Inferna's seven House Quiddities are options on one definition. Each is a

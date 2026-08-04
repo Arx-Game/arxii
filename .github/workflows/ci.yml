@@ -168,7 +168,7 @@ jobs:
           #   directory-based discovery recurse the ENTIRE world/ tree,
           #   double-running every world.* shard — see the matching skip in
           #   tools/lint_shard_coverage.py's discover_apps_on_disk().)
-          #   + world.contributors (2026-08-04, #2980 credit identity model —
+          #   + world.contributors (2026-08-04, #2980 credit identity model -
           #   smallest shard at the time it was added).
           - name: shard-3
             split_app: world.combat

@@ -11,6 +11,7 @@ from django.db import models
 from evennia.utils.idmapper.models import SharedMemoryModel
 
 from core.natural_keys import NaturalKeyManager, NaturalKeyMixin
+from world.contributors.models import CreditedContent
 from world.magic.models.affinity import Resonance
 
 
@@ -18,7 +19,7 @@ class FacetManager(NaturalKeyManager):
     """Manager for Facet with natural key support."""
 
 
-class Facet(NaturalKeyMixin, SharedMemoryModel):
+class Facet(NaturalKeyMixin, CreditedContent, SharedMemoryModel):
     """
     Hierarchical imagery/symbolism that players assign to resonances.
 
