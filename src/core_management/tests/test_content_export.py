@@ -1591,3 +1591,94 @@ class ExportAdditionGateProseDomainTests(TestCase):
 
         names = {p.stem for p in self.domain.rglob("*.md")}
         self.assertIn("genuinely-authored", names)
+
+
+class GiftUnlockContentExportTests(TestCase):
+    """Round-trip coverage for GiftUnlock (#2967).
+
+    ``magic.giftunlock`` was added to ``CONTENT_MODELS`` with natural key
+    ``["gift"]``. Without an authorable row here nobody can *learn* a Minor
+    Gift: ``charge_and_learn`` raises ``GiftUnlockMissing`` when a learner takes
+    their first technique from a gift they do not own and holds no
+    ``CharacterGiftUnlock`` receipt, and that receipt is bought against this
+    row. So an authored Minor Gift with no ``GiftUnlock`` is reachable only by a
+    Species/Tradition/Path grant handing it over outright — which is what
+    blocked authoring a portal-travel minor gift in the lore repo.
+    """
+
+    def setUp(self) -> None:
+        self.tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(self.tmp.cleanup)
+        self.root = Path(self.tmp.name)
+
+    def test_gift_unlock_round_trips(self) -> None:
+        from world.classes.factories import PathFactory
+        from world.magic.constants import GiftKind
+        from world.magic.factories import GiftFactory, GiftUnlockFactory
+
+        gift = GiftFactory(name="Round Trip Mirrorcraft", kind=GiftKind.MINOR)
+        path = PathFactory(name="Round Trip Threshold Walker")
+        unlock = GiftUnlockFactory(gift=gift, xp_cost=50)
+        unlock.paths.add(path)
+
+        result = export_to_content_repo(self.root)
+        assert result.errors == []
+
+        unlock_path = self.root / "fixtures" / "magic" / "giftunlock.json"
+        assert unlock_path.exists()
+
+        records = json.loads(unlock_path.read_text(encoding="utf-8"))
+        assert len(records) == 1
+        record = records[0]
+        assert "pk" not in record
+        # Natural-key identity, not a raw pk, on both the FK and the M2M.
+        assert record["fields"]["gift"] == ["Round Trip Mirrorcraft"]
+        assert record["fields"]["paths"] == [["Round Trip Threshold Walker"]]
+
+        from core_management.content_fixtures import build_all, load_entries
+
+        load_result = build_all(self.root)
+        created, _updated, _ = load_entries(load_result)
+        assert created == 0, f"Round-trip created {created} new records (expected 0)"
+
+        unlock.refresh_from_db()
+        assert unlock.gift_id == gift.pk
+        assert unlock.xp_cost == 50
+
+    def test_blank_paths_is_the_open_to_everyone_shape(self) -> None:
+        """A minor gift nobody's path gates: blank ``paths`` means in-band for all."""
+        from world.magic.constants import GiftKind
+        from world.magic.factories import GiftFactory, GiftUnlockFactory
+
+        gift = GiftFactory(name="Open Mirrorcraft", kind=GiftKind.MINOR)
+        unlock = GiftUnlockFactory(gift=gift, xp_cost=50)
+
+        result = export_to_content_repo(self.root)
+        assert result.errors == []
+
+        records = json.loads(
+            (self.root / "fixtures" / "magic" / "giftunlock.json").read_text(encoding="utf-8")
+        )
+        assert records[0]["fields"]["paths"] == []
+
+        from core_management.content_fixtures import build_all, load_entries
+
+        created, _updated, _ = load_entries(build_all(self.root))
+        assert created == 0
+
+        unlock.refresh_from_db()
+        assert not unlock.paths.exists()
+
+    def test_one_unlock_per_gift_is_enforced(self) -> None:
+        """The natural key is ``gift``, so a second row for it must not exist."""
+        from django.db import IntegrityError, transaction
+
+        from world.magic.constants import GiftKind
+        from world.magic.factories import GiftFactory, GiftUnlockFactory
+        from world.magic.models import GiftUnlock
+
+        gift = GiftFactory(name="Duplicate Mirrorcraft", kind=GiftKind.MINOR)
+        GiftUnlockFactory(gift=gift, xp_cost=50)
+
+        with self.assertRaises(IntegrityError), transaction.atomic():
+            GiftUnlock.objects.create(gift=gift, xp_cost=99)

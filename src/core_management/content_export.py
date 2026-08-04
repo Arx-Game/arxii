@@ -164,6 +164,7 @@ CONTENT_MODELS: frozenset[str] = frozenset(
         "magic.effecttype",
         "magic.facet",
         "magic.gift",
+        "magic.giftunlock",
         "magic.glimpsetag",
         "magic.glimpsetagdistinctionsuggestion",
         "magic.intensitytier",

@@ -1549,6 +1549,16 @@ same offer). Proven end-to-end by
 `world/magic/tests/integration/test_gift_acquisition_action_e2e.py` (purchase → accept →
 `CharacterTechnique` minted; thread-weaving parity).
 
+**`GiftUnlock` is authored content, not seed data (#2967).** `magic.giftunlock` is registered in
+`CONTENT_MODELS` with natural key `["gift"]` (one row per gift, now a DB constraint), so the lore
+repo authors which Minor Gifts are acquirable and at what price. This was the missing link: without
+a row here nobody can *learn* a Minor Gift at all, since `charge_and_learn` raises
+`GiftUnlockMissing` for a learner's first technique from a gift they don't own, and an authored
+Minor Gift with no `GiftUnlock` is reachable only by a Species/Tradition/Path grant handing it over
+outright. Leaving `paths` blank is the open-to-everyone shape — every path treats the unlock as
+in-band at full `xp_cost`; populate it only to make the gift cheaper for some paths. Corollary of
+the `CONTENT_MODELS` registration: **no seeder may create a `GiftUnlock` row.**
+
 **Second front door — Academy TRAIN offers (#2440):** `accept_technique_offer`'s charge+acquire
 core is extracted into `charge_and_learn(learner, technique, *, base_ap_cost, source,
 gold_cost=0, gold_treasury=None, teacher_tenure=None, teacher_banked_ap=0)`

@@ -4955,6 +4955,7 @@
   - damage_profiles <- magic.TechniqueDamageProfile
   - pendingalteration_set <- magic.PendingAlteration
   - magicalalterationevent_set <- magic.MagicalAlterationEvent
+  - dramatic_moment_suggestions <- magic.DramaticMomentSuggestion
   - teaching_offers <- magic.TechniqueTeachingOffer
   - granted_by_path_gifts <- magic.PathGiftGrant
   - granted_by_tradition_gifts <- magic.TraditionGiftGrant
@@ -5190,7 +5191,7 @@
 
 ### DramaticMomentType
 **Foreign Keys:**
-  - resonance -> magic.Resonance [FK]
+  - resonance -> magic.Resonance [FK] (nullable)
   - archetypes -> societies.PhilosophicalArchetype [M2M]
 **Pointed to by:**
   - tags <- magic.DramaticMomentTag
@@ -5213,6 +5214,7 @@
   - character_sheet -> character_sheets.CharacterSheet [FK]
   - scene -> scenes.Scene [FK] (nullable)
   - interaction -> scenes.Interaction [FK] (nullable)
+  - technique -> magic.Technique [FK] (nullable)
   - resolved_by -> accounts.AccountDB [FK] (nullable)
   - confirmed_tag -> magic.DramaticMomentTag [OneToOne] (nullable)
 

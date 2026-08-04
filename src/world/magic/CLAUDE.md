@@ -90,8 +90,13 @@ The magic system for Arx II. Power flows from identity and connection.
   from `species.SpeciesGiftGrant.inheritable`, which walks the species chain — both are needed.
   See `docs/systems/magic.md`'s "Gift lineage" section for the full call-site table.
 - **Content pipeline (#2486):** the catalog (`Gift`/`Technique` + grant tables
-  `PathGiftGrant`/`TraditionGiftGrant`/`species.SpeciesGiftGrant` + `Technique`'s payload
-  rows) is lore-repo exportable via `CONTENT_MODELS` with natural keys —
+  `PathGiftGrant`/`TraditionGiftGrant`/`species.SpeciesGiftGrant` + `GiftUnlock` + `Technique`'s
+  payload rows) is lore-repo exportable via `CONTENT_MODELS` with natural keys —
+  `GiftUnlock` is keyed `["gift"]` (#2967; one row per gift, DB-enforced). Registering it is what
+  makes an authored Minor Gift *learnable*: `charge_and_learn` raises `GiftUnlockMissing` for a
+  learner's first technique from a gift they don't own, so a Minor Gift with no `GiftUnlock` is
+  reachable only by a Species/Tradition/Path grant. Blank `paths` = in-band for everyone (the
+  open-to-all shape). **No seeder may create one.**
   `Technique` is keyed `(gift, name)`, now DB-unique per gift
   (`unique_technique_gift_name`), so authoring a duplicate raises
   `DuplicateTechniqueName` (clean 400) instead of an `IntegrityError`. See
