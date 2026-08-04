@@ -134,6 +134,26 @@ _STUB_EFFECT_TYPES: list[tuple[str, str, str]] = [
     ("Utility", "Produces a practical magical effect with no direct combat role.", "utility"),
 ]
 
+#: (affinity_name, description) — the three canonical magic Affinities. Seeders
+#: look these up (``seed_canonical_affinities``) but must never create them, and
+#: since #2967 the same is true of every Resonance below.
+_STUB_AFFINITIES: list[tuple[str, str]] = [
+    ("Celestial", "The affinity of order, radiance, and the divine."),
+    ("Primal", "The affinity of nature, beasts, and raw survival."),
+    ("Abyssal", "The affinity of hunger, ruin, and the deep places."),
+]
+
+#: (resonance_name, affinity_name, description) — a Latin-ish stand-in for the
+#: real 24-resonance catalog, one per affinity. No seeder may mint a Resonance
+#: (#2967), so anything exercising a seed step keyed to one needs these to exist:
+#: the cascade demo rooms, the reference Corruption content, the TRAIT pull
+#: catalog and the Fall/Redemption examples all resolve theirs by affinity.
+_STUB_RESONANCES: list[tuple[str, str, str]] = [
+    ("Bene", "Celestial", "The resonance of mercy freely given."),
+    ("Fera", "Primal", "The resonance of the beast that does not reason."),
+    ("Maligna", "Abyssal", "The resonance of harm done for its own sake."),
+]
+
 #: style_name -> (gift_name, gift_description) — one starter MAJOR Gift per style.
 _STUB_GIFTS_BY_STYLE: dict[str, tuple[str, str]] = {
     "Manifestation": (
@@ -326,7 +346,8 @@ _STUB_TECHNIQUES: list[tuple[str, str, str, str]] = [
 def _build_starter_catalog_fixture_objects() -> list[dict]:
     """Build the raw-fixture-JSON object list for the starter catalog stub.
 
-    Dependency order (Style before Path; then EffectType/Gift before Technique before
+    Dependency order (Style before Path; then EffectType/Affinity before
+    Resonance, Gift before Technique, and those before
     Tradition/PathGiftGrant/TraditionGiftGrant) so ``load_world_content()``'s
     natural-key resolution succeeds on the first pass — its deferred-retry
     mechanism would paper over a wrong order anyway, but there is no reason to
@@ -364,6 +385,26 @@ def _build_starter_catalog_fixture_objects() -> list[dict]:
             {
                 "model": "magic.effecttype",
                 "fields": {"name": name, "description": description, "category": category},
+            }
+        )
+
+    for name, description in _STUB_AFFINITIES:
+        objects.append(
+            {
+                "model": "magic.affinity",
+                "fields": {"name": name, "description": description},
+            }
+        )
+
+    for name, affinity_name, description in _STUB_RESONANCES:
+        objects.append(
+            {
+                "model": "magic.resonance",
+                "fields": {
+                    "name": name,
+                    "affinity": [affinity_name],
+                    "description": description,
+                },
             }
         )
 

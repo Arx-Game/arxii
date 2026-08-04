@@ -43,6 +43,8 @@ from world.combat.factories import (
 )
 from world.combat.models import CombatEncounter, CombatParticipant, CombatRoundAction
 from world.magic.factories import (
+    CharacterResonanceFactory,
+    ResonanceFactory,
     ensure_dramatic_entrance_content,
 )
 from world.scenes.constants import RoundStatus

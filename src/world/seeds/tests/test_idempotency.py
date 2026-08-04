@@ -40,20 +40,28 @@ class TestSeedIdempotency(TestCase):
     @stub_content_root()
     @override_settings(SEED_SAMPLE_CONTENT=True)
     def test_edit_survives_reseed(self) -> None:
-        """Resonance is content-repo-owned (#2698) — sample content must be on
-        for the stub root to yield a row here; the invariant under test
-        (staff edits survive re-seed) is otherwise unrelated to that gating.
+        """A staff edit to a SEEDER-OWNED row survives the next Big Button press.
+
+        This used to assert on a ``Resonance``, which only worked while the magic
+        cluster minted one. Since #2967 no seeder may create a Resonance and the
+        stub content root authors them instead — and a content row is *supposed*
+        to be restored from the corpus by ``load_world_content()`` on the next
+        press, so a staff edit to one legitimately does not survive. The
+        invariant this test exists for is the seeder's non-overwrite rule
+        (get_or_create, never update_or_create), so it asserts on a row the
+        seeder genuinely owns: ``ThreadPullCost`` is tuning data and is
+        deliberately absent from ``CONTENT_MODELS``.
         """
-        from world.magic.models import Resonance
+        from world.magic.models import ThreadPullCost
 
         seed_dev_database()
-        res = Resonance.objects.order_by("pk").first()
-        assert res is not None
-        res.description = "STAFF-EDITED — must survive re-seed"
-        res.save()
+        cost = ThreadPullCost.objects.order_by("pk").first()
+        assert cost is not None
+        cost.label = "STAFF-EDITED - must survive re-seed"
+        cost.save()
         seed_dev_database()
-        res.refresh_from_db()
-        self.assertEqual(res.description, "STAFF-EDITED — must survive re-seed")
+        cost.refresh_from_db()
+        self.assertEqual(cost.label, "STAFF-EDITED - must survive re-seed")
 
     @stub_content_root()
     @override_settings(SEED_SAMPLE_CONTENT=True)
