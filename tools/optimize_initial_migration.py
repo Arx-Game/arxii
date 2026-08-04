@@ -71,21 +71,73 @@ approach from scratch — the reasoning above (and the measured result, see
 ``.superpowers/sdd/2026-08-04-single-app-collapse/task-9-report.md``) should
 not be lost.
 
+Chunk mode (Task 10, #2906): cost-weighted splitting
+-----------------------------------------------------
+Even topologically sorted, ``0001_initial.py`` is one ~27-minute transaction
+(1,973 operations). That's not a speed problem (splitting a migration doesn't
+reduce total work — the same ``project_state.clone()`` calls happen either
+way; see the Task 10 report for the measurement that ruled speed out) but a
+*robustness* one: bounded transaction duration (deploy/statement/idle
+timeouts, PgBouncer), bounded lock footprint, and resumability (``migrate``
+resumes from the last committed migration, so a killed run loses only the
+in-flight chunk instead of the whole 27 minutes).
+
+``--chunks [N]`` (default 100) splits the operations into N migration files
+instead of rewriting one. The boundaries are **cost-weighted, not
+equal-count**: every operation's cost is dominated by the size of Django's
+in-memory ``ProjectState`` at the moment it runs (``clone()`` and the
+closure re-render are both O(models-already-in-state)). For the k-th
+``CreateModel`` that cost is ~k, so cumulative cost through model k is
+~k²/2 (quadratic) - splitting 1,026 models into equal *operation-count*
+chunks would give a first chunk of milliseconds and a last chunk of minutes.
+The 947 operations that only run after every model exists (the 146 deferred
+cycle-breaking ``AddField``/``ManyToManyField`` ops plus the 801
+``AddConstraint``/``AddIndex``/``AlterUniqueTogether`` tail ops) each cost a
+constant ~1,026 (the max model count) - by itself that phase is already
+equal-cost-per-op, so equal-*count* chunking is correct for it.
+``compute_chunk_boundaries`` builds one combined per-operation cost array
+(``range(1, M+1)`` for the M ``CreateModel`` ops, then ``[M] * T`` for the T
+post-model ops) and cuts it at N boundaries of ~equal cumulative cost, so
+both phases fall out of the same computation: early chunks get many models
+(cheap individually), later model-phase chunks get few (expensive
+individually), and the post-model phase naturally lands as ~equal-sized
+chunks. This is a *starting model*, not a proven-optimal one - if measured
+per-chunk timings come out skewed, the boundaries should be adjusted from
+that data (see the Task 10 report for what was actually measured).
+
+Chunk 1 keeps ``0001_initial``'s exact header (imports, ``initial = True``,
+the original ``dependencies`` list including the swappable
+``AUTH_USER_MODEL`` dependency) verbatim, shrunk to only its slice of
+operations. Chunks 2..N are named ``NNNN_initial_part_N`` and each depends
+on the previous chunk. Chunk mode also renumbers whatever non-chunk
+migrations already follow ``0001_initial`` (materialized views, later
+``AlterField``s, ...) to sit after the last chunk, relinks each one's
+dependency on its predecessor, and rewrites ``max_migration.txt`` to the new
+final migration - so the tool is safe to rerun with a different N (it
+discovers the current tail-migration chain from file content, not from
+hardcoded old numbers).
+
 Usage::
 
     uv run python tools/optimize_initial_migration.py [--check]
+    uv run python tools/optimize_initial_migration.py --chunks [N]
 
 ``--check`` parses and analyzes only, printing the planned operation counts,
-without writing the file.
+without writing the file. ``--chunks`` (default N=100 if given bare) writes
+the chunked migration set plus renumbers the downstream migrations; it is
+mutually exclusive with ``--check``.
 """
 
 from __future__ import annotations
 
 import argparse
 import ast
+from bisect import bisect_left
 from collections import defaultdict
 from dataclasses import dataclass
+import itertools
 from pathlib import Path
+import re
 import shutil
 import subprocess
 import sys
@@ -95,6 +147,8 @@ MIGRATION_PATH = REPO_ROOT / "src" / "world" / "migrations" / "0001_initial.py"
 APP_LABEL = "arxii"
 RELATION_TYPES = {"ForeignKey", "OneToOneField", "ManyToManyField"}
 SINGLE_VALUED_RELATION_TYPES = {"ForeignKey", "OneToOneField"}
+DEFAULT_CHUNK_COUNT = 100
+_ARXII_DEP_RE = re.compile(rf'\("{APP_LABEL}",\s*"([^"]+)"\)')
 
 
 def _require(condition: bool, message: str) -> None:
@@ -392,8 +446,16 @@ def build_model_order(
     return ordered_keys
 
 
-def rewrite(source: str, check_only: bool) -> tuple[str, dict]:
-    tree = ast.parse(source)
+def _analyze(
+    tree: ast.Module,
+) -> tuple[dict[str, CreateModelOp], list[str], list[AddFieldOp], list[TailOp], dict]:
+    """Parse, classify, and fold deferred ``AddField`` ops into ``CreateModel``.
+
+    Shared by both single-file (`rewrite`) and chunked (`rewrite_chunks`)
+    modes. Returns ``(create_models, model_order, remaining_add_field_ops,
+    tail_ops, stats)`` - everything needed to build the final operation
+    sequence, without deciding how it gets split across file(s).
+    """
     op_nodes = parse_operations(tree)
     create_models, create_order, add_fields, tail_ops = classify(op_nodes)
 
@@ -473,6 +535,13 @@ def rewrite(source: str, check_only: bool) -> tuple[str, dict]:
         "create_model_ops": len(create_order),
     }
 
+    return create_models, model_order, remaining_add_field_ops, tail_ops, stats
+
+
+def rewrite(source: str, check_only: bool) -> tuple[str, dict]:
+    tree = ast.parse(source)
+    create_models, model_order, remaining_add_field_ops, tail_ops, stats = _analyze(tree)
+
     if check_only:
         return source, stats
 
@@ -516,37 +585,50 @@ def _find_operations_assign(tree: ast.Module) -> ast.Assign:
     return candidates[0]
 
 
+def _create_model_call(op: CreateModelOp) -> ast.Call:
+    """Rebuild a `CreateModel(...)` call node with any folded-in fields added."""
+    fields_list = ast.List(
+        elts=[*op.field_entries, *[e for e in op.extra_field_entries if e is not None]],
+        ctx=ast.Load(),
+    )
+    kw = [ast.keyword(arg="name", value=ast.Constant(value=op.name))]
+    kw.append(ast.keyword(arg="fields", value=fields_list))
+    if op.options_node is not None:
+        kw.append(ast.keyword(arg="options", value=op.options_node))
+    if op.bases_node is not None:
+        kw.append(ast.keyword(arg="bases", value=op.bases_node))
+    return ast.Call(
+        func=ast.Attribute(
+            value=ast.Name(id="migrations", ctx=ast.Load()), attr="CreateModel", ctx=ast.Load()
+        ),
+        args=[],
+        keywords=kw,
+    )
+
+
+def _build_full_op_sequence(plan: RewritePlan) -> list[ast.expr]:
+    """The final, topologically-valid operation order: every `CreateModel` (in
+    `model_order`, fields folded in), then every remaining deferred
+    `AddField` (cycle-breakers + M2M), then every tail op (`AddConstraint`
+    / `AddIndex` / `AlterUniqueTogether`). Shared by both the single-file
+    and chunked emitters - chunking only decides *where* to cut this list,
+    never reorders it.
+    """
+    ops: list[ast.expr] = [_create_model_call(plan.create_models[key]) for key in plan.model_order]
+    ops.extend(af.node for af in plan.remaining_add_field_ops)
+    ops.extend(t.node for t in plan.tail_ops)
+    return ops
+
+
+def _unparse_ops_list(ops: list[ast.expr]) -> str:
+    ops_list = ast.List(elts=ops, ctx=ast.Load())
+    ast.fix_missing_locations(ops_list)
+    return ast.unparse(ops_list)
+
+
 def emit_source(source: str, tree: ast.Module, plan: RewritePlan) -> str:
     ops_assign = _find_operations_assign(tree)
-
-    new_ops: list[ast.expr] = []
-    for key in plan.model_order:
-        op = plan.create_models[key]
-        fields_list = ast.List(
-            elts=[*op.field_entries, *[e for e in op.extra_field_entries if e is not None]],
-            ctx=ast.Load(),
-        )
-        kw = [ast.keyword(arg="name", value=ast.Constant(value=op.name))]
-        kw.append(ast.keyword(arg="fields", value=fields_list))
-        if op.options_node is not None:
-            kw.append(ast.keyword(arg="options", value=op.options_node))
-        if op.bases_node is not None:
-            kw.append(ast.keyword(arg="bases", value=op.bases_node))
-        call = ast.Call(
-            func=ast.Attribute(
-                value=ast.Name(id="migrations", ctx=ast.Load()), attr="CreateModel", ctx=ast.Load()
-            ),
-            args=[],
-            keywords=kw,
-        )
-        new_ops.append(call)
-
-    new_ops.extend(af.node for af in plan.remaining_add_field_ops)
-    new_ops.extend(t.node for t in plan.tail_ops)
-
-    new_ops_list = ast.List(elts=new_ops, ctx=ast.Load())
-    ast.fix_missing_locations(new_ops_list)
-    new_operations_source = ast.unparse(new_ops_list)
+    new_operations_source = _unparse_ops_list(_build_full_op_sequence(plan))
 
     # Splice the regenerated operations list text in place of the original,
     # keeping everything else (imports, dependencies, initial=True, header
@@ -563,12 +645,271 @@ def emit_source(source: str, tree: ast.Module, plan: RewritePlan) -> str:
     return before + new_operations_source + after
 
 
+def compute_chunk_boundaries(costs: list[int], n_chunks: int) -> list[int]:
+    """Partition `costs` (one weight per operation, in final emission order)
+    into `n_chunks` contiguous groups of ~equal cumulative cost.
+
+    Returns exclusive end-indices (length `n_chunks`, strictly increasing,
+    last entry == len(costs)). Every chunk gets >= 1 operation as long as
+    `len(costs) >= n_chunks` (enforced by the caller).
+    """
+    n_ops = len(costs)
+    _require(1 <= n_chunks <= n_ops, "n_chunks must be between 1 and the number of operations")
+    prefix = list(itertools.accumulate(costs))
+    total = prefix[-1]
+    boundaries: list[int] = []
+    prev_end = 0
+    for j in range(1, n_chunks):
+        target = total * j / n_chunks
+        end = bisect_left(prefix, target, lo=prev_end)
+        # Clamp so every chunk (including remaining ones) stays non-empty,
+        # regardless of how lumpy the cost distribution is.
+        min_end = prev_end + 1
+        max_end = n_ops - (n_chunks - j)
+        end = max(min_end, min(end, max_end))
+        boundaries.append(end)
+        prev_end = end
+    boundaries.append(n_ops)
+    return boundaries
+
+
+def _split_by_boundaries(items: list[ast.expr], boundaries: list[int]) -> list[list[ast.expr]]:
+    groups = []
+    start = 0
+    for end in boundaries:
+        groups.append(items[start:end])
+        start = end
+    return groups
+
+
+def _operation_costs(n_model_ops: int, n_tail_ops: int) -> list[int]:
+    """Per-operation cost weight, in final emission order.
+
+    Each `CreateModel` op's cost scales with the number of models already in
+    `ProjectState` (both `clone()` and the reload closure re-render are
+    O(models-in-state)), so the k-th `CreateModel` costs ~k. Every operation
+    after all M models exist (deferred `AddField`, `AddConstraint`,
+    `AddIndex`, `AlterUniqueTogether`) costs the constant maximum, ~M. See
+    the module docstring's "Chunk mode" section for the full rationale.
+    """
+    return [*range(1, n_model_ops + 1), *([n_model_ops] * n_tail_ops)]
+
+
+def rewrite_chunks(source: str, n_chunks: int) -> tuple[list[tuple[str, str]], dict]:
+    """Split `source` into `n_chunks` cost-weighted migration files.
+
+    Returns `(files, stats)` where `files` is `[(migration_name, content),
+    ...]` in dependency-chain order (first is always "0001_initial").
+    """
+    tree = ast.parse(source)
+    create_models, model_order, remaining_add_field_ops, tail_ops, stats = _analyze(tree)
+    plan = RewritePlan(
+        create_models=create_models,
+        model_order=model_order,
+        remaining_add_field_ops=remaining_add_field_ops,
+        tail_ops=tail_ops,
+    )
+
+    full_ops = _build_full_op_sequence(plan)
+    n_model_ops = len(plan.model_order)
+    n_tail_ops = len(full_ops) - n_model_ops
+    costs = _operation_costs(n_model_ops, n_tail_ops)
+
+    n_chunks = max(1, min(n_chunks, len(full_ops)))
+    boundaries = compute_chunk_boundaries(costs, n_chunks)
+    groups = _split_by_boundaries(full_ops, boundaries)
+
+    files = _render_chunk_files(source, tree, groups)
+    stats = {**stats, "n_chunks": len(files), "chunk_sizes": [len(g) for g in groups]}
+    return files, stats
+
+
+def _render_chunk_files(
+    source: str, tree: ast.Module, groups: list[list[ast.expr]]
+) -> list[tuple[str, str]]:
+    """Render each op group into a migration file's full source text.
+
+    Chunk 1 keeps `0001_initial`'s original header (imports, header comment,
+    `initial = True`, the original `dependencies` list) byte-identical via
+    the same source-slicing technique as `emit_source`, with only its
+    `operations` list shrunk to `groups[0]`. Chunks 2..N get a fresh minimal
+    header built from the original file's imports block (reused verbatim,
+    over-inclusive - `ruff check --fix` strips whatever a given chunk
+    doesn't need) and a `dependencies = [("arxii", <previous chunk>)]`.
+    """
+    ops_assign = _find_operations_assign(tree)
+    lines = source.splitlines(keepends=True)
+
+    ops_list_node = ops_assign.value
+    start_line, start_col = ops_list_node.lineno, ops_list_node.col_offset
+    end_line, end_col = ops_list_node.end_lineno, ops_list_node.end_col_offset
+    before = "".join(lines[: start_line - 1]) + lines[start_line - 1][:start_col]
+    after = lines[end_line - 1][end_col:] + "".join(lines[end_line:])
+
+    migration_class = next(
+        n for n in tree.body if isinstance(n, ast.ClassDef) and n.name == "Migration"
+    )
+    imports_block = "".join(lines[: migration_class.lineno - 1])
+
+    files: list[tuple[str, str]] = [("0001_initial", before + _unparse_ops_list(groups[0]) + after)]
+
+    prev_name = "0001_initial"
+    for i, group in enumerate(groups[1:], start=2):
+        name = f"{i:04d}_initial_part_{i}"
+        content = (
+            f"{imports_block}\n"
+            "class Migration(migrations.Migration):\n"
+            "    dependencies = [\n"
+            f'        ("{APP_LABEL}", "{prev_name}"),\n'
+            "    ]\n\n"
+            f"    operations = {_unparse_ops_list(group)}\n"
+        )
+        files.append((name, content))
+        prev_name = name
+
+    return files
+
+
+def _predecessor_name(text: str) -> str:
+    """The arxii-dependency name a tail migration's `dependencies` currently
+    reference (dynamically parsed from content, not assumed - so a rerun
+    with a different N still finds the right predecessor to relink).
+    """
+    matches = _ARXII_DEP_RE.findall(text)
+    _require(
+        len(matches) == 1,
+        f"expected exactly one {APP_LABEL!r} dependency in tail migration, found {matches!r}",
+    )
+    return matches[0]
+
+
+def _discover_tail_migrations(migrations_dir: Path) -> list[Path]:
+    """Migrations after `0001_initial` that are not `*_initial_part_*` chunks,
+    in dependency-chain order (their numeric filename prefix already
+    reflects that order - django_linear_migrations enforces exactly one
+    linear history / leaf per app).
+    """
+    return sorted(
+        p
+        for p in migrations_dir.glob("[0-9][0-9][0-9][0-9]_*.py")
+        if p.name != "0001_initial.py" and "_initial_part_" not in p.name
+    )
+
+
+def _write_chunk_files(migrations_dir: Path, files: list[tuple[str, str]]) -> list[Path]:
+    written = []
+    for name, content in files:
+        path = migrations_dir / f"{name}.py"
+        path.write_text(content)
+        written.append(path)
+    return written
+
+
+def _renumber_tail_migrations(migrations_dir: Path, last_chunk_name: str, n_chunks: int) -> str:
+    """Move the non-chunk migrations (materialized views, later AlterFields,
+    ...) after the new last chunk, preserving their relative order and
+    relinking each one's dependency onto its (possibly renamed) predecessor.
+
+    Returns the final migration's name, for `max_migration.txt`.
+    """
+    tail_paths = _discover_tail_migrations(migrations_dir)
+    tail_sources = [(p, p.read_text()) for p in tail_paths]
+
+    # Move every tail file out of the way first, in case the chunk range
+    # [0002..NNNN] about to be (re)written would otherwise collide with one
+    # of these files' *current* number (e.g. N shrank since the last run).
+    temp_paths = []
+    for i, (p, _text) in enumerate(tail_sources):
+        temp_path = p.with_name(f"__renumbering_{i}__{p.name}")
+        p.rename(temp_path)
+        temp_paths.append(temp_path)
+
+    prev_name = last_chunk_name
+    next_number = n_chunks + 1
+    for (orig_path, orig_text), temp_path in zip(tail_sources, temp_paths, strict=True):
+        old_predecessor = _predecessor_name(orig_text)
+        name_suffix = orig_path.stem.split("_", 1)[1]
+        new_own_name = f"{next_number:04d}_{name_suffix}"
+        new_text = orig_text.replace(f'"{old_predecessor}"', f'"{prev_name}"')
+        (migrations_dir / f"{new_own_name}.py").write_text(new_text)
+        temp_path.unlink()
+        prev_name = new_own_name
+        next_number += 1
+
+    return prev_name
+
+
+def _run_chunk_mode(source: str, n_chunks: int) -> int:
+    files, stats = rewrite_chunks(source, n_chunks)
+
+    print("=== optimize_initial_migration chunk stats ===")
+    for k, v in stats.items():
+        if k != "chunk_sizes":
+            print(f"{k}: {v}")
+    print(f"chunk_sizes: {stats['chunk_sizes']}")
+
+    migrations_dir = MIGRATION_PATH.parent
+
+    # Discover the tail migrations (materialized views, later AlterFields,
+    # ...) and the stale chunk artifacts from any previous run BEFORE
+    # touching anything, so a rerun with a different N still works.
+    old_part_files = sorted(migrations_dir.glob("*_initial_part_*.py"))
+    tail_final_name = _renumber_tail_migrations(migrations_dir, files[-1][0], len(files))
+
+    for p in old_part_files:
+        p.unlink()
+
+    written = _write_chunk_files(migrations_dir, files)
+
+    max_migration_path = migrations_dir / "max_migration.txt"
+    max_migration_path.write_text(tail_final_name + "\n")
+
+    print(
+        f"wrote {len(written)} chunk files (0001_initial.py .. "
+        f"{files[-1][0]}.py) + renumbered tail migrations through "
+        f"{tail_final_name}; max_migration.txt updated"
+    )
+
+    # House-style only (does not change semantics); argv is a fixed literal
+    # list, not untrusted input.
+    uv_path = shutil.which("uv") or "uv"
+    ruff_target = str(migrations_dir)
+    subprocess.run(  # noqa: S603
+        [uv_path, "run", "ruff", "format", ruff_target], cwd=REPO_ROOT, check=True
+    )
+    subprocess.run(  # noqa: S603
+        [uv_path, "run", "ruff", "check", "--fix", ruff_target], cwd=REPO_ROOT, check=False
+    )
+    return 0
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--check", action="store_true", help="analyze only, do not write")
+    parser.add_argument(
+        "--chunks",
+        type=int,
+        nargs="?",
+        const=DEFAULT_CHUNK_COUNT,
+        default=None,
+        metavar="N",
+        help=(
+            "split into N cost-weighted migrations instead of rewriting "
+            f"0001_initial.py as one file (default {DEFAULT_CHUNK_COUNT} if "
+            "given bare); also renumbers the downstream migrations and "
+            "max_migration.txt to follow the last chunk. Mutually exclusive "
+            "with --check."
+        ),
+    )
     args = parser.parse_args()
+    if args.chunks is not None and args.check:
+        parser.error("--check and --chunks are mutually exclusive")
 
     source = MIGRATION_PATH.read_text()
+
+    if args.chunks is not None:
+        return _run_chunk_mode(source, args.chunks)
+
     new_source, stats = rewrite(source, check_only=args.check)
 
     print("=== optimize_initial_migration stats ===")

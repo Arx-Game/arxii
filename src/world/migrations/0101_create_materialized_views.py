@@ -37,7 +37,7 @@ def _read_sql(subpackage: str, filename: str) -> str:
 
 class Migration(migrations.Migration):
     dependencies = [
-        ("arxii", "0001_initial"),
+        ("arxii", "0100_initial_part_100"),
     ]
 
     operations = [

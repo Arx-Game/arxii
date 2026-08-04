@@ -5,7 +5,7 @@ from django.db import migrations, models
 
 class Migration(migrations.Migration):
     dependencies = [
-        ("arxii", "0002_create_materialized_views"),
+        ("arxii", "0101_create_materialized_views"),
     ]
 
     operations = [
