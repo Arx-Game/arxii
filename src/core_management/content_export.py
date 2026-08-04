@@ -96,6 +96,8 @@ CONTENT_MODELS: frozenset[str] = frozenset(
         "combat.creaturetemplate",
         "combat.threatpool",
         "combat.threatpoolentry",
+        # contributors
+        "contributors.contentcontributor",
         # codex
         "codex.codexcategory",
         "codex.codexentry",

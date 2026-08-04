@@ -109,6 +109,17 @@ class PlayerData(RelatedCacheClearingMixin, SharedMemoryModel):
         help_text="Max upload size per file in KB",
     )
 
+    contributor = models.OneToOneField(
+        "arxii.ContentContributor",
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="player_data",
+        help_text="Content-credit identity for this account, if they author "
+        "content. The link lives here rather than on ContentContributor so the "
+        "exported corpus never carries a username (ADR-0010, ADR-0196).",
+    )
+
     # Timestamps
     created_date = models.DateTimeField(auto_now_add=True)
     updated_date = models.DateTimeField(auto_now=True)

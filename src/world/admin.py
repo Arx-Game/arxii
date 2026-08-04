@@ -46,6 +46,7 @@ import world.combat.admin
 import world.companions.admin
 import world.conditions.admin
 import world.consent.admin
+import world.contributors.admin
 import world.covenants.admin
 import world.currency.admin
 import world.distinctions.admin
