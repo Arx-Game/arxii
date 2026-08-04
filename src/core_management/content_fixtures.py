@@ -98,6 +98,8 @@ import unicodedata
 import yaml
 
 if TYPE_CHECKING:
+    from django.db import models
+
     from core_management.grid_import import GridImportResult
 
 PLACEHOLDER_MARK = "PLACEHOLDER"
@@ -310,19 +312,37 @@ def _prose_sections(entry: ContentEntry, field_by_heading: dict[str, str]) -> di
     return prose
 
 
+def _fixture_model_label(model: type[models.Model]) -> str:
+    """Return ``"<domain>.<modelname>"`` for a builder's ``"model"`` fixture key.
+
+    Sourced from ``core.app_domains.domain_of`` (Task 1) rather than the
+    model's own Django ``app_label``, so an emitted fixture's label stays
+    aligned with the lore repo's ``fixtures/<domain>/`` directory layout even
+    after #2906 collapses every first-party app into one Django label. The
+    label is cosmetic on the read side (``resolve_fixture_model`` ignores it),
+    but keeping exports domain-accurate matters for humans reading the JSON
+    and for the directory-layout convention itself.
+    """
+    from core.app_domains import domain_of  # noqa: PLC0415
+
+    return f"{domain_of(model)}.{model.__name__.lower()}"
+
+
 def _build_trait_fixture(entry: ContentEntry, *, trait_type: str) -> dict:
     """Map a stats/ or skills/ entry to a traits.Trait fixture object.
 
     No "pk" key: with NaturalKeyManager.get_by_natural_key on the model,
     loaddata resolves existing rows by name and UPDATES them.
     """
+    from world.traits.models import Trait  # noqa: PLC0415
+
     name = _require_name_and_body(entry)
     category = entry.meta.get("category")
     if category not in TRAIT_CATEGORIES:
         msg = f"{entry.path}: 'category' must be one of {sorted(TRAIT_CATEGORIES)}."
         raise ContentError(msg)
     return {
-        "model": "traits.trait",
+        "model": _fixture_model_label(Trait),
         "fields": {
             "name": name,
             "trait_type": trait_type,
@@ -390,7 +410,9 @@ def _build_npc_role_fixture(entry: ContentEntry) -> dict:
             raise ContentError(msg)
         fields[FIELD_DEFAULT_DESCRIPTION_TEMPLATE] = template
 
-    return {"model": "npc_services.npcrole", "fields": fields}
+    from world.npc_services.models import NPCRole  # noqa: PLC0415
+
+    return {"model": _fixture_model_label(NPCRole), "fields": fields}
 
 
 def _build_item_template_fixture(entry: ContentEntry) -> dict:
@@ -418,7 +440,9 @@ def _build_item_template_fixture(entry: ContentEntry) -> dict:
             raise ContentError(msg)
         fields[FIELD_WEIGHT] = str(weight)
 
-    return {"model": "items.itemtemplate", "fields": fields}
+    from world.items.models import ItemTemplate  # noqa: PLC0415
+
+    return {"model": _fixture_model_label(ItemTemplate), "fields": fields}
 
 
 def _build_building_kind_fixture(entry: ContentEntry) -> dict:
@@ -427,9 +451,11 @@ def _build_building_kind_fixture(entry: ContentEntry) -> dict:
     Required: ``name``. Body → ``description``. Descriptive flags
     (is_residential, is_commercial, ...) stay admin/seeder-authored.
     """
+    from world.buildings.models import BuildingKind  # noqa: PLC0415
+
     name = _require_name_and_body(entry)
     return {
-        "model": "buildings.buildingkind",
+        "model": _fixture_model_label(BuildingKind),
         "fields": {"name": name, "description": entry.body},
     }
 
@@ -440,9 +466,11 @@ def _build_decoration_kind_fixture(entry: ContentEntry) -> dict:
     Required: ``name``. Body → ``description``. ``amenity``/affinity
     magnitudes stay admin/seeder-authored.
     """
+    from world.buildings.models import DecorationKind  # noqa: PLC0415
+
     name = _require_name_and_body(entry)
     return {
-        "model": "buildings.decorationkind",
+        "model": _fixture_model_label(DecorationKind),
         "fields": {"name": name, "description": entry.body},
     }
 
@@ -490,6 +518,8 @@ def _build_codex_entry_fixture(entry: ContentEntry) -> dict:
     admin. Omission already means "leave this column alone" — see the module
     docstring on optional-field semantics.
     """
+    from world.codex.models import CodexEntry  # noqa: PLC0415
+
     name = entry.meta.get("name")
     if not name or not isinstance(name, str):
         msg = f"{entry.path}: 'name' (string) is required."
@@ -507,7 +537,7 @@ def _build_codex_entry_fixture(entry: ContentEntry) -> dict:
             {"Lore": FIELD_LORE_CONTENT, "Mechanics": FIELD_MECHANICS_CONTENT},
         )
     )
-    return {"model": "codex.codexentry", "fields": fields}
+    return {"model": _fixture_model_label(CodexEntry), "fields": fields}
 
 
 def _build_beginnings_fixture(entry: ContentEntry) -> dict:
@@ -517,9 +547,11 @@ def _build_beginnings_fixture(entry: ContentEntry) -> dict:
     Body is the ``description`` — these run past 1,000 characters, which is
     the whole reason this domain moves out of JSON string literals.
     """
+    from world.character_creation.models import Beginnings  # noqa: PLC0415
+
     name = _require_name_and_body(entry)
     return {
-        "model": "character_creation.beginnings",
+        "model": _fixture_model_label(Beginnings),
         "fields": {
             "name": name,
             "starting_area": _require_meta_natural_key(entry, "starting_area"),
@@ -545,20 +577,24 @@ def _build_starting_area_fixture(entry: ContentEntry) -> dict:
     Genuinely admin-owned placement columns (``sort_order``, ``access_level``,
     ``minimum_trust``, ``grants_residence_tenancy``, ``is_active``) stay out.
     """
+    from world.character_creation.models import StartingArea  # noqa: PLC0415
+
     name = _require_name_and_body(entry)
     fields: dict = {"name": name, FIELD_DESCRIPTION: entry.body}
     for key in ("realm", "default_starting_room"):
         value = _optional_meta_natural_key(entry, key)
         if value is not None:
             fields[key] = value
-    return {"model": "character_creation.startingarea", "fields": fields}
+    return {"model": _fixture_model_label(StartingArea), "fields": fields}
 
 
 def _build_tradition_fixture(entry: ContentEntry) -> dict:
     """Map a traditions/ entry to a magic.Tradition fixture object (#2688)."""
+    from world.magic.models import Tradition  # noqa: PLC0415
+
     name = _require_name_and_body(entry)
     return {
-        "model": "magic.tradition",
+        "model": _fixture_model_label(Tradition),
         "fields": {"name": name, FIELD_DESCRIPTION: entry.body},
     }
 
@@ -1154,6 +1190,19 @@ def _upsert_fixture_object(  # noqa: C901 — one branch per distinct skip reaso
     return OUTCOME_CREATED if created else OUTCOME_UPDATED
 
 
+def resolve_fixture_model(model_key: str) -> type[models.Model]:
+    """Thin readability wrapper over ``core.app_domains.resolve_model_by_name``.
+
+    The real name->model resolution lives in ``core.app_domains`` (not here)
+    because it's needed in three places — fixture loading (this module), the
+    admin pin/exclude toggles, and content export — and duplicating it per
+    call site would be exactly the sprawl this refactor exists to remove.
+    """
+    from core.app_domains import resolve_model_by_name  # noqa: PLC0415
+
+    return resolve_model_by_name(model_key)
+
+
 def load_entries(
     result: BuildResult, *, defer_unresolved: bool = False
 ) -> tuple[int, int, list[tuple[dict, Path | None]]]:
@@ -1180,9 +1229,13 @@ def load_entries(
     Both paths share the same ``_resolve_natural_key_fields`` pass for FK
     natural-key-list values, via the per-object ``_upsert_fixture_object``.
 
-    Stale model labels (referencing renamed/removed models) are skipped with
-    a warning written to ``result.skipped`` — the load does not fail, but the
-    skip is visible to the operator.
+    Model resolution goes through ``resolve_fixture_model``, which resolves by
+    model *name* and ignores the label half of ``obj["model"]`` entirely — a
+    fixture written under a since-renamed app label still loads (#2906
+    collapsed every first-party app label into ``arxii``). Only a genuinely
+    unknown model name (renamed or removed) is skipped, with a warning written
+    to ``result.skipped`` — the load does not fail, but the skip is visible to
+    the operator.
 
     ``defer_unresolved`` (#2448): when true, returns a THIRD tuple element —
     ``deferred``, a list of ``(obj, source_path)`` pairs that failed only on
@@ -1204,17 +1257,14 @@ def load_entries(
     Requires Django to be configured; imports are deferred so the module
     stays import-safe for pure validation.
     """
-    from django.apps import apps  # noqa: PLC0415
-
     created_count = 0
     updated_count = 0
     deferred: list[tuple[dict, Path | None]] = []
     for output_path, objects in result.fixtures.items():
         paths = result.source_paths.get(output_path, [])
         for obj, source_path in zip(objects, paths, strict=False):
-            app_label, model_name = obj["model"].split(".")
             try:
-                model = apps.get_model(app_label, model_name)
+                model = resolve_fixture_model(obj["model"])
             except LookupError:
                 result.skipped.append(
                     f"{source_path}: stale model {obj['model']!r} (renamed or removed) — skipped."
@@ -1269,8 +1319,6 @@ def _retry_deferred(
     behavior is directly unit-testable. Returns
     ``(created, updated, deferred_resolved)``.
     """
-    from django.apps import apps  # noqa: PLC0415
-
     created = updated = deferred_resolved = 0
 
     def _retry_pass(
@@ -1280,9 +1328,8 @@ def _retry_deferred(
         nonlocal created, updated, deferred_resolved
         still_pending: list[tuple[dict, Path | None]] = []
         for obj, source_path in pending:
-            app_label, model_name = obj["model"].split(".")
             try:
-                model = apps.get_model(app_label, model_name)
+                model = resolve_fixture_model(obj["model"])
             except LookupError:
                 result.skipped.append(
                     f"{source_path}: stale model {obj['model']!r} (renamed or removed) — skipped."
