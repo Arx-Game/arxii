@@ -5,7 +5,7 @@ from django.test import TestCase
 from evennia_extensions.factories import AccountFactory
 from world.character_sheets.factories import CharacterSheetFactory
 from world.magic.constants import GainSource
-from world.magic.exceptions import DramaticMomentCapExceeded, EndorsementValidationError
+from world.magic.exceptions import DramaticMomentCapExceeded
 from world.magic.factories import (
     CharacterResonanceFactory,
     DramaticMomentTagFactory,
@@ -120,16 +120,67 @@ class CreateDramaticMomentTagServiceTest(TestCase):
             )
             mock_award.assert_called_once()
 
-    def test_character_must_have_claimed_resonance(self):
+    def test_unclaimed_resonance_still_tags_but_skips_the_grant(self):
+        """An unclaimed resonance no longer REFUSES the tag (ruled 2026-08-04).
+
+        The resonance a moment grants is resolved, not dictated: the type's own
+        resonance is only a fallback override, and a moment is still worth
+        recognising when none resolves. So the tag is created and the renown
+        award fires; only the resonance grant is skipped.
+
+        This used to raise, which is how the single authored moment type
+        ("Grand Entrance", naming the invented "Fervor") became un-awardable to
+        every character in the game.
+        """
+        from world.magic.models.aura import CharacterResonance
+
         other_resonance = ResonanceFactory()
         other_type = DramaticMomentTypeFactory(resonance=other_resonance)
-        with self.assertRaises(EndorsementValidationError):
-            create_dramatic_moment_tag(
-                character_sheet=self.sheet,
-                moment_type=other_type,
-                tagged_by=self.tagger,
-                scene=None,
-            )
+
+        tag = create_dramatic_moment_tag(
+            character_sheet=self.sheet,
+            moment_type=other_type,
+            tagged_by=self.tagger,
+            scene=None,
+        )
+
+        self.assertIsNotNone(tag.pk)
+        self.assertEqual(tag.moment_type, other_type)
+        # No grant, because the character never claimed that resonance.
+        self.assertFalse(
+            CharacterResonance.objects.filter(
+                character_sheet=self.sheet, resonance=other_resonance
+            ).exists()
+        )
+
+    def test_explicit_resonance_wins_over_the_types_own(self):
+        """The manual GM tag names the resonance, and it beats the type's.
+
+        This is the fallback path for a flashy moment with no technique behind
+        it (ruled 2026-08-04: "if they don't use a technique and GM thinks it's
+        flashy, then I guess manually tagged by GM"). The type's own resonance
+        is only the last-resort override.
+        """
+        unpinned = ResonanceFactory()
+        moment_type = DramaticMomentTypeFactory(resonance=unpinned, resonance_amount=15)
+
+        create_dramatic_moment_tag(
+            character_sheet=self.sheet,
+            moment_type=moment_type,
+            tagged_by=self.tagger,
+            scene=None,
+            resonance=self.resonance,
+        )
+
+        claimed = CharacterResonance.objects.get(
+            character_sheet=self.sheet, resonance=self.resonance
+        )
+        self.assertEqual(claimed.lifetime_earned, 15)
+        self.assertFalse(
+            CharacterResonance.objects.filter(
+                character_sheet=self.sheet, resonance=unpinned
+            ).exists()
+        )
 
     def test_persists_interaction_and_denormalized_timestamp(self):
         from world.magic.services.gain import create_dramatic_moment_tag

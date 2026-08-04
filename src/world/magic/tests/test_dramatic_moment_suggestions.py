@@ -87,15 +87,37 @@ class MaybeSuggestDramaticMomentsTest(TestCase):
         self.assertEqual(created, [])
         self.assertFalse(DramaticMomentSuggestion.objects.exists())
 
-    def test_suggest_skips_unclaimed_resonance(self):
+    def test_suggest_does_not_filter_on_claimed_resonance(self):
+        """Eligibility is the success threshold and the per-scene cap, nothing else.
+
+        The old claimed-resonance filter (ruled out 2026-08-04) made a moment
+        type unreachable the moment its authored resonance was one nobody
+        claims — which is exactly what happened to the only authored type.
+        What the moment resonates AS is resolved at confirm time instead.
+        """
         other_sheet = CharacterSheetFactory()
         created = maybe_suggest_dramatic_moments(
             character_sheet=other_sheet,
             scene=self.scene,
             success_level=5,
         )
-        self.assertEqual(created, [])
-        self.assertFalse(DramaticMomentSuggestion.objects.exists())
+        self.assertEqual(len(created), 1)
+        self.assertEqual(created[0].character_sheet, other_sheet)
+        self.assertTrue(DramaticMomentSuggestion.objects.exists())
+
+    def test_suggest_records_the_entrance_technique(self):
+        """The technique is carried so confirm-time can read its woven thread."""
+        from world.magic.factories import TechniqueFactory
+
+        technique = TechniqueFactory()
+        created = maybe_suggest_dramatic_moments(
+            character_sheet=self.sheet,
+            scene=self.scene,
+            success_level=5,
+            technique=technique,
+        )
+        self.assertEqual(len(created), 1)
+        self.assertEqual(created[0].technique, technique)
 
     def test_suggest_skips_capped(self):
         DramaticMomentTagFactory(

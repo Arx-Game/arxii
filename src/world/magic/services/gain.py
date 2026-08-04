@@ -843,6 +843,9 @@ def _resolve_moment_resonance(
     if resonance is not None:
         candidates.append(resonance)
     if technique is not None and technique.gift_id:
+        # CharacterSheet.character is a primary_key OneToOne, so it is always
+        # present on a saved sheet. gift_resonances_for reads the woven GIFT
+        # thread off it and falls back to the gift's authored set itself.
         candidates.extend(gift_resonances_for(character_sheet.character, technique.gift))
     if moment_type.resonance_id:
         candidates.append(moment_type.resonance)
