@@ -1,6 +1,6 @@
 """Concrete crossing-ceremony handlers (ADR-0094, #1987).
 
-Each handler is registered against a ``TargetKind`` in ``MagicConfig.ready()``.
+Each handler is registered against a ``TargetKind`` in ``world.magic.apps.ready()``.
 
 - ``GiftCrossingHandler`` (GIFT) and ``CovenantRoleCrossingHandler``
   (COVENANT_ROLE) wrap the existing variant-discovery logic verbatim — no

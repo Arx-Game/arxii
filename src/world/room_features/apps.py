@@ -1,16 +1,4 @@
-"""AppConfig for the room_features system."""
-
-from django.apps import AppConfig
-
-
-class RoomFeaturesConfig(AppConfig):
-    name = "world.room_features"
-    label = "room_features"
-    verbose_name = "Room Features (Sanctum, Library, Training Room, …)"
-    default_auto_field = "django.db.models.BigAutoField"
-
-    def ready(self) -> None:
-        ready()
+"""Startup hook for the room_features system, called from world/apps.py."""
 
 
 def ready() -> None:

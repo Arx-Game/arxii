@@ -1,16 +1,4 @@
-"""AppConfig for the projects framework."""
-
-from django.apps import AppConfig
-
-
-class ProjectsConfig(AppConfig):
-    name = "world.projects"
-    label = "projects"
-    verbose_name = "Projects (delayed multi-tick endeavors)"
-    default_auto_field = "django.db.models.BigAutoField"
-
-    def ready(self) -> None:
-        ready()
+"""Startup hook for the projects framework, called from world/apps.py."""
 
 
 def ready() -> None:

@@ -1,9 +1,10 @@
 """Promotion effect handlers for the NPCAsset informant/contact mechanic (#1872).
 
 Registered against OfferKind.INFORMANT/.CONTACT/.PERSONAL_FAVOR by
-AssetsConfig.ready() (mirrors world.missions.apps.MissionsConfig.ready) —
-not inline in world.npc_services.effects, since this is a first-class new
-subsystem rather than a one-off tweak to an existing app's offer kind.
+world.assets.apps.ready() (mirrors world.missions.apps.ready()), called
+from world/apps.py's ArxiiConfig.ready() call list — not inline in
+world.npc_services.effects, since this is a first-class new subsystem
+rather than a one-off tweak to an existing app's offer kind.
 """
 
 from __future__ import annotations

@@ -82,15 +82,16 @@ def _stub_issue_permit(offer: NPCServiceOffer, persona: Persona) -> EffectResult
 
 OFFER_EFFECT_HANDLERS: dict[str, EffectHandler] = {
     OfferKind.PERMIT.value: _stub_issue_permit,
-    # LOAN (#930) is registered here rather than from an AppConfig.ready():
+    # LOAN (#930) is registered here rather than from a sub-package's ready():
     # the handler lives in this module (currency imported lazily) so there
     # is no consuming-app ready() to defer to.
 }
 
 # Lazy snapshot of the "production baseline" handler set. Populated on the
 # first call to ``reset_offer_effect_handlers`` so the snapshot includes
-# every handler registered by an AppConfig.ready() hook (notably the
-# MISSION handler registered by ``MissionsConfig.ready``). If we snapshotted
+# every handler registered by a sub-package's ready() hook, called from
+# world/apps.py (notably the MISSION handler registered by
+# ``world.missions.apps.ready``). If we snapshotted
 # at module import time, ``reset_offer_effect_handlers`` would silently drop
 # MISSION on every test reset — a foot-gun the #686 review surfaced.
 _DEFAULT_HANDLERS: dict[str, EffectHandler] | None = None

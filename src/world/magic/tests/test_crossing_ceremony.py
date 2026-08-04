@@ -27,7 +27,7 @@ class CrossingRegistryTests(TestCase):
 
     def test_all_target_kinds_have_handlers(self) -> None:
         """Every TargetKind must have a registered handler — no silent no-ops."""
-        # Register happens in MagicConfig.ready(), which runs on app load.
+        # Register happens in world.magic.apps.ready(), which runs on app load.
         # We check that the registry is populated for every kind.
         missing = [kind for kind in TargetKind.values if get_crossing_handler(kind) is None]
         self.assertEqual(

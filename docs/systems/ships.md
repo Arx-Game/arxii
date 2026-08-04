@@ -74,7 +74,7 @@ It reuses only the low-level Area/Building/entry-room steps
   a `SHIP_REPAIR` Project that clears `ShipDetails.needs_repair`.
 
 All four completion handlers are registered with
-`world.projects.services.register_kind_handler` in `ShipsConfig.ready()` and are
+`world.projects.services.register_kind_handler` in `world.ships.apps.ready()` and are
 idempotent via the same `applied_at`-claim idiom used across `world.buildings`.
 
 ## Ship-as-sanctum (`world.ships.sanctum_bonus`)
@@ -150,7 +150,7 @@ ejection all run through the existing `world.battles` machinery unmodified (see
 
 **`apply_ship_battle_outcome(battle)`** is registered as a
 **battle-conclusion hook** (`world.battles.conclusion_hooks
-.register_battle_conclusion_hook`, called from `ShipsConfig.ready()`) — the new
+.register_battle_conclusion_hook`, called from `world.ships.apps.ready()`) — the new
 pattern this system introduces in `battles`, mirroring
 `world.projects.services.register_kind_handler`'s registry shape but for
 end-of-`Battle` side effects rather than Project completion. `conclude_battle`

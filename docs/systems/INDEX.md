@@ -2769,7 +2769,7 @@ register as additional kinds.
   seam instead (see below).
 - **Effect dispatch:** `OFFER_EFFECT_HANDLERS: dict[str, Callable]` in
   `world.npc_services.effects` — keyed on `OfferKind`: `issue_permit` (buildings),
-  MISSION (registered by `MissionsConfig.ready`), `grant_loan`, the #930
+  MISSION (registered by `world.missions.apps.ready`), `grant_loan`, the #930
   domain-running pair `run_collection` / `run_improvement` (over
   `currency.collect_org_income` / `improve_org_domain`; org resolved via the shared
   `_resolve_authority_org` single-treasury-authority rule), and `run_train_offer` (#2440,
@@ -3302,7 +3302,7 @@ unified NPCServiceOffer PERMIT effect handler. Buildings spawn from completed
   not mutate per-building flags, which are catalog-level per the glossary).
 - **Key functions** (`world.buildings.services`):
   - `issue_permit(offer, persona) -> EffectResult` — real PERMIT effect handler
-    (replaces Plan 2's stub; registered via `BuildingsConfig.ready()`)
+    (replaces Plan 2's stub; registered via `world.buildings.apps.ready()`)
   - `validate_permit_site(permit_details, site_room, acting_persona, target_size) -> ValidationResult`
     — raises typed `PermitValidationError` subclasses with `user_message`
   - `activate_permit(permit_details, site_room, acting_persona, target_size, target_grandeur) -> Project`
@@ -3518,7 +3518,7 @@ the hull stat IS `Building.fortification_level`, reused not duplicated. Full det
   `buildings.fortification_services.start_fortification_upgrade` — no separate
   hull Project kind), `start_ship_repair` / `complete_ship_repair` (clears
   `needs_repair`). All four completion handlers registered via
-  `world.projects.services.register_kind_handler` at `ShipsConfig.ready()`.
+  `world.projects.services.register_kind_handler` at `world.ships.apps.ready()`.
 - **Ship-as-sanctum** (`world.ships.sanctum_bonus`): `ship_sanctum_bonus(ship) ->
   ShipStatBonus` / `ship_sanctum_capability_grants(ship) -> list[ShipCapabilityGrant]`
   read the ship's installed `SanctumDetails`' woven SANCTUM threads (at most one sanctum
@@ -3626,7 +3626,7 @@ ADR-0091.
   Character+CharacterSheet+PRIMARY Persona via
   `create_character_with_sheet`, place it in the Functionary's room, create
   the `NPCAsset` row, and deactivate the source Functionary. Registered via
-  `AssetsConfig.ready()`.
+  `world.assets.apps.ready()`.
 - **Seed content** (`world.assets.content`): reuses the existing
   Stealth/Leadership/Persuasion/Scholarship check content
   (`world.seeds.stealth_checks`/`governance_checks`/`social_checks`) rather

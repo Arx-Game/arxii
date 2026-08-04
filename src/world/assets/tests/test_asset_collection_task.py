@@ -27,7 +27,7 @@ class AssetTaskCollectHandlerTests(EvenniaTestCase):
 
     def setUp(self) -> None:
         super().setUp()
-        from world.assets.apps import AssetsConfig  # noqa: F401
+        from world.assets.apps import ready  # noqa: F401
 
         self.sheet = CharacterSheetFactory()
         self.promoter = self.sheet.primary_persona

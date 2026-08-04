@@ -1,15 +1,3 @@
-from django.apps import AppConfig
-
-
-class ItemsConfig(AppConfig):
-    default_auto_field = "django.db.models.BigAutoField"
-    name = "world.items"
-    verbose_name = "Items & Equipment"
-
-    def ready(self) -> None:
-        ready()
-
-
 def ready() -> None:
     """Register the Lab room-feature strategy + item-refinement handler.
 

@@ -105,7 +105,7 @@ class ReactToWindowTests(TestCase):
 
     def setUp(self) -> None:
         # The registry is module-global process state — snapshot the real
-        # entrance config (registered by MagicConfig.ready) and restore it so
+        # entrance config (registered by world.magic.apps.ready()) and restore it so
         # this module's stub kinds never leak into later test modules.
         from world.scenes.reaction_services import _KIND_REGISTRY
 

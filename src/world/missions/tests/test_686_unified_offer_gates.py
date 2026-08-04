@@ -652,7 +652,7 @@ class IssueMissionContractTests(TestCase):
     def test_dispatch_offer_effect_routes_mission_through_registry(self):
         """Reaches the MISSION handler via OFFER_EFFECT_HANDLERS — not direct call.
 
-        Guards against regression of the `MissionsConfig.ready()` registration
+        Guards against regression of the `world.missions.apps.ready()` registration
         + the lazy-snapshot for `reset_offer_effect_handlers` (the latter
         previously dropped MISSION on every reset, per #686 review).
         """

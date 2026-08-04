@@ -1,15 +1,3 @@
-from django.apps import AppConfig
-
-
-class MissionsConfig(AppConfig):
-    default_auto_field = "django.db.models.BigAutoField"
-    name = "world.missions"
-    verbose_name = "Missions"
-
-    def ready(self) -> None:
-        ready()
-
-
 def ready() -> None:
     """Register the MISSION effect handler with the unified offer framework (#686).
 

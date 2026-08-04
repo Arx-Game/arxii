@@ -1,15 +1,3 @@
-from django.apps import AppConfig
-
-
-class MagicConfig(AppConfig):
-    default_auto_field = "django.db.models.BigAutoField"
-    name = "world.magic"
-    verbose_name = "Magic System"
-
-    def ready(self) -> None:
-        ready()
-
-
 def ready() -> None:
     """Register magic's cross-app resolvers, strategies, and handlers.
 

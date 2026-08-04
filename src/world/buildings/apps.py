@@ -1,16 +1,4 @@
-"""AppConfig for the buildings system."""
-
-from django.apps import AppConfig
-
-
-class BuildingsConfig(AppConfig):
-    name = "world.buildings"
-    label = "buildings"
-    verbose_name = "Buildings (permits + construction + materials)"
-    default_auto_field = "django.db.models.BigAutoField"
-
-    def ready(self) -> None:
-        ready()
+"""Startup hook for the buildings system, called from world/apps.py."""
 
 
 def ready() -> None:

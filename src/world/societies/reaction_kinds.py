@@ -7,7 +7,7 @@ remaining capacity and an optional per-scene cap), and each acclaiming reactor
 earns a little engagement. PC assists are deliberately minor — the NPC traffic
 band stays the primary spread vector.
 
-Registered from ``SocietiesConfig.ready()`` so scenes never imports societies.
+Registered from ``world.societies.apps.ready()`` so scenes never imports societies.
 The window's deed + original value live on a ``SpreadAssistTarget`` (the
 per-kind settlement record), written when the telling opens the window.
 """

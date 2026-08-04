@@ -1,16 +1,4 @@
-"""AppConfig for the ships system (#1832)."""
-
-from django.apps import AppConfig
-
-
-class ShipsConfig(AppConfig):
-    name = "world.ships"
-    label = "ships"
-    verbose_name = "Ships (persistent upgrades + repair)"
-    default_auto_field = "django.db.models.BigAutoField"
-
-    def ready(self) -> None:
-        ready()
+"""Startup hook for the ships system (#1832), called from world/apps.py."""
 
 
 def ready() -> None:

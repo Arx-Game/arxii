@@ -1,15 +1,3 @@
-from django.apps import AppConfig
-
-
-class JusticeConfig(AppConfig):
-    default_auto_field = "django.db.models.BigAutoField"
-    name = "world.justice"
-    verbose_name = "Justice"
-
-    def ready(self) -> None:
-        ready()
-
-
 def ready() -> None:
     """Register the FRAME_JOB project-kind resolver (#1825).
 

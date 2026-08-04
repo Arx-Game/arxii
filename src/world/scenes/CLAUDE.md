@@ -89,7 +89,7 @@ the unified Persona identity system, and non-combat scene rounds.
   validates eligibility up front (`validate_boon_ask`, dial 1 — penniless-target money / unheld item /
   empty deed / vault-stub asks are rejected before any row exists) and persists the `Boon` row
   BEFORE NPC auto-resolve, so the defender sees the ask pre-consent. The `boon` **resolver**
-  (`register_resolver`, imported by `ScenesConfig.ready`) fires on both consent paths — NPC
+  (`register_resolver`, imported by `world.scenes.apps.ready`) fires on both consent paths — NPC
   auto-accept and piloted accept — fulfilling on success (`fulfill_boon`; MONEY via
   `currency.transfer`, VAULT_ITEM via the org vault's audited `withdraw_item_from_vault` with the
   target as authority and the asker as recipient, HELD_ITEM via a lean sheet-level hand-over —

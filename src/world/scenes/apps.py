@@ -1,14 +1,3 @@
-from django.apps import AppConfig
-
-
-class ScenesConfig(AppConfig):
-    default_auto_field = "django.db.models.BigAutoField"
-    name = "world.scenes"
-
-    def ready(self) -> None:
-        ready()
-
-
 def ready() -> None:
     """Register the boon scene-action resolver.
 
