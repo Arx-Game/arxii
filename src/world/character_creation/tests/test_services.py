@@ -281,9 +281,11 @@ class CharacterFinalizationTests(FinalizationTestMixin, TestCase):
         # (Plus some queries for character/sheet creation)
         # This is a rough check - the key is we're NOT doing 16 queries
         # (8 trait lookups + 8 creates)
-        create_queries = [
-            q for q in queries if "INSERT" in q["sql"] and "traits_charactertraitvalue" in q["sql"]
-        ]
+        # Table name derived (not hardcoded): post-#2906 every first-party model's
+        # real Django db_table follows the single collapsed app_label ("arxii"),
+        # not the old per-app "traits_" prefix.
+        table = CharacterTraitValue._meta.db_table
+        create_queries = [q for q in queries if "INSERT" in q["sql"] and table in q["sql"]]
 
         # Should be 1 bulk insert, not 8 individual inserts
         assert len(create_queries) == 1, f"Expected 1 bulk insert, got {len(create_queries)}"

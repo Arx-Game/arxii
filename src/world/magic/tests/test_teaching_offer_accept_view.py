@@ -24,6 +24,7 @@ from evennia_extensions.factories import AccountFactory, CharacterFactory
 from evennia_extensions.models import PlayerData
 from world.action_points.models import ActionPointPool
 from world.character_sheets.factories import CharacterSheetFactory
+from world.character_sheets.models import CharacterSheet
 from world.magic.factories import (
     PendingAlterationFactory,
     ThreadWeavingTeachingOfferFactory,
@@ -33,6 +34,7 @@ from world.magic.models import CharacterThreadWeavingUnlock
 from world.magic.types import AlterationGateError
 from world.progression.models import ExperiencePointsData
 from world.roster.factories import RosterEntryFactory, RosterTenureFactory
+from world.roster.models import RosterTenure
 
 
 def _link_account_to_sheet(account, character, sheet):
@@ -316,6 +318,8 @@ class TeachingOfferAcceptViewTests(APITestCase):
         object) then asserts that the CharacterSheet tenant-resolution query appears
         exactly once in the captured SQL — not once per row.
         """
+        import re
+
         from django.db import connection
         from django.test.utils import CaptureQueriesContext
 
@@ -341,10 +345,23 @@ class TeachingOfferAcceptViewTests(APITestCase):
 
         # The viewer-sheet tenant-resolution query (CharacterSheet WHERE
         # roster_entry__tenures__player_data__account = ...) must appear AT MOST ONCE.
+        # Identified by its PRIMARY table (the FROM clause), not a blunt substring
+        # match — the offer-listing query also touches both CharacterSheet's and
+        # RosterTenure's tables via select_related (for teacher_display_name), so a
+        # substring check matches both queries and can't tell them apart. Table name
+        # derived (not hardcoded): a stale string here would go silently vacuous
+        # (never matching any real table) rather than catching a regression — #2906.
+        sheet_table = CharacterSheet._meta.db_table
+        tenure_table = RosterTenure._meta.db_table
+
+        def primary_table(sql: str) -> str:
+            m = re.search(r'FROM\s+"([^"]+)"', sql)
+            return m.group(1) if m else ""
+
         viewer_sheet_queries = [
             q["sql"]
             for q in ctx.captured_queries
-            if "character_sheets" in q["sql"] and "tenures" in q["sql"]
+            if primary_table(q["sql"]) == sheet_table and tenure_table in q["sql"]
         ]
         self.assertLessEqual(
             len(viewer_sheet_queries),

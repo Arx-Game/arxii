@@ -143,7 +143,11 @@ class PersonaDisplayApiTests(APITestCase):
 
         sql = [q["sql"].lower() for q in ctx.captured_queries]
         discovery_queries = [s for s in sql if "personadiscovery" in s]
-        gender_queries = [s for s in sql if "character_sheets_gender" in s]
+        # Table name derived (not hardcoded): a stale string here would go
+        # silently vacuous (never matching any real table) rather than catching
+        # a per-row N+1 — see #2906.
+        gender_table = Gender._meta.db_table.lower()
+        gender_queries = [s for s in sql if gender_table in s]
         # One discovery query for all 8 masks; gender comes via select_related — neither grows
         # per anonymous persona (8 masks must not mean 8 of either).
         assert len(discovery_queries) <= 1, f"discovery not batched: {len(discovery_queries)}"

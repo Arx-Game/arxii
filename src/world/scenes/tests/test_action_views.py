@@ -16,6 +16,7 @@ from evennia_extensions.factories import (
     RoomProfileFactory,
 )
 from world.character_sheets.factories import CharacterSheetFactory
+from world.character_sheets.models import CharacterSheet
 from world.magic.factories import (
     BinaryEffectTypeFactory,
     CharacterAnimaFactory,
@@ -933,11 +934,12 @@ class CastEndpointTestCase(APITestCase):
         with CaptureQueriesContext(connection) as ctx:
             response = self.client.post(self._cast_url(), data, format="json")
         assert response.status_code == status.HTTP_400_BAD_REQUEST
-        # No query should touch character_sheets_charactersheet for the persona lookup
-        # (persona.character_sheet_id is a cached FK id — no SELECT needed).
-        sheet_fetches = [
-            q["sql"] for q in ctx.captured_queries if "character_sheets_charactersheet" in q["sql"]
-        ]
+        # No query should touch CharacterSheet's table for the persona lookup
+        # (persona.character_sheet_id is a cached FK id — no SELECT needed). Table
+        # name is derived, not hardcoded: a stale string here would go silently
+        # vacuous (never matching any real table) rather than catching a regression.
+        sheet_table = CharacterSheet._meta.db_table
+        sheet_fetches = [q["sql"] for q in ctx.captured_queries if sheet_table in q["sql"]]
         assert sheet_fetches == [], (
             f"Unexpected CharacterSheet SELECT(s) in pull validation: {sheet_fetches}"
         )
