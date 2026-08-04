@@ -57,11 +57,13 @@ class TestSeedIdempotency(TestCase):
         seed_dev_database()
         cost = ThreadPullCost.objects.order_by("pk").first()
         assert cost is not None
-        cost.label = "STAFF-EDITED - must survive re-seed"
+        # Short on purpose: ThreadPullCost.label is varchar(32), which SQLite
+        # does not enforce and Postgres does.
+        cost.label = "STAFF-EDITED"
         cost.save()
         seed_dev_database()
         cost.refresh_from_db()
-        self.assertEqual(cost.label, "STAFF-EDITED - must survive re-seed")
+        self.assertEqual(cost.label, "STAFF-EDITED")
 
     @stub_content_root()
     @override_settings(SEED_SAMPLE_CONTENT=True)

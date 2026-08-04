@@ -45,6 +45,7 @@ from world.magic.factories import (
     CharacterResonanceFactory,
     CharacterThreadWeavingUnlockFactory,
     ImbuingRitualFactory,
+    ResonanceFactory,
     TechniqueFactory,
     ThreadFactory,
     ThreadPullEffectFactory,
@@ -103,10 +104,15 @@ class WeaveImbulePullJourneyE2ETests(TestCase):
         cls.weaving_ritual = WeavingCeremonyFactory()
         cls.imbuing_ritual = ImbuingRitualFactory()
 
+        # An authored Resonance for the catalog's reference TRAIT rows to hang
+        # off. No seeder mints one since #2967, so a suite exercising a seed step
+        # keyed to a resonance supplies it, standing in for the content repo.
+        ResonanceFactory()
+
         # Seed tier-1 pull catalog (ThreadPullCost + ThreadPullEffect rows)
         cls.catalog = seed_thread_pull_catalog()
 
-        # Resonance: use the catalog's canonical resonance so ThreadPullEffect rows match
+        # Resonance: use the catalog's reference resonance so ThreadPullEffect rows match
         cls.resonance = cls.catalog.canonical_resonance
 
         # Resonance balance: enough to imbue (amount=5) and pull (tier-1 cost=1)
