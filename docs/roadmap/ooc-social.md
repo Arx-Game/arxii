@@ -188,8 +188,10 @@ Details: `docs/systems/character_creation.md`'s "Email Notifications (#2162)" se
   flat copper cost, `PORTAL_ANCHOR_INSTALL_COST`) via `portal_anchor_install`/
   `portal_anchor_dissolve` (telnet `portal/install`/`portal/dissolve`); discovery via
   `GET /api/locations/portal-destinations/` and the room-panel `PortalsBlock`. Seeded
-  starter content: a "Mirror" anchor kind + "Mirrorwalking" Minor Gift/"Mirrorwalk"
-  Technique + anchors in two seeded public rooms. See `docs/systems/magic.md`'s
+  starter content: anchors in two seeded public rooms on the content-authored "Mirror"
+  anchor kind. The "Mirrorwalking"/"Mirrorwalk" placeholder was obliterated in #2967, so
+  **no authored technique sets `travel_anchor_kind` and nobody can portal yet** — the
+  feature is waiting on a lore-repo minor gift. See `docs/systems/magic.md`'s
   "Portal travel" section. Still open: no dedicated search/filter UI for browsing
   scenes beyond the plain list.
 - Social feed — what's happening in the game right now (new achievements, notable events, active scenes)

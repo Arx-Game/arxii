@@ -31,7 +31,6 @@ from world.combat.models import CombatRoundAction
 from world.combat.services import resolve_round
 from world.magic.factories import (
     CharacterAnimaFactory,
-    CharacterResonanceFactory,
     EffectTypeFactory,
     GiftFactory,
     TechniqueFactory,
@@ -271,10 +270,6 @@ class EntranceDeclarationSuggestsOnResolutionTests(TestCase):
             max_health=50,
         )
         sheet = CharacterSheetFactory()
-        CharacterResonanceFactory(
-            character_sheet=sheet,
-            resonance=self.moment_type.resonance,
-        )
         participant = CombatParticipantFactory(
             encounter=encounter,
             character_sheet=sheet,

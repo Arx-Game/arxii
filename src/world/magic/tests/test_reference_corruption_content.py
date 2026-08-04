@@ -167,32 +167,58 @@ class TestCorruptionTwistTemplateFactory(TestCase):
 class TestAuthorReferenceCorruptionContent(TestCase):
     """author_reference_corruption_content seeds Primal + Abyssal sets correctly.
 
-    The "Wild Hunt"/"Web of Spiders" Affinity + Resonance rows are
-    content-repo-owned (#2698); ``SEED_SAMPLE_CONTENT`` opts this suite into
-    the sample-seeding path so the function has something to hang the
-    Corruption content off of.
+    Since #2967 the seeder names no resonance: it attaches its reference
+    Corruption content to whichever Primal and Abyssal Resonance the content
+    repo authored first. It used to invent "Wild Hunt" and "Web of Spiders",
+    which then shipped out of the next content export looking authored. These
+    tests stand in for the content repo with two factory-built resonances.
     """
+
+    @classmethod
+    def setUpTestData(cls) -> None:
+        from world.magic.factories import AffinityFactory, ResonanceFactory
+
+        cls.primal = ResonanceFactory(affinity=AffinityFactory(name="Primal"))
+        cls.abyssal = ResonanceFactory(affinity=AffinityFactory(name="Abyssal"))
+
+    def test_creates_no_resonance_of_its_own(self) -> None:
+        from world.magic.models.affinity import Resonance
+
+        before = set(Resonance.objects.values_list("pk", flat=True))
+        author_reference_corruption_content()
+        self.assertEqual(set(Resonance.objects.values_list("pk", flat=True)), before)
+
+    def test_skips_when_no_resonance_is_authored(self) -> None:
+        """No content repo, no reference content — and no crash."""
+        from world.conditions.models import ConditionTemplate
+        from world.magic.models.affinity import Resonance
+
+        Resonance.objects.all().delete()
+
+        author_reference_corruption_content()
+
+        self.assertFalse(
+            ConditionTemplate.objects.filter(corruption_resonance__isnull=False).exists()
+        )
 
     def test_both_resonances_get_condition_templates(self) -> None:
         from world.conditions.models import ConditionTemplate
 
         author_reference_corruption_content()
 
-        self.assertTrue(
-            ConditionTemplate.objects.filter(corruption_resonance__name="Wild Hunt").exists()
-        )
-        self.assertTrue(
-            ConditionTemplate.objects.filter(corruption_resonance__name="Web of Spiders").exists()
-        )
+        for resonance in (self.primal, self.abyssal):
+            self.assertTrue(
+                ConditionTemplate.objects.filter(corruption_resonance=resonance).exists()
+            )
 
     def test_primal_has_six_or_more_twist_templates(self) -> None:
         author_reference_corruption_content()
 
         count = MagicalAlterationTemplate.objects.filter(
             kind=AlterationKind.CORRUPTION_TWIST,
-            resonance__name="Wild Hunt",
+            resonance=self.primal,
         ).count()
-        # 3 stages × 2 templates each = 6
+        # 3 stages x 2 templates each = 6
         self.assertGreaterEqual(count, 6)
 
     def test_abyssal_has_six_or_more_twist_templates(self) -> None:
@@ -200,7 +226,7 @@ class TestAuthorReferenceCorruptionContent(TestCase):
 
         count = MagicalAlterationTemplate.objects.filter(
             kind=AlterationKind.CORRUPTION_TWIST,
-            resonance__name="Web of Spiders",
+            resonance=self.abyssal,
         ).count()
         self.assertGreaterEqual(count, 6)
 
@@ -210,51 +236,32 @@ class TestAuthorReferenceCorruptionContent(TestCase):
         author_reference_corruption_content()
         author_reference_corruption_content()
 
-        self.assertEqual(
-            ConditionTemplate.objects.filter(corruption_resonance__name="Wild Hunt").count(), 1
-        )
-        self.assertEqual(
-            ConditionTemplate.objects.filter(corruption_resonance__name="Web of Spiders").count(),
-            1,
-        )
+        for resonance in (self.primal, self.abyssal):
+            self.assertEqual(
+                ConditionTemplate.objects.filter(corruption_resonance=resonance).count(), 1
+            )
 
     def test_idempotent_does_not_exceed_twist_count(self) -> None:
         author_reference_corruption_content()
         count_before = MagicalAlterationTemplate.objects.filter(
             kind=AlterationKind.CORRUPTION_TWIST,
-            resonance__name="Wild Hunt",
+            resonance=self.primal,
         ).count()
 
         author_reference_corruption_content()
         count_after = MagicalAlterationTemplate.objects.filter(
             kind=AlterationKind.CORRUPTION_TWIST,
-            resonance__name="Wild Hunt",
+            resonance=self.primal,
         ).count()
 
         self.assertEqual(count_before, count_after)
-
-    def test_wild_hunt_is_primal_affinity(self) -> None:
-        from world.magic.models.affinity import Resonance
-
-        author_reference_corruption_content()
-
-        resonance = Resonance.objects.select_related("affinity").get(name="Wild Hunt")
-        self.assertEqual(resonance.affinity.name, "Primal")
-
-    def test_web_of_spiders_is_abyssal_affinity(self) -> None:
-        from world.magic.models.affinity import Resonance
-
-        author_reference_corruption_content()
-
-        resonance = Resonance.objects.select_related("affinity").get(name="Web of Spiders")
-        self.assertEqual(resonance.affinity.name, "Abyssal")
 
     def test_primal_condition_template_has_five_stages(self) -> None:
         from world.conditions.models import ConditionTemplate
 
         author_reference_corruption_content()
 
-        template = ConditionTemplate.objects.get(corruption_resonance__name="Wild Hunt")
+        template = ConditionTemplate.objects.get(corruption_resonance=self.primal)
         self.assertEqual(template.stages.count(), 5)
 
     def test_abyssal_condition_template_has_harder_dcs(self) -> None:
@@ -262,9 +269,7 @@ class TestAuthorReferenceCorruptionContent(TestCase):
 
         author_reference_corruption_content()
 
-        abyssal_template = ConditionTemplate.objects.get(
-            corruption_resonance__name="Web of Spiders"
-        )
+        abyssal_template = ConditionTemplate.objects.get(corruption_resonance=self.abyssal)
         dcs = list(
             abyssal_template.stages.order_by("stage_order").values_list(
                 "resist_difficulty", flat=True

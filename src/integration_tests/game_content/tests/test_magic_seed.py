@@ -30,13 +30,30 @@ from integration_tests.game_content.magic import (
     _seed_affinity_interactions,
     _seed_resonance_environment_config,
     seed_canonical_affinities,
-    seed_canonical_resonances,
     seed_canonical_rituals,
     seed_magic_config,
     seed_magic_dev,
     seed_starter_magic_story,
     seed_thread_pull_catalog,
 )
+
+
+def _author_stand_in_resonances() -> list:
+    """Author 4 Resonances the way the content repo would (#2967).
+
+    No seeder mints a Resonance any more, so a suite that exercises seed steps
+    keyed to one has to supply them itself — exactly as a real deploy does, by
+    loading lore-repo content before the cluster loop runs.
+    """
+    from world.magic.factories import AffinityFactory, ResonanceFactory
+
+    affinities = {name: AffinityFactory(name=name) for name in ("Celestial", "Primal", "Abyssal")}
+    return [
+        ResonanceFactory(affinity=affinities["Celestial"]),
+        ResonanceFactory(affinity=affinities["Celestial"]),
+        ResonanceFactory(affinity=affinities["Primal"]),
+        ResonanceFactory(affinity=affinities["Abyssal"]),
+    ]
 
 
 @override_settings(SEED_SAMPLE_CONTENT=True)
@@ -311,6 +328,9 @@ class TestSeedThreadPullCatalogCreation(TestCase):
 
     @classmethod
     def setUpTestData(cls) -> None:
+        # The reference TRAIT rows key to an authored resonance since #2967 —
+        # the seeder no longer invents a "Tideborne" nobody can hold.
+        cls.resonance = _author_stand_in_resonances()[0]
         cls.result: ThreadPullCatalogResult = seed_thread_pull_catalog()
 
     def test_pull_costs_created(self) -> None:
@@ -377,13 +397,25 @@ class TestSeedThreadPullCatalogCreation(TestCase):
         self.assertIsNotNone(cap_grant.capability_grant)
         self.assertEqual(cap_grant.capability_grant.name, "endurance")
 
-    def test_canonical_resonance_authored(self) -> None:
-        from world.magic.models import Affinity, Resonance
+    def test_reference_resonance_is_authored_never_invented(self) -> None:
+        """#2967: the catalog takes the first authored Resonance and mints none."""
+        from world.magic.models import Resonance
 
-        self.assertEqual(Resonance.objects.filter(name="Tideborne").count(), 1)
-        self.assertEqual(Affinity.objects.filter(name="Primal (Tideborne)").count(), 1)
-        self.assertEqual(self.result.canonical_resonance.name, "Tideborne")
-        self.assertEqual(self.result.canonical_resonance.affinity.name, "Primal (Tideborne)")
+        self.assertEqual(self.result.canonical_resonance, self.resonance)
+        self.assertEqual(Resonance.objects.count(), 4)
+
+    def test_skips_the_pull_effects_when_nothing_is_authored(self) -> None:
+        from world.magic.models import Resonance
+        from world.magic.models.threads import ThreadPullEffect
+
+        ThreadPullEffect.objects.all().delete()
+        Resonance.objects.all().delete()
+
+        result = seed_thread_pull_catalog()
+
+        self.assertIsNone(result.canonical_resonance)
+        self.assertEqual(ThreadPullEffect.objects.count(), 0)
+        self.assertEqual(Resonance.objects.count(), 0)
 
 
 @override_settings(SEED_SAMPLE_CONTENT=True)
@@ -392,6 +424,7 @@ class TestSeedThreadPullCatalogIdempotency(TestCase):
 
     @classmethod
     def setUpTestData(cls) -> None:
+        _author_stand_in_resonances()
         cls.first: ThreadPullCatalogResult = seed_thread_pull_catalog()
         cls.second: ThreadPullCatalogResult = seed_thread_pull_catalog()
 
@@ -418,13 +451,13 @@ class TestSeedThreadPullCatalogIdempotency(TestCase):
         )
         self.assertEqual(
             counts["resonances"],
-            1,
-            "seed_thread_pull_catalog() must not create extra Resonance rows on second call",
+            4,
+            "seed_thread_pull_catalog() must not create any Resonance row (#2967)",
         )
         self.assertEqual(
             counts["affinities"],
-            1,
-            "seed_thread_pull_catalog() must not create extra Affinity rows on second call",
+            3,
+            "seed_thread_pull_catalog() must not create any Affinity row (#2967)",
         )
         self.assertEqual(
             counts["capability_types"],
@@ -578,6 +611,13 @@ class TestSeedMagicDev(TestCase):
     def setUpTestData(cls) -> None:
         from integration_tests.game_content.magic import seed_magic_dev
 
+        # Stand in for the content repo. No seeder mints a Resonance any more
+        # (#2967), and several steps below hang their config off whichever ones
+        # are authored, so a real deploy loads content before the cluster loop
+        # (`load_world_content()` in `seed_dev_database()`). Four resonances,
+        # one per affinity plus a spare Celestial, keeps the pull-effect count
+        # at the 16 this suite has always asserted.
+        cls.resonances = _author_stand_in_resonances()
         cls.first = seed_magic_dev()
         cls.second = seed_magic_dev()
 
@@ -614,7 +654,8 @@ class TestSeedMagicDev(TestCase):
         # --- Task 1.3: thread pull catalog ---
         # 3 universal + 1 GIFT (imbue-only; ADR-0051) = 4.
         self.assertEqual(ThreadPullCost.objects.count(), 4)
-        # 4 TRAIT + 16 RELATIONSHIP_TRACK (4 resonances × 4 tiers, #2021) = 20.
+        # 4 TRAIT + 16 RELATIONSHIP_TRACK (the 4 authored resonances × 4 tiers,
+        # #2021 — every authored resonance gets a chain since #2967) = 20.
         self.assertEqual(ThreadPullEffect.objects.count(), 20)
 
         # Note: the starter Gift/Technique/PathGiftGrant/Tradition catalog
@@ -623,15 +664,19 @@ class TestSeedMagicDev(TestCase):
         # ahead of seed_dev_database()'s cluster loop, not by seed_magic_dev()
         # itself. Nothing to assert on this orchestrator's own output.
 
-        # --- author_reference_corruption_content: Wild Hunt + Web of Spiders ---
-        self.assertTrue(
-            ConditionTemplate.objects.filter(name__icontains="Wild Hunt").exists(),
-            "Wild Hunt Corruption ConditionTemplate must exist",
-        )
-        self.assertTrue(
-            ConditionTemplate.objects.filter(name__icontains="Web of Spiders").exists(),
-            "Web of Spiders Corruption ConditionTemplate must exist",
-        )
+        # --- author_reference_corruption_content: one Primal + one Abyssal ---
+        # Keyed to whichever resonance the content repo authored first per
+        # affinity, never an invented name (#2967).
+        from world.magic.seeds_resonance import first_authored_resonance
+
+        for affinity_name in ("Primal", "Abyssal"):
+            resonance = first_authored_resonance(affinity_name)
+            self.assertIsNotNone(resonance)
+            self.assertTrue(
+                ConditionTemplate.objects.filter(corruption_resonance=resonance).exists(),
+                f"Corruption ConditionTemplate must exist for the {affinity_name} reference "
+                f"resonance {resonance}",
+            )
 
         # --- MagicContent.create_all(): 6 social techniques ---
         from integration_tests.game_content.magic import ACTION_TECHNIQUE_MAP
@@ -941,40 +986,27 @@ class SeedEndureHallowedGroundCheckTests(TestCase):
 
 
 @override_settings(SEED_SAMPLE_CONTENT=True)
-class SeedCanonicalResonancesTests(TestCase):
-    """Task 1.12: seed_canonical_resonances() creates idempotent Celestial Resonance rows."""
+class SeedMintsNoResonanceTests(TestCase):
+    """No seeder may create a Resonance, even with sample content enabled (#2967).
+
+    ``seed_canonical_resonances()`` used to invent "Light", "Sanctity",
+    "Radiance" and "Dissolution" here and call them canonical; the canonical set
+    is the 24 Latin-ish resonances the content repo authors, and the invented
+    ones shipped back out of the next export looking authored. The function is
+    gone; this test is the guard that keeps it gone.
+    """
 
     @classmethod
     def setUpTestData(cls) -> None:
         seed_canonical_affinities()
 
-    def test_seeds_three_celestial_resonances(self) -> None:
-        seed_canonical_resonances()
-        from world.magic.models.affinity import Affinity, Resonance
-
-        celestial = Affinity.objects.get(name="Celestial")
-        names = set(
-            Resonance.objects.filter(affinity=celestial).values_list("name", flat=True),
-        )
-        self.assertGreaterEqual(names, {"Light", "Sanctity", "Radiance"})
-
-    def test_idempotent(self) -> None:
-        seed_canonical_resonances()
+    def test_seed_starter_magic_story_creates_no_resonance(self) -> None:
+        from integration_tests.game_content.magic import seed_starter_magic_story
         from world.magic.models.affinity import Resonance
 
-        count_a = Resonance.objects.count()
-        seed_canonical_resonances()
-        count_b = Resonance.objects.count()
-        self.assertEqual(count_a, count_b)
-
-    def test_resonances_have_celestial_affinity(self) -> None:
-        seed_canonical_resonances()
-        from world.magic.models.affinity import Affinity, Resonance
-
-        celestial = Affinity.objects.get(name="Celestial")
-        for name in ("Light", "Sanctity", "Radiance"):
-            res = Resonance.objects.get(name=name)
-            self.assertEqual(res.affinity, celestial)
+        before = Resonance.objects.count()
+        seed_starter_magic_story()
+        self.assertEqual(Resonance.objects.count(), before)
 
 
 # ---------------------------------------------------------------------------
@@ -1152,11 +1184,15 @@ class SeedResonanceEnvironmentRoomsTests(TestCase):
             _seed_endure_hallowed_ground_check,
             _seed_hallowed_reaction_conditions,
             seed_canonical_affinities,
-            seed_canonical_resonances,
         )
+        from world.magic.factories import ResonanceFactory
+        from world.magic.models.affinity import Affinity
 
         seed_canonical_affinities()
-        seed_canonical_resonances()
+        # The cascade rooms take whichever Celestial/Abyssal resonance the
+        # content repo authored (#2967); stand in for that here.
+        ResonanceFactory(affinity=Affinity.objects.get(name="Celestial"))
+        ResonanceFactory(affinity=Affinity.objects.get(name="Abyssal"))
         _seed_hallowed_reaction_conditions()
         _seed_endure_hallowed_ground_check()
 

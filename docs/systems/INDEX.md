@@ -608,9 +608,11 @@ Powers, affinities, auras, resonances, threads-as-currency, rituals, and Mage Sc
   /api/locations/portal-destinations/?character_id=<id>` (`world.locations.views
   .PortalDestinationsViewSet` — lives in `world.locations`, not `world.magic`, alongside the
   sibling `ComfortViewSet`; see Locations section). Frontend: `PortalsBlock`
-  (room-panel). Seed: `ensure_portal_travel_content()` — "Mirror" anchor kind, MINOR Gift
-  "Mirrorwalking" + "Mirrorwalk" Technique, starter anchors in the seeded magic-story cascade
-  rooms. See magic.md "Portal travel" for the full eligibility chain + exception table.
+  (room-panel). Seed: `ensure_portal_travel_content()` — starter anchors on the
+  content-authored "Mirror" anchor kind, in the seeded magic-story cascade rooms. The
+  "Mirrorwalking"/"Mirrorwalk" placeholder it used to invent was obliterated (#2967), so
+  **no authored technique sets `travel_anchor_kind` yet and the feature has no content**.
+  See magic.md "Portal travel" for the full eligibility chain + exception table.
 - **Offer registry** (`commands/offer_registry.py`): generic pending-offer dispatch; `SurgeOfferHandler` and `CrossingOfferHandler` in `world/magic/offer_handlers.py`. Telnet: `accept <keyword>` / `decline <keyword>`.
 - **Technique authoring action:** `AuthorTechniqueAction` (key `"author_technique"`, category
   `"magic"`) — single seam; telnet `CmdTechnique` and web `POST /api/magic/techniques/author/`

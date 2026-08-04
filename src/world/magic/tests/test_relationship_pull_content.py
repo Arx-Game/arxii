@@ -10,16 +10,26 @@ class RelationshipPullContentTests(TestCase):
     """Verify the seed creates correct ThreadPullEffect rows."""
 
     def setUp(self):
-        """Create canonical resonances for the seed to find."""
-        from world.magic.models.affinity import Affinity
+        """Stand in for the content repo's authored resonances.
 
-        celestial = Affinity.objects.create(name="Celestial")
-        abyssal = Affinity.objects.create(name="Abyssal")
-        for name in ("Light", "Sanctity", "Radiance"):
-            Resonance.objects.get_or_create(name=name, defaults={"affinity": celestial})
-        Resonance.objects.get_or_create(name="Dissolution", defaults={"affinity": abyssal})
+        The seed covered four named resonances until #2967 — "Light",
+        "Sanctity", "Radiance", "Dissolution" — which it invented itself and
+        which no player could hold, so a relationship thread woven at a real
+        resonance had no pull effects at all. It now covers every authored
+        resonance and creates none.
+        """
+        from world.magic.factories import AffinityFactory, ResonanceFactory
 
-    def test_seed_creates_rows_for_all_canonical_resonances(self):
+        celestial = AffinityFactory(name="Celestial")
+        abyssal = AffinityFactory(name="Abyssal")
+        self.resonances = [
+            ResonanceFactory(affinity=celestial),
+            ResonanceFactory(affinity=celestial),
+            ResonanceFactory(affinity=celestial),
+            ResonanceFactory(affinity=abyssal),
+        ]
+
+    def test_seed_creates_rows_for_every_authored_resonance(self):
         """ensure_relationship_pull_content creates 4 tiers x 4 resonances = 16 rows."""
         from world.seeds.game_content.magic import ensure_relationship_pull_content
 
@@ -27,6 +37,18 @@ class RelationshipPullContentTests(TestCase):
 
         rows = ThreadPullEffect.objects.filter(target_kind=TargetKind.RELATIONSHIP_TRACK)
         self.assertEqual(rows.count(), 16)
+        self.assertEqual(
+            set(rows.values_list("resonance_id", flat=True)),
+            {resonance.pk for resonance in self.resonances},
+        )
+
+    def test_seed_creates_no_resonance(self):
+        """#2967: no seeder may add to the authored catalog."""
+        from world.seeds.game_content.magic import ensure_relationship_pull_content
+
+        before = Resonance.objects.count()
+        ensure_relationship_pull_content()
+        self.assertEqual(Resonance.objects.count(), before)
 
     def test_seed_is_idempotent(self):
         """Running twice doesn't duplicate rows."""

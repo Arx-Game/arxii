@@ -539,7 +539,7 @@ The application point is `accrue_corruption` (Scope 7): when called for a non-Ce
 
 This is **not a Soul Tether feature** — it's a small piece of Corruption tuning that the Soul Tether design assumes. Listed here because the spec hangs together only with this floor in place.
 
-Author `passive_decay_per_day` and `passive_decay_max_severity` values on existing Corruption `ConditionTemplate` rows (Wild Hunt, Web of Spiders) and any future Corruption templates. Tuning numbers (settled at implementation, not in this spec):
+Author `passive_decay_per_day` and `passive_decay_max_severity` values on the existing reference Corruption `ConditionTemplate` rows (one per the first authored Primal and Abyssal Resonance, seeded by `author_reference_corruption_content()`; the named "Wild Hunt"/"Web of Spiders" rows were removed in #2967) and any future Corruption templates. Tuning numbers (settled at implementation, not in this spec):
 
 - Primal-flavored Corruption: decay rate sufficient to fully clear a low-tier Primal-primary character's accrual over a small number of days. *Primal users below mid-tier do not need a Sineater.*
 - Abyssal-flavored Corruption: decay rate slow enough that an Abyssal-primary character past tier 1 cannot rely on decay alone. *Abyssal users post-tier-1 need a Sineater (or rely on Atonement Rite, which is one-shot per scene and only effective at stages 1-2).*
@@ -805,7 +805,7 @@ No model change — `is_soul_tether` and `soul_tether_role` already shipped (Spe
 - `RitualComponentRequirement` rows for both rituals.
 - `ImbuingProseTemplate` or equivalent prose for the Hollow / Sineating / rescue events.
 - Authored `ConditionTemplate` for `TetherStrainTemplate` with 5 stages, each with severity_threshold and stage-entry effects per §6.3.
-- `passive_decay_per_day` values on existing Corruption `ConditionTemplate` rows (Wild Hunt, Web of Spiders) per §11.
+- `passive_decay_per_day` values on the existing reference Corruption `ConditionTemplate` rows per §11.
 
 ---
 

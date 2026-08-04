@@ -185,24 +185,20 @@ def _ensure_effect_types() -> dict[str, EffectType]:
 
 
 def _ensure_resonances() -> dict[str, Resonance]:
-    """Look up (or, under ``SEED_SAMPLE_CONTENT``, invent) the resonance-gated combo's Resonance.
+    """Resolve the Resonance the resonance-gated demo combo is keyed to.
 
-    Content-repo-owned (#2698) — the "Celestial" Affinity and "Light"
-    Resonance are the same canonical rows ``seed_canonical_affinities()`` /
-    ``seed_canonical_resonances()`` author; this just re-resolves them
-    (idempotent — a no-op lookup once those have run). Returns an empty dict
-    when either is unavailable.
+    The combo only needs *a* Celestial resonance to prove the
+    ``ComboSlot.resonance_requirement`` gate fires; it used to name the invented
+    "Light" and ``authored_or_sample`` it into existence (#2967). It now takes
+    the first authored Celestial resonance, and returns an empty dict when the
+    content repo has authored none — the combo then seeds ungated.
     """
-    from world.magic.models import Affinity, Resonance  # noqa: PLC0415
-    from world.seeds.sample_content import authored_or_sample  # noqa: PLC0415
+    from world.magic.seeds_resonance import first_authored_resonance  # noqa: PLC0415
 
-    celestial = authored_or_sample(Affinity, {}, name="Celestial")
-    if celestial is None:
+    celestial_resonance = first_authored_resonance("Celestial")
+    if celestial_resonance is None:
         return {}
-    light = authored_or_sample(Resonance, {"affinity": celestial}, name="Light")
-    if light is None:
-        return {}
-    return {"light": light}
+    return {"light": celestial_resonance}
 
 
 def _ensure_slots(
