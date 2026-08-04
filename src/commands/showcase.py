@@ -7,6 +7,8 @@ the statement; payouts settle at the weekly cron. No business logic here.
 
 from __future__ import annotations
 
+from typing import Any
+
 from commands.command import ArxCommand
 from commands.exceptions import CommandError
 
@@ -114,3 +116,60 @@ class CmdShowcase(ArxCommand):
             msg = f"More than one piece matches '{token}' — use its #id."
             raise CommandError(msg)
         return matches[0].pk
+
+
+class CmdReveal(ArxCommand):
+    """Dramatically reveal a concealed worn piece.
+
+    Usage:
+        reveal <item name or #id>
+
+    A concealed piece's accents and prestige lie dormant until seen; the
+    reveal is the moment it starts to openly count. It stays revealed until
+    you take it off or dress over it anew.
+    """
+
+    key = "reveal"
+    locks = "cmd:all()"
+
+    def func(self) -> None:
+        from actions.definitions.fashion import RevealAction  # noqa: PLC0415
+
+        raw = (self.args or "").strip()
+        if not raw:
+            self.msg("Reveal what? Usage: reveal <item name or #id>")
+            return
+        try:
+            item_id = _resolve_worn_item_id(self.caller, raw)
+        except CommandError as err:
+            self.msg(str(err))
+            return
+        result = RevealAction().run(actor=self.caller, item_id=item_id)
+        if result.message:
+            self.msg(result.message)
+
+
+def _resolve_worn_item_id(caller: Any, token: str) -> int:
+    """Resolve a WORN item by #id or name (worn scope, unlike the held scope above)."""
+    from world.items.models import EquippedItem  # noqa: PLC0415
+
+    if token.lstrip("#").isdigit():
+        return int(token.lstrip("#"))
+    sheet = caller.sheet_data
+    worn_ids = set(
+        EquippedItem.objects.filter(character_id=sheet.character_id).values_list(
+            "item_instance_id", flat=True
+        )
+    )
+    from world.items.models import ItemInstance  # noqa: PLC0415
+
+    matches = list(
+        ItemInstance.objects.filter(pk__in=worn_ids, custom_name__icontains=token)[:2]
+    ) or list(ItemInstance.objects.filter(pk__in=worn_ids, template__name__icontains=token)[:2])
+    if not matches:
+        msg = f"You wear nothing matching '{token}'."
+        raise CommandError(msg)
+    if len(matches) > 1:
+        msg = f"More than one worn piece matches '{token}' — use its #id."
+        raise CommandError(msg)
+    return matches[0].pk

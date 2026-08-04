@@ -685,6 +685,24 @@ Returns `{"action_points": n, "anima": n, "materials": k}`.
   Engagement signal: `create_style_presentation_endorsement` bumps the
   endorsee's unsettled showing (`record_showing_engagement`).
 
+### Coverage, concealment & the Reveal (#2965, ADR-0194)
+
+- **Visibility** (`services/visibility.py`, `compute_worn_visibility`) — pure
+  function over prefetched `EquippedItem` rows: a slot is concealed when a
+  higher layer at the same region has `covers_lower_layers`; a piece is
+  visible iff any occupied slot shows, or it is REVEALED
+  (`EquippedItem.revealed_at` — set by `RevealAction`, dies with the row on
+  unequip). Memoized on `CharacterEquipmentHandler`.
+- **The three-way split:** `crafted_modifier_total` counts recipe modifiers
+  ONCE per distinct piece and accents × visible slot count (a 3-slot gown's
+  menace ×3); the prestige walk counts each piece once, visible pieces
+  contribute polish/worth/accents while concealed pieces contribute ONLY
+  `legend_value` (legend is magical — pierces concealment). Wearer-facing
+  systems (comfort/armor/mitigation) are untouched and read everything worn.
+- **Reveal**: `RevealAction` (key `reveal`) + telnet `reveal <item>` — a
+  deliberate dramatic broadcast that flips a concealed worn piece into the
+  visible set. Extensible to tattoos/scars when their models exist.
+
 ### Accent lifecycle & recycling (#2886)
 
 - **Vocabulary** (Apostate-ratified 2026-08-02, seeded by `seed_accent_axes`):

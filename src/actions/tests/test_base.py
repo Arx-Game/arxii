@@ -200,6 +200,7 @@ class ActionRegistryTests(TestCase):
             "present_outfit",
             "judge_presentation",
             "showcase",
+            "reveal",
             "traverse_exit",
             "travel_to",
             "stop_travel",

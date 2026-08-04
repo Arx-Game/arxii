@@ -48,6 +48,7 @@ if TYPE_CHECKING:
         Outfit,
         Style,
     )
+    from world.items.services.visibility import WornVisibility
     from world.magic.models import Facet
     from world.mechanics.models import ModifierTarget
 
@@ -63,6 +64,7 @@ class CharacterEquipmentHandler:
     def __init__(self, character: ObjectDB) -> None:
         self._character = character
         self._cached: list[EquippedItem] | None = None
+        self._visibility: WornVisibility | None = None
 
     @property
     def _equipped(self) -> list[EquippedItem]:
@@ -156,13 +158,40 @@ class CharacterEquipmentHandler:
         ]
 
     def crafted_modifier_total(self, target: ModifierTarget) -> int:
-        """Sum crafted modifier values for ``target`` across equipped items."""
-        return sum(
-            equipped.item_instance.crafted_modifier_value(target) for equipped in self._equipped
-        )
+        """Sum crafted modifier values for ``target`` across worn pieces (#2965).
+
+        Apostate's coverage ruling: recipe-crafted modifiers count ONCE per
+        distinct piece (a 3-slot gown is one piece, not three), while ACCENTS
+        extend and multiply per visible slot the piece covers — the statement
+        scales with the canvas it commands. Fully concealed pieces contribute
+        nothing here (social-facing); a Reveal restores them.
+        """
+        visibility = self._worn_visibility()
+        total = 0
+        seen: set[int] = set()
+        for equipped in self._equipped:
+            instance = equipped.item_instance
+            if instance.pk in seen:
+                continue
+            seen.add(instance.pk)
+            visible_slots = visibility.visible_slot_counts.get(instance.pk, 0)
+            if visible_slots == 0:
+                continue
+            total += instance.crafted_recipe_modifier_value(target)
+            total += instance.accent_modifier_value(target) * visible_slots
+        return total
+
+    def _worn_visibility(self) -> WornVisibility:
+        """Memoized visibility over the current equipment snapshot (#2965)."""
+        from world.items.services.visibility import compute_worn_visibility  # noqa: PLC0415
+
+        if self._visibility is None:
+            self._visibility = compute_worn_visibility(self._equipped)
+        return self._visibility
 
     def invalidate(self) -> None:
         self._cached = None
+        self._visibility = None
 
 
 class CharacterCarriedItemsHandler:

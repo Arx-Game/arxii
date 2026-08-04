@@ -131,11 +131,14 @@ def recompute_persona_prestige_from_items(persona: Persona) -> int:
     switch event hook, equip/unequip hook) determine *which* persona to
     recompute; this function just reads the body.
     """
+    from world.items.models import TemplateSlot  # noqa: PLC0415
+    from world.items.services.visibility import compute_worn_visibility  # noqa: PLC0415
+
     sheet = persona.character_sheet
     if sheet is None or sheet.character_id is None:
         return persona.prestige_from_items
     total = 0
-    equipped = (
+    equipped = list(
         EquippedItem.objects.filter(character_id=sheet.character_id)
         .select_related("item_instance__template", "item_instance__quality_tier")
         .prefetch_related(
@@ -143,14 +146,32 @@ def recompute_persona_prestige_from_items(persona: Persona) -> int:
                 "item_instance__accents",
                 queryset=ItemAccent.objects.select_related("target", "level"),
                 to_attr="cached_item_accents",
-            )
+            ),
+            Prefetch(
+                "item_instance__template__slots",
+                queryset=TemplateSlot.objects.all(),
+                to_attr="cached_slots",
+            ),
         )
     )
+    # #2965 (Apostate's coverage ruling): prestige is PER PIECE, never
+    # slot-multiplied — a multi-slot gown is one masterwork. Social-facing
+    # terms (polish, quality worth, accents) read only VISIBLE pieces;
+    # LEGEND pierces concealment (it is magical — ownership carries it).
+    visibility = compute_worn_visibility(equipped)
+    seen: set[int] = set()
     for slot in equipped:
-        template = slot.item_instance.template
-        if template.polish_value > 0 and template.polish_category_id is not None:
-            total += template.polish_value
-        total += _item_worth_prestige(slot.item_instance)
+        instance = slot.item_instance
+        if instance.pk in seen:
+            continue
+        seen.add(instance.pk)
+        if visibility.is_visible(instance.pk):
+            template = instance.template
+            if template.polish_value > 0 and template.polish_category_id is not None:
+                total += template.polish_value
+            total += _item_worth_prestige(instance)
+        else:
+            total += instance.legend_value
     if total == persona.prestige_from_items:
         return total
     persona.prestige_from_items = total
