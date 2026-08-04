@@ -499,6 +499,7 @@ class TestSeedThreadPullCatalogPreservesEdits(TestCase):
         from world.magic.constants import EffectKind
         from world.magic.models.threads import ThreadPullEffect
 
+        _author_stand_in_resonances()
         first = seed_thread_pull_catalog()
         flat_pk = first.pull_effects[EffectKind.FLAT_BONUS].pk
 
@@ -654,9 +655,21 @@ class TestSeedMagicDev(TestCase):
         # --- Task 1.3: thread pull catalog ---
         # 3 universal + 1 GIFT (imbue-only; ADR-0051) = 4.
         self.assertEqual(ThreadPullCost.objects.count(), 4)
-        # 4 TRAIT + 16 RELATIONSHIP_TRACK (the 4 authored resonances × 4 tiers,
-        # #2021 — every authored resonance gets a chain since #2967) = 20.
-        self.assertEqual(ThreadPullEffect.objects.count(), 20)
+        # 4 reference TRAIT rows, on exactly one resonance. Derived rather than
+        # hardcoded: the suites below this one build techniques through factories
+        # that mint their own resonances, so the catalog is not just the four
+        # stand-ins by the time seed_magic_dev() finishes.
+        from world.magic.constants import TargetKind
+        from world.magic.models import Resonance
+
+        trait_rows = ThreadPullEffect.objects.filter(target_kind=TargetKind.TRAIT)
+        self.assertEqual(trait_rows.count(), 4)
+        self.assertEqual(len(set(trait_rows.values_list("resonance_id", flat=True))), 1)
+        # Every authored resonance gets a 4-tier RELATIONSHIP_TRACK chain (#2967).
+        self.assertEqual(
+            ThreadPullEffect.objects.filter(target_kind=TargetKind.RELATIONSHIP_TRACK).count(),
+            4 * Resonance.objects.count(),
+        )
 
         # Note: the starter Gift/Technique/PathGiftGrant/Tradition catalog
         # (#2426 Task 7) is no longer authored here — it's retired (#2474) in
@@ -665,17 +678,19 @@ class TestSeedMagicDev(TestCase):
         # itself. Nothing to assert on this orchestrator's own output.
 
         # --- author_reference_corruption_content: one Primal + one Abyssal ---
-        # Keyed to whichever resonance the content repo authored first per
-        # affinity, never an invented name (#2967).
-        from world.magic.seeds_resonance import first_authored_resonance
-
+        # Exactly one reference template per affinity, keyed to an authored
+        # resonance rather than an invented name (#2967). Which one is not
+        # asserted: the seed follows whichever row it placed first, so pinning
+        # the identity here would just re-encode the ordering it deliberately
+        # stopped depending on.
         for affinity_name in ("Primal", "Abyssal"):
-            resonance = first_authored_resonance(affinity_name)
-            self.assertIsNotNone(resonance)
-            self.assertTrue(
-                ConditionTemplate.objects.filter(corruption_resonance=resonance).exists(),
-                f"Corruption ConditionTemplate must exist for the {affinity_name} reference "
-                f"resonance {resonance}",
+            templates = ConditionTemplate.objects.filter(
+                corruption_resonance__affinity__name=affinity_name
+            )
+            self.assertEqual(
+                templates.count(),
+                1,
+                f"exactly one reference Corruption ConditionTemplate for {affinity_name}",
             )
 
         # --- MagicContent.create_all(): 6 social techniques ---
@@ -1227,12 +1242,12 @@ class SeedResonanceEnvironmentRoomsTests(TestCase):
 
         from integration_tests.game_content.magic import _seed_resonance_environment_rooms
         from world.locations.services import effective_value
-        from world.magic.models.affinity import Resonance
+        from world.magic.seeds_resonance import first_authored_resonance
 
         _seed_resonance_environment_rooms()
         low = ObjectDB.objects.get(db_key="The Hallowed Threshold (Low)")
-        light = Resonance.objects.get(name="Light")
-        self.assertEqual(effective_value(low, resonance=light), 10)
+        celestial = first_authored_resonance("Celestial")
+        self.assertEqual(effective_value(low, resonance=celestial), 10)
 
     def test_high_room_cascade_magnitude(self):
         """The High celestial room resolves to magnitude 80 via effective_value."""
@@ -1240,12 +1255,12 @@ class SeedResonanceEnvironmentRoomsTests(TestCase):
 
         from integration_tests.game_content.magic import _seed_resonance_environment_rooms
         from world.locations.services import effective_value
-        from world.magic.models.affinity import Resonance
+        from world.magic.seeds_resonance import first_authored_resonance
 
         _seed_resonance_environment_rooms()
         high = ObjectDB.objects.get(db_key="The Hallowed Threshold (High)")
-        light = Resonance.objects.get(name="Light")
-        self.assertEqual(effective_value(high, resonance=light), 80)
+        celestial = first_authored_resonance("Celestial")
+        self.assertEqual(effective_value(high, resonance=celestial), 80)
 
     def test_aligned_sanctum_cascade_magnitude(self):
         """The Abyssal aligned room resolves to magnitude 60 via effective_value."""
@@ -1253,12 +1268,12 @@ class SeedResonanceEnvironmentRoomsTests(TestCase):
 
         from integration_tests.game_content.magic import _seed_resonance_environment_rooms
         from world.locations.services import effective_value
-        from world.magic.models.affinity import Resonance
+        from world.magic.seeds_resonance import first_authored_resonance
 
         _seed_resonance_environment_rooms()
         sanctum = ObjectDB.objects.get(db_key="The Resonant Sanctum (Aligned)")
-        dissolution = Resonance.objects.get(name="Dissolution")
-        self.assertEqual(effective_value(sanctum, resonance=dissolution), 60)
+        abyssal = first_authored_resonance("Abyssal")
+        self.assertEqual(effective_value(sanctum, resonance=abyssal), 60)
 
     def test_idempotent(self):
         """Re-running _seed_resonance_environment_rooms() produces stable counts/values."""
@@ -1268,11 +1283,11 @@ class SeedResonanceEnvironmentRoomsTests(TestCase):
         from world.conditions.models import ConditionTemplate
         from world.locations.models import LocationValueModifier
         from world.locations.services import effective_value
-        from world.magic.models.affinity import Resonance
+        from world.magic.seeds_resonance import first_authored_resonance
 
         _seed_resonance_environment_rooms()
-        light = Resonance.objects.get(name="Light")
-        dissolution = Resonance.objects.get(name="Dissolution")
+        light = first_authored_resonance("Celestial")
+        dissolution = first_authored_resonance("Abyssal")
         low = ObjectDB.objects.get(db_key="The Hallowed Threshold (Low)")
         high = ObjectDB.objects.get(db_key="The Hallowed Threshold (High)")
         sanctum = ObjectDB.objects.get(db_key="The Resonant Sanctum (Aligned)")
@@ -1474,6 +1489,9 @@ class SeedStarterMagicStoryOrchestratorTests(TestCase):
         )
         from world.stories.models import Story
 
+        # The cascade rooms only seed when a Celestial and an Abyssal resonance
+        # are authored (#2967) — stand in for the content repo.
+        _author_stand_in_resonances()
         seed_starter_magic_story()
 
         # Spot-check that representative content from each phase is present.
@@ -1849,6 +1867,7 @@ class TestSeedMagicDevVariants(TestCase):
 
     @classmethod
     def setUpTestData(cls) -> None:
+        cls.resonances = _author_stand_in_resonances()
         cls.seed = seed_magic_dev()
 
     def test_seed_authors_gift_technique_variants(self):
@@ -1856,9 +1875,11 @@ class TestSeedMagicDevVariants(TestCase):
 
         variants = TechniqueVariant.objects.all()
         self.assertTrue(variants.exists(), "dev seed authored no gift technique variants")
+        authored = {resonance.pk for resonance in self.resonances}
         for v in variants:
             self.assertGreaterEqual(v.unlock_thread_level, 3)
-            self.assertEqual(
-                v.parent_technique.gift.resonances.filter(id=v.resonance_id).count(),
-                1,
-            )
+            # The variant's resonance is an authored one. It is NOT checked
+            # against the parent gift's supported set: since #2968 an empty set
+            # means unrestricted, and the seeded "Social Arts" gift leaves it
+            # empty rather than minting a resonance to put in it (#2967).
+            self.assertIn(v.resonance_id, authored)

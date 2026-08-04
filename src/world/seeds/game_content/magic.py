@@ -257,22 +257,19 @@ class MagicContent:
         """
         from actions.constants import EnhancementSourceType  # noqa: PLC0415
         from actions.models import ActionEnhancement  # noqa: PLC0415
-        from world.magic.factories import (  # noqa: PLC0415
-            AffinityFactory,
-            GiftFactory,
-            ResonanceFactory,
-        )
+        from world.magic.factories import GiftFactory  # noqa: PLC0415
         from world.magic.models import EffectType, Technique  # noqa: PLC0415
+        from world.magic.seeds_resonance import reference_resonance  # noqa: PLC0415
         from world.magic.specialization.models import TechniqueVariant  # noqa: PLC0415
 
         gift = GiftFactory(name="Social Arts")
 
-        # Wire one resonance into the Social Arts supported set so gift-thread
-        # variants can be authored against it (#1581).  Uses get_or_create on both
-        # the affinity and the resonance so repeated calls are a no-op.
-        social_affinity = AffinityFactory(name="Social")
-        social_resonance = ResonanceFactory(name="Social Influence", affinity=social_affinity)
-        gift.resonances.add(social_resonance)
+        # The gift's supported set stays EMPTY -- empty means unrestricted since
+        # #2968, so wiring a resonance in would narrow the gift, not widen it.
+        # This used to mint a "Social Influence" Resonance under a "Social"
+        # Affinity, which is neither authored nor claimable, and which perturbed
+        # the resonance catalog mid-seed so later steps were not idempotent
+        # (#2967). The #1581 variants below take an authored resonance instead.
 
         # Ensure a minimal effect_type exists for social techniques.
         # get_or_create so re-runs don't create duplicates.
@@ -322,8 +319,10 @@ class MagicContent:
         # renamed form.  Keyed on the unique triple (parent_technique, resonance,
         # unlock_thread_level); get_or_create makes repeated calls a no-op.
         seeded_gift_techniques = list(techniques.values())
+        resonance = reference_resonance(
+            TechniqueVariant.objects.filter(parent_technique__in=seeded_gift_techniques)
+        )
         for technique in seeded_gift_techniques:
-            resonance = technique.gift.resonances.first()
             if resonance is None:
                 continue
             TechniqueVariant.objects.get_or_create(
@@ -2097,7 +2096,7 @@ def seed_thread_pull_catalog() -> ThreadPullCatalogResult:
     from world.magic.constants import EffectKind, TargetKind, VitalBonusTarget  # noqa: PLC0415
     from world.magic.factories import ThreadPullCostFactory  # noqa: PLC0415
     from world.magic.models.threads import ThreadPullEffect  # noqa: PLC0415
-    from world.magic.seeds_resonance import authored_resonances  # noqa: PLC0415
+    from world.magic.seeds_resonance import reference_resonance  # noqa: PLC0415
     from world.seeds.sample_content import authored_or_sample  # noqa: PLC0415
 
     # --- ThreadPullCost rows (universal defaults; target_kind=None) ---
@@ -2127,8 +2126,11 @@ def seed_thread_pull_catalog() -> ThreadPullCatalogResult:
     # --- Reference resonance for the TRAIT rows — authored, never invented ---
     # This used to invent a "Tideborne" Resonance under a "Primal (Tideborne)"
     # Affinity (#2967), so the reference TRAIT pull effects hung off a resonance
-    # no character could ever hold. It now takes the first authored one.
-    resonance = next(iter(authored_resonances()), None)
+    # no character could ever hold. It now follows whichever authored resonance
+    # the existing TRAIT rows already point at, and only picks a fresh one when
+    # there are none — otherwise a re-press after the catalog grew would seed a
+    # second reference set beside the first.
+    resonance = reference_resonance(ThreadPullEffect.objects.filter(target_kind=TargetKind.TRAIT))
 
     # --- CapabilityType for CAPABILITY_GRANT — content-repo-owned (#2698) ---
     capability = authored_or_sample(

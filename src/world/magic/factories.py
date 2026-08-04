@@ -3131,8 +3131,8 @@ def wire_fall_redemption_content() -> object:
     (#1583); no new Ritual row is needed for Atonement.
 
     Also seeds example ``CompromiseActType`` and ``ResonanceConversion``
-    rows if the canonical Affinities/Resonances from ``seed_starter_magic_story``
-    exist (self-contained — skips gracefully if they don't).
+    rows against one authored Resonance per affinity, skipping gracefully when
+    the content repo has authored none. It never mints one (#2967).
 
     Returns a simple namespace with the created objects.
     """
@@ -3142,9 +3142,9 @@ def wire_fall_redemption_content() -> object:
         Affinity,
         CompromiseActType,
         FallRedemptionConfig,
-        Resonance,
         ResonanceConversion,
     )
+    from world.magic.seeds_resonance import reference_resonance
     from world.seeds.sample_content import authored_or_sample
 
     # Pure config: a pk=1 singleton of tuning multipliers, seeder-owned. It was
@@ -3192,11 +3192,26 @@ def wire_fall_redemption_content() -> object:
         and abyssal_affinity is not None
     )
     if have_affinities:
-        # Find or create example resonances in each affinity
-        cele_res = authored_or_sample(Resonance, {"affinity": celestial_affinity}, name="Bene")
-        primal_res = authored_or_sample(Resonance, {"affinity": primal_affinity}, name="Praedari")
-        abyssal_res = authored_or_sample(
-            Resonance, {"affinity": abyssal_affinity}, name="Dissolution"
+        # One authored resonance per affinity to hang the examples off. This used
+        # to name "Bene"/"Praedari"/"Dissolution" and authored_or_sample them into
+        # existence -- two canonical names minted with whatever affinity this
+        # function happened to assert (Praedari is Abyssal, not Primal) plus one
+        # wholly invented (#2967). Following an existing example row keeps a
+        # re-press from seeding a second set beside the first.
+        cele_res = reference_resonance(
+            CompromiseActType.objects.filter(target_resonance__affinity=celestial_affinity),
+            resonance_field="target_resonance",
+            affinity_name=celestial_affinity.name,
+        )
+        primal_res = reference_resonance(
+            CompromiseActType.objects.filter(target_resonance__affinity=primal_affinity),
+            resonance_field="target_resonance",
+            affinity_name=primal_affinity.name,
+        )
+        abyssal_res = reference_resonance(
+            CompromiseActType.objects.filter(target_resonance__affinity=abyssal_affinity),
+            resonance_field="target_resonance",
+            affinity_name=abyssal_affinity.name,
         )
 
         if cele_res is not None and primal_res is not None and abyssal_res is not None:
@@ -3380,18 +3395,27 @@ def author_reference_corruption_content() -> None:
     attach to without it).
     """
     from world.conditions.models import ConditionCategory, ConditionTemplate
-    from world.magic.seeds_resonance import first_authored_resonance
+    from world.magic.seeds_resonance import reference_resonance
     from world.seeds.sample_content import authored_or_sample, sample_content_enabled
 
     primal_affinity = authored_or_sample(Affinity, {}, name="Primal")
     abyssal_affinity = authored_or_sample(Affinity, {}, name="Abyssal")
     if primal_affinity is None or abyssal_affinity is None:
         return
+    # Follow whichever resonance already carries this affinity's reference
+    # Corruption template, so a re-press after the catalog grew doesn't author a
+    # second set beside the first.
     reference_resonances = [
         resonance
         for resonance in (
-            first_authored_resonance(primal_affinity.name),
-            first_authored_resonance(abyssal_affinity.name),
+            reference_resonance(
+                ConditionTemplate.objects.filter(corruption_resonance__affinity=affinity).exclude(
+                    corruption_resonance=None
+                ),
+                resonance_field="corruption_resonance",
+                affinity_name=affinity.name,
+            )
+            for affinity in (primal_affinity, abyssal_affinity)
         )
         if resonance is not None
     ]
