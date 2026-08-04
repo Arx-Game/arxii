@@ -19,7 +19,11 @@ from django.urls import reverse
 from rest_framework import status
 from rest_framework.test import APIRequestFactory, force_authenticate
 
-from world.magic.factories import CharacterResonanceFactory, ensure_dramatic_entrance_content
+from world.magic.factories import (
+    CharacterResonanceFactory,
+    ResonanceFactory,
+    ensure_dramatic_entrance_content,
+)
 from world.magic.models.dramatic_moment import DramaticMomentSuggestion
 from world.scenes.action_views import SceneActionRequestViewSet
 from world.scenes.constants import InteractionMode
@@ -61,10 +65,17 @@ class EntranceTechniqueRestDispatchTests(CastScenarioMixin):
     @classmethod
     def setUpTestData(cls) -> None:
         super().setUpTestData()
-        moment_type = ensure_dramatic_entrance_content()
+        # "Grand Entrance" carries no resonance of its own since #2967, and
+        # suggestion eligibility no longer filters on a claimed one -- the
+        # resonance is resolved at confirm time from the entrance technique.
+        cls.moment_type = ensure_dramatic_entrance_content()
+        # A claimed resonance, needed for the entry-flourish offer (which skips a
+        # character with none). It is deliberately NOT the moment type's: "Grand
+        # Entrance" carries no resonance of its own since #2967, and suggestion
+        # eligibility no longer filters on a claimed one.
         CharacterResonanceFactory(
             character_sheet=cls.caster.character_sheet,
-            resonance=moment_type.resonance,
+            resonance=ResonanceFactory(),
         )
 
     def setUp(self) -> None:

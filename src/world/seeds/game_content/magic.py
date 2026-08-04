@@ -257,22 +257,19 @@ class MagicContent:
         """
         from actions.constants import EnhancementSourceType  # noqa: PLC0415
         from actions.models import ActionEnhancement  # noqa: PLC0415
-        from world.magic.factories import (  # noqa: PLC0415
-            AffinityFactory,
-            GiftFactory,
-            ResonanceFactory,
-        )
+        from world.magic.factories import GiftFactory  # noqa: PLC0415
         from world.magic.models import EffectType, Technique  # noqa: PLC0415
+        from world.magic.seeds_resonance import reference_resonance  # noqa: PLC0415
         from world.magic.specialization.models import TechniqueVariant  # noqa: PLC0415
 
         gift = GiftFactory(name="Social Arts")
 
-        # Wire one resonance into the Social Arts supported set so gift-thread
-        # variants can be authored against it (#1581).  Uses get_or_create on both
-        # the affinity and the resonance so repeated calls are a no-op.
-        social_affinity = AffinityFactory(name="Social")
-        social_resonance = ResonanceFactory(name="Social Influence", affinity=social_affinity)
-        gift.resonances.add(social_resonance)
+        # The gift's supported set stays EMPTY -- empty means unrestricted since
+        # #2968, so wiring a resonance in would narrow the gift, not widen it.
+        # This used to mint a "Social Influence" Resonance under a "Social"
+        # Affinity, which is neither authored nor claimable, and which perturbed
+        # the resonance catalog mid-seed so later steps were not idempotent
+        # (#2967). The #1581 variants below take an authored resonance instead.
 
         # Ensure a minimal effect_type exists for social techniques.
         # get_or_create so re-runs don't create duplicates.
@@ -322,8 +319,10 @@ class MagicContent:
         # renamed form.  Keyed on the unique triple (parent_technique, resonance,
         # unlock_thread_level); get_or_create makes repeated calls a no-op.
         seeded_gift_techniques = list(techniques.values())
+        resonance = reference_resonance(
+            TechniqueVariant.objects.filter(parent_technique__in=seeded_gift_techniques)
+        )
         for technique in seeded_gift_techniques:
-            resonance = technique.gift.resonances.first()
             if resonance is None:
                 continue
             TechniqueVariant.objects.get_or_create(
@@ -1326,9 +1325,11 @@ def _seed_resonance_environment_rooms() -> None:
     flavor content for the story.
 
     Three rooms:
-      - "The Hallowed Threshold (Low)"   — Celestial / Light, magnitude=10
-      - "The Hallowed Threshold (High)"  — Celestial / Light, magnitude=80
-      - "The Resonant Sanctum (Aligned)" — Abyssal / Dissolution, magnitude=60
+      - "The Hallowed Threshold (Low)"   — the first authored Celestial resonance,
+        magnitude=10
+      - "The Hallowed Threshold (High)"  — the same Celestial resonance, magnitude=80
+      - "The Resonant Sanctum (Aligned)" — the first authored Abyssal resonance,
+        magnitude=60
 
     Idempotent at every layer:
       - rooms: filter().first() + create_object(nohome=True) when absent
@@ -1343,7 +1344,7 @@ def _seed_resonance_environment_rooms() -> None:
     from evennia_extensions.models import RoomProfile  # noqa: PLC0415
     from world.conditions.constants import DurationType  # noqa: PLC0415
     from world.conditions.models import ConditionCategory, ConditionTemplate  # noqa: PLC0415
-    from world.magic.models.affinity import Resonance  # noqa: PLC0415
+    from world.magic.seeds_resonance import first_authored_resonance  # noqa: PLC0415
     from world.magic.services.gain import tag_room_resonance  # noqa: PLC0415
     from world.seeds.sample_content import authored_or_sample  # noqa: PLC0415
 
@@ -1382,17 +1383,19 @@ def _seed_resonance_environment_rooms() -> None:
     )
 
     # ----- Rooms with cascade resonance -----
-    # Resonance is content-repo-owned (#2698): skip cascade-room seeding
-    # rather than raising when either canonical Resonance isn't there.
-    light = Resonance.objects.filter(name="Light").first()
-    dissolution = Resonance.objects.filter(name="Dissolution").first()
-    if light is None or dissolution is None:
+    # These demo rooms need *a* Celestial and *an* Abyssal resonance, not any
+    # particular one — they exercise the aligned/opposed cascade poles. They
+    # used to name the invented "Light"/"Dissolution" (#2967); they now take
+    # whichever the content repo authored, and skip when it authored none.
+    celestial_resonance = first_authored_resonance("Celestial")
+    abyssal_resonance = first_authored_resonance("Abyssal")
+    if celestial_resonance is None or abyssal_resonance is None:
         return
 
-    room_specs: list[tuple[str, Resonance, int]] = [
-        ("The Hallowed Threshold (Low)", light, _CELESTIAL_LOW_MAGNITUDE),
-        ("The Hallowed Threshold (High)", light, _CELESTIAL_HIGH_MAGNITUDE),
-        ("The Resonant Sanctum (Aligned)", dissolution, _ABYSSAL_ALIGNED_MAGNITUDE),
+    room_specs = [
+        ("The Hallowed Threshold (Low)", celestial_resonance, _CELESTIAL_LOW_MAGNITUDE),
+        ("The Hallowed Threshold (High)", celestial_resonance, _CELESTIAL_HIGH_MAGNITUDE),
+        ("The Resonant Sanctum (Aligned)", abyssal_resonance, _ABYSSAL_ALIGNED_MAGNITUDE),
     ]
 
     for db_key, resonance, magnitude in room_specs:
@@ -1616,35 +1619,6 @@ def seed_canonical_affinities() -> None:
 
     for name in ("Celestial", "Primal", "Abyssal"):
         authored_or_sample(Affinity, {}, name=name)
-
-
-def seed_canonical_resonances() -> None:
-    """Seed canonical Resonances for the magic-story slice.
-
-    Celestial: Light / Sanctity / Radiance
-    Abyssal: Dissolution
-
-    Content-repo-owned (#2698): looked up rather than invented unless
-    ``SEED_SAMPLE_CONTENT`` is on. Depends on seed_canonical_affinities()
-    having run — skips a resonance group entirely when its Affinity is
-    absent (rather than raising), since that Affinity is itself
-    content-repo-owned and may not exist.
-    The Celestial resonances are used by Hallowed Threshold room cascade rows.
-    Dissolution (Abyssal) is used by the Resonant Sanctum room for the
-    ALIGNED-pole amplification subtest (an Abyssal caster casting in an Abyssal
-    resonance room gets the boon).
-    """
-    from world.magic.models.affinity import Affinity, Resonance  # noqa: PLC0415
-    from world.seeds.sample_content import authored_or_sample  # noqa: PLC0415
-
-    celestial = Affinity.objects.filter(name="Celestial").first()
-    if celestial is not None:
-        for name in ("Light", "Sanctity", "Radiance"):
-            authored_or_sample(Resonance, {"affinity": celestial}, name=name)
-
-    abyssal = Affinity.objects.filter(name="Abyssal").first()
-    if abyssal is not None:
-        authored_or_sample(Resonance, {"affinity": abyssal}, name="Dissolution")
 
 
 # Task RC1 — directed RPS affinity interaction matrix
@@ -2065,12 +2039,6 @@ def seed_canonical_rituals() -> RitualSeedResult:
 # Task 1.3 — seed_thread_pull_catalog()
 # ---------------------------------------------------------------------------
 
-#: Canonical resonance name for the thread pull catalog.
-#: Must not collide with names used by other seed helpers
-#: ("Wild Hunt", "Web of Spiders" are claimed by corruption content).
-_CATALOG_RESONANCE_NAME: str = "Tideborne"
-_CATALOG_AFFINITY_NAME: str = "Primal (Tideborne)"
-
 #: Per-tier pull cost definitions: (tier, resonance_cost, anima_per_thread, label)
 #: These are the UNIVERSAL default rows (target_kind=None) that apply to all
 #: thread kinds without a kind-specific override.
@@ -2105,8 +2073,7 @@ def seed_thread_pull_catalog() -> ThreadPullCatalogResult:
 
     Creates:
     - ThreadPullCost rows: tier 1 (soft), tier 2 (medium), tier 3 (hard)
-    - Affinity "Primal (Tideborne)" — shared affinity for the catalog resonance
-    - Resonance "Tideborne" — canonical reference resonance for the catalog
+    - the reference TRAIT pull effects, keyed to the first authored Resonance
     - CapabilityType "endurance" — used by the CAPABILITY_GRANT effect
     - ThreadPullEffect rows:
         - FLAT_BONUS (tier=1, min_thread_level=0, flat_bonus_amount=10)
@@ -2114,9 +2081,8 @@ def seed_thread_pull_catalog() -> ThreadPullCatalogResult:
         - VITAL_BONUS (tier=0, min_thread_level=0, vital_bonus_amount=10, MAX_HEALTH)
         - CAPABILITY_GRANT (tier=3, min_thread_level=5, capability=endurance)
 
-    The "Primal (Tideborne)" Affinity and "Tideborne" Resonance are
-    content-repo-owned (#2698) — looked up rather than invented unless
-    ``SEED_SAMPLE_CONTENT`` is on. When either is missing, the four
+    The reference resonance is whichever the content repo authored first
+    (#2967) — the seeder never invents one. When none is authored, the four
     ThreadPullEffect rows (which need a real ``resonance`` FK) are skipped
     and ``canonical_resonance`` is ``None`` on the returned result. The
     "endurance" ``CapabilityType`` is likewise content-repo-owned (#2698); when
@@ -2129,8 +2095,8 @@ def seed_thread_pull_catalog() -> ThreadPullCatalogResult:
     from world.conditions.models import CapabilityType  # noqa: PLC0415
     from world.magic.constants import EffectKind, TargetKind, VitalBonusTarget  # noqa: PLC0415
     from world.magic.factories import ThreadPullCostFactory  # noqa: PLC0415
-    from world.magic.models import Affinity, Resonance  # noqa: PLC0415
     from world.magic.models.threads import ThreadPullEffect  # noqa: PLC0415
+    from world.magic.seeds_resonance import reference_resonance  # noqa: PLC0415
     from world.seeds.sample_content import authored_or_sample  # noqa: PLC0415
 
     # --- ThreadPullCost rows (universal defaults; target_kind=None) ---
@@ -2157,13 +2123,14 @@ def seed_thread_pull_catalog() -> ThreadPullCatalogResult:
         label="gift-imbue",
     )
 
-    # --- Canonical resonance — content-repo-owned (#2698) ---
-    affinity = authored_or_sample(Affinity, {}, name=_CATALOG_AFFINITY_NAME)
-    resonance = None
-    if affinity is not None:
-        resonance = authored_or_sample(
-            Resonance, {"affinity": affinity}, name=_CATALOG_RESONANCE_NAME
-        )
+    # --- Reference resonance for the TRAIT rows — authored, never invented ---
+    # This used to invent a "Tideborne" Resonance under a "Primal (Tideborne)"
+    # Affinity (#2967), so the reference TRAIT pull effects hung off a resonance
+    # no character could ever hold. It now follows whichever authored resonance
+    # the existing TRAIT rows already point at, and only picks a fresh one when
+    # there are none — otherwise a re-press after the catalog grew would seed a
+    # second reference set beside the first.
+    resonance = reference_resonance(ThreadPullEffect.objects.filter(target_kind=TargetKind.TRAIT))
 
     # --- CapabilityType for CAPABILITY_GRANT — content-repo-owned (#2698) ---
     capability = authored_or_sample(
@@ -2243,26 +2210,26 @@ def seed_thread_pull_catalog() -> ThreadPullCatalogResult:
 def ensure_relationship_pull_content() -> None:
     """Seed RELATIONSHIP_TRACK ThreadPullEffect rows with a survivability skew (#2021).
 
-    Creates one 4-tier chain per canonical resonance (Light, Sanctity, Radiance,
-    Dissolution) = 16 rows total. Tier 0 is passive (always-on); tiers 1-3 are
-    paid pulls. All effects are survivability-oriented: VITAL_BONUS to
-    DAMAGE_TAKEN_REDUCTION / DEATH_SAVE / KNOCKOUT_RESIST, plus RESISTANCE.
+    Creates one 4-tier chain per **authored** resonance. Tier 0 is passive
+    (always-on); tiers 1-3 are paid pulls. All effects are
+    survivability-oriented: VITAL_BONUS to DAMAGE_TAKEN_REDUCTION / DEATH_SAVE
+    / KNOCKOUT_RESIST, plus RESISTANCE.
+
+    ``ThreadPullEffect`` is seeder-owned tuning data, not ``CONTENT_MODELS``
+    content, so covering the whole catalog is free. It used to cover four named
+    resonances — "Light", "Sanctity", "Radiance", "Dissolution" — which the
+    seeder invented and which no player could hold (#2967); a relationship
+    thread woven at any real resonance therefore had no pull effects at all.
 
     Idempotent via get_or_create. The relationship_bond_modulation saturating
     curve (#1849) scales these by bond strength when the target IS the threaded
     person or is hostile to them.
     """
     from world.magic.constants import EffectKind, TargetKind, VitalBonusTarget  # noqa: PLC0415
-    from world.magic.models import Resonance, ThreadPullEffect  # noqa: PLC0415
+    from world.magic.models import ThreadPullEffect  # noqa: PLC0415
+    from world.magic.seeds_resonance import authored_resonances  # noqa: PLC0415
 
-    # The four canonical production resonances (seeded by seed_canonical_resonances)
-    resonance_names = ["Light", "Sanctity", "Radiance", "Dissolution"]
-
-    for resonance_name in resonance_names:
-        resonance = Resonance.objects.filter(name=resonance_name).first()
-        if resonance is None:
-            continue
-
+    for resonance in authored_resonances():
         # Tier 0 (passive): VITAL_BONUS(DAMAGE_TAKEN_REDUCTION, 10)
         # Amount bumped from 3 → 10 per #1845: thread_level_multiplier(level 1) = 0.1
         # (#1718's corrected ramp), so round(3 * 0.1) = round(0.3) = 0 — a no-op
@@ -2333,18 +2300,6 @@ def ensure_relationship_pull_content() -> None:
 #: Catalog name for the mirror anchor kind (#2222 Decision 2/5b).
 _MIRROR_ANCHOR_KIND_NAME = "Mirror"
 
-#: The starter portal-travel Minor Gift + its single Technique (#2222 Decision 3).
-_MIRRORWALKING_GIFT_NAME = "Mirrorwalking"
-_MIRRORWALK_TECHNIQUE_NAME = "Mirrorwalk"
-
-#: No prior ``GiftUnlock`` row exists anywhere in seed content to read a norm
-#: from (verified — the model has shipped since #1587 but nothing has ever
-#: seeded a row). Matches the baseline this same module already uses twice for
-#: a single-purpose magic unlock (``seed_facet_thread_unlock`` /
-#: ``seed_relationship_track_thread_unlock``, both ``xp_cost=50``) rather than
-#: inventing a new number.
-_MIRRORWALK_UNLOCK_XP_COST = 50
-
 #: Starter public rooms that get a Mirror anchor so the network has real,
 #: reachable nodes on a fresh Big Button run — not just catalog rows (#2222
 #: "Seed content"). "The Wanderer's Rest" (the canonical fallback starting
@@ -2385,141 +2340,49 @@ def _ensure_mirror_anchor(kind: PortalAnchorKind, room: ObjectDB, name: str) -> 
 
 
 def ensure_portal_travel_content() -> None:
-    """Idempotently seed the Mirror portal network's starter content (#2222).
+    """Idempotently place the Mirror portal network's starter anchors (#2222).
 
-    Creates (get_or_create throughout):
+    Looks up the ``PortalAnchorKind`` "Mirror" (authored in the content repo)
+    and get-or-creates a Mirror ``PortalAnchor`` in the canonical fallback room
+    plus each seeded public room in ``_MIRROR_ANCHOR_ROOM_SPECS``, so the mirror
+    network is reachable rather than merely cataloged. Idempotent; re-running on
+    a populated DB preserves staff edits (never ``update_or_create``).
 
-    1. ``PortalAnchorKind`` "Mirror" — arrival "steps out of" / departure
-       "steps into" (#2222 Decision 2).
-    2. A self-contained "Reflection" Resonance (Celestial affinity) + MINOR
-       ``Gift`` "Mirrorwalking" carrying it — mirrors
-       ``world.companions.content.ensure_companion_content``'s shape (a MINOR
-       gift gets its own dedicated Resonance rather than reusing one of the
-       canonical story resonances).
-    3. ``Technique`` "Mirrorwalk" — ``travel_anchor_kind=Mirror``,
-       ``anima_cost=0`` (#2222 Decision 5d: per-use cost is the technique's
-       own ``anima_cost``; 0 for the seeded starter technique is convenience
-       by design). Reuses the "Teleport" ``EffectType`` already seeded by
-       ``ensure_teleport_content`` — it fits movement/travel, so this is
-       reuse, not a parallel catalog
-       (anti-reinvention pass) — plus the shared standalone cast template so
-       the technique is fully castable like every other technique.
-    4. A ``GiftUnlock`` row gating Mirrorwalking behind XP
-       (``xp_cost=50`` — see ``_MIRRORWALK_UNLOCK_XP_COST``).
-    5. Starter Mirror ``PortalAnchor`` rows in 2-3 seeded public rooms (see
-       ``_MIRROR_ANCHOR_ROOM_SPECS``) so the mirror network is actually
-       reachable, not just cataloged.
+    **Seeds no gift, technique or resonance (#2967).** It used to invent a
+    "Reflection" Resonance, a MINOR ``Gift`` "Mirrorwalking" carrying it, a
+    ``Technique`` "Mirrorwalk" and an XP ``GiftUnlock`` — a placeholder set
+    ruled out on 2026-08-04 ("at best Mirrorwalk is a placeholder... we can
+    obliterate that"). The Gift was the only one in the catalog with a non-empty
+    resonance set, and its one resonance was the invented Reflection, so it was
+    also the only gift the weave gate could refuse outright.
 
-    Idempotent at every layer. Re-running on a populated DB preserves staff
-    edits (never ``update_or_create``).
-
-    ``PortalAnchorKind``/``Affinity``/``Resonance``/``Gift``/
-    ``EffectType``/``Technique`` are all content-repo-owned
-    (#2698) — looked up rather than invented unless ``SEED_SAMPLE_CONTENT`` is
-    on. When the anchor kind, gift, style, or effect type is unavailable, the
-    Technique (and everything that hangs off it — the GiftUnlock, the starter
-    anchors) is skipped entirely.
+    Portal travel itself stays fully built: the gate is *knowing a technique
+    whose ``travel_anchor_kind`` is set*, and that technique is authored content
+    the lore repo owns. Until one is authored these anchors stand unused, which
+    is the honest state — a seeded placeholder made it look shipped.
     """
     from evennia.objects.models import ObjectDB  # noqa: PLC0415
 
-    from actions.constants import ActionTargetType  # noqa: PLC0415
-    from world.magic.constants import GiftKind  # noqa: PLC0415
-    from world.magic.models import (  # noqa: PLC0415
-        Affinity,
-        EffectType,
-        Gift,
-        GiftUnlock,
-        PortalAnchorKind,
-        Resonance,
-        Technique,
-    )
-    from world.magic.seeds_cast import get_standalone_cast_template  # noqa: PLC0415
+    from world.magic.models import PortalAnchorKind  # noqa: PLC0415
     from world.seeds.character_creation import ensure_canonical_fallback_room  # noqa: PLC0415
     from world.seeds.sample_content import authored_or_sample  # noqa: PLC0415
 
-    # 1. Anchor kind.
     mirror_kind = authored_or_sample(
         PortalAnchorKind,
         {
             "description": (
-                "A tall, silvered mirror — a threshold to every other mirror open on its network."
+                "A tall, silvered mirror: a threshold to every other mirror open on its network."
             ),
             "arrival_verb": "steps out of",
             "departure_verb": "steps into",
         },
         name=_MIRROR_ANCHOR_KIND_NAME,
     )
-
-    # 2. MINOR Gift + its own dedicated Resonance.
-    celestial = authored_or_sample(
-        Affinity,
-        {"description": "The affinity of order, radiance, and the divine."},
-        name="Celestial",
-    )
-    reflection = None
-    if celestial is not None:
-        reflection = authored_or_sample(
-            Resonance,
-            {
-                "description": "The resonance of thresholds and mirrored passage.",
-                "affinity": celestial,
-            },
-            name="Reflection",
-        )
-    gift = authored_or_sample(
-        Gift,
-        {
-            "description": "Step through an open mirror here and out of its twin elsewhere.",
-            "kind": GiftKind.MINOR,
-        },
-        name=_MIRRORWALKING_GIFT_NAME,
-    )
-    if gift is not None and reflection is not None:
-        gift.resonances.add(reflection)  # idempotent M2M add
-
-    # 3. Technique — reuse the existing movement-fitting EffectType.
-    effect_type = authored_or_sample(
-        EffectType,
-        {
-            "description": "Instant relocation through bent space.",
-            "base_power": None,
-            "base_anima_cost": 0,
-            "has_power_scaling": False,
-        },
-        name="Teleport",
-    )
-    if mirror_kind is None or gift is None or effect_type is None:
-        return
-    technique = authored_or_sample(
-        Technique,
-        {
-            "description": (
-                "Step into an open mirror and out the other side, wherever its "
-                "twin waits open on the network."
-            ),
-            "effect_type": effect_type,
-            "level": 1,
-            "intensity": 1,
-            "control": 1,
-            "anima_cost": 0,
-            "target_type": ActionTargetType.SELF,
-            "travel_anchor_kind": mirror_kind,
-            "action_template": get_standalone_cast_template(),
-        },
-        name=_MIRRORWALK_TECHNIQUE_NAME,
-        gift=gift,
-    )
-    if technique is None:
+    if mirror_kind is None:
         return
 
-    # 4. XP-gated unlock.
-    GiftUnlock.objects.get_or_create(
-        gift=gift,
-        defaults={"xp_cost": _MIRRORWALK_UNLOCK_XP_COST},
-    )
-
-    # 5. Starter anchors — the canonical fallback room is guaranteed; the
-    #    magic-story cascade rooms are resolved defensively (skip if absent).
+    # The canonical fallback room is guaranteed; the magic-story cascade rooms
+    # are resolved defensively (skip if absent).
     _ensure_mirror_anchor(mirror_kind, ensure_canonical_fallback_room(), "a tall silvered mirror")
     for room_key, anchor_name in _MIRROR_ANCHOR_ROOM_SPECS:
         room = ObjectDB.objects.filter(
@@ -2787,7 +2650,6 @@ def seed_starter_magic_story() -> None:
     Composes the per-phase helpers in dependency order:
 
       1. seed_canonical_affinities() — the 3 magic Affinities
-      2. seed_canonical_resonances() — Celestial (Light/Sanctity/Radiance) + Abyssal (Dissolution)
      RC1. _seed_affinity_interactions() — 9 directed AffinityInteraction rows (needs affinities)
      RC1. _seed_resonance_environment_config() — ResonanceEnvironmentConfig singleton
       B. _seed_hallowed_reaction_conditions() — 5 OPPOSED reaction conditions
@@ -2803,7 +2665,6 @@ def seed_starter_magic_story() -> None:
     edits (per project seed rule: never update_or_create).
     """
     seed_canonical_affinities()
-    seed_canonical_resonances()
     _seed_affinity_interactions()
     _seed_resonance_environment_config()
     _seed_hallowed_reaction_conditions()
@@ -2825,10 +2686,12 @@ def seed_magic_dev() -> MagicDevSeedResult:
     2. ``seed_canonical_rituals()`` — Rite of Imbuing, Rite of Atonement, Ritual
        of the Durance (#2121)
     3. ``seed_thread_pull_catalog()`` — ThreadPullCost × 3, ThreadPullEffect × 4,
-       canonical Tideborne resonance; then ``seed_thread_survivability_tuning()`` —
+       reference TRAIT rows on the first authored resonance; then
+       ``seed_thread_survivability_tuning()`` —
        ThreadSurvivabilityTuning × 2 (DR + MAX_HEALTH baseline tuning rows, #1175)
-    4. ``author_reference_corruption_content()`` — Wild Hunt (Primal) + Web of
-       Spiders (Abyssal) Corruption ConditionTemplates + CORRUPTION_TWIST entries
+    4. ``author_reference_corruption_content()`` — Corruption ConditionTemplates
+       + CORRUPTION_TWIST entries for the first authored Primal and Abyssal
+       Resonance
     5. ``MagicContent.create_all()`` — 6 social action Techniques + 6
        ActionEnhancements
     6. ``seed_facet_thread_unlock()`` — single global FACET ThreadWeavingUnlock
@@ -2852,11 +2715,10 @@ def seed_magic_dev() -> MagicDevSeedResult:
     13. ``ensure_dramatic_entrance_content()`` — "Grand Entrance" DramaticMomentType,
         flagged ``suggest_on_technique_entrance=True`` (#2183). Without this, the
         technique-entrance suggestion bridge has nothing authored to surface.
-    14. ``ensure_portal_travel_content()`` — "Mirror" PortalAnchorKind, the
-        "Mirrorwalking" MINOR Gift + "Mirrorwalk" Technique
-        (``travel_anchor_kind=Mirror``), its GiftUnlock, and starter Mirror
-        PortalAnchor rows in seeded public rooms (#2222). Without this, the
-        portal-travel network has no reachable content in a live game.
+    14. ``ensure_portal_travel_content()`` — starter Mirror ``PortalAnchor`` rows
+        in seeded public rooms, on the content-authored "Mirror"
+        ``PortalAnchorKind`` (#2222). The gift + technique it used to invent were
+        removed in #2967; a real travel technique is lore-repo content.
 
     The starter Gift/Technique/PathGiftGrant/Tradition catalog formerly seeded
     here at this point (Task 7, #2426) is retired (#2474) — real starter-catalog

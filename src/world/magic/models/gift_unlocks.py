@@ -14,15 +14,33 @@ from django.db import models
 from evennia.utils.idmapper.models import SharedMemoryModel
 
 from core.managers import ArxSharedMemoryManager
+from core.natural_keys import NaturalKeyManager, NaturalKeyMixin
 from world.magic.constants import GiftKind
 
 
-class GiftUnlock(SharedMemoryModel):
+class GiftUnlock(NaturalKeyMixin, SharedMemoryModel):
     """Authored catalog of XP-purchasable Minor Gifts (ADR-0053).
 
-    One row per acquirable gift. ``gift.kind`` must be ``MINOR`` — enforced
-    in ``clean()``. XP cost is the gate; acquisition is a separate step
-    behind this gate (accepting a TechniqueTeachingOffer).
+    One row per acquirable gift — now a DB constraint, not just a docstring,
+    because the row is keyed on ``gift`` for the content pipeline.
+    ``gift.kind`` must be ``MINOR`` — enforced in ``clean()``. XP cost is the
+    gate; acquisition is a separate step behind this gate (accepting a
+    TechniqueTeachingOffer).
+
+    **Content, not config (#2967).** Registered in ``CONTENT_MODELS`` so the
+    lore repo can author it, because without a row here nobody can learn a
+    Minor Gift at all: ``charge_and_learn`` raises ``GiftUnlockMissing`` when a
+    learner takes their first technique from a gift they do not own and holds
+    no ``CharacterGiftUnlock`` receipt, and that receipt is bought against this
+    row. An authored Minor Gift with no ``GiftUnlock`` is reachable only by a
+    Species/Tradition/Path grant handing it over outright. Which gifts are
+    acquirable and at what price is a catalog decision keyed to authored gifts,
+    not a tuning multiplier — it passes the ADR-0168 test. Corollary: **no
+    seeder may create a row here.**
+
+    Leaving ``paths`` blank means every path treats the unlock as in-band, so a
+    minor gift open to everyone is the default shape; populate it only to make
+    the gift cheaper for some paths than others.
     """
 
     gift = models.ForeignKey(
@@ -47,12 +65,24 @@ class GiftUnlock(SharedMemoryModel):
         help_text="Cost multiplier applied when buyer's Path is not in `paths`.",
     )
 
+    objects = NaturalKeyManager()
+
+    class NaturalKeyConfig:
+        fields = ["gift"]
+        dependencies = ["magic.Gift"]
+
     class Meta:
+        constraints = [
+            models.UniqueConstraint(
+                fields=["gift"],
+                name="unique_gift_unlock_per_gift",
+            ),
+        ]
         verbose_name = "Gift Unlock"
         verbose_name_plural = "Gift Unlocks"
 
     def __str__(self) -> str:
-        return f"GiftUnlock: {self.gift.name if self.gift_id else '—'}"
+        return f"GiftUnlock: {self.gift.name if self.gift_id else '-'}"
 
     def clean(self) -> None:
         """Enforce gift.kind == MINOR."""

@@ -216,9 +216,19 @@ class ResolveDramaticMomentSuggestionTest(TestCase):
 @override_settings(SEED_SAMPLE_CONTENT=True)
 class EnsureDramaticEntranceContentTest(TestCase):
     """Exercises the sample-seeding path directly (#2698) — the DramaticMomentType
-    (+ its Affinity/Resonance) is content-repo-owned, so this suite needs
-    ``SEED_SAMPLE_CONTENT`` on to get a real row to test idempotency against.
+    is content-repo-owned, so this suite needs ``SEED_SAMPLE_CONTENT`` on to get
+    a real row to test idempotency against.
     """
+
+    def test_seed_creates_no_resonance(self):
+        """#2967: "Grand Entrance" is seeded unpinned, not against an invented
+        "Fervor" nobody could claim."""
+        from world.magic.models import Resonance
+
+        moment_type = ensure_dramatic_entrance_content()
+
+        self.assertIsNone(moment_type.resonance_id)
+        self.assertFalse(Resonance.objects.exists())
 
     def test_seed_idempotent(self):
         first = ensure_dramatic_entrance_content()

@@ -1905,9 +1905,15 @@ def ensure_dramatic_entrance_content() -> object:
     flagged, threshold-set DramaticMomentType so ``maybe_suggest_dramatic_moments``
     has something real to surface in a live game, not only under test factories.
 
-    Self-contained: get-or-creates its own "Fervor" Resonance (+ "Celestial"
-    Affinity) by name, mirroring ``seeds_touchstone_content.ensure_touchstone_content``
-    — never assumes some other seed already ran.
+    **Carries no resonance of its own (#2967).** It used to mint a "Fervor"
+    Resonance (+ "Celestial" Affinity) by name and pin the moment type to it,
+    which made the one authored moment type in the game un-awardable: the tag
+    service refused any character who had not *claimed* Fervor, and nobody can
+    claim an invented resonance. The resonance a moment grants is now resolved
+    at tag time from the entrance technique's gift thread, falling back to the
+    GM's explicit pick and then the character's anima-ritual resonance
+    (``_resolve_moment_resonance`` in ``services/gain.py``), so the type's own
+    ``resonance`` is only a last-resort override and is left null here.
 
     Does NOT use ``DramaticMomentTypeFactory`` — that factory's
     ``django_get_or_create = ("label",)`` drops every other kwarg on a pre-existing
@@ -1916,38 +1922,18 @@ def ensure_dramatic_entrance_content() -> object:
     row rather than resetting it (catalog rows are preserved; only pk=1 tuning
     singletons get ``update_or_create`` resets — see CLAUDE.md).
 
-    Returns the "Grand Entrance" DramaticMomentType, or ``None`` when it (or
-    its Affinity/Resonance prerequisites) isn't authored in the content repo
-    and ``SEED_SAMPLE_CONTENT`` is off (#2698) — Affinity, Resonance, and
-    DramaticMomentType are all content-repo-owned.
+    Returns the "Grand Entrance" DramaticMomentType, or ``None`` when it isn't
+    authored in the content repo and ``SEED_SAMPLE_CONTENT`` is off (#2698) —
+    DramaticMomentType is content-repo-owned.
     """
-    from world.magic.models import Affinity, Resonance
     from world.magic.models.dramatic_moment import DramaticMomentType
     from world.seeds.sample_content import authored_or_sample
-
-    celestial_affinity = authored_or_sample(
-        Affinity,
-        {"description": "The affinity of order, radiance, and the divine."},
-        name="Celestial",
-    )
-    if celestial_affinity is None:
-        return None
-    fervor = authored_or_sample(
-        Resonance,
-        {
-            "description": "The resonance of dramatic flair and commanding presence.",
-            "affinity": celestial_affinity,
-        },
-        name="Fervor",
-    )
-    if fervor is None:
-        return None
 
     return authored_or_sample(
         DramaticMomentType,
         {
             "description": "A technique cast with such flair the room takes notice.",
-            "resonance": fervor,
+            "resonance": None,
             "resonance_amount": 15,
             "per_scene_cap": 1,
             "suggest_on_technique_entrance": True,
@@ -3145,8 +3131,8 @@ def wire_fall_redemption_content() -> object:
     (#1583); no new Ritual row is needed for Atonement.
 
     Also seeds example ``CompromiseActType`` and ``ResonanceConversion``
-    rows if the canonical Affinities/Resonances from ``seed_starter_magic_story``
-    exist (self-contained — skips gracefully if they don't).
+    rows against one authored Resonance per affinity, skipping gracefully when
+    the content repo has authored none. It never mints one (#2967).
 
     Returns a simple namespace with the created objects.
     """
@@ -3156,9 +3142,9 @@ def wire_fall_redemption_content() -> object:
         Affinity,
         CompromiseActType,
         FallRedemptionConfig,
-        Resonance,
         ResonanceConversion,
     )
+    from world.magic.seeds_resonance import reference_resonance
     from world.seeds.sample_content import authored_or_sample
 
     # Pure config: a pk=1 singleton of tuning multipliers, seeder-owned. It was
@@ -3206,11 +3192,26 @@ def wire_fall_redemption_content() -> object:
         and abyssal_affinity is not None
     )
     if have_affinities:
-        # Find or create example resonances in each affinity
-        cele_res = authored_or_sample(Resonance, {"affinity": celestial_affinity}, name="Bene")
-        primal_res = authored_or_sample(Resonance, {"affinity": primal_affinity}, name="Praedari")
-        abyssal_res = authored_or_sample(
-            Resonance, {"affinity": abyssal_affinity}, name="Dissolution"
+        # One authored resonance per affinity to hang the examples off. This used
+        # to name "Bene"/"Praedari"/"Dissolution" and authored_or_sample them into
+        # existence -- two canonical names minted with whatever affinity this
+        # function happened to assert (Praedari is Abyssal, not Primal) plus one
+        # wholly invented (#2967). Following an existing example row keeps a
+        # re-press from seeding a second set beside the first.
+        cele_res = reference_resonance(
+            CompromiseActType.objects.filter(target_resonance__affinity=celestial_affinity),
+            resonance_field="target_resonance",
+            affinity_name=celestial_affinity.name,
+        )
+        primal_res = reference_resonance(
+            CompromiseActType.objects.filter(target_resonance__affinity=primal_affinity),
+            resonance_field="target_resonance",
+            affinity_name=primal_affinity.name,
+        )
+        abyssal_res = reference_resonance(
+            CompromiseActType.objects.filter(target_resonance__affinity=abyssal_affinity),
+            resonance_field="target_resonance",
+            affinity_name=abyssal_affinity.name,
         )
 
         if cele_res is not None and primal_res is not None and abyssal_res is not None:
@@ -3364,8 +3365,8 @@ def _seed_corruption_twists_for_resonance(resonance: Any, twist_category: Any) -
 def author_reference_corruption_content() -> None:
     """Seed 1 Primal + 1 Abyssal reference Corruption content set.
 
-    Creates (or reuses) two reference resonances — "Wild Hunt" (Primal) and
-    "Web of Spiders" (Abyssal) — and for each:
+    Picks one authored Primal and one authored Abyssal Resonance — whichever
+    sorts first in each affinity — and for each:
     - one per-resonance Corruption ConditionTemplate with 5 stages
     - 6 CORRUPTION_TWIST MagicalAlterationTemplate rows (stages 2, 3, 4 × 2)
 
@@ -3373,11 +3374,13 @@ def author_reference_corruption_content() -> None:
     uses django_get_or_create on corruption_resonance; twist factories create
     new rows each time, so the twist-exists check below prevents duplication.
 
-    The "Wild Hunt"/"Web of Spiders" Affinity + Resonance rows are
-    content-repo-owned (#2698) — looked up rather than invented, unless
-    ``SEED_SAMPLE_CONTENT`` is on. When either is missing, this skips
-    entirely (no Affinity/Resonance to hang the reference Corruption content
-    off of).
+    **Names no resonance (#2967).** This used to name "Wild Hunt" (Primal) and
+    "Web of Spiders" (Abyssal) and ``authored_or_sample`` them into existence,
+    so two invented resonances plus their "Corrupted by …" templates shipped
+    back out of the next content export as if a human had authored them. The
+    canonical set is the 24 Latin-ish resonances in the content repo; this seed
+    now attaches its reference content to two of *those* and skips when the
+    affinity has none authored.
 
     The per-resonance Corruption ``ConditionTemplate`` (+ its 5 stages) and
     the per-twist ``ConditionTemplate`` are ALSO content-repo-owned (#2698,
@@ -3392,17 +3395,36 @@ def author_reference_corruption_content() -> None:
     attach to without it).
     """
     from world.conditions.models import ConditionCategory, ConditionTemplate
+    from world.magic.seeds_resonance import reference_resonance
     from world.seeds.sample_content import authored_or_sample, sample_content_enabled
 
     primal_affinity = authored_or_sample(Affinity, {}, name="Primal")
     abyssal_affinity = authored_or_sample(Affinity, {}, name="Abyssal")
     if primal_affinity is None or abyssal_affinity is None:
         return
-    wild_hunt = authored_or_sample(Resonance, {"affinity": primal_affinity}, name="Wild Hunt")
-    web_of_spiders = authored_or_sample(
-        Resonance, {"affinity": abyssal_affinity}, name="Web of Spiders"
-    )
-    if wild_hunt is None or web_of_spiders is None:
+    # Follow whichever resonance already carries this affinity's reference
+    # Corruption template, so a re-press after the catalog grew doesn't author a
+    # second set beside the first.
+    reference_resonances = [
+        resonance
+        for resonance in (
+            reference_resonance(
+                ConditionTemplate.objects.filter(corruption_resonance__affinity=affinity).exclude(
+                    corruption_resonance=None
+                ),
+                resonance_field="corruption_resonance",
+                affinity_name=affinity.name,
+            )
+            for affinity in (primal_affinity, abyssal_affinity)
+        )
+        if resonance is not None
+    ]
+    if not reference_resonances:
+        logger.warning(
+            "No authored Primal or Abyssal Resonance to hang reference Corruption "
+            "content off. Author the canonical resonances in the content repo and "
+            "re-press the Big Button (see #2967)."
+        )
         return
 
     # Shared category for the per-twist ConditionTemplates (deterministic name so
@@ -3414,7 +3436,7 @@ def author_reference_corruption_content() -> None:
         name="Corruption Twist",
     )
 
-    for resonance in (wild_hunt, web_of_spiders):
+    for resonance in reference_resonances:
         # ConditionTemplate — looked up by corruption_resonance; only the
         # elaborate abyssal/primal-aware factory invention path is gated
         # (django_get_or_create on the factory means a lookup hit is free).

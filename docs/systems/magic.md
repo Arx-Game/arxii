@@ -1549,6 +1549,16 @@ same offer). Proven end-to-end by
 `world/magic/tests/integration/test_gift_acquisition_action_e2e.py` (purchase → accept →
 `CharacterTechnique` minted; thread-weaving parity).
 
+**`GiftUnlock` is authored content, not seed data (#2967).** `magic.giftunlock` is registered in
+`CONTENT_MODELS` with natural key `["gift"]` (one row per gift, now a DB constraint), so the lore
+repo authors which Minor Gifts are acquirable and at what price. This was the missing link: without
+a row here nobody can *learn* a Minor Gift at all, since `charge_and_learn` raises
+`GiftUnlockMissing` for a learner's first technique from a gift they don't own, and an authored
+Minor Gift with no `GiftUnlock` is reachable only by a Species/Tradition/Path grant handing it over
+outright. Leaving `paths` blank is the open-to-everyone shape — every path treats the unlock as
+in-band at full `xp_cost`; populate it only to make the gift cheaper for some paths. Corollary of
+the `CONTENT_MODELS` registration: **no seeder may create a `GiftUnlock` row.**
+
 **Second front door — Academy TRAIN offers (#2440):** `accept_technique_offer`'s charge+acquire
 core is extracted into `charge_and_learn(learner, technique, *, base_ap_cost, source,
 gold_cost=0, gold_treasury=None, teacher_tenure=None, teacher_banked_ap=0)`
@@ -1793,11 +1803,17 @@ suggestions` (PENDING suggestions for the active scene here), `moment confirm <i
 in `PoseUnit` for the caller's own entrance poses.
 
 **Seed content:** `ensure_dramatic_entrance_content()` (`world/magic/factories.py`) seeds the
-"Grand Entrance" `DramaticMomentType` (self-contained — get-or-creates its own "Fervor"
-Resonance + "Celestial" Affinity by name, mirroring `seeds_touchstone_content
-.ensure_touchstone_content`) with `suggest_on_technique_entrance=True` and
+"Grand Entrance" `DramaticMomentType` with `suggest_on_technique_entrance=True` and
 `suggestion_min_success_level=3` — framework-proving content so the bridge has something real
 to surface, not only under test factories.
+
+It carries **no resonance of its own** (#2967). It used to mint a "Fervor" Resonance by name
+and pin the type to it, and because `create_dramatic_moment_tag` refused any character who
+had not *claimed* that resonance, the game's only authored moment type was un-awardable to
+every character alive. The resonance is resolved at tag time now — from the entrance
+technique's gift thread, then the GM's explicit pick, then the character's anima-ritual
+resonance (`_resolve_moment_resonance`, `services/gain.py`) — so the type's own `resonance`
+is a last-resort override and stays null.
 
 ### Technique Entrance (#2183)
 
@@ -1980,15 +1996,22 @@ otherwise a compact kind/anchor/room list with a "Travel" button that dispatches
 `travel_to` registry action the #2163 Go-there buttons use (`{ target: roomId }`).
 
 **Seed content** (`world/seeds/game_content/magic.py`,
-`ensure_portal_travel_content()`, called from `seed_magic_dev()`): a "Mirror"
-`PortalAnchorKind`; a self-contained "Reflection" Resonance (Celestial affinity) carried by a
-new MINOR `Gift` "Mirrorwalking"; a "Mirrorwalk" `Technique`
-(`travel_anchor_kind=Mirror`, `anima_cost=0`, reusing the "Translocation Stance" style and
-"Teleport" `EffectType`); a `GiftUnlock` row gating it behind `xp_cost=50` (mirrors the two
-other single-purpose magic unlocks this module seeds); and starter Mirror `PortalAnchor` rows
-in the seeded magic-story cascade rooms ("The Hallowed Threshold (Low)", "The Resonant
-Sanctum (Aligned)") so the network is reachable, not just cataloged. Idempotent throughout
-(`get_or_create`).
+`ensure_portal_travel_content()`, called from `seed_magic_dev()`): starter Mirror
+`PortalAnchor` rows on the content-authored "Mirror" `PortalAnchorKind`, placed in the
+canonical fallback room plus the seeded magic-story cascade rooms ("The Hallowed Threshold
+(Low)", "The Resonant Sanctum (Aligned)") so the network has real nodes. Idempotent
+throughout (`get_or_create`); skips entirely when the anchor kind isn't authored.
+
+It seeds **no gift, technique or resonance** (#2967). It used to invent a "Reflection"
+Resonance, a MINOR `Gift` "Mirrorwalking" carrying it, a "Mirrorwalk" `Technique` and an XP
+`GiftUnlock` — ruled a placeholder on 2026-08-04 and obliterated. Mirrorwalking was also the
+only `Gift` in the catalog with a non-empty resonance set, so it was the only one the weave
+gate could refuse outright.
+
+**Portal travel consequently has no content today.** The machinery is complete; the gate is
+knowing a technique whose `travel_anchor_kind` is set, and no such technique is authored in
+the lore repo. That is the honest state — the seeded placeholder made a contentless feature
+look shipped.
 
 ### Other
 

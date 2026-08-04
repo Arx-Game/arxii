@@ -83,6 +83,7 @@ from world.magic.factories import (
     TechniqueFactory,
 )
 from world.magic.models.resonance_environment import ResonanceAlignmentBoonTier
+from world.magic.seeds_resonance import first_authored_resonance
 from world.magic.services.resonance_environment import evaluate_resonance_environment
 from world.magic.services.techniques import use_technique
 from world.magic.tests._cache_isolation import ResonanceCacheIsolationMixin
@@ -104,14 +105,28 @@ class MagicStoryPipelineTests(ResonanceCacheIsolationMixin, EvenniaTestCase):
     """
 
     @classmethod
+    def _author_stand_in_resonances(cls) -> None:
+        """Stand in for the content repo (#2967).
+
+        The magic-story slice tags its cascade rooms with the first authored
+        Celestial and Abyssal resonance. No seeder mints one any more, so a
+        suite exercising that slice supplies them itself -- exactly as a real
+        deploy does, by loading lore content before the cluster loop.
+        """
+        from world.magic.factories import AffinityFactory, ResonanceFactory
+
+        ResonanceFactory(affinity=AffinityFactory(name="Celestial"))
+        ResonanceFactory(affinity=AffinityFactory(name="Abyssal"))
+
+    @classmethod
     def setUpTestData(cls) -> None:
         super().setUpTestData()
+        cls._author_stand_in_resonances()
         seed_starter_magic_story()
 
         from evennia.objects.models import ObjectDB
 
         from world.conditions.models import ConditionTemplate
-        from world.magic.models.affinity import Resonance
         from world.stories.models import Story
 
         # Store PKs only for Evennia ObjectDB instances — they carry a DbHolder which is
@@ -165,8 +180,11 @@ class MagicStoryPipelineTests(ResonanceCacheIsolationMixin, EvenniaTestCase):
 
         cls.story = Story.objects.get(title="The Hallowed Threshold")
 
-        # The seeded Abyssal "Dissolution" resonance — used to wire the technique gift.
-        cls.dissolution_resonance = Resonance.objects.get(name="Dissolution")
+        # The Abyssal resonance the cascade rooms were tagged with — used to wire
+        # the technique gift. Resolved by affinity, not by name: no seeder mints a
+        # Resonance since #2967, and the "Dissolution" this used to fetch was one
+        # the seeder invented.
+        cls.dissolution_resonance = first_authored_resonance("Abyssal")
 
     def setUp(self) -> None:
         super().setUp()  # ResonanceCacheIsolationMixin.setUp() clears caches first
@@ -988,7 +1006,6 @@ class MagicStoryPipelineTests(ResonanceCacheIsolationMixin, EvenniaTestCase):
         """
         from world.locations.models import LocationValueModifier
         from world.locations.services import effective_value
-        from world.magic.models.affinity import Resonance
         from world.magic.models.aura import CharacterResonance
         from world.magic.services.resonance_environment import (
             get_resonance_environment_config,
@@ -997,8 +1014,9 @@ class MagicStoryPipelineTests(ResonanceCacheIsolationMixin, EvenniaTestCase):
         # Caster is already in self.low_room (celestial Light magnitude=10) from setUp.
         cfg = get_resonance_environment_config()
 
-        # Fetch the Celestial "Light" resonance tagged on low_room.
-        light_resonance = Resonance.objects.get(name="Light")
+        # The Celestial resonance tagged on low_room — resolved by affinity, not
+        # by the invented "Light" name the seeder used to mint (#2967).
+        light_resonance = first_authored_resonance("Celestial")
 
         # Pre-cast: effective_value of Light on low_room = 10.
         light_ev_before = effective_value(self.low_room, resonance=light_resonance)

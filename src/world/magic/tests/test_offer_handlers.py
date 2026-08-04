@@ -23,7 +23,11 @@ from commands.exceptions import CommandError
 from world.classes.factories import PathFactory
 from world.classes.models import PathStage
 from world.magic.entry_flourish import PendingEntryFlourishOffer
-from world.magic.factories import CharacterResonanceFactory, ensure_dramatic_entrance_content
+from world.magic.factories import (
+    CharacterResonanceFactory,
+    ResonanceFactory,
+    ensure_dramatic_entrance_content,
+)
 from world.magic.models.dramatic_moment import DramaticMomentSuggestion
 from world.magic.types.techniques import SoulfrayWarning
 from world.scenes.tests.cast_test_helpers import (
@@ -105,10 +109,17 @@ class SoulfrayPendingHandlerAcceptEntranceTests(CastScenarioMixin):
             character.db_location = cls.scene.location
             character.save()
         ActionTemplateFactory(name="Entrance", grants_entry_flourish=True)
-        moment_type = ensure_dramatic_entrance_content()
+        # "Grand Entrance" carries no resonance of its own since #2967, and
+        # suggestion eligibility no longer filters on a claimed one — the
+        # resonance is resolved at confirm time from the entrance technique.
+        cls.moment_type = ensure_dramatic_entrance_content()
+        # A claimed resonance, needed for the entry-flourish offer (which skips a
+        # character with none). It is deliberately NOT the moment type's: "Grand
+        # Entrance" carries no resonance of its own since #2967, and suggestion
+        # eligibility no longer filters on a claimed one.
         CharacterResonanceFactory(
             character_sheet=cls.caster.character_sheet,
-            resonance=moment_type.resonance,
+            resonance=ResonanceFactory(),
         )
 
     def setUp(self) -> None:

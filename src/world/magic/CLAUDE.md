@@ -90,8 +90,13 @@ The magic system for Arx II. Power flows from identity and connection.
   from `species.SpeciesGiftGrant.inheritable`, which walks the species chain — both are needed.
   See `docs/systems/magic.md`'s "Gift lineage" section for the full call-site table.
 - **Content pipeline (#2486):** the catalog (`Gift`/`Technique` + grant tables
-  `PathGiftGrant`/`TraditionGiftGrant`/`species.SpeciesGiftGrant` + `Technique`'s payload
-  rows) is lore-repo exportable via `CONTENT_MODELS` with natural keys —
+  `PathGiftGrant`/`TraditionGiftGrant`/`species.SpeciesGiftGrant` + `GiftUnlock` + `Technique`'s
+  payload rows) is lore-repo exportable via `CONTENT_MODELS` with natural keys —
+  `GiftUnlock` is keyed `["gift"]` (#2967; one row per gift, DB-enforced). Registering it is what
+  makes an authored Minor Gift *learnable*: `charge_and_learn` raises `GiftUnlockMissing` for a
+  learner's first technique from a gift they don't own, so a Minor Gift with no `GiftUnlock` is
+  reachable only by a Species/Tradition/Path grant. Blank `paths` = in-band for everyone (the
+  open-to-all shape). **No seeder may create one.**
   `Technique` is keyed `(gift, name)`, now DB-unique per gift
   (`unique_technique_gift_name`), so authoring a duplicate raises
   `DuplicateTechniqueName` (clean 400) instead of an `IntegrityError`. See
@@ -590,12 +595,15 @@ admin all converge on the same service layer.
   the three ship targets. Zero rows authored in the lore repo today, so the ship
   grant is currently inert. **Relationship pull content (#2021):**
   `ensure_relationship_pull_content()` seeds survivability-skewed rows for
-  `RELATIONSHIP_TRACK` (one 4-tier chain per resonance, for the four the magic-story
-  slice uses: Light/Sanctity/Radiance/Dissolution). **These four are sample names, NOT
-  canonical resonances** — they are created only under `SEED_SAMPLE_CONTENT` and this
-  bullet used to call them "canonical", which is how they ended up in the lore corpus
-  masquerading as authored content (#2890). The canonical set is 24 resonances in 12
-  opposed pairs, authored in the content repo. Tier 0: VITAL_BONUS(DAMAGE_TAKEN_REDUCTION). Tier 1:
+  `RELATIONSHIP_TRACK` — one 4-tier chain per **authored** resonance. `ThreadPullEffect`
+  is seeder-owned tuning data, not `CONTENT_MODELS` content, so covering the whole
+  catalog is free. Until #2967 it covered four names the seeder invented itself
+  (Light/Sanctity/Radiance/Dissolution) and which no player could hold, so a
+  relationship thread woven at a real resonance had no pull effects at all; those
+  invented rows are also how the lore corpus ended up with resonances masquerading as
+  authored content (#2890). **No seeder may create a `Resonance`** — the canonical set
+  is 24 resonances in 12 opposed pairs, authored in the content repo, and seeders
+  resolve what they need by affinity via `world/magic/seeds_resonance.py`. Tier 0: VITAL_BONUS(DAMAGE_TAKEN_REDUCTION). Tier 1:
   VITAL_BONUS(DEATH_SAVE). Tier 2: RESISTANCE (all damage types). Tier 3:
   VITAL_BONUS(KNOCKOUT_RESIST). `apply_target_modulation` now handles
   `RELATIONSHIP_CAPSTONE` in addition to `RELATIONSHIP_TRACK` —
@@ -1288,9 +1296,12 @@ Recognition stays a human-adjudicated nudge, never a mechanical auto-grant (ADR-
 - **Frontend:** `DramaticMomentSuggestionChip` (`frontend/src/scenes/components/`),
   mounted in `PoseUnit` for the caller's own entrance poses.
 - **Seed content:** `ensure_dramatic_entrance_content()` (`factories.py`) seeds the "Grand
-  Entrance" `DramaticMomentType` (self-contained — get-or-creates its own "Fervor"
-  Resonance + "Celestial" Affinity) with `suggest_on_technique_entrance=True` /
-  `suggestion_min_success_level=3`.
+  Entrance" `DramaticMomentType` with `suggest_on_technique_entrance=True` /
+  `suggestion_min_success_level=3` and **no resonance**. It used to mint its own "Fervor"
+  Resonance and pin the type to it, which made the game's one authored moment type
+  un-awardable to everybody: the tag service refused any character who had not claimed
+  Fervor, and an invented resonance is unclaimable (#2967). The resonance is resolved at
+  tag time instead — see `_resolve_moment_resonance` in `services/gain.py`.
 
 ### Entry-Flourish Declaration (#1140)
 
@@ -1568,9 +1579,14 @@ also carries an optional nullable-unique `fixture_key` (#2451) for grid-bundle e
 see the "Grid content export/import" area of `docs/systems/INDEX.md`. Discovery
 API lives in `world.locations` (not this app) alongside `ComfortViewSet`: `GET
 /api/locations/portal-destinations/?character_id=<id>`. Seed:
-`ensure_portal_travel_content()` (`world/seeds/game_content/magic.py`) — "Mirror" anchor
-kind, "Mirrorwalking" Minor Gift + "Mirrorwalk" Technique, starter anchors in the seeded
-magic-story cascade rooms. Full eligibility chain + API/frontend detail:
+`ensure_portal_travel_content()` (`world/seeds/game_content/magic.py`) — the
+content-authored "Mirror" anchor kind plus starter anchors in the seeded magic-story
+cascade rooms, and nothing else. The "Mirrorwalking" Minor Gift + "Mirrorwalk" Technique
+it used to invent were obliterated in #2967 (ruled a placeholder; the gift was also the
+only one in the catalog with a non-empty resonance set, and its one resonance was the
+invented "Reflection"). **Portal travel therefore has no content today** — the gate is
+knowing a technique whose `travel_anchor_kind` is set, and that technique is lore-repo
+content nobody has authored yet. Full eligibility chain + API/frontend detail:
 `docs/systems/magic.md`'s "Portal travel" section.
 
 ## Fall / Redemption: Asymmetric Resonance Conversion (#1583)

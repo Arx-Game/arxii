@@ -10,7 +10,7 @@ from __future__ import annotations
 from world.items.models import ItemTemplate
 from world.magic.models import ResonanceTier, Ritual
 
-PRAEDARI_PAW_TEMPLATE_NAME = "Paw of a Predatory Animal"
+TOUCHSTONE_TEMPLATE_NAME = "Paw of a Predatory Animal"
 CANDLE_TEMPLATE_NAME = "Tallow Candle"
 SALT_TEMPLATE_NAME = "Handful of Salt"
 INCENSE_TEMPLATE_NAME = "Bundle of Incense"
@@ -36,46 +36,38 @@ def ensure_resonance_tiers() -> list[ResonanceTier]:
 def ensure_touchstone_content() -> tuple[ItemTemplate | None, list[ItemTemplate]]:
     """Get-or-create one example touchstone template + generic reagent templates.
 
-    The "Primal" Affinity and "Praedari" Resonance are content-repo-owned
-    (#2698) — looked up rather than assumed, and invented only under
-    ``SEED_SAMPLE_CONTENT``. When either is absent, the touchstone
-    ``ItemTemplate`` (which needs a real ``tied_resonance``) is skipped and
-    ``None`` is returned in its place; the generic reagent templates below
-    don't reference a resonance, so they still seed unconditionally. This
-    module is called unconditionally from ``seeds_sanctum.ensure_sanctum_rituals()``,
-    which itself is called broadly (dev seed + many unrelated tests), so it
-    must never hard-fail on a missing prerequisite.
+    The example touchstone needs a real ``tied_resonance``. It used to name
+    "Praedari" and ``authored_or_sample`` it into existence under a "Primal"
+    Affinity (#2967) — and the authored Praedari is **Abyssal**, so the seeder
+    was minting a *wrong* row under a canonical name whenever the content repo
+    was absent. It now follows whichever resonance the example template already
+    ties to, falling back to the first authored one, and skips the template
+    entirely when the content repo has authored none. The generic reagents
+    don't reference a resonance, so they still seed unconditionally.
+
+    This module is called unconditionally from
+    ``seeds_sanctum.ensure_sanctum_rituals()``, which itself is called broadly
+    (dev seed + many unrelated tests), so it must never hard-fail on a missing
+    prerequisite.
     """
-    from world.magic.models import Affinity, Resonance  # noqa: PLC0415
-    from world.seeds.sample_content import authored_or_sample  # noqa: PLC0415
+    from world.magic.seeds_resonance import reference_resonance  # noqa: PLC0415
 
     tiers = {t.tier_level: t for t in ensure_resonance_tiers()}
-    primal_affinity = authored_or_sample(
-        Affinity,
-        {"description": "The affinity of nature, beasts, and raw survival."},
-        name="Primal",
+    tied = reference_resonance(
+        ItemTemplate.objects.filter(name=TOUCHSTONE_TEMPLATE_NAME).exclude(tied_resonance=None),
+        resonance_field="tied_resonance",
     )
-    praedari = None
-    if primal_affinity is not None:
-        praedari = authored_or_sample(
-            Resonance,
-            {
-                "description": "The resonance of the predator, the hunt, and the kill.",
-                "affinity": primal_affinity,
-            },
-            name="Praedari",
-        )
 
     touchstone = None
-    if praedari is not None:
+    if tied is not None:
         touchstone, _ = ItemTemplate.objects.get_or_create(
-            name=PRAEDARI_PAW_TEMPLATE_NAME,
+            name=TOUCHSTONE_TEMPLATE_NAME,
             defaults={
                 "description": "A dried predatory animal's paw, warm to the touch.",
                 "weight": 0.2,
                 "size": 1,
                 "value": 0,
-                "tied_resonance": praedari,
+                "tied_resonance": tied,
                 "resonance_tier": tiers[1],
             },
         )

@@ -139,8 +139,10 @@ class TestSeededCharacterCreation(TestCase):
         available_techniques = technique_options.pool + technique_options.tradition
         self.assertTrue(available_techniques, "the picked gift must have >=1 available technique")
         technique = available_techniques[0]
+        # The CONTENT REPO supplies resonances, never the magic cluster -- no
+        # seeder may create one since #2967 (the stub root authors three).
         resonance = Resonance.objects.first()
-        self.assertIsNotNone(resonance, "magic cluster must seed a resonance")
+        self.assertIsNotNone(resonance, "the content repo must author a resonance")
         stat = Trait.objects.filter(trait_type=TraitType.STAT).first()
         self.assertIsNotNone(stat, "character-creation cluster must seed STAT traits")
         skill = Skill.objects.filter(is_active=True).first()
