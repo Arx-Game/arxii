@@ -18,6 +18,14 @@
 > `tools/build_schema.py` (ADR-0013 forbids RunPython data seeding in
 > migrations). Every reference below to preserving those two migration files no
 > longer applies.
+>
+> Doubly moot as of #2906: the "one `0001_initial.py` per app" framing below no
+> longer parses at all, because there is only one app left (`world`, label
+> `arxii`) - see ADR-0195. That collapse did what this plan set out to do, for
+> the graph-resolution reason ADR-0195 gives (no cross-app dependency graph
+> left to resolve), not the wall-clock reason this plan originally chased (that
+> one stayed disproven; ADR-0083's schema-from-models bypass is still the fix
+> for CI/test replay time).
 
 # Migration nuke-and-rebuild playbook
 

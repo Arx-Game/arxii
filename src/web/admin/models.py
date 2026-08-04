@@ -26,6 +26,7 @@ class AdminPinnedModel(SharedMemoryModel):
     objects = AdminPinnedModelManager()
 
     class Meta:
+        app_label = "arxii"
         ordering = ["sort_order", "created_at"]
         unique_together = [["app_label", "model_name"]]
         verbose_name = "Pinned Admin Model"
@@ -60,6 +61,7 @@ class AdminExcludedModel(SharedMemoryModel):
     objects = AdminExcludedModelManager()
 
     class Meta:
+        app_label = "arxii"
         unique_together = [["app_label", "model_name"]]
         verbose_name = "Excluded Export Model"
         verbose_name_plural = "Excluded Export Models"

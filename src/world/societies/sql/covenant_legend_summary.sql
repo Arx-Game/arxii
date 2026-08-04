@@ -7,8 +7,14 @@
 -- CAVEAT: After a migration squash, you must manually add a RunSQL operation
 -- pointing at this file. Django's makemigrations won't auto-generate it.
 --
--- REFRESH MATERIALIZED VIEW CONCURRENTLY requires a unique index — hence both
+-- REFRESH MATERIALIZED VIEW CONCURRENTLY requires a unique index - hence both
 -- statements below.
+--
+-- Source tables are arxii_covenant / arxii_covenantlegendcredit /
+-- arxii_legendentry / arxii_legendspread (single-app collapse, #2906) - the
+-- view's own name stays societies_covenantlegendsummary since it's a
+-- managed=False model with an explicit Meta.db_table, unaffected by the
+-- app-label table rename.
 
 CREATE MATERIALIZED VIEW IF NOT EXISTS societies_covenantlegendsummary AS
 SELECT
@@ -18,12 +24,12 @@ SELECT
             le.base_value + COALESCE(spreads.total, 0)
         ELSE 0 END
     ), 0)::bigint AS legend_total
-FROM covenants_covenant c
-LEFT JOIN societies_covenantlegendcredit clc ON clc.covenant_id = c.id
-LEFT JOIN societies_legendentry le ON le.id = clc.entry_id
+FROM arxii_covenant c
+LEFT JOIN arxii_covenantlegendcredit clc ON clc.covenant_id = c.id
+LEFT JOIN arxii_legendentry le ON le.id = clc.entry_id
 LEFT JOIN (
     SELECT legend_entry_id, SUM(value_added)::bigint AS total
-    FROM societies_legendspread
+    FROM arxii_legendspread
     GROUP BY legend_entry_id
 ) spreads ON spreads.legend_entry_id = le.id
 GROUP BY c.id;

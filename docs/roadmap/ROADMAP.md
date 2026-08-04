@@ -110,6 +110,30 @@ limits, IC-vs-UI placement, etc. — see [`design-tenets.md`](design-tenets.md).
 
 ### Recent Infrastructure Changes
 
+- **Single-app collapse (#2906, complete):** every first-party Django app (66 `world.*`
+  apps, plus 27 models folded in from `actions`/`flows`/`behaviors`/`evennia_extensions`/
+  `web.admin` via an explicit `Meta.app_label`) collapsed into one: package `world`,
+  label `arxii`. `world/` directories did not move - `world.magic`, `world.roster`, etc.
+  still work as import paths and `just test-fast world.<app>` targets - but there is now
+  one Django app, one `src/world/migrations/` history (102 files: 100 cost-weighted
+  chunks carrying the 1,026 `CreateModel` operations, plus 2 tail migrations), and one
+  `max_migration.txt` sentinel repo-wide. Measurement after the fact found the collapse
+  alone was *not* the speed win the original hypothesis claimed - topologically inlining
+  deferred FKs down from Django's 2,321 to the schema's true floor of 49 is what actually
+  produced the ~1.3x faster fresh `migrate`, and the collapse's real payoff is that the
+  floor without it stays at 1,153 (46 of the 68 pre-collapse apps shared one dependency
+  cycle). The single `max_migration.txt` sentinel also raises merge-collision odds rather
+  than lowering them, per CLAUDE.md's Git Workflow section. See ADR-0195 for the full
+  decision, the rejected alternatives, and the consequences (dev DBs must be rebuilt and
+  reseeded; `core.app_domains.domain_of()` now supplies the authoring-domain grouping
+  `app_label` used to carry, for the admin index, the lore repo's `fixtures/<domain>/`
+  layout, and the admin pin/exclude keys; model names must stay globally unique for
+  `resolve_model_by_name`; `tools/build_schema.py` remains the right path for fresh-
+  database bootstrap, migration-replay speed only matters for deploys that replay
+  history). Also renamed
+  `achievements.AchievementRequirement` to `AchievementStatRequirement` (Task 3) to
+  disambiguate it from the pre-existing, distinct `progression.AchievementRequirement`.
+
 - **Admin-hosted Game Tuning & Game Ops dashboards + content-repo load (#1220/#1221, complete):**
   - **Game Tuning** (`/admin/_tuning/`, `admin_tuning`) — four HTMX-fragment panels: check-engine
     probability distributions (`web/admin/tuning/checks_analytics.py`), a consequence-pool inspector

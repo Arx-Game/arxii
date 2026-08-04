@@ -13,10 +13,10 @@ from evennia.utils.idmapper.models import SharedMemoryModel
 from world.travel.constants import TravelMode, VoyageStatus
 
 # Cross-app FK string constants — centralized per the buildings/models.py convention.
-_ROOMPROFILE_FK = "evennia_extensions.RoomProfile"
-_PERSONA_FK = "scenes.Persona"
-_SHIPTYPE_FK = "ships.ShipType"
-_SHIPDETAILS_FK = "ships.ShipDetails"
+_ROOMPROFILE_FK = "arxii.RoomProfile"
+_PERSONA_FK = "arxii.Persona"
+_SHIPTYPE_FK = "arxii.ShipType"
+_SHIPDETAILS_FK = "arxii.ShipDetails"
 
 
 class TravelHub(SharedMemoryModel):

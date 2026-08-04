@@ -11,46 +11,56 @@ class SocietiesConfig(AppConfig):
     verbose_name = "Societies"
 
     def ready(self) -> None:
-        # Import for side effect: registers the spread_a_tale scene-action resolver.
-        # Register the SPREAD_ASSIST reaction kind (#915) so the scenes
-        # reaction framework can settle acclaim on tellings.
-        from world.scenes.constants import ReactionWindowKind  # noqa: PLC0415
-        from world.scenes.reaction_services import register_reaction_kind  # noqa: PLC0415
-        from world.societies import spread_services  # noqa: F401, PLC0415
-        from world.societies.reaction_kinds import SPREAD_ASSIST_KIND  # noqa: PLC0415
+        ready()
 
-        register_reaction_kind(ReactionWindowKind.SPREAD_ASSIST, SPREAD_ASSIST_KIND)
 
-        # #1511 — register the org invitation offer handler.
-        from commands.offer_registry import register_offer_handler  # noqa: PLC0415
-        from world.societies.offer_handlers import OrgInviteHandler  # noqa: PLC0415
+def ready() -> None:
+    """Register societies' cross-app resolvers and project-kind handlers.
 
-        register_offer_handler(OrgInviteHandler())
+    Extracted to module level (#2906) so the single-app aggregator
+    (``world.apps.ArxiiConfig.ready``) can call it directly once
+    ``world.societies`` stops being its own installed app.
+    """
+    # Import for side effect: registers the spread_a_tale scene-action resolver.
+    # Register the SPREAD_ASSIST reaction kind (#915) so the scenes
+    # reaction framework can settle acclaim on tellings.
+    from world.scenes.constants import ReactionWindowKind  # noqa: PLC0415
+    from world.scenes.reaction_services import register_reaction_kind  # noqa: PLC0415
+    from world.societies import spread_services  # noqa: F401, PLC0415
+    from world.societies.reaction_kinds import SPREAD_ASSIST_KIND  # noqa: PLC0415
 
-        # #1891 — register the GANG_TURF kind handler + tiered resolver.
-        from world.projects.constants import ProjectKind  # noqa: PLC0415
-        from world.projects.services import (  # noqa: PLC0415
-            register_kind_handler,
-            register_tiered_resolver,
-        )
-        from world.societies.gang_turf import complete_gang_turf, resolve_gang_turf  # noqa: PLC0415
-        from world.societies.org_capability import resolve_organization_capability  # noqa: PLC0415
+    register_reaction_kind(ReactionWindowKind.SPREAD_ASSIST, SPREAD_ASSIST_KIND)
 
-        register_kind_handler(ProjectKind.GANG_TURF, complete_gang_turf)
-        register_tiered_resolver(ProjectKind.GANG_TURF, resolve_gang_turf)
-        register_kind_handler(
-            ProjectKind.ORGANIZATION_CAPABILITY,
-            resolve_organization_capability,
-        )
+    # #1511 — register the org invitation offer handler.
+    from commands.offer_registry import register_offer_handler  # noqa: PLC0415
+    from world.societies.offer_handlers import OrgInviteHandler  # noqa: PLC0415
 
-        # #1884 — register the DOMAIN_IMPROVEMENT kind handler.
-        from world.societies.houses.services import complete_domain_improvement  # noqa: PLC0415
+    register_offer_handler(OrgInviteHandler())
 
-        register_kind_handler(ProjectKind.DOMAIN_IMPROVEMENT, complete_domain_improvement)
+    # #1891 — register the GANG_TURF kind handler + tiered resolver.
+    from world.projects.constants import ProjectKind  # noqa: PLC0415
+    from world.projects.services import (  # noqa: PLC0415
+        register_kind_handler,
+        register_tiered_resolver,
+    )
+    from world.societies.gang_turf import complete_gang_turf, resolve_gang_turf  # noqa: PLC0415
+    from world.societies.org_capability import resolve_organization_capability  # noqa: PLC0415
 
-        # #1621 — PROPAGANDA: kind handler + instant completion (funds→renown at threshold).
-        from world.projects.services import register_instant_completion_kind  # noqa: PLC0415
-        from world.societies.propaganda import resolve_propaganda_project  # noqa: PLC0415
+    register_kind_handler(ProjectKind.GANG_TURF, complete_gang_turf)
+    register_tiered_resolver(ProjectKind.GANG_TURF, resolve_gang_turf)
+    register_kind_handler(
+        ProjectKind.ORGANIZATION_CAPABILITY,
+        resolve_organization_capability,
+    )
 
-        register_kind_handler(ProjectKind.PROPAGANDA, resolve_propaganda_project)
-        register_instant_completion_kind(ProjectKind.PROPAGANDA)
+    # #1884 — register the DOMAIN_IMPROVEMENT kind handler.
+    from world.societies.houses.services import complete_domain_improvement  # noqa: PLC0415
+
+    register_kind_handler(ProjectKind.DOMAIN_IMPROVEMENT, complete_domain_improvement)
+
+    # #1621 — PROPAGANDA: kind handler + instant completion (funds→renown at threshold).
+    from world.projects.services import register_instant_completion_kind  # noqa: PLC0415
+    from world.societies.propaganda import resolve_propaganda_project  # noqa: PLC0415
+
+    register_kind_handler(ProjectKind.PROPAGANDA, resolve_propaganda_project)
+    register_instant_completion_kind(ProjectKind.PROPAGANDA)

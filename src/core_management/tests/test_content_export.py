@@ -276,13 +276,13 @@ class ContentExportTests(TestCase):
 
     def test_content_models_all_have_natural_key(self) -> None:
         """Every model in the allowlist must have NaturalKeyMixin."""
-        from django.apps import apps
-
+        from core.app_domains import resolve_model_by_name
         from core.natural_keys import NaturalKeyMixin
 
         for model_label in CONTENT_MODELS:
-            app_label, model_name = model_label.split(".")
-            model = apps.get_model(app_label, model_name)
+            # model_label is "<domain>.<model_name>", not a real Django
+            # app_label post-collapse (#2906) — resolve by model name.
+            model = resolve_model_by_name(model_label)
             assert issubclass(model, NaturalKeyMixin), f"{model_label} lacks NaturalKeyMixin"
 
     #: Content models legitimately keyed on ``pk`` — documented singletons pinned
@@ -312,14 +312,15 @@ class ContentExportTests(TestCase):
         shipped that way and made its exported ``ThreatPoolEntry`` rows
         unloadable, which is why this guard exists.
         """
-        from django.apps import apps
+        from core.app_domains import resolve_model_by_name
 
         offenders = []
         for model_label in CONTENT_MODELS:
             if model_label in self.PK_KEYED_SINGLETONS:
                 continue
-            app_label, model_name = model_label.split(".")
-            model = apps.get_model(app_label, model_name)
+            # model_label is "<domain>.<model_name>", not a real Django
+            # app_label post-collapse (#2906) — resolve by model name.
+            model = resolve_model_by_name(model_label)
             # NaturalKeyConfig.fields is the mixin's contract — a content model
             # missing it should fail loudly here rather than be skipped.
             fields = list(model.NaturalKeyConfig.fields)

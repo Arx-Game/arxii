@@ -1,6 +1,6 @@
 """Models for the gem value model (Build 0b slice 1).
 
-All models set ``Meta.app_label = "items"`` (registered under the ``items`` app,
+All models set ``Meta.app_label = "arxii"`` (the single collapsed app, #2906,
 mirroring ``world.items.crafting``).
 """
 
@@ -17,10 +17,10 @@ from world.items.gems.constants import (
     GemAxis,
 )
 
-_ITEM_TEMPLATE_FK = "items.ItemTemplate"
-_ITEM_INSTANCE_FK = "items.ItemInstance"
-_GEM_GRADE_FK = "items.GemGrade"
-_MATERIAL_CATEGORY_FK = "items.MaterialCategory"
+_ITEM_TEMPLATE_FK = "arxii.ItemTemplate"
+_ITEM_INSTANCE_FK = "arxii.ItemInstance"
+_GEM_GRADE_FK = "arxii.GemGrade"
+_MATERIAL_CATEGORY_FK = "arxii.MaterialCategory"
 
 
 class GemGrade(SharedMemoryModel):
@@ -51,7 +51,7 @@ class GemGrade(SharedMemoryModel):
     )
 
     class Meta:
-        app_label = "items"
+        app_label = "arxii"
         ordering = ["axis", "sort_order"]
         constraints = [
             models.UniqueConstraint(
@@ -93,7 +93,7 @@ class GemDetails(SharedMemoryModel):
     )
 
     class Meta:
-        app_label = "items"
+        app_label = "arxii"
 
     def __str__(self) -> str:
         return f"gem type {self.item_template_id} (level {self.quality_level})"
@@ -118,7 +118,7 @@ class GemInstanceDetails(SharedMemoryModel):
     cut_grade = models.ForeignKey(_GEM_GRADE_FK, on_delete=models.PROTECT, related_name="+")
 
     class Meta:
-        app_label = "items"
+        app_label = "arxii"
 
     def __str__(self) -> str:
         return (
@@ -189,7 +189,7 @@ class Adornment(SharedMemoryModel):
     set_at = models.DateTimeField(auto_now_add=True)
 
     class Meta:
-        app_label = "items"
+        app_label = "arxii"
         ordering = ["set_at"]
 
     def __str__(self) -> str:
@@ -206,7 +206,7 @@ class CommonGemBucket(SharedMemoryModel):
     """
 
     character_sheet = models.ForeignKey(
-        "character_sheets.CharacterSheet",
+        "arxii.CharacterSheet",
         on_delete=models.CASCADE,
         related_name="common_gem_buckets",
     )
@@ -222,7 +222,7 @@ class CommonGemBucket(SharedMemoryModel):
     )
 
     class Meta:
-        app_label = "items"
+        app_label = "arxii"
         constraints = [
             models.UniqueConstraint(
                 fields=["character_sheet", "tier"],
@@ -243,7 +243,7 @@ class StreamCommonGemPool(SharedMemoryModel):
     """
 
     income_stream = models.ForeignKey(
-        "currency.OrgIncomeStream",
+        "arxii.OrgIncomeStream",
         on_delete=models.CASCADE,
         related_name="common_gem_pools",
     )
@@ -258,7 +258,7 @@ class StreamCommonGemPool(SharedMemoryModel):
     )
 
     class Meta:
-        app_label = "items"
+        app_label = "arxii"
         constraints = [
             models.UniqueConstraint(
                 fields=["income_stream", "tier"],
@@ -278,19 +278,19 @@ class PendingRareFind(SharedMemoryModel):
     """
 
     income_stream = models.ForeignKey(
-        "currency.OrgIncomeStream",
+        "arxii.OrgIncomeStream",
         on_delete=models.CASCADE,
         related_name="pending_rare_finds",
     )
     gem_instance = models.OneToOneField(
-        "items.ItemInstance",
+        "arxii.ItemInstance",
         on_delete=models.CASCADE,
         related_name="pending_rare_find",
     )
     accrued_at = models.DateTimeField(auto_now_add=True)
 
     class Meta:
-        app_label = "items"
+        app_label = "arxii"
         ordering = ["accrued_at"]
 
     def __str__(self) -> str:
@@ -306,7 +306,7 @@ class OrgGemStock(SharedMemoryModel):
     """
 
     organization = models.ForeignKey(
-        "societies.Organization",
+        "arxii.Organization",
         on_delete=models.CASCADE,
         related_name="gem_stocks",
     )
@@ -321,7 +321,7 @@ class OrgGemStock(SharedMemoryModel):
     )
 
     class Meta:
-        app_label = "items"
+        app_label = "arxii"
         constraints = [
             models.UniqueConstraint(
                 fields=["organization", "tier"],

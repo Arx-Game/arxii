@@ -60,7 +60,7 @@ class SignatureMotifBonus(DiscoverableContent, SharedMemoryModel):
         ),
     )
     required_resonance = models.ForeignKey(
-        "magic.Resonance",
+        "arxii.Resonance",
         on_delete=models.PROTECT,
         null=True,
         blank=True,

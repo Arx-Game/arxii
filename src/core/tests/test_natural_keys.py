@@ -193,13 +193,13 @@ class NaturalKeyDependenciesTests(TestCase):
     def test_single_dependency(self):
         """Test model with single dependency."""
         deps = TraitRankDescription.natural_key_dependencies()
-        self.assertEqual(deps, ["traits.Trait"])
+        self.assertEqual(deps, ["arxii.Trait"])
 
     def test_multiple_dependencies(self):
         """Test model with multiple dependencies."""
         deps = SpeciesFormTrait.natural_key_dependencies()
-        self.assertIn("species.Species", deps)
-        self.assertIn("forms.FormTrait", deps)
+        self.assertIn("arxii.Species", deps)
+        self.assertIn("arxii.FormTrait", deps)
 
 
 class RoundTripTests(TestCase):

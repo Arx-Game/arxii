@@ -103,13 +103,13 @@ class AffinityInteraction(SharedMemoryModel):
     """
 
     source_affinity = models.ForeignKey(
-        "magic.Affinity",
+        "arxii.Affinity",
         on_delete=models.PROTECT,
         related_name="interactions_as_source",
         help_text="The caster's magic affinity.",
     )
     environment_affinity = models.ForeignKey(
-        "magic.Affinity",
+        "arxii.Affinity",
         on_delete=models.PROTECT,
         related_name="interactions_as_environment",
         help_text="The place's affinity.",
@@ -136,7 +136,7 @@ class AffinityInteraction(SharedMemoryModel):
         help_text="Scales the interaction's effect magnitude.",
     )
     consequence_pool = models.ForeignKey(
-        "actions.ConsequencePool",
+        "arxii.ConsequencePool",
         on_delete=models.PROTECT,
         null=True,
         blank=True,
@@ -348,7 +348,7 @@ class ResonanceAlignmentBoonTier(SharedMemoryModel):
     objects = ResonanceAlignmentBoonTierManager()
 
     affinity_interaction = models.ForeignKey(
-        "magic.AffinityInteraction",
+        "arxii.AffinityInteraction",
         on_delete=models.CASCADE,
         related_name="alignment_boon_tiers",
         help_text="Must reference an ALIGNED (diagonal) interaction row.",
@@ -360,7 +360,7 @@ class ResonanceAlignmentBoonTier(SharedMemoryModel):
         ),
     )
     condition_template = models.ForeignKey(
-        "conditions.ConditionTemplate",
+        "arxii.ConditionTemplate",
         on_delete=models.PROTECT,
         related_name="resonance_alignment_tiers",
         help_text="The named, player-visible buff applied while present.",

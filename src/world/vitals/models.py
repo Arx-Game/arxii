@@ -30,8 +30,8 @@ from world.vitals.constants import (
 # Cross-app FK string for the consequence pool model, referenced by several
 # fields below. Centralized to avoid the duplicated-literal SonarCloud smell
 # (python:S1192).
-_CONSEQUENCE_POOL_FK = "actions.ConsequencePool"
-_CHARACTER_SHEET_FK = "character_sheets.CharacterSheet"
+_CONSEQUENCE_POOL_FK = "arxii.ConsequencePool"
+_CHARACTER_SHEET_FK = "arxii.CharacterSheet"
 
 
 class CharacterVitals(SharedMemoryModel):
@@ -54,7 +54,7 @@ class CharacterVitals(SharedMemoryModel):
         help_text="When the character died (permanent death).",
     )
     died_in_scene = models.ForeignKey(
-        "scenes.Scene",
+        "arxii.Scene",
         on_delete=models.SET_NULL,
         null=True,
         blank=True,
@@ -307,7 +307,7 @@ class WoundDetails(SharedMemoryModel):
     """
 
     condition_instance = models.OneToOneField(
-        "conditions.ConditionInstance",
+        "arxii.ConditionInstance",
         on_delete=models.CASCADE,
         related_name="wound_details",
         help_text="The wound ConditionInstance this provenance row describes.",

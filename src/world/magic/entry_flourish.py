@@ -26,12 +26,12 @@ class PendingEntryFlourishOffer(SharedMemoryModel):
     """A poll-able offer awaiting the entrant's resonance pick (#1140)."""
 
     character_sheet = models.ForeignKey(
-        "character_sheets.CharacterSheet",
+        "arxii.CharacterSheet",
         on_delete=models.CASCADE,
         related_name="entry_flourish_offers",
     )
     scene = models.ForeignKey(
-        "scenes.Scene",
+        "arxii.Scene",
         on_delete=models.SET_NULL,
         null=True,
         blank=True,

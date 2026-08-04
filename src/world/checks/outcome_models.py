@@ -5,7 +5,7 @@ resolution — both combat damage resolution and challenge resolution write one.
 A ViewSet exposes it with the roulette recomputed on read.
 
 The `combat_interaction` FK is declared db_constraint=False because
-scenes_interaction is range-partitioned by timestamp.  No composite FK
+arxii_interaction is range-partitioned by timestamp.  No composite FK
 constraint (interaction_id, interaction_timestamp) is created at the DB level
 for this table — unlike CombatRoundAction/ClashContribution, the raw-SQL
 migration for that constraint has deliberately been omitted here because the
@@ -41,17 +41,17 @@ class ConsequenceOutcome(SharedMemoryModel):
     """
 
     character = models.ForeignKey(
-        "character_sheets.CharacterSheet",
+        "arxii.CharacterSheet",
         on_delete=models.CASCADE,
         related_name="consequence_outcomes",
     )
     check_type = models.ForeignKey(
-        "checks.CheckType",
+        "arxii.CheckType",
         on_delete=models.PROTECT,
         related_name="consequence_outcomes",
     )
     pool = models.ForeignKey(
-        "actions.ConsequencePool",
+        "arxii.ConsequencePool",
         null=True,
         blank=True,
         on_delete=models.PROTECT,
@@ -64,7 +64,7 @@ class ConsequenceOutcome(SharedMemoryModel):
         ),
     )
     selected_consequence = models.ForeignKey(
-        "checks.Consequence",
+        "arxii.Consequence",
         null=True,
         blank=True,
         on_delete=models.SET_NULL,
@@ -73,13 +73,13 @@ class ConsequenceOutcome(SharedMemoryModel):
     modifier_total = models.IntegerField(default=0)
     summary = models.CharField(max_length=255, blank=True)
 
-    # combat_interaction: FK to the partitioned scenes_interaction table.
+    # combat_interaction: FK to the partitioned arxii_interaction table.
     # db_constraint=False because Django cannot express the required composite
     # FK (interaction_id, interaction_timestamp) against a range-partitioned
     # table.  No raw-SQL migration adds a DB-level composite FK constraint here;
     # integrity is maintained by the writer setting both columns atomically.
     combat_interaction = models.ForeignKey(
-        "scenes.Interaction",
+        "arxii.Interaction",
         on_delete=models.SET_NULL,
         null=True,
         blank=True,
@@ -96,14 +96,14 @@ class ConsequenceOutcome(SharedMemoryModel):
         db_index=True,
         help_text=(
             "Denormalized from combat_interaction.timestamp. Required because "
-            "scenes_interaction is range-partitioned by timestamp. "
+            "arxii_interaction is range-partitioned by timestamp. "
             "No DB-level composite FK constraint is enforced — integrity is "
             "maintained by the writer setting both columns atomically."
         ),
     )
 
     challenge_record = models.ForeignKey(
-        "mechanics.CharacterChallengeRecord",
+        "arxii.CharacterChallengeRecord",
         null=True,
         blank=True,
         on_delete=models.CASCADE,

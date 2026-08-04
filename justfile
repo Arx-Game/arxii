@@ -113,7 +113,7 @@ build-test-schema:
 # (bypassing this recipe) can make Django itself create test_<dbname> via
 # plain syncdb — no partition, no composite FKs, no matviews, no seeds — and
 # with --keepdb that broken schema persists. So probe the same signal
-# build_schema.py itself uses for its idempotency guard (scenes_interaction
+# build_schema.py itself uses for its idempotency guard (arxii_interaction
 # being partitioned, relkind='p') against the actual test DB, not just
 # pg_database existence, and rebuild if it's missing or wrong.
 _ensure-testdb rebuild="":
@@ -124,7 +124,7 @@ _ensure-testdb rebuild="":
     SCHEMA_OK=""
     if [ "$EXISTS" = "1" ]; then
         SCHEMA_OK=$(psql "$TESTDB_URL" -tAc \
-            "SELECT 1 FROM pg_class WHERE relname='scenes_interaction' AND relkind='p'" \
+            "SELECT 1 FROM pg_class WHERE relname='arxii_interaction' AND relkind='p'" \
             2>/dev/null || echo "")
     fi
     if [ -n "{{rebuild}}" ] || [ "$EXISTS" != "1" ] || [ "$SCHEMA_OK" != "1" ]; then
@@ -181,12 +181,26 @@ test-affected *args: _fs-warn
         echo "Use 'just regression' for the full suite, or 'just test-fast <app>' for one."
         exit 0
     fi
-    OUTSIDE=$(echo "$CHANGED" | grep -vE '^src/world/[^/]+/' || true)
+    OUTSIDE=$(echo "$CHANGED" | grep -vE '^src/world/' || true)
     if [ -n "$OUTSIDE" ]; then
-        echo "test-affected: changes outside src/world/<app>/ — running full regression:"
+        echo "test-affected: changes outside src/world/ - running full regression:"
         echo "$OUTSIDE" | sed 's/^/  /'
         just _ensure-testdb ""
         echo "yes" | uv run arx test --keepdb --parallel {{args}}
+        exit 0
+    fi
+    # #2906 collapsed world.* into one app (arxii); world/apps.py, models.py,
+    # admin.py are its aggregators (every sub-package's ready()/models/admin
+    # wiring funnels through them) and migrations/ holds the app's one
+    # schema history - a change to any of these can affect every world.*
+    # sub-package's tests, so map them to the whole world app rather than
+    # either guessing one sub-app or running a full cross-repo regression.
+    ROOT_OR_MIGRATIONS=$(echo "$CHANGED" | grep -E '^src/world/([^/]+\.py|migrations/)' || true)
+    if [ -n "$ROOT_OR_MIGRATIONS" ]; then
+        echo "test-affected: world app-root/migrations changed - running the whole world app:"
+        echo "$ROOT_OR_MIGRATIONS" | sed 's/^/  /'
+        just _ensure-testdb ""
+        echo "yes" | uv run arx test --keepdb world {{args}}
         exit 0
     fi
     CHANGED_APPS=$(echo "$CHANGED" | sed -E 's|^src/world/([^/]+)/.*|\1|' | sort -u)

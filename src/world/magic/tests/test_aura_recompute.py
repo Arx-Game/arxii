@@ -160,7 +160,7 @@ class FireAuraThresholdCrossingsTests(TestCase):
         from world.achievements.constants import ComparisonType
         from world.achievements.factories import (
             AchievementFactory,
-            AchievementRequirementFactory,
+            AchievementStatRequirementFactory,
             StatDefinitionFactory,
         )
         from world.achievements.models import CharacterAchievement
@@ -170,7 +170,7 @@ class FireAuraThresholdCrossingsTests(TestCase):
 
         allure = StatDefinitionFactory()
         achievement = AchievementFactory(is_active=True)
-        AchievementRequirementFactory(
+        AchievementStatRequirementFactory(
             achievement=achievement, stat=allure, threshold=50, comparison=ComparisonType.GTE
         )
         AuraAffinityThreshold.objects.create(

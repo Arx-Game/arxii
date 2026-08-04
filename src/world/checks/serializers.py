@@ -48,7 +48,7 @@ class ConsequenceOutcomeSerializer(serializers.ModelSerializer):
     challenge template — no pool is stored; no denormalization occurs.
 
     combat_interaction and challenge_record are exposed as plain integer ids to
-    avoid touching the range-partitioned scenes_interaction table at
+    avoid touching the range-partitioned arxii_interaction table at
     serialization time.
     """
 

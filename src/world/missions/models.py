@@ -45,8 +45,8 @@ from world.missions.constants import (
 )
 from world.societies.constants import RenownMagnitude, RenownReach, RenownRisk
 
-_PERSONA_MODEL_PATH = "scenes.Persona"
-_MISSION_OPTION_ROUTE_MODEL = "missions.MissionOptionRoute"
+_PERSONA_MODEL_PATH = "arxii.Persona"
+_MISSION_OPTION_ROUTE_MODEL = "arxii.MissionOptionRoute"
 
 # MissionOptionRouteReward XOR (route, candidate) — module-level so the
 # clean() messages stay readable and the magic 2 has a name.
@@ -57,12 +57,12 @@ _REWARD_BOTH_PARENTS_SET = 2
 # Cross-app FK string for the reusable consequence primitive (missions FK to
 # it by reference only). Centralized to avoid the duplicated-literal SonarCloud
 # smell (python:S1192).
-_CONSEQUENCE_FK = "checks.Consequence"
+_CONSEQUENCE_FK = "arxii.Consequence"
 
 # Lazy model references (Django app_label.ModelName), extracted to satisfy S1192.
 OBJECT_DB_MODEL = "objects.ObjectDB"
-ROOM_PROFILE_MODEL = "evennia_extensions.RoomProfile"
-CHARACTER_SHEET_MODEL = "character_sheets.CharacterSheet"
+ROOM_PROFILE_MODEL = "arxii.RoomProfile"
+CHARACTER_SHEET_MODEL = "arxii.CharacterSheet"
 
 # #1035 — the durable (non-transient) ExternalAct members. Mirrors
 # ``world.missions.services.external_acts._DURABLE_ACTS`` — duplicated here
@@ -131,7 +131,7 @@ class MissionTemplate(NaturalKeyMixin, SharedMemoryModel):
         help_text="Relative weight in the availability draw.",
     )
     created_in_era = models.ForeignKey(
-        "stories.Era",
+        "arxii.Era",
         null=True,
         blank=True,
         on_delete=models.SET_NULL,
@@ -139,7 +139,7 @@ class MissionTemplate(NaturalKeyMixin, SharedMemoryModel):
         help_text="Arc association — the era this mission was authored for.",
     )
     report_to_role = models.ForeignKey(
-        "npc_services.NPCRole",
+        "arxii.NPCRole",
         null=True,
         blank=True,
         on_delete=models.SET_NULL,
@@ -374,7 +374,7 @@ class MissionNode(NaturalKeyMixin, SharedMemoryModel):
         ),
     )
     target_area = models.ForeignKey(
-        "areas.Area",
+        "arxii.Area",
         null=True,
         blank=True,
         on_delete=models.PROTECT,
@@ -396,7 +396,7 @@ class MissionNode(NaturalKeyMixin, SharedMemoryModel):
 
     class NaturalKeyConfig:
         fields = ["template", "key"]
-        dependencies = ["missions.MissionTemplate"]
+        dependencies = ["arxii.MissionTemplate"]
 
     class Meta:
         constraints = [
@@ -526,7 +526,7 @@ class MissionOption(NaturalKeyMixin, SharedMemoryModel):
         help_text="Phase 0 predicate tree gating this option's visibility.",
     )
     authored_check_type = models.ForeignKey(
-        "checks.CheckType",
+        "arxii.CheckType",
         null=True,
         blank=True,
         on_delete=models.PROTECT,
@@ -572,7 +572,7 @@ class MissionOption(NaturalKeyMixin, SharedMemoryModel):
         ),
     )
     challenge = models.ForeignKey(
-        "mechanics.ChallengeTemplate",
+        "arxii.ChallengeTemplate",
         null=True,
         blank=True,
         on_delete=models.PROTECT,
@@ -730,7 +730,7 @@ class MissionOption(NaturalKeyMixin, SharedMemoryModel):
 
     class NaturalKeyConfig:
         fields = ["node", "key"]
-        dependencies = ["missions.MissionNode"]
+        dependencies = ["arxii.MissionNode"]
 
     def save(self, *args: object, **kwargs: object) -> None:
         # Runs the scalar clean() invariants on the real write path so
@@ -779,7 +779,7 @@ class MissionOptionRoute(NaturalKeyMixin, SharedMemoryModel):
         related_name="routes",
     )
     outcome_tier = models.ForeignKey(
-        "traits.CheckOutcome",
+        "arxii.CheckOutcome",
         null=True,
         blank=True,
         on_delete=models.PROTECT,
@@ -831,7 +831,7 @@ class MissionOptionRoute(NaturalKeyMixin, SharedMemoryModel):
 
     class NaturalKeyConfig:
         fields = ["option", "outcome_tier"]
-        dependencies = ["missions.MissionOption"]
+        dependencies = ["arxii.MissionOption"]
 
     class Meta:
         # Partial index — see MissionNode.Meta.indexes for the rationale.
@@ -998,7 +998,7 @@ class MissionOptionRouteReward(NaturalKeyMixin, SharedMemoryModel):
         help_text="Optional reference/discriminator (e.g., a rumor key).",
     )
     resonance = models.ForeignKey(
-        "magic.Resonance",
+        "arxii.Resonance",
         null=True,
         blank=True,
         on_delete=models.PROTECT,
@@ -1006,7 +1006,7 @@ class MissionOptionRouteReward(NaturalKeyMixin, SharedMemoryModel):
         help_text="Required when sink=RESONANCE: which Resonance this reward grants.",
     )
     item_template = models.ForeignKey(
-        "items.ItemTemplate",
+        "arxii.ItemTemplate",
         null=True,
         blank=True,
         on_delete=models.PROTECT,
@@ -1014,7 +1014,7 @@ class MissionOptionRouteReward(NaturalKeyMixin, SharedMemoryModel):
         help_text="Required when sink=ITEM: which ItemTemplate this reward grants.",
     )
     followon_offer = models.ForeignKey(
-        "npc_services.NPCServiceOffer",
+        "arxii.NPCServiceOffer",
         null=True,
         blank=True,
         on_delete=models.PROTECT,
@@ -1066,7 +1066,7 @@ class MissionOptionRouteReward(NaturalKeyMixin, SharedMemoryModel):
 
     class NaturalKeyConfig:
         fields = ["route", "candidate", "sequence"]
-        dependencies = [_MISSION_OPTION_ROUTE_MODEL, "missions.MissionOptionRouteCandidate"]
+        dependencies = [_MISSION_OPTION_ROUTE_MODEL, "arxii.MissionOptionRouteCandidate"]
 
     class Meta:
         constraints = [
@@ -1246,7 +1246,7 @@ class MissionRenownAward(NaturalKeyMixin, SharedMemoryModel):
         ),
     )
     archetypes = models.ManyToManyField(
-        "societies.PhilosophicalArchetype",
+        "arxii.PhilosophicalArchetype",
         related_name="mission_awards",
         blank=True,
         help_text=(
@@ -1419,7 +1419,7 @@ class MissionInstance(SharedMemoryModel):
     # null the instance is a "free" run with no Beat reporting. SET_NULL on
     # Beat delete: losing the Beat must not also lose the run record.
     source_beat = models.ForeignKey(
-        "stories.Beat",
+        "arxii.Beat",
         null=True,
         blank=True,
         on_delete=models.SET_NULL,
@@ -1437,7 +1437,7 @@ class MissionInstance(SharedMemoryModel):
     # Used to scope the CharacterSheet.max_active_npc_missions cap to
     # NPC-mediated runs only.
     source_offer = models.ForeignKey(
-        "npc_services.NPCServiceOffer",
+        "arxii.NPCServiceOffer",
         null=True,
         blank=True,
         on_delete=models.SET_NULL,
@@ -1479,7 +1479,7 @@ class MissionInstance(SharedMemoryModel):
         ),
     )
     target_project = models.ForeignKey(
-        "projects.Project",
+        "arxii.Project",
         null=True,
         blank=True,
         on_delete=models.SET_NULL,
@@ -1661,7 +1661,7 @@ class MissionGroupBallot(SharedMemoryModel):
         help_text="The participant's own stage-1 pick (from their option list).",
     )
     picked_approach = models.ForeignKey(
-        "mechanics.ChallengeApproach",
+        "arxii.ChallengeApproach",
         null=True,
         blank=True,
         on_delete=models.SET_NULL,
@@ -1725,7 +1725,7 @@ class MissionDeedRecord(SharedMemoryModel):
         related_name="+",
     )
     outcome = models.ForeignKey(
-        "traits.CheckOutcome",
+        "arxii.CheckOutcome",
         null=True,
         blank=True,
         on_delete=models.PROTECT,
@@ -1733,7 +1733,7 @@ class MissionDeedRecord(SharedMemoryModel):
         help_text="Resolved outcome tier; null for a BRANCH deed.",
     )
     route_candidate = models.ForeignKey(
-        "missions.MissionOptionRouteCandidate",
+        "arxii.MissionOptionRouteCandidate",
         null=True,
         blank=True,
         on_delete=models.SET_NULL,
@@ -1746,7 +1746,7 @@ class MissionDeedRecord(SharedMemoryModel):
     )
     applied_at = models.DateTimeField(auto_now_add=True)
     legend_entries = models.ManyToManyField(
-        "societies.LegendEntry",
+        "arxii.LegendEntry",
         blank=True,
         related_name="mission_deeds",
         help_text=(
@@ -1782,7 +1782,7 @@ class MissionAssistPattern(SharedMemoryModel):
 
     name = models.CharField(max_length=100, unique=True)
     capability = models.ForeignKey(
-        "conditions.CapabilityType",
+        "arxii.CapabilityType",
         on_delete=models.CASCADE,
         null=True,
         blank=True,
@@ -1799,13 +1799,13 @@ class MissionAssistPattern(SharedMemoryModel):
         ),
     )
     check_types = models.ManyToManyField(
-        "checks.CheckType",
+        "arxii.CheckType",
         blank=True,
         related_name="assist_patterns",
         help_text="Context axis: match when the node has a CHECK option using any of these.",
     )
     challenge_categories = models.ManyToManyField(
-        "mechanics.ChallengeCategory",
+        "arxii.ChallengeCategory",
         blank=True,
         related_name="assist_patterns",
         help_text=(
@@ -1813,7 +1813,7 @@ class MissionAssistPattern(SharedMemoryModel):
         ),
     )
     support_check_type = models.ForeignKey(
-        "checks.CheckType",
+        "arxii.CheckType",
         on_delete=models.PROTECT,
         related_name="+",
         help_text="The CheckType rolled when a helper declares this support move.",
@@ -1827,7 +1827,7 @@ class MissionAssistPattern(SharedMemoryModel):
         help_text="Bonus added to the resolving check on success (retunable, can be negative).",
     )
     complication_consequence = models.ForeignKey(
-        "checks.Consequence",
+        "arxii.Consequence",
         on_delete=models.SET_NULL,
         null=True,
         blank=True,
@@ -1876,7 +1876,7 @@ class MissionNodeSupportOption(SharedMemoryModel):
         related_name="support_options",
     )
     capability = models.ForeignKey(
-        "conditions.CapabilityType",
+        "arxii.CapabilityType",
         on_delete=models.CASCADE,
         null=True,
         blank=True,
@@ -1889,7 +1889,7 @@ class MissionNodeSupportOption(SharedMemoryModel):
         help_text="Predicate-tree leg. Empty dict = no predicate gate.",
     )
     support_check_type = models.ForeignKey(
-        "checks.CheckType",
+        "arxii.CheckType",
         on_delete=models.PROTECT,
         related_name="+",
         help_text="The CheckType rolled when a helper declares this support move.",
@@ -1897,7 +1897,7 @@ class MissionNodeSupportOption(SharedMemoryModel):
     difficulty = models.PositiveSmallIntegerField(default=5)
     easing = models.IntegerField(default=2)
     complication_consequence = models.ForeignKey(
-        "checks.Consequence",
+        "arxii.Consequence",
         on_delete=models.SET_NULL,
         null=True,
         blank=True,
@@ -1966,7 +1966,7 @@ class MissionSupportDeclaration(SharedMemoryModel):
         related_name="+",
     )
     outcome = models.ForeignKey(
-        "traits.CheckOutcome",
+        "arxii.CheckOutcome",
         null=True,
         blank=True,
         on_delete=models.PROTECT,
@@ -2046,7 +2046,7 @@ class MissionGiver(SharedMemoryModel):
         ),
     )
     org = models.ForeignKey(
-        "societies.Organization",
+        "arxii.Organization",
         null=True,
         blank=True,
         on_delete=models.SET_NULL,
@@ -2055,7 +2055,7 @@ class MissionGiver(SharedMemoryModel):
     )
     is_active = models.BooleanField(default=True)
     templates = models.ManyToManyField(
-        "missions.MissionTemplate",
+        "arxii.MissionTemplate",
         blank=True,
         related_name="givers",
         help_text=(
@@ -2211,7 +2211,7 @@ class MissionDeedRewardLine(SharedMemoryModel):
         help_text="Numeric magnitude of the reward, when applicable.",
     )
     resonance = models.ForeignKey(
-        "magic.Resonance",
+        "arxii.Resonance",
         null=True,
         blank=True,
         on_delete=models.PROTECT,
@@ -2219,7 +2219,7 @@ class MissionDeedRewardLine(SharedMemoryModel):
         help_text="Set when sink=RESONANCE: which Resonance this line grants.",
     )
     item_template = models.ForeignKey(
-        "items.ItemTemplate",
+        "arxii.ItemTemplate",
         null=True,
         blank=True,
         on_delete=models.PROTECT,
@@ -2227,7 +2227,7 @@ class MissionDeedRewardLine(SharedMemoryModel):
         help_text="Required when sink=ITEM: which ItemTemplate this reward grants.",
     )
     followon_offer = models.ForeignKey(
-        "npc_services.NPCServiceOffer",
+        "arxii.NPCServiceOffer",
         null=True,
         blank=True,
         on_delete=models.PROTECT,
@@ -2250,7 +2250,7 @@ class MissionDeedRewardLine(SharedMemoryModel):
         help_text="Optional reference/discriminator (e.g., a rumor key).",
     )
     project_contribution = models.ForeignKey(
-        "projects.Contribution",
+        "arxii.Contribution",
         null=True,
         blank=True,
         on_delete=models.SET_NULL,
@@ -2347,7 +2347,7 @@ class MissionRiskAcknowledgement(SharedMemoryModel):
     """
 
     offer = models.ForeignKey(
-        "npc_services.NPCServiceOffer",
+        "arxii.NPCServiceOffer",
         on_delete=models.CASCADE,
         related_name="mission_risk_acknowledgements",
     )

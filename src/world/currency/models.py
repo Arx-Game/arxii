@@ -29,9 +29,9 @@ from world.currency.constants import (
 )
 
 # Lazy model references (Django app_label.ModelName), extracted to satisfy S1192.
-PERSONA_MODEL = "scenes.Persona"
-ORGANIZATION_MODEL = "societies.Organization"
-CHARACTER_SHEET_MODEL = "character_sheets.CharacterSheet"
+PERSONA_MODEL = "arxii.Persona"
+ORGANIZATION_MODEL = "arxii.Organization"
+CHARACTER_SHEET_MODEL = "arxii.CharacterSheet"
 
 
 class CharacterPurse(SharedMemoryModel):
@@ -170,7 +170,7 @@ class CurrencyInstrumentDetails(SharedMemoryModel):
     """
 
     item_instance = models.OneToOneField(
-        "items.ItemInstance",
+        "arxii.ItemInstance",
         on_delete=models.CASCADE,
         related_name="currency_instrument",
         help_text="The physical coin in the world.",
@@ -204,7 +204,7 @@ class FavorTokenDetails(SharedMemoryModel):
     """
 
     item_instance = models.OneToOneField(
-        "items.ItemInstance",
+        "arxii.ItemInstance",
         on_delete=models.CASCADE,
         related_name="favor_token",
         help_text="The physical Golden Hare coin in the world.",
@@ -298,7 +298,7 @@ class OrgIncomeStream(SharedMemoryModel):
         ),
     )
     area = models.ForeignKey(
-        "areas.Area",
+        "arxii.Area",
         null=True,
         blank=True,
         on_delete=models.SET_NULL,
@@ -677,7 +677,7 @@ class Profession(NaturalKeyMixin, SharedMemoryModel):
         help_text="AP locked out of the pool each week to hold this job.",
     )
     chore_check_type = models.ForeignKey(
-        "checks.CheckType",
+        "arxii.CheckType",
         on_delete=models.SET_NULL,
         null=True,
         blank=True,
@@ -780,7 +780,7 @@ class DistinctionPurseDrain(SharedMemoryModel):
     """
 
     distinction = models.OneToOneField(
-        "distinctions.Distinction",
+        "arxii.Distinction",
         on_delete=models.CASCADE,
         related_name="purse_drain",
         help_text="The distinction whose holders drain weekly.",
@@ -821,7 +821,7 @@ class PurseDrainWeek(SharedMemoryModel):
         related_name="purse_drain_weeks",
     )
     game_week = models.ForeignKey(
-        "game_clock.GameWeek",
+        "arxii.GameWeek",
         on_delete=models.CASCADE,
         related_name="purse_drain_weeks",
     )

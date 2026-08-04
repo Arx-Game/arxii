@@ -44,7 +44,7 @@ class GiftUnlock(NaturalKeyMixin, SharedMemoryModel):
     """
 
     gift = models.ForeignKey(
-        "magic.Gift",
+        "arxii.Gift",
         on_delete=models.PROTECT,
         related_name="gift_unlocks",
         help_text="The Minor Gift this unlock gates. Must be kind=MINOR.",
@@ -53,7 +53,7 @@ class GiftUnlock(NaturalKeyMixin, SharedMemoryModel):
         help_text="Base XP cost; multiplied by out_of_path_multiplier when out-of-Path.",
     )
     paths = models.ManyToManyField(
-        "classes.Path",
+        "arxii.Path",
         related_name="gift_unlocks",
         blank=True,
         help_text="Paths that treat this unlock as in-band (full xp_cost). Blank = all paths.",
@@ -106,7 +106,7 @@ class CharacterGiftUnlock(SharedMemoryModel):
     """
 
     character = models.ForeignKey(
-        "character_sheets.CharacterSheet",
+        "arxii.CharacterSheet",
         on_delete=models.CASCADE,
         related_name="gift_unlocks",
         help_text="Character who purchased this unlock.",
@@ -121,7 +121,7 @@ class CharacterGiftUnlock(SharedMemoryModel):
         help_text="Actual XP paid (in-Path: xp_cost; out-of-Path: xp_cost * multiplier).",
     )
     teacher = models.ForeignKey(
-        "roster.RosterTenure",
+        "arxii.RosterTenure",
         on_delete=models.SET_NULL,
         null=True,
         blank=True,
@@ -149,13 +149,13 @@ class TechniqueTeachingOffer(SharedMemoryModel):
     """
 
     teacher = models.ForeignKey(
-        "roster.RosterTenure",
+        "arxii.RosterTenure",
         on_delete=models.CASCADE,
         related_name="technique_teaching_offers",
         help_text="Tenure (player-character instance) offering to teach.",
     )
     technique = models.ForeignKey(
-        "magic.Technique",
+        "arxii.Technique",
         on_delete=models.PROTECT,
         related_name="teaching_offers",
         help_text="The technique being offered.",

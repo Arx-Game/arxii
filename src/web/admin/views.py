@@ -10,10 +10,31 @@ from django.http import HttpResponse, JsonResponse
 from django.shortcuts import render
 from django.views.decorators.http import require_POST
 
+from core.app_domains import domain_of, resolve_model_by_name
 from web.admin.models import AdminExcludedModel, AdminPinnedModel
 from web.admin.services import HARDCODED_EXCLUDED_APPS, analyze_fixture, execute_import
 
 logger = logging.getLogger(__name__)
+
+
+def _resolve_domain(app_label, model_name):
+    """Resolve a request's ``(app_label, model_name)`` to its authoring domain.
+
+    The pin/exclude UI POSTs the model's *domain* (``export_preview``'s
+    ``data-app-label``, itself ``core.app_domains.domain_of`` — #2906), not
+    Django's real app_label (a single ``"arxii"`` for nearly every model
+    post-collapse). ``apps.get_model(app_label, model_name)`` would 400 on
+    every toggle since "magic"/"roster"/etc. are no longer installed app
+    labels — resolve by model name instead, via the same model-name index
+    ``resolve_model_by_name`` uses everywhere else, passing the domain along
+    only to disambiguate the rare same-named-model case. Returns ``None`` if
+    the model doesn't exist.
+    """
+    try:
+        model = resolve_model_by_name(f"{app_label}.{model_name}" if app_label else model_name)
+    except LookupError:
+        return None
+    return domain_of(model)
 
 
 @require_POST
@@ -26,8 +47,12 @@ def toggle_pin_model(request):
     if not app_label or not model_name:
         return JsonResponse({"error": "Missing app_label or model_name"}, status=400)
 
+    domain = _resolve_domain(app_label, model_name)
+    if domain is None:
+        return JsonResponse({"error": "Unknown model"}, status=400)
+
     pin, created = AdminPinnedModel.objects.get_or_create(
-        app_label=app_label,
+        app_label=domain,
         model_name=model_name,
     )
 
@@ -47,8 +72,12 @@ def is_model_pinned(request):
     if not app_label or not model_name:
         return JsonResponse({"error": "Missing app_label or model_name"}, status=400)
 
+    domain = _resolve_domain(app_label, model_name)
+    if domain is None:
+        return JsonResponse({"error": "Unknown model"}, status=400)
+
     pinned = AdminPinnedModel.objects.filter(
-        app_label=app_label,
+        app_label=domain,
         model_name=model_name,
     ).exists()
 
@@ -66,7 +95,7 @@ def export_data(request):
     all_objects = []
     for model_key in selected:
         try:
-            app_label, model_name = model_key.split(".")
+            app_label, _model_name = model_key.split(".")
         except ValueError:
             continue
 
@@ -75,7 +104,10 @@ def export_data(request):
             continue
 
         try:
-            model = apps.get_model(app_label, model_name)
+            # model_key carries the domain (export_preview's data-model-key —
+            # core.app_domains.domain_of, #2906), not Django's real app_label
+            # (uniformly "arxii" post-collapse) — resolve by model name.
+            model = resolve_model_by_name(model_key)
             objects = list(model.objects.all())
             all_objects.extend(objects)
         except Exception:
@@ -109,8 +141,12 @@ def toggle_export_exclusion(request):
     if not app_label or not model_name:
         return JsonResponse({"error": "Missing app_label or model_name"}, status=400)
 
+    domain = _resolve_domain(app_label, model_name)
+    if domain is None:
+        return JsonResponse({"error": "Unknown model"}, status=400)
+
     exclusion, created = AdminExcludedModel.objects.get_or_create(
-        app_label=app_label,
+        app_label=domain,
         model_name=model_name,
     )
 
@@ -130,8 +166,12 @@ def is_model_excluded(request):
     if not app_label or not model_name:
         return JsonResponse({"error": "Missing app_label or model_name"}, status=400)
 
+    domain = _resolve_domain(app_label, model_name)
+    if domain is None:
+        return JsonResponse({"error": "Unknown model"}, status=400)
+
     excluded = AdminExcludedModel.objects.filter(
-        app_label=app_label,
+        app_label=domain,
         model_name=model_name,
     ).exists()
 
@@ -151,12 +191,18 @@ def export_preview(request):
     total_records = 0
 
     for model in apps.get_models():
-        app_label = model._meta.app_label  # noqa: SLF001
-        model_name = model._meta.model_name  # noqa: SLF001
+        real_app_label = model._meta.app_label  # noqa: SLF001
 
-        # Skip hardcoded exclusions entirely
-        if app_label in HARDCODED_EXCLUDED_APPS:
+        # Skip hardcoded exclusions entirely. HARDCODED_EXCLUDED_APPS lists
+        # Django/Evennia app labels (which stay separate apps, #2906), so this
+        # check stays keyed on the real app_label, not the authoring domain.
+        if real_app_label in HARDCODED_EXCLUDED_APPS:
             continue
+
+        # Authoring domain (core.app_domains.domain_of — #2906), identical to
+        # real_app_label today; the AdminExcludedModel rows above key on it.
+        app_label = domain_of(model)
+        model_name = model._meta.model_name  # noqa: SLF001
 
         # Get record count
         try:

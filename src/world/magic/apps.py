@@ -7,74 +7,84 @@ class MagicConfig(AppConfig):
     verbose_name = "Magic System"
 
     def ready(self) -> None:
-        # Trigger registration of action resolvers and menu contributors.
-        from world.magic.services import anima_ritual_action  # noqa: F401, PLC0415
+        ready()
 
-        # #2853: feed/drain consent resolvers (both consent paths).
-        from world.magic.services.feeding import register_feeding_resolvers  # noqa: PLC0415
 
-        register_feeding_resolvers()
+def ready() -> None:
+    """Register magic's cross-app resolvers, strategies, and handlers.
 
-        # Register Sanctum as the SANCTUM service strategy for the
-        # ROOM_FEATURE_PROGRESSION ProjectKind handler (Plan 4 §F).
-        from world.magic.services.sanctum import handle_progression  # noqa: PLC0415
-        from world.room_features.constants import (  # noqa: PLC0415
-            RoomFeatureServiceStrategy,
-        )
-        from world.room_features.services import (  # noqa: PLC0415
-            register_room_feature_strategy,
-        )
+    Extracted to module level (#2906) so the single-app aggregator
+    (``world.apps.ArxiiConfig.ready``) can call it directly once
+    ``world.magic`` stops being its own installed app.
+    """
+    # Trigger registration of action resolvers and menu contributors.
+    from world.magic.services import anima_ritual_action  # noqa: F401, PLC0415
 
-        register_room_feature_strategy(
-            RoomFeatureServiceStrategy.SANCTUM,
-            handle_progression,
-            as_default=True,
-        )
+    # #2853: feed/drain consent resolvers (both consent paths).
+    from world.magic.services.feeding import register_feeding_resolvers  # noqa: PLC0415
 
-        # Register Make an Entrance as a reaction-window kind (#904) —
-        # scenes owns the primitive; magic owns the entrance behavior.
-        from world.magic.reaction_kinds import ENTRANCE_KIND  # noqa: PLC0415
-        from world.scenes.constants import ReactionWindowKind  # noqa: PLC0415
-        from world.scenes.reaction_services import register_reaction_kind  # noqa: PLC0415
+    register_feeding_resolvers()
 
-        register_reaction_kind(ReactionWindowKind.ENTRANCE, ENTRANCE_KIND)
+    # Register Sanctum as the SANCTUM service strategy for the
+    # ROOM_FEATURE_PROGRESSION ProjectKind handler (Plan 4 §F).
+    from world.magic.services.sanctum import handle_progression  # noqa: PLC0415
+    from world.room_features.constants import (  # noqa: PLC0415
+        RoomFeatureServiceStrategy,
+    )
+    from world.room_features.services import (  # noqa: PLC0415
+        register_room_feature_strategy,
+    )
 
-        # Register offer handlers for telnet accept/decline routing (#1344).
-        from commands.offer_registry import register_offer_handler  # noqa: PLC0415
-        from world.magic.offer_handlers import (  # noqa: PLC0415
-            CrossingOfferHandler,
-            SoulfrayPendingHandler,
-            SurgeOfferHandler,
-        )
+    register_room_feature_strategy(
+        RoomFeatureServiceStrategy.SANCTUM,
+        handle_progression,
+        as_default=True,
+    )
 
-        register_offer_handler(SurgeOfferHandler())
-        register_offer_handler(CrossingOfferHandler())
-        register_offer_handler(SoulfrayPendingHandler())
+    # Register Make an Entrance as a reaction-window kind (#904) —
+    # scenes owns the primitive; magic owns the entrance behavior.
+    from world.magic.reaction_kinds import ENTRANCE_KIND  # noqa: PLC0415
+    from world.scenes.constants import ReactionWindowKind  # noqa: PLC0415
+    from world.scenes.reaction_services import register_reaction_kind  # noqa: PLC0415
 
-        # Register crossing-ceremony handlers (ADR-0094, #1987).
-        # Each TargetKind dispatches to a handler when a thread crosses a
-        # PathStage crossing level (3, 6, 11, 16, 21).
-        from world.magic.crossing.handlers import (  # noqa: PLC0415
-            CovenantRoleCrossingHandler,
-            FacetCrossingHandler,
-            GiftCrossingHandler,
-            MantleCrossingHandler,
-            OrganizationCrossingHandler,
-            RelationshipCapstoneCrossingHandler,
-            RelationshipTrackCrossingHandler,
-            SanctumCrossingHandler,
-            TechniqueCrossingHandler,
-            TraitCrossingHandler,
-        )
-        from world.magic.crossing.registry import register_crossing_handler  # noqa: PLC0415
+    register_reaction_kind(ReactionWindowKind.ENTRANCE, ENTRANCE_KIND)
 
-        register_crossing_handler(GiftCrossingHandler())
-        register_crossing_handler(OrganizationCrossingHandler())
-        register_crossing_handler(CovenantRoleCrossingHandler())
-        register_crossing_handler(TechniqueCrossingHandler())
-        register_crossing_handler(TraitCrossingHandler())
-        register_crossing_handler(FacetCrossingHandler())
-        register_crossing_handler(RelationshipTrackCrossingHandler())
-        register_crossing_handler(RelationshipCapstoneCrossingHandler())
-        register_crossing_handler(MantleCrossingHandler())
-        register_crossing_handler(SanctumCrossingHandler())
+    # Register offer handlers for telnet accept/decline routing (#1344).
+    from commands.offer_registry import register_offer_handler  # noqa: PLC0415
+    from world.magic.offer_handlers import (  # noqa: PLC0415
+        CrossingOfferHandler,
+        SoulfrayPendingHandler,
+        SurgeOfferHandler,
+    )
+
+    register_offer_handler(SurgeOfferHandler())
+    register_offer_handler(CrossingOfferHandler())
+    register_offer_handler(SoulfrayPendingHandler())
+
+    # Register crossing-ceremony handlers (ADR-0094, #1987).
+    # Each TargetKind dispatches to a handler when a thread crosses a
+    # PathStage crossing level (3, 6, 11, 16, 21).
+    from world.magic.crossing.handlers import (  # noqa: PLC0415
+        CovenantRoleCrossingHandler,
+        FacetCrossingHandler,
+        GiftCrossingHandler,
+        MantleCrossingHandler,
+        OrganizationCrossingHandler,
+        RelationshipCapstoneCrossingHandler,
+        RelationshipTrackCrossingHandler,
+        SanctumCrossingHandler,
+        TechniqueCrossingHandler,
+        TraitCrossingHandler,
+    )
+    from world.magic.crossing.registry import register_crossing_handler  # noqa: PLC0415
+
+    register_crossing_handler(GiftCrossingHandler())
+    register_crossing_handler(OrganizationCrossingHandler())
+    register_crossing_handler(CovenantRoleCrossingHandler())
+    register_crossing_handler(TechniqueCrossingHandler())
+    register_crossing_handler(TraitCrossingHandler())
+    register_crossing_handler(FacetCrossingHandler())
+    register_crossing_handler(RelationshipTrackCrossingHandler())
+    register_crossing_handler(RelationshipCapstoneCrossingHandler())
+    register_crossing_handler(MantleCrossingHandler())
+    register_crossing_handler(SanctumCrossingHandler())

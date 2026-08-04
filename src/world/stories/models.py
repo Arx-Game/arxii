@@ -47,9 +47,9 @@ if TYPE_CHECKING:
 
 # Lazy model references (Django app_label.ModelName), extracted to satisfy S1192.
 ACCOUNT_DB_MODEL = "accounts.AccountDB"
-CONSEQUENCE_POOL_MODEL = "actions.ConsequencePool"
-STORY_BEAT_MODEL = "stories.Beat"
-STAKE_MODEL = "stories.Stake"
+CONSEQUENCE_POOL_MODEL = "arxii.ConsequencePool"
+STORY_BEAT_MODEL = "arxii.Beat"
+STAKE_MODEL = "arxii.Stake"
 
 # Foreclosure wrap-up annotation: the nullable resolved_at/resolved_by pair shared
 # by all three progress models (StoryProgress / GroupStoryProgress / GlobalStoryProgress).
@@ -69,7 +69,7 @@ def _foreclosure_resolution_fields(related_name: str) -> dict[str, object]:
     return {
         "resolved_at": models.DateTimeField(null=True, blank=True, help_text=_RESOLVED_AT_HELP),
         "resolved_by": models.ForeignKey(
-            "gm.GMProfile",
+            "arxii.GMProfile",
             null=True,
             blank=True,
             on_delete=models.SET_NULL,
@@ -172,7 +172,7 @@ class Story(SharedMemoryModel):
         default=StoryMaturity.PITCH,
     )
     character_sheet = models.ForeignKey(
-        "character_sheets.CharacterSheet",
+        "arxii.CharacterSheet",
         null=True,
         blank=True,
         on_delete=models.SET_NULL,
@@ -180,7 +180,7 @@ class Story(SharedMemoryModel):
         help_text="For CHARACTER-scope stories: the character whose story this is.",
     )
     created_in_era = models.ForeignKey(
-        "stories.Era",
+        "arxii.Era",
         null=True,
         blank=True,
         on_delete=models.SET_NULL,
@@ -188,7 +188,7 @@ class Story(SharedMemoryModel):
         help_text="The metaplot era in which this story was created. Null = pre-era or ungrouped.",
     )
     covenant = models.ForeignKey(
-        "covenants.Covenant",
+        "arxii.Covenant",
         on_delete=models.SET_NULL,
         null=True,
         blank=True,
@@ -207,12 +207,12 @@ class Story(SharedMemoryModel):
         help_text="Players who own and can manage this story",
     )
     active_gms = models.ManyToManyField(
-        "gm.GMProfile",
+        "arxii.GMProfile",
         related_name="active_stories",
         help_text="GM profiles currently running this story",
     )
     primary_table = models.ForeignKey(
-        "gm.GMTable",
+        "arxii.GMTable",
         on_delete=models.SET_NULL,
         null=True,
         blank=True,
@@ -364,7 +364,7 @@ class StoryParticipation(SharedMemoryModel):
         related_name="participants",
     )
     character = models.ForeignKey(
-        "character_sheets.CharacterSheet",
+        "arxii.CharacterSheet",
         on_delete=models.CASCADE,
         related_name="story_participations",
     )
@@ -494,7 +494,7 @@ class EpisodeScene(SharedMemoryModel):
         related_name="episode_scenes",
     )
     scene = models.ForeignKey(
-        "scenes.Scene",
+        "arxii.Scene",
         on_delete=models.CASCADE,
         related_name="story_episodes",
     )
@@ -755,12 +755,12 @@ class Transition(SharedMemoryModel):
     """A guarded edge from one Episode to another."""
 
     source_episode = models.ForeignKey(
-        "stories.Episode",
+        "arxii.Episode",
         on_delete=models.CASCADE,
         related_name="outbound_transitions",
     )
     target_episode = models.ForeignKey(
-        "stories.Episode",
+        "arxii.Episode",
         null=True,
         blank=True,
         on_delete=models.SET_NULL,
@@ -829,7 +829,7 @@ class Beat(SharedMemoryModel):
     """
 
     episode = models.ForeignKey(
-        "stories.Episode",
+        "arxii.Episode",
         on_delete=models.CASCADE,
         related_name="beats",
     )
@@ -881,7 +881,7 @@ class Beat(SharedMemoryModel):
         help_text="For CHARACTER_LEVEL_AT_LEAST predicates.",
     )
     required_achievement = models.ForeignKey(
-        "achievements.Achievement",
+        "arxii.Achievement",
         null=True,
         blank=True,
         on_delete=models.SET_NULL,
@@ -889,7 +889,7 @@ class Beat(SharedMemoryModel):
         help_text="For ACHIEVEMENT_HELD predicates.",
     )
     required_condition_template = models.ForeignKey(
-        "conditions.ConditionTemplate",
+        "arxii.ConditionTemplate",
         null=True,
         blank=True,
         on_delete=models.SET_NULL,
@@ -897,7 +897,7 @@ class Beat(SharedMemoryModel):
         help_text="For CONDITION_HELD predicates.",
     )
     required_codex_entry = models.ForeignKey(
-        "codex.CodexEntry",
+        "arxii.CodexEntry",
         null=True,
         blank=True,
         on_delete=models.SET_NULL,
@@ -905,7 +905,7 @@ class Beat(SharedMemoryModel):
         help_text="For CODEX_ENTRY_UNLOCKED predicates.",
     )
     referenced_story = models.ForeignKey(
-        "stories.Story",
+        "arxii.Story",
         null=True,
         blank=True,
         on_delete=models.SET_NULL,
@@ -920,7 +920,7 @@ class Beat(SharedMemoryModel):
         help_text="Which kind of milestone to check on referenced_story.",
     )
     referenced_chapter = models.ForeignKey(
-        "stories.Chapter",
+        "arxii.Chapter",
         null=True,
         blank=True,
         on_delete=models.SET_NULL,
@@ -928,7 +928,7 @@ class Beat(SharedMemoryModel):
         help_text="For referenced_milestone_type=CHAPTER_REACHED.",
     )
     referenced_episode = models.ForeignKey(
-        "stories.Episode",
+        "arxii.Episode",
         null=True,
         blank=True,
         on_delete=models.SET_NULL,
@@ -941,7 +941,7 @@ class Beat(SharedMemoryModel):
         help_text="For AGGREGATE_THRESHOLD predicates — total contribution points required.",
     )
     required_society = models.ForeignKey(
-        "societies.Society",
+        "arxii.Society",
         null=True,
         blank=True,
         on_delete=models.SET_NULL,
@@ -949,7 +949,7 @@ class Beat(SharedMemoryModel):
         help_text="For FACTION_STANDING_AT_LEAST predicates (society-level).",
     )
     required_organization = models.ForeignKey(
-        "societies.Organization",
+        "arxii.Organization",
         null=True,
         blank=True,
         on_delete=models.SET_NULL,
@@ -976,7 +976,7 @@ class Beat(SharedMemoryModel):
     # not yet constrain it. SET_NULL on template delete: losing the
     # MissionTemplate must not also lose the Beat.
     required_mission = models.ForeignKey(
-        "missions.MissionTemplate",
+        "arxii.MissionTemplate",
         null=True,
         blank=True,
         on_delete=models.SET_NULL,
@@ -1159,7 +1159,7 @@ class EpisodeProgressionRequirement(SharedMemoryModel):
     """A beat that must reach ``required_outcome`` before any outbound transition fires."""
 
     episode = models.ForeignKey(
-        "stories.Episode",
+        "arxii.Episode",
         on_delete=models.CASCADE,
         related_name="progression_requirements",
     )
@@ -1198,7 +1198,7 @@ class TransitionRequiredOutcome(SharedMemoryModel):
     """
 
     transition = models.ForeignKey(
-        "stories.Transition",
+        "arxii.Transition",
         on_delete=models.CASCADE,
         related_name="required_outcomes",
     )
@@ -1301,12 +1301,12 @@ class AggregateBeatContribution(SharedMemoryModel):
         related_name="aggregate_contributions",
     )
     character_sheet = models.ForeignKey(
-        "character_sheets.CharacterSheet",
+        "arxii.CharacterSheet",
         on_delete=models.CASCADE,
         related_name="aggregate_contributions",
     )
     roster_entry = models.ForeignKey(
-        "roster.RosterEntry",
+        "arxii.RosterEntry",
         null=True,
         blank=True,
         on_delete=models.SET_NULL,
@@ -1364,7 +1364,7 @@ class BeatCompletion(SharedMemoryModel):
         related_name="completions",
     )
     character_sheet = models.ForeignKey(
-        "character_sheets.CharacterSheet",
+        "arxii.CharacterSheet",
         null=True,
         blank=True,
         on_delete=models.CASCADE,
@@ -1374,7 +1374,7 @@ class BeatCompletion(SharedMemoryModel):
         ),
     )
     gm_table = models.ForeignKey(
-        "gm.GMTable",
+        "arxii.GMTable",
         null=True,
         blank=True,
         on_delete=models.SET_NULL,
@@ -1382,7 +1382,7 @@ class BeatCompletion(SharedMemoryModel):
         help_text=("For GROUP-scope stories: the GMTable whose progress recorded this completion."),
     )
     ran_by_table = models.ForeignKey(
-        "gm.GMTable",
+        "arxii.GMTable",
         null=True,
         blank=True,
         on_delete=models.SET_NULL,
@@ -1394,7 +1394,7 @@ class BeatCompletion(SharedMemoryModel):
         ),
     )
     roster_entry = models.ForeignKey(
-        "roster.RosterEntry",
+        "arxii.RosterEntry",
         null=True,
         blank=True,
         on_delete=models.SET_NULL,
@@ -1408,7 +1408,7 @@ class BeatCompletion(SharedMemoryModel):
         choices=BeatOutcome.choices,
     )
     outcome_tier = models.ForeignKey(
-        "traits.CheckOutcome",
+        "arxii.CheckOutcome",
         on_delete=models.SET_NULL,
         null=True,
         blank=True,
@@ -1476,7 +1476,7 @@ class EpisodeResolution(SharedMemoryModel):
         related_name="resolutions",
     )
     character_sheet = models.ForeignKey(
-        "character_sheets.CharacterSheet",
+        "arxii.CharacterSheet",
         null=True,
         blank=True,
         on_delete=models.CASCADE,
@@ -1484,7 +1484,7 @@ class EpisodeResolution(SharedMemoryModel):
         help_text="For CHARACTER-scope stories: the character whose progress advanced.",
     )
     gm_table = models.ForeignKey(
-        "gm.GMTable",
+        "arxii.GMTable",
         null=True,
         blank=True,
         on_delete=models.SET_NULL,
@@ -1500,7 +1500,7 @@ class EpisodeResolution(SharedMemoryModel):
         help_text="Null when the episode resolves with no transition (frontier pause).",
     )
     resolved_by = models.ForeignKey(
-        "gm.GMProfile",
+        "arxii.GMProfile",
         null=True,
         blank=True,
         on_delete=models.SET_NULL,
@@ -1563,7 +1563,7 @@ class GroupStoryProgress(SharedMemoryModel):
         related_name="group_progress_records",
     )
     gm_table = models.ForeignKey(
-        "gm.GMTable",
+        "arxii.GMTable",
         on_delete=models.CASCADE,
         related_name="story_progress",
     )
@@ -1670,7 +1670,7 @@ class StoryProgress(SharedMemoryModel):
         related_name="progress_records",
     )
     character_sheet = models.ForeignKey(
-        "character_sheets.CharacterSheet",
+        "arxii.CharacterSheet",
         on_delete=models.CASCADE,
         related_name="story_progress",
     )
@@ -1772,7 +1772,7 @@ class AssistantGMClaim(SharedMemoryModel):
         related_name="assistant_claims",
     )
     assistant_gm = models.ForeignKey(
-        "gm.GMProfile",
+        "arxii.GMProfile",
         on_delete=models.CASCADE,
         related_name="assistant_claims_made",
     )
@@ -1782,7 +1782,7 @@ class AssistantGMClaim(SharedMemoryModel):
         default=AssistantClaimStatus.REQUESTED,
     )
     approved_by = models.ForeignKey(
-        "gm.GMProfile",
+        "arxii.GMProfile",
         null=True,
         blank=True,
         on_delete=models.SET_NULL,
@@ -1853,7 +1853,7 @@ class SessionRequest(SharedMemoryModel):
         default=SessionRequestStatus.OPEN,
     )
     event = models.ForeignKey(
-        "events.Event",
+        "arxii.Event",
         null=True,
         blank=True,
         on_delete=models.SET_NULL,
@@ -1870,7 +1870,7 @@ class SessionRequest(SharedMemoryModel):
         ),
     )
     assigned_gm = models.ForeignKey(
-        "gm.GMProfile",
+        "arxii.GMProfile",
         null=True,
         blank=True,
         on_delete=models.SET_NULL,
@@ -1925,7 +1925,7 @@ class StoryGMOffer(SharedMemoryModel):
         related_name="gm_offers",
     )
     offered_to = models.ForeignKey(
-        "gm.GMProfile",
+        "arxii.GMProfile",
         on_delete=models.CASCADE,
         related_name="story_offers_received",
     )
@@ -1987,7 +1987,7 @@ class GroupStoryRequest(SharedMemoryModel):
     """
 
     covenant = models.ForeignKey(
-        "covenants.Covenant",
+        "arxii.Covenant",
         on_delete=models.CASCADE,
         related_name="gm_requests",
     )
@@ -2007,7 +2007,7 @@ class GroupStoryRequest(SharedMemoryModel):
         default=GroupStoryRequestStatus.PENDING,
     )
     claimed_by = models.ForeignKey(
-        "gm.GMProfile",
+        "arxii.GMProfile",
         null=True,
         blank=True,
         on_delete=models.SET_NULL,
@@ -2064,12 +2064,12 @@ class CrossoverInvite(SharedMemoryModel):
     """
 
     event = models.ForeignKey(
-        "events.Event",
+        "arxii.Event",
         on_delete=models.CASCADE,
         related_name="crossover_invites",
     )
     from_gm = models.ForeignKey(
-        "gm.GMProfile",
+        "arxii.GMProfile",
         on_delete=models.CASCADE,
         related_name="crossover_invites_sent",
         help_text="The GM inviting another story into this shared event.",
@@ -2146,12 +2146,12 @@ class TableBulletinPost(SharedMemoryModel):
     """
 
     table = models.ForeignKey(
-        "gm.GMTable",
+        "arxii.GMTable",
         on_delete=models.CASCADE,
         related_name="bulletin_posts",
     )
     story = models.ForeignKey(
-        "stories.Story",
+        "arxii.Story",
         null=True,
         blank=True,
         on_delete=models.CASCADE,
@@ -2162,7 +2162,7 @@ class TableBulletinPost(SharedMemoryModel):
         ),
     )
     author_persona = models.ForeignKey(
-        "scenes.Persona",
+        "arxii.Persona",
         null=True,  # nullable so persona deletion does not cascade-delete history
         on_delete=models.SET_NULL,
         related_name="table_bulletin_posts",
@@ -2198,7 +2198,7 @@ class TableBulletinReply(SharedMemoryModel):
         related_name="replies",
     )
     author_persona = models.ForeignKey(
-        "scenes.Persona",
+        "arxii.Persona",
         null=True,
         on_delete=models.SET_NULL,
         related_name="table_bulletin_replies",
@@ -2259,7 +2259,7 @@ class StakeTemplate(SharedMemoryModel):
     description = models.TextField(blank=True)
     is_active = models.BooleanField(default=True)
     content_themes = models.ManyToManyField(
-        "boundaries.ContentTheme",
+        "arxii.ContentTheme",
         blank=True,
         related_name="stake_templates",
         help_text=(
@@ -2288,7 +2288,7 @@ class SubjectMixin(models.Model):
 
     subject_kind = models.CharField(max_length=20, choices=StakeSubjectKind.choices)
     subject_sheet = models.ForeignKey(
-        "character_sheets.CharacterSheet",
+        "arxii.CharacterSheet",
         null=True,
         blank=True,
         on_delete=models.SET_NULL,
@@ -2296,7 +2296,7 @@ class SubjectMixin(models.Model):
         help_text="For NPC_FATE / PERSONAL_JEOPARDY subjects. Nulls if the sheet is deleted.",
     )
     subject_item = models.ForeignKey(
-        "items.ItemInstance",
+        "arxii.ItemInstance",
         null=True,
         blank=True,
         on_delete=models.SET_NULL,
@@ -2304,7 +2304,7 @@ class SubjectMixin(models.Model):
         help_text="For ITEM subjects. Nulls if the item instance is deleted/consumed.",
     )
     subject_society = models.ForeignKey(
-        "societies.Society",
+        "arxii.Society",
         null=True,
         blank=True,
         on_delete=models.SET_NULL,
@@ -2312,7 +2312,7 @@ class SubjectMixin(models.Model):
         help_text="For FACTION subjects (society-level). Nulls if the society is deleted.",
     )
     subject_organization = models.ForeignKey(
-        "societies.Organization",
+        "arxii.Organization",
         null=True,
         blank=True,
         on_delete=models.SET_NULL,
@@ -2320,7 +2320,7 @@ class SubjectMixin(models.Model):
         help_text="For FACTION subjects (organization-level). Nulls if the org is deleted.",
     )
     subject_asset = models.ForeignKey(
-        "assets.NPCAsset",
+        "arxii.NPCAsset",
         null=True,
         blank=True,
         on_delete=models.SET_NULL,
@@ -2369,7 +2369,7 @@ class Stake(SubjectMixin, SharedMemoryModel):
 
     beat = models.ForeignKey(STORY_BEAT_MODEL, on_delete=models.CASCADE, related_name="stakes")
     template = models.ForeignKey(
-        "stories.StakeTemplate",
+        "arxii.StakeTemplate",
         null=True,
         blank=True,
         on_delete=models.SET_NULL,
@@ -2558,7 +2558,7 @@ class StakeRewardLine(SharedMemoryModel):
     """
 
     resolution = models.ForeignKey(
-        "stories.StakeResolution",
+        "arxii.StakeResolution",
         on_delete=models.CASCADE,
         related_name="reward_lines",
     )
@@ -2568,7 +2568,7 @@ class StakeRewardLine(SharedMemoryModel):
         help_text="Money-equivalent scalar paid to EACH participant (banded by calibration).",
     )
     resonance = models.ForeignKey(
-        "magic.Resonance",
+        "arxii.Resonance",
         null=True,
         blank=True,
         on_delete=models.SET_NULL,
@@ -2656,7 +2656,7 @@ class StakeOutcome(SharedMemoryModel):
         related_name="outcomes",
     )
     activation = models.ForeignKey(
-        "stories.StakeContractActivation",
+        "arxii.StakeContractActivation",
         null=True,
         blank=True,
         on_delete=models.SET_NULL,
@@ -2664,7 +2664,7 @@ class StakeOutcome(SharedMemoryModel):
         help_text="Which locked contract this outcome resolved under (audit).",
     )
     resolution = models.ForeignKey(
-        "stories.StakeResolution",
+        "arxii.StakeResolution",
         null=True,
         blank=True,
         on_delete=models.SET_NULL,
@@ -2674,7 +2674,7 @@ class StakeOutcome(SharedMemoryModel):
     column = models.CharField(max_length=12, choices=StakeResolutionColumn.choices)
     method = models.CharField(max_length=12, choices=StakeOutcomeMethod.choices)
     resolved_by = models.ForeignKey(
-        "gm.GMProfile",
+        "arxii.GMProfile",
         null=True,
         blank=True,
         on_delete=models.SET_NULL,
@@ -2704,12 +2704,12 @@ class TreasuredSignoff(SharedMemoryModel):
         related_name="treasured_signoffs",
     )
     player_data = models.ForeignKey(
-        "evennia_extensions.PlayerData",
+        "arxii.PlayerData",
         on_delete=models.CASCADE,
         related_name="treasured_signoffs",
     )
     treasured_subject = models.ForeignKey(
-        "boundaries.TreasuredSubject",
+        "arxii.TreasuredSubject",
         on_delete=models.CASCADE,
         related_name="signoffs",
     )
@@ -2815,13 +2815,13 @@ class CustodyClearance(SharedMemoryModel):
         related_name="clearances",
     )
     requested_by = models.ForeignKey(
-        "gm.GMProfile",
+        "arxii.GMProfile",
         on_delete=models.PROTECT,
         related_name="custody_requests",
         help_text="The GM requesting permission to act on the protected subject.",
     )
     requesting_story = models.ForeignKey(
-        "stories.Story",
+        "arxii.Story",
         null=True,
         blank=True,
         on_delete=models.SET_NULL,
@@ -2829,7 +2829,7 @@ class CustodyClearance(SharedMemoryModel):
         help_text="The requester's own story this clearance is needed for, if any.",
     )
     requesting_beat = models.ForeignKey(
-        "stories.Beat",
+        "arxii.Beat",
         null=True,
         blank=True,
         on_delete=models.SET_NULL,
@@ -2843,7 +2843,7 @@ class CustodyClearance(SharedMemoryModel):
         default=CustodyClearanceStatus.PENDING,
     )
     granted_by = models.ForeignKey(
-        "gm.GMProfile",
+        "arxii.GMProfile",
         null=True,
         blank=True,
         on_delete=models.SET_NULL,
@@ -2915,7 +2915,7 @@ class CanonReview(SharedMemoryModel):
     """
 
     story = models.ForeignKey(
-        "stories.Story",
+        "arxii.Story",
         on_delete=models.CASCADE,
         related_name="canon_reviews",
     )

@@ -21,14 +21,14 @@ class Area(NaturalKeyMixin, SharedMemoryModel):
         related_name="children",
     )
     realm = models.ForeignKey(
-        "realms.Realm",
+        "arxii.Realm",
         null=True,
         blank=True,
         on_delete=models.SET_NULL,
         related_name="areas",
     )
     climate = models.ForeignKey(
-        "weather.Climate",
+        "arxii.Climate",
         null=True,
         blank=True,
         on_delete=models.SET_NULL,
@@ -39,7 +39,7 @@ class Area(NaturalKeyMixin, SharedMemoryModel):
         ),
     )
     dominant_society = models.ForeignKey(
-        "societies.Society",
+        "arxii.Society",
         null=True,
         blank=True,
         on_delete=models.SET_NULL,
@@ -74,7 +74,7 @@ class Area(NaturalKeyMixin, SharedMemoryModel):
         default=1,
     )
     allowed_building_kinds = models.ManyToManyField(
-        "buildings.BuildingKind",
+        "arxii.BuildingKind",
         related_name="allowed_in_wards",
         blank=True,
     )
@@ -206,7 +206,7 @@ class CleanupProjectDetails(SharedMemoryModel):
     """
 
     project = models.OneToOneField(
-        "projects.Project",
+        "arxii.Project",
         on_delete=models.CASCADE,
         primary_key=True,
         related_name="cleanup_details",
@@ -240,7 +240,7 @@ class CleanupTierThreshold(SharedMemoryModel):
         related_name="tier_thresholds",
     )
     outcome_tier = models.ForeignKey(
-        "traits.CheckOutcome",
+        "arxii.CheckOutcome",
         on_delete=models.PROTECT,
         related_name="cleanup_thresholds",
     )

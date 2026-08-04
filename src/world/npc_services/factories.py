@@ -215,14 +215,14 @@ class ProfileRecordingOfferDetailsFactory(DjangoModelFactory):
 
 class StaffingProfileFactory(DjangoModelFactory):
     class Meta:
-        model = "npc_services.StaffingProfile"
+        model = "arxii.StaffingProfile"
 
     building_kind = factory.SubFactory("world.buildings.factories.BuildingKindFactory")
 
 
 class StaffingProfileLineFactory(DjangoModelFactory):
     class Meta:
-        model = "npc_services.StaffingProfileLine"
+        model = "arxii.StaffingProfileLine"
 
     profile = factory.SubFactory(StaffingProfileFactory)
     role = factory.SubFactory(NPCRoleFactory)

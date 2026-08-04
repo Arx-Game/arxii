@@ -22,9 +22,9 @@ from world.ships.constants import ARMAMENT_PER_LEVEL, HANDLING_PER_LEVEL, ShipUp
 
 # Cross-app FK string constants — centralized per the buildings/models.py
 # convention (single grep target, avoids the duplicated-literal smell).
-_PROJECT_FK = "projects.Project"
-_PERSONA_FK = "scenes.Persona"
-_COVENANT_FK = "covenants.Covenant"
+_PROJECT_FK = "arxii.Project"
+_PERSONA_FK = "arxii.Persona"
+_COVENANT_FK = "arxii.Covenant"
 
 
 class ShipType(SharedMemoryModel):
@@ -74,7 +74,7 @@ class ShipDetails(SharedMemoryModel):
     """
 
     building = models.OneToOneField(
-        "buildings.Building",
+        "arxii.Building",
         on_delete=models.CASCADE,
         related_name="ship_details",
         primary_key=True,
@@ -137,12 +137,12 @@ class ShipDeployment(SharedMemoryModel):
         related_name="deployments",
     )
     battle = models.ForeignKey(
-        "battles.Battle",
+        "arxii.Battle",
         on_delete=models.CASCADE,
         related_name="ship_deployments",
     )
     vehicle = models.OneToOneField(
-        "battles.BattleVehicle",
+        "arxii.BattleVehicle",
         on_delete=models.CASCADE,
         related_name="ship_deployment",
     )

@@ -22,7 +22,7 @@ class OutcomeTierAwardBaseTests(TestCase):
         # resolution-timing detail.
         related = field.related_model
         related_name = related if isinstance(related, str) else related.__name__
-        self.assertIn(related_name, ("traits.CheckOutcome", "CheckOutcome"))
+        self.assertIn(related_name, ("arxii.CheckOutcome", "CheckOutcome"))
 
     def test_ordering_is_by_success_level(self):
         self.assertEqual(OutcomeTierAward._meta.ordering, ["outcome_tier__success_level"])

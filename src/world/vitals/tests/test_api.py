@@ -140,6 +140,9 @@ class CharacterVitalsViewTests(APITestCase):
             response = self.client.get(self.url)
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         joined = " ".join(q["sql"].lower() for q in ctx.captured_queries)
-        self.assertNotIn("vitals_charactervitals", joined)
-        self.assertNotIn("fatigue_fatiguepool", joined)
-        self.assertNotIn("character_sheets_charactersheet", joined)
+        # Table names derived (not hardcoded): a stale string here would go
+        # silently vacuous (never matching any real table) rather than catching
+        # a regression — see #2906.
+        self.assertNotIn(CharacterVitals._meta.db_table.lower(), joined)
+        self.assertNotIn(FatiguePool._meta.db_table.lower(), joined)
+        self.assertNotIn(CharacterSheet._meta.db_table.lower(), joined)

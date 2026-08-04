@@ -25,7 +25,7 @@ class DramaticMomentType(NaturalKeyMixin, RenownAwardConfig):
 
     class NaturalKeyConfig:
         fields = ["label"]
-        dependencies = ["magic.Resonance"]
+        dependencies = ["arxii.Resonance"]
 
     objects = NaturalKeyManager()
 
@@ -36,7 +36,7 @@ class DramaticMomentType(NaturalKeyMixin, RenownAwardConfig):
     )
     description = models.TextField(blank=True)
     resonance = models.ForeignKey(
-        "magic.Resonance",
+        "arxii.Resonance",
         on_delete=models.PROTECT,
         related_name="dramatic_moment_types",
         null=True,
@@ -93,12 +93,12 @@ class DramaticMomentTag(SharedMemoryModel):
         related_name="tags",
     )
     character_sheet = models.ForeignKey(
-        "character_sheets.CharacterSheet",
+        "arxii.CharacterSheet",
         on_delete=models.CASCADE,
         related_name="dramatic_moment_tags",
     )
     scene = models.ForeignKey(
-        "scenes.Scene",
+        "arxii.Scene",
         on_delete=models.SET_NULL,
         null=True,
         blank=True,
@@ -112,12 +112,12 @@ class DramaticMomentTag(SharedMemoryModel):
         help_text="Account that tagged this moment. PROTECT because provenance must be kept.",
     )
     interaction = models.ForeignKey(
-        "scenes.Interaction",
+        "arxii.Interaction",
         on_delete=models.SET_NULL,
         null=True,
         blank=True,
         related_name="dramatic_moment_tags",
-        db_constraint=False,  # scenes_interaction is partitioned (composite PK)
+        db_constraint=False,  # arxii_interaction is partitioned (composite PK)
         help_text="The pose that earned this moment; nullable for non-pose tags.",
     )
     interaction_timestamp = models.DateTimeField(
@@ -159,12 +159,12 @@ class DramaticMomentSuggestion(SharedMemoryModel):
         related_name="suggestions",
     )
     character_sheet = models.ForeignKey(
-        "character_sheets.CharacterSheet",
+        "arxii.CharacterSheet",
         on_delete=models.CASCADE,
         related_name="dramatic_moment_suggestions",
     )
     scene = models.ForeignKey(
-        "scenes.Scene",
+        "arxii.Scene",
         on_delete=models.SET_NULL,
         null=True,
         blank=True,
@@ -172,12 +172,12 @@ class DramaticMomentSuggestion(SharedMemoryModel):
         help_text="Scene context; nullable for resilience to scene cleanup.",
     )
     interaction = models.ForeignKey(
-        "scenes.Interaction",
+        "arxii.Interaction",
         on_delete=models.SET_NULL,
         null=True,
         blank=True,
         related_name="dramatic_moment_suggestions",
-        db_constraint=False,  # scenes_interaction is partitioned (composite PK)
+        db_constraint=False,  # arxii_interaction is partitioned (composite PK)
         help_text="The entrance pose that triggered this suggestion; nullable.",
     )
     interaction_timestamp = models.DateTimeField(
@@ -186,7 +186,7 @@ class DramaticMomentSuggestion(SharedMemoryModel):
         help_text="Denormalized from interaction.timestamp for the partitioned-table composite FK.",
     )
     technique = models.ForeignKey(
-        "magic.Technique",
+        "arxii.Technique",
         on_delete=models.SET_NULL,
         null=True,
         blank=True,

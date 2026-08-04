@@ -26,7 +26,7 @@ class OutcomeTierAward(SharedMemoryModel):
     """
 
     outcome_tier = models.OneToOneField(
-        "traits.CheckOutcome",
+        "arxii.CheckOutcome",
         on_delete=models.PROTECT,
         related_name="%(app_label)s_%(class)s",
     )
@@ -78,7 +78,7 @@ class CheckType(NaturalKeyMixin, SharedMemoryModel):
     # so a player's signature check never ships in the content corpus (#2724). Points at
     # CharacterSheet rather than ObjectDB: this can only ever be a character's row.
     owner_sheet = models.ForeignKey(
-        "character_sheets.CharacterSheet",
+        "arxii.CharacterSheet",
         on_delete=models.CASCADE,
         null=True,
         blank=True,
@@ -90,7 +90,7 @@ class CheckType(NaturalKeyMixin, SharedMemoryModel):
 
     class NaturalKeyConfig:
         fields = ["name", "category"]
-        dependencies = ["checks.CheckCategory"]
+        dependencies = ["arxii.CheckCategory"]
 
     class Meta:
         ordering = ["category__display_order", "display_order", "name"]
@@ -109,7 +109,7 @@ class CheckTypeTrait(NaturalKeyMixin, SharedMemoryModel):
         related_name="traits",
     )
     trait = models.ForeignKey(
-        "traits.Trait",
+        "arxii.Trait",
         on_delete=models.CASCADE,
         related_name="check_type_traits",
     )
@@ -124,7 +124,7 @@ class CheckTypeTrait(NaturalKeyMixin, SharedMemoryModel):
 
     class NaturalKeyConfig:
         fields = ["check_type", "trait"]
-        dependencies = ["checks.CheckType", "traits.Trait"]
+        dependencies = ["arxii.CheckType", "arxii.Trait"]
 
     class Meta:
         unique_together = ["check_type", "trait"]
@@ -142,7 +142,7 @@ class CheckTypeCapabilityModifier(NaturalKeyMixin, SharedMemoryModel):
         related_name="capability_modifiers",
     )
     capability = models.ForeignKey(
-        "conditions.CapabilityType",
+        "arxii.CapabilityType",
         on_delete=models.CASCADE,
         related_name="check_type_modifiers",
     )
@@ -161,7 +161,7 @@ class CheckTypeCapabilityModifier(NaturalKeyMixin, SharedMemoryModel):
 
     class NaturalKeyConfig:
         fields = ["check_type", "capability"]
-        dependencies = ["checks.CheckType", "conditions.CapabilityType"]
+        dependencies = ["arxii.CheckType", "arxii.CapabilityType"]
 
     class Meta:
         unique_together = ["check_type", "capability"]
@@ -179,7 +179,7 @@ class CheckTypeAspect(NaturalKeyMixin, SharedMemoryModel):
         related_name="aspects",
     )
     aspect = models.ForeignKey(
-        "classes.Aspect",
+        "arxii.Aspect",
         on_delete=models.CASCADE,
         related_name="check_type_aspects",
     )
@@ -194,7 +194,7 @@ class CheckTypeAspect(NaturalKeyMixin, SharedMemoryModel):
 
     class NaturalKeyConfig:
         fields = ["check_type", "aspect"]
-        dependencies = ["checks.CheckType", "classes.Aspect"]
+        dependencies = ["arxii.CheckType", "arxii.Aspect"]
 
     class Meta:
         unique_together = ["check_type", "aspect"]
@@ -220,7 +220,7 @@ class CheckTypeSpecialization(NaturalKeyMixin, SharedMemoryModel):
         related_name="specializations",
     )
     specialization = models.ForeignKey(
-        "skills.Specialization",
+        "arxii.Specialization",
         on_delete=models.CASCADE,
         related_name="check_type_specializations",
     )
@@ -235,7 +235,7 @@ class CheckTypeSpecialization(NaturalKeyMixin, SharedMemoryModel):
 
     class NaturalKeyConfig:
         fields = ["check_type", "specialization"]
-        dependencies = ["checks.CheckType", "skills.Specialization"]
+        dependencies = ["arxii.CheckType", "arxii.Specialization"]
 
     class Meta:
         unique_together = ["check_type", "specialization"]
@@ -260,7 +260,7 @@ class Consequence(SharedMemoryModel):
     """
 
     outcome_tier = models.ForeignKey(
-        "traits.CheckOutcome",
+        "arxii.CheckOutcome",
         on_delete=models.CASCADE,
         related_name="consequences",
     )
@@ -308,7 +308,7 @@ class ConsequenceEffect(SharedMemoryModel):
 
     # Condition effects
     condition_template = models.ForeignKey(
-        "conditions.ConditionTemplate",
+        "arxii.ConditionTemplate",
         on_delete=models.CASCADE,
         null=True,
         blank=True,
@@ -320,7 +320,7 @@ class ConsequenceEffect(SharedMemoryModel):
     # TARGET becomes Attracted To the actor; a null duration is permanent, a set duration creates a
     # temporary (expiring) condition (e.g. Very Attracted). Direction is resolved in the handler.
     relationship_condition = models.ForeignKey(
-        "relationships.RelationshipCondition",
+        "arxii.RelationshipCondition",
         on_delete=models.CASCADE,
         null=True,
         blank=True,
@@ -340,7 +340,7 @@ class ConsequenceEffect(SharedMemoryModel):
 
     # Property effects
     property = models.ForeignKey(
-        "mechanics.Property",
+        "arxii.Property",
         on_delete=models.CASCADE,
         null=True,
         blank=True,
@@ -352,7 +352,7 @@ class ConsequenceEffect(SharedMemoryModel):
     # distinction_rank mirrors property_value: null means "advance one step" (the
     # grant_distinction seam's default), a set value means "set/raise to that rank".
     distinction = models.ForeignKey(
-        "distinctions.Distinction",
+        "arxii.Distinction",
         on_delete=models.CASCADE,
         null=True,
         blank=True,
@@ -380,7 +380,7 @@ class ConsequenceEffect(SharedMemoryModel):
     # Damage effects (stubbed — needs HP/combat system)
     damage_amount = models.PositiveIntegerField(null=True, blank=True)
     damage_type = models.ForeignKey(
-        "conditions.DamageType",
+        "arxii.DamageType",
         on_delete=models.CASCADE,
         null=True,
         blank=True,
@@ -389,7 +389,7 @@ class ConsequenceEffect(SharedMemoryModel):
 
     # Flow effects
     flow_definition = models.ForeignKey(
-        "flows.FlowDefinition",
+        "arxii.FlowDefinition",
         on_delete=models.CASCADE,
         null=True,
         blank=True,
@@ -398,7 +398,7 @@ class ConsequenceEffect(SharedMemoryModel):
 
     # Codex effects
     codex_entry = models.ForeignKey(
-        "codex.CodexEntry",
+        "arxii.CodexEntry",
         on_delete=models.CASCADE,
         null=True,
         blank=True,
@@ -408,7 +408,7 @@ class ConsequenceEffect(SharedMemoryModel):
     # Legend award effects
     legend_base_value = models.PositiveIntegerField(null=True, blank=True)
     legend_source_type = models.ForeignKey(
-        "societies.LegendSourceType",
+        "arxii.LegendSourceType",
         on_delete=models.PROTECT,
         null=True,
         blank=True,
@@ -419,7 +419,7 @@ class ConsequenceEffect(SharedMemoryModel):
     # Capture effects (#931). Both optional: a captor org may be unnamed, and
     # the off-screen-loss flag defaults to the safe "never lost off-screen".
     capture_captor_organization = models.ForeignKey(
-        "societies.Organization",
+        "arxii.Organization",
         on_delete=models.SET_NULL,
         null=True,
         blank=True,
@@ -437,7 +437,7 @@ class ConsequenceEffect(SharedMemoryModel):
     # CaptivityConfig default when left unset, so a marquee captor hand-crafts
     # its own cell + loops here while routine captures use the singleton.
     capture_captive_template = models.ForeignKey(
-        "missions.MissionTemplate",
+        "arxii.MissionTemplate",
         on_delete=models.SET_NULL,
         null=True,
         blank=True,
@@ -448,7 +448,7 @@ class ConsequenceEffect(SharedMemoryModel):
         ),
     )
     capture_rescue_template = models.ForeignKey(
-        "missions.MissionTemplate",
+        "arxii.MissionTemplate",
         on_delete=models.SET_NULL,
         null=True,
         blank=True,

@@ -4,7 +4,10 @@ The allowlist below defines which models are "authored content" (lore-repo
 material) vs ephemeral/runtime data. Only models in this set are exported.
 
 The export serializes each model with natural keys (no pks) and writes one
-JSON file per model to ``CONTENT_REPO_PATH/fixtures/<app_label>/<model_name>.json``.
+JSON file per model to ``CONTENT_REPO_PATH/fixtures/<domain>/<model_name>.json``,
+where ``<domain>`` is the model's authoring domain (see ``core.app_domains``) —
+today identical to its Django ``app_label``, but sourced from the model's module
+path so the directory layout survives the single-app collapse (#2906).
 
 This is the inverse of ``core_management.content_fixtures.load_entries`` —
 export writes what import reads. Round-tripping (export → import) is a no-op
@@ -21,6 +24,7 @@ import json
 import logging
 from pathlib import Path
 
+from core.app_domains import domain_of, resolve_model_by_name
 from core_management.content_fixtures import (
     MARKDOWN_EXPORT_DOMAINS,
     content_slug,
@@ -61,7 +65,7 @@ CONTENT_MODELS: frozenset[str] = frozenset(
         # achievements
         "achievements.statdefinition",
         "achievements.achievement",
-        "achievements.achievementrequirement",
+        "achievements.achievementstatrequirement",
         "achievements.achievementreward",
         "achievements.rewarddefinition",
         "achievements.conditionstatrule",
@@ -395,9 +399,10 @@ def export_to_content_repo(
 ) -> ExportResult:
     """Serialize content models and write fixture JSON to the lore repo.
 
-    Writes one file per model to ``<content_root>/fixtures/<app_label>/<model_name>.json``.
-    Models with zero rows are skipped (the file is not written). Existing files
-    are overwritten.
+    Writes one file per model to ``<content_root>/fixtures/<domain>/<model_name>.json``,
+    where ``<domain>`` is ``core.app_domains.domain_of(model)`` (today identical to
+    the model's Django ``app_label``). Models with zero rows are skipped (the file
+    is not written). Existing files are overwritten.
 
     **The addition gate (#2890, default ON).** A row whose natural key is not
     already in the corpus file is an *addition*, and by default an addition is
@@ -424,7 +429,6 @@ def export_to_content_repo(
 
     Requires Django to be configured.
     """
-    from django.apps import apps  # noqa: PLC0415
     from django.core import serializers  # noqa: PLC0415
 
     root = content_root or resolve_content_root()
@@ -439,9 +443,10 @@ def export_to_content_repo(
     result = ExportResult()
 
     for model_label in sorted(CONTENT_MODELS):
-        app_label, model_name = model_label.split(".")
+        # model_label is "<domain>.<model_name>" (CONTENT_MODELS above), not a
+        # real Django app_label post-collapse (#2906) — resolve by model name.
         try:
-            model = apps.get_model(app_label, model_name)
+            model = resolve_model_by_name(model_label)
         except LookupError:
             result.skipped.append(f"{model_label} (model not found)")
             continue
@@ -485,8 +490,13 @@ def _write_one_model(
     Extracted from ``export_to_content_repo`` to keep that function under the
     complexity ceiling; mutates ``result`` in place, as the inlined body did.
     """
-    model_label = model._meta.label_lower  # noqa: SLF001 — Django's public-ish Meta API
-    app_label, model_name = model_label.split(".")
+    # "<domain>.<model_name>" — matches CONTENT_MODELS'/MARKDOWN_EXPORT_DOMAINS'
+    # key convention (core.app_domains.domain_of), NOT model._meta.label_lower.
+    # Post-#2906 every model's real Django app_label is "arxii", so a
+    # label_lower-keyed lookup into MARKDOWN_EXPORT_DOMAINS would never match
+    # and silently fall through to plain JSON export for every prose domain.
+    model_name = model.__name__.lower()
+    model_label = f"{domain_of(model)}.{model_name}"
     count = len(json.loads(data))
 
     spec = MARKDOWN_EXPORT_DOMAINS.get(model_label)
@@ -502,7 +512,7 @@ def _write_one_model(
         result.total_records += count - len(withheld)
         return
 
-    out_dir = root / "fixtures" / app_label
+    out_dir = root / "fixtures" / domain_of(model)
     out_path = out_dir / f"{model_name}.json"
 
     records, withheld, added = _apply_addition_gate(

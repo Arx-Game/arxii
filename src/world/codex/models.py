@@ -95,7 +95,7 @@ class CodexSubject(NaturalKeyMixin, SharedMemoryModel):
 
     class NaturalKeyConfig:
         fields = ["category", "parent", "name"]
-        dependencies = ["codex.CodexCategory"]
+        dependencies = ["arxii.CodexCategory"]
 
     class Meta:
         ordering = ["display_order", "name"]
@@ -232,7 +232,7 @@ class CodexEntry(NaturalKeyMixin, SharedMemoryModel):
         help_text="Display order for featured entries (1, 2, 3...). NULL for non-featured.",
     )
     modifier_target = models.OneToOneField(
-        "mechanics.ModifierTarget",
+        "arxii.ModifierTarget",
         on_delete=models.SET_NULL,
         null=True,
         blank=True,
@@ -240,7 +240,7 @@ class CodexEntry(NaturalKeyMixin, SharedMemoryModel):
         help_text="Link to a modifier target this entry documents (for resonances, stats, etc.).",
     )
     art = models.ForeignKey(
-        "evennia_extensions.Media",
+        "arxii.Media",
         on_delete=models.SET_NULL,
         null=True,
         blank=True,
@@ -252,7 +252,7 @@ class CodexEntry(NaturalKeyMixin, SharedMemoryModel):
 
     class NaturalKeyConfig:
         fields = ["subject", "name"]
-        dependencies = ["codex.CodexSubject"]
+        dependencies = ["arxii.CodexSubject"]
 
     class Meta:
         ordering = ["display_order", "name"]
@@ -530,7 +530,7 @@ class BeginningsCodexGrant(NaturalKeyMixin, SharedMemoryModel):
     """Codex entries granted by a Beginnings choice."""
 
     beginnings = models.ForeignKey(
-        "character_creation.Beginnings",
+        "arxii.Beginnings",
         on_delete=models.CASCADE,
         related_name="codex_grants",
     )
@@ -544,7 +544,7 @@ class BeginningsCodexGrant(NaturalKeyMixin, SharedMemoryModel):
 
     class NaturalKeyConfig:
         fields = ["beginnings", "entry"]
-        dependencies = ["character_creation.Beginnings", "codex.CodexEntry"]
+        dependencies = ["arxii.Beginnings", "arxii.CodexEntry"]
 
     class Meta:
         unique_together = ["beginnings", "entry"]
@@ -560,7 +560,7 @@ class PathCodexGrant(NaturalKeyMixin, models.Model):  # noqa: SHARED_MEMORY
     """Codex entries granted by a Path choice."""
 
     path = models.ForeignKey(
-        "classes.Path",
+        "arxii.Path",
         on_delete=models.CASCADE,
         related_name="codex_grants",
     )
@@ -574,7 +574,7 @@ class PathCodexGrant(NaturalKeyMixin, models.Model):  # noqa: SHARED_MEMORY
 
     class NaturalKeyConfig:
         fields = ["path", "entry"]
-        dependencies = ["classes.Path", "codex.CodexEntry"]
+        dependencies = ["arxii.Path", "arxii.CodexEntry"]
 
     class Meta:
         unique_together = ["path", "entry"]
@@ -589,7 +589,7 @@ class DistinctionCodexGrant(NaturalKeyMixin, SharedMemoryModel):
     """Codex entries granted by a Distinction."""
 
     distinction = models.ForeignKey(
-        "distinctions.Distinction",
+        "arxii.Distinction",
         on_delete=models.CASCADE,
         related_name="codex_grants",
     )
@@ -603,7 +603,7 @@ class DistinctionCodexGrant(NaturalKeyMixin, SharedMemoryModel):
 
     class NaturalKeyConfig:
         fields = ["distinction", "entry"]
-        dependencies = ["distinctions.Distinction", "codex.CodexEntry"]
+        dependencies = ["arxii.Distinction", "arxii.CodexEntry"]
 
     class Meta:
         unique_together = ["distinction", "entry"]
@@ -618,7 +618,7 @@ class TraditionCodexGrant(NaturalKeyMixin, SharedMemoryModel):
     """Codex entries granted by a Tradition."""
 
     tradition = models.ForeignKey(
-        "magic.Tradition",
+        "arxii.Tradition",
         on_delete=models.CASCADE,
         related_name="codex_grants",
     )
@@ -632,7 +632,7 @@ class TraditionCodexGrant(NaturalKeyMixin, SharedMemoryModel):
 
     class NaturalKeyConfig:
         fields = ["tradition", "entry"]
-        dependencies = ["magic.Tradition", "codex.CodexEntry"]
+        dependencies = ["arxii.Tradition", "arxii.CodexEntry"]
 
     class Meta:
         unique_together = ["tradition", "entry"]

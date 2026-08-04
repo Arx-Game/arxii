@@ -31,9 +31,9 @@ from world.roster.constants import (
     PowerBand,
 )
 
-_SHEET_FK = "character_sheets.CharacterSheet"
-_SECRET_FK = "secrets.Secret"  # noqa: S105 — model path, not a credential
-_GENDER_FK = "character_sheets.Gender"
+_SHEET_FK = "arxii.CharacterSheet"
+_SECRET_FK = "arxii.Secret"  # noqa: S105 — model path, not a credential
+_GENDER_FK = "arxii.Gender"
 
 
 class Family(NaturalKeyMixin, SharedMemoryModel):
@@ -82,7 +82,7 @@ class Family(NaturalKeyMixin, SharedMemoryModel):
         help_text="Account that created this family (staff or player-created commoner)",
     )
     origin_realm = models.ForeignKey(
-        "realms.Realm",
+        "arxii.Realm",
         on_delete=models.SET_NULL,
         null=True,
         blank=True,
@@ -155,7 +155,7 @@ class Kinsperson(SharedMemoryModel):
         help_text="Bound CharacterSheet (SHEETED / PC tiers).",
     )
     functionary = models.ForeignKey(
-        "npc_services.Functionary",
+        "arxii.Functionary",
         on_delete=models.SET_NULL,
         null=True,
         blank=True,
@@ -177,7 +177,7 @@ class Kinsperson(SharedMemoryModel):
 
     # --- Heredity stub fields (#2815 Parent Dominance) -----------------------
     species = models.ForeignKey(
-        "species.Species",
+        "arxii.Species",
         on_delete=models.PROTECT,
         null=True,
         blank=True,
@@ -279,12 +279,12 @@ class KinspersonTraitValue(SharedMemoryModel):
         related_name="trait_values",
     )
     trait = models.ForeignKey(
-        "forms.FormTrait",
+        "arxii.FormTrait",
         on_delete=models.CASCADE,
         related_name="kinsperson_values",
     )
     option = models.ForeignKey(
-        "forms.FormTraitOption",
+        "arxii.FormTraitOption",
         on_delete=models.CASCADE,
         related_name="kinsperson_values",
     )
@@ -356,7 +356,7 @@ class UnionKind(NaturalKeyMixin, SharedMemoryModel):
 
     name = models.CharField(max_length=80, unique=True)
     realm = models.ForeignKey(
-        "realms.Realm",
+        "arxii.Realm",
         on_delete=models.SET_NULL,
         null=True,
         blank=True,

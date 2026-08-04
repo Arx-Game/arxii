@@ -244,7 +244,7 @@ class ResonanceTierFactory(factory.django.DjangoModelFactory):
     """Factory for ResonanceTier."""
 
     class Meta:
-        model = "magic.ResonanceTier"
+        model = "arxii.ResonanceTier"
         # Dedup on `name`, not `tier_level`: get_or_create on tier_level would
         # silently return the existing row for a duplicate-tier_level factory
         # call instead of hitting the DB unique constraint (the
@@ -261,7 +261,7 @@ class DistinctionResonanceGrantFactory(factory.django.DjangoModelFactory):
     """Factory for DistinctionResonanceGrant (#1834 currency-knob sidecar)."""
 
     class Meta:
-        model = "magic.DistinctionResonanceGrant"
+        model = "arxii.DistinctionResonanceGrant"
 
     distinction = factory.SubFactory(_DISTINCTION_FACTORY)
     resonance = factory.SubFactory(ResonanceFactory)
@@ -273,7 +273,7 @@ class DistinctionResonanceRankThresholdFactory(factory.django.DjangoModelFactory
     """Factory for DistinctionResonanceRankThreshold (#2037 reverse sidecar)."""
 
     class Meta:
-        model = "magic.DistinctionResonanceRankThreshold"
+        model = "arxii.DistinctionResonanceRankThreshold"
 
     distinction = factory.SubFactory(_DISTINCTION_FACTORY)
     resonance = factory.SubFactory(ResonanceFactory)
@@ -498,7 +498,7 @@ class TechniqueVariantFactory(factory.django.DjangoModelFactory):
     """Factory for TechniqueVariant rows (gift-technique specialization, #1578)."""
 
     class Meta:
-        model = "magic.TechniqueVariant"
+        model = "arxii.TechniqueVariant"
 
     parent_technique = factory.SubFactory(TechniqueFactory, damage_profile=False)
     resonance = factory.SubFactory(ResonanceFactory)
@@ -1735,7 +1735,7 @@ SoulfrayContentFactory = _SoulfrayContentFactory()
 
 class ResonanceGainConfigFactory(factory.django.DjangoModelFactory):
     class Meta:
-        model = "magic.ResonanceGainConfig"
+        model = "arxii.ResonanceGainConfig"
         django_get_or_create = ("pk",)
 
     pk = 1
@@ -1743,7 +1743,7 @@ class ResonanceGainConfigFactory(factory.django.DjangoModelFactory):
 
 class CorruptionConfigFactory(factory.django.DjangoModelFactory):
     class Meta:
-        model = "magic.CorruptionConfig"
+        model = "arxii.CorruptionConfig"
         django_get_or_create = ("pk",)
 
     pk = 1
@@ -1751,7 +1751,7 @@ class CorruptionConfigFactory(factory.django.DjangoModelFactory):
 
 class PoseEndorsementFactory(factory.django.DjangoModelFactory):
     class Meta:
-        model = "magic.PoseEndorsement"
+        model = "arxii.PoseEndorsement"
 
     endorser_sheet = factory.SubFactory("world.character_sheets.factories.CharacterSheetFactory")
     endorsee_sheet = factory.SubFactory("world.character_sheets.factories.CharacterSheetFactory")
@@ -1762,7 +1762,7 @@ class PoseEndorsementFactory(factory.django.DjangoModelFactory):
 
 class SceneEntryEndorsementFactory(factory.django.DjangoModelFactory):
     class Meta:
-        model = "magic.SceneEntryEndorsement"
+        model = "arxii.SceneEntryEndorsement"
 
     endorser_sheet = factory.SubFactory("world.character_sheets.factories.CharacterSheetFactory")
     endorsee_sheet = factory.SubFactory("world.character_sheets.factories.CharacterSheetFactory")
@@ -1780,7 +1780,7 @@ class StylePresentationEndorsementFactory(factory.django.DjangoModelFactory):
     """
 
     class Meta:
-        model = "magic.StylePresentationEndorsement"
+        model = "arxii.StylePresentationEndorsement"
 
     endorser_sheet = factory.SubFactory("world.character_sheets.factories.CharacterSheetFactory")
     endorsee_sheet = factory.SubFactory("world.character_sheets.factories.CharacterSheetFactory")
@@ -1791,7 +1791,7 @@ class StylePresentationEndorsementFactory(factory.django.DjangoModelFactory):
 
 class PresentationEndorsementFactory(factory.django.DjangoModelFactory):
     class Meta:
-        model = "magic.PresentationEndorsement"
+        model = "arxii.PresentationEndorsement"
 
     endorser_sheet = factory.SubFactory("world.character_sheets.factories.CharacterSheetFactory")
     endorsee_sheet = factory.SubFactory("world.character_sheets.factories.CharacterSheetFactory")
@@ -1801,7 +1801,7 @@ class PresentationEndorsementFactory(factory.django.DjangoModelFactory):
 
 class EntryFlourishRecordFactory(factory.django.DjangoModelFactory):
     class Meta:
-        model = "magic.EntryFlourishRecord"
+        model = "arxii.EntryFlourishRecord"
 
     character_sheet = factory.SubFactory("world.character_sheets.factories.CharacterSheetFactory")
     resonance = factory.SubFactory(ResonanceFactory)
@@ -1811,7 +1811,7 @@ class EntryFlourishRecordFactory(factory.django.DjangoModelFactory):
 
 class DramaticMomentTypeFactory(factory.django.DjangoModelFactory):
     class Meta:
-        model = "magic.DramaticMomentType"
+        model = "arxii.DramaticMomentType"
         django_get_or_create = ("label",)
 
     label = factory.Sequence(lambda n: f"DramaticMomentType{n}")
@@ -1826,7 +1826,7 @@ class DramaticMomentTypeFactory(factory.django.DjangoModelFactory):
 
 class DramaticMomentTagFactory(factory.django.DjangoModelFactory):
     class Meta:
-        model = "magic.DramaticMomentTag"
+        model = "arxii.DramaticMomentTag"
 
     moment_type = factory.SubFactory(DramaticMomentTypeFactory)
     character_sheet = factory.SubFactory("world.character_sheets.factories.CharacterSheetFactory")
@@ -1838,7 +1838,7 @@ class DramaticMomentTagFactory(factory.django.DjangoModelFactory):
 
 class DramaticMomentSuggestionFactory(factory.django.DjangoModelFactory):
     class Meta:
-        model = "magic.DramaticMomentSuggestion"
+        model = "arxii.DramaticMomentSuggestion"
 
     moment_type = factory.SubFactory(DramaticMomentTypeFactory)
     character_sheet = factory.SubFactory("world.character_sheets.factories.CharacterSheetFactory")
@@ -2110,7 +2110,7 @@ class CorruptionConditionTemplateFactory(factory.django.DjangoModelFactory):
     """
 
     class Meta:
-        model = "conditions.ConditionTemplate"
+        model = "arxii.ConditionTemplate"
         django_get_or_create = ("corruption_resonance",)
 
     name = factory.LazyAttribute(lambda o: f"Corrupted by {o.corruption_resonance.name}")
@@ -2222,7 +2222,7 @@ class SineatingFactory(factory.django.DjangoModelFactory):
     """
 
     class Meta:
-        model = "magic.Sineating"
+        model = "arxii.Sineating"
 
     sinner_sheet = factory.SubFactory("world.character_sheets.factories.CharacterSheetFactory")
     sineater_sheet = factory.SubFactory("world.character_sheets.factories.CharacterSheetFactory")
@@ -2239,7 +2239,7 @@ class SoulTetherRescueFactory(factory.django.DjangoModelFactory):
     """Audit-row factory for a stage-3+ rescue ritual (Spec B §9)."""
 
     class Meta:
-        model = "magic.SoulTetherRescue"
+        model = "arxii.SoulTetherRescue"
 
     sinner_sheet = factory.SubFactory("world.character_sheets.factories.CharacterSheetFactory")
     sineater_sheet = factory.SubFactory("world.character_sheets.factories.CharacterSheetFactory")
@@ -2275,7 +2275,7 @@ class TetherStrainTemplateFactory(factory.django.DjangoModelFactory):
     """
 
     class Meta:
-        model = "conditions.ConditionTemplate"
+        model = "arxii.ConditionTemplate"
         django_get_or_create = ("name",)
 
     name = "Tether Strain"
@@ -2334,7 +2334,7 @@ class SoulTetherActiveTemplateFactory(factory.django.DjangoModelFactory):
     """
 
     class Meta:
-        model = "conditions.ConditionTemplate"
+        model = "arxii.ConditionTemplate"
         django_get_or_create = ("name",)
 
     name = "Soul Tether Active"
@@ -2364,7 +2364,7 @@ class AcceptSoulTetherRitualFactory(factory.django.DjangoModelFactory):
     """
 
     class Meta:
-        model = "magic.Ritual"
+        model = "arxii.Ritual"
         django_get_or_create = ("name",)
 
     name = "accept_soul_tether"
@@ -2427,7 +2427,7 @@ class SoulTetherRescueRitualFactory(factory.django.DjangoModelFactory):
     """
 
     class Meta:
-        model = "magic.Ritual"
+        model = "arxii.Ritual"
         django_get_or_create = ("name",)
 
     name = "soul_tether_rescue"
@@ -2517,7 +2517,7 @@ class SoulTetherRedirectTriggerDefinitionFactory(factory.django.DjangoModelFacto
     """
 
     class Meta:
-        model = "flows.TriggerDefinition"
+        model = "arxii.TriggerDefinition"
         django_get_or_create = ("name",)
 
     name = "soul_tether_redirect"
@@ -2536,7 +2536,7 @@ class SoulTetherStageAdvancePromptTriggerDefinitionFactory(factory.django.Django
     """
 
     class Meta:
-        model = "flows.TriggerDefinition"
+        model = "arxii.TriggerDefinition"
         django_get_or_create = ("name",)
 
     name = "soul_tether_stage_advance_prompt"
@@ -3475,7 +3475,7 @@ class RitualSessionFactory(factory.django.DjangoModelFactory):
     """Factory for RitualSession — transient coordination row for multi-participant rituals."""
 
     class Meta:
-        model = "magic.RitualSession"
+        model = "arxii.RitualSession"
 
     ritual = factory.SubFactory(RitualFactory)
     initiator = factory.SubFactory(CharacterSheetFactory)
@@ -3488,7 +3488,7 @@ class RitualSessionParticipantFactory(factory.django.DjangoModelFactory):
     """Factory for RitualSessionParticipant."""
 
     class Meta:
-        model = "magic.RitualSessionParticipant"
+        model = "arxii.RitualSessionParticipant"
 
     session = factory.SubFactory(RitualSessionFactory)
     character_sheet = factory.SubFactory(CharacterSheetFactory)
@@ -3500,7 +3500,7 @@ class RitualSessionCovenantRefFactory(factory.django.DjangoModelFactory):
     """Reference of kind=COVENANT (session-level)."""
 
     class Meta:
-        model = "magic.RitualSessionReference"
+        model = "arxii.RitualSessionReference"
 
     session = factory.SubFactory(RitualSessionFactory)
     participant = None
@@ -3513,7 +3513,7 @@ class RitualSessionCovenantRoleRefFactory(factory.django.DjangoModelFactory):
     """Reference of kind=COVENANT_ROLE (typically participant-level)."""
 
     class Meta:
-        model = "magic.RitualSessionReference"
+        model = "arxii.RitualSessionReference"
 
     session = factory.SubFactory(RitualSessionFactory)
     participant = factory.SubFactory(RitualSessionParticipantFactory)
@@ -3532,7 +3532,7 @@ class CovenantFormationRitualFactory(factory.django.DjangoModelFactory):
     """
 
     class Meta:
-        model = "magic.Ritual"
+        model = "arxii.Ritual"
         django_get_or_create = ("name",)
 
     name = "Covenant Formation"
@@ -3586,7 +3586,7 @@ class CovenantInductionRitualFactory(factory.django.DjangoModelFactory):
     """Factory for the covenant induction ritual."""
 
     class Meta:
-        model = "magic.Ritual"
+        model = "arxii.Ritual"
         django_get_or_create = ("name",)
 
     name = "Covenant Induction"
@@ -3637,7 +3637,7 @@ class OrganizationInductionRitualFactory(factory.django.DjangoModelFactory):
     """
 
     class Meta:
-        model = "magic.Ritual"
+        model = "arxii.Ritual"
         django_get_or_create = ("name",)
 
     name = "Organization Induction"
@@ -3666,7 +3666,7 @@ class RenewTheOathRitualFactory(factory.django.DjangoModelFactory):
     """
 
     class Meta:
-        model = "magic.Ritual"
+        model = "arxii.Ritual"
         django_get_or_create = ("name",)
 
     name = "Renew the Oath"
@@ -3692,7 +3692,7 @@ class BattleCovenantRiseRitualFactory(factory.django.DjangoModelFactory):
     """Factory for the 'call the banners' battle-covenant rise ritual (Slice E)."""
 
     class Meta:
-        model = "magic.Ritual"
+        model = "arxii.Ritual"
         django_get_or_create = ("name",)
 
     name = "Call the Banners"
@@ -3737,7 +3737,7 @@ class MentorsVowRitualFactory(factory.django.DjangoModelFactory):
     """
 
     class Meta:
-        model = "magic.Ritual"
+        model = "arxii.Ritual"
         django_get_or_create = ("name",)
 
     name = "Mentor's Vow"
@@ -4118,7 +4118,7 @@ def seed_magic_progression(prospect_paths: Any = None):
 
 class FuryTierFactory(factory.django.DjangoModelFactory):
     class Meta:
-        model = "magic.FuryTier"
+        model = "arxii.FuryTier"
         django_get_or_create = ("name",)
 
     name = "Unleashed"
@@ -4132,7 +4132,7 @@ class FuryTierFactory(factory.django.DjangoModelFactory):
 
 class FuryConfigFactory(factory.django.DjangoModelFactory):
     class Meta:
-        model = "magic.FuryConfig"
+        model = "arxii.FuryConfig"
         django_get_or_create = ("pk",)
 
     pk = 1
@@ -4331,7 +4331,7 @@ class RitualOfTheDuranceFactory(factory.django.DjangoModelFactory):
     """
 
     class Meta:
-        model = "magic.Ritual"
+        model = "arxii.Ritual"
         django_get_or_create = ("name",)
 
     name = "Ritual of the Durance"

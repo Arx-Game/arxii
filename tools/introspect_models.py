@@ -1,8 +1,21 @@
-"""
-One-off introspection script for generating MODEL_MAP.md content.
+"""One-off introspection script for generating MODEL_MAP.md content.
 Run via: uv run python tools/introspect_models.py > docs/systems/MODEL_MAP.md
 
 Also importable: call write_model_map() to write directly to file.
+
+#2906 collapsed 66 ``world.*`` Django apps (+ 27 models folded in from
+``actions``/``flows``/``behaviors``/``evennia_extensions``/``web.admin`` via an
+explicit ``Meta.app_label``) into a single app: package ``world``, label
+``arxii``. Model introspection below therefore queries that ONE app config
+once, then groups the result by authoring *domain*
+(``core.app_domains.domain_of``) for the doc's section headers — there is no
+longer a one-Django-app-per-domain list to loop over. Service-function
+discovery still walks real importable packages (a domain has no "services"
+of its own; a package does), so that part keeps a package list — but it is
+auto-discovered for everything under ``world/`` rather than hand-maintained,
+since a hand-maintained 66-entry list is exactly what silently rotted into a
+no-op the moment the collapse landed (every entry raised ``LookupError``
+against the single surviving app, and a bare ``except`` swallowed it).
 """
 
 from __future__ import annotations
@@ -12,81 +25,55 @@ from pathlib import Path
 import re
 import sys
 
-TARGET_APPS = [
-    "actions",
-    "behaviors",
-    "commands",
-    "conditions",
-    "evennia_extensions",
-    "flows",
-    "typeclasses",
-    "world.achievements",
-    "world.action_points",
-    "world.agriculture",
-    "world.areas",
-    "world.assets",
-    "world.attempts",
-    "world.battles",
-    "world.boundaries",
-    "world.buildings",
-    "world.captivity",
-    "world.ceremonies",
-    "world.character_creation",
-    "world.character_sheets",
-    "world.checks",
-    "world.classes",
-    "world.clues",
-    "world.codex",
-    "world.combat",
-    "world.companions",
-    "world.conditions",
-    "world.consent",
-    "world.covenants",
-    "world.currency",
-    "world.distinctions",
-    "world.dreams",
-    "world.estates",
-    "world.events",
-    "world.fatigue",
-    "world.forms",
-    "world.game_clock",
-    "world.gm",
-    "world.goals",
-    "world.instances",
-    "world.items",
-    "world.journals",
-    "world.justice",
-    "world.locations",
-    "world.magic",
-    "world.mechanics",
-    "world.military",
-    "world.missions",
-    "world.narrative",
-    "world.npc_services",
-    "world.player_submissions",
-    "world.predicates",
-    "world.progression",
-    "world.projects",
-    "world.realms",
-    "world.relationships",
-    "world.room_features",
-    "world.roster",
-    "world.scenes",
-    "world.secrets",
-    "world.ships",
-    "world.skills",
-    "world.societies",
-    "world.species",
-    "world.stories",
-    "world.tarot",
-    "world.traits",
-    "world.travel",
-    "world.vitals",
-    "world.weather",
-    "world.worship",
-]
+_REPO_ROOT = Path(__file__).resolve().parent.parent
+_SRC_ROOT = _REPO_ROOT / "src"
+_DEFAULT_OUTPUT = _REPO_ROOT / "docs" / "systems" / "MODEL_MAP.md"
 
-_DEFAULT_OUTPUT = Path(__file__).resolve().parent.parent / "docs" / "systems" / "MODEL_MAP.md"
+# The single Django app label every first-party model shares since #2906.
+MODEL_APP_LABEL = "arxii"
+
+# Packages outside ``world/`` whose models fold into ``arxii`` too (#2906)
+# and/or carry their own ``services`` module. Unlike ``world/*``, these are
+# not siblings under one directory, so they can't be auto-discovered the
+# same way and stay a short, hand-owned list.
+EXTRA_SERVICE_PACKAGES = ["actions", "flows", "behaviors", "evennia_extensions", "web.admin"]
+
+
+def _discover_world_packages() -> list[str]:
+    """Return ``world.<name>`` for every real sub-package under ``world/``.
+
+    Auto-discovered, not hand-maintained: walks the actual directory tree so
+    a new ``world/<name>/`` package is picked up automatically and this list
+    can't silently rot the way the old hand-written ``TARGET_APPS`` did.
+    """
+    world_dir = _SRC_ROOT / "world"
+    return sorted(
+        f"world.{child.name}"
+        for child in world_dir.iterdir()
+        if child.is_dir() and (child / "__init__.py").is_file()
+    )
+
+
+def _domain_for_package(package: str) -> str:
+    """Forward mapping: dotted package path -> authoring domain.
+
+    Mirrors ``core.app_domains.domain_of``'s own convention deliberately
+    (rather than importing it) because that function maps a *model class* to
+    a domain string, and this needs the same transform applied to a *package
+    path* instead.
+    """
+    if package.startswith("world."):
+        return package.split(".")[1]
+    return "web_admin" if package == "web.admin" else package
+
+
+def _package_for_domain(domain: str) -> str:
+    """Inverse of ``_domain_for_package``, for domains with no matching package."""
+    if domain == "web_admin":
+        return "web.admin"
+    if (_SRC_ROOT / "world" / domain).is_dir():
+        return f"world.{domain}"
+    return domain
 
 
 def _ensure_django_setup() -> None:
@@ -96,7 +83,7 @@ def _ensure_django_setup() -> None:
     if settings.configured:
         return
 
-    src_dir = str(Path(__file__).resolve().parent.parent / "src")
+    src_dir = str(_SRC_ROOT)
     os.chdir(src_dir)
     if src_dir not in sys.path:
         sys.path.insert(0, src_dir)
@@ -104,10 +91,15 @@ def _ensure_django_setup() -> None:
     django.setup()
 
 
+def _domain_of(model: object) -> str:
+    from core.app_domains import domain_of  # noqa: PLC0415
+
+    return domain_of(model)  # type: ignore[arg-type]
+
+
 def get_fk_info(field: object) -> str:
     related_model = field.related_model  # type: ignore[attr-defined]
-    app = related_model._meta.app_label  # noqa: SLF001
-    return f"{app}.{related_model.__name__}"
+    return f"{_domain_of(related_model)}.{related_model.__name__}"
 
 
 def get_field_info(field: object) -> tuple[str | None, str | None]:
@@ -124,8 +116,7 @@ def get_field_info(field: object) -> tuple[str | None, str | None]:
     # fields (the ``id`` PK, multi-table-inheritance parent-link OneToOnes), which are
     # concrete columns and must stay on the forward side.
     if field.auto_created and not field.concrete:  # type: ignore[attr-defined]
-        app = field.related_model._meta.app_label  # type: ignore[attr-defined]  # noqa: SLF001
-        source = f"{app}.{field.related_model.__name__}"  # type: ignore[attr-defined]
+        source = f"{_domain_of(field.related_model)}.{field.related_model.__name__}"  # type: ignore[attr-defined]
         accessor = field.get_accessor_name()  # type: ignore[attr-defined]
         return "reverse", f"{accessor} <- {source}"
 
@@ -145,70 +136,73 @@ def get_field_info(field: object) -> tuple[str | None, str | None]:
     return None, None
 
 
-def introspect_app(app_label: str) -> dict | None:
+def _gather_models_by_domain() -> dict[str, list[dict]]:
+    """Introspect the single ``arxii`` app ONCE, grouped by authoring domain."""
+    from django.apps import apps  # noqa: PLC0415
+
+    app_config = apps.get_app_config(MODEL_APP_LABEL)
+    by_domain: dict[str, list[dict]] = {}
+
+    for model in app_config.get_models():
+        model_info: dict = {"name": model.__name__, "fks": [], "reverse_relations": []}
+        for field in model._meta.get_fields():  # noqa: SLF001
+            kind, info = get_field_info(field)
+            if kind == "fk":
+                model_info["fks"].append(info)
+            elif kind == "reverse":
+                model_info["reverse_relations"].append(info)
+        by_domain.setdefault(_domain_of(model), []).append(model_info)
+
+    for models_list in by_domain.values():
+        models_list.sort(key=lambda m: m["name"])
+    return by_domain
+
+
+def _gather_service_functions(package: str) -> list[str]:
     import importlib  # noqa: PLC0415
     import inspect  # noqa: PLC0415
 
-    from django.apps import apps  # noqa: PLC0415
-
-    try:
-        app_config = apps.get_app_config(app_label.split(".")[-1])
-    except LookupError:
-        return None
-
-    result: dict = {"app": app_label, "models": [], "service_functions": []}
-
-    _fk_kind = "fk"
-    _reverse_kind = "reverse"
-    for model in app_config.get_models():
-        model_info: dict = {
-            "name": model.__name__,
-            "fks": [],
-            "reverse_relations": [],
-        }
-
-        for field in model._meta.get_fields():  # noqa: SLF001
-            kind, info = get_field_info(field)
-            if kind == _fk_kind:
-                model_info["fks"].append(info)
-            elif kind == _reverse_kind:
-                model_info["reverse_relations"].append(info)
-
-        result["models"].append(model_info)
-
-    module_path = app_label + ".services"
+    module_path = f"{package}.services"
     try:
         services_mod = importlib.import_module(module_path)
-        for name, obj in inspect.getmembers(services_mod, inspect.isfunction):
-            if name.startswith("_"):
-                continue
-            # Skip helpers imported into the services module (e.g. dataclasses.field,
-            # typing.cast) — document only functions defined in project source, not
-            # stdlib/third-party callables that happen to be importable here.
-            func_mod = sys.modules.get(obj.__module__)
-            # getattr-with-default: func_mod may be None or a module without __file__.
-            func_file = getattr(func_mod, "__file__", "") or ""  # noqa: GETATTR_LITERAL
-            if "site-packages" in func_file or "/lib/python" in func_file:
-                continue
-            # Render the signature deterministically: repr() of a sentinel-object
-            # default (``object()`` / ``dataclasses._MISSING_TYPE``) embeds a
-            # per-process memory address; strip it so regeneration is reproducible.
-            sig = re.sub(r" at 0x[0-9a-fA-F]+", "", str(inspect.signature(obj)))
-            doc = (inspect.getdoc(obj) or "").split("\n")[0]
-            result["service_functions"].append(f"{name}{sig}" + (f" — {doc}" if doc else ""))
-    except (ImportError, ModuleNotFoundError):
-        pass
+    except ModuleNotFoundError as exc:
+        # Tolerate ONLY "this package has no services module at all". A genuine
+        # import failure inside an existing services.py (bad import, syntax
+        # error, missing dependency) must surface loudly instead of vanishing
+        # the way the old bare ``except (ImportError, ModuleNotFoundError)``
+        # let every dead TARGET_APPS entry vanish into a silent no-op (#2906).
+        if exc.name != module_path:
+            raise
+        return []
 
-    return result
+    functions = []
+    for name, obj in inspect.getmembers(services_mod, inspect.isfunction):
+        if name.startswith("_"):
+            continue
+        # Skip helpers imported into the services module (e.g. dataclasses.field,
+        # typing.cast) — document only functions defined in project source, not
+        # stdlib/third-party callables that happen to be importable here.
+        func_mod = sys.modules.get(obj.__module__)
+        # getattr-with-default: func_mod may be None or a module without __file__.
+        func_file = getattr(func_mod, "__file__", "") or ""  # noqa: GETATTR_LITERAL
+        if "site-packages" in func_file or "/lib/python" in func_file:
+            continue
+        # Render the signature deterministically: repr() of a sentinel-object
+        # default (``object()`` / ``dataclasses._MISSING_TYPE``) embeds a
+        # per-process memory address; strip it so regeneration is reproducible.
+        sig = re.sub(r" at 0x[0-9a-fA-F]+", "", str(inspect.signature(obj)))
+        doc = (inspect.getdoc(obj) or "").split("\n")[0]
+        functions.append(f"{name}{sig}" + (f" - {doc}" if doc else ""))
+    return functions
 
 
-def format_output(data: dict) -> str:
-    if not data:
+def format_output(header: str, models_list: list[dict], service_functions: list[str]) -> str:
+    if not models_list and not service_functions:
         return ""
 
-    lines = [f"\n## {data['app']}\n"]
+    lines = [f"\n## {header}\n"]
 
-    for model in data["models"]:
+    for model in models_list:
         lines.append(f"### {model['name']}")
         if model["fks"]:
             lines.append("**Foreign Keys:**")
@@ -218,9 +212,9 @@ def format_output(data: dict) -> str:
             lines.extend(f"  - {rev}" for rev in model["reverse_relations"])
         lines.append("")
 
-    if data["service_functions"]:
+    if service_functions:
         lines.append("### Service Functions")
-        lines.extend(f"- `{fn}`" for fn in data["service_functions"])
+        lines.extend(f"- `{fn}`" for fn in service_functions)
         lines.append("")
 
     return "\n".join(lines)
@@ -231,10 +225,25 @@ def _generate_content() -> str:
         "# Arx II Model Introspection Report",
         "# Generated for CLAUDE.md enrichment\n",
     ]
-    for app_label in sorted(TARGET_APPS):
-        data = introspect_app(app_label)
-        if data and (data["models"] or data["service_functions"]):
-            lines.append(format_output(data))
+    models_by_domain = _gather_models_by_domain()
+    packages = sorted(set(_discover_world_packages()) | set(EXTRA_SERVICE_PACKAGES))
+
+    covered_domains: set[str] = set()
+    for package in packages:
+        domain = _domain_for_package(package)
+        covered_domains.add(domain)
+        models_list = models_by_domain.get(domain, [])
+        service_functions = _gather_service_functions(package)
+        lines.append(format_output(package, models_list, service_functions))
+
+    # A domain with models but no package above would mean the earlier
+    # discovery missed something real -- render it rather than drop it, since
+    # a silent drop here is exactly the #2906 task 6 bug this rewrite fixes.
+    lines.extend(
+        format_output(_package_for_domain(domain), models_by_domain[domain], [])
+        for domain in sorted(set(models_by_domain) - covered_domains)
+    )
+
     return "\n".join(lines)
 
 

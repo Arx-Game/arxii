@@ -16,7 +16,7 @@ from django.db import transaction
 from world.achievements.constants import RewardType
 from world.achievements.models import (
     Achievement,
-    AchievementRequirement,
+    AchievementStatRequirement,
     CharacterAchievement,
     CharacterTitle,
     Discovery,
@@ -152,7 +152,7 @@ def _achievement_requirements_met(
         ).exists():
             return False
 
-    requirements = list(AchievementRequirement.objects.filter(achievement=achievement))
+    requirements = list(AchievementStatRequirement.objects.filter(achievement=achievement))
 
     if not requirements:
         return False

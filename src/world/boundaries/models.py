@@ -37,7 +37,7 @@ class PlayerBoundary(VisibilityMixin, SharedMemoryModel):
     across every character the person plays."""
 
     owner = models.ForeignKey(
-        "evennia_extensions.PlayerData",
+        "arxii.PlayerData",
         on_delete=models.CASCADE,
         related_name="content_boundaries",
     )
@@ -91,13 +91,13 @@ class TreasuredSubject(VisibilityMixin, SharedMemoryModel):
     import — ADR-0010 FK direction specific->general)."""
 
     owner = models.ForeignKey(
-        "roster.RosterTenure",
+        "arxii.RosterTenure",
         on_delete=models.CASCADE,
         related_name="treasured_subjects",
     )
     subject_kind = models.CharField(max_length=20, choices=TreasuredSubjectKind.choices)
     subject_sheet = models.ForeignKey(
-        "character_sheets.CharacterSheet",
+        "arxii.CharacterSheet",
         null=True,
         blank=True,
         on_delete=models.SET_NULL,
@@ -105,7 +105,7 @@ class TreasuredSubject(VisibilityMixin, SharedMemoryModel):
         help_text="For NPC_FATE / PERSONAL_JEOPARDY subjects. Nulls if the sheet is deleted.",
     )
     subject_item = models.ForeignKey(
-        "items.ItemInstance",
+        "arxii.ItemInstance",
         null=True,
         blank=True,
         on_delete=models.SET_NULL,
@@ -113,7 +113,7 @@ class TreasuredSubject(VisibilityMixin, SharedMemoryModel):
         help_text="For ITEM subjects. Nulls if the item instance is deleted/consumed.",
     )
     subject_society = models.ForeignKey(
-        "societies.Society",
+        "arxii.Society",
         null=True,
         blank=True,
         on_delete=models.SET_NULL,
@@ -121,7 +121,7 @@ class TreasuredSubject(VisibilityMixin, SharedMemoryModel):
         help_text="For FACTION subjects (society-level). Nulls if the society is deleted.",
     )
     subject_organization = models.ForeignKey(
-        "societies.Organization",
+        "arxii.Organization",
         null=True,
         blank=True,
         on_delete=models.SET_NULL,

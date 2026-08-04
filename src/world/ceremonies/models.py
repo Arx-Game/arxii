@@ -12,7 +12,7 @@ from evennia.utils.idmapper.models import SharedMemoryModel
 
 from world.ceremonies.constants import CeremonyStatus, CeremonyTypeKey, SeanceOfferStatus
 
-_PERSONA_MODEL = "scenes.Persona"
+_PERSONA_MODEL = "arxii.Persona"
 
 
 class CeremonyType(SharedMemoryModel):
@@ -46,23 +46,23 @@ class Ceremony(SharedMemoryModel):
         _PERSONA_MODEL, on_delete=models.PROTECT, related_name="ceremonies_officiated"
     )
     being = models.ForeignKey(
-        "worship.WorshippedBeing", on_delete=models.PROTECT, related_name="ceremonies"
+        "arxii.WorshippedBeing", on_delete=models.PROTECT, related_name="ceremonies"
     )
     presented_being = models.ForeignKey(
-        "worship.WorshippedBeing", on_delete=models.PROTECT, related_name="+"
+        "arxii.WorshippedBeing", on_delete=models.PROTECT, related_name="+"
     )
     location = models.ForeignKey(
-        "evennia_extensions.RoomProfile", on_delete=models.PROTECT, related_name="ceremonies"
+        "arxii.RoomProfile", on_delete=models.PROTECT, related_name="ceremonies"
     )
     scene = models.ForeignKey(
-        "scenes.Scene",
+        "arxii.Scene",
         null=True,
         blank=True,
         on_delete=models.SET_NULL,
         related_name="ceremonies",
     )
     event = models.ForeignKey(
-        "events.Event",
+        "arxii.Event",
         null=True,
         blank=True,
         on_delete=models.SET_NULL,
@@ -104,7 +104,7 @@ class CeremonyHonoree(SharedMemoryModel):
 
     ceremony = models.ForeignKey(Ceremony, on_delete=models.CASCADE, related_name="honorees")
     honoree_sheet = models.ForeignKey(
-        "character_sheets.CharacterSheet",
+        "arxii.CharacterSheet",
         on_delete=models.PROTECT,
         related_name="ceremony_honors",
     )
@@ -133,7 +133,7 @@ class CeremonyOffering(SharedMemoryModel):
         help_text="Legend value of the offered item at sacrifice time (#2359).",
     )
     worship_grant = models.ForeignKey(
-        "worship.WorshipGrant",
+        "arxii.WorshipGrant",
         null=True,
         blank=True,
         on_delete=models.SET_NULL,

@@ -25,7 +25,7 @@ class ImbuingProseTemplate(SharedMemoryModel):
     """
 
     resonance = models.ForeignKey(
-        "magic.Resonance",
+        "arxii.Resonance",
         on_delete=models.PROTECT,
         null=True,
         blank=True,
@@ -63,7 +63,7 @@ class Ritual(NaturalKeyMixin, SharedMemoryModel):
 
     class NaturalKeyConfig:
         fields = ["name"]
-        dependencies = ["flows.FlowDefinition"]
+        dependencies = ["arxii.FlowDefinition"]
 
     objects = NaturalKeyManager()
 
@@ -94,7 +94,7 @@ class Ritual(NaturalKeyMixin, SharedMemoryModel):
     """Optional dotted path to a ``validator(*, session)`` callable run at draft
     time (mirrors service_function_path's fire dispatch). Blank = no validation."""
     flow = models.ForeignKey(
-        "flows.FlowDefinition",
+        "arxii.FlowDefinition",
         on_delete=models.PROTECT,
         null=True,
         blank=True,
@@ -110,7 +110,7 @@ class Ritual(NaturalKeyMixin, SharedMemoryModel):
     )
 
     site_property = models.ForeignKey(
-        "mechanics.Property",
+        "arxii.Property",
         on_delete=models.SET_NULL,
         null=True,
         blank=True,
@@ -226,19 +226,19 @@ class RitualComponentRequirement(SharedMemoryModel):
     """
 
     ritual = models.ForeignKey(
-        "magic.Ritual",
+        "arxii.Ritual",
         on_delete=models.CASCADE,
         related_name="requirements",
     )
     item_template = models.ForeignKey(
-        "items.ItemTemplate",
+        "arxii.ItemTemplate",
         on_delete=models.PROTECT,
         null=True,
         blank=True,
         related_name="ritual_requirements",
     )
     min_touchstone_tier = models.ForeignKey(
-        "magic.ResonanceTier",
+        "arxii.ResonanceTier",
         on_delete=models.PROTECT,
         null=True,
         blank=True,
@@ -251,7 +251,7 @@ class RitualComponentRequirement(SharedMemoryModel):
     )
     quantity = models.PositiveSmallIntegerField(default=1)
     min_quality_tier = models.ForeignKey(
-        "items.QualityTier",
+        "arxii.QualityTier",
         on_delete=models.SET_NULL,
         null=True,
         blank=True,
@@ -289,12 +289,12 @@ class PendingRitualEffect(SharedMemoryModel):
     """
 
     character = models.ForeignKey(
-        "character_sheets.CharacterSheet",
+        "arxii.CharacterSheet",
         on_delete=models.PROTECT,
         related_name="pending_ritual_effects",
     )
     ritual = models.ForeignKey(
-        "magic.Ritual",
+        "arxii.Ritual",
         on_delete=models.PROTECT,
         related_name="pending_effects",
     )

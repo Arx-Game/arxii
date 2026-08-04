@@ -16,17 +16,17 @@ class CharacterRitualKnowledge(SharedMemoryModel):
     """
 
     roster_entry = models.ForeignKey(
-        "roster.RosterEntry",
+        "arxii.RosterEntry",
         on_delete=models.CASCADE,
         related_name="known_rituals",
     )
     ritual = models.ForeignKey(
-        "magic.Ritual",
+        "arxii.Ritual",
         on_delete=models.CASCADE,
         related_name="known_by_records",
     )
     learned_from = models.ForeignKey(
-        "roster.RosterTenure",
+        "arxii.RosterTenure",
         on_delete=models.SET_NULL,
         null=True,
         blank=True,

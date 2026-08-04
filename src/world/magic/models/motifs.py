@@ -56,7 +56,7 @@ class Facet(NaturalKeyMixin, SharedMemoryModel):
 
     class NaturalKeyConfig:
         fields = ["name", "parent"]
-        dependencies = ["magic.Facet"]
+        dependencies = ["arxii.Facet"]
 
     def __str__(self) -> str:
         if self.parent:
@@ -98,7 +98,7 @@ class Motif(SharedMemoryModel):
     """
 
     character = models.OneToOneField(
-        "character_sheets.CharacterSheet",
+        "arxii.CharacterSheet",
         on_delete=models.CASCADE,
         related_name="motif",
         help_text="The character this motif belongs to.",
@@ -240,7 +240,7 @@ class MotifResonanceStyle(MotifResonanceLink):
         help_text="The motif resonance this style belongs to.",
     )
     style = models.ForeignKey(
-        "items.Style",
+        "arxii.Style",
         on_delete=models.PROTECT,
         related_name="motif_usages",
         help_text="The aesthetic style.",

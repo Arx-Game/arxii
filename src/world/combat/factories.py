@@ -1663,7 +1663,7 @@ class EscalationSpikeOnIncapacitatedTriggerDefinitionFactory(factory_django.Djan
     """
 
     class Meta:
-        model = "flows.TriggerDefinition"
+        model = "arxii.TriggerDefinition"
         django_get_or_create = ("name",)
 
     name = "escalation_spike_on_incapacitated"
@@ -1677,7 +1677,7 @@ class EscalationSpikeOnKilledTriggerDefinitionFactory(factory_django.DjangoModel
     """TriggerDefinition for the CHARACTER_KILLED escalation spike (#872)."""
 
     class Meta:
-        model = "flows.TriggerDefinition"
+        model = "arxii.TriggerDefinition"
         django_get_or_create = ("name",)
 
     name = "escalation_spike_on_killed"
@@ -1724,7 +1724,7 @@ class EscalationSpikeOnMortalPerilTriggerDefinitionFactory(factory_django.Django
     """
 
     class Meta:
-        model = "flows.TriggerDefinition"
+        model = "arxii.TriggerDefinition"
         django_get_or_create = ("name",)
 
     name = "escalation_spike_on_mortal_peril"
@@ -1775,7 +1775,7 @@ class EncounterBeatTriggerDefinitionFactory(factory_django.DjangoModelFactory):
     """
 
     class Meta:
-        model = "flows.TriggerDefinition"
+        model = "arxii.TriggerDefinition"
         django_get_or_create = ("name",)
 
     name = "encounter_completed_beat_wiring"

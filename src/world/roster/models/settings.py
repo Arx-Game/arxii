@@ -17,7 +17,7 @@ class TenureDisplaySettings(SharedMemoryModel):
     """
 
     tenure = models.OneToOneField(
-        "roster.RosterTenure",
+        "arxii.RosterTenure",
         on_delete=models.CASCADE,
         related_name="display_settings",
     )
@@ -76,14 +76,14 @@ class TenureGallery(SharedMemoryModel):
     """Collection of media for a roster tenure."""
 
     tenure = models.ForeignKey(
-        "roster.RosterTenure",
+        "arxii.RosterTenure",
         on_delete=models.CASCADE,
         related_name="galleries",
     )
     name = models.CharField(max_length=100)
     is_public = models.BooleanField(default=True, help_text="Visible to other players")
     allowed_viewers = models.ManyToManyField(
-        "roster.RosterTenure",
+        "arxii.RosterTenure",
         blank=True,
         related_name="shared_galleries",
         help_text="Tenures allowed to view this private gallery",
@@ -103,17 +103,17 @@ class TenureMedia(SharedMemoryModel):
     """Bridge between player media and character tenures."""
 
     tenure = models.ForeignKey(
-        "roster.RosterTenure",
+        "arxii.RosterTenure",
         on_delete=models.CASCADE,
         related_name="media",
     )
     media = models.ForeignKey(
-        "evennia_extensions.Media",
+        "arxii.Media",
         on_delete=models.CASCADE,
         related_name="tenure_links",
     )
     gallery = models.ForeignKey(
-        "roster.TenureGallery",
+        "arxii.TenureGallery",
         on_delete=models.CASCADE,
         related_name="media",
         null=True,

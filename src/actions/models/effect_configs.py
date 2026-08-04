@@ -12,8 +12,8 @@ from evennia.utils.idmapper.models import SharedMemoryModel
 
 from actions.constants import TransformType
 
-CHECK_TYPE_FK = "checks.CheckType"
-CONDITION_TEMPLATE_FK = "conditions.ConditionTemplate"
+CHECK_TYPE_FK = "arxii.CheckType"
+CONDITION_TEMPLATE_FK = "arxii.ConditionTemplate"
 
 
 class BaseEffectConfig(models.Model):
@@ -24,7 +24,7 @@ class BaseEffectConfig(models.Model):
     """
 
     enhancement = models.ForeignKey(
-        "actions.ActionEnhancement",
+        "arxii.ActionEnhancement",
         on_delete=models.CASCADE,
         related_name="%(class)s_configs",
     )
@@ -45,7 +45,7 @@ class ModifyKwargsConfig(BaseEffectConfig, SharedMemoryModel):
     transform = models.CharField(max_length=20, choices=TransformType.choices)
 
     class Meta(BaseEffectConfig.Meta):
-        pass
+        app_label = "arxii"
 
     def __str__(self) -> str:
         return f"{self.transform} on {self.kwarg_name}"
@@ -62,7 +62,7 @@ class AddModifierConfig(BaseEffectConfig, SharedMemoryModel):
     modifier_value = models.IntegerField()
 
     class Meta(BaseEffectConfig.Meta):
-        pass
+        app_label = "arxii"
 
     def __str__(self) -> str:
         return f"{self.modifier_key}={self.modifier_value}"
@@ -127,7 +127,7 @@ class ConditionOnCheckConfig(BaseEffectConfig, SharedMemoryModel):
     )
 
     class Meta(BaseEffectConfig.Meta):
-        pass
+        app_label = "arxii"
 
     def __str__(self) -> str:
         return f"{self.condition} via {self.check_type}"
@@ -174,7 +174,7 @@ class RemoveConditionOnCheckConfig(BaseEffectConfig, SharedMemoryModel):
     )
 
     class Meta(BaseEffectConfig.Meta):
-        pass
+        app_label = "arxii"
 
     def __str__(self) -> str:
         return f"remove {self.condition} via {self.check_type}"

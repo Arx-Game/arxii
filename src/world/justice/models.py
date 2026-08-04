@@ -14,11 +14,11 @@ from evennia.utils.idmapper.models import SharedMemoryModel
 from world.justice.constants import DEFAULT_HEAT_WEIGHT, EVIDENCE_BASE_QUALITY, EvidenceState
 
 # App-qualified model path repeated across FK references; centralized for dedup.
-_LEGEND_ENTRY_MODEL = "societies.LegendEntry"
-_SOCIETY_MODEL = "societies.Society"
-_AREA_MODEL = "areas.Area"
-_PERSONA_MODEL = "scenes.Persona"
-SECRET_MODEL = "secrets.Secret"  # noqa: S105
+_LEGEND_ENTRY_MODEL = "arxii.LegendEntry"
+_SOCIETY_MODEL = "arxii.Society"
+_AREA_MODEL = "arxii.Area"
+_PERSONA_MODEL = "arxii.Persona"
+SECRET_MODEL = "arxii.Secret"  # noqa: S105
 
 
 class CrimeKind(SharedMemoryModel):
@@ -307,18 +307,18 @@ class FrameJobDetails(SharedMemoryModel):
     """
 
     project = models.OneToOneField(
-        "projects.Project",
+        "arxii.Project",
         on_delete=models.CASCADE,
         related_name="frame_job_details",
     )
     evidence = models.ForeignKey(
-        "justice.CrimeEvidence",
+        "arxii.CrimeEvidence",
         on_delete=models.PROTECT,
         related_name="frame_jobs",
         help_text="The gathered evidence being doctored.",
     )
     subject_sheet = models.ForeignKey(
-        "character_sheets.CharacterSheet",
+        "arxii.CharacterSheet",
         on_delete=models.PROTECT,
         related_name="frame_jobs_against",
         help_text="The patsy the crime is being pinned on.",
@@ -353,7 +353,7 @@ class DenounceRecord(SharedMemoryModel):
         related_name="denouncements",
     )
     denouncer_sheet = models.ForeignKey(
-        "character_sheets.CharacterSheet",
+        "arxii.CharacterSheet",
         on_delete=models.CASCADE,
         related_name="denouncements_made",
     )
@@ -394,13 +394,13 @@ class CrimeEvidence(SharedMemoryModel):
         related_name="crime_evidence",
     )
     room_profile = models.ForeignKey(
-        "evennia_extensions.RoomProfile",
+        "arxii.RoomProfile",
         on_delete=models.PROTECT,
         related_name="crime_evidence",
         help_text="The scene of the crime — where the evidence lies until gathered.",
     )
     item_instance = models.OneToOneField(
-        "items.ItemInstance",
+        "arxii.ItemInstance",
         null=True,
         blank=True,
         on_delete=models.SET_NULL,
@@ -544,7 +544,7 @@ class JusticeCase(SharedMemoryModel):
         _SOCIETY_MODEL, on_delete=models.CASCADE, related_name="justice_cases"
     )
     captivity = models.ForeignKey(
-        "captivity.Captivity",
+        "arxii.Captivity",
         null=True,
         blank=True,
         on_delete=models.SET_NULL,

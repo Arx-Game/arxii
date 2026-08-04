@@ -7,7 +7,7 @@ across every game system. Hidden by default, designed to surprise and delight.
 
 ### StatDefinition (SharedMemoryModel)
 Lookup table for trackable stats. Normalizes stat keys so they stay in sync
-between StatTracker and AchievementRequirement.
+between StatTracker and AchievementStatRequirement.
 - key (unique): dot-separated identifier, e.g., 'relationships.total_established'
 - name: player-facing display name
 - description: what this stat measures
@@ -25,7 +25,7 @@ Staff-defined achievement definitions.
 - prerequisite (self FK for chained achievements)
 - is_active flag
 
-### AchievementRequirement
+### AchievementStatRequirement
 Conditions to earn an achievement. FK to StatDefinition with thresholds.
 - Multiple per achievement (all must be met)
 - comparison: gte, eq, lte

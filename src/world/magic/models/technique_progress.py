@@ -28,12 +28,12 @@ class TechniqueProgress(SharedMemoryModel):
     """
 
     character_sheet = models.ForeignKey(
-        "character_sheets.CharacterSheet",
+        "arxii.CharacterSheet",
         on_delete=models.CASCADE,
         related_name="technique_progress",
     )
     technique = models.ForeignKey(
-        "magic.Technique",
+        "arxii.Technique",
         on_delete=models.PROTECT,
         related_name="progress_records",
     )
@@ -45,7 +45,7 @@ class TechniqueProgress(SharedMemoryModel):
         help_text="Total development points required, snapshotted at creation.",
     )
     teacher_tenure = models.ForeignKey(
-        "roster.RosterTenure",
+        "arxii.RosterTenure",
         on_delete=models.SET_NULL,
         null=True,
         blank=True,
@@ -93,17 +93,17 @@ class TechniqueProgressWeekly(SharedMemoryModel):
     """
 
     character_sheet = models.ForeignKey(
-        "character_sheets.CharacterSheet",
+        "arxii.CharacterSheet",
         on_delete=models.CASCADE,
         related_name="technique_progress_weekly",
     )
     technique = models.ForeignKey(
-        "magic.Technique",
+        "arxii.Technique",
         on_delete=models.CASCADE,
         related_name="progress_weekly",
     )
     game_week = models.ForeignKey(
-        "game_clock.GameWeek",
+        "arxii.GameWeek",
         on_delete=models.CASCADE,
         related_name="technique_progress_weekly",
     )

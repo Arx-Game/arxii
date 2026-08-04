@@ -22,14 +22,14 @@ from evennia.utils.idmapper.models import SharedMemoryModel
 from world.items.constants import OrgVaultEventKind, VaultTransitResolution
 
 # Lazy model references (Django app_label.ModelName), extracted to satisfy S1192.
-ITEM_INSTANCE_MODEL = "items.ItemInstance"
+ITEM_INSTANCE_MODEL = "arxii.ItemInstance"
 
 
 class OrganizationVault(SharedMemoryModel):
     """One per org (get-or-create): the item-custody twin of ``OrganizationTreasury``."""
 
     organization = models.OneToOneField(
-        "societies.Organization",
+        "arxii.Organization",
         on_delete=models.CASCADE,
         related_name="item_vault",
     )
@@ -42,7 +42,7 @@ class OrganizationVault(SharedMemoryModel):
     )
 
     class Meta:
-        app_label = "items"
+        app_label = "arxii"
 
     def __str__(self) -> str:
         return f"Vault of {self.organization}"
@@ -62,7 +62,7 @@ class VaultHolding(SharedMemoryModel):
         related_name="vault_holding",
     )
     deposited_by = models.ForeignKey(
-        "scenes.Persona",
+        "arxii.Persona",
         on_delete=models.SET_NULL,
         null=True,
         blank=True,
@@ -72,7 +72,7 @@ class VaultHolding(SharedMemoryModel):
     deposited_at = models.DateTimeField(auto_now_add=True)
 
     class Meta:
-        app_label = "items"
+        app_label = "arxii"
         ordering = ["deposited_at"]
 
     def __str__(self) -> str:
@@ -103,7 +103,7 @@ class VaultTransit(SharedMemoryModel):
         related_name="vault_transit",
     )
     carrier_character_sheet = models.ForeignKey(
-        "character_sheets.CharacterSheet",
+        "arxii.CharacterSheet",
         on_delete=models.CASCADE,
         related_name="vault_transits",
         help_text="The collector currently holding the item (sheet-scoped, like holders).",
@@ -119,7 +119,7 @@ class VaultTransit(SharedMemoryModel):
     )
 
     class Meta:
-        app_label = "items"
+        app_label = "arxii"
         ordering = ["created_at"]
 
     def __str__(self) -> str:
@@ -144,7 +144,7 @@ class OrgVaultEvent(SharedMemoryModel):
     )
     kind = models.CharField(max_length=20, choices=OrgVaultEventKind.choices)
     actor_persona = models.ForeignKey(
-        "scenes.Persona",
+        "arxii.Persona",
         on_delete=models.SET_NULL,
         null=True,
         blank=True,
@@ -159,7 +159,7 @@ class OrgVaultEvent(SharedMemoryModel):
     created_at = models.DateTimeField(auto_now_add=True)
 
     class Meta:
-        app_label = "items"
+        app_label = "arxii"
         ordering = ["-created_at"]
 
     def __str__(self) -> str:

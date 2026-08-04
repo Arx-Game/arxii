@@ -28,13 +28,13 @@ class RandomSceneTarget(SharedMemoryModel):
         related_name="random_scene_targets",
     )
     target_persona = models.ForeignKey(
-        "scenes.Persona",
+        "arxii.Persona",
         on_delete=models.CASCADE,
         related_name="targeted_for_random_scene",
         help_text="The persona (IC identity) to RP with",
     )
     game_week = models.ForeignKey(
-        "game_clock.GameWeek",
+        "arxii.GameWeek",
         on_delete=models.CASCADE,
         related_name="random_scene_targets",
     )
@@ -78,13 +78,13 @@ class RandomSceneCompletion(SharedMemoryModel):
         related_name="random_scene_completions",
     )
     claimer_entry = models.ForeignKey(
-        "roster.RosterEntry",
+        "arxii.RosterEntry",
         on_delete=models.CASCADE,
         related_name="random_scene_claimed_as",
         help_text="Which of the claimer's characters they were playing",
     )
     target_persona = models.ForeignKey(
-        "scenes.Persona",
+        "arxii.Persona",
         on_delete=models.CASCADE,
         related_name="random_scene_completed_by",
         help_text="The target persona that was RP'd with",

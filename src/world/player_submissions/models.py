@@ -26,7 +26,7 @@ class PlayerFeedback(SharedMemoryModel):
         help_text="The account that submitted this.",
     )
     reporter_persona = models.ForeignKey(
-        "scenes.Persona",
+        "arxii.Persona",
         on_delete=models.PROTECT,
         related_name="feedback_submissions",
         help_text="The persona the submitter was wearing when they submitted.",
@@ -68,7 +68,7 @@ class BugReport(SharedMemoryModel):
         help_text="The account that submitted this.",
     )
     reporter_persona = models.ForeignKey(
-        "scenes.Persona",
+        "arxii.Persona",
         on_delete=models.PROTECT,
         related_name="bug_reports",
     )
@@ -134,13 +134,13 @@ class PlayerReport(SharedMemoryModel):
         ),
     )
     reporter_persona = models.ForeignKey(
-        "scenes.Persona",
+        "arxii.Persona",
         on_delete=models.PROTECT,
         related_name="reports_submitted",
         help_text="The persona the reporter was wearing when submitting.",
     )
     reported_persona = models.ForeignKey(
-        "scenes.Persona",
+        "arxii.Persona",
         on_delete=models.PROTECT,
         related_name="reports_against",
         help_text="The persona of the reported player at the time of the incident.",
@@ -163,7 +163,7 @@ class PlayerReport(SharedMemoryModel):
         help_text="Whether the reporter blocked or muted as a result.",
     )
     scene = models.ForeignKey(
-        "scenes.Scene",
+        "arxii.Scene",
         on_delete=models.SET_NULL,
         null=True,
         blank=True,
@@ -171,7 +171,7 @@ class PlayerReport(SharedMemoryModel):
         help_text="The scene where the behavior occurred, if applicable.",
     )
     interaction = models.ForeignKey(
-        "scenes.Interaction",
+        "arxii.Interaction",
         on_delete=models.SET_NULL,
         null=True,
         blank=True,
@@ -230,7 +230,7 @@ class SystemErrorReport(SharedMemoryModel):
     message = models.TextField(blank=True, help_text="The exception's message.")
     traceback = models.TextField(help_text="Full formatted traceback of the first occurrence.")
     actor_persona = models.ForeignKey(
-        "scenes.Persona",
+        "arxii.Persona",
         on_delete=models.SET_NULL,
         null=True,
         blank=True,
@@ -278,14 +278,14 @@ class Petition(SharedMemoryModel):
     )
     category = models.CharField(max_length=30, choices=PetitionCategory.choices)
     scene = models.ForeignKey(
-        "scenes.Scene",
+        "arxii.Scene",
         null=True,
         blank=True,
         on_delete=models.SET_NULL,
         related_name="petitions",
     )
     subject_character = models.ForeignKey(
-        "character_sheets.CharacterSheet",
+        "arxii.CharacterSheet",
         null=True,
         blank=True,
         on_delete=models.SET_NULL,

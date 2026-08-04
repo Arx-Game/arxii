@@ -4,8 +4,8 @@ from django.test import TestCase
 from world.achievements.constants import ComparisonType
 from world.achievements.factories import (
     AchievementFactory,
-    AchievementRequirementFactory,
     AchievementRewardFactory,
+    AchievementStatRequirementFactory,
     CharacterAchievementFactory,
     DiscoveryFactory,
     RewardDefinitionFactory,
@@ -83,12 +83,12 @@ class AchievementModelTest(TestCase):
         self.assertIn(seasoned, novice.next_in_chain.all())
 
 
-class AchievementRequirementModelTest(TestCase):
+class AchievementStatRequirementModelTest(TestCase):
     @classmethod
     def setUpTestData(cls) -> None:
         cls.stat_def = StatDefinitionFactory(key="kills", name="Kills")
         cls.achievement = AchievementFactory(name="Test Achievement", slug="test-achievement")
-        cls.requirement = AchievementRequirementFactory(
+        cls.requirement = AchievementStatRequirementFactory(
             achievement=cls.achievement, stat=cls.stat_def, threshold=10
         )
 
@@ -98,7 +98,7 @@ class AchievementRequirementModelTest(TestCase):
 
     def test_multiple_requirements_per_achievement(self) -> None:
         quests_stat = StatDefinitionFactory(key="quests", name="Quests")
-        AchievementRequirementFactory(
+        AchievementStatRequirementFactory(
             achievement=self.achievement,
             stat=quests_stat,
             threshold=5,
@@ -107,19 +107,19 @@ class AchievementRequirementModelTest(TestCase):
         self.assertEqual(self.achievement.requirements.count(), 2)
 
     def test_is_met_gte(self) -> None:
-        req = AchievementRequirementFactory(threshold=10, comparison=ComparisonType.GTE)
+        req = AchievementStatRequirementFactory(threshold=10, comparison=ComparisonType.GTE)
         self.assertFalse(req.is_met(9))
         self.assertTrue(req.is_met(10))
         self.assertTrue(req.is_met(11))
 
     def test_is_met_eq(self) -> None:
-        req = AchievementRequirementFactory(threshold=10, comparison=ComparisonType.EQ)
+        req = AchievementStatRequirementFactory(threshold=10, comparison=ComparisonType.EQ)
         self.assertFalse(req.is_met(9))
         self.assertTrue(req.is_met(10))
         self.assertFalse(req.is_met(11))
 
     def test_is_met_lte(self) -> None:
-        req = AchievementRequirementFactory(threshold=10, comparison=ComparisonType.LTE)
+        req = AchievementStatRequirementFactory(threshold=10, comparison=ComparisonType.LTE)
         self.assertTrue(req.is_met(9))
         self.assertTrue(req.is_met(10))
         self.assertFalse(req.is_met(11))

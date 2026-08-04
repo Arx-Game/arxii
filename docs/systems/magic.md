@@ -2257,7 +2257,7 @@ if total lifetime-earned resonance is 0 (leaves the existing stored values as-is
 recompute, `fire_aura_threshold_crossings` checks whether the drift crossed any
 authored threshold and grants the linked achievement — mirroring the
 `fire_variant_discoveries` discovery pattern (direct before/after check, not a Flows
-event). Compound gates reuse the achievement's own `AchievementRequirement` rows.
+event). Compound gates reuse the achievement's own `AchievementStatRequirement` rows.
 
 Missions is the first deed source to grant morally-typed resonance:
 `MissionOptionRouteReward.resonance` (author-set, required when `sink=RESONANCE`) flows
@@ -2320,7 +2320,7 @@ owning technique plus their own unique-constraint fields, except `TechniqueOutco
 a global outcome-tier table with no technique FK — it's a `OneToOneField` to
 `traits.CheckOutcome` and keys on `outcome` alone; `PortalAnchorKind` keys on `name`
 (`achievements.Achievement` keys on `slug` and is now in `CONTENT_MODELS`
-alongside `AchievementRequirement`/`AchievementReward`/`RewardDefinition`/
+alongside `AchievementStatRequirement`/`AchievementReward`/`RewardDefinition`/
 `ConditionStatRule` — #2832). `load_entries` (`core_management/content_fixtures.py`)
 upserts by natural key. There is no in-repo seed catalog to fall back on: the lore repo is the
 single source (`seed_starter_gift_catalog()` was retired by #2474 — see "CG Starter

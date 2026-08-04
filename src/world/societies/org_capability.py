@@ -22,7 +22,7 @@ class OrganizationCapabilityProjectDetails(SharedMemoryModel):
         related_name="org_capability_details",
     )
     gift = models.ForeignKey(
-        "magic.Gift",
+        "arxii.Gift",
         on_delete=models.PROTECT,
         related_name="capability_project_details",
     )
@@ -30,7 +30,7 @@ class OrganizationCapabilityProjectDetails(SharedMemoryModel):
         help_text="Ceiling on thread level for this capability.",
     )
     organization = models.ForeignKey(
-        "societies.Organization",
+        "arxii.Organization",
         on_delete=models.CASCADE,
         related_name="capability_projects",
     )

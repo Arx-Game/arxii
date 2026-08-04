@@ -10,7 +10,7 @@ are never deleted (story-significant history, per CLAUDE.md).
 Import direction (ADR-0010): societies is the dependent/specific side of the
 societies↔currency relationship here (an obligation is a societies concept
 that happens to be settled with a currency instrument), so the FK on
-``OrganizationObligation`` uses the string ref ``"currency.FavorTokenDetails"``
+``OrganizationObligation`` uses the string ref ``"arxii.FavorTokenDetails"``
 and this module deferred-imports ``world.currency`` at call time rather than
 importing it at module load, matching the rest of this file's cross-app
 service calls.

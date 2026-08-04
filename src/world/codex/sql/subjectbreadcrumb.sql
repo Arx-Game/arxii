@@ -4,6 +4,11 @@
 -- CAVEAT: After a migration squash, you must manually add a RunSQL operation
 -- pointing at this file. Django's makemigrations won't auto-generate it.
 -- See docs/plans/2026-02-22-materialized-view-sql-files-design.md
+--
+-- Source tables are arxii_codexsubject / arxii_codexcategory (single-app
+-- collapse, #2906) -- the view's own name stays codex_subjectbreadcrumb
+-- since it's a managed=False model with an explicit Meta.db_table,
+-- unaffected by the app-label table rename.
 
 CREATE MATERIALIZED VIEW codex_subjectbreadcrumb AS
 WITH RECURSIVE path_cte AS (
@@ -18,8 +23,8 @@ WITH RECURSIVE path_cte AS (
                 'type', 'subject', 'id', s.id, 'name', s.name
             )
         ) AS breadcrumb_path
-    FROM codex_codexsubject s
-    JOIN codex_codexcategory c ON c.id = s.category_id
+    FROM arxii_codexsubject s
+    JOIN arxii_codexcategory c ON c.id = s.category_id
     WHERE s.parent_id IS NULL
 
     UNION ALL
@@ -32,7 +37,7 @@ WITH RECURSIVE path_cte AS (
                 'type', 'subject', 'id', s.id, 'name', s.name
             )
         )
-    FROM codex_codexsubject s
+    FROM arxii_codexsubject s
     JOIN path_cte p ON p.subject_id = s.parent_id
 )
 SELECT

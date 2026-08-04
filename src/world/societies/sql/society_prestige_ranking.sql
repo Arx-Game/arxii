@@ -13,6 +13,14 @@
 --
 -- CAVEAT: After a migration squash, add a RunSQL operation pointing at
 -- this file. Django's makemigrations won't auto-generate it.
+--
+-- NOT currently wired to anything: the SocietyPrestigeRanking model was
+-- deleted (pre-#2906 societies/0012) and no live caller references this
+-- view (verified via grep across src/), so tools/build_schema.py
+-- deliberately excludes it from SQL_FILES. Kept in-repo as a frozen
+-- reference; source tables below are renamed to their post-#2906 single-app
+-- names for consistency with the sibling materialized-view SQL files, even
+-- though nothing currently executes this file.
 
 -- Fame tier multipliers from world.societies.constants.FAME_TIER_MULTIPLIERS,
 -- and the tier-ordering used for fame_perception_offset application (#738).
@@ -43,8 +51,8 @@ persona_membership_societies AS (
     SELECT DISTINCT
         om.persona_id,
         org.society_id
-    FROM societies_organizationmembership om
-    JOIN societies_organization org ON org.id = om.organization_id
+    FROM arxii_organizationmembership om
+    JOIN arxii_organization org ON org.id = om.organization_id
     WHERE org.society_id IS NOT NULL
 ),
 displayed AS (
@@ -62,8 +70,8 @@ displayed AS (
             )
         )::integer AS displayed_prestige
     FROM persona_membership_societies pms
-    JOIN scenes_persona p ON p.id = pms.persona_id
-    JOIN societies_society s ON s.id = pms.society_id
+    JOIN arxii_persona p ON p.id = pms.persona_id
+    JOIN arxii_society s ON s.id = pms.society_id
     LEFT JOIN fame_tier_ranks ftr ON ftr.fame_tier = p.fame_tier
     LEFT JOIN fame_multipliers adj_fm ON adj_fm.tier_index =
         GREATEST(0, COALESCE(ftr.tier_index, 0) + COALESCE(s.fame_perception_offset, 0))

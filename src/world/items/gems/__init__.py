@@ -5,6 +5,6 @@ Gem types are ordinary ``ItemTemplate`` rows decorated by a ``GemDetails`` sidec
 ``ItemInstance`` decorated by ``GemInstanceDetails`` carrying its size/purity/cut
 grades. Worth = ``template.value × size × purity × cut``, folded into ``appraise()``.
 
-All models set ``Meta.app_label = "items"`` so Django registers them under the
-existing ``items`` app (no new Django app), mirroring ``world.items.crafting``.
+All models set ``Meta.app_label = "arxii"`` so Django registers them under the
+single collapsed app (#2906), mirroring ``world.items.crafting``.
 """

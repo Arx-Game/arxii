@@ -37,7 +37,7 @@ class SoulfrayConfig(SharedMemoryModel):
         help_text="Additional scaling factor for deficit (anima spent beyond zero).",
     )
     resilience_check_type = models.ForeignKey(
-        "checks.CheckType",
+        "arxii.CheckType",
         on_delete=models.PROTECT,
         help_text="Check type for Soulfray resilience (e.g., magical endurance).",
     )
@@ -75,7 +75,7 @@ class MishapPoolTier(SharedMemoryModel):
         help_text="Maximum control deficit for this tier (inclusive). Null = no upper bound.",
     )
     consequence_pool = models.ForeignKey(
-        "actions.ConsequencePool",
+        "arxii.ConsequencePool",
         on_delete=models.CASCADE,
         related_name="mishap_tiers",
         help_text="Consequence pool for this deficit range.",

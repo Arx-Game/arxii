@@ -21,8 +21,8 @@ from world.scenes.action_constants import (
 if TYPE_CHECKING:
     from world.scenes.models import Persona
 
-_PERSONA_MODEL = "scenes.Persona"
-_INTERACTION_MODEL = "scenes.Interaction"
+_PERSONA_MODEL = "arxii.Persona"
+_INTERACTION_MODEL = "arxii.Interaction"
 
 
 class DefenderConsentFields(models.Model):
@@ -61,7 +61,7 @@ class SceneActionRequest(CommittingDeclaration, DefenderConsentFields, SharedMem
     """
 
     scene = models.ForeignKey(
-        "scenes.Scene",
+        "arxii.Scene",
         on_delete=models.CASCADE,
         related_name="action_requests",
         help_text="The scene where this action takes place",
@@ -116,7 +116,7 @@ class SceneActionRequest(CommittingDeclaration, DefenderConsentFields, SharedMem
         help_text="EffortLevel value — modifies the check and scales social fatigue.",
     )
     spread_deed_target = models.ForeignKey(
-        "societies.LegendEntry",
+        "arxii.LegendEntry",
         on_delete=models.SET_NULL,
         null=True,
         blank=True,
@@ -124,7 +124,7 @@ class SceneActionRequest(CommittingDeclaration, DefenderConsentFields, SharedMem
         help_text="For spread_a_tale: the deed being spread.",
     )
     action_template = models.ForeignKey(
-        "actions.ActionTemplate",
+        "arxii.ActionTemplate",
         on_delete=models.SET_NULL,
         null=True,
         blank=True,
@@ -132,7 +132,7 @@ class SceneActionRequest(CommittingDeclaration, DefenderConsentFields, SharedMem
         help_text="Data-driven action template if applicable",
     )
     treatment = models.ForeignKey(
-        "conditions.TreatmentTemplate",
+        "arxii.TreatmentTemplate",
         on_delete=models.PROTECT,
         null=True,
         blank=True,
@@ -140,7 +140,7 @@ class SceneActionRequest(CommittingDeclaration, DefenderConsentFields, SharedMem
         help_text="Treatment being attempted, when the action_key is treat_condition.",
     )
     target_condition_instance = models.ForeignKey(
-        "conditions.ConditionInstance",
+        "arxii.ConditionInstance",
         on_delete=models.PROTECT,
         null=True,
         blank=True,
@@ -148,7 +148,7 @@ class SceneActionRequest(CommittingDeclaration, DefenderConsentFields, SharedMem
         help_text="Condition instance being treated, when applicable.",
     )
     target_pending_alteration = models.ForeignKey(
-        "magic.PendingAlteration",
+        "arxii.PendingAlteration",
         on_delete=models.PROTECT,
         null=True,
         blank=True,
@@ -156,7 +156,7 @@ class SceneActionRequest(CommittingDeclaration, DefenderConsentFields, SharedMem
         help_text="Pending alteration being treated, when applicable.",
     )
     thread_used = models.ForeignKey(
-        "magic.Thread",
+        "arxii.Thread",
         on_delete=models.PROTECT,
         null=True,
         blank=True,
@@ -169,7 +169,7 @@ class SceneActionRequest(CommittingDeclaration, DefenderConsentFields, SharedMem
         help_text="Key identifying the action type (e.g., 'intimidate', 'persuade')",
     )
     technique = models.ForeignKey(
-        "magic.Technique",
+        "arxii.Technique",
         on_delete=models.SET_NULL,
         null=True,
         blank=True,
@@ -178,7 +178,7 @@ class SceneActionRequest(CommittingDeclaration, DefenderConsentFields, SharedMem
     )
     # Snapshot fields for ritual check specs (nullable, fired-action audit only)
     snapshot_ritual = models.ForeignKey(
-        "magic.Ritual",
+        "arxii.Ritual",
         on_delete=models.SET_NULL,
         null=True,
         blank=True,
@@ -186,7 +186,7 @@ class SceneActionRequest(CommittingDeclaration, DefenderConsentFields, SharedMem
         help_text="Ritual that fired this action (snapshot audit field)",
     )
     snapshot_stat = models.ForeignKey(
-        "traits.Trait",
+        "arxii.Trait",
         on_delete=models.SET_NULL,
         null=True,
         blank=True,
@@ -194,7 +194,7 @@ class SceneActionRequest(CommittingDeclaration, DefenderConsentFields, SharedMem
         help_text="Primary stat from ritual check spec at fire time",
     )
     snapshot_skill = models.ForeignKey(
-        "skills.Skill",
+        "arxii.Skill",
         on_delete=models.SET_NULL,
         null=True,
         blank=True,
@@ -202,7 +202,7 @@ class SceneActionRequest(CommittingDeclaration, DefenderConsentFields, SharedMem
         help_text="Skill from ritual check spec at fire time",
     )
     snapshot_specialization = models.ForeignKey(
-        "skills.Specialization",
+        "arxii.Specialization",
         on_delete=models.SET_NULL,
         null=True,
         blank=True,
@@ -210,7 +210,7 @@ class SceneActionRequest(CommittingDeclaration, DefenderConsentFields, SharedMem
         help_text="Optional specialization from ritual check spec at fire time",
     )
     snapshot_resonance = models.ForeignKey(
-        "magic.Resonance",
+        "arxii.Resonance",
         on_delete=models.SET_NULL,
         null=True,
         blank=True,
@@ -218,7 +218,7 @@ class SceneActionRequest(CommittingDeclaration, DefenderConsentFields, SharedMem
         help_text="Optional resonance filter from ritual check spec at fire time",
     )
     snapshot_check_type = models.ForeignKey(
-        "checks.CheckType",
+        "arxii.CheckType",
         on_delete=models.SET_NULL,
         null=True,
         blank=True,
@@ -339,7 +339,7 @@ class SceneActionTarget(DefenderConsentFields, SharedMemoryModel):
     """
 
     action_request = models.ForeignKey(
-        "scenes.SceneActionRequest",
+        "arxii.SceneActionRequest",
         on_delete=models.CASCADE,
         related_name="additional_targets",
     )
@@ -392,13 +392,13 @@ class SceneActionPullDeclaration(SharedMemoryModel):
     """
 
     request = models.OneToOneField(
-        "scenes.SceneActionRequest",
+        "arxii.SceneActionRequest",
         on_delete=models.CASCADE,
         related_name="pull_declaration",
         help_text="The action request this pull was declared with.",
     )
     resonance = models.ForeignKey(
-        "magic.Resonance",
+        "arxii.Resonance",
         on_delete=models.PROTECT,
         related_name="+",
         help_text="Resonance committed by the pull (all threads must share it).",
@@ -408,7 +408,7 @@ class SceneActionPullDeclaration(SharedMemoryModel):
         help_text="Paid pull tier (1-3).",
     )
     threads = models.ManyToManyField(
-        "magic.Thread",
+        "arxii.Thread",
         related_name="action_pull_declarations",
         help_text="Threads pulled; owned by the actor, sharing ``resonance``.",
     )

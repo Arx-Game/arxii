@@ -17,7 +17,7 @@ class Reincarnation(SharedMemoryModel):
     """
 
     character = models.ForeignKey(
-        "character_sheets.CharacterSheet",
+        "arxii.CharacterSheet",
         on_delete=models.CASCADE,
         related_name="reincarnations",
         help_text="The character who is a reincarnation.",

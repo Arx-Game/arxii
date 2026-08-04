@@ -1,8 +1,8 @@
 """Crafting submodule for the items app.
 
 Provides the generic magical-crafting framework: recipes, ingredient slots,
-attempt tracking, and cost consumption. All models carry ``Meta.app_label = "items"``
-so Django discovers them under the ``items`` app label.
+attempt tracking, and cost consumption. All models carry ``Meta.app_label = "arxii"``
+(#2906) so Django discovers them under the single collapsed app label.
 """
 
 # Register concrete handlers at package import time so that

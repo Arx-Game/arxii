@@ -12,13 +12,13 @@ class PathIntent(SharedMemoryModel):
     """
 
     character_sheet = models.OneToOneField(
-        "character_sheets.CharacterSheet",
+        "arxii.CharacterSheet",
         on_delete=models.CASCADE,
         related_name="path_intent",
     )
     # NOT named "path": idmapper metaclass shadows that attribute name.
     intended_path = models.ForeignKey(
-        "classes.Path",
+        "arxii.Path",
         on_delete=models.PROTECT,
         related_name="path_intents",
         help_text="The path the character intends to take at their next crossing.",

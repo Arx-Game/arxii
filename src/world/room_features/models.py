@@ -27,9 +27,9 @@ from world.room_features.constants import (
     RoomFeatureServiceStrategy,
 )
 
-ROOM_PROFILE_MODEL = "evennia_extensions.RoomProfile"
-_PERSONA_MODEL = "scenes.Persona"
-CHARACTER_SHEET_MODEL = "character_sheets.CharacterSheet"
+ROOM_PROFILE_MODEL = "arxii.RoomProfile"
+_PERSONA_MODEL = "arxii.Persona"
+CHARACTER_SHEET_MODEL = "arxii.CharacterSheet"
 
 
 class RoomFeatureKind(SharedMemoryModel):
@@ -70,7 +70,7 @@ class RoomFeatureKind(SharedMemoryModel):
         ),
     )
     allowed_building_kinds = models.ManyToManyField(
-        "buildings.BuildingKind",
+        "arxii.BuildingKind",
         blank=True,
         related_name="installable_features",
         help_text=(
@@ -118,7 +118,7 @@ class RoomFeatureKindInstallRitual(SharedMemoryModel):
         related_name="install_rituals",
     )
     ritual = models.ForeignKey(
-        "magic.Ritual",
+        "arxii.Ritual",
         on_delete=models.PROTECT,
         related_name="installs_room_features",
     )
@@ -259,7 +259,7 @@ class RoomFeatureProgressionDetails(SharedMemoryModel):
     """
 
     project = models.OneToOneField(
-        "projects.Project",
+        "arxii.Project",
         on_delete=models.CASCADE,
         related_name="room_feature_progression_details",
         primary_key=True,
@@ -319,7 +319,7 @@ class Trap(SharedMemoryModel):
         help_text="The room this trap is set in. A room may hold several traps.",
     )
     position = models.ForeignKey(
-        "areas.Position",
+        "arxii.Position",
         on_delete=models.PROTECT,
         null=True,
         blank=True,
@@ -333,7 +333,7 @@ class Trap(SharedMemoryModel):
     )
     name = models.CharField(max_length=100)
     consequence_pool = models.ForeignKey(
-        "actions.ConsequencePool",
+        "arxii.ConsequencePool",
         on_delete=models.PROTECT,
         related_name="traps",
         help_text=(
@@ -343,13 +343,13 @@ class Trap(SharedMemoryModel):
         ),
     )
     detect_check_type = models.ForeignKey(
-        "checks.CheckType",
+        "arxii.CheckType",
         on_delete=models.PROTECT,
         related_name="detect_traps",
         help_text="Check rolled on entry to spot the trap before it triggers.",
     )
     disarm_check_type = models.ForeignKey(
-        "checks.CheckType",
+        "arxii.CheckType",
         on_delete=models.PROTECT,
         related_name="disarm_traps",
         help_text="Check rolled by the disarm action.",
@@ -466,7 +466,7 @@ class VaultDetails(SharedMemoryModel):
     """
 
     feature_instance = models.OneToOneField(
-        "room_features.RoomFeatureInstance",
+        "arxii.RoomFeatureInstance",
         on_delete=models.CASCADE,
         related_name="vault_details",
         primary_key=True,
@@ -529,7 +529,7 @@ class VaultAccessEntry(DiscriminatorMixin, SharedMemoryModel):
         related_name="vault_access_entries",
     )
     holder_organization = models.ForeignKey(
-        "societies.Organization",
+        "arxii.Organization",
         null=True,
         blank=True,
         on_delete=models.PROTECT,
@@ -579,7 +579,7 @@ class ExitBarsDetails(SharedMemoryModel):
     """
 
     exit_profile = models.OneToOneField(
-        "evennia_extensions.ExitProfile",
+        "arxii.ExitProfile",
         on_delete=models.CASCADE,
         related_name="bars_details",
         primary_key=True,
@@ -637,7 +637,7 @@ class RoomWardDetails(SharedMemoryModel):
         help_text="Ward tier. Capped at ROOM_WARD_MAX_LEVEL.",
     )
     resonance = models.ForeignKey(
-        "magic.Resonance",
+        "arxii.Resonance",
         on_delete=models.PROTECT,
         related_name="wards",
         help_text="The resonance flavor powering this ward's upkeep.",
@@ -647,7 +647,7 @@ class RoomWardDetails(SharedMemoryModel):
         help_text="Banked resonance the daily upkeep tick drains from.",
     )
     reaction_condition = models.ForeignKey(
-        "conditions.ConditionTemplate",
+        "arxii.ConditionTemplate",
         on_delete=models.PROTECT,
         null=True,
         blank=True,
@@ -733,14 +733,14 @@ class DefenseProgressionDetails(SharedMemoryModel):
     """
 
     project = models.OneToOneField(
-        "projects.Project",
+        "arxii.Project",
         on_delete=models.CASCADE,
         related_name="defense_progression_details",
         primary_key=True,
     )
     defense_kind = models.CharField(max_length=16, choices=DefenseKind.choices)
     target_exit_profile = models.ForeignKey(
-        "evennia_extensions.ExitProfile",
+        "arxii.ExitProfile",
         on_delete=models.PROTECT,
         null=True,
         blank=True,
@@ -757,7 +757,7 @@ class DefenseProgressionDetails(SharedMemoryModel):
     )
     target_level = models.PositiveSmallIntegerField(validators=[MinValueValidator(1)])
     resonance = models.ForeignKey(
-        "magic.Resonance",
+        "arxii.Resonance",
         on_delete=models.PROTECT,
         null=True,
         blank=True,
@@ -765,7 +765,7 @@ class DefenseProgressionDetails(SharedMemoryModel):
         help_text="Required for ROOM_WARD installs only.",
     )
     reaction_condition = models.ForeignKey(
-        "conditions.ConditionTemplate",
+        "arxii.ConditionTemplate",
         on_delete=models.PROTECT,
         null=True,
         blank=True,
@@ -821,7 +821,7 @@ class BrigDetails(SharedMemoryModel):
     """
 
     feature_instance = models.OneToOneField(
-        "room_features.RoomFeatureInstance",
+        "arxii.RoomFeatureInstance",
         on_delete=models.CASCADE,
         related_name="brig_details",
         primary_key=True,

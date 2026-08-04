@@ -1,17 +1,18 @@
--- Reverse: convert partitioned scenes_interaction back to a regular table.
+-- Reverse: convert partitioned arxii_interaction back to a regular table.
 --
--- Referenced by: scenes/migrations/0003_partition_interaction.py
--- If migrations are squashed, this SQL file must be preserved and re-referenced.
+-- Kept for reference only: no migration currently applies this reverse SQL
+-- (the #2906 single-app collapse squashed the per-app migration chain that
+-- used to RunSQL it; tools/build_schema.py builds forward-only from models).
 
 -- 1. Rename partitioned table
-ALTER TABLE scenes_interaction RENAME TO scenes_interaction_partitioned;
+ALTER TABLE arxii_interaction RENAME TO arxii_interaction_partitioned;
 
 -- 2. Create regular table with same structure as the forward SQL's partitioned
 -- table. The column list MUST match world.scenes.models.Interaction. Drift is
 -- enforced by tools/check_partition_sql_drift.py (pre-commit hook).
 -- ON DELETE NO ACTION mirrors the forward SQL (Postgres has no PROTECT — see
 -- notes in partition_interaction_forward.sql).
-CREATE TABLE scenes_interaction (
+CREATE TABLE arxii_interaction (
     id               bigserial PRIMARY KEY,
     content          text NOT NULL,
     mode             varchar(20) NOT NULL,
@@ -25,63 +26,63 @@ CREATE TABLE scenes_interaction (
     -- already dropped before this migration runs back, so re-adding it is not
     -- this SQL's job. See POST_PARTITION_COLUMNS in check_partition_sql_drift.py
     "timestamp"           timestamptz NOT NULL,
-    persona_id            bigint NOT NULL REFERENCES scenes_persona (id)
+    persona_id            bigint NOT NULL REFERENCES arxii_persona (id)
         ON DELETE NO ACTION DEFERRABLE INITIALLY DEFERRED,
-    scene_id              bigint REFERENCES scenes_scene (id)
+    scene_id              bigint REFERENCES arxii_scene (id)
         ON DELETE SET NULL DEFERRABLE INITIALLY DEFERRED,
-    place_id              bigint REFERENCES scenes_place (id)
+    place_id              bigint REFERENCES arxii_place (id)
         ON DELETE SET NULL DEFERRABLE INITIALLY DEFERRED
 );
 
 -- 3. Copy data — explicit column list (drift-checked vs. the CREATE TABLE above)
-INSERT INTO scenes_interaction
+INSERT INTO arxii_interaction
     (id, content, mode, visibility, pose_kind, vote_count, strain_committed, "timestamp", persona_id, scene_id, place_id)
     SELECT id, content, mode, visibility, pose_kind, vote_count, strain_committed, "timestamp", persona_id, scene_id, place_id
-    FROM scenes_interaction_partitioned;
+    FROM arxii_interaction_partitioned;
 
 -- 4. Drop partitioned table
-DROP TABLE scenes_interaction_partitioned CASCADE;
+DROP TABLE arxii_interaction_partitioned CASCADE;
 
 -- 5. Recreate indexes
-CREATE INDEX scenes_interaction_timestamp_idx
-    ON scenes_interaction ("timestamp");
-CREATE INDEX scenes_inte_persona_ts_idx
-    ON scenes_interaction (persona_id, "timestamp");
-CREATE INDEX scenes_inte_scene_ts_idx
-    ON scenes_interaction (scene_id, "timestamp");
+CREATE INDEX arxii_interaction_timestamp_idx
+    ON arxii_interaction ("timestamp");
+CREATE INDEX arxii_inte_persona_ts_idx
+    ON arxii_interaction (persona_id, "timestamp");
+CREATE INDEX arxii_inte_scene_ts_idx
+    ON arxii_interaction (scene_id, "timestamp");
 CREATE INDEX interaction_very_private_idx
-    ON scenes_interaction ("timestamp")
+    ON arxii_interaction ("timestamp")
     WHERE visibility = 'very_private';
 CREATE INDEX interaction_no_scene_idx
-    ON scenes_interaction ("timestamp")
+    ON arxii_interaction ("timestamp")
     WHERE scene_id IS NULL;
 
 -- 6. Drop composite FK constraints from child tables (added in forward)
-ALTER TABLE scenes_interactionreceiver
+ALTER TABLE arxii_interactionreceiver
     DROP CONSTRAINT IF EXISTS interactionreceiver_interaction_fk;
-ALTER TABLE scenes_interactionfavorite
+ALTER TABLE arxii_interactionfavorite
     DROP CONSTRAINT IF EXISTS interactionfavorite_interaction_fk;
-ALTER TABLE scenes_interactiontargetpersona
+ALTER TABLE arxii_interactiontargetpersona
     DROP CONSTRAINT IF EXISTS interactiontargetpersona_interaction_fk;
-ALTER TABLE scenes_interactionreaction
+ALTER TABLE arxii_interactionreaction
     DROP CONSTRAINT IF EXISTS interactionreaction_interaction_fk;
 
 -- 7. Re-add single-column FK constraints
-ALTER TABLE scenes_interactionreceiver
-    ADD CONSTRAINT scenes_interactionreceiver_interaction_id_fk
-    FOREIGN KEY (interaction_id) REFERENCES scenes_interaction (id)
+ALTER TABLE arxii_interactionreceiver
+    ADD CONSTRAINT arxii_interactionreceiver_interaction_id_fk
+    FOREIGN KEY (interaction_id) REFERENCES arxii_interaction (id)
     ON DELETE CASCADE DEFERRABLE INITIALLY DEFERRED;
-ALTER TABLE scenes_interactionfavorite
-    ADD CONSTRAINT scenes_interactionfavorite_interaction_id_fk
-    FOREIGN KEY (interaction_id) REFERENCES scenes_interaction (id)
+ALTER TABLE arxii_interactionfavorite
+    ADD CONSTRAINT arxii_interactionfavorite_interaction_id_fk
+    FOREIGN KEY (interaction_id) REFERENCES arxii_interaction (id)
     ON DELETE CASCADE DEFERRABLE INITIALLY DEFERRED;
-ALTER TABLE scenes_interactiontargetpersona
-    ADD CONSTRAINT scenes_interactiontargetpersona_interaction_id_fk
-    FOREIGN KEY (interaction_id) REFERENCES scenes_interaction (id)
+ALTER TABLE arxii_interactiontargetpersona
+    ADD CONSTRAINT arxii_interactiontargetpersona_interaction_id_fk
+    FOREIGN KEY (interaction_id) REFERENCES arxii_interaction (id)
     ON DELETE CASCADE DEFERRABLE INITIALLY DEFERRED;
-ALTER TABLE scenes_interactionreaction
-    ADD CONSTRAINT scenes_interactionreaction_interaction_id_fk
-    FOREIGN KEY (interaction_id) REFERENCES scenes_interaction (id)
+ALTER TABLE arxii_interactionreaction
+    ADD CONSTRAINT arxii_interactionreaction_interaction_id_fk
+    FOREIGN KEY (interaction_id) REFERENCES arxii_interaction (id)
     ON DELETE CASCADE DEFERRABLE INITIALLY DEFERRED;
 
 -- 8. Drop BRIN indexes

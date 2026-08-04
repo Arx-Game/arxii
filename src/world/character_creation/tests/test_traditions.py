@@ -9,7 +9,7 @@ from world.character_creation.factories import (
     BeginningTraditionFactory,
     CharacterDraftFactory,
 )
-from world.character_creation.models import BeginningTradition
+from world.character_creation.models import Beginnings, BeginningTradition
 from world.distinctions.factories import DistinctionFactory
 from world.magic.factories import TraditionFactory
 
@@ -225,10 +225,15 @@ class TraditionListLeakTests(TestCase):
             return m.group(1) if m else ""
 
         primary_tables = [primary_table(q["sql"]) for q in ctx.captured_queries]
-        assert "character_creation_beginningtradition" not in primary_tables, (
+        # Table names derived (not hardcoded): a stale string here would go
+        # silently vacuous (never matching any real table) rather than catching
+        # a regression — see #2906.
+        bt_table = BeginningTradition._meta.db_table
+        beginnings_table = Beginnings._meta.db_table
+        assert bt_table not in primary_tables, (
             f"Expected zero BT-as-primary-table queries on repeat request, got: {primary_tables}"
         )
-        assert "character_creation_beginnings" not in primary_tables, (
+        assert beginnings_table not in primary_tables, (
             f"Expected zero Beginnings-as-primary-table queries on repeat request "
             f"(SharedMemoryModel cache hit), got: {primary_tables}"
         )

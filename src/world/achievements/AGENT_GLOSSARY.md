@@ -13,7 +13,7 @@ In this app, a named numeric counter (a tracked metric like "quests_completed" o
 _Avoid_: counter, metric (as the canonical term)
 
 **StatDefinition**:
-The lookup row defining a trackable Stat — its unique dot-separated key, display name, and description — so the same normalized stat identity is shared between a StatTracker and an AchievementRequirement instead of raw strings.
+The lookup row defining a trackable Stat — its unique dot-separated key, display name, and description — so the same normalized stat identity is shared between a StatTracker and an AchievementStatRequirement instead of raw strings.
 _Avoid_: stat key, stat type
 
 **StatTracker**:

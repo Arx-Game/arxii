@@ -58,7 +58,7 @@ class Clue(NaturalKeyMixin, DiscriminatorMixin, SharedMemoryModel):
         help_text="Which target this clue points at (selects the active FK).",
     )
     target_codex_entry = models.ForeignKey(
-        "codex.CodexEntry",
+        "arxii.CodexEntry",
         null=True,
         blank=True,
         on_delete=models.CASCADE,
@@ -66,7 +66,7 @@ class Clue(NaturalKeyMixin, DiscriminatorMixin, SharedMemoryModel):
         help_text="The codex entry this clue hints at (target_kind=CODEX).",
     )
     target_mission = models.ForeignKey(
-        "missions.MissionTemplate",
+        "arxii.MissionTemplate",
         null=True,
         blank=True,
         on_delete=models.CASCADE,
@@ -74,7 +74,7 @@ class Clue(NaturalKeyMixin, DiscriminatorMixin, SharedMemoryModel):
         help_text="The mission this clue points to (target_kind=MISSION).",
     )
     target_captivity = models.ForeignKey(
-        "captivity.Captivity",
+        "arxii.Captivity",
         null=True,
         blank=True,
         on_delete=models.CASCADE,
@@ -82,7 +82,7 @@ class Clue(NaturalKeyMixin, DiscriminatorMixin, SharedMemoryModel):
         help_text="The captivity this clue points to freeing (target_kind=RESCUE, #931).",
     )
     target_secret = models.ForeignKey(
-        "secrets.Secret",
+        "arxii.Secret",
         null=True,
         blank=True,
         on_delete=models.CASCADE,
@@ -90,7 +90,7 @@ class Clue(NaturalKeyMixin, DiscriminatorMixin, SharedMemoryModel):
         help_text="The character secret this clue points to (target_kind=SECRET, #1334).",
     )
     target_persona = models.ForeignKey(
-        "scenes.Persona",
+        "arxii.Persona",
         null=True,
         blank=True,
         on_delete=models.CASCADE,
@@ -103,7 +103,7 @@ class Clue(NaturalKeyMixin, DiscriminatorMixin, SharedMemoryModel):
         ),
     )
     target_persona_linked = models.ForeignKey(
-        "scenes.Persona",
+        "arxii.Persona",
         null=True,
         blank=True,
         on_delete=models.CASCADE,
@@ -168,7 +168,7 @@ class CharacterClue(SharedMemoryModel):
     """
 
     roster_entry = models.ForeignKey(
-        "roster.RosterEntry",
+        "arxii.RosterEntry",
         on_delete=models.CASCADE,
         related_name="clues_held",
     )
@@ -198,7 +198,7 @@ class ResearchProjectDetails(SharedMemoryModel):
     """
 
     project = models.OneToOneField(
-        "projects.Project",
+        "arxii.Project",
         on_delete=models.CASCADE,
         related_name="research_details",
     )
@@ -227,7 +227,7 @@ class RoomClue(SharedMemoryModel):
     """
 
     room_profile = models.ForeignKey(
-        "evennia_extensions.RoomProfile",
+        "arxii.RoomProfile",
         on_delete=models.CASCADE,
         related_name="hidden_clues",
     )
@@ -292,7 +292,7 @@ class ClueTrigger(SharedMemoryModel):
     """
 
     room_profile = models.ForeignKey(
-        "evennia_extensions.RoomProfile",
+        "arxii.RoomProfile",
         on_delete=models.CASCADE,
         related_name="clue_triggers",
     )
@@ -354,7 +354,7 @@ class ItemClueTrigger(SharedMemoryModel):
     """
 
     item_template = models.ForeignKey(
-        "items.ItemTemplate",
+        "arxii.ItemTemplate",
         on_delete=models.CASCADE,
         related_name="clue_triggers",
     )

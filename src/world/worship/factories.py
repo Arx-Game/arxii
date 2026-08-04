@@ -48,7 +48,7 @@ class WorshipDeclarationFactory(factory.django.DjangoModelFactory):
 
 class MiracleFactory(factory.django.DjangoModelFactory):
     class Meta:
-        model = "worship.Miracle"
+        model = "arxii.Miracle"
 
     name = factory.Sequence(lambda n: f"Miracle {n}")
     being = factory.SubFactory(WorshippedBeingFactory)
@@ -62,7 +62,7 @@ class MiracleFactory(factory.django.DjangoModelFactory):
 
 class DivineInterventionConfigFactory(factory.django.DjangoModelFactory):
     class Meta:
-        model = "worship.DivineInterventionConfig"
+        model = "arxii.DivineInterventionConfig"
         django_get_or_create = ("pk",)
 
     pk = 1

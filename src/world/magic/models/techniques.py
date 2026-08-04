@@ -31,9 +31,9 @@ if TYPE_CHECKING:
     from world.magic.types.technique_effects import TechniqueEffectPayload
 
 # App-qualified model paths repeated across FK references; centralized for dedup.
-_TECHNIQUE_MODEL = "magic.Technique"
-_CONDITION_TEMPLATE_MODEL = "conditions.ConditionTemplate"
-_CAPABILITY_TYPE_MODEL = "conditions.CapabilityType"
+_TECHNIQUE_MODEL = "arxii.Technique"
+_CONDITION_TEMPLATE_MODEL = "arxii.ConditionTemplate"
+_CAPABILITY_TYPE_MODEL = "arxii.CapabilityType"
 
 # Sentinel distinguishing "no config argument passed" (self-fetch) from an explicit
 # ``config=None`` (caller already established no row exists — skip the fetch). Lets a
@@ -430,7 +430,7 @@ class Technique(NaturalKeyMixin, DiscoverableContent, SharedMemoryModel):
         ),
     )
     clash_resolution_pool = models.ForeignKey(
-        "actions.ConsequencePool",
+        "arxii.ConsequencePool",
         on_delete=models.PROTECT,
         null=True,
         blank=True,
@@ -441,7 +441,7 @@ class Technique(NaturalKeyMixin, DiscoverableContent, SharedMemoryModel):
         ),
     )
     clash_per_round_pool = models.ForeignKey(
-        "actions.ConsequencePool",
+        "arxii.ConsequencePool",
         on_delete=models.PROTECT,
         null=True,
         blank=True,
@@ -453,7 +453,7 @@ class Technique(NaturalKeyMixin, DiscoverableContent, SharedMemoryModel):
     )
 
     creator = models.ForeignKey(
-        "character_sheets.CharacterSheet",
+        "arxii.CharacterSheet",
         on_delete=models.SET_NULL,
         null=True,
         blank=True,
@@ -461,7 +461,7 @@ class Technique(NaturalKeyMixin, DiscoverableContent, SharedMemoryModel):
         help_text="Character who created this technique.",
     )
     action_template = models.ForeignKey(
-        "actions.ActionTemplate",
+        "arxii.ActionTemplate",
         on_delete=models.SET_NULL,
         null=True,
         blank=True,
@@ -470,27 +470,27 @@ class Technique(NaturalKeyMixin, DiscoverableContent, SharedMemoryModel):
     )
     applied_conditions = models.ManyToManyField(
         _CONDITION_TEMPLATE_MODEL,
-        through="magic.TechniqueAppliedCondition",
+        through="arxii.TechniqueAppliedCondition",
         related_name="techniques_applying",
         blank=True,
         help_text="Conditions this technique can apply, with formula-based scaling.",
     )
     properties = models.ManyToManyField(
-        "mechanics.Property",
+        "arxii.Property",
         related_name="techniques",
         blank=True,
         help_text="Neutral descriptive tags on this technique (e.g. cursed), used by "
         "reactive trigger filters via the has_property op.",
     )
     target_prerequisites = models.ManyToManyField(
-        "mechanics.Prerequisite",
+        "arxii.Prerequisite",
         related_name="gated_techniques",
         blank=True,
         help_text="Property-based targeting preconditions a target must satisfy "
         "(ALL must pass) to be a legal target for this technique.",
     )
     target_weather_type = models.ForeignKey(
-        "weather.WeatherType",
+        "arxii.WeatherType",
         on_delete=models.SET_NULL,
         null=True,
         blank=True,
@@ -500,7 +500,7 @@ class Technique(NaturalKeyMixin, DiscoverableContent, SharedMemoryModel):
         "Null on every non-environmental technique.",
     )
     travel_anchor_kind = models.ForeignKey(
-        "magic.PortalAnchorKind",
+        "arxii.PortalAnchorKind",
         on_delete=models.PROTECT,
         null=True,
         blank=True,
@@ -509,7 +509,7 @@ class Technique(NaturalKeyMixin, DiscoverableContent, SharedMemoryModel):
         "anchor medium (#2222).",
     )
     codex_entry = models.ForeignKey(
-        "codex.CodexEntry",
+        "arxii.CodexEntry",
         on_delete=models.PROTECT,
         null=True,
         blank=True,
@@ -521,7 +521,7 @@ class Technique(NaturalKeyMixin, DiscoverableContent, SharedMemoryModel):
 
     class NaturalKeyConfig:
         fields = ["gift", "name"]
-        dependencies = ["magic.Gift"]
+        dependencies = ["arxii.Gift"]
 
     class Meta:
         verbose_name = "Technique"
@@ -857,7 +857,7 @@ class AbstractDamageProfile(SharedMemoryModel):
     """
 
     damage_type = models.ForeignKey(
-        "conditions.DamageType",
+        "arxii.DamageType",
         on_delete=models.PROTECT,
         null=True,
         blank=True,
@@ -932,7 +932,7 @@ class TechniqueCapabilityGrant(NaturalKeyMixin, AbstractCapabilityGrant):
         related_name="capability_grants",
     )
     prerequisite = models.ForeignKey(
-        "mechanics.Prerequisite",
+        "arxii.Prerequisite",
         on_delete=models.SET_NULL,
         null=True,
         blank=True,
@@ -1081,7 +1081,7 @@ class StyleCapabilityRequirement(NaturalKeyMixin, SharedMemoryModel):
 
     class NaturalKeyConfig:
         fields = ["style", "capability"]
-        dependencies = ["magic.TechniqueStyle", _CAPABILITY_TYPE_MODEL]
+        dependencies = ["arxii.TechniqueStyle", _CAPABILITY_TYPE_MODEL]
 
     class Meta:
         constraints = [
@@ -1104,7 +1104,7 @@ class CharacterTechnique(SharedMemoryModel):
     """
 
     character = models.ForeignKey(
-        "character_sheets.CharacterSheet",
+        "arxii.CharacterSheet",
         on_delete=models.CASCADE,
         related_name="character_techniques",
         help_text="The character who knows this technique.",
@@ -1120,7 +1120,7 @@ class CharacterTechnique(SharedMemoryModel):
         help_text="When this technique was acquired.",
     )
     source = models.ForeignKey(
-        "mechanics.ModifierSource",
+        "arxii.ModifierSource",
         null=True,
         blank=True,
         on_delete=models.SET_NULL,
@@ -1132,7 +1132,7 @@ class CharacterTechnique(SharedMemoryModel):
         ),
     )
     role_source = models.ForeignKey(
-        "covenants.CharacterCovenantRole",
+        "arxii.CharacterCovenantRole",
         null=True,
         blank=True,
         on_delete=models.CASCADE,
@@ -1161,7 +1161,7 @@ class TechniqueOutcomeModifier(NaturalKeyMixin, SharedMemoryModel):
     """
 
     outcome = models.OneToOneField(
-        "traits.CheckOutcome",
+        "arxii.CheckOutcome",
         on_delete=models.CASCADE,
         related_name="technique_warp_modifier",
         help_text="The technique check outcome tier.",
@@ -1174,7 +1174,7 @@ class TechniqueOutcomeModifier(NaturalKeyMixin, SharedMemoryModel):
 
     class NaturalKeyConfig:
         fields = ["outcome"]
-        dependencies = ["traits.CheckOutcome"]
+        dependencies = ["arxii.CheckOutcome"]
 
     class Meta:
         verbose_name = "Technique Outcome Modifier"
@@ -1331,7 +1331,7 @@ class TechniqueTreatment(NaturalKeyMixin, SharedMemoryModel):
         related_name="treatments",
     )
     treatment_template = models.ForeignKey(
-        "conditions.TreatmentTemplate",
+        "arxii.TreatmentTemplate",
         on_delete=models.PROTECT,
         related_name="technique_payloads",
     )
@@ -1349,7 +1349,7 @@ class TechniqueTreatment(NaturalKeyMixin, SharedMemoryModel):
 
     class NaturalKeyConfig:
         fields = ["technique", "treatment_template"]
-        dependencies = [_TECHNIQUE_MODEL, "conditions.TreatmentTemplate"]
+        dependencies = [_TECHNIQUE_MODEL, "arxii.TreatmentTemplate"]
 
     class Meta:
         constraints = [
@@ -1384,7 +1384,7 @@ class TechniqueDamageProfile(NaturalKeyMixin, AbstractDamageProfile):
 
     class NaturalKeyConfig:
         fields = ["technique", "damage_type"]
-        dependencies = [_TECHNIQUE_MODEL, "conditions.DamageType"]
+        dependencies = [_TECHNIQUE_MODEL, "arxii.DamageType"]
 
     class Meta:
         constraints = [

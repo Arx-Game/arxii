@@ -40,13 +40,13 @@ from world.locations.constants import StatKey
 
 # Cross-app FK strings used by multiple fields below. Centralized to avoid the
 # duplicated-literal SonarCloud smell (python:S1192).
-_CHARACTER_SHEET_FK = "character_sheets.CharacterSheet"
-_PERSONA_FK = "scenes.Persona"
-_ITEM_INSTANCE_FK = "items.ItemInstance"
-SOCIETY_MODEL = "societies.Society"
-CHECK_TYPE_MODEL = "checks.CheckType"
-FACET_MODEL = "magic.Facet"
-RESONANCE_MODEL = "magic.Resonance"
+_CHARACTER_SHEET_FK = "arxii.CharacterSheet"
+_PERSONA_FK = "arxii.Persona"
+_ITEM_INSTANCE_FK = "arxii.ItemInstance"
+SOCIETY_MODEL = "arxii.Society"
+CHECK_TYPE_MODEL = "arxii.CheckType"
+FACET_MODEL = "arxii.Facet"
+RESONANCE_MODEL = "arxii.Resonance"
 
 
 class QualityTier(SharedMemoryModel):
@@ -297,7 +297,7 @@ class ItemTemplate(NaturalKeyMixin, SharedMemoryModel):
         help_text="Inactive templates cannot be used to create new items.",
     )
     material_category = models.ForeignKey(
-        "items.MaterialCategory",
+        "arxii.MaterialCategory",
         on_delete=models.PROTECT,
         null=True,
         blank=True,
@@ -370,7 +370,7 @@ class ItemTemplate(NaturalKeyMixin, SharedMemoryModel):
         help_text="Maximum charges for consumable items.",
     )
     on_use_pool = models.ForeignKey(
-        "actions.ConsequencePool",
+        "arxii.ConsequencePool",
         on_delete=models.SET_NULL,
         null=True,
         blank=True,
@@ -424,7 +424,7 @@ class ItemTemplate(NaturalKeyMixin, SharedMemoryModel):
         help_text="Resonance this item archetype is thematically tied to (a touchstone).",
     )
     resonance_tier = models.ForeignKey(
-        "magic.ResonanceTier",
+        "arxii.ResonanceTier",
         on_delete=models.PROTECT,
         null=True,
         blank=True,
@@ -432,7 +432,7 @@ class ItemTemplate(NaturalKeyMixin, SharedMemoryModel):
         help_text="Potency tier, required together with tied_resonance.",
     )
     image = models.ForeignKey(
-        "evennia_extensions.Media",
+        "arxii.Media",
         on_delete=models.SET_NULL,
         null=True,
         blank=True,
@@ -454,7 +454,7 @@ class ItemTemplate(NaturalKeyMixin, SharedMemoryModel):
         ),
     )
     silhouette = models.ForeignKey(
-        "items.Silhouette",
+        "arxii.Silhouette",
         on_delete=models.SET_NULL,
         null=True,
         blank=True,
@@ -482,7 +482,7 @@ class ItemTemplate(NaturalKeyMixin, SharedMemoryModel):
         ),
     )
     weapon_class = models.ForeignKey(
-        "items.WeaponClass",
+        "arxii.WeaponClass",
         on_delete=models.PROTECT,
         null=True,
         blank=True,
@@ -493,7 +493,7 @@ class ItemTemplate(NaturalKeyMixin, SharedMemoryModel):
         ),
     )
     weapon_damage_type = models.ForeignKey(
-        "conditions.DamageType",
+        "arxii.DamageType",
         on_delete=models.SET_NULL,
         null=True,
         blank=True,
@@ -526,7 +526,7 @@ class ItemTemplate(NaturalKeyMixin, SharedMemoryModel):
         ),
     )
     polish_category = models.ForeignKey(
-        "buildings.PolishCategory",
+        "arxii.PolishCategory",
         on_delete=models.PROTECT,
         null=True,
         blank=True,
@@ -678,7 +678,7 @@ class ItemTemplateProperty(NaturalKeyMixin, SharedMemoryModel):
         related_name="default_properties",
     )
     property = models.ForeignKey(
-        "mechanics.Property",
+        "arxii.Property",
         on_delete=models.CASCADE,
         related_name="item_template_defaults",
     )
@@ -688,7 +688,7 @@ class ItemTemplateProperty(NaturalKeyMixin, SharedMemoryModel):
 
     class NaturalKeyConfig:
         fields = ["item_template", "property"]
-        dependencies = ["items.ItemTemplate", "mechanics.Property"]
+        dependencies = ["arxii.ItemTemplate", "arxii.Property"]
 
     class Meta:
         constraints = [
@@ -798,7 +798,7 @@ class ItemInstance(SharedMemoryModel):
         related_name="item_instances",
     )
     silhouette = models.ForeignKey(
-        "items.Silhouette",
+        "arxii.Silhouette",
         on_delete=models.SET_NULL,
         null=True,
         blank=True,
@@ -922,7 +922,7 @@ class ItemInstance(SharedMemoryModel):
         help_text=("Container item this item is stored inside (null = not in a container)."),
     )
     image = models.ForeignKey(
-        "evennia_extensions.Media",
+        "arxii.Media",
         on_delete=models.SET_NULL,
         null=True,
         blank=True,
@@ -949,7 +949,7 @@ class ItemInstance(SharedMemoryModel):
         help_text="Set when the item is consumed/destroyed and removed from play. Null = in play.",
     )
     legend_deeds = models.ManyToManyField(
-        "societies.LegendEntry",
+        "arxii.LegendEntry",
         blank=True,
         related_name="linked_items",
         help_text="Deeds that made this item legendary (#2359). Provenance-preserving link.",
@@ -1169,13 +1169,13 @@ class ItemTemplateAppearanceEffect(SharedMemoryModel):
         help_text="The item template this cosmetic effect belongs to.",
     )
     trait = models.ForeignKey(
-        "forms.FormTrait",
+        "arxii.FormTrait",
         on_delete=models.PROTECT,
         related_name="item_template_effects",
         help_text="The appearance trait this item can change (e.g., hair_color).",
     )
     target_option = models.ForeignKey(
-        "forms.FormTraitOption",
+        "arxii.FormTraitOption",
         null=True,
         blank=True,
         on_delete=models.PROTECT,
@@ -1311,7 +1311,7 @@ class RoomItem(SharedMemoryModel):
     """
 
     room = models.ForeignKey(
-        "evennia_extensions.RoomProfile",
+        "arxii.RoomProfile",
         on_delete=models.CASCADE,
         related_name="placed_items",
     )
@@ -1411,12 +1411,12 @@ class RecycleRequest(SharedMemoryModel):
     """
 
     item_instance = models.ForeignKey(
-        "items.ItemInstance",
+        "arxii.ItemInstance",
         on_delete=models.CASCADE,
         related_name="recycle_requests",
     )
     requested_by = models.ForeignKey(
-        "character_sheets.CharacterSheet",
+        "arxii.CharacterSheet",
         on_delete=models.CASCADE,
         related_name="recycle_requests",
     )
@@ -1426,7 +1426,7 @@ class RecycleRequest(SharedMemoryModel):
         default=RecycleRequestStatus.PENDING,
     )
     resolved_by = models.ForeignKey(
-        "gm.GMProfile",
+        "arxii.GMProfile",
         on_delete=models.SET_NULL,
         null=True,
         blank=True,
@@ -1471,7 +1471,7 @@ class ItemAttachment(SharedMemoryModel):
         related_name="%(class)s_applications",
     )
     attachment_quality_tier = models.ForeignKey(
-        "items.QualityTier",
+        "arxii.QualityTier",
         on_delete=models.PROTECT,
         related_name="%(class)s_attachments",
     )
@@ -1529,7 +1529,7 @@ class ItemStyle(ItemAttachment):
         related_name="item_styles",
     )
     style = models.ForeignKey(
-        "items.Style",
+        "arxii.Style",
         on_delete=models.PROTECT,
         related_name="item_attachments",
     )
@@ -1655,7 +1655,7 @@ class FashionPresentation(SharedMemoryModel):
     """A character modelling an outfit at an event, judged by a society (#514)."""
 
     event = models.ForeignKey(
-        "events.Event",
+        "arxii.Event",
         on_delete=models.CASCADE,
         related_name="fashion_presentations",
     )
@@ -1665,7 +1665,7 @@ class FashionPresentation(SharedMemoryModel):
         related_name="fashion_presentations",
     )
     outfit = models.ForeignKey(
-        "items.Outfit",
+        "arxii.Outfit",
         on_delete=models.SET_NULL,
         null=True,
         blank=True,
@@ -1788,7 +1788,7 @@ class FashionStyle(NaturalKeyMixin, SharedMemoryModel):
         help_text="Facets that are currently fashionable in this style.",
     )
     in_vogue_styles = models.ManyToManyField(
-        "items.Style",
+        "arxii.Style",
         related_name="vogue_in",
         blank=True,
         help_text="Aesthetic styles (vocabulary words) that are currently fashionable.",
@@ -1844,14 +1844,14 @@ class ShowcaseState(SharedMemoryModel):
     is_active = models.BooleanField(default=False)
     mode = models.CharField(max_length=20, choices=ShowcaseMode.choices)
     outfit = models.ForeignKey(
-        "items.Outfit",
+        "arxii.Outfit",
         on_delete=models.SET_NULL,
         null=True,
         blank=True,
         related_name="showcases",
     )
     item = models.ForeignKey(
-        "items.ItemInstance",
+        "arxii.ItemInstance",
         on_delete=models.SET_NULL,
         null=True,
         blank=True,
@@ -1877,14 +1877,14 @@ class FashionShowing(SharedMemoryModel):
         related_name="fashion_showings",
     )
     scene = models.ForeignKey(
-        "scenes.Scene",
+        "arxii.Scene",
         on_delete=models.SET_NULL,
         null=True,
         blank=True,
         related_name="fashion_showings",
     )
     presentation = models.ForeignKey(
-        "items.FashionPresentation",
+        "arxii.FashionPresentation",
         on_delete=models.SET_NULL,
         null=True,
         blank=True,
@@ -1893,28 +1893,28 @@ class FashionShowing(SharedMemoryModel):
     )
     mode = models.CharField(max_length=20, choices=ShowcaseMode.choices)
     statement_item = models.ForeignKey(
-        "items.ItemInstance",
+        "arxii.ItemInstance",
         on_delete=models.SET_NULL,
         null=True,
         blank=True,
         related_name="statement_showings",
     )
     statement_outfit = models.ForeignKey(
-        "items.Outfit",
+        "arxii.Outfit",
         on_delete=models.SET_NULL,
         null=True,
         blank=True,
         related_name="statement_showings",
     )
     statement_style = models.ForeignKey(
-        "items.Style",
+        "arxii.Style",
         on_delete=models.SET_NULL,
         null=True,
         blank=True,
         related_name="statement_showings",
     )
     statement_silhouette = models.ForeignKey(
-        "items.Silhouette",
+        "arxii.Silhouette",
         on_delete=models.SET_NULL,
         null=True,
         blank=True,
@@ -1947,7 +1947,7 @@ class SilhouetteVogueMomentum(SharedMemoryModel):
     """
 
     silhouette = models.OneToOneField(
-        "items.Silhouette",
+        "arxii.Silhouette",
         on_delete=models.CASCADE,
         primary_key=True,
         related_name="vogue_momentum",
@@ -1966,7 +1966,7 @@ class StyleVogueMomentum(SharedMemoryModel):
     """Accumulating vogue heat for a cultural style register (#2907; global v1)."""
 
     style = models.OneToOneField(
-        "items.Style",
+        "arxii.Style",
         on_delete=models.CASCADE,
         primary_key=True,
         related_name="vogue_momentum_row",
@@ -2063,7 +2063,7 @@ class Style(NaturalKeyMixin, SharedMemoryModel):
         ),
     )
     founder = models.ForeignKey(
-        "scenes.Persona",
+        "arxii.Persona",
         on_delete=models.SET_NULL,
         null=True,
         blank=True,
@@ -2080,7 +2080,7 @@ class Style(NaturalKeyMixin, SharedMemoryModel):
         "AudacityTuning (#2029).",
     )
     axis_lean = models.ForeignKey(
-        "mechanics.ModifierTarget",
+        "arxii.ModifierTarget",
         on_delete=models.SET_NULL,
         null=True,
         blank=True,
@@ -2112,12 +2112,12 @@ class FashionStyleBonus(SharedMemoryModel):
     """
 
     fashion_style = models.ForeignKey(
-        "items.FashionStyle",
+        "arxii.FashionStyle",
         on_delete=models.CASCADE,
         related_name="bonuses",
     )
     target = models.ForeignKey(
-        "mechanics.ModifierTarget",
+        "arxii.ModifierTarget",
         on_delete=models.PROTECT,
         related_name="fashion_style_bonuses",
     )
@@ -2264,7 +2264,7 @@ class MantleLevelDefinition(SharedMemoryModel):
     )
     level = models.PositiveSmallIntegerField()
     codex_entry_required = models.ForeignKey(
-        "codex.CodexEntry",
+        "arxii.CodexEntry",
         on_delete=models.PROTECT,
         related_name="mantle_level_gates",
         help_text="Lore the character must research before this level can clear.",
@@ -2334,7 +2334,7 @@ class Trendsetter(SharedMemoryModel):
         related_name="trendsetter_crownings",
     )
     fashion_style = models.ForeignKey(
-        "items.FashionStyle",
+        "arxii.FashionStyle",
         on_delete=models.CASCADE,
         related_name="trendsetter_crownings",
     )
@@ -2472,7 +2472,7 @@ class ReclamationClaim(SharedMemoryModel):
     )
     origin = models.CharField(max_length=30)
     estate_claim = models.ForeignKey(
-        "estates.EstateClaim",
+        "arxii.EstateClaim",
         null=True,
         blank=True,
         on_delete=models.SET_NULL,

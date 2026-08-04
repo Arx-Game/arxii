@@ -40,11 +40,11 @@ if TYPE_CHECKING:
     from world.scenes.place_models import InteractionReceiver
 
 # Lazy model references (Django app_label.ModelName), extracted to satisfy S1192.
-CHARACTER_SHEET_MODEL = "character_sheets.CharacterSheet"
-INTERACTION_MODEL = "scenes.Interaction"
-PLAYER_DATA_MODEL = "evennia_extensions.PlayerData"
-SCENE_ROUND_PARTICIPANT_MODEL = "scenes.SceneRoundParticipant"
-ROSTER_TENURE_MODEL = "roster.RosterTenure"
+CHARACTER_SHEET_MODEL = "arxii.CharacterSheet"
+INTERACTION_MODEL = "arxii.Interaction"
+PLAYER_DATA_MODEL = "arxii.PlayerData"
+SCENE_ROUND_PARTICIPANT_MODEL = "arxii.SceneRoundParticipant"
+ROSTER_TENURE_MODEL = "arxii.RosterTenure"
 
 
 class Scene(CachedPropertiesMixin, SharedMemoryModel):
@@ -84,7 +84,7 @@ class Scene(CachedPropertiesMixin, SharedMemoryModel):
         help_text="Status of collaborative summary (mainly for ephemeral scenes)",
     )
     event = models.ForeignKey(
-        "events.Event",
+        "arxii.Event",
         null=True,
         blank=True,
         on_delete=models.SET_NULL,
@@ -330,7 +330,7 @@ class Persona(CachedPropertiesMixin, SharedMemoryModel):
     # fabricated bio) so it does not out itself with an empty one. Null falls back to the
     # sheet's true_profile.
     profile = models.ForeignKey(
-        "character_sheets.Profile",
+        "arxii.Profile",
         null=True,
         blank=True,
         on_delete=models.SET_NULL,
@@ -339,7 +339,7 @@ class Persona(CachedPropertiesMixin, SharedMemoryModel):
     )
     thumbnail_url = models.URLField(blank=True, max_length=500)
     thumbnail = models.ForeignKey(
-        "evennia_extensions.Media",
+        "arxii.Media",
         null=True,
         blank=True,
         on_delete=models.SET_NULL,
@@ -366,7 +366,7 @@ class Persona(CachedPropertiesMixin, SharedMemoryModel):
         "interactions still display in the scene log.",
     )
     properties = models.ManyToManyField(
-        "mechanics.Property",
+        "arxii.Property",
         related_name="personas",
         blank=True,
         help_text="Neutral descriptive tags on this persona (e.g. masked-identity, "
@@ -876,7 +876,7 @@ class Interaction(SharedMemoryModel):
         help_text="Scene container if one was active",
     )
     place = models.ForeignKey(
-        "scenes.Place",
+        "arxii.Place",
         on_delete=models.SET_NULL,
         null=True,
         blank=True,
@@ -928,7 +928,7 @@ class Interaction(SharedMemoryModel):
         ),
     )
     fury_committed = models.ForeignKey(
-        "magic.FuryTier",
+        "arxii.FuryTier",
         null=True,
         blank=True,
         on_delete=models.SET_NULL,
@@ -1060,7 +1060,7 @@ class InteractionFavorite(SharedMemoryModel):
         "with partitioned table",
     )
     roster_entry = models.ForeignKey(
-        "roster.RosterEntry",
+        "arxii.RosterEntry",
         on_delete=models.CASCADE,
         related_name="favorited_interactions",
         help_text="The player who bookmarked this",
@@ -1247,7 +1247,7 @@ class InteractionPowerLedgerEntry(SharedMemoryModel):
     Child of the ACTION-mode Interaction the cast/action resolved into. The
     transient ``world.magic.types.power_ledger.PowerLedger`` is copied here at
     resolution time so the per-stage breakdown is re-viewable from the log.
-    FK uses ``db_constraint=False`` because ``scenes_interaction`` is partitioned.
+    FK uses ``db_constraint=False`` because ``arxii_interaction`` is partitioned.
     """
 
     interaction = models.ForeignKey(
@@ -1337,7 +1337,7 @@ class SceneCheckModifier(SharedMemoryModel):
         help_text="The scene whose surroundings this modifier describes",
     )
     check_type = models.ForeignKey(
-        "checks.CheckType",
+        "arxii.CheckType",
         on_delete=models.CASCADE,
         related_name="scene_check_modifiers",
         help_text="The check type this modifier applies to",
@@ -1367,13 +1367,13 @@ class SceneRound(AbstractRound):
     """
 
     room = models.ForeignKey(
-        "evennia_extensions.RoomProfile",
+        "arxii.RoomProfile",
         on_delete=models.PROTECT,
         related_name="scene_rounds",
         help_text="Room the round takes place in (mirrors CombatEncounter.room).",
     )
     scene = models.ForeignKey(
-        "scenes.Scene",
+        "arxii.Scene",
         on_delete=models.SET_NULL,
         null=True,
         blank=True,
@@ -1497,7 +1497,7 @@ class SceneActionDeclaration(SharedMemoryModel):
     """
 
     scene_round = models.ForeignKey(
-        "scenes.SceneRound", on_delete=models.CASCADE, related_name="action_declarations"
+        "arxii.SceneRound", on_delete=models.CASCADE, related_name="action_declarations"
     )
     round_number = models.PositiveIntegerField()
     participant = models.ForeignKey(
@@ -1506,21 +1506,21 @@ class SceneActionDeclaration(SharedMemoryModel):
         related_name="action_declarations",
     )
     challenge_instance = models.ForeignKey(
-        "mechanics.ChallengeInstance",
+        "arxii.ChallengeInstance",
         on_delete=models.CASCADE,
         null=True,
         blank=True,
         related_name="scene_declarations",
     )
     challenge_approach = models.ForeignKey(
-        "mechanics.ChallengeApproach",
+        "arxii.ChallengeApproach",
         on_delete=models.CASCADE,
         null=True,
         blank=True,
         related_name="scene_declarations",
     )
     target_persona = models.ForeignKey(
-        "scenes.Persona",
+        "arxii.Persona",
         on_delete=models.SET_NULL,
         null=True,
         blank=True,
@@ -1582,7 +1582,7 @@ class PendingSuddenHarm(SharedMemoryModel):
         help_text="The character this pending harm targets; multiple unresolved rows may exist.",
     )
     scene_round = models.ForeignKey(
-        "scenes.SceneRound",
+        "arxii.SceneRound",
         on_delete=models.CASCADE,
         related_name="pending_sudden_harms",
         help_text="The round bound to resolve this harm.",
@@ -1591,7 +1591,7 @@ class PendingSuddenHarm(SharedMemoryModel):
         help_text="The raw pending damage amount, before any interpose mitigation.",
     )
     damage_type = models.ForeignKey(
-        "conditions.DamageType",
+        "arxii.DamageType",
         on_delete=models.PROTECT,
         null=True,
         blank=True,
@@ -1626,12 +1626,12 @@ class DecisiveCheckMarker(SharedMemoryModel):
     """
 
     scene = models.ForeignKey(
-        "scenes.Scene",
+        "arxii.Scene",
         on_delete=models.CASCADE,
         related_name="decisive_markers",
     )
     beat = models.ForeignKey(
-        "stories.Beat",
+        "arxii.Beat",
         on_delete=models.CASCADE,
         related_name="decisive_markers",
     )
@@ -1649,7 +1649,7 @@ class DecisiveCheckMarker(SharedMemoryModel):
         db_index=True,
     )
     resolved_outcome_tier = models.ForeignKey(
-        "traits.CheckOutcome",
+        "arxii.CheckOutcome",
         on_delete=models.SET_NULL,
         null=True,
         blank=True,

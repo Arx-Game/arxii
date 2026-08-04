@@ -21,13 +21,13 @@ class GhostTutelage(SharedMemoryModel):
     """
 
     character_sheet = models.ForeignKey(
-        "character_sheets.CharacterSheet",
+        "arxii.CharacterSheet",
         on_delete=models.CASCADE,
         related_name="ghost_tutelages",
         help_text="The character who summoned this tutor.",
     )
     tradition = models.ForeignKey(
-        "magic.Tradition",
+        "arxii.Tradition",
         on_delete=models.PROTECT,
         related_name="ghost_tutelages",
         help_text="The tradition whose tutor was summoned.",

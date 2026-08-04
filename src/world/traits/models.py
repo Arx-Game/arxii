@@ -193,7 +193,7 @@ class TraitRankDescription(NaturalKeyMixin, SharedMemoryModel):
 
     class NaturalKeyConfig:
         fields = ["trait", "value"]
-        dependencies = ["traits.Trait"]
+        dependencies = ["arxii.Trait"]
 
     class Meta:
         unique_together = ["trait", "value"]
@@ -223,7 +223,7 @@ class CharacterTraitValue(SharedMemoryModel):
     """
 
     character = models.ForeignKey(
-        "character_sheets.CharacterSheet",
+        "arxii.CharacterSheet",
         on_delete=models.CASCADE,
         related_name="trait_values",
     )
@@ -588,7 +588,7 @@ class ResultChartOutcome(NaturalKeyMixin, SharedMemoryModel):
 
     class NaturalKeyConfig:
         fields = ["chart", "min_roll"]
-        dependencies = ["traits.ResultChart"]
+        dependencies = ["arxii.ResultChart"]
 
     class Meta:
         ordering: ClassVar[list[str]] = ["chart", "min_roll"]

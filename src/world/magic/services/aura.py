@@ -91,15 +91,15 @@ def recompute_aura(character_sheet: CharacterSheet) -> AuraDrift | None:
 
 
 def _achievement_gate_passes(achievement, character_sheet: CharacterSheet) -> bool:
-    """True if every AchievementRequirement on `achievement` is met by `character_sheet`.
+    """True if every AchievementStatRequirement on `achievement` is met by `character_sheet`.
 
     No requirements at all => passes (this mirrors an authored achievement with
     zero stat gates, i.e. the crossing itself is the only condition).
     """
-    from world.achievements.models import AchievementRequirement  # noqa: PLC0415
+    from world.achievements.models import AchievementStatRequirement  # noqa: PLC0415
     from world.achievements.services import get_stat  # noqa: PLC0415
 
-    reqs = list(AchievementRequirement.objects.filter(achievement=achievement))
+    reqs = list(AchievementStatRequirement.objects.filter(achievement=achievement))
     return all(req.is_met(get_stat(character_sheet, req.stat)) for req in reqs)
 
 
@@ -110,7 +110,7 @@ def fire_aura_threshold_crossings(character_sheet: CharacterSheet, drift: AuraDr
     affinity crossed any authored threshold_percent in (before, after].
     Idempotent (skips already-earned achievements, mirroring
     world.covenants.discovery._fire_one). Compound gates (an achievement's own
-    AchievementRequirement rows) are checked via the character's own stat
+    AchievementStatRequirement rows) are checked via the character's own stat
     values before granting.
 
     Called explicitly by grant_resonance() (the AuraDrift returned by

@@ -39,10 +39,10 @@ database.
 
 from __future__ import annotations
 
-from django.apps import apps
 from django.db.models import DateField
 from django.test import TestCase
 
+from core.app_domains import resolve_model_by_name
 from core_management.content_export import CONTENT_MODELS
 from world.seeds.clusters import CLUSTER_SEEDERS
 from world.seeds.database import load_content_first
@@ -103,8 +103,10 @@ class SeedersDoNotCreateContentTests(TestCase):
     def _content_models(self) -> dict[str, type]:
         models = {}
         for label in sorted(CONTENT_MODELS):
+            # label is "<domain>.<model_name>", not a real Django app_label
+            # post-collapse (#2906) — resolve by model name.
             try:
-                models[label] = apps.get_model(*label.split("."))
+                models[label] = resolve_model_by_name(label)
             except LookupError:
                 continue
         return models

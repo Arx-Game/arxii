@@ -25,20 +25,20 @@ from evennia.utils.idmapper.models import SharedMemoryModel
 from core.managers import ArxSharedMemoryManager
 from world.captivity.constants import CaptivityStatus
 
-_MISSION_TEMPLATE_FK = "missions.MissionTemplate"
+_MISSION_TEMPLATE_FK = "arxii.MissionTemplate"
 
 
 class Captivity(SharedMemoryModel):
     """One character's imprisonment and how it ends."""
 
     captive = models.ForeignKey(
-        "character_sheets.CharacterSheet",
+        "arxii.CharacterSheet",
         on_delete=models.CASCADE,
         related_name="captivities",
         help_text="The held character (the body, regardless of presented persona).",
     )
     cell = models.ForeignKey(
-        "instances.InstancedRoom",
+        "arxii.InstancedRoom",
         on_delete=models.SET_NULL,
         null=True,
         blank=True,
@@ -51,7 +51,7 @@ class Captivity(SharedMemoryModel):
         ),
     )
     holding_room = models.ForeignKey(
-        "evennia_extensions.RoomProfile",
+        "arxii.RoomProfile",
         on_delete=models.SET_NULL,
         null=True,
         blank=True,
@@ -76,7 +76,7 @@ class Captivity(SharedMemoryModel):
         ),
     )
     captor_organization = models.ForeignKey(
-        "societies.Organization",
+        "arxii.Organization",
         on_delete=models.SET_NULL,
         null=True,
         blank=True,
@@ -98,7 +98,7 @@ class Captivity(SharedMemoryModel):
         ),
     )
     ransom_project = models.ForeignKey(
-        "projects.Project",
+        "arxii.Project",
         on_delete=models.SET_NULL,
         null=True,
         blank=True,

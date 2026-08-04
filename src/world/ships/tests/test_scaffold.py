@@ -16,9 +16,22 @@ class ShipsAppScaffoldTests(SimpleTestCase):
     """The ships app is registered and its skeleton modules import cleanly."""
 
     def test_app_is_registered(self) -> None:
-        config = apps.get_app_config("ships")
+        """`ships` is a sub-package of the single collapsed `world` app (#2906).
 
-        self.assertEqual(config.name, "world.ships")
+        Pre-collapse, ``world.ships`` was its own installed app with label
+        "ships". Post-collapse, every ``world.*`` sub-package (ships included)
+        lives under the one installed app ``world.apps.ArxiiConfig`` (label
+        "arxii") — there is no per-sub-package app config to look up anymore.
+        `world.tests.test_aggregators` is the completeness guard that `ships`'s
+        `models`/`admin` modules are actually wired into that single app; this
+        test just confirms the sub-package itself is importable under it.
+        """
+        import world.ships
+
+        config = apps.get_app_config("arxii")
+
+        self.assertEqual(config.name, "world")
+        self.assertTrue(world.ships.__name__.startswith(f"{config.name}."))
 
     def test_constants_import(self) -> None:
         from world.ships.constants import SHIP_KIND_NAME, ShipUpgradeStat

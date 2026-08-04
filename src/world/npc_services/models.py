@@ -37,8 +37,8 @@ from world.npc_services.constants import (
 
 # Cross-app FK string for the Persona model, referenced by several fields below.
 # Centralized to avoid the duplicated-literal SonarCloud smell (python:S1192).
-_PERSONA_FK = "scenes.Persona"
-_ORG_MODEL_PATH = "societies.Organization"
+_PERSONA_FK = "arxii.Persona"
+_ORG_MODEL_PATH = "arxii.Organization"
 _NPC_OFFER_DETAILS_HELP_TEXT = "The NPCServiceOffer row this details model decorates."
 _REGARD_EVENT_CONFIG_LABEL = "Regard Event Config"
 
@@ -189,7 +189,7 @@ class NPCRole(NaturalKeyMixin, SharedMemoryModel):
         ),
     )
     teaches_tradition = models.ForeignKey(
-        "magic.Tradition",
+        "arxii.Tradition",
         null=True,
         blank=True,
         on_delete=models.SET_NULL,
@@ -242,7 +242,7 @@ class Functionary(SharedMemoryModel):
         help_text="The NPC role this placement fronts (its offers, faction, rapport default).",
     )
     room = models.ForeignKey(
-        "evennia_extensions.RoomProfile",
+        "arxii.RoomProfile",
         on_delete=models.CASCADE,
         related_name="functionaries",
         help_text="The room this Functionary serves — where a player must be to interact.",
@@ -318,7 +318,7 @@ class PersonalityTrait(NaturalKeyMixin, SharedMemoryModel):
     name = models.CharField(max_length=100, unique=True)
     description = models.TextField(blank=True, default="")
     eased_check = models.ForeignKey(
-        "checks.CheckType",
+        "arxii.CheckType",
         null=True,
         blank=True,
         on_delete=models.SET_NULL,
@@ -390,7 +390,7 @@ class NameCulture(NaturalKeyMixin, SharedMemoryModel):
 
     name = models.CharField(max_length=100, unique=True)
     area = models.ForeignKey(
-        "areas.Area",
+        "arxii.Area",
         null=True,
         blank=True,
         on_delete=models.SET_NULL,
@@ -398,7 +398,7 @@ class NameCulture(NaturalKeyMixin, SharedMemoryModel):
         help_text="Rooms under this area use this culture (nearest ancestor wins).",
     )
     society = models.ForeignKey(
-        "societies.Society",
+        "arxii.Society",
         null=True,
         blank=True,
         on_delete=models.SET_NULL,
@@ -453,7 +453,7 @@ class StaffingProfile(SharedMemoryModel):
     """
 
     building_kind = models.OneToOneField(
-        "buildings.BuildingKind",
+        "arxii.BuildingKind",
         on_delete=models.CASCADE,
         related_name="staffing_profile",
         help_text="Buildings of this kind auto-staff from this profile on activation.",
@@ -591,7 +591,7 @@ class NPCServiceOffer(SharedMemoryModel):
         ),
     )
     check_type = models.ForeignKey(
-        "checks.CheckType",
+        "arxii.CheckType",
         null=True,
         blank=True,
         on_delete=models.PROTECT,
@@ -739,12 +739,12 @@ class MissionOfferDetails(SharedMemoryModel):
         ),
     )
     mission_template = models.ForeignKey(
-        "missions.MissionTemplate",
+        "arxii.MissionTemplate",
         on_delete=models.CASCADE,
         related_name="offer_details",
     )
     source_beat = models.ForeignKey(
-        "stories.Beat",
+        "arxii.Beat",
         null=True,
         blank=True,
         on_delete=models.SET_NULL,
@@ -757,7 +757,7 @@ class MissionOfferDetails(SharedMemoryModel):
         ),
     )
     target_project = models.ForeignKey(
-        "projects.Project",
+        "arxii.Project",
         null=True,
         blank=True,
         on_delete=models.SET_NULL,
@@ -855,7 +855,7 @@ class PermitOfferDetails(SharedMemoryModel):
         help_text=_NPC_OFFER_DETAILS_HELP_TEXT,
     )
     building_kind = models.ForeignKey(
-        "buildings.BuildingKind",
+        "arxii.BuildingKind",
         null=True,
         blank=True,
         on_delete=models.PROTECT,
@@ -867,7 +867,7 @@ class PermitOfferDetails(SharedMemoryModel):
         ),
     )
     default_approved_wards = models.ManyToManyField(
-        "areas.Area",
+        "arxii.Area",
         related_name="default_permits_offered",
         blank=True,
         help_text=(
@@ -973,7 +973,7 @@ class TrainOfferDetails(SharedMemoryModel):
         help_text=_NPC_OFFER_DETAILS_HELP_TEXT,
     )
     technique = models.ForeignKey(
-        "magic.Technique",
+        "arxii.Technique",
         on_delete=models.PROTECT,
         related_name="train_offers",
         help_text="The technique this trainer teaches on this offer.",
@@ -1059,7 +1059,7 @@ class NpcRegard(DiscriminatorMixin, SharedMemoryModel):
         help_text="Set iff target_type=ORGANIZATION.",
     )
     target_society = models.ForeignKey(
-        "societies.Society",
+        "arxii.Society",
         null=True,
         blank=True,
         on_delete=models.PROTECT,
@@ -1126,7 +1126,7 @@ class CourtGrantOfferDetails(SharedMemoryModel):
         help_text=_NPC_OFFER_DETAILS_HELP_TEXT,
     )
     covenant = models.ForeignKey(
-        "covenants.Covenant",
+        "arxii.Covenant",
         on_delete=models.CASCADE,
         related_name="court_grant_offer_details",
         help_text="The Court covenant this petition raises the servant's grant in.",
@@ -1178,7 +1178,7 @@ class OfferSummons(SharedMemoryModel):
         help_text="When this summons lapses if unanswered. Null = no expiry.",
     )
     created_by = models.ForeignKey(
-        "gm.GMProfile",
+        "arxii.GMProfile",
         on_delete=models.SET_NULL,
         null=True,
         blank=True,
@@ -1273,7 +1273,7 @@ class NpcRegardEvent(SharedMemoryModel):
         ),
     )
     source_pc_combat_action = models.ForeignKey(
-        "combat.CombatRoundAction",
+        "arxii.CombatRoundAction",
         null=True,
         blank=True,
         on_delete=models.SET_NULL,
@@ -1281,7 +1281,7 @@ class NpcRegardEvent(SharedMemoryModel):
         help_text="Set for PC_FOILED_NPC_PLAN: the PC's resolved combat action that caused this.",
     )
     source_npc_combat_action = models.ForeignKey(
-        "combat.CombatOpponentAction",
+        "arxii.CombatOpponentAction",
         null=True,
         blank=True,
         on_delete=models.SET_NULL,
@@ -1291,7 +1291,7 @@ class NpcRegardEvent(SharedMemoryModel):
         ),
     )
     source_scene = models.ForeignKey(
-        "scenes.Scene",
+        "arxii.Scene",
         null=True,
         blank=True,
         on_delete=models.SET_NULL,
@@ -1299,7 +1299,7 @@ class NpcRegardEvent(SharedMemoryModel):
         help_text="Set for SOCIAL_ACTION_RESOLVED: the scene the structured effect resolved in.",
     )
     source_stake_resolution = models.ForeignKey(
-        "stories.StakeResolution",
+        "arxii.StakeResolution",
         null=True,
         blank=True,
         on_delete=models.SET_NULL,
@@ -1379,7 +1379,7 @@ class DistinctionRegardSeed(SharedMemoryModel):
     """
 
     distinction = models.ForeignKey(
-        "distinctions.Distinction",
+        "arxii.Distinction",
         on_delete=models.CASCADE,
         related_name="npc_regard_seeds",
     )
@@ -1464,7 +1464,7 @@ class NPCAssignment(SharedMemoryModel, DiscriminatorMixin):
         help_text="The class-1 Functionary placement (set when source_type=FUNCTIONARY).",
     )
     npc_asset = models.ForeignKey(
-        "assets.NPCAsset",
+        "arxii.NPCAsset",
         null=True,
         blank=True,
         on_delete=models.CASCADE,
@@ -1472,7 +1472,7 @@ class NPCAssignment(SharedMemoryModel, DiscriminatorMixin):
         help_text="The promoted NPCAsset (set when source_type=NPC_ASSET).",
     )
     room = models.ForeignKey(
-        "evennia_extensions.RoomProfile",
+        "arxii.RoomProfile",
         on_delete=models.CASCADE,
         related_name="npc_assignments",
         help_text="The room this NPC is posted to.",
@@ -1545,13 +1545,13 @@ class StylingOfferDetails(SharedMemoryModel):
         help_text=_NPC_OFFER_DETAILS_HELP_TEXT,
     )
     trait = models.ForeignKey(
-        "forms.FormTrait",
+        "arxii.FormTrait",
         on_delete=models.PROTECT,
         related_name="styling_offers",
         help_text="The cosmetic trait this service restyles.",
     )
     target_option = models.ForeignKey(
-        "forms.FormTraitOption",
+        "arxii.FormTraitOption",
         on_delete=models.PROTECT,
         related_name="styling_offers",
         help_text="The value the trait is set to.",
@@ -1613,7 +1613,7 @@ class RecordedProfile(SharedMemoryModel):
     """
 
     persona = models.ForeignKey(
-        "scenes.Persona",
+        "arxii.Persona",
         on_delete=models.PROTECT,
         related_name="recorded_profiles",
         help_text="The persona whose profile was recorded.",
@@ -1642,7 +1642,7 @@ class RecordedProfile(SharedMemoryModel):
         help_text="IC datetime when the write-up was finalized.",
     )
     era = models.ForeignKey(
-        "stories.Era",
+        "arxii.Era",
         null=True,
         blank=True,
         on_delete=models.SET_NULL,

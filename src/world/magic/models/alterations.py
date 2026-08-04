@@ -32,7 +32,7 @@ class MagicalAlterationTemplate(SharedMemoryModel):
     """
 
     condition_template = models.OneToOneField(
-        "conditions.ConditionTemplate",
+        "arxii.ConditionTemplate",
         on_delete=models.CASCADE,
         related_name="magical_alteration",
     )
@@ -53,7 +53,7 @@ class MagicalAlterationTemplate(SharedMemoryModel):
         help_text="The resonance channeled at overburn.",
     )
     weakness_damage_type = models.ForeignKey(
-        "conditions.DamageType",
+        "arxii.DamageType",
         on_delete=models.PROTECT,
         null=True,
         blank=True,
@@ -110,7 +110,7 @@ class MagicalAlterationTemplate(SharedMemoryModel):
         help_text="Discriminator: MAGE_SCAR (Scope 5) vs CORRUPTION_TWIST (Scope 7).",
     )
     resonance = models.ForeignKey(
-        "magic.Resonance",
+        "arxii.Resonance",
         null=True,
         blank=True,
         on_delete=models.PROTECT,
@@ -170,7 +170,7 @@ class PendingAlteration(SharedMemoryModel):
     """
 
     character = models.ForeignKey(
-        "character_sheets.CharacterSheet",
+        "arxii.CharacterSheet",
         on_delete=models.CASCADE,
         related_name="pending_alterations",
     )
@@ -186,7 +186,7 @@ class PendingAlteration(SharedMemoryModel):
         ),
     )
     triggering_scene = models.ForeignKey(
-        "scenes.Scene",
+        "arxii.Scene",
         on_delete=models.SET_NULL,
         null=True,
         blank=True,
@@ -258,7 +258,7 @@ class MagicalAlterationEvent(SharedMemoryModel):
     """
 
     character = models.ForeignKey(
-        "character_sheets.CharacterSheet",
+        "arxii.CharacterSheet",
         on_delete=models.CASCADE,
         related_name="alteration_events",
     )
@@ -268,14 +268,14 @@ class MagicalAlterationEvent(SharedMemoryModel):
         related_name="application_events",
     )
     active_condition = models.ForeignKey(
-        "conditions.ConditionInstance",
+        "arxii.ConditionInstance",
         on_delete=models.SET_NULL,
         null=True,
         blank=True,
         related_name="alteration_events",
     )
     triggering_scene = models.ForeignKey(
-        "scenes.Scene",
+        "arxii.Scene",
         on_delete=models.SET_NULL,
         null=True,
         blank=True,

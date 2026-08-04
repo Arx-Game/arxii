@@ -48,13 +48,13 @@ class GlimpseTag(NaturalKeyMixin, SharedMemoryModel):
         default=True, help_text="Inactive tags are hidden from the CG flow."
     )
     paths = models.ManyToManyField(
-        "classes.Path",
+        "arxii.Path",
         blank=True,
         related_name="glimpse_trigger_tags",
         help_text="Restricts this tag to these paths. Empty = available to all paths.",
     )
     affinity = models.ForeignKey(
-        "magic.Affinity",
+        "arxii.Affinity",
         on_delete=models.SET_NULL,
         null=True,
         blank=True,
@@ -83,7 +83,7 @@ class CharacterGlimpseTag(SharedMemoryModel):
     """A character's chosen glimpse tag (#2427). Instance data — never exported."""
 
     aura = models.ForeignKey(
-        "magic.CharacterAura",
+        "arxii.CharacterAura",
         on_delete=models.CASCADE,
         related_name="glimpse_tags",
         help_text="The aura (one per character) whose Glimpse this tag describes.",
@@ -125,7 +125,7 @@ class GlimpseTagDistinctionSuggestion(NaturalKeyMixin, SharedMemoryModel):
         help_text="The glimpse tag that suggests the distinction.",
     )
     distinction = models.ForeignKey(
-        "distinctions.Distinction",
+        "arxii.Distinction",
         on_delete=models.CASCADE,
         related_name="glimpse_tag_suggestions",
         help_text="The distinction this tag suggests considering.",
@@ -144,7 +144,7 @@ class GlimpseTagDistinctionSuggestion(NaturalKeyMixin, SharedMemoryModel):
 
     class NaturalKeyConfig:
         fields = ["tag", "distinction"]
-        dependencies = ["magic.GlimpseTag", "distinctions.Distinction"]
+        dependencies = ["arxii.GlimpseTag", "arxii.Distinction"]
 
     def __str__(self) -> str:
         return f"{self.tag.name} → {self.distinction.name}"

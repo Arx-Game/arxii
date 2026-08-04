@@ -1,8 +1,8 @@
 """Models for the crafting submodule.
 
-All models set ``Meta.app_label = "items"`` so Django registers them under the
-existing ``items`` app (no new Django app needed). Migrations are deferred to
-Task 7 of the crafting framework PR.
+All models set ``Meta.app_label = "arxii"`` so Django registers them under the
+single collapsed app (#2906; no new Django app needed). Migrations are deferred
+to Task 7 of the crafting framework PR.
 """
 
 from __future__ import annotations
@@ -21,13 +21,13 @@ if TYPE_CHECKING:
     from world.items.models import QualityTier
 
 # Cross-app FK strings — centralised to avoid duplicated-literal smell.
-_CHECK_TYPE_FK = "checks.CheckType"
-_TRAIT_FK = "traits.Trait"
-_QUALITY_TIER_FK = "items.QualityTier"
-_ITEM_TEMPLATE_FK = "items.ItemTemplate"
-_MODIFIER_TARGET_FK = "mechanics.ModifierTarget"
-_ITEM_INSTANCE_FK = "items.ItemInstance"
-_CONSEQUENCE_FK = "checks.Consequence"
+_CHECK_TYPE_FK = "arxii.CheckType"
+_TRAIT_FK = "arxii.Trait"
+_QUALITY_TIER_FK = "arxii.QualityTier"
+_ITEM_TEMPLATE_FK = "arxii.ItemTemplate"
+_MODIFIER_TARGET_FK = "arxii.ModifierTarget"
+_ITEM_INSTANCE_FK = "arxii.ItemInstance"
+_CONSEQUENCE_FK = "arxii.Consequence"
 
 
 class CraftingRecipe(SharedMemoryModel):
@@ -73,7 +73,7 @@ class CraftingRecipe(SharedMemoryModel):
         help_text="Trait (skill) whose rank gates or boosts this recipe. Optional.",
     )
     specialization = models.ForeignKey(
-        "skills.Specialization",
+        "arxii.Specialization",
         on_delete=models.PROTECT,
         null=True,
         blank=True,
@@ -108,7 +108,7 @@ class CraftingRecipe(SharedMemoryModel):
         ),
     )
     required_feature_kind = models.ForeignKey(
-        "room_features.RoomFeatureKind",
+        "arxii.RoomFeatureKind",
         on_delete=models.PROTECT,
         null=True,
         blank=True,
@@ -120,7 +120,7 @@ class CraftingRecipe(SharedMemoryModel):
         ),
     )
     output_item_template = models.ForeignKey(
-        "items.ItemTemplate",
+        "arxii.ItemTemplate",
         on_delete=models.PROTECT,
         null=True,
         blank=True,
@@ -140,7 +140,7 @@ class CraftingRecipe(SharedMemoryModel):
     )
 
     class Meta:
-        app_label = "items"
+        app_label = "arxii"
         ordering = ["name"]
         constraints = [
             models.UniqueConstraint(
@@ -179,7 +179,7 @@ class CraftingMaterialRequirement(SharedMemoryModel):
         help_text="A specific ingredient template. Mutually exclusive with material_category.",
     )
     material_category = models.ForeignKey(
-        "items.MaterialCategory",
+        "arxii.MaterialCategory",
         on_delete=models.PROTECT,
         null=True,
         blank=True,
@@ -212,7 +212,7 @@ class CraftingMaterialRequirement(SharedMemoryModel):
     )
 
     class Meta:
-        app_label = "items"
+        app_label = "arxii"
         constraints = [
             models.CheckConstraint(
                 check=(
@@ -258,7 +258,7 @@ class CraftingSkillCap(SharedMemoryModel):
     )
 
     class Meta:
-        app_label = "items"
+        app_label = "arxii"
         ordering = ["min_skill_value"]
         constraints = [
             models.UniqueConstraint(
@@ -320,7 +320,7 @@ class CraftingRecipeConsequence(SharedMemoryModel):
     )
 
     class Meta:
-        app_label = "items"
+        app_label = "arxii"
         constraints = [
             models.UniqueConstraint(
                 fields=["recipe", "consequence"],
@@ -360,7 +360,7 @@ class CraftingRecipeModifier(SharedMemoryModel):
     )
 
     class Meta:
-        app_label = "items"
+        app_label = "arxii"
         constraints = [
             models.UniqueConstraint(
                 fields=["recipe", "target"],
@@ -393,14 +393,14 @@ class CraftedItemRecipe(SharedMemoryModel):
         related_name="crafted_items",
     )
     quality_tier = models.ForeignKey(
-        "items.QualityTier",
+        "arxii.QualityTier",
         on_delete=models.PROTECT,
         related_name="crafted_item_recipes",
         help_text="Quality tier resolved at craft time, used to scale modifier outcomes.",
     )
 
     class Meta:
-        app_label = "items"
+        app_label = "arxii"
         constraints = [
             models.UniqueConstraint(
                 fields=["item_instance", "recipe"],
@@ -434,14 +434,14 @@ class ItemAccent(SharedMemoryModel):
         help_text="The styleable axis (is_styleable=True): allure, menace, …",
     )
     level = models.ForeignKey(
-        "items.AccentLevel",
+        "arxii.AccentLevel",
         on_delete=models.PROTECT,
         related_name="item_accents",
         help_text="How strongly the accent realized (its own roll at craft time).",
     )
 
     class Meta:
-        app_label = "items"
+        app_label = "arxii"
         ordering = ["target__name"]
         constraints = [
             models.UniqueConstraint(
@@ -474,7 +474,7 @@ class AccentExclusion(SharedMemoryModel):
     )
 
     class Meta:
-        app_label = "items"
+        app_label = "arxii"
         ordering = ["pk"]
         constraints = [
             models.UniqueConstraint(
@@ -516,7 +516,7 @@ class AccentArchetypeAllowance(SharedMemoryModel):
     gear_archetype = models.CharField(max_length=40)
 
     class Meta:
-        app_label = "items"
+        app_label = "arxii"
         ordering = ["target__name", "gear_archetype"]
         constraints = [
             models.UniqueConstraint(
@@ -551,7 +551,7 @@ class ItemRefinementDetails(SharedMemoryModel):
     """
 
     project = models.OneToOneField(
-        "projects.Project",
+        "arxii.Project",
         on_delete=models.CASCADE,
         primary_key=True,
         related_name="item_refinement_details",
@@ -571,7 +571,7 @@ class ItemRefinementDetails(SharedMemoryModel):
     )
 
     class Meta:
-        app_label = "items"
+        app_label = "arxii"
 
     def __str__(self) -> str:
         goal = self.accent_target.name if self.accent_target else "quality"
@@ -602,7 +602,7 @@ class LabStationDetails(SharedMemoryModel):
     )
 
     class Meta:
-        app_label = "items"
+        app_label = "arxii"
 
     def __str__(self) -> str:
         room_id = self.feature_instance.room_profile_id
@@ -624,7 +624,7 @@ class CharacterRecipeKnowledge(SharedMemoryModel):
     """
 
     character_sheet = models.ForeignKey(
-        "character_sheets.CharacterSheet",
+        "arxii.CharacterSheet",
         on_delete=models.CASCADE,
         related_name="recipe_knowledge",
     )
@@ -636,7 +636,7 @@ class CharacterRecipeKnowledge(SharedMemoryModel):
     learned_at = models.DateTimeField(auto_now_add=True)
 
     class Meta:
-        app_label = "items"
+        app_label = "arxii"
         ordering = ["character_sheet", "recipe"]
         constraints = [
             models.UniqueConstraint(

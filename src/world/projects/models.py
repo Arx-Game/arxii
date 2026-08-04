@@ -54,7 +54,7 @@ class Project(SharedMemoryModel):
     )
 
     owner_persona = models.ForeignKey(
-        "scenes.Persona",
+        "arxii.Persona",
         on_delete=models.PROTECT,
         related_name="projects_owned",
         help_text=(
@@ -70,7 +70,7 @@ class Project(SharedMemoryModel):
     current_progress = models.PositiveIntegerField(default=0)
 
     outcome_tier = models.ForeignKey(
-        "traits.CheckOutcome",
+        "arxii.CheckOutcome",
         null=True,
         blank=True,
         on_delete=models.PROTECT,
@@ -79,7 +79,7 @@ class Project(SharedMemoryModel):
     )
 
     resonance = models.ForeignKey(
-        "magic.Resonance",
+        "arxii.Resonance",
         null=True,
         blank=True,
         on_delete=models.SET_NULL,
@@ -123,7 +123,7 @@ class Contribution(SharedMemoryModel):
 
     project = models.ForeignKey(Project, on_delete=models.CASCADE, related_name="contributions")
     contributor_persona = models.ForeignKey(
-        "scenes.Persona",
+        "arxii.Persona",
         on_delete=models.PROTECT,
         related_name="project_contributions",
     )
@@ -133,14 +133,14 @@ class Contribution(SharedMemoryModel):
     ap_amount = models.PositiveIntegerField(null=True, blank=True)
     money_amount = models.PositiveIntegerField(null=True, blank=True)
     item_instance = models.ForeignKey(
-        "items.ItemInstance",
+        "arxii.ItemInstance",
         null=True,
         blank=True,
         on_delete=models.PROTECT,
         related_name="project_contributions",
     )
     check_outcome = models.ForeignKey(
-        "traits.CheckOutcome",
+        "arxii.CheckOutcome",
         null=True,
         blank=True,
         on_delete=models.PROTECT,
@@ -151,7 +151,7 @@ class Contribution(SharedMemoryModel):
     # The authored check-based method used (CHECK contributions only); records which
     # method's check/AP/progress applied (#1574).
     contribution_method = models.ForeignKey(
-        "projects.ContributionMethod",
+        "arxii.ContributionMethod",
         null=True,
         blank=True,
         on_delete=models.SET_NULL,
@@ -209,7 +209,7 @@ class ContributionMethod(SharedMemoryModel):
     )
     description = models.TextField(blank=True)
     check_type = models.ForeignKey(
-        "checks.CheckType",
+        "arxii.CheckType",
         on_delete=models.PROTECT,
         related_name="project_contribution_methods",
         help_text="The check rolled to make this contribution.",

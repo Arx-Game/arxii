@@ -109,7 +109,7 @@ class ThreadPullEffect(SharedMemoryModel):
 
     target_kind = models.CharField(max_length=32, choices=TargetKind.choices)
     resonance = models.ForeignKey(
-        "magic.Resonance",
+        "arxii.Resonance",
         on_delete=models.PROTECT,
         related_name="pull_effects",
     )
@@ -135,7 +135,7 @@ class ThreadPullEffect(SharedMemoryModel):
         blank=True,
     )
     capability_grant = models.ForeignKey(
-        "conditions.CapabilityType",
+        "arxii.CapabilityType",
         on_delete=models.PROTECT,
         null=True,
         blank=True,
@@ -143,7 +143,7 @@ class ThreadPullEffect(SharedMemoryModel):
     )
     narrative_snippet = models.TextField(blank=True)
     target_form = models.ForeignKey(
-        "forms.CharacterForm",
+        "arxii.CharacterForm",
         on_delete=models.PROTECT,
         null=True,
         blank=True,
@@ -152,7 +152,7 @@ class ThreadPullEffect(SharedMemoryModel):
     )
     resistance_amount = models.SmallIntegerField(null=True, blank=True)
     resistance_damage_type = models.ForeignKey(
-        "conditions.DamageType",
+        "arxii.DamageType",
         on_delete=models.PROTECT,
         null=True,
         blank=True,
@@ -160,7 +160,7 @@ class ThreadPullEffect(SharedMemoryModel):
         help_text="Damage type this resistance applies to. Null = all damage types.",
     )
     target_gift = models.ForeignKey(
-        "magic.Gift",
+        "arxii.Gift",
         on_delete=models.PROTECT,
         null=True,
         blank=True,
@@ -505,13 +505,13 @@ class Thread(SharedMemoryModel):
     """
 
     owner = models.ForeignKey(
-        "character_sheets.CharacterSheet",
+        "arxii.CharacterSheet",
         on_delete=models.PROTECT,
         related_name="threads",
         help_text="Character who owns this thread.",
     )
     resonance = models.ForeignKey(
-        "magic.Resonance",
+        "arxii.Resonance",
         on_delete=models.PROTECT,
         related_name="threads",
         help_text="Resonance this thread channels.",
@@ -554,7 +554,7 @@ class Thread(SharedMemoryModel):
     )
 
     target_trait = models.ForeignKey(
-        "traits.Trait",
+        "arxii.Trait",
         on_delete=models.PROTECT,
         null=True,
         blank=True,
@@ -562,7 +562,7 @@ class Thread(SharedMemoryModel):
         help_text="Set when target_kind=TRAIT; null otherwise.",
     )
     target_technique = models.ForeignKey(
-        "magic.Technique",
+        "arxii.Technique",
         on_delete=models.PROTECT,
         null=True,
         blank=True,
@@ -570,7 +570,7 @@ class Thread(SharedMemoryModel):
         help_text="Set when target_kind=TECHNIQUE; null otherwise.",
     )
     target_relationship_track = models.ForeignKey(
-        "relationships.RelationshipTrackProgress",
+        "arxii.RelationshipTrackProgress",
         on_delete=models.PROTECT,
         null=True,
         blank=True,
@@ -578,7 +578,7 @@ class Thread(SharedMemoryModel):
         help_text="Set when target_kind=RELATIONSHIP_TRACK; null otherwise.",
     )
     target_capstone = models.ForeignKey(
-        "relationships.RelationshipCapstone",
+        "arxii.RelationshipCapstone",
         on_delete=models.PROTECT,
         null=True,
         blank=True,
@@ -586,7 +586,7 @@ class Thread(SharedMemoryModel):
         help_text="Set when target_kind=RELATIONSHIP_CAPSTONE; null otherwise.",
     )
     target_facet = models.ForeignKey(
-        "magic.Facet",
+        "arxii.Facet",
         on_delete=models.PROTECT,
         null=True,
         blank=True,
@@ -594,7 +594,7 @@ class Thread(SharedMemoryModel):
         help_text="Set when target_kind=FACET; null otherwise.",
     )
     target_covenant_role = models.ForeignKey(
-        "covenants.CovenantRole",
+        "arxii.CovenantRole",
         on_delete=models.PROTECT,
         null=True,
         blank=True,
@@ -602,7 +602,7 @@ class Thread(SharedMemoryModel):
         help_text="Set when target_kind=COVENANT_ROLE; null otherwise.",
     )
     target_gift = models.ForeignKey(
-        "magic.Gift",
+        "arxii.Gift",
         on_delete=models.PROTECT,
         null=True,
         blank=True,
@@ -610,7 +610,7 @@ class Thread(SharedMemoryModel):
         help_text="Set when target_kind=GIFT; null otherwise.",
     )
     target_mantle = models.ForeignKey(
-        "items.Mantle",
+        "arxii.Mantle",
         on_delete=models.PROTECT,
         null=True,
         blank=True,
@@ -618,7 +618,7 @@ class Thread(SharedMemoryModel):
         help_text="Set when target_kind=MANTLE; null otherwise.",
     )
     target_sanctum_details = models.ForeignKey(
-        "magic.SanctumDetails",
+        "arxii.SanctumDetails",
         on_delete=models.PROTECT,
         null=True,
         blank=True,
@@ -626,7 +626,7 @@ class Thread(SharedMemoryModel):
         help_text="Set when target_kind=SANCTUM; null otherwise. Plan 4 §F.",
     )
     target_organization = models.ForeignKey(
-        "societies.Organization",
+        "arxii.Organization",
         on_delete=models.PROTECT,
         null=True,
         blank=True,
@@ -645,7 +645,7 @@ class Thread(SharedMemoryModel):
         ),
     )
     signature_bonus = models.ForeignKey(
-        "magic.SignatureMotifBonus",
+        "arxii.SignatureMotifBonus",
         on_delete=models.SET_NULL,
         null=True,
         blank=True,

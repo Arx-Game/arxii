@@ -12,15 +12,15 @@ from django.test import TestCase
 
 from world.achievements.factories import (
     AchievementFactory,
-    AchievementRequirementFactory,
     AchievementRewardFactory,
+    AchievementStatRequirementFactory,
     ConditionStatRuleFactory,
     RewardDefinitionFactory,
 )
 from world.achievements.models import (
     Achievement,
-    AchievementRequirement,
     AchievementReward,
+    AchievementStatRequirement,
     ConditionStatRule,
     RewardDefinition,
 )
@@ -61,18 +61,18 @@ class RewardDefinitionNaturalKeyTest(TestCase):
         self.assertNotIn(f'"pk": {reward.pk}', data)
 
 
-class AchievementRequirementNaturalKeyTest(TestCase):
+class AchievementStatRequirementNaturalKeyTest(TestCase):
     def test_round_trip(self):
-        req = AchievementRequirementFactory()
+        req = AchievementStatRequirementFactory()
         self.assertEqual(
-            AchievementRequirement.objects.get_by_natural_key(*req.natural_key()).pk,
+            AchievementStatRequirement.objects.get_by_natural_key(*req.natural_key()).pk,
             req.pk,
         )
 
     def test_duplicate_raises_integrity_error(self):
-        req = AchievementRequirementFactory()
+        req = AchievementStatRequirementFactory()
         with self.assertRaises(IntegrityError), transaction.atomic():
-            AchievementRequirement.objects.create(
+            AchievementStatRequirement.objects.create(
                 achievement=req.achievement,
                 stat=req.stat,
                 threshold=req.threshold,

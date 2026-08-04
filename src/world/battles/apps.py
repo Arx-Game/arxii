@@ -9,29 +9,39 @@ class BattlesConfig(AppConfig):
     verbose_name = "Battles"
 
     def ready(self) -> None:
-        from world.battles.city_defense_services import (  # noqa: PLC0415
-            complete_city_defense,
-            resolve_city_defense,
-        )
-        from world.battles.conclusion_hooks import register_battle_conclusion_hook  # noqa: PLC0415
-        from world.battles.legend_wiring import apply_battle_legend_awards  # noqa: PLC0415
-        from world.projects.constants import ProjectKind  # noqa: PLC0415
-        from world.projects.services import (  # noqa: PLC0415
-            register_kind_handler,
-            register_tiered_resolver,
-        )
+        ready()
 
-        register_battle_conclusion_hook(apply_battle_legend_awards)
 
-        # #1892 — register the CITY_DEFENSE kind handler + tiered resolver.
-        register_kind_handler(ProjectKind.CITY_DEFENSE, complete_city_defense)
-        register_tiered_resolver(ProjectKind.CITY_DEFENSE, resolve_city_defense)
+def ready() -> None:
+    """Register battle conclusion hooks + project-kind handlers.
 
-        from world.battles.war_funding_services import (  # noqa: PLC0415
-            complete_war_funding,
-            resolve_war_funding,
-        )
+    Extracted to module level (#2906) so the single-app aggregator
+    (``world.apps.ArxiiConfig.ready``) can call it directly once
+    ``world.battles`` stops being its own installed app.
+    """
+    from world.battles.city_defense_services import (  # noqa: PLC0415
+        complete_city_defense,
+        resolve_city_defense,
+    )
+    from world.battles.conclusion_hooks import register_battle_conclusion_hook  # noqa: PLC0415
+    from world.battles.legend_wiring import apply_battle_legend_awards  # noqa: PLC0415
+    from world.projects.constants import ProjectKind  # noqa: PLC0415
+    from world.projects.services import (  # noqa: PLC0415
+        register_kind_handler,
+        register_tiered_resolver,
+    )
 
-        # #1890 — register the WAR_FUNDING kind handler + tiered resolver.
-        register_kind_handler(ProjectKind.WAR_FUNDING, complete_war_funding)
-        register_tiered_resolver(ProjectKind.WAR_FUNDING, resolve_war_funding)
+    register_battle_conclusion_hook(apply_battle_legend_awards)
+
+    # #1892 — register the CITY_DEFENSE kind handler + tiered resolver.
+    register_kind_handler(ProjectKind.CITY_DEFENSE, complete_city_defense)
+    register_tiered_resolver(ProjectKind.CITY_DEFENSE, resolve_city_defense)
+
+    from world.battles.war_funding_services import (  # noqa: PLC0415
+        complete_war_funding,
+        resolve_war_funding,
+    )
+
+    # #1890 — register the WAR_FUNDING kind handler + tiered resolver.
+    register_kind_handler(ProjectKind.WAR_FUNDING, complete_war_funding)
+    register_tiered_resolver(ProjectKind.WAR_FUNDING, resolve_war_funding)

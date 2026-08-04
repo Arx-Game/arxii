@@ -21,7 +21,7 @@ from world.achievements.constants import (
 # String model reference for the CharacterSheet FK target. Using a single
 # constant keeps the lazy "app_label.ModelName" reference consistent across the
 # several models in this file that link to a character.
-CHARACTER_SHEET_MODEL = "character_sheets.CharacterSheet"
+CHARACTER_SHEET_MODEL = "arxii.CharacterSheet"
 
 
 class StatDefinition(NaturalKeyMixin, SharedMemoryModel):
@@ -29,7 +29,7 @@ class StatDefinition(NaturalKeyMixin, SharedMemoryModel):
     Defines a trackable stat with display metadata.
 
     Normalizes stat keys so they can't get out of sync between
-    StatTracker and AchievementRequirement. Staff-defined.
+    StatTracker and AchievementStatRequirement. Staff-defined.
     """
 
     class NaturalKeyConfig:
@@ -64,7 +64,7 @@ class StatTracker(SharedMemoryModel):
 
     Other game systems increment these counters (e.g., "quests_completed",
     "monsters_slain"). The achievements engine checks stat values against
-    AchievementRequirement thresholds.
+    AchievementStatRequirement thresholds.
     """
 
     character_sheet = models.ForeignKey(
@@ -194,7 +194,7 @@ class DiscoverableContent(models.Model):
         abstract = True
 
 
-class AchievementRequirement(NaturalKeyMixin, SharedMemoryModel):
+class AchievementStatRequirement(NaturalKeyMixin, SharedMemoryModel):
     """
     A stat threshold that must be met for an achievement.
 
@@ -233,7 +233,7 @@ class AchievementRequirement(NaturalKeyMixin, SharedMemoryModel):
 
     class NaturalKeyConfig:
         fields = ["achievement", "stat", "threshold", "comparison"]
-        dependencies = ["achievements.Achievement", "achievements.StatDefinition"]
+        dependencies = ["arxii.Achievement", "arxii.StatDefinition"]
 
     class Meta:
         ordering = ["achievement", "id"]
@@ -360,7 +360,7 @@ class RewardDefinition(NaturalKeyMixin, SharedMemoryModel):
         help_text="What this reward is",
     )
     modifier_target = models.ForeignKey(
-        "mechanics.ModifierTarget",
+        "arxii.ModifierTarget",
         null=True,
         blank=True,
         on_delete=models.SET_NULL,
@@ -371,7 +371,7 @@ class RewardDefinition(NaturalKeyMixin, SharedMemoryModel):
         ),
     )
     distinction = models.ForeignKey(
-        "distinctions.Distinction",
+        "arxii.Distinction",
         null=True,
         blank=True,
         on_delete=models.SET_NULL,
@@ -423,7 +423,7 @@ class AchievementReward(NaturalKeyMixin, SharedMemoryModel):
 
     class NaturalKeyConfig:
         fields = ["achievement", "reward"]
-        dependencies = ["achievements.Achievement", "achievements.RewardDefinition"]
+        dependencies = ["arxii.Achievement", "arxii.RewardDefinition"]
 
     class Meta:
         constraints = [
@@ -456,7 +456,7 @@ class ConditionStatRule(NaturalKeyMixin, SharedMemoryModel):
         related_name="condition_rules",
     )
     condition = models.ForeignKey(
-        "conditions.ConditionTemplate",
+        "arxii.ConditionTemplate",
         on_delete=models.CASCADE,
         related_name="stat_rules_for",
     )
@@ -470,7 +470,7 @@ class ConditionStatRule(NaturalKeyMixin, SharedMemoryModel):
 
     class NaturalKeyConfig:
         fields = ["stat", "condition", "event_type"]
-        dependencies = ["achievements.StatDefinition", "conditions.ConditionTemplate"]
+        dependencies = ["arxii.StatDefinition", "arxii.ConditionTemplate"]
 
     class Meta:
         constraints = [

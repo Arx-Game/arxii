@@ -41,9 +41,11 @@ from check_partition_sql_drift import POST_PARTITION_COLUMNS  # noqa: E402
 # Ordered: the scenes partition rewrite must precede combat's composite FKs
 # (they reference the partitioned table); matviews only need base tables.
 #
-# society_prestige_ranking.sql is deliberately excluded: societies.0012 drops
-# that matview (the SocietyPrestigeRanking model was deleted). The file stays
-# in-repo only because historical migrations 0008/0010 still read it at replay.
+# society_prestige_ranking.sql is deliberately excluded: the SocietyPrestigeRanking
+# model was deleted pre-#2906 (societies/0012 dropped that matview before the
+# single-app collapse squashed the per-app migration history away). No live
+# caller references the view (verified via grep across src/); the file stays
+# in-repo only as a frozen reference.
 SQL_FILES = [
     "world/scenes/sql/partition_interaction_forward.sql",
     "world/combat/sql/interaction_fk_composites_forward.sql",
@@ -55,15 +57,18 @@ SQL_FILES = [
 ]
 
 # Columns on world.scenes.models.Interaction that real migration replay adds
-# *after* the partition rewrite (scenes/0024, scenes/0026) via plain AddField
-# — see POST_PARTITION_COLUMNS in tools/check_partition_sql_drift.py. The raw
-# SQL in SQL_FILES rebuilds scenes_interaction from a frozen pre-partition
+# *after* the partition rewrite (originally scenes/0024, scenes/0026) via plain
+# AddField — see POST_PARTITION_COLUMNS in tools/check_partition_sql_drift.py. The
+# raw SQL in SQL_FILES rebuilds arxii_interaction from a frozen pre-partition
 # snapshot that deliberately omits them; with every migration disabled here,
 # the AddField migrations that would normally backfill them never run, so
 # they must be added explicitly. Derived from check_partition_sql_drift's
 # POST_PARTITION_COLUMNS (FK column names) so the two lists can't diverge.
+#
+# App label is "arxii" (single-app collapse, #2906) — Interaction now lives
+# in that one collapsed app, not a standalone "scenes" app.
 POST_PARTITION_FIELDS = [
-    ("scenes", "Interaction", col.removesuffix("_id")) for col in sorted(POST_PARTITION_COLUMNS)
+    ("arxii", "Interaction", col.removesuffix("_id")) for col in sorted(POST_PARTITION_COLUMNS)
 ]
 
 
@@ -78,18 +83,18 @@ class _DisableMigrations:
 
 
 def _schema_already_built(connection: "BaseDatabaseWrapper") -> bool:
-    """True once the partitioned ``scenes_interaction`` table exists.
+    """True once the partitioned ``arxii_interaction`` table exists.
 
     The raw SQL files (partition rewrite, composite FKs, matviews) are
     one-shot DDL — e.g. the partition rewrite unconditionally does
     ``CREATE SEQUENCE`` and renames the Django-created table out of the way,
     so replaying it against its own output errors. Checking whether
-    ``scenes_interaction`` is already partitioned (``relkind='p'``) tells us
+    ``arxii_interaction`` is already partitioned (``relkind='p'``) tells us
     a prior run already applied the SQL files and seeds, so this run should
     skip straight past them — that's what makes the script idempotent.
     """
     with connection.cursor() as cursor:
-        cursor.execute("SELECT relkind FROM pg_class WHERE relname = 'scenes_interaction'")
+        cursor.execute("SELECT relkind FROM pg_class WHERE relname = 'arxii_interaction'")
         row = cursor.fetchone()
     return row is not None and row[0] == "p"
 
@@ -112,7 +117,7 @@ def main() -> None:
     call_command("migrate", run_syncdb=True, interactive=False, verbosity=1)
 
     if _schema_already_built(connection):
-        print("schema already built (scenes_interaction is partitioned) — skipping SQL + seeds")
+        print("schema already built (arxii_interaction is partitioned) — skipping SQL + seeds")
         return
 
     with transaction.atomic():

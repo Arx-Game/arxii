@@ -34,21 +34,21 @@ class ActionEnhancement(SharedMemoryModel):
 
     # === Source FKs — exactly one must be non-null, matching source_type ===
     distinction = models.ForeignKey(
-        "distinctions.Distinction",
+        "arxii.Distinction",
         null=True,
         blank=True,
         on_delete=models.CASCADE,
         related_name="action_enhancements",
     )
     condition = models.ForeignKey(
-        "conditions.ConditionTemplate",
+        "arxii.ConditionTemplate",
         null=True,
         blank=True,
         on_delete=models.CASCADE,
         related_name="action_enhancements",
     )
     technique = models.ForeignKey(
-        "magic.Technique",
+        "arxii.Technique",
         null=True,
         blank=True,
         on_delete=models.CASCADE,
@@ -56,6 +56,7 @@ class ActionEnhancement(SharedMemoryModel):
     )
 
     class Meta:
+        app_label = "arxii"
         indexes = [
             models.Index(fields=["base_action_key", "is_involuntary"]),
         ]

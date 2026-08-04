@@ -30,12 +30,12 @@ class RosterTenure(RelatedCacheClearingMixin, SharedMemoryModel):
     display_settings_or_none = ReverseOneToOneOrNone("display_settings")
 
     player_data = models.ForeignKey(
-        "evennia_extensions.PlayerData",
+        "arxii.PlayerData",
         on_delete=models.CASCADE,
         related_name="tenures",
     )
     roster_entry = models.ForeignKey(
-        "roster.RosterEntry",
+        "arxii.RosterEntry",
         on_delete=models.CASCADE,
         related_name="tenures",
     )
@@ -63,7 +63,7 @@ class RosterTenure(RelatedCacheClearingMixin, SharedMemoryModel):
     applied_date = models.DateTimeField(null=True, blank=True)
     approved_date = models.DateTimeField(null=True, blank=True)
     approved_by = models.ForeignKey(
-        "evennia_extensions.PlayerData",
+        "arxii.PlayerData",
         null=True,
         blank=True,
         on_delete=models.SET_NULL,

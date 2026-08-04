@@ -26,7 +26,7 @@ class GameInvite(SharedMemoryModel):
     """
 
     inviter = models.ForeignKey(
-        "evennia_extensions.PlayerData",
+        "arxii.PlayerData",
         on_delete=models.CASCADE,
         related_name="sent_invites",
     )

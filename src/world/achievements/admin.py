@@ -4,8 +4,8 @@ from django.contrib import admin
 
 from world.achievements.models import (
     Achievement,
-    AchievementRequirement,
     AchievementReward,
+    AchievementStatRequirement,
     CharacterAchievement,
     ConditionStatRule,
     Discovery,
@@ -15,10 +15,10 @@ from world.achievements.models import (
 )
 
 
-class AchievementRequirementInline(admin.TabularInline):
+class AchievementStatRequirementInline(admin.TabularInline):
     """Inline admin for achievement requirements."""
 
-    model = AchievementRequirement
+    model = AchievementStatRequirement
     extra = 1
     raw_id_fields = ["stat"]
 
@@ -56,7 +56,7 @@ class AchievementAdmin(admin.ModelAdmin):
     list_filter = ["notification_level", "hidden", "is_active"]
     search_fields = ["name", "description"]
     prepopulated_fields = {"slug": ("name",)}
-    inlines = [AchievementRequirementInline, AchievementRewardInline]
+    inlines = [AchievementStatRequirementInline, AchievementRewardInline]
 
 
 @admin.register(StatTracker)

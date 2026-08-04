@@ -86,13 +86,13 @@ class Resonance(NaturalKeyMixin, SharedMemoryModel):
         help_text="The opposing resonance in the pair.",
     )
     properties = models.ManyToManyField(
-        "mechanics.Property",
+        "arxii.Property",
         blank=True,
         related_name="resonances",
         help_text="Properties associated with this resonance (e.g., Flame → flame property).",
     )
     codex_entry = models.ForeignKey(
-        "codex.CodexEntry",
+        "arxii.CodexEntry",
         on_delete=models.PROTECT,
         null=True,
         blank=True,

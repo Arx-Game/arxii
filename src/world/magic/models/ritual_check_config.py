@@ -24,25 +24,25 @@ class RitualCheckConfig(SharedMemoryModel):
     """
 
     ritual = models.OneToOneField(
-        "magic.Ritual",
+        "arxii.Ritual",
         on_delete=models.CASCADE,
         related_name="check_config",
     )
     stat = models.ForeignKey(
-        "traits.Trait",
+        "arxii.Trait",
         on_delete=models.PROTECT,
         limit_choices_to={"trait_type": "stat"},
         related_name="+",
         help_text="The primary stat used in this ritual's check.",
     )
     skill = models.ForeignKey(
-        "skills.Skill",
+        "arxii.Skill",
         on_delete=models.PROTECT,
         related_name="+",
         help_text="The skill used in this ritual's check.",
     )
     specialization = models.ForeignKey(
-        "skills.Specialization",
+        "arxii.Specialization",
         on_delete=models.SET_NULL,
         null=True,
         blank=True,
@@ -50,7 +50,7 @@ class RitualCheckConfig(SharedMemoryModel):
         help_text="Optional specialization for this ritual's check.",
     )
     resonance = models.ForeignKey(
-        "magic.Resonance",
+        "arxii.Resonance",
         on_delete=models.SET_NULL,
         null=True,
         blank=True,
@@ -58,7 +58,7 @@ class RitualCheckConfig(SharedMemoryModel):
         help_text="Optional resonance filter for this ritual.",
     )
     check_type = models.ForeignKey(
-        "checks.CheckType",
+        "arxii.CheckType",
         on_delete=models.PROTECT,
         null=True,
         blank=True,

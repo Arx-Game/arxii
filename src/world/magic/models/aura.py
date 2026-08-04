@@ -26,7 +26,7 @@ class CharacterAura(SharedMemoryModel):
     """
 
     character = models.OneToOneField(
-        "character_sheets.CharacterSheet",
+        "arxii.CharacterSheet",
         on_delete=models.CASCADE,
         related_name="aura",
         help_text="The character this aura belongs to.",
@@ -106,7 +106,7 @@ class CharacterResonance(SharedMemoryModel):
     """
 
     character_sheet = models.ForeignKey(
-        "character_sheets.CharacterSheet",
+        "arxii.CharacterSheet",
         on_delete=models.CASCADE,
         related_name="resonances",
         help_text="The character sheet this resonance is attached to.",
@@ -184,7 +184,7 @@ class AuraAffinityThreshold(SharedMemoryModel):
         help_text="Percentage (0-100) this affinity must cross to fire.",
     )
     discovery_achievement = models.ForeignKey(
-        "achievements.Achievement",
+        "arxii.Achievement",
         on_delete=models.PROTECT,
         null=True,
         blank=True,

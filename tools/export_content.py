@@ -3,7 +3,7 @@
 
 NOT a management command (repo rule) — a tools script wrapping
 core_management.content_export. Writes one JSON file per content model
-to CONTENT_REPO_PATH/fixtures/<app_label>/<model_name>.json.
+to CONTENT_REPO_PATH/fixtures/<domain>/<model_name>.json.
 
 Usage:
     uv run python tools/export_content.py            # export; withhold new rows
@@ -150,13 +150,15 @@ def _run_grid_export(content_root: Path) -> bool:
 
 def _run_check(content_models: frozenset[str]) -> None:
     """Dry-run: count rows per model, write nothing."""
-    from django.apps import apps  # noqa: PLC0415
+    from core.app_domains import resolve_model_by_name  # noqa: PLC0415
 
     total = 0
     for model_label in sorted(content_models):
+        # model_label is "<domain>.<model_name>", not a real Django app_label
+        # post-collapse (#2906) — resolve by model name, not apps.get_model().
         app_label, model_name = model_label.split(".")
         try:
-            model = apps.get_model(app_label, model_name)
+            model = resolve_model_by_name(model_label)
         except LookupError:
             print(f"  {model_label}: MODEL NOT FOUND")
             continue

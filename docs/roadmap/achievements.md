@@ -17,7 +17,7 @@ A meta-engagement layer inspired by Everquest 2's discovery system and Steam ach
 - **Cross-cutting integration:** Every game system calls a simple service function to record stats and trigger achievement checks
 
 ## What Exists
-- **Models:** StatTracker (per-character counters), Achievement (SharedMemoryModel definitions), AchievementRequirement (stat threshold conditions), Discovery (first-to-achieve with co-discoverer support), CharacterAchievement (earned records), AchievementReward (titles/bonuses/cosmetics)
+- **Models:** StatTracker (per-character counters), Achievement (SharedMemoryModel definitions), AchievementStatRequirement (stat threshold conditions), Discovery (first-to-achieve with co-discoverer support), CharacterAchievement (earned records), AchievementReward (titles/bonuses/cosmetics)
 - **Services:** increment_stat (atomic increment + achievement check), grant_achievement (with discovery tracking and batch support), get_stat
 - **APIs:** AchievementViewSet (shows visible + earned hidden), CharacterAchievementViewSet (with filtering)
 - **Admin:** Full admin with inlines for requirements and rewards

@@ -15,7 +15,7 @@ class DuranceCohort(SharedMemoryModel):
     """
 
     organization = models.ForeignKey(
-        "societies.Organization",
+        "arxii.Organization",
         on_delete=models.PROTECT,
         related_name="durance_cohorts",
         help_text="The Academy organization this cohort belongs to.",
@@ -24,7 +24,7 @@ class DuranceCohort(SharedMemoryModel):
     opened_at = models.DateTimeField(auto_now_add=True)
     closed_at = models.DateTimeField(null=True, blank=True)
     enrollment_scene = models.ForeignKey(
-        "scenes.Scene",
+        "arxii.Scene",
         null=True,
         blank=True,
         on_delete=models.SET_NULL,
@@ -47,13 +47,13 @@ class CohortEnrollment(SharedMemoryModel):
         related_name="enrollments",
     )
     persona = models.ForeignKey(
-        "scenes.Persona",
+        "arxii.Persona",
         on_delete=models.CASCADE,
         related_name="cohort_enrollments",
     )
     enrolled_at = models.DateTimeField(auto_now_add=True)
     enrollment_scene = models.ForeignKey(
-        "scenes.Scene",
+        "arxii.Scene",
         null=True,
         blank=True,
         on_delete=models.SET_NULL,

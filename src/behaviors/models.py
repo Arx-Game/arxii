@@ -22,6 +22,9 @@ class BehaviorPackageDefinition(SharedMemoryModel):
         help_text="Python path to the service function for this package.",
     )
 
+    class Meta:
+        app_label = "arxii"
+
     def __str__(self) -> str:
         return str(self.name)
 
@@ -59,6 +62,9 @@ class BehaviorPackageInstance(SharedMemoryModel):
         help_text="Name of the hook where this package applies.",
     )
     data = models.JSONField(blank=True, null=True)
+
+    class Meta:
+        app_label = "arxii"
 
     def __str__(self) -> str:
         definition = cast("BehaviorPackageDefinition", self.definition)

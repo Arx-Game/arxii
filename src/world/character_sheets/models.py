@@ -150,7 +150,7 @@ class Profile(SharedMemoryModel):
         help_text="Character's heritage (Normal, Sleeper, Misbegotten, etc.)",
     )
     origin_realm = models.ForeignKey(
-        "realms.Realm",
+        "arxii.Realm",
         null=True,
         blank=True,
         on_delete=models.SET_NULL,
@@ -158,7 +158,7 @@ class Profile(SharedMemoryModel):
         help_text="Realm/homeland the character is from",
     )
     family = models.ForeignKey(
-        "roster.Family",
+        "arxii.Family",
         null=True,
         blank=True,
         on_delete=models.SET_NULL,
@@ -166,7 +166,7 @@ class Profile(SharedMemoryModel):
         help_text="Character's family. Null for orphans/unknown lineage.",
     )
     tarot_card = models.ForeignKey(
-        "tarot.TarotCard",
+        "arxii.TarotCard",
         null=True,
         blank=True,
         on_delete=models.SET_NULL,
@@ -224,7 +224,7 @@ class ProfileTextVersion(SharedMemoryModel):
     """
 
     profile = models.ForeignKey(
-        "character_sheets.Profile",
+        "arxii.Profile",
         on_delete=models.CASCADE,
         related_name="text_versions",
     )
@@ -241,7 +241,7 @@ class ProfileTextVersion(SharedMemoryModel):
         help_text="IC datetime at write time (null if the game clock was unset).",
     )
     era = models.ForeignKey(
-        "stories.Era",
+        "arxii.Era",
         null=True,
         blank=True,
         on_delete=models.SET_NULL,
@@ -353,7 +353,7 @@ class CharacterSheet(SharedMemoryModel):
         help_text="Character's true height in inches (staff-visible only)",
     )
     build = models.ForeignKey(
-        "forms.Build",
+        "arxii.Build",
         null=True,
         blank=True,
         on_delete=models.SET_NULL,
@@ -404,7 +404,7 @@ class CharacterSheet(SharedMemoryModel):
 
     # Species
     species = models.ForeignKey(
-        "species.Species",
+        "arxii.Species",
         null=True,
         blank=True,
         on_delete=models.PROTECT,
@@ -414,7 +414,7 @@ class CharacterSheet(SharedMemoryModel):
 
     # Residence & Trickle
     current_residence = models.ForeignKey(
-        "evennia_extensions.RoomProfile",
+        "arxii.RoomProfile",
         null=True,
         blank=True,
         on_delete=models.PROTECT,
@@ -433,7 +433,7 @@ class CharacterSheet(SharedMemoryModel):
     # persona presents this; the narrative text fields (concept, quote, background, …) are
     # read back through forwarding properties below so existing reads stay unchanged.
     true_profile = models.OneToOneField(
-        "character_sheets.Profile",
+        "arxii.Profile",
         null=True,
         blank=True,
         on_delete=models.SET_NULL,
@@ -496,7 +496,7 @@ class CharacterSheet(SharedMemoryModel):
     # restore the covered face). ``SET_NULL`` so a deleted persona safely reverts
     # to primary, never a dangling/foreign identity.
     active_persona = models.ForeignKey(
-        "scenes.Persona",
+        "arxii.Persona",
         null=True,
         blank=True,
         on_delete=models.SET_NULL,
@@ -1221,7 +1221,7 @@ class CharacterSheet(SharedMemoryModel):
         help_text="When the character was registered into the Durance arc via the intake rite.",
     )
     durance_cohort = models.ForeignKey(
-        "progression.DuranceCohort",
+        "arxii.DuranceCohort",
         null=True,
         blank=True,
         on_delete=models.SET_NULL,

@@ -1227,7 +1227,7 @@ def record_consequence_outcome(  # noqa: PLR0913 - consequence resolution needs 
     ``combat_interaction_timestamp`` is derived from ``combat_interaction.timestamp``
     (the same attribute CombatRoundAction.interaction_timestamp is denormalized from)
     and is populated atomically with the FK, as required by the composite FK
-    constraint on the range-partitioned scenes_interaction table.
+    constraint on the range-partitioned arxii_interaction table.
 
     Modifier rows are bulk-created in a single query (no per-row saves).
 

@@ -11,8 +11,11 @@ We have a custom `makemigrations` command that prevents Django from creating pro
 # SAFE - our custom command prevents phantom Evennia migrations
 arx manage makemigrations
 
-# Still works - specify specific apps when needed  
-arx manage makemigrations traits
+# Still works - specify an app label when needed (almost always just this one:
+# #2906 collapsed every first-party app into a single label, `arxii` -
+# `arx manage makemigrations traits` no longer resolves, since `traits` is a
+# sub-package of `world`, not an installed app in its own right; see ADR-0195)
+arx manage makemigrations arxii
 ```
 
 **The guard depends on `INSTALLED_APPS` order (#2885).** `django_linear_migrations`
@@ -46,9 +49,25 @@ only when the launcher blocks it.
 - **No Attributes**: Replace all Evennia attribute usage with proper Django models through evennia_extensions
 - **Item Data System**: Consider reusing ArxI's item_data descriptor system for routing data to different storage models
 
-### Migration Management for New Apps
-**IMPORTANT: When working on a new app, avoid multiple migrations during development**
-django_notes.md gives a more in-depth explanation of this strategy.
+### Migration Management for a New Subsystem
+
+**There is no "new app" case any more.** #2906 collapsed every first-party
+app into one (`world`, label `arxii`; see ADR-0195) - not because per-app
+migration history was itself the cost driver (measurement disproved that;
+see ADR-0195's "Why"), but because 46 of the previous 68 apps sat inside one
+dependency cycle, which forced 1,153 FK edges to be deferred no matter how
+each app's own migrations were written. Collapsing to one app lets that
+deferral floor drop to the schema's true 49. A new subsystem is a new
+`world/<name>/` sub-package with its own `models.py` (wired into
+`world/models.py`'s aggregator and, if it needs a `ready()` hook,
+`world/apps.py`'s call list) - its migration lands in the existing
+`world/migrations/` history via a normal `arx manage makemigrations arxii`,
+the same as any other model change. `django_notes.md`'s old per-app
+clean-slate squash workflow (fake-to-zero, delete migration files, regenerate
+`0001_initial.py`) is now obsolete for this case - the history is now one
+flattened `world/migrations/` sequence (102 files: 100 cost-weighted chunks
+plus 2 tail migrations, not a single file), and squashing it again defeats
+the point of the collapse.
 
 ### loaddata Cannot UPDATE SharedMemoryModel Rows (#946)
 

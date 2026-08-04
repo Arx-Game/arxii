@@ -44,7 +44,7 @@ from world.classes.models import PathStage
 
 logger = logging.getLogger(__name__)
 
-_SPECIES_MODEL = "species.Species"
+_SPECIES_MODEL = "arxii.Species"
 
 
 class CGPointBudget(NaturalKeyMixin, SharedMemoryModel):
@@ -117,7 +117,7 @@ class StartingArea(NaturalKeyMixin, SharedMemoryModel):
 
     # Canonical realm this StartingArea references (data lives in `realms.Realm`)
     realm = models.ForeignKey(
-        "realms.Realm",
+        "arxii.Realm",
         on_delete=models.SET_NULL,
         null=True,
         blank=True,
@@ -134,7 +134,7 @@ class StartingArea(NaturalKeyMixin, SharedMemoryModel):
         help_text="Rich description shown on hover/click in character creation",
     )
     crest_art = models.ForeignKey(
-        "evennia_extensions.Media",
+        "arxii.Media",
         on_delete=models.SET_NULL,
         null=True,
         blank=True,
@@ -142,7 +142,7 @@ class StartingArea(NaturalKeyMixin, SharedMemoryModel):
         help_text="Crest/flag art for this area. Leave unset for gradient placeholder.",
     )
     default_starting_room = models.ForeignKey(
-        "evennia_extensions.RoomProfile",
+        "arxii.RoomProfile",
         on_delete=models.SET_NULL,
         null=True,
         blank=True,
@@ -237,7 +237,7 @@ class Beginnings(NaturalKeyMixin, SharedMemoryModel):
         help_text="Worldbuilding text shown to players",
     )
     art = models.ForeignKey(
-        "evennia_extensions.Media",
+        "arxii.Media",
         on_delete=models.SET_NULL,
         null=True,
         blank=True,
@@ -273,7 +273,7 @@ class Beginnings(NaturalKeyMixin, SharedMemoryModel):
         help_text="Species available for this path. Parent species include all children.",
     )
     starting_languages = models.ManyToManyField(
-        "species.Language",
+        "arxii.Language",
         blank=True,
         related_name="beginnings",
         help_text="Languages granted to all characters from this path",
@@ -285,13 +285,13 @@ class Beginnings(NaturalKeyMixin, SharedMemoryModel):
     # TODO: Implement finalize_character integration to grant society awareness/membership
     # based on this field. See societies system design doc for details.
     societies = models.ManyToManyField(
-        "societies.Society",
+        "arxii.Society",
         blank=True,
         related_name="connected_beginnings",
         help_text="Societies characters gain awareness/membership in during character creation",
     )
     traditions = models.ManyToManyField(
-        "magic.Tradition",
+        "arxii.Tradition",
         through="BeginningTradition",
         blank=True,
         related_name="available_beginnings",
@@ -310,7 +310,7 @@ class Beginnings(NaturalKeyMixin, SharedMemoryModel):
         "grant costs into the character-creation points budget.",
     )
     heritage = models.ForeignKey(
-        "character_sheets.Heritage",
+        "arxii.Heritage",
         null=True,
         blank=True,
         on_delete=models.SET_NULL,
@@ -320,7 +320,7 @@ class Beginnings(NaturalKeyMixin, SharedMemoryModel):
         "Null defaults to 'Normal' heritage at finalization.",
     )
     starting_room_override = models.ForeignKey(
-        "evennia_extensions.RoomProfile",
+        "arxii.RoomProfile",
         on_delete=models.SET_NULL,
         null=True,
         blank=True,
@@ -328,7 +328,7 @@ class Beginnings(NaturalKeyMixin, SharedMemoryModel):
         help_text="Override starting room for this Beginnings path (e.g., Sleeper wake room)",
     )
     property_grant_profile = models.ForeignKey(
-        "buildings.PropertyGrantProfile",
+        "arxii.PropertyGrantProfile",
         on_delete=models.SET_NULL,
         null=True,
         blank=True,
@@ -339,7 +339,7 @@ class Beginnings(NaturalKeyMixin, SharedMemoryModel):
         ),
     )
     prelude_mission = models.ForeignKey(
-        "missions.MissionTemplate",
+        "arxii.MissionTemplate",
         on_delete=models.SET_NULL,
         null=True,
         blank=True,
@@ -353,7 +353,7 @@ class Beginnings(NaturalKeyMixin, SharedMemoryModel):
 
     class NaturalKeyConfig:
         fields = ["starting_area", "name"]
-        dependencies = ["character_creation.StartingArea"]
+        dependencies = ["arxii.StartingArea"]
 
     class Meta:
         verbose_name = "Beginnings"
@@ -493,12 +493,12 @@ class BeginningTradition(NaturalKeyMixin, SharedMemoryModel):
         related_name="beginning_traditions",
     )
     tradition = models.ForeignKey(
-        "magic.Tradition",
+        "arxii.Tradition",
         on_delete=models.CASCADE,
         related_name="beginning_traditions",
     )
     required_distinction = models.ForeignKey(
-        "distinctions.Distinction",
+        "arxii.Distinction",
         on_delete=models.SET_NULL,
         null=True,
         blank=True,
@@ -568,7 +568,7 @@ class OriginTemplate(NaturalKeyMixin, SharedMemoryModel):
 
     class NaturalKeyConfig:
         fields = ["beginning", "name"]
-        dependencies = ["character_creation.Beginnings"]
+        dependencies = ["arxii.Beginnings"]
 
     def __str__(self) -> str:
         return self.name
@@ -612,7 +612,7 @@ class OriginTemplateSlot(NaturalKeyMixin, SharedMemoryModel):
 
     class NaturalKeyConfig:
         fields = ["template", "name"]
-        dependencies = ["character_creation.OriginTemplate"]
+        dependencies = ["arxii.OriginTemplate"]
 
     def __str__(self) -> str:
         return self.name
@@ -626,7 +626,7 @@ class CharacterOriginSlot(SharedMemoryModel):
     """
 
     sheet = models.ForeignKey(
-        "character_sheets.CharacterSheet",
+        "arxii.CharacterSheet",
         on_delete=models.CASCADE,
         related_name="origin_slots",
         help_text="The character sheet this slot answer belongs to.",
@@ -713,7 +713,7 @@ class CharacterDraft(SharedMemoryModel):
     )
 
     selected_gender = models.ForeignKey(
-        "character_sheets.Gender",
+        "arxii.Gender",
         on_delete=models.SET_NULL,
         null=True,
         blank=True,
@@ -743,7 +743,7 @@ class CharacterDraft(SharedMemoryModel):
 
     # Stage 9: Identity — worship declarations (#2355)
     public_worship = models.ForeignKey(
-        "worship.WorshippedBeing",
+        "arxii.WorshippedBeing",
         on_delete=models.SET_NULL,
         null=True,
         blank=True,
@@ -752,7 +752,7 @@ class CharacterDraft(SharedMemoryModel):
         help_text="The being this character publicly worships (optional).",
     )
     secret_worship = models.ForeignKey(
-        "worship.WorshippedBeing",
+        "arxii.WorshippedBeing",
         on_delete=models.SET_NULL,
         null=True,
         blank=True,
@@ -766,7 +766,7 @@ class CharacterDraft(SharedMemoryModel):
 
     # Stage 3: Lineage (merged into Heritage in new flow)
     family = models.ForeignKey(
-        "roster.Family",
+        "arxii.Family",
         on_delete=models.SET_NULL,
         null=True,
         blank=True,
@@ -775,7 +775,7 @@ class CharacterDraft(SharedMemoryModel):
     )
     # Kinship slot claim (#2062): the appable node or pool this OC fills.
     claimed_kin_slot = models.ForeignKey(
-        "roster.Kinsperson",
+        "arxii.Kinsperson",
         on_delete=models.SET_NULL,
         null=True,
         blank=True,
@@ -783,7 +783,7 @@ class CharacterDraft(SharedMemoryModel):
         help_text="Appable kinship node this character claims at finalization.",
     )
     claimed_kin_pool = models.ForeignKey(
-        "roster.KinSlotPool",
+        "arxii.KinSlotPool",
         on_delete=models.SET_NULL,
         null=True,
         blank=True,
@@ -814,7 +814,7 @@ class CharacterDraft(SharedMemoryModel):
 
     # Stage 5: Path
     selected_path = models.ForeignKey(
-        "classes.Path",
+        "arxii.Path",
         on_delete=models.SET_NULL,
         null=True,
         blank=True,
@@ -823,7 +823,7 @@ class CharacterDraft(SharedMemoryModel):
         help_text="Selected starting path (Prospect stage only)",
     )
     selected_tradition = models.ForeignKey(
-        "magic.Tradition",
+        "arxii.Tradition",
         on_delete=models.SET_NULL,
         null=True,
         blank=True,
@@ -833,7 +833,7 @@ class CharacterDraft(SharedMemoryModel):
 
     # Stage 7: Appearance
     height_band = models.ForeignKey(
-        "forms.HeightBand",
+        "arxii.HeightBand",
         on_delete=models.SET_NULL,
         null=True,
         blank=True,
@@ -846,7 +846,7 @@ class CharacterDraft(SharedMemoryModel):
         help_text="Exact height in inches within the selected band",
     )
     build = models.ForeignKey(
-        "forms.Build",
+        "arxii.Build",
         on_delete=models.SET_NULL,
         null=True,
         blank=True,
@@ -866,7 +866,7 @@ class CharacterDraft(SharedMemoryModel):
         help_text="GM is designing a roster character, not playing one.",
     )
     target_table = models.ForeignKey(
-        "gm.GMTable",
+        "arxii.GMTable",
         null=True,
         blank=True,
         on_delete=models.SET_NULL,
@@ -1325,7 +1325,7 @@ class DraftApplication(SharedMemoryModel):
         help_text="Set on deny/withdraw for soft-delete grace period.",
     )
     invited_via = models.ForeignKey(
-        "roster.GameInvite",
+        "arxii.GameInvite",
         null=True,
         blank=True,
         on_delete=models.SET_NULL,

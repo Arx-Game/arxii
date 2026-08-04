@@ -17,7 +17,7 @@ from world.battles.constants import DEFAULT_MORALE, UnitQuality
 from world.conditions.models import CapabilityType
 from world.mechanics.models import Property
 
-CHARACTER_SHEET_MODEL = "character_sheets.CharacterSheet"
+CHARACTER_SHEET_MODEL = "arxii.CharacterSheet"
 
 
 class MilitaryUnit(SharedMemoryModel):
@@ -41,7 +41,7 @@ class MilitaryUnit(SharedMemoryModel):
         "— properties/capabilities/quality below drive mechanics.",
     )
     owner_org = models.ForeignKey(
-        "societies.Organization",
+        "arxii.Organization",
         null=True,
         blank=True,
         on_delete=models.PROTECT,
@@ -174,7 +174,7 @@ class Army(SharedMemoryModel):
         help_text="The overall commander of this army. May differ from individual unit commanders.",
     )
     campaign_story = models.ForeignKey(
-        "stories.Story",
+        "arxii.Story",
         null=True,
         blank=True,
         on_delete=models.SET_NULL,
@@ -182,7 +182,7 @@ class Army(SharedMemoryModel):
         help_text="Optional campaign story this army was formed for.",
     )
     covenant = models.ForeignKey(
-        "covenants.Covenant",
+        "arxii.Covenant",
         null=True,
         blank=True,
         on_delete=models.SET_NULL,

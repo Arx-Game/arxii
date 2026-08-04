@@ -72,7 +72,7 @@ class Gift(NaturalKeyMixin, SharedMemoryModel):
         help_text="Resonances associated with this gift.",
     )
     creator = models.ForeignKey(
-        "character_sheets.CharacterSheet",
+        "arxii.CharacterSheet",
         on_delete=models.SET_NULL,
         null=True,
         blank=True,
@@ -80,7 +80,7 @@ class Gift(NaturalKeyMixin, SharedMemoryModel):
         help_text="Character who created this gift.",
     )
     codex_entry = models.ForeignKey(
-        "codex.CodexEntry",
+        "arxii.CodexEntry",
         on_delete=models.PROTECT,
         null=True,
         blank=True,
@@ -177,7 +177,7 @@ class CharacterGift(SharedMemoryModel):
     """
 
     character = models.ForeignKey(
-        "character_sheets.CharacterSheet",
+        "arxii.CharacterSheet",
         on_delete=models.CASCADE,
         related_name="character_gifts",
         help_text="The character who knows this gift.",
@@ -274,7 +274,7 @@ class CharacterTradition(SharedMemoryModel):
     """
 
     character = models.ForeignKey(
-        "character_sheets.CharacterSheet",
+        "arxii.CharacterSheet",
         on_delete=models.CASCADE,
         related_name="character_traditions",
         help_text="The character who belongs to this tradition.",

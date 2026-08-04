@@ -21,7 +21,7 @@ from world.worship.constants import MiracleTrigger
 
 # Verbose name reused across Meta verbose_name / verbose_name_plural / __str__ (python:S1192).
 CHOSEN_FAVOR_CONFIG_VERBOSE = "Chosen Favor Config"
-CHARACTER_SHEET_MODEL = "character_sheets.CharacterSheet"
+CHARACTER_SHEET_MODEL = "arxii.CharacterSheet"
 
 
 class PatronageValence(models.TextChoices):
@@ -46,7 +46,7 @@ class WorshipTradition(SharedMemoryModel):
         blank=True, help_text="PLACEHOLDER lore — Apostate rewrite pending."
     )
     rites_specialization = models.ForeignKey(
-        "skills.Specialization",
+        "arxii.Specialization",
         on_delete=models.PROTECT,
         related_name="worship_traditions",
         help_text="The Rites specialization ceremonies of this tradition roll with.",
@@ -195,7 +195,7 @@ class WorshipDeclaration(SharedMemoryModel):
         related_name="secret_worshippers",
     )
     secret = models.ForeignKey(
-        "secrets.Secret",
+        "arxii.Secret",
         null=True,
         blank=True,
         on_delete=models.SET_NULL,
@@ -369,7 +369,7 @@ class MiraclePerformance(SharedMemoryModel):
         related_name="miracle_performances",
     )
     scene = models.ForeignKey(
-        "scenes.Scene",
+        "arxii.Scene",
         null=True,
         blank=True,
         on_delete=models.SET_NULL,

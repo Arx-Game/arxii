@@ -124,6 +124,18 @@ def discover_apps_on_disk() -> set[str]:
         # name (e.g. src/world/missions/apps.py → world.missions).
         rel = apps_py.parent.relative_to(SRC_DIR)
         dotted = ".".join(rel.parts)
+        if dotted == "world":
+            # #2906 single-app-collapse: src/world/apps.py is the transitional
+            # ArxiiConfig aggregator, not an independently testable app. It has
+            # no tests of its own, isn't in INSTALLED_APPS yet, and — because
+            # "world" the bare directory contains every world.* sub-package —
+            # passing the literal label "world" to `manage.py test` makes
+            # unittest's directory-based discovery recurse through the ENTIRE
+            # world/ tree, re-running every world.* shard's tests a second
+            # time. world.* coverage is (and stays) tracked at the
+            # `world.<sub>` granularity via discover_labelable_packages()'s
+            # matching special-case; skip the bare aggregator here too.
+            continue
         apps.add(dotted)
     return apps
 

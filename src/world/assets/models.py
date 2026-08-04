@@ -36,7 +36,7 @@ class NPCAsset(SharedMemoryModel):
     """
 
     promoter_persona = models.ForeignKey(
-        "scenes.Persona",
+        "arxii.Persona",
         null=True,
         blank=True,
         on_delete=models.PROTECT,
@@ -47,7 +47,7 @@ class NPCAsset(SharedMemoryModel):
         ),
     )
     promoter_org = models.ForeignKey(
-        "societies.Organization",
+        "arxii.Organization",
         null=True,
         blank=True,
         on_delete=models.PROTECT,
@@ -59,7 +59,7 @@ class NPCAsset(SharedMemoryModel):
         ),
     )
     asset_persona = models.ForeignKey(
-        "scenes.Persona",
+        "arxii.Persona",
         on_delete=models.PROTECT,
         related_name="asset_ownerships",
         help_text="The promoted NPC's own persona — shared among co-owners (#2295).",
@@ -70,7 +70,7 @@ class NPCAsset(SharedMemoryModel):
         help_text="What kind of relationship this asset serves.",
     )
     source_functionary = models.ForeignKey(
-        "npc_services.Functionary",
+        "arxii.Functionary",
         null=True,
         blank=True,
         on_delete=models.PROTECT,
@@ -87,7 +87,7 @@ class NPCAsset(SharedMemoryModel):
         help_text="How this asset was acquired: PROMOTION (runtime) or DISTINCTION_GRANT (CG).",
     )
     source_distinction_grant = models.ForeignKey(
-        "assets.DistinctionAssetGrant",
+        "arxii.DistinctionAssetGrant",
         null=True,
         blank=True,
         on_delete=models.SET_NULL,
@@ -184,13 +184,13 @@ class DistinctionAssetGrant(SharedMemoryModel):
     """
 
     distinction = models.ForeignKey(
-        "distinctions.Distinction",
+        "arxii.Distinction",
         on_delete=models.CASCADE,
         related_name="asset_grants",
         help_text="The Distinction that grants this asset at character creation.",
     )
     npc_role = models.ForeignKey(
-        "npc_services.NPCRole",
+        "arxii.NPCRole",
         on_delete=models.PROTECT,
         related_name="distinction_grants",
         help_text="The NPCRole the granted asset's persona is assigned to.",
@@ -240,12 +240,12 @@ class AssetTaskIntelDetails(SharedMemoryModel):
     """
 
     offer = models.OneToOneField(
-        "npc_services.NPCServiceOffer",
+        "arxii.NPCServiceOffer",
         on_delete=models.CASCADE,
         related_name="asset_task_intel_details",
     )
     clue_pool = models.ForeignKey(
-        "assets.CluePool",
+        "arxii.CluePool",
         on_delete=models.PROTECT,
         related_name="intel_task_offers",
         help_text="The pool of clues this intel task draws from.",
@@ -304,7 +304,7 @@ class CluePoolEntry(SharedMemoryModel):
         related_name="entries",
     )
     clue = models.ForeignKey(
-        "clues.Clue",
+        "arxii.Clue",
         on_delete=models.PROTECT,
         related_name="pool_entries",
     )

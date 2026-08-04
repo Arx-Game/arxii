@@ -121,25 +121,25 @@ class CompanionAbility(NaturalKeyMixin, SharedMemoryModel):
     )
     base_damage = models.PositiveIntegerField(default=0)
     damage_type = models.ForeignKey(
-        "conditions.DamageType",
+        "arxii.DamageType",
         on_delete=models.PROTECT,
         null=True,
         blank=True,
         related_name="companion_abilities",
     )
     conditions_applied = models.ManyToManyField(
-        "conditions.ConditionTemplate",
+        "arxii.ConditionTemplate",
         blank=True,
         related_name="companion_abilities",
     )
     effect_properties = models.ManyToManyField(
-        "mechanics.Property",
+        "arxii.Property",
         blank=True,
         related_name="companion_abilities",
     )
     # Utility fields (inert when ATTACK)
     grants_property = models.ForeignKey(
-        "mechanics.Property",
+        "arxii.Property",
         on_delete=models.PROTECT,
         null=True,
         blank=True,
@@ -147,7 +147,7 @@ class CompanionAbility(NaturalKeyMixin, SharedMemoryModel):
     )
     # Battle-scale bridge: the Technique this ability resolves as
     technique = models.ForeignKey(
-        "magic.Technique",
+        "arxii.Technique",
         on_delete=models.PROTECT,
         null=True,
         blank=True,
@@ -220,7 +220,7 @@ class Companion(SharedMemoryModel):
     """
 
     owner = models.ForeignKey(
-        "character_sheets.CharacterSheet",
+        "arxii.CharacterSheet",
         on_delete=models.PROTECT,
         related_name="companions",
     )
@@ -230,7 +230,7 @@ class Companion(SharedMemoryModel):
         related_name="companions",
     )
     granting_gift = models.ForeignKey(
-        "magic.Gift",
+        "arxii.Gift",
         on_delete=models.PROTECT,
         related_name="granted_companions",
         help_text="Which Gift's Thread capacity pool this companion is charged against.",
@@ -250,7 +250,7 @@ class Companion(SharedMemoryModel):
     bonded_at = models.DateTimeField(auto_now_add=True)
     released_at = models.DateTimeField(null=True, blank=True)
     ridden_by = models.ForeignKey(
-        "character_sheets.CharacterSheet",
+        "arxii.CharacterSheet",
         on_delete=models.SET_NULL,
         null=True,
         blank=True,
@@ -291,12 +291,12 @@ class CompanionDeployment(SharedMemoryModel):
         related_name="deployments",
     )
     battle = models.ForeignKey(
-        "battles.Battle",
+        "arxii.Battle",
         on_delete=models.CASCADE,
         related_name="companion_deployments",
     )
     vehicle = models.OneToOneField(
-        "battles.BattleVehicle",
+        "arxii.BattleVehicle",
         on_delete=models.CASCADE,
         related_name="companion_deployment",
     )
@@ -322,14 +322,14 @@ class CompanionOrder(SharedMemoryModel):
         related_name="orders",
     )
     encounter = models.ForeignKey(
-        "combat.CombatEncounter",
+        "arxii.CombatEncounter",
         on_delete=models.CASCADE,
         null=True,
         blank=True,
         related_name="companion_orders",
     )
     battle = models.ForeignKey(
-        "battles.Battle",
+        "arxii.Battle",
         on_delete=models.CASCADE,
         null=True,
         blank=True,
@@ -348,28 +348,28 @@ class CompanionOrder(SharedMemoryModel):
         related_name="orders",
     )
     target_opponent = models.ForeignKey(
-        "combat.CombatOpponent",
+        "arxii.CombatOpponent",
         on_delete=models.SET_NULL,
         null=True,
         blank=True,
         related_name="+",
     )
     target_unit = models.ForeignKey(
-        "battles.BattleUnit",
+        "arxii.BattleUnit",
         on_delete=models.SET_NULL,
         null=True,
         blank=True,
         related_name="+",
     )
     defending_participant = models.ForeignKey(
-        "combat.CombatParticipant",
+        "arxii.CombatParticipant",
         on_delete=models.SET_NULL,
         null=True,
         blank=True,
         related_name="+",
     )
     target_ally = models.ForeignKey(
-        "battles.BattleParticipant",
+        "arxii.BattleParticipant",
         on_delete=models.SET_NULL,
         null=True,
         blank=True,
@@ -413,7 +413,7 @@ class StablesDetails(SharedMemoryModel):
     """
 
     feature_instance = models.OneToOneField(
-        "room_features.RoomFeatureInstance",
+        "arxii.RoomFeatureInstance",
         on_delete=models.CASCADE,
         related_name="stables_details",
         primary_key=True,
