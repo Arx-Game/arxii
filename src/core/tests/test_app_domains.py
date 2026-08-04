@@ -13,6 +13,8 @@ from world.magic.models import Technique
 # means by it.
 _SRC_DIR = Path(__file__).resolve().parents[2]
 
+_SNAPSHOT_PATH = Path(__file__).resolve().parent / "data" / "model_domain_snapshot.txt"
+
 
 def _first_party_models():
     """Every model registered under an app whose code lives in src/.
@@ -24,6 +26,17 @@ def _first_party_models():
         cfg.label for cfg in apps.get_app_configs() if cfg.path.startswith(str(_SRC_DIR))
     }
     return [model for model in apps.get_models() if model._meta.app_label in first_party_labels]
+
+
+def _load_domain_snapshot() -> dict[str, str]:
+    """Parse ``model_domain_snapshot.txt`` into ``{label_lower: domain}``."""
+    snapshot: dict[str, str] = {}
+    for line in _SNAPSHOT_PATH.read_text().splitlines():
+        if not line or line.startswith("#"):
+            continue
+        label, domain = line.split()
+        snapshot[label] = domain
+    return snapshot
 
 
 class DomainOfTest(TestCase):
@@ -47,18 +60,39 @@ class DomainOfTest(TestCase):
         ``world/scenes/boon_models.py``. Walking every first-party model via
         ``apps.get_models()`` covers all of them without hand-maintaining a list.
 
-        PRE-COLLAPSE ONLY. ``domain_of() == app_label`` is true today because
-        every first-party model still has its own Django app; #2906's
-        single-app collapse gives every one of them the label ``arxii``, so
-        this equivalence is *expected* to start failing then. When it does,
-        retarget this test (e.g. assert domain_of() against a recorded
-        pre-collapse snapshot) rather than deleting it as broken — it is the
-        thing that proves the collapse didn't silently rename anyone's domain.
+        RETARGETED post-collapse (#2906 Task 6), per this docstring's own
+        prior instruction: ``domain_of() == app_label`` stopped holding the
+        moment the collapse gave every first-party model the one label
+        ``arxii``, so this now checks ``domain_of()`` against a frozen
+        pre-collapse snapshot (``data/model_domain_snapshot.txt``, itself
+        generated from ``domain_of()`` while the equivalence still held)
+        instead of the live ``app_label``. ``domain_of()`` is a pure function
+        of a model's ``__module__`` path and the collapse moved no modules, so
+        this still proves the collapse didn't silently rename anyone's
+        domain — and it keeps guarding future drift, since any *later* change
+        that alters a model's computed domain without updating the snapshot
+        now fails loudly instead of passing silently against a label that no
+        longer carries the signal.
+
+        A model absent from the snapshot (added after it was captured) is
+        skipped, not failed — the snapshot is a historical baseline, not a
+        registry every new model must join.
         """
         first_party_models = _first_party_models()
         # Sanity check on the filter itself: a bug that made it match nothing
         # (e.g. a path-prefix typo) would otherwise pass an empty loop below.
         self.assertGreater(len(first_party_models), 900)
+        snapshot = _load_domain_snapshot()
+        self.assertGreater(len(snapshot), 900)
+        checked = 0
         for model in first_party_models:
+            expected = snapshot.get(model._meta.label_lower)
+            if expected is None:
+                continue
+            checked += 1
             with self.subTest(model=model._meta.label_lower):
-                self.assertEqual(domain_of(model), model._meta.app_label)
+                self.assertEqual(domain_of(model), expected)
+        # Guards the guard: if every model started missing from the snapshot
+        # (e.g. a label-format drift broke the lookup), the loop above would
+        # pass vacuously with zero assertions.
+        self.assertGreater(checked, 900)
