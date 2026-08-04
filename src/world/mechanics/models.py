@@ -42,6 +42,7 @@ from world.scenes.action_constants import (
 
 _DAMAGE_TYPE_MODEL_PATH = "conditions.DamageType"
 _CONSEQUENCE_POOL_MODEL = "actions.ConsequencePool"
+_CHALLENGE_TEMPLATE_MODEL = "mechanics.ChallengeTemplate"
 
 
 class ModifierCategoryManager(NaturalKeyManager):
@@ -761,7 +762,7 @@ class Application(NaturalKeyMixin, SharedMemoryModel):
         help_text="Effect Property the source must carry to use this Application.",
     )
     default_template = models.ForeignKey(
-        "mechanics.ChallengeTemplate",
+        _CHALLENGE_TEMPLATE_MODEL,
         on_delete=models.SET_NULL,
         null=True,
         blank=True,
@@ -1069,7 +1070,7 @@ class ChallengeApproach(NaturalKeyMixin, SharedMemoryModel):
 
     class NaturalKeyConfig:
         fields = ["challenge_template", "application"]
-        dependencies = ["mechanics.ChallengeTemplate", "mechanics.Application"]
+        dependencies = [_CHALLENGE_TEMPLATE_MODEL, "mechanics.Application"]
 
     def __str__(self) -> str:
         return self.display_name or self.application.name
@@ -1200,7 +1201,7 @@ class SituationChallengeLink(NaturalKeyMixin, SharedMemoryModel):
 
     class NaturalKeyConfig:
         fields = ["situation_template", "challenge_template"]
-        dependencies = ["mechanics.SituationTemplate", "mechanics.ChallengeTemplate"]
+        dependencies = ["mechanics.SituationTemplate", _CHALLENGE_TEMPLATE_MODEL]
 
     def __str__(self) -> str:
         return f"{self.situation_template.name} → {self.challenge_template.name}"

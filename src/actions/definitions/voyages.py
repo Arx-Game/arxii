@@ -25,6 +25,9 @@ from world.travel.services import (
     start_voyage,
 )
 
+_NO_ACTIVE_PERSONA = "You need an active persona to travel."
+_NOT_ON_VOYAGE = "You aren't on a voyage."
+
 
 def _resolve_active_persona(actor: Any):
     """Resolve the actor's active Persona via sheet_data + active_persona_for_sheet."""
@@ -114,7 +117,7 @@ class StartVoyageAction(Action):
 
         persona = _resolve_active_persona(actor)
         if persona is None:
-            return ActionResult(success=False, message="You need an active persona to travel.")
+            return ActionResult(success=False, message=_NO_ACTIVE_PERSONA)
 
         try:
             voyage = start_voyage(
@@ -152,11 +155,11 @@ class AdvanceLegAction(Action):
     ) -> ActionResult:
         persona = _resolve_active_persona(actor)
         if persona is None:
-            return ActionResult(success=False, message="You need an active persona to travel.")
+            return ActionResult(success=False, message=_NO_ACTIVE_PERSONA)
 
         voyage = _get_active_voyage(persona)
         if voyage is None:
-            return ActionResult(success=False, message="You aren't on a voyage.")
+            return ActionResult(success=False, message=_NOT_ON_VOYAGE)
 
         try:
             advance_leg(voyage, caller=persona)
@@ -189,11 +192,11 @@ class CompleteVoyageAction(Action):
     ) -> ActionResult:
         persona = _resolve_active_persona(actor)
         if persona is None:
-            return ActionResult(success=False, message="You need an active persona to travel.")
+            return ActionResult(success=False, message=_NO_ACTIVE_PERSONA)
 
         voyage = _get_active_voyage(persona)
         if voyage is None:
-            return ActionResult(success=False, message="You aren't on a voyage.")
+            return ActionResult(success=False, message=_NOT_ON_VOYAGE)
 
         try:
             complete_voyage(voyage, caller=persona)
@@ -222,11 +225,11 @@ class AbandonVoyageAction(Action):
     ) -> ActionResult:
         persona = _resolve_active_persona(actor)
         if persona is None:
-            return ActionResult(success=False, message="You need an active persona to travel.")
+            return ActionResult(success=False, message=_NO_ACTIVE_PERSONA)
 
         voyage = _get_active_voyage(persona)
         if voyage is None:
-            return ActionResult(success=False, message="You aren't on a voyage.")
+            return ActionResult(success=False, message=_NOT_ON_VOYAGE)
 
         try:
             abandon_voyage(voyage, caller=persona)
@@ -262,11 +265,11 @@ class InviteToVoyageAction(Action):
 
         persona = _resolve_active_persona(actor)
         if persona is None:
-            return ActionResult(success=False, message="You need an active persona to travel.")
+            return ActionResult(success=False, message=_NO_ACTIVE_PERSONA)
 
         voyage = _get_active_voyage(persona)
         if voyage is None:
-            return ActionResult(success=False, message="You aren't on a voyage.")
+            return ActionResult(success=False, message=_NOT_ON_VOYAGE)
 
         invitee = Persona.objects.filter(pk=target_persona_id).first()
         if invitee is None:
@@ -346,11 +349,11 @@ class DepartVoyageAction(Action):
 
         persona = _resolve_active_persona(actor)
         if persona is None:
-            return ActionResult(success=False, message="You need an active persona to travel.")
+            return ActionResult(success=False, message=_NO_ACTIVE_PERSONA)
 
         voyage = _get_active_voyage(persona)
         if voyage is None:
-            return ActionResult(success=False, message="You aren't on a voyage.")
+            return ActionResult(success=False, message=_NOT_ON_VOYAGE)
 
         try:
             depart_voyage(voyage, caller=persona)

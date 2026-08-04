@@ -40,6 +40,7 @@ _CONSEQUENCE_POOL_FK = "actions.ConsequencePool"
 _CONDITION_TEMPLATE_FK = "conditions.ConditionTemplate"
 _CONDITION_STAGE_FK = "conditions.ConditionStage"
 CHARACTER_SHEET_MODEL = "character_sheets.CharacterSheet"
+_POSITION_FK = "areas.Position"
 
 # =============================================================================
 # Lookup Tables (SharedMemoryModel - cached, rarely change)
@@ -1407,7 +1408,7 @@ class ConditionInstance(SharedMemoryModel):
 
     # === Cast-time position targeting (#2019) ===
     cast_destination = models.ForeignKey(
-        "areas.Position",
+        _POSITION_FK,
         on_delete=models.SET_NULL,
         null=True,
         blank=True,
@@ -1420,7 +1421,7 @@ class ConditionInstance(SharedMemoryModel):
         ),
     )
     cast_position_a = models.ForeignKey(
-        "areas.Position",
+        _POSITION_FK,
         on_delete=models.SET_NULL,
         null=True,
         blank=True,
@@ -1431,7 +1432,7 @@ class ConditionInstance(SharedMemoryModel):
         ),
     )
     cast_position_b = models.ForeignKey(
-        "areas.Position",
+        _POSITION_FK,
         on_delete=models.SET_NULL,
         null=True,
         blank=True,

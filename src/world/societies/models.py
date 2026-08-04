@@ -38,6 +38,8 @@ from world.societies.constants import (
 from world.societies.renown_config import RenownAwardConfig
 from world.societies.types import ReputationTier
 
+_PROJECT_MODEL = "projects.Project"
+
 # Validators for principle fields (-5 to +5 range)
 PRINCIPLE_MIN = -5
 PRINCIPLE_MAX = 5
@@ -599,7 +601,7 @@ class OrganizationGiftGrant(SharedMemoryModel):
         help_text="The Gift this org has acquired.",
     )
     project = models.ForeignKey(
-        "projects.Project",
+        _PROJECT_MODEL,
         on_delete=models.SET_NULL,
         null=True,
         blank=True,
@@ -1937,7 +1939,7 @@ class GangTurfDetails(SharedMemoryModel):
     """
 
     project = models.OneToOneField(
-        "projects.Project",
+        _PROJECT_MODEL,
         on_delete=models.CASCADE,
         primary_key=True,
         related_name="gang_turf_details",
@@ -2055,7 +2057,7 @@ class PropagandaDetails(RenownAwardConfig):
     """
 
     project = models.OneToOneField(
-        "projects.Project",
+        _PROJECT_MODEL,
         on_delete=models.CASCADE,
         related_name="propaganda_details",
         primary_key=True,

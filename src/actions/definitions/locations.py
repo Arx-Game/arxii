@@ -33,6 +33,7 @@ from actions.prerequisites import (
 from actions.types import ActionResult, TargetType
 
 _NOT_PART_OF_BUILDING_MESSAGE = "This room isn't part of a building."
+_NOT_IN_ROOM_MESSAGE = "You're not in a room."
 
 if TYPE_CHECKING:
     from actions.types import ActionContext
@@ -105,7 +106,7 @@ def _resolve_room(actor: ObjectDB, kwargs: dict[str, Any]) -> ObjectDB | None:
 
 
 def _no_room_message(kwargs: dict[str, Any]) -> str:
-    return "No such room." if kwargs.get("room_id") else "You're not in a room."
+    return "No such room." if kwargs.get("room_id") else _NOT_IN_ROOM_MESSAGE
 
 
 def _no_exit_message(kwargs: dict[str, Any]) -> str:
@@ -580,7 +581,7 @@ class SetPrimaryHomeAction(Action):
 
         room = actor.location
         if room is None:
-            return ActionResult(success=False, message="You're not in a room.")
+            return ActionResult(success=False, message=_NOT_IN_ROOM_MESSAGE)
         try:
             set_primary_home(persona=_persona_for(actor), room=room)
         except RoomEditError as exc:
@@ -623,7 +624,7 @@ class TagRoomResonanceAction(Action):
 
         room = actor.location
         if room is None:
-            return ActionResult(success=False, message="You're not in a room.")
+            return ActionResult(success=False, message=_NOT_IN_ROOM_MESSAGE)
         resonance = Resonance.objects.filter(pk=kwargs.get("resonance_id")).first()
         if resonance is None:
             return ActionResult(success=False, message="No such resonance.")
@@ -669,7 +670,7 @@ class UntagRoomResonanceAction(Action):
 
         room = actor.location
         if room is None:
-            return ActionResult(success=False, message="You're not in a room.")
+            return ActionResult(success=False, message=_NOT_IN_ROOM_MESSAGE)
         resonance = Resonance.objects.filter(pk=kwargs.get("resonance_id")).first()
         if resonance is None:
             return ActionResult(success=False, message="No such resonance.")

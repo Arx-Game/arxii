@@ -12,6 +12,8 @@ from evennia.utils.idmapper.models import SharedMemoryModel
 
 from world.ceremonies.constants import CeremonyStatus, CeremonyTypeKey, SeanceOfferStatus
 
+_PERSONA_MODEL = "scenes.Persona"
+
 
 class CeremonyType(SharedMemoryModel):
     """A data-driven kind of ceremony (Funeral, Blessing, Sermon; later Wedding…)."""
@@ -41,7 +43,7 @@ class Ceremony(SharedMemoryModel):
         CeremonyType, on_delete=models.PROTECT, related_name="ceremonies"
     )
     officiant = models.ForeignKey(
-        "scenes.Persona", on_delete=models.PROTECT, related_name="ceremonies_officiated"
+        _PERSONA_MODEL, on_delete=models.PROTECT, related_name="ceremonies_officiated"
     )
     being = models.ForeignKey(
         "worship.WorshippedBeing", on_delete=models.PROTECT, related_name="ceremonies"
@@ -138,7 +140,7 @@ class CeremonyOffering(SharedMemoryModel):
         related_name="+",
     )
     offered_by = models.ForeignKey(
-        "scenes.Persona", on_delete=models.PROTECT, related_name="ceremony_offerings"
+        _PERSONA_MODEL, on_delete=models.PROTECT, related_name="ceremony_offerings"
     )
 
     class Meta:
@@ -153,7 +155,7 @@ class CeremonySpeech(SharedMemoryModel):
 
     ceremony = models.ForeignKey(Ceremony, on_delete=models.CASCADE, related_name="speeches")
     speaker = models.ForeignKey(
-        "scenes.Persona", on_delete=models.PROTECT, related_name="ceremony_speeches"
+        _PERSONA_MODEL, on_delete=models.PROTECT, related_name="ceremony_speeches"
     )
     success_level = models.IntegerField(
         null=True, blank=True, help_text="Speech check success level (null if unrolled)."

@@ -44,6 +44,8 @@ from world.classes.models import PathStage
 
 logger = logging.getLogger(__name__)
 
+_SPECIES_MODEL = "species.Species"
+
 
 class CGPointBudget(NaturalKeyMixin, SharedMemoryModel):
     """
@@ -265,7 +267,7 @@ class Beginnings(NaturalKeyMixin, SharedMemoryModel):
         help_text="Whether family is selectable in Lineage stage (False = 'Unknown')",
     )
     allowed_species = models.ManyToManyField(
-        "species.Species",
+        _SPECIES_MODEL,
         blank=True,
         related_name="beginnings",
         help_text="Species available for this path. Parent species include all children.",
@@ -702,7 +704,7 @@ class CharacterDraft(SharedMemoryModel):
     )
 
     selected_species = models.ForeignKey(
-        "species.Species",
+        _SPECIES_MODEL,
         on_delete=models.SET_NULL,
         null=True,
         blank=True,
@@ -801,7 +803,7 @@ class CharacterDraft(SharedMemoryModel):
     # are always band-null, so maternal dominance holds and this only unlocks the
     # other parent's palette in the appearance stage.
     second_parent_species = models.ForeignKey(
-        "species.Species",
+        _SPECIES_MODEL,
         on_delete=models.SET_NULL,
         null=True,
         blank=True,

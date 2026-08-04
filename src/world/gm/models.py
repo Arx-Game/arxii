@@ -28,6 +28,8 @@ from world.societies.constants import RenownRisk
 if TYPE_CHECKING:
     from world.game_clock.models import GameWeek
 
+_SITUATION_KIND_MODEL = "gm.SituationKind"
+
 
 class GMProfile(SharedMemoryModel):
     """A player's GM identity: their level, stats, and approval date.
@@ -550,7 +552,7 @@ class CheckTypeSituationFit(NaturalKeyMixin, SharedMemoryModel):
 
     class NaturalKeyConfig:
         fields = ["check_type", "situation_kind"]
-        dependencies = ["checks.CheckType", "gm.SituationKind"]
+        dependencies = ["checks.CheckType", _SITUATION_KIND_MODEL]
 
     def __str__(self) -> str:
         return f"{self.check_type.name} fits {self.situation_kind.name}"
@@ -584,7 +586,7 @@ class SituationDifficultyGuide(NaturalKeyMixin, SharedMemoryModel):
 
     class NaturalKeyConfig:
         fields = ["situation_kind", "risk"]
-        dependencies = ["gm.SituationKind"]
+        dependencies = [_SITUATION_KIND_MODEL]
 
     def __str__(self) -> str:
         return (
@@ -633,7 +635,7 @@ class ConsequencePoolGuide(NaturalKeyMixin, SharedMemoryModel):
 
     class NaturalKeyConfig:
         fields = ["situation_kind", "pool"]
-        dependencies = ["gm.SituationKind", "actions.ConsequencePool"]
+        dependencies = [_SITUATION_KIND_MODEL, "actions.ConsequencePool"]
 
     def __str__(self) -> str:
         return f"{self.situation_kind.name} -> {self.pool.name} (advisory)"

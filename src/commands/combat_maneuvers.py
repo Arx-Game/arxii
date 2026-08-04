@@ -61,6 +61,8 @@ _INTO_SEPARATOR = " into "
 # omitting the "into" clause entirely.
 _REDIRECT_AWAY_KEYWORD = "away"
 
+_NOT_IN_ACTIVE_ROUND = "You are not in an active combat round."
+
 
 class CmdCombat(_CombatCommandMixin, DispatchCommand):
     """Take a combat action other than casting or clashing.
@@ -219,7 +221,7 @@ class CmdCombat(_CombatCommandMixin, DispatchCommand):
 
         participant = self._combat_participant_or_none()
         if participant is None:
-            msg = "You are not in an active combat round."
+            msg = _NOT_IN_ACTIVE_ROUND
             raise CommandError(msg)
 
         opponent = CombatOpponent.objects.filter(
@@ -266,7 +268,7 @@ class CmdCombat(_CombatCommandMixin, DispatchCommand):
 
         participant = self._combat_participant_or_none()
         if participant is None:
-            msg = "You are not in an active combat round."
+            msg = _NOT_IN_ACTIVE_ROUND
             raise CommandError(msg)
         matches = list(
             CombatParticipant.objects.filter(
@@ -290,7 +292,7 @@ class CmdCombat(_CombatCommandMixin, DispatchCommand):
 
         participant = self._combat_participant_or_none()
         if participant is None:
-            msg = "You are not in an active combat round."
+            msg = _NOT_IN_ACTIVE_ROUND
             raise CommandError(msg)
         matches = list(
             CombatOpponent.objects.filter(
@@ -338,7 +340,7 @@ class CmdCombat(_CombatCommandMixin, DispatchCommand):
 
         participant = self._combat_participant_or_none()
         if participant is None:
-            msg = "You are not in an active combat round."
+            msg = _NOT_IN_ACTIVE_ROUND
             raise CommandError(msg)
         ally_matches = list(
             CombatParticipant.objects.filter(

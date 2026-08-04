@@ -22,6 +22,7 @@ if TYPE_CHECKING:
 
 _MSG_NO_CHARACTER_SHEET = "You have no character sheet."
 _MSG_NO_SUCH_PROJECT = "No such project."
+_MSG_NO_ACTIVE_PERSONA = "You have no active persona."
 
 
 @dataclass
@@ -137,7 +138,7 @@ class CheckContributeAction(Action):
         try:
             persona = active_persona_for_sheet(sheet)
         except Persona.DoesNotExist:
-            return _ActionResult(success=False, message="You have no active persona.")
+            return _ActionResult(success=False, message=_MSG_NO_ACTIVE_PERSONA)
 
         project = Project.objects.filter(pk=project_id).first()
         if project is None:
@@ -203,7 +204,7 @@ class StoryContributeAction(Action):
         try:
             persona = active_persona_for_sheet(sheet)
         except Persona.DoesNotExist:
-            return _ActionResult(success=False, message="You have no active persona.")
+            return _ActionResult(success=False, message=_MSG_NO_ACTIVE_PERSONA)
 
         project = Project.objects.filter(pk=project_id).first()
         if project is None:
@@ -262,7 +263,7 @@ class LaunchPropagandaCampaignAction(Action):
         try:
             persona = active_persona_for_sheet(sheet)
         except Persona.DoesNotExist:
-            return _ActionResult(success=False, message="You have no active persona.")
+            return _ActionResult(success=False, message=_MSG_NO_ACTIVE_PERSONA)
 
         tier = PropagandaCampaignTier.objects.filter(pk=tier_id).first()
         if tier is None:
