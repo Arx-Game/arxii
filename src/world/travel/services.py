@@ -315,8 +315,95 @@ def start_voyage(
     return voyage
 
 
+def _require_leader_in_transit(voyage: Voyage, caller) -> None:
+    """The shared advance/complete gate: the voyage is under way and caller leads it."""
+    if voyage.status == VoyageStatus.DRAFT:
+        raise VoyageError(user_message="You must depart first.")
+    if voyage.status != VoyageStatus.IN_TRANSIT:
+        raise VoyageNotInTransitError
+    if voyage.leader_id != caller.pk:
+        raise NotVoyageLeaderError
+
+
+def _leg_provisioning_ratio(voyage: Voyage) -> float | None:
+    """Ship crew provisioning for this leg (#2217); None for a landbound voyage."""
+    if voyage.ship is None:
+        return None
+
+    from world.agriculture.services import provision_ship_leg  # noqa: PLC0415
+
+    ratio = provision_ship_leg(voyage)
+    if ratio <= 0.0:
+        raise VoyageError(user_message="The crew is starving — you can't sail without provisions.")
+    return ratio
+
+
+def _compute_leg_ap_costs(
+    active_participants: list, route_edge, voyage: Voyage, provisioning_ratio: float | None
+) -> dict[int, int]:
+    """Per-participant AP cost for the leg; drops participants with no character sheet."""
+    costs: dict[int, int] = {}
+    for participant in active_participants:
+        try:
+            character_sheet = participant.persona.character_sheet
+        except (AttributeError, ObjectDoesNotExist):
+            participant.left_at = timezone.now()
+            participant.save()
+            continue
+        time = compute_travel_time(route_edge, voyage.travel_method, character_sheet, voyage.ship)
+        costs[participant.pk] = _with_provisioning_surcharge(
+            compute_ap_cost(time), provisioning_ratio
+        )
+    return costs
+
+
+def _with_provisioning_surcharge(ap_cost: int, provisioning_ratio: float | None) -> int:
+    """Short rations make the leg harder: scale AP by the unmet provisioning fraction."""
+    if provisioning_ratio is None or provisioning_ratio >= 1.0:
+        return ap_cost
+
+    from world.agriculture.services.production import get_food_config  # noqa: PLC0415
+
+    config = get_food_config()
+    surcharge = (1.0 - provisioning_ratio) * config.ship_provisioning_ap_surcharge / 100
+    return math.ceil(ap_cost * (1 + surcharge))
+
+
+def _move_participant_to_room(participant, next_room) -> None:
+    """Walk a participant's character object into the next hub's room."""
+    char_obj = _resolve_character_object(participant.persona)
+    if char_obj is None or next_room is None:
+        return
+
+    from flows.scene_data_manager import SceneDataManager  # noqa: PLC0415
+    from flows.service_functions.movement import move_object  # noqa: PLC0415
+
+    sdm = SceneDataManager()
+    char_state = sdm.initialize_state_for_object(char_obj)
+    room_state = sdm.initialize_state_for_object(next_room)
+    move_object(char_state, room_state, quiet=False)
+
+
+def _advance_participants(active_participants: list, caller, costs: dict[int, int], next_room):
+    """Charge each non-caller their AP (leaving behind those who can't pay) and move the rest.
+
+    The caller has already paid by the time this runs, so they are only counted
+    and moved.
+    """
+    for participant in active_participants:
+        if participant.persona_id != caller.pk:
+            ap = costs.get(participant.pk, 0)
+            if ap > 0 and not _spend_ap(participant.persona, ap):
+                participant.left_at = timezone.now()
+                participant.save()
+                continue
+        participant.legs_traveled += 1
+        participant.save()
+        _move_participant_to_room(participant, next_room)
+
+
 @transaction.atomic
-def advance_leg(voyage: Voyage, caller) -> None:  # noqa: C901, PLR0912, PLR0915
+def advance_leg(voyage: Voyage, caller) -> None:
     """Pay AP for next leg, move all participants to next hub room.
 
     Only the voyage leader may call this. Each participant's ActionPointPool.spend()
@@ -335,13 +422,7 @@ def advance_leg(voyage: Voyage, caller) -> None:  # noqa: C901, PLR0912, PLR0915
         .get(pk=voyage.pk)
     )
 
-    if voyage.status == VoyageStatus.DRAFT:
-        raise VoyageError(user_message="You must depart first.")
-    if voyage.status != VoyageStatus.IN_TRANSIT:
-        raise VoyageNotInTransitError
-
-    if voyage.leader_id != caller.pk:
-        raise NotVoyageLeaderError
+    _require_leader_in_transit(voyage, caller)
 
     next_leg_index = voyage.current_leg_index + 1
     if next_leg_index >= len(voyage.route_hubs):
@@ -354,18 +435,8 @@ def advance_leg(voyage: Voyage, caller) -> None:  # noqa: C901, PLR0912, PLR0915
     if route_edge is None:
         raise VoyageError(user_message="The route ahead seems to have vanished.")
 
-    # Ship crew provisioning (#2217)
-    provisioning_ratio = None
-    if voyage.ship is not None:
-        from world.agriculture.services import provision_ship_leg  # noqa: PLC0415
+    provisioning_ratio = _leg_provisioning_ratio(voyage)
 
-        provisioning_ratio = provision_ship_leg(voyage)
-        if provisioning_ratio <= 0.0:
-            raise VoyageError(
-                user_message="The crew is starving — you can't sail without provisions."
-            )
-
-    # Compute AP cost for each participant
     active_participants = list(
         voyage.participants.filter(left_at__isnull=True).select_related("persona")
     )
@@ -375,59 +446,15 @@ def advance_leg(voyage: Voyage, caller) -> None:  # noqa: C901, PLR0912, PLR0915
     if caller_participant is None:
         raise VoyageError(user_message="You're not part of this voyage.")
 
-    # Compute costs for each participant
-    costs: dict[int, int] = {}
-    for participant in active_participants:
-        try:
-            character_sheet = participant.persona.character_sheet
-        except (AttributeError, ObjectDoesNotExist):
-            participant.left_at = timezone.now()
-            participant.save()
-            continue
-        time = compute_travel_time(route_edge, voyage.travel_method, character_sheet, voyage.ship)
-        costs[participant.pk] = compute_ap_cost(time)
-        if provisioning_ratio is not None and provisioning_ratio < 1.0:
-            from world.agriculture.services.production import (  # noqa: PLC0415
-                get_food_config,
-            )
-
-            config = get_food_config()
-            surcharge = (1.0 - provisioning_ratio) * config.ship_provisioning_ap_surcharge / 100
-            costs[participant.pk] = math.ceil(costs[participant.pk] * (1 + surcharge))
+    costs = _compute_leg_ap_costs(active_participants, route_edge, voyage, provisioning_ratio)
 
     # Check caller can afford first — if not, fail atomically
     caller_cost = costs.get(caller_participant.pk, 0)
-    if caller_cost > 0:
-        if not _spend_ap(caller, caller_cost):
-            raise VoyageError(user_message="You can't afford the AP for this leg.")
+    if caller_cost > 0 and not _spend_ap(caller, caller_cost):
+        raise VoyageError(user_message="You can't afford the AP for this leg.")
 
-    # Now process other participants
     next_hub = TravelHub.objects.get(pk=next_hub_id)
-    next_room = next_hub.room_profile.objectdb
-
-    for participant in active_participants:
-        if participant.persona_id == caller.pk:
-            participant.legs_traveled += 1
-            participant.save()
-        else:
-            ap = costs.get(participant.pk, 0)
-            if ap > 0 and not _spend_ap(participant.persona, ap):
-                participant.left_at = timezone.now()
-                participant.save()
-                continue
-            participant.legs_traveled += 1
-            participant.save()
-
-        # Move character to next hub room
-        char_obj = _resolve_character_object(participant.persona)
-        if char_obj is not None and next_room is not None:
-            from flows.scene_data_manager import SceneDataManager  # noqa: PLC0415
-            from flows.service_functions.movement import move_object  # noqa: PLC0415
-
-            sdm = SceneDataManager()
-            char_state = sdm.initialize_state_for_object(char_obj)
-            room_state = sdm.initialize_state_for_object(next_room)
-            move_object(char_state, room_state, quiet=False)
+    _advance_participants(active_participants, caller, costs, next_hub.room_profile.objectdb)
 
     voyage.current_leg_index = next_leg_index
 

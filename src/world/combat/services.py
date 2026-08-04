@@ -5729,6 +5729,31 @@ def _apply_execute_multiplier(
     return max(0, int(damage_amount * factor))
 
 
+def _break_engagement_lock_on_defeat(opponent: CombatOpponent) -> None:
+    """Release the opponent's active engagement lock, if any, on its defeat (#2020)."""
+    from world.combat.constants import LockBreakReason  # noqa: PLC0415
+    from world.combat.engagement_locks import break_engagement_lock  # noqa: PLC0415
+
+    active_lock = EngagementLock.objects.filter(
+        opponent=opponent,
+        status=EngagementLockStatus.ACTIVE,
+    ).first()
+    if active_lock is not None:
+        break_engagement_lock(active_lock, reason=LockBreakReason.DEFEAT)
+
+
+def _accumulate_damage_threat(
+    opponent: CombatOpponent, source_sheet: CharacterSheet, damage_through: int
+) -> None:
+    """Credit post-soak damage to the dealer's ThreatRecord for this opponent (#2020)."""
+    participant = CombatParticipant.objects.filter(
+        encounter=opponent.encounter,
+        character_sheet=source_sheet,
+    ).first()
+    if participant is not None:
+        accumulate_threat(opponent.encounter, opponent, participant, damage_through)
+
+
 def apply_damage_to_opponent(  # noqa: PLR0913
     opponent: CombatOpponent,
     raw_damage: int,
@@ -5827,15 +5852,7 @@ def apply_damage_to_opponent(  # noqa: PLR0913
 
     # Break active engagement lock on opponent defeat (#2020).
     if defeated:
-        from world.combat.constants import LockBreakReason  # noqa: PLC0415
-        from world.combat.engagement_locks import break_engagement_lock  # noqa: PLC0415
-
-        active_lock = EngagementLock.objects.filter(
-            opponent=opponent,
-            status=EngagementLockStatus.ACTIVE,
-        ).first()
-        if active_lock is not None:
-            break_engagement_lock(active_lock, reason=LockBreakReason.DEFEAT)
+        _break_engagement_lock_on_defeat(opponent)
 
     opponent.save(update_fields=["health", "probing_current", "status"])
 
@@ -5846,12 +5863,7 @@ def apply_damage_to_opponent(  # noqa: PLR0913
     # Only post-soak, post-resistance damage (damage_through) contributes — the
     # real signal of who is hurting the NPC. No source_sheet = no threat record.
     if source_sheet is not None and damage_through > 0:
-        participant = CombatParticipant.objects.filter(
-            encounter=opponent.encounter,
-            character_sheet=source_sheet,
-        ).first()
-        if participant is not None:
-            accumulate_threat(opponent.encounter, opponent, participant, damage_through)
+        _accumulate_damage_threat(opponent, source_sheet, damage_through)
     del source_sheet
 
     return OpponentDamageResult(
@@ -8215,7 +8227,32 @@ def _maybe_record_npc_regard_on_defeat(
         )
 
 
-def _resolve_pc_action(  # noqa: C901, PLR0911, PLR0912
+#: Maneuvers that resolve wholly on their own, short-circuiting the technique
+#: pipeline in :func:`_resolve_pc_action`. COVER is deliberately absent — it
+#: falls through to the passives-only return, since its effect is the
+#: ``cover_bonus`` it contributes to the sheltered ally's flee check.
+_STANDALONE_MANEUVER_RESOLVERS: dict[
+    str, Callable[[CombatParticipant, CombatRoundAction], ActionOutcome]
+] = {
+    CombatManeuver.FLEE: _resolve_flee,
+    # Social/mental combat verbs (#2015): resolve as checks at round-tick.
+    CombatManeuver.RALLY: _resolve_rally,
+    CombatManeuver.DEMORALIZE: _resolve_demoralize,
+    CombatManeuver.TAUNT: _resolve_taunt,
+    CombatManeuver.PARLEY: _resolve_parley,
+    # On-use items as a combat maneuver (#2023): dispatches the existing
+    # UseItemAction as a primary maneuver (mutually exclusive with the focused
+    # technique, like FLEE/COVER). Using an item costs the round's focused action.
+    CombatManeuver.USE_ITEM: _resolve_use_item,
+    # JOUST (#1843): a bilateral opposed pass between two mounted, lance-armed
+    # duelists — resolved directly against the loser's mirror CombatOpponent,
+    # not through the normal per-target technique pipeline (there is no single
+    # "attacker vs one opponent" shape here).
+    CombatManeuver.JOUST: _resolve_joust,
+}
+
+
+def _resolve_pc_action(
     participant: CombatParticipant,
     action: CombatRoundAction,
     offense_check_fn: PerformCheckFn | None = None,
@@ -8233,35 +8270,9 @@ def _resolve_pc_action(  # noqa: C901, PLR0911, PLR0912
 
     Fatigue is applied after the action resolves (both combo and non-combo).
     """
-    # Flee resolves as its own graded check (#878). COVER deliberately falls
-    # through to the passives-only early return below — its effect is the
-    # cover_bonus it contributes to the ally's flee check.
-    if action.maneuver == CombatManeuver.FLEE:
-        return _resolve_flee(participant, action)
-
-    # Social/mental combat verbs (#2015): resolve as checks at round-tick.
-    if action.maneuver == CombatManeuver.RALLY:
-        return _resolve_rally(participant, action)
-    if action.maneuver == CombatManeuver.DEMORALIZE:
-        return _resolve_demoralize(participant, action)
-    if action.maneuver == CombatManeuver.TAUNT:
-        return _resolve_taunt(participant, action)
-    if action.maneuver == CombatManeuver.PARLEY:
-        return _resolve_parley(participant, action)
-
-    # On-use items as a combat maneuver (#2023): dispatches the existing
-    # UseItemAction as a primary maneuver (mutually exclusive with the
-    # focused technique, like FLEE/COVER). Using an item costs the
-    # round's focused action.
-    if action.maneuver == CombatManeuver.USE_ITEM:
-        return _resolve_use_item(participant, action)
-
-    # JOUST (#1843): a bilateral opposed pass between two mounted, lance-armed
-    # duelists — resolved directly against the loser's mirror CombatOpponent,
-    # not through the normal per-target technique pipeline below (there is no
-    # single "attacker vs one opponent" shape here). Returns immediately.
-    if action.maneuver == CombatManeuver.JOUST:
-        return _resolve_joust(participant, action)
+    standalone_resolver = _STANDALONE_MANEUVER_RESOLVERS.get(action.maneuver)
+    if standalone_resolver is not None:
+        return standalone_resolver(participant, action)
 
     # CHARGE (#1843): closes distance to the declared opponent, THEN falls
     # through to the normal weapon-attack pipeline below (no early return) —
@@ -8628,18 +8639,13 @@ def _resolve_actions(  # noqa: PLR0913 - resolution needs all check params
     """
     outcomes: list[ActionOutcome] = []
     for entity_type, entity in resolution_order:
-        if entity_type == ENTITY_TYPE_PC:
-            if not isinstance(entity, CombatParticipant):
-                continue
+        if entity_type == ENTITY_TYPE_PC and isinstance(entity, CombatParticipant):
             if entity.pk in sustaining_participant_ids:
                 continue
             action = pc_actions.get(entity.pk)
             if action is not None:
                 outcomes.append(_resolve_pc_action(entity, action, offense_check_fn))
-
-        elif entity_type == ENTITY_TYPE_NPC:
-            if not isinstance(entity, CombatOpponent):
-                continue
+        elif entity_type == ENTITY_TYPE_NPC and isinstance(entity, CombatOpponent):
             outcomes.extend(
                 _resolve_npc_action(entity, npc_action, defense_check_type, defense_check_fn)
                 for npc_action in npc_actions.get(entity.pk, [])

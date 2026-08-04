@@ -139,16 +139,30 @@ def derivable_species(lines: list[ParentLine], *, fallback_maternal: Species) ->
 
     allowed: list[Species] = [maternal_species]
     chimeric_possible = False
-    for line in lines:
-        if line.is_dominant_role or line.species is None:
-            continue
-        line_tier = dominance_tier(line.band)
-        if line.species != maternal_species:
-            if line_tier > maternal_tier and line.species not in allowed:
-                allowed.append(line.species)
-            if line_tier >= CHIMERIC_MIN_TIER and maternal_tier >= CHIMERIC_MIN_TIER:
-                chimeric_possible = True
+    for species, line_tier in _competing_lines(lines, maternal_species):
+        if line_tier > maternal_tier and species not in allowed:
+            allowed.append(species)
+        if line_tier >= CHIMERIC_MIN_TIER and maternal_tier >= CHIMERIC_MIN_TIER:
+            chimeric_possible = True
     return SpeciesDerivation(allowed=allowed, chimeric_possible=chimeric_possible)
+
+
+def _competing_lines(
+    lines: list[ParentLine], maternal_species: Species
+) -> list[tuple[Species, int]]:
+    """(species, dominance tier) per non-dominant line that could widen the allowed set.
+
+    Only a line with a *declared* species differing from the maternal line's
+    can add a species or open the chimeric door; the dominant line and
+    undeclared parents contribute nothing.
+    """
+    competing: list[tuple[Species, int]] = []
+    for line in lines:
+        species = line.species
+        if line.is_dominant_role or species is None or species == maternal_species:
+            continue
+        competing.append((species, dominance_tier(line.band)))
+    return competing
 
 
 def _line_pins(line: ParentLine) -> dict[int, FormTraitOption]:

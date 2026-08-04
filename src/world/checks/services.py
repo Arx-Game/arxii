@@ -793,18 +793,47 @@ def _calculate_trait_points(
         # stat_count > 1: warning already logged, fall through to default.
 
     # Default path: stat_override is None or was ignored — byte-identical to pre-#2757.
-    total = 0
+    return sum(_weighted_trait_points(handler, ct_trait) for ct_trait in check_type_traits)
+
+
+def _weighted_trait_points(handler: "TraitHandler", ct_trait) -> int:
+    """One ``CheckTypeTrait``'s contribution: raw value x weight, converted to points."""
+    trait = cast(Trait, ct_trait.trait)
+    trait_value = handler.get_trait_value(cast(str, trait.name))
+    if trait_value <= 0:
+        return 0
+    weighted_value = int(trait_value * ct_trait.weight)
+    if weighted_value <= 0:
+        return 0
+    return PointConversionRange.calculate_points(trait.trait_type, weighted_value)
+
+
+def _stat_trait_count_and_weight(check_type_traits) -> tuple[int, Decimal]:
+    """How many STAT-type rows the check has, and the first one's weight (1.0 if none)."""
+    stat_weight: Decimal = Decimal("1.0")
+    stat_count = 0
     for ct_trait in check_type_traits:
-        trait = cast(Trait, ct_trait.trait)
-        trait_value = handler.get_trait_value(cast(str, trait.name))
-        if trait_value > 0:
-            weighted_value = int(trait_value * ct_trait.weight)
-            if weighted_value > 0:
-                total += PointConversionRange.calculate_points(trait.trait_type, weighted_value)
-    return total
+        if cast(Trait, ct_trait.trait).trait_type == TraitType.STAT:
+            stat_count += 1
+            if stat_count == 1:
+                stat_weight = ct_trait.weight
+    return stat_count, stat_weight
 
 
-def _calculate_trait_points_with_override(  # noqa: C901
+def _override_stat_value(handler: "TraitHandler", stat_override: str | int) -> Decimal:
+    """The value substituted for the check's STAT trait.
+
+    An ``int`` (0-10, #2879) is a weighted strength/agility blend where the int
+    is strength's share in tenths; a ``str`` names a single stat outright.
+    """
+    if not isinstance(stat_override, int):
+        return handler.get_trait_value(stat_override)
+    strength_value = handler.get_trait_value(PrimaryStat.STRENGTH.value)
+    agility_value = handler.get_trait_value(PrimaryStat.AGILITY.value)
+    return (strength_value * stat_override + agility_value * (10 - stat_override)) / Decimal(10)
+
+
+def _calculate_trait_points_with_override(
     handler: "TraitHandler",
     check_type: "CheckType",
     check_type_traits,
@@ -820,14 +849,7 @@ def _calculate_trait_points_with_override(  # noqa: C901
     single trait via the ``str`` path.
     """
     # Count STAT traits and borrow the first STAT weight for the override.
-    stat_weight: Decimal = Decimal("1.0")
-    stat_count = 0
-    for ct_trait in check_type_traits:
-        trait = cast(Trait, ct_trait.trait)
-        if trait.trait_type == TraitType.STAT:
-            stat_count += 1
-            if stat_count == 1:
-                stat_weight = ct_trait.weight
+    stat_count, stat_weight = _stat_trait_count_and_weight(check_type_traits)
 
     if stat_count > 1:
         logger.warning(
@@ -842,30 +864,17 @@ def _calculate_trait_points_with_override(  # noqa: C901
     total = 0
     # Substitute the override stat (borrowed weight if a STAT trait existed,
     # or weight 1.0 if the check had no STAT traits).
-    if isinstance(stat_override, int):
-        # #2879: weighted strength/agility blend. strength_tenths is the
-        # weight (0-10); agility's share is 10 minus it.
-        strength_value = handler.get_trait_value(PrimaryStat.STRENGTH.value)
-        agility_value = handler.get_trait_value(PrimaryStat.AGILITY.value)
-        override_value = (
-            strength_value * stat_override + agility_value * (10 - stat_override)
-        ) / Decimal(10)
-    else:
-        override_value = handler.get_trait_value(stat_override)
+    override_value = _override_stat_value(handler, stat_override)
     if override_value > 0:
         weighted_value = int(override_value * stat_weight)
         if weighted_value > 0:
             total += PointConversionRange.calculate_points(TraitType.STAT, weighted_value)
     # Add all non-STAT (SKILL) traits from the check's own composition.
-    for ct_trait in check_type_traits:
-        trait = cast(Trait, ct_trait.trait)
-        if trait.trait_type == TraitType.STAT:
-            continue
-        trait_value = handler.get_trait_value(cast(str, trait.name))
-        if trait_value > 0:
-            weighted_value = int(trait_value * ct_trait.weight)
-            if weighted_value > 0:
-                total += PointConversionRange.calculate_points(trait.trait_type, weighted_value)
+    total += sum(
+        _weighted_trait_points(handler, ct_trait)
+        for ct_trait in check_type_traits
+        if cast(Trait, ct_trait.trait).trait_type != TraitType.STAT
+    )
     return total
 
 

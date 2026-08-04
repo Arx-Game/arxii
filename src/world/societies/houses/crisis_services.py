@@ -9,6 +9,7 @@ an unjudged crisis never worsens, per the AFK-protection ruling).
 
 from __future__ import annotations
 
+from collections.abc import Sequence
 from datetime import timedelta
 import random
 from typing import TYPE_CHECKING
@@ -75,7 +76,7 @@ class CrisisServiceError(Exception):
 def pick_crisis_type(
     origin: str,
     *,
-    audiences: tuple[str, ...] = (CrisisAudience.DOMAIN,),
+    audiences: Sequence[str] = (CrisisAudience.DOMAIN,),
     valence: str = CrisisValence.THREAT,
     rng: random.Random | None = None,
 ) -> DomainCrisisType | None:
@@ -122,7 +123,7 @@ def open_crisis(  # noqa: PLR0913 — one target pair + the existing authoring k
         msg = "open_crisis takes exactly one of domain/org"
         raise CrisisServiceError(msg, user_message="Invalid crisis target.")
     if crisis_type is None and origin != CrisisOrigin.STAFF:
-        audiences = (CrisisAudience.DOMAIN,) if domain is not None else _org_audiences(org)
+        audiences = [CrisisAudience.DOMAIN] if domain is not None else _org_audiences(org)
         crisis_type = pick_crisis_type(origin, audiences=audiences, rng=rng)
     valence = crisis_type.valence if crisis_type else CrisisValence.THREAT
     open_of_kind = DomainCrisis.objects.filter(
@@ -144,13 +145,26 @@ def open_crisis(  # noqa: PLR0913 — one target pair + the existing authoring k
         origin=origin,
         surfaces_at=surfaces_at,
     )
-    if origin != CrisisOrigin.STAFF and crisis_type is not None:
-        options = list(crisis_type.options.all())
-        if len(options) == 1 and options[0].kind == CrisisResolutionKind.MISSION:
-            crisis.chosen_option = options[0]
-            crisis.chosen_at = timezone.now()
-            crisis.save(update_fields=["chosen_option", "chosen_at"])
+    _maybe_auto_mint_mission(crisis, origin, crisis_type)
     return crisis
+
+
+def _maybe_auto_mint_mission(
+    crisis: DomainCrisis, origin: str, crisis_type: DomainCrisisType | None
+) -> None:
+    """Pre-set the single MISSION option on an automated crisis with no judgment to make.
+
+    A STAFF-origin crisis never auto-chooses; neither does a typeless one, nor
+    one whose type offers a real menu.
+    """
+    if origin == CrisisOrigin.STAFF or crisis_type is None:
+        return
+    options = list(crisis_type.options.all())
+    if len(options) != 1 or options[0].kind != CrisisResolutionKind.MISSION:
+        return
+    crisis.chosen_option = options[0]
+    crisis.chosen_at = timezone.now()
+    crisis.save(update_fields=["chosen_option", "chosen_at"])
 
 
 def pay_cost_for(crisis: DomainCrisis, option: DomainCrisisTypeOption) -> int:
@@ -177,7 +191,7 @@ def crisis_options(crisis: DomainCrisis) -> list[dict]:
     ]
 
 
-def _org_audiences(org) -> tuple[str, ...]:
+def _org_audiences(org) -> list[str]:
     """Which type audiences an org-target draw includes (#2837)."""
     from world.currency.constants import IncomeStreamKind  # noqa: PLC0415
 
@@ -185,8 +199,8 @@ def _org_audiences(org) -> tuple[str, ...]:
         org.income_streams.filter(active=True, kind=IncomeStreamKind.CRIME_KICKUP).exists()
     )
     if criminal:
-        return (CrisisAudience.ORG, CrisisAudience.CRIMINAL_ORG)
-    return (CrisisAudience.ORG,)
+        return [CrisisAudience.ORG, CrisisAudience.CRIMINAL_ORG]
+    return [CrisisAudience.ORG]
 
 
 def _can_lead_org(persona: Persona, org) -> bool:
@@ -393,7 +407,7 @@ def _open_generated(
     rng: random.Random,
 ) -> DomainCrisis | None:
     """Ambient open with an explicit valence draw (open_crisis defaults to threat)."""
-    audiences = (CrisisAudience.DOMAIN,) if domain is not None else _org_audiences(org)
+    audiences = [CrisisAudience.DOMAIN] if domain is not None else _org_audiences(org)
     crisis_type = pick_crisis_type(
         CrisisOrigin.AMBIENT, audiences=audiences, valence=valence, rng=rng
     )
