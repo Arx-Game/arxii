@@ -832,10 +832,22 @@ def _resolve_moment_resonance(
 ) -> Resonance | None:
     """Resolve which resonance a dramatic moment grants, or None to skip the grant.
 
-    Explicit argument first, then the thread the character wove into the
-    entrance technique's gift (via ``gift_resonances_for``, the ADR-0052
-    derive-on-read seam), then the moment type's authored override. Only a
-    resonance the character has actually claimed can be granted.
+    In order, taking the first the character has actually claimed:
+
+    1. an explicit *resonance* (the manual GM tag names one);
+    2. the resonance woven into the entrance technique's gift, via
+       ``gift_resonances_for`` (the ADR-0052 derive-on-read seam);
+    3. the moment type's authored override;
+    4. the character's anima-ritual resonance — their "main" one.
+
+    Step 4 exists because step 2 can come up empty even for a technique-driven
+    entrance. ``grant_gift_to_character`` skips thread provisioning entirely
+    when no resonance was chosen at CG, and ``gift_resonances_for`` then falls
+    back to the gift's authored supported set — which is empty for every
+    authored gift, since an empty set means "unrestricted". A character can
+    therefore hold a gift, know its techniques, and have no gift thread to read
+    a resonance from. Their anima ritual is the one place a "main" resonance is
+    always recorded, so it is the last resort before granting nothing.
     """
     from world.magic.specialization.services import gift_resonances_for  # noqa: PLC0415
 
@@ -849,6 +861,9 @@ def _resolve_moment_resonance(
         candidates.extend(gift_resonances_for(character_sheet.character, technique.gift))
     if moment_type.resonance_id:
         candidates.append(moment_type.resonance)
+    main = _anima_ritual_resonance(character_sheet)
+    if main is not None:
+        candidates.append(main)
 
     for candidate in candidates:
         if CharacterResonance.objects.filter(
@@ -856,6 +871,24 @@ def _resolve_moment_resonance(
         ).exists():
             return candidate
     return None
+
+
+def _anima_ritual_resonance(character_sheet: CharacterSheet) -> Resonance | None:
+    """The character's anima-ritual resonance — their 'main' one, if authored.
+
+    The anima ritual is per-character and carries a ``RitualCheckConfig`` whose
+    ``resonance`` is optional, so this is best-effort: no ritual, or no
+    resonance on its config, simply yields no candidate.
+    """
+    from world.magic.services.anima import get_character_anima_ritual  # noqa: PLC0415
+
+    ritual = get_character_anima_ritual(character_sheet.character)
+    if ritual is None:
+        return None
+    # ``check_config_or_none`` is the model's own ReverseOneToOneOrNone
+    # descriptor; the sidecar is optional, so don't reinvent the guard.
+    config = ritual.check_config_or_none
+    return config.resonance if config is not None else None
 
 
 def create_dramatic_moment_tag(  # noqa: PLR0913 - cohesive params describing one tag event

@@ -153,6 +153,37 @@ class CreateDramaticMomentTagServiceTest(TestCase):
             ).exists()
         )
 
+    def test_falls_back_to_the_anima_ritual_resonance(self):
+        """With nothing else to go on, the moment grants their 'main' resonance.
+
+        A character can hold a gift, know its techniques, and still have NO gift
+        thread: ``grant_gift_to_character`` skips thread provisioning when no
+        resonance was chosen at CG, and ``gift_resonances_for`` then falls back
+        to the gift's supported set, which is empty for every authored gift
+        (empty means unrestricted). Without this fallback such a character earns
+        renown but never any resonance.
+        """
+        from world.magic.factories import RitualCheckConfigFactory
+
+        # A type pinning nothing, and no technique/explicit resonance supplied.
+        moment_type = DramaticMomentTypeFactory(resonance=None, resonance_amount=15)
+        RitualCheckConfigFactory(
+            ritual__author_account=self.sheet.character.db_account,
+            resonance=self.resonance,
+        )
+
+        create_dramatic_moment_tag(
+            character_sheet=self.sheet,
+            moment_type=moment_type,
+            tagged_by=self.tagger,
+            scene=None,
+        )
+
+        claimed = CharacterResonance.objects.get(
+            character_sheet=self.sheet, resonance=self.resonance
+        )
+        self.assertEqual(claimed.lifetime_earned, 15)
+
     def test_explicit_resonance_wins_over_the_types_own(self):
         """The manual GM tag names the resonance, and it beats the type's.
 
