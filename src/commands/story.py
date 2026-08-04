@@ -1231,7 +1231,7 @@ class CmdStory(ArxNamespaceCommand):
             msg = "You do not own or lead this story."
             raise CommandError(msg)
         if story_is_cleared(story):
-            msg = "This story's impact tier is frozen — it has a cleared canon review."
+            msg = "This story's impact tier is frozen; it has a cleared canon review."
             raise CommandError(msg)
 
         story.impact_tier = new_tier
