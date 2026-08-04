@@ -82,8 +82,8 @@ function nextKey(): string {
 // ---------------------------------------------------------------------------
 
 const MODE_OPTIONS = [
-  { value: 'auto', label: 'Auto — fires automatically when eligibility is satisfied' },
-  { value: 'gm_choice', label: 'GM Choice — Lead GM picks from the eligible set' },
+  { value: 'auto', label: 'Auto; fires automatically when eligibility is satisfied' },
+  { value: 'gm_choice', label: 'GM Choice; Lead GM picks from the eligible set' },
 ];
 
 const CONNECTION_TYPE_OPTIONS = [
@@ -472,7 +472,7 @@ export function TransitionFormDialog({
             <div className="space-y-2">
               <p className="text-sm font-medium">Routing Predicate</p>
               <p className="text-xs text-muted-foreground">
-                Beat-outcome conditions — ALL must be true for this transition to fire. Submitted
+                Beat-outcome conditions: ALL must be true for this transition to fire. Submitted
                 atomically with the transition fields; no partial saves.
               </p>
               {routingRows.length === 0 ? (
@@ -480,7 +480,7 @@ export function TransitionFormDialog({
                   className="text-sm italic text-muted-foreground"
                   data-testid="routing-predicate-empty"
                 >
-                  No conditions — this transition is always eligible.
+                  No conditions: this transition is always eligible.
                 </p>
               ) : (
                 <ul className="space-y-1" data-testid="routing-predicate-list">
@@ -492,8 +492,8 @@ export function TransitionFormDialog({
                     >
                       <span>
                         {row.stakeId != null
-                          ? `${row.beatLabel} — stake #${row.stakeId} ${row.stakeColumn ?? ''}`
-                          : `${row.beatLabel} — ${row.outcome}`}
+                          ? `${row.beatLabel}: stake #${row.stakeId} ${row.stakeColumn ?? ''}`
+                          : `${row.beatLabel}: ${row.outcome}`}
                       </span>
                       <Button
                         type="button"

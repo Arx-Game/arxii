@@ -21,6 +21,6 @@ export function handleKudosReceivedPayload(payload: KudosReceivedPayload | undef
     source_category: '',
     description: '',
   };
-  toast(`+${amount} kudos — ${description}`, { description: sourceCategory });
+  toast(`+${amount} kudos: ${description}`, { description: sourceCategory });
   queryClient.invalidateQueries({ queryKey: ['account-progression'] });
 }

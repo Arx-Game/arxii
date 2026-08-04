@@ -63,7 +63,7 @@ export function DeleteOutfitDialog({ open, onOpenChange, outfit }: DeleteOutfitD
           <AlertDialogDescription>
             Delete the outfit &ldquo;
             <span className="font-medium text-foreground">{outfit.name}</span>&rdquo;? The items
-            themselves won&apos;t be affected — just the saved arrangement.
+            themselves won&apos;t be affected: just the saved arrangement.
           </AlertDialogDescription>
         </AlertDialogHeader>
         <AlertDialogFooter>

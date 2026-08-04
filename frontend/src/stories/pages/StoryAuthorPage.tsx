@@ -253,7 +253,7 @@ function StoryMainPane({ story, onEdited, onDeleted }: StoryMainPaneProps) {
               data-testid="dag-edit-mode-toggle"
             />
             <Label htmlFor="dag-edit-mode" className="text-sm text-muted-foreground">
-              {dagEditMode ? 'Edit mode — drag nodes to connect' : 'Read-only'}
+              {dagEditMode ? 'Edit mode: drag nodes to connect' : 'Read-only'}
             </Label>
           </div>
           <EpisodeDAG

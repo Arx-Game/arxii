@@ -171,7 +171,7 @@ export function RequestClaimDialog({ beat }: RequestClaimDialogProps) {
               </Label>
               <Textarea
                 id="request-framing-note"
-                placeholder="Your pitch — how you'd handle this scene, what tone you'd bring, any relevant character knowledge…"
+                placeholder="Your pitch: how you'd handle this scene, what tone you'd bring, any relevant character knowledge…"
                 value={framingNote}
                 onChange={(e) => setFramingNote(e.target.value)}
                 rows={4}

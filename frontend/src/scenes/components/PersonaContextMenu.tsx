@@ -423,7 +423,7 @@ export function PersonaContextMenu({
             <DialogTitle>Block {personaName}?</DialogTitle>
             <DialogDescription>
               You won't see or be targeted by them. Unblocking takes a full cron cycle to clear, so
-              this is deliberate — a reason is required and goes to staff.
+              this is deliberate: a reason is required and goes to staff.
             </DialogDescription>
           </DialogHeader>
           <Textarea

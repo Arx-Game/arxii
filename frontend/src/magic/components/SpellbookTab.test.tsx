@@ -324,7 +324,7 @@ describe('SpellbookTab', () => {
 
     expect(screen.getByTestId('finish-glimpse-button')).toBeInTheDocument();
     expect(
-      screen.getByText(/chosen the shape of it — write the story when ready/i)
+      screen.getByText(/chosen the shape of it; write the story when ready/i)
     ).toBeInTheDocument();
   });
 
@@ -336,7 +336,7 @@ describe('SpellbookTab', () => {
 
     expect(screen.getByTestId('finish-glimpse-button')).toBeInTheDocument();
     expect(
-      screen.queryByText(/chosen the shape of it — write the story when ready/i)
+      screen.queryByText(/chosen the shape of it; write the story when ready/i)
     ).not.toBeInTheDocument();
   });
 

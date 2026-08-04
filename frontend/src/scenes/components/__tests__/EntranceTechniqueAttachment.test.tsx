@@ -123,7 +123,7 @@ describe('EntranceTechniqueAttachment', () => {
     expect(screen.getByText('4 anima')).toBeInTheDocument();
     expect(screen.getByText('12 anima')).toBeInTheDocument();
     // Hostile marker renders only for the hostile technique.
-    expect(screen.getAllByTitle('Hostile — may seed or feed a combat encounter')).toHaveLength(1);
+    expect(screen.getAllByTitle('Hostile: may seed or feed a combat encounter')).toHaveLength(1);
   });
 
   it('picking a self/no-target technique (target_spec=null) commits immediately, no target picker', async () => {

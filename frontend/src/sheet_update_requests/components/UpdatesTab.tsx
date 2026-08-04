@@ -219,7 +219,7 @@ function SubmitRequestForm({ characterId }: { characterId: number }) {
   if (myMemberships.length === 0) {
     return (
       <p className="py-4 text-sm text-muted-foreground">
-        Sheet updates go through the GM whose table you play at — join a table to submit one.
+        Sheet updates go through the GM whose table you play at; join a table to submit one.
       </p>
     );
   }

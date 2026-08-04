@@ -157,7 +157,7 @@ export function CombatTurnPanel({
       >
         <div className="flex items-center justify-between">
           <h2 className="text-sm font-bold text-foreground">
-            Encounter Concluded — Round {encounter.round_number ?? 0}
+            Encounter Concluded: Round {encounter.round_number ?? 0}
           </h2>
         </div>
         <EncounterOutcomeBanner outcome={outcome} />
@@ -201,7 +201,7 @@ export function CombatTurnPanel({
     >
       {/* Panel header — round number + observer badge */}
       <div className="flex items-center justify-between">
-        <h2 className="text-sm font-bold text-foreground">Your Turn — Round {roundNumber}</h2>
+        <h2 className="text-sm font-bold text-foreground">Your Turn: Round {roundNumber}</h2>
         {!isParticipant && (
           <span className="rounded border border-border bg-muted px-2 py-0.5 text-[10px] uppercase tracking-wide text-muted-foreground">
             Observer

@@ -16,10 +16,10 @@ import type { BattleDeed, BattlePersonaSummary } from '../types';
 
 const OUTCOME_LABELS: Record<string, string> = {
   unresolved: 'Unresolved',
-  attacker_decisive: 'Attacker — decisive',
-  attacker_marginal: 'Attacker — marginal',
-  defender_marginal: 'Defender — marginal',
-  defender_decisive: 'Defender — decisive',
+  attacker_decisive: 'Attacker: decisive',
+  attacker_marginal: 'Attacker: marginal',
+  defender_marginal: 'Defender: marginal',
+  defender_decisive: 'Defender: decisive',
 };
 
 function formatDate(iso: string | null | undefined): string | null {

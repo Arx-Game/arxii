@@ -129,7 +129,7 @@ export function AlterationResolveDialog({
             {libraryLoading && <p className="text-sm text-muted-foreground">Searching…</p>}
             {!libraryLoading && (library ?? []).length === 0 && (
               <p className="text-sm text-muted-foreground">
-                No library entries match this scar&apos;s tier and origin — author your own in the
+                No library entries match this scar&apos;s tier and origin; author your own in the
                 other tab.
               </p>
             )}

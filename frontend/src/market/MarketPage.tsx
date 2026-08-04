@@ -70,7 +70,7 @@ export function MarketPage() {
               {offers.map((offer) => (
                 <li key={offer.id} className="flex items-baseline justify-between">
                   <span>
-                    <span className="font-medium">{offer.crafter_name}</span> —{' '}
+                    <span className="font-medium">{offer.crafter_name}</span> -{' '}
                     {offer.recipe_kind.replace('_', ' ')}
                   </span>
                   <span className="text-muted-foreground">
@@ -176,7 +176,7 @@ function WareRow({ ware, disabled, onBuy }: WareRowProps) {
       <span>
         {ware.item_name}
         <Badge variant="outline" className="ml-2">
-          unfinished — you describe it
+          unfinished: you describe it
         </Badge>
         <span className="ml-2 text-xs text-muted-foreground">by {ware.seller_name}</span>
       </span>
@@ -222,7 +222,7 @@ export function FinishWareForm({
         onChange={(event) => setName(event.target.value)}
       />
       <Textarea
-        placeholder="Describe it in your own words — this prose is yours."
+        placeholder="Describe it in your own words; this prose is yours."
         value={description}
         onChange={(event) => setDescription(event.target.value)}
       />

@@ -102,7 +102,7 @@ function OrgBooksInner({ orgId }: { orgId: number }) {
   return (
     <div className="space-y-4" data-testid="org-books">
       <div className="flex items-center justify-between">
-        <h1 className="text-2xl font-bold">{books.organization_name} — the Books</h1>
+        <h1 className="text-2xl font-bold">{books.organization_name}: the Books</h1>
         {books.steward_role_id != null && (
           <Button
             variant="outline"
@@ -134,7 +134,7 @@ function OrgBooksInner({ orgId }: { orgId: number }) {
             </CardTitle>
           </CardHeader>
           <CardContent>
-            <p className="text-2xl font-semibold">Ranks 1–{books.spend_rank_max}</p>
+            <p className="text-2xl font-semibold">Ranks 1-{books.spend_rank_max}</p>
             <p className="mt-0.5 text-xs text-muted-foreground">may draw on the treasury</p>
           </CardContent>
         </Card>

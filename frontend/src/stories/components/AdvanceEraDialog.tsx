@@ -47,7 +47,7 @@ export function AdvanceEraDialog({ open, onClose, era }: AdvanceEraDialogProps) 
 
         <p className="text-sm text-muted-foreground">
           Advancing to <span className="font-medium text-foreground">{era.display_name}</span> will
-          close the current active era. Stories continue across eras — no in-flight stories will be
+          close the current active era. Stories continue across eras; no in-flight stories will be
           affected.
         </p>
 

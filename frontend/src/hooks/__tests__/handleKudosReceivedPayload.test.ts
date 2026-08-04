@@ -30,7 +30,7 @@ describe('handleKudosReceivedPayload', () => {
 
     handleKudosReceivedPayload(payload);
 
-    expect(toastMock).toHaveBeenCalledWith('+3 kudos — A commend for your writeup', {
+    expect(toastMock).toHaveBeenCalledWith('+3 kudos: A commend for your writeup', {
       description: 'writeup_commend',
     });
   });
@@ -49,7 +49,7 @@ describe('handleKudosReceivedPayload', () => {
 
   it('tolerates an undefined payload (malformed frame) without throwing', () => {
     expect(() => handleKudosReceivedPayload(undefined)).not.toThrow();
-    expect(toastMock).toHaveBeenCalledWith('+0 kudos — ', { description: '' });
+    expect(toastMock).toHaveBeenCalledWith('+0 kudos: ', { description: '' });
     expect(invalidateQueriesMock).toHaveBeenCalledWith({ queryKey: ['account-progression'] });
   });
 });

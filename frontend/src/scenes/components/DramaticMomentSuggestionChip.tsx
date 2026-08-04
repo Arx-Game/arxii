@@ -43,7 +43,7 @@ export function DramaticMomentSuggestionChip({
           <button
             type="button"
             aria-label={`Confirm ${suggestion.moment_type_label}`}
-            title="Confirm — mints the dramatic-moment tag"
+            title="Confirm: mints the dramatic-moment tag"
             data-testid="dramatic-moment-suggestion-chip-confirm"
             disabled={isPending}
             onClick={() => confirmMutation.mutate(suggestion.id)}

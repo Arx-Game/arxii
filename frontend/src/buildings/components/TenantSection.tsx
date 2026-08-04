@@ -56,7 +56,7 @@ export function TenantSection({ room, runAction }: TenantSectionProps) {
                 <AlertDialogTitle>End {tenancy.tenant_name}&apos;s tenancy?</AlertDialogTitle>
                 <AlertDialogDescription>
                   They lose their standing in this room
-                  {tenancy.is_primary_home ? ' — including their primary home' : ''}.
+                  {tenancy.is_primary_home ? ', including their primary home' : ''}.
                 </AlertDialogDescription>
               </AlertDialogHeader>
               <AlertDialogFooter>
@@ -74,7 +74,7 @@ export function TenantSection({ room, runAction }: TenantSectionProps) {
       <Input
         value={term}
         onChange={(event) => setTerm(event.target.value)}
-        placeholder="Assign a tenant — search by name…"
+        placeholder="Assign a tenant: search by name…"
         data-testid="tenant-search"
       />
       {term.trim().length >= 2 && (

@@ -42,7 +42,7 @@ function NotYetPublicCard() {
   return (
     <Card>
       <CardContent className="py-8 text-center text-muted-foreground">
-        This organization&apos;s page is not yet public — full house and organization pages are
+        This organization&apos;s page is not yet public; full house and organization pages are
         coming (#1884).
       </CardContent>
     </Card>
@@ -148,7 +148,7 @@ function HouseSection({ orgId, house }: { orgId: number; house: HouseDetail }) {
                 {house.features.map((feature) => (
                   <li key={feature.slug}>
                     <span className="font-medium">{feature.name}</span>{' '}
-                    <span className="text-muted-foreground">— {feature.description}</span>
+                    <span className="text-muted-foreground">- {feature.description}</span>
                   </li>
                 ))}
               </ul>
@@ -178,7 +178,7 @@ function HouseSection({ orgId, house }: { orgId: number; house: HouseDetail }) {
                       </Badge>
                     </span>
                     <span className="text-muted-foreground">
-                      {title.holder_name || (title.is_claimable ? 'vacant — claimable' : 'vacant')}
+                      {title.holder_name || (title.is_claimable ? 'vacant: claimable' : 'vacant')}
                     </span>
                   </li>
                 ))}
@@ -217,7 +217,7 @@ function HouseSection({ orgId, house }: { orgId: number; house: HouseDetail }) {
                   <Badge variant={item.kind === 'scandal' ? 'destructive' : 'secondary'}>
                     {item.kind}
                   </Badge>{' '}
-                  <span className="font-medium">{item.subject}</span> — {item.headline}
+                  <span className="font-medium">{item.subject}</span>: {item.headline}
                 </li>
               ))}
             </ul>

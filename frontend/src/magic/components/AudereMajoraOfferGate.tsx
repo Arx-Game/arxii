@@ -44,7 +44,7 @@ export function AudereMajoraOfferGate({
         data-testid="audere-majora-gate-strip"
       >
         <DoorOpen className="h-4 w-4 shrink-0" />
-        The threshold stands open — answer it
+        The threshold stands open: answer it
       </button>
       <AudereMajoraOfferDialog
         offer={offer}
@@ -74,7 +74,7 @@ export function AudereMajoraOfferGate({
         errorMessage={
           respond.isError
             ? respond.error?.message ||
-              'The threshold did not answer — your response failed to land. Try again.'
+              'The threshold did not answer: your response failed to land. Try again.'
             : null
         }
       />

@@ -43,8 +43,8 @@ function OfferRow({ offer, sineaterSheetId, isPending, onConfirm, onDecline }: O
         </p>
         <p className="mt-0.5 text-sm text-amber-300/80">
           Commit up to <span className="font-semibold">{offer.commit_units_max}</span> Hollow unit
-          {offer.commit_units_max !== 1 ? 's' : ''} —{' '}
-          <span className="font-semibold">{offer.strain_cost_per_unit} Strain per unit</span> — to
+          {offer.commit_units_max !== 1 ? 's' : ''} -{' '}
+          <span className="font-semibold">{offer.strain_cost_per_unit} Strain per unit</span>: to
           soften the advance.
         </p>
       </div>

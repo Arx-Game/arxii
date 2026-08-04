@@ -177,7 +177,7 @@ export function CrossoverInviteComposeDialog({
                     <SelectItem key={event.id} value={event.id.toString()}>
                       {event.name}
                       {event.scheduled_real_time &&
-                        ` — ${new Date(event.scheduled_real_time).toLocaleDateString()}`}
+                        `: ${new Date(event.scheduled_real_time).toLocaleDateString()}`}
                     </SelectItem>
                   ))}
                 </SelectContent>

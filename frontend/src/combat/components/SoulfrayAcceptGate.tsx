@@ -39,7 +39,7 @@ export function SoulfrayAcceptGate({
       )}
     >
       <h3 className={cn('mb-1 text-sm font-bold', isDangerous ? 'text-red-400' : 'text-amber-400')}>
-        {isDangerous ? 'DANGER: ' : ''}Soulfray Warning — {warning.stage_name}
+        {isDangerous ? 'DANGER: ' : ''}Soulfray Warning: {warning.stage_name}
       </h3>
       <p className="mb-1 text-xs text-gray-300">{warning.stage_description}</p>
       <p className="mb-2 text-xs text-gray-400">

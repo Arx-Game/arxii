@@ -1000,7 +1000,7 @@ export function YourTurn({
           className="rounded-md border border-emerald-500/40 bg-emerald-500/10 px-3 py-2 text-center text-sm font-medium text-emerald-300"
           data-testid="ready-badge"
         >
-          Ready — waiting for round to advance
+          Ready: waiting for round to advance
         </div>
       )}
 
@@ -1008,7 +1008,7 @@ export function YourTurn({
       <div>
         <p
           className="mb-1.5 text-xs font-semibold uppercase tracking-wide text-muted-foreground"
-          title="Your primary declared action this round — the technique or maneuver you're committing to."
+          title="Your primary declared action this round, the technique or maneuver you're committing to."
         >
           Focused Action
         </p>
@@ -1108,7 +1108,7 @@ export function YourTurn({
         <div className="space-y-3">
           <p
             className="text-xs font-semibold uppercase tracking-wide text-muted-foreground"
-            title="Secondary declarations in categories your Focused Action doesn't use — they resolve alongside it."
+            title="Secondary declarations in categories your Focused Action doesn't use; they resolve alongside it."
           >
             Passive Actions
           </p>
@@ -1185,7 +1185,7 @@ export function YourTurn({
         </div>
         {selectedPull !== null && (
           <p className="text-[10px] text-primary/70" data-testid="selected-pull-summary">
-            Tier {selectedPull.tier} pull — {selectedPull.thread_ids.length} thread
+            Tier {selectedPull.tier} pull: {selectedPull.thread_ids.length} thread
             {selectedPull.thread_ids.length === 1 ? '' : 's'} selected
           </p>
         )}
@@ -1217,7 +1217,7 @@ export function YourTurn({
               className="rounded border border-amber-500/40 bg-amber-500/10 px-3 py-2 text-xs text-amber-300"
               data-testid="flee-declared-badge"
             >
-              Fleeing — resolves at end of round
+              Fleeing: resolves at end of round
             </div>
           )}
           {declaredManeuver === 'cover' && (

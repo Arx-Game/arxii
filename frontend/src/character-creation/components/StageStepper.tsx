@@ -99,7 +99,7 @@ export function StageStepper({
                   <HoverCardTrigger asChild>{button}</HoverCardTrigger>
                   <HoverCardContent className="w-64">
                     <p className="mb-1 text-xs font-semibold text-muted-foreground">
-                      {STAGE_LABELS[stage]} — incomplete
+                      {STAGE_LABELS[stage]}: incomplete
                     </p>
                     <ul className="list-disc pl-4 text-sm">
                       {errors.map((error) => (

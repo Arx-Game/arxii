@@ -268,8 +268,8 @@ function AlterationGateAlert() {
   // Singular/plural keyed on distinct characters (one alt can carry several scars).
   const message =
     uniqueNames.length === 1
-      ? `${names} carries an unresolved Mage Scar — that character's XP spending is blocked until it is resolved.`
-      : `${names} carry unresolved Mage Scars — their XP spending is blocked until those scars are resolved.`;
+      ? `${names} carries an unresolved Mage Scar; that character's XP spending is blocked until it is resolved.`
+      : `${names} carry unresolved Mage Scars; their XP spending is blocked until those scars are resolved.`;
   return (
     <div
       data-testid="alteration-gate-alert"

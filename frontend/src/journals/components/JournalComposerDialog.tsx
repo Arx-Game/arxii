@@ -112,8 +112,8 @@ export function JournalComposerDialog({ open, onClose, initialTags }: JournalCom
         <DialogHeader>
           <DialogTitle>Write a Journal Entry</DialogTitle>
           <DialogDescription>
-            Private entries are visible only to you. Public entries can be read — and praised or
-            retorted — by anyone.
+            Private entries are visible only to you. Public entries can be read; and praised or
+            retorted: by anyone.
           </DialogDescription>
         </DialogHeader>
         <div className="space-y-4">

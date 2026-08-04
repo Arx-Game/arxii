@@ -167,7 +167,7 @@ export function ResolveEpisodeDialog({ entry }: ResolveEpisodeDialogProps) {
               <Label>Transition</Label>
               {!hasTransitions ? (
                 <p className="text-sm text-muted-foreground">
-                  No eligible transitions — advance to frontier.
+                  No eligible transitions: advance to frontier.
                 </p>
               ) : (
                 <div className="space-y-2">
@@ -197,7 +197,7 @@ export function ResolveEpisodeDialog({ entry }: ResolveEpisodeDialogProps) {
                       className="h-4 w-4"
                     />
                     <span className="text-sm text-muted-foreground">
-                      Advance to frontier — no next episode selected
+                      Advance to frontier: no next episode selected
                     </span>
                   </label>
                 </div>

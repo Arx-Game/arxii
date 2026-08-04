@@ -25,7 +25,7 @@ export function RevokeClearanceButton({ clearanceId }: Props) {
   return (
     <ClearanceConfirmButton
       title="Revoke this clearance?"
-      description="The requesting GM will lose permission to act on this subject. This is a soft revoke — the decision trail is kept."
+      description="The requesting GM will lose permission to act on this subject. This is a soft revoke; the decision trail is kept."
       confirmLabel="Revoke"
       isPending={mutation.isPending}
       onConfirm={handleConfirm}

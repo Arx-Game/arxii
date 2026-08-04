@@ -85,7 +85,7 @@ describe('SessionRequestStatusCard', () => {
       <SessionRequestStatusCard activeEntry={{ ...baseEntry, open_session_request_id: 5 }} />
     );
 
-    expect(screen.getByText(/Session pending — your GM has been notified/i)).toBeInTheDocument();
+    expect(screen.getByText(/Session pending: your GM has been notified/i)).toBeInTheDocument();
   });
 
   it('shows scheduled message when session request status is scheduled', () => {
@@ -95,7 +95,7 @@ describe('SessionRequestStatusCard', () => {
     );
 
     expect(
-      screen.getByText(/Session scheduled — your GM is finalising the event/i)
+      screen.getByText(/Session scheduled: your GM is finalising the event/i)
     ).toBeInTheDocument();
   });
 
@@ -114,7 +114,7 @@ describe('SessionRequestStatusCard', () => {
       <SessionRequestStatusCard activeEntry={{ ...baseEntry, open_session_request_id: 5 }} />
     );
 
-    expect(screen.getByText(/Episode ready — GM scheduling required/i)).toBeInTheDocument();
+    expect(screen.getByText(/Episode ready: GM scheduling required/i)).toBeInTheDocument();
   });
 
   it('shows scheduled event panel with formatted date when scheduled_event_id is set', () => {

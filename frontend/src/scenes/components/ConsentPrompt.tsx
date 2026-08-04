@@ -92,7 +92,7 @@ function ConsentCard({
         {boon && (
           <p className="mt-1 text-xs font-semibold text-amber-700 dark:text-amber-300">
             {boon.kind === 'money' &&
-              `They ask for ${boon.sum_tier ? `a ${boon.sum_tier} sum — ` : ''}${boon.amount} coppers.`}
+              `They ask for ${boon.sum_tier ? `a ${boon.sum_tier} sum; ` : ''}${boon.amount} coppers.`}
             {boon.kind === 'deed' && `They ask a deed of you: "${boon.deed_text}"`}
             {(boon.kind === 'held_item' || boon.kind === 'vault_item') &&
               `They ask for ${boon.item_name ?? 'an item'}${boon.kind === 'vault_item' ? ' from your vault' : ''}.`}
@@ -105,7 +105,7 @@ function ConsentCard({
         )}
         {combatRiskLevel && (
           <p className="mt-1 text-xs font-semibold text-red-600 dark:text-red-400">
-            The fight before you is {combatRiskLevel.toUpperCase()} risk — accepting wades your
+            The fight before you is {combatRiskLevel.toUpperCase()} risk; accepting wades your
             character into the combat encounter.
           </p>
         )}

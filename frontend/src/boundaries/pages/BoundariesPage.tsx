@@ -41,7 +41,7 @@ function BoundariesPageInner() {
         <CardHeader>
           <CardTitle>Treasured subjects</CardTitle>
           <CardDescription>
-            Pick a character to manage what they treasure — staking one of these requires your
+            Pick a character to manage what they treasure; staking one of these requires your
             pre-scene sign-off.
           </CardDescription>
         </CardHeader>

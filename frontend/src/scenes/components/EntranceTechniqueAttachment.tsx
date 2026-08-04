@@ -130,7 +130,7 @@ export function EntranceTechniqueAttachment({
                     {technique.hostile && (
                       <span
                         className="text-xs text-destructive"
-                        title="Hostile — may seed or feed a combat encounter"
+                        title="Hostile: may seed or feed a combat encounter"
                       >
                         ⚔
                       </span>

@@ -117,7 +117,7 @@ export function ApproveClaimDialog({ claim }: ApproveClaimDialogProps) {
           <DialogHeader>
             <DialogTitle>Approve AGM claim</DialogTitle>
             <DialogDescription>
-              AGM #{claim.assistant_gm_id} — {claim.story_title}
+              AGM #{claim.assistant_gm_id}: {claim.story_title}
             </DialogDescription>
           </DialogHeader>
 
@@ -147,7 +147,7 @@ export function ApproveClaimDialog({ claim }: ApproveClaimDialogProps) {
               </Label>
               <Textarea
                 id="approve-framing-note"
-                placeholder="Context for the AGM's session — e.g. 'This scene takes place at the temple at dusk…'"
+                placeholder="Context for the AGM's session, e.g. 'This scene takes place at the temple at dusk…'"
                 value={framingNote}
                 onChange={(e) => setFramingNote(e.target.value)}
                 rows={4}

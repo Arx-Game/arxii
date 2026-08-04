@@ -64,7 +64,7 @@ export function MissionCanvasPage() {
           <Button asChild variant="ghost" size="sm">
             <Link to={`/staff/missions?id=${id ?? ''}`}>← Back to browser</Link>
           </Button>
-          <h1 className="mt-1 text-2xl font-semibold">{template?.name ?? `#${id}`} — Graph</h1>
+          <h1 className="mt-1 text-2xl font-semibold">{template?.name ?? `#${id}`}: Graph</h1>
         </div>
       </div>
       {isLoading ? (

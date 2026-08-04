@@ -145,7 +145,7 @@ export function useCastPullSelection(params: UseCastPullSelectionParams): CastPu
     if (paid.length === 0) return {};
     const firstThread = threadById.get(Number(paid[0][0]));
     if (!firstThread) {
-      return { error: 'Thread data is still loading — try again in a moment.' };
+      return { error: 'Thread data is still loading; try again in a moment.' };
     }
     const pull: CastPullRequestBody = {
       resonance_id: firstThread.resonance,

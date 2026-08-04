@@ -522,7 +522,7 @@ async function getImbuingRitualId(): Promise<number> {
   const imbuing = rituals.find((r) => r.is_imbuing);
 
   if (!imbuing) {
-    throw new Error('Imbuing ritual not found — ensure the Ritual seed exists on this server');
+    throw new Error('Imbuing ritual not found; ensure the Ritual seed exists on this server');
   }
 
   _imbuingRitualIdCache = imbuing.id;

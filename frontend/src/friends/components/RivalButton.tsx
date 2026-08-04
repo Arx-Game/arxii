@@ -32,7 +32,7 @@ export function RivalButton({
         <span className="text-sm italic text-muted-foreground">
           {existing.is_mutual
             ? `You and ${targetName} are mutual rivals.`
-            : `Rival declared — mutual once ${targetName} declares you back.`}
+            : `Rival declared: mutual once ${targetName} declares you back.`}
         </span>
         <button
           type="button"

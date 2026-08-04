@@ -62,7 +62,7 @@ export function TechniqueEffectSummaryDisplay({
       >
         {summary.hostile && (
           <AlertTriangle
-            aria-label="Hostile — may trigger combat"
+            aria-label="Hostile: may trigger combat"
             className="h-3 w-3 shrink-0 text-amber-400"
           />
         )}
@@ -82,7 +82,7 @@ export function TechniqueEffectSummaryDisplay({
       <p className="flex items-start gap-1 text-sm text-muted-foreground">
         {summary.hostile && (
           <AlertTriangle
-            aria-label="Hostile — may trigger combat"
+            aria-label="Hostile: may trigger combat"
             className="mt-0.5 h-3.5 w-3.5 shrink-0 text-amber-400"
           />
         )}

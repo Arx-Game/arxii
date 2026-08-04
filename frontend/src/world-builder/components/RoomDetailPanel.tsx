@@ -334,8 +334,8 @@ export function RoomDetailPanel({
               <AlertDialogHeader>
                 <AlertDialogTitle>Promote {room.name}?</AlertDialogTitle>
                 <AlertDialogDescription>
-                  This stamps a permanent fixture key and marks the room AUTHORED — it will export
-                  to the lore repo. This cannot be undone.
+                  This stamps a permanent fixture key and marks the room AUTHORED; it will export to
+                  the lore repo. This cannot be undone.
                 </AlertDialogDescription>
               </AlertDialogHeader>
               <AlertDialogFooter>
@@ -361,7 +361,7 @@ export function RoomDetailPanel({
             <AlertDialogHeader>
               <AlertDialogTitle>Remove {room.name}?</AlertDialogTitle>
               <AlertDialogDescription>
-                Refused if the room has any contents, an installed feature, or is already exported —
+                Refused if the room has any contents, an installed feature, or is already exported -
                 empty or unexport it first.
               </AlertDialogDescription>
             </AlertDialogHeader>

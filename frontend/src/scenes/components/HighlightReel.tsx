@@ -121,7 +121,7 @@ export function HighlightReel({ sceneId, canGm }: HighlightReelProps) {
             <SealedMoment
               interactionId={data.featured.interaction_id}
               sceneId={sceneId}
-              label="✦ Top moment of this scene — reveal"
+              label="✦ Top moment of this scene; reveal"
               canGm={canGm}
             />
           )}
@@ -132,7 +132,7 @@ export function HighlightReel({ sceneId, canGm }: HighlightReelProps) {
                   <SealedMoment
                     interactionId={entry.interaction_id}
                     sceneId={sceneId}
-                    label={`Moment #${entry.rank} — reveal`}
+                    label={`Moment #${entry.rank}: reveal`}
                     canGm={canGm}
                   />
                 </li>

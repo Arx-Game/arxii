@@ -103,7 +103,7 @@ export function PlayerReportPage() {
           </CardHeader>
           <CardContent className="space-y-4">
             <p>
-              Your report has been submitted. Staff will review it — they can see the real identity
+              Your report has been submitted. Staff will review it; they can see the real identity
               behind the persona. You won't receive any information about the reported player's
               identity or alts.
             </p>
@@ -123,7 +123,7 @@ export function PlayerReportPage() {
         <CardContent className="space-y-4">
           <p className="text-sm text-muted-foreground">
             Report problematic behavior from another player. Staff see the real identity behind the
-            persona — anonymity does not shield abuse. You won't learn anything about the reported
+            persona: anonymity does not shield abuse. You won't learn anything about the reported
             player's identity or alts from filing.
           </p>
           <form onSubmit={handleSubmit} className="space-y-4">

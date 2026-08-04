@@ -365,7 +365,7 @@ function OfferCard({
               type="number"
               value={checkType}
               onChange={(e) => setCheckType(e.target.value)}
-              placeholder="optional — gates a perform_check"
+              placeholder="optional: gates a perform_check"
             />
           </Field>
           <Field label="Check difficulty">
@@ -423,8 +423,8 @@ function OfferCard({
           </div>
         ) : (
           <p className="text-sm text-muted-foreground">
-            This mission offer has no MissionOfferDetails row yet — pick a template via the
-            add-offer flow.
+            This mission offer has no MissionOfferDetails row yet; pick a template via the add-offer
+            flow.
           </p>
         ))}
 
@@ -527,7 +527,7 @@ function PermitDetailsPanel({
           />
         </Field>
       </div>
-      <Field label="Permit cost (coppers — approval fee, not construction)">
+      <Field label="Permit cost (coppers: approval fee, not construction)">
         <Input
           type="number"
           value={cost}

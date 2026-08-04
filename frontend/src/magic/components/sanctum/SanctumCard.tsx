@@ -93,7 +93,7 @@ export function SanctumCard({ sanctum }: Readonly<SanctumCardProps>) {
         {pendingTotal > 0 ? (
           <div className="mt-2 rounded-md bg-muted/40 p-2 text-sm">
             <div className="flex justify-between">
-              <span className="text-muted-foreground">Well — your gift</span>
+              <span className="text-muted-foreground">Well: your gift</span>
               <span className="font-medium">{pendingTotal}</span>
             </div>
             {pendingOwnerBonus > 0 ? (

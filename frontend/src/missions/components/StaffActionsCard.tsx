@@ -55,7 +55,7 @@ export function StaffActionsCard({ template }: StaffActionsCardProps) {
               <div className="text-sm font-medium">Visibility</div>
               <div className="text-xs text-muted-foreground">
                 Currently <Badge variant="outline">{template.visibility}</Badge>
-                {' — '}
+                {'-'}
                 {isOpen
                   ? 'visible to everyone; the availability rule is ignored.'
                   : 'the availability rule is the audience; empty rule = staff-only.'}
@@ -132,7 +132,7 @@ function CopyRow({ template }: { template: MissionTemplate }) {
     <div className="space-y-2 rounded border p-2">
       <div className="text-sm font-medium">Copy template</div>
       <div>
-        <Label htmlFor="copy-new-name">New name (optional — server auto-suffixes if blank)</Label>
+        <Label htmlFor="copy-new-name">New name (optional: server auto-suffixes if blank)</Label>
         <Input id="copy-new-name" value={newName} onChange={(e) => setNewName(e.target.value)} />
       </div>
       {copy.error ? (

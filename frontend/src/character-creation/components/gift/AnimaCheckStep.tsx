@@ -104,7 +104,7 @@ export function AnimaCheckStep({ draft, ritualNameField }: AnimaCheckStepProps) 
         <h3 className="text-lg font-semibold">{copy?.anima_check_heading ?? 'Anima Check'}</h3>
         <p className="text-sm text-muted-foreground">
           {copy?.anima_check_intro ??
-            'How does your magic move through you? The stat and skill you choose here are what every cast rolls — and how your casting looks and feels in a scene is always yours to describe.'}
+            'How does your magic move through you? The stat and skill you choose here are what every cast rolls, and how your casting looks and feels in a scene is always yours to describe.'}
         </p>
       </div>
 

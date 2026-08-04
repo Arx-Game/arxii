@@ -37,12 +37,12 @@ export function AgreementsPanel({ characterSheetId }: AgreementsPanelProps) {
         <h3 className="text-xl font-semibold">Last Will &amp; Testament</h3>
         {frozen && (
           <p className="rounded border border-amber-500 bg-amber-500/10 p-2 text-sm">
-            This will is sealed — the estate is being settled.
+            This will is sealed: the estate is being settled.
           </p>
         )}
         {!will && (
           <p className="text-sm text-muted-foreground">
-            No will written. Declare where your belongings go — otherwise your estate falls to your
+            No will written. Declare where your belongings go; otherwise your estate falls to your
             house, then next of kin, then the crown of the region.
           </p>
         )}
@@ -85,7 +85,7 @@ export function AgreementsPanel({ characterSheetId }: AgreementsPanelProps) {
           <ul className="space-y-1">
             {settlements.map((s) => (
               <li key={s.id} className="rounded border p-2 text-sm">
-                <span className="font-medium">{s.deceased_name}</span> — settles by{' '}
+                <span className="font-medium">{s.deceased_name}</span>: settles by{' '}
                 {new Date(s.deadline).toLocaleDateString()}
               </li>
             ))}

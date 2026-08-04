@@ -88,7 +88,7 @@ export function BulletinReplyRow({ reply, isGMOrStaff }: BulletinReplyRowProps) 
   return (
     <div className="flex gap-2 py-2 text-sm">
       {/* Left dash / thread indicator */}
-      <span className="mt-0.5 shrink-0 text-muted-foreground">—</span>
+      <span className="mt-0.5 shrink-0 text-muted-foreground">-</span>
 
       <div className="min-w-0 flex-1 space-y-1">
         {/* Header row */}

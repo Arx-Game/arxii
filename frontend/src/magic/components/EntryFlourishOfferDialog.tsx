@@ -114,7 +114,7 @@ export function EntryFlourishOfferDialog({
             data-testid="entry-flourish-respond-error"
             className="rounded-md border border-red-600/60 bg-red-950/40 p-3 text-sm font-medium text-red-200"
           >
-            {respond.error?.message || 'Your declaration did not land — please try again.'}
+            {respond.error?.message || 'Your declaration did not land; please try again.'}
           </div>
         ) : null}
 

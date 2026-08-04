@@ -97,7 +97,7 @@ export function SendGemitDialog() {
         onSuccess: () => {
           setOpen(false);
           resetForm();
-          toast.success('Gemit broadcast — all online accounts notified');
+          toast.success('Gemit broadcast: all online accounts notified');
         },
         onError: (err: unknown) => {
           const fetchErr = err as { status?: number; response?: Response };

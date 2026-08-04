@@ -210,7 +210,7 @@ export function CreateMissionPage() {
         categories,
       });
       if (created.name !== submittedName) {
-        toast.success(`Saved as "${created.name}" — "${submittedName}" was taken.`);
+        toast.success(`Saved as "${created.name}"; "${submittedName}" was taken.`);
       }
       navigate(`/staff/missions/${created.id}/canvas`);
     } catch (err) {

@@ -53,7 +53,7 @@ export function CharacterAuthorSelect({ entries, value, onChange }: Props) {
         </SelectContent>
       </Select>
       <p className="text-xs text-muted-foreground">
-        You play multiple characters — choose which one is authoring this technique.
+        You play multiple characters: choose which one is authoring this technique.
       </p>
     </div>
   );

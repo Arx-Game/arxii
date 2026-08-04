@@ -59,7 +59,7 @@ export function MissionBrowserPage() {
   return (
     <div className="container mx-auto px-4 py-6">
       <div className="mb-4 flex items-center justify-between">
-        <h1 className="text-2xl font-semibold">Mission Studio — Browse</h1>
+        <h1 className="text-2xl font-semibold">Mission Studio: Browse</h1>
         <Button onClick={() => navigate('/staff/missions/new')}>+ New Mission</Button>
       </div>
       <FiltersBar

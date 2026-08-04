@@ -28,7 +28,7 @@ function BlockRow({ block }: { block: Block }) {
         </p>
         {block.reason && <p className="text-xs text-muted-foreground">Reason: {block.reason}</p>}
         {block.pending_removal_at && (
-          <p className="text-xs text-amber-600">Unblocking — clears on the next cron cycle.</p>
+          <p className="text-xs text-amber-600">Unblocking: clears on the next cron cycle.</p>
         )}
       </div>
       <div className="flex gap-2">

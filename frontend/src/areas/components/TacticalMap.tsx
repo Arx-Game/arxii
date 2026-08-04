@@ -125,7 +125,7 @@ export function TacticalMap({
       onDispatchMove(action);
       return;
     }
-    toast.error("Can't move there — no open path from your current position.");
+    toast.error("Can't move there: no open path from your current position.");
   };
 
   const layout = useMemo(() => computeTacticalLayout(nodes, edges), [nodes, edges]);

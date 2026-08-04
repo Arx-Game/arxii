@@ -49,7 +49,7 @@ export function ArchiveEraDialog({ open, onClose, era }: ArchiveEraDialogProps) 
         <p className="text-sm text-muted-foreground">
           Archive{' '}
           <span className="font-medium text-foreground">
-            Season {era.season_number} — {era.display_name}
+            Season {era.season_number}: {era.display_name}
           </span>
           ? It will be marked <span className="font-medium">Concluded</span> without activating any
           new era. This action is safe to repeat.

@@ -53,7 +53,7 @@ export function BoonAskForm({
       <div className="w-full max-w-sm rounded-lg border bg-background p-4 shadow-lg">
         <h3 className="mb-1 text-sm font-semibold">Ask {targetName ?? 'them'} for a boon</h3>
         <p className="mb-3 text-xs text-muted-foreground">
-          Name what you ask up front — they see exactly what granting costs them.
+          Name what you ask up front; they see exactly what granting costs them.
         </p>
         <div className="mb-3 flex gap-2">
           <Button
@@ -77,7 +77,7 @@ export function BoonAskForm({
             {isLoading && <p className="text-xs text-muted-foreground">Weighing their purse…</p>}
             {!isLoading && !moneyAvailable && (
               <p className="text-xs text-muted-foreground">
-                They have nothing worth asking for — ask for a deed instead.
+                They have nothing worth asking for; ask for a deed instead.
               </p>
             )}
             {sumOptions?.map((option) => (

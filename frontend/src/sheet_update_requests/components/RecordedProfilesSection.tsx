@@ -60,7 +60,7 @@ function CommissionedCard({ profile }: { profile: RecordedProfile }) {
   const complete = useMutation({
     mutationFn: () => completeRecordedProfile(profile.id, text),
     onSuccess: () => {
-      toast.success('Profile recorded — it is now your description.');
+      toast.success('Profile recorded: it is now your description.');
       void queryClient.invalidateQueries({ queryKey: ['recorded-profiles'] });
     },
     onError: (error: Error) => toast.error(error.message),
@@ -75,8 +75,8 @@ function CommissionedCard({ profile }: { profile: RecordedProfile }) {
       </CardHeader>
       <CardContent className="space-y-2">
         <p className="text-sm text-muted-foreground">
-          Write the profile as the scholar would deliver it — it becomes your description and is
-          kept in the Archive forever.
+          Write the profile as the scholar would deliver it; it becomes your description and is kept
+          in the Archive forever.
         </p>
         <Textarea rows={6} value={text} onChange={(e) => setText(e.target.value)} />
         <Button

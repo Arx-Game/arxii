@@ -84,7 +84,7 @@ const KIND_META: Record<string, KindMeta> = {
   RELATIONSHIP_CAPSTONE: {
     label: 'Relationship Capstone',
     supported: false,
-    unsupportedNote: 'Not yet available — deferred.',
+    unsupportedNote: 'Not yet available: deferred.',
   },
 };
 
@@ -517,11 +517,11 @@ export function WeaveThreadWizard({
   // ---------------------------------------------------------------------------
 
   const stepLabel: Record<WizardStep, string> = {
-    1: 'Step 1 of 5 — Choose Anchor Kind',
-    2: 'Step 2 of 5 — Choose Anchor',
-    3: 'Step 3 of 5 — Choose Resonance',
-    4: 'Step 4 of 5 — Name Your Thread',
-    5: 'Step 5 of 5 — Confirm',
+    1: 'Step 1 of 5: Choose Anchor Kind',
+    2: 'Step 2 of 5: Choose Anchor',
+    3: 'Step 3 of 5: Choose Resonance',
+    4: 'Step 4 of 5: Name Your Thread',
+    5: 'Step 5 of 5: Confirm',
   };
 
   const selectedResonance = characterResonances?.find(
@@ -827,22 +827,22 @@ export function WeaveThreadWizard({
             <span className="font-medium">
               {state.selectedKind
                 ? (KIND_META[state.selectedKind]?.label ?? state.selectedKind)
-                : '—'}
+                : '-'}
             </span>
           </div>
           {state.selectedKind === 'RELATIONSHIP_TRACK' && (
             <div className="flex gap-2">
               <span className="w-28 shrink-0 text-muted-foreground">Partner</span>
-              <span className="font-medium">{state.selectedPartnerLabel ?? '—'}</span>
+              <span className="font-medium">{state.selectedPartnerLabel ?? '-'}</span>
             </div>
           )}
           <div className="flex gap-2">
             <span className="w-28 shrink-0 text-muted-foreground">Anchor</span>
-            <span className="font-medium">{state.selectedAnchorLabel ?? '—'}</span>
+            <span className="font-medium">{state.selectedAnchorLabel ?? '-'}</span>
           </div>
           <div className="flex gap-2">
             <span className="w-28 shrink-0 text-muted-foreground">Resonance</span>
-            <span className="font-medium">{selectedResonance?.resonance_name ?? '—'}</span>
+            <span className="font-medium">{selectedResonance?.resonance_name ?? '-'}</span>
           </div>
           <div className="flex gap-2">
             <span className="w-28 shrink-0 text-muted-foreground">Name</span>

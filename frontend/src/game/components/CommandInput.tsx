@@ -361,7 +361,7 @@ export function CommandInput({
                 <button
                   type="button"
                   aria-label="Make an entrance"
-                  title="Make an entrance — your next pose announces your arrival and others can acclaim it"
+                  title="Make an entrance: your next pose announces your arrival and others can acclaim it"
                   aria-pressed={isEntrance}
                   onClick={handleToggleEntrance}
                   className={`rounded px-1 text-sm transition-colors ${

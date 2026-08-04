@@ -55,7 +55,7 @@ export function StrainSlider({
           className="rounded border border-amber-500/50 bg-amber-500/10 px-2 py-1 text-xs text-amber-200"
         >
           <span className="font-semibold">Insufficient anima</span>
-          {' — projected '}
+          {': projected '}
           {projectedCost}
           {' exceeds pool '}
           {currentAnima ?? 0}

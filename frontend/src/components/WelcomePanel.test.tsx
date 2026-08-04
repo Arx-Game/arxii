@@ -87,7 +87,7 @@ describe('WelcomePanel', () => {
     renderWithProviders(<WelcomePanel />);
 
     expect(screen.getByText('Your applications')).toBeInTheDocument();
-    expect(screen.getByText(/Branwen — pending since/)).toBeInTheDocument();
+    expect(screen.getByText(/Branwen: pending since/)).toBeInTheDocument();
   });
 
   it('shows the draft-application link when a draft exists and there are no characters', () => {

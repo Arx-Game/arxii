@@ -234,7 +234,7 @@ export function AnimaRitualEditDialog({
               <label htmlFor="anima-ritual-stat-id" className="mb-1 block text-sm font-medium">
                 Stat ID *{' '}
                 <span className="text-xs text-muted-foreground">
-                  (pending proper picker — enter the Trait PK for now)
+                  (pending proper picker: enter the Trait PK for now)
                 </span>
               </label>
               <input
@@ -255,7 +255,7 @@ export function AnimaRitualEditDialog({
               <label htmlFor="anima-ritual-skill-id" className="mb-1 block text-sm font-medium">
                 Skill ID *{' '}
                 <span className="text-xs text-muted-foreground">
-                  (pending proper picker — enter the Skill PK for now)
+                  (pending proper picker: enter the Skill PK for now)
                 </span>
               </label>
               <input
@@ -316,7 +316,7 @@ export function AnimaRitualEditDialog({
               >
                 Check Type ID *{' '}
                 <span className="text-xs text-muted-foreground">
-                  (pending proper picker — enter the CheckType PK for now)
+                  (pending proper picker: enter the CheckType PK for now)
                 </span>
               </label>
               <input

@@ -72,7 +72,7 @@ export function RoomEditorPanel({
       </div>
       <div className="flex items-center gap-3">
         <Switch id="room-public" checked={isPublic} onCheckedChange={setIsPublic} />
-        <Label htmlFor="room-public">Public — listed on where; only public scenes here</Label>
+        <Label htmlFor="room-public">Public: listed on where; only public scenes here</Label>
       </div>
       <div className="flex gap-3">
         <Button type="submit" disabled={!name.trim() || mutation.isPending}>

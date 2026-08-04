@@ -73,7 +73,7 @@ export function MaturationPanel({ sheetId }: MaturationPanelProps) {
       <h3 className="text-xl font-semibold">Maturation</h3>
       <p className="text-sm text-muted-foreground">
         {data.available_points > 0
-          ? `${data.available_points} point${data.available_points === 1 ? '' : 's'} earned by the years — spend them below.`
+          ? `${data.available_points} point${data.available_points === 1 ? '' : 's'} earned by the years; spend them below.`
           : `No points waiting. The next milestone arrives at age ${data.next_milestone_year}.`}
       </p>
       {error && <p className="mt-1 text-sm text-destructive">{error}</p>}

@@ -66,7 +66,7 @@ export function PresencePanel() {
             {data.where.map((entry, i) => (
               <li key={`${entry.persona_name}-${i}`}>
                 <span className="font-medium">{entry.persona_name}</span>{' '}
-                <span className="text-muted-foreground">— </span>
+                <span className="text-muted-foreground">-</span>
                 <FormattedContent content={entry.room_path} />
                 <button
                   type="button"

@@ -48,7 +48,7 @@ export function GroupBeatCard({
   if (!beat) {
     return (
       <div className="p-3 text-sm text-muted-foreground" data-testid="group-beat-concluded">
-        This story has concluded — see your journal for how it ended.
+        This story has concluded: see your journal for how it ended.
       </div>
     );
   }
@@ -124,7 +124,7 @@ function GroupBeatView({
 
       {beat.options.length === 0 ? (
         <p className="text-xs text-muted-foreground" data-testid="group-beat-not-here">
-          Nothing presents itself here — this story waits somewhere else.
+          Nothing presents itself here: this story waits somewhere else.
         </p>
       ) : (
         <div className="space-y-1" data-testid="group-beat-options">
@@ -169,7 +169,7 @@ function GroupBeatView({
 
       {expired ? (
         <p className="text-xs text-muted-foreground" data-testid="group-beat-expired">
-          The window closed — waiting for the server to resolve.
+          The window closed: waiting for the server to resolve.
         </p>
       ) : null}
 

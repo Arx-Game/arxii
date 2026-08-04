@@ -55,7 +55,7 @@ export function PortalsBlock({ characterId }: PortalsBlockProps) {
             <span>
               <span className="font-medium">{dest.kind_name}</span>{' '}
               <span className="text-muted-foreground">
-                — {dest.anchor_name}, {dest.room_name}
+                : {dest.anchor_name}, {dest.room_name}
               </span>
             </span>
             <Button

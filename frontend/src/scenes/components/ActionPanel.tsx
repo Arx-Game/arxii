@@ -690,7 +690,7 @@ export function ActionPanel({ sceneId }: Props) {
                               <span className="flex items-center gap-1">
                                 {tech.hostile && (
                                   <AlertTriangle
-                                    aria-label="Hostile — may trigger combat"
+                                    aria-label="Hostile: may trigger combat"
                                     className="h-3 w-3 shrink-0 text-amber-400"
                                   />
                                 )}
@@ -734,7 +734,7 @@ export function ActionPanel({ sceneId }: Props) {
                       {selectedTechnique.hostile && (
                         <p className="flex items-center gap-1 text-xs text-amber-500">
                           <AlertTriangle className="h-3 w-3 shrink-0" />
-                          Hostile — casting at another character may start combat.
+                          Hostile: casting at another character may start combat.
                         </p>
                       )}
 

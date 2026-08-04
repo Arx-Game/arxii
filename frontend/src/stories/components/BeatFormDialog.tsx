@@ -82,7 +82,7 @@ interface DRFFieldErrors {
 // ---------------------------------------------------------------------------
 
 const PREDICATE_OPTIONS: { value: BeatPredicateType; label: string }[] = [
-  { value: 'gm_marked', label: 'GM Marked — GM manually resolves this beat' },
+  { value: 'gm_marked', label: 'GM Marked; GM manually resolves this beat' },
   { value: 'character_level_at_least', label: 'Character Level At Least' },
   { value: 'achievement_held', label: 'Achievement Held' },
   { value: 'condition_held', label: 'Condition Held' },
@@ -107,9 +107,9 @@ const RISK_OPTIONS: { value: BeatRisk; label: string }[] = [
 ];
 
 const VISIBILITY_OPTIONS: { value: BeatVisibility; label: string }[] = [
-  { value: 'hinted', label: 'Hinted — player sees a vague hint' },
-  { value: 'visible', label: 'Visible — player sees full details' },
-  { value: 'secret', label: 'Secret — player cannot see this beat' },
+  { value: 'hinted', label: 'Hinted; player sees a vague hint' },
+  { value: 'visible', label: 'Visible; player sees full details' },
+  { value: 'secret', label: 'Secret; player cannot see this beat' },
 ];
 
 const MILESTONE_OPTIONS: { value: ReferencedMilestoneType; label: string }[] = [
@@ -807,7 +807,7 @@ export function BeatFormDialog({
                 className="h-4 w-4"
                 id="beat-agm-eligible"
               />
-              <span className="text-sm">AGM eligible — allow Assistant GMs to claim this beat</span>
+              <span className="text-sm">AGM eligible: allow Assistant GMs to claim this beat</span>
             </label>
           </div>
 

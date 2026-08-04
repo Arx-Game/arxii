@@ -22,7 +22,7 @@ export function SoulfrayWarning({
       className={`rounded-lg border p-4 ${isDangerous ? 'border-red-500 bg-red-950/50' : 'border-amber-500 bg-amber-950/50'}`}
     >
       <h3 className={`mb-2 font-bold ${isDangerous ? 'text-red-400' : 'text-amber-400'}`}>
-        {isDangerous ? 'DANGER: ' : ''}Soulfray Warning — {warning.stage_name}
+        {isDangerous ? 'DANGER: ' : ''}Soulfray Warning: {warning.stage_name}
       </h3>
       <p className="mb-2 text-sm text-gray-300">{warning.stage_description}</p>
       <p className="mb-4 text-sm text-gray-400">

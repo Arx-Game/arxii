@@ -107,7 +107,7 @@ export function MuteSettingsPage() {
     <div className="container mx-auto px-4 py-6 sm:px-6 sm:py-8 lg:px-8">
       <h1 className="mb-2 text-2xl font-bold">Notification Settings</h1>
       <p className="mb-6 text-muted-foreground">
-        Muted items still appear in your dashboard — only the real-time push is suppressed.
+        Muted items still appear in your dashboard; only the real-time push is suppressed.
       </p>
 
       <section className="mb-8">

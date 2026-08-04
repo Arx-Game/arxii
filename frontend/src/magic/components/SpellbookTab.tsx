@@ -263,7 +263,7 @@ export function SpellbookTab({ characterId, isMyCharacter }: Props) {
               <div className="space-y-2 pt-1">
                 {magic.aura.glimpse_state === 'TAGS_ONLY' && (
                   <p className="text-sm text-muted-foreground">
-                    You&rsquo;ve chosen the shape of it — write the story when ready.
+                    You&rsquo;ve chosen the shape of it; write the story when ready.
                   </p>
                 )}
                 <Button

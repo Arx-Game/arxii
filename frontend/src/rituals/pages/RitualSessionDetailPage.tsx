@@ -234,7 +234,7 @@ function RitualSessionDetailInner({ sessionId }: DetailInnerProps) {
         {/* Threshold status */}
         <p className="mt-2 text-sm text-muted-foreground">
           {thresholdMet ? (
-            <span className="font-medium text-green-700">Threshold met — ready to fire.</span>
+            <span className="font-medium text-green-700">Threshold met: ready to fire.</span>
           ) : (
             <span>Waiting for participants to respond.</span>
           )}

@@ -77,7 +77,7 @@ export function AcceptOfferDialog({ offer, storyTitle }: AcceptOfferDialogProps)
         onSuccess: (updated) => {
           setOpen(false);
           resetForm();
-          toast.success(`Story accepted — it is now at your table`, {
+          toast.success(`Story accepted: it is now at your table`, {
             action: {
               label: 'View story',
               onClick: () => navigate(`/stories/${updated.story}`),

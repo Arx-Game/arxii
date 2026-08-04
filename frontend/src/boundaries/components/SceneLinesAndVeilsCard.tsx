@@ -55,7 +55,7 @@ export function SceneLinesAndVeilsCard({ sceneId }: Props) {
                       {data.advisories.map((a, idx) => (
                         <li key={`${a.theme_name}-${idx}`} className="text-sm">
                           <span className="font-medium">{a.theme_name}</span>
-                          {a.detail && <span className="text-muted-foreground"> — {a.detail}</span>}
+                          {a.detail && <span className="text-muted-foreground">: {a.detail}</span>}
                         </li>
                       ))}
                     </ul>
@@ -71,7 +71,7 @@ export function SceneLinesAndVeilsCard({ sceneId }: Props) {
                       {data.treasured_subjects.map((t, idx) => (
                         <li key={`${t.subject_label}-${idx}`} className="text-sm">
                           <span className="font-medium">{t.subject_label}</span>
-                          {t.detail && <span className="text-muted-foreground"> — {t.detail}</span>}
+                          {t.detail && <span className="text-muted-foreground">: {t.detail}</span>}
                         </li>
                       ))}
                     </ul>

@@ -117,7 +117,7 @@ export function TechniqueBuilderPage() {
         <h1 className="text-2xl font-bold tracking-tight">Author a Technique</h1>
         <p className="mt-1 text-sm text-muted-foreground">
           {isStaff
-            ? 'Staff mode — budget is advisory. Over-budget designs may still be saved.'
+            ? 'Staff mode: budget is advisory. Over-budget designs may still be saved.'
             : 'Design a new technique. Your design must fit within the tier budget to submit.'}
         </p>
       </div>

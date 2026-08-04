@@ -310,7 +310,7 @@ export function RitualSessionResponseDialog({
         <DialogHeader>
           <DialogTitle>Respond to Invitation</DialogTitle>
           <DialogDescription>
-            {session.ritual_name} — from {session.initiator_name}
+            {session.ritual_name}: from {session.initiator_name}
           </DialogDescription>
         </DialogHeader>
 

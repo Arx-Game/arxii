@@ -24,7 +24,7 @@ export function NewPlayerSection() {
               <AccordionContent>
                 <p className="mb-2">
                   Arx II is a collaborative roleplaying game: you play a character in a shared
-                  story, scene by scene, alongside other players. No downloads — everything happens
+                  story, scene by scene, alongside other players. No downloads; everything happens
                   right here in the browser.
                 </p>
                 <p>
@@ -47,8 +47,8 @@ export function NewPlayerSection() {
               <AccordionTrigger>Getting Started</AccordionTrigger>
               <AccordionContent>
                 <p className="mb-2">
-                  Register an account, get a character — apply for an existing roster character or
-                  create your own — then join a scene and play. The game teaches you the rest as you
+                  Register an account, get a character: apply for an existing roster character or
+                  create your own: then join a scene and play. The game teaches you the rest as you
                   go.
                 </p>
                 <Link className="text-primary underline" to="/how-to-start">

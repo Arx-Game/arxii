@@ -155,7 +155,7 @@ describe('BattleWriteupPage', () => {
     });
     expect(screen.getByTestId('battle-writeup-page')).toBeInTheDocument();
     expect(screen.getByText('Siege of the Gate')).toBeInTheDocument();
-    expect(screen.getByTestId('battle-writeup-outcome')).toHaveTextContent('Attacker — decisive');
+    expect(screen.getByTestId('battle-writeup-outcome')).toHaveTextContent('Attacker: decisive');
     expect(screen.getByTestId('battle-writeup-scene-link')).toHaveAttribute('href', '/scenes/99');
   });
 

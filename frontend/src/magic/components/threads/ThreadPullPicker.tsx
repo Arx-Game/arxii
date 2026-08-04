@@ -412,7 +412,7 @@ export function ThreadPullPicker({
       if (onAutoRevertNotice) {
         const names = revertedNames.join(', ');
         onAutoRevertNotice(
-          `${reverted} pull${reverted > 1 ? 's' : ''} (${names}) reverted to tier 0 — no longer applicable.`
+          `${reverted} pull${reverted > 1 ? 's' : ''} (${names}) reverted to tier 0, no longer applicable.`
         );
       }
     }
@@ -453,7 +453,7 @@ export function ThreadPullPicker({
         <h4 className="text-sm font-semibold text-foreground">
           Thread pulls{' '}
           <span className="text-xs font-normal text-muted-foreground">
-            — {isLoading ? '…' : `${applicableCount} applicable`}
+            : {isLoading ? '…' : `${applicableCount} applicable`}
           </span>
         </h4>
         {(pulledCount > 0 || passiveCount > 0) && (

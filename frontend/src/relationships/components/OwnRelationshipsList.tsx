@@ -171,7 +171,7 @@ function RelationshipRowDetail({ relationshipId }: { relationshipId: number }) {
                   {entry.kind}
                 </Badge>
                 <span className="font-medium">{entry.title}</span>
-                <span className="text-muted-foreground"> — {entry.track_name}</span>
+                <span className="text-muted-foreground">: {entry.track_name}</span>
                 <p className="text-muted-foreground">{entry.writeup}</p>
               </li>
             ))}

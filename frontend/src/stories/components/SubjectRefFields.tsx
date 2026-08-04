@@ -118,7 +118,7 @@ export function SubjectRefFields({ value, onChange, disabled }: Props) {
             disabled={disabled}
           />
           <p className="text-xs text-muted-foreground">
-            No name-search picker exists yet for CharacterSheet — enter the numeric id directly.
+            No name-search picker exists yet for CharacterSheet; enter the numeric id directly.
           </p>
         </div>
       )}
@@ -135,7 +135,7 @@ export function SubjectRefFields({ value, onChange, disabled }: Props) {
             disabled={disabled}
           />
           <p className="text-xs text-muted-foreground">
-            No name-search picker exists yet for ItemInstance — enter the numeric id directly.
+            No name-search picker exists yet for ItemInstance; enter the numeric id directly.
           </p>
         </div>
       )}
