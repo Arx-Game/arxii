@@ -283,7 +283,10 @@ class AuditLegendFloorTutorialChainTests(TestCase):
             seed_dev_database()
 
     def test_no_legend_floor_violations_for_tutorial_chain(self) -> None:
-        from world.missions.management.commands.audit_legend_floor import Command
+        # Management commands are discovered per INSTALLED_APP, so #2906's collapse
+        # moved every world.<pkg>/management/ tree up to the single app's own
+        # world/management/commands/.
+        from world.management.commands.audit_legend_floor import Command
 
         command = Command()
         violations = command._check_route_rewards() + command._check_renown_awards()
