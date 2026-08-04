@@ -41,16 +41,31 @@ jobs:
   # this way also guarantees the `changes` job itself SUCCEEDS on merge_group
   # (dorny has no defined behavior there) — a failed `changes` job would fail
   # the required aggregators and brick the queue.
+  # FAIL-OPEN on a broken filter step (#2906). dorny/paths-filter enumerates the
+  # PR's changed files through the GitHub API, and on a very large PR that call
+  # can time out ("We couldn't respond to your request in time"), which used to
+  # fail the whole `changes` job and, through the aggregators' change-detection
+  # guard below, both REQUIRED checks - with no way to tell a real breakage from
+  # a transient API hiccup. Measured on PR #2974 (1,430 changed files: 1,088
+  # migration deletions plus their replacements), where GitHub also could not
+  # re-run the workflow at all.
+  #
+  # So the step is now `continue-on-error` and the outputs fall back to 'true'
+  # whenever it did not succeed: change detection degrades to "run everything",
+  # which is the conservative answer, instead of blocking the PR. The `outcome`
+  # check is deliberate - `steps.filter.outputs.*` is empty on both failure and
+  # skip, and an empty string would otherwise gate the heavy jobs OFF.
   changes:
     runs-on: ubuntu-latest
     outputs:
-      backend: ${{ steps.filter.outputs.backend }}
-      frontend: ${{ steps.filter.outputs.frontend }}
+      backend: ${{ steps.filter.outcome == 'success' && steps.filter.outputs.backend || 'true' }}
+      frontend: ${{ steps.filter.outcome == 'success' && steps.filter.outputs.frontend || 'true' }}
     steps:
       - uses: actions/checkout@v6
       # Third-party action SHA-pinned (SonarCloud supply-chain rule on new code).
       - uses: dorny/paths-filter@fbd0ab8f3e69293af611ebaee6363fc25e6d187d # v4.0.1
         id: filter
+        continue-on-error: true
         if: github.event_name == 'pull_request'
         with:
           filters: |
