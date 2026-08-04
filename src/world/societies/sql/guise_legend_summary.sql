@@ -3,6 +3,11 @@
 --
 -- CAVEAT: After a migration squash, you must manually add a RunSQL operation
 -- pointing at this file. Django's makemigrations won't auto-generate it.
+--
+-- Source tables are arxii_persona / arxii_legendentry / arxii_legendspread
+-- (single-app collapse, #2906) -- the view's own name stays
+-- societies_personalegendsummary since it's a managed=False model with an
+-- explicit Meta.db_table, unaffected by the app-label table rename.
 
 CREATE MATERIALIZED VIEW IF NOT EXISTS societies_personalegendsummary AS
 SELECT
@@ -12,11 +17,11 @@ SELECT
             le.base_value + COALESCE(spread_totals.total_spread, 0)
         ELSE 0 END
     ), 0)::integer AS persona_legend
-FROM scenes_persona p
-LEFT JOIN societies_legendentry le ON le.persona_id = p.id
+FROM arxii_persona p
+LEFT JOIN arxii_legendentry le ON le.persona_id = p.id
 LEFT JOIN (
     SELECT legend_entry_id, SUM(value_added) AS total_spread
-    FROM societies_legendspread
+    FROM arxii_legendspread
     GROUP BY legend_entry_id
 ) spread_totals ON spread_totals.legend_entry_id = le.id
 GROUP BY p.id;

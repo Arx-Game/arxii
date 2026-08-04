@@ -4,15 +4,19 @@
 -- CAVEAT: After a migration squash, you must manually add a RunSQL operation
 -- pointing at this file. Django's makemigrations won't auto-generate it.
 -- See docs/plans/2026-02-22-materialized-view-sql-files-design.md
+--
+-- Source table is arxii_area (single-app collapse, #2906) -- the view's own
+-- name stays areas_areaclosure since it's a managed=False model with an
+-- explicit Meta.db_table, unaffected by the app-label table rename.
 
 CREATE MATERIALIZED VIEW areas_areaclosure AS
 WITH RECURSIVE closure AS (
     SELECT id AS ancestor_id, id AS descendant_id, 0 AS depth
-    FROM areas_area
+    FROM arxii_area
     UNION ALL
     SELECT c.ancestor_id, a.id AS descendant_id, c.depth + 1
     FROM closure c
-    JOIN areas_area a ON a.parent_id = c.descendant_id
+    JOIN arxii_area a ON a.parent_id = c.descendant_id
 )
 SELECT
     ROW_NUMBER() OVER () AS id,
