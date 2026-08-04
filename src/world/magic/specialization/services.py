@@ -93,14 +93,18 @@ def provision_additional_gift_thread(
     resonance. The new thread starts at level 0 (the Glimpse) and must be
     independently woven and imbued.
 
-    Validates that the resonance is in the gift's supported set. Raises
-    ``UnsupportedGiftResonanceError`` if not. If a thread at this resonance
-    already exists, returns it unchanged (idempotent — delegates to
+    Validates that the resonance is in the gift's supported set, when that set
+    is non-empty. An EMPTY set means UNRESTRICTED (ruled 2026-08-04) — resonance
+    comes from the thread the player weaves, and the set is only an optional
+    narrowing. Raises ``UnsupportedGiftResonanceError`` when a non-empty set
+    excludes the resonance. If a thread at this resonance already exists,
+    returns it unchanged (idempotent — delegates to
     ``provision_latent_gift_thread``).
     """
     from world.magic.exceptions import UnsupportedGiftResonanceError  # noqa: PLC0415
 
-    if not any(r.pk == resonance.pk for r in gift.cached_resonances):
+    supported = gift.cached_resonances
+    if supported and not any(r.pk == resonance.pk for r in supported):
         raise UnsupportedGiftResonanceError
 
     return provision_latent_gift_thread(sheet, gift, resonance=resonance)
