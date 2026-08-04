@@ -9,19 +9,19 @@ class InstancedRoom(SharedMemoryModel):
     """Tracks the lifecycle of a temporary instanced room."""
 
     room = models.OneToOneField(
-        "evennia_extensions.RoomProfile",
+        "arxii.RoomProfile",
         on_delete=models.CASCADE,
         related_name="instance_data",
     )
     owner = models.ForeignKey(
-        "character_sheets.CharacterSheet",
+        "arxii.CharacterSheet",
         null=True,
         blank=True,
         on_delete=models.SET_NULL,
         related_name="owned_instances",
     )
     gm_owner = models.ForeignKey(
-        "gm.GMProfile",
+        "arxii.GMProfile",
         null=True,
         blank=True,
         on_delete=models.SET_NULL,

@@ -35,7 +35,7 @@ class ActionTemplate(NaturalKeyMixin, SharedMemoryModel):
         help_text="Narrative description of this action.",
     )
     check_type = models.ForeignKey(
-        "checks.CheckType",
+        "arxii.CheckType",
         on_delete=models.PROTECT,
         related_name="action_templates",
         help_text="Check type for the main resolution step.",
@@ -70,7 +70,7 @@ class ActionTemplate(NaturalKeyMixin, SharedMemoryModel):
         help_text="Grouping category (e.g., 'magic', 'combat', 'exploration').",
     )
     consent_category = models.ForeignKey(
-        "consent.SocialConsentCategory",
+        "arxii.SocialConsentCategory",
         on_delete=models.SET_NULL,
         null=True,
         blank=True,
@@ -118,6 +118,7 @@ class ActionTemplate(NaturalKeyMixin, SharedMemoryModel):
     )
 
     class Meta:
+        app_label = "arxii"
         verbose_name = "Action Template"
         verbose_name_plural = "Action Templates"
 
@@ -154,7 +155,7 @@ class ActionTemplateGate(SharedMemoryModel):
         help_text="Execution order (lower = earlier). Negative = before main step.",
     )
     check_type = models.ForeignKey(
-        "checks.CheckType",
+        "arxii.CheckType",
         on_delete=models.PROTECT,
         related_name="action_template_gates",
         help_text="Check type for this gate.",
@@ -173,6 +174,7 @@ class ActionTemplateGate(SharedMemoryModel):
     )
 
     class Meta:
+        app_label = "arxii"
         verbose_name = "Action Template Gate"
         verbose_name_plural = "Action Template Gates"
         ordering = ["step_order"]

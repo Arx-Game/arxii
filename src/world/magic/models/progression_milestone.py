@@ -14,7 +14,7 @@ class MagicProgressionMilestone(SharedMemoryModel):
     stage = models.PositiveSmallIntegerField(choices=PathStage.choices)
     kind = models.CharField(max_length=32, choices=MagicMilestoneKind.choices)
     codex_entry = models.ForeignKey(
-        "codex.CodexEntry",
+        "arxii.CodexEntry",
         on_delete=models.SET_NULL,
         null=True,
         blank=True,

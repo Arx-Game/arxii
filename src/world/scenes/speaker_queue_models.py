@@ -15,13 +15,13 @@ class SpeakerQueue(SharedMemoryModel):
     """
 
     room = models.ForeignKey(
-        "evennia_extensions.RoomProfile",
+        "arxii.RoomProfile",
         on_delete=models.PROTECT,
         related_name="speaker_queues",
         help_text="Room the queue belongs to.",
     )
     scene = models.ForeignKey(
-        "scenes.Scene",
+        "arxii.Scene",
         on_delete=models.SET_NULL,
         null=True,
         blank=True,
@@ -30,7 +30,7 @@ class SpeakerQueue(SharedMemoryModel):
     )
     is_active = models.BooleanField(default=True)
     opened_by = models.ForeignKey(
-        "scenes.Persona",
+        "arxii.Persona",
         on_delete=models.SET_NULL,
         null=True,
         blank=True,
@@ -62,7 +62,7 @@ class SpeakerQueueEntry(SharedMemoryModel):
         related_name="entries",
     )
     persona = models.ForeignKey(
-        "scenes.Persona",
+        "arxii.Persona",
         on_delete=models.CASCADE,
         related_name="speaker_queue_entries",
     )

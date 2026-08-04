@@ -32,7 +32,7 @@ class CrossingOption(SharedMemoryModel):
         help_text="Which thread kind this option applies to.",
     )
     resonance = models.ForeignKey(
-        "magic.Resonance",
+        "arxii.Resonance",
         on_delete=models.PROTECT,
         related_name="crossing_options",
     )
@@ -48,7 +48,7 @@ class CrossingOption(SharedMemoryModel):
         help_text="Staff-authored flavor, examinable by other players.",
     )
     condition_template = models.ForeignKey(
-        "conditions.ConditionTemplate",
+        "arxii.ConditionTemplate",
         on_delete=models.PROTECT,
         related_name="crossing_options",
         help_text=(
@@ -66,14 +66,14 @@ class CrossingOption(SharedMemoryModel):
         ),
     )
     discovery_achievement = models.ForeignKey(
-        "achievements.Achievement",
+        "arxii.Achievement",
         on_delete=models.PROTECT,
         null=True,
         blank=True,
         related_name="crossing_options",
     )
     codex_entry = models.ForeignKey(
-        "codex.CodexEntry",
+        "arxii.CodexEntry",
         on_delete=models.PROTECT,
         null=True,
         blank=True,
@@ -106,7 +106,7 @@ class CrossingChoice(SharedMemoryModel):
     """Irreversible per-thread receipt of a player's crossing choice."""
 
     thread = models.ForeignKey(
-        "magic.Thread",
+        "arxii.Thread",
         on_delete=models.CASCADE,
         related_name="crossing_choices",
     )
@@ -142,7 +142,7 @@ class PendingCrossingOffer(SharedMemoryModel):
     """
 
     thread = models.ForeignKey(
-        "magic.Thread",
+        "arxii.Thread",
         on_delete=models.CASCADE,
         related_name="pending_crossing_offers",
     )

@@ -376,7 +376,7 @@ class FallToPlummetTriggerDefinitionFactory(factory.django.DjangoModelFactory):
     """
 
     class Meta:
-        model = "flows.TriggerDefinition"
+        model = "arxii.TriggerDefinition"
         django_get_or_create = ("name",)
 
     name = FALL_TRIGGER_NAME

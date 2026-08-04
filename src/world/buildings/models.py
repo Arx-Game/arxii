@@ -36,13 +36,13 @@ from world.locations.constants import StatKey
 # Cross-app FK string constants. Django resolves these lazily at app-ready
 # time; centralizing them here avoids the "literal duplicated N times" SonarCloud
 # code smell and gives a single grep target if the source model ever moves.
-_BUILDING_MODEL_PATH = "buildings.Building"
-_PROJECT_FK = "projects.Project"
-_POLISH_CATEGORY_FK = "buildings.PolishCategory"
-_PERSONA_FK = "scenes.Persona"
-_CODEX_SUBJECT_FK = "codex.CodexSubject"
-_ARCHITECTURAL_STYLE_FK = "buildings.ArchitecturalStyle"
-_ROOM_PROFILE_FK = "evennia_extensions.RoomProfile"
+_BUILDING_MODEL_PATH = "arxii.Building"
+_PROJECT_FK = "arxii.Project"
+_POLISH_CATEGORY_FK = "arxii.PolishCategory"
+_PERSONA_FK = "arxii.Persona"
+_CODEX_SUBJECT_FK = "arxii.CodexSubject"
+_ARCHITECTURAL_STYLE_FK = "arxii.ArchitecturalStyle"
+_ROOM_PROFILE_FK = "arxii.RoomProfile"
 
 
 class BuildingKind(NaturalKeyMixin, SharedMemoryModel):
@@ -111,7 +111,7 @@ class PropertyGrantProfile(NaturalKeyMixin, SharedMemoryModel):
         related_name="property_grant_profiles",
     )
     ward_area = models.ForeignKey(
-        "areas.Area",
+        "arxii.Area",
         on_delete=models.SET_NULL,
         null=True,
         blank=True,
@@ -190,7 +190,7 @@ class MaterialLoreEffect(SharedMemoryModel):
     """
 
     template = models.ForeignKey(
-        "items.ItemTemplate",
+        "arxii.ItemTemplate",
         on_delete=models.CASCADE,
         related_name="lore_effects",
     )
@@ -245,7 +245,7 @@ class Building(SharedMemoryModel):
     """
 
     area = models.OneToOneField(
-        "areas.Area",
+        "arxii.Area",
         on_delete=models.CASCADE,
         related_name="building_profile",
         primary_key=True,
@@ -374,7 +374,7 @@ class Building(SharedMemoryModel):
         ),
     )
     entry_room = models.ForeignKey(
-        "evennia_extensions.RoomProfile",
+        "arxii.RoomProfile",
         null=True,
         blank=True,
         on_delete=models.PROTECT,
@@ -407,7 +407,7 @@ class Building(SharedMemoryModel):
         ),
     )
     granted_via_profile = models.ForeignKey(
-        "buildings.PropertyGrantProfile",
+        "arxii.PropertyGrantProfile",
         on_delete=models.SET_NULL,
         null=True,
         blank=True,
@@ -503,7 +503,7 @@ class BuildingMaterial(SharedMemoryModel):
         related_name="materials_used",
     )
     item_template = models.ForeignKey(
-        "items.ItemTemplate",
+        "arxii.ItemTemplate",
         on_delete=models.PROTECT,
         related_name="building_uses",
     )
@@ -517,7 +517,7 @@ class BuildingMaterial(SharedMemoryModel):
     )
     units = models.PositiveIntegerField(default=1)
     quality_tier = models.ForeignKey(
-        "items.QualityTier",
+        "arxii.QualityTier",
         on_delete=models.SET_NULL,
         null=True,
         blank=True,
@@ -559,7 +559,7 @@ class BuildingPermitDetails(SharedMemoryModel):
     """
 
     item_instance = models.OneToOneField(
-        "items.ItemInstance",
+        "arxii.ItemInstance",
         on_delete=models.CASCADE,
         related_name="building_permit_details",
         primary_key=True,
@@ -583,7 +583,7 @@ class BuildingPermitDetails(SharedMemoryModel):
         related_name="permits",
     )
     approved_wards = models.ManyToManyField(
-        "areas.Area",
+        "arxii.Area",
         related_name="building_permits_valid_in",
         blank=True,
         help_text=(
@@ -602,7 +602,7 @@ class BuildingPermitDetails(SharedMemoryModel):
         help_text="Multiplier on construction-side costs negotiated at issuance.",
     )
     issued_by_role = models.ForeignKey(
-        "npc_services.NPCRole",
+        "arxii.NPCRole",
         on_delete=models.SET_NULL,
         null=True,
         blank=True,
@@ -753,7 +753,7 @@ class BuildingRenovationDetails(SharedMemoryModel):
         related_name="renovation_details",
     )
     target_kind = models.ForeignKey(
-        "buildings.BuildingKind",
+        "arxii.BuildingKind",
         on_delete=models.PROTECT,
         related_name="renovation_targets",
         help_text="The catalog BuildingKind this building is re-pointed to on completion.",
@@ -828,7 +828,7 @@ class BuildingPreparationDetails(SharedMemoryModel):
         primary_key=True,
     )
     building = models.ForeignKey(
-        "buildings.Building",
+        "arxii.Building",
         on_delete=models.CASCADE,
         related_name="preparation_details",
     )
@@ -913,7 +913,7 @@ class InteriorDesignDetails(SharedMemoryModel):
         primary_key=True,
     )
     template = models.ForeignKey(
-        "buildings.ProjectTemplate",
+        "arxii.ProjectTemplate",
         on_delete=models.PROTECT,
         related_name="design_details",
     )
@@ -966,7 +966,7 @@ class BuildingConstructionDetails(SharedMemoryModel):
         help_text="The (consumed) permit that authorized this construction.",
     )
     ward = models.ForeignKey(
-        "areas.Area",
+        "arxii.Area",
         on_delete=models.PROTECT,
         related_name="construction_projects",
         help_text="The ward this building will rise in.",
@@ -1108,7 +1108,7 @@ class RoomPolish(SharedMemoryModel):
     """
 
     room = models.ForeignKey(
-        "evennia_extensions.RoomProfile",
+        "arxii.RoomProfile",
         on_delete=models.CASCADE,
         related_name="polish_by_category",
     )

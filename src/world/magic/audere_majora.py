@@ -47,12 +47,12 @@ class AudereMajoraThreshold(RenownAwardConfig):
         help_text="PathStage the character crosses into.",
     )
     minimum_intensity_tier = models.ForeignKey(
-        "magic.IntensityTier",
+        "arxii.IntensityTier",
         on_delete=models.PROTECT,
         related_name="+",
     )
     minimum_warp_stage = models.ForeignKey(
-        "conditions.ConditionStage",
+        "arxii.ConditionStage",
         on_delete=models.PROTECT,
         related_name="+",
     )
@@ -94,7 +94,7 @@ class PendingAudereMajoraOffer(AbstractPendingOffer):
     """
 
     character_sheet = models.ForeignKey(
-        "character_sheets.CharacterSheet",
+        "arxii.CharacterSheet",
         on_delete=models.CASCADE,
         related_name="audere_majora_offers",
     )
@@ -134,7 +134,7 @@ class AudereMajoraCrossing(AbstractClassLevelAdvancement, SharedMemoryModel):
     """Irreversible receipt: this character crossed this threshold. Survives death."""
 
     character_sheet = models.ForeignKey(
-        "character_sheets.CharacterSheet",
+        "arxii.CharacterSheet",
         on_delete=models.CASCADE,
         related_name="audere_majora_crossings",
     )
@@ -145,12 +145,12 @@ class AudereMajoraCrossing(AbstractClassLevelAdvancement, SharedMemoryModel):
     )
     # NOT named "path": Evennia's idmapper metaclass shadows a `path` attribute.
     chosen_path = models.ForeignKey(
-        "classes.Path",
+        "arxii.Path",
         on_delete=models.PROTECT,
         related_name="audere_majora_crossings",
     )
     legend_entry = models.OneToOneField(
-        "societies.LegendEntry",
+        "arxii.LegendEntry",
         on_delete=models.SET_NULL,
         null=True,
         blank=True,
@@ -835,7 +835,7 @@ class AudereMajoraFaithVariant(SharedMemoryModel):
         related_name="faith_variants",
     )
     being = models.ForeignKey(
-        "worship.WorshippedBeing",
+        "arxii.WorshippedBeing",
         on_delete=models.PROTECT,
         related_name="audere_majora_faith_variants",
     )

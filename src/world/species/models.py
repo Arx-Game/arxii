@@ -63,7 +63,7 @@ class Species(NaturalKeyMixin, SharedMemoryModel):
         help_text="Racial languages known by this species",
     )
     codex_entry = models.ForeignKey(
-        "codex.CodexEntry",
+        "arxii.CodexEntry",
         on_delete=models.PROTECT,
         null=True,
         blank=True,
@@ -196,7 +196,7 @@ class SpeciesStatBonus(NaturalKeyMixin, SharedMemoryModel):
 
     class NaturalKeyConfig:
         fields = ["species", "stat"]
-        dependencies = ["species.Species"]
+        dependencies = ["arxii.Species"]
 
     class Meta:
         verbose_name = "Species Stat Bonus"
@@ -223,13 +223,13 @@ class SpeciesGiftGrant(NaturalKeyMixin, SharedMemoryModel):
         help_text="The species (or subspecies) that grants this Minor Gift.",
     )
     gift = models.ForeignKey(
-        "magic.Gift",
+        "arxii.Gift",
         on_delete=models.PROTECT,
         related_name="species_grants",
         help_text="The Minor Gift granted. Must have kind=MINOR.",
     )
     drawback_condition = models.ForeignKey(
-        "conditions.ConditionTemplate",
+        "arxii.ConditionTemplate",
         on_delete=models.PROTECT,
         null=True,
         blank=True,
@@ -237,7 +237,7 @@ class SpeciesGiftGrant(NaturalKeyMixin, SharedMemoryModel):
         help_text="Optional drawback condition applied at finalize (frenzy/sunlight-vuln).",
     )
     benefit_condition = models.ForeignKey(
-        "conditions.ConditionTemplate",
+        "arxii.ConditionTemplate",
         on_delete=models.PROTECT,
         null=True,
         blank=True,
@@ -246,7 +246,7 @@ class SpeciesGiftGrant(NaturalKeyMixin, SharedMemoryModel):
         "(e.g. a resist-check bonus condition).",
     )
     drawback_distinction = models.ForeignKey(
-        "distinctions.Distinction",
+        "arxii.Distinction",
         on_delete=models.PROTECT,
         null=True,
         blank=True,
@@ -269,7 +269,7 @@ class SpeciesGiftGrant(NaturalKeyMixin, SharedMemoryModel):
 
     class NaturalKeyConfig:
         fields = ["species", "gift"]
-        dependencies = ["species.Species", "magic.Gift", "distinctions.Distinction"]
+        dependencies = ["arxii.Species", "arxii.Gift", "arxii.Distinction"]
 
     class Meta:
         verbose_name = "Species Gift Grant"

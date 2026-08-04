@@ -60,7 +60,7 @@ class Path(NaturalKeyMixin, SharedMemoryModel):
         help_text="Action arena this path specializes in (drives CG technique category).",
     )
     style = models.ForeignKey(
-        "magic.TechniqueStyle",
+        "arxii.TechniqueStyle",
         on_delete=models.PROTECT,
         null=True,
         blank=True,
@@ -182,7 +182,7 @@ class CharacterClass(NaturalKeyMixin, SharedMemoryModel):
 
     # Many-to-many relationship with traits for core class traits
     core_traits = models.ManyToManyField(
-        "traits.Trait",
+        "arxii.Trait",
         blank=True,
         related_name="classes_requiring_trait",
         help_text="Core traits associated with this class",
@@ -226,7 +226,7 @@ class CharacterClassLevel(SharedMemoryModel):
     """
 
     character = models.ForeignKey(
-        "character_sheets.CharacterSheet",
+        "arxii.CharacterSheet",
         on_delete=models.CASCADE,
         related_name="character_class_levels",
     )
@@ -357,7 +357,7 @@ class PathAspect(NaturalKeyMixin, SharedMemoryModel):
 
     class NaturalKeyConfig:
         fields = ["character_path", "aspect"]
-        dependencies = ["classes.Path", "classes.Aspect"]
+        dependencies = ["arxii.Path", "arxii.Aspect"]
 
     class Meta:
         unique_together = ["character_path", "aspect"]

@@ -5,9 +5,9 @@ from __future__ import annotations
 from django.db import models
 from evennia.utils.idmapper.models import SharedMemoryModel
 
-CHARACTER_SHEET_FK = "character_sheets.CharacterSheet"
-RESONANCE_FK = "magic.Resonance"
-SCENE_FK = "scenes.Scene"
+CHARACTER_SHEET_FK = "arxii.CharacterSheet"
+RESONANCE_FK = "arxii.Resonance"
+SCENE_FK = "arxii.Scene"
 
 
 class EndorsementBase(SharedMemoryModel):
@@ -31,7 +31,7 @@ class EndorsementBase(SharedMemoryModel):
         related_name="%(class)s_received",
     )
     persona_snapshot = models.ForeignKey(
-        "scenes.Persona",
+        "arxii.Persona",
         on_delete=models.SET_NULL,
         null=True,
         blank=True,
@@ -53,7 +53,7 @@ class PoseEndorsement(EndorsementBase):
     """
 
     interaction = models.ForeignKey(
-        "scenes.Interaction",
+        "arxii.Interaction",
         on_delete=models.CASCADE,
         related_name="endorsements",
         db_constraint=False,
@@ -107,7 +107,7 @@ class SceneEntryEndorsement(EndorsementBase):
         related_name="entry_endorsements",
     )
     entry_interaction = models.ForeignKey(
-        "scenes.Interaction",
+        "arxii.Interaction",
         on_delete=models.SET_NULL,
         null=True,
         blank=True,
@@ -154,7 +154,7 @@ class PresentationEndorsement(EndorsementBase):
     """
 
     presentation = models.ForeignKey(
-        "items.FashionPresentation",
+        "arxii.FashionPresentation",
         on_delete=models.CASCADE,
         related_name="endorsements",
     )

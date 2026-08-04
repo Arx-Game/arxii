@@ -28,7 +28,7 @@ from world.societies.constants import RenownRisk
 if TYPE_CHECKING:
     from world.game_clock.models import GameWeek
 
-_SITUATION_KIND_MODEL = "gm.SituationKind"
+_SITUATION_KIND_MODEL = "arxii.SituationKind"
 
 
 class GMProfile(SharedMemoryModel):
@@ -134,7 +134,7 @@ class GMTable(SharedMemoryModel):
     """A GM's working group — players engaging with a set of stories."""
 
     gm = models.ForeignKey(
-        "gm.GMProfile",
+        "arxii.GMProfile",
         on_delete=models.PROTECT,
         related_name="tables",
     )
@@ -176,12 +176,12 @@ class GMTableMembership(SharedMemoryModel):
     """
 
     table = models.ForeignKey(
-        "gm.GMTable",
+        "arxii.GMTable",
         on_delete=models.CASCADE,
         related_name="memberships",
     )
     persona = models.ForeignKey(
-        "scenes.Persona",
+        "arxii.Persona",
         on_delete=models.PROTECT,
         related_name="gm_table_memberships",
     )
@@ -230,13 +230,13 @@ class GMRosterInvite(SharedMemoryModel):
     """
 
     roster_entry = models.ForeignKey(
-        "roster.RosterEntry",
+        "arxii.RosterEntry",
         on_delete=models.CASCADE,
         related_name="invites",
     )
     code = models.CharField(max_length=64, unique=True, db_index=True)
     created_by = models.ForeignKey(
-        "gm.GMProfile",
+        "arxii.GMProfile",
         on_delete=models.PROTECT,
         related_name="invites_created",
     )
@@ -345,7 +345,7 @@ class GMLevelChange(SharedMemoryModel):
     """
 
     profile = models.ForeignKey(
-        "gm.GMProfile",
+        "arxii.GMProfile",
         on_delete=models.CASCADE,
         related_name="level_changes",
     )
@@ -379,12 +379,12 @@ class StoryArea(SharedMemoryModel):
     """
 
     gm = models.ForeignKey(
-        "gm.GMProfile",
+        "arxii.GMProfile",
         on_delete=models.PROTECT,
         related_name="story_areas",
     )
     area = models.OneToOneField(
-        "areas.Area",
+        "arxii.Area",
         on_delete=models.CASCADE,
         related_name="story_ownership",
     )
@@ -409,22 +409,22 @@ class StoryRoomGrant(SharedMemoryModel):
     """
 
     room = models.ForeignKey(
-        "evennia_extensions.RoomProfile",
+        "arxii.RoomProfile",
         on_delete=models.CASCADE,
         related_name="story_grants",
     )
     character = models.ForeignKey(
-        "character_sheets.CharacterSheet",
+        "arxii.CharacterSheet",
         on_delete=models.CASCADE,
         related_name="story_room_grants",
     )
     granted_by = models.ForeignKey(
-        "gm.GMProfile",
+        "arxii.GMProfile",
         on_delete=models.PROTECT,
         related_name="story_grants_issued",
     )
     return_location = models.ForeignKey(
-        "evennia_extensions.RoomProfile",
+        "arxii.RoomProfile",
         null=True,
         blank=True,
         on_delete=models.SET_NULL,
@@ -527,7 +527,7 @@ class CheckTypeSituationFit(NaturalKeyMixin, SharedMemoryModel):
     """
 
     check_type = models.ForeignKey(
-        "checks.CheckType",
+        "arxii.CheckType",
         on_delete=models.CASCADE,
         related_name="situation_fits",
     )
@@ -552,7 +552,7 @@ class CheckTypeSituationFit(NaturalKeyMixin, SharedMemoryModel):
 
     class NaturalKeyConfig:
         fields = ["check_type", "situation_kind"]
-        dependencies = ["checks.CheckType", _SITUATION_KIND_MODEL]
+        dependencies = ["arxii.CheckType", _SITUATION_KIND_MODEL]
 
     def __str__(self) -> str:
         return f"{self.check_type.name} fits {self.situation_kind.name}"
@@ -611,7 +611,7 @@ class ConsequencePoolGuide(NaturalKeyMixin, SharedMemoryModel):
         related_name="pool_guides",
     )
     pool = models.ForeignKey(
-        "actions.ConsequencePool",
+        "arxii.ConsequencePool",
         on_delete=models.CASCADE,
         related_name="situation_guides",
     )
@@ -635,7 +635,7 @@ class ConsequencePoolGuide(NaturalKeyMixin, SharedMemoryModel):
 
     class NaturalKeyConfig:
         fields = ["situation_kind", "pool"]
-        dependencies = [_SITUATION_KIND_MODEL, "actions.ConsequencePool"]
+        dependencies = [_SITUATION_KIND_MODEL, "arxii.ConsequencePool"]
 
     def __str__(self) -> str:
         return f"{self.situation_kind.name} -> {self.pool.name} (advisory)"
@@ -778,12 +778,12 @@ class GMWeeklyRewardTracker(SharedMemoryModel):
     """
 
     gm_profile = models.OneToOneField(
-        "gm.GMProfile",
+        "arxii.GMProfile",
         on_delete=models.CASCADE,
         related_name="weekly_reward_tracker",
     )
     game_week = models.ForeignKey(
-        "game_clock.GameWeek",
+        "arxii.GameWeek",
         null=True,
         blank=True,
         on_delete=models.SET_NULL,
@@ -825,7 +825,7 @@ class TableUpdateRequest(SharedMemoryModel):
     """
 
     membership = models.ForeignKey(
-        "gm.GMTableMembership",
+        "arxii.GMTableMembership",
         on_delete=models.PROTECT,
         related_name="update_requests",
         help_text="The table membership this request rides on.",
@@ -846,7 +846,7 @@ class TableUpdateRequest(SharedMemoryModel):
         help_text="The GM's sign-off/rejection notes.",
     )
     resolved_by = models.ForeignKey(
-        "gm.GMProfile",
+        "arxii.GMProfile",
         null=True,
         blank=True,
         on_delete=models.SET_NULL,
@@ -888,7 +888,7 @@ class ProfileTextRequestDetails(SharedMemoryModel):
         help_text="The full replacement text (player-written).",
     )
     applied_version = models.ForeignKey(
-        "character_sheets.ProfileTextVersion",
+        "arxii.ProfileTextVersion",
         null=True,
         blank=True,
         on_delete=models.SET_NULL,
@@ -925,7 +925,7 @@ class DistinctionChangeRequestDetails(SharedMemoryModel):
         "(distinction_add/distinction_remove).",
     )
     distinction = models.ForeignKey(
-        "distinctions.Distinction",
+        "arxii.Distinction",
         null=True,
         blank=True,
         on_delete=models.PROTECT,
@@ -933,7 +933,7 @@ class DistinctionChangeRequestDetails(SharedMemoryModel):
         help_text="The distinction to add/rank up (DISTINCTION_ADD only).",
     )
     character_distinction = models.ForeignKey(
-        "distinctions.CharacterDistinction",
+        "arxii.CharacterDistinction",
         null=True,
         blank=True,
         on_delete=models.SET_NULL,
@@ -941,7 +941,7 @@ class DistinctionChangeRequestDetails(SharedMemoryModel):
         help_text="The held distinction to remove (DISTINCTION_REMOVE only; nulls after deletion).",
     )
     sheet_update_request = models.ForeignKey(
-        "distinctions.SheetUpdateRequest",
+        "arxii.SheetUpdateRequest",
         null=True,
         blank=True,
         on_delete=models.SET_NULL,

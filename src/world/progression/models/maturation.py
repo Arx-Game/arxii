@@ -51,12 +51,12 @@ class MaturationSpend(SharedMemoryModel):
     """
 
     character_sheet = models.ForeignKey(
-        "character_sheets.CharacterSheet",
+        "arxii.CharacterSheet",
         on_delete=models.CASCADE,
         related_name="maturation_spends",
     )
     trait = models.ForeignKey(
-        "traits.Trait",
+        "arxii.Trait",
         on_delete=models.PROTECT,
         related_name="maturation_spends",
         help_text="The stat this point raised.",

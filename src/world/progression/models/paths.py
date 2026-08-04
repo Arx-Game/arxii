@@ -19,13 +19,13 @@ class CharacterPathHistory(models.Model):  # noqa: SHARED_MEMORY
     """
 
     character = models.ForeignKey(
-        "character_sheets.CharacterSheet",
+        "arxii.CharacterSheet",
         on_delete=models.CASCADE,
         related_name="path_history",
         help_text="The character this path history belongs to",
     )
     path = models.ForeignKey(
-        "classes.Path",
+        "arxii.Path",
         on_delete=models.PROTECT,
         related_name="character_selections",
         help_text="The path selected by the character",

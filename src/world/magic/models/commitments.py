@@ -17,7 +17,7 @@ class CommittingDeclaration(models.Model):
         ),
     )
     fury_commitment = models.ForeignKey(
-        "magic.FuryTier",
+        "arxii.FuryTier",
         null=True,
         blank=True,
         on_delete=models.SET_NULL,
@@ -25,7 +25,7 @@ class CommittingDeclaration(models.Model):
         help_text="Declared Fury tier for this action (null = no fury).",
     )
     fury_anchor = models.ForeignKey(
-        "character_sheets.CharacterSheet",
+        "arxii.CharacterSheet",
         null=True,
         blank=True,
         on_delete=models.SET_NULL,

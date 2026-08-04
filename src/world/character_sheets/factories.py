@@ -159,7 +159,7 @@ class ObjectDisplayDataFactory(factory_django.DjangoModelFactory):
     """Factory for creating ObjectDisplayData instances."""
 
     class Meta:
-        model = "evennia_extensions.ObjectDisplayData"
+        model = "arxii.ObjectDisplayData"
 
     object = factory.SubFactory(CharacterFactory)
     longname = factory.LazyAttribute(lambda obj: f"{obj.object.db_key} the Brave")

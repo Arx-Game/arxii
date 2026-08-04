@@ -43,13 +43,13 @@ class SanctumDetails(SharedMemoryModel):
     """
 
     feature_instance = models.OneToOneField(
-        "room_features.RoomFeatureInstance",
+        "arxii.RoomFeatureInstance",
         on_delete=models.CASCADE,
         related_name="sanctum_details",
         primary_key=True,
     )
     resonance_type = models.ForeignKey(
-        "magic.Resonance",
+        "arxii.Resonance",
         on_delete=models.PROTECT,
         related_name="sanctums",
         help_text=(
@@ -69,7 +69,7 @@ class SanctumDetails(SharedMemoryModel):
         ),
     )
     founder_character_sheet = models.ForeignKey(
-        "character_sheets.CharacterSheet",
+        "arxii.CharacterSheet",
         on_delete=models.PROTECT,
         null=True,
         blank=True,
@@ -145,7 +145,7 @@ class SanctumPendingPayout(SharedMemoryModel):
         related_name="pending_payouts",
     )
     weaver_character_sheet = models.ForeignKey(
-        "character_sheets.CharacterSheet",
+        "arxii.CharacterSheet",
         on_delete=models.CASCADE,
         related_name="sanctum_pending_payouts",
         help_text=(

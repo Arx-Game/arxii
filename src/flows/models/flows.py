@@ -53,6 +53,9 @@ class FlowDefinition(NaturalKeyMixin, SharedMemoryModel):
     class NaturalKeyConfig:
         fields = ["name"]
 
+    class Meta:
+        app_label = "arxii"
+
     if TYPE_CHECKING:
         steps: "models.Manager[FlowStepDefinition]"
         _unsaved_steps: list["FlowStepDefinition"]
@@ -126,7 +129,10 @@ class FlowStepDefinition(NaturalKeyMixin, SharedMemoryModel):
 
     class NaturalKeyConfig:
         fields = ["flow", "variable_name", "parent"]
-        dependencies = ["flows.FlowDefinition"]
+        dependencies = ["arxii.FlowDefinition"]
+
+    class Meta:
+        app_label = "arxii"
 
     def _parameters_mapping(self) -> dict[str, Any]:
         """Return step parameters as a dictionary."""

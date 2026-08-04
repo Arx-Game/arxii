@@ -22,7 +22,7 @@ from evennia.utils.idmapper.models import SharedMemoryModel
 from core.natural_keys import NaturalKeyManager, NaturalKeyMixin
 from world.locations.constants import StatKey
 
-_CODEX_SUBJECT_FK = "codex.CodexSubject"
+_CODEX_SUBJECT_FK = "arxii.CodexSubject"
 
 
 class Climate(NaturalKeyMixin, SharedMemoryModel):
@@ -243,7 +243,7 @@ class WeatherTypeShelter(NaturalKeyMixin, SharedMemoryModel):
         related_name="shelters",
     )
     damage_type = models.ForeignKey(
-        "conditions.DamageType",
+        "arxii.DamageType",
         on_delete=models.PROTECT,
         related_name="weather_shelters",
     )
@@ -322,7 +322,7 @@ class RegionWeatherState(SharedMemoryModel):
     """
 
     area = models.OneToOneField(
-        "areas.Area",
+        "arxii.Area",
         on_delete=models.CASCADE,
         related_name="weather_state",
     )

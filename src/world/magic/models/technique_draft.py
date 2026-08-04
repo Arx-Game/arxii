@@ -32,7 +32,7 @@ class TechniqueDraft(SharedMemoryModel):
     """
 
     character = models.OneToOneField(
-        "character_sheets.CharacterSheet",
+        "arxii.CharacterSheet",
         on_delete=models.CASCADE,
         related_name="technique_draft",
         help_text="Character who owns this draft.",
@@ -52,7 +52,7 @@ class TechniqueDraft(SharedMemoryModel):
     # --- design knobs (all nullable/defaulted for partial authoring) ---
 
     gift = models.ForeignKey(
-        "magic.Gift",
+        "arxii.Gift",
         on_delete=models.SET_NULL,
         null=True,
         blank=True,
@@ -60,7 +60,7 @@ class TechniqueDraft(SharedMemoryModel):
         help_text="Gift this technique will belong to.",
     )
     effect_type = models.ForeignKey(
-        "magic.EffectType",
+        "arxii.EffectType",
         on_delete=models.SET_NULL,
         null=True,
         blank=True,
@@ -91,13 +91,13 @@ class TechniqueDraft(SharedMemoryModel):
         help_text="Planned anima cost.",
     )
     restrictions = models.ManyToManyField(
-        "magic.Restriction",
+        "arxii.Restriction",
         blank=True,
         related_name="technique_drafts",
         help_text="Restrictions applied for power bonuses.",
     )
     consequence_pool = models.ForeignKey(
-        "actions.ConsequencePool",
+        "arxii.ConsequencePool",
         on_delete=models.SET_NULL,
         null=True,
         blank=True,
@@ -224,7 +224,7 @@ class TechniqueDraftTreatment(SharedMemoryModel):
         related_name="treatments",
     )
     treatment_template = models.ForeignKey(
-        "conditions.TreatmentTemplate",
+        "arxii.TreatmentTemplate",
         on_delete=models.PROTECT,
         related_name="draft_technique_payloads",
     )

@@ -122,7 +122,7 @@ class XPTransaction(SharedMemoryModel):
         help_text="Detailed description",
     )
     character = models.ForeignKey(
-        "character_sheets.CharacterSheet",
+        "arxii.CharacterSheet",
         null=True,
         blank=True,
         on_delete=models.CASCADE,
@@ -155,12 +155,12 @@ class DevelopmentPoints(SharedMemoryModel):
     """Development points earned by characters through activity."""
 
     character_sheet = models.ForeignKey(
-        "character_sheets.CharacterSheet",
+        "arxii.CharacterSheet",
         on_delete=models.CASCADE,
         related_name="development_points",
     )
     trait = models.ForeignKey(
-        "traits.Trait",
+        "arxii.Trait",
         on_delete=models.CASCADE,
         related_name="development_points",
     )
@@ -238,12 +238,12 @@ class DevelopmentTransaction(SharedMemoryModel):
     """Audit trail for all development point awards."""
 
     character_sheet = models.ForeignKey(
-        "character_sheets.CharacterSheet",
+        "arxii.CharacterSheet",
         on_delete=models.CASCADE,
         related_name="development_transactions",
     )
     trait = models.ForeignKey(
-        "traits.Trait",
+        "arxii.Trait",
         on_delete=models.CASCADE,
         related_name="development_transactions",
     )
@@ -254,7 +254,7 @@ class DevelopmentTransaction(SharedMemoryModel):
     reason = models.CharField(max_length=20, choices=ProgressionReason.choices)
     description = models.CharField(max_length=255, blank=True)
     scene = models.ForeignKey(
-        "scenes.Scene",
+        "arxii.Scene",
         null=True,
         blank=True,
         on_delete=models.SET_NULL,
@@ -267,7 +267,7 @@ class DevelopmentTransaction(SharedMemoryModel):
         related_name="development_transactions_created",
     )
     game_week = models.ForeignKey(
-        "game_clock.GameWeek",
+        "arxii.GameWeek",
         null=True,
         blank=True,
         on_delete=models.SET_NULL,
@@ -299,17 +299,17 @@ class WeeklySkillUsage(SharedMemoryModel):
     """
 
     character_sheet = models.ForeignKey(
-        "character_sheets.CharacterSheet",
+        "arxii.CharacterSheet",
         on_delete=models.CASCADE,
         related_name="weekly_skill_usage",
     )
     trait = models.ForeignKey(
-        "traits.Trait",
+        "arxii.Trait",
         on_delete=models.CASCADE,
         related_name="weekly_skill_usage",
     )
     game_week = models.ForeignKey(
-        "game_clock.GameWeek",
+        "arxii.GameWeek",
         on_delete=models.CASCADE,
         related_name="skill_usages",
     )

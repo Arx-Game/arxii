@@ -6,8 +6,8 @@ from evennia.utils.idmapper.models import SharedMemoryModel
 from core.natural_keys import NaturalKeyManager, NaturalKeyMixin
 from world.species.models import Species
 
-SCENES_PERSONA_FK = "scenes.Persona"
-CHARACTER_SHEET_MODEL = "character_sheets.CharacterSheet"
+SCENES_PERSONA_FK = "arxii.Persona"
+CHARACTER_SHEET_MODEL = "arxii.CharacterSheet"
 
 
 class TraitType(models.TextChoices):
@@ -103,7 +103,7 @@ class FormTrait(NaturalKeyMixin, SharedMemoryModel):
         ),
     )
     composite_option = models.ForeignKey(
-        "forms.FormTraitOption",
+        "arxii.FormTraitOption",
         null=True,
         blank=True,
         on_delete=models.SET_NULL,
@@ -165,7 +165,7 @@ class FormTraitOption(NaturalKeyMixin, SharedMemoryModel):
 
     class NaturalKeyConfig:
         fields = ["trait", "name"]
-        dependencies = ["forms.FormTrait"]
+        dependencies = ["arxii.FormTrait"]
 
     class Meta:
         unique_together = [["trait", "name"]]
@@ -200,7 +200,7 @@ class SpeciesFormTrait(NaturalKeyMixin, SharedMemoryModel):
 
     class NaturalKeyConfig:
         fields = ["species", "trait"]
-        dependencies = ["species.Species", "forms.FormTrait"]
+        dependencies = ["arxii.Species", "arxii.FormTrait"]
 
     class Meta:
         unique_together = [["species", "trait"]]
@@ -398,7 +398,7 @@ class CharacterFormState(SharedMemoryModel):
         help_text="How the active overlay is pierced (mundane vs magical). Blank ⇒ no overlay.",
     )
     applied_kit_instance = models.ForeignKey(
-        "items.ItemInstance",
+        "arxii.ItemInstance",
         on_delete=models.SET_NULL,
         null=True,
         blank=True,
@@ -454,7 +454,7 @@ class FormCombatProfileEffect(SharedMemoryModel):
 
     profile = models.ForeignKey(FormCombatProfile, on_delete=models.CASCADE, related_name="effects")
     target = models.ForeignKey(
-        "mechanics.ModifierTarget", on_delete=models.CASCADE, related_name="form_effects"
+        "arxii.ModifierTarget", on_delete=models.CASCADE, related_name="form_effects"
     )
     value = models.IntegerField(help_text="Modifier value (can be negative).")
 
@@ -499,12 +499,12 @@ class AlternateSelf(SharedMemoryModel):
         related_name="grants",
     )
     techniques = models.ManyToManyField(
-        "magic.Technique", blank=True, related_name="alternate_self_grants"
+        "arxii.Technique", blank=True, related_name="alternate_self_grants"
     )
     tuning_value = models.IntegerField(null=True, blank=True)
     display_name = models.CharField(max_length=100, blank=True)
     thumbnail = models.ForeignKey(
-        "evennia_extensions.Media",
+        "arxii.Media",
         null=True,
         blank=True,
         on_delete=models.SET_NULL,
@@ -514,7 +514,7 @@ class AlternateSelf(SharedMemoryModel):
         ),
     )
     resonance = models.ForeignKey(
-        "magic.Resonance",
+        "arxii.Resonance",
         null=True,
         blank=True,
         on_delete=models.PROTECT,

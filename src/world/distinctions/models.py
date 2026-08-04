@@ -29,8 +29,8 @@ from world.distinctions.types import (
 from world.secrets.constants import SecretLevel
 
 # Lazy model references (Django app_label.ModelName), extracted to satisfy S1192.
-DISTINCTION_MODEL = "distinctions.Distinction"
-CHARACTER_SHEET_MODEL = "character_sheets.CharacterSheet"
+DISTINCTION_MODEL = "arxii.Distinction"
+CHARACTER_SHEET_MODEL = "arxii.CharacterSheet"
 
 
 class DistinctionCategoryManager(NaturalKeyManager):
@@ -181,7 +181,7 @@ class Distinction(NaturalKeyMixin, SharedMemoryModel):
         help_text="Minimum trust value required to take this distinction.",
     )
     trust_category = models.ForeignKey(
-        "stories.TrustCategory",
+        "arxii.TrustCategory",
         on_delete=models.SET_NULL,
         null=True,
         blank=True,
@@ -249,7 +249,7 @@ class Distinction(NaturalKeyMixin, SharedMemoryModel):
 
     class NaturalKeyConfig:
         fields = ["slug"]
-        dependencies = ["distinctions.DistinctionCategory"]
+        dependencies = ["arxii.DistinctionCategory"]
 
     def __str__(self) -> str:
         return self.name
@@ -389,7 +389,7 @@ class DistinctionEffect(NaturalKeyMixin, SharedMemoryModel):
         help_text="The distinction this effect belongs to.",
     )
     target = models.ForeignKey(
-        "mechanics.ModifierTarget",
+        "arxii.ModifierTarget",
         on_delete=models.PROTECT,
         related_name="distinction_effects",
         help_text="The modifier type this effect targets.",
@@ -422,7 +422,7 @@ class DistinctionEffect(NaturalKeyMixin, SharedMemoryModel):
 
     class NaturalKeyConfig:
         fields = ["distinction", "target"]
-        dependencies = [DISTINCTION_MODEL, "mechanics.ModifierTarget"]
+        dependencies = [DISTINCTION_MODEL, "arxii.ModifierTarget"]
 
     class Meta:
         unique_together = ["distinction", "target"]
@@ -493,7 +493,7 @@ class CharacterDistinction(SharedMemoryModel):
     # The FK's presence IS the secret-state (see ``is_secret``); there is no separate flag to
     # drift. SET_NULL so deleting the Secret simply makes the distinction public again.
     secret = models.OneToOneField(
-        "secrets.Secret",
+        "arxii.Secret",
         null=True,
         blank=True,
         on_delete=models.SET_NULL,
@@ -505,7 +505,7 @@ class CharacterDistinction(SharedMemoryModel):
     # linked state, mirroring ``secret`` above — no separate flag to drift.
     # SET_NULL so deleting the aura simply drops the provenance.
     from_glimpse = models.ForeignKey(
-        "magic.CharacterAura",
+        "arxii.CharacterAura",
         null=True,
         blank=True,
         on_delete=models.SET_NULL,
@@ -641,7 +641,7 @@ class SheetUpdateRequest(models.Model):  # noqa: SHARED_MEMORY
         help_text="The distinction to add (set for DISTINCTION_ADD only).",
     )
     target_character_distinction = models.ForeignKey(
-        "distinctions.CharacterDistinction",
+        "arxii.CharacterDistinction",
         on_delete=models.SET_NULL,
         null=True,
         blank=True,

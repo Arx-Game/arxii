@@ -24,7 +24,7 @@ import json
 import logging
 from pathlib import Path
 
-from core.app_domains import domain_of
+from core.app_domains import domain_of, resolve_model_by_name
 from core_management.content_fixtures import (
     MARKDOWN_EXPORT_DOMAINS,
     content_slug,
@@ -429,7 +429,6 @@ def export_to_content_repo(
 
     Requires Django to be configured.
     """
-    from django.apps import apps  # noqa: PLC0415
     from django.core import serializers  # noqa: PLC0415
 
     root = content_root or resolve_content_root()
@@ -444,9 +443,10 @@ def export_to_content_repo(
     result = ExportResult()
 
     for model_label in sorted(CONTENT_MODELS):
-        app_label, model_name = model_label.split(".")
+        # model_label is "<domain>.<model_name>" (CONTENT_MODELS above), not a
+        # real Django app_label post-collapse (#2906) — resolve by model name.
         try:
-            model = apps.get_model(app_label, model_name)
+            model = resolve_model_by_name(model_label)
         except LookupError:
             result.skipped.append(f"{model_label} (model not found)")
             continue

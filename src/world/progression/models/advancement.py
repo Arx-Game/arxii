@@ -16,14 +16,14 @@ class AbstractClassLevelAdvancement(models.Model):
     """Shared shape for a single class-level advance (within-tier or crossing)."""
 
     scene = models.ForeignKey(
-        "scenes.Scene",
+        "arxii.Scene",
         on_delete=models.SET_NULL,
         null=True,
         blank=True,
         related_name="+",
     )
     declaration_interaction = models.ForeignKey(
-        "scenes.Interaction",
+        "arxii.Interaction",
         on_delete=models.SET_NULL,
         null=True,
         blank=True,
@@ -47,17 +47,17 @@ class ClassLevelAdvancement(AbstractClassLevelAdvancement, SharedMemoryModel):
     """Receipt for a within-tier advance via the Ritual of the Durance. Survives death."""
 
     character_sheet = models.ForeignKey(
-        "character_sheets.CharacterSheet",
+        "arxii.CharacterSheet",
         on_delete=models.CASCADE,
         related_name="class_level_advancements",
     )
     character_class = models.ForeignKey(
-        "classes.CharacterClass",
+        "arxii.CharacterClass",
         on_delete=models.PROTECT,
         related_name="durance_advancements",
     )
     officiant = models.ForeignKey(
-        "character_sheets.CharacterSheet",
+        "arxii.CharacterSheet",
         on_delete=models.SET_NULL,
         null=True,
         blank=True,
@@ -65,14 +65,14 @@ class ClassLevelAdvancement(AbstractClassLevelAdvancement, SharedMemoryModel):
         help_text="The trainer who inducted this advance (PC or academy NPC).",
     )
     ritual = models.ForeignKey(
-        "magic.Ritual",
+        "arxii.Ritual",
         on_delete=models.PROTECT,
         null=True,
         blank=True,
         related_name="class_level_advancements",
     )
     witnesses = models.ManyToManyField(
-        "scenes.Persona",
+        "arxii.Persona",
         related_name="witnessed_advancements",
         blank=True,
     )
@@ -98,18 +98,18 @@ class DuranceTrainingSite(SharedMemoryModel):
     """
 
     room_profile = models.ForeignKey(
-        "evennia_extensions.RoomProfile",
+        "arxii.RoomProfile",
         on_delete=models.PROTECT,
         related_name="durance_training_sites",
     )
     officiant = models.ForeignKey(
-        "character_sheets.CharacterSheet",
+        "arxii.CharacterSheet",
         on_delete=models.PROTECT,
         related_name="durance_training_roles",
     )
     # NOT named "path": Evennia's idmapper metaclass shadows a `path` attribute.
     training_path = models.ForeignKey(
-        "classes.Path",
+        "arxii.Path",
         on_delete=models.SET_NULL,
         null=True,
         blank=True,

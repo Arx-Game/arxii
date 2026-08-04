@@ -28,7 +28,7 @@ from world.goals.constants import GoalStatus
 OPTIONAL_GOAL_DOMAINS = {"Drives"}
 
 # Lazy model references (Django app_label.ModelName), extracted to satisfy S1192.
-CHARACTER_SHEET_MODEL = "character_sheets.CharacterSheet"
+CHARACTER_SHEET_MODEL = "arxii.CharacterSheet"
 
 
 class CharacterGoal(SharedMemoryModel):
@@ -48,7 +48,7 @@ class CharacterGoal(SharedMemoryModel):
         related_name="goals",
     )
     domain = models.ForeignKey(
-        "mechanics.ModifierTarget",
+        "arxii.ModifierTarget",
         on_delete=models.PROTECT,
         related_name="character_goals",
         limit_choices_to={"category__name": "goal"},
@@ -94,7 +94,7 @@ class GoalJournal(SharedMemoryModel):
         related_name="goal_journals",
     )
     domain = models.ForeignKey(
-        "mechanics.ModifierTarget",
+        "arxii.ModifierTarget",
         on_delete=models.PROTECT,
         related_name="goal_journals",
         null=True,
@@ -161,7 +161,7 @@ class GoalInstance(SharedMemoryModel):
     )
     # TODO: Add check FK when Check model exists
     # check = models.ForeignKey(
-    #     "checks.Check",
+    #     "arxii.Check",
     #     on_delete=models.SET_NULL,
     #     null=True,
     #     blank=True,

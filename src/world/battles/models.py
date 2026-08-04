@@ -42,14 +42,14 @@ if TYPE_CHECKING:
     from world.battles.state_cache import BattleStateCache
 
 # Lazy model references extracted to constants to satisfy S1192.
-SCENE_MODEL = "scenes.Scene"
-STORY_MODEL = "stories.Story"
-COMBAT_ENCOUNTER_MODEL = "combat.CombatEncounter"
-CHARACTER_SHEET_MODEL = "character_sheets.CharacterSheet"
-CHECK_OUTCOME_MODEL = "traits.CheckOutcome"
-TECHNIQUE_MODEL = "magic.Technique"
-COVENANT_MODEL = "covenants.Covenant"
-BUILDING_MODEL = "buildings.Building"
+SCENE_MODEL = "arxii.Scene"
+STORY_MODEL = "arxii.Story"
+COMBAT_ENCOUNTER_MODEL = "arxii.CombatEncounter"
+CHARACTER_SHEET_MODEL = "arxii.CharacterSheet"
+CHECK_OUTCOME_MODEL = "arxii.CheckOutcome"
+TECHNIQUE_MODEL = "arxii.Technique"
+COVENANT_MODEL = "arxii.Covenant"
+BUILDING_MODEL = "arxii.Building"
 
 
 class Battle(SharedMemoryModel):
@@ -109,7 +109,7 @@ class Battle(SharedMemoryModel):
         ),
     )
     region = models.ForeignKey(
-        "areas.Area",
+        "arxii.Area",
         null=True,
         blank=True,
         on_delete=models.SET_NULL,
@@ -414,7 +414,7 @@ class BattleUnit(SharedMemoryModel):
         help_text="Destination of an in-progress multi-round MOVE (#2007). Null when at rest.",
     )
     military_unit = models.ForeignKey(
-        "military.MilitaryUnit",
+        "arxii.MilitaryUnit",
         on_delete=models.PROTECT,
         related_name="battle_units",
         help_text="The persistent MilitaryUnit this battle unit projects from. "
@@ -1115,13 +1115,13 @@ class CityDefenseDetails(SharedMemoryModel):
     """
 
     project = models.OneToOneField(
-        "projects.Project",
+        "arxii.Project",
         on_delete=models.CASCADE,
         primary_key=True,
         related_name="city_defense_details",
     )
     area = models.ForeignKey(
-        "areas.Area",
+        "arxii.Area",
         on_delete=models.PROTECT,
         related_name="city_defense_projects",
         help_text="The defended region. PROTECT prevents deleting an area with a defense project.",
@@ -1207,7 +1207,7 @@ class WarFundingDetails(SharedMemoryModel):
     """
 
     project = models.OneToOneField(
-        "projects.Project",
+        "arxii.Project",
         on_delete=models.CASCADE,
         primary_key=True,
         related_name="war_funding_details",

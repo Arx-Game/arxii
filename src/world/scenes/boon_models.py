@@ -24,7 +24,7 @@ class Boon(SharedMemoryModel):
     """The payload of a structured social ask, attached to its ``SceneActionRequest``."""
 
     action_request = models.OneToOneField(
-        "scenes.SceneActionRequest",
+        "arxii.SceneActionRequest",
         on_delete=models.CASCADE,
         related_name="boon",
     )
@@ -44,7 +44,7 @@ class Boon(SharedMemoryModel):
         help_text="Coppers asked, for MONEY boons — derived from sum_tier at ask time.",
     )
     item_instance = models.ForeignKey(
-        "items.ItemInstance",
+        "arxii.ItemInstance",
         on_delete=models.SET_NULL,
         null=True,
         blank=True,
@@ -59,7 +59,7 @@ class Boon(SharedMemoryModel):
     )
 
     class Meta:
-        app_label = "scenes"
+        app_label = "arxii"
 
     def __str__(self) -> str:
         return f"Boon({self.kind}) on request {self.action_request_id}"

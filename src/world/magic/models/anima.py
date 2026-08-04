@@ -20,7 +20,7 @@ class CharacterAnima(SharedMemoryModel):
     """
 
     character = models.OneToOneField(
-        "character_sheets.CharacterSheet",
+        "arxii.CharacterSheet",
         on_delete=models.CASCADE,
         related_name="anima",
         help_text="The character this anima belongs to.",
@@ -82,7 +82,7 @@ class AnimaRitualPerformance(SharedMemoryModel):
     """
 
     ritual = models.ForeignKey(
-        "magic.Ritual",
+        "arxii.Ritual",
         on_delete=models.CASCADE,
         related_name="performances",
         help_text="The Ritual (SCENE_ACTION kind) that was performed.",
@@ -92,14 +92,14 @@ class AnimaRitualPerformance(SharedMemoryModel):
         help_text="When the ritual was performed.",
     )
     target_character = models.ForeignKey(
-        "character_sheets.CharacterSheet",
+        "arxii.CharacterSheet",
         on_delete=models.SET_NULL,
         null=True,
         related_name="anima_ritual_participations",
         help_text="The character the ritual was performed with.",
     )
     scene = models.ForeignKey(
-        "scenes.Scene",
+        "arxii.Scene",
         on_delete=models.SET_NULL,
         null=True,
         blank=True,
@@ -115,7 +115,7 @@ class AnimaRitualPerformance(SharedMemoryModel):
         help_text="Amount of anima recovered (if successful).",
     )
     outcome = models.ForeignKey(
-        "traits.CheckOutcome",
+        "arxii.CheckOutcome",
         on_delete=models.PROTECT,
         null=True,
         blank=True,

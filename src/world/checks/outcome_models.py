@@ -41,17 +41,17 @@ class ConsequenceOutcome(SharedMemoryModel):
     """
 
     character = models.ForeignKey(
-        "character_sheets.CharacterSheet",
+        "arxii.CharacterSheet",
         on_delete=models.CASCADE,
         related_name="consequence_outcomes",
     )
     check_type = models.ForeignKey(
-        "checks.CheckType",
+        "arxii.CheckType",
         on_delete=models.PROTECT,
         related_name="consequence_outcomes",
     )
     pool = models.ForeignKey(
-        "actions.ConsequencePool",
+        "arxii.ConsequencePool",
         null=True,
         blank=True,
         on_delete=models.PROTECT,
@@ -64,7 +64,7 @@ class ConsequenceOutcome(SharedMemoryModel):
         ),
     )
     selected_consequence = models.ForeignKey(
-        "checks.Consequence",
+        "arxii.Consequence",
         null=True,
         blank=True,
         on_delete=models.SET_NULL,
@@ -79,7 +79,7 @@ class ConsequenceOutcome(SharedMemoryModel):
     # table.  No raw-SQL migration adds a DB-level composite FK constraint here;
     # integrity is maintained by the writer setting both columns atomically.
     combat_interaction = models.ForeignKey(
-        "scenes.Interaction",
+        "arxii.Interaction",
         on_delete=models.SET_NULL,
         null=True,
         blank=True,
@@ -103,7 +103,7 @@ class ConsequenceOutcome(SharedMemoryModel):
     )
 
     challenge_record = models.ForeignKey(
-        "mechanics.CharacterChallengeRecord",
+        "arxii.CharacterChallengeRecord",
         null=True,
         blank=True,
         on_delete=models.CASCADE,

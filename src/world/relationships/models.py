@@ -61,7 +61,7 @@ class RelationshipCondition(SharedMemoryModel):
 
     # Which modifiers does this condition gate?
     gates_modifiers = models.ManyToManyField(
-        "mechanics.ModifierTarget",
+        "arxii.ModifierTarget",
         blank=True,
         related_name="gated_by_conditions",
         help_text="Modifier types that only apply when this condition exists",
@@ -315,13 +315,13 @@ class CharacterRelationship(SharedMemoryModel):
     """
 
     source = models.ForeignKey(
-        "character_sheets.CharacterSheet",
+        "arxii.CharacterSheet",
         on_delete=models.CASCADE,
         related_name="relationships_as_source",
         help_text="The character who holds this relationship",
     )
     target = models.ForeignKey(
-        "character_sheets.CharacterSheet",
+        "arxii.CharacterSheet",
         on_delete=models.CASCADE,
         related_name="relationships_as_target",
         help_text="The character this relationship is about",
@@ -367,7 +367,7 @@ class CharacterRelationship(SharedMemoryModel):
 
     # Weekly rate limiting
     game_week = models.ForeignKey(
-        "game_clock.GameWeek",
+        "arxii.GameWeek",
         null=True,
         blank=True,
         on_delete=models.SET_NULL,
@@ -606,7 +606,7 @@ class RelationshipUpdate(SharedMemoryModel):
         help_text="The relationship this update applies to",
     )
     author = models.ForeignKey(
-        "character_sheets.CharacterSheet",
+        "arxii.CharacterSheet",
         on_delete=models.CASCADE,
         help_text="The character who wrote this update",
     )
@@ -642,14 +642,14 @@ class RelationshipUpdate(SharedMemoryModel):
         help_text="Whether this is a first impression update",
     )
     linked_scene = models.ForeignKey(
-        "scenes.Scene",
+        "arxii.Scene",
         on_delete=models.SET_NULL,
         null=True,
         blank=True,
         help_text="Optional scene this update is based on",
     )
     linked_interaction = models.ForeignKey(
-        "scenes.Interaction",
+        "arxii.Interaction",
         on_delete=models.SET_NULL,
         null=True,
         blank=True,
@@ -716,7 +716,7 @@ class RelationshipDevelopment(SharedMemoryModel):
         help_text="The relationship this development applies to",
     )
     author = models.ForeignKey(
-        "character_sheets.CharacterSheet",
+        "arxii.CharacterSheet",
         on_delete=models.CASCADE,
         help_text="The character who performed this development",
     )
@@ -746,7 +746,7 @@ class RelationshipDevelopment(SharedMemoryModel):
         help_text="Who can see this development",
     )
     linked_scene = models.ForeignKey(
-        "scenes.Scene",
+        "arxii.Scene",
         on_delete=models.SET_NULL,
         null=True,
         blank=True,
@@ -780,7 +780,7 @@ class RelationshipCapstone(SharedMemoryModel):
         help_text="The relationship this capstone applies to",
     )
     author = models.ForeignKey(
-        "character_sheets.CharacterSheet",
+        "arxii.CharacterSheet",
         on_delete=models.CASCADE,
         help_text="The character who recorded this capstone",
     )
@@ -806,7 +806,7 @@ class RelationshipCapstone(SharedMemoryModel):
         help_text="Who can see this capstone",
     )
     linked_scene = models.ForeignKey(
-        "scenes.Scene",
+        "arxii.Scene",
         on_delete=models.SET_NULL,
         null=True,
         blank=True,
@@ -817,7 +817,7 @@ class RelationshipCapstone(SharedMemoryModel):
         help_text="Whether this capstone was created via a Ritual Capstone (Spec B §12.1).",
     )
     ritual = models.ForeignKey(
-        "magic.Ritual",
+        "arxii.Ritual",
         on_delete=models.PROTECT,
         null=True,
         blank=True,
@@ -854,7 +854,7 @@ class RelationshipBump(SharedMemoryModel):
         help_text="The directed (source→target) relationship this bump nudges",
     )
     interaction = models.ForeignKey(
-        "scenes.Interaction",
+        "arxii.Interaction",
         on_delete=models.CASCADE,
         related_name="relationship_bumps",
         db_constraint=False,
@@ -868,7 +868,7 @@ class RelationshipBump(SharedMemoryModel):
         help_text="+1 warms (Regard system track), -1 cools (Friction system track)",
     )
     source_emoji = models.ForeignKey(
-        "scenes.ReactionEmoji",
+        "arxii.ReactionEmoji",
         on_delete=models.SET_NULL,
         null=True,
         blank=True,
@@ -912,13 +912,13 @@ class AffectionShift(SharedMemoryModel):
         help_text="The directed (target→actor) relationship this shift moved",
     )
     scene = models.ForeignKey(
-        "scenes.Scene",
+        "arxii.Scene",
         on_delete=models.CASCADE,
         related_name="affection_shifts",
         help_text="The scene the shifting action resolved in (dedup key)",
     )
     effect = models.ForeignKey(
-        "checks.ConsequenceEffect",
+        "arxii.ConsequenceEffect",
         on_delete=models.CASCADE,
         null=True,
         blank=True,
@@ -926,7 +926,7 @@ class AffectionShift(SharedMemoryModel):
         help_text="The SHIFT_AFFECTION effect row that fired (dedup key + provenance)",
     )
     boon = models.OneToOneField(
-        "scenes.Boon",
+        "arxii.Boon",
         on_delete=models.SET_NULL,
         null=True,
         blank=True,
@@ -972,7 +972,7 @@ class RelationshipChange(SharedMemoryModel):
         help_text="The relationship this change applies to",
     )
     author = models.ForeignKey(
-        "character_sheets.CharacterSheet",
+        "arxii.CharacterSheet",
         on_delete=models.CASCADE,
         help_text="The character who authored this change",
     )
@@ -1020,21 +1020,21 @@ class WriteupFeedbackBase(SharedMemoryModel):
     """Abstract: feedback attached to exactly one relationship writeup."""
 
     update = models.ForeignKey(
-        "relationships.RelationshipUpdate",
+        "arxii.RelationshipUpdate",
         on_delete=models.CASCADE,
         null=True,
         blank=True,
         related_name=CLASS_SET_RELATED_NAME,
     )
     development = models.ForeignKey(
-        "relationships.RelationshipDevelopment",
+        "arxii.RelationshipDevelopment",
         on_delete=models.CASCADE,
         null=True,
         blank=True,
         related_name=CLASS_SET_RELATED_NAME,
     )
     capstone = models.ForeignKey(
-        "relationships.RelationshipCapstone",
+        "arxii.RelationshipCapstone",
         on_delete=models.CASCADE,
         null=True,
         blank=True,

@@ -30,7 +30,7 @@ class ThreadWeavingUnlock(NaturalKeyMixin, SharedMemoryModel):
 
     class NaturalKeyConfig:
         fields = ["target_kind", "unlock_trait", "unlock_gift", "unlock_track"]
-        dependencies = ["traits.Trait", "magic.Gift", "relationships.RelationshipTrack"]
+        dependencies = ["arxii.Trait", "arxii.Gift", "arxii.RelationshipTrack"]
 
     objects = NaturalKeyManager()
 
@@ -41,7 +41,7 @@ class ThreadWeavingUnlock(NaturalKeyMixin, SharedMemoryModel):
     )
 
     unlock_trait = models.ForeignKey(
-        "traits.Trait",
+        "arxii.Trait",
         on_delete=models.PROTECT,
         null=True,
         blank=True,
@@ -49,7 +49,7 @@ class ThreadWeavingUnlock(NaturalKeyMixin, SharedMemoryModel):
         help_text="Set when target_kind=TRAIT; null otherwise.",
     )
     unlock_gift = models.ForeignKey(
-        "magic.Gift",
+        "arxii.Gift",
         on_delete=models.PROTECT,
         null=True,
         blank=True,
@@ -57,7 +57,7 @@ class ThreadWeavingUnlock(NaturalKeyMixin, SharedMemoryModel):
         help_text="Set when target_kind=TECHNIQUE; covers all techniques under Gift.",
     )
     unlock_track = models.ForeignKey(
-        "relationships.RelationshipTrack",
+        "arxii.RelationshipTrack",
         on_delete=models.PROTECT,
         null=True,
         blank=True,
@@ -69,7 +69,7 @@ class ThreadWeavingUnlock(NaturalKeyMixin, SharedMemoryModel):
         help_text="Base XP cost; multiplied by out_of_path_multiplier when out-of-Path.",
     )
     paths = models.ManyToManyField(
-        "classes.Path",
+        "arxii.Path",
         related_name="thread_weaving_unlocks",
         blank=True,
         help_text="Paths that treat this unlock as in-band (full xp_cost).",
@@ -248,7 +248,7 @@ class CharacterThreadWeavingUnlock(SharedMemoryModel):
     """
 
     character = models.ForeignKey(
-        "character_sheets.CharacterSheet",
+        "arxii.CharacterSheet",
         on_delete=models.CASCADE,
         related_name="thread_weaving_unlocks",
         help_text="Character who owns this purchase.",
@@ -264,7 +264,7 @@ class CharacterThreadWeavingUnlock(SharedMemoryModel):
         help_text="Actual XP paid (in-Path: xp_cost; out-of-Path: xp_cost * multiplier).",
     )
     teacher = models.ForeignKey(
-        "roster.RosterTenure",
+        "arxii.RosterTenure",
         on_delete=models.SET_NULL,
         null=True,
         blank=True,
@@ -289,7 +289,7 @@ class ThreadWeavingTeachingOffer(SharedMemoryModel):
     """
 
     teacher = models.ForeignKey(
-        "roster.RosterTenure",
+        "arxii.RosterTenure",
         on_delete=models.CASCADE,
         related_name="thread_weaving_offers",
         help_text="Teaching tenure offering this unlock.",

@@ -14,8 +14,8 @@ from evennia.utils.idmapper.models import SharedMemoryModel
 
 from core.natural_keys import NaturalKeyManager, NaturalKeyMixin
 
-ROOM_PROFILE_MODEL = "evennia_extensions.RoomProfile"
-PERSONA_MODEL = "scenes.Persona"
+ROOM_PROFILE_MODEL = "arxii.RoomProfile"
+PERSONA_MODEL = "arxii.Persona"
 
 
 class PortalAnchorKind(NaturalKeyMixin, SharedMemoryModel):

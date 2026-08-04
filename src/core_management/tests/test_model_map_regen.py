@@ -55,26 +55,26 @@ class TestGetFieldInfoClassification(SimpleTestCase):
     def test_forward_one_to_one_reads_as_fk(self) -> None:
         from django.apps import apps
 
-        field = apps.get_model("magic", "AudereMajoraCrossing")._meta.get_field("legend_entry")
+        field = apps.get_model("arxii", "AudereMajoraCrossing")._meta.get_field("legend_entry")
         kind, info = self.get_field_info(field)
         self.assertEqual(kind, "fk")
-        self.assertIn("legend_entry -> societies.LegendEntry [OneToOne]", info)
+        self.assertIn("legend_entry -> arxii.LegendEntry [OneToOne]", info)
 
     def test_reverse_one_to_one_reads_as_reverse_not_fk(self) -> None:
         # The #1204 bug: a reverse OneToOne (one_to_one=True) fell into the forward-FK
         # branch and was emitted as a bogus FK on the target model instead of a pointer.
         from django.apps import apps
 
-        field = apps.get_model("societies", "LegendEntry")._meta.get_field("audere_majora_crossing")
+        field = apps.get_model("arxii", "LegendEntry")._meta.get_field("audere_majora_crossing")
         kind, info = self.get_field_info(field)
         self.assertEqual(kind, "reverse")
-        self.assertEqual(info, "audere_majora_crossing <- magic.AudereMajoraCrossing")
+        self.assertEqual(info, "audere_majora_crossing <- arxii.AudereMajoraCrossing")
 
     def test_forward_many_to_many_is_emitted(self) -> None:
         # Forward M2M was silently dropped before (zero [M2M] edges in the whole map).
         from django.apps import apps
 
-        field = apps.get_model("societies", "LegendEntry")._meta.get_field("societies_aware")
+        field = apps.get_model("arxii", "LegendEntry")._meta.get_field("societies_aware")
         kind, info = self.get_field_info(field)
         self.assertEqual(kind, "fk")
         self.assertIn("societies_aware ->", info)

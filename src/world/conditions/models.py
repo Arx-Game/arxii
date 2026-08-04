@@ -36,11 +36,11 @@ if TYPE_CHECKING:
 # FK string constants reused across many fields / NaturalKeyConfig dependency
 # lists below. Centralized to avoid the duplicated-literal SonarCloud smell
 # (python:S1192).
-_CONSEQUENCE_POOL_FK = "actions.ConsequencePool"
-_CONDITION_TEMPLATE_FK = "conditions.ConditionTemplate"
-_CONDITION_STAGE_FK = "conditions.ConditionStage"
-CHARACTER_SHEET_MODEL = "character_sheets.CharacterSheet"
-_POSITION_FK = "areas.Position"
+_CONSEQUENCE_POOL_FK = "arxii.ConsequencePool"
+_CONDITION_TEMPLATE_FK = "arxii.ConditionTemplate"
+_CONDITION_STAGE_FK = "arxii.ConditionStage"
+CHARACTER_SHEET_MODEL = "arxii.CharacterSheet"
+_POSITION_FK = "arxii.Position"
 
 # =============================================================================
 # Lookup Tables (SharedMemoryModel - cached, rarely change)
@@ -135,7 +135,7 @@ class CapabilityType(NaturalKeyMixin, SharedMemoryModel):
         ),
     )
     prerequisite = models.ForeignKey(
-        "mechanics.Prerequisite",
+        "arxii.Prerequisite",
         on_delete=models.SET_NULL,
         null=True,
         blank=True,
@@ -165,7 +165,7 @@ class DamageType(NaturalKeyMixin, SharedMemoryModel):
 
     # Link to magic resonance if applicable (one resonance = one damage type)
     resonance = models.OneToOneField(
-        "magic.Resonance",
+        "arxii.Resonance",
         on_delete=models.SET_NULL,
         null=True,
         blank=True,
@@ -293,7 +293,7 @@ class ConditionTemplate(NaturalKeyMixin, SharedMemoryModel):
         help_text="Can magical dispel effects remove this?",
     )
     cure_check_type = models.ForeignKey(
-        "checks.CheckType",
+        "arxii.CheckType",
         on_delete=models.SET_NULL,
         null=True,
         blank=True,
@@ -305,7 +305,7 @@ class ConditionTemplate(NaturalKeyMixin, SharedMemoryModel):
         help_text="Base difficulty to cure via check",
     )
     resist_check_type = models.ForeignKey(
-        "checks.CheckType",
+        "arxii.CheckType",
         on_delete=models.SET_NULL,
         null=True,
         blank=True,
@@ -330,7 +330,7 @@ class ConditionTemplate(NaturalKeyMixin, SharedMemoryModel):
         ),
     )
     break_free_check_type = models.ForeignKey(
-        "checks.CheckType",
+        "arxii.CheckType",
         on_delete=models.SET_NULL,
         null=True,
         blank=True,
@@ -392,7 +392,7 @@ class ConditionTemplate(NaturalKeyMixin, SharedMemoryModel):
 
     # === Dynamic Thumbnail (#2196) ===
     thumbnail = models.ForeignKey(
-        "evennia_extensions.Media",
+        "arxii.Media",
         null=True,
         blank=True,
         on_delete=models.SET_NULL,
@@ -402,7 +402,7 @@ class ConditionTemplate(NaturalKeyMixin, SharedMemoryModel):
 
     # === Property Grants ===
     properties = models.ManyToManyField(
-        "mechanics.Property",
+        "arxii.Property",
         related_name="condition_templates",
         blank=True,
         help_text=(
@@ -413,7 +413,7 @@ class ConditionTemplate(NaturalKeyMixin, SharedMemoryModel):
 
     # === Reactive Triggers ===
     reactive_triggers = models.ManyToManyField(
-        "flows.TriggerDefinition",
+        "arxii.TriggerDefinition",
         blank=True,
         related_name="installing_templates",
         help_text=(
@@ -470,7 +470,7 @@ class ConditionTemplate(NaturalKeyMixin, SharedMemoryModel):
 
     # === Corruption (Scope 7) ===
     corruption_resonance = models.ForeignKey(
-        "magic.Resonance",
+        "arxii.Resonance",
         null=True,
         blank=True,
         on_delete=models.PROTECT,
@@ -558,7 +558,7 @@ class ConditionStage(NaturalKeyMixin, SharedMemoryModel):
 
     # Can a check prevent progression?
     resist_check_type = models.ForeignKey(
-        "checks.CheckType",
+        "arxii.CheckType",
         on_delete=models.SET_NULL,
         null=True,
         blank=True,
@@ -611,7 +611,7 @@ class ConditionStage(NaturalKeyMixin, SharedMemoryModel):
 
     # === Dynamic Thumbnail (#2196) ===
     thumbnail = models.ForeignKey(
-        "evennia_extensions.Media",
+        "arxii.Media",
         null=True,
         blank=True,
         on_delete=models.SET_NULL,
@@ -624,13 +624,13 @@ class ConditionStage(NaturalKeyMixin, SharedMemoryModel):
 
     # === Stage-level tags / on-entry hooks (Scope 6 §4.1) ===
     properties = models.ManyToManyField(
-        "mechanics.Property",
+        "arxii.Property",
         blank=True,
         related_name="condition_stages_carrying",
     )
     on_entry_conditions = models.ManyToManyField(
         _CONDITION_TEMPLATE_FK,
-        through="conditions.ConditionStageOnEntry",
+        through="arxii.ConditionStageOnEntry",
         related_name="applied_on_entry_of",
         blank=True,
     )
@@ -779,7 +779,7 @@ class ConditionCapabilityEffect(NaturalKeyMixin, ConditionOrStageEffect):
         dependencies = [
             _CONDITION_TEMPLATE_FK,
             _CONDITION_STAGE_FK,
-            "conditions.CapabilityType",
+            "arxii.CapabilityType",
         ]
 
     class Meta(ConditionOrStageEffect.Meta):
@@ -812,7 +812,7 @@ class ConditionModifierEffect(NaturalKeyMixin, ConditionOrStageEffect):
     'power_multiplier' the value is a percent-delta (35 = +35%); see _derive_power.
     """
 
-    modifier_target = models.ForeignKey("mechanics.ModifierTarget", on_delete=models.CASCADE)
+    modifier_target = models.ForeignKey("arxii.ModifierTarget", on_delete=models.CASCADE)
     value = models.IntegerField(
         default=0,
         help_text="Additive contribution to the modifier target (or percent-delta).",
@@ -825,7 +825,7 @@ class ConditionModifierEffect(NaturalKeyMixin, ConditionOrStageEffect):
         dependencies = [
             _CONDITION_TEMPLATE_FK,
             _CONDITION_STAGE_FK,
-            "mechanics.ModifierTarget",
+            "arxii.ModifierTarget",
         ]
 
     class Meta(ConditionOrStageEffect.Meta):
@@ -860,14 +860,14 @@ class ConditionCheckModifier(NaturalKeyMixin, ConditionOrStageEffect):
     """
 
     check_type = models.ForeignKey(
-        "checks.CheckType",
+        "arxii.CheckType",
         on_delete=models.CASCADE,
         null=True,
         blank=True,
         help_text="Specific check type. Mutually exclusive with check_category.",
     )
     check_category = models.ForeignKey(
-        "checks.CheckCategory",
+        "arxii.CheckCategory",
         on_delete=models.CASCADE,
         null=True,
         blank=True,
@@ -889,8 +889,8 @@ class ConditionCheckModifier(NaturalKeyMixin, ConditionOrStageEffect):
         dependencies = [
             _CONDITION_TEMPLATE_FK,
             _CONDITION_STAGE_FK,
-            "checks.CheckType",
-            "checks.CheckCategory",
+            "arxii.CheckType",
+            "arxii.CheckCategory",
         ]
 
     class Meta(ConditionOrStageEffect.Meta):
@@ -986,7 +986,7 @@ class ConditionResistanceModifier(NaturalKeyMixin, ConditionOrStageEffect):
         dependencies = [
             _CONDITION_TEMPLATE_FK,
             _CONDITION_STAGE_FK,
-            "conditions.DamageType",
+            "arxii.DamageType",
         ]
 
     class Meta(ConditionOrStageEffect.Meta):
@@ -1068,7 +1068,7 @@ class ConditionDamageOverTime(NaturalKeyMixin, ConditionOrStageEffect):
         dependencies = [
             _CONDITION_TEMPLATE_FK,
             _CONDITION_STAGE_FK,
-            "conditions.DamageType",
+            "arxii.DamageType",
         ]
 
     class Meta(ConditionOrStageEffect.Meta):
@@ -1159,7 +1159,7 @@ class ConditionDamageInteraction(NaturalKeyMixin, SharedMemoryModel):
         fields = ["condition", "damage_type"]
         dependencies = [
             _CONDITION_TEMPLATE_FK,
-            "conditions.DamageType",
+            "arxii.DamageType",
         ]
 
     class Meta:
@@ -1336,7 +1336,7 @@ class ConditionInstance(SharedMemoryModel):
         help_text="Character who applied this condition",
     )
     source_technique = models.ForeignKey(
-        "magic.Technique",
+        "arxii.Technique",
         on_delete=models.SET_NULL,
         null=True,
         blank=True,
@@ -1344,7 +1344,7 @@ class ConditionInstance(SharedMemoryModel):
         help_text="Technique used to apply this condition",
     )
     source_vow = models.ForeignKey(
-        "covenants.CovenantRole",
+        "arxii.CovenantRole",
         on_delete=models.SET_NULL,
         null=True,
         blank=True,
@@ -1508,7 +1508,7 @@ class TreatmentTemplate(SharedMemoryModel):
         choices=TreatmentTargetKind.choices,
     )
 
-    check_type = models.ForeignKey("checks.CheckType", on_delete=models.PROTECT)
+    check_type = models.ForeignKey("arxii.CheckType", on_delete=models.PROTECT)
     target_difficulty = models.PositiveIntegerField(default=0)
     requires_bond = models.BooleanField(default=False)
 
@@ -1594,18 +1594,18 @@ class TreatmentAttempt(SharedMemoryModel):
         related_name="treatment_attempts_as_target",
     )
     scene = models.ForeignKey(
-        "scenes.Scene",
+        "arxii.Scene",
         on_delete=models.PROTECT,
         related_name="treatment_attempts",
     )
     treatment = models.ForeignKey(
-        "conditions.TreatmentTemplate",
+        "arxii.TreatmentTemplate",
         on_delete=models.PROTECT,
         related_name="attempts",
     )
 
     thread_used = models.ForeignKey(
-        "magic.Thread",
+        "arxii.Thread",
         null=True,
         blank=True,
         on_delete=models.PROTECT,
@@ -1613,14 +1613,14 @@ class TreatmentAttempt(SharedMemoryModel):
     )
 
     target_condition_instance = models.ForeignKey(
-        "conditions.ConditionInstance",
+        "arxii.ConditionInstance",
         null=True,
         blank=True,
         on_delete=models.SET_NULL,
         related_name="treatment_attempts_targeting_instance",
     )
     target_pending_alteration = models.ForeignKey(
-        "magic.PendingAlteration",
+        "arxii.PendingAlteration",
         null=True,
         blank=True,
         on_delete=models.SET_NULL,
@@ -1629,7 +1629,7 @@ class TreatmentAttempt(SharedMemoryModel):
 
     # CheckOutcome lookup row — FK to the catalog row, not a choices string.
     outcome = models.ForeignKey(
-        "traits.CheckOutcome",
+        "arxii.CheckOutcome",
         on_delete=models.PROTECT,
         related_name="treatment_attempts",
     )

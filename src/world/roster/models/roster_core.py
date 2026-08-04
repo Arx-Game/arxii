@@ -84,7 +84,7 @@ class RosterEntry(SharedMemoryModel):
     """
 
     character_sheet = models.OneToOneField(
-        "character_sheets.CharacterSheet",
+        "arxii.CharacterSheet",
         on_delete=models.CASCADE,
         related_name="roster_entry",
         help_text="The character sheet for this roster entry.",
@@ -93,7 +93,7 @@ class RosterEntry(SharedMemoryModel):
 
     # Profile picture - references specific media from character's current tenure
     profile_picture = models.ForeignKey(
-        "roster.TenureMedia",
+        "arxii.TenureMedia",
         null=True,
         blank=True,
         on_delete=models.SET_NULL,
@@ -169,7 +169,7 @@ class RosterEntry(SharedMemoryModel):
         help_text="Account that authored this character (the GM, the staffer, or the player).",
     )
     created_for_table = models.ForeignKey(
-        "gm.GMTable",
+        "arxii.GMTable",
         null=True,
         blank=True,
         on_delete=models.SET_NULL,

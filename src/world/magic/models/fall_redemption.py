@@ -21,7 +21,7 @@ from evennia.utils.idmapper.models import SharedMemoryModel
 from core.natural_keys import NaturalKeyManager, NaturalKeyMixin
 from world.magic.types.aura import AffinityType
 
-_RESONANCE_FK = "magic.Resonance"
+_RESONANCE_FK = "arxii.Resonance"
 _CONFIG_VERBOSE = "Fall / Redemption Config"
 
 
@@ -212,7 +212,7 @@ class FallRedemptionRecord(SharedMemoryModel):
     """
 
     character_sheet = models.ForeignKey(
-        "character_sheets.CharacterSheet",
+        "arxii.CharacterSheet",
         on_delete=models.CASCADE,
         related_name="fall_redemption_records",
     )
@@ -225,7 +225,7 @@ class FallRedemptionRecord(SharedMemoryModel):
     multiplier = models.DecimalField(max_digits=4, decimal_places=2)
     performed_at = models.DateTimeField(auto_now_add=True)
     scene = models.ForeignKey(
-        "scenes.Scene",
+        "arxii.Scene",
         null=True,
         blank=True,
         on_delete=models.SET_NULL,

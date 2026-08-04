@@ -14,7 +14,7 @@ from evennia.utils.idmapper.models import SharedMemoryModel
 from world.estates.constants import BequestKind, SettlementDoor, SettlementStatus
 
 # Lazy model reference (Django app_label.ModelName), extracted to satisfy S1192.
-PERSONA_MODEL = "scenes.Persona"
+PERSONA_MODEL = "arxii.Persona"
 
 
 class Will(SharedMemoryModel):
@@ -25,7 +25,7 @@ class Will(SharedMemoryModel):
     """
 
     character_sheet = models.OneToOneField(
-        "character_sheets.CharacterSheet",
+        "arxii.CharacterSheet",
         on_delete=models.CASCADE,
         related_name="will",
     )
@@ -74,21 +74,21 @@ class Bequest(SharedMemoryModel):
     )
     kind = models.CharField(max_length=20, choices=BequestKind.choices)
     item = models.ForeignKey(
-        "items.ItemInstance",
+        "arxii.ItemInstance",
         null=True,
         blank=True,
         on_delete=models.SET_NULL,
         related_name="bequests",
     )
     building = models.ForeignKey(
-        "buildings.Building",
+        "arxii.Building",
         null=True,
         blank=True,
         on_delete=models.SET_NULL,
         related_name="bequests",
     )
     business = models.ForeignKey(
-        "currency.Business",
+        "arxii.Business",
         null=True,
         blank=True,
         on_delete=models.SET_NULL,
@@ -105,7 +105,7 @@ class Bequest(SharedMemoryModel):
         related_name="bequests_received",
     )
     recipient_organization = models.ForeignKey(
-        "societies.Organization",
+        "arxii.Organization",
         null=True,
         blank=True,
         on_delete=models.CASCADE,
@@ -169,7 +169,7 @@ class EstateSettlement(SharedMemoryModel):
     """
 
     character_sheet = models.OneToOneField(
-        "character_sheets.CharacterSheet",
+        "arxii.CharacterSheet",
         on_delete=models.CASCADE,
         related_name="estate_settlement",
     )
@@ -205,7 +205,7 @@ class EstateClaim(SharedMemoryModel):
         EstateSettlement, on_delete=models.CASCADE, related_name="claims"
     )
     item = models.ForeignKey(
-        "items.ItemInstance", on_delete=models.PROTECT, related_name="estate_claims"
+        "arxii.ItemInstance", on_delete=models.PROTECT, related_name="estate_claims"
     )
     claimant_persona = models.ForeignKey(
         PERSONA_MODEL,
@@ -215,7 +215,7 @@ class EstateClaim(SharedMemoryModel):
         related_name="estate_claims",
     )
     claimant_organization = models.ForeignKey(
-        "societies.Organization",
+        "arxii.Organization",
         null=True,
         blank=True,
         on_delete=models.CASCADE,

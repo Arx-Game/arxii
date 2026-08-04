@@ -30,12 +30,12 @@ class RosterApplication(SharedMemoryModel):
     objects = RosterApplicationManager()
 
     player_data = models.ForeignKey(
-        "evennia_extensions.PlayerData",
+        "arxii.PlayerData",
         on_delete=models.CASCADE,
         related_name="applications",
     )
     character = models.ForeignKey(
-        "character_sheets.CharacterSheet",
+        "arxii.CharacterSheet",
         on_delete=models.CASCADE,
         related_name="applications",
     )
@@ -51,7 +51,7 @@ class RosterApplication(SharedMemoryModel):
     applied_date = models.DateTimeField(auto_now_add=True)
     reviewed_date = models.DateTimeField(null=True, blank=True)
     reviewed_by = models.ForeignKey(
-        "evennia_extensions.PlayerData",
+        "arxii.PlayerData",
         null=True,
         on_delete=models.SET_NULL,
         related_name="reviewed_applications",
@@ -69,8 +69,8 @@ class RosterApplication(SharedMemoryModel):
         # Import here to avoid circular imports
         from django.apps import apps
 
-        RosterTenure = apps.get_model("roster", "RosterTenure")
-        Roster = apps.get_model("roster", "Roster")
+        RosterTenure = apps.get_model("arxii", "RosterTenure")
+        Roster = apps.get_model("arxii", "Roster")
 
         entry = self.character.roster_entry
 

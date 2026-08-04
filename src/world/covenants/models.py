@@ -56,12 +56,12 @@ if TYPE_CHECKING:
 
 # Lazy model references (Django app_label.ModelName), extracted to satisfy S1192.
 ACCOUNT_DB_MODEL = "accounts.AccountDB"
-COVENANT_MODEL = "covenants.Covenant"
-COVENANT_ROLE_MODEL = "covenants.CovenantRole"
-CHARACTER_SHEET_MODEL = "character_sheets.CharacterSheet"
-CONDITION_TEMPLATE_MODEL = "conditions.ConditionTemplate"
-GIFT_MODEL = "magic.Gift"
-VOW_SITUATIONAL_PERK_MODEL = "covenants.VowSituationalPerk"
+COVENANT_MODEL = "arxii.Covenant"
+COVENANT_ROLE_MODEL = "arxii.CovenantRole"
+CHARACTER_SHEET_MODEL = "arxii.CharacterSheet"
+CONDITION_TEMPLATE_MODEL = "arxii.ConditionTemplate"
+GIFT_MODEL = "arxii.Gift"
+VOW_SITUATIONAL_PERK_MODEL = "arxii.VowSituationalPerk"
 
 
 class Covenant(SharedMemoryModel):
@@ -83,7 +83,7 @@ class Covenant(SharedMemoryModel):
     """
 
     organization = models.OneToOneField(
-        "societies.Organization",
+        "arxii.Organization",
         on_delete=models.CASCADE,
         related_name="covenant",
         # NOT NULL at the DB level — the auto-create in save() always populates it
@@ -127,7 +127,7 @@ class Covenant(SharedMemoryModel):
         ),
     )
     campaign_story = models.ForeignKey(
-        "stories.Story",
+        "arxii.Story",
         null=True,
         blank=True,
         on_delete=models.SET_NULL,
@@ -139,7 +139,7 @@ class Covenant(SharedMemoryModel):
         ),
     )
     leader = models.ForeignKey(
-        "character_sheets.CharacterSheet",
+        "arxii.CharacterSheet",
         null=True,
         blank=True,
         on_delete=models.SET_NULL,
@@ -149,7 +149,7 @@ class Covenant(SharedMemoryModel):
         ),
     )
     court_grant_role = models.ForeignKey(
-        "npc_services.NPCRole",
+        "arxii.NPCRole",
         null=True,
         blank=True,
         on_delete=models.SET_NULL,
@@ -356,7 +356,7 @@ class CovenantRole(NaturalKeyMixin, AbstractSpecializedVariant, SharedMemoryMode
         ),
     )
     granted_capabilities = models.ManyToManyField(
-        "conditions.CapabilityType",
+        "arxii.CapabilityType",
         blank=True,
         related_name="granted_by_roles",
         help_text=(
@@ -762,7 +762,7 @@ class CharacterCovenantRole(SharedMemoryModel):
         ),
     )
     rank = models.ForeignKey(
-        "covenants.CovenantRank",
+        "arxii.CovenantRank",
         on_delete=models.PROTECT,
         related_name="memberships",
     )
@@ -918,7 +918,7 @@ class CovenantLevelBonus(SharedMemoryModel):
     """
 
     modifier_target = models.ForeignKey(
-        "mechanics.ModifierTarget",
+        "arxii.ModifierTarget",
         on_delete=models.CASCADE,
         related_name="covenant_level_bonuses",
     )
@@ -969,7 +969,7 @@ class VowStatScaling(NaturalKeyMixin, SharedMemoryModel):
         related_name="vow_stat_scalings",
     )
     modifier_target = models.ForeignKey(
-        "mechanics.ModifierTarget",
+        "arxii.ModifierTarget",
         on_delete=models.CASCADE,
         related_name="vow_stat_scalings",
     )
@@ -993,7 +993,7 @@ class VowStatScaling(NaturalKeyMixin, SharedMemoryModel):
 
     class NaturalKeyConfig:
         fields = ["covenant_role", "modifier_target"]
-        dependencies = [COVENANT_ROLE_MODEL, "mechanics.ModifierTarget"]
+        dependencies = [COVENANT_ROLE_MODEL, "arxii.ModifierTarget"]
 
     def __str__(self) -> str:
         return (
@@ -1234,7 +1234,7 @@ class CovenantRoleBonus(NaturalKeyMixin, SharedMemoryModel):
         related_name="role_bonuses",
     )
     modifier_target = models.ForeignKey(
-        "mechanics.ModifierTarget",
+        "arxii.ModifierTarget",
         on_delete=models.CASCADE,
         related_name="covenant_role_bonuses",
     )
@@ -1258,7 +1258,7 @@ class CovenantRoleBonus(NaturalKeyMixin, SharedMemoryModel):
 
     class NaturalKeyConfig:
         fields = ["covenant_role", "modifier_target"]
-        dependencies = [COVENANT_ROLE_MODEL, "mechanics.ModifierTarget"]
+        dependencies = [COVENANT_ROLE_MODEL, "arxii.ModifierTarget"]
 
     def __str__(self) -> str:
         return (
@@ -1274,12 +1274,12 @@ class CovenantRite(NaturalKeyMixin, SharedMemoryModel):
 
     class NaturalKeyConfig:
         fields = ["ritual"]
-        dependencies = ["magic.Ritual"]
+        dependencies = ["arxii.Ritual"]
 
     objects = NaturalKeyManager()
 
     ritual = models.OneToOneField(
-        "magic.Ritual",
+        "arxii.Ritual",
         on_delete=models.CASCADE,
         related_name="covenant_rite",
     )
@@ -1346,12 +1346,12 @@ class CovenantRiteRolePackage(NaturalKeyMixin, SharedMemoryModel):
 
     class NaturalKeyConfig:
         fields = ["rite", "covenant_role", "min_covenant_level"]
-        dependencies = ["covenants.CovenantRite", "covenants.CovenantRole"]
+        dependencies = ["arxii.CovenantRite", "arxii.CovenantRole"]
 
     objects = NaturalKeyManager()
 
     rite = models.ForeignKey(
-        "covenants.CovenantRite",
+        "arxii.CovenantRite",
         on_delete=models.CASCADE,
         related_name="role_packages",
     )
@@ -1393,12 +1393,12 @@ class CovenantRiteInstance(SharedMemoryModel):
         related_name="rite_instances",
     )
     scene = models.ForeignKey(
-        "scenes.Scene",
+        "arxii.Scene",
         on_delete=models.CASCADE,
         related_name="covenant_rite_instances",
     )
     combat_encounter = models.ForeignKey(
-        "combat.CombatEncounter",
+        "arxii.CombatEncounter",
         on_delete=models.CASCADE,
         related_name="covenant_rite_instances",
         null=True,
@@ -1406,7 +1406,7 @@ class CovenantRiteInstance(SharedMemoryModel):
     )
     participants = models.ManyToManyField(
         CHARACTER_SHEET_MODEL,
-        through="covenants.CovenantRiteParticipant",
+        through="arxii.CovenantRiteParticipant",
         related_name="covenant_rite_instances",
     )
     fired_at = models.DateTimeField(auto_now_add=True)
@@ -1423,7 +1423,7 @@ class CovenantRiteParticipant(SharedMemoryModel):
     """
 
     instance = models.ForeignKey(
-        "covenants.CovenantRiteInstance",
+        "arxii.CovenantRiteInstance",
         on_delete=models.CASCADE,
         related_name="participant_records",
     )
@@ -1606,7 +1606,7 @@ class CourtGrantConfig(SharedMemoryModel):
         ),
     )
     summons_refusal_escalation_pool = models.ForeignKey(
-        "actions.ConsequencePool",
+        "arxii.ConsequencePool",
         null=True,
         blank=True,
         on_delete=models.SET_NULL,
@@ -1617,7 +1617,7 @@ class CourtGrantConfig(SharedMemoryModel):
         ),
     )
     petition_check_type = models.ForeignKey(
-        "checks.CheckType",
+        "arxii.CheckType",
         null=True,
         blank=True,
         on_delete=models.SET_NULL,
@@ -1629,7 +1629,7 @@ class CourtGrantConfig(SharedMemoryModel):
         help_text="Base target_difficulty for petition_check_type before affection easing.",
     )
     escalation_consequence_pool = models.ForeignKey(
-        "actions.ConsequencePool",
+        "arxii.ConsequencePool",
         null=True,
         blank=True,
         on_delete=models.SET_NULL,
@@ -1868,7 +1868,7 @@ class VowSituationalPerk(NaturalKeyMixin, SharedMemoryModel):
         help_text="Player-facing announce line; {holder}/{subject} placeholders.",
     )
     check_type = models.ForeignKey(
-        "checks.CheckType",
+        "arxii.CheckType",
         on_delete=models.SET_NULL,
         null=True,
         blank=True,
@@ -1885,7 +1885,7 @@ class VowSituationalPerk(NaturalKeyMixin, SharedMemoryModel):
         ),
     )
     mission_category = models.ForeignKey(
-        "missions.MissionCategory",
+        "arxii.MissionCategory",
         on_delete=models.SET_NULL,
         null=True,
         blank=True,
@@ -1895,7 +1895,7 @@ class VowSituationalPerk(NaturalKeyMixin, SharedMemoryModel):
         ),
     )
     mission_template = models.ForeignKey(
-        "missions.MissionTemplate",
+        "arxii.MissionTemplate",
         on_delete=models.SET_NULL,
         null=True,
         blank=True,
@@ -2240,7 +2240,7 @@ class WeaknessPoolEntry(NaturalKeyMixin, SharedMemoryModel):
         help_text="Curated weakness name, e.g. 'Armor Crack' or 'Fear of Flame'.",
     )
     creature_template = models.ForeignKey(
-        "combat.CreatureTemplate",
+        "arxii.CreatureTemplate",
         on_delete=models.CASCADE,
         related_name="weakness_pool_entries",
         help_text="The boss this weakness belongs to.",

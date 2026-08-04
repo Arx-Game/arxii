@@ -6,7 +6,7 @@ from evennia.utils.idmapper.models import SharedMemoryModel
 from core.managers import CachedAllMixin
 
 # App-qualified model path repeated across FK references; centralized for dedup.
-_ROOM_PROFILE_MODEL = "evennia_extensions.RoomProfile"
+_ROOM_PROFILE_MODEL = "arxii.RoomProfile"
 
 
 class DreamReflectionManager(CachedAllMixin, models.Manager):
@@ -86,7 +86,7 @@ class DreamPerilConfig(SharedMemoryModel):
     """
 
     resist_check_type = models.ForeignKey(
-        "checks.CheckType",
+        "arxii.CheckType",
         on_delete=models.SET_NULL,
         null=True,
         blank=True,

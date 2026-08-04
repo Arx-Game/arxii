@@ -211,7 +211,7 @@ class TechniqueVariantResolutionTests(TestCase):
 
 class TechniqueVariantCapabilityGrantFactory(factory.django.DjangoModelFactory):
     class Meta:
-        model = "magic.TechniqueVariantCapabilityGrant"
+        model = "arxii.TechniqueVariantCapabilityGrant"
 
     variant = factory.SubFactory("world.magic.factories.TechniqueVariantFactory")
     capability = factory.SubFactory(CapabilityTypeFactory)
@@ -219,7 +219,7 @@ class TechniqueVariantCapabilityGrantFactory(factory.django.DjangoModelFactory):
 
 class TechniqueVariantDamageProfileFactory(factory.django.DjangoModelFactory):
     class Meta:
-        model = "magic.TechniqueVariantDamageProfile"
+        model = "arxii.TechniqueVariantDamageProfile"
 
     variant = factory.SubFactory("world.magic.factories.TechniqueVariantFactory")
     damage_type = factory.SubFactory(DamageTypeFactory)
@@ -227,7 +227,7 @@ class TechniqueVariantDamageProfileFactory(factory.django.DjangoModelFactory):
 
 class TechniqueVariantAppliedConditionFactory(factory.django.DjangoModelFactory):
     class Meta:
-        model = "magic.TechniqueVariantAppliedCondition"
+        model = "arxii.TechniqueVariantAppliedCondition"
 
     variant = factory.SubFactory("world.magic.factories.TechniqueVariantFactory")
     condition = factory.SubFactory(ConditionTemplateFactory)

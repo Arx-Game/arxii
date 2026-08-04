@@ -53,21 +53,21 @@ class NarrativeMessage(SharedMemoryModel):
     # by the stories system. Consumers of the message can use these to
     # render story-log entries, link to the related story, etc.
     related_story = models.ForeignKey(
-        "stories.Story",
+        "arxii.Story",
         null=True,
         blank=True,
         on_delete=models.SET_NULL,
         related_name="narrative_messages",
     )
     related_beat_completion = models.ForeignKey(
-        "stories.BeatCompletion",
+        "arxii.BeatCompletion",
         null=True,
         blank=True,
         on_delete=models.SET_NULL,
         related_name="narrative_messages",
     )
     related_episode_resolution = models.ForeignKey(
-        "stories.EpisodeResolution",
+        "arxii.EpisodeResolution",
         null=True,
         blank=True,
         on_delete=models.SET_NULL,
@@ -140,7 +140,7 @@ class NarrativeMessageDelivery(SharedMemoryModel):
         related_name="deliveries",
     )
     recipient_character_sheet = models.ForeignKey(
-        "character_sheets.CharacterSheet",
+        "arxii.CharacterSheet",
         on_delete=models.CASCADE,
         related_name="narrative_message_deliveries",
     )
@@ -202,13 +202,13 @@ class Gemit(SharedMemoryModel):
         help_text="Audience scope: game-wide, or the members of the linked societies / orgs.",
     )
     reach_societies = models.ManyToManyField(
-        "societies.Society",
+        "arxii.Society",
         blank=True,
         related_name="gemits",
         help_text="SPECIFIED-reach societies whose members get this gemit (mixable with orgs).",
     )
     reach_organizations = models.ManyToManyField(
-        "societies.Organization",
+        "arxii.Organization",
         blank=True,
         related_name="gemits",
         help_text="For SPECIFIED reach, organizations whose members receive this gemit (may mix).",
@@ -222,7 +222,7 @@ class Gemit(SharedMemoryModel):
         help_text="Null = system-generated.",
     )
     related_era = models.ForeignKey(
-        "stories.Era",
+        "arxii.Era",
         null=True,
         blank=True,
         on_delete=models.SET_NULL,
@@ -230,7 +230,7 @@ class Gemit(SharedMemoryModel):
         help_text="Optional: link to the era this gemit relates to.",
     )
     related_story = models.ForeignKey(
-        "stories.Story",
+        "arxii.Story",
         null=True,
         blank=True,
         on_delete=models.SET_NULL,
@@ -265,7 +265,7 @@ class UserStoryMute(SharedMemoryModel):
         related_name="story_mutes",
     )
     story = models.ForeignKey(
-        "stories.Story",
+        "arxii.Story",
         on_delete=models.CASCADE,
         related_name="muted_by",
     )
@@ -344,14 +344,14 @@ class AmbientEmoteLine(DiscriminatorMixin, SharedMemoryModel):
         help_text="Selects which FK (area or room_profile) is active.",
     )
     area = models.ForeignKey(
-        "areas.Area",
+        "arxii.Area",
         null=True,
         blank=True,
         on_delete=models.CASCADE,
         related_name="ambient_emote_lines",
     )
     room_profile = models.ForeignKey(
-        "evennia_extensions.RoomProfile",
+        "arxii.RoomProfile",
         null=True,
         blank=True,
         on_delete=models.CASCADE,
@@ -427,7 +427,7 @@ class AmbientEmoteCondition(SharedMemoryModel):
     )
     condition_type = models.CharField(max_length=20, choices=ConditionType.choices)
     species = models.ForeignKey(
-        "species.Species",
+        "arxii.Species",
         null=True,
         blank=True,
         on_delete=models.CASCADE,
@@ -435,7 +435,7 @@ class AmbientEmoteCondition(SharedMemoryModel):
         help_text="Required when condition_type is SPECIES.",
     )
     resonance = models.ForeignKey(
-        "magic.Resonance",
+        "arxii.Resonance",
         null=True,
         blank=True,
         on_delete=models.CASCADE,
@@ -450,7 +450,7 @@ class AmbientEmoteCondition(SharedMemoryModel):
         ),
     )
     distinction = models.ForeignKey(
-        "distinctions.Distinction",
+        "arxii.Distinction",
         null=True,
         blank=True,
         on_delete=models.CASCADE,
@@ -465,7 +465,7 @@ class AmbientEmoteCondition(SharedMemoryModel):
         help_text="Required when condition_type is RENOWN_MIN.",
     )
     perceiving_society = models.ForeignKey(
-        "societies.Society",
+        "arxii.Society",
         null=True,
         blank=True,
         on_delete=models.CASCADE,

@@ -23,22 +23,22 @@ EVENNIA_LARGE_TABLE_LABELS = {
 # Grouped by domain for readability.
 LARGE_TABLE_MODELS = {
     # Character identity
-    "character_sheets.CharacterSheet",
+    "arxii.CharacterSheet",
     # Scenes / roleplay
-    "scenes.Scene",
-    "scenes.Persona",
-    "scenes.Interaction",
-    "scenes.Place",
+    "arxii.Scene",
+    "arxii.Persona",
+    "arxii.Interaction",
+    "arxii.Place",
     # Roster
-    "roster.RosterEntry",
-    "roster.RosterTenure",
-    "evennia_extensions.PlayerData",
+    "arxii.RosterEntry",
+    "arxii.RosterTenure",
+    "arxii.PlayerData",
     # Items
-    "items.ItemInstance",
+    "arxii.ItemInstance",
     # Magic (per-character links)
-    "magic.CharacterGift",
-    "magic.CharacterTechnique",
-    "magic.CharacterTradition",
+    "arxii.CharacterGift",
+    "arxii.CharacterTechnique",
+    "arxii.CharacterTradition",
 }
 
 
@@ -154,7 +154,7 @@ def _find_large_table_fk_violations(model, admin_cls, exempt, protected):
                     "intentional, add the field name to "
                     "large_table_widget_exempt with a comment."
                 ),
-                id="web_admin.W001",
+                id="arxii.W001",
             )
         )
     return violations

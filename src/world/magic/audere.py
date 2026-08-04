@@ -34,12 +34,12 @@ class AudereThreshold(SharedMemoryModel):
     objects = ArxSharedMemoryManager()
 
     minimum_intensity_tier = models.ForeignKey(
-        "magic.IntensityTier",
+        "arxii.IntensityTier",
         on_delete=models.PROTECT,
         help_text="Runtime intensity must reach this tier for Audere to trigger.",
     )
     minimum_warp_stage = models.ForeignKey(
-        "conditions.ConditionStage",
+        "arxii.ConditionStage",
         on_delete=models.PROTECT,
         help_text="Soulfray must be at this stage or higher.",
     )
@@ -97,7 +97,7 @@ class PendingAudereOffer(AbstractPendingOffer):
     """
 
     character_sheet = models.ForeignKey(
-        "character_sheets.CharacterSheet",
+        "arxii.CharacterSheet",
         on_delete=models.CASCADE,
         related_name="audere_offers",
     )

@@ -17,7 +17,7 @@ from evennia.utils.idmapper.models import SharedMemoryModel
 from world.secrets.constants import SecretLevel, SecretProvenance
 
 # App-qualified model path repeated across FK references; centralized for dedup.
-_CHARACTER_SHEET_MODEL = "character_sheets.CharacterSheet"
+_CHARACTER_SHEET_MODEL = "arxii.CharacterSheet"
 
 
 class SecretCategory(SharedMemoryModel):
@@ -100,7 +100,7 @@ class Secret(SharedMemoryModel):
         ),
     )
     author_persona = models.ForeignKey(
-        "scenes.Persona",
+        "arxii.Persona",
         null=True,
         blank=True,
         on_delete=models.SET_NULL,
@@ -118,7 +118,7 @@ class Secret(SharedMemoryModel):
     # per ADR-0010: the secret (consumer) points at the reusable record primitives, and `scenes`/
     # `missions` stay free of any dependency on `secrets`.
     legend_deed = models.ForeignKey(
-        "societies.LegendEntry",
+        "arxii.LegendEntry",
         null=True,
         blank=True,
         on_delete=models.SET_NULL,
@@ -126,7 +126,7 @@ class Secret(SharedMemoryModel):
         help_text="The public legend telling of the act this secret is the truth behind (#1573).",
     )
     mission_deed = models.ForeignKey(
-        "missions.MissionDeedRecord",
+        "arxii.MissionDeedRecord",
         null=True,
         blank=True,
         on_delete=models.SET_NULL,
@@ -134,7 +134,7 @@ class Secret(SharedMemoryModel):
         help_text="The recorded mission act this secret is the truth behind (#1573).",
     )
     scene = models.ForeignKey(
-        "scenes.Scene",
+        "arxii.Scene",
         null=True,
         blank=True,
         on_delete=models.SET_NULL,
@@ -146,7 +146,7 @@ class Secret(SharedMemoryModel):
     # principles, so the same fact reads positive to one society and negative to another. Empty =
     # no diffuse reputational impact. Authored, or generated (e.g. a mission seeds them by act).
     archetypes = models.ManyToManyField(
-        "societies.PhilosophicalArchetype",
+        "arxii.PhilosophicalArchetype",
         blank=True,
         related_name="secrets",
         help_text="Moral framings that drive the diffuse per-society reputation hit on reveal.",
@@ -154,7 +154,7 @@ class Secret(SharedMemoryModel):
     # One-shot tracking: societies this secret has already been exposed to, so re-exposure never
     # double-fires the reputation hit (mirrors LegendEntry.societies_aware).
     societies_exposed = models.ManyToManyField(
-        "societies.Society",
+        "arxii.Society",
         blank=True,
         related_name="exposed_secrets",
         help_text="Societies already exposed to this secret (so reveal fires once per society).",
@@ -228,7 +228,7 @@ class SecretVictim(SharedMemoryModel):
         help_text="The secret whose underlying fact harmed this entity.",
     )
     organization = models.ForeignKey(
-        "societies.Organization",
+        "arxii.Organization",
         null=True,
         blank=True,
         on_delete=models.CASCADE,
@@ -236,7 +236,7 @@ class SecretVictim(SharedMemoryModel):
         help_text="The victim organization (collective victim).",
     )
     persona = models.ForeignKey(
-        "scenes.Persona",
+        "arxii.Persona",
         null=True,
         blank=True,
         on_delete=models.CASCADE,
@@ -287,7 +287,7 @@ class SecretGrievance(SharedMemoryModel):
         help_text="The wronged character who answered it.",
     )
     capstone = models.ForeignKey(
-        "relationships.RelationshipCapstone",
+        "arxii.RelationshipCapstone",
         null=True,
         blank=True,
         on_delete=models.SET_NULL,
@@ -318,7 +318,7 @@ class SecretKnowledge(SharedMemoryModel):
     """
 
     roster_entry = models.ForeignKey(
-        "roster.RosterEntry",
+        "arxii.RosterEntry",
         on_delete=models.CASCADE,
         related_name="secrets_known",
         help_text="The character who holds this knowledge.",
@@ -368,7 +368,7 @@ class SecretGossip(SharedMemoryModel):
         help_text="The Level-1 secret being gossiped.",
     )
     region = models.ForeignKey(
-        "areas.Area",
+        "arxii.Area",
         on_delete=models.CASCADE,
         related_name="gossip_heat",
         help_text="The region (Area at AreaLevel.REGION) this heat is scoped to.",
@@ -464,7 +464,7 @@ class AccusationRebuttal(SharedMemoryModel):
         help_text="The ACCUSATION secret whose credibility was attacked.",
     )
     refuter_sheet = models.ForeignKey(
-        "character_sheets.CharacterSheet",
+        "arxii.CharacterSheet",
         on_delete=models.CASCADE,
         related_name="accusation_rebuttals",
     )

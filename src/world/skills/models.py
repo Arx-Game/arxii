@@ -19,7 +19,7 @@ if TYPE_CHECKING:
     from evennia.objects.models import ObjectDB
 
 # Lazy model references (Django app_label.ModelName), extracted to satisfy S1192.
-CHARACTER_SHEET_MODEL = "character_sheets.CharacterSheet"
+CHARACTER_SHEET_MODEL = "arxii.CharacterSheet"
 
 
 class Skill(NaturalKeyMixin, SharedMemoryModel):
@@ -256,7 +256,7 @@ class SkillPointBudget(SharedMemoryModel):
         help_text="Maximum specialization value in CG",
     )
     teaching_skill = models.ForeignKey(
-        "skills.Skill",
+        "arxii.Skill",
         on_delete=models.SET_NULL,
         null=True,
         blank=True,
@@ -297,7 +297,7 @@ class PathSkillSuggestion(SharedMemoryModel):
     # Note: field named 'character_path' instead of 'path' because SharedMemoryModel
     # reserves 'path' as a class attribute for the model's module path
     character_path = models.ForeignKey(
-        "classes.Path",
+        "arxii.Path",
         on_delete=models.CASCADE,
         related_name="skill_suggestions",
         help_text="The path this suggestion belongs to",
@@ -355,7 +355,7 @@ class TrainingAllocation(SharedMemoryModel):
         help_text="The specialization being trained (mutually exclusive with skill)",
     )
     mentor = models.ForeignKey(
-        "scenes.Persona",
+        "arxii.Persona",
         on_delete=models.SET_NULL,
         null=True,
         blank=True,

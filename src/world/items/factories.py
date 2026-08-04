@@ -68,7 +68,7 @@ class MaterialCategoryFactory(factory.django.DjangoModelFactory):
     """Factory for MaterialCategory."""
 
     class Meta:
-        model = "items.MaterialCategory"
+        model = "arxii.MaterialCategory"
         django_get_or_create = ("name",)
 
     name = factory.Sequence(lambda n: f"Material Category {n}")
@@ -490,7 +490,7 @@ class CraftingRecipeFactory(factory.django.DjangoModelFactory):
     """
 
     class Meta:
-        model = "items.CraftingRecipe"
+        model = "arxii.CraftingRecipe"
         django_get_or_create = ("kind", "output_item_template")
 
     name = factory.Sequence(lambda n: f"Crafting Recipe {n}")
@@ -511,7 +511,7 @@ class CraftingMaterialRequirementFactory(factory.django.DjangoModelFactory):
     """
 
     class Meta:
-        model = "items.CraftingMaterialRequirement"
+        model = "arxii.CraftingMaterialRequirement"
 
     recipe = factory.SubFactory(CraftingRecipeFactory)
     item_template = factory.SubFactory(ItemTemplateFactory)
@@ -529,7 +529,7 @@ class CraftingSkillCapFactory(factory.django.DjangoModelFactory):
     """
 
     class Meta:
-        model = "items.CraftingSkillCap"
+        model = "arxii.CraftingSkillCap"
 
     recipe = factory.SubFactory(CraftingRecipeFactory)
     min_skill_value = 0
@@ -544,7 +544,7 @@ class CraftingRecipeConsequenceFactory(factory.django.DjangoModelFactory):
     """
 
     class Meta:
-        model = "items.CraftingRecipeConsequence"
+        model = "arxii.CraftingRecipeConsequence"
 
     recipe = factory.SubFactory(CraftingRecipeFactory)
     consequence = factory.SubFactory("world.checks.factories.ConsequenceFactory")
@@ -560,7 +560,7 @@ class CraftingRecipeModifierFactory(factory.django.DjangoModelFactory):
     """
 
     class Meta:
-        model = "items.CraftingRecipeModifier"
+        model = "arxii.CraftingRecipeModifier"
 
     recipe = factory.SubFactory(CraftingRecipeFactory)
     target = factory.SubFactory(ModifierTargetFactory)
@@ -572,7 +572,7 @@ class CraftedItemRecipeFactory(factory.django.DjangoModelFactory):
     """Factory for CraftedItemRecipe — a recipe applied to an item at a quality tier."""
 
     class Meta:
-        model = "items.CraftedItemRecipe"
+        model = "arxii.CraftedItemRecipe"
 
     item_instance = factory.SubFactory(ItemInstanceFactory)
     recipe = factory.SubFactory(CraftingRecipeFactory)
@@ -595,7 +595,7 @@ class GemGradeFactory(factory.django.DjangoModelFactory):
     """Factory for GemGrade — one grade on one gem axis (word + multiplier)."""
 
     class Meta:
-        model = "items.GemGrade"
+        model = "arxii.GemGrade"
         django_get_or_create = ("axis", "label")
 
     axis = GemAxis.SIZE
@@ -608,7 +608,7 @@ class GemDetailsFactory(factory.django.DjangoModelFactory):
     """Factory for GemDetails — marks a template as a gem type at a quality level."""
 
     class Meta:
-        model = "items.GemDetails"
+        model = "arxii.GemDetails"
 
     item_template = factory.SubFactory(ItemTemplateFactory)
     quality_level = 1
@@ -618,7 +618,7 @@ class GemInstanceDetailsFactory(factory.django.DjangoModelFactory):
     """Factory for GemInstanceDetails — a cut/graded gem instance's three axes."""
 
     class Meta:
-        model = "items.GemInstanceDetails"
+        model = "arxii.GemInstanceDetails"
 
     item_instance = factory.SubFactory(ItemInstanceFactory)
     size_grade = factory.SubFactory(GemGradeFactory, axis=GemAxis.SIZE)
@@ -631,7 +631,7 @@ class AdornmentFactory(factory.django.DjangoModelFactory):
     ``gem_instance`` when exercising adorn_item; the default is a plain instance."""
 
     class Meta:
-        model = "items.Adornment"
+        model = "arxii.Adornment"
 
     host_instance = factory.SubFactory(ItemInstanceFactory)
     gem_instance = factory.SubFactory(ItemInstanceFactory)
@@ -642,7 +642,7 @@ class CommonGemBucketFactory(factory.django.DjangoModelFactory):
     """Factory for CommonGemBucket — a crafter's per-tier common-gem value stock."""
 
     class Meta:
-        model = "items.CommonGemBucket"
+        model = "arxii.CommonGemBucket"
         django_get_or_create = ("character_sheet", "tier")
 
     character_sheet = factory.SubFactory(_CHARACTER_SHEET_FACTORY)

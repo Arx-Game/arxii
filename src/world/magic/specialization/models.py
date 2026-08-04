@@ -61,7 +61,7 @@ class AbstractSpecializedVariant(SharedMemoryModel):
     """
 
     resonance = models.ForeignKey(
-        "magic.Resonance",
+        "arxii.Resonance",
         on_delete=models.PROTECT,
         null=True,
         blank=True,
@@ -73,7 +73,7 @@ class AbstractSpecializedVariant(SharedMemoryModel):
         help_text="0 = base/parent; >=3 = variant (thread level needed to unlock).",
     )
     discovery_achievement = models.ForeignKey(
-        "achievements.Achievement",
+        "arxii.Achievement",
         on_delete=models.PROTECT,
         null=True,
         blank=True,
@@ -81,7 +81,7 @@ class AbstractSpecializedVariant(SharedMemoryModel):
         help_text="Variant only: achievement granted (+ global-first Discovery) on manifestation.",
     )
     codex_entry = models.ForeignKey(
-        "codex.CodexEntry",
+        "arxii.CodexEntry",
         on_delete=models.PROTECT,
         null=True,
         blank=True,
@@ -197,7 +197,7 @@ class TechniqueVariant(AbstractSpecializedVariant):
     """
 
     parent_technique = models.ForeignKey(
-        "magic.Technique",
+        "arxii.Technique",
         on_delete=models.CASCADE,
         related_name="variants",
         help_text="The parent technique this variant specializes.",
@@ -318,7 +318,7 @@ class TechniqueVariantCapabilityGrant(AbstractCapabilityGrant):
         related_name="capability_grants",
     )
     prerequisite = models.ForeignKey(
-        "mechanics.Prerequisite",
+        "arxii.Prerequisite",
         on_delete=models.SET_NULL,
         null=True,
         blank=True,

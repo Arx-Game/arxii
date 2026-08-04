@@ -44,7 +44,7 @@ class JournalEntry(SharedMemoryModel):
 
     # Related threads (Spec A §2.2)
     related_threads = models.ManyToManyField(
-        "magic.Thread",
+        "arxii.Thread",
         blank=True,
         related_name="related_journal_entries",
     )
@@ -124,7 +124,7 @@ class WeeklyJournalXP(SharedMemoryModel):
         related_name="weekly_journal_xp",
     )
     game_week = models.ForeignKey(
-        "game_clock.GameWeek",
+        "arxii.GameWeek",
         null=True,
         blank=True,
         on_delete=models.SET_NULL,

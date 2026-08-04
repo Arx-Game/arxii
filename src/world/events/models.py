@@ -18,7 +18,7 @@ class Event(SharedMemoryModel):
     name = models.CharField(max_length=255)
     description = models.TextField(blank=True)
     location = models.ForeignKey(
-        "evennia_extensions.RoomProfile",
+        "arxii.RoomProfile",
         on_delete=models.PROTECT,
         related_name="events",
         help_text="The room where this event takes place",
@@ -34,7 +34,7 @@ class Event(SharedMemoryModel):
         help_text="Public events are visible on the calendar to everyone",
     )
     host_society = models.ForeignKey(
-        "societies.Society",
+        "arxii.Society",
         on_delete=models.SET_NULL,
         null=True,
         blank=True,
@@ -123,7 +123,7 @@ class EventHost(SharedMemoryModel):
         related_name="hosts",
     )
     persona = models.ForeignKey(
-        "scenes.Persona",
+        "arxii.Persona",
         null=True,
         on_delete=models.SET_NULL,
         related_name="hosted_events",
@@ -168,21 +168,21 @@ class EventInvitation(DiscriminatorMixin, SharedMemoryModel):
         choices=InvitationTargetType.choices,
     )
     target_persona = models.ForeignKey(
-        "scenes.Persona",
+        "arxii.Persona",
         null=True,
         blank=True,
         on_delete=models.SET_NULL,
         related_name="event_invitations",
     )
     target_organization = models.ForeignKey(
-        "societies.Organization",
+        "arxii.Organization",
         null=True,
         blank=True,
         on_delete=models.SET_NULL,
         related_name="event_invitations",
     )
     target_society = models.ForeignKey(
-        "societies.Society",
+        "arxii.Society",
         null=True,
         blank=True,
         on_delete=models.SET_NULL,
@@ -191,7 +191,7 @@ class EventInvitation(DiscriminatorMixin, SharedMemoryModel):
     can_bring_guests = models.BooleanField(default=False)
     invited_at = models.DateTimeField(auto_now_add=True)
     invited_by = models.ForeignKey(
-        "scenes.Persona",
+        "arxii.Persona",
         null=True,
         blank=True,
         on_delete=models.SET_NULL,
@@ -279,7 +279,7 @@ class EventCatering(SharedMemoryModel):
         related_name="catering",
     )
     item_instance = models.ForeignKey(
-        "items.ItemInstance",
+        "arxii.ItemInstance",
         on_delete=models.CASCADE,
         related_name="catering_uses",
         help_text="The vessel or provision itself — still a real item in the world.",
@@ -290,7 +290,7 @@ class EventCatering(SharedMemoryModel):
         help_text="CONTAINER (a flagged vessel) or PROVISION (a consumable set out in one).",
     )
     contributed_by = models.ForeignKey(
-        "scenes.Persona",
+        "arxii.Persona",
         on_delete=models.PROTECT,
         null=True,
         blank=True,

@@ -28,7 +28,7 @@ class RitualLiturgy(SharedMemoryModel):
     """
 
     ritual = models.OneToOneField(
-        "magic.Ritual",
+        "arxii.Ritual",
         on_delete=models.CASCADE,
         related_name="liturgy",
     )

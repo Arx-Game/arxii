@@ -25,16 +25,17 @@ def content_export_preview(request: HttpRequest) -> HttpResponse:
     if not request.user.is_superuser:
         raise PermissionDenied
 
-    from django.apps import apps  # noqa: PLC0415
-
+    from core.app_domains import resolve_model_by_name  # noqa: PLC0415
     from core_management.content_export import CONTENT_MODELS  # noqa: PLC0415
 
     models_info = []
     total_records = 0
     for model_label in sorted(CONTENT_MODELS):
+        # model_label is "<domain>.<model_name>", not a real Django app_label
+        # post-collapse (#2906) — resolve by model name, not apps.get_model().
         app_label, model_name = model_label.split(".")
         try:
-            model = apps.get_model(app_label, model_name)
+            model = resolve_model_by_name(model_label)
         except LookupError:
             continue
         try:

@@ -102,7 +102,7 @@ class ActionPointPool(SharedMemoryModel):
     """
 
     character = models.OneToOneField(
-        "character_sheets.CharacterSheet",
+        "arxii.CharacterSheet",
         on_delete=models.CASCADE,
         related_name="action_points",
         help_text="The character this pool belongs to.",

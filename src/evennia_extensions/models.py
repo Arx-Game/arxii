@@ -221,6 +221,7 @@ class PlayerData(RelatedCacheClearingMixin, SharedMemoryModel):
         return f"PlayerData for {self.account.username}"
 
     class Meta:
+        app_label = "arxii"
         verbose_name = "Player Data"
         verbose_name_plural = "Player Data"
 
@@ -242,6 +243,7 @@ class Artist(SharedMemoryModel):
         return self.name
 
     class Meta:
+        app_label = "arxii"
         verbose_name = "Artist"
         verbose_name_plural = "Artists"
 
@@ -306,6 +308,7 @@ class Media(NaturalKeyMixin, SharedMemoryModel):
         return f"{self.media_type} for {owner} ({title})"
 
     class Meta:
+        app_label = "arxii"
         ordering = ["-uploaded_date"]
         indexes = [models.Index(fields=["player_data", "media_type"])]
 
@@ -348,6 +351,7 @@ class PageBackground(NaturalKeyMixin, SharedMemoryModel):
         return f"PageBackground({self.slot})"
 
     class Meta:
+        app_label = "arxii"
         verbose_name = "Page Background"
         verbose_name_plural = "Page Backgrounds"
 
@@ -432,6 +436,7 @@ class ObjectDisplayData(SharedMemoryModel):
         return f"Display data for {self.object.key}"
 
     class Meta:
+        app_label = "arxii"
         verbose_name = "Object Display Data"
         verbose_name_plural = "Object Display Data"
 
@@ -464,6 +469,7 @@ class PlayerAllowList(SharedMemoryModel):
         return f"{owner_name} allows {allowed_name}"
 
     class Meta:
+        app_label = "arxii"
         unique_together = ["owner", "allowed_player"]
         verbose_name = "Player Allow List Entry"
         verbose_name_plural = "Player Allow List Entries"
@@ -492,6 +498,7 @@ class RoomSizeTier(NaturalKeyMixin, SharedMemoryModel):
         fields = ["name"]
 
     class Meta:
+        app_label = "arxii"
         ordering = ["units"]
 
     def __str__(self) -> str:
@@ -534,7 +541,7 @@ class RoomProfile(NaturalKeyMixin, SharedMemoryModel):
         related_name="room_profile",
     )
     area = models.ForeignKey(
-        "areas.Area",
+        "arxii.Area",
         null=True,
         blank=True,
         on_delete=models.SET_NULL,
@@ -560,7 +567,7 @@ class RoomProfile(NaturalKeyMixin, SharedMemoryModel):
         ),
     )
     size = models.ForeignKey(
-        "evennia_extensions.RoomSizeTier",
+        "arxii.RoomSizeTier",
         null=True,
         blank=True,
         on_delete=models.PROTECT,
@@ -602,7 +609,7 @@ class RoomProfile(NaturalKeyMixin, SharedMemoryModel):
     # ``locations.LocationTenancy`` is the one tenancy model (with
     # ``is_primary_home`` driving prestige_from_dwellings).
     default_blueprint = models.ForeignKey(
-        "areas.PositionBlueprint",
+        "arxii.PositionBlueprint",
         null=True,
         blank=True,
         on_delete=models.SET_NULL,
@@ -634,6 +641,7 @@ class RoomProfile(NaturalKeyMixin, SharedMemoryModel):
         fields = ["fixture_key"]
 
     class Meta:
+        app_label = "arxii"
         verbose_name = "Room Profile"
         verbose_name_plural = "Room Profiles"
 
@@ -670,6 +678,7 @@ class ExitProfile(SharedMemoryModel):
     )
 
     class Meta:
+        app_label = "arxii"
         verbose_name = "Exit Profile"
         verbose_name_plural = "Exit Profiles"
 

@@ -46,7 +46,7 @@ class KinspersonFactory(factory_django.DjangoModelFactory):
     """Factory for kinship graph nodes (#2062)."""
 
     class Meta:
-        model = "roster.Kinsperson"
+        model = "arxii.Kinsperson"
 
     name = factory.Sequence(lambda n: f"Kin {n}")
 
@@ -55,7 +55,7 @@ class ParentageEdgeFactory(factory_django.DjangoModelFactory):
     """Factory for typed parentage edges (#2062)."""
 
     class Meta:
-        model = "roster.ParentageEdge"
+        model = "arxii.ParentageEdge"
 
     child = factory.SubFactory(KinspersonFactory)
     parent = factory.SubFactory(KinspersonFactory)
@@ -65,7 +65,7 @@ class KinspersonTraitValueFactory(factory_django.DjangoModelFactory):
     """Factory for pinned kinsperson appearance values (#2815)."""
 
     class Meta:
-        model = "roster.KinspersonTraitValue"
+        model = "arxii.KinspersonTraitValue"
 
     kinsperson = factory.SubFactory(KinspersonFactory)
 
@@ -74,7 +74,7 @@ class UnionKindFactory(factory_django.DjangoModelFactory):
     """Factory for authorable union vocabulary rows (#2062)."""
 
     class Meta:
-        model = "roster.UnionKind"
+        model = "arxii.UnionKind"
         django_get_or_create = ("name",)
 
     name = "Marriage"
@@ -85,7 +85,7 @@ class UnionFactory(factory_django.DjangoModelFactory):
     """Factory for unions (#2062). Pass members=[...] post-generation."""
 
     class Meta:
-        model = "roster.Union"
+        model = "arxii.Union"
 
     kind = factory.SubFactory(UnionKindFactory)
 
@@ -99,14 +99,14 @@ class SoulFactory(factory_django.DjangoModelFactory):
     """Factory for souls (#2062)."""
 
     class Meta:
-        model = "roster.Soul"
+        model = "arxii.Soul"
 
 
 class KinSlotPoolFactory(factory_django.DjangoModelFactory):
     """Factory for kin slot pools (#2062). Pass parents=[...] post-generation."""
 
     class Meta:
-        model = "roster.KinSlotPool"
+        model = "arxii.KinSlotPool"
 
     family = factory.SubFactory(FamilyFactory)
     count_remaining = 3

@@ -20,7 +20,7 @@ class PlayerMail(SharedMemoryModel):
 
     # Sender info via tenure
     sender_tenure = models.ForeignKey(
-        "roster.RosterTenure",
+        "arxii.RosterTenure",
         null=True,
         blank=True,
         on_delete=models.SET_NULL,
@@ -30,7 +30,7 @@ class PlayerMail(SharedMemoryModel):
 
     # Recipient info (references tenure for anonymity)
     recipient_tenure = models.ForeignKey(
-        "roster.RosterTenure",
+        "arxii.RosterTenure",
         on_delete=models.CASCADE,
         related_name="received_mail",
         help_text=("Mail targets the character, routes to current player via roster entry"),

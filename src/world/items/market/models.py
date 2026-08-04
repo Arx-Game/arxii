@@ -17,9 +17,9 @@ provenance renders "Crafted by X, Designed by Y" (designer fields live on
 from django.db import models
 from evennia.utils.idmapper.models import SharedMemoryModel
 
-_PERSONA_FK = "scenes.Persona"
-_TEMPLATE_FK = "items.ItemTemplate"
-_INSTANCE_FK = "items.ItemInstance"
+_PERSONA_FK = "arxii.Persona"
+_TEMPLATE_FK = "arxii.ItemTemplate"
+_INSTANCE_FK = "arxii.ItemInstance"
 
 
 class MarketSquare(SharedMemoryModel):
@@ -31,13 +31,13 @@ class MarketSquare(SharedMemoryModel):
 
     name = models.CharField(max_length=120, unique=True)
     area = models.ForeignKey(
-        "areas.Area",
+        "arxii.Area",
         on_delete=models.PROTECT,
         related_name="market_squares",
         help_text="The capital-city Area this square trades in.",
     )
     realm = models.ForeignKey(
-        "realms.Realm",
+        "arxii.Realm",
         on_delete=models.SET_NULL,
         null=True,
         blank=True,
@@ -88,7 +88,7 @@ class MarketStall(SharedMemoryModel):
         help_text="Null = NPC stall (authored stock, infinite supply).",
     )
     host_org = models.ForeignKey(
-        "societies.Organization",
+        "arxii.Organization",
         on_delete=models.SET_NULL,
         null=True,
         blank=True,
@@ -240,7 +240,7 @@ class CraftingServiceOffer(SharedMemoryModel):
         help_text="CraftingRecipeKind this offer covers (attachment crafting).",
     )
     shop_room = models.ForeignKey(
-        "evennia_extensions.RoomProfile",
+        "arxii.RoomProfile",
         on_delete=models.CASCADE,
         related_name="crafting_service_offers",
         help_text="The crafter's shop — service runs require presence here.",

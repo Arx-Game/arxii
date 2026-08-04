@@ -51,14 +51,14 @@ class LocationValueOverride(DiscriminatorMixin, SharedMemoryModel):
         help_text="Selects which FK (area or room_profile) is active.",
     )
     area = models.ForeignKey(
-        "areas.Area",
+        "arxii.Area",
         null=True,
         blank=True,
         on_delete=models.CASCADE,
         related_name="stat_overrides",
     )
     room_profile = models.ForeignKey(
-        "evennia_extensions.RoomProfile",
+        "arxii.RoomProfile",
         null=True,
         blank=True,
         on_delete=models.CASCADE,
@@ -78,14 +78,14 @@ class LocationValueOverride(DiscriminatorMixin, SharedMemoryModel):
         default="",
     )
     resonance = models.ForeignKey(
-        "magic.Resonance",
+        "arxii.Resonance",
         null=True,
         blank=True,
         on_delete=models.PROTECT,
         related_name="cascade_overrides",
     )
     damage_type = models.ForeignKey(
-        "conditions.DamageType",
+        "arxii.DamageType",
         null=True,
         blank=True,
         on_delete=models.PROTECT,
@@ -194,14 +194,14 @@ class LocationValueModifier(DiscriminatorMixin, SharedMemoryModel):
         help_text="Selects which FK (area or room_profile) is active.",
     )
     area = models.ForeignKey(
-        "areas.Area",
+        "arxii.Area",
         null=True,
         blank=True,
         on_delete=models.CASCADE,
         related_name="stat_modifiers",
     )
     room_profile = models.ForeignKey(
-        "evennia_extensions.RoomProfile",
+        "arxii.RoomProfile",
         null=True,
         blank=True,
         on_delete=models.CASCADE,
@@ -221,14 +221,14 @@ class LocationValueModifier(DiscriminatorMixin, SharedMemoryModel):
         default="",
     )
     resonance = models.ForeignKey(
-        "magic.Resonance",
+        "arxii.Resonance",
         null=True,
         blank=True,
         on_delete=models.PROTECT,
         related_name="cascade_modifiers",
     )
     damage_type = models.ForeignKey(
-        "conditions.DamageType",
+        "arxii.DamageType",
         null=True,
         blank=True,
         on_delete=models.PROTECT,
@@ -347,14 +347,14 @@ class LocationOwnership(DiscriminatorMixin, SharedMemoryModel):
         help_text="Selects which parent FK (area or room_profile) is active.",
     )
     area = models.ForeignKey(
-        "areas.Area",
+        "arxii.Area",
         null=True,
         blank=True,
         on_delete=models.CASCADE,
         related_name="ownership_records",
     )
     room_profile = models.ForeignKey(
-        "evennia_extensions.RoomProfile",
+        "arxii.RoomProfile",
         null=True,
         blank=True,
         on_delete=models.CASCADE,
@@ -367,14 +367,14 @@ class LocationOwnership(DiscriminatorMixin, SharedMemoryModel):
         help_text="Selects which holder FK (persona or organization) is active.",
     )
     holder_persona = models.ForeignKey(
-        "scenes.Persona",
+        "arxii.Persona",
         null=True,
         blank=True,
         on_delete=models.PROTECT,
         related_name="ownership_records",
     )
     holder_organization = models.ForeignKey(
-        "societies.Organization",
+        "arxii.Organization",
         null=True,
         blank=True,
         on_delete=models.PROTECT,
@@ -466,14 +466,14 @@ class LocationTenancy(DiscriminatorMixin, SharedMemoryModel):
         help_text="Selects which parent FK (area or room_profile) is active.",
     )
     area = models.ForeignKey(
-        "areas.Area",
+        "arxii.Area",
         null=True,
         blank=True,
         on_delete=models.CASCADE,
         related_name="tenancy_records",
     )
     room_profile = models.ForeignKey(
-        "evennia_extensions.RoomProfile",
+        "arxii.RoomProfile",
         null=True,
         blank=True,
         on_delete=models.CASCADE,
@@ -486,14 +486,14 @@ class LocationTenancy(DiscriminatorMixin, SharedMemoryModel):
         help_text="Selects which tenant FK (persona or organization) is active.",
     )
     tenant_persona = models.ForeignKey(
-        "scenes.Persona",
+        "arxii.Persona",
         null=True,
         blank=True,
         on_delete=models.PROTECT,
         related_name="tenancies",
     )
     tenant_organization = models.ForeignKey(
-        "societies.Organization",
+        "arxii.Organization",
         null=True,
         blank=True,
         on_delete=models.PROTECT,

@@ -27,7 +27,7 @@ class WeeklyVoteBudget(SharedMemoryModel):
         related_name="weekly_vote_budgets",
     )
     game_week = models.ForeignKey(
-        "game_clock.GameWeek",
+        "arxii.GameWeek",
         on_delete=models.CASCADE,
         related_name="vote_budgets",
     )
@@ -65,7 +65,7 @@ class WeeklyVote(SharedMemoryModel):
         related_name="weekly_votes",
     )
     game_week = models.ForeignKey(
-        "game_clock.GameWeek",
+        "arxii.GameWeek",
         on_delete=models.CASCADE,
         related_name="votes",
     )

@@ -42,6 +42,7 @@ class ConsequencePool(NaturalKeyMixin, SharedMemoryModel):
     )
 
     class Meta:
+        app_label = "arxii"
         verbose_name = "Consequence Pool"
         verbose_name_plural = "Consequence Pools"
 
@@ -106,7 +107,7 @@ class ConsequencePoolEntry(SharedMemoryModel):
         related_name="entries",
     )
     consequence = models.ForeignKey(
-        "checks.Consequence",
+        "arxii.Consequence",
         on_delete=models.CASCADE,
         related_name="pool_entries",
     )
@@ -121,6 +122,7 @@ class ConsequencePoolEntry(SharedMemoryModel):
     )
 
     class Meta:
+        app_label = "arxii"
         verbose_name = "Consequence Pool Entry"
         verbose_name_plural = "Consequence Pool Entries"
         constraints = [

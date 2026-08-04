@@ -91,8 +91,8 @@ class ObjectDBFieldLintTests(SimpleTestCase):
     def test_ignores_narrower_targets(self) -> None:
         code = """\
             class Thing(models.Model):
-                room = models.ForeignKey("evennia_extensions.RoomProfile", on_delete=CASCADE)
-                sheet = models.ForeignKey("character_sheets.CharacterSheet", on_delete=CASCADE)
+                room = models.ForeignKey("arxii.RoomProfile", on_delete=CASCADE)
+                sheet = models.ForeignKey("arxii.CharacterSheet", on_delete=CASCADE)
             """
         self.assertEqual(self._fields(code), [])
 

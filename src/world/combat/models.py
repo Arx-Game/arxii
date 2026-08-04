@@ -69,17 +69,17 @@ from world.scenes.round_models import AbstractRound
 
 # Lazy model references (Django app_label.ModelName), extracted to satisfy S1192.
 ACCOUNT_DB_MODEL = "accounts.AccountDB"
-CHECK_TYPE_MODEL = "checks.CheckType"
-CHECK_OUTCOME_MODEL = "traits.CheckOutcome"
-CONSEQUENCE_POOL_MODEL = "actions.ConsequencePool"
-CHARACTER_SHEET_MODEL = "character_sheets.CharacterSheet"
-TECHNIQUE_MODEL = "magic.Technique"
-COMBAT_PARTICIPANT_MODEL = "combat.CombatParticipant"
-COMBAT_ENCOUNTER_MODEL = "combat.CombatEncounter"
+CHECK_TYPE_MODEL = "arxii.CheckType"
+CHECK_OUTCOME_MODEL = "arxii.CheckOutcome"
+CONSEQUENCE_POOL_MODEL = "arxii.ConsequencePool"
+CHARACTER_SHEET_MODEL = "arxii.CharacterSheet"
+TECHNIQUE_MODEL = "arxii.Technique"
+COMBAT_PARTICIPANT_MODEL = "arxii.CombatParticipant"
+COMBAT_ENCOUNTER_MODEL = "arxii.CombatEncounter"
 OBJECTS_OBJECTDB_MODEL = "objects.ObjectDB"
 
 _MUST_BE_NULL_FOR_KIND = "Must be null for this kind."
-POSITION_MODEL = "areas.Position"
+POSITION_MODEL = "arxii.Position"
 
 
 class CombatEncounter(AbstractRound):
@@ -91,7 +91,7 @@ class CombatEncounter(AbstractRound):
         default=EncounterType.PARTY_COMBAT,
     )
     scene = models.ForeignKey(
-        "scenes.Scene",
+        "arxii.Scene",
         on_delete=models.PROTECT,
         related_name="combat_encounters",
     )
@@ -132,7 +132,7 @@ class CombatEncounter(AbstractRound):
     )
     is_paused = models.BooleanField(default=False)
     escalation_curve = models.ForeignKey(
-        "combat.EscalationCurve",
+        "arxii.EscalationCurve",
         on_delete=models.PROTECT,
         null=True,
         blank=True,
@@ -201,7 +201,7 @@ class CombatEncounter(AbstractRound):
         ),
     )
     story_beat = models.ForeignKey(
-        "stories.Beat",
+        "arxii.Beat",
         on_delete=models.SET_NULL,
         null=True,
         blank=True,
@@ -284,7 +284,7 @@ class ThreatPoolEntry(NaturalKeyMixin, SharedMemoryModel):
 
     class NaturalKeyConfig:
         fields = ["pool", "name"]
-        dependencies = ["combat.ThreatPool"]
+        dependencies = ["arxii.ThreatPool"]
 
     objects = NaturalKeyManager()
 
@@ -301,7 +301,7 @@ class ThreatPoolEntry(NaturalKeyMixin, SharedMemoryModel):
     )
     base_damage = models.PositiveIntegerField(default=0)
     damage_type = models.ForeignKey(
-        "conditions.DamageType",
+        "arxii.DamageType",
         on_delete=models.PROTECT,
         null=True,
         blank=True,
@@ -330,12 +330,12 @@ class ThreatPoolEntry(NaturalKeyMixin, SharedMemoryModel):
         default=TargetSelection.SPECIFIC_ROLE,
     )
     conditions_applied = models.ManyToManyField(
-        "conditions.ConditionTemplate",
+        "arxii.ConditionTemplate",
         blank=True,
         related_name="threat_pool_entries",
     )
     effect_properties = models.ManyToManyField(
-        "mechanics.Property",
+        "arxii.Property",
         blank=True,
         related_name="threat_pool_entries",
         help_text=(
@@ -358,7 +358,7 @@ class ThreatPoolEntry(NaturalKeyMixin, SharedMemoryModel):
         ),
     )
     defense_check_type = models.ForeignKey(
-        "checks.CheckType",
+        "arxii.CheckType",
         on_delete=models.SET_NULL,
         null=True,
         blank=True,
@@ -530,7 +530,7 @@ class CombatOpponent(SharedMemoryModel):
         related_name="opponents",
     )
     creature_template = models.ForeignKey(
-        "combat.CreatureTemplate",
+        "arxii.CreatureTemplate",
         on_delete=models.SET_NULL,
         null=True,
         blank=True,
@@ -547,7 +547,7 @@ class CombatOpponent(SharedMemoryModel):
         default=OpponentStatus.ACTIVE,
     )
     persona = models.ForeignKey(
-        "scenes.Persona",
+        "arxii.Persona",
         on_delete=models.SET_NULL,
         null=True,
         blank=True,
@@ -555,7 +555,7 @@ class CombatOpponent(SharedMemoryModel):
         help_text="Links to a persistent NPC identity for story NPCs.",
     )
     portrait = models.ForeignKey(
-        "evennia_extensions.Media",
+        "arxii.Media",
         on_delete=models.SET_NULL,
         null=True,
         blank=True,
@@ -640,7 +640,7 @@ class CombatOpponent(SharedMemoryModel):
         ),
     )
     summoned_by = models.ForeignKey(
-        "character_sheets.CharacterSheet",
+        "arxii.CharacterSheet",
         on_delete=models.SET_NULL,
         null=True,
         blank=True,
@@ -684,7 +684,7 @@ class CombatOpponent(SharedMemoryModel):
         ),
     )
     wall_breaker_combo = models.ForeignKey(
-        "combat.ComboDefinition",
+        "arxii.ComboDefinition",
         on_delete=models.SET_NULL,
         null=True,
         blank=True,
@@ -1020,7 +1020,7 @@ class ComboDefinition(DiscoverableContent, SharedMemoryModel):
         ),
     )
     required_clash_window_condition = models.ForeignKey(
-        "conditions.ConditionTemplate",
+        "arxii.ConditionTemplate",
         on_delete=models.PROTECT,
         null=True,
         blank=True,
@@ -1069,13 +1069,13 @@ class ComboSlot(SharedMemoryModel):
     )
     slot_number = models.PositiveIntegerField()
     required_action_type = models.ForeignKey(
-        "magic.EffectType",
+        "arxii.EffectType",
         on_delete=models.PROTECT,
         related_name="combo_slots",
         help_text="The EffectType the PC's focused action must match.",
     )
     resonance_requirement = models.ForeignKey(
-        "magic.Resonance",
+        "arxii.Resonance",
         on_delete=models.SET_NULL,
         null=True,
         blank=True,
@@ -1149,7 +1149,7 @@ class ComboSignature(SharedMemoryModel):
     """
 
     covenant = models.ForeignKey(
-        "covenants.Covenant",
+        "arxii.Covenant",
         on_delete=models.CASCADE,
         related_name="combo_signatures",
     )
@@ -1194,7 +1194,7 @@ class CombatParticipant(SharedMemoryModel):
         related_name="combat_participations",
     )
     covenant_role = models.ForeignKey(
-        "covenants.CovenantRole",
+        "arxii.CovenantRole",
         on_delete=models.SET_NULL,
         null=True,
         blank=True,
@@ -1355,7 +1355,7 @@ class CombatRoundAction(CommittingDeclaration, SharedMemoryModel):
         ),
     )
     item_instance = models.ForeignKey(
-        "items.ItemInstance",
+        "arxii.ItemInstance",
         on_delete=models.SET_NULL,
         null=True,
         blank=True,
@@ -1454,7 +1454,7 @@ class CombatRoundAction(CommittingDeclaration, SharedMemoryModel):
         ),
     )
     interaction = models.ForeignKey(
-        "scenes.Interaction",
+        "arxii.Interaction",
         on_delete=models.SET_NULL,
         null=True,
         blank=True,
@@ -1697,7 +1697,7 @@ class SustainedAction(SharedMemoryModel):
     )
     sustained_kind = models.CharField(max_length=16, choices=SustainedKind.choices)
     ritual = models.ForeignKey(
-        "magic.Ritual",
+        "arxii.Ritual",
         on_delete=models.PROTECT,
         null=True,
         blank=True,
@@ -1828,13 +1828,13 @@ class CombatPull(SharedMemoryModel):
     )
     round_number = models.PositiveIntegerField()
     resonance = models.ForeignKey(
-        "magic.Resonance",
+        "arxii.Resonance",
         on_delete=models.PROTECT,
         related_name="combat_pulls",
     )
     tier = models.PositiveSmallIntegerField()  # 1, 2, or 3
     threads = models.ManyToManyField(
-        "magic.Thread",
+        "arxii.Thread",
         related_name="combat_pulls",
     )
     resonance_spent = models.PositiveIntegerField()
@@ -1882,14 +1882,14 @@ class CombatPullResolvedEffect(SharedMemoryModel):
         blank=True,
     )
     source_thread = models.ForeignKey(
-        "magic.Thread",
+        "arxii.Thread",
         on_delete=models.PROTECT,
         related_name="resolved_pull_effects",
     )
     source_thread_level = models.PositiveSmallIntegerField()
     source_tier = models.PositiveSmallIntegerField()  # 0..pull.tier
     granted_capability = models.ForeignKey(
-        "conditions.CapabilityType",
+        "arxii.CapabilityType",
         on_delete=models.PROTECT,
         null=True,
         blank=True,
@@ -1906,7 +1906,7 @@ class CombatPullResolvedEffect(SharedMemoryModel):
     )
     narrative_snippet = models.TextField(blank=True)
     resistance_damage_type = models.ForeignKey(
-        "conditions.DamageType",
+        "arxii.DamageType",
         on_delete=models.PROTECT,
         null=True,
         blank=True,
@@ -2124,12 +2124,12 @@ class RoundChallengeDeclaration(SharedMemoryModel):
         related_name="challenge_declarations",
     )
     challenge_instance = models.ForeignKey(
-        "mechanics.ChallengeInstance",
+        "arxii.ChallengeInstance",
         on_delete=models.CASCADE,
         related_name="combat_declarations",
     )
     challenge_approach = models.ForeignKey(
-        "mechanics.ChallengeApproach",
+        "arxii.ChallengeApproach",
         on_delete=models.CASCADE,
         related_name="combat_declarations",
     )
@@ -2733,7 +2733,7 @@ class StakesEscalationModifier(SharedMemoryModel):
         ),
     )
     default_curve = models.ForeignKey(
-        "combat.EscalationCurve",
+        "arxii.EscalationCurve",
         on_delete=models.SET_NULL,
         null=True,
         blank=True,
@@ -2876,7 +2876,7 @@ class Clash(SharedMemoryModel):
         help_text="Set iff flavor=WARD; null otherwise.",
     )
     triggering_threat_entry = models.ForeignKey(
-        "combat.ThreatPoolEntry",
+        "arxii.ThreatPoolEntry",
         on_delete=models.PROTECT,
         null=True,
         blank=True,
@@ -2890,7 +2890,7 @@ class Clash(SharedMemoryModel):
         ),
     )
     rampart = models.ForeignKey(
-        "areas.Rampart",
+        "arxii.Rampart",
         on_delete=models.SET_NULL,
         null=True,
         blank=True,
@@ -3082,7 +3082,7 @@ class ClashContribution(SharedMemoryModel):
         help_text="Soulfray severity the PC accrued as a result of this contribution.",
     )
     interaction = models.ForeignKey(
-        "scenes.Interaction",
+        "arxii.Interaction",
         on_delete=models.SET_NULL,
         null=True,
         blank=True,
@@ -3167,7 +3167,7 @@ class BreakBarContribution(SharedMemoryModel):
         help_text="Which feed produced this contribution.",
     )
     effect_type = models.ForeignKey(
-        "magic.EffectType",
+        "arxii.EffectType",
         on_delete=models.SET_NULL,
         null=True,
         blank=True,
@@ -3231,7 +3231,7 @@ class ClashContributionDeclaration(CommittingDeclaration, SharedMemoryModel):
         help_text="The PC participant making this contribution.",
     )
     clash = models.ForeignKey(
-        "combat.Clash",
+        "arxii.Clash",
         on_delete=models.CASCADE,
         related_name="declarations",
         help_text="The active Clash this contribution is directed at.",
@@ -3716,7 +3716,7 @@ class PendingSelection(SharedMemoryModel):
     source_object_id = models.PositiveIntegerField(null=True, blank=True)
     source_object = GenericForeignKey("source_content_type", "source_object_id")
     target_opponent = models.ForeignKey(
-        "combat.CombatOpponent",
+        "arxii.CombatOpponent",
         on_delete=models.CASCADE,
         null=True,
         blank=True,
@@ -3765,7 +3765,7 @@ class CombatMark(SharedMemoryModel):
     )
     round_number = models.PositiveIntegerField()
     source_technique = models.ForeignKey(
-        "magic.Technique",
+        "arxii.Technique",
         on_delete=models.SET_NULL,
         null=True,
         blank=True,

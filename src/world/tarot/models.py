@@ -120,7 +120,7 @@ class NamingRitualConfig(SharedMemoryModel):
         help_text="Flavor text displayed above the tarot card browser in CG.",
     )
     codex_entry = models.ForeignKey(
-        "codex.CodexEntry",
+        "arxii.CodexEntry",
         null=True,
         blank=True,
         on_delete=models.SET_NULL,

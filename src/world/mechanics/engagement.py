@@ -35,7 +35,7 @@ class CharacterEngagement(SharedMemoryModel):
     """
 
     character = models.OneToOneField(
-        "character_sheets.CharacterSheet",
+        "arxii.CharacterSheet",
         on_delete=models.CASCADE,
         related_name="engagement",
         help_text="The character who is engaged.",

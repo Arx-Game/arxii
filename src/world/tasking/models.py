@@ -25,8 +25,8 @@ from core.mixins import DiscriminatorMixin
 from core.natural_keys import NaturalKeyManager, NaturalKeyMixin
 from world.tasking.constants import TaskCategory, TaskStatus, TaskTargetKind
 
-_PERSONA_FK = "scenes.Persona"
-_CHECK_OUTCOME_FK = "traits.CheckOutcome"
+_PERSONA_FK = "arxii.Persona"
+_CHECK_OUTCOME_FK = "arxii.CheckOutcome"
 
 
 class TaskTemplateManager(NaturalKeyManager):
@@ -50,7 +50,7 @@ class TaskTemplate(NaturalKeyMixin, SharedMemoryModel):
         default=TaskCategory.GENERAL,
     )
     check_type = models.ForeignKey(
-        "checks.CheckType",
+        "arxii.CheckType",
         on_delete=models.PROTECT,
         related_name="task_templates",
         help_text="Check both the handler (dispatch) and the agent (resolution) roll.",
@@ -74,7 +74,7 @@ class TaskTemplate(NaturalKeyMixin, SharedMemoryModel):
         help_text="Predicate tree gating who may issue/fulfill (NPCServiceOffer convention).",
     )
     mission_template = models.ForeignKey(
-        "missions.MissionTemplate",
+        "arxii.MissionTemplate",
         on_delete=models.SET_NULL,
         null=True,
         blank=True,
@@ -82,7 +82,7 @@ class TaskTemplate(NaturalKeyMixin, SharedMemoryModel):
         help_text="Set = PCs may fulfill this as a mission (phase 5). Unset = NPC-only.",
     )
     consequence_pool = models.ForeignKey(
-        "actions.ConsequencePool",
+        "arxii.ConsequencePool",
         on_delete=models.PROTECT,
         null=True,
         blank=True,
@@ -126,7 +126,7 @@ class TaskOutcomeRoute(SharedMemoryModel):
         help_text="Coppers delivered to the handler's purse on this tier.",
     )
     clue_pool = models.ForeignKey(
-        "assets.CluePool",
+        "arxii.CluePool",
         on_delete=models.PROTECT,
         null=True,
         blank=True,
@@ -259,7 +259,7 @@ class OrgTask(SharedMemoryModel, DiscriminatorMixin):
         related_name="tasks",
     )
     org = models.ForeignKey(
-        "societies.Organization",
+        "arxii.Organization",
         on_delete=models.CASCADE,
         related_name="org_tasks",
         help_text="The issuing organization.",
@@ -286,21 +286,21 @@ class OrgTask(SharedMemoryModel, DiscriminatorMixin):
         default=TaskTargetKind.NONE,
     )
     target_room = models.ForeignKey(
-        "evennia_extensions.RoomProfile",
+        "arxii.RoomProfile",
         on_delete=models.CASCADE,
         null=True,
         blank=True,
         related_name="+",
     )
     target_org = models.ForeignKey(
-        "societies.Organization",
+        "arxii.Organization",
         on_delete=models.CASCADE,
         null=True,
         blank=True,
         related_name="org_tasks_targeting",
     )
     target_domain = models.ForeignKey(
-        "societies.Domain",
+        "arxii.Domain",
         on_delete=models.CASCADE,
         null=True,
         blank=True,
@@ -314,7 +314,7 @@ class OrgTask(SharedMemoryModel, DiscriminatorMixin):
         related_name="org_tasks_targeting",
     )
     target_crisis = models.ForeignKey(
-        "societies.DomainCrisis",
+        "arxii.DomainCrisis",
         on_delete=models.CASCADE,
         null=True,
         blank=True,
@@ -412,7 +412,7 @@ class ListenerPost(SharedMemoryModel):
     """
 
     assignment = models.OneToOneField(
-        "npc_services.NPCAssignment",
+        "arxii.NPCAssignment",
         on_delete=models.CASCADE,
         related_name="listener_post",
         help_text="The LISTENER-role assignment this post decorates.",
@@ -424,7 +424,7 @@ class ListenerPost(SharedMemoryModel):
         help_text="The persona who collects — physically, in the room.",
     )
     check_type = models.ForeignKey(
-        "checks.CheckType",
+        "arxii.CheckType",
         on_delete=models.PROTECT,
         null=True,
         blank=True,
@@ -464,7 +464,7 @@ class ListenerPost(SharedMemoryModel):
         ),
     )
     pending_plant = models.ForeignKey(
-        "clues.Clue",
+        "arxii.Clue",
         null=True,
         blank=True,
         on_delete=models.SET_NULL,
@@ -497,7 +497,7 @@ class ListenerHarvest(SharedMemoryModel):
         related_name="harvests",
     )
     secret = models.ForeignKey(
-        "secrets.Secret",
+        "arxii.Secret",
         on_delete=models.PROTECT,
         null=True,
         blank=True,
@@ -505,7 +505,7 @@ class ListenerHarvest(SharedMemoryModel):
         help_text="The caught record. NULL = nothing real happened that cycle.",
     )
     planted_clue = models.ForeignKey(
-        "clues.Clue",
+        "arxii.Clue",
         null=True,
         blank=True,
         on_delete=models.SET_NULL,
@@ -538,7 +538,7 @@ class TaskFulfillment(SharedMemoryModel):
         related_name="fulfillments",
     )
     npc_asset = models.ForeignKey(
-        "assets.NPCAsset",
+        "arxii.NPCAsset",
         on_delete=models.CASCADE,
         null=True,
         blank=True,
@@ -546,7 +546,7 @@ class TaskFulfillment(SharedMemoryModel):
         help_text="The dispatched agent (NPC path).",
     )
     mission_instance = models.ForeignKey(
-        "missions.MissionInstance",
+        "arxii.MissionInstance",
         on_delete=models.SET_NULL,
         null=True,
         blank=True,

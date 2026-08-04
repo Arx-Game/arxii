@@ -39,7 +39,7 @@ class RenownAwardConfig(SharedMemoryModel):
         help_text="Override reach; if null, derived from magnitude default.",
     )
     archetypes = models.ManyToManyField(
-        "societies.PhilosophicalArchetype",
+        "arxii.PhilosophicalArchetype",
         blank=True,
         related_name="%(class)s_renown_configs",
         help_text="Philosophical archetypes forwarded to fire_renown_award.",

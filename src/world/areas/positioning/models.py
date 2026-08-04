@@ -14,7 +14,7 @@ from core.descriptors import ReverseOneToOneOrNone
 from core.natural_keys import NaturalKeyManager, NaturalKeyMixin
 from world.areas.positioning.constants import PositionKind, RampartCrackState, RampartSignature
 
-_DAMAGE_TYPE_MODEL = "conditions.DamageType"
+_DAMAGE_TYPE_MODEL = "arxii.DamageType"
 
 # Instance-dict names of the Prefetch/query shared-interface caches on Position.
 _POSITION_EDGE_CACHES = ("passable_edges_as_a", "passable_edges_as_b", "all_edges_as_a")
@@ -125,7 +125,7 @@ class Position(PositionNodeBase):
     )
 
     class Meta:
-        app_label = "areas"
+        app_label = "arxii"
         constraints = [
             models.UniqueConstraint(fields=["room", "name"], name="unique_position_per_room"),
         ]
@@ -178,7 +178,7 @@ class PositionEdge(PositionEdgeBase):
     position_a = models.ForeignKey(Position, on_delete=models.CASCADE, related_name="edges_as_a")
     position_b = models.ForeignKey(Position, on_delete=models.CASCADE, related_name="edges_as_b")
     gating_challenge = models.ForeignKey(
-        "mechanics.ChallengeInstance",
+        "arxii.ChallengeInstance",
         on_delete=models.SET_NULL,
         null=True,
         blank=True,
@@ -195,7 +195,7 @@ class PositionEdge(PositionEdgeBase):
         help_text="For conjured obstacles: rounds until expiry. Null = permanent (staff-authored).",
     )
     created_by_sheet = models.ForeignKey(
-        "character_sheets.CharacterSheet",
+        "arxii.CharacterSheet",
         on_delete=models.SET_NULL,
         null=True,
         blank=True,
@@ -206,7 +206,7 @@ class PositionEdge(PositionEdgeBase):
     )
 
     class Meta:
-        app_label = "areas"
+        app_label = "arxii"
         constraints = [
             models.UniqueConstraint(
                 fields=["position_a", "position_b"], name="unique_position_edge"
@@ -261,7 +261,7 @@ class PositionBlueprint(SharedMemoryModel):
     description = models.TextField(blank=True)
 
     class Meta:
-        app_label = "areas"
+        app_label = "arxii"
         ordering = ["name"]
 
     def __str__(self) -> str:
@@ -292,7 +292,7 @@ class BlueprintPosition(PositionNodeBase):
     )
 
     class Meta:
-        app_label = "areas"
+        app_label = "arxii"
         constraints = [
             models.UniqueConstraint(
                 fields=["blueprint", "name"], name="unique_blueprint_position_per_blueprint"
@@ -323,7 +323,7 @@ class BlueprintEdge(PositionEdgeBase):
         BlueprintPosition, on_delete=models.CASCADE, related_name="edges_as_b"
     )
     gating_challenge_template = models.ForeignKey(
-        "mechanics.ChallengeTemplate",
+        "arxii.ChallengeTemplate",
         on_delete=models.PROTECT,
         null=True,
         blank=True,
@@ -331,7 +331,7 @@ class BlueprintEdge(PositionEdgeBase):
     )
 
     class Meta:
-        app_label = "areas"
+        app_label = "arxii"
         constraints = [
             models.UniqueConstraint(
                 fields=["position_a", "position_b"], name="unique_blueprint_edge"
@@ -375,7 +375,7 @@ class ObjectPosition(SharedMemoryModel):
     position = models.ForeignKey(Position, on_delete=models.CASCADE, related_name="occupants")
 
     class Meta:
-        app_label = "areas"
+        app_label = "arxii"
 
     def __str__(self) -> str:
         return f"{self.objectdb_id} @ {self.position_id}"
@@ -428,7 +428,7 @@ class PositionShelter(SharedMemoryModel):
     )
 
     class Meta:
-        app_label = "areas"
+        app_label = "arxii"
         constraints = [
             models.UniqueConstraint(
                 fields=["position", "damage_type", "source"],
@@ -489,7 +489,7 @@ class BlueprintPositionShelter(SharedMemoryModel):
     )
 
     class Meta:
-        app_label = "areas"
+        app_label = "arxii"
         constraints = [
             models.UniqueConstraint(
                 fields=["blueprint_position", "damage_type"],
@@ -518,7 +518,7 @@ class RampartElementProfile(NaturalKeyMixin, SharedMemoryModel):
 
     class NaturalKeyConfig:
         fields = ["name"]
-        dependencies = [_DAMAGE_TYPE_MODEL, "conditions.ConditionTemplate"]
+        dependencies = [_DAMAGE_TYPE_MODEL, "arxii.ConditionTemplate"]
 
     objects = NaturalKeyManager()
 
@@ -545,7 +545,7 @@ class RampartElementProfile(NaturalKeyMixin, SharedMemoryModel):
         help_text="Retaliation damage type (MELEE_RETALIATION). Unused by other behaviors.",
     )
     signature_condition = models.ForeignKey(
-        "conditions.ConditionTemplate",
+        "arxii.ConditionTemplate",
         on_delete=models.SET_NULL,
         null=True,
         blank=True,
@@ -554,7 +554,7 @@ class RampartElementProfile(NaturalKeyMixin, SharedMemoryModel):
     )
 
     class Meta:
-        app_label = "areas"
+        app_label = "arxii"
         ordering = ["name"]
 
     def __str__(self) -> str:
@@ -570,7 +570,7 @@ class RampartElementResistance(NaturalKeyMixin, SharedMemoryModel):
 
     class NaturalKeyConfig:
         fields = ["profile", "damage_type"]
-        dependencies = ["areas.RampartElementProfile", _DAMAGE_TYPE_MODEL]
+        dependencies = ["arxii.RampartElementProfile", _DAMAGE_TYPE_MODEL]
 
     objects = NaturalKeyManager()
 
@@ -587,7 +587,7 @@ class RampartElementResistance(NaturalKeyMixin, SharedMemoryModel):
     )
 
     class Meta:
-        app_label = "areas"
+        app_label = "arxii"
         constraints = [
             models.UniqueConstraint(
                 fields=["profile", "damage_type"], name="unique_rampart_resistance_per_type"
@@ -613,7 +613,7 @@ class Rampart(SharedMemoryModel):
     integrity = models.PositiveSmallIntegerField()
     max_integrity = models.PositiveSmallIntegerField()
     created_by_sheet = models.ForeignKey(
-        "character_sheets.CharacterSheet",
+        "arxii.CharacterSheet",
         on_delete=models.SET_NULL,
         null=True,
         blank=True,
@@ -628,7 +628,7 @@ class Rampart(SharedMemoryModel):
     created_at = models.DateTimeField(auto_now_add=True)
 
     class Meta:
-        app_label = "areas"
+        app_label = "arxii"
         ordering = ["position"]
 
     @property

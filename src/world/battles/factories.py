@@ -251,7 +251,7 @@ class BattleDuelOutcomeTriggerDefinitionFactory(factory_django.DjangoModelFactor
     """
 
     class Meta:
-        model = "flows.TriggerDefinition"
+        model = "arxii.TriggerDefinition"
         django_get_or_create = ("name",)
 
     name = "encounter_completed_champion_duel_outcome"
@@ -300,7 +300,7 @@ class BattlePlaceEncounterOutcomeTriggerDefinitionFactory(factory_django.DjangoM
     """
 
     class Meta:
-        model = "flows.TriggerDefinition"
+        model = "arxii.TriggerDefinition"
         django_get_or_create = ("name",)
 
     name = "encounter_completed_place_encounter_outcome"

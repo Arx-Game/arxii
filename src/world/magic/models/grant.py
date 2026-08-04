@@ -20,12 +20,12 @@ from world.magic.constants import GainSource
 
 class ResonanceGrant(SharedMemoryModel):
     character_sheet = models.ForeignKey(
-        "character_sheets.CharacterSheet",
+        "arxii.CharacterSheet",
         on_delete=models.CASCADE,
         related_name="resonance_grants",
     )
     resonance = models.ForeignKey(
-        "magic.Resonance",
+        "arxii.Resonance",
         on_delete=models.PROTECT,
     )
     amount = models.PositiveIntegerField()
@@ -38,7 +38,7 @@ class ResonanceGrant(SharedMemoryModel):
 
     # Typed source FKs — exactly one non-null per row, matching ``source``.
     source_room_profile = models.ForeignKey(
-        "evennia_extensions.RoomProfile",
+        "arxii.RoomProfile",
         null=True,
         blank=True,
         on_delete=models.PROTECT,
@@ -52,21 +52,21 @@ class ResonanceGrant(SharedMemoryModel):
         related_name="resonance_grants_issued",
     )
     source_pose_endorsement = models.ForeignKey(
-        "magic.PoseEndorsement",
+        "arxii.PoseEndorsement",
         null=True,
         blank=True,
         on_delete=models.PROTECT,
         related_name="resonance_grants",
     )
     source_scene_entry_endorsement = models.ForeignKey(
-        "magic.SceneEntryEndorsement",
+        "arxii.SceneEntryEndorsement",
         null=True,
         blank=True,
         on_delete=models.PROTECT,
         related_name="resonance_grants",
     )
     outfit_item_facet = models.ForeignKey(
-        "items.ItemFacet",
+        "arxii.ItemFacet",
         on_delete=models.SET_NULL,
         null=True,
         blank=True,
@@ -74,7 +74,7 @@ class ResonanceGrant(SharedMemoryModel):
         help_text="Set when source=OUTFIT_TRICKLE; the ItemFacet that produced this trickle.",
     )
     source_sanctum_details = models.ForeignKey(
-        "magic.SanctumDetails",
+        "arxii.SanctumDetails",
         on_delete=models.SET_NULL,
         null=True,
         blank=True,
@@ -85,7 +85,7 @@ class ResonanceGrant(SharedMemoryModel):
         ),
     )
     source_project = models.ForeignKey(
-        "projects.Project",
+        "arxii.Project",
         on_delete=models.SET_NULL,
         null=True,
         blank=True,
@@ -96,7 +96,7 @@ class ResonanceGrant(SharedMemoryModel):
         ),
     )
     source_entry_flourish = models.ForeignKey(
-        "magic.EntryFlourishRecord",
+        "arxii.EntryFlourishRecord",
         on_delete=models.PROTECT,
         null=True,
         blank=True,
@@ -104,7 +104,7 @@ class ResonanceGrant(SharedMemoryModel):
         help_text="Set when source=ENTRY_FLOURISH.",
     )
     source_dramatic_moment = models.ForeignKey(
-        "magic.DramaticMomentTag",
+        "arxii.DramaticMomentTag",
         on_delete=models.PROTECT,
         null=True,
         blank=True,
@@ -112,7 +112,7 @@ class ResonanceGrant(SharedMemoryModel):
         help_text="Set when source=DRAMATIC_MOMENT.",
     )
     source_style_presentation_endorsement = models.ForeignKey(
-        "magic.StylePresentationEndorsement",
+        "arxii.StylePresentationEndorsement",
         null=True,
         blank=True,
         on_delete=models.PROTECT,
@@ -120,7 +120,7 @@ class ResonanceGrant(SharedMemoryModel):
         help_text="Set when source=STYLE_PRESENTATION.",
     )
     source_mission_deed_reward_line = models.ForeignKey(
-        "missions.MissionDeedRewardLine",
+        "arxii.MissionDeedRewardLine",
         null=True,
         blank=True,
         on_delete=models.PROTECT,
@@ -128,7 +128,7 @@ class ResonanceGrant(SharedMemoryModel):
         help_text="Set when source=MISSION_REWARD.",
     )
     source_character_distinction = models.ForeignKey(
-        "distinctions.CharacterDistinction",
+        "arxii.CharacterDistinction",
         null=True,
         blank=True,
         on_delete=models.SET_NULL,

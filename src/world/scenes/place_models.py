@@ -20,7 +20,7 @@ class Place(SharedMemoryModel):
     name = models.CharField(max_length=255)
     description = models.TextField(blank=True)
     room = models.ForeignKey(
-        "evennia_extensions.RoomProfile",
+        "arxii.RoomProfile",
         on_delete=models.CASCADE,
         null=True,
         blank=True,
@@ -56,7 +56,7 @@ class PlacePresence(SharedMemoryModel):
         related_name="presences",
     )
     persona = models.ForeignKey(
-        "scenes.Persona",
+        "arxii.Persona",
         on_delete=models.CASCADE,
         related_name="place_presences",
     )
@@ -83,7 +83,7 @@ class InteractionReceiver(SharedMemoryModel):
     """
 
     interaction = models.ForeignKey(
-        "scenes.Interaction",
+        "arxii.Interaction",
         on_delete=models.CASCADE,
         related_name="receivers",
         db_constraint=False,
@@ -94,7 +94,7 @@ class InteractionReceiver(SharedMemoryModel):
         "with partitioned table",
     )
     persona = models.ForeignKey(
-        "scenes.Persona",
+        "arxii.Persona",
         on_delete=models.CASCADE,
         related_name="interactions_received",
         help_text="The persona who received this interaction",

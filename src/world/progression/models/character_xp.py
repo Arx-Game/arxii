@@ -18,7 +18,7 @@ class CharacterXP(SharedMemoryModel):
     """Per-character XP balance, partitioned by transferability."""
 
     character = models.ForeignKey(
-        "character_sheets.CharacterSheet",
+        "arxii.CharacterSheet",
         on_delete=models.CASCADE,
         related_name="character_xp",
     )
@@ -84,7 +84,7 @@ class CharacterXPTransaction(SharedMemoryModel):
     """Audit trail for character-level XP changes."""
 
     character = models.ForeignKey(
-        "character_sheets.CharacterSheet",
+        "arxii.CharacterSheet",
         on_delete=models.CASCADE,
         related_name="character_xp_transactions",
     )

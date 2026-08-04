@@ -14,7 +14,7 @@ from django.db import models
 from evennia.utils.idmapper.models import SharedMemoryModel
 
 # App-qualified model path repeated across FK references; centralized for dedup.
-_DOMAIN_MODEL = "societies.Domain"
+_DOMAIN_MODEL = "arxii.Domain"
 
 
 class CropType(SharedMemoryModel):
@@ -48,7 +48,7 @@ class FieldDetails(SharedMemoryModel):
     """
 
     feature_instance = models.OneToOneField(
-        "room_features.RoomFeatureInstance",
+        "arxii.RoomFeatureInstance",
         on_delete=models.CASCADE,
         related_name="field_details",
         primary_key=True,
@@ -76,7 +76,7 @@ class GranaryDetails(SharedMemoryModel):
     """
 
     feature_instance = models.OneToOneField(
-        "room_features.RoomFeatureInstance",
+        "arxii.RoomFeatureInstance",
         on_delete=models.CASCADE,
         related_name="granary_details",
         primary_key=True,
@@ -222,7 +222,7 @@ class FoodTransfer(SharedMemoryModel):
     )
     amount = models.PositiveIntegerField(help_text="Food units moved.")
     acting_persona = models.ForeignKey(
-        "scenes.Persona",
+        "arxii.Persona",
         on_delete=models.SET_NULL,
         null=True,
         blank=True,

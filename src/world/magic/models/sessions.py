@@ -28,7 +28,7 @@ class RitualSession(SharedMemoryModel):
     ritual = models.ForeignKey(Ritual, on_delete=models.PROTECT)
     initiator = models.ForeignKey(CharacterSheet, on_delete=models.PROTECT)
     scene = models.ForeignKey(
-        "scenes.Scene",
+        "arxii.Scene",
         on_delete=models.SET_NULL,
         null=True,
         blank=True,

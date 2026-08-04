@@ -99,7 +99,7 @@ class ClassXPCost(SharedMemoryModel):
     """
 
     character_class = models.ForeignKey(
-        "classes.CharacterClass",
+        "arxii.CharacterClass",
         on_delete=models.CASCADE,
         related_name="xp_costs",
     )
@@ -137,7 +137,7 @@ class TraitXPCost(SharedMemoryModel):
     """
 
     trait = models.ForeignKey(
-        "traits.Trait",
+        "arxii.Trait",
         on_delete=models.CASCADE,
         related_name="xp_costs",
     )
@@ -174,7 +174,7 @@ class ClassLevelUnlock(SharedMemoryModel):
     """Unlocking a new level in a character class."""
 
     character_class = models.ForeignKey(
-        "classes.CharacterClass",
+        "arxii.CharacterClass",
         on_delete=models.CASCADE,
         related_name="level_unlocks",
     )
@@ -202,7 +202,7 @@ class TraitRatingUnlock(SharedMemoryModel):
     """Unlocking a major trait rating threshold."""
 
     trait = models.ForeignKey(
-        "traits.Trait",
+        "arxii.Trait",
         on_delete=models.CASCADE,
         related_name="rating_unlocks",
     )
@@ -268,7 +268,7 @@ class AbstractUnlockRequirement(models.Model):
         blank=True,
     )
     thread_crossing_threshold = models.ForeignKey(
-        "magic.ThreadCrossingThreshold",
+        "arxii.ThreadCrossingThreshold",
         on_delete=models.CASCADE,
         related_name=_REQUIREMENTS_RELATED_NAME,
         null=True,
@@ -279,7 +279,7 @@ class AbstractUnlockRequirement(models.Model):
         ),
     )
     path = models.ForeignKey(
-        "classes.Path",
+        "arxii.Path",
         on_delete=models.CASCADE,
         related_name=_REQUIREMENTS_RELATED_NAME,
         null=True,
@@ -328,7 +328,7 @@ class TraitRequirement(AbstractClassLevelRequirement):
     """Requirement for a specific trait at a minimum value."""
 
     trait = models.ForeignKey(
-        "traits.Trait",
+        "arxii.Trait",
         on_delete=models.CASCADE,
         related_name="trait_requirements",
     )
@@ -399,7 +399,7 @@ class ClassLevelRequirement(AbstractClassLevelRequirement):
     """Requirement for a specific level in a specific class."""
 
     character_class = models.ForeignKey(
-        "classes.CharacterClass",
+        "arxii.CharacterClass",
         on_delete=models.CASCADE,
     )
     minimum_level = models.PositiveIntegerField(
@@ -439,7 +439,7 @@ class MultiClassRequirement(AbstractClassLevelRequirement):
     """Requirement for having multiple classes at specific levels."""
 
     required_classes = models.ManyToManyField(
-        "classes.CharacterClass",
+        "arxii.CharacterClass",
         through="MultiClassLevel",
         related_name="multi_requirements",
     )
@@ -490,7 +490,7 @@ class MultiClassLevel(SharedMemoryModel):
         related_name="class_levels",
     )
     character_class = models.ForeignKey(
-        "classes.CharacterClass",
+        "arxii.CharacterClass",
         on_delete=models.CASCADE,
     )
     minimum_level = models.PositiveIntegerField(
@@ -508,7 +508,7 @@ class AchievementRequirement(AbstractClassLevelRequirement):
     """Requirement based on character achievements."""
 
     achievement = models.ForeignKey(
-        "achievements.Achievement",
+        "arxii.Achievement",
         on_delete=models.CASCADE,
         help_text="The achievement required",
     )
@@ -546,7 +546,7 @@ class RelationshipRequirement(AbstractClassLevelRequirement):
     """
 
     required_track_kind = models.ForeignKey(
-        "relationships.RelationshipTrack",
+        "arxii.RelationshipTrack",
         on_delete=models.PROTECT,
         null=True,
         blank=True,
@@ -692,14 +692,14 @@ class ItemRequirement(AbstractClassLevelRequirement):
     """
 
     item_template = models.ForeignKey(
-        "items.ItemTemplate",
+        "arxii.ItemTemplate",
         on_delete=models.PROTECT,
         null=True,
         blank=True,
         related_name="class_level_item_requirements",
     )
     min_touchstone_tier = models.ForeignKey(
-        "magic.ResonanceTier",
+        "arxii.ResonanceTier",
         on_delete=models.PROTECT,
         null=True,
         blank=True,
@@ -715,7 +715,7 @@ class ItemRequirement(AbstractClassLevelRequirement):
         help_text="Template-mode only; touchstone-mode is a possess-at-least-one check.",
     )
     min_quality_tier = models.ForeignKey(
-        "items.QualityTier",
+        "arxii.QualityTier",
         on_delete=models.SET_NULL,
         null=True,
         blank=True,
@@ -863,7 +863,7 @@ class CodexKnowledgeRequirement(AbstractUnlockRequirement):
     """
 
     codex_entry = models.ForeignKey(
-        "codex.CodexEntry",
+        "arxii.CodexEntry",
         on_delete=models.CASCADE,
         related_name="codex_knowledge_requirements",
         help_text="The codex entry the character must know (KNOWN status).",
@@ -903,12 +903,12 @@ class CharacterUnlock(SharedMemoryModel):
     """Records what class levels a character has unlocked."""
 
     character = models.ForeignKey(
-        "character_sheets.CharacterSheet",
+        "arxii.CharacterSheet",
         on_delete=models.CASCADE,
         related_name="unlocks",
     )
     character_class = models.ForeignKey(
-        "classes.CharacterClass",
+        "arxii.CharacterClass",
         on_delete=models.CASCADE,
         related_name="character_unlocks",
     )

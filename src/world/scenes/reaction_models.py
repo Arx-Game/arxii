@@ -29,7 +29,7 @@ class ReactionWindow(SharedMemoryModel):
     """
 
     interaction = models.ForeignKey(
-        "scenes.Interaction",
+        "arxii.Interaction",
         on_delete=models.CASCADE,
         related_name="reaction_windows",
         db_constraint=False,
@@ -40,7 +40,7 @@ class ReactionWindow(SharedMemoryModel):
         "with partitioned table",
     )
     scene = models.ForeignKey(
-        "scenes.Scene",
+        "arxii.Scene",
         on_delete=models.CASCADE,
         related_name="reaction_windows",
         help_text="Scene whose close settles this window.",
@@ -85,7 +85,7 @@ class WindowReaction(SharedMemoryModel):
         related_name="reactions",
     )
     reactor_persona = models.ForeignKey(
-        "scenes.Persona",
+        "arxii.Persona",
         on_delete=models.CASCADE,
         related_name="window_reactions",
         help_text="The IC face that reacted.",

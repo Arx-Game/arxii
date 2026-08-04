@@ -61,6 +61,9 @@ class TriggerDefinition(NaturalKeyMixin, SharedMemoryModel):
     class NaturalKeyConfig:
         fields = ["name"]
 
+    class Meta:
+        app_label = "arxii"
+
     def clean(self) -> None:
         super().clean()
         if self.base_filter_condition:
@@ -102,7 +105,7 @@ class Trigger(SharedMemoryModel):
         help_text=("Optional JSON condition to further refine when this trigger activates."),
     )
     source_condition = models.ForeignKey(
-        "conditions.ConditionInstance",
+        "arxii.ConditionInstance",
         on_delete=models.CASCADE,
         null=True,
         blank=True,
@@ -113,13 +116,16 @@ class Trigger(SharedMemoryModel):
         ),
     )
     source_stage = models.ForeignKey(
-        "conditions.ConditionStage",
+        "arxii.ConditionStage",
         on_delete=models.CASCADE,
         null=True,
         blank=True,
         related_name="stage_triggers",
         help_text="If set, active only while source_condition is at this stage.",
     )
+
+    class Meta:
+        app_label = "arxii"
 
     def clean(self) -> None:
         super().clean()
@@ -200,6 +206,7 @@ class TriggerData(SharedMemoryModel):
     value = models.TextField(help_text="The data value.")
 
     class Meta:
+        app_label = "arxii"
         unique_together = ("trigger", "key")
 
     def __str__(self) -> str:

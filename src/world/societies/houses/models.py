@@ -32,9 +32,9 @@ from world.societies.houses.constants import (
     TitleTier,
 )
 
-_ORG_FK = "societies.Organization"
-_KINSPERSON_FK = "roster.Kinsperson"
-_REALM_FK = "realms.Realm"
+_ORG_FK = "arxii.Organization"
+_KINSPERSON_FK = "arxii.Kinsperson"
+_REALM_FK = "arxii.Realm"
 
 
 class NobiliaryParticle(SharedMemoryModel):
@@ -192,7 +192,7 @@ class Title(SharedMemoryModel):
         help_text="The person holding the title (PC or NPC kinsperson node).",
     )
     seat_domain = models.ForeignKey(
-        "societies.Domain",
+        "arxii.Domain",
         on_delete=models.SET_NULL,
         null=True,
         blank=True,
@@ -227,7 +227,7 @@ class Domain(SharedMemoryModel):
     """
 
     area = models.OneToOneField(
-        "areas.Area",
+        "arxii.Area",
         on_delete=models.CASCADE,
         related_name="domain_profile",
         primary_key=True,
@@ -306,7 +306,7 @@ class DomainHolding(SharedMemoryModel):
     )
     name = models.CharField(max_length=120)
     income_stream = models.OneToOneField(
-        "currency.OrgIncomeStream",
+        "arxii.OrgIncomeStream",
         on_delete=models.SET_NULL,
         null=True,
         blank=True,
@@ -322,7 +322,7 @@ class DomainHolding(SharedMemoryModel):
         ),
     )
     common_gem_tier = models.ForeignKey(
-        "items.MaterialCategory",
+        "arxii.MaterialCategory",
         on_delete=models.PROTECT,
         null=True,
         blank=True,
@@ -349,7 +349,7 @@ class DomainImprovementDetails(SharedMemoryModel):
     """
 
     project = models.OneToOneField(
-        "projects.Project",
+        "arxii.Project",
         on_delete=models.CASCADE,
         related_name="domain_improvement_details",
         primary_key=True,
@@ -395,7 +395,7 @@ class EdictKind(SharedMemoryModel):
     name = models.CharField(max_length=100, unique=True)
     description = models.TextField(blank=True)
     stance = models.ForeignKey(
-        "societies.StanceArchetype",
+        "arxii.StanceArchetype",
         on_delete=models.PROTECT,
         related_name="edict_kinds",
         help_text="The philosophy this policy embodies; proclaimed at enactment.",
@@ -439,7 +439,7 @@ class DomainEdict(SharedMemoryModel):
         related_name="enactments",
     )
     proclamation = models.ForeignKey(
-        "societies.Proclamation",
+        "arxii.Proclamation",
         null=True,
         blank=True,
         on_delete=models.SET_NULL,
@@ -447,7 +447,7 @@ class DomainEdict(SharedMemoryModel):
         help_text="The proclaiming act that enacted this policy.",
     )
     enacted_by = models.ForeignKey(
-        "scenes.Persona",
+        "arxii.Persona",
         on_delete=models.CASCADE,
         related_name="edicts_enacted",
     )
@@ -529,7 +529,7 @@ class DomainCrisisTypeOption(SharedMemoryModel):
         default=0, help_text="PAY only: base cost, scaled by severity at runtime. PLACEHOLDER."
     )
     mission_template = models.ForeignKey(
-        "missions.MissionTemplate",
+        "arxii.MissionTemplate",
         null=True,
         blank=True,
         on_delete=models.PROTECT,
@@ -590,7 +590,7 @@ class DomainCrisis(SharedMemoryModel):
     # One machinery, two fictions (the CRIME_KICKUP precedent): the same row
     # is a crisis on a house's lands OR on the organization itself (#2837).
     org = models.ForeignKey(
-        "societies.Organization",
+        "arxii.Organization",
         null=True,
         blank=True,
         on_delete=models.CASCADE,
@@ -628,7 +628,7 @@ class DomainCrisis(SharedMemoryModel):
     )
     chosen_at = models.DateTimeField(null=True, blank=True)
     minted_mission = models.ForeignKey(
-        "missions.MissionInstance",
+        "arxii.MissionInstance",
         null=True,
         blank=True,
         on_delete=models.SET_NULL,
@@ -709,7 +709,7 @@ class CrisisIntel(SharedMemoryModel):
 
     crisis = models.ForeignKey(DomainCrisis, on_delete=models.CASCADE, related_name="intel")
     org = models.ForeignKey(
-        "societies.Organization", on_delete=models.CASCADE, related_name="crisis_intel"
+        "arxii.Organization", on_delete=models.CASCADE, related_name="crisis_intel"
     )
     source = models.CharField(
         max_length=20,
@@ -739,7 +739,7 @@ class MarriagePact(SharedMemoryModel):
     """
 
     union = models.OneToOneField(
-        "roster.Union",
+        "arxii.Union",
         on_delete=models.PROTECT,
         related_name="marriage_pact",
     )
@@ -803,7 +803,7 @@ class PactCommitment(SharedMemoryModel):
         ),
     )
     obligation = models.OneToOneField(
-        "currency.OrgObligation",
+        "arxii.OrgObligation",
         on_delete=models.SET_NULL,
         null=True,
         blank=True,
@@ -841,7 +841,7 @@ class HouseTemplate(SharedMemoryModel):
         help_text="roster.Family.FamilyType the defined family gets.",
     )
     society = models.ForeignKey(
-        "societies.Society",
+        "arxii.Society",
         on_delete=models.PROTECT,
         related_name="house_templates",
         help_text="The society the materialized org joins.",
@@ -888,13 +888,13 @@ class HouseTemplate(SharedMemoryModel):
         help_text="KinSlotPool capacity minted for the new family. PLACEHOLDER.",
     )
     aspect_definitions = models.ManyToManyField(
-        "societies.HouseAspectDefinition",
+        "arxii.HouseAspectDefinition",
         blank=True,
         related_name="templates",
         help_text="Required catalog choices for claims on this template (#2079).",
     )
     features = models.ManyToManyField(
-        "societies.HouseFeature",
+        "arxii.HouseFeature",
         blank=True,
         related_name="templates",
         help_text="Cultural facts stamped on materialized houses (#2079).",
@@ -919,7 +919,7 @@ class HouseClaim(SharedMemoryModel):
     """
 
     draft = models.OneToOneField(
-        "character_creation.CharacterDraft",
+        "arxii.CharacterDraft",
         on_delete=models.CASCADE,
         related_name="house_claim",
     )
@@ -1029,7 +1029,7 @@ class HouseAspectOption(NaturalKeyMixin, SharedMemoryModel):
         blank=True, help_text="Player-facing blurb shown on the option card."
     )
     codex_entry = models.ForeignKey(
-        "codex.CodexEntry",
+        "arxii.CodexEntry",
         on_delete=models.PROTECT,
         null=True,
         blank=True,
@@ -1043,7 +1043,7 @@ class HouseAspectOption(NaturalKeyMixin, SharedMemoryModel):
 
     class NaturalKeyConfig:
         fields = ["definition", "name"]
-        dependencies = ["societies.HouseAspectDefinition"]
+        dependencies = ["arxii.HouseAspectDefinition"]
 
     class Meta:
         ordering = ["definition", "display_order", "name"]
@@ -1104,7 +1104,7 @@ class OrganizationAspect(SharedMemoryModel):
     """
 
     organization = models.ForeignKey(
-        "societies.Organization", on_delete=models.CASCADE, related_name="aspects"
+        "arxii.Organization", on_delete=models.CASCADE, related_name="aspects"
     )
     definition = models.ForeignKey(
         HouseAspectDefinition, on_delete=models.PROTECT, related_name="+"
@@ -1125,7 +1125,7 @@ class OrganizationFeature(SharedMemoryModel):
     """A cultural feature stamped on a house org (#2079)."""
 
     organization = models.ForeignKey(
-        "societies.Organization", on_delete=models.CASCADE, related_name="features"
+        "arxii.Organization", on_delete=models.CASCADE, related_name="features"
     )
     feature = models.ForeignKey(
         HouseFeature, on_delete=models.PROTECT, related_name="organization_features"

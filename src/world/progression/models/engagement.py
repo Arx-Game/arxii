@@ -32,7 +32,7 @@ class WeeklySocialEngagement(SharedMemoryModel):
         related_name="weekly_social_engagement",
     )
     game_week = models.ForeignKey(
-        "game_clock.GameWeek",
+        "arxii.GameWeek",
         null=True,
         blank=True,
         on_delete=models.SET_NULL,

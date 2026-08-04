@@ -82,13 +82,13 @@ class ResolveFixtureModelCollisionTest(TestCase):
         """No label, and a label that matches neither candidate, are both ambiguous."""
         with self.assertRaises(LookupError) as no_label:
             resolve_fixture_model(self.SYNTHETIC_NAME)
-        self.assertIn("achievements.SyntheticCollisionWidget", str(no_label.exception))
-        self.assertIn("progression.SyntheticCollisionWidget", str(no_label.exception))
+        self.assertIn("arxii.SyntheticCollisionWidget", str(no_label.exception))
+        self.assertIn("arxii.SyntheticCollisionWidget", str(no_label.exception))
 
         with self.assertRaises(LookupError) as wrong_label:
             resolve_fixture_model(f"totally_bogus_label.{self.SYNTHETIC_NAME}")
-        self.assertIn("achievements.SyntheticCollisionWidget", str(wrong_label.exception))
-        self.assertIn("progression.SyntheticCollisionWidget", str(wrong_label.exception))
+        self.assertIn("arxii.SyntheticCollisionWidget", str(wrong_label.exception))
+        self.assertIn("arxii.SyntheticCollisionWidget", str(wrong_label.exception))
 
 
 class _FakeModel:

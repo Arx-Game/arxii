@@ -10,7 +10,7 @@ from django.http import HttpResponse, JsonResponse
 from django.shortcuts import render
 from django.views.decorators.http import require_POST
 
-from core.app_domains import domain_of
+from core.app_domains import domain_of, resolve_model_by_name
 from web.admin.models import AdminExcludedModel, AdminPinnedModel
 from web.admin.services import HARDCODED_EXCLUDED_APPS, analyze_fixture, execute_import
 
@@ -20,14 +20,18 @@ logger = logging.getLogger(__name__)
 def _resolve_domain(app_label, model_name):
     """Resolve a request's ``(app_label, model_name)`` to its authoring domain.
 
-    The pin/exclude UI still POSTs Django's real ``app_label`` (from the model
-    dict Django's own admin machinery builds), but the ``AdminPinnedModel`` /
-    ``AdminExcludedModel`` rows now key on the model's *domain*
-    (``core.app_domains.domain_of`` — #2906), which is identical to
-    ``app_label`` today. Returns ``None`` if the model doesn't exist.
+    The pin/exclude UI POSTs the model's *domain* (``export_preview``'s
+    ``data-app-label``, itself ``core.app_domains.domain_of`` — #2906), not
+    Django's real app_label (a single ``"arxii"`` for nearly every model
+    post-collapse). ``apps.get_model(app_label, model_name)`` would 400 on
+    every toggle since "magic"/"roster"/etc. are no longer installed app
+    labels — resolve by model name instead, via the same model-name index
+    ``resolve_model_by_name`` uses everywhere else, passing the domain along
+    only to disambiguate the rare same-named-model case. Returns ``None`` if
+    the model doesn't exist.
     """
     try:
-        model = apps.get_model(app_label, model_name)
+        model = resolve_model_by_name(f"{app_label}.{model_name}" if app_label else model_name)
     except LookupError:
         return None
     return domain_of(model)
@@ -100,7 +104,10 @@ def export_data(request):
             continue
 
         try:
-            model = apps.get_model(app_label, model_name)
+            # model_key carries the domain (export_preview's data-model-key —
+            # core.app_domains.domain_of, #2906), not Django's real app_label
+            # (uniformly "arxii" post-collapse) — resolve by model name.
+            model = resolve_model_by_name(model_key)
             objects = list(model.objects.all())
             all_objects.extend(objects)
         except Exception:

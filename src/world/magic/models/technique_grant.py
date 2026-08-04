@@ -18,13 +18,13 @@ class TechniqueGrant(SharedMemoryModel):
     """
 
     technique = models.ForeignKey(
-        "magic.Technique",
+        "arxii.Technique",
         on_delete=models.PROTECT,
         related_name="grants",
         help_text="The technique this grant teaches.",
     )
     item_template = models.ForeignKey(
-        "items.ItemTemplate",
+        "arxii.ItemTemplate",
         on_delete=models.PROTECT,
         null=True,
         blank=True,
@@ -32,7 +32,7 @@ class TechniqueGrant(SharedMemoryModel):
         help_text="Item that grants this technique on use. Mutually exclusive with ritual.",
     )
     ritual = models.ForeignKey(
-        "magic.Ritual",
+        "arxii.Ritual",
         on_delete=models.PROTECT,
         null=True,
         blank=True,

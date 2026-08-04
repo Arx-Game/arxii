@@ -20,22 +20,22 @@ from evennia.utils.idmapper.models import SharedMemoryModel
 from core.natural_keys import NaturalKeyManager, NaturalKeyMixin
 
 # App-qualified model paths repeated across FK references; centralized for dedup.
-_DISTINCTION_MODEL = "distinctions.Distinction"
-_PATH_MODEL = "classes.Path"
-_GIFT_MODEL = "magic.Gift"
-_TRADITION_MODEL = "magic.Tradition"
+_DISTINCTION_MODEL = "arxii.Distinction"
+_PATH_MODEL = "arxii.Path"
+_GIFT_MODEL = "arxii.Gift"
+_TRADITION_MODEL = "arxii.Tradition"
 
 
 class BeginningsRitualGrant(SharedMemoryModel):
     """Rituals granted by a Beginnings choice."""
 
     beginnings = models.ForeignKey(
-        "character_creation.Beginnings",
+        "arxii.Beginnings",
         on_delete=models.CASCADE,
         related_name="ritual_grants",
     )
     ritual = models.ForeignKey(
-        "magic.Ritual",
+        "arxii.Ritual",
         on_delete=models.CASCADE,
         related_name="+",
     )
@@ -65,7 +65,7 @@ class PathRitualGrant(models.Model):  # noqa: SHARED_MEMORY
         related_name="ritual_grants",
     )
     ritual = models.ForeignKey(
-        "magic.Ritual",
+        "arxii.Ritual",
         on_delete=models.CASCADE,
         related_name="+",
     )
@@ -109,7 +109,7 @@ class PathGiftGrant(NaturalKeyMixin, models.Model):  # noqa: SHARED_MEMORY
         related_name="path_grants",
     )
     starter_techniques = models.ManyToManyField(
-        "magic.Technique",
+        "arxii.Technique",
         blank=True,
         related_name="granted_by_path_gifts",
         help_text=("Curated subset of this gift's techniques minted on crossing into this path."),
@@ -169,7 +169,7 @@ class TraditionGiftGrant(NaturalKeyMixin, SharedMemoryModel):
         related_name="tradition_grants",
     )
     special_techniques = models.ManyToManyField(
-        "magic.Technique",
+        "arxii.Technique",
         blank=True,
         related_name="granted_by_tradition_gifts",
         help_text=(
@@ -222,7 +222,7 @@ class DistinctionRitualGrant(SharedMemoryModel):
         related_name="ritual_grants",
     )
     ritual = models.ForeignKey(
-        "magic.Ritual",
+        "arxii.Ritual",
         on_delete=models.CASCADE,
         related_name="+",
     )
@@ -259,7 +259,7 @@ class DistinctionResonanceGrant(SharedMemoryModel):
         related_name="resonance_grants",
     )
     resonance = models.ForeignKey(
-        "magic.Resonance",
+        "arxii.Resonance",
         on_delete=models.PROTECT,
         related_name="distinction_grants",
     )
@@ -315,7 +315,7 @@ class DistinctionResonanceRankThreshold(SharedMemoryModel):
         related_name="resonance_rank_thresholds",
     )
     resonance = models.ForeignKey(
-        "magic.Resonance",
+        "arxii.Resonance",
         on_delete=models.PROTECT,
         related_name="distinction_rank_thresholds",
     )
@@ -352,7 +352,7 @@ class TraditionRitualGrant(SharedMemoryModel):
         related_name="ritual_grants",
     )
     ritual = models.ForeignKey(
-        "magic.Ritual",
+        "arxii.Ritual",
         on_delete=models.CASCADE,
         related_name="+",
     )
@@ -379,12 +379,12 @@ class CodexEntryRitualGrant(SharedMemoryModel):
     """
 
     codex_entry = models.ForeignKey(
-        "codex.CodexEntry",
+        "arxii.CodexEntry",
         on_delete=models.CASCADE,
         related_name="ritual_grants",
     )
     ritual = models.ForeignKey(
-        "magic.Ritual",
+        "arxii.Ritual",
         on_delete=models.CASCADE,
         related_name="+",
     )

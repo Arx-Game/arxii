@@ -76,7 +76,7 @@ class CheckAdminFkWidgetsTest(TestCase):
         """Any errors returned should use the web_admin.W001 check id."""
         errors = check_admin_fk_widgets(None)
         for error in errors:
-            self.assertEqual(error.id, "web_admin.W001")
+            self.assertEqual(error.id, "arxii.W001")
 
     def test_exempt_field_suppresses_error(self):
         """A field listed in large_table_widget_exempt should not appear in errors."""
