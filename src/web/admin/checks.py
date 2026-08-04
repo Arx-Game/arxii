@@ -154,7 +154,7 @@ def _find_large_table_fk_violations(model, admin_cls, exempt, protected):
                     "intentional, add the field name to "
                     "large_table_widget_exempt with a comment."
                 ),
-                id="arxii.W001",
+                id="web_admin.W001",
             )
         )
     return violations

@@ -1,8 +1,8 @@
 """Models for the crafting submodule.
 
 All models set ``Meta.app_label = "arxii"`` so Django registers them under the
-existing ``items`` app (no new Django app needed). Migrations are deferred to
-Task 7 of the crafting framework PR.
+single collapsed app (#2906; no new Django app needed). Migrations are deferred
+to Task 7 of the crafting framework PR.
 """
 
 from __future__ import annotations

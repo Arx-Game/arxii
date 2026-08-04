@@ -1,6 +1,6 @@
 """Models for the gem value model (Build 0b slice 1).
 
-All models set ``Meta.app_label = "arxii"`` (registered under the ``items`` app,
+All models set ``Meta.app_label = "arxii"`` (the single collapsed app, #2906,
 mirroring ``world.items.crafting``).
 """
 

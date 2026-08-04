@@ -95,7 +95,7 @@ def export_data(request):
     all_objects = []
     for model_key in selected:
         try:
-            app_label, model_name = model_key.split(".")
+            app_label, _model_name = model_key.split(".")
         except ValueError:
             continue
 
