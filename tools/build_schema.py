@@ -57,15 +57,18 @@ SQL_FILES = [
 ]
 
 # Columns on world.scenes.models.Interaction that real migration replay adds
-# *after* the partition rewrite (scenes/0024, scenes/0026) via plain AddField
-# — see POST_PARTITION_COLUMNS in tools/check_partition_sql_drift.py. The raw
-# SQL in SQL_FILES rebuilds arxii_interaction from a frozen pre-partition
+# *after* the partition rewrite (originally scenes/0024, scenes/0026) via plain
+# AddField — see POST_PARTITION_COLUMNS in tools/check_partition_sql_drift.py. The
+# raw SQL in SQL_FILES rebuilds arxii_interaction from a frozen pre-partition
 # snapshot that deliberately omits them; with every migration disabled here,
 # the AddField migrations that would normally backfill them never run, so
 # they must be added explicitly. Derived from check_partition_sql_drift's
 # POST_PARTITION_COLUMNS (FK column names) so the two lists can't diverge.
+#
+# App label is "arxii" (single-app collapse, #2906) — Interaction now lives
+# in that one collapsed app, not a standalone "scenes" app.
 POST_PARTITION_FIELDS = [
-    ("scenes", "Interaction", col.removesuffix("_id")) for col in sorted(POST_PARTITION_COLUMNS)
+    ("arxii", "Interaction", col.removesuffix("_id")) for col in sorted(POST_PARTITION_COLUMNS)
 ]
 
 

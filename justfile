@@ -113,7 +113,7 @@ build-test-schema:
 # (bypassing this recipe) can make Django itself create test_<dbname> via
 # plain syncdb — no partition, no composite FKs, no matviews, no seeds — and
 # with --keepdb that broken schema persists. So probe the same signal
-# build_schema.py itself uses for its idempotency guard (scenes_interaction
+# build_schema.py itself uses for its idempotency guard (arxii_interaction
 # being partitioned, relkind='p') against the actual test DB, not just
 # pg_database existence, and rebuild if it's missing or wrong.
 _ensure-testdb rebuild="":
@@ -124,7 +124,7 @@ _ensure-testdb rebuild="":
     SCHEMA_OK=""
     if [ "$EXISTS" = "1" ]; then
         SCHEMA_OK=$(psql "$TESTDB_URL" -tAc \
-            "SELECT 1 FROM pg_class WHERE relname='scenes_interaction' AND relkind='p'" \
+            "SELECT 1 FROM pg_class WHERE relname='arxii_interaction' AND relkind='p'" \
             2>/dev/null || echo "")
     fi
     if [ -n "{{rebuild}}" ] || [ "$EXISTS" != "1" ] || [ "$SCHEMA_OK" != "1" ]; then
