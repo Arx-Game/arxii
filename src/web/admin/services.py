@@ -16,11 +16,11 @@ import json
 import logging
 from typing import Any
 
-from django.apps import apps
 from django.core import serializers
 from django.db import models, transaction
 from django.db.models.fields.related import ForeignKey
 
+from core.app_domains import resolve_model_by_name
 from core.natural_keys import count_natural_key_args
 from web.admin.constants import ImportAction
 
@@ -304,7 +304,10 @@ def _build_edges(
 ) -> None:
     """Populate *in_degree* and *dependents* for one model's FK edges."""
     try:
-        model_class = apps.get_model(app_label, model_name)
+        # resolve_model_by_name (not apps.get_model) so a pre-#2906 backup's
+        # stale domain-style label (e.g. "magic.technique") still resolves --
+        # see the module-level note in execute_import().
+        model_class = resolve_model_by_name(f"{app_label}.{model_name}")
     except LookupError:
         return
 
@@ -392,7 +395,13 @@ def _analyze_model(
     app_label, model_name = parts
 
     try:
-        model_class = apps.get_model(app_label, model_name)
+        # resolve_model_by_name (not apps.get_model) so a pre-#2906 backup's
+        # stale domain-style label (e.g. "magic.technique") still resolves.
+        # ma.app_label/ma.model_name below stay the RAW parsed values (not the
+        # resolved model's real label) -- the template round-trips them back
+        # into model_actions keys in execute_import(), which must match the
+        # fixture's original "model" strings exactly.
+        model_class = resolve_model_by_name(model_key)
     except LookupError:
         analysis.warnings.append(f"Model not found: {model_key}")
         return None
@@ -733,6 +742,37 @@ def _merge_m2m(
             mr.errors.append(f"Error setting M2M {m2m_field_name} on {nk}: {exc}")
 
 
+def _deserialize_model_records(
+    model_key: str,
+    raw_records: list[dict[str, Any]],
+) -> tuple[list | None, str | None]:
+    """Resolve *model_key* and deserialize its raw records; return ``(objects, error)``.
+
+    Resolves via ``resolve_model_by_name`` (not ``apps.get_model`` / Django's own
+    deserializer resolution) so a pre-#2906 backup's stale domain-style label
+    (e.g. ``"magic.technique"``) still resolves. ``serializers.deserialize()``
+    reads its own ``"model"`` key straight from the JSON and would 404 on that
+    stale label, so each record's ``"model"`` key is rewritten to the resolved
+    model's real current label before being handed off.
+
+    On success returns ``(objects, None)``. On failure returns ``(None, message)``,
+    with *message* naming either an unresolvable model name or a deserialization
+    error -- the caller reports either as this model's import error.
+    """
+    try:
+        model_class = resolve_model_by_name(model_key)
+    except LookupError as exc:
+        return None, f"Model not found: {exc}"
+
+    real_label = model_class._meta.label_lower  # noqa: SLF001
+    relabeled_records = [{**record, "model": real_label} for record in raw_records]
+    model_json = json.dumps(relabeled_records)
+    try:
+        return list(serializers.deserialize("json", model_json)), None
+    except Exception as exc:  # noqa: BLE001
+        return None, f"Deserialization failed: {exc}"
+
+
 # ---------------------------------------------------------------------------
 # Public API -- execute import
 # ---------------------------------------------------------------------------
@@ -779,18 +819,16 @@ def execute_import(
                     result.models.append(mr)
                     continue
 
-                # Deserialize only this model's records now (after deps imported)
-                model_json = json.dumps(grouped_raw[model_key])
-                try:
-                    objects = list(serializers.deserialize("json", model_json))
-                except Exception as exc:  # noqa: BLE001
+                # Resolve + deserialize this model's records now (after deps imported)
+                objects, error = _deserialize_model_records(model_key, grouped_raw[model_key])
+                if error is not None:
                     parts = model_key.split(".")
                     mr = ModelImportResult(
                         app_label=parts[0],
                         model_name=parts[1],
                         action=action,
                     )
-                    mr.errors.append(f"Deserialization failed: {exc}")
+                    mr.errors.append(error)
                     result.models.append(mr)
                     continue
 

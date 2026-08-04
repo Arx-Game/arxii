@@ -1,5 +1,7 @@
 """Tests for the fixture import/export analysis and execution pipeline."""
 
+import json
+
 from django.core import serializers
 from django.test import TestCase
 
@@ -596,3 +598,98 @@ class SelfReferentialNaturalKeyTests(TestCase):
                 break
         self.assertIsNotNone(facet_model)
         self.assertGreaterEqual(facet_model.unchanged_count, 2)
+
+
+class StaleLabelImportTests(TestCase):
+    """Pre-#2906 backups carry domain-style labels (e.g. "magic.technique") that no
+    longer match any installed Django app label (#2906 collapsed everything onto
+    "arxii"). resolve_model_by_name mostly ignores the label half, so these
+    should still resolve and import rather than being dropped with a "Model not
+    found" warning (review fix)."""
+
+    @staticmethod
+    def _relabel(fixture_data, old_model_key, new_model_key):
+        """Rewrite every record's "model" key from *old_model_key* to *new_model_key*.
+
+        Simulates a pre-#2906 export whose fixture JSON still carries the
+        stale pre-collapse domain-style label instead of today's "arxii.<name>".
+        """
+        records = json.loads(fixture_data)
+        for record in records:
+            if record.get("model") == old_model_key:
+                record["model"] = new_model_key
+        return json.dumps(records)
+
+    def test_stale_domain_label_analyzes_successfully(self):
+        """analyze_fixture resolves a stale pre-collapse label like "magic.facet"."""
+        facet = FacetFactory(name="StaleLabelAnalyzeFacet")
+        fixture_data = _serialize_objects([facet])
+        stale_fixture = self._relabel(fixture_data, "arxii.facet", "magic.facet")
+        facet.delete()
+
+        analysis = analyze_fixture(stale_fixture)
+
+        facet_model = next(
+            (ma for ma in analysis.models if ma.app_label == "magic" and ma.model_name == "facet"),
+            None,
+        )
+        self.assertIsNotNone(facet_model, analysis.warnings)
+        self.assertEqual(facet_model.new_count, 1)
+        self.assertFalse(
+            any("Model not found" in w for w in analysis.warnings),
+            analysis.warnings,
+        )
+
+    def test_stale_domain_label_imports_successfully(self):
+        """execute_import resolves and imports a stale pre-collapse label."""
+        facet = FacetFactory(name="StaleLabelImportFacet")
+        fixture_data = _serialize_objects([facet])
+        stale_fixture = self._relabel(fixture_data, "arxii.facet", "magic.facet")
+        facet.delete()
+        self.assertFalse(Facet.objects.filter(name="StaleLabelImportFacet").exists())
+
+        result = execute_import(stale_fixture, {"magic.facet": ImportAction.MERGE})
+
+        self.assertTrue(result.success, f"Import failed: {result.error_message}")
+        self.assertTrue(Facet.objects.filter(name="StaleLabelImportFacet").exists())
+
+    def test_unknown_model_name_still_reported_in_analysis(self):
+        """A genuinely unknown model name is still reported, not silently resolved."""
+        records = [
+            {
+                "model": "totally_bogus_domain.nonexistentmodel",
+                "pk": 1,
+                "fields": {},
+            }
+        ]
+        fixture_data = json.dumps(records)
+
+        analysis = analyze_fixture(fixture_data)
+
+        self.assertTrue(
+            any("Model not found" in w for w in analysis.warnings),
+            analysis.warnings,
+        )
+
+    def test_unknown_model_name_fails_import(self):
+        """A genuinely unknown model name fails the import rather than being dropped."""
+        records = [
+            {
+                "model": "totally_bogus_domain.nonexistentmodel",
+                "pk": 1,
+                "fields": {},
+            }
+        ]
+        fixture_data = json.dumps(records)
+
+        result = execute_import(
+            fixture_data,
+            {"totally_bogus_domain.nonexistentmodel": ImportAction.MERGE},
+        )
+
+        self.assertFalse(result.success)
+        all_errors = [err for mr in result.models for err in mr.errors]
+        self.assertTrue(
+            any("Model not found" in err for err in all_errors),
+            all_errors,
+        )
