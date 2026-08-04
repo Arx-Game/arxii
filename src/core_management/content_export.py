@@ -4,7 +4,10 @@ The allowlist below defines which models are "authored content" (lore-repo
 material) vs ephemeral/runtime data. Only models in this set are exported.
 
 The export serializes each model with natural keys (no pks) and writes one
-JSON file per model to ``CONTENT_REPO_PATH/fixtures/<app_label>/<model_name>.json``.
+JSON file per model to ``CONTENT_REPO_PATH/fixtures/<domain>/<model_name>.json``,
+where ``<domain>`` is the model's authoring domain (see ``core.app_domains``) —
+today identical to its Django ``app_label``, but sourced from the model's module
+path so the directory layout survives the single-app collapse (#2906).
 
 This is the inverse of ``core_management.content_fixtures.load_entries`` —
 export writes what import reads. Round-tripping (export → import) is a no-op
@@ -21,6 +24,7 @@ import json
 import logging
 from pathlib import Path
 
+from core.app_domains import domain_of
 from core_management.content_fixtures import (
     MARKDOWN_EXPORT_DOMAINS,
     content_slug,
@@ -395,9 +399,10 @@ def export_to_content_repo(
 ) -> ExportResult:
     """Serialize content models and write fixture JSON to the lore repo.
 
-    Writes one file per model to ``<content_root>/fixtures/<app_label>/<model_name>.json``.
-    Models with zero rows are skipped (the file is not written). Existing files
-    are overwritten.
+    Writes one file per model to ``<content_root>/fixtures/<domain>/<model_name>.json``,
+    where ``<domain>`` is ``core.app_domains.domain_of(model)`` (today identical to
+    the model's Django ``app_label``). Models with zero rows are skipped (the file
+    is not written). Existing files are overwritten.
 
     **The addition gate (#2890, default ON).** A row whose natural key is not
     already in the corpus file is an *addition*, and by default an addition is
@@ -486,7 +491,7 @@ def _write_one_model(
     complexity ceiling; mutates ``result`` in place, as the inlined body did.
     """
     model_label = model._meta.label_lower  # noqa: SLF001 — Django's public-ish Meta API
-    app_label, model_name = model_label.split(".")
+    _app_label, model_name = model_label.split(".")
     count = len(json.loads(data))
 
     spec = MARKDOWN_EXPORT_DOMAINS.get(model_label)
@@ -502,7 +507,7 @@ def _write_one_model(
         result.total_records += count - len(withheld)
         return
 
-    out_dir = root / "fixtures" / app_label
+    out_dir = root / "fixtures" / domain_of(model)
     out_path = out_dir / f"{model_name}.json"
 
     records, withheld, added = _apply_addition_gate(

@@ -2,6 +2,8 @@
 
 from django.contrib import admin
 
+from core.app_domains import domain_of
+
 
 class ArxAdminSite(admin.AdminSite):
     """
@@ -60,7 +62,13 @@ class ArxAdminSite(admin.AdminSite):
     }
 
     def _build_recent_models(self, app_dict, excluded):
-        """Build list of pinned models with export exclusion status."""
+        """Build list of pinned models with export exclusion status.
+
+        ``pin.app_label`` holds a *domain* value (``core.app_domains.domain_of``,
+        written by ``web.admin.views.toggle_pin_model`` — #2906), identical to
+        Django's real ``app_label`` today, so it still keys straight into
+        ``app_dict``.
+        """
         from web.admin.models import AdminPinnedModel  # noqa: PLC0415
 
         recent_models = []
@@ -80,9 +88,25 @@ class ArxAdminSite(admin.AdminSite):
                     break
         return recent_models
 
+    @staticmethod
+    def _domain_key(app):
+        """Return the domain bucketing key for an ``app_dict`` entry.
+
+        Pre-collapse, every model in ``app["models"]`` shares one Django
+        ``app_label`` (an ``app_dict`` entry *is* one app), so any model's
+        ``domain_of()`` value stands in for the whole entry — restoring the
+        signal from the module path rather than Django's ``app_label`` (#2906).
+        Falls back to ``app["app_label"]`` for an entry with no models
+        (defensive; Django's own ``_build_app_dict`` never produces one).
+        """
+        models = app.get("models") or []
+        if not models:
+            return app["app_label"]
+        return domain_of(models[0]["model"])
+
     def _mark_export_exclusion(self, app, excluded):
         """Mark export exclusion status on each model in an app."""
-        app_label_key = app["app_label"]
+        app_label_key = self._domain_key(app)
         for model in app["models"]:
             model["export_excluded"] = (
                 app_label_key,
@@ -131,7 +155,7 @@ class ArxAdminSite(admin.AdminSite):
             )
 
         for app in app_dict.values():
-            app_label_key = app["app_label"]
+            app_label_key = self._domain_key(app)
             group = app_to_group.get(app_label_key, "other")
             self._mark_export_exclusion(app, excluded)
             app["models"].sort(key=lambda x: x["name"])
