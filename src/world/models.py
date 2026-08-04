@@ -4,7 +4,13 @@ Django's autodiscovery imports ``<app>.models`` once per installed app. Once
 the 66 ``world.*`` sub-packages stop being separate installed apps (a later
 task flips ``INSTALLED_APPS``), nothing imports their individual ``models``
 modules automatically any more — so this file imports every one of them
-directly, in ``INSTALLED_APPS`` order, to keep every model in the schema.
+directly to keep every model in the schema.
+
+The import order below is alphabetical, not ``INSTALLED_APPS`` order — ruff's
+isort rule (``select = ["ALL"]``, no ``I001`` exemption) enforces it on save.
+That's fine: unlike ``world/apps.py``'s ``ready()`` order, import order here
+carries no runtime effect — each ``import world.<pkg>.models`` is independent
+of the others, so any order registers every model with Django the same way.
 
 **Completeness is guarded by a test**, not by convention:
 ``world/tests/test_aggregators.py`` walks the ``world`` package with

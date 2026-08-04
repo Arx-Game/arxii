@@ -13,14 +13,26 @@ discovers which ones actually define a `models` module and (separately) an
 aggregator. It is deliberately NOT derived from `world/models.py` /
 `world/admin.py` themselves — that would just check the file agrees with
 itself.
+
+**Evidence source is the aggregator's own file text, not `sys.modules`.**
+While `world.*` are still separately installed apps (true for this whole
+task — see world/apps.py's docstring), Django's own app loading imports
+every `world.<pkg>.models` / `world.<pkg>.admin` module during ordinary
+`django.setup()`, before this test ever runs — so a `sys.modules` scan would
+already show every module as "imported" regardless of what `world/models.py`
+/ `world/admin.py` actually contain. An empty aggregator file would pass a
+`sys.modules`-based check. Parsing the aggregator's own `import` statements
+(via `ast`) is the only check whose result depends on the file's contents.
 """
 
 from __future__ import annotations
 
+import ast
 from collections.abc import Iterator
 import importlib.util
+from pathlib import Path
 import pkgutil
-import sys
+import re
 
 from django.test import SimpleTestCase
 
@@ -34,6 +46,10 @@ import world
 # future additions/removals don't make this test flaky.
 MINIMUM_EXPECTED_MODELS_MODULES = 60
 MINIMUM_EXPECTED_ADMIN_MODULES = 55
+
+_WORLD_DIR = Path(world.__file__).resolve().parent
+MODELS_AGGREGATOR = _WORLD_DIR / "models.py"
+ADMIN_AGGREGATOR = _WORLD_DIR / "admin.py"
 
 
 def _world_subpackages() -> Iterator[str]:
@@ -58,20 +74,32 @@ def _has_submodule(subpackage_name: str, submodule_name: str) -> bool:
     return spec is not None
 
 
-def _imported_leaf_packages(suffix: str) -> set[str]:
-    """Sub-package names with a `world.<name>.<suffix>` entry in sys.modules."""
-    found = set()
-    prefix = "world."
-    for mod_name in sys.modules:
-        if not mod_name.startswith(prefix) or not mod_name.endswith(f".{suffix}"):
+def _imported_leaf_packages_from_source(aggregator_path: Path, suffix: str) -> set[str]:
+    """Sub-package names the aggregator FILE actually imports, per its own source.
+
+    Parses ``aggregator_path`` with ``ast`` and collects the ``<name>`` from every
+    top-level ``import world.<name>.<suffix>`` statement. This reads the file's
+    text — not any runtime import state — so it fails when a line is missing,
+    regardless of what's already sitting in ``sys.modules`` from Django's normal
+    app loading of the still-separately-installed ``world.*`` apps.
+
+    Args:
+        aggregator_path: Path to ``world/models.py`` or ``world/admin.py``.
+        suffix: ``"models"`` or ``"admin"``.
+
+    Returns:
+        The set of sub-package names imported for that suffix.
+    """
+    tree = ast.parse(aggregator_path.read_text(encoding="utf-8"), filename=str(aggregator_path))
+    pattern = re.compile(rf"^world\.([^.]+)\.{re.escape(suffix)}$")
+    found: set[str] = set()
+    for node in ast.walk(tree):
+        if not isinstance(node, ast.Import):
             continue
-        # Exactly "world.<pkg>.<suffix>" — two dots. Excludes deeper
-        # submodules like "world.magic.services.techniques" or
-        # "world.progression.admin.kudos_admin".
-        if mod_name.count(".") != 2:
-            continue
-        pkg_name = mod_name[len(prefix) : -len(f".{suffix}")]
-        found.add(pkg_name)
+        for alias in node.names:
+            match = pattern.match(alias.name)
+            if match:
+                found.add(match.group(1))
     return found
 
 
@@ -89,9 +117,12 @@ class ModelsAggregatorCompletenessTests(SimpleTestCase):
             "shrunk this much.",
         )
 
-        import world.models  # noqa: F401 — imported for its sys.modules side effect
+        # Importing here is a bonus signal (a listed-but-nonexistent module would
+        # raise ImportError) but is NOT the evidence for completeness — see
+        # `_imported_leaf_packages_from_source`'s docstring for why.
+        import world.models  # noqa: F401
 
-        imported = _imported_leaf_packages("models")
+        imported = _imported_leaf_packages_from_source(MODELS_AGGREGATOR, "models")
         missing = discovered - imported
         self.assertFalse(
             missing,
@@ -104,9 +135,7 @@ class ModelsAggregatorCompletenessTests(SimpleTestCase):
         """Every import in world/models.py corresponds to a real models module."""
         discovered = {name for name in _world_subpackages() if _has_submodule(name, "models")}
 
-        import world.models  # noqa: F401 — imported for its sys.modules side effect
-
-        imported = _imported_leaf_packages("models")
+        imported = _imported_leaf_packages_from_source(MODELS_AGGREGATOR, "models")
         stale = imported - discovered
         self.assertFalse(
             stale,
@@ -130,9 +159,12 @@ class AdminAggregatorCompletenessTests(SimpleTestCase):
             "shrunk this much.",
         )
 
-        import world.admin  # noqa: F401 — imported for its sys.modules side effect
+        # Importing here is a bonus signal (a listed-but-nonexistent module would
+        # raise ImportError) but is NOT the evidence for completeness — see
+        # `_imported_leaf_packages_from_source`'s docstring for why.
+        import world.admin  # noqa: F401
 
-        imported = _imported_leaf_packages("admin")
+        imported = _imported_leaf_packages_from_source(ADMIN_AGGREGATOR, "admin")
         missing = discovered - imported
         self.assertFalse(
             missing,
@@ -145,9 +177,7 @@ class AdminAggregatorCompletenessTests(SimpleTestCase):
         """Every import in world/admin.py corresponds to a real admin module."""
         discovered = {name for name in _world_subpackages() if _has_submodule(name, "admin")}
 
-        import world.admin  # noqa: F401 — imported for its sys.modules side effect
-
-        imported = _imported_leaf_packages("admin")
+        imported = _imported_leaf_packages_from_source(ADMIN_AGGREGATOR, "admin")
         stale = imported - discovered
         self.assertFalse(
             stale,
