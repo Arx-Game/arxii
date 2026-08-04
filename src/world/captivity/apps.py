@@ -1,15 +1,3 @@
-from django.apps import AppConfig
-
-
-class CaptivityConfig(AppConfig):
-    default_auto_field = "django.db.models.BigAutoField"
-    name = "world.captivity"
-    verbose_name = "Captivity"
-
-    def ready(self) -> None:
-        ready()
-
-
 def ready() -> None:
     """Register the RANSOM project-kind handler + instant-completion (#1500).
 

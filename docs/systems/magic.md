@@ -3111,7 +3111,7 @@ execute_flow("cast_power", context={
   (sineating inverted; SIP non-fatal by construction; Ravenous restraint check may escalate to
   GORGE; NPC gorged past empty dies via `vitals.mark_fed_to_death` + a concealed murder-tagged
   deed with scene evidence), consent resolvers for the `feed`/`drain` action keys (registered in
-  `MagicConfig.ready`; NPC targets auto-resolve, PC targets need consent — `drain` category
+  `world.magic.apps.ready()`; NPC targets auto-resolve, PC targets need consent — `drain` category
   under the antagonism root).
 - **Actions/commands**: `FeedAction`/`DrainAction` (`actions/definitions/appetites.py`) — the
   NPC-direct path with explicit mode; telnet `feed`/`drain` (`commands/consent.py`) branch on

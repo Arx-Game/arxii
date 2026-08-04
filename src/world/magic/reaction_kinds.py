@@ -7,7 +7,7 @@ the endorsement row stays the mechanical record and the resonance grant
 fires immediately, exactly as the existing API path does. ``WindowReaction``
 is the generic social-surface record on top.
 
-Registered from ``MagicConfig.ready()`` so scenes never imports magic.
+Registered from ``world.magic.apps.ready()`` so scenes never imports magic.
 """
 
 from __future__ import annotations

@@ -18,7 +18,7 @@ stays, per the ruling on #911 — Discord-style OOC reactions beside the
 mechanical kudos chip. See ADR-0115 for the three-axes ruling (votes vs.
 kudos vs. reactions) that keeps all three separate by design.
 
-Registered from ``ProgressionConfig.ready()`` so scenes never imports
+Registered from ``world.progression.apps.ready()`` so scenes never imports
 progression.
 """
 

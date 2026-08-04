@@ -117,7 +117,7 @@ class ResolveResearchTests(TestCase):
 
 class ResearchHandlerRegistrationTests(TestCase):
     def setUp(self) -> None:
-        # CluesConfig.ready() registers this at startup, but other apps' tests clear the
+        # world.clues.apps.ready() registers this at startup, but other apps' tests clear the
         # shared kind-handler registry (projects' clear_kind_handlers) and run before
         # world.clues in a CI shard. Re-register so these tests verify the RESEARCH
         # wiring without depending on app-ready surviving cross-app test pollution.

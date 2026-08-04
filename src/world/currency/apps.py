@@ -1,7 +1,0 @@
-from django.apps import AppConfig
-
-
-class CurrencyConfig(AppConfig):
-    default_auto_field = "django.db.models.BigAutoField"
-    name = "world.currency"
-    verbose_name = "Currency"

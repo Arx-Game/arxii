@@ -1,16 +1,3 @@
-from django.apps import AppConfig
-
-
-class AgricultureConfig(AppConfig):
-    name = "world.agriculture"
-    label = "agriculture"
-    verbose_name = "Agriculture (Fields, Granaries, Food)"
-    default_auto_field = "django.db.models.BigAutoField"
-
-    def ready(self) -> None:
-        ready()
-
-
 def ready() -> None:
     """Register the field/granary room-feature strategies.
 

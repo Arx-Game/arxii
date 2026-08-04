@@ -1,7 +1,7 @@
 """MISSION effect handler for ``NPCServiceOffer`` (#686).
 
 Registered with ``world.npc_services.effects.OFFER_EFFECT_HANDLERS`` at
-``MissionsConfig.ready()``. Wraps the existing accept-mission lifecycle —
+``world.missions.apps.ready()``. Wraps the existing accept-mission lifecycle —
 ``MissionInstance`` + ``MissionParticipant`` + ``enter_node`` — but with the
 unified ``(offer, persona) -> EffectResult`` signature the framework expects.
 
@@ -242,7 +242,7 @@ def issue_mission(offer: NPCServiceOffer, persona: Persona) -> EffectResult:
     )
 
     return EffectResult(
-        # ty quirk: see comment in MissionsConfig.ready for the str() wrapper.
+        # ty quirk: see comment in world.missions.apps.ready for the str() wrapper.
         kind=str(OfferKind.MISSION.value),
         object_pk=instance.pk,
         object_label=template.name,

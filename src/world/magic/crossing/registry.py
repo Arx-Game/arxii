@@ -1,7 +1,7 @@
 """Crossing-ceremony handler registry (ADR-0094, #1987).
 
 Mirrors the ``OfferHandler`` registry pattern in ``commands/offer_registry.py``:
-handlers register in ``MagicConfig.ready()`` keyed on ``TargetKind``, and
+handlers register in ``world.magic.apps.ready()`` keyed on ``TargetKind``, and
 ``execute_crossing_ceremonies`` dispatches via the registry.
 """
 

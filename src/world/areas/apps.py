@@ -1,15 +1,3 @@
-from django.apps import AppConfig
-
-
-class AreasConfig(AppConfig):
-    default_auto_field = "django.db.models.BigAutoField"
-    name = "world.areas"
-    verbose_name = "Areas"
-
-    def ready(self) -> None:
-        ready()
-
-
 def ready() -> None:
     """Register the CLEANUP project-kind handler + tiered resolver (#1889).
 

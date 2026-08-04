@@ -655,7 +655,7 @@ path: `BattleOutcome` has no FLED/ABANDONED-equivalent value.
 `world.ships.battle_wiring` uses) — `battles` importing `societies` is the
 ratified direction here, both being general/reusable systems (unlike the
 ships case, where the FK-direction rule points the other way, ADR-0010).
-Registered in `BattlesConfig.ready()` (`world/battles/apps.py`).
+Registered in `world.battles.apps.ready()` (`world/battles/apps.py`), called from `world/apps.py`.
 
 **Idempotency:** no-ops if any `LegendEntry` tagged with the lazily-created
 `"Battle"` `LegendSourceType` already exists for `battle.scene` — covers a

@@ -33,8 +33,8 @@ class AssetTaskIntelHandlerTests(EvenniaTestCase):
 
     def setUp(self) -> None:
         super().setUp()
-        # Ensure the AssetsConfig.ready() handlers are registered.
-        from world.assets.apps import AssetsConfig  # noqa: F401
+        # Ensure the world.assets.apps.ready() handlers are registered.
+        from world.assets.apps import ready  # noqa: F401
 
         # Build a promoter with a roster entry (needed for CharacterClue).
         self.roster_entry = RosterEntryFactory()

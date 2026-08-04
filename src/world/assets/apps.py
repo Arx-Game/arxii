@@ -1,20 +1,8 @@
-from django.apps import AppConfig
-
-
-class AssetsConfig(AppConfig):
-    default_auto_field = "django.db.models.BigAutoField"
-    name = "world.assets"
-    verbose_name = "Assets"
-
-    def ready(self) -> None:
-        ready()
-
-
 def ready() -> None:
     """Register the promotion effect handlers (#1872).
 
     Late-imported so models/handlers load only after Django's app
-    registry is ready; mirrors world.missions.apps.MissionsConfig.ready.
+    registry is ready; mirrors world.missions.apps.ready.
 
     Extracted to module level (#2906) so the single-app aggregator
     (``world.apps.ArxiiConfig.ready``) can call it directly once

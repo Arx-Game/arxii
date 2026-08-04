@@ -243,7 +243,7 @@ def _result_message(mode: str, take: int, lost_control: bool, was_lethal: bool) 
 
 # ---------------------------------------------------------------------------
 # Consent-path resolvers (#2853): the transfer on an accepted feed/drain request.
-# Registered at app-ready (MagicConfig) — the same seam boon/anima_ritual use;
+# Registered at app-ready (world.magic.apps.ready) — the same seam boon/anima_ritual use;
 # fires on both consent paths (NPC auto-accept and piloted accept).
 # ---------------------------------------------------------------------------
 
@@ -269,7 +269,7 @@ def _resolve_feeding(request, result) -> None:
 
 
 def register_feeding_resolvers() -> None:
-    """Register the feed/drain consent resolvers (called from MagicConfig.ready)."""
+    """Register the feed/drain consent resolvers (called from world.magic.apps.ready)."""
     from world.scenes.action_resolvers import register_resolver  # noqa: PLC0415
 
     register_resolver("feed", _resolve_feeding)

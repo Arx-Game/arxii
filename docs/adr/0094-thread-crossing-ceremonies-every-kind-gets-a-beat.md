@@ -46,7 +46,7 @@ the effect shape varies. A registry of handlers keyed on `TargetKind` keeps the 
 place while allowing each kind to declare its own effect shape.
 
 The handler registry follows the existing `OfferHandler` pattern
-(`commands/offer_registry.py`): handlers register in `MagicConfig.ready()`, and
+(`commands/offer_registry.py`): handlers register in `world.magic.apps.ready()`, and
 `execute_crossing_ceremonies` (the renamed `fire_variant_discoveries`) dispatches via the
 registry. Kinds that have no handler yet (a gap being closed by follow-up subissues) log a
 debug-level no-op rather than silently returning `None`.
