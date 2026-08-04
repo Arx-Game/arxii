@@ -145,7 +145,6 @@ import sys
 REPO_ROOT = Path(__file__).resolve().parent.parent
 MIGRATION_PATH = REPO_ROOT / "src" / "world" / "migrations" / "0001_initial.py"
 APP_LABEL = "arxii"
-RELATION_TYPES = {"ForeignKey", "OneToOneField", "ManyToManyField"}
 SINGLE_VALUED_RELATION_TYPES = {"ForeignKey", "OneToOneField"}
 DEFAULT_CHUNK_COUNT = 100
 _ARXII_DEP_RE = re.compile(rf'\("{APP_LABEL}",\s*"([^"]+)"\)')

@@ -172,9 +172,8 @@ class ArxAdminSite(admin.AdminSite):
                 }
         return split
 
-    def _mark_export_exclusion(self, app, excluded):
+    def _mark_export_exclusion(self, app, excluded, app_label_key):
         """Mark export exclusion status on each model in an app."""
-        app_label_key = self._domain_key(app)
         for model in app["models"]:
             model["export_excluded"] = (
                 app_label_key,
@@ -228,7 +227,7 @@ class ArxAdminSite(admin.AdminSite):
         for app in app_dict.values():
             app_label_key = self._domain_key(app)
             group = app_to_group.get(app_label_key, "other")
-            self._mark_export_exclusion(app, excluded)
+            self._mark_export_exclusion(app, excluded, app_label_key)
             app["models"].sort(key=lambda x: x["name"])
             app["app_group"] = group
             app["app_group_name"] = self.GROUP_NAMES[group]

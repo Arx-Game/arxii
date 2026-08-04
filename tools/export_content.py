@@ -3,7 +3,7 @@
 
 NOT a management command (repo rule) — a tools script wrapping
 core_management.content_export. Writes one JSON file per content model
-to CONTENT_REPO_PATH/fixtures/<app_label>/<model_name>.json.
+to CONTENT_REPO_PATH/fixtures/<domain>/<model_name>.json.
 
 Usage:
     uv run python tools/export_content.py            # export; withhold new rows
