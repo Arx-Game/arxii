@@ -46,10 +46,15 @@ import world
 # future additions/removals don't make this test flaky.
 MINIMUM_EXPECTED_MODELS_MODULES = 60
 MINIMUM_EXPECTED_ADMIN_MODULES = 55
+# world/apps.py's ArxiiConfig.ready() currently calls 20 sub-package ready()
+# hooks; floor sits comfortably below so ordinary future additions/removals
+# don't make this test flaky (see the two floors above for the same reasoning).
+MINIMUM_EXPECTED_READY_MODULES = 15
 
 _WORLD_DIR = Path(world.__file__).resolve().parent
 MODELS_AGGREGATOR = _WORLD_DIR / "models.py"
 ADMIN_AGGREGATOR = _WORLD_DIR / "admin.py"
+APPS_AGGREGATOR = _WORLD_DIR / "apps.py"
 
 
 def _world_subpackages() -> Iterator[str]:
@@ -184,4 +189,110 @@ class AdminAggregatorCompletenessTests(SimpleTestCase):
             f"world/admin.py imports an admin module that pkgutil discovery "
             f"can't find: {sorted(stale)}. This aggregator should only import "
             "modules that actually exist.",
+        )
+
+
+def _has_module_level_ready(subpackage_name: str) -> bool:
+    """True if ``world.<subpackage_name>.apps`` defines a module-level ``ready()``.
+
+    Parses the module's source with ``ast`` rather than importing it, matching
+    ``_has_submodule``'s no-import discovery discipline above -- discovery must
+    never execute a sub-package's ``apps`` module, only the aggregator itself
+    should trigger that (via Django's normal app loading).
+    """
+    dotted = f"world.{subpackage_name}.apps"
+    try:
+        spec = importlib.util.find_spec(dotted)
+    except ModuleNotFoundError:
+        return False
+    if spec is None or spec.origin is None:
+        return False
+    source_path = Path(spec.origin)
+    tree = ast.parse(source_path.read_text(encoding="utf-8"), filename=str(source_path))
+    return any(isinstance(node, ast.FunctionDef) and node.name == "ready" for node in tree.body)
+
+
+def _imported_apps_aliases_from_source(aggregator_path: Path) -> dict[str, str]:
+    """Return ``{alias: subpackage_name}`` for every ``import world.<name>.apps as <alias>``."""
+    tree = ast.parse(aggregator_path.read_text(encoding="utf-8"), filename=str(aggregator_path))
+    pattern = re.compile(r"^world\.([^.]+)\.apps$")
+    aliases: dict[str, str] = {}
+    for node in ast.walk(tree):
+        if not isinstance(node, ast.Import):
+            continue
+        for alias in node.names:
+            match = pattern.match(alias.name)
+            if match and alias.asname:
+                aliases[alias.asname] = match.group(1)
+    return aliases
+
+
+def _called_ready_packages_from_source(aggregator_path: Path) -> set[str]:
+    """Sub-package names whose ``<alias>.ready()`` is actually CALLED in the aggregator.
+
+    Unlike ``_imported_leaf_packages_from_source`` (which only checks that
+    world/models.py and world/admin.py *import* each sub-package's module --
+    the mere existence of the module is what registers models/admin), an
+    ``apps.py`` ``ready()`` hook only runs its registration side effects when
+    ``<alias>.ready()`` is actually CALLED, so an import with no call would
+    silently skip that sub-package's registration handshake with no error
+    anywhere. This checks the call, not just the import.
+    """
+    aliases = _imported_apps_aliases_from_source(aggregator_path)
+    tree = ast.parse(aggregator_path.read_text(encoding="utf-8"), filename=str(aggregator_path))
+    called: set[str] = set()
+    for node in ast.walk(tree):
+        if not isinstance(node, ast.Call):
+            continue
+        func = node.func
+        if (
+            isinstance(func, ast.Attribute)
+            and func.attr == "ready"
+            and isinstance(func.value, ast.Name)
+            and func.value.id in aliases
+        ):
+            called.add(aliases[func.value.id])
+    return called
+
+
+class ReadyAggregatorCompletenessTests(SimpleTestCase):
+    """`world/apps.py`'s ``ArxiiConfig.ready()`` must call every sub-package's `ready()` hook.
+
+    Deliberately does NOT assert on call *order* -- world/apps.py's docstring
+    records that the order is load-bearing (a cross-app registration handshake)
+    and independently verified, but order is not mechanically derivable from
+    sub-package discovery the way "does this hook get called at all" is.
+    """
+
+    def test_every_ready_hook_is_called(self) -> None:
+        discovered = {name for name in _world_subpackages() if _has_module_level_ready(name)}
+        self.assertGreaterEqual(
+            len(discovered),
+            MINIMUM_EXPECTED_READY_MODULES,
+            f"Only found {len(discovered)} world.*.apps modules with a module-level "
+            f"ready() via source parsing (expected >= {MINIMUM_EXPECTED_READY_MODULES}). "
+            "Discovery is probably broken rather than the codebase having "
+            "shrunk this much.",
+        )
+
+        called = _called_ready_packages_from_source(APPS_AGGREGATOR)
+        missing = discovered - called
+        self.assertFalse(
+            missing,
+            "world/apps.py's ArxiiConfig.ready() is missing a call to `<pkg>.ready()` "
+            f"for: {sorted(missing)}. Without it, that sub-package's ready() hook "
+            "silently never runs once world.* stop being separate installed apps.",
+        )
+
+    def test_no_stale_calls_for_packages_without_ready(self) -> None:
+        """Every `<alias>.ready()` call in world/apps.py corresponds to a real hook."""
+        discovered = {name for name in _world_subpackages() if _has_module_level_ready(name)}
+
+        called = _called_ready_packages_from_source(APPS_AGGREGATOR)
+        stale = called - discovered
+        self.assertFalse(
+            stale,
+            f"world/apps.py calls a ready() hook that source parsing can't find: "
+            f"{sorted(stale)}. This aggregator should only call hooks that "
+            "actually exist.",
         )
