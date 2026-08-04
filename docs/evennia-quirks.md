@@ -52,17 +52,22 @@ only when the launcher blocks it.
 ### Migration Management for a New Subsystem
 
 **There is no "new app" case any more.** #2906 collapsed every first-party
-app into one (`world`, label `arxii`; see ADR-0195) specifically because a
-per-app migration history was the cost driver, not the file count. A new
-subsystem is a new `world/<name>/` sub-package with its own `models.py` (wired
-into `world/models.py`'s aggregator and, if it needs a `ready()` hook,
+app into one (`world`, label `arxii`; see ADR-0195) - not because per-app
+migration history was itself the cost driver (measurement disproved that;
+see ADR-0195's "Why"), but because 46 of the previous 68 apps sat inside one
+dependency cycle, which forced 1,153 FK edges to be deferred no matter how
+each app's own migrations were written. Collapsing to one app lets that
+deferral floor drop to the schema's true 49. A new subsystem is a new
+`world/<name>/` sub-package with its own `models.py` (wired into
+`world/models.py`'s aggregator and, if it needs a `ready()` hook,
 `world/apps.py`'s call list) - its migration lands in the existing
 `world/migrations/` history via a normal `arx manage makemigrations arxii`,
 the same as any other model change. `django_notes.md`'s old per-app
 clean-slate squash workflow (fake-to-zero, delete migration files, regenerate
-`0001_initial.py`) is now obsolete for this case - there is only one
-`0001_initial.py`, already flattened, and squashing it again defeats the
-point of the collapse.
+`0001_initial.py`) is now obsolete for this case - the history is now one
+flattened `world/migrations/` sequence (102 files: 100 cost-weighted chunks
+plus 2 tail migrations, not a single file), and squashing it again defeats
+the point of the collapse.
 
 ### loaddata Cannot UPDATE SharedMemoryModel Rows (#946)
 

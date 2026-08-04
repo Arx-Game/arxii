@@ -109,9 +109,11 @@ The first run is slow — it builds the Docker image, bakes the mise toolchain (
 Node, uv, pnpm) into the image layer, installs Python and frontend dependencies, and
 runs database migrations. This can take a few minutes. Subsequent starts are fast
 because the image layer is cached and only the firewall re-initialization runs.
-(#2906 flattened every first-party app's migration history into one file; migrate no
-longer scales with app count the way it used to, so this step shouldn't be the long
-pole any more - see ADR-0195.)
+(#2906 flattened every first-party app's migration history into `world/migrations/`
+- 102 files, not one; measurement showed the win comes from topologically inlining
+deferred FKs down to the schema's true floor, not from fewer apps. Fresh `migrate`
+is about 1.30x faster than before the collapse, roughly 27 minutes versus 35 on this
+box - a real but modest improvement, still the long pole here. See ADR-0195.)
 
 **Get a shell inside the container:**
 
