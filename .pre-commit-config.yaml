@@ -9,6 +9,11 @@ repos:
       - id: end-of-file-fixer
       - id: check-ast
       - id: check-added-large-files
+        # world/migrations/0001_initial.py is the single collapsed-app initial
+        # migration (#2906): one CreateModel per model across every former
+        # world.* sub-app, ~2.8MB by construction. It is the only migration
+        # that will ever be this size — later migrations are incremental.
+        exclude: ^src/world/migrations/0001_initial\.py$
   - repo: https://github.com/astral-sh/ruff-pre-commit
     rev: v0.14.10
     hooks:
