@@ -24,10 +24,11 @@ CEREMONY_CHECK_TYPE = "Ceremony Rites"
 DEVOTION_ASPECT_NAME = "Devotion"
 PATH_OF_THE_CHOSEN = "Path of the Chosen"
 SECRET_INVESTIGATION_CATEGORY = "secret-investigation"  # noqa: S105 — consent category slug
+_CHURCH_LITURGY_TRADITION = "Church Liturgy"
 
 #: (specialization name, tradition name, tradition description) — PLACEHOLDER names.
 _TRADITIONS = [
-    ("Liturgy", "Church Liturgy", "PLACEHOLDER — formal rites of the mainline faiths."),
+    ("Liturgy", _CHURCH_LITURGY_TRADITION, "PLACEHOLDER — formal rites of the mainline faiths."),
     ("Spiritcalling", "Spiritcalling", "PLACEHOLDER — shamanic totem and spirit worship."),
     ("Druidry", "Druidry", "PLACEHOLDER — nature worship of the old green ways."),
     ("Occultism", "Occultism", "PLACEHOLDER — veiled rites of darker powers."),
@@ -35,8 +36,12 @@ _TRADITIONS = [
 
 #: (being name, tradition name, description) — PLACEHOLDER example beings.
 _BEINGS = [
-    ("The Shepherd", "Church Liturgy", "PLACEHOLDER — the mainline god of the flock."),
-    ("The Gray Sister", "Church Liturgy", "PLACEHOLDER — keeper of thresholds and the dead."),
+    ("The Shepherd", _CHURCH_LITURGY_TRADITION, "PLACEHOLDER — the mainline god of the flock."),
+    (
+        "The Gray Sister",
+        _CHURCH_LITURGY_TRADITION,
+        "PLACEHOLDER — keeper of thresholds and the dead.",
+    ),
     ("Old Antler", "Spiritcalling", "PLACEHOLDER — a great totem spirit of the wilds."),
     ("The Verdant", "Druidry", "PLACEHOLDER — the living green, worshipped in groves."),
     ("The Hollow Flame", "Occultism", "PLACEHOLDER — a dark power worshipped in secret."),

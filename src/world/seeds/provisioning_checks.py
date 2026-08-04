@@ -242,9 +242,7 @@ def _ensure_recipes(check_type, tiers: dict[str, object]) -> None:
     """The example ITEM_CREATE recipes + ingredients + skill caps."""
     from world.items.crafting.constants import CraftingRecipeKind  # noqa: PLC0415
     from world.items.crafting.models import (  # noqa: PLC0415
-        CraftingMaterialRequirement,
         CraftingRecipe,
-        CraftingSkillCap,
     )
     from world.items.models import (  # noqa: PLC0415
         ItemTemplate,
@@ -285,28 +283,43 @@ def _ensure_recipes(check_type, tiers: dict[str, object]) -> None:
                 "required_feature_kind": workshop_kind if workshop_gated else None,
             },
         )
-        for ingredient_name, quantity in ingredients:
-            ingredient, _created = ItemTemplate.objects.get_or_create(
-                name=ingredient_name,
-                defaults={
-                    "description": f"PLACEHOLDER: {ingredient_name.lower()} — cooking stock.",
-                    "is_active": True,
-                    "material_category": categories.get(
-                        _INGREDIENT_CATEGORY.get(ingredient_name, ""),
-                    ),
-                },
-            )
-            CraftingMaterialRequirement.objects.get_or_create(
-                recipe=recipe,
-                item_template=ingredient,
-                defaults={"quantity": quantity},
-            )
-        for min_skill, tier_name in _SKILL_CAP_LADDER:
-            tier = tiers.get(tier_name)
-            if tier is None:
-                continue
-            CraftingSkillCap.objects.get_or_create(
-                recipe=recipe,
-                min_skill_value=min_skill,
-                defaults={"max_quality_tier": tier},
-            )
+        _ensure_recipe_ingredients(recipe, ingredients, categories)
+        _ensure_recipe_skill_caps(recipe, tiers)
+
+
+def _ensure_recipe_ingredients(recipe, ingredients, categories: dict[str, object]) -> None:
+    """The recipe's material requirements, minting any missing ingredient template."""
+    from world.items.crafting.models import CraftingMaterialRequirement  # noqa: PLC0415
+    from world.items.models import ItemTemplate  # noqa: PLC0415
+
+    for ingredient_name, quantity in ingredients:
+        ingredient, _created = ItemTemplate.objects.get_or_create(
+            name=ingredient_name,
+            defaults={
+                "description": f"PLACEHOLDER: {ingredient_name.lower()} — cooking stock.",
+                "is_active": True,
+                "material_category": categories.get(
+                    _INGREDIENT_CATEGORY.get(ingredient_name, ""),
+                ),
+            },
+        )
+        CraftingMaterialRequirement.objects.get_or_create(
+            recipe=recipe,
+            item_template=ingredient,
+            defaults={"quantity": quantity},
+        )
+
+
+def _ensure_recipe_skill_caps(recipe, tiers: dict[str, object]) -> None:
+    """The recipe's skill-value -> max-quality-tier ladder, skipping unseeded tiers."""
+    from world.items.crafting.models import CraftingSkillCap  # noqa: PLC0415
+
+    for min_skill, tier_name in _SKILL_CAP_LADDER:
+        tier = tiers.get(tier_name)
+        if tier is None:
+            continue
+        CraftingSkillCap.objects.get_or_create(
+            recipe=recipe,
+            min_skill_value=min_skill,
+            defaults={"max_quality_tier": tier},
+        )

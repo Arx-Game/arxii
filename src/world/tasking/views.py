@@ -39,6 +39,9 @@ if TYPE_CHECKING:
     from rest_framework.request import Request
 
 
+_NO_ACTIVE_CHARACTER = "No active character."
+
+
 class TaskingPagination(PageNumberPagination):
     page_size = 50
 
@@ -153,7 +156,7 @@ class ListenerPostViewSet(
 
         persona = active_persona_for_request(request)
         if persona is None:
-            return Response({"detail": "No active character."}, status=status.HTTP_400_BAD_REQUEST)
+            return Response({"detail": _NO_ACTIVE_CHARACTER}, status=status.HTTP_400_BAD_REQUEST)
         payload = ListenerPostCreateSerializer(data=request.data)
         payload.is_valid(raise_exception=True)
         data = payload.validated_data
@@ -178,7 +181,7 @@ class ListenerPostViewSet(
         post = self.get_object()
         persona = active_persona_for_request(request)
         if persona is None:
-            return Response({"detail": "No active character."}, status=status.HTTP_400_BAD_REQUEST)
+            return Response({"detail": _NO_ACTIVE_CHARACTER}, status=status.HTTP_400_BAD_REQUEST)
         result = get_action("collect_harvest").run(
             persona.character_sheet.character, post_id=post.pk
         )
@@ -204,7 +207,7 @@ class CounterplayViewSet(viewsets.ViewSet):
 
         persona = active_persona_for_request(request)
         if persona is None:
-            return Response({"detail": "No active character."}, status=status.HTTP_400_BAD_REQUEST)
+            return Response({"detail": _NO_ACTIVE_CHARACTER}, status=status.HTTP_400_BAD_REQUEST)
         result = get_action(action_key).run(persona.character_sheet.character, **kwargs)
         if not result.success:
             return Response({"detail": result.message}, status=status.HTTP_400_BAD_REQUEST)
@@ -340,7 +343,7 @@ class OrgTaskViewSet(
         task = self.get_object()
         persona = active_persona_for_request(request)
         if persona is None:
-            return Response({"detail": "No active character."}, status=status.HTTP_400_BAD_REQUEST)
+            return Response({"detail": _NO_ACTIVE_CHARACTER}, status=status.HTTP_400_BAD_REQUEST)
         result = get_action("accept_org_task").run(
             persona.character_sheet.character, task_id=task.pk
         )
@@ -360,7 +363,7 @@ class OrgTaskViewSet(
         persona = active_persona_for_request(request)
         if persona is None:
             return Response(
-                {"detail": "No active character."},
+                {"detail": _NO_ACTIVE_CHARACTER},
                 status=status.HTTP_400_BAD_REQUEST,
             )
         payload = TaskAssignSerializer(data=request.data)

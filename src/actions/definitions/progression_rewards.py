@@ -21,6 +21,7 @@ if TYPE_CHECKING:
     from actions.types import ActionContext
 
 _NO_ACCOUNT = "You have no active character on the roster."
+_NO_ACTIVE_CHARACTER = "No active character."
 
 
 def _resolve_account(actor: ObjectDB) -> AccountDB | None:
@@ -228,7 +229,7 @@ class SetPathIntentAction(Action):
         try:
             sheet = actor.sheet_data
         except (AttributeError, ObjectDoesNotExist):
-            return ActionResult(success=False, message="No active character.")
+            return ActionResult(success=False, message=_NO_ACTIVE_CHARACTER)
         path = Path.objects.filter(pk=kwargs.get("path_id"), is_active=True).first()
         if path is None:
             return ActionResult(success=False, message="That is not a valid path.")
@@ -256,7 +257,7 @@ class ClearPathIntentAction(Action):
         try:
             sheet = actor.sheet_data
         except (AttributeError, ObjectDoesNotExist):
-            return ActionResult(success=False, message="No active character.")
+            return ActionResult(success=False, message=_NO_ACTIVE_CHARACTER)
         clear_path_intent(sheet)
         return ActionResult(success=True, message="Path intent cleared.")
 
@@ -288,7 +289,7 @@ class SelectPathAction(Action):
         from world.progression.services.advancement import select_initial_path  # noqa: PLC0415
 
         if actor.character_sheet is None:
-            return ActionResult(success=False, message="No active character.")
+            return ActionResult(success=False, message=_NO_ACTIVE_CHARACTER)
         path = Path.objects.filter(
             pk=kwargs.get("path_id"), is_active=True, stage=PathStage.PROSPECT
         ).first()

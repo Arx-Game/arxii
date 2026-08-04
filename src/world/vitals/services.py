@@ -1934,37 +1934,51 @@ def tick_round_for_targets(
             result = process_round_end(target)
         _apply_round_tick_damage(target, result)
     if timing == ROUND_TICK_END:
-        from world.fatigue.services import tick_fatigue_collapse_for_targets  # noqa: PLC0415
+        _tick_round_end_for_targets(target_list)
 
-        for target in target_list:
-            try:
-                sheet = target.sheet_data
-            except (AttributeError, ObjectDoesNotExist):
-                continue
-            advance_bleed_out(sheet)
-            # #2287: unconscious characters get one free wake roll per round.
-            attempt_wake(sheet, in_combat_tick=True)
-        # Non-cast over-capacity exhaustion collapse (acute tier, #520 Phase 5).
-        tick_fatigue_collapse_for_targets(target_list)
-        # Action-driven plummet descent + impact (#1228). Function-local import
-        # avoids a circular import (positioning -> vitals).
-        from world.areas.positioning.plummet import advance_plummet  # noqa: PLC0415
 
-        advance_plummet(target_list)
+# OBJECTDB_PARAM kept: mirrors tick_round_for_targets' own signature — a round tick
+# spans every kind of object that can occupy a room, not just characters.
+def _tick_round_end_for_targets(target_list: list[ObjectDB]) -> None:  # noqa: OBJECTDB_PARAM
+    """The end-of-round half of the tick: bleed-out, collapse, plummet, room expiry."""
+    from world.fatigue.services import tick_fatigue_collapse_for_targets  # noqa: PLC0415
 
-        # #2019: expire conjured obstacles + zone hazards in the target rooms.
-        # #2209: ramparts expire on the same per-round tick.
-        from world.areas.positioning.services import (  # noqa: PLC0415
-            expire_obstacle_rounds,
-            expire_rampart_rounds,
-        )
-        from world.room_features.trap_services import tick_zone_hazards  # noqa: PLC0415
+    for target in target_list:
+        try:
+            sheet = target.sheet_data
+        except (AttributeError, ObjectDoesNotExist):
+            continue
+        advance_bleed_out(sheet)
+        # #2287: unconscious characters get one free wake roll per round.
+        attempt_wake(sheet, in_combat_tick=True)
+    # Non-cast over-capacity exhaustion collapse (acute tier, #520 Phase 5).
+    tick_fatigue_collapse_for_targets(target_list)
+    # Action-driven plummet descent + impact (#1228). Function-local import
+    # avoids a circular import (positioning -> vitals).
+    from world.areas.positioning.plummet import advance_plummet  # noqa: PLC0415
 
-        rooms_seen: set[int] = set()
-        for target in target_list:
-            room = target.db_location
-            if room is not None and room.id not in rooms_seen:
-                rooms_seen.add(room.id)
-                expire_obstacle_rounds(room)
-                expire_rampart_rounds(room)
-                tick_zone_hazards(room)
+    advance_plummet(target_list)
+    _expire_room_round_effects(target_list)
+
+
+# OBJECTDB_PARAM kept: the same round-tick target list as above — any object type
+# may be present in a ticking room.
+def _expire_room_round_effects(target_list: list[ObjectDB]) -> None:  # noqa: OBJECTDB_PARAM
+    """Per-round expiry in each distinct room the targets occupy.
+
+    #2019: conjured obstacles + zone hazards. #2209: ramparts ride the same tick.
+    """
+    from world.areas.positioning.services import (  # noqa: PLC0415
+        expire_obstacle_rounds,
+        expire_rampart_rounds,
+    )
+    from world.room_features.trap_services import tick_zone_hazards  # noqa: PLC0415
+
+    rooms_seen: set[int] = set()
+    for target in target_list:
+        room = target.db_location
+        if room is not None and room.id not in rooms_seen:
+            rooms_seen.add(room.id)
+            expire_obstacle_rounds(room)
+            expire_rampart_rounds(room)
+            tick_zone_hazards(room)

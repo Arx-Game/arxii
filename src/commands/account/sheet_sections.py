@@ -22,7 +22,10 @@ if TYPE_CHECKING:
 
     from world.character_sheets.models import CharacterSheet
     from world.character_sheets.types import TechniqueEntry
-    from world.magic.types.technique_effects import TechniqueFormPayload
+    from world.magic.types.technique_effects import (
+        TechniqueFormPayload,
+        TechniqueSignaturePayload,
+    )
     from world.roster.models import ParentageEdge as ParentageEdgeType
     from world.secrets.models import Secret, SecretKnowledge
 
@@ -390,11 +393,7 @@ def _render_technique_forms(technique: TechniqueEntry) -> list[str]:
     if len(unlocked) > 1 or locked:
         lines.append("      Forms you can work:")
         for form in unlocked:
-            marker = " |w(default)|n" if form["is_default"] else ""
-            lines.append(f"        {_form_label(form)}{marker}")
-            lines.append(f"          intensity {form['intensity']}, control {form['control']}")
-            if form["variant_id"] is not None:
-                lines.append(f"          {form['effect_summary']['summary']}")
+            lines.extend(_render_unlocked_form(form))
     if locked:
         lines.append("      Not yet yours:")
         lines.extend(
@@ -402,11 +401,29 @@ def _render_technique_forms(technique: TechniqueEntry) -> list[str]:
             for form in locked
         )
     if signature:
-        delta = signature["intensity_delta"]
-        sign = "+" if delta >= 0 else ""
-        lines.append(f"      Signature: {signature['name']} ({sign}{delta} intensity)")
-        if signature["narrative_snippet"]:
-            lines.append(f"        {signature['narrative_snippet']}")
+        lines.extend(_render_signature(signature))
+    return lines
+
+
+def _render_unlocked_form(form: TechniqueFormPayload) -> list[str]:
+    """One workable form: label, its numbers, and (for variants) what it does."""
+    marker = " |w(default)|n" if form["is_default"] else ""
+    lines = [
+        f"        {_form_label(form)}{marker}",
+        f"          intensity {form['intensity']}, control {form['control']}",
+    ]
+    if form["variant_id"] is not None:
+        lines.append(f"          {form['effect_summary']['summary']}")
+    return lines
+
+
+def _render_signature(signature: TechniqueSignaturePayload) -> list[str]:
+    """The caster's signature flourish on a technique, with its narrative snippet."""
+    delta = signature["intensity_delta"]
+    sign = "+" if delta >= 0 else ""
+    lines = [f"      Signature: {signature['name']} ({sign}{delta} intensity)"]
+    if signature["narrative_snippet"]:
+        lines.append(f"        {signature['narrative_snippet']}")
     return lines
 
 

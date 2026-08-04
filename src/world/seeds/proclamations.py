@@ -6,6 +6,8 @@ archetypes' deed-judgments). Axis magnitudes follow the ±2-typical rule.
 
 from __future__ import annotations
 
+_STRONG_HAND_STANCE = "The Strong Hand"
+
 # name, description, axis deltas (mercy, method, status, change, allegiance, power)
 _STANCES = [
     (
@@ -24,7 +26,7 @@ _STANCES = [
         {"mercy_delta": 2, "power_delta": 1},
     ),
     (
-        "The Strong Hand",
+        _STRONG_HAND_STANCE,
         "PLACEHOLDER Order is a kindness; enforce it.",
         {"mercy_delta": -2, "power_delta": -2},
     ),
@@ -76,7 +78,7 @@ _EDICT_KINDS = [
     (
         "Doubled Patrols",
         "PLACEHOLDER Steel on every road; little moves unseen.",
-        "The Strong Hand",
+        _STRONG_HAND_STANCE,
         -5,
         1,
         1_500,
@@ -100,7 +102,7 @@ _EDICT_KINDS = [
     (
         "Iron Curfew",
         "PLACEHOLDER The streets empty at dusk, by order.",
-        "The Strong Hand",
+        _STRONG_HAND_STANCE,
         -10,
         4,
         500,

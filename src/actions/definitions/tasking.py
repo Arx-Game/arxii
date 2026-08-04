@@ -22,6 +22,7 @@ if TYPE_CHECKING:
     from world.scenes.models import Persona
 
 _CATEGORY = "tasking"
+_NOT_IN_ROOM_MESSAGE = "You're not in a room."
 
 
 def _active_persona(actor: ObjectDB) -> Persona | None:
@@ -323,7 +324,7 @@ class PostListenerAction(Action):
         else:
             room = _room_profile(actor)
         if room is None:
-            return ActionResult(success=False, message="You're not in a room.")
+            return ActionResult(success=False, message=_NOT_IN_ROOM_MESSAGE)
         npc_asset = NPCAsset.objects.filter(pk=kwargs.get("npc_asset_id")).first()
         if npc_asset is None:
             return ActionResult(success=False, message="No such agent.")
@@ -534,7 +535,7 @@ class DetectListenersAction(Action):
             return _NO_PERSONA
         room = _room_profile(actor)
         if room is None:
-            return ActionResult(success=False, message="You're not in a room.")
+            return ActionResult(success=False, message=_NOT_IN_ROOM_MESSAGE)
         try:
             revealed = detect_listeners(persona, room)
         except TaskingError as exc:
@@ -574,7 +575,7 @@ class ClearRoomListenersAction(Action):
             return _NO_PERSONA
         room = _room_profile(actor)
         if room is None:
-            return ActionResult(success=False, message="You're not in a room.")
+            return ActionResult(success=False, message=_NOT_IN_ROOM_MESSAGE)
         try:
             count = clear_room_listeners(persona, room)
         except TaskingError as exc:

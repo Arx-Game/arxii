@@ -12,6 +12,8 @@ rows for idempotency, DRAIN-phased crons.
 from django.db import models
 from evennia.utils.idmapper.models import SharedMemoryModel
 
+_CHARACTER_SHEET_FK = "character_sheets.CharacterSheet"
+
 
 class AppetitePeriod(models.TextChoices):
     """How often an appetite upkeep drain fires."""
@@ -63,7 +65,7 @@ class AppetiteUpkeepReceipt(SharedMemoryModel):
     """
 
     character_sheet = models.ForeignKey(
-        "character_sheets.CharacterSheet",
+        _CHARACTER_SHEET_FK,
         on_delete=models.CASCADE,
         related_name="appetite_upkeep_receipts",
     )
@@ -101,12 +103,12 @@ class FeedingRecord(SharedMemoryModel):
     """
 
     feeder_sheet = models.ForeignKey(
-        "character_sheets.CharacterSheet",
+        _CHARACTER_SHEET_FK,
         on_delete=models.CASCADE,
         related_name="feedings_taken",
     )
     victim_sheet = models.ForeignKey(
-        "character_sheets.CharacterSheet",
+        _CHARACTER_SHEET_FK,
         on_delete=models.CASCADE,
         related_name="feedings_suffered",
     )

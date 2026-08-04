@@ -31,6 +31,7 @@ from world.vitals.constants import (
 # fields below. Centralized to avoid the duplicated-literal SonarCloud smell
 # (python:S1192).
 _CONSEQUENCE_POOL_FK = "actions.ConsequencePool"
+_CHARACTER_SHEET_FK = "character_sheets.CharacterSheet"
 
 
 class CharacterVitals(SharedMemoryModel):
@@ -43,7 +44,7 @@ class CharacterVitals(SharedMemoryModel):
     """
 
     character_sheet = models.OneToOneField(
-        "character_sheets.CharacterSheet",
+        _CHARACTER_SHEET_FK,
         on_delete=models.CASCADE,
         related_name="vitals",
     )
@@ -341,13 +342,13 @@ class CarriedBody(SharedMemoryModel):
     """
 
     carrier = models.OneToOneField(
-        "character_sheets.CharacterSheet",
+        _CHARACTER_SHEET_FK,
         on_delete=models.CASCADE,
         related_name="carrying_body",
         help_text="The character doing the carrying.",
     )
     carried = models.OneToOneField(
-        "character_sheets.CharacterSheet",
+        _CHARACTER_SHEET_FK,
         on_delete=models.CASCADE,
         related_name="carried_by",
         help_text="The character being carried.",

@@ -17,6 +17,38 @@ if TYPE_CHECKING:
     from world.distinctions.models import SheetUpdateRequest
 
 
+#: The one non-default sub-verb; anything else (including the empty string) means add.
+_REMOVE_ACTION = "remove"
+
+
+def _usage_message(action_str: str) -> str:
+    """The usage line for whichever sub-verb the GM was reaching for."""
+    if action_str == _REMOVE_ACTION:
+        return "Usage: grant_distinction/remove <character>=<distinction slug>"
+    return "Usage: grant_distinction <character>=<distinction slug>[,rank]"
+
+
+def _validate_rank(rank_raw: Any, distinction: Any) -> ActionResult | None:
+    """A refusal for a bad explicit rank, or None when the request may proceed.
+
+    An absent rank is fine — the add path treats it as "first rank / rank up by
+    one". A garbage or over-max rank is rejected outright rather than clamped.
+    Validation only: ``_execute_add`` routes through the sheet-update request
+    framework, which takes no rank, so an accepted value is not applied here.
+    """
+    if rank_raw is None:
+        return None
+    rank = _coerce_positive_int(rank_raw)
+    if rank is None:
+        return ActionResult(success=False, message="rank must be a positive whole number.")
+    if rank > distinction.max_rank:
+        return ActionResult(
+            success=False,
+            message=f"{distinction.name} has a maximum rank of {distinction.max_rank}.",
+        )
+    return None
+
+
 def _coerce_positive_int(value: Any) -> int | None:
     """Return ``value`` as a positive int, or ``None`` if it isn't one.
 
@@ -107,15 +139,7 @@ class GMAwardDistinctionAction(Action):
         action_str = (kwargs.get("action") or "add").strip().lower()
 
         if not target_name or not distinction_slug:
-            if action_str == "remove":  # noqa: STRING_LITERAL
-                return ActionResult(
-                    success=False,
-                    message="Usage: grant_distinction/remove <character>=<distinction slug>",
-                )
-            return ActionResult(
-                success=False,
-                message="Usage: grant_distinction <character>=<distinction slug>[,rank]",
-            )
+            return ActionResult(success=False, message=_usage_message(action_str))
 
         target = actor.search(target_name, global_search=True)
         if target is None:
@@ -136,7 +160,7 @@ class GMAwardDistinctionAction(Action):
 
         gm_account = actor.account
 
-        if action_str == "remove":  # noqa: STRING_LITERAL
+        if action_str == _REMOVE_ACTION:
             return self._execute_remove(
                 sheet=sheet,
                 target=target,
@@ -153,18 +177,9 @@ class GMAwardDistinctionAction(Action):
             )
 
         # ADD (default)
-        rank: int | None = None
-        rank_raw = kwargs.get("rank")
-        if rank_raw is not None:
-            rank = _coerce_positive_int(rank_raw)
-            if rank is None:
-                return ActionResult(success=False, message="rank must be a positive whole number.")
-
-        if rank is not None and rank > distinction.max_rank:
-            return ActionResult(
-                success=False,
-                message=f"{distinction.name} has a maximum rank of {distinction.max_rank}.",
-            )
+        rank_refusal = _validate_rank(kwargs.get("rank"), distinction)
+        if rank_refusal is not None:
+            return rank_refusal
 
         return self._execute_add(
             sheet=sheet,

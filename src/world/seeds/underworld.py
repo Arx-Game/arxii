@@ -120,6 +120,8 @@ def _seed_retaliation_crisis_type() -> None:
 BACK_ROOM_BOARD_NAME = "The Back Room Wall PLACEHOLDER"
 BACK_ROOM_OBJECT_KEY = "a wall of chalked marks PLACEHOLDER"
 ROUTE_TASK_NAME = "Run the Quiet Docks PLACEHOLDER"
+_GATHER_EVIDENCE_CHECK = "Gather Evidence"
+_TURF_WAR_CHECK = "Turf War"
 
 #: (name, summary, risk_tier, category, check name, money, item reward,
 #:  crime-watch slug on failure, feeds the turf project)
@@ -130,7 +132,7 @@ _MISSION_ROWS = (
         "docks without meeting anyone's eyes.",
         1,
         "Smuggling",
-        "Gather Evidence",
+        _GATHER_EVIDENCE_CHECK,
         80,
         "Duskpetal Resin",
         "smuggling",
@@ -142,7 +144,7 @@ _MISSION_ROWS = (
         "steady and the Workshop's door stays shut.",
         1,
         "Crime",
-        "Gather Evidence",
+        _GATHER_EVIDENCE_CHECK,
         20,
         "Dream Dust",
         "contraband",
@@ -153,7 +155,7 @@ _MISSION_ROWS = (
         "PLACEHOLDER: move the product through the fence while the corner is thick with buyers.",
         2,
         "Crime",
-        "Gather Evidence",
+        _GATHER_EVIDENCE_CHECK,
         150,
         None,
         "contraband",
@@ -163,7 +165,7 @@ _MISSION_ROWS = (
         "Send a Message",
         "PLACEHOLDER: the Ashfingers' collector works your street like he owns it. Correct him.",
         2,
-        "Turf War",
+        _TURF_WAR_CHECK,
         "Intimidation",
         60,
         None,
@@ -174,8 +176,8 @@ _MISSION_ROWS = (
         "Burn Their Stash",
         "PLACEHOLDER: what they cannot sell they cannot hold the corner with. Bring a light.",
         3,
-        "Turf War",
-        "Gather Evidence",
+        _TURF_WAR_CHECK,
+        _GATHER_EVIDENCE_CHECK,
         100,
         None,
         "arson",
@@ -187,7 +189,7 @@ _MISSION_ROWS = (
         "pier. Make it yours, permanently.",
         3,
         "Smuggling",
-        "Gather Evidence",
+        _GATHER_EVIDENCE_CHECK,
         400,
         None,
         "smuggling",
@@ -198,7 +200,7 @@ _MISSION_ROWS = (
         "PLACEHOLDER: they are coming to take the corner back tonight. Be "
         "standing on it when they arrive.",
         2,
-        "Turf War",
+        _TURF_WAR_CHECK,
         "Intimidation",
         80,
         None,
@@ -461,7 +463,7 @@ def _seed_route_task(template) -> None:
     )
     from world.traits.models import CheckOutcome  # noqa: PLC0415
 
-    check_type = CheckType.objects.filter(name="Gather Evidence").first()
+    check_type = CheckType.objects.filter(name=_GATHER_EVIDENCE_CHECK).first()
     if check_type is None:
         return
     task, _created = TaskTemplate.objects.get_or_create(

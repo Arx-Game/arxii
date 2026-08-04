@@ -484,31 +484,32 @@ def _incriminate(task: OrgTask, fulfillment: TaskFulfillment, level: int) -> lis
     return []  # residue is never reported to the handler — that's the point
 
 
-def template_is_offensive(template) -> bool:
-    """Whether any route works AGAINST its target (#2833 consent gate).
+#: Per-target-kind "is this route offensive?" predicates (#2833 consent gate).
+#: Quashing gossip and soothing unrest (negative deltas) are defensive; reports,
+#: recruitment, agitation, and amplification are offense. Residue hits the
+#: handler, not the mark, so it has no entry here.
+_OFFENSIVE_ROUTE_PREDICATES = {
+    TaskTargetKind.PERSONA: lambda route: bool(
+        route.movements_report
+        or route.unmask_target
+        or route.recruit_target
+        or route.gossip_heat_delta > 0
+    ),
+    TaskTargetKind.DOMAIN: lambda route: bool(
+        route.domain_report or route.domain_unrest_delta > 0 or route.reveal_schemes
+    ),
+    TaskTargetKind.ORG: lambda route: bool(
+        route.organization_report or route.military_report or route.reveal_schemes
+    ),
+    TaskTargetKind.CRISIS: lambda route: bool(
+        route.crisis_severity_delta > 0 or route.exploit_crisis
+    ),
+}
 
-    Quashing gossip and soothing unrest (negative deltas) are defensive;
-    reports, recruitment, agitation, and amplification are offense.
-    Residue hits the handler, not the mark.
-    """
-    for route in template.outcome_routes.all():
-        if template.target_kind == TaskTargetKind.PERSONA and (
-            route.movements_report
-            or route.unmask_target
-            or route.recruit_target
-            or route.gossip_heat_delta > 0
-        ):
-            return True
-        if template.target_kind == TaskTargetKind.DOMAIN and (
-            route.domain_report or route.domain_unrest_delta > 0 or route.reveal_schemes
-        ):
-            return True
-        if template.target_kind == TaskTargetKind.ORG and (
-            route.organization_report or route.military_report or route.reveal_schemes
-        ):
-            return True
-        if template.target_kind == TaskTargetKind.CRISIS and (
-            route.crisis_severity_delta > 0 or route.exploit_crisis
-        ):
-            return True
-    return False
+
+def template_is_offensive(template) -> bool:
+    """Whether any route works AGAINST its target (#2833 consent gate)."""
+    is_offensive = _OFFENSIVE_ROUTE_PREDICATES.get(template.target_kind)
+    if is_offensive is None:
+        return False
+    return any(is_offensive(route) for route in template.outcome_routes.all())

@@ -60,6 +60,7 @@ COVENANT_MODEL = "covenants.Covenant"
 COVENANT_ROLE_MODEL = "covenants.CovenantRole"
 CHARACTER_SHEET_MODEL = "character_sheets.CharacterSheet"
 CONDITION_TEMPLATE_MODEL = "conditions.ConditionTemplate"
+GIFT_MODEL = "magic.Gift"
 VOW_SITUATIONAL_PERK_MODEL = "covenants.VowSituationalPerk"
 
 
@@ -343,7 +344,7 @@ class CovenantRole(NaturalKeyMixin, AbstractSpecializedVariant, SharedMemoryMode
         ),
     )
     granted_gifts = models.ManyToManyField(
-        "magic.Gift",
+        GIFT_MODEL,
         through="CovenantRoleGiftGrant",
         blank=True,
         related_name="granted_by_roles",
@@ -1181,7 +1182,7 @@ class CovenantRoleGiftGrant(NaturalKeyMixin, SharedMemoryModel):
         related_name="gift_grants",
     )
     gift = models.ForeignKey(
-        "magic.Gift",
+        GIFT_MODEL,
         on_delete=models.CASCADE,
         related_name="role_grants",
     )
@@ -1205,7 +1206,7 @@ class CovenantRoleGiftGrant(NaturalKeyMixin, SharedMemoryModel):
 
     class NaturalKeyConfig:
         fields = ["covenant_role", "gift"]
-        dependencies = [COVENANT_ROLE_MODEL, "magic.Gift"]
+        dependencies = [COVENANT_ROLE_MODEL, GIFT_MODEL]
 
     def __str__(self) -> str:
         return f"{self.covenant_role.name} → {self.gift.name} (≥L{self.unlock_thread_level})"

@@ -25,6 +25,8 @@ _CHECK_TYPE_FK = "checks.CheckType"
 _TRAIT_FK = "traits.Trait"
 _QUALITY_TIER_FK = "items.QualityTier"
 _ITEM_TEMPLATE_FK = "items.ItemTemplate"
+_MODIFIER_TARGET_FK = "mechanics.ModifierTarget"
+_ITEM_INSTANCE_FK = "items.ItemInstance"
 _CONSEQUENCE_FK = "checks.Consequence"
 
 
@@ -345,7 +347,7 @@ class CraftingRecipeModifier(SharedMemoryModel):
         related_name="modifier_outcomes",
     )
     target = models.ForeignKey(
-        "mechanics.ModifierTarget",
+        _MODIFIER_TARGET_FK,
         on_delete=models.CASCADE,
         related_name="+",
     )
@@ -381,7 +383,7 @@ class CraftedItemRecipe(SharedMemoryModel):
     """
 
     item_instance = models.ForeignKey(
-        "items.ItemInstance",
+        _ITEM_INSTANCE_FK,
         on_delete=models.CASCADE,
         related_name="crafted_recipes",
     )
@@ -421,12 +423,12 @@ class ItemAccent(SharedMemoryModel):
     """
 
     item_instance = models.ForeignKey(
-        "items.ItemInstance",
+        _ITEM_INSTANCE_FK,
         on_delete=models.CASCADE,
         related_name="accents",
     )
     target = models.ForeignKey(
-        "mechanics.ModifierTarget",
+        _MODIFIER_TARGET_FK,
         on_delete=models.PROTECT,
         related_name="item_accents",
         help_text="The styleable axis (is_styleable=True): allure, menace, …",
@@ -461,12 +463,12 @@ class AccentExclusion(SharedMemoryModel):
     """
 
     target_a = models.ForeignKey(
-        "mechanics.ModifierTarget",
+        _MODIFIER_TARGET_FK,
         on_delete=models.CASCADE,
         related_name="accent_exclusions_a",
     )
     target_b = models.ForeignKey(
-        "mechanics.ModifierTarget",
+        _MODIFIER_TARGET_FK,
         on_delete=models.CASCADE,
         related_name="accent_exclusions_b",
     )
@@ -507,7 +509,7 @@ class AccentArchetypeAllowance(SharedMemoryModel):
     """
 
     target = models.ForeignKey(
-        "mechanics.ModifierTarget",
+        _MODIFIER_TARGET_FK,
         on_delete=models.CASCADE,
         related_name="accent_archetype_allowances",
     )
@@ -555,12 +557,12 @@ class ItemRefinementDetails(SharedMemoryModel):
         related_name="item_refinement_details",
     )
     item_instance = models.ForeignKey(
-        "items.ItemInstance",
+        _ITEM_INSTANCE_FK,
         on_delete=models.CASCADE,
         related_name="refinement_projects",
     )
     accent_target = models.ForeignKey(
-        "mechanics.ModifierTarget",
+        _MODIFIER_TARGET_FK,
         on_delete=models.PROTECT,
         null=True,
         blank=True,

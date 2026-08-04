@@ -430,6 +430,7 @@ _ORPHANED_TRADITION_MARKER_TAG = "orphaned-tradition-marker"
 #: Order and the Fractals of the Abyss" per the #2428 vision) is a lore-repo
 #: authoring pass; this row is a PLACEHOLDER, content-overridable.
 _METALLIC_ORDER_TRADITION_NAME = "Metallic Order"
+_DISADVANTAGE_CATEGORY_DESCRIPTION = "PLACEHOLDER: disadvantages that reimburse CG points."
 
 
 def wire_magic_learning_ap_cost_target():
@@ -1207,7 +1208,7 @@ def _seed_sun_sensitive_species() -> None:
         DistinctionCategory,
         {
             "name": "Drawbacks",
-            "description": "PLACEHOLDER: disadvantages that reimburse CG points.",
+            "description": _DISADVANTAGE_CATEGORY_DESCRIPTION,
         },
         slug="drawbacks",
     )
@@ -1368,7 +1369,7 @@ def _seed_appetite_content() -> None:
         DistinctionCategory,
         {
             "name": "Drawbacks",
-            "description": "PLACEHOLDER: disadvantages that reimburse CG points.",
+            "description": _DISADVANTAGE_CATEGORY_DESCRIPTION,
         },
         slug="drawbacks",
     )
@@ -1492,7 +1493,7 @@ def _seed_moon_content() -> None:
         DistinctionCategory,
         {
             "name": "Drawbacks",
-            "description": "PLACEHOLDER: disadvantages that reimburse CG points.",
+            "description": _DISADVANTAGE_CATEGORY_DESCRIPTION,
         },
         slug="drawbacks",
     )

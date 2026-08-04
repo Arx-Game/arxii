@@ -70,12 +70,15 @@ from world.scenes.round_models import AbstractRound
 # Lazy model references (Django app_label.ModelName), extracted to satisfy S1192.
 ACCOUNT_DB_MODEL = "accounts.AccountDB"
 CHECK_TYPE_MODEL = "checks.CheckType"
+CHECK_OUTCOME_MODEL = "traits.CheckOutcome"
 CONSEQUENCE_POOL_MODEL = "actions.ConsequencePool"
 CHARACTER_SHEET_MODEL = "character_sheets.CharacterSheet"
 TECHNIQUE_MODEL = "magic.Technique"
 COMBAT_PARTICIPANT_MODEL = "combat.CombatParticipant"
 COMBAT_ENCOUNTER_MODEL = "combat.CombatEncounter"
 OBJECTS_OBJECTDB_MODEL = "objects.ObjectDB"
+
+_MUST_BE_NULL_FOR_KIND = "Must be null for this kind."
 POSITION_MODEL = "areas.Position"
 
 
@@ -1730,7 +1733,7 @@ class SustainedAction(SharedMemoryModel):
         ),
     )
     outcome_snapshot = models.ForeignKey(
-        "traits.CheckOutcome",
+        CHECK_OUTCOME_MODEL,
         on_delete=models.PROTECT,
         null=True,
         blank=True,
@@ -2031,13 +2034,13 @@ class CombatPullResolvedEffect(SharedMemoryModel):
         if self.scaled_value is None:
             raise ValidationError({"scaled_value": "Required for this kind."})
         if self.granted_capability is not None:
-            raise ValidationError({"granted_capability": "Must be null for this kind."})
+            raise ValidationError({"granted_capability": _MUST_BE_NULL_FOR_KIND})
         if self.capability_grant_value is not None:
-            raise ValidationError({"capability_grant_value": "Must be null for this kind."})
+            raise ValidationError({"capability_grant_value": _MUST_BE_NULL_FOR_KIND})
         if self.narrative_snippet:
             raise ValidationError({"narrative_snippet": "Must be empty for this kind."})
         if self.vital_target:
-            raise ValidationError({"vital_target": "Must be null for this kind."})
+            raise ValidationError({"vital_target": _MUST_BE_NULL_FOR_KIND})
 
     def _clean_flat_bonus(self) -> None:
         self._require_scaled_value_only()
@@ -2462,7 +2465,7 @@ class EncounterOutcomeMapping(SharedMemoryModel):
     outcome = models.CharField(max_length=20, choices=EncounterOutcome.choices)
     risk_level = models.CharField(max_length=20, choices=RiskLevel.choices)
     check_outcome = models.ForeignKey(
-        "traits.CheckOutcome",
+        CHECK_OUTCOME_MODEL,
         on_delete=models.SET_NULL,
         null=True,
         blank=True,
@@ -3055,7 +3058,7 @@ class ClashContribution(SharedMemoryModel):
         ),
     )
     check_outcome = models.ForeignKey(
-        "traits.CheckOutcome",
+        CHECK_OUTCOME_MODEL,
         on_delete=models.PROTECT,
         related_name="+",
         help_text="The check outcome tier the PC rolled this round.",

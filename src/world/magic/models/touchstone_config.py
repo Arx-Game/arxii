@@ -8,6 +8,8 @@ from evennia.utils.idmapper.models import SharedMemoryModel
 
 from core.managers import ArxSharedMemoryManager
 
+_VERBOSE_NAME = "Touchstone Cast Config"
+
 
 class TouchstoneCastConfig(SharedMemoryModel):
     """Singleton (pk=1) tuning knobs for touchstone combat resonance.
@@ -29,8 +31,8 @@ class TouchstoneCastConfig(SharedMemoryModel):
     )
 
     class Meta:
-        verbose_name = "Touchstone Cast Config"
-        verbose_name_plural = "Touchstone Cast Config"
+        verbose_name = _VERBOSE_NAME
+        verbose_name_plural = _VERBOSE_NAME
 
     def __str__(self) -> str:
-        return "Touchstone Cast Config"
+        return _VERBOSE_NAME

@@ -115,7 +115,6 @@ def active_crossing_effects(character: Character) -> list[CrossingEffectInfo]:
     For FACET-kind threads, only includes choices where the character is
     wearing an item with the anchor facet. Other kinds (TRAIT) are always-on.
     """
-    from world.magic.constants import TargetKind  # noqa: PLC0415
     from world.magic.models.crossing import CrossingChoice  # noqa: PLC0415
 
     sheet = character.sheet_data
@@ -130,22 +129,8 @@ def active_crossing_effects(character: Character) -> list[CrossingEffectInfo]:
     result: list[CrossingEffectInfo] = []
     for choice in choices:
         thread = choice.thread
-        if thread.target_kind == TargetKind.FACET:
-            # Wear-gate: only active if wearing an item with the anchor facet
-            # (equipped_items is an unconditional cached_property on Character).
-            matching = character.equipped_items.item_facets_for(thread.target_facet)
-            if not matching:
-                continue
-
-        if thread.target_kind == TargetKind.SANCTUM:
-            # Location-gate: only active if the character is in the sanctum's room
-            sanctum = thread.target_sanctum_details
-            if sanctum is None:
-                continue
-            sanctum_room = sanctum.feature_instance.room_profile.objectdb
-            if character.location != sanctum_room:
-                continue
-
+        if not _crossing_choice_is_live(character, thread):
+            continue
         result.append(
             CrossingEffectInfo(
                 name=choice.option.name,
@@ -157,3 +142,26 @@ def active_crossing_effects(character: Character) -> list[CrossingEffectInfo]:
             )
         )
     return result
+
+
+def _crossing_choice_is_live(character: Character, thread: Thread) -> bool:
+    """Whether a crossing choice's anchor gate is currently satisfied.
+
+    FACET threads are wear-gated (the character must be wearing an item
+    carrying the anchor facet); SANCTUM threads are location-gated (the
+    character must be standing in the sanctum's room). Other kinds (TRAIT)
+    are always-on.
+    """
+    from world.magic.constants import TargetKind  # noqa: PLC0415
+
+    if thread.target_kind == TargetKind.FACET:
+        # equipped_items is an unconditional cached_property on Character.
+        return bool(character.equipped_items.item_facets_for(thread.target_facet))
+
+    if thread.target_kind == TargetKind.SANCTUM:
+        sanctum = thread.target_sanctum_details
+        if sanctum is None:
+            return False
+        return character.location == sanctum.feature_instance.room_profile.objectdb
+
+    return True

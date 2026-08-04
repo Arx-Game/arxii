@@ -46,6 +46,7 @@ SCENE_MODEL = "scenes.Scene"
 STORY_MODEL = "stories.Story"
 COMBAT_ENCOUNTER_MODEL = "combat.CombatEncounter"
 CHARACTER_SHEET_MODEL = "character_sheets.CharacterSheet"
+CHECK_OUTCOME_MODEL = "traits.CheckOutcome"
 TECHNIQUE_MODEL = "magic.Technique"
 COVENANT_MODEL = "covenants.Covenant"
 BUILDING_MODEL = "buildings.Building"
@@ -853,7 +854,7 @@ class BattleOutcomeMapping(SharedMemoryModel):
 
     outcome = models.CharField(max_length=30, choices=BattleOutcome.choices, unique=True)
     check_outcome = models.ForeignKey(
-        "traits.CheckOutcome",
+        CHECK_OUTCOME_MODEL,
         on_delete=models.SET_NULL,
         null=True,
         blank=True,
@@ -1126,7 +1127,7 @@ class CityDefenseDetails(SharedMemoryModel):
         help_text="The defended region. PROTECT prevents deleting an area with a defense project.",
     )
     outcome_tier = models.ForeignKey(
-        "traits.CheckOutcome",
+        CHECK_OUTCOME_MODEL,
         null=True,
         blank=True,
         on_delete=models.PROTECT,
@@ -1158,7 +1159,7 @@ class CityDefenseTierThreshold(SharedMemoryModel):
         related_name="tier_thresholds",
     )
     outcome_tier = models.ForeignKey(
-        "traits.CheckOutcome",
+        CHECK_OUTCOME_MODEL,
         on_delete=models.PROTECT,
         related_name="city_defense_thresholds",
     )
@@ -1218,7 +1219,7 @@ class WarFundingDetails(SharedMemoryModel):
         help_text="The covenant whose military readiness this drive funds.",
     )
     outcome_tier = models.ForeignKey(
-        "traits.CheckOutcome",
+        CHECK_OUTCOME_MODEL,
         null=True,
         blank=True,
         on_delete=models.PROTECT,
@@ -1250,7 +1251,7 @@ class WarFundingTierThreshold(SharedMemoryModel):
         related_name="tier_thresholds",
     )
     outcome_tier = models.ForeignKey(
-        "traits.CheckOutcome",
+        CHECK_OUTCOME_MODEL,
         on_delete=models.PROTECT,
         related_name="war_funding_thresholds",
     )

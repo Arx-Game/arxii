@@ -24,41 +24,55 @@ def find_sun_refuge(character, *, max_depth: int = SUN_REFUGE_MAX_DEPTH):
     Breadth-first over exits from the character's location. Among refuges at
     the same (minimal) depth, a non-publicly-listed room wins.
     """
-    from evennia.objects.models import ObjectDB  # noqa: PLC0415
-
-    from evennia_extensions.models import room_is_publicly_listed  # noqa: PLC0415
-
     origin = character.location
     if origin is None:
         return None
     visited: set[int] = {origin.pk}
     frontier: list[int] = [origin.pk]
-    rooms_by_pk: dict[int, object] = {}
     for _depth in range(max_depth):
         if not frontier:
             break
-        exits = ObjectDB.objects.filter(
-            db_location_id__in=frontier,
-            db_destination__isnull=False,
-        ).select_related("db_destination")
-        next_frontier: list[int] = []
-        candidates = []
-        for exit_obj in exits:
-            dest = exit_obj.db_destination
-            if dest.pk in visited:
-                continue
-            visited.add(dest.pk)
-            rooms_by_pk[dest.pk] = dest
-            next_frontier.append(dest.pk)
-            if _shade_only_safe(character, dest):
-                candidates.append(dest)
-        if candidates:
-            for room in candidates:
-                if not room_is_publicly_listed(room):
-                    return room
-            return candidates[0]
-        frontier = next_frontier
+        frontier, candidates = _expand_frontier(character, frontier, visited)
+        refuge = _preferred_refuge(candidates)
+        if refuge is not None:
+            return refuge
     return None
+
+
+def _expand_frontier(character, frontier: list[int], visited: set[int]):
+    """One BFS step: the next frontier's room pks, plus any refuges found in it.
+
+    ``visited`` is mutated in place, so a room is only ever considered once.
+    """
+    from evennia.objects.models import ObjectDB  # noqa: PLC0415
+
+    exits = ObjectDB.objects.filter(
+        db_location_id__in=frontier,
+        db_destination__isnull=False,
+    ).select_related("db_destination")
+    next_frontier: list[int] = []
+    candidates = []
+    for exit_obj in exits:
+        dest = exit_obj.db_destination
+        if dest.pk in visited:
+            continue
+        visited.add(dest.pk)
+        next_frontier.append(dest.pk)
+        if _shade_only_safe(character, dest):
+            candidates.append(dest)
+    return next_frontier, candidates
+
+
+def _preferred_refuge(candidates: list):
+    """The best refuge among equal-depth candidates: a private room, else the first."""
+    from evennia_extensions.models import room_is_publicly_listed  # noqa: PLC0415
+
+    if not candidates:
+        return None
+    for room in candidates:
+        if not room_is_publicly_listed(room):
+            return room
+    return candidates[0]
 
 
 def _shade_only_safe(character, room) -> bool:

@@ -89,6 +89,7 @@ SUNLIGHT_STAGE_BURNING = "Burning"
 SUNLIGHT_STAGE_SEARING = "Searing"
 # PLACEHOLDER: every check suffers this per point of severity while exposed.
 SUNLIGHT_CHECK_PENALTY_PER_SEVERITY = -1
+_DISADVANTAGE_CATEGORY_DESCRIPTION = "PLACEHOLDER: disadvantages that reimburse CG points."
 
 
 def ensure_sunlight_exposure_content() -> "ConditionTemplate":
@@ -249,7 +250,7 @@ def ensure_sunlight_distinctions() -> tuple:
         slug="drawbacks",
         defaults={
             "name": "Drawbacks",
-            "description": "PLACEHOLDER: disadvantages that reimburse CG points.",
+            "description": _DISADVANTAGE_CATEGORY_DESCRIPTION,
         },
     )
     bane_tag, _created = DistinctionTag.objects.get_or_create(
@@ -317,7 +318,7 @@ def ensure_appetite_distinctions() -> tuple:
         slug="drawbacks",
         defaults={
             "name": "Drawbacks",
-            "description": "PLACEHOLDER: disadvantages that reimburse CG points.",
+            "description": _DISADVANTAGE_CATEGORY_DESCRIPTION,
         },
     )
     blood_tag, _created = DistinctionTag.objects.get_or_create(
@@ -407,7 +408,7 @@ def ensure_moon_bound_distinction() -> "Distinction":
         slug="drawbacks",
         defaults={
             "name": "Drawbacks",
-            "description": "PLACEHOLDER: disadvantages that reimburse CG points.",
+            "description": _DISADVANTAGE_CATEGORY_DESCRIPTION,
         },
     )
     tag, _created = DistinctionTag.objects.get_or_create(
@@ -538,7 +539,7 @@ def ensure_shade_distinction() -> "Distinction":
         slug="drawbacks",
         defaults={
             "name": "Drawbacks",
-            "description": "PLACEHOLDER: disadvantages that reimburse CG points.",
+            "description": _DISADVANTAGE_CATEGORY_DESCRIPTION,
         },
     )
     shade_tag, _created = DistinctionTag.objects.get_or_create(

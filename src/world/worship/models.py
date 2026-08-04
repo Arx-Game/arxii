@@ -21,6 +21,7 @@ from world.worship.constants import MiracleTrigger
 
 # Verbose name reused across Meta verbose_name / verbose_name_plural / __str__ (python:S1192).
 CHOSEN_FAVOR_CONFIG_VERBOSE = "Chosen Favor Config"
+CHARACTER_SHEET_MODEL = "character_sheets.CharacterSheet"
 
 
 class PatronageValence(models.TextChoices):
@@ -78,7 +79,7 @@ class WorshippedBeing(SharedMemoryModel):
         default=0, help_text="Monotonic total worship ever received (audit)."
     )
     avatar_sheet = models.OneToOneField(
-        "character_sheets.CharacterSheet",
+        CHARACTER_SHEET_MODEL,
         null=True,
         blank=True,
         on_delete=models.SET_NULL,
@@ -100,7 +101,7 @@ class WorshipGrant(SharedMemoryModel):
     being = models.ForeignKey(WorshippedBeing, on_delete=models.PROTECT, related_name="grants")
     amount = models.PositiveIntegerField()
     granted_by = models.ForeignKey(
-        "character_sheets.CharacterSheet",
+        CHARACTER_SHEET_MODEL,
         null=True,
         blank=True,
         on_delete=models.SET_NULL,
@@ -125,7 +126,7 @@ class DevotionStanding(SharedMemoryModel):
     """
 
     character_sheet = models.ForeignKey(
-        "character_sheets.CharacterSheet",
+        CHARACTER_SHEET_MODEL,
         on_delete=models.CASCADE,
         related_name="devotion_standings",
     )
@@ -175,7 +176,7 @@ class WorshipDeclaration(SharedMemoryModel):
     """
 
     character_sheet = models.OneToOneField(
-        "character_sheets.CharacterSheet",
+        CHARACTER_SHEET_MODEL,
         on_delete=models.CASCADE,
         related_name="worship_declaration",
     )
@@ -361,7 +362,7 @@ class MiraclePerformance(SharedMemoryModel):
         WorshippedBeing, on_delete=models.PROTECT, related_name="miracle_performances"
     )
     target_character = models.ForeignKey(
-        "character_sheets.CharacterSheet",
+        CHARACTER_SHEET_MODEL,
         null=True,
         blank=True,
         on_delete=models.SET_NULL,

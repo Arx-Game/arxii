@@ -26,6 +26,7 @@ from core.natural_keys import NaturalKeyManager, NaturalKeyMixin
 from world.tasking.constants import TaskCategory, TaskStatus, TaskTargetKind
 
 _PERSONA_FK = "scenes.Persona"
+_CHECK_OUTCOME_FK = "traits.CheckOutcome"
 
 
 class TaskTemplateManager(NaturalKeyManager):
@@ -115,7 +116,7 @@ class TaskOutcomeRoute(SharedMemoryModel):
         related_name="outcome_routes",
     )
     outcome_tier = models.ForeignKey(
-        "traits.CheckOutcome",
+        _CHECK_OUTCOME_FK,
         on_delete=models.PROTECT,
         related_name="+",
         help_text="The check outcome this route fires on.",
@@ -559,7 +560,7 @@ class TaskFulfillment(SharedMemoryModel):
         help_text="The persona running the job: rolls dispatch, collects results.",
     )
     handler_check_outcome = models.ForeignKey(
-        "traits.CheckOutcome",
+        _CHECK_OUTCOME_FK,
         on_delete=models.PROTECT,
         null=True,
         blank=True,
@@ -571,7 +572,7 @@ class TaskFulfillment(SharedMemoryModel):
         help_text="Modifier the dispatch check contributes to the agent's resolution roll.",
     )
     resolved_outcome = models.ForeignKey(
-        "traits.CheckOutcome",
+        _CHECK_OUTCOME_FK,
         on_delete=models.PROTECT,
         null=True,
         blank=True,
