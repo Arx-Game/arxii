@@ -79,7 +79,7 @@ function InboxRow({ session }: InboxRowProps) {
         <div className="flex items-center gap-2">
           <span className="font-medium text-foreground">{session.ritual_name}</span>
           <span className="text-xs text-muted-foreground">
-            — expires {formatRelativeTime(session.expires_at)}
+            : expires {formatRelativeTime(session.expires_at)}
           </span>
         </div>
         <p className="mt-1 text-sm text-muted-foreground">

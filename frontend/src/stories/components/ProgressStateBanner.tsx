@@ -152,7 +152,7 @@ export function ProgressStateBanner({ storyId, scope }: ProgressStateBannerProps
       >
         {isAssignableScope(scope) && <ScopeBadge scope={scope} className="text-xs" />}
         <span className="text-muted-foreground" data-testid="progress-state-idle">
-          Not yet running — no active progress for this story.
+          Not yet running: no active progress for this story.
         </span>
       </div>
     );

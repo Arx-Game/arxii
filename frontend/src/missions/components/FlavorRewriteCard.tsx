@@ -85,7 +85,7 @@ export function FlavorRewriteCard({ template }: FlavorRewriteCardProps) {
                     key={r.id}
                     className="rounded border px-2 py-1 text-sm text-muted-foreground"
                   >
-                    Route id={r.id} (option {r.option}) — outcome {r.outcome_tier ?? '<branch>'}
+                    Route id={r.id} (option {r.option}): outcome {r.outcome_tier ?? '<branch>'}
                   </div>
                 ))}
               </Section>

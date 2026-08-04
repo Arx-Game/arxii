@@ -60,8 +60,8 @@ export function CeremonyRoomCard({ roomId }: { roomId: string | undefined }) {
       </div>
       <p className="mt-1 text-xs text-muted-foreground">
         Officiant: {ceremony.officiant_name}
-        {honorees ? ` — honoring ${honorees}` : ''}
-        {ceremony.offering_count > 0 ? ` — ${ceremony.offering_count} offering(s)` : ''}
+        {honorees ? `, honoring ${honorees}` : ''}
+        {ceremony.offering_count > 0 ? `, ${ceremony.offering_count} offering(s)` : ''}
       </p>
     </div>
   );

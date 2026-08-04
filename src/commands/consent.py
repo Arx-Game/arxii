@@ -309,9 +309,9 @@ class CmdAccept(_RespondCommand):
     The game will tell you what to type when a prompt is available.
 
     Usage:
-        accept                   — list pending offers, or check for consent requests
-        accept <keyword> [args]  — accept via a registered offer handler
-        accept [request_id]      — consent to a pending social action (numeric id)
+        accept                   - list pending offers, or check for consent requests
+        accept <keyword> [args]  - accept via a registered offer handler
+        accept [request_id]      - consent to a pending social action (numeric id)
     """
 
     key = "accept"

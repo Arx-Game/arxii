@@ -118,7 +118,7 @@ export function ItemLifecycleControls({ item, onRecycled }: ItemLifecycleControl
           <AlertDialogHeader>
             <AlertDialogTitle>Remove the {removing?.label} accent?</AlertDialogTitle>
             <AlertDialogDescription>
-              The crafter&apos;s work is undone for good — there is no refund, and adding it back
+              The crafter&apos;s work is undone for good; there is no refund, and adding it back
               means another commission.
             </AlertDialogDescription>
           </AlertDialogHeader>
@@ -139,8 +139,8 @@ export function ItemLifecycleControls({ item, onRecycled }: ItemLifecycleControl
           <AlertDialogHeader>
             <AlertDialogTitle>Recycle {item.display_name}?</AlertDialogTitle>
             <AlertDialogDescription>
-              The piece is destroyed permanently. You recover a fraction of its materials — never
-              the work itself.
+              The piece is destroyed permanently. You recover a fraction of its materials; never the
+              work itself.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>

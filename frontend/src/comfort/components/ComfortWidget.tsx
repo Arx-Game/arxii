@@ -34,7 +34,7 @@ export function ComfortWidget({ characterId }: ComfortWidgetProps) {
 
   const color = BAND_COLORS[data.band_index] ?? BAND_COLORS[BAND_COLORS.length - 1];
   const reasons = data.reasons.map(titleCase).join(', ');
-  const tooltip = reasons ? `${data.band} — ${reasons}` : data.band;
+  const tooltip = reasons ? `${data.band}; ${reasons}` : data.band;
 
   return (
     <div

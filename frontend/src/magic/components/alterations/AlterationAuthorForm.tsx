@@ -128,7 +128,7 @@ export function AlterationAuthorForm({
           id="alteration-name"
           value={name}
           onChange={(e) => setName(e.target.value)}
-          placeholder="3–60 characters"
+          placeholder="3-60 characters"
           maxLength={60}
         />
         {fieldErrors.name?.map((err) => (
@@ -203,7 +203,7 @@ export function AlterationAuthorForm({
           }}
           className={SELECT_CLASS_DISABLED}
         >
-          <option value="">— select a type —</option>
+          <option value="">(select a type)</option>
           {damageTypes.map((dt) => (
             <option key={dt.id} value={dt.id}>
               {dt.name}

@@ -107,7 +107,7 @@ export function GlimpseSection({ draft, glimpseProseField, heading }: GlimpseSec
     return (
       <div className="flex items-center justify-between gap-3 rounded-md border border-dashed p-4">
         <p className="text-sm text-muted-foreground">
-          The Glimpse is set aside for now — your tag picks are saved.
+          The Glimpse is set aside for now; your tag picks are saved.
         </p>
         <Button type="button" variant="outline" size="sm" onClick={() => setIsCollapsed(false)}>
           Resume

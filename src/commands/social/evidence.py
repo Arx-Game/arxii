@@ -26,11 +26,11 @@ class CmdEvidence(ArxCommand):
     """Work the physical evidence a crime leaves behind.
 
     Usage:
-      evidence               — evidence at this scene (of your own deeds) + what you hold
-      evidence gather [<id>] — claim evidence lying at this scene (Skulduggery)
-      evidence dispose <id>  — destroy evidence you hold (Skulduggery)
-      evidence produce <#>   — pull a filed case's evidence from storage (needs authority)
-      evidence examine <id>  — scrutinize produced evidence for tampering
+      evidence               - evidence at this scene (of your own deeds) + what you hold
+      evidence gather [<id>] - claim evidence lying at this scene (Skulduggery)
+      evidence dispose <id>  - destroy evidence you hold (Skulduggery)
+      evidence produce <#>   - pull a filed case's evidence from storage (needs authority)
+      evidence examine <id>  - scrutinize produced evidence for tampering
     """
 
     key = "evidence"

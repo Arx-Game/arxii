@@ -62,7 +62,7 @@ export function ImbuePanel({ thread, balance, characterSheetId, onResult }: Imbu
             aria-label="Decrease amount"
             data-testid="imbue-decrement"
           >
-            –
+            -
           </Button>
           <span className="w-8 text-center font-medium tabular-nums" data-testid="imbue-amount">
             {amount}

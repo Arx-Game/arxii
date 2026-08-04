@@ -11,9 +11,9 @@ from commands.command import ArxCommand
 from commands.exceptions import CommandError
 
 _USAGE = (
-    "Usage: showcase — status; showcase <item name or #id> — highlight one "
-    "piece; showcase outfit <name or #id> — highlight an ensemble; "
-    "showcase off — stop."
+    "Usage: showcase - status; showcase <item name or #id> - highlight one "
+    "piece; showcase outfit <name or #id> - highlight an ensemble; "
+    "showcase off - stop."
 )
 
 _SUBVERB_OFF = "off"
@@ -25,13 +25,13 @@ class CmdShowcase(ArxCommand):
     """Choose what you are showcasing to the fashionable world.
 
     Usage:
-        showcase                       — what you're currently showcasing + cachet
-        showcase <item name or #id>    — highlight a single piece you hold
-        showcase outfit <name or #id>  — highlight a saved outfit as an ensemble
-        showcase off                   — stop showcasing
+        showcase                       - what you're currently showcasing + cachet
+        showcase <item name or #id>    - highlight a single piece you hold
+        showcase outfit <name or #id>  - highlight a saved outfit as an ensemble
+        showcase off                   - stop showcasing
 
     While showcasing, making an entrance stakes cachet on your statement;
-    the week's showings settle at the weekly cron — a good roll refunds the
+    the week's showings settle at the weekly cron; a good roll refunds the
     stake, and real engagement from other players pays more.
     """
 

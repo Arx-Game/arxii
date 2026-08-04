@@ -225,7 +225,7 @@ export function IdentityStage({ draft, onRegisterBeforeLeave }: IdentityStagePro
             }
           >
             <SelectTrigger id="secret-worship">
-              <SelectValue placeholder="None — my faith is what it appears" />
+              <SelectValue placeholder="None: my faith is what it appears" />
             </SelectTrigger>
             <SelectContent className="max-h-60 overflow-y-auto">
               <SelectItem value={NONE_VALUE}>None</SelectItem>

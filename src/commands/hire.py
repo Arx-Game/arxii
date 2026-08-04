@@ -26,16 +26,16 @@ class CmdHire(ArxCommand):
     """Hire or commission services from an NPC.
 
     Usage:
-        hire                              — show current interaction and offers
-        hire <role name or id>           — start an interaction with that NPC role
-        hire <role name or id> as <npc>  — start an interaction with a specific named NPC
-        hire offer <id>                  — resolve an available offer
-        hire end                         — end the current interaction
+        hire                              - show current interaction and offers
+        hire <role name or id>           - start an interaction with that NPC role
+        hire <role name or id> as <npc>  - start an interaction with a specific named NPC
+        hire offer <id>                  - resolve an available offer
+        hire end                         - end the current interaction
 
     The optional ``as <npc>`` clause selects a named Persona for class-2+ NPCs.
     It resolves the name the same way other targeted commands do (``self.caller.search``).
 
-    ``hire`` is intentionally a single-word, domain-specific key — the verb only
+    ``hire`` is intentionally a single-word, domain-specific key - the verb only
     makes sense for NPC-service transactions and mirrors other economy/action verbs
     such as ``cast`` / ``clash`` / ``flee``. Namespacing it behind ``npc`` would add
     friction without reducing collision risk.

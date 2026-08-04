@@ -89,22 +89,22 @@ def _parse_kwargs(args: str) -> dict[str, str]:
 
 
 class CmdSanctum(DispatchCommand):
-    """Interact with a Sanctum — the consecrated anchor point of a mage's power.
+    """Interact with a Sanctum, the consecrated anchor point of a mage's power.
 
     Usage:
-        sanctum                             — list standing Sanctums + local Sanctum
-        sanctum status                      — (same)
+        sanctum                             - list standing Sanctums + local Sanctum
+        sanctum status                      - (same)
         sanctum install resonance=<name> owner=personal|covenant
-                                            — consecrate the current room
+                                            - consecrate the current room
         sanctum homecoming amount=<n> [narrative=<text>]
-                                            — sacrifice resonance into Homecoming pool
+                                            - sacrifice resonance into Homecoming pool
         sanctum purging resonance=<name> amount=<n>
-                                            — change the Sanctum's consecrated resonance
+                                            - change the Sanctum's consecrated resonance
         sanctum weave slot=personal|covenant|helper
-                                            — weave a thread into the local Sanctum
-        sanctum dissolve                    — dissolve the local Sanctum
-        sanctum absorb                      — drain the Sanctum's weaving pool
-        sanctum sever thread=<id or name>   — retire a sanctum thread
+                                            - weave a thread into the local Sanctum
+        sanctum dissolve                    - dissolve the local Sanctum
+        sanctum absorb                      - drain the Sanctum's weaving pool
+        sanctum sever thread=<id or name>   - retire a sanctum thread
     """
 
     key = "sanctum"

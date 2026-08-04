@@ -180,7 +180,7 @@ export function DuelAcknowledgeRiskBanner({
       data-testid="duel-acknowledge-risk-banner"
     >
       <p className="text-xs font-semibold uppercase tracking-wide text-destructive">
-        Lethal Duel — Risk Acknowledgement Required
+        Lethal Duel: Risk Acknowledgement Required
       </p>
       <p className="text-sm text-foreground">
         This duel carries lethal consequences. You must acknowledge the risk before declaring

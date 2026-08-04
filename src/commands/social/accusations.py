@@ -23,23 +23,23 @@ DENOUNCE_SWITCH = "denounce"
 
 
 class CmdAccuse(ArxCommand):
-    """Manufacture a false scandal against another character — or pick one apart.
+    """Manufacture a false scandal against another character, or pick one apart.
 
     Only works against someone who has opened themselves to antagonism (their consent
-    settings). Falsity is emergent — a leaked accusation mints heat and reputation like a
+    settings). Falsity is emergent; a leaked accusation mints heat and reputation like a
     true one until disproven.
 
     With ``/crime`` you name a specific crime kind: where the law where you stand
     criminalizes it, the accusation draws pursuit heat onto your target, not just gossip.
-    This files a *wild* accusation — a claim with no real crime underneath, so it's the
+    This files a *wild* accusation, a claim with no real crime underneath, so it's the
     fragile, easily-refuted kind.
 
     With ``/refute`` you attack a manufactured scandal you've come into, at a social
-    hub — anyone may defend the accused; no consent needed. Bare ``accuse/refute``
+    hub: anyone may defend the accused; no consent needed. Bare ``accuse/refute``
     lists the scandals you could dispute. One attempt each.
 
     With ``/denounce`` you wield a PROVEN fabrication against its unmasked author,
-    at a social hub — this one is consent-gated: only someone the framer has opened
+    at a social hub, and this one is consent-gated: only someone the framer has opened
     themselves to may turn it back on them. Their reputation takes the exposure and
     the law takes an interest, scaled by how grave the frame was.
 

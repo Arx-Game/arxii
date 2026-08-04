@@ -15,7 +15,7 @@ from commands.exceptions import CommandError
 
 
 class CmdPlaces(ArxCommand):
-    """Join or leave a Place — a named sub-location within your current room.
+    """Join or leave a Place, a named sub-location within your current room.
 
     Usage:
         places

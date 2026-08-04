@@ -107,7 +107,7 @@ export function AudereMajoraOfferDialog({
                   <div className="font-semibold">
                     {path.name}{' '}
                     <span className="font-normal text-muted-foreground">
-                      — {path.stage_display}
+                      : {path.stage_display}
                     </span>
                   </div>
                   {path.description ? (
@@ -125,7 +125,7 @@ export function AudereMajoraOfferDialog({
             htmlFor="majora-declaration"
             className="block text-sm font-semibold text-amber-300"
           >
-            Speak — in your own words
+            Speak: in your own words
           </label>
           <Textarea
             id="majora-declaration"

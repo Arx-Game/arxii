@@ -161,22 +161,22 @@ class CmdEvent(ArxCommand):
     """Schedule and manage RP gatherings, and RSVP to invitations.
 
     Usage:
-        event                               — list events visible to you
-        event list                          — same as bare ``event``
-        event show <id>                     — detail one event (hosts, invitations, RSVPs)
+        event                               - list events visible to you
+        event list                          - same as bare ``event``
+        event show <id>                     - detail one event (hosts, invitations, RSVPs)
         event create name=<text> room=<name|id> when=<datetime>
             [desc=<text>] [public=<yes|no>] [phase=day|dusk|night|dawn]
-        event schedule <id>                 — DRAFT → SCHEDULED
-        event start <id>                    — SCHEDULED → ACTIVE (spawns the scene)
-        event complete <id>                 — ACTIVE → COMPLETED (host / scene GM / staff)
-        event cancel <id>                   — DRAFT/SCHEDULED → CANCELLED (host / staff)
+        event schedule <id>                 - DRAFT → SCHEDULED
+        event start <id>                    - SCHEDULED → ACTIVE (spawns the scene)
+        event complete <id>                 - ACTIVE → COMPLETED (host / scene GM / staff)
+        event cancel <id>                   - DRAFT/SCHEDULED → CANCELLED (host / staff)
         event invite <id> persona=<name|id> [by=<persona>]
-        event invite <id> org=<name|id>      — or organization= / society=
-        event rsvp <id> accept|decline      — respond to your own persona invitation
+        event invite <id> org=<name|id>      - or organization= / society=
+        event rsvp <id> accept|decline      - respond to your own persona invitation
 
     ``when=`` accepts ISO 8601 or ``YYYY-MM-DD HH:MM``. Room resolves by name
     (caller.search) or numeric id; persona/org/society targets resolve by name
-    (iexact) or id. Lifecycle verbs are account-authorized — staff and scene
+    (iexact) or id. Lifecycle verbs are account-authorized: staff and scene
     GMs can manage an event with no character. ``rsvp`` acts as your active
     persona and only works on a persona-targeted invitation addressed to you.
     """

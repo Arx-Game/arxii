@@ -289,7 +289,7 @@ export function SineatingRequestDialog({
             {/* Units input */}
             <div className="space-y-1.5">
               <Label htmlFor="sineating-units">
-                Units <span className="text-xs text-muted-foreground">(1–{availableUnits})</span>
+                Units <span className="text-xs text-muted-foreground">(1-{availableUnits})</span>
               </Label>
               <Input
                 id="sineating-units"
@@ -302,7 +302,7 @@ export function SineatingRequestDialog({
                   const val = e.target.value;
                   setUnits(val === '' ? '' : Number(val));
                 }}
-                placeholder={`1–${availableUnits}`}
+                placeholder={`1-${availableUnits}`}
                 disabled={requestMutation.isPending || availableUnits === 0}
               />
               {availableUnits === 0 && (

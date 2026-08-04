@@ -210,7 +210,7 @@ export function StoryFormDialog({ open, onOpenChange, story, onSuccess }: StoryF
                 rows={3}
               />
               <p className="text-xs text-muted-foreground">
-                Player-facing recap — keep this current as the story advances.
+                Player-facing recap: keep this current as the story advances.
               </p>
               {fieldErrors.summary && (
                 <p className="text-xs text-destructive">{fieldErrors.summary.join(' ')}</p>
@@ -227,9 +227,9 @@ export function StoryFormDialog({ open, onOpenChange, story, onSuccess }: StoryF
               >
                 {(
                   [
-                    ['character', "Character — one character's personal story"],
-                    ['group', "Group — a covenant or table's story"],
-                    ['global', 'Global — affects the whole metaplot'],
+                    ['character', "Character: one character's personal story"],
+                    ['group', "Group: a covenant or table's story"],
+                    ['global', 'Global: affects the whole metaplot'],
                   ] as const
                 ).map(([value, label]) => (
                   <label

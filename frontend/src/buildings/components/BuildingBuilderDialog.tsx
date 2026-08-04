@@ -72,7 +72,7 @@ export function BuildingBuilderDialog({
       <DialogContent className="flex h-[92vh] w-[96vw] max-w-none flex-col sm:max-w-[96vw]">
         <DialogHeader className="flex-row flex-wrap items-center justify-between gap-4 space-y-0 pr-8">
           <DialogTitle>
-            {payload ? `${payload.building.name} — ${payload.building.kind}` : 'Building manager'}
+            {payload ? `${payload.building.name}: ${payload.building.kind}` : 'Building manager'}
           </DialogTitle>
           <div className="flex flex-wrap items-center gap-3">
             {floors.length > 1 && (

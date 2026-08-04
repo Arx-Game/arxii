@@ -44,7 +44,7 @@ export default function AlterationResolutionPage() {
       {isError && (
         <Card>
           <CardContent className="py-8 text-center text-destructive" role="alert">
-            Could not load your pending alterations — the gate may still be active. Try again
+            Could not load your pending alterations; the gate may still be active. Try again
             shortly.
           </CardContent>
         </Card>
@@ -53,7 +53,7 @@ export default function AlterationResolutionPage() {
       {!isLoading && !isError && pendings.length === 0 && (
         <Card>
           <CardContent className="py-8 text-center text-muted-foreground">
-            No unresolved alterations. Your flesh is your own — for now.
+            No unresolved alterations. Your flesh is your own; for now.
           </CardContent>
         </Card>
       )}
@@ -68,7 +68,7 @@ export default function AlterationResolutionPage() {
                 {pending.tier_display} Mage Scar
               </CardTitle>
               <CardDescription>
-                {pending.character_name} — marked by {pending.origin_affinity_name} magic (
+                {pending.character_name}: marked by {pending.origin_affinity_name} magic (
                 {pending.origin_resonance_name}) on {formatDate(pending.created_at)}
               </CardDescription>
             </CardHeader>
@@ -76,7 +76,7 @@ export default function AlterationResolutionPage() {
               <p className="text-sm text-muted-foreground">
                 Caps for this tier: social {caps.social_cap}, weakness {caps.weakness_cap},
                 resonance {caps.resonance_cap}
-                {caps.visibility_required ? ' — always visible' : ''}
+                {caps.visibility_required ? ', always visible' : ''}
               </p>
               <Button onClick={() => setResolving(pending)}>Resolve</Button>
             </CardContent>

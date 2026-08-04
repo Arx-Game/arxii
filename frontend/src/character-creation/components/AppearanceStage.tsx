@@ -306,7 +306,7 @@ export function AppearanceStage({
           <p className="mt-1 text-xs text-muted-foreground">
             Age must be between {AGE_MIN} and {ageMax} years.
             {draft.selected_species?.eternal_youth &&
-              ' Your species keeps its eternal youth — apparent age locks in the early twenties.'}
+              ' Your species keeps its eternal youth; apparent age locks in the early twenties.'}
           </p>
         </div>
       </section>
@@ -395,7 +395,7 @@ export function AppearanceStage({
               <span className="font-semibold">
                 {(heightDraft ?? draft.height_inches)
                   ? formatHeight(heightDraft ?? draft.height_inches!)
-                  : '—'}
+                  : '-'}
               </span>
               <span>{formatHeight(draft.height_band.max_inches)}</span>
             </div>
@@ -509,7 +509,7 @@ export function AppearanceStage({
                   </Select>
                   <Input
                     aria-label={`Describe your ${formOption.trait.display_name.toLowerCase()}`}
-                    placeholder="Describe it (optional) — e.g. flowing crimson"
+                    placeholder="Describe it (optional): e.g. flowing crimson"
                     defaultValue={getTraitDescriptor(formOption.trait.name)}
                     onBlur={(e) =>
                       handleTraitDescriptorCommit(formOption.trait.name, e.target.value)

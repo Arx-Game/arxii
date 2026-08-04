@@ -87,7 +87,7 @@ export function UndressButton({
             <AlertDialogTitle>Remove all items?</AlertDialogTitle>
             <AlertDialogDescription>
               You&apos;re wearing {equippedCount} items. Removing them all will leave you in your
-              skin. The pieces go back to your inventory — nothing is destroyed.
+              skin. The pieces go back to your inventory; nothing is destroyed.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>

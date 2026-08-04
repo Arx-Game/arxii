@@ -105,7 +105,7 @@ export function StoryAreaListPanel({
               <AlertDialogHeader>
                 <AlertDialogTitle>Remove {area.name}?</AlertDialogTitle>
                 <AlertDialogDescription>
-                  Refused if the area still has rooms in it — remove those first. This cannot be
+                  Refused if the area still has rooms in it; remove those first. This cannot be
                   undone.
                 </AlertDialogDescription>
               </AlertDialogHeader>

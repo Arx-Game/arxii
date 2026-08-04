@@ -51,7 +51,7 @@ export function WeatherWidget() {
     data.emit_text ?? '',
   ]
     .filter(Boolean)
-    .join(' — ');
+    .join('-');
 
   return (
     <div

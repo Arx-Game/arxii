@@ -71,9 +71,9 @@ interface AssignDRFError {
 // ---------------------------------------------------------------------------
 
 const SCOPE_OPTIONS: { value: AssignableStoryScope; label: string }[] = [
-  { value: 'character', label: "Character — one person's personal story" },
-  { value: 'group', label: "Group — a table's shared story" },
-  { value: 'global', label: 'Global — affects the whole metaplot' },
+  { value: 'character', label: "Character; one person's personal story" },
+  { value: 'group', label: "Group; a table's shared story" },
+  { value: 'global', label: 'Global; affects the whole metaplot' },
 ];
 
 // ---------------------------------------------------------------------------

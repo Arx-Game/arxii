@@ -41,10 +41,10 @@ class CmdMotif(DispatchCommand):
     """Bind or unbind a Style to one of your claimed resonances.
 
     Usage:
-        motif                                    — list your style bindings
-        motif list                               — (same)
-        motif bindstyle <style>=<resonance>      — bind a style to a resonance
-        motif unbindstyle <style>                — remove a style binding
+        motif                                    - list your style bindings
+        motif list                               - (same)
+        motif bindstyle <style>=<resonance>      - bind a style to a resonance
+        motif unbindstyle <style>                - remove a style binding
     """
 
     key = "motif"

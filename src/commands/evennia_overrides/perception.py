@@ -24,11 +24,11 @@ class CmdLook(ArxCommand):
     """Examine a location, character, or item.
 
     Telnet grammars:
-        ``look``                          — look at the current location
-        ``look <target>``                 — look at a character or object
-        ``look <owner>'s <item>``         — examine an item worn on someone
-        ``look <item> on <owner>``        — alternate syntax for worn items
-        ``look <item> in <container>``    — examine an item inside a container
+        ``look``                          - look at the current location
+        ``look <target>``                 - look at a character or object
+        ``look <owner>'s <item>``         - examine an item worn on someone
+        ``look <item> on <owner>``        - alternate syntax for worn items
+        ``look <item> in <container>``    - examine an item inside a container
     """
 
     key = "look"

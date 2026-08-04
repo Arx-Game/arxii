@@ -34,9 +34,9 @@ class CmdResonance(ArxCommand):
     """Check your spendable resonance balances and grant history.
 
     Usage:
-        resonance                  — list your claimed resonances (balance + lifetime earned)
-        resonance history          — your last 10 resonance grants, newest first
-        resonance history <name>   — same, narrowed to one claimed resonance
+        resonance                  - list your claimed resonances (balance + lifetime earned)
+        resonance history          - your last 10 resonance grants, newest first
+        resonance history <name>   - same, narrowed to one claimed resonance
     """
 
     key = "resonance"

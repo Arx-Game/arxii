@@ -59,7 +59,7 @@ export function WantedBoard({ areaId, viewerEntryId }: Props) {
                 {row.tier_label}
               </span>
               <span className="font-semibold">{row.persona_name}</span>
-              <span className="text-muted-foreground"> — sought by {row.society_name}</span>
+              <span className="text-muted-foreground">: sought by {row.society_name}</span>
               {row.crimes.length > 0 && (
                 <span className="text-muted-foreground"> for {row.crimes.join(', ')}</span>
               )}

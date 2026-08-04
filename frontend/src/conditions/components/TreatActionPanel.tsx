@@ -128,7 +128,7 @@ export function TreatActionPanel({ sceneId, targetPersonaId }: Props) {
 
       {offeredRequestId !== null && offerTreatment.isSuccess && (
         <p className="text-xs text-muted-foreground" data-testid="treat-offer-confirmation">
-          Offered — awaiting response (request #{offeredRequestId})
+          Offered: awaiting response (request #{offeredRequestId})
         </p>
       )}
 

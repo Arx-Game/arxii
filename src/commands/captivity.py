@@ -15,8 +15,8 @@ from commands.exceptions import CommandError
 
 _USAGE = (
     "Usage:\n"
-    "  demandransom <captive>            — demand the default ransom\n"
-    "  demandransom <captive> = <amount> — demand <amount> coppers"
+    "  demandransom <captive>            - demand the default ransom\n"
+    "  demandransom <captive> = <amount> - demand <amount> coppers"
 )
 
 

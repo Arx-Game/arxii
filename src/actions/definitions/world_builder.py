@@ -338,9 +338,7 @@ class StaffDigRoomAction(_WorldBuilderAction):
             # precedent) — place_room_on_grid is the verb that still raises.
             grid_x = None
             grid_y = None
-            unplaced_note = (
-                " That cell was occupied — room created unplaced; drag it into position."
-            )
+            unplaced_note = " That cell was occupied. Room created unplaced; drag it into position."
         profile = create_room(
             area=area,
             name=room_name,

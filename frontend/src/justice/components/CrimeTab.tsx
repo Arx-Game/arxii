@@ -73,7 +73,7 @@ function MyCaseCard({ viewerEntryId }: { viewerEntryId: number }) {
         <p className="mt-2 text-sm font-medium" data-testid="trial-verdict">
           Verdict: {trial.data.verdict}
           {trial.data.sentence_kind &&
-            ` — ${trial.data.sentence_kind}${trial.data.sentence_amount ? ` (${trial.data.sentence_amount})` : ''}`}
+            `: ${trial.data.sentence_kind}${trial.data.sentence_amount ? ` (${trial.data.sentence_amount})` : ''}`}
         </p>
       ) : (
         <div className="mt-2">

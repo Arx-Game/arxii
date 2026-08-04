@@ -38,13 +38,13 @@ if TYPE_CHECKING:
     from world.magic.models import TechniqueDraft
 
 _USAGE = (
-    "technique draft <name>          — start/replace draft\n"
-    "  technique show                  — show current draft + live price\n"
-    "  technique set <field>=<v> ...   — set one or more draft fields\n"
+    "technique draft <name>          - start/replace draft\n"
+    "  technique show                  - show current draft + live price\n"
+    "  technique set <field>=<v> ...   - set one or more draft fields\n"
     "    (fields: name, description, gift, effect_type,\n"
     "             action_category, tier, intensity, control, anima_cost,\n"
     "             consequence_pool)\n"
-    "    (put name= / description= LAST — they consume the rest of the line)\n"
+    "    (put name= / description= LAST; they consume the rest of the line)\n"
     "  technique restrict add|remove <name>\n"
     "  technique grant add capability=<n> base=<n> mult=<f>\n"
     "  technique grant remove <row-id>\n"
@@ -54,9 +54,9 @@ _USAGE = (
     "  technique condition remove <row-id>\n"
     "  technique dispel add template=<n> [target=self|ally|enemy] [minsl=<n>] [allstacks=yes|no]\n"
     "  technique dispel remove <row-id>\n"
-    "  technique price                 — dry-run budget check\n"
-    "  technique author                — author the technique (staff path)\n"
-    "  technique discard               — discard current draft"
+    "  technique price                 - dry-run budget check\n"
+    "  technique author                - author the technique (staff path)\n"
+    "  technique discard               - discard current draft"
 )
 
 _SET_FIELDS = frozenset(
@@ -288,7 +288,7 @@ class CmdTechnique(ArxCommand):
             budget_label = "|gwithin budget|n" if breakdown.within_budget else "|rover budget|n"
             lines.append(f"  |wPrice:|n {breakdown.total_cost}/{breakdown.budget} ({budget_label})")
         except TechniqueDraftIncomplete:
-            lines.append("  |wPrice:|n (incomplete — set all required fields to preview)")
+            lines.append("  |wPrice:|n (incomplete: set all required fields to preview)")
         self.caller.msg("\n".join(lines))
 
     def _handle_set(self, rest: str) -> None:

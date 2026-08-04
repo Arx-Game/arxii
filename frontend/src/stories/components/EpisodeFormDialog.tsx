@@ -271,7 +271,7 @@ export function EpisodeFormDialog({
                 rows={2}
               />
               <p className="text-xs text-muted-foreground">
-                Player-facing recap — keep this current as the story advances.
+                Player-facing recap: keep this current as the story advances.
               </p>
               {fieldErrors.summary && (
                 <p className="text-xs text-destructive">{fieldErrors.summary.join(' ')}</p>

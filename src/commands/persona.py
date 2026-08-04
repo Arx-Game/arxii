@@ -33,14 +33,14 @@ class CmdPersona(DispatchCommand):
     """List, create, or switch your faces.
 
     Usage:
-        persona               — list your personas; marks the active one
-        persona list          — same as bare ``persona``
-        persona create <name> — create a new established (durable) identity
-        persona mask <name>   — create a temporary anonymous mask and wear it
+        persona               - list your personas; marks the active one
+        persona list          - same as bare ``persona``
+        persona create <name> - create a new established (durable) identity
+        persona mask <name>   - create a temporary anonymous mask and wear it
         persona profile <name> [concept=… quote=… personality=… background=…]
-                              — view or author a cover identity's own (fabricated) bio
-        persona <name>        — switch your active face to the named persona
-        wear-face <name>      — alias for persona <name>
+                              - view or author a cover identity's own (fabricated) bio
+        persona <name>        - switch your active face to the named persona
+        wear-face <name>      - alias for persona <name>
     """
 
     key = "persona"

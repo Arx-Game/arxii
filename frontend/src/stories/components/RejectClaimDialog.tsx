@@ -116,7 +116,7 @@ export function RejectClaimDialog({ claim }: RejectClaimDialogProps) {
           <DialogHeader>
             <DialogTitle>Reject AGM claim</DialogTitle>
             <DialogDescription>
-              AGM #{claim.assistant_gm_id} — {claim.story_title}
+              AGM #{claim.assistant_gm_id}: {claim.story_title}
             </DialogDescription>
           </DialogHeader>
 

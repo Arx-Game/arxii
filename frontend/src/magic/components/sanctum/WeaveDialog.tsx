@@ -39,9 +39,9 @@ export interface WeaveDialogProps {
 }
 
 const SLOT_LABELS: Record<SanctumSlotKind, string> = {
-  PERSONAL_OWN: 'Personal — my own home',
-  COVENANT: 'Covenant — my sworn ground',
-  HELPER: 'Helper — invited ally',
+  PERSONAL_OWN: 'Personal: my own home',
+  COVENANT: 'Covenant: my sworn ground',
+  HELPER: 'Helper: invited ally',
 };
 
 export function WeaveDialog({ sanctum, open, onOpenChange }: Readonly<WeaveDialogProps>) {

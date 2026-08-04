@@ -15,7 +15,7 @@ class CmdPetition(Command):
         petition
         petition status
 
-    Filing happens on the website (Profile menu > Petition Staff) — the
+    Filing happens on the website (Profile menu > Petition Staff) - the
     form walks you through the emergency categories and attaches the
     scene or character it is about. This command is a pointer plus a
     read-only status check, not a filing surface. For non-emergencies

@@ -156,11 +156,11 @@ class CmdRelationship(ArxCommand):
     """Record and review your regard for other characters.
 
     Usage:
-        relationship                         — list your relationships
-        relationship list                    — same as bare ``relationship``
-        relationship show <name|#>           — detail one relationship (includes writeup refs)
-        relationship plus <name>             — ambient +1 bump (also ``rel/plus <name>``)
-        relationship neg <name>              — ambient -1 bump (also ``rel/neg <name>``)
+        relationship                         - list your relationships
+        relationship list                    - same as bare ``relationship``
+        relationship show <name|#>           - detail one relationship (includes writeup refs)
+        relationship plus <name>             - ambient +1 bump (also ``rel/plus <name>``)
+        relationship neg <name>              - ambient -1 bump (also ``rel/neg <name>``)
         relationship impression <name> track=<id|name> points=<n>
             title=<text> writeup=<text> [coloring=positive|neutral|negative]
             [visibility=private|shared|gossip|public]
@@ -170,13 +170,13 @@ class CmdRelationship(ArxCommand):
             title=<text> writeup=<text> [visibility=...]
         relationship redistribute <name> source=<track> target=<track>
             points=<n> title=<text> writeup=<text> [visibility=...]
-        relationship kudos <ref>             — commend a shared writeup
-        relationship complain <ref>=<reason> — file a staff complaint about a writeup
+        relationship kudos <ref>             - commend a shared writeup
+        relationship complain <ref>=<reason> - file a staff complaint about a writeup
 
     Writeup refs are shown by ``relationship show``: ``u<id>`` = update,
     ``d<id>`` = development, ``c<id>`` = capstone (e.g. ``kudos u42``).
     Tracks resolve by name (iexact) or id. ``title`` / ``writeup`` are free
-    text — their values run to the next ``key=`` token. An active scene in your
+    text; their values run to the next ``key=`` token. An active scene in your
     current room is linked automatically when the target is co-located.
     """
 
@@ -359,7 +359,7 @@ class CmdRelationship(ArxCommand):
                     return writeup_type, int(pk_str)
         msg = (
             f"Invalid writeup reference '{ref}'. "
-            "Use u<id> (update), d<id> (development), or c<id> (capstone) — "
+            "Use u<id> (update), d<id> (development), or c<id> (capstone); "
             "labels shown by 'relationship show <name|#>'."
         )
         raise CommandError(msg)
@@ -539,7 +539,7 @@ class CmdRelationship(ArxCommand):
             lines.append("|wTracks:|n")
             for prog in progress:
                 tier = prog.current_tier
-                tier_name = tier.name if tier else "—"
+                tier_name = tier.name if tier else "-"
                 lines.append(
                     f"  {prog.track.name}: {prog.developed_points} permanent / "
                     f"{prog.temporary_points} temporary (cap {prog.capacity}, tier {tier_name})"

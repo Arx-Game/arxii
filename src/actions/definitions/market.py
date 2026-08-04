@@ -113,7 +113,7 @@ class BuyWareAction(_MarketAction):
             success=True,
             message=(
                 f"You buy {listing.item_instance.display_name} for {listing.price} "
-                "coppers. It is yours to name and describe — finish it with "
+                "coppers. It is yours to name and describe; finish it with "
                 f"'market/finish {finishing_pass.pk}'."
             ),
             data={"finishing_pass_id": finishing_pass.pk},

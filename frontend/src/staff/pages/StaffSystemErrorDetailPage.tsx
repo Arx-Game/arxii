@@ -57,7 +57,7 @@ export function StaffSystemErrorDetailPage() {
             </div>
             <div>
               <p className="font-medium text-muted-foreground">Acting persona</p>
-              <p>{report.actor_persona_name ?? '—'}</p>
+              <p>{report.actor_persona_name ?? '-'}</p>
             </div>
             <div>
               <p className="font-medium text-muted-foreground">Signature</p>

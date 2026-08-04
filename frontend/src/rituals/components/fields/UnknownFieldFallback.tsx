@@ -15,7 +15,7 @@ export function UnknownFieldFallback({ field, value, onChange, disabled }: Field
           disabled={disabled}
         />
         <div className="rounded bg-amber-950/50 p-2 text-sm text-amber-600">
-          Unsupported field type '{field.type}' — frontend may need an update
+          Unsupported field type '{field.type}': frontend may need an update
         </div>
       </div>
       {field.help && <p className="text-xs text-muted-foreground">{field.help}</p>}

@@ -102,7 +102,7 @@ export function NodePage() {
                 className="flex items-center justify-between rounded border px-2 py-1 text-sm hover:bg-muted"
               >
                 <span>
-                  #{opt.order} — {opt.option_kind} / {opt.source_kind}
+                  #{opt.order}: {opt.option_kind} / {opt.source_kind}
                 </span>
                 <span className="text-xs text-muted-foreground">
                   {opt.authored_ic_framing || '<no framing>'}

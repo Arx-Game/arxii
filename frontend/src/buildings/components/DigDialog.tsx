@@ -116,7 +116,7 @@ export function DigDialog({
             />
           </div>
           <div className="flex flex-col gap-1.5">
-            <Label htmlFor="dig-size">Size (optional — defaults to Modest)</Label>
+            <Label htmlFor="dig-size">Size (optional: defaults to Modest)</Label>
             <Select value={size} onValueChange={setSize} disabled={like != null}>
               <SelectTrigger id="dig-size">
                 <SelectValue placeholder={like ? 'Copied from exemplar' : 'Default size'} />

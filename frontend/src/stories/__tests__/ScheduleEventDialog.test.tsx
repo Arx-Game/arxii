@@ -145,7 +145,7 @@ describe('ScheduleEventDialog', () => {
     await user.click(screen.getByRole('button', { name: /schedule/i }));
 
     const nameInput = screen.getByLabelText(/event name/i) as HTMLInputElement;
-    expect(nameInput.value).toBe('The Long Road — The Reckoning');
+    expect(nameInput.value).toBe('The Long Road: The Reckoning');
   });
 
   it('submit is disabled until all required fields are filled', async () => {

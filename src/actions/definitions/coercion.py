@@ -76,7 +76,7 @@ class CoerceAssetAction(Action):
         if target_character.db_account is not None or target_character.sessions.count() > 0:
             return _ActionResult(
                 success=False,
-                message="They're being played — press them with blackmail, where they answer.",
+                message="They're being played; press them with blackmail, where they answer.",
             )
 
         try:
@@ -128,7 +128,7 @@ class RevealSecretAction(Action):
         if reveal_leveraged_secret(revealer_sheet=actor_sheet, secret=secret):
             return _ActionResult(
                 success=True,
-                message="You reveal it. The secret is out — and no longer your hold over them.",
+                message="You reveal it. The secret is out, and no longer your hold over them.",
             )
         return _ActionResult(success=False, message="You hold no leverage from that secret.")
 

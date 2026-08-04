@@ -57,7 +57,7 @@ _KEY_NOTE = "note"
 
 
 class CmdGMDashboard(ArxCommand):
-    """Show the GM dashboard — tables, sessions, stories needing attention (#2004).
+    """Show the GM dashboard: tables, sessions, stories needing attention (#2004).
 
     Usage:
       gm dashboard

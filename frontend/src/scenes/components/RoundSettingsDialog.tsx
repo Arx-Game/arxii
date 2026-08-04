@@ -23,9 +23,9 @@ import type { SceneDetail, SceneRoundModeValue } from '../types';
 import { useSetRoundMode, type SetRoundModePayload } from '../queries';
 
 const MODE_OPTIONS: { value: SceneRoundModeValue; label: string }[] = [
-  { value: 'open', label: 'Open — every action resolves immediately' },
-  { value: 'pose_order', label: 'Pose order — quorum advances the round' },
-  { value: 'strict', label: 'Strict — declare, then resolve together' },
+  { value: 'open', label: 'Open; every action resolves immediately' },
+  { value: 'pose_order', label: 'Pose order; quorum advances the round' },
+  { value: 'strict', label: 'Strict; declare, then resolve together' },
 ];
 
 export function RoundSettingsDialog({ scene }: { scene: SceneDetail }) {
@@ -92,7 +92,7 @@ export function RoundSettingsDialog({ scene }: { scene: SceneDetail }) {
             {isDanger && (
               <p className="text-xs text-muted-foreground">
                 This round was started by an unfolding danger. It resolves each round and ends on
-                its own once the peril clears — but you can still adjust its settings below.
+                its own once the peril clears, but you can still adjust its settings below.
               </p>
             )}
 

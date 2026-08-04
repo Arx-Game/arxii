@@ -17,7 +17,7 @@ export function ForcedEscapeBanner() {
         'animate-pulse border-red-600/70 bg-red-950/50 text-red-200'
       )}
     >
-      You cannot win this fight — you must run.
+      You cannot win this fight; you must run.
     </div>
   );
 }

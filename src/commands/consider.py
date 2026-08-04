@@ -12,7 +12,7 @@ from commands.command import ArxCommand
 class CmdConsider(ArxCommand):
     """Assess a foe's threat level relative to your own.
 
-    Produces a narrative reading — banded prose, not raw numbers. The
+    Produces a narrative reading: banded prose, not raw numbers. The
     reading can be inaccurate on a failed PERCEPTION check: you get
     confidently wrong information, not silence. One reading per opponent
     per encounter (no re-rolls).

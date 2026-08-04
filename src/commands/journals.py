@@ -50,13 +50,13 @@ class CmdJournal(ArxCommand):
     """Write and respond to journal entries.
 
     Usage:
-        journal                         — list your recent entries
-        journal list                    — same as bare ``journal``
+        journal                         - list your recent entries
+        journal list                    - same as bare ``journal``
         journal write title=<text> body=<text> [public] [tags=a,b,c]
         journal respond <id|#> type=praise|retort title=<text> body=<text>
         journal edit <id|#> [title=<text>] [body=<text>]
 
-    ``title`` / ``body`` are free text — their values run to the next
+    ``title`` / ``body`` are free text - their values run to the next
     ``key=`` token. ``public`` is a bare flag (entries are private by default).
     """
 

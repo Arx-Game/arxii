@@ -59,12 +59,12 @@ export function SessionRequestStatusCard({ activeEntry }: SessionRequestStatusCa
   // Open session request path — GM has been notified.
   const statusLabel =
     sessionRequest?.status === 'open'
-      ? 'Session pending — your GM has been notified'
+      ? 'Session pending: your GM has been notified'
       : sessionRequest?.status === 'scheduled'
-        ? 'Session scheduled — your GM is finalising the event'
+        ? 'Session scheduled: your GM is finalising the event'
         : sessionRequest?.status === 'resolved'
           ? 'Session resolved'
-          : 'Episode ready — GM scheduling required';
+          : 'Episode ready: GM scheduling required';
 
   return (
     <div className="rounded-lg border bg-card p-4">

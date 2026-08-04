@@ -93,7 +93,7 @@ function RiteCard({ rite, ritual, isActiveMember, characterSheetId, onPerform }:
           )}
           {rite.max_severity !== null && (
             <Badge variant="outline" className="text-xs">
-              Severity {rite.base_severity}–{rite.max_severity}
+              Severity {rite.base_severity}-{rite.max_severity}
             </Badge>
           )}
         </div>

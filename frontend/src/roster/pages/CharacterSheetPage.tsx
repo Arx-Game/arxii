@@ -83,7 +83,7 @@ export function CharacterSheetPage() {
               <Link to={`/covenants/${covenant.id}`} className="hover:underline">
                 {covenant.name}
               </Link>
-              {' — '}
+              {'-'}
               {covenant.role}
             </p>
           )}

@@ -43,7 +43,7 @@ export function AudereOfferGate({
         data-testid="audere-gate-strip"
       >
         <Flame className="h-4 w-4 shrink-0" />
-        The Audere gate stands open — answer it
+        The Audere gate stands open: answer it
       </button>
       <AudereOfferDialog
         offer={offer}
@@ -68,7 +68,7 @@ export function AudereOfferGate({
         errorMessage={
           respond.isError
             ? respond.error?.message ||
-              'The gate did not answer — your response failed to land. Try again.'
+              'The gate did not answer: your response failed to land. Try again.'
             : null
         }
       />

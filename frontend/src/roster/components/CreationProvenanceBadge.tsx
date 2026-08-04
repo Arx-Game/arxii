@@ -21,14 +21,14 @@ export function CreationProvenanceBadge({
 }: CreationProvenanceBadgeProps) {
   if (provenance === 'gm_table') {
     return (
-      <Badge variant="secondary" title="Created by a player GM for their table — not staff-vetted">
+      <Badge variant="secondary" title="Created by a player GM for their table; not staff-vetted">
         {tableName ? `GM-made · ${tableName}` : 'GM-made'}
       </Badge>
     );
   }
   if (provenance === 'staff') {
     return (
-      <Badge variant="outline" title="Staff-created — held to the global content standard">
+      <Badge variant="outline" title="Staff-created: held to the global content standard">
         Staff-created
       </Badge>
     );

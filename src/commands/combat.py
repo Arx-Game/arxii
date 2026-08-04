@@ -148,7 +148,7 @@ class _CombatCommandMixin(PullParsingMixin):
 
 
 class CmdDeclareTechnique(_CombatCommandMixin, DispatchCommand):
-    """Cast a technique — works both in and out of combat.
+    """Cast a technique. Works both in and out of combat.
 
     Usage:
         cast
@@ -169,7 +169,7 @@ class CmdDeclareTechnique(_CombatCommandMixin, DispatchCommand):
     arena slot (the technique's action_category decides the slot).
 
     Use ``openly`` to waive your Path style's cast concealment for this one
-    cast — a one-way choice: it can only remove concealment a subtle style
+    cast, a one-way choice: it can only remove concealment a subtle style
     already imposes, never add concealment to an overt one.
     """
 
@@ -918,7 +918,7 @@ class CmdClashCommit(_CombatCommandMixin, DispatchCommand):
     ``_dispatch_clash_contribution`` commits a ``CombatPull`` at declaration time so
     the clash read-path (``_sum_active_flat_bonuses`` / ``compute_intensity_for_clash``)
     reflects the pull during round resolution.  The one-pull-per-round cap still
-    applies — a player who pulled on a cast this round cannot also pull on a clash.
+    applies: a player who pulled on a cast this round cannot also pull on a clash.
     """
 
     key = "clash"

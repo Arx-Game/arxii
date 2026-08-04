@@ -27,7 +27,7 @@ class CmdIdentify(ArxCommand):
       identify <target>
       identify <target>=<guess>
 
-    The optional ``=<guess>`` names who you think is really underneath — a correct
+    The optional ``=<guess>`` names who you think is really underneath - a correct
     guess eases the check; a wrong one is just a failure, same as no guess at all.
     """
 

@@ -32,7 +32,7 @@ export function WelcomePanel() {
               <p className="font-medium">Your applications</p>
               {pending.map((app) => (
                 <p key={app.id} className="text-muted-foreground">
-                  {app.character_name} — pending since{' '}
+                  {app.character_name}: pending since{' '}
                   {new Date(app.applied_date).toLocaleDateString()}
                 </p>
               ))}
@@ -43,12 +43,12 @@ export function WelcomePanel() {
               <Link to="/characters/create/application" className="text-primary underline">
                 Your character application
               </Link>{' '}
-              — check its status.
+              : check its status.
             </p>
           )}
           {!hasCharacters && pending.length === 0 && (
             <div className="space-y-3">
-              <p>You don't have a character yet — two ways to get one:</p>
+              <p>You don't have a character yet: two ways to get one:</p>
               <div className="flex flex-wrap gap-2">
                 <Button asChild variant="secondary">
                   <Link to="/roster">Browse the roster</Link>

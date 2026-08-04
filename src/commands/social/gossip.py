@@ -31,12 +31,12 @@ class CmdGossip(ArxCommand):
     """Work the rumor mill at a social hub.
 
     Usage:
-      gossip               — your gossipable secrets (+ their heat in this hub's region)
-      gossip seek          — roll to overhear a hot secret you don't yet know
-      gossip plant <#>     — spread secret # (raises its regional heat)
-      gossip suppress <#>  — talk secret #'s heat down
+      gossip               - your gossipable secrets (+ their heat in this hub's region)
+      gossip seek          - roll to overhear a hot secret you don't yet know
+      gossip plant <#>     - spread secret # (raises its regional heat)
+      gossip suppress <#>  - talk secret #'s heat down
       gossip smear <character> = <claim>
-                           — mint a false rumor about them and set it spreading (#1825;
+                           - mint a false rumor about them and set it spreading (#1825;
                              only against someone open to antagonism)
     """
 
@@ -142,7 +142,7 @@ class CmdGossip(ArxCommand):
             self.msg(exc.user_message)
             return
         if not result.success:
-            self.msg("Your effort falls flat — the rumor doesn't take.")
+            self.msg("Your effort falls flat; the rumor doesn't take.")
             return
         verbed = "spread" if verb == _PLANT else "quieted"
         extra = " |R(now public knowledge!)|n" if result.went_public else ""

@@ -168,7 +168,7 @@ class StartInvestigationAction(Action):
         if duplicate:
             return ActionResult(
                 success=False,
-                message="That trail is already under investigation — lend your checks to it.",
+                message="That trail is already under investigation; lend your checks to it.",
             )
         project = start_research_project(clue, active_persona_for_sheet(sheet))
         return ActionResult(
@@ -236,7 +236,7 @@ class StartInvestigationAction(Action):
             return ActionResult(success=False, message="You don't hold that lead.")
         if clue.resolution_mode != ClueResolution.RESEARCH:
             return ActionResult(
-                success=False, message="That lead needs no research — you already have it."
+                success=False, message="That lead needs no research; you already have it."
             )
         if clue.target_kind not in (ClueTargetKind.SECRET, ClueTargetKind.CODEX):
             return ActionResult(success=False, message="That lead can't be researched here.")

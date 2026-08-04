@@ -206,7 +206,7 @@ function TargetKindSelect({ targetId, targetKind, onTargetChange, disabled }: Ta
       }}
       className="rounded border border-border bg-background px-2 py-1 text-xs text-foreground"
     >
-      <option value="">— no target —</option>
+      <option value="">(no target)</option>
       <option value="opponent">Opponent</option>
       <option value="ally">Ally</option>
       <option value="social">Social</option>
@@ -510,8 +510,8 @@ function ICChip({ intensity, control }: ICChipProps) {
       data-testid="ic-chip"
       title={
         isOverburn
-          ? 'Intensity exceeds Control — overburn risk'
-          : 'Control meets or exceeds Intensity — comfortable cast'
+          ? 'Intensity exceeds Control: overburn risk'
+          : 'Control meets or exceeds Intensity: comfortable cast'
       }
       className={cn(
         'inline-flex items-center rounded border px-2 py-0.5 font-mono text-xs',
@@ -547,7 +547,7 @@ function CostPreview({ intensity, control, animaCost }: CostPreviewProps) {
   if (isOverburn) {
     return (
       <p className="text-xs text-amber-400">
-        Cost: ~{animaCost} anima · (overburn risk — server confirms at cast)
+        Cost: ~{animaCost} anima · (overburn risk; server confirms at cast)
       </p>
     );
   }
@@ -779,7 +779,7 @@ export function ActionDeclarationCard({
           <p className="text-xs text-muted-foreground">Cost unavailable</p>
         ) : (
           <p className="text-xs text-muted-foreground">
-            {hasTechnique && techniqueLoading ? 'Loading cost...' : '— select a technique first —'}
+            {hasTechnique && techniqueLoading ? 'Loading cost...' : '(select a technique first)'}
           </p>
         )}
       </Section>
@@ -804,7 +804,7 @@ export function ActionDeclarationCard({
             balanceByResonanceId={balanceByResonanceId}
           />
         ) : (
-          <p className="text-xs text-muted-foreground">— no sheet context —</p>
+          <p className="text-xs text-muted-foreground">(no sheet context)</p>
         )}
       </Section>
     </div>

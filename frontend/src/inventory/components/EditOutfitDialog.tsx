@@ -237,7 +237,7 @@ export function EditOutfitDialog({
           <h3 className="text-sm font-semibold">Pieces</h3>
 
           {outfit.slots.length === 0 ? (
-            <p className="text-xs italic text-muted-foreground">No pieces yet — add one below.</p>
+            <p className="text-xs italic text-muted-foreground">No pieces yet: add one below.</p>
           ) : (
             <ul className="flex flex-col gap-2">
               {outfit.slots.map((slot) => (

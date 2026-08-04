@@ -235,9 +235,9 @@ function StatsGrid({ item }: StatsGridProps) {
   const template = item.template;
   return (
     <div className="grid grid-cols-2 gap-x-6 gap-y-2 text-sm">
-      <Stat label="Weight" value={template?.weight ?? '—'} />
-      <Stat label="Size" value={template ? String(template.size) : '—'} />
-      <Stat label="Value" value={template ? String(template.value) : '—'} />
+      <Stat label="Weight" value={template?.weight ?? '-'} />
+      <Stat label="Size" value={template ? String(template.size) : '-'} />
+      <Stat label="Value" value={template ? String(template.value) : '-'} />
       {item.quantity > 1 && <Stat label="Quantity" value={String(item.quantity)} />}
       {item.charges > 0 && <Stat label="Charges" value={String(item.charges)} />}
     </div>

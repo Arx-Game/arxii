@@ -19,13 +19,13 @@ _START_USAGE = "Usage: search start [<#>]  (bare lists your researchable leads)"
 
 
 class CmdSearch(ArxCommand):
-    """Search your current room for clues — or open an investigation.
+    """Search your current room for clues, or open an investigation.
 
     Usage:
-      search               — search the room for hidden clues
-      investigate          — alias for search
-      search start         — list the leads you could research at a lab
-      search start <#>     — open an investigation project on lead # (needs a Lab)
+      search               - search the room for hidden clues
+      investigate          - alias for search
+      search start         - list the leads you could research at a lab
+      search start <#>     - open an investigation project on lead # (needs a Lab)
     """
 
     key = "search"

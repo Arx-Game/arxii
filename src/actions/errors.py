@@ -28,7 +28,7 @@ class ActionDispatchError(Exception):
         ROUND_REPEAT_BLOCKED: "You have already acted this round.",
         PULL_ALREADY_COMMITTED: "You have already pulled a thread this round.",
         PULL_INVALID: "That pull cannot be applied to this action.",
-        PARTICIPANT_MID_CROSSING: "A participant needs a moment — try again shortly.",
+        PARTICIPANT_MID_CROSSING: "A participant needs a moment; try again shortly.",
     }
     _FALLBACK = "That action could not be completed."
 

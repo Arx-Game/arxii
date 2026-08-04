@@ -53,7 +53,7 @@ function ClaimCard({ claim }: { claim: ReclamationClaimRow }) {
         )}
         {isOpen && !claim.trace_complete && (
           <p className="text-sm text-muted-foreground">
-            The trail continues — someone knows where it went next.
+            The trail continues: someone knows where it went next.
           </p>
         )}
         {isOpen && claim.trace_complete && (
@@ -90,7 +90,7 @@ function ClaimCard({ claim }: { claim: ReclamationClaimRow }) {
                   variant="outline"
                   disabled={steal.isPending}
                   onClick={() => steal.mutate()}
-                  title="Take it back yourself. Recovering your own property is not a crime — getting caught doing it may complicate things."
+                  title="Take it back yourself. Recovering your own property is not a crime; getting caught doing it may complicate things."
                 >
                   Steal it back
                 </Button>
@@ -108,12 +108,12 @@ function ClaimCard({ claim }: { claim: ReclamationClaimRow }) {
         )}
         {advance.data?.chilled && (
           <p className="text-sm text-muted-foreground">
-            Your inquiry spooked the trail — it has gone cold for now. Try again later.
+            Your inquiry spooked the trail: it has gone cold for now. Try again later.
           </p>
         )}
         {report.data?.reported && (
           <p className="text-sm text-muted-foreground">
-            The report is filed — the holder now carries the receiving-stolen-goods risk.
+            The report is filed: the holder now carries the receiving-stolen-goods risk.
           </p>
         )}
       </CardContent>

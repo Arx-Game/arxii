@@ -129,10 +129,10 @@ class CmdTether(ArxCommand):
         tether dissolve [<partner>]
         tether entreat <sineater> sins=<n>
 
-    ``burden`` — you are the Sinner; your partner becomes the Sineater.
-    ``bear``    — you are the Sineater; your partner is the Sinner.
-    ``dissolve``— sever the bond (specify partner if you have more than one).
-    ``entreat`` — request your Sineater consume sins from your Hollow.
+    ``burden`` - you are the Sinner; your partner becomes the Sineater.
+    ``bear``    - you are the Sineater; your partner is the Sinner.
+    ``dissolve``- sever the bond (specify partner if you have more than one).
+    ``entreat`` - request your Sineater consume sins from your Hollow.
     """
 
     key = "tether"
@@ -340,10 +340,10 @@ class CmdSineater(ArxCommand):
         sineater rescue <sinner>
         sineater pleas
 
-    ``consume`` — accept/decline a pending sineat plea (sins=0 to decline).
-    ``mire``    — pledge against a Sinner's stage-advance darkening (sins=0 to decline).
-    ``rescue``  — perform the stage-3+ corruption rescue ritual.
-    ``pleas``   — list pending sineat pleas awaiting your response.
+    ``consume`` - accept/decline a pending sineat plea (sins=0 to decline).
+    ``mire``    - pledge against a Sinner's stage-advance darkening (sins=0 to decline).
+    ``rescue``  - perform the stage-3+ corruption rescue ritual.
+    ``pleas``   - list pending sineat pleas awaiting your response.
     """
 
     key = "sineater"

@@ -153,7 +153,7 @@ describe('GlimpseFlow', () => {
     render(<GlimpseFlow {...makeProps({ selectedTagIds: [3], onChangeAxis })} />);
 
     // The accordion is single-open (Tone is the default) — open Consequence first.
-    await user.click(screen.getByText('Consequence — what did it leave behind?'));
+    await user.click(screen.getByText('Consequence: what did it leave behind?'));
     await user.click(screen.getByText('A Door Opened'));
     expect(onChangeAxis).toHaveBeenLastCalledWith('CONSEQUENCE', [3, 4]);
 
@@ -214,7 +214,7 @@ describe('GlimpseFlow', () => {
     render(<GlimpseFlow {...makeProps({ onSkip })} />);
 
     await user.click(screen.getByText('Skip for now'));
-    await user.click(screen.getByText('Save tags — write the story later'));
+    await user.click(screen.getByText('Save tags: write the story later'));
 
     expect(onSkip).toHaveBeenCalledTimes(2);
   });
@@ -246,8 +246,8 @@ describe('GlimpseFlow', () => {
     render(<GlimpseFlow {...makeProps({ tags: [] })} />);
 
     expect(screen.queryByText('Tone — how did it feel?')).not.toBeInTheDocument();
-    expect(screen.queryByText('Consequence — what did it leave behind?')).not.toBeInTheDocument();
-    expect(screen.queryByText('Witness & Secrecy — who saw?')).not.toBeInTheDocument();
+    expect(screen.queryByText('Consequence: what did it leave behind?')).not.toBeInTheDocument();
+    expect(screen.queryByText('Witness & Secrecy: who saw?')).not.toBeInTheDocument();
     // The always-present heading and story step still render.
     expect(screen.getByText('The Glimpse')).toBeInTheDocument();
     expect(screen.getByText('Link a distinction to your glimpse')).toBeInTheDocument();
@@ -292,7 +292,7 @@ describe('GlimpseFlow', () => {
   it('renders the Trigger step as a single-select accordion item', () => {
     render(<GlimpseFlow {...makeProps({ tags: [...ALL_TAGS, TRIGGER_TRAUMA, TRIGGER_PATRON] })} />);
 
-    expect(screen.getByText('Trigger — what was happening?')).toBeInTheDocument();
+    expect(screen.getByText('Trigger: what was happening?')).toBeInTheDocument();
     expect(screen.getByText('Trauma')).toBeInTheDocument();
   });
 
@@ -317,6 +317,6 @@ describe('GlimpseFlow', () => {
   it('hides the Trigger step when no TRIGGER tags exist in the catalog', () => {
     render(<GlimpseFlow {...makeProps()} />);
 
-    expect(screen.queryByText('Trigger — what was happening?')).not.toBeInTheDocument();
+    expect(screen.queryByText('Trigger: what was happening?')).not.toBeInTheDocument();
   });
 });

@@ -177,7 +177,7 @@ class SignatureListAction(SignatureActionBase):
 def _build_list_message(available: list, technique_threads: list) -> str:
     """Compose the telnet listing for ``SignatureListAction``."""
     bonus_lines: list[str] = (
-        ["  (none — check your Motif facets and resonances)"]
+        ["  (none: check your Motif facets and resonances)"]
         if not available
         else [f"  {b.name}" for b in available]
     )

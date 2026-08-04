@@ -68,7 +68,7 @@ export function MilestoneCard({ milestone }: MilestoneCardProps) {
           </>
         ) : (
           <p className="text-sm italic text-muted-foreground">
-            Heard of — learn more to uncover what this holds.
+            Heard of: learn more to uncover what this holds.
           </p>
         )}
 

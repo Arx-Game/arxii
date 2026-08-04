@@ -76,7 +76,7 @@ def _split_trailing_kwargs(text: str, keys: tuple[str, ...]) -> tuple[str, dict[
 
 
 class CmdRoom(ArxCommand):
-    """Shape and manage rooms — dig, describe, resize, connect, and call one home.
+    """Shape and manage rooms: dig, describe, resize, connect, and call one home.
 
     Owners restructure; tenants redescribe the room they live in. See
     ``help room`` for the full grammar.

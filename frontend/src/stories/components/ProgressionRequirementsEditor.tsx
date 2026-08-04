@@ -187,7 +187,7 @@ export function ProgressionRequirementsEditor({ episodeId }: ProgressionRequirem
               data-testid="progression-requirement-row"
             >
               <span>
-                Beat #{req.beat} — {req.required_outcome ?? 'success'}
+                Beat #{req.beat}: {req.required_outcome ?? 'success'}
               </span>
               <Button
                 type="button"

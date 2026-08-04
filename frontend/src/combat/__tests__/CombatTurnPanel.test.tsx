@@ -271,7 +271,7 @@ describe('CombatTurnPanel — render smoke', () => {
     });
 
     expect(screen.getByTestId('combat-turn-panel')).toBeInTheDocument();
-    expect(screen.getByText(/Your Turn — Round 3/)).toBeInTheDocument();
+    expect(screen.getByText(/Your Turn: Round 3/)).toBeInTheDocument();
     expect(screen.getByTestId('your-turn-stub')).toBeInTheDocument();
   });
 

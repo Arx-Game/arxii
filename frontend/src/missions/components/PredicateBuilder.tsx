@@ -403,7 +403,7 @@ function LeafView({
       </div>
       {empty ? (
         <div className="text-xs text-destructive">
-          Pick a leaf type — saving with an empty leaf will crash availability checks.
+          Pick a leaf type: saving with an empty leaf will crash availability checks.
         </div>
       ) : null}
       {currentLeaf && currentLeaf.params.length > 0 ? (

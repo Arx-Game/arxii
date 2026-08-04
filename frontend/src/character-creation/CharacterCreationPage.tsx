@@ -247,8 +247,8 @@ export function CharacterCreationPage() {
             <DialogHeader>
               <DialogTitle>Restart Character Creation?</DialogTitle>
               <DialogDescription>
-                This will permanently delete all your current progress — selections, stats, magic,
-                appearance, everything — and start a completely fresh character. This cannot be
+                This will permanently delete all your current progress, selections, stats, magic,
+                appearance, everything, and start a completely fresh character. This cannot be
                 undone.
               </DialogDescription>
             </DialogHeader>

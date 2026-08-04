@@ -30,10 +30,10 @@ if TYPE_CHECKING:
 
 _USAGE = (
     "Usage: gmtrust <subcommand>\n"
-    "  gmtrust show [account]              — your GM level + caps (staff may name another)\n"
-    "  gmtrust evidence <account>          — staff: aggregate track record\n"
+    "  gmtrust show [account]              - your GM level + caps (staff may name another)\n"
+    "  gmtrust evidence <account>          - staff: aggregate track record\n"
     "  gmtrust promote <account>=<level> reason=<why>\n"
-    "                                       — staff: change a GM's trust level"
+    "                                       - staff: change a GM's trust level"
 )
 _STAFF_ONLY = "Only staff may do that."
 _NOT_A_GM = "You are not a GM."

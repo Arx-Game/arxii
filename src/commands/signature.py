@@ -74,11 +74,11 @@ class CmdSignature(DispatchCommand):
     """Manage signature bonuses on technique threads.
 
     Usage:
-        signature                              — list available bonuses + current settings
-        signature list                         — (same)
+        signature                              - list available bonuses + current settings
+        signature list                         - (same)
         signature set technique=<name> bonus=<name>
-                                               — attach a bonus to a technique thread
-        signature clear technique=<name>       — remove the current bonus
+                                               - attach a bonus to a technique thread
+        signature clear technique=<name>       - remove the current bonus
     """
 
     key = "signature"

@@ -159,9 +159,9 @@ export function RosterListPage() {
                           />
                         </div>
                       </TableCell>
-                      <TableCell>{entry.character.gender ?? '—'}</TableCell>
-                      <TableCell>{entry.character.char_class ?? '—'}</TableCell>
-                      <TableCell>{entry.character.level ?? '—'}</TableCell>
+                      <TableCell>{entry.character.gender ?? '-'}</TableCell>
+                      <TableCell>{entry.character.char_class ?? '-'}</TableCell>
+                      <TableCell>{entry.character.level ?? '-'}</TableCell>
                     </TableRow>
                   ))
                 )}

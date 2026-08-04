@@ -159,7 +159,7 @@ def _file_accusation_crime(  # noqa: PLR0913
         success=True,
         message=(
             f"You accuse {target_persona} of {crime_kind}. Where that's a crime, "
-            "the law will start to look their way — until someone disproves it."
+            "the law will start to look their way, until someone disproves it."
         ),
         data={"secret_id": secret.pk},
     )
@@ -217,7 +217,7 @@ class SmearAction(Action):
         if not result.success:
             return _ActionResult(
                 success=True,
-                message="PLACEHOLDER The rumor dies on your lips — nobody bites.",
+                message="PLACEHOLDER The rumor dies on your lips; nobody bites.",
             )
         return _ActionResult(
             success=True,
@@ -274,7 +274,7 @@ class RefuteAccusationAction(Action):
         if not result.success:
             return _ActionResult(
                 success=True,
-                message="PLACEHOLDER Your case fails to land — the rumor keeps its teeth.",
+                message="PLACEHOLDER Your case fails to land; the rumor keeps its teeth.",
             )
         return _ActionResult(
             success=True,
@@ -333,7 +333,7 @@ class DenounceFramerAction(Action):
         return _ActionResult(
             success=True,
             message=(
-                "PLACEHOLDER You lay the fabrication bare before the crowd — "
+                "PLACEHOLDER You lay the fabrication bare before the crowd, "
                 "and name the hand that stitched it."
             ),
             data={"secret_id": secret.pk},

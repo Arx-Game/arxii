@@ -80,7 +80,7 @@ export function CreateItemDialog({ open, onOpenChange }: CreateItemDialogProps) 
           } else {
             toast.warning(
               result.consequence_label
-                ? `The attempt failed — ${result.consequence_label}.`
+                ? `The attempt failed: ${result.consequence_label}.`
                 : 'The attempt failed.'
             );
           }

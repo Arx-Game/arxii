@@ -76,7 +76,7 @@ export function FileGithubIssueDialog({
         <DialogHeader>
           <DialogTitle>File GitHub issue</DialogTitle>
           <DialogDescription>
-            Review and edit before filing — this creates a public issue. Names we hold have been
+            Review and edit before filing: this creates a public issue. Names we hold have been
             stripped; remove any remaining names or specifics yourself.
           </DialogDescription>
         </DialogHeader>
@@ -104,7 +104,7 @@ export function FileGithubIssueDialog({
           <div className="flex items-center gap-2">
             <Switch id="omit-details" checked={omitDetails} onCheckedChange={toggleOmitDetails} />
             <Label htmlFor="omit-details" className="font-normal">
-              Sensitive / exploit — omit details (file a minimal stub)
+              Sensitive / exploit: omit details (file a minimal stub)
             </Label>
           </div>
         </div>

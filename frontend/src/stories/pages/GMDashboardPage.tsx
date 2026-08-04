@@ -195,7 +195,7 @@ function GMDashboardContent() {
           <ul className="space-y-1 text-sm">
             {data.my_tables.map((table) => (
               <li key={table.id}>
-                <span className="font-medium">{table.name}</span> — {table.membership_count}{' '}
+                <span className="font-medium">{table.name}</span>: {table.membership_count}{' '}
                 member(s)
               </li>
             ))}
@@ -234,7 +234,7 @@ function GMDashboardContent() {
           <ul className="space-y-1 text-sm">
             {data.pending_story_offers.map((offer) => (
               <li key={offer.id}>
-                <span className="font-medium">{offer.story__title}</span> —{' '}
+                <span className="font-medium">{offer.story__title}</span> -{' '}
                 {new Date(offer.created_at).toLocaleDateString()}
               </li>
             ))}

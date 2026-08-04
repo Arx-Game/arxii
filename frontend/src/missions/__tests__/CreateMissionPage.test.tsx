@@ -116,7 +116,7 @@ describe('CreateMissionPage', () => {
     fireEvent.change(screen.getByLabelText(/cooldown.*amount/i), { target: { value: '1' } });
     fireEvent.click(screen.getByRole('button', { name: /create/i }));
     await waitFor(() => {
-      expect(toast.success).toHaveBeenCalledWith('Saved as "Heist 2" — "Heist" was taken.');
+      expect(toast.success).toHaveBeenCalledWith('Saved as "Heist 2"; "Heist" was taken.');
     });
   });
 

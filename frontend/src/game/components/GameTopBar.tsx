@@ -80,7 +80,7 @@ export function GameTopBar({ characters }: GameTopBarProps) {
 
       {characters.length === 0 && (
         <p className="text-sm text-muted-foreground">
-          No characters yet —{' '}
+          No characters yet -{' '}
           <Link to="/roster" className="text-primary underline">
             browse the roster
           </Link>{' '}

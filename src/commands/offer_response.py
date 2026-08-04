@@ -9,8 +9,8 @@ class CmdDecline(ArxCommand):
     """Decline a pending game prompt.
 
     Usage:
-        decline              — list pending offers
-        decline <keyword>    — decline the offer of that type
+        decline              - list pending offers
+        decline <keyword>    - decline the offer of that type
     """
 
     key = "decline"

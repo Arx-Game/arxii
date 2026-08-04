@@ -62,17 +62,17 @@ class CmdMission(ArxCommand):
     """Play a mission: inspect your journal, resolve beats, or run a group decision.
 
     **Read:**
-        ``mission`` / ``mission list``   — your mission journal
-        ``mission beat <id>``            — the current beat + numbered options
+        ``mission`` / ``mission list``   - your mission journal
+        ``mission beat <id>``            - the current beat + numbered options
 
     **Single-player:**
-        ``mission resolve <id> <n>``     — choose option n at the current beat
-        ``mission abandon <id>``         — abandon an ACTIVE run (contract holder)
-        ``mission tale <id> <text>``     — write your epilogue for a completed run
+        ``mission resolve <id> <n>``     - choose option n at the current beat
+        ``mission abandon <id>``         - abandon an ACTIVE run (contract holder)
+        ``mission tale <id> <text>``     - write your epilogue for a completed run
 
     **Group decision (two stages):**
-        ``mission pick <id> <n>``        — submit your stage-1 pick
-        ``mission vote <id> <n>``        — cast your stage-2 vote
+        ``mission pick <id> <n>``        - submit your stage-1 pick
+        ``mission vote <id> <n>``        - cast your stage-2 vote
     """
 
     key = "mission"
@@ -504,7 +504,7 @@ class CmdMission(ArxCommand):
         if beat.flavor_text:
             lines.append(beat.flavor_text)
         if not beat.options:
-            lines.append("(No options here — follow where the compass points.)")
+            lines.append("(No options here; follow where the compass points.)")
         for i, opt in enumerate(beat.options, 1):
             suffix = f" [{opt.check_type_name}]" if opt.check_type_name else ""
             lines.append(f"  {i}) {opt.label}{suffix}")

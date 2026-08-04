@@ -100,14 +100,14 @@ class CmdRitual(ArxCommand):
         Example: ``ritual Rite of Imbuing thread=5``
 
     **Multi-participant session lifecycle:**
-        ``ritual sessions``                              — list pending sessions
-        ``ritual draft <name> invite=<char>[,<char>]``   — draft a session
+        ``ritual sessions``                              - list pending sessions
+        ``ritual draft <name> invite=<char>[,<char>]``   - draft a session
             (add ``role=sinner|sineater resonance=<name> [writeup=...]`` for
             rituals that carry setup info, e.g. the soul-tether BILATERAL)
-        ``ritual join <id> [role=sinner|sineater]``       — accept your invitation
-        ``ritual decline <id>``                           — decline your invitation
-        ``ritual fire <id>``                              — fire the session (initiator only)
-        ``ritual cancel <id>``                           — cancel a pending session (initiator only)
+        ``ritual join <id> [role=sinner|sineater]``       - accept your invitation
+        ``ritual decline <id>``                           - decline your invitation
+        ``ritual fire <id>``                              - fire the session (initiator only)
+        ``ritual cancel <id>``                           - cancel a pending session (initiator only)
     """
 
     key = "ritual"
@@ -365,7 +365,7 @@ class CmdRitual(ArxCommand):
         if not RitualSession.objects.filter(pk=session_id).exists():
             self.caller.msg(
                 f"You declined session #{session_id}. The session was dissolved "
-                "— the threshold can no longer be met."
+                "; the threshold can no longer be met."
             )
         else:
             self.caller.msg(f"You declined ritual session #{session_id}.")

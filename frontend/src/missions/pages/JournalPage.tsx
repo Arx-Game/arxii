@@ -157,7 +157,7 @@ function TaleSection({ entry }: { entry: JournalEntry }) {
         maxLength={5000}
       />
       <p className="mt-1 text-xs text-muted-foreground">
-        Your narration is canon by default. Impossible elaborations are braggadocio — handled
+        Your narration is canon by default. Impossible elaborations are braggadocio; handled
         in-world, never moderated.
       </p>
       <Button

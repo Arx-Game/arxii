@@ -420,7 +420,7 @@ export function StagingPanel({ sceneId, battle, detail }: Props) {
           {confirmingReplace ? (
             <div className="space-y-1">
               <p className="text-xs text-destructive">
-                This battle already has a staged map — applying will replace it.
+                This battle already has a staged map; applying will replace it.
               </p>
               <div className="flex gap-1">
                 <button

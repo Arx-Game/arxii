@@ -121,7 +121,7 @@ export function MissionDetailPanel({ id }: MissionDetailPanelProps) {
       ) : (
         <Card>
           <CardContent className="p-4 text-xs text-muted-foreground">
-            This mission is open to everyone — the availability rule is not consulted. Restrict it
+            This mission is open to everyone; the availability rule is not consulted. Restrict it
             (Staff actions above) to gate the audience with a rule.
           </CardContent>
         </Card>
@@ -167,7 +167,7 @@ function MetadataGrid({
   return (
     <div className="grid grid-cols-2 gap-3 text-sm md:grid-cols-4">
       <Cell label="Level band">
-        {template.level_band_min}–{template.level_band_max}
+        {template.level_band_min}-{template.level_band_max}
       </Cell>
       <Cell label="Risk tier">{template.risk_tier}</Cell>
       <Cell label="Arc scope">{template.arc_scope}</Cell>

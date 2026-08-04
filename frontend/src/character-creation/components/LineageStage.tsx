@@ -303,12 +303,12 @@ function InventedParentsCard({ draft }: { draft: CharacterDraft }) {
     <div className="space-y-2">
       <Label className="text-sm font-medium text-muted-foreground">Your Parents</Label>
       <p className="text-xs text-muted-foreground">
-        Optional — name them and they become part of your family record. A parent of another species
+        Optional: name them and they become part of your family record. A parent of another species
         opens that line&apos;s features for your appearance.
         {sameGender && (
           <span>
             {' '}
-            Two parents of the same gender bore you through the Tree of Souls — the first parent
+            Two parents of the same gender bore you through the Tree of Souls; the first parent
             invoked the ritual and carries your line.
           </span>
         )}
@@ -448,7 +448,7 @@ function HouseFoundingPanel({ draft }: { draft: CharacterDraft }) {
   const submit = useMutation({
     mutationFn: (payload: HouseClaimPayload) => submitHouseClaim(draft.id, payload),
     onSuccess: () => {
-      toast.success('House claim filed — staff will review it with your application.');
+      toast.success('House claim filed: staff will review it with your application.');
       void queryClient.invalidateQueries({
         queryKey: ['character-creation', 'house-claim', draft.id],
       });
@@ -461,7 +461,7 @@ function HouseFoundingPanel({ draft }: { draft: CharacterDraft }) {
       <div className="space-y-1 rounded-md border p-3">
         <Label className="text-sm font-medium text-muted-foreground">Your House Claim</Label>
         <p className="text-sm">
-          House {claim.house_name} — {claim.title_name}{' '}
+          House {claim.house_name}: {claim.title_name}{' '}
           <Badge variant={claim.status === 'rejected' ? 'destructive' : 'secondary'}>
             {claim.status}
           </Badge>
@@ -532,7 +532,7 @@ function HouseFoundingPanel({ draft }: { draft: CharacterDraft }) {
               </Label>
               {selectedTemplate.features.map((feature) => (
                 <p key={feature.id} className="text-xs">
-                  <span className="font-medium">{feature.name}</span> — {feature.description}
+                  <span className="font-medium">{feature.name}</span>: {feature.description}
                 </p>
               ))}
             </div>
@@ -543,7 +543,7 @@ function HouseFoundingPanel({ draft }: { draft: CharacterDraft }) {
             onChange={(event) => setHouseName(event.target.value)}
           />
           <Textarea
-            placeholder="The house as it has always been — its lands, its temper, its debts."
+            placeholder="The house as it has always been: its lands, its temper, its debts."
             value={backstory}
             onChange={(event) => setBackstory(event.target.value)}
           />
@@ -711,7 +711,7 @@ function KinSlotPicker({ draft, familyId }: KinSlotPickerProps) {
   }) => {
     const parts: string[] = [];
     if (item.age_min !== null || item.age_max !== null) {
-      parts.push(`age ${item.age_min ?? '?'}–${item.age_max ?? '?'}`);
+      parts.push(`age ${item.age_min ?? '?'}-${item.age_max ?? '?'}`);
     }
     if (item.allowed_genders.length > 0) {
       parts.push(item.allowed_genders.join('/'));

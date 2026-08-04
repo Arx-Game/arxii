@@ -67,7 +67,7 @@ export function GuiseSheetDialog({
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-lg">
         <DialogHeader>
-          <DialogTitle>Guise sheet — {persona.name}</DialogTitle>
+          <DialogTitle>Guise sheet: {persona.name}</DialogTitle>
           <DialogDescription>
             The bio this cover identity presents to the world. A guise with no story outs itself;
             give it one.

@@ -21,7 +21,7 @@ export function HowToStartPage() {
             </CardHeader>
             <CardContent className="space-y-2 text-sm">
               <p>
-                Create an account and verify your email. That's the only setup there is — the game
+                Create an account and verify your email. That's the only setup there is; the game
                 runs entirely in your browser.
               </p>
               <Button asChild size="sm">
@@ -33,7 +33,7 @@ export function HowToStartPage() {
         <li>
           <Card>
             <CardHeader>
-              <CardTitle>2. Get a character — two ways</CardTitle>
+              <CardTitle>2. Get a character: two ways</CardTitle>
             </CardHeader>
             <CardContent className="space-y-3 text-sm">
               <div>
@@ -70,7 +70,7 @@ export function HowToStartPage() {
             <CardContent className="space-y-2 text-sm">
               <p>
                 Once approved, log in and press Play. You'll arrive in the world with a guided first
-                arc that teaches the game as you play it — no manual required.
+                arc that teaches the game as you play it, no manual required.
               </p>
               <Button asChild size="sm">
                 <Link to="/game">Play</Link>

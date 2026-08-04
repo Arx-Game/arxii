@@ -245,7 +245,7 @@ export function RoomDetailPanel({
         <h4 className="text-sm font-semibold text-destructive">Remove room</h4>
         {isEntry ? (
           <p className="text-xs text-muted-foreground">
-            The entry room can&apos;t be removed — it&apos;s the building&apos;s way in.
+            The entry room can&apos;t be removed; it&apos;s the building&apos;s way in.
           </p>
         ) : (
           <AlertDialog>

@@ -147,7 +147,7 @@ describe('EpisodeFormDialog — Task E2 GM/player text split + episode fields', 
 
     expect(screen.getByLabelText(/the story so far/i)).toBeInTheDocument();
     expect(
-      screen.getByText(/player-facing recap — keep this current as the story advances/i)
+      screen.getByText(/player-facing recap: keep this current as the story advances/i)
     ).toBeInTheDocument();
   });
 

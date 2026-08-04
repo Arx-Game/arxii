@@ -28,7 +28,7 @@ class CmdAccount(Command):  # ty: ignore[invalid-base]
     and current session status (OOC account-level info, not character info).
 
     ``account email <address>`` sets your account's primary email address and
-    (re)sends a verification link — the same allauth confirmation flow the web
+    (re)sends a verification link, the same allauth confirmation flow the web
     signup form uses. Telnet-registered accounts (``create <user> <pass>``
     collects no email) have no other way to satisfy the verified-email gate
     that character applications require (#2122).
@@ -163,7 +163,7 @@ class CmdRoster(Command):  # ty: ignore[invalid-base]
 
     Shows the status of applications you've already submitted. Roster
     browsing and applying for new characters happens on the website
-    (see the connection screen or ``@account`` for the URL) — this
+    (see the connection screen or ``@account`` for the URL) - this
     command is a read-only status check, not a browse/apply surface
     (#2122).
     """

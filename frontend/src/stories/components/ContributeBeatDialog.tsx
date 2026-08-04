@@ -170,7 +170,7 @@ export function ContributeBeatDialog({
             <DialogTitle>Contribute to &ldquo;{beatLabel}&rdquo;</DialogTitle>
             <DialogDescription>
               {currentTotal} of {required} points reached
-              {remaining > 0 ? ` — ${remaining} still needed` : ' — threshold met'}
+              {remaining > 0 ? ` (${remaining} still needed` : ') threshold met'}
             </DialogDescription>
           </DialogHeader>
 

@@ -366,9 +366,7 @@ class StoryDigRoomAction(_StoryBuilderAction):
             # precedent) — place_room_on_grid is the verb that still raises.
             grid_x = None
             grid_y = None
-            unplaced_note = (
-                " That cell was occupied — room created unplaced; drag it into position."
-            )
+            unplaced_note = " That cell was occupied. Room created unplaced; drag it into position."
         profile_row = create_room(
             area=area,
             name=room_name,
@@ -687,7 +685,7 @@ class SpinUpSceneRoomAction(_StoryBuilderAction):
             success=True,
             message=(
                 f"{instance.room.objectdb.db_key} spun up (#{instance.room.pk})"
-                " — grant characters access."
+                "; grant characters access."
             ),
         )
 

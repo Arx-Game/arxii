@@ -57,11 +57,11 @@ function HazardPromptToastBody({ toastId, payload }: ToastBodyProps) {
     >
       <p className="text-sm font-semibold text-foreground">
         {payload.condition_name}
-        {payload.stage_name ? ` — ${payload.stage_name}` : ''}
+        {payload.stage_name ? `; ${payload.stage_name}` : ''}
       </p>
       <p className="mt-1 text-sm text-foreground">{payload.player_text}</p>
       <p className="mt-1 text-xs text-muted-foreground">
-        Cover up or find shade where you are — or choose below. Do nothing, and your instincts will
+        Cover up or find shade where you are, or choose below. Do nothing, and your instincts will
         carry you to shelter.
       </p>
       <div className="mt-2 flex gap-2">

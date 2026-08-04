@@ -34,12 +34,12 @@ class CmdDurance(ArxCommand):
     """Track readiness and open a Ritual of the Durance training session.
 
     Usage:
-        durance                             — show your Durance readiness hub
-        durance status                      — (same)
-        durance intent <path name or id>    — declare your intended next path
-        durance intent clear                — clear your declared path intent
-        durance convene                     — open a site-convened Durance session
-        durance selectpath <path name or id> — one-time recovery: pick a path when
+        durance                             - show your Durance readiness hub
+        durance status                      - (same)
+        durance intent <path name or id>    - declare your intended next path
+        durance intent clear                - clear your declared path intent
+        durance convene                     - open a site-convened Durance session
+        durance selectpath <path name or id> - one-time recovery: pick a path when
                                                 you have none on record at all
     """
 
@@ -97,7 +97,7 @@ class CmdDurance(ArxCommand):
         # Tier-boundary check: Audere Majora, not Durance.
         if AudereMajoraThreshold.objects.filter(boundary_level=level).exists():
             lines.append(
-                "Your next step crosses a tier — that is Audere Majora, the Crossing, "
+                "Your next step crosses a tier: that is Audere Majora, the Crossing, "
                 "not the Durance."
             )
             lines.extend(self._intent_line(sheet))

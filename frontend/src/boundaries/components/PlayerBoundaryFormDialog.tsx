@@ -200,7 +200,7 @@ export function PlayerBoundaryFormDialog({ open, onOpenChange, boundary, onSucce
               onChange={(e) => setDetail(e.target.value)}
               placeholder={
                 isHardLine
-                  ? 'Staff/audit-only nuance — never shown to anyone else.'
+                  ? 'Staff/audit-only nuance: never shown to anyone else.'
                   : 'What should scene partners know?'
               }
               rows={3}

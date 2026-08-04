@@ -92,7 +92,7 @@ export function StaffPetitionDetailPage() {
         <CardHeader>
           <CardTitle className="flex items-center justify-between">
             <span>
-              Petition #{petition.id} — {petition.category_display}
+              Petition #{petition.id}: {petition.category_display}
             </span>
             <Badge>{petition.status}</Badge>
           </CardTitle>

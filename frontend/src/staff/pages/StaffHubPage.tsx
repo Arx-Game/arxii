@@ -125,8 +125,8 @@ export function StaffHubPage() {
             </CardHeader>
             <CardContent>
               <p className="text-sm text-muted-foreground">
-                Author NPC roles and the service offers they make — mission-giving and permit
-                issuance — on the unified offer framework.
+                Author NPC roles and the service offers they make; mission-giving and permit
+                issuance: on the unified offer framework.
               </p>
             </CardContent>
           </Card>

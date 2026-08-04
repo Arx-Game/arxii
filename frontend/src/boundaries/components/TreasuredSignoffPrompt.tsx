@@ -62,7 +62,7 @@ export function TreasuredSignoffPrompt({ beatId, tenureId, pendingSubjectIds }: 
         </CardTitle>
         <CardDescription>
           These are things this character treasures. Sign off to allow them to be staked in this
-          beat — you can withdraw at any time before the scene resolves.
+          beat: you can withdraw at any time before the scene resolves.
         </CardDescription>
       </CardHeader>
       <CardContent className="space-y-2">

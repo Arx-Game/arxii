@@ -59,8 +59,8 @@ class CmdGoal(ArxCommand):
     """Set character goals and log progress toward them.
 
     Usage:
-        goal                            — list allocations + points remaining
-        goal list                       — same as bare ``goal``
+        goal                            - list allocations + points remaining
+        goal list                       - same as bare ``goal``
         goal add domain=<id|name> points=<n> [notes=<text>]
         goal set domain=<id>:points=<n>[,domain=<id>:points=<n>...]
         goal log [domain=<id|name>] title=<text> content=<text> [public]

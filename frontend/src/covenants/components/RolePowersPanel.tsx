@@ -63,7 +63,7 @@ function RolePowerCard({ power }: { power: RolePower }) {
         ) : (
           <p className="text-sm text-muted-foreground">
             {power.resonance_name
-              ? `Channeling ${power.resonance_name} — no power unlocked`
+              ? `Channeling ${power.resonance_name}: no power unlocked`
               : 'No role power yet'}
           </p>
         )}

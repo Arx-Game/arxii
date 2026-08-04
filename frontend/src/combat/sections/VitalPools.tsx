@@ -122,7 +122,7 @@ export function VitalPools({
           {/* Health */}
           <StatBar
             label="Health"
-            valueText={health !== null && maxHealth !== null ? `${health} / ${maxHealth}` : '—'}
+            valueText={health !== null && maxHealth !== null ? `${health} / ${maxHealth}` : '-'}
             percent={healthPct !== null ? healthPct * 100 : 0}
             fillClass={isWounded ? 'bg-amber-500' : 'bg-emerald-500'}
             testId="vital-health-bar"
@@ -136,7 +136,7 @@ export function VitalPools({
                 ? `${animaCurrent} / ${animaMaximum}`
                 : animaLoading
                   ? '…'
-                  : '—'
+                  : '-'
             }
             percent={
               animaCurrent !== null && animaMaximum !== null && animaMaximum > 0

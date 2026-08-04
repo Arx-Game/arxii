@@ -163,7 +163,7 @@ describe('SendGemitDialog', () => {
     await user.click(screen.getByRole('button', { name: /^broadcast$/i }));
 
     await waitFor(() => {
-      expect(toast.success).toHaveBeenCalledWith('Gemit broadcast — all online accounts notified');
+      expect(toast.success).toHaveBeenCalledWith('Gemit broadcast: all online accounts notified');
     });
     expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
   });

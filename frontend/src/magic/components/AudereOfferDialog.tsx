@@ -49,7 +49,7 @@ export function AudereOfferDialog({
           </AlertDialogTitle>
           <AlertDialogDescription className="text-base">
             Battered down. Break through. Your soul strains at intensity{' '}
-            <span className="font-semibold text-fuchsia-400">{offer.fired_intensity}</span> — power
+            <span className="font-semibold text-fuchsia-400">{offer.fired_intensity}</span>: power
             beyond your limits waits on the other side.
           </AlertDialogDescription>
         </AlertDialogHeader>

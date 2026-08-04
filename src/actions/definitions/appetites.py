@@ -44,7 +44,7 @@ class _FeedBaseAction(Action):
             return ActionResult(success=False, message="You have no hunger to feed.")
         if appetite_for(actor_sheet) == AppetiteKind.NONE:
             return ActionResult(
-                success=False, message="You carry no appetite — nothing in you feeds this way."
+                success=False, message="You carry no appetite; nothing in you feeds this way."
             )
         target = kwargs.get("target_character")
         if target is None:

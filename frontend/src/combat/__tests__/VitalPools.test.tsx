@@ -255,7 +255,7 @@ describe('VitalPools', () => {
     });
 
     expect(screen.getByTestId('vital-health-bar')).toBeInTheDocument();
-    expect(screen.getByText('—')).toBeInTheDocument();
+    expect(screen.getByText('-')).toBeInTheDocument();
   });
 
   it('matches the viewer own row by sheet id when several participants have visible health', () => {

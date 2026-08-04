@@ -16,8 +16,8 @@ class CmdGet(ArxCommand):
     """Pick up an item from the room or take an item out of a container.
 
     Telnet grammars:
-        ``get <item>`` / ``take <item>``                 — pick up from the room
-        ``get <item> from <container>``                  — take out of a container
+        ``get <item>`` / ``take <item>``                 - pick up from the room
+        ``get <item> from <container>``                  - take out of a container
         ``take <item> from <container>`` (alias)
     """
 
@@ -61,11 +61,11 @@ class CmdDrop(ArxCommand):
 
 
 class CmdGive(ArxCommand):
-    """Give an item to someone — or hand them coppers directly.
+    """Give an item to someone, or hand them coppers directly.
 
     Telnet grammars:
-        ``give <item> to <recipient>``   — hand over an item (``GiveAction``)
-        ``give <amount> to <recipient>`` — e.g. ``give 3s 5c to Bob``; the
+        ``give <item> to <recipient>``   - hand over an item (``GiveAction``)
+        ``give <amount> to <recipient>`` - e.g. ``give 3s 5c to Bob``; the
         amount-shaped item name swaps dispatch to ``GiveCoinsAction`` for
         this invocation (mirrors ``CmdGet``'s ``from <container>`` swap).
     """
@@ -90,12 +90,12 @@ class CmdGive(ArxCommand):
 
 
 class CmdHome(ArxCommand):
-    """Return to your home — or set it.
+    """Return to your home, or set it.
 
     Usage:
       home        - recall to your home location
       home/set    - make the room you're standing in your home (requires owner or tenant
-                    standing — directly, or via family/organization/Academy standing)
+                    standing, directly or via family/organization/Academy standing)
 
     Your home is where ``home`` recalls you to; a residence defaults to the first room you
     rent or acquire until you change it here (#1514).

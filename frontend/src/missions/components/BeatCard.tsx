@@ -53,7 +53,7 @@ export function BeatCard({ instanceId, roomKey }: BeatCardProps) {
   if (!beat) {
     return (
       <div className="p-3 text-sm text-muted-foreground" data-testid="beat-concluded">
-        This story has concluded — see your journal for how it ended.
+        This story has concluded: see your journal for how it ended.
       </div>
     );
   }
@@ -63,7 +63,7 @@ export function BeatCard({ instanceId, roomKey }: BeatCardProps) {
       {beat.flavor_text ? <p className="whitespace-pre-wrap text-sm">{beat.flavor_text}</p> : null}
       {beat.options.length === 0 ? (
         <p className="text-xs text-muted-foreground" data-testid="beat-not-here">
-          Nothing presents itself here — this story waits somewhere else.
+          Nothing presents itself here: this story waits somewhere else.
         </p>
       ) : (
         <div className="space-y-1" data-testid="beat-options">

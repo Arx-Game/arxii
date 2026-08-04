@@ -43,12 +43,12 @@ class CmdDuel(DispatchCommand):
     """Issue or answer a PC-vs-PC duel challenge.
 
     Usage:
-        duel                        — show your pending challenges + duel state
-        duel challenge <name>       — challenge a co-located character to a duel
-        duel accept [id]            — accept a pending challenge directed at you
-        duel decline [id]           — decline a pending challenge directed at you
-        duel withdraw [id]          — rescind a pending challenge you issued
-        duel risk                   — acknowledge the lethal risk of your duel
+        duel                        - show your pending challenges + duel state
+        duel challenge <name>       - challenge a co-located character to a duel
+        duel accept [id]            - accept a pending challenge directed at you
+        duel decline [id]           - decline a pending challenge directed at you
+        duel withdraw [id]          - rescind a pending challenge you issued
+        duel risk                   - acknowledge the lethal risk of your duel
 
     The optional ``id`` selects a specific pending challenge when you have more
     than one; without it the command acts on your single pending challenge. To
@@ -147,11 +147,11 @@ class CmdDuel(DispatchCommand):
         if participant is not None:
             if participant.encounter.is_lethal:
                 lines.append(
-                    "You are in a lethal duel — duel risk to acknowledge the risk, "
+                    "You are in a lethal duel; duel risk to acknowledge the risk, "
                     "combat yield to concede."
                 )
             else:
-                lines.append("You are in a duel — combat yield to concede.")
+                lines.append("You are in a duel; combat yield to concede.")
         if incoming is None and outgoing is None and participant is None:
             lines.append("You have no pending duel challenges.")
         self.msg("\n".join(lines))

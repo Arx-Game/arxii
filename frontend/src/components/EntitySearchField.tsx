@@ -146,7 +146,7 @@ export function EntitySearchField({
                   onClick={() => handleSelect(r)}
                 >
                   {r.name}
-                  {r.hint ? <span className="text-muted-foreground"> — {r.hint}</span> : null}
+                  {r.hint ? <span className="text-muted-foreground">; {r.hint}</span> : null}
                 </button>
               </li>
             ))}

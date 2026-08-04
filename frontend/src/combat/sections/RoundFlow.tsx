@@ -146,7 +146,7 @@ const CHIP_STYLES: Record<ChipState, string> = {
 const CHIP_GLYPH: Record<ChipState, string> = { acted: '✓', current: '▶', pending: '…' };
 const CHIP_TITLE: Record<ChipState, string> = {
   acted: 'Acted this round',
-  current: 'On deck — next PC to resolve',
+  current: 'On deck: next PC to resolve',
   pending: 'Pending',
 };
 

@@ -105,7 +105,7 @@ export function AttachFacetDialog({ open, onOpenChange, itemInstanceId }: Attach
             toast.success(parts.join(' · '));
             setSelectedFacetId('');
           } else {
-            const failParts = ['Your attempt failed — no facet attached.'];
+            const failParts = ['Your attempt failed; no facet attached.'];
             if (result.consequence_label) failParts.push(result.consequence_label);
             toast.error(failParts.join(' · '));
           }
@@ -125,7 +125,7 @@ export function AttachFacetDialog({ open, onOpenChange, itemInstanceId }: Attach
         <DialogHeader>
           <DialogTitle>Attach Facet</DialogTitle>
           <DialogDescription>
-            Quality is determined by your Enchanting skill — you choose only which facet to attach.
+            Quality is determined by your Enchanting skill; you choose only which facet to attach.
           </DialogDescription>
         </DialogHeader>
 

@@ -23,10 +23,10 @@ class CmdForm(DispatchCommand):
     """List, shift into, or revert your alternate selves.
 
     Usage:
-        form                       — list your alternate selves; marks the active one
-        form list                  — same as bare ``form``
-        form shift <name|id>       — assume the named alternate self
-        form revert                — revert to your true self
+        form                       - list your alternate selves; marks the active one
+        form list                  - same as bare ``form``
+        form shift <name|id>       - assume the named alternate self
+        form revert                - revert to your true self
     """
 
     key = "form"
@@ -123,7 +123,7 @@ class CmdForm(DispatchCommand):
             lines.append("You have no alternate selves.")
 
         if not sheet.in_control:
-            lines.append("You are not in control — revert is blocked.")
+            lines.append("You are not in control; revert is blocked.")
 
         self.msg("\n".join(lines))
 

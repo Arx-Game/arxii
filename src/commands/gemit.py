@@ -23,16 +23,16 @@ if TYPE_CHECKING:
 
 _USAGE = (
     "Usage:\n"
-    "  gemit <message>                          — game-wide\n"
-    "  gemit/society <name>[,<name>] = <message> — to those societies' members\n"
-    "  gemit/org <name>[,<name>] = <message>     — to those organizations' members"
+    "  gemit <message>                          - game-wide\n"
+    "  gemit/society <name>[,<name>] = <message> - to those societies' members\n"
+    "  gemit/org <name>[,<name>] = <message>     - to those organizations' members"
 )
 
 
 class CmdGemit(ArxCommand):
     """Broadcast a hand-authored gemit to a chosen reach (staff).
 
-    The message is sent verbatim — write it exactly as players should see it, colour codes
+    The message is sent verbatim; write it exactly as players should see it, colour codes
     included. Game-wide reaches everyone online; the scoped forms reach only the members of the
     named societies / organizations (multiple, comma-separated).
 

@@ -75,7 +75,7 @@ interface PersonaOption {
 
 export function ScheduleEventDialog({ request }: ScheduleEventDialogProps) {
   const [open, setOpen] = useState(false);
-  const [name, setName] = useState(`${request.story_title} — ${request.episode_title}`);
+  const [name, setName] = useState(`${request.story_title}: ${request.episode_title}`);
   const [scheduledRealTime, setScheduledRealTime] = useState('');
   const [locationId, setLocationId] = useState<number | null>(null);
   const [isPublic, setIsPublic] = useState(true);
@@ -93,7 +93,7 @@ export function ScheduleEventDialog({ request }: ScheduleEventDialogProps) {
   const personaResults = selectedPersona?.name === personaQuery ? [] : results;
 
   function resetForm() {
-    setName(`${request.story_title} — ${request.episode_title}`);
+    setName(`${request.story_title}: ${request.episode_title}`);
     setScheduledRealTime('');
     setLocationId(null);
     setIsPublic(true);
@@ -132,7 +132,7 @@ export function ScheduleEventDialog({ request }: ScheduleEventDialogProps) {
           resetForm();
           const eventId = updatedRequest.event;
           if (eventId !== null && eventId !== undefined) {
-            toast.success(`Event scheduled — event #${String(eventId)}`);
+            toast.success(`Event scheduled: event #${String(eventId)}`);
           } else {
             toast.success('Event scheduled');
           }

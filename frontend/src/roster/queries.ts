@@ -97,7 +97,7 @@ export function useSendRosterApplication(id: RosterEntryData['id']) {
   return useMutation({
     mutationFn: (message: string) => postRosterApplication(id, message),
     onSuccess: () => {
-      toast.success('Application sent! Staff will review it — you will get an email.');
+      toast.success('Application sent! Staff will review it; you will get an email.');
       queryClient.invalidateQueries({ queryKey: ['roster-entry', id] });
       // ['account'] is the query key useAccountQuery() (mounted globally via
       // AuthProvider) reads and mirrors into Redux — invalidating it here

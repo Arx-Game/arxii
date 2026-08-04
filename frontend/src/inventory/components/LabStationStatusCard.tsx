@@ -95,7 +95,7 @@ export function LabStationStatusCard({ featureInstanceId, onRepaired }: LabStati
       data-testid="lab-station-status-card"
     >
       <p className="font-medium">
-        Lab station (L{level}) — {durability}/{max_durability}
+        Lab station (L{level}): {durability}/{max_durability}
         {is_broken && <span className="ml-1 text-destructive">(broken)</span>}
       </p>
       <Progress value={durabilityPct} />

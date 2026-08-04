@@ -891,7 +891,7 @@ describe('YourTurn — flee declaration', () => {
 
     expect(screen.getByTestId('flee-declared-badge')).toBeInTheDocument();
     expect(screen.getByTestId('flee-declared-badge')).toHaveTextContent(
-      'Fleeing — resolves at end of round'
+      'Fleeing: resolves at end of round'
     );
     // Flee button should be hidden when already declared.
     expect(screen.queryByTestId('flee-btn')).not.toBeInTheDocument();
@@ -1565,7 +1565,7 @@ describe('YourTurn — first-timer wayfinding tooltips (#2157)', () => {
 
     expect(screen.getByText('Focused Action')).toHaveAttribute(
       'title',
-      "Your primary declared action this round — the technique or maneuver you're committing to."
+      "Your primary declared action this round, the technique or maneuver you're committing to."
     );
   });
 
@@ -1590,7 +1590,7 @@ describe('YourTurn — first-timer wayfinding tooltips (#2157)', () => {
 
     expect(screen.getByText('Passive Actions')).toHaveAttribute(
       'title',
-      "Secondary declarations in categories your Focused Action doesn't use — they resolve alongside it."
+      "Secondary declarations in categories your Focused Action doesn't use; they resolve alongside it."
     );
   });
 

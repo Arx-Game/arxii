@@ -12,14 +12,14 @@ from commands.command import ArxCommand
 
 _USAGE = (
     "Usage: line <subcommand>\n"
-    "  line                      — show the queue\n"
-    "  line open                 — open a speaker queue in this room\n"
-    "  line close                — close the queue\n"
-    "  line join                 — get in line\n"
-    "  line leave                — leave the queue\n"
-    "  line next                 — yield your turn (advance)\n"
-    "  line skip <name>          — skip a specific persona (AFK escape)\n"
-    "  line status               — same as bare 'line'"
+    "  line                      - show the queue\n"
+    "  line open                 - open a speaker queue in this room\n"
+    "  line close                - close the queue\n"
+    "  line join                 - get in line\n"
+    "  line leave                - leave the queue\n"
+    "  line next                 - yield your turn (advance)\n"
+    "  line skip <name>          - skip a specific persona (AFK escape)\n"
+    "  line status               - same as bare 'line'"
 )
 
 
