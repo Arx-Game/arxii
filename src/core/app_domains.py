@@ -14,10 +14,15 @@ from django.db import models
 
 _WORLD_PREFIX = "world."
 
-# Lazily-built model-name -> model class index (see resolve_model_by_name).
-# Populated on first use, not at import time, since apps.get_models() requires
-# the app registry to already be populated.
-_MODEL_INDEX: dict[str, type[models.Model]] | None = None
+# Lazily-built model-name -> candidate model classes index (see
+# resolve_model_by_name). A list, not a single model, because model names are
+# NOT guaranteed unique across all installed apps pre-collapse (e.g.
+# AchievementRequirement exists in both world.achievements and
+# world.progression today) — collapsing to one entry would silently pick
+# whichever model apps.get_models() happened to enumerate last. Populated on
+# first use, not at import time, since apps.get_models() requires the app
+# registry to already be populated.
+_MODEL_INDEX: dict[str, list[type[models.Model]]] | None = None
 
 
 def domain_of(model: type[models.Model]) -> str:
@@ -31,23 +36,30 @@ def domain_of(model: type[models.Model]) -> str:
     return "web_admin" if module.startswith("web.admin") else head
 
 
-def _model_index() -> dict[str, type[models.Model]]:
-    """Return the cached lowercase-model-name -> model class index, building it once.
+def _model_index() -> dict[str, list[type[models.Model]]]:
+    """Return the cached lowercase-model-name -> candidate-models index, building it once.
 
     ``resolve_model_by_name`` is called per fixture row (thousands of them via
     ``load_entries``), so the index is built from ``apps.get_models()`` a single
     time per process and cached at module scope rather than re-scanned per call.
+    A name maps to a LIST because it is not guaranteed unique (see the
+    ``_MODEL_INDEX`` comment above) — collision detection happens at lookup
+    time in ``resolve_model_by_name``, never here, so a colliding name doesn't
+    fail the whole pipeline before anyone actually looks it up.
     """
     global _MODEL_INDEX  # noqa: PLW0603
     if _MODEL_INDEX is None:
         from django.apps import apps  # noqa: PLC0415
 
-        _MODEL_INDEX = {model.__name__.lower(): model for model in apps.get_models()}
+        index: dict[str, list[type[models.Model]]] = {}
+        for model in apps.get_models():
+            index.setdefault(model.__name__.lower(), []).append(model)
+        _MODEL_INDEX = index
     return _MODEL_INDEX
 
 
 def resolve_model_by_name(model_key: str) -> type[models.Model]:
-    """Resolve ``"<label>.<model_name>"`` (or a bare ``"<model_name>"``), ignoring the label.
+    """Resolve ``"<label>.<model_name>"`` (or a bare ``"<model_name>"``), mostly ignoring the label.
 
     Used everywhere a fixture, admin toggle, or export needs to turn a
     stored/authored model reference into a live model class: fixture loading
@@ -57,17 +69,48 @@ def resolve_model_by_name(model_key: str) -> type[models.Model]:
     The label half is historical: #2906 collapsed every first-party app into
     ``arxii``, so a reference written as ``"magic.technique"`` (or any other
     stale/renamed label) names a model that may now live under a different
-    Django app label entirely. Model *names* are unique across all installed
-    apps (verified for #2906: the sole collision is renamed away in Task 3), so
-    the name alone identifies the model and the label can simply be ignored.
+    Django app label entirely. Model names are unique across almost every
+    installed app, so in the overwhelming common case the name alone
+    identifies the model and the label is ignored outright.
 
-    Raises ``LookupError`` when the model name is not installed — a silent
-    skip here would make a whole-repo label rename look like a successful load
-    while quietly importing nothing.
+    They are NOT unique in every case, though (e.g. today,
+    ``AchievementRequirement`` exists in both ``world.achievements`` and
+    ``world.progression``) — collapsing straight to a single match would
+    silently resolve to whichever model happened to be enumerated last,
+    forever. So resolution is layered:
+
+    1. Exactly one model with this name -> return it (the common case).
+    2. More than one -> if a label was supplied and exactly one candidate's
+       ``app_label`` matches it, return that one (disambiguates today's
+       pre-collapse interim window, including the ``AchievementRequirement``
+       case).
+    3. Still ambiguous (no label supplied, or it matched none/several) ->
+       raise ``LookupError`` naming every candidate as ``app_label.ModelName``,
+       so the failure is self-diagnosing rather than a silent wrong answer.
+    4. No candidates at all -> raise ``LookupError`` as before.
+
+    A silent skip/wrong-resolution here would make a whole-repo label rename
+    look like a successful load while quietly importing nothing (or importing
+    into the wrong model), so every failure mode above raises loudly instead.
     """
-    _, _, model_name = model_key.rpartition(".")
-    try:
-        return _model_index()[model_name.lower()]
-    except KeyError:
+    label, _, model_name = model_key.rpartition(".")
+    candidates = _model_index().get(model_name.lower())
+    if not candidates:
         msg = f"No installed model named {model_name!r} (from {model_key!r})"
-        raise LookupError(msg) from None
+        raise LookupError(msg)
+    if len(candidates) == 1:
+        return candidates[0]
+    if label:
+        label_matches = [m for m in candidates if m._meta.app_label == label]  # noqa: SLF001
+        if len(label_matches) == 1:
+            return label_matches[0]
+    candidate_names = ", ".join(
+        f"{m._meta.app_label}.{m.__name__}"  # noqa: SLF001
+        for m in candidates
+    )
+    msg = (
+        f"Ambiguous model name {model_name!r} (from {model_key!r}): "
+        f"{len(candidates)} installed models share this name and the label didn't "
+        f"disambiguate: {candidate_names}"
+    )
+    raise LookupError(msg)
