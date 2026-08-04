@@ -4,7 +4,7 @@ from django.test import TestCase
 
 from world.achievements.factories import (
     AchievementFactory,
-    AchievementRequirementFactory,
+    AchievementStatRequirementFactory,
     StatDefinitionFactory,
     StatTrackerFactory,
 )
@@ -52,7 +52,9 @@ class IncrementStatTest(TestCase):
 
     def test_checks_achievements_after_increment(self) -> None:
         achievement = AchievementFactory()
-        AchievementRequirementFactory(achievement=achievement, stat=self.quest_stat, threshold=10)
+        AchievementStatRequirementFactory(
+            achievement=achievement, stat=self.quest_stat, threshold=10
+        )
         StatTrackerFactory(character_sheet=self.sheet, stat=self.quest_stat, value=9)
 
         increment_stat(self.sheet, self.quest_stat, amount=1)
@@ -65,7 +67,9 @@ class IncrementStatTest(TestCase):
 
     def test_does_not_grant_if_threshold_not_met(self) -> None:
         achievement = AchievementFactory()
-        AchievementRequirementFactory(achievement=achievement, stat=self.quest_stat, threshold=10)
+        AchievementStatRequirementFactory(
+            achievement=achievement, stat=self.quest_stat, threshold=10
+        )
         StatTrackerFactory(character_sheet=self.sheet, stat=self.quest_stat, value=5)
 
         increment_stat(self.sheet, self.quest_stat, amount=1)
@@ -78,7 +82,9 @@ class IncrementStatTest(TestCase):
 
     def test_does_not_grant_already_earned(self) -> None:
         achievement = AchievementFactory()
-        AchievementRequirementFactory(achievement=achievement, stat=self.quest_stat, threshold=5)
+        AchievementStatRequirementFactory(
+            achievement=achievement, stat=self.quest_stat, threshold=5
+        )
         StatTrackerFactory(character_sheet=self.sheet, stat=self.quest_stat, value=9)
 
         increment_stat(self.sheet, self.quest_stat, amount=1)
@@ -93,10 +99,10 @@ class IncrementStatTest(TestCase):
 
     def test_prerequisite_not_met_blocks_grant(self) -> None:
         tier1 = AchievementFactory(slug="tier1")
-        AchievementRequirementFactory(achievement=tier1, stat=self.quest_stat, threshold=10)
+        AchievementStatRequirementFactory(achievement=tier1, stat=self.quest_stat, threshold=10)
 
         tier2 = AchievementFactory(slug="tier2", prerequisite=tier1)
-        AchievementRequirementFactory(achievement=tier2, stat=self.quest_stat, threshold=10)
+        AchievementStatRequirementFactory(achievement=tier2, stat=self.quest_stat, threshold=10)
 
         StatTrackerFactory(character_sheet=self.sheet, stat=self.quest_stat, value=9)
 
@@ -117,7 +123,9 @@ class IncrementStatTest(TestCase):
 
     def test_inactive_achievement_not_granted(self) -> None:
         achievement = AchievementFactory(is_active=False)
-        AchievementRequirementFactory(achievement=achievement, stat=self.quest_stat, threshold=1)
+        AchievementStatRequirementFactory(
+            achievement=achievement, stat=self.quest_stat, threshold=1
+        )
         StatTrackerFactory(character_sheet=self.sheet, stat=self.quest_stat, value=0)
 
         increment_stat(self.sheet, self.quest_stat, amount=1)

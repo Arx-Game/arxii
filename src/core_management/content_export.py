@@ -65,7 +65,7 @@ CONTENT_MODELS: frozenset[str] = frozenset(
         # achievements
         "achievements.statdefinition",
         "achievements.achievement",
-        "achievements.achievementrequirement",
+        "achievements.achievementstatrequirement",
         "achievements.achievementreward",
         "achievements.rewarddefinition",
         "achievements.conditionstatrule",

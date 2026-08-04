@@ -1225,7 +1225,7 @@ def _seed_hallowed_achievement_bridge() -> None:
     outcomes — Burning is common-failure, not noteworthy enough for an
     achievement), creates:
 
-        StatDefinition → ConditionStatRule → Achievement → AchievementRequirement
+        StatDefinition → ConditionStatRule → Achievement → AchievementStatRequirement
 
     Discoveries fire automatically via the existing achievements engine when
     the first character earns each Achievement.
@@ -1246,7 +1246,7 @@ def _seed_hallowed_achievement_bridge() -> None:
     )
     from world.achievements.models import (  # noqa: PLC0415
         Achievement,
-        AchievementRequirement,
+        AchievementStatRequirement,
         ConditionStatRule,
         StatDefinition,
     )
@@ -1291,7 +1291,7 @@ def _seed_hallowed_achievement_bridge() -> None:
         if achievement is None:
             continue
         authored_or_sample(
-            AchievementRequirement,
+            AchievementStatRequirement,
             {"description": ""},
             achievement=achievement,
             stat=stat,

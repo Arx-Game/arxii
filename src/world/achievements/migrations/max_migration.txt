@@ -1,1 +1,1 @@
-0006_achievementrequirement_unique_achievement_requirement_and_more
+0007_rename_achievementrequirement_achievementstatrequirement

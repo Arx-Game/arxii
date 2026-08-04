@@ -2601,8 +2601,10 @@ gains a discoverable content item for the first time.
   `"relationships.total_established"`; `CONTENT_MODELS` since #2698), `StatTracker` (per-character integer counter),
   `Achievement` (staff-authored; `hidden` default True, `notification_level`, chained via
   `prerequisite` self-FK, `is_active`; natural key `slug`; `CONTENT_MODELS` since #2832),
-  `AchievementRequirement` (stat threshold comparison per
-  achievement; composite natural key `(achievement, stat, threshold, comparison)`; `CONTENT_MODELS` since #2832),
+  `AchievementStatRequirement` (stat threshold comparison per
+  achievement; composite natural key `(achievement, stat, threshold, comparison)`; `CONTENT_MODELS` since #2832;
+  renamed from `AchievementRequirement` by #2906's Task 3, disambiguating it from
+  `progression.AchievementRequirement`),
   `Discovery` (OneToOne → `Achievement`; records first-ever earner timestamp),
   `CharacterAchievement` (earned record; optional `discovery` FK when the earner was a co-discoverer),
   `RewardDefinition` (TITLE / BONUS / COSMETIC / PRESTIGE / DISTINCTION reward catalog;

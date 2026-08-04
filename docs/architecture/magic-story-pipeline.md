@@ -37,7 +37,7 @@ shape between magic, conditions, stories, and achievements.
 4. After the slice lands, authoring a second reactive scar requires zero new service code —
    only new seed rows (ConditionTemplates, FlowDefinition, TriggerDefinition, etc.).
 5. After the slice lands, granting an achievement on "condition X is gained" requires only
-   authoring a `StatDefinition`, an `Achievement`, an `AchievementRequirement`, and a
+   authoring a `StatDefinition`, an `Achievement`, an `AchievementStatRequirement`, and a
    `ConditionStatRule` bridge row — no service-layer code changes.
 6. After the slice lands, a reactive flow can query "this room has affinity X" via the
    filter DSL and scale check difficulty by affinity-tag count via a generic helper service
@@ -102,7 +102,7 @@ The slice is composed of nine units, each with one purpose:
    condition (Hallowed Rejection), 5 reaction conditions, 1 CheckType + ResultChart with
    placeholder tuning, 1 FlowDefinition + steps, 1 TriggerDefinition.
 7. Authored achievement content: 3 StatDefinitions, 3 ConditionStatRules, 3 Achievements +
-   AchievementRequirements (CRITICAL_SUCCESS + SUCCESS + CRITICAL_FAILURE paths; Burning path
+   AchievementStatRequirements (CRITICAL_SUCCESS + SUCCESS + CRITICAL_FAILURE paths; Burning path
    gets no achievement).
 8. Authored story content: 1 Story (CHARACTER scope), 1 Chapter, 4 Episodes, 4 Beats on
    Episode 1, 4 Transitions, 4 TransitionRequiredOutcomes.
@@ -503,11 +503,11 @@ Difficulty values are placeholder. For low-intensity room (1 celestial resonance
 | 29 | `achievements.ConditionStatRule` | Singed (#10) → stat #26 / GAINED / +1 | bridge |
 | 30 | `achievements.ConditionStatRule` | Hallowed Burn (#12) → stat #27 / GAINED / +1 | bridge |
 | 31 | `achievements.Achievement` | **Hallowed-Hardened** | hidden=True, notification_level=GAMEWIDE |
-| 32 | `achievements.AchievementRequirement` | Hallowed-Hardened on stat #25, threshold=1, GTE | |
+| 32 | `achievements.AchievementStatRequirement` | Hallowed-Hardened on stat #25, threshold=1, GTE | |
 | 33 | `achievements.Achievement` | **Touched by Light** | hidden=True, notification_level=PERSONAL |
-| 34 | `achievements.AchievementRequirement` | Touched by Light on stat #26, threshold=1, GTE | |
+| 34 | `achievements.AchievementStatRequirement` | Touched by Light on stat #26, threshold=1, GTE | |
 | 35 | `achievements.Achievement` | **Cast Out by the Light** | hidden=True, notification_level=GAMEWIDE |
-| 36 | `achievements.AchievementRequirement` | Cast Out by the Light on stat #27, threshold=1, GTE | |
+| 36 | `achievements.AchievementStatRequirement` | Cast Out by the Light on stat #27, threshold=1, GTE | |
 
 Burning intentionally gets no StatDefinition / ConditionStatRule / Achievement — common
 failure mode, not noteworthy enough for an achievement.
@@ -655,7 +655,7 @@ Per FK dependencies:
 1. CheckType + ResultChart + 3 StatDefinitions (no FKs into slice content)
 2. Five reaction ConditionTemplates (Tempered, Singed, Burning, Hallowed Burn, Cast Disrupted)
 3. Three ConditionStatRule rows (FK to StatDef + ConditionTemplate)
-4. Three Achievements + three AchievementRequirements (FK to StatDef)
+4. Three Achievements + three AchievementStatRequirements (FK to StatDef)
 5. FlowDefinition + FlowStepDefinition rows (FK to CheckType + reaction conditions; uses
    the `has_affinity_resonance` filter + `compute_intensity_difficulty` service function)
 6. TriggerDefinition (FK to FlowDefinition)
@@ -676,7 +676,7 @@ Per FK dependencies:
 | `ConditionTemplate` | `name` | existing unique |
 | `ConditionStatRule` | `(stat, condition, event_type)` | new unique constraint on model |
 | `Achievement` | `name` | existing unique |
-| `AchievementRequirement` | `(achievement, stat)` | verify or add UniqueConstraint |
+| `AchievementStatRequirement` | `(achievement, stat)` | verify or add UniqueConstraint |
 | `FlowDefinition` | `name` | existing unique |
 | `FlowStepDefinition` | TBD — likely `(flow, parent, order)` — verify | |
 | `TriggerDefinition` | `name` | existing unique |
@@ -732,7 +732,7 @@ Mirrors Phase 1 task 1.9's idempotency pattern.
 
 3. **Compound predicates on `ConditionStatRule`.** Sibling join table
    `ConditionStatRuleRequirement(rule, predicate_type, config fields)` — mirrors how
-   `AchievementRequirement` relates to `Achievement` today. Added when first authored content
+   `AchievementStatRequirement` relates to `Achievement` today. Added when first authored content
    needs "increment only if X AND Y." Current rows keep firing unconditionally (no requirement
    rows = "fires always").
 
@@ -782,7 +782,7 @@ These are quick checks during plan-writing to confirm or fix natural keys / uniq
 - Room ObjectDB seed idempotency via `db_key`
 - `Beat` UniqueConstraint on `(episode, predicate_type, required_condition_template)` — likely needs adding
 - `Transition` natural key
-- `AchievementRequirement` UniqueConstraint on `(achievement, stat)` — verify or add
+- `AchievementStatRequirement` UniqueConstraint on `(achievement, stat)` — verify or add
 - Existing factory-created `Burning` ConditionTemplate compatibility with the reactive flow's
   expectations (duration, stage progression, etc.). `get_or_create(name="Burning", defaults={...})`
   semantics protect us, but verify defaults are sane.

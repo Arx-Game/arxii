@@ -16,12 +16,12 @@ _WORLD_PREFIX = "world."
 
 # Lazily-built model-name -> candidate model classes index (see
 # resolve_model_by_name). A list, not a single model, because model names are
-# NOT guaranteed unique across all installed apps pre-collapse (e.g.
-# AchievementRequirement exists in both world.achievements and
-# world.progression today) — collapsing to one entry would silently pick
-# whichever model apps.get_models() happened to enumerate last. Populated on
-# first use, not at import time, since apps.get_models() requires the app
-# registry to already be populated.
+# NOT guaranteed unique across all installed apps pre-collapse (e.g., before
+# #2906's Task 3 renamed it, AchievementRequirement existed in both
+# world.achievements and world.progression) — collapsing to one entry would
+# silently pick whichever model apps.get_models() happened to enumerate last.
+# Populated on first use, not at import time, since apps.get_models()
+# requires the app registry to already be populated.
 _MODEL_INDEX: dict[str, list[type[models.Model]]] | None = None
 
 
@@ -73,17 +73,17 @@ def resolve_model_by_name(model_key: str) -> type[models.Model]:
     installed app, so in the overwhelming common case the name alone
     identifies the model and the label is ignored outright.
 
-    They are NOT unique in every case, though (e.g. today,
-    ``AchievementRequirement`` exists in both ``world.achievements`` and
-    ``world.progression``) — collapsing straight to a single match would
-    silently resolve to whichever model happened to be enumerated last,
-    forever. So resolution is layered:
+    They are NOT unique in every case, though (e.g., before #2906's Task 3
+    renamed it, ``AchievementRequirement`` existed in both
+    ``world.achievements`` and ``world.progression``) — collapsing straight
+    to a single match would silently resolve to whichever model happened to
+    be enumerated last, forever. So resolution is layered:
 
     1. Exactly one model with this name -> return it (the common case).
     2. More than one -> if a label was supplied and exactly one candidate's
-       ``app_label`` matches it, return that one (disambiguates today's
-       pre-collapse interim window, including the ``AchievementRequirement``
-       case).
+       ``app_label`` matches it, return that one (disambiguates the
+       pre-collapse interim window whenever a genuine name collision like
+       that recurs).
     3. Still ambiguous (no label supplied, or it matched none/several) ->
        raise ``LookupError`` naming every candidate as ``app_label.ModelName``,
        so the failure is self-diagnosing rather than a silent wrong answer.

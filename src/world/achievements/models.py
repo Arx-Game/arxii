@@ -29,7 +29,7 @@ class StatDefinition(NaturalKeyMixin, SharedMemoryModel):
     Defines a trackable stat with display metadata.
 
     Normalizes stat keys so they can't get out of sync between
-    StatTracker and AchievementRequirement. Staff-defined.
+    StatTracker and AchievementStatRequirement. Staff-defined.
     """
 
     class NaturalKeyConfig:
@@ -64,7 +64,7 @@ class StatTracker(SharedMemoryModel):
 
     Other game systems increment these counters (e.g., "quests_completed",
     "monsters_slain"). The achievements engine checks stat values against
-    AchievementRequirement thresholds.
+    AchievementStatRequirement thresholds.
     """
 
     character_sheet = models.ForeignKey(
@@ -194,7 +194,7 @@ class DiscoverableContent(models.Model):
         abstract = True
 
 
-class AchievementRequirement(NaturalKeyMixin, SharedMemoryModel):
+class AchievementStatRequirement(NaturalKeyMixin, SharedMemoryModel):
     """
     A stat threshold that must be met for an achievement.
 

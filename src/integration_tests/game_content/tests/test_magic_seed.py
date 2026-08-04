@@ -1133,7 +1133,7 @@ class SeedHallowedAchievementBridgeTests(TestCase):
 
     def test_seeds_three_achievement_requirements(self):
         from integration_tests.game_content.magic import _seed_hallowed_achievement_bridge
-        from world.achievements.models import Achievement, AchievementRequirement
+        from world.achievements.models import Achievement, AchievementStatRequirement
 
         _seed_hallowed_achievement_bridge()
         for ach_name, stat_key in (
@@ -1142,7 +1142,7 @@ class SeedHallowedAchievementBridgeTests(TestCase):
             ("Cast Out by the Light", "conditions.hallowed_burn.gained"),
         ):
             ach = Achievement.objects.get(name=ach_name)
-            reqs = AchievementRequirement.objects.filter(
+            reqs = AchievementStatRequirement.objects.filter(
                 achievement=ach,
                 stat__key=stat_key,
             )
@@ -1162,7 +1162,7 @@ class SeedHallowedAchievementBridgeTests(TestCase):
         from integration_tests.game_content.magic import _seed_hallowed_achievement_bridge
         from world.achievements.models import (
             Achievement,
-            AchievementRequirement,
+            AchievementStatRequirement,
             ConditionStatRule,
             StatDefinition,
         )
@@ -1172,7 +1172,7 @@ class SeedHallowedAchievementBridgeTests(TestCase):
             StatDefinition.objects.count(),
             ConditionStatRule.objects.count(),
             Achievement.objects.count(),
-            AchievementRequirement.objects.count(),
+            AchievementStatRequirement.objects.count(),
         )
         _seed_hallowed_achievement_bridge()
         self.assertEqual(
@@ -1180,7 +1180,7 @@ class SeedHallowedAchievementBridgeTests(TestCase):
                 StatDefinition.objects.count(),
                 ConditionStatRule.objects.count(),
                 Achievement.objects.count(),
-                AchievementRequirement.objects.count(),
+                AchievementStatRequirement.objects.count(),
             ),
             snapshot,
         )
@@ -1572,7 +1572,7 @@ class SeedStarterMagicStoryOrchestratorTests(TestCase):
         """Re-running on populated DB is a no-op for all relevant tables."""
         from world.achievements.models import (
             Achievement,
-            AchievementRequirement,
+            AchievementStatRequirement,
             ConditionStatRule,
             StatDefinition,
         )
@@ -1607,7 +1607,7 @@ class SeedStarterMagicStoryOrchestratorTests(TestCase):
             "ConditionStatRule": ConditionStatRule.objects.count(),
             "StatDefinition": StatDefinition.objects.count(),
             "Achievement": Achievement.objects.count(),
-            "AchievementRequirement": AchievementRequirement.objects.count(),
+            "AchievementStatRequirement": AchievementStatRequirement.objects.count(),
             "ResonanceAlignmentBoonTier": ResonanceAlignmentBoonTier.objects.count(),
             "LocationValueModifier": LocationValueModifier.objects.count(),
             "Story": Story.objects.count(),
@@ -1631,7 +1631,7 @@ class SeedStarterMagicStoryOrchestratorTests(TestCase):
             "ConditionStatRule": ConditionStatRule.objects.count(),
             "StatDefinition": StatDefinition.objects.count(),
             "Achievement": Achievement.objects.count(),
-            "AchievementRequirement": AchievementRequirement.objects.count(),
+            "AchievementStatRequirement": AchievementStatRequirement.objects.count(),
             "ResonanceAlignmentBoonTier": ResonanceAlignmentBoonTier.objects.count(),
             "LocationValueModifier": LocationValueModifier.objects.count(),
             "Story": Story.objects.count(),

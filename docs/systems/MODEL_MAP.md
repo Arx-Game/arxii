@@ -528,7 +528,7 @@
 ### StatDefinition
 **Pointed to by:**
   - trackers <- achievements.StatTracker
-  - requirements <- achievements.AchievementRequirement
+  - requirements <- achievements.AchievementStatRequirement
   - condition_rules <- achievements.ConditionStatRule
 
 ### StatTracker
@@ -544,12 +544,12 @@
   - aura_affinity_thresholds <- magic.AuraAffinityThreshold
   - crossing_options <- magic.CrossingOption
   - next_in_chain <- achievements.Achievement
-  - requirements <- achievements.AchievementRequirement
+  - requirements <- achievements.AchievementStatRequirement
   - discovery <- achievements.Discovery
   - character_achievements <- achievements.CharacterAchievement
   - rewards <- achievements.AchievementReward
 
-### AchievementRequirement
+### AchievementStatRequirement
 **Foreign Keys:**
   - achievement -> achievements.Achievement [FK]
   - stat -> achievements.StatDefinition [FK]

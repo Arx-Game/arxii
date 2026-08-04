@@ -9,8 +9,8 @@ from world.achievements.constants import (
 )
 from world.achievements.models import (
     Achievement,
-    AchievementRequirement,
     AchievementReward,
+    AchievementStatRequirement,
     CharacterAchievement,
     ConditionStatRule,
     Discovery,
@@ -54,9 +54,9 @@ class AchievementFactory(factory_django.DjangoModelFactory):
     is_active = True
 
 
-class AchievementRequirementFactory(factory_django.DjangoModelFactory):
+class AchievementStatRequirementFactory(factory_django.DjangoModelFactory):
     class Meta:
-        model = AchievementRequirement
+        model = AchievementStatRequirement
 
     achievement = factory.SubFactory(AchievementFactory)
     stat = factory.SubFactory(StatDefinitionFactory)
