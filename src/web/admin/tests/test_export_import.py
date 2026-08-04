@@ -48,7 +48,7 @@ class AnalyzeFixtureTests(TestCase):
 
         analysis = analyze_fixture(fixture_data)
 
-        trait_model = self._find_model_analysis(analysis, "traits", "trait")
+        trait_model = self._find_model_analysis(analysis, "arxii", "trait")
         self.assertIsNotNone(trait_model)
         self.assertEqual(trait_model.new_count, 1)
 
@@ -62,7 +62,7 @@ class AnalyzeFixtureTests(TestCase):
 
         analysis = analyze_fixture(fixture_data)
 
-        trait_model = self._find_model_analysis(analysis, "traits", "trait")
+        trait_model = self._find_model_analysis(analysis, "arxii", "trait")
         self.assertIsNotNone(trait_model)
         self.assertEqual(trait_model.changed_count, 1)
 
@@ -72,7 +72,7 @@ class AnalyzeFixtureTests(TestCase):
 
         analysis = analyze_fixture(fixture_data)
 
-        trait_model = self._find_model_analysis(analysis, "traits", "trait")
+        trait_model = self._find_model_analysis(analysis, "arxii", "trait")
         self.assertIsNotNone(trait_model)
         self.assertEqual(trait_model.unchanged_count, 1)
 
@@ -83,7 +83,7 @@ class AnalyzeFixtureTests(TestCase):
 
         analysis = analyze_fixture(fixture_data)
 
-        trait_model = self._find_model_analysis(analysis, "traits", "trait")
+        trait_model = self._find_model_analysis(analysis, "arxii", "trait")
         self.assertIsNotNone(trait_model)
         # At minimum trait_b is local-only (other traits from other tests may exist)
         self.assertGreaterEqual(trait_model.local_only_count, 1)
@@ -100,7 +100,7 @@ class AnalyzeFixtureTests(TestCase):
 
         analysis = analyze_fixture(fixture_data)
 
-        pin_model = self._find_model_analysis(analysis, "web_admin", "adminpinnedmodel")
+        pin_model = self._find_model_analysis(analysis, "arxii", "adminpinnedmodel")
         self.assertIsNotNone(pin_model)
         self.assertFalse(pin_model.has_natural_key)
         # Should have a warning about no natural key
@@ -118,9 +118,9 @@ class AnalyzeFixtureTests(TestCase):
         cat_idx = None
         type_idx = None
         for idx, (app_label, model_name) in enumerate(analysis.dependency_order):
-            if app_label == "mechanics" and model_name == "modifiercategory":
+            if app_label == "arxii" and model_name == "modifiercategory":
                 cat_idx = idx
-            if app_label == "mechanics" and model_name == "modifiertarget":
+            if app_label == "arxii" and model_name == "modifiertarget":
                 type_idx = idx
 
         self.assertIsNotNone(cat_idx, "ModifierCategory should appear in dependency order")
@@ -157,7 +157,7 @@ class AnalyzeFixtureTests(TestCase):
 
         analysis = analyze_fixture(fixture_data)
 
-        trait_model = self._find_model_analysis(analysis, "traits", "trait")
+        trait_model = self._find_model_analysis(analysis, "arxii", "trait")
         self.assertIsNotNone(trait_model)
         self.assertEqual(trait_model.changed_count, 1)
         self.assertEqual(len(trait_model.changed_records), 1)
@@ -192,7 +192,7 @@ class MergeExecutionTests(TestCase):
         cat.delete()
         self.assertFalse(ModifierCategory.objects.filter(name="MergeNewCat").exists())
 
-        result = execute_import(fixture_data, {"mechanics.modifiercategory": ImportAction.MERGE})
+        result = execute_import(fixture_data, {"arxii.modifiercategory": ImportAction.MERGE})
 
         self.assertTrue(result.success)
         self.assertTrue(ModifierCategory.objects.filter(name="MergeNewCat").exists())
@@ -213,13 +213,13 @@ class MergeExecutionTests(TestCase):
         # Modify the DB record so it differs from fixture
         ModifierCategory.objects.filter(name="MergeUpdateCat").update(description="Modified in DB")
 
-        result = execute_import(fixture_data, {"mechanics.modifiercategory": ImportAction.MERGE})
+        result = execute_import(fixture_data, {"arxii.modifiercategory": ImportAction.MERGE})
 
         self.assertTrue(result.success, f"Import failed: {result.error_message}")
         merge_result = next(
             mr
             for mr in result.models
-            if mr.app_label == "mechanics" and mr.model_name == "modifiercategory"
+            if mr.app_label == "arxii" and mr.model_name == "modifiercategory"
         )
         self.assertEqual(merge_result.errors, [])
         # The pipeline reports an update even though SharedMemoryModel
@@ -232,7 +232,7 @@ class MergeExecutionTests(TestCase):
         ModifierCategoryFactory(name="MergeLocalOnlyCat")
         fixture_data = _serialize_objects([cat_in_fixture])
 
-        result = execute_import(fixture_data, {"mechanics.modifiercategory": ImportAction.MERGE})
+        result = execute_import(fixture_data, {"arxii.modifiercategory": ImportAction.MERGE})
 
         self.assertTrue(result.success)
         # Local-only record should still exist
@@ -249,8 +249,8 @@ class MergeExecutionTests(TestCase):
         result = execute_import(
             fixture_data,
             {
-                "mechanics.modifiercategory": ImportAction.MERGE,
-                "mechanics.modifiertarget": ImportAction.MERGE,
+                "arxii.modifiercategory": ImportAction.MERGE,
+                "arxii.modifiertarget": ImportAction.MERGE,
             },
         )
 
@@ -269,7 +269,7 @@ class ReplaceExecutionTests(TestCase):
         # Modify description in DB after serialization
         ModifierCategory.objects.filter(name="ReplaceCat").update(description="Will be replaced")
 
-        result = execute_import(fixture_data, {"mechanics.modifiercategory": ImportAction.REPLACE})
+        result = execute_import(fixture_data, {"arxii.modifiercategory": ImportAction.REPLACE})
 
         self.assertTrue(result.success)
         self.assertGreaterEqual(result.total_deleted, 1)
@@ -285,7 +285,7 @@ class ReplaceExecutionTests(TestCase):
         ModifierCategoryFactory(name="ReplaceLocalCat")
         fixture_data = _serialize_objects([cat_fixture])
 
-        result = execute_import(fixture_data, {"mechanics.modifiercategory": ImportAction.REPLACE})
+        result = execute_import(fixture_data, {"arxii.modifiercategory": ImportAction.REPLACE})
 
         self.assertTrue(result.success)
         # The fixture record should exist
@@ -310,7 +310,7 @@ class ErrorHandlingTests(TestCase):
         # Add a bogus record that will fail deserialization
         records.append(
             {
-                "model": "mechanics.modifiercategory",
+                "model": "arxii.modifiercategory",
                 "fields": {
                     "name": "ValidCat",
                     "description": "",
@@ -321,7 +321,7 @@ class ErrorHandlingTests(TestCase):
         # Add a record with a bad FK reference that will cause a save error
         records.append(
             {
-                "model": "mechanics.modifiertarget",
+                "model": "arxii.modifiertarget",
                 "fields": {
                     "name": "BadFKType",
                     "category": ["nonexistent_category_xyz"],
@@ -336,8 +336,8 @@ class ErrorHandlingTests(TestCase):
         result = execute_import(
             bad_fixture,
             {
-                "mechanics.modifiercategory": ImportAction.MERGE,
-                "mechanics.modifiertarget": ImportAction.MERGE,
+                "arxii.modifiercategory": ImportAction.MERGE,
+                "arxii.modifiertarget": ImportAction.MERGE,
             },
         )
 
@@ -353,7 +353,7 @@ class ErrorHandlingTests(TestCase):
         cat.description = "Modified"
         cat.save()
 
-        result = execute_import(fixture_data, {"mechanics.modifiercategory": ImportAction.SKIP})
+        result = execute_import(fixture_data, {"arxii.modifiercategory": ImportAction.SKIP})
 
         self.assertTrue(result.success)
         # Flush cache and re-fetch to verify DB state
@@ -409,7 +409,7 @@ class RoundtripTests(TestCase):
         self.assertEqual(ModifierCategory.objects.count(), 0)
 
         # Import the fixture
-        result = execute_import(fixture_data, {"mechanics.modifiercategory": ImportAction.MERGE})
+        result = execute_import(fixture_data, {"arxii.modifiercategory": ImportAction.MERGE})
 
         self.assertTrue(result.success)
         imported = ModifierCategory.objects.get(name=original_name)
@@ -432,8 +432,8 @@ class RoundtripTests(TestCase):
         result = execute_import(
             fixture_data,
             {
-                "mechanics.modifiercategory": ImportAction.MERGE,
-                "mechanics.modifiertarget": ImportAction.MERGE,
+                "arxii.modifiercategory": ImportAction.MERGE,
+                "arxii.modifiertarget": ImportAction.MERGE,
             },
         )
 
@@ -460,8 +460,8 @@ class RoundtripTests(TestCase):
         result = execute_import(
             fixture_data,
             {
-                "traits.trait": ImportAction.REPLACE,
-                "traits.traitrankdescription": ImportAction.REPLACE,
+                "arxii.trait": ImportAction.REPLACE,
+                "arxii.traitrankdescription": ImportAction.REPLACE,
             },
         )
 
@@ -493,7 +493,7 @@ class AnalyzeFixtureFKNaturalKeyTests(TestCase):
 
         rd_model = None
         for ma in analysis.models:
-            if ma.app_label == "traits" and ma.model_name == "traitrankdescription":
+            if ma.app_label == "arxii" and ma.model_name == "traitrankdescription":
                 rd_model = ma
                 break
         self.assertIsNotNone(rd_model)
@@ -511,7 +511,7 @@ class AnalyzeFixtureFKNaturalKeyTests(TestCase):
 
         rd_model = None
         for ma in analysis.models:
-            if ma.app_label == "traits" and ma.model_name == "traitrankdescription":
+            if ma.app_label == "arxii" and ma.model_name == "traitrankdescription":
                 rd_model = ma
                 break
         self.assertIsNotNone(rd_model)
@@ -572,7 +572,7 @@ class SelfReferentialNaturalKeyTests(TestCase):
         # Modify a field so merge has something to update
         Facet.objects.filter(name="MergeWolf").update(description="Modified")
 
-        result = execute_import(fixture_data, {"magic.facet": ImportAction.MERGE})
+        result = execute_import(fixture_data, {"arxii.facet": ImportAction.MERGE})
 
         self.assertTrue(result.success, f"Import failed: {result.error_message}")
         # Verify hierarchy is intact
@@ -591,7 +591,7 @@ class SelfReferentialNaturalKeyTests(TestCase):
 
         facet_model = None
         for ma in analysis.models:
-            if ma.app_label == "magic" and ma.model_name == "facet":
+            if ma.app_label == "arxii" and ma.model_name == "facet":
                 facet_model = ma
                 break
         self.assertIsNotNone(facet_model)

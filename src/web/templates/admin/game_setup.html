@@ -93,7 +93,7 @@
   <h2>Jump to authoring</h2>
   <ul>
     {% for app in world_apps %}
-      <li><a href="{% url 'admin:app_list' app %}">{{ app }}</a></li>
+      <li><a href="{% url 'admin:app_list' arxii_app_label %}">{{ app }}</a></li>
     {% endfor %}
   </ul>
 </div>

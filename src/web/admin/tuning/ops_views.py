@@ -95,12 +95,21 @@ def ops_story_fragment(request: HttpRequest) -> HttpResponse:
     normal admin change form (linked from the panel), per this dashboard's
     read+preview-only contract.
     """
+    from django.urls import reverse  # noqa: PLC0415
+
     from world.gm.models import GMRewardConfig  # noqa: PLC0415
 
+    reward_config = GMRewardConfig.load()
+    # Django admin URL names are "<app_label>_<model_name>_change" — derived from
+    # the model's real Django app_label (uniformly "arxii" post-#2906), not
+    # hardcoded, so this survives any future re-labeling.
+    opts = reward_config._meta  # noqa: SLF001 — Django's public-ish Meta API
+    admin_url_name = f"admin:{opts.app_label}_{opts.model_name}_change"
     context = {
         "series": [_series_row(s) for s in story_series()],
         "snapshot": story_snapshot(),
-        "reward_config": GMRewardConfig.load(),
+        "reward_config": reward_config,
+        "reward_config_admin_url": reverse(admin_url_name, args=[reward_config.pk]),
     }
     return render(request, "admin/tuning/_story_panel.html", context)
 

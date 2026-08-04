@@ -56,7 +56,7 @@
 </table>
 <p>
   {% translate "Weekly ceiling per GM" %}: {{ reward_config.weekly_reward_cap }} XP —
-  <a href="{% url 'admin:gm_gmrewardconfig_change' reward_config.pk %}">{% translate "edit" %}</a>
+  <a href="{{ reward_config_admin_url }}">{% translate "edit" %}</a>
 </p>
 
 {% for row in series %}

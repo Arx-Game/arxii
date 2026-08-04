@@ -63,7 +63,11 @@ class KudosPointsDataAdmin(admin.ModelAdmin):
     current_available.short_description = "Available Kudos"
 
     def view_transactions_link(self, obj):
-        url = reverse("admin:progression_kudostransaction_changelist")
+        # Admin URL name is "<app_label>_<model_name>_changelist" — derived from
+        # KudosTransaction's real Django app_label (uniformly "arxii" post-#2906),
+        # not hardcoded, so this survives any future re-labeling.
+        opts = KudosTransaction._meta  # noqa: SLF001 — Django's public-ish Meta API
+        url = reverse(f"admin:{opts.app_label}_{opts.model_name}_changelist")
         url += f"?account__id__exact={obj.account_id}"
         count = KudosTransaction.objects.filter(account=obj.account).count()
         return format_html('<a href="{}">View {} transactions</a>', url, count)

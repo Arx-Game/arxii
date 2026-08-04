@@ -490,8 +490,13 @@ def _write_one_model(
     Extracted from ``export_to_content_repo`` to keep that function under the
     complexity ceiling; mutates ``result`` in place, as the inlined body did.
     """
-    model_label = model._meta.label_lower  # noqa: SLF001 — Django's public-ish Meta API
-    _app_label, model_name = model_label.split(".")
+    # "<domain>.<model_name>" — matches CONTENT_MODELS'/MARKDOWN_EXPORT_DOMAINS'
+    # key convention (core.app_domains.domain_of), NOT model._meta.label_lower.
+    # Post-#2906 every model's real Django app_label is "arxii", so a
+    # label_lower-keyed lookup into MARKDOWN_EXPORT_DOMAINS would never match
+    # and silently fall through to plain JSON export for every prose domain.
+    model_name = model.__name__.lower()
+    model_label = f"{domain_of(model)}.{model_name}"
     count = len(json.loads(data))
 
     spec = MARKDOWN_EXPORT_DOMAINS.get(model_label)

@@ -313,19 +313,18 @@ def _prose_sections(entry: ContentEntry, field_by_heading: dict[str, str]) -> di
 
 
 def _fixture_model_label(model: type[models.Model]) -> str:
-    """Return ``"<domain>.<modelname>"`` for a builder's ``"model"`` fixture key.
+    """Return ``"<app_label>.<modelname>"`` for a builder's ``"model"`` fixture key.
 
-    Sourced from ``core.app_domains.domain_of`` (Task 1) rather than the
-    model's own Django ``app_label``, so an emitted fixture's label stays
-    aligned with the lore repo's ``fixtures/<domain>/`` directory layout even
-    after #2906 collapses every first-party app into one Django label. The
-    label is cosmetic on the read side (``resolve_fixture_model`` ignores it),
-    but keeping exports domain-accurate matters for humans reading the JSON
-    and for the directory-layout convention itself.
+    Must be ``model._meta.app_label`` (real Django app label — ``"arxii"`` post-
+    #2906), not ``core.app_domains.domain_of``. The value here is not cosmetic:
+    Django's own ``loaddata`` — used directly (not through ``resolve_fixture_model``)
+    for fresh-DB seeding, see the module docstring's "fresh-DB / insert-or-resolve
+    only" contract — resolves the "model" key via ``apps.get_model(app_label,
+    model_name)``, which raises ``LookupError`` on anything but a real installed
+    label. ``resolve_fixture_model``/``load_entries`` ignore this value entirely
+    (name-only resolution), so using the real label doesn't affect that path.
     """
-    from core.app_domains import domain_of  # noqa: PLC0415
-
-    return f"{domain_of(model)}.{model.__name__.lower()}"
+    return f"{model._meta.app_label}.{model.__name__.lower()}"  # noqa: SLF001
 
 
 def _build_trait_fixture(entry: ContentEntry, *, trait_type: str) -> dict:

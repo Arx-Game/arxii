@@ -38,6 +38,7 @@ def game_setup(request: HttpRequest) -> HttpResponse:
         raise PermissionDenied
 
     from core_management.content_repo import resolve_content_root  # noqa: PLC0415
+    from world.apps import ArxiiConfig  # noqa: PLC0415
     from world.seeds.clusters import seeded_models_by_cluster  # noqa: PLC0415
 
     inventory = [
@@ -61,6 +62,12 @@ def game_setup(request: HttpRequest) -> HttpResponse:
         "import_url": reverse("admin_import_upload"),
         "content_repo_configured": resolve_content_root() is not None,
         "content_load_url": reverse("admin_content_load"),
+        # Post-#2906 every first-party model shares one real Django app_label
+        # (ArxiiConfig.label) — "Jump to authoring" can no longer deep-link
+        # per domain via admin:app_list (that URL only accepts a real
+        # installed label), so every entry below points at the same single
+        # index page; the domain name is still shown as the link text.
+        "arxii_app_label": ArxiiConfig.label,
         "world_apps": [
             "character_creation",
             "character_sheets",
