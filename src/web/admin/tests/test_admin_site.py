@@ -163,3 +163,93 @@ class ArxAdminSiteTestCase(TestCase):
                 system_apps,
                 f"{app} should be in system group",
             )
+
+    def _superuser_app_list(self):
+        """Return ``get_app_list`` output for a fully-privileged request."""
+        request = self.factory.get("/admin/")
+        User = get_user_model()
+        request.user = User(username="test", is_staff=True, is_superuser=True)
+        return self.site.get_app_list(request)
+
+    def test_arxii_mega_entry_is_split_by_domain(self):
+        """The collapsed ``arxii`` app_dict entry must not survive as one bucket.
+
+        #2906 merged 66 world.* apps onto one Django app_label ("arxii"),
+        which collapsed the admin index into a single 539-model list. This
+        pins the regression: the index must expose many first-party entries,
+        never a single merged one.
+        """
+        app_list = self._superuser_app_list()
+
+        first_party_labels = {app["app_label"] for app in app_list if app["app_label"] != "_recent"}
+
+        self.assertNotIn(
+            "arxii",
+            first_party_labels,
+            "the collapsed app_label should never appear directly in the admin index",
+        )
+        # Well above 1: a regression back to a single merged bucket must fail loudly.
+        self.assertGreater(
+            len(first_party_labels),
+            20,
+            "admin index should list many per-domain entries, not one merged bucket",
+        )
+
+    def test_distinct_domains_land_in_separate_entries(self):
+        """Models from distinct authoring domains must not share an app_dict entry."""
+        app_list = self._superuser_app_list()
+        by_label = {app["app_label"]: app for app in app_list}
+
+        for domain in ("magic", "roster", "progression"):
+            self.assertIn(domain, by_label, f"expected a distinct {domain!r} admin entry")
+
+        magic_models = {m["object_name"] for m in by_label["magic"]["models"]}
+        roster_models = {m["object_name"] for m in by_label["roster"]["models"]}
+        progression_models = {m["object_name"] for m in by_label["progression"]["models"]}
+
+        self.assertTrue(magic_models, "magic entry should have models")
+        self.assertTrue(roster_models, "roster entry should have models")
+        self.assertTrue(progression_models, "progression entry should have models")
+        self.assertFalse(magic_models & roster_models, "magic/roster entries should not overlap")
+        self.assertFalse(
+            roster_models & progression_models,
+            "roster/progression entries should not overlap",
+        )
+
+    def test_domain_group_assignment_matches_pre_collapse_expectation(self):
+        """Split entries should land in the group APP_GROUPS assigns their domain to."""
+        app_list = self._superuser_app_list()
+        by_label = {app["app_label"]: app for app in app_list}
+
+        self.assertEqual(by_label["roster"]["app_group"], "world")
+        self.assertEqual(by_label["progression"]["app_group"], "world")
+        self.assertEqual(by_label["evennia_extensions"]["app_group"], "players")
+        self.assertEqual(by_label["auth"]["app_group"], "system")
+        self.assertEqual(by_label["sites"]["app_group"], "system")
+
+    def test_non_first_party_apps_still_present_and_grouped(self):
+        """Genuinely separate installed apps (never touched by #2906) still appear."""
+        app_list = self._superuser_app_list()
+        labels = {app["app_label"] for app in app_list}
+
+        for label in ("socialaccount", "auth", "sites"):
+            self.assertIn(label, labels, f"{label} should still be its own admin entry")
+
+    def test_split_entry_model_urls_still_resolve(self):
+        """A split pseudo-entry's models must keep working change-list links.
+
+        The pseudo-entry's own app_label is a domain (not a real Django app
+        label), but each model's admin_url is built by Django's own
+        _build_app_dict from the real (collapsed) app_label, so it must
+        still point at a real, non-empty URL.
+        """
+        app_list = self._superuser_app_list()
+        by_label = {app["app_label"]: app for app in app_list}
+
+        roster_models = by_label["roster"]["models"]
+        self.assertTrue(roster_models)
+        for model in roster_models:
+            if model.get("admin_url"):
+                # Built from the real (collapsed) app_label, not the domain
+                # pseudo-label -- links must resolve under /admin/arxii/...
+                self.assertIn("/admin/arxii/", model["admin_url"])
