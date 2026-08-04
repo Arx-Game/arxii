@@ -24393,9 +24393,9 @@ export interface components {
       /** @description Display name used as the renown deed title (e.g. 'Grand Entrance'). */
       label: string;
       description?: string;
-      /** @description Resonance granted when this moment type is tagged. */
-      resonance: number;
-      /** @description Flat resonance units granted to the tagged character. */
+      /** @description OPTIONAL override pinning this moment type to one resonance. Leave blank (the norm): the grant then follows the resonance the character wove into the gift of the technique they made their entrance with. Resonance comes from the player, not from authored content (ADR-0052). */
+      resonance?: number | null;
+      /** @description Flat resonance units granted to the tagged character. Granted to whichever resonance is resolved; no grant fires when none resolves. */
       resonance_amount?: number;
       /** @description Maximum number of times this moment type may be awarded to a given character within a single scene. */
       per_scene_cap?: number;

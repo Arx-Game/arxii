@@ -73,6 +73,7 @@ if TYPE_CHECKING:
         DramaticMomentType,
     )
     from world.magic.models.endorsement import EntryFlourishRecord, StylePresentationEndorsement
+    from world.magic.models.techniques import Technique
 from django.utils import timezone
 from evennia.accounts.models import AccountDB
 
@@ -822,13 +823,50 @@ def create_entry_flourish(
 
 
 @transaction.atomic
-def create_dramatic_moment_tag(
+def _resolve_moment_resonance(
+    *,
+    character_sheet: CharacterSheet,
+    moment_type: DramaticMomentType,
+    technique: Technique | None,
+    resonance: Resonance | None,
+) -> Resonance | None:
+    """Resolve which resonance a dramatic moment grants, or None to skip the grant.
+
+    Explicit argument first, then the thread the character wove into the
+    entrance technique's gift (via ``gift_resonances_for``, the ADR-0052
+    derive-on-read seam), then the moment type's authored override. Only a
+    resonance the character has actually claimed can be granted.
+    """
+    from world.magic.specialization.services import gift_resonances_for  # noqa: PLC0415
+
+    candidates: list[Resonance] = []
+    if resonance is not None:
+        candidates.append(resonance)
+    if technique is not None and technique.gift_id:
+        # CharacterSheet.character is a primary_key OneToOne, so it is always
+        # present on a saved sheet. gift_resonances_for reads the woven GIFT
+        # thread off it and falls back to the gift's authored set itself.
+        candidates.extend(gift_resonances_for(character_sheet.character, technique.gift))
+    if moment_type.resonance_id:
+        candidates.append(moment_type.resonance)
+
+    for candidate in candidates:
+        if CharacterResonance.objects.filter(
+            character_sheet=character_sheet, resonance=candidate
+        ).exists():
+            return candidate
+    return None
+
+
+def create_dramatic_moment_tag(  # noqa: PLR0913 - cohesive params describing one tag event
     *,
     character_sheet: CharacterSheet,
     moment_type: DramaticMomentType,
     tagged_by: AccountDB,
     scene: Scene | None,
     interaction: Interaction | None = None,
+    technique: Technique | None = None,
+    resonance: Resonance | None = None,
 ) -> DramaticMomentTag:
     """Tag a character's dramatic scene moment and fire resonance + renown.
 
@@ -837,8 +875,20 @@ def create_dramatic_moment_tag(
     resonance grant still fires. Fire_renown_award's best-effort notification
     runs outside the transaction by design (see fire_renown_award docstring).
 
+    The resonance granted is resolved, not dictated by the moment type
+    (ruled 2026-08-04 — resonance comes from the player). In order:
+
+    1. an explicit *resonance* argument (the manual GM tag names one);
+    2. the resonance woven into the gift of *technique*, when the entrance was
+       cast with one — the expected path, since most dramatic entrances should
+       be technique-driven;
+    3. ``moment_type.resonance``, if a type pins one as an authored override.
+
+    If none of those resolve, the renown award still fires and the resonance
+    grant is simply skipped — a moment can be worth recognising without paying
+    a currency the character has no claim to.
+
     Raises:
-        EndorsementValidationError: If the character hasn't claimed the resonance.
         DramaticMomentCapExceeded: If per_scene_cap for this (moment_type, scene, sheet) is reached.
     """
     from world.magic.constants import GainSource  # noqa: PLC0415
@@ -846,11 +896,12 @@ def create_dramatic_moment_tag(
     from world.magic.models.dramatic_moment import DramaticMomentTag  # noqa: PLC0415
     from world.magic.services.resonance import grant_resonance  # noqa: PLC0415
 
-    if not CharacterResonance.objects.filter(
-        character_sheet=character_sheet, resonance=moment_type.resonance
-    ).exists():
-        msg = "Character has not claimed this resonance"
-        raise EndorsementValidationError(msg)
+    granted_resonance = _resolve_moment_resonance(
+        character_sheet=character_sheet,
+        moment_type=moment_type,
+        technique=technique,
+        resonance=resonance,
+    )
 
     existing = DramaticMomentTag.objects.filter(
         moment_type=moment_type,
@@ -868,13 +919,14 @@ def create_dramatic_moment_tag(
         interaction=interaction,
         interaction_timestamp=interaction.timestamp if interaction is not None else None,
     )
-    grant_resonance(
-        character_sheet,
-        moment_type.resonance,
-        moment_type.resonance_amount,
-        source=GainSource.DRAMATIC_MOMENT,
-        dramatic_moment=tag,
-    )
+    if granted_resonance is not None:
+        grant_resonance(
+            character_sheet,
+            granted_resonance,
+            moment_type.resonance_amount,
+            source=GainSource.DRAMATIC_MOMENT,
+            dramatic_moment=tag,
+        )
 
     try:
         persona = character_sheet.primary_persona
@@ -903,15 +955,27 @@ def maybe_suggest_dramatic_moments(
     scene: Scene | None,
     success_level: int,
     interaction: Interaction | None = None,
+    technique: Technique | None = None,
 ) -> list[DramaticMomentSuggestion]:
     """Create PENDING GM suggestions for a high-success technique entrance (#2183).
 
     Bridges the technique-entrance deferral markers (Tasks 1-2) to the existing
     DramaticMomentTag machinery without auto-tagging: for every flagged
-    DramaticMomentType whose threshold the success level clears, whose resonance the
-    character has claimed, and whose per-scene cap isn't already spent on real tags,
-    creates (idempotently) a PENDING DramaticMomentSuggestion for a GM to later
-    confirm or dismiss via ``resolve_dramatic_moment_suggestion``.
+    DramaticMomentType whose threshold the success level clears, and whose
+    per-scene cap isn't already spent on real tags, creates (idempotently) a
+    PENDING DramaticMomentSuggestion for a GM to later confirm or dismiss via
+    ``resolve_dramatic_moment_suggestion``.
+
+    *technique* is the technique the entrance was cast with. It is stored on the
+    suggestion so that confirming it can resolve the resonance from the thread
+    the character wove into that technique's gift — most dramatic entrances are
+    expected to be technique-driven (ruled 2026-08-04).
+
+    There is deliberately NO claimed-resonance filter here. It used to skip any
+    moment type whose authored resonance the character had not claimed, which
+    made every flagged type unreachable the moment its authored resonance was one
+    nobody claims. Eligibility is now the success threshold and the per-scene cap;
+    what the moment resonates as is resolved at confirm time.
 
     No-ops (returns []) when scene is None — a suggestion is scoped to a scene, same
     as the DramaticMomentTag per-scene cap it mirrors.
@@ -932,10 +996,6 @@ def maybe_suggest_dramatic_moments(
         suggestion_min_success_level__lte=success_level,
     )
     for moment_type in flagged:
-        if not CharacterResonance.objects.filter(
-            character_sheet=character_sheet, resonance=moment_type.resonance
-        ).exists():
-            continue
         if (
             DramaticMomentTag.objects.filter(
                 moment_type=moment_type, character_sheet=character_sheet, scene=scene
@@ -952,6 +1012,7 @@ def maybe_suggest_dramatic_moments(
                 "success_level": success_level,
                 "interaction": interaction,
                 "interaction_timestamp": interaction.timestamp if interaction else None,
+                "technique": technique,
             },
         )
         if was_created:
@@ -986,6 +1047,9 @@ def resolve_dramatic_moment_suggestion(
                 tagged_by=resolver,
                 scene=suggestion.scene,
                 interaction=suggestion.interaction,
+                # Carry the entrance technique so the grant follows the thread the
+                # character wove into its gift, rather than an authored constant.
+                technique=suggestion.technique,
             )
             suggestion.confirmed_tag = tag
             suggestion.status = SuggestionStatus.CONFIRMED

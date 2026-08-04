@@ -25,6 +25,8 @@ from commands.exceptions import CommandError
 if TYPE_CHECKING:
     from evennia.accounts.models import AccountDB
 
+    from world.magic.models import Resonance
+    from world.magic.models.dramatic_moment import DramaticMomentTag, DramaticMomentType
     from world.scenes.models import Scene
 
 _SUBVERB_SUGGESTIONS = "suggestions"
@@ -152,8 +154,56 @@ class CmdMoment(ArxCommand):
 
     # -- tag subverb -----------------------------------------------------------
 
+    @staticmethod
+    def _split_tag_args(rest: str) -> tuple[str, str, str]:
+        """Split ``<character>=<type label> [resonance=<name>]``.
+
+        The optional trailing ``resonance=`` is the manual-GM fallback, for a
+        flashy moment with no technique behind it. A technique-driven entrance
+        resolves its own resonance from the woven thread and needs none.
+        """
+        name, type_label = (part.strip() for part in rest.split("=", 1))
+        resonance_name = ""
+        if " resonance=" in f" {type_label}":
+            type_label, _, resonance_name = type_label.partition("resonance=")
+            type_label = type_label.strip()
+            resonance_name = resonance_name.strip()
+        if not name or not type_label:
+            raise CommandError(_USAGE)
+        return name, type_label, resonance_name
+
+    @staticmethod
+    def _resolve_named_resonance(resonance_name: str) -> Resonance | None:
+        """Resolve an explicit ``resonance=<name>``; None when none was given."""
+        if not resonance_name:
+            return None
+        from world.magic.models import Resonance  # noqa: PLC0415
+
+        resonance = Resonance.objects.filter(name__iexact=resonance_name).first()
+        if resonance is None:
+            msg = f"No resonance named '{resonance_name}'."
+            raise CommandError(msg)
+        return resonance
+
+    def _report_tag_result(
+        self, target_key: str, moment_type: DramaticMomentType, tag: DramaticMomentTag
+    ) -> None:
+        """Say what actually happened: renown always, resonance only if resolved."""
+        granted = tag.resonance_grants.first()
+        label = moment_type.label
+        if granted is not None:
+            self.msg(
+                f"You tagged {target_key} with '{label}'. "
+                f"{granted.amount} {granted.resonance.name} and renown awarded."
+            )
+        else:
+            self.msg(
+                f"You tagged {target_key} with '{label}'. Renown awarded; no resonance "
+                "resolved (no technique behind it, and none named)."
+            )
+
     def _handle_tag(self, rest: str) -> None:
-        """``moment tag <character>=<type label>`` or ``moment tag list``."""
+        """``moment tag <character>=<type label> [resonance=<name>]``, or ``moment tag list``."""
         if not rest:
             raise CommandError(_USAGE)
         if rest.lower() == _TAG_LIST_ARG:
@@ -161,9 +211,7 @@ class CmdMoment(ArxCommand):
             return
         if "=" not in rest:
             raise CommandError(_USAGE)
-        name, type_label = (part.strip() for part in rest.split("=", 1))
-        if not name or not type_label:
-            raise CommandError(_USAGE)
+        name, type_label, resonance_name = self._split_tag_args(rest)
 
         scene = self._active_scene()
         account = self._account()
@@ -193,25 +241,23 @@ class CmdMoment(ArxCommand):
             self.msg(f"No dramatic-moment type named '{type_label}'. Available: {available}")
             return
 
-        from world.magic.exceptions import (  # noqa: PLC0415
-            DramaticMomentCapExceeded,
-            EndorsementValidationError,
-        )
+        resonance = self._resolve_named_resonance(resonance_name)
+
+        from world.magic.exceptions import DramaticMomentCapExceeded  # noqa: PLC0415
 
         try:
-            create_dramatic_moment_tag(
+            tag = create_dramatic_moment_tag(
                 character_sheet=sheet,
                 moment_type=moment_type,
                 tagged_by=account,
                 scene=scene,
+                resonance=resonance,
             )
-        except (EndorsementValidationError, DramaticMomentCapExceeded) as exc:
+        except DramaticMomentCapExceeded as exc:
             self.msg(exc.user_message)
             return
 
-        self.msg(
-            f"You tagged {target.db_key} with '{moment_type.label}'. Resonance and renown awarded."
-        )
+        self._report_tag_result(target.db_key, moment_type, tag)
 
     def _handle_tag_list(self) -> None:
         """``moment tag list`` — show available DramaticMomentType rows."""

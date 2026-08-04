@@ -23,7 +23,7 @@ from world.magic.factories import (
     DramaticMomentSuggestionFactory,
     DramaticMomentTypeFactory,
 )
-from world.magic.models.dramatic_moment import DramaticMomentSuggestion
+from world.magic.models.dramatic_moment import DramaticMomentSuggestion, DramaticMomentTag
 from world.scenes.factories import SceneFactory, SceneGMParticipationFactory
 
 
@@ -252,8 +252,12 @@ class MomentTelnetE2ETest(TestCase):
         msg = self.gm_character.msg.call_args[0][0]
         self.assertIn(self.moment_type.label, msg)
 
-    def test_tag_unclaimed_resonance_surfaces_error(self) -> None:
-        """Target hasn't claimed the type's resonance → EndorsementValidationError."""
+    def test_tag_unclaimed_resonance_still_tags_and_says_so(self) -> None:
+        """An unclaimed resonance no longer refuses the tag (ruled 2026-08-04).
+
+        Renown still fires; only the resonance grant is skipped, and the GM is
+        told which actually happened rather than being promised both.
+        """
         target_sheet = CharacterSheetFactory()
         target_char = target_sheet.character
         # No CharacterResonance for this resonance on target_sheet
@@ -262,7 +266,29 @@ class MomentTelnetE2ETest(TestCase):
 
         self.gm_character.msg.assert_called()
         msg = self.gm_character.msg.call_args[0][0]
-        self.assertIn("not claimed", msg.lower())
+        self.assertIn("renown awarded", msg.lower())
+        self.assertIn("no resonance resolved", msg.lower())
+        self.assertTrue(
+            DramaticMomentTag.objects.filter(
+                character_sheet=target_sheet, moment_type=self.moment_type
+            ).exists()
+        )
+
+    def test_tag_with_explicit_resonance_grants_it(self) -> None:
+        """`resonance=<name>` is the manual-GM fallback for a technique-less moment."""
+        target_sheet = CharacterSheetFactory()
+        target_char = target_sheet.character
+        claimed = CharacterResonanceFactory(character_sheet=target_sheet)
+
+        _run(
+            self.gm_character,
+            f"tag {target_char.db_key}={self.moment_type.label} resonance={claimed.resonance.name}",
+        )
+
+        self.gm_character.msg.assert_called()
+        msg = self.gm_character.msg.call_args[0][0]
+        self.assertIn(claimed.resonance.name, msg)
+        self.assertIn("renown awarded", msg.lower())
 
     def test_tag_per_scene_cap_surfaces_error(self) -> None:
         """Cap already reached → DramaticMomentCapExceeded surfaces."""

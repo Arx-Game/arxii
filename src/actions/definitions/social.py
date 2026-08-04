@@ -279,7 +279,7 @@ def run_entrance_success_hooks(  # noqa: PLR0913 - cohesive entrance-hook params
     *,
     success_level: int | None,
     target_persona_id: int | None,  # noqa: ARG001 - reserved: Task 5's combat-resolution reuse
-    technique: Technique,  # noqa: ARG001 - reserved: Task 5's combat-resolution reuse
+    technique: Technique,
     interaction: Interaction | None = None,
 ) -> str | None:
     """Flourish offer + dramatic-moment suggestion for an entrance (#2183).
@@ -327,6 +327,11 @@ def run_entrance_success_hooks(  # noqa: PLR0913 - cohesive entrance-hook params
                 scene=scene,
                 success_level=success_level,
                 interaction=interaction,
+                # Carried so confirming the suggestion grants the resonance the
+                # character wove into THIS technique's gift. Most dramatic
+                # entrances are meant to be technique-driven (ruled 2026-08-04),
+                # so this is the ordinary path, not the exception.
+                technique=technique,
             )
 
     return prompt

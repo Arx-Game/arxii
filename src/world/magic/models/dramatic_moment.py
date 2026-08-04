@@ -39,11 +39,21 @@ class DramaticMomentType(NaturalKeyMixin, RenownAwardConfig):
         "magic.Resonance",
         on_delete=models.PROTECT,
         related_name="dramatic_moment_types",
-        help_text="Resonance granted when this moment type is tagged.",
+        null=True,
+        blank=True,
+        help_text=(
+            "OPTIONAL override pinning this moment type to one resonance. Leave "
+            "blank (the norm): the grant then follows the resonance the character "
+            "wove into the gift of the technique they made their entrance with. "
+            "Resonance comes from the player, not from authored content (ADR-0052)."
+        ),
     )
     resonance_amount = models.PositiveIntegerField(
         default=15,
-        help_text="Flat resonance units granted to the tagged character.",
+        help_text=(
+            "Flat resonance units granted to the tagged character. Granted to "
+            "whichever resonance is resolved; no grant fires when none resolves."
+        ),
     )
     per_scene_cap = models.PositiveIntegerField(
         default=1,
@@ -174,6 +184,19 @@ class DramaticMomentSuggestion(SharedMemoryModel):
         null=True,
         blank=True,
         help_text="Denormalized from interaction.timestamp for the partitioned-table composite FK.",
+    )
+    technique = models.ForeignKey(
+        "magic.Technique",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="dramatic_moment_suggestions",
+        help_text=(
+            "The technique the entrance was cast with. Carried so that confirming "
+            "the suggestion can resolve the resonance from the thread the character "
+            "wove into that technique's gift. Null for a manual GM tag with no "
+            "technique behind it."
+        ),
     )
     success_level = models.PositiveSmallIntegerField(
         help_text="Cast success level that triggered this suggestion.",

@@ -58,15 +58,19 @@ class DramaticMomentTagApiTest(APITestCase):
         self.assertIn("detail", resp.data)
         self.assertTrue(resp.data["detail"])
 
-    def test_unclaimed_resonance_returns_400(self):
+    def test_unclaimed_resonance_still_tags(self):
+        """An unclaimed resonance is no longer a refusal (ruled 2026-08-04).
+
+        The tag is created and the renown award fires; only the resonance grant
+        is skipped when none resolves. This used to 400, which is why the single
+        authored moment type could never be awarded to anyone.
+        """
         other_sheet = CharacterSheetFactory()  # no CharacterResonance claimed
         self.client.force_authenticate(self.gm)
         payload = self._payload()
         payload["character_sheet"] = other_sheet.pk
         resp = self.client.post(self.url, payload, format="json")
-        self.assertEqual(resp.status_code, status.HTTP_400_BAD_REQUEST, resp.data)
-        self.assertIn("detail", resp.data)
-        self.assertTrue(resp.data["detail"])
+        self.assertEqual(resp.status_code, status.HTTP_201_CREATED, resp.data)
 
     def test_owner_can_tag_via_interaction(self):
         owner = AccountFactory()

@@ -42118,12 +42118,17 @@ components:
           type: string
         resonance:
           type: integer
-          description: Resonance granted when this moment type is tagged.
+          nullable: true
+          description: 'OPTIONAL override pinning this moment type to one resonance.
+            Leave blank (the norm): the grant then follows the resonance the character
+            wove into the gift of the technique they made their entrance with. Resonance
+            comes from the player, not from authored content (ADR-0052).'
         resonance_amount:
           type: integer
           maximum: 2147483647
           minimum: 0
-          description: Flat resonance units granted to the tagged character.
+          description: Flat resonance units granted to the tagged character. Granted
+            to whichever resonance is resolved; no grant fires when none resolves.
         per_scene_cap:
           type: integer
           maximum: 2147483647
@@ -42133,7 +42138,6 @@ components:
       required:
       - id
       - label
-      - resonance
     DrawModeEnum:
       enum:
       - menu
