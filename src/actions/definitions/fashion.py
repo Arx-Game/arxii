@@ -5,6 +5,8 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any
 
+from django.db.models import Prefetch
+
 from actions.base import Action
 from actions.types import ActionContext, ActionResult, TargetType
 from flows.constants import EventName
@@ -187,3 +189,74 @@ class ShowcaseAction(Action):
                 "entrances now stake cachet on it.",
             )
         return ActionResult(success=False, message="Showcase what? (a piece, an ensemble, or off)")
+
+
+@dataclass
+class RevealAction(Action):
+    """Dramatically reveal a concealed worn piece (#2965).
+
+    The reveal is the moment a concealed thing starts to openly count:
+    social-facing effects (accents, prestige) read only visible pieces, so
+    revealing flips the piece into the visible set until it is unequipped
+    (the state lives on the EquippedItem rows and dies with them). Legend
+    never needed revealing — it pierces concealment. Extensible to other
+    concealed features (tattoos, scars) when their models exist.
+    """
+
+    key: str = "reveal"
+    name: str = "Reveal"
+    icon: str = "eye"
+    category: str = "items"
+    target_type: TargetType = TargetType.SELF
+
+    def execute(
+        self,
+        actor: ObjectDB,
+        context: ActionContext | None = None,
+        **kwargs: Any,
+    ) -> ActionResult:
+        from django.utils import timezone  # noqa: PLC0415
+
+        from actions.prerequisites import resolve_actor_sheet  # noqa: PLC0415
+        from world.items.models import EquippedItem, TemplateSlot  # noqa: PLC0415
+        from world.items.services.visibility import compute_worn_visibility  # noqa: PLC0415
+
+        sheet = resolve_actor_sheet(actor)
+        if sheet is None or sheet.character_id is None:
+            return ActionResult(success=False, message="You have nothing worn to reveal.")
+        item_id = kwargs.get("item_id")
+        rows = list(
+            EquippedItem.objects.filter(character_id=sheet.character_id)
+            .select_related("item_instance__template")
+            .prefetch_related(
+                Prefetch(
+                    "item_instance__template__slots",
+                    queryset=TemplateSlot.objects.all(),
+                    to_attr="cached_slots",
+                )
+            )
+        )
+        mine = [row for row in rows if row.item_instance_id == item_id]
+        if not mine:
+            return ActionResult(success=False, message="You aren't wearing that.")
+        visibility = compute_worn_visibility(rows)
+        if visibility.is_visible(item_id):
+            return ActionResult(success=False, message="That is already plainly visible.")
+        now = timezone.now()
+        EquippedItem.objects.filter(
+            character_id=sheet.character_id, item_instance_id=item_id
+        ).update(revealed_at=now)
+        for row in mine:
+            row.revealed_at = now
+
+        piece = mine[0].item_instance
+        sdm = context.scene_data if context else SceneDataManager()
+        actor_state = sdm.initialize_state_for_object(actor)
+        message_location(
+            actor_state,
+            f"$You() $conj(reveal) {piece.display_name}, hidden until this moment.",
+        )
+        return ActionResult(
+            success=True,
+            message=f"You reveal {piece.display_name} — it counts for all to see now.",
+        )

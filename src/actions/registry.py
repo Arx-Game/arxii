@@ -165,6 +165,7 @@ from actions.definitions.evidence import (
 from actions.definitions.fashion import (
     JudgePresentationAction,
     PresentOutfitAction,
+    RevealAction,
     ShowcaseAction,
 )
 from actions.definitions.fatigue import RestAction
@@ -577,6 +578,7 @@ _ALL_ACTIONS: list[Action] = [
     PresentOutfitAction(),
     JudgePresentationAction(),
     ShowcaseAction(),
+    RevealAction(),
     PoseEndorseAction(),
     SceneEntryEndorseAction(),
     StylePresentationEndorseAction(),

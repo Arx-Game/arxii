@@ -993,6 +993,10 @@ class ItemInstance(SharedMemoryModel):
         axis matches contributes its ladder rung (small single digits by
         design — gear colors a character without being the character).
         """
+        return self.crafted_recipe_modifier_value(target) + self.accent_modifier_value(target)
+
+    def crafted_recipe_modifier_value(self, target: ModifierTarget) -> int:
+        """The recipe-crafted modifier term alone (#2965) — counts once per piece."""
         total = 0
         for crafted in self.cached_crafted_recipes:
             for outcome in crafted.recipe.cached_modifier_outcomes:
@@ -1000,10 +1004,16 @@ class ItemInstance(SharedMemoryModel):
                     total += outcome.base_value + round(
                         outcome.quality_scale_factor * crafted.quality_tier.stat_multiplier
                     )
-        for accent in self.cached_item_accents:
-            if accent.target_id == target.pk:
-                total += accent.level.level
         return total
+
+    def accent_modifier_value(self, target: ModifierTarget) -> int:
+        """The accent-rung term alone (#2965) — the equipment walk multiplies
+        this per visible slot the piece covers (Apostate's coverage ruling)."""
+        return sum(
+            accent.level.level
+            for accent in self.cached_item_accents
+            if accent.target_id == target.pk
+        )
 
     @property
     def display_image(self) -> Media | None:
@@ -1260,6 +1270,15 @@ class EquippedItem(SharedMemoryModel):
     equipment_layer = models.CharField(
         max_length=20,
         choices=EquipmentLayer.choices,
+    )
+    revealed_at = models.DateTimeField(
+        null=True,
+        blank=True,
+        help_text=(
+            "Set by the Reveal action (#2965): a deliberately revealed piece "
+            "counts for social-facing effects despite covering layers. The "
+            "state dies with this row on unequip — no cleanup needed."
+        ),
     )
 
     class Meta:

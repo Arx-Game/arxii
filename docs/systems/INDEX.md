@@ -4116,7 +4116,9 @@ Items, equipment, inventory, and currency. Spec D PR1 shipped facets, equip/uneq
   `ShowcaseState` toggle (`ShowcaseAction`/`CmdShowcase`), entrance
   auto-stake → `FashionShowing` ledger → weekly-cron settlement
   (`settle_fashion_showings`; never immediate), acclaim on items/outfits +
-  Silhouette/Style vogue momentum. See docs/systems/items.md.
+  Silhouette/Style vogue momentum. Coverage ruling (#2965, ADR-0194): accents
+  multiply per visible slot, prestige per-piece, legend pierces concealment;
+  `compute_worn_visibility` + `RevealAction`/`reveal`. See docs/systems/items.md.
 
 - **#2862-review gap closures (#2869 follow-through):** telnet `endure`/`retreat`
   (hazard prompt answers — the prompt now names them), `turf` / `turf push <crew>`
