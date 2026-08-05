@@ -197,10 +197,26 @@ class DreamwalkAction(Action):
                 message="You must be dreaming to dreamwalk.",
             )
 
-        # Resolve the target character
+        # Resolve the target character. Telnet passes an already-resolved
+        # ObjectDB; the web dispatcher's websocket resolver never touches a
+        # bare ``target`` kwarg (only ``<field>_id`` names route through
+        # ``_resolve_registry_kwargs``), and co-location-scoped visibility
+        # (``_is_visible_to``/``can_perceive``) is the wrong gate here anyway —
+        # a dreamwalk target is by definition NOT co-located (see the
+        # same-room short-circuit below). So resolve a plain pk ourselves,
+        # mirroring ``_resolve_room()`` (definitions/locations.py:92-100)
+        # rather than declaring ``objectdb_target_kwargs``.
         target = kwargs.get("target")
         if target is None:
             return ActionResult(success=False, message="Dreamwalk to whom?")
+        if isinstance(target, int):
+            from evennia.objects.models import ObjectDB  # noqa: PLC0415
+
+            target = ObjectDB.objects.filter(pk=target).first()
+            if target is None:
+                return ActionResult(
+                    success=False, message="You cannot find that person in the dream."
+                )
 
         try:
             target_sheet = target.sheet_data
