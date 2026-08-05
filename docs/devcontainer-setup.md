@@ -107,13 +107,27 @@ just dc-up
 
 The first run is slow — it builds the Docker image, bakes the mise toolchain (Python,
 Node, uv, pnpm) into the image layer, installs Python and frontend dependencies, and
-runs database migrations. This can take a few minutes. Subsequent starts are fast
+builds the database schema. This can take a few minutes. Subsequent starts are fast
 because the image layer is cached and only the firewall re-initialization runs.
-(#2906 flattened every first-party app's migration history into `world/migrations/`
-- 102 files, not one; measurement showed the win comes from topologically inlining
-deferred FKs down to the schema's true floor, not from fewer apps. Fresh `migrate`
-is about 1.30x faster than before the collapse, roughly 27 minutes versus 35 on this
-box - a real but modest improvement, still the long pole here. See ADR-0195.)
+
+(#2977: `post-create.sh` builds the schema straight from current model state via
+`tools/build_schema.py` instead of replaying the full migration chain, then runs
+`arx manage migrate --fake` to populate `django_migrations` so later incremental
+migrations still apply normally - continuing ADR-0083, which already moved CI and
+both test tiers onto this path. Measured on this box: ~5-9 minutes for the new path
+versus ~27-29 minutes for a full `arx manage migrate` replay (#2906 measured 27 vs 35
+minutes pre/post the single-app collapse - #2906 flattened every first-party app's
+migration history into `world/migrations/`, 102 files, not one; see ADR-0195 - the
+squash itself only trims a further ~1.3x because migration replay's cost is
+Django's per-operation state re-rendering, not real DDL, and `build_schema.py` skips
+that machinery entirely rather than shrinking it). If the target database is
+non-empty and wasn't built by `build_schema.py`, `post-create.sh` refuses instead of
+grafting onto it - see "Stale bootstrap database" in Troubleshooting below. To
+exercise the real migration chain locally instead (e.g. reproducing a
+migration-only bug), point `DATABASE_URL` at a fresh empty database and run `uv run
+arx manage migrate` directly; CI's nightly workflow
+(`.github/workflows/nightly-migration-replay.yml`) is the standing coverage for that
+path.)
 
 **Get a shell inside the container:**
 
@@ -511,6 +525,35 @@ Subsequent starts skip the build and are much faster.
 script waits up to 90 seconds for the db service. If the container exits with "db
 service did not become ready within 90s", run `just dc-up` again; Docker sometimes
 needs a moment on first run.
+
+**Stale bootstrap database** (`post-create.sh` refuses with "target database ...
+is non-empty and was not built by tools/build_schema.py") - the schema-from-models
+bootstrap (#2977) assumes an empty target, or one it already built itself; anything
+else (an old pre-#2906 database, or one built by some other route) gets refused
+rather than silently grafted onto. The failure message names the exact commands, but
+in short: drop and recreate the database, then re-run `post-create.sh` (or `just
+dc-build`). `PGPASSWORD` is the password from `DATABASE_URL` in `src/.env` - export
+it yourself (the failure message never prints it):
+
+```bash
+export PGPASSWORD=... # the password from DATABASE_URL in src/.env
+dropdb -h db -U arxii arxiidev
+createdb -h db -U arxii arxiidev
+```
+
+This is deliberate, not a bug - CLAUDE.md's "preserve the dev database" rule means
+tooling never drops a developer's database automatically, even a stale one.
+
+One consequence worth knowing about ahead of time: because the migration chain is
+currently missing the `arxii_interaction` partition rewrite and its composite FK
+constraints (a pre-existing gap from the #2906 squash, unrelated to this bootstrap
+change - see #2982), a database built by a **fully successful**
+`arx manage migrate` also ends up with an unpartitioned `arxii_interaction`. That
+means this guard refuses it too, reporting it as "not built by
+tools/build_schema.py" even though nothing actually failed. That's arguably correct
+- such a database genuinely has the less-correct schema - but it's surprising if
+you hit it after a clean `migrate`. It resolves itself once the migration chain
+regains the partition/composite-FK SQL.
 
 **Network call hangs or fails inside the container** — a needed host is not in the
 firewall allowlist. Check `.devcontainer/init-firewall.sh`, add the host, then

@@ -47,5 +47,18 @@ a plain `arx manage migrate`-built environment does not invoke the idempotent se
 `tools/build_schema.py` does — so a deploy pipeline must call them explicitly, or lookups like
 `scenes/action_services._get_social_engagement_category()` hard-fail on the missing row.
 
+**Update (#2977):** the devcontainer's `post-create.sh` joined this path too, closing
+the last environment still replaying the full chain on every fresh build (measured
+~5-9 minutes via `build_schema.py` versus ~27-29 minutes for `arx manage migrate`
+replay on this box). Unlike a throwaway test database, a devcontainer database is
+long-lived, so `build_schema.py` alone isn't enough - it disables migrations while it
+runs and leaves no `django_migrations` table at all, which would make the next real
+`arx manage migrate` try to recreate every table from scratch. `post-create.sh`
+follows it with `arx manage migrate --fake`, which records every migration in the
+chain as applied without touching the schema, so a later incremental migration
+applies normally instead of colliding. `post-create.sh` also refuses to bootstrap
+into a database that is non-empty and wasn't built by this path (detect and refuse,
+never auto-drop - see `docs/devcontainer-setup.md`).
+
 > Status: accepted · Source: CI-speedup branch, task 5 · Related: ADR-0013 (schema-only
 > migrations pre-production), ADR-0021 (merge queue + single-leaf migration guard)
