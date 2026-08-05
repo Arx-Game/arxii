@@ -17,6 +17,16 @@ deliberate, not a layering violation: same package, and the alternative is a
 second hand-maintained copy of the resolution sequence that WILL drift from
 the one the real load path uses. ``content_fixtures`` stays the single source
 of resolution semantics; this module only reads what it produces.
+
+Caveat (Task 3 review): this scan, and any single-entry reload built on it,
+resolves each object in isolation - there is no deferred-retry pass and no
+grid-bundle load, unlike ``load_world_content``'s full sequence. So a row
+whose incoming FK target is itself new in the same corpus update may not
+show up as a conflict (or reload cleanly) until after a full load brings
+that target in. The divergence is one-directional: it can under-report a
+conflict, never invent one, and the upsert guard in
+``_upsert_fixture_object`` still protects the row regardless of which path
+notices it.
 """
 
 from __future__ import annotations
