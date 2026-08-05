@@ -69,6 +69,14 @@ def apply_class_level_advance(sheet: CharacterSheet, *, level_after: int) -> Non
         cl.level = level_after
         cl.save(update_fields=["level"])
     sheet.invalidate_class_level_cache()
+
+    # Re-evaluate level-gated story beats. Both in-play advancement paths (Ritual of
+    # the Durance and Audere Majora's cross_threshold) write through this spine, so
+    # one call covers both (#3004).
+    from world.stories.services.reactivity import on_character_level_changed
+
+    on_character_level_changed(sheet)
+
     # Recompute max_health so level-derived base scales immediately. Every character
     # with a CharacterSheet is a real typeclassed Character (via create_character_with_sheet
     # / CharacterFactory), so the threads + combat_pulls handlers always exist. The
