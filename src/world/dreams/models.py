@@ -104,3 +104,37 @@ class DreamPerilConfig(SharedMemoryModel):
 
     def __str__(self) -> str:
         return "Dream Peril Config"
+
+
+class DreamwalkPresence(SharedMemoryModel):
+    """A dreamer whose perception is anchored to another dreamer's dreamspace.
+
+    Replaces the pre-#3003 ``ndb.dreamwalk_destination`` stash, which was
+    process-local (a reload stranded the walker) and unqueryable (no surface
+    could answer "who is dreaming with me"). Anchored on the host *sheet*
+    rather than a room: you dreamwalk to a person, so the walker follows a
+    host who moves, and there is no dependency on the host's room having a
+    RoomProfile row.
+    """
+
+    dreamer = models.OneToOneField(
+        "arxii.CharacterSheet",
+        on_delete=models.CASCADE,
+        related_name="dreamwalk_presence",
+        help_text="The dreamwalker whose perception is displaced.",
+    )
+    host = models.ForeignKey(
+        "arxii.CharacterSheet",
+        on_delete=models.CASCADE,
+        related_name="dream_visitors",
+        help_text="The dreamer whose dreamspace the walker perceives.",
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["pk"]
+        verbose_name = "Dreamwalk Presence"
+        verbose_name_plural = "Dreamwalk Presences"
+
+    def __str__(self) -> str:
+        return f"{self.dreamer} dreamwalking to {self.host}"
