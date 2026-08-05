@@ -403,8 +403,8 @@ class StyleAdmin(admin.ModelAdmin):
 
 @admin.register(Silhouette)
 class SilhouetteAdmin(admin.ModelAdmin):
-    list_display = ("name", "wear_family", "parent", "is_active")
-    list_filter = ("wear_family", "is_active")
+    list_display = ("name", "wear_family", "parent", "exposes_skin", "is_active")
+    list_filter = ("wear_family", "exposes_skin", "is_active")
     search_fields = ["name"]
 
 
