@@ -161,14 +161,14 @@ Recipients resolve by story scope:
 
 ---
 
-## Frontend Roadmap (Phase 4)
+## Frontend (shipped)
 
-The React frontend will surface narrative messages in two places:
-
-- **Inline main-text stream** — messages get a distinct `|R` (light red) color tag so the webclient can style them apart from normal scene messages
-- **Messages section of character sheet** — paginated, filterable, searchable; unread counter from `acknowledged_at=null` rows
-
-Both are frontend concerns; the backend exposes `/api/narrative/my-messages/` and `/api/narrative/deliveries/{id}/acknowledge/` as the minimum needed to drive them.
+The React surface lives in `frontend/src/narrative/`: `MessagesSection.tsx` +
+`MessageRow.tsx` (paginated message list off `/api/narrative/my-messages/`),
+`UnreadNarrativeBadge.tsx` (unread counter from `acknowledged_at=null` rows),
+`SendGemitDialog.tsx`, and per-category muting via `CategoryMuteToggles.tsx` /
+`MuteSettingsPage.tsx`. Acknowledge goes through
+`/api/narrative/deliveries/{id}/acknowledge/`.
 
 ---
 

@@ -80,8 +80,8 @@ limits, IC-vs-UI placement, etc. — see [`design-tenets.md`](design-tenets.md).
 | [Capabilities & Challenges](capabilities-and-challenges.md) | in-progress | Properties, capabilities, applications, action generation, challenges, situations |
 | [Combat](combat.md) | in-progress | Party combat (Phases 1–9 + clash + web UI + escalation/passives/aftermath complete; NPC-tier gap tracked), battle scenes, duels |
 | [Missions & Living Grid](missions.md) | in-progress | Branching narrative quests, world consequences, co-op group beats, support moves |
-| [Crafting, Fashion & Economy](crafting-economy.md) | not-started | Crafting, fashion-resonance loop, housing, shops, domains, ships |
-| [Items & Equipment](items-equipment.md) | not-started | Worn items, body slots, item stats, fashion integration |
+| [Crafting, Fashion & Economy](crafting-economy.md) | in-progress | Crafting expressiveness arc (#2881) + market/fence + fashion cachet economy (#2959) shipped; housing purchase, p2p trade (#2990), harvesting (#2998) remain |
+| [Items & Equipment](items-equipment.md) | in-progress | Worn items, body slots, layered coverage + Reveal (#2965) shipped; body markings (#2985) and visible-equipment web polish remain |
 | [Rooms, Buildings & Estates](rooms-and-estates.md) | skeleton | What ownership of rooms/buildings/estates unlocks — servants, decoration, vaults, special-purpose rooms |
 | [Relationships & Bonds](relationships.md) | in-progress | Relationship types, situational mods, soul tethers, party bonds |
 | [RP Interaction & Scenes](rp-scenes.md) | in-progress | Rich text editor, action-attached poses, scene engagement, three-mode round framework |
