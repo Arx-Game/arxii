@@ -56,6 +56,7 @@
             {% csrf_token %}
             <input type="hidden" name="model" value="{{ model_label }}">
             <input type="hidden" name="key" value="{{ key }}">
+            <input type="hidden" name="digest" value="{{ conflict.digest }}">
             <p>
                 <label for="typed_key">Type the natural key to confirm:</label>
                 <input type="text" id="typed_key" name="typed_key" size="60">

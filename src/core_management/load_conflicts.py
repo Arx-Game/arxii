@@ -32,6 +32,7 @@ notices it.
 from __future__ import annotations
 
 from dataclasses import dataclass
+import hashlib
 from pathlib import Path
 
 from core_management.content_fixtures import (
@@ -72,6 +73,31 @@ class LoadConflict:
     model_name: str
     natural_key: str
     fields: list[tuple[str, str, str]]
+
+    @property
+    def digest(self) -> str:
+        """Stable hash of the reviewed diff (#3017 GET/POST staleness fix).
+
+        The admin detail page hands this back to the resolve view as a
+        hidden field alongside the typed natural key. If the corpus or the
+        DB row changes between the detail GET and the resolve POST, a fresh
+        ``find_load_conflict`` call produces a different digest and the
+        resolve view refuses rather than silently applying corpus values the
+        operator never actually reviewed - the row is still a genuine
+        conflict at POST time, so a bare re-fetch-and-compare wouldn't catch
+        this the way it does for a conflict that resolved out from under the
+        request.
+
+        Computed over ``model_label``, ``natural_key``, and every
+        ``(field name, db display, incoming display)`` triple in order -
+        exactly what the detail page rendered, nothing more. Uses ``\\x1f``
+        (unit separator) as the field delimiter so no display value's own
+        content can forge a collision the way a plain ``, ``/``|`` join could.
+        """
+        parts = [self.model_label, self.natural_key]
+        parts.extend(f"{name}\x1f{db}\x1f{incoming}" for name, db, incoming in self.fields)
+        payload = "\x1e".join(parts)
+        return hashlib.sha256(payload.encode("utf-8")).hexdigest()
 
 
 def _truncate(text: str) -> str:

@@ -37,17 +37,17 @@
                 </tr>
             </thead>
             <tbody>
-                {% for conflict in conflicts %}
+                {% for row in conflict_rows %}
                 <tr>
-                    <td>{{ conflict.model_name }}</td>
-                    <td><code>{{ conflict.natural_key }}</code></td>
+                    <td>{{ row.conflict.model_name }}</td>
+                    <td><code>{{ row.conflict.natural_key }}</code></td>
                     <td>
-                        {% for triple in conflict.fields %}{{ triple.0 }}{% if not forloop.last %}, {% endif %}{% endfor %}
+                        {% for triple in row.conflict.fields %}
+                            {{ triple.0 }}{% if not forloop.last %}, {% endif %}
+                        {% endfor %}
                     </td>
                     <td>
-                        <a href="{% url 'admin_content_conflict_detail' %}?model={{ conflict.model_label|urlencode }}&amp;key={{ conflict.natural_key|urlencode }}">
-                            Review
-                        </a>
+                        <a href="{{ row.detail_url }}">Review</a>
                     </td>
                 </tr>
                 {% endfor %}

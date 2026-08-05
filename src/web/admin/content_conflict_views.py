@@ -101,6 +101,54 @@ def _reload_single_entry(model_label: str, natural_key: str, content_root) -> st
     return _upsert_fixture_object(model, obj, source_path, BuildResult())
 
 
+def _delete_and_reload(model, model_label: str, content_root, conflict) -> str | None:
+    """Delete the conflict's row and reload it from the corpus in one transaction.
+
+    Returns ``None`` on success, or a user-facing error message on failure -
+    the transaction has already rolled back by the time this returns, so a
+    ``ProtectedError``, a ``ContentError`` from either helper, or a raw
+    database error all leave the original row untouched. Split out of
+    ``content_conflict_resolve`` (ruff C901) so that view's own branching
+    (superuser gate, content-root check, digest check, typed-key check) stays
+    separate from this transaction's three-way exception handling.
+    """
+    from django.db import (  # noqa: PLC0415
+        Error as DjangoDbError,
+        transaction,
+    )
+    from django.db.models import ProtectedError  # noqa: PLC0415
+
+    from core_management.content_fixtures import (  # noqa: PLC0415
+        OUTCOME_CREATED,
+        ContentError,
+    )
+
+    try:
+        with transaction.atomic():
+            instance = _instance_for_conflict(model, content_root, conflict)
+            instance.delete()
+            outcome = _reload_single_entry(model_label, conflict.natural_key, content_root)
+            if outcome != OUTCOME_CREATED:
+                reload_failed_msg = (
+                    f"Reload after delete did not recreate the row (outcome: {outcome}). "
+                    "Transaction rolled back; the original row is untouched."
+                )
+                raise ContentError(reload_failed_msg)
+    except ProtectedError as exc:
+        return f"Cannot delete: other rows protect this one ({exc.args[0]})."
+    except ContentError as exc:
+        return str(exc)
+    except DjangoDbError as exc:
+        # Mirrors content_load_views.content_load_run: an unmigrated or
+        # unreachable DB is the one environmental failure mode left once
+        # ContentError/ProtectedError are both ruled out.
+        return (
+            f"Database error while resolving conflict: {exc} "
+            "(hint: run `arx manage migrate` to bring the dev DB schema up to date)."
+        )
+    return None
+
+
 def _locate_corpus_entry(content_root, model_label: str, natural_key: str):
     """Find the corpus fixture object matching ``(model_label, natural_key)``.
 
@@ -154,9 +202,18 @@ def content_conflicts(request: HttpRequest) -> HttpResponse:
         )
         return HttpResponseRedirect(reverse("admin_game_setup"))
 
+    conflicts = scan_load_conflicts(content_root)
     context = {
         "title": "Load conflicts",
-        "conflicts": scan_load_conflicts(content_root),
+        "conflicts": conflicts,
+        # Pre-built (conflict, detail_url) pairs so the template never has to
+        # assemble a querystring itself - keeps every template line well
+        # under the 100-char limit without splitting a URL across lines
+        # (which would embed whitespace inside an href attribute value).
+        "conflict_rows": [
+            {"conflict": c, "detail_url": _detail_url(c.model_label, c.natural_key)}
+            for c in conflicts
+        ],
     }
     return render(request, "admin/content_conflicts.html", context)
 
@@ -204,19 +261,18 @@ def content_conflict_resolve(request: HttpRequest) -> HttpResponse:
 
     Runs entirely inside one transaction: the delete and the reload either
     both land or neither does. A wrong typed key never touches the row at
-    all - the mismatch check runs before the transaction opens.
+    all - the mismatch check runs before the transaction opens. Same for a
+    stale digest (#3017 review): the detail page hands back a hash of the
+    diff it rendered, and if the corpus or the DB row changed between that
+    GET and this POST, the row is still a genuine conflict - so a bare
+    re-fetch-and-compare wouldn't catch it - but the diff the operator typed
+    the key against is no longer the diff this POST would apply. Refuse and
+    send them back to review the current diff.
     """
     if not request.user.is_superuser:
         raise PermissionDenied
 
-    from django.db import transaction  # noqa: PLC0415
-    from django.db.models import ProtectedError  # noqa: PLC0415
-
-    from core_management.content_fixtures import (  # noqa: PLC0415
-        OUTCOME_CREATED,
-        ContentError,
-        resolve_fixture_model,
-    )
+    from core_management.content_fixtures import resolve_fixture_model  # noqa: PLC0415
     from core_management.content_repo import resolve_content_root  # noqa: PLC0415
     from core_management.load_conflicts import find_load_conflict  # noqa: PLC0415
 
@@ -238,27 +294,20 @@ def content_conflict_resolve(request: HttpRequest) -> HttpResponse:
         messages.info(request, f"{model_label} [{key}] is no longer in conflict.")
         return HttpResponseRedirect(reverse("admin_content_conflicts"))
 
+    if request.POST.get("digest", "") != conflict.digest:
+        messages.error(
+            request, "The corpus or row changed since you reviewed this diff. Review it again."
+        )
+        return HttpResponseRedirect(detail_url)
+
     if request.POST.get("typed_key", "") != conflict.natural_key:
         messages.error(request, "Typed key does not match. Nothing was changed.")
         return HttpResponseRedirect(detail_url)
 
     model = resolve_fixture_model(model_label)
-    try:
-        with transaction.atomic():
-            instance = _instance_for_conflict(model, content_root, conflict)
-            instance.delete()
-            outcome = _reload_single_entry(model_label, conflict.natural_key, content_root)
-            if outcome != OUTCOME_CREATED:
-                reload_failed_msg = (
-                    f"Reload after delete did not recreate the row (outcome: {outcome}). "
-                    "Transaction rolled back; the original row is untouched."
-                )
-                raise ContentError(reload_failed_msg)
-    except ProtectedError as exc:
-        messages.error(request, f"Cannot delete: other rows protect this one ({exc.args[0]}).")
-        return HttpResponseRedirect(detail_url)
-    except ContentError as exc:
-        messages.error(request, str(exc))
+    error_msg = _delete_and_reload(model, model_label, content_root, conflict)
+    if error_msg is not None:
+        messages.error(request, error_msg)
         return HttpResponseRedirect(detail_url)
 
     messages.success(
