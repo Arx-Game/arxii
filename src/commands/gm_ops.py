@@ -45,6 +45,10 @@ _USAGE_SUGGEST = (
     "Usage: gm suggest <kind>=<text>"
     " (kind: new_situation|check_fit|difficulty_guide|pool_guide|other)"
 )
+_USAGE_TRAP = "Usage: gm trap list | gm trap arm <id> | gm trap disarm <id>"
+_SUBVERB_LIST = "list"
+_SUBVERB_ARM = "arm"
+_SUBVERB_DISARM = "disarm"
 
 # parse_kv_and_flags key names -- module constants so the STRING_LITERAL lint's
 # comparison/membership check doesn't see bare identifier-shaped literals.
@@ -70,6 +74,9 @@ class CmdGMDashboard(ArxCommand):
       gm award <character> hare=<organization> reason=<text>
       gm condition <character> condition=<name> [severity=<n>] [duration=<n>] [note=<text>]
       gm suggest <kind>=<text>
+      gm trap list
+      gm trap arm <id>
+      gm trap disarm <id>
     """
 
     key = "gm"
@@ -95,6 +102,8 @@ class CmdGMDashboard(ArxCommand):
                 self._handle_condition(rest)
             elif first == "suggest":  # noqa: STRING_LITERAL
                 self._handle_suggest(rest)
+            elif first == "trap":  # noqa: STRING_LITERAL
+                self._handle_trap(rest)
             else:
                 self._render()
         except CommandError as err:
@@ -255,6 +264,34 @@ class CmdGMDashboard(ArxCommand):
         )
         if result.message:
             self.msg(result.message)
+
+    def _handle_trap(self, rest: str) -> None:
+        """``gm trap list|arm <id>|disarm <id>`` - manage traps in this room (#3002).
+
+        Thin: parse the subverb and the id, then hand off. Authorization lives
+        entirely in the Actions' prerequisites, like every other subverb here.
+        """
+        from actions.definitions.traps import (  # noqa: PLC0415
+            ArmTrapAction,
+            GmDisarmTrapAction,
+            ListRoomTrapsAction,
+        )
+
+        tokens = rest.split(maxsplit=1)
+        subverb = tokens[0].lower() if tokens else ""
+        argument = tokens[1].strip() if len(tokens) > 1 else ""
+
+        if subverb == _SUBVERB_LIST:
+            result = ListRoomTrapsAction().run(actor=self.caller)
+            self.msg(result.message)
+            return
+
+        if subverb not in (_SUBVERB_ARM, _SUBVERB_DISARM) or not argument.isdigit():
+            raise CommandError(_USAGE_TRAP)
+
+        action = ArmTrapAction() if subverb == _SUBVERB_ARM else GmDisarmTrapAction()
+        result = action.run(actor=self.caller, trap_id=int(argument))
+        self.msg(result.message)
 
     def _render(self) -> None:
         raw = (self.args or "").strip().lower()

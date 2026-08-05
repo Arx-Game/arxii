@@ -548,7 +548,7 @@ they happened to walk.
   `technique.gift.style` first, falling back to the caster's Path style exactly as before
   when the gift sets none. Capability gating (`technique_performable` /
   `StyleCapabilityRequirement`) is unaffected — it still reads the caster's own Path style.
-- Full record: ADR-0197.
+- Full record: ADR-0199.
 
 ---
 

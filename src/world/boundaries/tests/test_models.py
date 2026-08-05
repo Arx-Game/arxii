@@ -3,9 +3,9 @@ from django.test import TestCase
 
 from world.boundaries.constants import BoundaryKind
 from world.boundaries.factories import (
-    ContentThemeFactory,
     PlayerBoundaryFactory,
     TreasuredSubjectFactory,
+    make_child_endangerment_theme,
     make_default_content_themes,
 )
 from world.boundaries.models import ContentTheme, PlayerBoundary
@@ -14,7 +14,7 @@ from world.boundaries.models import ContentTheme, PlayerBoundary
 class PlayerBoundaryModelTests(TestCase):
     @classmethod
     def setUpTestData(cls):
-        cls.theme = ContentThemeFactory(key="child-endangerment", name="Child endangerment")
+        cls.theme = make_child_endangerment_theme()
 
     def test_hard_line_requires_theme(self):
         boundary = PlayerBoundaryFactory.build(kind=BoundaryKind.HARD_LINE, theme=None)

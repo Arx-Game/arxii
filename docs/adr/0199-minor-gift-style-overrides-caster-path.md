@@ -1,4 +1,4 @@
-# ADR-0197: Minor gifts may override caster-path casting style
+# ADR-0199: Minor gifts may override caster-path casting style
 
 **Status:** Accepted · **Source:** #2905, Tehom design ruling 2026-08-03
 

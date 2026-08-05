@@ -328,6 +328,8 @@ class GoalJournalViewSetTests(TestCase):
         cls.other_user = AccountFactory()
         cls.sheet = CharacterSheetFactory()
         cls.character = cls.sheet.character
+        cls.character.db_account = cls.user
+        cls.character.save()
         cls.other_sheet = CharacterSheetFactory()
         cls.other_character = cls.other_sheet.character
         cls.domain = GoalDomainFactory(name="JournalDomain")

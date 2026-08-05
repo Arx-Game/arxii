@@ -40,7 +40,7 @@ from world.items.exceptions import (
     CraftingStationBroken,
     CraftingStationRequired,
 )
-from world.items.models import EquippedItem, ItemInstance
+from world.items.models import EquippedItem, ItemInstance, ItemStyle, ItemTemplate
 from world.items.services.materials import meets_quality_tier
 from world.room_features.constants import RoomFeatureServiceStrategy
 
@@ -101,6 +101,7 @@ class CraftRunResult:
     consequence_label: str | None
     crafted_recipe: CraftedItemRecipe | None = None
     accents: tuple[ItemAccent, ...] = ()
+    styles: tuple[ItemStyle, ...] = ()
 
 
 @dataclass(frozen=True)
@@ -592,13 +593,14 @@ def _accent_penalty_contributions(accent_count: int) -> list:
     ]
 
 
-def _resolve_accents(
+def _resolve_accents(  # noqa: PLR0913 — orchestrator context passthrough
     *,
     recipe: CraftingRecipe,
     crafter_character: ObjectDB,
     target_item: ItemInstance,
     accent_targets: list,
     difficulty: int,
+    ambition_count: int | None = None,
 ) -> tuple[ItemAccent, ...]:
     """Roll each requested Accent's own check and record what realized (#2878).
 
@@ -614,7 +616,9 @@ def _resolve_accents(
 
     cap = BASE_MAX_ACCENT_LEVEL + thread_count_for_skill(crafter_character, recipe.skill_trait)
     accent_contribs = _thread_check_contributions(crafter_character, recipe)
-    accent_contribs += _accent_penalty_contributions(len(accent_targets))
+    accent_contribs += _accent_penalty_contributions(
+        len(accent_targets) if ambition_count is None else ambition_count
+    )
     realized: list[ItemAccent] = []
     for target in accent_targets:
         result = perform_check_with_modifiers(
@@ -639,6 +643,115 @@ def _resolve_accents(
         )
         realized.append(accent)
     return tuple(realized)
+
+
+def _validate_style_choices(styles: list | None, template: ItemTemplate | None) -> list:
+    """Validate create-time Style picks (#2985) — before any staging or rolling.
+
+    A dress is designed Lycene from the first stitch: styles are chosen at the
+    bench like accents and silhouette (STYLE_ATTACH remains the *restyle* path
+    for existing pieces). Dedupes preserving order; caps at the output
+    template's ``style_capacity``.
+    """
+    from world.items.exceptions import StyleCapacityExceeded  # noqa: PLC0415
+
+    chosen = list(dict.fromkeys(styles or []))
+    if not chosen:
+        return []
+    capacity = template.style_capacity if template is not None else 0
+    if len(chosen) > capacity:
+        raise StyleCapacityExceeded
+    return chosen
+
+
+def _resolve_styles_at_create(  # noqa: PLR0913 — mirrors _resolve_accents' context passthrough
+    *,
+    recipe: CraftingRecipe,
+    crafter_account: AccountDB,
+    crafter_character: ObjectDB,
+    target_item: ItemInstance,
+    styles_requested: list,
+    difficulty: int,
+    tier: QualityTier,
+    ambition_count: int,
+) -> tuple[ItemStyle, ...]:
+    """Roll each create-time Style's own check and attach what takes (#2985).
+
+    Mirrors ``_resolve_accents``: each style rolls at the ambition-penalized
+    difficulty; a roll below the recipe's minimum means the register didn't
+    come through — the piece is made, but it isn't convincingly Lycene (a
+    restyle candidate via STYLE_ATTACH). A style that takes attaches at the
+    piece's own quality tier.
+    """
+    from world.items.services.styles import attach_style_to_item  # noqa: PLC0415
+
+    style_contribs = _thread_check_contributions(crafter_character, recipe)
+    style_contribs += _accent_penalty_contributions(ambition_count)
+    realized: list[ItemStyle] = []
+    for style in styles_requested:
+        result = perform_check_with_modifiers(
+            crafter_character,
+            recipe.check_type,
+            difficulty,
+            specialization=recipe.specialization,
+            extra_contributions=style_contribs or None,
+        )
+        if result.success_level < recipe.min_success_level:
+            continue
+        realized.append(
+            attach_style_to_item(
+                crafter=crafter_account,
+                item_instance=target_item,
+                style=style,
+                attachment_quality_tier=tier,
+            )
+        )
+    return tuple(realized)
+
+
+def _resolve_expressive_layers(  # noqa: PLR0913 — orchestrator context passthrough
+    *,
+    recipe: CraftingRecipe,
+    crafter_account: AccountDB,
+    crafter_character: ObjectDB,
+    item_instance: ItemInstance | None,
+    row: object | None,
+    attached: bool,
+    tier: QualityTier | None,
+    accents_requested: list,
+    styles_requested: list,
+    difficulty: int,
+    ambition_count: int,
+) -> tuple[tuple[ItemAccent, ...], tuple[ItemStyle, ...]]:
+    """Post-piece sub-rolls for the expressive layers (steps 10c/10c2).
+
+    Accents attach to the host item (attach kinds included); create-time
+    styles only ever target the freshly minted piece.
+    """
+    accents: tuple[ItemAccent, ...] = ()
+    accent_host = item_instance if item_instance is not None else row
+    if attached and accents_requested and isinstance(accent_host, ItemInstance):
+        accents = _resolve_accents(
+            recipe=recipe,
+            crafter_character=crafter_character,
+            target_item=accent_host,
+            accent_targets=accents_requested,
+            difficulty=difficulty,
+            ambition_count=ambition_count,
+        )
+    styles: tuple[ItemStyle, ...] = ()
+    if attached and styles_requested and tier is not None and isinstance(row, ItemInstance):
+        styles = _resolve_styles_at_create(
+            recipe=recipe,
+            crafter_account=crafter_account,
+            crafter_character=crafter_character,
+            target_item=row,
+            styles_requested=styles_requested,
+            difficulty=difficulty,
+            tier=tier,
+            ambition_count=ambition_count,
+        )
+    return accents, styles
 
 
 def _resolve_outcome_tier(  # noqa: PLR0913 — orchestrator context passthrough
@@ -810,10 +923,16 @@ def run_crafting_recipe(  # noqa: PLR0913
     )
     # Silhouette pick (#2907) — validated before any staging or rolling.
     _resolve_silhouette_choice(output_overrides)
+    # Create-time Style picks (#2985) — designed-in registers, same ambition
+    # pricing as accents; STYLE_ATTACH remains the restyle path.
+    styles_requested = _validate_style_choices(
+        (output_overrides or {}).pop("styles", None), create_template
+    )
     from world.items.crafting.constants import ACCENT_CRAFT_COST_BASE  # noqa: PLC0415
 
     difficulty = recipe.base_difficulty
-    accent_cost_multiplier = ACCENT_CRAFT_COST_BASE ** len(accents_requested)
+    ambition_count = len(accents_requested) + len(styles_requested)
+    accent_cost_multiplier = ACCENT_CRAFT_COST_BASE**ambition_count
 
     # --- 2. Pre-validate (never waste a roll) ---
     handler = get_handler(kind)
@@ -840,7 +959,7 @@ def run_crafting_recipe(  # noqa: PLR0913
     craft_contribs = _thread_check_contributions(
         crafter_character, recipe, thread_count=craft_thread_count
     )
-    craft_contribs += _accent_penalty_contributions(len(accents_requested))
+    craft_contribs += _accent_penalty_contributions(ambition_count)
     check_result = perform_check_with_modifiers(
         crafter_character,
         recipe.check_type,
@@ -923,17 +1042,20 @@ def run_crafting_recipe(  # noqa: PLR0913
         else None
     )
 
-    # --- 10c. Roll each requested Accent's own check (#2878) ---
-    accents: tuple[ItemAccent, ...] = ()
-    accent_host = item_instance if item_instance is not None else row
-    if attached and accents_requested and isinstance(accent_host, ItemInstance):
-        accents = _resolve_accents(
-            recipe=recipe,
-            crafter_character=crafter_character,
-            target_item=accent_host,
-            accent_targets=accents_requested,
-            difficulty=difficulty,
-        )
+    # --- 10c. Roll the expressive layers' own checks: accents (#2878) + styles (#2985) ---
+    accents, styles = _resolve_expressive_layers(
+        recipe=recipe,
+        crafter_account=crafter_account,
+        crafter_character=crafter_character,
+        item_instance=item_instance,
+        row=row,
+        attached=attached,
+        tier=tier,
+        accents_requested=accents_requested,
+        styles_requested=styles_requested,
+        difficulty=difficulty,
+        ambition_count=ambition_count,
+    )
 
     # --- 10d. Fame at first making (#2878, generalizes #2243) ---
     # First making = the ITEM_CREATE path (item_instance None, row is the new
@@ -959,4 +1081,5 @@ def run_crafting_recipe(  # noqa: PLR0913
         consequence_label=consequence_label,
         crafted_recipe=crafted_recipe,
         accents=accents,
+        styles=styles,
     )

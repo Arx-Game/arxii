@@ -19,6 +19,7 @@ from world.mechanics.models import SituationInstance
 from world.room_features.models import Trap
 
 if TYPE_CHECKING:
+    from world.character_sheets.models import CharacterSheet
     from world.mechanics.models import SituationTemplate
 
 _TARGET_OBJECT_TYPECLASS = "typeclasses.objects.Object"
@@ -35,7 +36,12 @@ def create_challenge_target_object(name: str) -> ObjectDB:
     return ObjectDB.objects.create(db_key=name, db_typeclass_path=_TARGET_OBJECT_TYPECLASS)
 
 
-def instantiate_situation(template: SituationTemplate, location: ObjectDB) -> SituationInstance:
+def instantiate_situation(
+    template: SituationTemplate,
+    location: ObjectDB,
+    *,
+    placed_by_sheet: CharacterSheet | None = None,
+) -> SituationInstance:
     """Mint a SituationInstance at ``location`` and materialize its authored content.
 
     Raises ``django.core.exceptions.ObjectDoesNotExist`` (unwrapped) if
@@ -45,6 +51,13 @@ def instantiate_situation(template: SituationTemplate, location: ObjectDB) -> Si
     doesn't need a RoomProfile). The instance and all its traps/challenges
     are created atomically: if materialization fails partway (including the
     RoomProfile lookup), no orphaned SituationInstance survives.
+
+    ``placed_by_sheet`` stamps each minted Trap's ``created_by_sheet`` with the GM
+    who placed the situation. That provenance is what makes a GM-placed trap
+    scene-scoped: ``teardown_conjured_hazards`` selects on it at scene end, so a
+    staff-authored trap (null sheet) stays armed permanently while a GM's does
+    not. Omitted (tests, any non-GM caller) the field stays null and behavior is
+    unchanged.
     """
     with transaction.atomic():
         instance = SituationInstance.objects.create(template=template, location=location)
@@ -62,6 +75,7 @@ def instantiate_situation(template: SituationTemplate, location: ObjectDB) -> Si
                     detect_difficulty=trap_link.detect_difficulty,
                     disarm_difficulty=trap_link.disarm_difficulty,
                     is_hidden=trap_link.is_hidden,
+                    created_by_sheet=placed_by_sheet,
                 )
 
         for challenge_link in template.challenge_links.all():

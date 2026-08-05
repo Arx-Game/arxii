@@ -25,7 +25,6 @@ import type {
   FacetTreeNode,
   Family,
   FamilySlots,
-  FamilyTree,
   FormOptionsResponse,
   GenderOption,
   GiftDetail,
@@ -295,35 +294,10 @@ export async function getFamiliesWithOpenPositions(areaId?: number): Promise<Fam
   return res.json();
 }
 
-export async function getFamilyTree(familyId: number): Promise<FamilyTree> {
-  const res = await apiFetch(`${ROSTER_URL}/families/${familyId}/tree/`);
-  if (!res.ok) {
-    throw new Error('Failed to load family tree');
-  }
-  return res.json();
-}
-
 export async function getFamilySlots(familyId: number): Promise<FamilySlots> {
   const res = await apiFetch(`${ROSTER_URL}/families/${familyId}/slots/`);
   if (!res.ok) {
     throw new Error('Failed to load family positions');
-  }
-  return res.json();
-}
-
-export async function createFamily(data: {
-  name: string;
-  family_type: 'commoner' | 'noble';
-  description: string;
-  origin_realm?: number;
-}): Promise<Family> {
-  const res = await apiFetch(`${ROSTER_URL}/families/`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(data),
-  });
-  if (!res.ok) {
-    throw new Error('Failed to create family');
   }
   return res.json();
 }

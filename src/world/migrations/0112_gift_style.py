@@ -6,7 +6,7 @@ import django.db.models.deletion
 
 class Migration(migrations.Migration):
     dependencies = [
-        ("arxii", "0108_draftmarking_formmarking"),
+        ("arxii", "0111_goaljournal_game_week"),
     ]
 
     operations = [

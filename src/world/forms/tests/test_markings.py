@@ -99,6 +99,22 @@ class MarkingVisibilityTests(TestCase):
         visible = visible_markings_for(self.character, observer=self.observer)
         assert self.marking in visible
 
+    def test_revealing_cut_silhouette_exposes_marking(self):
+        """A plunging cut bares the skin even on a non-revealing template (#2985)."""
+        from world.items.models import Silhouette, WearFamily
+
+        worn = _wear(self.sheet, BodyRegion.TORSO)
+        assert visible_markings_for(self.character, observer=self.observer) == []
+        plunging = Silhouette.objects.create(
+            name="plunging bodice",
+            wear_family=WearFamily.TORSO_GARMENT,
+            exposes_skin=True,
+        )
+        worn.silhouette = plunging
+        worn.save(update_fields=["silhouette"])
+        visible = visible_markings_for(self.character, observer=self.observer)
+        assert self.marking in visible
+
     def test_garment_elsewhere_does_not_conceal(self):
         _wear(self.sheet, BodyRegion.LEFT_LEG)
         visible = visible_markings_for(self.character, observer=self.observer)

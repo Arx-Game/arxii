@@ -310,6 +310,9 @@ class Trap(SharedMemoryModel):
     pool when a character actively disarms it. A room may hold several traps,
     so this is a plain FK (not the one-per-room OneToOne RoomFeatureInstance
     uses).
+
+    ``is_hidden`` is NOT WIRED as of #3002: no code reads it. See the comment
+    on the field itself for what it is waiting on.
     """
 
     room_profile = models.ForeignKey(
@@ -362,10 +365,19 @@ class Trap(SharedMemoryModel):
         default=0,
         help_text="Authored target difficulty for the disarm check.",
     )
+    # #3002: the help_text below predates the GM ``arm_trap`` action
+    # (actions/definitions/traps.py). ``arm_trap`` CAN re-arm a disarmed trap - it
+    # refuses only a zone hazard whose ``duration_rounds`` has already ticked to 0.
     is_armed = models.BooleanField(
         default=True,
         help_text="A disarmed trap never triggers and cannot be disarmed again.",
     )
+    # NOT WIRED as of #3002: no code reads is_hidden. It waits on the
+    # player-facing trap reveal surface - no serializer, command or view exposes
+    # a Trap today, which is also why DisarmTrapAction is unreachable. Do not
+    # design against this field as though it gated visibility, and do not delete
+    # it: it is authored on SituationTrapLink, a CONTENT_MODELS row, so removing
+    # it would drop authored content meaning.
     is_hidden = models.BooleanField(
         default=True,
         help_text="Whether the trap is concealed until a character resolves it.",

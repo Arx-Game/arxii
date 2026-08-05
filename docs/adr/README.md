@@ -58,7 +58,7 @@ treat those names as hints to confirm, not gospel.
 - [0127 — Combat renders in-scene, not on a separate route](0127-combat-renders-in-scene-not-a-separate-route.md)
 - [0128 — Scene decisive-check is pre-declared, not post-hoc](0128-scene-decisive-check-is-pre-declared.md)
 - [0167 — Technique style is a property of the caster's Path, not of the Technique](0167-technique-style-is-a-property-of-the-casters-path.md) (#2700; relates to ADR-0136, ADR-0010)
-- [0197 — A Minor Gift may set its own casting style, overriding the caster's Path](0197-minor-gift-style-overrides-caster-path.md) (#2905; narrows ADR-0167)
+- [0199 — A Minor Gift may set its own casting style, overriding the caster's Path](0199-minor-gift-style-overrides-caster-path.md) (#2905; narrows ADR-0167)
 
 ### Database & modeling
 - [0007 — No JSON fields; every setting is a typed, queryable column](0007-no-json-fields-typed-queryable-columns.md)
@@ -83,6 +83,7 @@ treat those names as hints to confirm, not gospel.
 - [0178 — Combatant relationship models (EngagementLock, Clash, CombatMark) remain separate; no shared base](0178-combatant-relationships-remain-separate.md) (#2674; extends ADR-0094, ADR-0015, ADR-0016)
 - [0195 — All first-party apps collapse into one Django app, `arxii`](0195-single-app-collapse-arxii.md) (#2906; narrows ADR-0013; relates to ADR-0021)
 - [0196 - Content credit is a row mixin; contributors are content](0196-content-credit-is-a-row-mixin-and-contributors-are-content.md) (#2980; related ADR-0010, ADR-0146)
+- [0197 - Traps ride situations, and a GM manages them rather than authoring them](0197-traps-ride-situations-and-are-managed-not-authored.md) (#3002; applies ADR-0110; relates to #1895, #2865)
 
 ### Resolution
 - [0019 — Unified resolution: one roll path, data-sourced difficulty, graded outcomes](0019-unified-resolution-one-roll-path.md)
@@ -204,6 +205,7 @@ treat those names as hints to confirm, not gospel.
 - [0164 — Capability values share one uncapped ladder; blocking is emergent arithmetic, not a flag](0164-capability-value-ladder-and-emergent-blocking.md) (#2704; related ADR-0143, ADR-0034)
 - [0169 — Capability magnitude curves geometrically with contextual power, uncapped](0169-capability-magnitude-curves-geometrically-with-contextual-power.md) (#2708; builds on ADR-0164, ADR-0034; related ADR-0144)
 - [0190 — PC sustained actions extend ADR-0161's pre-armed shape, with a rolled — not ramped — budget](0190-pc-sustained-actions-absorption-budget.md) (#2705; extends ADR-0161; related ADR-0007, ADR-0118)
+- [0198 — Dreamwalk presence is a persisted row keyed on the host sheet, not ephemeral per-process state](0198-dreamwalk-presence-is-persisted-on-the-host-sheet.md) (#3003; related ADR-0008, ADR-0131)
 
 ### Gift & resonance economy
 - [0050 — Gifts are Major or Minor; species abilities are a species-granted Minor Gift](0050-gifts-are-major-or-minor-species-abilities-are-minor-gifts.md)

@@ -102,6 +102,47 @@ class ApplyClassLevelAdvanceTests(TestCase):
         spy.assert_called_once_with(self.sheet)
 
 
+class ApplyClassLevelAdvanceFiresStoryReactivityTests(TestCase):
+    """apply_class_level_advance re-evaluates level-gated story beats (#3004)."""
+
+    def test_level_beat_completes_on_advance(self) -> None:
+        from world.character_sheets.factories import CharacterSheetFactory
+        from world.classes.factories import CharacterClassLevelFactory
+        from world.stories.constants import BeatOutcome, BeatPredicateType, StoryScope
+        from world.stories.factories import (
+            BeatFactory,
+            EpisodeFactory,
+            StoryProgressFactory,
+        )
+        from world.stories.models import BeatCompletion
+
+        sheet = CharacterSheetFactory()
+        CharacterClassLevelFactory(character=sheet, level=2, is_primary=True)
+
+        episode = EpisodeFactory()
+        progress = StoryProgressFactory(
+            character_sheet=sheet,
+            story=episode.chapter.story,
+            current_episode=episode,
+        )
+        progress.story.scope = StoryScope.CHARACTER
+        progress.story.character_sheet = sheet
+        progress.story.save()
+
+        beat = BeatFactory(
+            episode=episode,
+            predicate_type=BeatPredicateType.CHARACTER_LEVEL_AT_LEAST,
+            required_level=3,
+            outcome=BeatOutcome.UNSATISFIED,
+        )
+
+        apply_class_level_advance(sheet, level_after=3)
+
+        beat.refresh_from_db()
+        assert beat.outcome == BeatOutcome.SUCCESS
+        assert BeatCompletion.objects.filter(beat=beat, character_sheet=sheet).exists()
+
+
 class PrimaryClassLevelTests(TestCase):
     """primary_class_level returns the primary row, falls back to highest-level, else None."""
 

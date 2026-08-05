@@ -64,7 +64,7 @@ and the 5-axis Thread model no longer exist.
 | Model | Purpose | Key Fields |
 |-------|---------|------------|
 | `EffectType` | Types of magical effects (Attack, Defense, Movement) | `name`, `description`, `base_power`, `base_anima_cost`, `has_power_scaling` |
-| `TechniqueStyle` | How a **practitioner** works magic (Manifestation, Subtle, Prayer). A property of the caster's Path, not of the technique (#2700, ADR-0167) — the same catalog `Technique` is an Incantation cast by a Path of Tomes character and a Manifestation cast by a Path of Steel one. Reverse of `classes.Path.style` via `related_name="paths"`. `cast_concealment` (#2710, ADR-0170) is the style's difficulty floor for being noticed while casting — 0 (default) is overt and skips detection entirely; see "Cast observation" below. A Gift may set its own style (`Gift.style`), which wins over the caster's Path style for `cast_concealment` on that gift's techniques (capability gating still reads the caster's Path) (#2905, ADR-0197). | `name`, `description`, `cast_concealment` |
+| `TechniqueStyle` | How a **practitioner** works magic (Manifestation, Subtle, Prayer). A property of the caster's Path, not of the technique (#2700, ADR-0167) — the same catalog `Technique` is an Incantation cast by a Path of Tomes character and a Manifestation cast by a Path of Steel one. Reverse of `classes.Path.style` via `related_name="paths"`. `cast_concealment` (#2710, ADR-0170) is the style's difficulty floor for being noticed while casting — 0 (default) is overt and skips detection entirely; see "Cast observation" below. A Gift may set its own style (`Gift.style`), which wins over the caster's Path style for `cast_concealment` on that gift's techniques (capability gating still reads the caster's Path) (#2905, ADR-0199). | `name`, `description`, `cast_concealment` |
 | `StyleCapabilityRequirement` | A capability the **caster** needs to work magic in this style (#2700) — e.g. Incantation requires `speech >= 1`. Caster-scoped sibling of `TechniqueCapabilityRequirement`; both are evaluated by `technique_performable` against `get_effective_capability_value`. | `style` FK, `capability` FK (`conditions.CapabilityType`), `minimum_value`. Natural key `(style, capability)` |
 | `IntensityTier` | Power effect thresholds | `name`, `threshold`, `control_modifier`, `description` |
 | `Restriction` | Limitations that grant power bonuses | `name`, `description`, `power_bonus` |
@@ -2372,7 +2372,7 @@ you just cannot say who did it. The tiers are a ladder of attribution:
    what makes a sword swing unconcealable.
 1. `_concealment_for(caster, technique)` checks `technique.gift.style` first — a Minor Gift
    may impose its own casting style, overriding whatever the caster's Path would otherwise
-   supply (#2905, ADR-0197), since a species-granted gift is magic the character never
+   supply (#2905, ADR-0199), since a species-granted gift is magic the character never
    chose. Only when the gift sets no style does it fall back to `cast_concealment` off the
    caster's current Path's `TechniqueStyle`
    (`world.progression.selectors.current_path_for_character`). Returns 0 (overt — no check,

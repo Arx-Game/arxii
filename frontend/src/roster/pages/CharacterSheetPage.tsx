@@ -30,6 +30,7 @@ import { UpdatesTab } from '@/sheet_update_requests/components/UpdatesTab';
 import { SpellbookTab } from '@/magic/components/SpellbookTab';
 import { LocationsTab } from '@/locations/components/LocationsTab';
 import { AgreementsPanel } from '@/estates/components/AgreementsPanel';
+import { KinshipPanel } from '@/kinship/components/KinshipPanel';
 
 export function CharacterSheetPage() {
   const { id } = useParams();
@@ -125,6 +126,7 @@ export function CharacterSheetPage() {
           <TabsTrigger value="reputation">Reputation</TabsTrigger>
           <TabsTrigger value="titles">Titles</TabsTrigger>
           <TabsTrigger value="distinctions">Distinctions</TabsTrigger>
+          <TabsTrigger value="kinship">Kinship</TabsTrigger>
           {isMyCharacter && <TabsTrigger value="updates">Updates</TabsTrigger>}
           <TabsTrigger value="magic">Magic</TabsTrigger>
           <TabsTrigger value="secrets">Secrets</TabsTrigger>
@@ -202,6 +204,16 @@ export function CharacterSheetPage() {
               character.id is the CharacterSheet pk (shared with the ObjectDB pk). Radix
               unmounts inactive tab content, so the query only fires when this tab is opened. */}
           <DistinctionsTab characterId={entry.character.id} />
+        </TabsContent>
+
+        <TabsContent value="kinship" className="space-y-4">
+          {/* Ungated (#3003): the server already filters the kin graph to what the viewer may
+              see (public record + truths they know, or the full truth for staff) — the public
+              family record telnet's own family section shows more of, so gating this tab client
+              side would hide something the server already means to show. character.id is the
+              CharacterSheet pk the kin tree endpoint is centred on. Radix unmounts inactive tab
+              content, so the query only fires when this tab is opened. */}
+          <KinshipPanel characterId={entry.character.id} />
         </TabsContent>
 
         <TabsContent value="updates" className="space-y-4">

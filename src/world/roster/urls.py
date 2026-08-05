@@ -7,8 +7,10 @@ from rest_framework.routers import DefaultRouter
 
 from world.gm.views import LookingForTableToggleView
 from world.roster.views import (
+    CharacterKinTreeView,
     FamilyViewSet,
     GameInviteViewSet,
+    KinRelationshipView,
     MediaViewSet,
     PlayerMailViewSet,
     RosterEntryViewSet,
@@ -40,6 +42,16 @@ urlpatterns = [
         "looking-for-table/",
         LookingForTableToggleView.as_view(),
         name="looking-for-table-toggle",
+    ),
+    path(
+        "kin/tree/<int:character_id>/",
+        CharacterKinTreeView.as_view(),
+        name="kin-tree",
+    ),
+    path(
+        "kin/relationship/",
+        KinRelationshipView.as_view(),
+        name="kin-relationship",
     ),
     *router.urls,
 ]

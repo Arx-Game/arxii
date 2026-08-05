@@ -123,7 +123,7 @@ class TechniqueStyle(NaturalKeyMixin, CreditedContent, SharedMemoryModel):
 
     Exception: a Minor Gift may override this for its own techniques via
     ``Gift.style`` — a species gift the character never chose doesn't inherit the
-    caster's Path-chosen manner (#2905, ADR-0197). The override affects only
+    caster's Path-chosen manner (#2905, ADR-0199). The override affects only
     ``cast_concealment`` resolution; capability gating below still reads the caster's
     own Path style.
 

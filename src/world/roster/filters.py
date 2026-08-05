@@ -35,13 +35,14 @@ class RosterEntryFilterSet(django_filters.FilterSet):
 
 
 class FamilyFilterSet(django_filters.FilterSet):
-    """Filter families by open positions."""
+    """Filter families by open positions and/or starting area."""
 
     has_open_positions = django_filters.BooleanFilter(method="filter_has_open_positions")
+    area_id = django_filters.CharFilter(method="filter_by_area")
 
     class Meta:
         model = Family
-        fields = ["has_open_positions"]
+        fields = ["has_open_positions", "area_id"]
 
     def filter_has_open_positions(
         self, queryset: QuerySet[Family], name: str, value: bool
@@ -51,6 +52,26 @@ class FamilyFilterSet(django_filters.FilterSet):
                 Q(members__is_appable=True, members__sheet__isnull=True)
                 | Q(kin_slot_pools__count_remaining__gt=0)
             ).distinct()
+        return queryset
+
+    def filter_by_area(self, queryset: QuerySet[Family], name: str, value: str) -> QuerySet[Family]:
+        """
+        Filter families by the realm of the given starting area.
+
+        Includes families with no origin_realm or matching the area's realm.
+        """
+        if not value:
+            return queryset
+
+        from world.character_creation.models import StartingArea  # noqa: PLC0415
+
+        try:
+            area = StartingArea.objects.get(id=value)
+        except (StartingArea.DoesNotExist, ValueError):
+            return queryset
+
+        if area.realm:
+            return queryset.filter(Q(origin_realm__isnull=True) | Q(origin_realm=area.realm))
         return queryset
 
 
