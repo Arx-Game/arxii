@@ -116,16 +116,25 @@ class DreamPerilNarrationTests(TestCase):
         return sent
 
     def test_collapse_carries_peril_narration(self):
+        # No CheckRank/ResultChart is seeded in this test's transaction, so
+        # `outcome` resolves deterministically to None (world/checks/services.py
+        # perform_check, chart lookup) regardless of the roll — which forces
+        # select_consequence's no-tier-match fallback ("Unknown",
+        # world/checks/consequence_resolution.py) and peril.py's
+        # messages.get(label, "You survive the dream, somehow.") default.
+        # Asserting the exact values (not just truthiness) is what actually
+        # proves outcome_label/message were threaded through correctly rather
+        # than merely non-empty.
         sheet = self._dreaming_sheet_at_mental_collapse()
         result = resolve_fatigue_collapse(sheet, ActionCategory.MENTAL)
-        assert result.outcome_label
-        assert result.message
+        assert result.outcome_label == "Unknown"
+        assert result.message == "You survive the dream, somehow."
 
     def test_character_is_told_what_the_dream_did(self):
         sheet = self._dreaming_sheet_at_mental_collapse()
         sent = self._capture_msgs(sheet)
         resolve_fatigue_collapse(sheet, ActionCategory.MENTAL)
-        assert any(m for m in sent if m)
+        assert "You survive the dream, somehow." in sent
 
     def test_non_dream_collapse_has_no_narration(self):
         sheet = self._awake_sheet_at_physical_collapse()
