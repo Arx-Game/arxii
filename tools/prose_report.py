@@ -4,7 +4,7 @@
 Runs against a content-repo checkout with no database:
 
     uv run python tools/prose_report.py
-    uv run python tools/prose_report.py --content-root /path/to/checkout
+    uv run python tools/prose_report.py --content-path /path/to/checkout
 """
 
 from __future__ import annotations
@@ -23,12 +23,12 @@ from core_management.prose_report import render_report, scan_corpus  # noqa: E40
 
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--content-root", default=None, help="Content repo checkout path.")
+    parser.add_argument("--content-path", default=None, help="Content repo checkout path.")
     args = parser.parse_args()
 
-    raw = args.content_root or load_dotenv_content_path()
+    raw = args.content_path or load_dotenv_content_path()
     if not raw:
-        print("CONTENT_REPO_PATH is not set and --content-root was not given.", file=sys.stderr)
+        print("CONTENT_REPO_PATH is not set and --content-path was not given.", file=sys.stderr)
         return 2
     root = Path(raw).expanduser()
     if not root.is_dir():
