@@ -64,6 +64,13 @@ name is dropped and logged, never the row.
   authoring: `FlowDefinition` never needed a guard (create-or-fetch-unchanged only), and
   `TriggerDefinition`'s guard defends a branch that only fires on a sha1 digest collision -
   defensive width, not a response to an observed incident.
+- The admin's generic Import Data surface (`web.admin.services.execute_import`, merge or
+  replace) does not run the credited-row freeze and can overwrite a credited row's fields with no
+  credit check at all. This is a deliberate bypass, not a gap: it is superuser-only disaster
+  recovery tooling with its own dry-run diff preview (`analyze_fixture`) shown before any write,
+  operating at whole-model granularity rather than the per-field content pipeline the freeze
+  protects. An operator restoring from a known-good export is expected to accept the overwrite
+  they are previewing, not be blocked by the same guard that protects an unattended content load.
 
 > Status: accepted · Source: #3017, Tehom's ruling 2026-08-05 · Related: ADR-0196 (content credit
 > is a row mixin), ADR-0168/ADR-0171 (CONTENT_MODELS is the seed boundary), ADR-0191 (export

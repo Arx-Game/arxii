@@ -71,6 +71,11 @@ is a one-row, one-typed-confirmation action every time.
   `admin_content_conflict_resolve` (POST resolve).
 - The Game Setup hub's "Load private content repo" step links here beside
   the load/export/push links.
+- This guard does not reach the generic Import Data surface below (`services.execute_import`):
+  its merge/replace pipeline can overwrite a credited row's fields with no credit check at all.
+  That is deliberate, not a gap - Import Data is superuser-only disaster-recovery tooling with
+  its own dry-run diff preview, not the content pipeline this freeze protects. See ADR-0201's
+  trade-offs section and the "Export/Import System" section below.
 
 ### Content-Repo Export & Push (PR #2425; grid bundles added #2436/#2448)
 
