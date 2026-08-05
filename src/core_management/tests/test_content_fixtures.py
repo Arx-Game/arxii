@@ -1316,6 +1316,41 @@ class CreditEndToEndLoadTests(TestCase):
         self.addCleanup(self.tmp.cleanup)
         self.root = Path(self.tmp.name)
 
+    def test_contributor_rows_load_before_the_credits_that_name_them(self) -> None:
+        """One pass suffices even when the contributor arrives in the same corpus.
+
+        Markdown domains build (and so used to load) before the raw fixture
+        JSON, and credit resolution is drop-not-defer - so a frontmatter
+        ``written_by`` naming a contributor authored in
+        ``fixtures/contributors/`` lost its credit on the first load and only
+        picked it up on the next. On a fresh database the Big Button presses
+        once, which made that a silent de-crediting of every markdown credit.
+        ``load_entries`` now hoists contributor objects to the front.
+        """
+        _write(
+            self.root,
+            "skills/juggling.md",
+            "---\n"
+            "name: Juggling\n"
+            "category: social\n"
+            'written_by: "Newperson"\n'
+            "---\n"
+            "PLACEHOLDER Keeping several objects aloft at once.\n",
+        )
+        _write(
+            self.root,
+            "fixtures/contributors/contentcontributor.json",
+            '[{"model": "contributors.contentcontributor",'
+            ' "fields": {"name": "Newperson", "notes": ""}}]\n',
+        )
+        result = build_all(self.root)
+        load_entries(result)
+
+        trait = Trait.objects.get(name="Juggling")
+        assert trait.written_by is not None
+        assert trait.written_by.name == "Newperson"
+        assert not [s for s in result.skipped if "not applied" in s]
+
     def test_written_by_and_written_on_land_on_the_row(self) -> None:
         from world.contributors.factories import ContentContributorFactory
 
