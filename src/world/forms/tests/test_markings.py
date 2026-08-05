@@ -108,7 +108,7 @@ class MarkingVisibilityTests(TestCase):
         plunging = Silhouette.objects.create(
             name="plunging bodice",
             wear_family=WearFamily.TORSO_GARMENT,
-            exposes_skin=True,
+            exposes_beneath=True,
         )
         worn.silhouette = plunging
         worn.save(update_fields=["silhouette"])

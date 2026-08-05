@@ -36553,7 +36553,7 @@ export interface components {
       readonly name: string;
       readonly wear_family: string;
       readonly prose_noun: string;
-      readonly exposes_skin: boolean;
+      readonly exposes_beneath: boolean;
     };
     /** @description Read serializer for SineatingOffer payloads returned by the request endpoint. */
     SineatingOffer: {
