@@ -40,6 +40,7 @@ class AnnounceAccessChangeDiscoveryAchievementTest(TestCase):
         ach = AchievementFactory(hidden=True)
         tech = TechniqueFactory(discovery_achievement=ach)
         sheet = CharacterSheetFactory()
+        RosterTenureFactory(roster_entry=RosterEntryFactory(character_sheet=sheet), end_date=None)
         from world.achievements.discovery import announce_access_change
 
         announce_access_change(
@@ -69,6 +70,7 @@ class AnnounceAccessChangeDiscoveryIdempotencyTest(TestCase):
         ach = AchievementFactory(hidden=True)
         tech = TechniqueFactory(discovery_achievement=ach)
         sheet = CharacterSheetFactory()
+        RosterTenureFactory(roster_entry=RosterEntryFactory(character_sheet=sheet), end_date=None)
         from world.achievements.discovery import announce_access_change
 
         # First call — should fire the first-ever gamewide ceremony.
@@ -126,7 +128,13 @@ class AnnounceAccessChangeDiscoveryIdempotencyTest(TestCase):
         ach = AchievementFactory(hidden=True)
         tech = TechniqueFactory(discovery_achievement=ach)
         first_discoverer = CharacterSheetFactory()
+        RosterTenureFactory(
+            roster_entry=RosterEntryFactory(character_sheet=first_discoverer), end_date=None
+        )
         second_earner = CharacterSheetFactory()
+        RosterTenureFactory(
+            roster_entry=RosterEntryFactory(character_sheet=second_earner), end_date=None
+        )
         from world.achievements.discovery import announce_access_change
 
         # First discoverer claims the first-ever ceremony.
@@ -192,6 +200,94 @@ class AnnounceAccessChangeDiscoveryIdempotencyTest(TestCase):
             NarrativeMessageDelivery.objects.filter(recipient_character_sheet=other).count(),
             "No additional ceremony deliveries to 'other' on repeat call for second earner.",
         )
+
+
+class AnnounceAccessChangeEligibilityGateTest(TestCase):
+    def test_no_tenure_never_fires_the_ceremony(self):
+        ach = AchievementFactory(hidden=True)
+        tech = TechniqueFactory(discovery_achievement=ach)
+        sheet = CharacterSheetFactory()  # no RosterEntry at all
+        from world.achievements.discovery import announce_access_change
+
+        announce_access_change(
+            sheet, gained=[tech], lost=[], source=AccessChangeSource.CHARACTER_CREATION
+        )
+
+        self.assertFalse(CharacterAchievement.objects.filter(achievement=ach).exists())
+
+    def test_untenured_roster_entry_never_fires_the_ceremony(self):
+        """A RosterEntry that exists but has no current tenure (e.g. GM-created, Available
+        roster) — mirrors finalize_gm_character's RosterEntry-with-no-tenure shape."""
+        ach = AchievementFactory(hidden=True)
+        tech = TechniqueFactory(discovery_achievement=ach)
+        roster_entry = RosterEntryFactory()
+        from world.achievements.discovery import announce_access_change
+
+        announce_access_change(
+            roster_entry.character_sheet,
+            gained=[tech],
+            lost=[],
+            source=AccessChangeSource.CHARACTER_CREATION,
+        )
+
+        self.assertFalse(CharacterAchievement.objects.filter(achievement=ach).exists())
+
+    def test_staff_piloted_tenure_never_fires_the_ceremony(self):
+        from evennia_extensions.factories import AccountFactory
+        from world.roster.factories import PlayerDataFactory
+
+        ach = AchievementFactory(hidden=True)
+        tech = TechniqueFactory(discovery_achievement=ach)
+        staff_account = AccountFactory(is_staff=True)
+        roster_entry = RosterEntryFactory()
+        RosterTenureFactory(
+            roster_entry=roster_entry,
+            player_data=PlayerDataFactory(account=staff_account),
+            end_date=None,
+        )
+        from world.achievements.discovery import announce_access_change
+
+        announce_access_change(
+            roster_entry.character_sheet,
+            gained=[tech],
+            lost=[],
+            source=AccessChangeSource.CHARACTER_CREATION,
+        )
+
+        self.assertFalse(CharacterAchievement.objects.filter(achievement=ach).exists())
+
+    def test_non_staff_tenured_sheet_fires_the_ceremony(self):
+        ach = AchievementFactory(hidden=True)
+        tech = TechniqueFactory(discovery_achievement=ach)
+        roster_entry = RosterEntryFactory()
+        RosterTenureFactory(roster_entry=roster_entry, end_date=None)
+        from world.achievements.discovery import announce_access_change
+
+        announce_access_change(
+            roster_entry.character_sheet,
+            gained=[tech],
+            lost=[],
+            source=AccessChangeSource.CHARACTER_CREATION,
+        )
+
+        self.assertTrue(
+            CharacterAchievement.objects.filter(
+                character_sheet=roster_entry.character_sheet, achievement=ach
+            ).exists()
+        )
+
+    def test_gate_does_not_block_the_plain_narrative_message(self):
+        """The gained/lost narrative message is unaffected by ceremony eligibility."""
+        sheet = CharacterSheetFactory()  # no tenure
+        tech = TechniqueFactory(name="Ungated Message")
+        from world.achievements.discovery import announce_access_change
+
+        announce_access_change(
+            sheet, gained=[tech], lost=[], source=AccessChangeSource.CHARACTER_CREATION
+        )
+
+        msg = NarrativeMessage.objects.latest("id")
+        self.assertIn("Ungated Message", msg.body)
 
 
 class AnnounceAccessChangeCapabilityTest(TestCase):
