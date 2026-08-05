@@ -7,6 +7,7 @@ know) — never raw graph rows.
 
 from rest_framework import serializers
 
+from world.roster.constants import RelationshipType
 from world.roster.models import Family, KinSlotPool, Kinsperson
 
 
@@ -70,6 +71,28 @@ class FamilyTreeSerializer(serializers.Serializer):
     nodes = KinspersonNodeSerializer(many=True)
     parentage = ParentageEdgeSerializer(many=True)
     unions = UnionEdgeSerializer(many=True)
+
+
+class KinRelationshipQuerySerializer(serializers.Serializer):
+    """Query params for GET /api/roster/kin/relationship/ (#3003).
+
+    ``a``/``b`` are character ids (``CharacterSheet`` pks) — validated here,
+    never read off ``request.query_params`` directly in the view.
+    """
+
+    a = serializers.IntegerField(required=True)
+    b = serializers.IntegerField(required=True)
+
+
+class KinRelationshipSerializer(serializers.Serializer):
+    """Response for GET /api/roster/kin/relationship/ (#3003).
+
+    ``label`` is a viewer-derived ``RelationshipType`` value, or null when
+    the two people have no visible relationship (including a hidden one the
+    viewer has not learned).
+    """
+
+    label = serializers.ChoiceField(choices=RelationshipType.choices, allow_null=True)
 
 
 class KinSlotSerializer(serializers.ModelSerializer):
