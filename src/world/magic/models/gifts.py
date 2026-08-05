@@ -88,11 +88,12 @@ class Gift(NaturalKeyMixin, CreditedContent, SharedMemoryModel):
         related_name="gifts",
         help_text="Lore entry this gift is bound to, if any.",
     )
-    # Minor Gifts (species abilities, in-play powers) aren't hung off a Path, so they
-    # never inherit a casting style from Path.style (#2700) — leaving every Minor Gift
-    # cast styleless. This lets a gift impose its own casting style directly, overriding
-    # whatever the caster's Path would otherwise supply (#2905). Null = defer to the
-    # caster's Path, as before.
+    # A Minor Gift (species ability, in-play power) is magic the character never
+    # chose, so tying its casting manner to whatever Path they DID choose gives the
+    # gift itself no say — a Khati's species magic would be as loud as their Path
+    # (#2905). This lets a gift impose its own casting style directly, overriding
+    # the caster's Path style when set. Null = defer to the caster's Path, as before
+    # (today's behavior, and every Major Gift's expected behavior).
     style = models.ForeignKey(
         "arxii.TechniqueStyle",
         on_delete=models.PROTECT,

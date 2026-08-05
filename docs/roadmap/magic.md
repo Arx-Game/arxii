@@ -533,6 +533,25 @@ techniques need somewhere to hang. Making that FK nullable is its own change.
 
 ---
 
+## Minor gifts set their own casting style (#2905 — BUILT, 2026-08-05)
+
+A Minor Gift (species ability, in-play power) is magic the character never chose, so
+letting #2710's Path-derived `cast_concealment` govern it gave the gift itself no say in
+how it manifests — a Khati's species magic would be exactly as loud as whatever Path
+they happened to walk.
+
+**Built:**
+- `Gift.style` — nullable FK to `TechniqueStyle` (`on_delete=PROTECT`, mirrors
+  `Path.style`'s shape). Null = defer to the caster's Path, as before (today's behavior,
+  and every Major Gift's expected behavior).
+- `_concealment_for` (`world/magic/services/cast_observation.py`) now checks
+  `technique.gift.style` first, falling back to the caster's Path style exactly as before
+  when the gift sets none. Capability gating (`technique_performable` /
+  `StyleCapabilityRequirement`) is unaffected — it still reads the caster's own Path style.
+- Full record: ADR-0197.
+
+---
+
 ## Deeper design & history
 
 - Scope-by-scope build record: [`magic-build-history.md`](magic-build-history.md)

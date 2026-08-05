@@ -264,6 +264,17 @@ class ResolveCastAudienceTests(TestCase):
             resolve_cast_audience(caster=caster, technique=technique)
         self.assertEqual(rolled.call_args.kwargs["target_difficulty"], 25)
 
+    def test_gift_style_zero_concealment_overrides_a_concealed_path(self) -> None:
+        """The override wins in both directions: quieter than the Path too (#2905)."""
+        caster = _caster_on_path_with_style(cast_concealment=25)
+        _observer_in_room_with(caster)
+        gift_style = TechniqueStyleFactory(cast_concealment=0)
+        technique = TechniqueFactory(reach=TechniqueReach.ANY, gift=GiftFactory(style=gift_style))
+        with patch("world.magic.services.cast_observation.perform_check_with_modifiers") as rolled:
+            audience = resolve_cast_audience(caster=caster, technique=technique)
+        self.assertFalse(audience.concealed)
+        rolled.assert_not_called()
+
     def test_null_gift_style_falls_back_to_caster_path_style(self) -> None:
         """A gift that doesn't opt in keeps today's caster-derived behavior exactly (#2905)."""
         caster = _caster_on_path_with_style(cast_concealment=25)
