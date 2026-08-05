@@ -3723,6 +3723,29 @@ registering a service strategy + per-kind details model.
   check/consequence-pool path — see `trap_services.py`'s `check_room_traps_on_entry` /
   `check_traps_at_position`. Not a `RoomFeatureInstance` kind; a plain FK to `RoomProfile`
   since a room may hold several.
+  - **Placement is situation-driven** (ADR-0197): the authored blueprint is
+    `mechanics.SituationTrapLink`, and `instantiate_situation` mints an armed `Trap` per
+    link. There is no standalone trap catalog row and no `place_trap` verb; a GM places
+    traps with `set_situation` (telnet `setsituation <name|id>`).
+  - **GM management** (#3002, `actions/definitions/traps.py`): `list_room_traps`,
+    `arm_trap` and `gm_disarm_trap`, telnet `gm trap list|arm <id>|disarm <id>`. Each is
+    gated on `MinimumGMLevelPrerequisite(JUNIOR)` AND `IsSceneGMPrerequisite()`, and each
+    resolves the trap strictly within the actor's own room. `arm_trap` deliberately leaves
+    `detected_by` alone, so a re-armed trap fires for newcomers and stays inert for anyone
+    who already resolved it. `gm_disarm_trap` rolls nothing, unlike the player's
+    `disarm_trap`, which rolls `disarm_check_type` and fires the trap on a failed roll.
+  - **Lifetime:** a GM-placed trap carries `created_by_sheet` (stamped by
+    `instantiate_situation`'s `placed_by_sheet` kwarg) and is disarmed at scene end by
+    `teardown_conjured_hazards`, wired into `finish_scene_full` beside the obstacle and
+    rampart teardowns. An admin-authored trap has a null `created_by_sheet` and stays
+    armed permanently. That teardown saves per instance rather than bulk-updating,
+    because a bulk `.update()` sends no `post_save` and leaves SharedMemoryModel's
+    identity map serving a stale `is_armed`.
+  - **The player half is NOT wired.** `disarm_trap` is registered but unreachable: it
+    needs a `trap_id`, and no serializer, ViewSet, URL, telnet command or frontend surface
+    exposes a `Trap` to a player. `search_room` (`world/clues/services.py`) finds clues and
+    concealed characters only and never touches traps. `Trap.is_hidden` is written by
+    `instantiate_situation` and read by nothing; it is the field waiting on that surface.
 - **`PreparedGround`** (`world.room_features.models`, #2646): a room a character has
   prepared as their battleground ahead of time — "the fight was won yesterday." Plain FK
   to `RoomProfile` (a room may hold several characters' prepared grounds) but `prepared_by`
