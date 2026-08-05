@@ -51,6 +51,11 @@ def grant_codex_entry(
     Returns ``(knowledge, newly_known)``; ``newly_known`` is False when the
     character already knew the entry, which is what makes repeat calls safe.
 
+    On ``newly_known``, fires ``achievements.discovery.announce_access_change`` (the same
+    discovery/achievement ceremony a learned Technique gets — gated on a live, non-staff
+    tenure and excluded for CG-catalog content, see ``announce_access_change``) and
+    increments the ``codex.entries_learned`` stat (#2899).
+
     **Not for "the character can now start researching this."** Two callers
     deliberately create UNCOVERED rows and must keep doing so: the
     ``GRANT_CODEX`` consequence effect (a scene hands you a lead, not the
@@ -69,6 +74,7 @@ def grant_codex_entry(
     if newly_known:
         from world.achievements.constants import AccessChangeSource  # noqa: PLC0415
         from world.achievements.discovery import announce_access_change  # noqa: PLC0415
+        from world.achievements.models import StatDefinition  # noqa: PLC0415
 
         announce_access_change(
             roster_entry.character_sheet,
@@ -76,6 +82,14 @@ def grant_codex_entry(
             lost=[],
             source=AccessChangeSource.CODEX_LEARNING,
         )
+        stat_def, _ = StatDefinition.objects.get_or_create(
+            key="codex.entries_learned",
+            defaults={
+                "name": "Entries Learned",
+                "description": "Total codex entries this character has fully learned.",
+            },
+        )
+        roster_entry.character_sheet.stats.increment(stat_def)
     return knowledge, newly_known
 
 

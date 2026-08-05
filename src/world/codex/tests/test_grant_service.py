@@ -144,3 +144,42 @@ class GrantCodexEntryAnnouncesAccessChangeTests(TestCase):
         grant_codex_entry(roster_entry, entry)
 
         self.assertFalse(CharacterAchievement.objects.filter(achievement=ach).exists())
+
+
+class GrantCodexEntryStatTrackingTests(TestCase):
+    @classmethod
+    def setUpTestData(cls):
+        cls.entry = CodexEntryFactory(name="Stat Entry")
+
+    def test_newly_known_increments_entries_learned_stat(self):
+        from world.achievements.models import StatDefinition
+
+        roster_entry = RosterEntryFactory()
+
+        grant_codex_entry(roster_entry, self.entry)
+
+        stat_def = StatDefinition.objects.get(key="codex.entries_learned")
+        self.assertEqual(roster_entry.character_sheet.stats.get(stat_def), 1)
+
+    def test_repeat_grant_does_not_increment_again(self):
+        from world.achievements.models import StatDefinition
+
+        roster_entry = RosterEntryFactory()
+        grant_codex_entry(roster_entry, self.entry)
+
+        grant_codex_entry(roster_entry, self.entry)
+
+        stat_def = StatDefinition.objects.get(key="codex.entries_learned")
+        self.assertEqual(roster_entry.character_sheet.stats.get(stat_def), 1)
+
+    def test_two_different_entries_increment_to_two(self):
+        from world.achievements.models import StatDefinition
+
+        other_entry = CodexEntryFactory(name="Second Stat Entry")
+        roster_entry = RosterEntryFactory()
+        grant_codex_entry(roster_entry, self.entry)
+
+        grant_codex_entry(roster_entry, other_entry)
+
+        stat_def = StatDefinition.objects.get(key="codex.entries_learned")
+        self.assertEqual(roster_entry.character_sheet.stats.get(stat_def), 2)
