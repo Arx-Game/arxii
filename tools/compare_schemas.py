@@ -86,6 +86,12 @@ SECTION_QUERIES: dict[str, str] = {
         WHERE n.nspname = 'public'
         ORDER BY 1
     """,
+    # pg_inherits also records partitioned INDEX hierarchies (e.g.
+    # arxii_interaction_pkey1 <- arxii_interaction_202601_pkey), not just table
+    # ones. An index child's relpartbound is always NULL, which would make the
+    # whole concatenated row NULL and crash the sort/startswith logic below -
+    # restrict to table-kind children ('r' plain, 'p' partitioned) so only real
+    # partition attachments are compared.
     "PARTITION": """
         SELECT 'PARTITION|' || parent.relname || '|' || child.relname || '|'
                || pg_get_expr(child.relpartbound, child.oid)
@@ -93,16 +99,58 @@ SECTION_QUERIES: dict[str, str] = {
         JOIN pg_class child ON child.oid = i.inhrelid
         JOIN pg_class parent ON parent.oid = i.inhparent
         JOIN pg_namespace n ON n.oid = parent.relnamespace
-        WHERE n.nspname = 'public'
+        WHERE n.nspname = 'public' AND child.relkind IN ('r', 'p')
         ORDER BY 1
     """,
 }
 
 # Differences that are real but deliberately tolerated. Every entry must say
 # WHY, because an entry without a reason is indistinguishable from an oversight.
-#
-# Populated in Task 4 from the actual verification run.
-ALLOWED_DIFFERENCES: frozenset[str] = frozenset()
+ALLOWED_DIFFERENCES: frozenset[str] = frozenset(
+    {
+        # Vendored Django/allauth M2M through-tables. Their PK width depends on
+        # which path built them: the migration chain replays the vendored
+        # app's own historical migrations (int), while build_schema.py's
+        # migrate --run-syncdb builds from current model state under
+        # DEFAULT_AUTO_FIELD (bigint). Both are internally consistent and
+        # neither is reachable from first-party code. CLAUDE.md forbids
+        # editing dependency code, so this is not ours to reconcile - only to
+        # record. Both the bigint (migrate-built) and integer (build_schema-
+        # built) forms are listed so the divergent line is dropped from
+        # whichever side's snapshot it appears in.
+        "COLUMN|auth_group_permissions|id|bigint|false||d",
+        "COLUMN|auth_group_permissions|id|integer|false||d",
+        "COLUMN|django_flatpage_sites|id|bigint|false||d",
+        "COLUMN|django_flatpage_sites|id|integer|false||d",
+        "COLUMN|socialaccount_socialapp_sites|id|bigint|false||d",
+        "COLUMN|socialaccount_socialapp_sites|id|integer|false||d",
+        "SEQUENCE|auth_group_permissions_id_seq|bigint",
+        "SEQUENCE|auth_group_permissions_id_seq|integer",
+        "SEQUENCE|django_flatpage_sites_id_seq|bigint",
+        "SEQUENCE|django_flatpage_sites_id_seq|integer",
+        "SEQUENCE|socialaccount_socialapp_sites_id_seq|bigint",
+        "SEQUENCE|socialaccount_socialapp_sites_id_seq|integer",
+    }
+)
+
+
+# django_migrations is Django's own migration-bookkeeping table, not
+# application schema, and by construction it exists on only one path:
+# tools/build_schema.py disables migrations outright and never creates it
+# (ADR-0083's #2977 update), while `arx manage migrate` always does. That is a
+# single structural fact about the two paths, not six-ish independent
+# divergences (a TABLE row, four COLUMN rows, a PK CONSTRAINT row, an INDEX
+# row and a SEQUENCE row) - so it is filtered here by object name rather than
+# enumerated in ALLOWED_DIFFERENCES one row at a time.
+def _is_django_migrations_object(line: str) -> bool:
+    """True if the snapshot line's object name is or starts with django_migrations.
+
+    'Starts with' (not just equals) catches django_migrations_id_seq, whose
+    SEQUENCE row is named after the table's own auto-incrementing id column.
+    """
+    object_name = line.split("|", 2)[1]
+    return object_name.startswith("django_migrations")
+
 
 _INDEX_NAME_RE = re.compile(r"^(CREATE (?:UNIQUE )?INDEX) [^ ]+ (ON )")
 
@@ -115,6 +163,20 @@ def strip_index_name(indexdef: str) -> str:
     return _INDEX_NAME_RE.sub(r"\1 \2", indexdef)
 
 
+def normalize_index_line(line: str) -> str:
+    """Strip the index's own name from a full 'INDEX|table|indexdef' snapshot line.
+
+    strip_index_name()'s regex expects the CREATE clause at the start of the
+    string it is given, but the raw snapshot row is 'INDEX|table|indexdef', not
+    the bare indexdef - applying strip_index_name() directly to the whole line
+    (as an earlier version of this function did) never matched, so index names
+    were never actually stripped. Splitting off the indexdef field first keeps
+    strip_index_name()'s contract simple and makes the call site correct.
+    """
+    kind, table, indexdef = line.split("|", 2)
+    return "|".join((kind, table, strip_index_name(indexdef)))
+
+
 def snapshot(dsn: str) -> list[str]:
     """Return the full, sorted catalog snapshot of one database."""
     lines: list[str] = []
@@ -122,13 +184,17 @@ def snapshot(dsn: str) -> list[str]:
         for query in SECTION_QUERIES.values():
             cursor.execute(query)
             lines.extend(row[0] for row in cursor.fetchall())
-    lines = [strip_index_name(line) if line.startswith("INDEX|") else line for line in lines]
+    lines = [normalize_index_line(line) if line.startswith("INDEX|") else line for line in lines]
     return sorted(lines)
 
 
 def filter_allowed(lines: list[str]) -> list[str]:
-    """Drop allowlisted lines before comparison."""
-    return [line for line in lines if line not in ALLOWED_DIFFERENCES]
+    """Drop allowlisted lines and django_migrations's own rows before comparison."""
+    return [
+        line
+        for line in lines
+        if line not in ALLOWED_DIFFERENCES and not _is_django_migrations_object(line)
+    ]
 
 
 def diff_snapshots(left: list[str], right: list[str], left_label: str, right_label: str) -> str:
