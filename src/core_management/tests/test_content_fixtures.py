@@ -1,5 +1,6 @@
 """Content pipeline (#944): parsing, validation, fixture shape, idempotent load."""
 
+import datetime
 import json
 from pathlib import Path
 import tempfile
@@ -1292,3 +1293,43 @@ class MarkdownCreditRoundTripTests(TestCase):
         fields = _build_tradition_fixture(entry)["fields"]
         for key in ("written_by", "written_on", "reviewed_by", "reviewed_on"):
             self.assertNotIn(key, fields)
+
+
+class CreditEndToEndLoadTests(TestCase):
+    """A credit written into an authored file survives onto the DB row (#2980).
+
+    Every other credit test in this module stops at the builder's ``fields``
+    dict (``MarkdownCreditRoundTripTests``). Nothing exercises the actual seam
+    this branch exists to create: ``build_all`` -> ``load_entries`` -> a real
+    ``CreditedContent`` column on a saved row. Uses ``skills/``, one of the six
+    fixture-JSON domains fix 1 wired ``_apply_credit_meta`` into, so this also
+    proves that wiring end-to-end and not just at the builder level.
+    """
+
+    def setUp(self) -> None:
+        self.tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(self.tmp.cleanup)
+        self.root = Path(self.tmp.name)
+
+    def test_written_by_and_written_on_land_on_the_row(self) -> None:
+        from world.contributors.factories import ContentContributorFactory
+
+        ContentContributorFactory(name="Tehom")
+        _write(
+            self.root,
+            "skills/performance.md",
+            "---\n"
+            "name: Performance\n"
+            "category: social\n"
+            'written_by: "Tehom"\n'
+            "written_on: 2026-08-04\n"
+            "---\n"
+            "PLACEHOLDER Captivating an audience through music, oration, or storytelling.\n",
+        )
+        created, updated, _ = load_entries(build_all(self.root))
+        assert (created, updated) == (1, 0)
+
+        trait = Trait.objects.get(name="Performance")
+        assert trait.written_by is not None
+        assert trait.written_by.name == "Tehom"
+        assert trait.written_on == datetime.date(2026, 8, 4)

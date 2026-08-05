@@ -13,6 +13,13 @@ A name heuristic was tried first and silently missed nine models carrying real
 player-facing prose, which is why this is an exhaustive list rather than a
 pattern. Django-free on purpose: ``prose_report`` imports it and must run without
 a configured Django.
+
+A second, independent "what counts as prose" list is ``PROSE_KEYS`` in
+``tools/lint_identifier_dashes.py`` - that one is a fast substring check guarding
+the em-dash-in-identifiers linter, this one is exhaustive per content model field
+and drives the credit backlog report. They already disagree in one spot
+(``narration_snippet`` here vs ``narrative_snippet`` there); do not assume they
+agree, and do not merge them - they serve different callers.
 """
 
 from __future__ import annotations
@@ -36,7 +43,6 @@ PROSE_FIELD_NAMES = frozenset(
         "frame_narrative",
         "goal",
         "guidance_text",
-        "help_text",
         "instance_description",
         "lore_content",
         "mechanics_content",
@@ -58,8 +64,10 @@ PROSE_FIELD_NAMES = frozenset(
 
 #: Identifiers, labels, staff notes and technical paths. Nobody is credited for
 #: these and the backlog report never counts them. ``gm_notes``/``admin_notes``/
-#: ``notes`` are staff scratch space, not player-facing writing; ``title``,
-#: ``label`` and ``display_name`` are display identifiers, not prose.
+#: ``notes``/``help_text`` are staff scratch space, not player-facing writing
+#: (``CGExplanation.help_text``'s own field ``help_text=`` kwarg calls it a
+#: "Reminder of which CG stage uses this key"); ``title``, ``label`` and
+#: ``display_name`` are display identifiers, not prose.
 NON_PROSE_TEXT_FIELDS = frozenset(
     {
         "action_key",
@@ -71,6 +79,7 @@ NON_PROSE_TEXT_FIELDS = frozenset(
         "display_name",
         "draft_validator_path",
         "gm_notes",
+        "help_text",
         "icon",
         "icon_name",
         "icon_url",

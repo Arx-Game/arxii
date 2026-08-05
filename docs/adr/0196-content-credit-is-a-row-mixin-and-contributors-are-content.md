@@ -63,3 +63,13 @@ converging the two credit identities is intended future work, and doing so
 will supersede part of ADR-0146. `WeatherEmit` rows carrying a null `key`
 predate the emit re-key done alongside this change and are not addressable by
 the content pipeline until backfilled.
+
+A `written_by` naming a `ContentContributor` that is not in the corpus raises
+`UnresolvedNaturalKeyError` at load time, and (same as any other unresolved FK
+in this pipeline) the whole row is skipped - not just the credit column. A
+malformed `written_on` fails the same way via `_coerce_scalar_fields`. So a
+misspelled writer name or a bad date on one line costs that entry's entire
+prose, not just its attribution. This is existing pipeline semantics for every
+FK-by-name field, not something new `CreditedContent` introduced, but it bites
+harder here because credit is the field most likely to be hand-typed by a
+writer rather than copy-pasted from an existing value.

@@ -23,7 +23,7 @@ Identity keys (what "the same row" means on re-seed):
 
 Editing an emit's *text* therefore updates the row in place, the same as any other field (#2980):
 ``key`` is assigned once and never recomputed from the text, so a rewrite can't fork a new row or
-strand the old one. Import-safe without Django configured — only the upsert functions touch the
+strand the old one. Import-safe without Django configured - only the upsert functions touch the
 ORM, via deferred imports.
 """
 

@@ -61,6 +61,12 @@ IDENTIFIER_HINTS = ("name", "key", "slug", "title", "label", "code", "ident")
 
 #: Prose wins over the hints. `display_text` is prose; `display_name` is not.
 #: Kept in step with FIXTURE_PROSE_KEYS in the deslop skill's check.py.
+#: A second, independent "what counts as prose" list is `PROSE_FIELD_NAMES` in
+#: `core_management/prose_fields.py` (#2980) - that one is exhaustive per content
+#: model field and drives the credit backlog report, this one is a fast substring
+#: check for the identifier-dash linter. They already disagree in one spot
+#: (`narrative_snippet` here vs `narration_snippet` there); do not assume they
+#: agree, and do not merge them - they serve different callers.
 PROSE_KEYS = frozenset(
     {
         "description",

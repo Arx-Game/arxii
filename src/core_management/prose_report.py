@@ -25,8 +25,20 @@ WRITTEN_BY = "written_by"
 REVIEWED_BY = "reviewed_by"
 FRONTMATTER_DELIMITER = "---"
 
-#: Prose domains export as one markdown file per entry, never as fixture JSON.
-MARKDOWN_DOMAIN_DIRS = (
+#: Every ``DOMAIN_BUILDERS`` key in ``content_fixtures.py`` (#2980 fix 2): each one
+#: is a directory of one markdown file per entry, frontmatter + body, whether or
+#: not it also round-trips back out through ``content_export`` (only the four
+#: ``content/*`` domains here do - the other six are build-only). Not imported
+#: from ``content_fixtures`` directly - this module avoids any dependency on it
+#: to stay a plain tuple import, so keep this list in sync with
+#: ``DOMAIN_BUILDERS`` by hand.
+MARKDOWN_SOURCE_DOMAIN_DIRS = (
+    "stats",
+    "skills",
+    "npc_roles",
+    "items",
+    "building_kinds",
+    "decoration_kinds",
     "content/codex_entries",
     "content/beginnings",
     "content/starting_areas",
@@ -119,7 +131,7 @@ def _scan_fixture_json(content_root: Path, report: ProseReport) -> None:
 
 def _scan_markdown(content_root: Path, report: ProseReport) -> None:
     """Count prose entries in the markdown domains, credits from frontmatter."""
-    for domain in MARKDOWN_DOMAIN_DIRS:
+    for domain in MARKDOWN_SOURCE_DOMAIN_DIRS:
         domain_dir = content_root / domain
         if not domain_dir.is_dir():
             continue

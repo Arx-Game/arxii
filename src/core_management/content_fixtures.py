@@ -352,14 +352,16 @@ def _build_trait_fixture(entry: ContentEntry, *, trait_type: str) -> dict:
     if category not in TRAIT_CATEGORIES:
         msg = f"{entry.path}: 'category' must be one of {sorted(TRAIT_CATEGORIES)}."
         raise ContentError(msg)
+    fields: dict = {
+        "name": name,
+        "trait_type": trait_type,
+        "category": category,
+        "description": entry.body,
+    }
+    _apply_credit_meta(entry, fields)
     return {
         "model": _fixture_model_label(Trait),
-        "fields": {
-            "name": name,
-            "trait_type": trait_type,
-            "category": category,
-            "description": entry.body,
-        },
+        "fields": fields,
     }
 
 
@@ -423,6 +425,7 @@ def _build_npc_role_fixture(entry: ContentEntry) -> dict:
 
     from world.npc_services.models import NPCRole  # noqa: PLC0415
 
+    _apply_credit_meta(entry, fields)
     return {"model": _fixture_model_label(NPCRole), "fields": fields}
 
 
@@ -453,6 +456,7 @@ def _build_item_template_fixture(entry: ContentEntry) -> dict:
 
     from world.items.models import ItemTemplate  # noqa: PLC0415
 
+    _apply_credit_meta(entry, fields)
     return {"model": _fixture_model_label(ItemTemplate), "fields": fields}
 
 
@@ -465,9 +469,11 @@ def _build_building_kind_fixture(entry: ContentEntry) -> dict:
     from world.buildings.models import BuildingKind  # noqa: PLC0415
 
     name = _require_name_and_body(entry)
+    fields: dict = {"name": name, "description": entry.body}
+    _apply_credit_meta(entry, fields)
     return {
         "model": _fixture_model_label(BuildingKind),
-        "fields": {"name": name, "description": entry.body},
+        "fields": fields,
     }
 
 
@@ -480,9 +486,11 @@ def _build_decoration_kind_fixture(entry: ContentEntry) -> dict:
     from world.buildings.models import DecorationKind  # noqa: PLC0415
 
     name = _require_name_and_body(entry)
+    fields: dict = {"name": name, "description": entry.body}
+    _apply_credit_meta(entry, fields)
     return {
         "model": _fixture_model_label(DecorationKind),
-        "fields": {"name": name, "description": entry.body},
+        "fields": fields,
     }
 
 
@@ -527,6 +535,16 @@ def _apply_credit_meta(entry: ContentEntry, fields: dict) -> None:
     the builder's output with ``json.dumps``, which raises ``TypeError`` on a
     date object. A quoted date arrives as a string already and passes straight
     through; Django accepts either form on a ``DateField``.
+
+    Hazard (ADR-0196 Consequences): a ``written_by``/``reviewed_by`` naming a
+    ``ContentContributor`` not present in the corpus raises
+    ``UnresolvedNaturalKeyError`` in ``load_entries``, and a malformed
+    ``written_on``/``reviewed_on`` fails the same way via
+    ``_coerce_scalar_fields`` - both skip the WHOLE row, not just the credit
+    columns, same as any other unresolved FK-by-name value in this pipeline.
+    Do not change that resolution behavior here; it is deliberate, existing
+    pipeline semantics for every natural-key field, not something to
+    special-case for credit.
     """
     for key in CREDIT_NAME_KEYS:
         value = _optional_meta_natural_key(entry, key)
