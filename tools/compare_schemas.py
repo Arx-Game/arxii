@@ -106,6 +106,15 @@ SECTION_QUERIES: dict[str, str] = {
 
 # Differences that are real but deliberately tolerated. Every entry must say
 # WHY, because an entry without a reason is indistinguishable from an oversight.
+#
+# Blind spot: filter_allowed() drops each allowlisted line independently per
+# side, not as a matched pair - it never checks that both variants are actually
+# present. If, say, auth_group_permissions.id were dropped entirely from one
+# database, that side's row would simply be absent while the allowlist still
+# silently drops the other side's row, and the diff would report nothing. This
+# is inherent to comparing two flat multisets line-by-line, not a defect in any
+# one entry - keep entries narrow and re-verify them if a vendored app's own
+# schema changes.
 ALLOWED_DIFFERENCES: frozenset[str] = frozenset(
     {
         # Vendored Django/allauth M2M through-tables. Their PK width depends on
@@ -143,13 +152,15 @@ ALLOWED_DIFFERENCES: frozenset[str] = frozenset(
 # row and a SEQUENCE row) - so it is filtered here by object name rather than
 # enumerated in ALLOWED_DIFFERENCES one row at a time.
 def _is_django_migrations_object(line: str) -> bool:
-    """True if the snapshot line's object name is or starts with django_migrations.
+    """True if the snapshot line's object name is or starts with django_migrations_.
 
-    'Starts with' (not just equals) catches django_migrations_id_seq, whose
-    SEQUENCE row is named after the table's own auto-incrementing id column.
+    The '_' boundary keeps this from wrongly excluding a hypothetical unrelated
+    table like django_migrationsfoo. 'Starts with' (not just equals) is still
+    needed to catch django_migrations_id_seq, whose SEQUENCE row is named after
+    the table's own auto-incrementing id column.
     """
     object_name = line.split("|", 2)[1]
-    return object_name.startswith("django_migrations")
+    return object_name == "django_migrations" or object_name.startswith("django_migrations_")
 
 
 _INDEX_NAME_RE = re.compile(r"^(CREATE (?:UNIQUE )?INDEX) [^ ]+ (ON )")
