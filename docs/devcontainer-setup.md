@@ -547,7 +547,7 @@ tooling never drops a developer's database automatically, even a stale one.
 One consequence worth knowing about ahead of time: because the migration chain is
 currently missing the `arxii_interaction` partition rewrite and its composite FK
 constraints (a pre-existing gap from the #2906 squash, unrelated to this bootstrap
-change - see #<N>), a database built by a **fully successful**
+change - see #2982), a database built by a **fully successful**
 `arx manage migrate` also ends up with an unpartitioned `arxii_interaction`. That
 means this guard refuses it too, reporting it as "not built by
 tools/build_schema.py" even though nothing actually failed. That's arguably correct
