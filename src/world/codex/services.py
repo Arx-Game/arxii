@@ -65,7 +65,18 @@ def grant_codex_entry(
             "learned_from": learned_from,
         },
     )
-    return knowledge, knowledge.add_progress(entry.learn_threshold)
+    newly_known = knowledge.add_progress(entry.learn_threshold)
+    if newly_known:
+        from world.achievements.constants import AccessChangeSource  # noqa: PLC0415
+        from world.achievements.discovery import announce_access_change  # noqa: PLC0415
+
+        announce_access_change(
+            roster_entry.character_sheet,
+            gained=[entry],
+            lost=[],
+            source=AccessChangeSource.CODEX_LEARNING,
+        )
+    return knowledge, newly_known
 
 
 def resolve_codex_links(

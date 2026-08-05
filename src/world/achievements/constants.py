@@ -49,3 +49,4 @@ class AccessChangeSource(models.TextChoices):
     GIFT_ACQUISITION = "gift_acquisition", "acquiring a new gift"
     TECHNIQUE_GRANT = "technique_grant", "studying a technique source"
     ACADEMY_TRAINING = "academy_training", "training at the Academy"
+    CODEX_LEARNING = "codex_learning", "learning a piece of lore"

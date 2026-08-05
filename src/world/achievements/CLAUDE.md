@@ -154,6 +154,8 @@ Current callers:
 - `world/forms/services.py` — assume / revert alternate self
 - `world/covenants/services.py` — `_announce_capability_diff` (engage / disengage covenant role)
 - `world/character_creation/services.py` — CG gift/technique grant (`AccessChangeSource.CHARACTER_CREATION`)
+- `world/codex/services.py::grant_codex_entry` — every codex-learning route (CG grant, clue
+  research, teaching, the crossing ceremony) on `newly_known` (`AccessChangeSource.CODEX_LEARNING`, #2899)
 
 ### `announce_achievement(earners, *, is_first, first_body, personal_body, category)`
 
