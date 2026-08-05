@@ -7,6 +7,8 @@ import { CharacterCardDrawer } from './components/CharacterCardDrawer';
 import { ConversationSidebar } from './components/ConversationSidebar';
 import { FocusPanel } from './components/FocusPanel';
 import { SidebarTabPanel } from './components/SidebarTabPanel';
+import { DreamspacePanel } from '@/dreams/components/DreamspacePanel';
+import { useDreamState } from '@/dreams/queries';
 import { PresencePanel } from './components/PresencePanel';
 import { CeremonyRoomCard } from '@/ceremonies/CeremonyRoomCard';
 import { EventsSidebarPanel } from '@/events/components/EventsSidebarPanel';
@@ -98,6 +100,12 @@ export function GamePage() {
   // The active character's own RosterEntry id (#2156 Task 7) — the FriendButton's
   // `viewerEntryId` inside the character-card drawer.
   const viewerEntryId = activeEntry?.id ?? null;
+  // Dreamspace takeover (#3003): the right sidebar's Room tab renders
+  // DreamspacePanel instead of FocusPanel whenever the active character is
+  // dreamside — the same rule the server already applies to `look` and the
+  // `room_state` websocket push, so web and telnet agree by construction.
+  const { data: dreamState } = useDreamState(activeCharacterId ?? 0);
+  const isDreaming = Boolean(activeCharacterId && active && dreamState?.is_dreamside);
 
   const activeSession = active ? sessions[active] : null;
   const roomData = activeSession?.room ?? null;
@@ -526,14 +534,18 @@ export function GamePage() {
           <SidebarTabPanel
             roomTabLabel={roomTabLabel}
             roomPanel={
-              <FocusPanel
-                focus={focus}
-                roomCharacter={active}
-                roomData={roomData}
-                sceneData={sceneData}
-                hasActiveEncounter={hasActiveEncounter}
-                hasActiveBattle={hasActiveBattle}
-              />
+              isDreaming && activeCharacterId && active ? (
+                <DreamspacePanel characterId={activeCharacterId} characterName={active} />
+              ) : (
+                <FocusPanel
+                  focus={focus}
+                  roomCharacter={active}
+                  roomData={roomData}
+                  sceneData={sceneData}
+                  hasActiveEncounter={hasActiveEncounter}
+                  hasActiveBattle={hasActiveBattle}
+                />
+              )
             }
             storiesPanel={<StoryTray roomKey={roomData?.name ?? 'nowhere'} />}
             eventsPanel={
