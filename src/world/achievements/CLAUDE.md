@@ -154,8 +154,11 @@ Current callers:
 - `world/forms/services.py` — assume / revert alternate self
 - `world/covenants/services.py` — `_announce_capability_diff` (engage / disengage covenant role)
 - `world/character_creation/services.py` — CG gift/technique grant (`AccessChangeSource.CHARACTER_CREATION`)
-- `world/codex/services.py::grant_codex_entry` — every codex-learning route (CG grant, clue
-  research, teaching, the crossing ceremony) on `newly_known` (`AccessChangeSource.CODEX_LEARNING`, #2899)
+- `world/codex/services.py::grant_codex_entry` — every route that lands a character on KNOWN
+  (CG grant, clue-research payoff, the crossing ceremony) on `newly_known`
+  (`AccessChangeSource.CODEX_LEARNING`, #2899). `CodexTeachingOffer.accept` only opens the
+  UNCOVERED row — a taught entry fires the ceremony once something else (e.g. research)
+  completes it through this same function.
 
 ### `announce_achievement(earners, *, is_first, first_body, personal_body, category)`
 
