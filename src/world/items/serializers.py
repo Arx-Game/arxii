@@ -113,7 +113,6 @@ class TemplateSlotSerializer(serializers.ModelSerializer):
             "body_region_display",
             "equipment_layer",
             "equipment_layer_display",
-            "covers_lower_layers",
         ]
         read_only_fields = fields
 

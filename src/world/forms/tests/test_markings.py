@@ -1,8 +1,9 @@
-"""Body markings (#2985): grant seam, coverage visibility, Reveal/Cover, re-conceal hook.
+"""Body markings (#2985): grant seam, layer-walk visibility, show/conceal.
 
 The journey: grant → covered by clothing → hidden from observers (self/staff see
-ground truth) → reveal bares it → equipping over it re-conceals → cover tucks it
-away by hand. Plus the disguise-overlay leak guard.
+ground truth) → show bares it (the covering layers are worn open) → dressing
+re-closes them → conceal tucks it away by hand. Markings hold no state; the
+worn layers do. Plus the disguise-overlay leak guard.
 """
 
 from django.test import TestCase
@@ -12,7 +13,6 @@ from world.forms.constants import MarkingKind, MarkingSource
 from world.forms.factories import CharacterFormFactory
 from world.forms.models import CharacterForm, CharacterFormState, FormMarking, FormType
 from world.forms.services.markings import (
-    clear_revealed_markings,
     grant_marking,
     visible_markings_for,
 )
@@ -143,7 +143,7 @@ class MarkingVisibilityTests(TestCase):
         assert self.marking in visible
 
 
-class RevealCoverMarkingTests(TestCase):
+class ShowConcealMarkingTests(TestCase):
     @classmethod
     def setUpTestData(cls):
         cls.sheet = CharacterSheetFactory()
@@ -155,19 +155,22 @@ class RevealCoverMarkingTests(TestCase):
             kind=MarkingKind.BRAND,
             name="a crescent brand",
         )
-        _wear(cls.sheet, BodyRegion.TORSO)
+        cls.shirt = _wear(cls.sheet, BodyRegion.TORSO)
 
-    def test_reveal_bares_concealed_marking(self):
+    def test_show_bares_concealed_marking(self):
         from actions.definitions.fashion import RevealAction
+        from world.items.models import EquippedItem
 
         result = RevealAction().run(actor=self.character, marking_id=self.marking.pk)
         assert result.success, result.message
-        self.marking.refresh_from_db()
-        assert self.marking.revealed_at is not None
+        # The state lives on the covering garment, not the marking.
+        assert EquippedItem.objects.filter(
+            item_instance=self.shirt, opened_at__isnull=False
+        ).exists()
         visible = visible_markings_for(self.character, observer=self.observer)
         assert self.marking in visible
 
-    def test_reveal_rejects_uncovered_marking(self):
+    def test_show_rejects_uncovered_marking(self):
         from actions.definitions.fashion import RevealAction
 
         bare = grant_marking(
@@ -179,7 +182,7 @@ class RevealCoverMarkingTests(TestCase):
         result = RevealAction().run(actor=self.character, marking_id=bare.pk)
         assert not result.success
 
-    def test_reveal_rejects_foreign_marking(self):
+    def test_show_rejects_foreign_marking(self):
         from actions.definitions.fashion import RevealAction
 
         other = grant_marking(
@@ -191,23 +194,15 @@ class RevealCoverMarkingTests(TestCase):
         result = RevealAction().run(actor=self.character, marking_id=other.pk)
         assert not result.success
 
-    def test_cover_tucks_revealed_marking_away(self):
+    def test_conceal_closes_the_shown_marking_back_up(self):
         from actions.definitions.fashion import CoverUpAction, RevealAction
 
         RevealAction().run(actor=self.character, marking_id=self.marking.pk)
         result = CoverUpAction().run(actor=self.character, marking_id=self.marking.pk)
         assert result.success, result.message
-        self.marking.refresh_from_db()
-        assert self.marking.revealed_at is None
         assert visible_markings_for(self.character, observer=self.observer) == []
 
-    def test_cover_rejects_unrevealed_marking(self):
-        from actions.definitions.fashion import CoverUpAction
-
-        result = CoverUpAction().run(actor=self.character, marking_id=self.marking.pk)
-        assert not result.success
-
-    def test_cover_rejects_when_nothing_conceals(self):
+    def test_conceal_honest_when_nothing_covers(self):
         from actions.definitions.fashion import CoverUpAction
 
         bare = grant_marking(
@@ -215,12 +210,11 @@ class RevealCoverMarkingTests(TestCase):
             body_region=BodyRegion.FACE,
             kind=MarkingKind.RUNE,
             name="a pale rune",
-            revealed=True,
         )
         result = CoverUpAction().run(actor=self.character, marking_id=bare.pk)
         assert not result.success
 
-    def test_equipping_over_region_reconceals(self):
+    def test_dressing_recloses_the_opened_layers(self):
         from actions.definitions.fashion import RevealAction
         from world.items.services.equip import equip_item
 
@@ -236,19 +230,15 @@ class RevealCoverMarkingTests(TestCase):
             body_region=BodyRegion.TORSO,
             equipment_layer=EquipmentLayer.OUTER,
         )
-        self.marking.refresh_from_db()
-        assert self.marking.revealed_at is None
+        assert visible_markings_for(self.character, observer=self.observer) == []
 
-    def test_clear_revealed_markings_scopes_to_regions(self):
-        from world.forms.services.markings import reveal_marking
+    def test_show_body_region_works_for_markings_too(self):
+        from actions.definitions.fashion import RevealAction
 
-        reveal_marking(self.marking)
-        clear_revealed_markings(self.sheet, {BodyRegion.LEFT_LEG})
-        self.marking.refresh_from_db()
-        assert self.marking.revealed_at is not None
-        clear_revealed_markings(self.sheet, {BodyRegion.TORSO})
-        self.marking.refresh_from_db()
-        assert self.marking.revealed_at is None
+        result = RevealAction().run(actor=self.character, body_region=BodyRegion.TORSO)
+        assert result.success, result.message
+        visible = visible_markings_for(self.character, observer=self.observer)
+        assert self.marking in visible
 
 
 class DraftMarkingMaterializationTests(TestCase):

@@ -145,7 +145,6 @@ class TemplateSlotFactory(factory.django.DjangoModelFactory):
     template = factory.SubFactory(ItemTemplateFactory)
     body_region = BodyRegion.TORSO
     equipment_layer = EquipmentLayer.BASE
-    covers_lower_layers = False
 
 
 class ItemFacetFactory(factory.django.DjangoModelFactory):

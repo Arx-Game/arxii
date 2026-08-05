@@ -32,7 +32,7 @@ class _VisibleWornSetupMixin:
     Builds two rooms; in room A, account A plays character A and account B
     plays character B; in room C, account C plays character C. Character A
     wears two items: a shirt at TORSO/BASE (covered) and a coat at
-    TORSO/OVER (covers_lower_layers=True). The shirt is concealed to
+    TORSO/OVER (plain cut — conceals by default, #2985). The shirt is concealed to
     same-room observers; the coat is visible.
     """
 
@@ -91,13 +91,12 @@ class _VisibleWornSetupMixin:
 
         # Two-layer outfit on character A:
         #   - shirt at TORSO/BASE  — concealed (covered by coat)
-        #   - coat at TORSO/OVER   — visible, with covers_lower_layers=True
+        #   - coat at TORSO/OVER   — visible, plain cut (conceals by default)
         self.shirt_template = ItemTemplateFactory(name="VWVShirt")
         TemplateSlotFactory(
             template=self.shirt_template,
             body_region=BodyRegion.TORSO,
             equipment_layer=EquipmentLayer.BASE,
-            covers_lower_layers=False,
         )
         shirt_obj = ObjectDBFactory(
             db_key="VWVShirtObj",
@@ -116,7 +115,6 @@ class _VisibleWornSetupMixin:
             template=self.coat_template,
             body_region=BodyRegion.TORSO,
             equipment_layer=EquipmentLayer.OVER,
-            covers_lower_layers=True,
         )
         coat_obj = ObjectDBFactory(
             db_key="VWVCoatObj",

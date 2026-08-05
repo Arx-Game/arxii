@@ -36,13 +36,14 @@ class _Builder:
         )
 
     @classmethod
-    def _make_item(cls, name: str, region: str, layer: str, *, covers: bool = False):
-        template = ItemTemplateFactory(name=name)
+    def _make_item(cls, name: str, region: str, layer: str, *, exposing: bool = False):
+        # #2985 layer walk: plain garments conceal beneath by default; an
+        # ``exposing`` one (sheer material here) shows the layer below.
+        template = ItemTemplateFactory(name=name, is_revealing=exposing)
         TemplateSlotFactory(
             template=template,
             body_region=region,
             equipment_layer=layer,
-            covers_lower_layers=covers,
         )
         item_obj = ObjectDBFactory(
             db_key=f"{name}_obj",
@@ -68,17 +69,17 @@ class VisibleWornItemsServiceTests(_Builder, TestCase):
         self.assertEqual(result[0].body_region, BodyRegion.TORSO)
         self.assertEqual(result[0].equipment_layer, EquipmentLayer.BASE)
 
-    def test_two_layers_no_covering_both_visible(self) -> None:
+    def test_two_layers_exposing_top_both_visible(self) -> None:
         shirt = self._make_item("Shirt", BodyRegion.TORSO, EquipmentLayer.BASE)
-        coat = self._make_item("Coat", BodyRegion.TORSO, EquipmentLayer.OVER, covers=False)
+        coat = self._make_item("Coat", BodyRegion.TORSO, EquipmentLayer.OVER, exposing=True)
         self._equip(self.character, shirt, BodyRegion.TORSO, EquipmentLayer.BASE)
         self._equip(self.character, coat, BodyRegion.TORSO, EquipmentLayer.OVER)
         result = visible_worn_items_for(self.character)
         self.assertEqual(len(result), 2)
 
-    def test_two_layers_with_covering_only_top_visible(self) -> None:
+    def test_two_layers_plain_top_conceals_by_default(self) -> None:
         shirt = self._make_item("Shirt", BodyRegion.TORSO, EquipmentLayer.BASE)
-        coat = self._make_item("Coat", BodyRegion.TORSO, EquipmentLayer.OVER, covers=True)
+        coat = self._make_item("Coat", BodyRegion.TORSO, EquipmentLayer.OVER)
         self._equip(self.character, shirt, BodyRegion.TORSO, EquipmentLayer.BASE)
         self._equip(self.character, coat, BodyRegion.TORSO, EquipmentLayer.OVER)
         result = visible_worn_items_for(self.character)
@@ -87,11 +88,11 @@ class VisibleWornItemsServiceTests(_Builder, TestCase):
         self.assertNotIn("Shirt", names)
 
     def test_three_layers_middle_covers_top_visible(self) -> None:
-        # under (no cover) + base (covers) + over (no cover)
-        # Expected: base and over visible; under hidden.
-        camisole = self._make_item("Camisole", BodyRegion.TORSO, EquipmentLayer.UNDER, covers=False)
-        shirt = self._make_item("Shirt", BodyRegion.TORSO, EquipmentLayer.BASE, covers=True)
-        vest = self._make_item("Vest", BodyRegion.TORSO, EquipmentLayer.OVER, covers=False)
+        # under (plain) + base (plain) + over (exposing).
+        # Expected: vest shows the shirt; the shirt conceals the camisole.
+        camisole = self._make_item("Camisole", BodyRegion.TORSO, EquipmentLayer.UNDER)
+        shirt = self._make_item("Shirt", BodyRegion.TORSO, EquipmentLayer.BASE)
+        vest = self._make_item("Vest", BodyRegion.TORSO, EquipmentLayer.OVER, exposing=True)
         self._equip(self.character, camisole, BodyRegion.TORSO, EquipmentLayer.UNDER)
         self._equip(self.character, shirt, BodyRegion.TORSO, EquipmentLayer.BASE)
         self._equip(self.character, vest, BodyRegion.TORSO, EquipmentLayer.OVER)
@@ -101,7 +102,7 @@ class VisibleWornItemsServiceTests(_Builder, TestCase):
 
     def test_different_regions_unaffected_by_each_other(self) -> None:
         # Cloak covers shoulders/back at OVER; doesn't touch torso (no torso slot).
-        cloak = self._make_item("Cloak", BodyRegion.SHOULDERS, EquipmentLayer.OVER, covers=True)
+        cloak = self._make_item("Cloak", BodyRegion.SHOULDERS, EquipmentLayer.OVER)
         torso_shirt = self._make_item("TorsoShirt", BodyRegion.TORSO, EquipmentLayer.BASE)
         self._equip(self.character, cloak, BodyRegion.SHOULDERS, EquipmentLayer.OVER)
         self._equip(self.character, torso_shirt, BodyRegion.TORSO, EquipmentLayer.BASE)
@@ -111,7 +112,7 @@ class VisibleWornItemsServiceTests(_Builder, TestCase):
 
     def test_self_observer_skips_hiding(self) -> None:
         shirt = self._make_item("Shirt", BodyRegion.TORSO, EquipmentLayer.BASE)
-        coat = self._make_item("Coat", BodyRegion.TORSO, EquipmentLayer.OVER, covers=True)
+        coat = self._make_item("Coat", BodyRegion.TORSO, EquipmentLayer.OVER)
         self._equip(self.character, shirt, BodyRegion.TORSO, EquipmentLayer.BASE)
         self._equip(self.character, coat, BodyRegion.TORSO, EquipmentLayer.OVER)
         result = visible_worn_items_for(self.character, observer=self.character)
@@ -126,7 +127,7 @@ class VisibleWornItemsServiceTests(_Builder, TestCase):
         staff_character.save()
 
         shirt = self._make_item("Shirt", BodyRegion.TORSO, EquipmentLayer.BASE)
-        coat = self._make_item("Coat", BodyRegion.TORSO, EquipmentLayer.OVER, covers=True)
+        coat = self._make_item("Coat", BodyRegion.TORSO, EquipmentLayer.OVER)
         self._equip(self.character, shirt, BodyRegion.TORSO, EquipmentLayer.BASE)
         self._equip(self.character, coat, BodyRegion.TORSO, EquipmentLayer.OVER)
         result = visible_worn_items_for(self.character, observer=staff_character)
@@ -141,7 +142,7 @@ class VisibleWornItemsServiceTests(_Builder, TestCase):
         observer.save()
 
         shirt = self._make_item("Shirt", BodyRegion.TORSO, EquipmentLayer.BASE)
-        coat = self._make_item("Coat", BodyRegion.TORSO, EquipmentLayer.OVER, covers=True)
+        coat = self._make_item("Coat", BodyRegion.TORSO, EquipmentLayer.OVER)
         self._equip(self.character, shirt, BodyRegion.TORSO, EquipmentLayer.BASE)
         self._equip(self.character, coat, BodyRegion.TORSO, EquipmentLayer.OVER)
         result = visible_worn_items_for(self.character, observer=observer)

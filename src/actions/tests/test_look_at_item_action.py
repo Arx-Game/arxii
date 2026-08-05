@@ -38,15 +38,12 @@ class LookAtItemActionTests(TestCase):
         name: str,
         region: str,
         layer: str,
-        *,
-        covers: bool = False,
     ):
         template = ItemTemplateFactory(name=name)
         TemplateSlotFactory(
             template=template,
             body_region=region,
             equipment_layer=layer,
-            covers_lower_layers=covers,
         )
         item_obj = ObjectDBFactory(
             db_key=f"{name}_obj",
@@ -69,13 +66,12 @@ class LookAtItemActionTests(TestCase):
         self.assertIn("Hat", result.message or "")
 
     def test_concealed_item_for_other_observer_fails(self) -> None:
-        # Coat covers shirt; non-staff observer can't see shirt.
+        # Plain coat conceals shirt by default (#2985); non-staff observer can't see it.
         self._equip(
             self.target,
             "Coat",
             BodyRegion.TORSO,
             EquipmentLayer.OVER,
-            covers=True,
         )
         self._equip(self.target, "Shirt", BodyRegion.TORSO, EquipmentLayer.BASE)
         action = LookAtItemAction()
@@ -90,7 +86,6 @@ class LookAtItemActionTests(TestCase):
             "Coat",
             BodyRegion.TORSO,
             EquipmentLayer.OVER,
-            covers=True,
         )
         self._equip(self.actor, "Shirt", BodyRegion.TORSO, EquipmentLayer.BASE)
         action = LookAtItemAction()
@@ -106,7 +101,6 @@ class LookAtItemActionTests(TestCase):
             "Coat",
             BodyRegion.TORSO,
             EquipmentLayer.OVER,
-            covers=True,
         )
         self._equip(self.target, "Shirt", BodyRegion.TORSO, EquipmentLayer.BASE)
         action = LookAtItemAction()

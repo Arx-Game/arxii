@@ -1,7 +1,8 @@
-"""Coverage/concealment ruling + Reveal (#2965).
+"""The layer walk + show/conceal (#2985, superseding #2965).
 
-Accents multiply per visible slot; prestige is per-piece; legend pierces
-concealment; a Reveal flips a concealed piece into the visible set.
+Plain cuts conceal beneath by default; exposure is authored (cut/material) or
+performed (worn open via show). Accents multiply per visible slot; prestige is
+per-piece; legend pierces concealment.
 """
 
 from django.test import TestCase
@@ -20,7 +21,7 @@ from world.items.services.visibility import compute_worn_visibility
 _GOWN_REGIONS = (BodyRegion.TORSO, BodyRegion.LEFT_LEG, BodyRegion.RIGHT_LEG)
 
 
-def _equip_multi(sheet, instance, regions, layer, *, covers=False):
+def _equip_multi(sheet, instance, regions, layer):
     """Equip one instance across several regions (one EquippedItem row each)."""
     rows = []
     for region in regions:
@@ -28,7 +29,6 @@ def _equip_multi(sheet, instance, regions, layer, *, covers=False):
             template=instance.template,
             body_region=region,
             equipment_layer=layer,
-            covers_lower_layers=covers,
         )
         rows.append(
             EquippedItemFactory(
@@ -71,41 +71,52 @@ class WornVisibilityTests(TestCase):
         assert visibility.occupied_slot_counts[gown.pk] == 3
         assert visibility.visible_slot_counts[gown.pk] == 3
 
-    def test_covering_layer_conceals_lower_piece(self):
+    def test_plain_layer_conceals_lower_piece_by_default(self):
         shirt = ItemInstanceFactory(template=ItemTemplateFactory())
         _equip_multi(self.sheet, shirt, [BodyRegion.TORSO], EquipmentLayer.BASE)
         coat = ItemInstanceFactory(template=ItemTemplateFactory())
-        _equip_multi(self.sheet, coat, [BodyRegion.TORSO], EquipmentLayer.OUTER, covers=True)
+        _equip_multi(self.sheet, coat, [BodyRegion.TORSO], EquipmentLayer.OUTER)
         visibility = compute_worn_visibility(_fresh_rows(self.sheet))
         assert not visibility.is_visible(shirt.pk)
         assert visibility.is_visible(coat.pk)
 
-    def test_reveal_counts_all_occupied_slots(self):
+    def test_worn_open_layer_shows_the_piece_beneath(self):
         shirt = ItemInstanceFactory(template=ItemTemplateFactory())
         _equip_multi(self.sheet, shirt, [BodyRegion.TORSO], EquipmentLayer.BASE)
         coat = ItemInstanceFactory(template=ItemTemplateFactory())
-        _equip_multi(self.sheet, coat, [BodyRegion.TORSO], EquipmentLayer.OUTER, covers=True)
+        _equip_multi(self.sheet, coat, [BodyRegion.TORSO], EquipmentLayer.OUTER)
         from django.utils import timezone
 
         # save() through instances, not .update() — idmapper-cached rows would
-        # otherwise keep a stale revealed_at=None (SharedMemoryModel).
-        for row in EquippedItem.objects.filter(item_instance=shirt):
-            row.revealed_at = timezone.now()
-            row.save(update_fields=["revealed_at"])
+        # otherwise keep a stale opened_at=None (SharedMemoryModel).
+        for row in EquippedItem.objects.filter(item_instance=coat):
+            row.opened_at = timezone.now()
+            row.save(update_fields=["opened_at"])
         visibility = compute_worn_visibility(_fresh_rows(self.sheet))
         assert visibility.is_visible(shirt.pk)
         assert visibility.visible_slot_counts[shirt.pk] == 1
+        assert visibility.is_visible(coat.pk)
 
-    def test_non_covering_higher_layer_does_not_conceal(self):
+    def test_exposing_cut_higher_layer_does_not_conceal(self):
+        from world.items.models import Silhouette, WearFamily
+
         shirt = ItemInstanceFactory(template=ItemTemplateFactory())
         _equip_multi(self.sheet, shirt, [BodyRegion.TORSO], EquipmentLayer.BASE)
-        open_vest = ItemInstanceFactory(template=ItemTemplateFactory())
-        _equip_multi(self.sheet, open_vest, [BodyRegion.TORSO], EquipmentLayer.OVER, covers=False)
+        open_cut = Silhouette.objects.create(
+            name="open-front vest",
+            wear_family=WearFamily.TORSO_GARMENT,
+            exposes_beneath=True,
+        )
+        open_vest = ItemInstanceFactory(template=ItemTemplateFactory(), silhouette=open_cut)
+        _equip_multi(self.sheet, open_vest, [BodyRegion.TORSO], EquipmentLayer.OVER)
         visibility = compute_worn_visibility(_fresh_rows(self.sheet))
         assert visibility.is_visible(shirt.pk)
+        assert visibility.is_visible(open_vest.pk)
 
 
-class RevealActionTests(TestCase):
+class ShowConcealActionTests(TestCase):
+    """Show opens the covering layers; conceal closes them (#2985)."""
+
     @classmethod
     def setUpTestData(cls):
         cls.character = CharacterSheetFactory().character
@@ -115,28 +126,83 @@ class RevealActionTests(TestCase):
         )
         _equip_multi(cls.sheet, cls.shirt, [BodyRegion.TORSO], EquipmentLayer.BASE)
         coat = ItemInstanceFactory(template=ItemTemplateFactory(), holder_character_sheet=cls.sheet)
-        _equip_multi(cls.sheet, coat, [BodyRegion.TORSO], EquipmentLayer.OUTER, covers=True)
+        _equip_multi(cls.sheet, coat, [BodyRegion.TORSO], EquipmentLayer.OUTER)
         cls.coat = coat
 
-    def test_reveal_flips_concealed_piece(self):
+    def test_show_piece_opens_the_layers_above_it(self):
         from actions.definitions.fashion import RevealAction
 
         result = RevealAction().run(actor=self.character, item_id=self.shirt.pk)
         assert result.success, result.message
+        # The state lives on the covering coat, never on the shirt.
+        assert EquippedItem.objects.filter(
+            item_instance=self.coat, opened_at__isnull=False
+        ).exists()
+        visibility = compute_worn_visibility(_fresh_rows(self.sheet))
+        assert visibility.is_visible(self.shirt.pk)
+
+    def test_show_body_part_bares_down_to_skin(self):
+        from actions.definitions.fashion import RevealAction
+
+        result = RevealAction().run(actor=self.character, body_region=BodyRegion.TORSO)
+        assert result.success, result.message
+        # Both layers opened: the walk reaches skin.
         assert (
-            EquippedItem.objects.filter(item_instance=self.shirt, revealed_at__isnull=False).count()
-            == 1
+            EquippedItem.objects.filter(
+                character=self.sheet, body_region=BodyRegion.TORSO, opened_at__isnull=False
+            ).count()
+            == 2
         )
 
-    def test_reveal_rejects_already_visible(self):
+    def test_show_rejects_already_visible(self):
         from actions.definitions.fashion import RevealAction
 
         result = RevealAction().run(actor=self.character, item_id=self.coat.pk)
         assert not result.success
 
-    def test_reveal_rejects_unworn(self):
+    def test_show_rejects_unworn(self):
         from actions.definitions.fashion import RevealAction
 
         loose = ItemInstanceFactory(template=ItemTemplateFactory())
         result = RevealAction().run(actor=self.character, item_id=loose.pk)
         assert not result.success
+
+    def test_conceal_closes_what_show_opened(self):
+        from actions.definitions.fashion import CoverUpAction, RevealAction
+
+        RevealAction().run(actor=self.character, item_id=self.shirt.pk)
+        result = CoverUpAction().run(actor=self.character, item_id=self.shirt.pk)
+        assert result.success, result.message
+        assert not EquippedItem.objects.filter(
+            character=self.sheet, opened_at__isnull=False
+        ).exists()
+        visibility = compute_worn_visibility(_fresh_rows(self.sheet))
+        assert not visibility.is_visible(self.shirt.pk)
+
+    def test_conceal_honest_when_nothing_covers(self):
+        from actions.definitions.fashion import CoverUpAction
+
+        result = CoverUpAction().run(actor=self.character, item_id=self.coat.pk)
+        assert not result.success
+
+    def test_dressing_recloses_opened_layers(self):
+        from actions.definitions.fashion import RevealAction
+        from world.items.services.equip import equip_item
+
+        RevealAction().run(actor=self.character, body_region=BodyRegion.TORSO)
+        scarf_template = ItemTemplateFactory()
+        TemplateSlotFactory(
+            template=scarf_template,
+            body_region=BodyRegion.TORSO,
+            equipment_layer=EquipmentLayer.ACCESSORY,
+        )
+        scarf = ItemInstanceFactory(template=scarf_template, holder_character_sheet=self.sheet)
+        equip_item(
+            character_sheet=self.sheet,
+            item_instance=scarf,
+            body_region=BodyRegion.TORSO,
+            equipment_layer=EquipmentLayer.ACCESSORY,
+        )
+        assert not EquippedItem.objects.filter(
+            character=self.sheet, opened_at__isnull=False
+        ).exists()
