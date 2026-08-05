@@ -24,6 +24,51 @@ gh api graphql -f query='{repository(owner:"Arx-Game",name:"arxii"){pullRequest(
 
 `mergeQueueEntry: {state: AWAITING_CHECKS, position: N}` = correctly queued (the queue re-tests on top of latest main, then merges). `mergeQueueEntry: null` while `state: OPEN` after being queued = bounced (a migration collision or failed re-test) — re-sync and re-enqueue. Don't re-enqueue repeatedly chasing `autoMerge=false`.
 
+## Any two migration-bearing PRs now ALWAYS collide (single-app collapse)
+
+Since #2906 collapsed the 66 `world.*` apps into one `arxii` app, every
+migration in the repo draws from ONE number sequence and ONE
+`max_migration.txt`. Two in-flight PRs that each add a migration are
+therefore guaranteed to conflict — first at the number (both mint `01NN_*`),
+always at `max_migration.txt`. TehomCD's ruling (2026-08-05): treat this as
+routine and handle it proactively, not as a surprise. On one hot afternoon a
+single PR pair got bounced three times in a row (#3013 took 0111, #3010 took
+0112, #3009 took 0113) — each a two-minute fix, but only if you know the
+recipe.
+
+**The fix is `rebase_migration`, not hand-renumbering.**
+django-linear-migrations (the thing that makes `max_migration.txt` conflict
+loudly on purpose) ships the automation:
+
+```bash
+git fetch origin main && git rebase origin/main    # conflict lands in max_migration.txt
+git checkout --theirs src/world/migrations/max_migration.txt   # keep MAIN's tip...
+# (direction depends on rebase orientation — the file must name MAIN's latest migration)
+uv run arx manage rebase_migration arxii           # renumbers YOUR migration after main's tip,
+                                                   # rewrites its dependencies + max_migration.txt
+uv run pre-commit run check-migrations --all-files # verify the graph before continuing
+git add src/world/migrations && git rebase --continue
+git push --force-with-lease
+gh pr merge <N> --auto                             # re-arm; the queue entry died with the bounce
+```
+
+**Proactively, before every enqueue** (and after any long CI wait): compare
+your branch's new migration number against main's tip —
+
+```bash
+git fetch origin main --quiet
+git show origin/main:src/world/migrations/max_migration.txt
+```
+
+If main's tip number ≥ yours, run the recipe above BEFORE the queue bounces
+you — the queue's trial merge will hit the same conflict you can fix in two
+minutes now.
+
+**Stacked PRs renumber as a chain**: rebase the parent first (its migration
+gets the next free number), then rebase the child onto the parent's new tip
+and `rebase_migration` again — the child's migration depends on the parent's
+renamed one, so the parent must settle first.
+
 ## A PR bounced from the queue with `PLR0915 Too many statements (52 > 50)`
 
 Passes local `pre-commit`/ruff, but repeatedly bounced from the merge queue. Means a shared function (often a long `at_cmdset_creation`-style registration function) sat at the 50-statement ceiling and both the PR and main appended to it — the merged copy crosses the limit even though neither side does alone.
