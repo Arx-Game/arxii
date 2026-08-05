@@ -1,11 +1,15 @@
 """Tests for the dreams API view (#3003)."""
 
+from datetime import timedelta
+
 from django.test import override_settings
+from django.utils import timezone
 from rest_framework import status
 from rest_framework.test import APITestCase
 
 from evennia_extensions.factories import AccountFactory
 from world.conditions.models import ConditionTemplate
+from world.conditions.services import get_condition_instance
 from world.dreams.services import dreamspace_for, start_dreamwalk
 from world.dreams.tests import DreamSleeperTestMixin
 from world.relationships.factories import CharacterRelationshipFactory
@@ -105,3 +109,27 @@ class CharacterDreamStateViewTests(DreamSleeperTestMixin, APITestCase):
         candidate_ids = {entry["id"] for entry in response.data["dreamwalk_candidates"]}
         self.assertIn(bonded.pk, candidate_ids)
         self.assertNotIn(unbonded.pk, candidate_ids)
+
+    def test_dreamwalk_candidates_includes_lapsed_suppression(self) -> None:
+        """A Sleeping condition whose suppression window has passed still counts (#3003).
+
+        Mirrors get_active_conditions's canonical "active" predicate: suppressed
+        AND past suppressed_until means active again, same as perceives_dreamside
+        would report via has_condition.
+        """
+        bonded = self._sleeping_sheet("LapsedSuppression")
+        CharacterRelationshipFactory(
+            source=self.sheet,
+            target=bonded,
+            is_soul_tether=True,
+            is_pending=False,
+        )
+        instance = get_condition_instance(bonded.character, self.template, include_suppressed=True)
+        instance.is_suppressed = True
+        instance.suppressed_until = timezone.now() - timedelta(minutes=1)
+        instance.save()
+
+        response = self.client.get(self.url)
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        candidate_ids = {entry["id"] for entry in response.data["dreamwalk_candidates"]}
+        self.assertIn(bonded.pk, candidate_ids)

@@ -133,7 +133,16 @@ def dreamwalk_candidates_for(sheet: CharacterSheet) -> list[CharacterSheet]:
     are dreaming right now, not by the size of the character table, so it
     does not reintroduce a query-per-row scan — and it reuses the existing
     bond logic rather than re-deriving Thread/soul-tether rules in bulk.
+
+    The "active" predicate mirrors the canonical one in
+    ``world.conditions.services.get_active_conditions`` (kept in sync with
+    ``ConditionHandler._canonical_active_qs`` per that module's own comment):
+    a condition counts as active if it is not suppressed, OR its temporary
+    suppression window has already lapsed.
     """
+    from django.db.models import Q  # noqa: PLC0415
+    from django.utils import timezone  # noqa: PLC0415
+
     from world.character_sheets.models import CharacterSheet  # noqa: PLC0415
     from world.conditions.constants import UNCONSCIOUS_CONDITION_NAME  # noqa: PLC0415
     from world.conditions.models import ConditionInstance  # noqa: PLC0415
@@ -142,10 +151,16 @@ def dreamwalk_candidates_for(sheet: CharacterSheet) -> list[CharacterSheet]:
         CharacterLifeState,
     )
 
-    dreaming_target_ids = ConditionInstance.objects.filter(
-        condition__name__in=(SLEEPING_CONDITION_NAME, UNCONSCIOUS_CONDITION_NAME),
-        is_suppressed=False,
-    ).values_list("target_id", flat=True)
+    dreaming_target_ids = (
+        ConditionInstance.objects.filter(
+            condition__name__in=(SLEEPING_CONDITION_NAME, UNCONSCIOUS_CONDITION_NAME),
+        )
+        .filter(
+            Q(is_suppressed=False)
+            | Q(suppressed_until__isnull=False, suppressed_until__lt=timezone.now())
+        )
+        .values_list("target_id", flat=True)
+    )
     candidates = (
         CharacterSheet.objects.filter(pk__in=dreaming_target_ids)
         .exclude(pk=sheet.pk)
