@@ -162,7 +162,7 @@ def finish_scene_full(scene: Scene, by_account: AccountDB | None = None) -> None
        ``teardown_ramparts``): disarms any Trap the scene's room holds whose
        ``created_by_sheet`` is set, i.e. a GM-placed trap rather than a
        staff-authored one.
-    5. ``broadcast_scene_message(scene, SceneAction.END)`` — pushes the END
+    5. ``broadcast_scene_message(scene, SceneAction.END)`` - pushes the END
        event over the scene's WebSocket channel.
 
     ``by_account`` is accepted for call-site symmetry (so both the web viewset

@@ -390,3 +390,78 @@ class GMPlacedTrapProvenanceTest(TestCase):
         authored_trap.refresh_from_db()
         assert gm_trap.is_armed is False
         assert authored_trap.is_armed is True
+
+
+class GMTrapManagementLifecycleTest(TestCase):
+    """Chained end-to-end journey through the whole #3002 GM trap loop, exercising the
+    seam every per-task test covered piecemeal: place via ``set_situation`` with an
+    active scene, then ``list_room_traps``, ``gm_disarm_trap``, ``arm_trap``, and
+    ``finish_scene_full`` in sequence, on the SAME trap instance.
+    """
+
+    def setUp(self) -> None:
+        super().setUp()
+        from world.gm.constants import GMLevel
+        from world.gm.factories import GMProfileFactory
+        from world.roster.factories import RosterEntryFactory, RosterTenureFactory
+        from world.scenes.factories import SceneFactory, SceneParticipationFactory
+        from world.scenes.interaction_services import invalidate_active_scene_cache
+
+        self.room = create_object("typeclasses.rooms.Room", key="Ambush Site", nohome=True)
+        self.room_profile, _ = RoomProfile.objects.get_or_create(objectdb=self.room)
+
+        self.gm_character = CharacterFactory(db_key="gm", location=self.room)
+        CharacterSheetFactory(character=self.gm_character)
+        entry = RosterEntryFactory(character_sheet__character=self.gm_character)
+        tenure = RosterTenureFactory(roster_entry=entry, end_date=None)
+        account = tenure.player_data.account
+        self.gm_character.db_account = account
+        GMProfileFactory(account=account, level=GMLevel.JUNIOR)
+        self.scene = SceneFactory(location=self.room)
+        SceneParticipationFactory(scene=self.scene, account=account, is_gm=True)
+        invalidate_active_scene_cache(self.room)
+
+        self.template = SituationTemplateFactory()
+        SituationTrapLinkFactory(situation_template=self.template, name="Chained Snare")
+
+    def test_place_list_disarm_arm_then_finish_scene(self) -> None:
+        from actions.definitions.situations import SetSituationAction
+        from actions.definitions.traps import (
+            ArmTrapAction,
+            GmDisarmTrapAction,
+            ListRoomTrapsAction,
+        )
+        from world.scenes.scene_admin_services import finish_scene_full
+
+        # An admin-authored trap already sits in this room and must be untouched
+        # throughout - it has no created_by_sheet, so it is neither GM-scoped nor
+        # torn down at scene end.
+        authored_trap = TrapFactory(room_profile=self.room_profile, name="Ancient Pit")
+
+        place_result = SetSituationAction().run(
+            self.gm_character, situation_template_id=self.template.pk
+        )
+        assert place_result.success is True
+        trap = Trap.objects.get(room_profile=self.room_profile, name="Chained Snare")
+        assert trap.created_by_sheet_id == self.gm_character.character_sheet.pk
+
+        list_result = ListRoomTrapsAction().run(self.gm_character)
+        assert list_result.success is True
+        assert trap.pk in {row["id"] for row in list_result.data["traps"]}
+
+        disarm_result = GmDisarmTrapAction().run(self.gm_character, trap_id=trap.pk)
+        assert disarm_result.success is True
+        trap.refresh_from_db()
+        assert trap.is_armed is False
+
+        arm_result = ArmTrapAction().run(self.gm_character, trap_id=trap.pk)
+        assert arm_result.success is True
+        trap.refresh_from_db()
+        assert trap.is_armed is True
+
+        finish_scene_full(self.scene)
+
+        trap.refresh_from_db()
+        authored_trap.refresh_from_db()
+        assert trap.is_armed is False
+        assert authored_trap.is_armed is True

@@ -9,12 +9,25 @@ premise was false: `SetSituationAction` (`set_situation`, JUNIOR-gated, telnet
 missing was everything after placement, so #3002 shipped **management** instead:
 `list_room_traps`, `arm_trap` and `gm_disarm_trap` (`src/actions/definitions/traps.py`,
 telnet `gm trap list|arm <id>|disarm <id>`), each gated on
-`MinimumGMLevelPrerequisite(JUNIOR)` **and** `IsSceneGMPrerequisite()`. Both gates are
-required: JUNIOR matches the tier that can already mint armed traps, and the scene gate
-exists because listing traps reveals concealed room content and a GM is also a player, so
-trust alone would let any JUNIOR GM read the hazards of a dungeon they are merely standing
-in. This is ADR-0110's catalog-not-invention rule applied unchanged - arming an authored
-trap composes no mechanics and touches no `consequence_pool`.
+`MinimumGMLevelPrerequisite(JUNIOR)`. This is ADR-0110's catalog-not-invention rule applied
+unchanged - arming an authored trap composes no mechanics and touches no
+`consequence_pool`.
+
+**The gate was widened after final review (finding 1).** The first cut also required
+`IsSceneGMPrerequisite()`: JUNIOR matches the tier that can already mint armed traps, and
+the scene gate existed because listing traps reveals concealed room content and a GM is
+also a player, so trust alone would let any JUNIOR GM read the hazards of a dungeon they
+are merely standing in. That gate dead-ended on the feature's own documented workflow:
+`SetSituationAction` - the action that places traps - is legitimately used before a scene
+exists, "staging a room ahead of players arriving" (`docs/roadmap/gm-system.md`). A GM who
+staged a room and placed an armed trap there could then never list, arm or disarm it,
+because no scene existed yet to be its GM of. The rule is now: a GM may manage a trap when
+they are staff, OR the trap's own placer, OR the GM of the active scene at that location -
+all still behind JUNIOR. Placer-ownership is a per-row check (`_room_traps` in
+`traps.py`), not a per-actor one, and it preserves the anti-metagaming property the scene
+gate provided: a JUNIOR GM standing in someone else's dungeon, who placed none of its
+traps and runs no scene there, is still refused. `list_room_traps` now returns a filtered
+list instead of refusing outright - a GM sees exactly what they may act on.
 
 **A standalone `TrapTemplate` was drafted and rejected.** It would have duplicated
 `SituationTrapLink`, which already carries exactly the authorable fields (name, pool, both

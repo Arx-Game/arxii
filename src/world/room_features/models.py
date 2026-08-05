@@ -365,6 +365,9 @@ class Trap(SharedMemoryModel):
         default=0,
         help_text="Authored target difficulty for the disarm check.",
     )
+    # #3002: the help_text below predates the GM ``arm_trap`` action
+    # (actions/definitions/traps.py). ``arm_trap`` CAN re-arm a disarmed trap - it
+    # refuses only a zone hazard whose ``duration_rounds`` has already ticked to 0.
     is_armed = models.BooleanField(
         default=True,
         help_text="A disarmed trap never triggers and cannot be disarmed again.",

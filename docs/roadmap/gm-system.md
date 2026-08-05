@@ -349,9 +349,17 @@ Delivered:
   before this), and `gm_disarm_trap` (an off switch with no roll, unlike the player's
   `disarm_trap`, which detonates on a failed disarm). Telnet:
   `gm trap list|arm <id>|disarm <id>`, subverbs on the existing `gm` command.
-- **Composed gate**: `MinimumGMLevelPrerequisite(JUNIOR)` AND `IsSceneGMPrerequisite()`.
-  JUNIOR matches the tier that can already mint armed traps; the scene gate exists because
-  listing traps reveals concealed room content and a GM is also a player.
+- **Gate**: `MinimumGMLevelPrerequisite(JUNIOR)` alone. JUNIOR matches the tier that can
+  already mint armed traps. WHICH traps an actor may act on is a separate, per-row check
+  (`_room_traps`): staff and the active scene's GM may act on every trap in the room;
+  everyone else may only act on traps they placed themselves. A first cut also required
+  `IsSceneGMPrerequisite()`, but that dead-ended `set_situation`'s own documented
+  pre-scene staging workflow (Phase 6b's "Table-running tools" note above: `setsituation`
+  is "legitimately used before a scene exists, staging a room ahead of players
+  arriving") - a GM who staged a room and placed a trap there could never manage it
+  until a scene existed. These actions also reach
+  technique-conjured zone hazards, not just situation-placed traps; `arm_trap` refuses to
+  re-arm one whose `duration_rounds` has already ticked to 0.
 - **Scene-scoped lifetime**: `instantiate_situation` gained a keyword-only
   `placed_by_sheet`, `SetSituationAction` passes the placing GM's sheet, and
   `finish_scene_full` now calls `teardown_conjured_hazards` alongside the obstacle and

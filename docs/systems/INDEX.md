@@ -3729,11 +3729,18 @@ registering a service strategy + per-kind details model.
     traps with `set_situation` (telnet `setsituation <name|id>`).
   - **GM management** (#3002, `actions/definitions/traps.py`): `list_room_traps`,
     `arm_trap` and `gm_disarm_trap`, telnet `gm trap list|arm <id>|disarm <id>`. Each is
-    gated on `MinimumGMLevelPrerequisite(JUNIOR)` AND `IsSceneGMPrerequisite()`, and each
-    resolves the trap strictly within the actor's own room. `arm_trap` deliberately leaves
-    `detected_by` alone, so a re-armed trap fires for newcomers and stays inert for anyone
-    who already resolved it. `gm_disarm_trap` rolls nothing, unlike the player's
-    `disarm_trap`, which rolls `disarm_check_type` and fires the trap on a failed roll.
+    gated on `MinimumGMLevelPrerequisite(JUNIOR)`, and each resolves the trap strictly
+    within the actor's own room - but WHICH traps in that room an actor may act on is a
+    per-row rule (`_room_traps`): staff and the active scene's GM may act on every trap
+    there; anyone else (e.g. a JUNIOR GM staging a room ahead of a scene) may only act on
+    traps they placed themselves (`created_by_sheet` matches their own sheet).
+    `list_room_traps` returns a filtered list rather than refusing outright. These actions
+    also reach technique-conjured zone hazards (see "Lifetime" below), not just
+    situation-placed traps - `arm_trap` refuses to re-arm one whose duration is already
+    spent (`duration_rounds == 0`). `arm_trap` deliberately leaves `detected_by` alone, so
+    a re-armed trap fires for newcomers and stays inert for anyone who already resolved
+    it. `gm_disarm_trap` rolls nothing, unlike the player's `disarm_trap`, which rolls
+    `disarm_check_type` and fires the trap on a failed roll.
   - **Lifetime:** a GM-placed trap carries `created_by_sheet` (stamped by
     `instantiate_situation`'s `placed_by_sheet` kwarg) and is disarmed at scene end by
     `teardown_conjured_hazards`, wired into `finish_scene_full` beside the obstacle and

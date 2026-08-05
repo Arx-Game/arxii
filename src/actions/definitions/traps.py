@@ -7,7 +7,6 @@ from typing import TYPE_CHECKING, Any
 
 from actions.base import Action
 from actions.prerequisites import (
-    IsSceneGMPrerequisite,
     MinimumGMLevelPrerequisite,
     Prerequisite,
 )
@@ -90,16 +89,51 @@ def _gm_trap_prerequisites() -> list[Prerequisite]:
     """The gate every GM trap action shares.
 
     JUNIOR matches ``SetSituationAction``, which already mints armed traps, so
-    acting on one that already exists is strictly less powerful. The scene gate
-    is on top of it because listing traps reveals hidden room content and a GM
-    is also a player: trust alone would let any JUNIOR GM stand in someone
-    else's dungeon and read its hazards. Both carry a staff bypass.
+    acting on one that already exists is strictly less powerful. There is no
+    scene gate here: ``SetSituationAction`` (the action that places traps) is
+    legitimately used before a scene exists (staging a room ahead of players
+    arriving, ``docs/roadmap/gm-system.md``), and a pure scene gate would have
+    let a GM place an armed trap they could then never list, arm or disarm.
+    Instead, WHICH traps an actor may act on is decided per-row in
+    ``_room_traps`` (staff, the active scene's GM, or the trap's own placer) -
+    see that function's docstring for the anti-metagaming reasoning it
+    preserves.
     """
-    return [MinimumGMLevelPrerequisite(GMLevel.JUNIOR), IsSceneGMPrerequisite()]
+    return [MinimumGMLevelPrerequisite(GMLevel.JUNIOR)]
+
+
+def _may_manage_every_trap(actor: ObjectDB) -> bool:
+    """Whether the actor may manage every trap in their room, not just their own.
+
+    True for staff, or for the GM of the active scene at the actor's location.
+    Mirrors ``IsSceneGMPrerequisite`` (``actions/prerequisites.py:185``): staff
+    bypass, else resolve the actor's active scene and require
+    ``scene.is_gm(account)``.
+    """
+    from commands.utils.gm_resolution import resolve_account_or_none  # noqa: PLC0415
+    from core_management.permissions import is_staff_observer  # noqa: PLC0415
+    from world.scenes.interaction_services import get_active_scene  # noqa: PLC0415
+
+    if is_staff_observer(actor):
+        return True
+    if actor.location is None:
+        return False
+    account = resolve_account_or_none(actor)
+    scene = get_active_scene(actor.location)
+    return scene is not None and scene.is_gm(account)
 
 
 def _room_traps(actor: ObjectDB):
-    """Every trap in the actor's current room, ordered by the model's own Meta.
+    """Every trap in the actor's room this actor may manage.
+
+    Staff and the GM of the active scene at the actor's location may manage
+    every trap in the room. Everyone else - a JUNIOR GM staging a room before a
+    scene starts, or one with no standing over this room's scene - may only
+    manage traps they placed themselves (``created_by_sheet`` matches their own
+    sheet). This is the anti-metagaming property the old scene-only gate
+    provided: a JUNIOR GM standing in someone else's dungeon, who placed none
+    of its traps and runs no scene there, still can't reach them (#3002 review
+    finding 1).
 
     ``RoomProfile`` is a ``primary_key=True`` OneToOne onto ``ObjectDB``
     (``evennia_extensions/models.py:549``), so ``room_profile_id`` is the room's
@@ -109,7 +143,13 @@ def _room_traps(actor: ObjectDB):
 
     if actor.location is None:
         return Trap.objects.none()
-    return Trap.objects.filter(room_profile_id=actor.location.pk).select_related("position")
+    traps = Trap.objects.filter(room_profile_id=actor.location.pk).select_related("position")
+    if _may_manage_every_trap(actor):
+        return traps
+    sheet = actor.character_sheet
+    if sheet is None:
+        return Trap.objects.none()
+    return traps.filter(created_by_sheet=sheet)
 
 
 def _resolve_trap_in_room(actor: ObjectDB, trap_id: Any) -> tuple[Any, str | None]:
@@ -133,10 +173,23 @@ def _resolve_trap_in_room(actor: ObjectDB, trap_id: Any) -> tuple[Any, str | Non
 
 
 def _set_armed(actor: ObjectDB, trap_id: Any, *, armed: bool, verb: str) -> ActionResult:
-    """Shared body for arm/disarm: resolve in-room, flip the flag, report."""
+    """Shared body for arm/disarm: resolve in-room, flip the flag, report.
+
+    Refuses to arm a zone hazard whose duration is already spent
+    (``duration_rounds`` not null and 0) - ``tick_zone_hazards``
+    (``world/room_features/trap_services.py``) decrements ``duration_rounds`` with
+    no floor once a hazard is armed, so re-arming a spent one would drive it
+    negative and crash the Postgres ``PositiveIntegerField`` check constraint
+    (#3002 review finding 2). Disarm is never blocked by this.
+    """
     trap, error = _resolve_trap_in_room(actor, trap_id)
     if error is not None:
         return ActionResult(success=False, message=error)
+    if armed and trap.duration_rounds is not None and trap.duration_rounds <= 0:
+        return ActionResult(
+            success=False,
+            message=f"{trap.name}'s duration is spent - it cannot be re-armed.",
+        )
     trap.is_armed = armed
     trap.save(update_fields=["is_armed"])
     return ActionResult(
@@ -148,10 +201,14 @@ def _set_armed(actor: ObjectDB, trap_id: Any, *, armed: bool, verb: str) -> Acti
 
 @dataclass
 class ListRoomTrapsAction(Action):
-    """GM: list every trap in the actor's room, armed or not (#3002).
+    """GM: list every trap in the actor's room this actor may manage (#3002).
 
-    The prerequisite for the other two verbs, and for trap management at all:
-    nothing else anywhere hands out a trap id.
+    A filtered list, not a refusal: staff and the active scene's GM see every
+    trap in the room; anyone else (e.g. a JUNIOR GM staging a room before a
+    scene starts) sees only the traps they placed themselves. See
+    ``_room_traps`` for the full rule. The prerequisite for the other two
+    verbs, and for trap management at all: nothing else anywhere hands out a
+    trap id.
     """
 
     key: str = "list_room_traps"
@@ -198,6 +255,9 @@ class ArmTrapAction(Action):
     this trap knows where it is; clearing that would silently re-hide a hazard
     from someone who earned the knowledge. A re-armed trap fires for newcomers
     and stays inert for those who already resolved it.
+
+    Refuses a zone hazard whose ``duration_rounds`` has already ticked to 0 -
+    see ``_set_armed`` for why.
     """
 
     key: str = "arm_trap"
