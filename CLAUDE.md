@@ -76,9 +76,13 @@ back from the creating command's own stdout.
   (`gh pr merge --auto --squash`, or `enqueue-pr.sh` in the `issue-to-merged-pr`
   skill) and stop — do not re-sync with main or merge by hand. The queue
   re-tests the PR on top of the latest main and merges in order; a human
-  approval is the only remaining gate. A migration collision shows up as the
-  loser being bounced from the queue (others keep flowing) — fix it with
-  `arx manage makemigrations --merge` (or renumber), push, re-enqueue. Since
+  approval is the only remaining gate. **Since the single-app collapse
+  (#2906), any two migration-bearing PRs always collide** (one number
+  sequence, one `max_migration.txt`) — check main's tip migration BEFORE
+  enqueueing, and fix a collision with `arx manage rebase_migration arxii`
+  (resolve `max_migration.txt` to main's tip first), push, re-enqueue; see
+  the `issue-to-merged-pr` skill's ci-merge-queue-gotchas reference for the
+  full recipe. Never hand-renumber. Since
   #2906 collapsed every first-party app into one (`arxii`), there is exactly
   one `max_migration.txt` sentinel repo-wide (`src/world/migrations/`), not
   one per app - any two branches that both add a model or field now land in
