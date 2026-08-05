@@ -493,6 +493,21 @@ class VisibleWornItemSerializer(serializers.Serializer):
     equipment_layer = serializers.CharField(read_only=True)
 
 
+class VisibleMarkingSerializer(serializers.Serializer):
+    """Slim shape for visible ``FormMarking`` rows (#2985).
+
+    The sibling of ``VisibleWornItemSerializer`` — the visible-worn list
+    response is a bare array, so markings ride their own endpoint rather
+    than a breaking shape change there.
+    """
+
+    id = serializers.IntegerField(read_only=True)
+    name = serializers.CharField(read_only=True)
+    kind = serializers.CharField(read_only=True)
+    body_region = serializers.CharField(read_only=True)
+    description = serializers.CharField(read_only=True)
+
+
 class ItemTemplateDetailSerializer(serializers.ModelSerializer):
     """Detail serializer for ItemTemplate with slots and interactions."""
 

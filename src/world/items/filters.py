@@ -11,6 +11,7 @@ ItemTemplate) and the visible-worn endpoint still use FilterSets.
 
 import django_filters
 
+from world.forms.models import FormMarking
 from world.items.crafting.models import LabStationDetails
 from world.items.models import (
     EquippedItem,
@@ -67,6 +68,21 @@ class VisibleWornItemFilter(django_filters.FilterSet):
 
     class Meta:
         model = EquippedItem
+        fields = ["character"]
+
+
+class VisibleMarkingFilter(django_filters.FilterSet):
+    """Filters for the visible-markings endpoint (#2985).
+
+    Mirrors ``VisibleWornItemFilter``: the list is computed from
+    ``visible_markings_for``, so this exists for documentation/schema —
+    the ViewSet reads ``character``/``observer`` directly.
+    """
+
+    character = django_filters.NumberFilter(field_name="form__character__id")
+
+    class Meta:
+        model = FormMarking
         fields = ["character"]
 
 

@@ -20,6 +20,7 @@ from world.character_creation.models import (
     CharacterDraft,
     DraftApplication,
     DraftApplicationComment,
+    DraftMarking,
     OriginTemplate,
     OriginTemplateSlot,
     StartingArea,
@@ -415,6 +416,14 @@ class CGOriginTemplateSerializer(serializers.ModelSerializer):
             obj.cached_slots if hasattr(obj, "cached_slots") else obj.slots.order_by("sort_order")
         )
         return OriginTemplateSlotSerializer(slots, many=True).data
+
+
+class DraftMarkingSerializer(serializers.ModelSerializer):
+    """CG-authored body markings (#2985) — materialized at finalization."""
+
+    class Meta:
+        model = DraftMarking
+        fields = ["id", "body_region", "kind", "name", "description"]
 
 
 class CharacterDraftSerializer(serializers.ModelSerializer):

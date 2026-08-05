@@ -119,14 +119,16 @@ class CmdShowcase(ArxCommand):
 
 
 class CmdReveal(ArxCommand):
-    """Dramatically reveal a concealed worn piece.
+    """Dramatically reveal a concealed worn piece or body marking.
 
     Usage:
         reveal <item name or #id>
+        reveal <marking name>
 
     A concealed piece's accents and prestige lie dormant until seen; the
     reveal is the moment it starts to openly count. It stays revealed until
-    you take it off or dress over it anew.
+    you take it off, dress over it anew, or cover it. A marking (tattoo,
+    scar, brand) concealed by clothing can be bared the same way (#2985).
     """
 
     key = "reveal"
@@ -137,16 +139,83 @@ class CmdReveal(ArxCommand):
 
         raw = (self.args or "").strip()
         if not raw:
-            self.msg("Reveal what? Usage: reveal <item name or #id>")
+            self.msg("Reveal what? Usage: reveal <item name, marking name, or #id>")
             return
         try:
             item_id = _resolve_worn_item_id(self.caller, raw)
-        except CommandError as err:
-            self.msg(str(err))
+        except CommandError as item_err:
+            marking_id = _resolve_marking_id_or_none(self.caller, raw)
+            if marking_id is None:
+                self.msg(str(item_err))
+                return
+            result = RevealAction().run(actor=self.caller, marking_id=marking_id)
+            if result.message:
+                self.msg(result.message)
             return
         result = RevealAction().run(actor=self.caller, item_id=item_id)
         if result.message:
             self.msg(result.message)
+
+
+class CmdCover(ArxCommand):
+    """Tuck a revealed piece or marking back away (#2985).
+
+    Usage:
+        cover <item name or #id>
+        cover <marking name>
+
+    The inverse of reveal — roll the sleeve back down. Works only when
+    something worn would actually conceal it.
+    """
+
+    key = "cover"
+    locks = "cmd:all()"
+
+    def func(self) -> None:
+        from actions.definitions.fashion import CoverUpAction  # noqa: PLC0415
+
+        raw = (self.args or "").strip()
+        if not raw:
+            self.msg("Cover what? Usage: cover <item name, marking name, or #id>")
+            return
+        try:
+            item_id = _resolve_worn_item_id(self.caller, raw)
+        except CommandError as item_err:
+            marking_id = _resolve_marking_id_or_none(self.caller, raw)
+            if marking_id is None:
+                self.msg(str(item_err))
+                return
+            result = CoverUpAction().run(actor=self.caller, marking_id=marking_id)
+            if result.message:
+                self.msg(result.message)
+            return
+        result = CoverUpAction().run(actor=self.caller, item_id=item_id)
+        if result.message:
+            self.msg(result.message)
+
+
+def _resolve_marking_id_or_none(caller: Any, token: str) -> int | None:
+    """Resolve one of the caller's TRUE-form markings by name, or None.
+
+    Returns None on no match; raises CommandError on an ambiguous match so
+    the caller sees the disambiguation rather than the item-not-found text.
+    """
+    from world.forms.models import FormMarking, FormType  # noqa: PLC0415
+
+    sheet = caller.sheet_data
+    matches = list(
+        FormMarking.objects.filter(
+            form__character=sheet,
+            form__form_type=FormType.TRUE,
+            name__icontains=token,
+        )[:2]
+    )
+    if not matches:
+        return None
+    if len(matches) > 1:
+        msg = f"More than one marking matches '{token}' — be more specific."
+        raise CommandError(msg)
+    return matches[0].pk
 
 
 def _resolve_worn_item_id(caller: Any, token: str) -> int:

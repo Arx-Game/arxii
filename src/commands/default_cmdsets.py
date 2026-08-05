@@ -140,7 +140,7 @@ from commands.setsituation import CmdSetSituation
 from commands.setstage import CmdSetStage
 from commands.sheet_request import CmdSheetRequest  # #2628 — sheet-update requests.
 from commands.ships import CmdShip
-from commands.showcase import CmdReveal, CmdShowcase  # #2907/#2965
+from commands.showcase import CmdCover, CmdReveal, CmdShowcase  # #2907/#2965/#2985
 from commands.signature import CmdSignature
 from commands.social.accusations import CmdAccuse, CmdFrame
 from commands.social.blocking import (
@@ -462,8 +462,10 @@ class CharacterCmdSet(default_cmds.CharacterCmdSet):
             CmdOutfit,
             # #2907 — the persistent fashion-showcase toggle.
             CmdShowcase,
-            # #2965 — dramatic reveal of a concealed worn piece.
+            # #2965 — dramatic reveal of a concealed worn piece or marking.
             CmdReveal,
+            # #2985 — the inverse: tuck a revealed piece/marking back away.
+            CmdCover,
             # #1866 — places join/leave telnet namespace.
             CmdPlaces,
             # #2356 — speaker queue (getinline) telnet namespace.

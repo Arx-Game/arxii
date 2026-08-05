@@ -3424,6 +3424,161 @@ paths:
               schema:
                 $ref: '#/components/schemas/CGPointBudget'
           description: ''
+  /api/character-creation/draft-markings/:
+    get:
+      operationId: character_creation_draft_markings_list
+      description: |-
+        CRUD for the requester's own CG draft markings (#2985).
+
+        Rows are scoped to the requesting account's draft; ``draft`` is never
+        client-supplied — creation binds to the account's sole draft, mirroring
+        the one-draft-per-account invariant of ``CharacterDraftViewSet``.
+      tags:
+      - character-creation
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/DraftMarking'
+          description: ''
+    post:
+      operationId: character_creation_draft_markings_create
+      description: |-
+        CRUD for the requester's own CG draft markings (#2985).
+
+        Rows are scoped to the requesting account's draft; ``draft`` is never
+        client-supplied — creation binds to the account's sole draft, mirroring
+        the one-draft-per-account invariant of ``CharacterDraftViewSet``.
+      tags:
+      - character-creation
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/DraftMarkingRequest'
+        required: true
+      security:
+      - cookieAuth: []
+      responses:
+        '201':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DraftMarking'
+          description: ''
+  /api/character-creation/draft-markings/{id}/:
+    get:
+      operationId: character_creation_draft_markings_retrieve
+      description: |-
+        CRUD for the requester's own CG draft markings (#2985).
+
+        Rows are scoped to the requesting account's draft; ``draft`` is never
+        client-supplied — creation binds to the account's sole draft, mirroring
+        the one-draft-per-account invariant of ``CharacterDraftViewSet``.
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: string
+        required: true
+      tags:
+      - character-creation
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DraftMarking'
+          description: ''
+    put:
+      operationId: character_creation_draft_markings_update
+      description: |-
+        CRUD for the requester's own CG draft markings (#2985).
+
+        Rows are scoped to the requesting account's draft; ``draft`` is never
+        client-supplied — creation binds to the account's sole draft, mirroring
+        the one-draft-per-account invariant of ``CharacterDraftViewSet``.
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: string
+        required: true
+      tags:
+      - character-creation
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/DraftMarkingRequest'
+        required: true
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DraftMarking'
+          description: ''
+    patch:
+      operationId: character_creation_draft_markings_partial_update
+      description: |-
+        CRUD for the requester's own CG draft markings (#2985).
+
+        Rows are scoped to the requesting account's draft; ``draft`` is never
+        client-supplied — creation binds to the account's sole draft, mirroring
+        the one-draft-per-account invariant of ``CharacterDraftViewSet``.
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: string
+        required: true
+      tags:
+      - character-creation
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PatchedDraftMarkingRequest'
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DraftMarking'
+          description: ''
+    delete:
+      operationId: character_creation_draft_markings_destroy
+      description: |-
+        CRUD for the requester's own CG draft markings (#2985).
+
+        Rows are scoped to the requesting account's draft; ``draft`` is never
+        client-supplied — creation binds to the account's sole draft, mirroring
+        the one-draft-per-account invariant of ``CharacterDraftViewSet``.
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: string
+        required: true
+      tags:
+      - character-creation
+      security:
+      - cookieAuth: []
+      responses:
+        '204':
+          description: No response body
   /api/character-creation/drafts/:
     get:
       operationId: character_creation_drafts_list
@@ -15194,6 +15349,17 @@ paths:
         schema:
           type: string
         required: true
+      tags:
+      - items
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          description: No response body
+  /api/items/visible-markings/:
+    get:
+      operationId: items_visible_markings_retrieve
+      description: Return the visible-markings list for ``?character=<pk>``.
       tags:
       - items
       security:
@@ -41962,6 +42128,59 @@ components:
             $ref: '#/components/schemas/DraftDistinctionEntry'
       required:
       - distinctions
+    DraftMarking:
+      type: object
+      description: CG-authored body markings (#2985) — materialized at finalization.
+      properties:
+        id:
+          type: integer
+          readOnly: true
+        body_region:
+          $ref: '#/components/schemas/BodyRegionEnum'
+        kind:
+          $ref: '#/components/schemas/DraftMarkingKindEnum'
+        name:
+          type: string
+          maxLength: 100
+        description:
+          type: string
+      required:
+      - body_region
+      - id
+      - kind
+      - name
+    DraftMarkingKindEnum:
+      enum:
+      - tattoo
+      - scar
+      - brand
+      - birthmark
+      - rune
+      type: string
+      description: |-
+        * `tattoo` - Tattoo
+        * `scar` - Scar
+        * `brand` - Brand
+        * `birthmark` - Birthmark
+        * `rune` - Rune
+    DraftMarkingRequest:
+      type: object
+      description: CG-authored body markings (#2985) — materialized at finalization.
+      properties:
+        body_region:
+          $ref: '#/components/schemas/BodyRegionEnum'
+        kind:
+          $ref: '#/components/schemas/DraftMarkingKindEnum'
+        name:
+          type: string
+          minLength: 1
+          maxLength: 100
+        description:
+          type: string
+      required:
+      - body_region
+      - kind
+      - name
     DramaticMomentSuggestion:
       type: object
       description: |-
@@ -56801,6 +57020,20 @@ components:
           description: 'May post an open ask for a GM to run a story for this covenant
             (GroupStoryRequest, #2119). Distinct from can_invite — petitioning an
             outside GM commits the covenant to outside oversight.'
+    PatchedDraftMarkingRequest:
+      type: object
+      description: CG-authored body markings (#2985) — materialized at finalization.
+      properties:
+        body_region:
+          $ref: '#/components/schemas/BodyRegionEnum'
+        kind:
+          $ref: '#/components/schemas/DraftMarkingKindEnum'
+        name:
+          type: string
+          minLength: 1
+          maxLength: 100
+        description:
+          type: string
     PatchedEncounterDetailRequest:
       type: object
       description: Full encounter state with covenant-filtered action visibility.

@@ -2204,6 +2204,80 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
+  '/api/character-creation/draft-markings/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /**
+     * @description CRUD for the requester's own CG draft markings (#2985).
+     *
+     *     Rows are scoped to the requesting account's draft; ``draft`` is never
+     *     client-supplied — creation binds to the account's sole draft, mirroring
+     *     the one-draft-per-account invariant of ``CharacterDraftViewSet``.
+     */
+    get: operations['character_creation_draft_markings_list'];
+    put?: never;
+    /**
+     * @description CRUD for the requester's own CG draft markings (#2985).
+     *
+     *     Rows are scoped to the requesting account's draft; ``draft`` is never
+     *     client-supplied — creation binds to the account's sole draft, mirroring
+     *     the one-draft-per-account invariant of ``CharacterDraftViewSet``.
+     */
+    post: operations['character_creation_draft_markings_create'];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/character-creation/draft-markings/{id}/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /**
+     * @description CRUD for the requester's own CG draft markings (#2985).
+     *
+     *     Rows are scoped to the requesting account's draft; ``draft`` is never
+     *     client-supplied — creation binds to the account's sole draft, mirroring
+     *     the one-draft-per-account invariant of ``CharacterDraftViewSet``.
+     */
+    get: operations['character_creation_draft_markings_retrieve'];
+    /**
+     * @description CRUD for the requester's own CG draft markings (#2985).
+     *
+     *     Rows are scoped to the requesting account's draft; ``draft`` is never
+     *     client-supplied — creation binds to the account's sole draft, mirroring
+     *     the one-draft-per-account invariant of ``CharacterDraftViewSet``.
+     */
+    put: operations['character_creation_draft_markings_update'];
+    post?: never;
+    /**
+     * @description CRUD for the requester's own CG draft markings (#2985).
+     *
+     *     Rows are scoped to the requesting account's draft; ``draft`` is never
+     *     client-supplied — creation binds to the account's sole draft, mirroring
+     *     the one-draft-per-account invariant of ``CharacterDraftViewSet``.
+     */
+    delete: operations['character_creation_draft_markings_destroy'];
+    options?: never;
+    head?: never;
+    /**
+     * @description CRUD for the requester's own CG draft markings (#2985).
+     *
+     *     Rows are scoped to the requesting account's draft; ``draft`` is never
+     *     client-supplied — creation binds to the account's sole draft, mirroring
+     *     the one-draft-per-account invariant of ``CharacterDraftViewSet``.
+     */
+    patch: operations['character_creation_draft_markings_partial_update'];
+    trace?: never;
+  };
   '/api/character-creation/drafts/': {
     parameters: {
       query?: never;
@@ -9725,6 +9799,23 @@ export interface paths {
     };
     /** @description Return the ItemInstance for ``pk`` if the requester may view it. */
     get: operations['items_visible_item_detail_retrieve'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/items/visible-markings/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /** @description Return the visible-markings list for ``?character=<pk>``. */
+    get: operations['items_visible_markings_retrieve'];
     put?: never;
     post?: never;
     delete?: never;
@@ -24315,6 +24406,30 @@ export interface components {
     DraftDistinctionSyncResult: {
       distinctions: components['schemas']['DraftDistinctionEntry'][];
     };
+    /** @description CG-authored body markings (#2985) — materialized at finalization. */
+    DraftMarking: {
+      readonly id: number;
+      body_region: components['schemas']['BodyRegionEnum'];
+      kind: components['schemas']['DraftMarkingKindEnum'];
+      name: string;
+      description?: string;
+    };
+    /**
+     * @description * `tattoo` - Tattoo
+     *     * `scar` - Scar
+     *     * `brand` - Brand
+     *     * `birthmark` - Birthmark
+     *     * `rune` - Rune
+     * @enum {string}
+     */
+    DraftMarkingKindEnum: 'tattoo' | 'scar' | 'brand' | 'birthmark' | 'rune';
+    /** @description CG-authored body markings (#2985) — materialized at finalization. */
+    DraftMarkingRequest: {
+      body_region: components['schemas']['BodyRegionEnum'];
+      kind: components['schemas']['DraftMarkingKindEnum'];
+      name: string;
+      description?: string;
+    };
     /**
      * @description Read-only GM confirm/dismiss inbox row (#2183).
      *
@@ -32312,6 +32427,13 @@ export interface components {
       can_lead_rituals?: boolean;
       /** @description May post an open ask for a GM to run a story for this covenant (GroupStoryRequest, #2119). Distinct from can_invite — petitioning an outside GM commits the covenant to outside oversight. */
       can_request_gm?: boolean;
+    };
+    /** @description CG-authored body markings (#2985) — materialized at finalization. */
+    PatchedDraftMarkingRequest: {
+      body_region?: components['schemas']['BodyRegionEnum'];
+      kind?: components['schemas']['DraftMarkingKindEnum'];
+      name?: string;
+      description?: string;
     };
     /** @description Full encounter state with covenant-filtered action visibility. */
     PatchedEncounterDetailRequest: {
@@ -42579,6 +42701,139 @@ export interface operations {
       };
     };
   };
+  character_creation_draft_markings_list: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['DraftMarking'][];
+        };
+      };
+    };
+  };
+  character_creation_draft_markings_create: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['DraftMarkingRequest'];
+      };
+    };
+    responses: {
+      201: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['DraftMarking'];
+        };
+      };
+    };
+  };
+  character_creation_draft_markings_retrieve: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        id: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['DraftMarking'];
+        };
+      };
+    };
+  };
+  character_creation_draft_markings_update: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        id: string;
+      };
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['DraftMarkingRequest'];
+      };
+    };
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['DraftMarking'];
+        };
+      };
+    };
+  };
+  character_creation_draft_markings_destroy: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        id: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description No response body */
+      204: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+    };
+  };
+  character_creation_draft_markings_partial_update: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        id: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: {
+      content: {
+        'application/json': components['schemas']['PatchedDraftMarkingRequest'];
+      };
+    };
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['DraftMarking'];
+        };
+      };
+    };
+  };
   character_creation_drafts_list: {
     parameters: {
       query?: never;
@@ -52611,6 +52866,24 @@ export interface operations {
       path: {
         id: string;
       };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description No response body */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+    };
+  };
+  items_visible_markings_retrieve: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
       cookie?: never;
     };
     requestBody?: never;

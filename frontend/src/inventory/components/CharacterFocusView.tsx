@@ -16,7 +16,8 @@
 
 import { Skeleton } from '@/components/ui/skeleton';
 import { cn } from '@/lib/utils';
-import { humanizeRegionLayer } from '../humanizeRegionLayer';
+import { humanizeRegion, humanizeRegionLayer } from '../humanizeRegionLayer';
+import { useVisibleMarkings } from '../hooks/useVisibleMarkings';
 import { useVisibleWornItems } from '../hooks/useVisibleWornItems';
 
 interface CharacterFocusViewProps {
@@ -42,6 +43,7 @@ export function CharacterFocusView({
     character.id,
     observerId ?? undefined
   );
+  const { data: visibleMarkings = [] } = useVisibleMarkings(character.id, observerId ?? undefined);
 
   return (
     <div className={cn('flex flex-col gap-4 p-4', className)}>
@@ -91,6 +93,31 @@ export function CharacterFocusView({
           </ul>
         )}
       </section>
+
+      {visibleMarkings.length > 0 && (
+        <section aria-labelledby="markings-heading">
+          <h3
+            id="markings-heading"
+            className="mb-2 text-sm font-semibold uppercase tracking-wide text-muted-foreground"
+          >
+            Markings
+          </h3>
+          <ul className="space-y-1">
+            {visibleMarkings.map((marking) => (
+              <li
+                key={marking.id}
+                className="flex items-baseline justify-between gap-2 rounded-md p-2"
+                title={marking.description || undefined}
+              >
+                <span className="truncate text-sm">{marking.name}</span>
+                <span className="shrink-0 text-xs text-muted-foreground">
+                  {humanizeRegion(marking.body_region)}
+                </span>
+              </li>
+            ))}
+          </ul>
+        </section>
+      )}
     </div>
   );
 }
