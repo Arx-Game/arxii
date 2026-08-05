@@ -1487,7 +1487,21 @@ def load_entries(
     created_count = 0
     updated_count = 0
     deferred: list[tuple[dict, Path | None]] = []
-    for output_path, objects in result.fixtures.items():
+
+    # ContentContributor rows load before everything else. Credit fields are
+    # the one drop-not-defer resolution path (#2980: a bad byline drops the
+    # credit, never the row), so an entry whose ``written_by`` names a
+    # contributor that loads LATER in this same pass would lose its credit on
+    # the first load and only pick it up on the next one - which on a fresh
+    # database (the Big Button presses once) means silently uncredited rows.
+    # The markdown domains build before the raw fixture JSON, so without this
+    # reorder every frontmatter credit hits exactly that window. Contributors
+    # are dependency-free by design (ADR-0010), so hoisting them is safe.
+    def _contributors_first(item: tuple[str, list[dict]]) -> bool:
+        _, objects = item
+        return not all(obj.get("model", "").endswith(".contentcontributor") for obj in objects)
+
+    for output_path, objects in sorted(result.fixtures.items(), key=_contributors_first):
         paths = result.source_paths.get(output_path, [])
         for obj, source_path in zip(objects, paths, strict=False):
             try:

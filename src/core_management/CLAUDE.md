@@ -123,6 +123,12 @@ absent key stays absent rather than clearing an existing credit, the same
 "omission means leave this column alone" rule every other optional field
 follows.
 
+``load_entries`` hoists ``ContentContributor`` objects to the front of the
+pass: credit resolution is drop-not-defer, so a frontmatter ``written_by``
+naming a contributor authored in the same corpus update would otherwise lose
+its credit on a fresh database's single Big Button load and only recover it
+on the next one.
+
 **Known asymmetry:** `NPCRole`, `ItemTemplate`, `BuildingKind` and `DecorationKind`
 carry `CreditedContent` and are authored through `DOMAIN_BUILDERS` (`npc_roles/`,
 `items/`, `building_kinds/`, `decoration_kinds/`) same as every other domain, but
