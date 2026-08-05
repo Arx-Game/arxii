@@ -224,8 +224,10 @@ Designed as a connected set (ADRs 0050–0057); most of it has now landed. See
 The "world feels inhabited" cluster — promised by design-tenets/ADRs or left as the unbuilt half of a
 shipped system, now each filed:
 
-- **Body markings** — tattoos/scars/brands as skin-layer features riding the shipped coverage/reveal
-  pipeline (#2965/#2846 anticipate them in code comments). `intent` — **#2985**.
+- ✅ **Body markings** — DONE (#2985): `FormMarking` on `CharacterForm` (tattoo/scar/brand/
+  birthmark/rune), coverage-concealed via the shared `covered_regions` predicate, Reveal + new
+  Cover verb, look "Markings:" section, `GET /api/items/visible-markings/`, CG `DraftMarking`
+  editor, `grant_marking` write seam (combat/soulfray scar *sourcing* remains TehomCD's consumer).
 - **Gossip & rumor authoring** — tidings is read-only and derived (no models); missions' RUMOR reward
   sink is a stub; relationship gossip unbuilt. `intent` — **#2986**.
 - **Bystander reaction menus** — ADR-0032's witness pop-up choice trees; witness-approach substrate
