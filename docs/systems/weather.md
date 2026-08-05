@@ -69,4 +69,7 @@ content repo and loads via the **`weather` seed cluster**
 `WEATHER_SEED_PATH` or `<content repo>/weather`. A missing corpus logs a warning
 and no-ops — the cron then runs against an empty transition graph, which is a
 content-authoring gap rather than a seeder bug. `tools/load_weather_seed.py`
-remains for out-of-band reloads.
+remains for out-of-band reloads. A credited `WeatherEmit` (`written_by` set) whose incoming
+corpus text differs is frozen rather than overwritten - `seed.upsert_weather_emits` reports the
+conflict instead of writing it (#3017, ADR-0201); the only way back is the admin's Load
+Conflicts pages.

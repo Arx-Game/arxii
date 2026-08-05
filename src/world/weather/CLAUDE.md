@@ -141,7 +141,13 @@ Services (`world.weather.services`):
   `loaddata`. Invoke via the tools wrapper `tools/load_weather_seed.py`
   (`--fixtures-dir` or `WEATHER_SEED_PATH`); not a management command. Existing rows predate the
   re-key and carry `key=NULL` until the content-repo pass assigns one; the corpus rows themselves
-  are not this repo's job (#2980).
+  are not this repo's job (#2980). `upsert_weather_emits` freezes a credited emit (`written_by`
+  set) whose incoming text differs instead of overwriting it, reporting the conflict in its
+  return value rather than writing it (#3017, ADR-0201) - resolved only via the admin's Load
+  Conflicts pages, same as the fixture pipeline. It also resolves a raw fixture credit
+  (`written_by`/`reviewed_by` as a natural-key list) via `_resolve_credit_names` before the
+  write, dropping an unresolvable name rather than raising (mirrors #2980's
+  drop-the-credit-never-the-row rule).
 - **Wind as a mechanic** (flyers/arrows/gale spells, driven by the active weather's WIND) —
   combat/technique consumer, **Tehom's domain**; filed as **#1555** (`needs-design`). The WIND
   *provider* side is done (`felt_exposure(room, WIND)` / `current_conditions`).
