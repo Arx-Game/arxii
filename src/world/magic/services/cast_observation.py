@@ -107,12 +107,21 @@ def conceal_action_interaction(action_interaction: Interaction, audience: CastAu
 
 def _concealment_for(
     caster: ObjectDB,  # noqa: OBJECTDB_PARAM — same caster the public entrypoint takes
+    technique: Technique,
 ) -> int:
-    """The caster's style concealment rating; 0 when they have no path or no style.
+    """The concealment rating for this cast; 0 when nothing imposes any.
+
+    The gift's own style wins when set (#2905) — a gift the character didn't choose
+    (a species gift) doesn't take its casting manner from whatever Path they did choose.
+    Every technique has a gift (Technique.gift is required), so this check is always safe.
+    Falls back to the caster's Path style exactly as before when the gift sets no style.
 
     The caller has already ruled out the free, no-query cases (an openly declared cast,
     a contact-range technique), so this only runs when concealment could still apply.
     """
+    if technique.gift.style_id is not None:
+        return technique.gift.style.cast_concealment
+
     from world.progression.selectors import current_path_for_character  # noqa: PLC0415
 
     path = current_path_for_character(caster)
@@ -183,7 +192,7 @@ def resolve_cast_audience(
     if cast_openly or technique.reach == TechniqueReach.SAME:
         return _unconcealed()
 
-    concealment = _concealment_for(caster)
+    concealment = _concealment_for(caster, technique)
     if concealment <= 0:
         return _unconcealed()
 
