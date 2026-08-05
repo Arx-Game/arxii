@@ -134,8 +134,8 @@ class KinRelationshipView(APIView):
 
     @extend_schema(
         parameters=[
-            OpenApiParameter("a", int, description="First character's id."),
-            OpenApiParameter("b", int, description="Second character's id."),
+            OpenApiParameter("a", int, required=True, description="First character's id."),
+            OpenApiParameter("b", int, required=True, description="Second character's id."),
         ],
         responses=KinRelationshipSerializer,
     )

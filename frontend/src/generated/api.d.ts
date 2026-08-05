@@ -17110,6 +17110,54 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
+  '/api/roster/kin/relationship/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /**
+     * @description Viewer-aware relationship label between two characters (#3003).
+     *
+     *     ``a``/``b`` are character ids (``CharacterSheet`` pks); the label is
+     *     derived fresh from the kinship graph on every call — nothing like
+     *     "cousin" is ever stored. No visibility logic lives here: ``viewer`` is
+     *     threaded straight into ``derive_relationship``, which gates on
+     *     ``fact_visible`` the same way the tree endpoint does.
+     */
+    get: operations['roster_kin_relationship_retrieve'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/roster/kin/tree/{character_id}/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /**
+     * @description Viewer-aware kin tree centred on a single character (#3003).
+     *
+     *     Family-bound characters get their family's tree; familyless subjects
+     *     (Misbegotten, tarot-named) get the ego-centric payload from
+     *     ``kin_tree_for_sheet`` — same node/edge/union shapes either way.
+     */
+    get: operations['roster_kin_tree_retrieve'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   '/api/roster/looking-for-table/': {
     parameters: {
       query?: never;
@@ -25388,6 +25436,18 @@ export interface components {
       origin_realm?: number | null;
     };
     /**
+     * @description Viewer-aware graph payload for GET /api/roster/families/{id}/tree/.
+     *
+     *     ``family`` is null for an ego-centric payload (``kin_tree_for_sheet``'s
+     *     familyless branch) — a character with no house can still have kin.
+     */
+    FamilyTree: {
+      family: components['schemas']['Family'] | null;
+      nodes: components['schemas']['KinspersonNode'][];
+      parentage: components['schemas']['ParentageEdge'][];
+      unions: components['schemas']['UnionEdge'][];
+    };
+    /**
      * @description * `commoner` - Commoner
      *     * `noble` - Noble
      *     * `crime` - Crime
@@ -27130,6 +27190,16 @@ export interface components {
       readonly last_unseen_count: number;
     };
     /**
+     * @description Response for GET /api/roster/kin/relationship/ (#3003).
+     *
+     *     ``label`` is a viewer-derived ``RelationshipType`` value, or null when
+     *     the two people have no visible relationship (including a hidden one the
+     *     viewer has not learned).
+     */
+    KinRelationship: {
+      label: (components['schemas']['LabelEnum'] | components['schemas']['NullEnum']) | null;
+    };
+    /**
      * @description * `update` - update
      *     * `development` - development
      *     * `capstone` - capstone
@@ -27150,6 +27220,18 @@ export interface components {
      * @enum {string}
      */
     KindF82Enum: 'profile_text' | 'distinction_change';
+    /** @description One visible node in a family tree payload. */
+    KinspersonNode: {
+      id: number;
+      name: string;
+      tier: string;
+      family_id: number | null;
+      is_deceased: boolean;
+      is_appable: boolean;
+      gender: string;
+      age: number | null;
+      description: string;
+    };
     /** @description One known secret, from the viewer's side, with locked layers shown as "Unknown". */
     KnownSecret: {
       readonly id: number;
@@ -27189,6 +27271,48 @@ export interface components {
       durability: number;
       max_durability: number;
     };
+    /**
+     * @description * `self` - Self
+     *     * `parent` - Parent
+     *     * `child` - Child
+     *     * `sibling` - Sibling
+     *     * `half-sibling` - Half-Sibling
+     *     * `step-parent` - Step-Parent
+     *     * `step-child` - Step-Child
+     *     * `foster-parent` - Foster-Parent
+     *     * `foster-child` - Foster-Child
+     *     * `foster-sibling` - Foster-Sibling
+     *     * `spouse` - Spouse
+     *     * `in-law` - In-Law
+     *     * `grandparent` - Grandparent
+     *     * `grandchild` - Grandchild
+     *     * `aunt/uncle` - Aunt/Uncle
+     *     * `niece/nephew` - Niece/Nephew
+     *     * `cousin` - Cousin
+     *     * `past-incarnation` - Past Incarnation
+     *     * `later-incarnation` - Later Incarnation
+     * @enum {string}
+     */
+    LabelEnum:
+      | 'self'
+      | 'parent'
+      | 'child'
+      | 'sibling'
+      | 'half-sibling'
+      | 'step-parent'
+      | 'step-child'
+      | 'foster-parent'
+      | 'foster-child'
+      | 'foster-sibling'
+      | 'spouse'
+      | 'in-law'
+      | 'grandparent'
+      | 'grandchild'
+      | 'aunt/uncle'
+      | 'niece/nephew'
+      | 'cousin'
+      | 'past-incarnation'
+      | 'later-incarnation';
     LedgerRow: {
       id: number;
       amount: number;
@@ -32105,6 +32229,14 @@ export interface components {
        */
       previous?: string | null;
       results: components['schemas']['WorshippedBeingRef'][];
+    };
+    /** @description One visible parentage edge in a family tree payload. */
+    ParentageEdge: {
+      child_id: number;
+      parent_id: number;
+      kind: string;
+      is_true: boolean;
+      via_secret: boolean;
     };
     /**
      * @description Read serializer for combat participants.
@@ -39376,6 +39508,13 @@ export interface components {
       description: string;
       /** @description Whether this category is currently in use */
       is_active?: boolean;
+    };
+    /** @description One visible union in a family tree payload. */
+    UnionEdge: {
+      id: number;
+      kind: string;
+      member_ids: number[];
+      ended: boolean;
     };
     /**
      * @description * `class_level` - Class Level
@@ -63781,6 +63920,51 @@ export interface operations {
         };
         content: {
           'application/json': components['schemas']['GameInvite'];
+        };
+      };
+    };
+  };
+  roster_kin_relationship_retrieve: {
+    parameters: {
+      query: {
+        /** @description First character's id. */
+        a: number;
+        /** @description Second character's id. */
+        b: number;
+      };
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['KinRelationship'];
+        };
+      };
+    };
+  };
+  roster_kin_tree_retrieve: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        character_id: number;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['FamilyTree'];
         };
       };
     };

@@ -27855,6 +27855,67 @@ paths:
               schema:
                 $ref: '#/components/schemas/GameInvite'
           description: ''
+  /api/roster/kin/relationship/:
+    get:
+      operationId: roster_kin_relationship_retrieve
+      description: |-
+        Viewer-aware relationship label between two characters (#3003).
+
+        ``a``/``b`` are character ids (``CharacterSheet`` pks); the label is
+        derived fresh from the kinship graph on every call — nothing like
+        "cousin" is ever stored. No visibility logic lives here: ``viewer`` is
+        threaded straight into ``derive_relationship``, which gates on
+        ``fact_visible`` the same way the tree endpoint does.
+      parameters:
+      - in: query
+        name: a
+        schema:
+          type: integer
+        description: First character's id.
+        required: true
+      - in: query
+        name: b
+        schema:
+          type: integer
+        description: Second character's id.
+        required: true
+      tags:
+      - roster
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/KinRelationship'
+          description: ''
+  /api/roster/kin/tree/{character_id}/:
+    get:
+      operationId: roster_kin_tree_retrieve
+      description: |-
+        Viewer-aware kin tree centred on a single character (#3003).
+
+        Family-bound characters get their family's tree; familyless subjects
+        (Misbegotten, tarot-named) get the ego-centric payload from
+        ``kin_tree_for_sheet`` — same node/edge/union shapes either way.
+      parameters:
+      - in: path
+        name: character_id
+        schema:
+          type: integer
+        required: true
+      tags:
+      - roster
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/FamilyTree'
+          description: ''
   /api/roster/looking-for-table/:
     post:
       operationId: roster_looking_for_table_create
@@ -44149,6 +44210,35 @@ components:
             in character creation and (#1884) to resolve the nobiliary particle
       required:
       - name
+    FamilyTree:
+      type: object
+      description: |-
+        Viewer-aware graph payload for GET /api/roster/families/{id}/tree/.
+
+        ``family`` is null for an ego-centric payload (``kin_tree_for_sheet``'s
+        familyless branch) — a character with no house can still have kin.
+      properties:
+        family:
+          allOf:
+          - $ref: '#/components/schemas/Family'
+          nullable: true
+        nodes:
+          type: array
+          items:
+            $ref: '#/components/schemas/KinspersonNode'
+        parentage:
+          type: array
+          items:
+            $ref: '#/components/schemas/ParentageEdge'
+        unions:
+          type: array
+          items:
+            $ref: '#/components/schemas/UnionEdge'
+      required:
+      - family
+      - nodes
+      - parentage
+      - unions
     FamilyTypeEnum:
       enum:
       - commoner
@@ -47852,6 +47942,22 @@ components:
       - summary
       - tale
       - template_name
+    KinRelationship:
+      type: object
+      description: |-
+        Response for GET /api/roster/kin/relationship/ (#3003).
+
+        ``label`` is a viewer-derived ``RelationshipType`` value, or null when
+        the two people have no visible relationship (including a hidden one the
+        viewer has not learned).
+      properties:
+        label:
+          nullable: true
+          oneOf:
+          - $ref: '#/components/schemas/LabelEnum'
+          - $ref: '#/components/schemas/NullEnum'
+      required:
+      - label
     Kind4adEnum:
       enum:
       - update
@@ -47882,6 +47988,40 @@ components:
       description: |-
         * `profile_text` - Profile Text
         * `distinction_change` - Distinction Change
+    KinspersonNode:
+      type: object
+      description: One visible node in a family tree payload.
+      properties:
+        id:
+          type: integer
+        name:
+          type: string
+        tier:
+          type: string
+        family_id:
+          type: integer
+          nullable: true
+        is_deceased:
+          type: boolean
+        is_appable:
+          type: boolean
+        gender:
+          type: string
+        age:
+          type: integer
+          nullable: true
+        description:
+          type: string
+      required:
+      - age
+      - description
+      - family_id
+      - gender
+      - id
+      - is_appable
+      - is_deceased
+      - name
+      - tier
     KnownSecret:
       type: object
       description: One known secret, from the viewer's side, with locked layers shown
@@ -47979,6 +48119,48 @@ components:
       required:
       - durability
       - max_durability
+    LabelEnum:
+      enum:
+      - self
+      - parent
+      - child
+      - sibling
+      - half-sibling
+      - step-parent
+      - step-child
+      - foster-parent
+      - foster-child
+      - foster-sibling
+      - spouse
+      - in-law
+      - grandparent
+      - grandchild
+      - aunt/uncle
+      - niece/nephew
+      - cousin
+      - past-incarnation
+      - later-incarnation
+      type: string
+      description: |-
+        * `self` - Self
+        * `parent` - Parent
+        * `child` - Child
+        * `sibling` - Sibling
+        * `half-sibling` - Half-Sibling
+        * `step-parent` - Step-Parent
+        * `step-child` - Step-Child
+        * `foster-parent` - Foster-Parent
+        * `foster-child` - Foster-Child
+        * `foster-sibling` - Foster-Sibling
+        * `spouse` - Spouse
+        * `in-law` - In-Law
+        * `grandparent` - Grandparent
+        * `grandchild` - Grandchild
+        * `aunt/uncle` - Aunt/Uncle
+        * `niece/nephew` - Niece/Nephew
+        * `cousin` - Cousin
+        * `past-incarnation` - Past Incarnation
+        * `later-incarnation` - Later Incarnation
     LedgerRow:
       type: object
       properties:
@@ -56472,6 +56654,26 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/WorshippedBeingRef'
+    ParentageEdge:
+      type: object
+      description: One visible parentage edge in a family tree payload.
+      properties:
+        child_id:
+          type: integer
+        parent_id:
+          type: integer
+        kind:
+          type: string
+        is_true:
+          type: boolean
+        via_secret:
+          type: boolean
+      required:
+      - child_id
+      - is_true
+      - kind
+      - parent_id
+      - via_secret
     Participant:
       type: object
       description: |-
@@ -70611,6 +70813,25 @@ components:
       - description
       - display_name
       - name
+    UnionEdge:
+      type: object
+      description: One visible union in a family tree payload.
+      properties:
+        id:
+          type: integer
+        kind:
+          type: string
+        member_ids:
+          type: array
+          items:
+            type: integer
+        ended:
+          type: boolean
+      required:
+      - ended
+      - id
+      - kind
+      - member_ids
     UnlockTypeEnum:
       enum:
       - class_level
