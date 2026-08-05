@@ -1,7 +1,8 @@
-from django.test import TestCase, override_settings
+from django.test import TestCase
 
 from world.seeds.database import seed_dev_database
 from world.seeds.tests.content_stub import stub_content_root
+from world.seeds.tests.press_helpers import seed_dev_database_with_sample_topup
 
 
 class TestSeedIdempotency(TestCase):
@@ -38,7 +39,6 @@ class TestSeedIdempotency(TestCase):
             )
 
     @stub_content_root()
-    @override_settings(SEED_SAMPLE_CONTENT=True)
     def test_edit_survives_reseed(self) -> None:
         """A staff edit to a SEEDER-OWNED row survives the next Big Button press.
 
@@ -51,10 +51,16 @@ class TestSeedIdempotency(TestCase):
         (get_or_create, never update_or_create), so it asserts on a row the
         seeder genuinely owns: ``ThreadPullCost`` is tuning data and is
         deliberately absent from ``CONTENT_MODELS``.
+
+        ``seed_dev_database()`` itself now refuses ``SEED_SAMPLE_CONTENT`` once
+        the stub content root's own load makes the universe non-empty (#3017),
+        so the first press uses ``seed_dev_database_with_sample_topup()``
+        instead of an ambient override; the reseed under test stays a plain
+        ``seed_dev_database()`` call.
         """
         from world.magic.models import ThreadPullCost
 
-        seed_dev_database()
+        seed_dev_database_with_sample_topup()
         cost = ThreadPullCost.objects.order_by("pk").first()
         assert cost is not None
         # Short on purpose: ThreadPullCost.label is varchar(32), which SQLite
@@ -66,7 +72,6 @@ class TestSeedIdempotency(TestCase):
         self.assertEqual(cost.label, "STAFF-EDITED")
 
     @stub_content_root()
-    @override_settings(SEED_SAMPLE_CONTENT=True)
     def test_edited_cg_row_survives_reseed(self) -> None:
         """The #651 non-overwrite gate for the character_creation cluster.
 
@@ -74,10 +79,16 @@ class TestSeedIdempotency(TestCase):
         on for the stub root to yield a "Human" row here — the invariant under
         test (staff edits survive re-seed) is otherwise unrelated to that
         gating.
+
+        ``seed_dev_database()`` itself now refuses ``SEED_SAMPLE_CONTENT`` once
+        the stub content root's own load makes the universe non-empty (#3017),
+        so the first press uses ``seed_dev_database_with_sample_topup()``
+        instead of an ambient override; the reseed under test stays a plain
+        ``seed_dev_database()`` call.
         """
         from world.species.models import Species
 
-        seed_dev_database()
+        seed_dev_database_with_sample_topup()
         sp = Species.objects.get(name="Human")
         sp.description = "HAND-EDITED"
         sp.save()
