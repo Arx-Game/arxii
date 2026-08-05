@@ -39,7 +39,7 @@ class WeatherTypeAdmin(admin.ModelAdmin):
 
 @admin.register(WeatherEmit)
 class WeatherEmitAdmin(admin.ModelAdmin):
-    list_display = ["weather_type", "weight", "text"]
+    list_display = ["key", "weather_type", "weight", "text"]
     list_filter = [
         "weather_type",
         "in_spring",
@@ -51,7 +51,7 @@ class WeatherEmitAdmin(admin.ModelAdmin):
         "at_dusk",
         "at_night",
     ]
-    search_fields = ["text", "gm_notes"]
+    search_fields = ["key", "text", "gm_notes"]
 
 
 @admin.register(RegionWeatherState)

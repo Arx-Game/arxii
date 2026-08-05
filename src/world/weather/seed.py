@@ -17,12 +17,13 @@ Identity keys (what "the same row" means on re-seed):
 - ``WeatherTypeExposure``  → ``(weather_type, stat_key)`` (its unique constraint)
 - ``WeatherTypeShelter``   → ``(weather_type, damage_type)`` (its unique constraint, #2845)
 - ``WeatherTransition``    → ``(from_type, to_type)`` (its unique constraint, #2845)
-- ``WeatherEmit``          → ``(weather_type, text)`` (the line's content identity)
+- ``WeatherEmit``          → ``key`` (its stable identity, #2980 — NOT the text)
 - ``FeastDay``             → ``(ic_month, ic_day)`` (its unique constraint)
 
-Editing an emit's *text* is therefore a new line (it can't match an old one); editing its weight,
-season/phase gates, or gm_notes updates in place. Import-safe without Django configured — only the
-upsert functions touch the ORM, via deferred imports.
+Editing an emit's *text* therefore updates the row in place, the same as any other field (#2980):
+``key`` is assigned once and never recomputed from the text, so a rewrite can't fork a new row or
+strand the old one. Import-safe without Django configured — only the upsert functions touch the
+ORM, via deferred imports.
 """
 
 from __future__ import annotations
@@ -130,10 +131,11 @@ def upsert_weather_transitions(objects: list[dict]) -> tuple[int, int]:
 
 
 def upsert_weather_emits(objects: list[dict]) -> tuple[int, int]:
-    """Upsert ``WeatherEmit`` rows keyed on ``(weather_type, text)`` — the line's content identity.
+    """Upsert ``WeatherEmit`` rows keyed on ``key`` - the line's stable identity.
 
-    This is the row type ``loaddata`` duplicates on re-seed (no natural key); keying on the text
-    makes re-running idempotent for edited weight / season / phase / gm_notes.
+    Keyed on the authored ``key`` rather than the text (#2980), so rewriting a
+    placeholder line updates the row it belongs to. Keying on the text, as this
+    did until #2980, made every rewrite a new row and left the placeholder behind.
     """
     from world.weather.models import WeatherEmit  # noqa: PLC0415
 
@@ -141,9 +143,9 @@ def upsert_weather_emits(objects: list[dict]) -> tuple[int, int]:
     for obj in objects:
         fields = _fields(obj)
         weather_type = _resolve_weather_type(fields.pop("weather_type"))
-        text = fields.pop("text")
+        key = fields.pop("key")
         _, was_created = WeatherEmit.objects.update_or_create(
-            weather_type=weather_type, text=text, defaults=fields
+            key=key, defaults={"weather_type": weather_type, **fields}
         )
         created, updated = (created + 1, updated) if was_created else (created, updated + 1)
     return created, updated

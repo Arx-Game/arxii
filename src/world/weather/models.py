@@ -276,13 +276,28 @@ class WeatherEmit(NaturalKeyMixin, CreditedContent, SharedMemoryModel):
     Seeded (later slice) from the Arx-1 emit corpus. Gated by IC season and time-of-day phase
     (from ``world.game_clock``): an emit is eligible when *both* its matching season flag and its
     matching phase flag are set. ``weight`` drives weighted-random selection. Arx-1's intensity
-    range is intentionally dropped. ``text`` is PLACEHOLDER until the author pass.
+    range is intentionally dropped. Identity is ``key`` (#2980), not the prose: ``text`` is a
+    PLACEHOLDER a writer is free to replace in place without forking the row.
     """
 
     weather_type = models.ForeignKey(
         WeatherType,
         on_delete=models.CASCADE,
         related_name="emits",
+    )
+    key = models.CharField(
+        max_length=100,
+        unique=True,
+        null=True,
+        blank=True,
+        help_text=(
+            "Stable identity, '<weather-type-slug>-<nnn>' (e.g. 'stormy-007'). "
+            "Assigned once and never recomputed. It is deliberately NOT derived "
+            "from the text: the text is what a writer rewrites, and an identity "
+            "that moves with it forks the row instead of updating it. Null means "
+            "the row predates the re-key (#2980) and the content pipeline cannot "
+            "address it."
+        ),
     )
     text = models.TextField(help_text="The atmospheric line shown to the room. PLACEHOLDER.")
     gm_notes = models.TextField(blank=True, default="")
@@ -305,7 +320,7 @@ class WeatherEmit(NaturalKeyMixin, CreditedContent, SharedMemoryModel):
         ordering = ["weather_type", "id"]
 
     class NaturalKeyConfig:
-        fields = ["weather_type", "text"]
+        fields = ["key"]
 
     objects = NaturalKeyManager()
 

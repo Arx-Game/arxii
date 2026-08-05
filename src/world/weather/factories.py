@@ -69,6 +69,7 @@ class WeatherEmitFactory(DjangoModelFactory):
         model = WeatherEmit
 
     weather_type = factory.SubFactory(WeatherTypeFactory)
+    key = factory.Sequence(lambda n: f"emit-{n:03d}")
     text = factory.Sequence(lambda n: f"PLACEHOLDER emit {n}")
     weight = 1
 
