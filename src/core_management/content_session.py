@@ -177,10 +177,49 @@ def session_state(content_root: Path) -> SessionState:
     )
 
 
+def _no_index_diff(content_root: Path, rel: str) -> str:
+    """Return a full-file addition diff for one untracked path (#3018).
+
+    Plain ``git diff`` only compares tracked content, so a brand-new export
+    (the common row-export case: a row's first commit into the corpus) is
+    invisible to it - the working tree file exists but the diff renders
+    empty. ``git diff --no-index`` against ``/dev/null`` shows the whole file
+    as an addition instead, without touching the index. Exit 1 is the normal
+    "a difference exists" result for ``--no-index``; only other nonzero
+    exits are a real git failure.
+    """
+    result = subprocess.run(
+        ["git", "-C", str(content_root), "diff", "--no-index", "--", "/dev/null", rel],
+        check=False,
+        capture_output=True,
+        text=True,
+        timeout=120,
+    )
+    if result.returncode not in (0, 1):
+        raise ContentPushError(
+            f"git diff --no-index failed (exit {result.returncode}):\n{result.stderr.strip()}"
+        )
+    return result.stdout
+
+
 def row_diff(content_root: Path, paths: list[Path]) -> str:
-    """Return the uncommitted diff (working tree vs HEAD) for ``paths``."""
+    """Return the uncommitted diff (working tree vs HEAD) for ``paths``.
+
+    Tracked paths go through plain ``git diff``; untracked ones (a row's
+    first-ever export, before it has any commit) go through
+    ``_no_index_diff`` instead - see that helper's docstring for why plain
+    ``git diff`` cannot show them.
+    """
     rels = _to_relative(content_root, paths)
-    return _run_git(content_root, "diff", "--", *rels).stdout
+    tracked = [
+        rel for rel in rels if _git_ok(content_root, "ls-files", "--error-unmatch", "--", rel)
+    ]
+    untracked = [rel for rel in rels if rel not in tracked]
+    parts: list[str] = []
+    if tracked:
+        parts.append(_run_git(content_root, "diff", "--", *tracked).stdout)
+    parts.extend(_no_index_diff(content_root, rel) for rel in untracked)
+    return "".join(parts)
 
 
 def session_diff(content_root: Path) -> str:

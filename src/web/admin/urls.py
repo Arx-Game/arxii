@@ -11,6 +11,11 @@ from web.admin.content_conflict_views import (
 from web.admin.content_export_views import content_export_preview, content_export_run
 from web.admin.content_load_views import content_load_confirm, content_load_run
 from web.admin.content_push_views import content_push_preview, content_push_run
+from web.admin.content_row_export_views import (
+    content_export_row,
+    content_export_row_confirm,
+    content_export_row_diff,
+)
 from web.admin.game_setup_views import game_setup
 from web.admin.seed_views import seed_confirm, seed_run
 from web.admin.sphinx_views import sphinx_audit
@@ -63,6 +68,21 @@ urlpatterns = [
         "_content_conflict_resolve/",
         content_conflict_resolve,
         name="admin_content_conflict_resolve",
+    ),
+    path(
+        "_content_export_row/",
+        content_export_row,
+        name="admin_content_export_row",
+    ),
+    path(
+        "_content_export_row_diff/",
+        content_export_row_diff,
+        name="admin_content_export_row_diff",
+    ),
+    path(
+        "_content_export_row_confirm/",
+        content_export_row_confirm,
+        name="admin_content_export_row_confirm",
     ),
     path(
         "_content_export/",

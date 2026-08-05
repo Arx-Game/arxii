@@ -126,6 +126,14 @@ external = ["STRING_LITERAL", "PREFETCH_STRING", "SHARED_MEMORY", "USE_FILTERSET
     "S607",    # partial executable path for git CLI in tests
 ]
 
+# Shared git fixture helper for content-session tests (#3018) - not itself a
+# test_*.py module, so it needs the same subprocess-git-CLI exemption spelled
+# out separately.
+"src/core_management/tests/_git_fixtures.py" = [
+    "S603",    # subprocess calls in test setup
+    "S607",    # partial executable path for git CLI in tests
+]
+
 # Content push module — subprocess git calls are its core function
 "src/core_management/content_push.py" = [
     "S603",    # subprocess without shell check — git CLI calls

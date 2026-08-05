@@ -22,27 +22,10 @@ from core_management.content_session import (
     session_state,
 )
 from core_management.github_rest import GitHubRestError, github_request
-
-
-def _run(repo: Path, *args: str) -> subprocess.CompletedProcess[str]:
-    """Run a git command in ``repo``, raising on failure."""
-    return subprocess.run(
-        ["git", "-C", str(repo), *args], capture_output=True, text=True, check=True
-    )
-
-
-def _init_origin_and_clone(origin: Path, clone: Path) -> None:
-    """Bare origin + a configured clone, seeded with one commit on main and pushed."""
-    subprocess.run(
-        ["git", "init", "--bare", "-b", "main", str(origin)], capture_output=True, check=True
-    )
-    subprocess.run(["git", "clone", str(origin), str(clone)], capture_output=True, check=True)
-    _run(clone, "config", "user.email", "test@example.com")
-    _run(clone, "config", "user.name", "Test")
-    (clone / "README.md").write_text("# test repo\n", encoding="utf-8")
-    _run(clone, "add", ".")
-    _run(clone, "commit", "-m", "initial")
-    _run(clone, "push", "-u", "origin", "main")
+from core_management.tests._git_fixtures import (
+    init_origin_and_clone as _init_origin_and_clone,
+    run_git as _run,
+)
 
 
 class ContentSessionTests(TestCase):
@@ -191,6 +174,24 @@ class ContentSessionTests(TestCase):
 
         s_diff = session_diff(self.root)
         assert "diffme.json" in s_diff
+
+    def test_row_diff_shows_untracked_addition(self) -> None:
+        """A brand-new, never-committed export shows as a full-file addition (#3018).
+
+        Plain ``git diff`` only compares tracked content and renders empty
+        for an untracked path - the common case for a row's first-ever
+        export, since nothing has been committed for it yet.
+        """
+        ensure_session_branch(self.root)
+        path = self._write_row("untracked.json", '{"a": 1}\n')
+
+        diff = row_diff(self.root, [path])
+
+        assert "untracked.json" in diff
+        assert "new file mode" in diff
+        assert '+{"a": 1}' in diff
+        status = _run(self.root, "status", "--short").stdout
+        assert "?? content/" in status
 
     def test_open_session_pr_posts_and_returns_url(self) -> None:
         # origin stays the local bare fixture repo (the push must succeed for
