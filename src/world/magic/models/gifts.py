@@ -88,6 +88,22 @@ class Gift(NaturalKeyMixin, CreditedContent, SharedMemoryModel):
         related_name="gifts",
         help_text="Lore entry this gift is bound to, if any.",
     )
+    # Minor Gifts (species abilities, in-play powers) aren't hung off a Path, so they
+    # never inherit a casting style from Path.style (#2700) — leaving every Minor Gift
+    # cast styleless. This lets a gift impose its own casting style directly, overriding
+    # whatever the caster's Path would otherwise supply (#2905). Null = defer to the
+    # caster's Path, as before.
+    style = models.ForeignKey(
+        "arxii.TechniqueStyle",
+        on_delete=models.PROTECT,
+        null=True,
+        blank=True,
+        related_name="gifts",
+        help_text=(
+            "Casting style this gift imposes, overriding the caster's Path style "
+            "(#2905). Null = defer to the caster's Path, as before."
+        ),
+    )
 
     objects = GiftManager()
 
