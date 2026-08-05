@@ -1,6 +1,6 @@
 -- Reverse: convert partitioned arxii_interaction back to a regular table.
 --
--- Applied by: src/world/migrations/0108_partition_interaction.py, as the
+-- Applied by: src/world/migrations/0109_partition_interaction.py, as the
 -- reverse_sql of the RunSQL that applies partition_interaction_forward.sql.
 -- Not listed in tools/build_schema.py's SQL_FILES - build_schema.py builds
 -- forward-only from models, so reverse files have no direction to satisfy there.

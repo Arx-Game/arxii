@@ -1056,12 +1056,12 @@ Post-#2906 there is one app (`arxii`), so both the ORM fields and the raw SQL la
 migration chain rather than a per-app pair. The raw SQL lives in committed `.sql` files (durable
 artifact that survives migration wipes pre-prod, mirroring
 `scenes/sql/partition_interaction_forward.sql`), applied by
-`src/world/migrations/0108_partition_interaction.py`.
+`src/world/migrations/0109_partition_interaction.py`.
 
 | Migration | App | Contents |
 | --- | --- | --- |
 | ORM fields | arxii | ORM-only. Adds `CombatRoundAction.interaction` + `interaction_timestamp`. Adds `ClashContribution.interaction` + `interaction_timestamp`. Adds `ThreatPoolEntry.effect_properties` M2M to `mechanics.Property`. Adds `ClashConfig.clash_min_intensity`. `db_constraint=False` on the `interaction` FKs since the composite constraint is added by the SQL below. |
-| `0108_partition_interaction` | arxii | Raw SQL via `migrations.RunSQL(_read_sql(...))`. Files: `combat/sql/interaction_fk_composites_forward.sql` + `_reverse.sql`. Adds composite FK constraints `(interaction_id, interaction_timestamp) → arxii_interaction (id, timestamp)` on `arxii_combatroundaction` and `arxii_clashcontribution`. `ON DELETE SET NULL DEFERRABLE INITIALLY DEFERRED`. |
+| `0109_partition_interaction` | arxii | Raw SQL via `migrations.RunSQL(_read_sql(...))`. Files: `combat/sql/interaction_fk_composites_forward.sql` + `_reverse.sql`. Adds composite FK constraints `(interaction_id, interaction_timestamp) → arxii_interaction (id, timestamp)` on `arxii_combatroundaction` and `arxii_clashcontribution`. `ON DELETE SET NULL DEFERRABLE INITIALLY DEFERRED`. |
 
 **Raw SQL discipline:** every `migrations.RunSQL(...)` call reads from a
 committed `.sql` file. No inline SQL strings in migration files. Same

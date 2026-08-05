@@ -99,7 +99,7 @@ one migration rewrite instead of two.
   sound** - #2982 later found the collapsed chain had lost the `arxii_interaction`
   partition rewrite and its composite FKs entirely, so the two paths were *not*
   equivalent when this ADR was written. The gap is closed by
-  `src/world/migrations/0108_partition_interaction.py`, and equivalence is now
+  `src/world/migrations/0109_partition_interaction.py`, and equivalence is now
   machine-checked nightly by `tools/compare_schemas.py` rather than asserted once by
   hand. This ADR's migration-speed work matters for deploys that must replay migration
   *history* (e.g. an existing database moving forward one release at a time); it does
