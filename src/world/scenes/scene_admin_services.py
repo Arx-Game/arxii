@@ -158,7 +158,11 @@ def finish_scene_full(scene: Scene, by_account: AccountDB | None = None) -> None
     2. ``on_scene_finished(scene)`` — awards scene-completion progression rewards.
     3. ``process_deferred_fatigue_resets`` — drains any pending fatigue-reset
        tasks for all participant accounts.
-    4. ``broadcast_scene_message(scene, SceneAction.END)`` — pushes the END
+    4. ``teardown_conjured_hazards`` (alongside ``teardown_conjured_obstacles`` /
+       ``teardown_ramparts``): disarms any Trap the scene's room holds whose
+       ``created_by_sheet`` is set, i.e. a GM-placed trap rather than a
+       staff-authored one.
+    5. ``broadcast_scene_message(scene, SceneAction.END)`` - pushes the END
        event over the scene's WebSocket channel.
 
     ``by_account`` is accepted for call-site symmetry (so both the web viewset
@@ -174,18 +178,22 @@ def finish_scene_full(scene: Scene, by_account: AccountDB | None = None) -> None
     participant_account_ids = set(scene.participations.values_list("account_id", flat=True))
     process_deferred_fatigue_resets(participant_account_ids)
 
-    # #2019/#2209: scene end tears down conjured obstacles and living-barrier
-    # ramparts in the scene's room — both are cast-for-the-scene constructs with
-    # no other teardown trigger (teardown_conjured_obstacles previously had no
-    # production call site; this closes that gap alongside wiring ramparts).
+    # #2019/#2209/#3002: scene end tears down conjured obstacles, living-barrier
+    # ramparts and conjured or GM-placed zone hazards in the scene's room. All
+    # three are cast-for-the-scene constructs with no other teardown trigger
+    # (each previously had no production call site; this closes that gap).
     if scene.location is not None:
         from world.areas.positioning.services import (  # noqa: PLC0415
             teardown_conjured_obstacles,
             teardown_ramparts,
         )
+        from world.room_features.trap_services import (  # noqa: PLC0415
+            teardown_conjured_hazards,
+        )
 
         teardown_conjured_obstacles(scene.location)
         teardown_ramparts(scene.location)
+        teardown_conjured_hazards(scene.location)
 
     # #2051: when a scene ends, Durance vows tied to co-presence in that
     # scene's room may dim — can_engage_membership checks for an active scene,

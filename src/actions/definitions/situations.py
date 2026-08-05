@@ -75,7 +75,7 @@ class SetSituationAction(Action):
             return ActionResult(success=False, message="That situation template does not exist.")
 
         try:
-            instantiate_situation(template, actor.location)
+            instantiate_situation(template, actor.location, placed_by_sheet=actor.character_sheet)
         except ObjectDoesNotExist:
             return ActionResult(
                 success=False,

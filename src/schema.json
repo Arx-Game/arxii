@@ -65048,7 +65048,11 @@ components:
         prose_noun:
           type: string
           readOnly: true
+        exposes_skin:
+          type: boolean
+          readOnly: true
       required:
+      - exposes_skin
       - id
       - name
       - prose_noun
