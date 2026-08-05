@@ -79,3 +79,45 @@ jobs:
       # check to first-party apps only, same as the per-PR `ty` job's gate.
       - name: Check migrations match models
         run: uv run python tools/check_missing_migrations.py
+      # The diff below subsumes this, but a bare "the partition is gone"
+      # failure is far easier to read than picking it out of a catalog diff.
+      # This is the exact regression #2982 fixed: before it, a fully successful
+      # migrate left arxii_interaction unpartitioned with no composite FKs.
+      - name: Assert the interaction partition and composite FKs exist
+        run: |
+          set -euo pipefail
+          RELKIND=$(docker exec postgres-ci psql -U postgres -d arxii_test -tAc \
+            "SELECT relkind FROM pg_class WHERE relname = 'arxii_interaction'")
+          if [ "$RELKIND" != "p" ]; then
+            echo "arxii_interaction has relkind='$RELKIND', expected 'p' (partitioned)." >&2
+            echo "The migration chain has lost the partition rewrite again - see #2982." >&2
+            exit 1
+          fi
+          FKS=$(docker exec postgres-ci psql -U postgres -d arxii_test -tAc \
+            "SELECT count(*) FROM pg_constraint WHERE conname IN (
+               'interactionreceiver_interaction_fk',
+               'interactionfavorite_interaction_fk',
+               'interactiontargetpersona_interaction_fk',
+               'interactionreaction_interaction_fk',
+               'combat_roundaction_interaction_fk',
+               'combat_clashcontribution_interaction_fk')")
+          if [ "$FKS" != "6" ]; then
+            echo "Expected 6 composite FK constraints onto arxii_interaction, found $FKS." >&2
+            exit 1
+          fi
+      - name: Build a second database from model state
+        env:
+          DATABASE_URL: postgresql://postgres:postgres@localhost:5432/arxii_models
+        run: |
+          set -euo pipefail
+          docker exec postgres-ci createdb -U postgres arxii_models
+          uv run python tools/build_schema.py
+      # The class-level gate. The per-PR drift check compares models to
+      # MIGRATIONS and is blind to a missing RunSQL by construction; this
+      # compares the two resulting SCHEMAS, so any standalone SQL step wired
+      # into only one path fails here even if it is not the partition.
+      - name: Assert both schema-construction paths agree
+        run: |
+          uv run python tools/compare_schemas.py \
+            postgresql://postgres:postgres@localhost:5432/arxii_test \
+            postgresql://postgres:postgres@localhost:5432/arxii_models
