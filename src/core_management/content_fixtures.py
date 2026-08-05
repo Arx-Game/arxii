@@ -132,6 +132,18 @@ FIELD_DEFAULT_DESCRIPTION_TEMPLATE = "default_description_template"
 FIELD_VALUE = "value"
 FIELD_WEIGHT = "weight"
 
+# Credit keys (#2980). Written to prose-domain frontmatter and read back by every
+# builder, so a writer can record authorship in the lore repo and a staff member
+# can record it in admin, with either side surviving the round trip.
+FIELD_WRITTEN_BY = "written_by"
+FIELD_WRITTEN_ON = "written_on"
+FIELD_REVIEWED_BY = "reviewed_by"
+FIELD_REVIEWED_ON = "reviewed_on"
+
+CREDIT_META_KEYS = (FIELD_WRITTEN_BY, FIELD_WRITTEN_ON, FIELD_REVIEWED_BY, FIELD_REVIEWED_ON)
+CREDIT_NAME_KEYS = (FIELD_WRITTEN_BY, FIELD_REVIEWED_BY)
+CREDIT_DATE_KEYS = (FIELD_WRITTEN_ON, FIELD_REVIEWED_ON)
+
 # Prose fields for the multi-section domains (#2688). A domain whose model
 # carries more than one long-form text field maps ``## Heading`` sections in
 # the markdown body onto these, instead of the whole-body-to-one-field rule
@@ -503,6 +515,32 @@ def _optional_meta_natural_key(entry: ContentEntry, key: str) -> list | None:
     return list(value) if isinstance(value, list) else [value]
 
 
+def _apply_credit_meta(entry: ContentEntry, fields: dict) -> None:
+    """Copy any credit keys from frontmatter into *fields* (#2980).
+
+    Absent keys stay absent, which ``load_entries`` already reads as "leave this
+    column alone" (see the module docstring on optional fields), so an entry that
+    says nothing about authorship never clears a credit set in admin.
+
+    Dates are coerced to ISO strings: ``yaml.safe_load`` turns an unquoted
+    ``2026-08-04`` into a ``datetime.date``, and ``write_fixtures`` serializes
+    the builder's output with ``json.dumps``, which raises ``TypeError`` on a
+    date object. A quoted date arrives as a string already and passes straight
+    through; Django accepts either form on a ``DateField``.
+    """
+    for key in CREDIT_NAME_KEYS:
+        value = _optional_meta_natural_key(entry, key)
+        if value is not None:
+            fields[key] = value
+    for key in CREDIT_DATE_KEYS:
+        if key not in entry.meta:
+            continue
+        value = entry.meta[key]
+        if value is None or value == "":
+            continue
+        fields[key] = value.isoformat() if hasattr(value, "isoformat") else str(value)
+
+
 def _build_codex_entry_fixture(entry: ContentEntry) -> dict:
     """Map a codex_entries/ entry to a codex.CodexEntry fixture object (#2688).
 
@@ -536,6 +574,7 @@ def _build_codex_entry_fixture(entry: ContentEntry) -> dict:
             {"Lore": FIELD_LORE_CONTENT, "Mechanics": FIELD_MECHANICS_CONTENT},
         )
     )
+    _apply_credit_meta(entry, fields)
     return {"model": _fixture_model_label(CodexEntry), "fields": fields}
 
 
@@ -549,14 +588,13 @@ def _build_beginnings_fixture(entry: ContentEntry) -> dict:
     from world.character_creation.models import Beginnings  # noqa: PLC0415
 
     name = _require_name_and_body(entry)
-    return {
-        "model": _fixture_model_label(Beginnings),
-        "fields": {
-            "name": name,
-            "starting_area": _require_meta_natural_key(entry, "starting_area"),
-            FIELD_DESCRIPTION: entry.body,
-        },
+    fields: dict = {
+        "name": name,
+        "starting_area": _require_meta_natural_key(entry, "starting_area"),
+        FIELD_DESCRIPTION: entry.body,
     }
+    _apply_credit_meta(entry, fields)
+    return {"model": _fixture_model_label(Beginnings), "fields": fields}
 
 
 def _build_starting_area_fixture(entry: ContentEntry) -> dict:
@@ -584,6 +622,7 @@ def _build_starting_area_fixture(entry: ContentEntry) -> dict:
         value = _optional_meta_natural_key(entry, key)
         if value is not None:
             fields[key] = value
+    _apply_credit_meta(entry, fields)
     return {"model": _fixture_model_label(StartingArea), "fields": fields}
 
 
@@ -592,10 +631,9 @@ def _build_tradition_fixture(entry: ContentEntry) -> dict:
     from world.magic.models import Tradition  # noqa: PLC0415
 
     name = _require_name_and_body(entry)
-    return {
-        "model": _fixture_model_label(Tradition),
-        "fields": {"name": name, FIELD_DESCRIPTION: entry.body},
-    }
+    fields: dict = {"name": name, FIELD_DESCRIPTION: entry.body}
+    _apply_credit_meta(entry, fields)
+    return {"model": _fixture_model_label(Tradition), "fields": fields}
 
 
 DOMAIN_BUILDERS = {
@@ -659,11 +697,13 @@ DOMAIN_BUILDERS = {
 #: round-tripped — omitting a key already means "leave this column alone" on
 #: load, so a full-field export would silently convert admin-owned tuning
 #: columns (costs, difficulty, display order, publication flags) into
-#: markdown-owned ones across the whole corpus.
+#: markdown-owned ones across the whole corpus. The credit keys (#2980,
+#: ``CREDIT_META_KEYS``) are the one exception carried by every domain here:
+#: a writer/reviewer name + date, author-owned like the rest of ``meta``.
 MARKDOWN_EXPORT_DOMAINS: dict[str, dict] = {
     "codex.codexentry": {
         "domain": "content/codex_entries",
-        "meta": ["name", FIELD_SUBJECT, FIELD_SUMMARY],
+        "meta": ["name", FIELD_SUBJECT, FIELD_SUMMARY, *CREDIT_META_KEYS],
         "prose": [("Lore", FIELD_LORE_CONTENT), ("Mechanics", FIELD_MECHANICS_CONTENT)],
         # Nest by the entry's own subject so the tree stays navigable as this
         # domain grows; ``build_all`` uses rglob, so depth costs nothing.
@@ -671,19 +711,19 @@ MARKDOWN_EXPORT_DOMAINS: dict[str, dict] = {
     },
     "character_creation.beginnings": {
         "domain": "content/beginnings",
-        "meta": ["name", "starting_area"],
+        "meta": ["name", "starting_area", *CREDIT_META_KEYS],
         "prose": [(None, FIELD_DESCRIPTION)],
     },
     "character_creation.startingarea": {
         "domain": "content/starting_areas",
         # default_starting_room is bootstrap wiring, not admin tuning — the
         # fallback-room guarantee depends on it surviving the round trip.
-        "meta": ["name", "realm", "default_starting_room"],
+        "meta": ["name", "realm", "default_starting_room", *CREDIT_META_KEYS],
         "prose": [(None, FIELD_DESCRIPTION)],
     },
     "magic.tradition": {
         "domain": "content/traditions",
-        "meta": ["name"],
+        "meta": ["name", *CREDIT_META_KEYS],
         "prose": [(None, FIELD_DESCRIPTION)],
     },
 }

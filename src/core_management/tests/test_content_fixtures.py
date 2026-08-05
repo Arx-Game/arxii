@@ -1220,3 +1220,75 @@ A Princess of the Leviathan is given a healthy amount of distance by her peers.
         outcome = load_world_content(self.root)
         assert outcome.created == 0, (outcome.created, outcome.updated)
         assert HouseAspectOption.objects.filter(name="The Leviathan").count() == 1
+
+
+class MarkdownCreditRoundTripTests(TestCase):
+    """Credit keys survive render -> parse for a prose domain (#2980)."""
+
+    def setUp(self) -> None:
+        self.tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(self.tmp.cleanup)
+        self.tmpdir = self.tmp.name
+
+    def test_render_emits_credit_frontmatter(self):
+        from core_management.content_fixtures import (
+            MARKDOWN_EXPORT_DOMAINS,
+            render_entry_markdown,
+        )
+
+        spec = MARKDOWN_EXPORT_DOMAINS["magic.tradition"]
+        rendered = render_entry_markdown(
+            {
+                "name": "Thornwake",
+                "description": "Authored prose.",
+                "written_by": ["Tehom"],
+                "written_on": "2026-08-04",
+                "reviewed_by": None,
+                "reviewed_on": None,
+            },
+            spec,
+        )
+        self.assertIn('written_by: "Tehom"', rendered)
+        self.assertIn('written_on: "2026-08-04"', rendered)
+        # Absent credits are omitted rather than written as null.
+        self.assertNotIn("reviewed_by", rendered)
+
+    def test_builder_reads_credit_frontmatter_back(self):
+        from core_management.content_fixtures import (
+            _build_tradition_fixture,
+            parse_content_file,
+        )
+
+        path = Path(self.tmpdir) / "thornwake.md"
+        path.write_text(
+            "---\n"
+            'name: "Thornwake"\n'
+            'written_by: "Tehom"\n'
+            "written_on: 2026-08-04\n"
+            "---\n\n"
+            "Authored prose.\n",
+            encoding="utf-8",
+        )
+        entry = parse_content_file(path, "content/traditions")
+        fields = _build_tradition_fixture(entry)["fields"]
+        self.assertEqual(fields["written_by"], ["Tehom"])
+        # yaml.safe_load returns a datetime.date here; json.dumps would raise on
+        # it in write_fixtures, so the builder must hand back an ISO string.
+        self.assertEqual(fields["written_on"], "2026-08-04")
+        self.assertIsInstance(fields["written_on"], str)
+
+    def test_absent_credit_keys_are_omitted_entirely(self):
+        from core_management.content_fixtures import (
+            _build_tradition_fixture,
+            parse_content_file,
+        )
+
+        path = Path(self.tmpdir) / "plain.md"
+        path.write_text(
+            '---\nname: "Plain"\n---\n\nProse.\n',
+            encoding="utf-8",
+        )
+        entry = parse_content_file(path, "content/traditions")
+        fields = _build_tradition_fixture(entry)["fields"]
+        for key in ("written_by", "written_on", "reviewed_by", "reviewed_on"):
+            self.assertNotIn(key, fields)
