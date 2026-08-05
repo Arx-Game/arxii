@@ -296,7 +296,7 @@ class TestContentRowExportViewsConfigured(TestCase):
             )
 
         self.assertEqual(resp.status_code, 302)
-        self.assertEqual(resp.url, reverse("admin_game_setup"))
+        self.assertEqual(resp.url, reverse("admin_content_session"))
         msgs = [str(m) for m in resp.wsgi_request._messages]
         self.assertTrue(any("Row Commit Flash" in m for m in msgs))
         log = run_git(self.root, "log", "--oneline", "-1").stdout

@@ -42,6 +42,10 @@
         lists credited rows a load left untouched because the repo's
         incoming values differ - resolve one at a time with a typed
         confirmation.
+        <br>
+        <a href="{% url 'admin_content_session' %}">Content session</a>
+        reviews the accumulated row-export commits on the session branch and
+        opens one pull request for the whole session.
       {% else %}
         set <code>CONTENT_REPO_PATH</code> in <code>src/.env</code> to enable
         this step. Until then, the

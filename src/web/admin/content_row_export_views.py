@@ -379,9 +379,7 @@ def _run_confirmed_action(
 
     _clear_pending_export(request)
     messages.success(request, f"Committed {model.__name__} [{natural_key}] as {sha}.")
-    # Redirects to the Game Setup hub for now - Task 4 adds the session page
-    # (admin_content_session) and this line moves there once it lands.
-    return HttpResponseRedirect(reverse("admin_game_setup"))
+    return HttpResponseRedirect(reverse("admin_content_session"))
 
 
 @staff_member_required
