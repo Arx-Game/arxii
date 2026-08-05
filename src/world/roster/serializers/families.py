@@ -60,9 +60,13 @@ class UnionEdgeSerializer(serializers.Serializer):
 
 
 class FamilyTreeSerializer(serializers.Serializer):
-    """Viewer-aware graph payload for GET /api/roster/families/{id}/tree/."""
+    """Viewer-aware graph payload for GET /api/roster/families/{id}/tree/.
 
-    family = FamilySerializer()
+    ``family`` is null for an ego-centric payload (``kin_tree_for_sheet``'s
+    familyless branch) — a character with no house can still have kin.
+    """
+
+    family = FamilySerializer(allow_null=True)
     nodes = KinspersonNodeSerializer(many=True)
     parentage = ParentageEdgeSerializer(many=True)
     unions = UnionEdgeSerializer(many=True)

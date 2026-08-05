@@ -77,7 +77,14 @@ Readers (all viewer-aware; `viewer` = RosterEntry, `None` = public-only,
 (full/half), `spouses_of`, `step_parents_of`, `unions_of`,
 `incarnation_chain_of` (per-life knowledge), `derive_relationship` (labeled
 precedence walk incl. foster/step/in-law/soul), `family_tree_for` (graph
-payload), `open_slots_for` (CG browser).
+payload for a `Family`), `kin_tree_for_sheet` (#3003 — the same graph payload
+centred on one `CharacterSheet`: delegates to `family_tree_for` when the
+sheet's `Kinsperson` node has a family, else walks parents/children/siblings/
+spouses/step-parents directly so a familyless character — Misbegotten,
+tarot-named — still gets an ego-centric kin graph; `FamilyTreePayload.family`
+is `None` in that branch), `open_slots_for` (CG browser). `_node_dict`/
+`_edge_dict`/`_union_dict` are the single node/edge/union dict-shape
+definitions both tree builders share — never duplicate them.
 
 ## Surfaces
 
