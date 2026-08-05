@@ -947,7 +947,7 @@ def _ensure_ambient_group_trigger(
     ``TriggerDefinition`` carries ``CreditedContent`` (#3017): a row whose
     ``written_by`` a staff admin has set is never overwritten here even when its
     ``base_filter_condition`` would otherwise be refreshed (the digest-collision
-    branch above) — the row is left untouched and the conflict is appended to
+    branch above) - the row is left untouched and the conflict is appended to
     ``result.reports``, same freeze the fixture loader and the weather seed apply
     to their own credited rows. ``FlowDefinition`` (also ``CreditedContent``) is
     only ever created-or-fetched-unchanged in this function (``get_or_create``
