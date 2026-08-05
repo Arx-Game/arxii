@@ -33,15 +33,11 @@ from __future__ import annotations
 
 import ast
 from pathlib import Path
-import re
 import sys
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 BUILD_SCHEMA = PROJECT_ROOT / "tools" / "build_schema.py"
 MIGRATIONS_DIR = PROJECT_ROOT / "src" / "world" / "migrations"
-
-# Any string literal ending in .sql, anywhere in a migration module's source.
-_SQL_LITERAL_RE = re.compile(r"""["']([A-Za-z0-9_./-]+\.sql)["']""")
 
 
 def sql_files_from_build_schema(source: str) -> list[str]:
@@ -57,12 +53,55 @@ def sql_files_from_build_schema(source: str) -> list[str]:
     raise SystemExit(msg)
 
 
+def _operations_node(source: str) -> ast.AST | None:
+    """Return the AST subtree assigned to Migration.operations, or None.
+
+    Parses with ast rather than scanning raw text so that comments (not part of
+    the AST at all) and module-level constants outside the operations list (not
+    part of this subtree) cannot masquerade as a wired reference. A module with
+    no ``class Migration`` or no ``operations`` assignment yields None rather
+    than raising - malformed or unusual modules should contribute no references,
+    not crash the check.
+    """
+    try:
+        tree = ast.parse(source)
+    except SyntaxError:
+        return None
+
+    migration_class = None
+    for node in ast.walk(tree):
+        if isinstance(node, ast.ClassDef) and node.name == "Migration":
+            migration_class = node
+            break
+    if migration_class is None:
+        return None
+
+    for node in ast.walk(migration_class):
+        if isinstance(node, (ast.Assign, ast.AnnAssign)):
+            targets = node.targets if isinstance(node, ast.Assign) else [node.target]
+            for target in targets:
+                if isinstance(target, ast.Name) and target.id == "operations":
+                    return node.value
+    return None
+
+
 def sql_names_referenced_by_migrations(sources: dict[str, str]) -> dict[str, set[str]]:
-    """Map each .sql basename a migration mentions to the modules mentioning it."""
+    """Map each .sql basename a migration mentions to the modules mentioning it.
+
+    Only string constants reachable from within ``Migration.operations`` count -
+    see ``_operations_node`` for why.
+    """
     referenced: dict[str, set[str]] = {}
     for module_name, source in sources.items():
-        for match in _SQL_LITERAL_RE.finditer(source):
-            name = Path(match.group(1)).name
+        operations = _operations_node(source)
+        if operations is None:
+            continue
+        for node in ast.walk(operations):
+            if not isinstance(node, ast.Constant) or not isinstance(node.value, str):
+                continue
+            if not node.value.endswith(".sql"):
+                continue
+            name = Path(node.value).name
             referenced.setdefault(name, set()).add(module_name)
     return referenced
 
