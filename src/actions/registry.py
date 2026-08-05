@@ -442,7 +442,12 @@ from actions.definitions.tasking import (
 )
 from actions.definitions.technique_authoring import AuthorTechniqueAction
 from actions.definitions.threads import WeaveThreadAction
-from actions.definitions.traps import DisarmTrapAction
+from actions.definitions.traps import (
+    ArmTrapAction,
+    DisarmTrapAction,
+    GmDisarmTrapAction,
+    ListRoomTrapsAction,
+)
 from actions.definitions.turf import StartGangTurfAction
 from actions.definitions.vault import (
     VaultAccessAddAction,
@@ -603,6 +608,9 @@ _ALL_ACTIONS: list[Action] = [
     LeaveRoundAction(),
     EndRoundAction(),
     DisarmTrapAction(),
+    ListRoomTrapsAction(),
+    ArmTrapAction(),
+    GmDisarmTrapAction(),
     PassRoundAction(),
     ForceResolveRoundAction(),
     SetRoundModeAction(),

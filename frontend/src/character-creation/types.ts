@@ -72,41 +72,6 @@ export interface Family {
   origin_realm?: number;
 }
 
-// Kinship graph payload (#2062): person-nodes + typed edges, viewer-filtered.
-export interface KinNode {
-  id: number;
-  name: string;
-  tier: string;
-  family_id: number | null;
-  is_deceased: boolean;
-  is_appable: boolean;
-  gender: string;
-  age: number | null;
-  description: string;
-}
-
-export interface KinParentageEdge {
-  child_id: number;
-  parent_id: number;
-  kind: string;
-  is_true: boolean;
-  via_secret: boolean;
-}
-
-export interface KinUnionEdge {
-  id: number;
-  kind: string;
-  member_ids: number[];
-  ended: boolean;
-}
-
-export interface FamilyTree {
-  family: Family;
-  nodes: KinNode[];
-  parentage: KinParentageEdge[];
-  unions: KinUnionEdge[];
-}
-
 // Open app-in positions for a family (#2062 slot mountain).
 export interface KinSlot {
   id: number;

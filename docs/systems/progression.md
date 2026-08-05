@@ -451,20 +451,6 @@ path = resolve_advanced_path_by_name(sheet, "Path of the Pale")  # -> Path | Non
 
 ---
 
-### Scene Integration (`services.scene_integration`)
-
-```python
-from world.progression.services import award_scene_development_points, calculate_automatic_scene_awards
-
-# Calculate automatic awards based on scene content
-awards = calculate_automatic_scene_awards(scene, participants)
-
-# Award development points to scene participants
-transactions = award_scene_development_points(scene, participants, awards)
-```
-
----
-
 ## API Endpoints
 
 ### Path Options (transition-generic)
@@ -661,7 +647,10 @@ Dispatches `SetPathIntentAction` / `ClearPathIntentAction`
 - **Mechanics**: Development rate modifiers from distinctions (e.g., Spoiled reduces physical skill development by 20%) are applied via `get_modifier_total(sheet, modifier_target)` with string-based ModifierTarget lookup (pending target FK).
 - **Traits**: `DevelopmentPoints.award_points()` auto-applies to `CharacterTraitValue`.
 - **Classes**: `ClassLevelUnlock`, `ClassXPCost`, and requirements reference `CharacterClass` and class levels.
-- **Scenes**: Scene completion triggers `award_scene_development_points()` for trait-specific development.
+- **Scenes**: Scene completion (`on_scene_finished`) grants vote-budget bonuses. It does
+  not award development points — development comes from resolved checks
+  (`award_check_development`) and GM fiat (`GMAwardAction`). Awarding development from
+  scene participation is recorded as intent in `docs/roadmap/planned-systems.md`.
 - **Character Creation**: CG-to-XP conversion via `award_cg_conversion_xp()` creates locked (non-transferable) `CharacterXP`.
 - **Magic — Ritual of the Durance (#1352):** `advance_class_level_via_session` is
   dispatched by `fire_session` for the "Ritual of the Durance" `Ritual` row (seeded via

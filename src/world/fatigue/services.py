@@ -301,10 +301,15 @@ def resolve_fatigue_collapse(
             from world.dreams.peril import resolve_dream_peril_collapse  # noqa: PLC0415
 
             result = resolve_dream_peril_collapse(character_sheet)
+            character = character_sheet.character
+            if character is not None and result.message:
+                character.msg(result.message)
             return FatigueCollapseResult(
                 collapsed=result.died,
                 powered_through=not result.died,
                 strain_damage=0,
+                outcome_label=result.outcome_label,
+                message=result.message,
             )
 
     power_success, strain_damage = attempt_power_through(character_sheet, category)

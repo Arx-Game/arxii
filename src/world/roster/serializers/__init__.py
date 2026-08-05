@@ -26,6 +26,8 @@ from world.roster.serializers.characters import (
 from world.roster.serializers.families import (
     FamilySerializer,
     FamilyTreeSerializer,
+    KinRelationshipQuerySerializer,
+    KinRelationshipSerializer,
     KinSlotPoolSerializer,
     KinSlotSerializer,
 )
@@ -64,6 +66,8 @@ __all__ = [
     "GameInviteCreateSerializer",
     "GameInviteResolveSerializer",
     "GameInviteSerializer",
+    "KinRelationshipQuerySerializer",
+    "KinRelationshipSerializer",
     "KinSlotPoolSerializer",
     "KinSlotSerializer",
     "MediaSerializer",

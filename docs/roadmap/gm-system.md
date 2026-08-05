@@ -226,13 +226,12 @@ Potential GM-specific tooling that may warrant a future phase:
   outcomes without *deciding* them — `perform_check` still resolves by player roll
   (ADR-0030), and the shift is catalog-bounded, not fiat (ADR-0110).
 - `GMAwardAction`/`GMApplyConditionAction` (#2118) are a deliberate, narrow exception
-  to "rewards are not a GM concern" above: they exist specifically because the
-  story-beat automatic-award pipeline (`award_scene_development_points`) has zero
-  production callers and is bug-for-bug broken (reads a nonexistent `scene.title`) —
-  see #2118's spec. They are fiat (JUNIOR-tier GM trust required, unlike the
-  no-floor check-invocation verb) and meant for improvised story moments the broken
-  pipeline can't reach, not a replacement for story-beat rewards once that pipeline
-  is fixed or reviving `award_scene_development_points` is designed properly.
+  to "rewards are not a GM concern" above: they exist specifically because there is no
+  automatic story-beat award pipeline: the broken `award_scene_development_points`
+  scaffold was removed in #3004 (see `docs/roadmap/planned-systems.md` for the
+  recorded intent). They are fiat (JUNIOR-tier GM trust required, unlike the
+  no-floor check-invocation verb) and meant for improvised story moments, not a
+  replacement for story-beat rewards if that pipeline is designed and built.
 
 ### Phase 5 — Dashboards and UI (deferred until after Stories)
 The GM dashboard is story-shaped, not roster-shaped. What GMs actually
@@ -336,6 +335,42 @@ Delivered:
 Still content-blocked: the catalog itself. A dozen or so reusable
 `ChallengeTemplate`s with authored approaches are a lore-repo authoring pass
 (tracked in the lore repo), and the code half is inert without them.
+
+### Phase 6c - GM Trap Management ✅ (#3002, ADR-0197)
+#3002 was filed as "the authoring half of the trap loop," on the premise that no GM action
+places or arms a trap. Verification against code falsified it: `set_situation` has placed
+armed `Trap` rows since #1895, via `instantiate_situation` and `SituationTrapLink`. The
+real hole was everything after placement, so the issue was rescoped to management.
+
+Delivered:
+- **Three GM actions** (`actions/definitions/traps.py`): `list_room_traps` (the only
+  surface anywhere that hands out a trap id), `arm_trap` (nothing re-armed a sprung trap
+  before this), and `gm_disarm_trap` (an off switch with no roll, unlike the player's
+  `disarm_trap`, which detonates on a failed disarm). Telnet:
+  `gm trap list|arm <id>|disarm <id>`, subverbs on the existing `gm` command.
+- **Gate**: `MinimumGMLevelPrerequisite(JUNIOR)` alone. JUNIOR matches the tier that can
+  already mint armed traps. WHICH traps an actor may act on is a separate, per-row check
+  (`_room_traps`): staff and the active scene's GM may act on every trap in the room;
+  everyone else may only act on traps they placed themselves. A first cut also required
+  `IsSceneGMPrerequisite()`, but that dead-ended `set_situation`'s own documented
+  pre-scene staging workflow (Phase 6b's "Table-running tools" note above: `setsituation`
+  is "legitimately used before a scene exists, staging a room ahead of players
+  arriving") - a GM who staged a room and placed a trap there could never manage it
+  until a scene existed. These actions also reach
+  technique-conjured zone hazards, not just situation-placed traps; `arm_trap` refuses to
+  re-arm one whose `duration_rounds` has already ticked to 0.
+- **Scene-scoped lifetime**: `instantiate_situation` gained a keyword-only
+  `placed_by_sheet`, `SetSituationAction` passes the placing GM's sheet, and
+  `finish_scene_full` now calls `teardown_conjured_hazards` alongside the obstacle and
+  rampart teardowns. Before this, `teardown_conjured_hazards` had zero callers and every
+  GM-placed trap was permanent. Admin-authored traps (null `created_by_sheet`) still are.
+- **idmapper fix**: `teardown_conjured_hazards` saves per instance instead of bulk
+  `.update()`, matching its two peers. A bulk update sends no `post_save`, so the identity
+  map kept serving a stale `is_armed` and the GM's own listing would have lied.
+
+Still open: the **player half**. `disarm_trap` is registered but unreachable (no surface
+gives a player a `trap_id`), and `search_room` never looks at traps. `Trap.is_hidden` is
+documented as unwired in place, waiting on that surface. Filed separately.
 
 ### Phase 7 — Story Areas & Story Rooms ✅ (#2450, epic #2436 slice 3, ADR-0141)
 A GM's own build-and-run space, layered on the #2436/#2449 staff world-builder grid

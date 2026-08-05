@@ -7,6 +7,7 @@ from django.test import TestCase
 from actions.definitions.goals import LogGoalProgressAction, SetCharacterGoalsAction
 from actions.registry import get_action
 from actions.types import ActionResult
+from evennia_extensions.factories import AccountFactory
 from world.character_sheets.factories import CharacterSheetFactory
 from world.goals.factories import GoalDomainFactory
 from world.goals.models import CharacterGoal, GoalJournal
@@ -40,6 +41,8 @@ class SetCharacterGoalsActionTests(TestCase):
 class LogGoalProgressActionTests(TestCase):
     def setUp(self) -> None:
         self.actor = CharacterSheetFactory().character
+        self.actor.db_account = AccountFactory()
+        self.actor.save()
 
     def test_logs_progress(self) -> None:
         result = LogGoalProgressAction().execute(

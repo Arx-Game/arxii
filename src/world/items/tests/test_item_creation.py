@@ -230,3 +230,144 @@ class ItemCreationCraftTests(TestCase):
             # Learn it, and the same craft now proceeds.
             grant_recipe_knowledge(self.sheet, recipe)
             self.assertTrue(_craft().attached)
+
+
+class StylesAtCreateTests(TestCase):
+    """Create-time Style picks (#2985): designed-in registers, ambition-priced.
+
+    A dress is Lycene from the first stitch — styles are chosen at the bench
+    like accents and silhouette; STYLE_ATTACH remains the restyle path.
+    """
+
+    def setUp(self) -> None:
+        from evennia_extensions.factories import AccountFactory, RoomProfileFactory
+        from world.character_sheets.factories import CharacterSheetFactory
+        from world.items.factories import install_full_lab_station, wire_enchanting_crafting
+        from world.roster.factories import (
+            PlayerDataFactory,
+            RosterEntryFactory,
+            RosterTenureFactory,
+        )
+
+        self.recipe = wire_enchanting_crafting(base_difficulty=0)
+        self.sheet = CharacterSheetFactory()
+        self.account = AccountFactory()
+        self.character = self.sheet.character
+        roster_entry = RosterEntryFactory(character_sheet=self.sheet)
+        RosterTenureFactory(
+            roster_entry=roster_entry,
+            player_data=PlayerDataFactory(account=self.account),
+        )
+        room_profile = RoomProfileFactory()
+        self.character.location = room_profile.objectdb
+        self.character.save()
+        install_full_lab_station(room_profile)
+
+    def _template_with_capacity(self, capacity: int):
+        from world.items.models import ItemTemplate
+
+        template = ItemTemplate.objects.get(name="Craftable Dagger")
+        template.style_capacity = capacity
+        template.save(update_fields=["style_capacity"])
+        return template
+
+    def _mint_piece(self, template):
+        from world.checks.test_helpers import force_check_outcome
+        from world.items.crafting.constants import CraftingRecipeKind
+        from world.items.crafting.services import run_crafting_recipe
+        from world.traits.factories import CheckOutcomeFactory
+
+        success = CheckOutcomeFactory(name="StyleCreateSuccess", success_level=5)
+        with force_check_outcome(success):
+            result = run_crafting_recipe(
+                kind=CraftingRecipeKind.ITEM_CREATE,
+                crafter_account=self.account,
+                crafter_character=self.character,
+                item_instance=None,
+                target=None,
+                output_overrides={
+                    "output_template": template,
+                    "custom_name": "",
+                    "custom_description": "",
+                },
+            )
+        assert result.attached
+        return result
+
+    def test_style_taken_at_making_attaches_at_piece_tier(self) -> None:
+        # force_check_outcome is single-shot, so (like the accent tests) the
+        # sub-roll resolver is exercised directly against a minted piece.
+        from world.checks.test_helpers import force_check_outcome
+        from world.items.crafting.services import _resolve_styles_at_create
+        from world.items.factories import StyleFactory
+        from world.traits.factories import CheckOutcomeFactory
+
+        template = self._template_with_capacity(2)
+        piece = self._mint_piece(template)
+        lycene = StyleFactory(name="Lycene")
+        with force_check_outcome(CheckOutcomeFactory(name="StyleTook", success_level=5)):
+            styles = _resolve_styles_at_create(
+                recipe=self.recipe,
+                crafter_account=self.account,
+                crafter_character=self.character,
+                target_item=piece.row,
+                styles_requested=[lycene],
+                difficulty=0,
+                tier=piece.quality_tier,
+                ambition_count=1,
+            )
+        self.assertEqual(len(styles), 1)
+        item_style = styles[0]
+        self.assertEqual(item_style.style, lycene)
+        self.assertEqual(item_style.item_instance, piece.row)
+        self.assertEqual(item_style.attachment_quality_tier, piece.quality_tier)
+
+    def test_over_capacity_refused_before_any_roll(self) -> None:
+        from world.items.crafting.constants import CraftingRecipeKind
+        from world.items.crafting.services import run_crafting_recipe
+        from world.items.exceptions import StyleCapacityExceeded
+        from world.items.factories import StyleFactory
+        from world.items.models import ItemInstance
+
+        template = self._template_with_capacity(1)
+        styles = [StyleFactory(name="Lycene"), StyleFactory(name="Old-Regime")]
+        before = ItemInstance.objects.count()
+        with self.assertRaises(StyleCapacityExceeded):
+            run_crafting_recipe(
+                kind=CraftingRecipeKind.ITEM_CREATE,
+                crafter_account=self.account,
+                crafter_character=self.character,
+                item_instance=None,
+                target=None,
+                output_overrides={
+                    "output_template": template,
+                    "custom_name": "",
+                    "custom_description": "",
+                    "styles": styles,
+                },
+            )
+        self.assertEqual(ItemInstance.objects.count(), before)
+
+    def test_weak_style_roll_makes_the_piece_without_the_register(self) -> None:
+        from world.checks.test_helpers import force_check_outcome
+        from world.items.crafting.services import _resolve_styles_at_create
+        from world.items.factories import StyleFactory
+        from world.items.models import ItemStyle
+        from world.traits.factories import CheckOutcomeFactory
+
+        template = self._template_with_capacity(1)
+        piece = self._mint_piece(template)
+        lycene = StyleFactory(name="Lycene")
+        with force_check_outcome(CheckOutcomeFactory(name="StyleBotch", success_level=0)):
+            styles = _resolve_styles_at_create(
+                recipe=self.recipe,
+                crafter_account=self.account,
+                crafter_character=self.character,
+                target_item=piece.row,
+                styles_requested=[lycene],
+                difficulty=0,
+                tier=piece.quality_tier,
+                ambition_count=1,
+            )
+        self.assertEqual(styles, ())
+        self.assertFalse(ItemStyle.objects.filter(item_instance=piece.row).exists())

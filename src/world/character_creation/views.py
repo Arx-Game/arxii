@@ -30,7 +30,6 @@ from world.character_creation.filters import (
     CGGiftOptionFilter,
     CGTechniqueOptionFilter,
     DraftMarkingFilter,
-    FamilyFilter,
     GenderFilter,
     GlimpseTagFilter,
     PathFilter,
@@ -101,8 +100,6 @@ from world.magic.models import (
 )
 from world.magic.services.cg_catalog import get_gift_options, get_technique_options
 from world.magic.types.cg_catalog import TechniqueOptions
-from world.roster.models import Family
-from world.roster.serializers import FamilySerializer
 from world.species.models import Language, Species, SpeciesStatBonus
 from world.stories.pagination import StandardResultsSetPagination
 
@@ -200,22 +197,6 @@ class SpeciesViewSet(viewsets.ReadOnlyModelViewSet):
     permission_classes = [IsAuthenticated]
     filter_backends = [DjangoFilterBackend]
     filterset_class = SpeciesFilter
-
-
-class FamilyViewSet(viewsets.ReadOnlyModelViewSet):
-    """
-    ViewSet for listing families.
-
-    Filter by area_id to get families available for a starting area's realm.
-    """
-
-    pagination_class = None  # 2026-07 audit: opt out of default paginator (ADR-0138)
-
-    queryset = Family.objects.filter(is_playable=True)
-    serializer_class = FamilySerializer
-    permission_classes = [IsAuthenticated]
-    filter_backends = [DjangoFilterBackend]
-    filterset_class = FamilyFilter
 
 
 class GenderViewSet(viewsets.ReadOnlyModelViewSet):

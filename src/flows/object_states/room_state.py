@@ -34,7 +34,7 @@ class RoomState(BaseState):
     @property
     def description(self) -> str:
         try:
-            return self.obj.item_data.desc or self.default_description
+            return self.obj.item_data.get_display_description() or self.default_description
         except AttributeError:
             return self.default_description
 

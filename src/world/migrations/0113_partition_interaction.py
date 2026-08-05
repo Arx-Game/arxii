@@ -56,7 +56,7 @@ def _read_sql(subpackage: str, filename: str) -> str:
 
 class Migration(migrations.Migration):
     dependencies = [
-        ("arxii", "0108_draftmarking_formmarking"),
+        ("arxii", "0112_gift_style"),
         migrations.swappable_dependency(settings.AUTH_USER_MODEL),
     ]
 

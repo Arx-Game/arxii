@@ -20,6 +20,10 @@ import {
 } from '@/store/gameSlice';
 import type { MyRosterEntry } from '@/roster/types';
 import type { InteractionWsPayload } from '@/hooks/types';
+import type { DreamState } from '@/dreams/types';
+import { dreamKeys } from '@/dreams/queries';
+import { emitActionResult } from '@/hooks/actionResultBus';
+import { QueryClient } from '@tanstack/react-query';
 
 const ACTIVE_NAME = 'Aria';
 
@@ -145,6 +149,28 @@ vi.mock('@/battles/queries', () => ({
   useBattleForSceneQuery: vi.fn().mockReturnValue({ data: null, isLoading: false, isError: false }),
 }));
 
+// Dreamspace takeover (#3003): defaults to "not dreaming" (data: undefined) so every
+// pre-existing test in this file keeps exercising FocusPanel/RoomPanel unchanged; the
+// dedicated describe block below overrides this per-test to exercise the swap.
+const mockUseDreamState = vi.fn(
+  (_characterId: number): { data: DreamState | undefined; isLoading: boolean } => ({
+    data: undefined,
+    isLoading: false,
+  })
+);
+// Keeps `dreamKeys` real (imported from the actual module) while overriding
+// only `useDreamState` — GamePage also imports `dreamKeys` directly (#3003
+// review finding 2's action-result-driven invalidation), and a factory that
+// omits it left `dreamKeys` `undefined` in GamePage's scope: harmless until
+// the next test exercises an action-result callback against it (finding 4).
+vi.mock('@/dreams/queries', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('@/dreams/queries')>();
+  return {
+    ...actual,
+    useDreamState: (characterId: number) => mockUseDreamState(characterId),
+  };
+});
+
 // EndorsementControl mounts its own hook machinery per-pose (#1138); stubbed
 // here since this test is about feed/threading composition, not endorsements.
 vi.mock('@/scenes/components/EndorsementControl', () => ({
@@ -242,6 +268,7 @@ describe('GamePage', () => {
     // #2165: the save effect now writes real localStorage during render, so
     // clear between tests to keep them isolated from each other.
     localStorage.clear();
+    mockUseDreamState.mockReturnValue({ data: undefined, isLoading: false });
   });
 
   afterEach(() => {
@@ -1315,6 +1342,82 @@ describe('GamePage', () => {
           activeThreadTab: 'whisper:9',
         });
       });
+    });
+  });
+
+  // ---------------------------------------------------------------------------
+  // Dreamspace takeover (#3003): the Room tab renders DreamspacePanel instead of
+  // FocusPanel whenever the active character is dreamside.
+  // ---------------------------------------------------------------------------
+
+  describe('dreamspace takeover (#3003)', () => {
+    it('renders DreamspacePanel in the Room tab when the active character is dreamside', () => {
+      store.dispatch(setAccount(mockAccount));
+      store.dispatch(startSession(ACTIVE_NAME));
+      mockUseDreamState.mockReturnValue({
+        data: {
+          is_dreamside: true,
+          dream_room: null,
+          co_dreamers: [],
+          dreamwalk_host: null,
+          dreamwalk_candidates: [],
+          can_descend: false,
+          descent_name: '',
+          can_ascend: false,
+          wake_blocked: false,
+        },
+        isLoading: false,
+      });
+
+      renderWithProviders(<GamePage />);
+
+      expect(screen.getByTestId('dreamspace-panel')).toBeInTheDocument();
+      expect(screen.queryByText(/no location data available/i)).not.toBeInTheDocument();
+    });
+
+    it('keeps FocusPanel/RoomPanel mounted for every other state', () => {
+      store.dispatch(setAccount(mockAccount));
+      store.dispatch(startSession(ACTIVE_NAME));
+      // Default mock from beforeEach: data undefined (not dreaming).
+
+      renderWithProviders(<GamePage />);
+
+      expect(screen.queryByTestId('dreamspace-panel')).not.toBeInTheDocument();
+      expect(screen.getByText(/no location data available/i)).toBeInTheDocument();
+    });
+
+    // Review finding 2: GamePage stays mounted across a sleep/knockout
+    // transition, and DreamspacePanel (the only prior invalidator of
+    // dreamKeys) isn't mounted until AFTER the takeover already happened —
+    // so nothing ever refetched and the panel never swapped on entry. This
+    // proves the fix: GamePage itself now subscribes to the action-result
+    // bus (mirroring DreamspacePanel's own subscription) and invalidates the
+    // active character's dream-state query on every action result, the same
+    // trigger that already drove the (working) exit transition.
+    it('invalidates the active character dream-state query on the next action result', () => {
+      store.dispatch(setAccount(mockAccount));
+      store.dispatch(startSession(ACTIVE_NAME));
+      // Default mock from beforeEach: data undefined (not dreaming) — the
+      // FocusPanel-mounted state the transition starts from.
+
+      renderWithProviders(<GamePage />);
+      expect(screen.queryByTestId('dreamspace-panel')).not.toBeInTheDocument();
+
+      const invalidateSpy = vi.spyOn(QueryClient.prototype, 'invalidateQueries');
+
+      // The server has no dedicated "you fell asleep" push; the actual swap
+      // is React Query's job once invalidated (already proven above and in
+      // DreamspacePanel.test.tsx) — what this test proves is that GamePage
+      // asks for that refetch, on the right query key, the moment ANY action
+      // result arrives (self-dispatched sleep, a wake attempt, or any other
+      // action fired while this trigger is armed).
+      emitActionResult({ success: true, message: null, data: null });
+
+      expect(invalidateSpy).toHaveBeenCalledWith({
+        queryKey: dreamKeys.state(rosterEntry.character_id),
+      });
+
+      invalidateSpy.mockRestore();
     });
   });
 });

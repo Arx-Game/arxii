@@ -121,6 +121,12 @@ class TechniqueStyle(NaturalKeyMixin, CreditedContent, SharedMemoryModel):
     Path of Tomes character casts it and a Manifestation when a Path of Steel one does.
     Many paths may share a style (higher-stage paths inherit their line's style).
 
+    Exception: a Minor Gift may override this for its own techniques via
+    ``Gift.style`` — a species gift the character never chose doesn't inherit the
+    caster's Path-chosen manner (#2905, ADR-0199). The override affects only
+    ``cast_concealment`` resolution; capability gating below still reads the caster's
+    own Path style.
+
     Mechanical, not decorative: a style's ``StyleCapabilityRequirement`` rows gate
     casting on the caster's capabilities (an Incantation caster who cannot speak cannot
     incant). This does not conflict with ADR-0136 — the system still never dictates how

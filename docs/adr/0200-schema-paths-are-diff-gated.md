@@ -1,4 +1,4 @@
-# Schema-construction paths are held equivalent by a nightly diff, names excluded
+# ADR-0200: Schema-construction paths are held equivalent by a nightly diff, names excluded
 
 **Decision:** the two supported schema-construction paths (`arx manage migrate`, production's
 path, and `tools/build_schema.py`, used by CI, the Postgres parity tier, and the devcontainer)

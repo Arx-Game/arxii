@@ -225,7 +225,10 @@ Real-time reactivity: six mutation-time hooks flip beats when gameplay state cha
 - `Character.at_post_puppet` calls the catch-up service after session puppeting — safety net for any mutation whose real-time hook didn't fire (direct admin action, data import, race condition)
 
 **Wave 8 — Progression-side cache invalidation:**
-- No-op for Phase 3: no production service mutates `CharacterClassLevel` yet. The reactivity hook (`on_character_level_changed`) already invalidates the cache defensively, so progression wiring is ready for a future mutation site.
+- No-op for Phase 3: no production service mutated `CharacterClassLevel` yet at the time.
+  That stopped being true in June (#1352/#1368), when `apply_class_level_advance` shipped
+  as the shared in-play advancement spine. It now calls the reactivity hook directly
+  (#3004) — see "Pending Wiring" below, which this closes.
 
 **Wave 9 — End-to-end integration test:**
 - `test_integration_phase3.py` — single scenario walking offline mutation → login catch-up → condition apply → resolve_episode cascade → atmosphere message → offline queue → next login delivers. Exercises the complete reactivity + narrative-integration surface.
@@ -419,19 +422,18 @@ All MVP-blocking items from Phase 5's "What's Needed for MVP" section have lande
 - **Persona ID in account payload** — for GM/staff persona selection (surfaces in `TableBulletin` `gmPersonaId` stub); requires account payload expansion
 - **Profile-driven role-aware navigation** — eliminate 403 fallbacks for GM-only routes; requires GMProfile presence in the account payload
 
-### Pending Wiring (backend)
+### Pending Wiring (backend) — DONE (#3004)
 
-**`on_character_level_changed` is implemented but unwired in production.**
+**`on_character_level_changed` is now wired into production.**
 
-`stories.services.reactivity.on_character_level_changed(sheet)` exists and correctly
-invalidates `sheet.cached_current_level` before re-evaluating `CHARACTER_LEVEL_AT_LEAST`
-beats across all active stories. However, no production service currently mutates
-`CharacterClassLevel`, so the hook is never called outside tests.
+`world.progression.services.advancement.apply_class_level_advance` — the shared
+in-play advancement spine both the Ritual of the Durance
+(`advance_class_level_via_session`) and Audere Majora (`cross_threshold`) write
+through — calls `stories.services.reactivity.on_character_level_changed(sheet)`
+right after invalidating the sheet's class-level cache. One call covers both
+in-play paths. `world.classes.set_primary_class_level` (the CG/seed-time upsert)
+deliberately does **not** call it — it runs outside story participation.
 
-When the progression-services pass creates a `CharacterClassLevel` mutation site, it **must**:
-1. Call `sheet.invalidate_class_level_cache()` after the level mutation.
-2. Call `stories.services.reactivity.on_character_level_changed(sheet)` to re-evaluate beats.
-
-Until that wiring exists, `CHARACTER_LEVEL_AT_LEAST` predicates only evaluate at login
-catch-up (via `catch_up_character_stories`) and when new story progress is created
-(retroactive match). Real-time level-up beat flips require the production hook to be wired.
+`CHARACTER_LEVEL_AT_LEAST` beats now flip in real time on an in-play advance, in
+addition to login catch-up (`catch_up_character_stories`) and retroactive match
+on new story progress.

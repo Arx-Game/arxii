@@ -60,7 +60,7 @@ class LookAction(Action):
         if target == actor.location:
             from django.core.exceptions import ObjectDoesNotExist  # noqa: PLC0415
 
-            from world.dreams.services import get_dream_space  # noqa: PLC0415
+            from world.dreams.services import dreamspace_for  # noqa: PLC0415
             from world.vitals.services import perceives_dreamside  # noqa: PLC0415
 
             try:
@@ -68,7 +68,7 @@ class LookAction(Action):
             except (AttributeError, ObjectDoesNotExist):
                 sheet = None
             if perceives_dreamside(sheet):
-                target = get_dream_space(room=actor.location) or target
+                target = dreamspace_for(sheet) or target
 
         sdm = context.scene_data if context else SceneDataManager()
         target_state = sdm.initialize_state_for_object(target)

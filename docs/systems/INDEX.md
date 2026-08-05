@@ -618,11 +618,14 @@ Powers, affinities, auras, resonances, threads-as-currency, rituals, and Mage Sc
   `"magic"`) — single seam; telnet `CmdTechnique` and web `POST /api/magic/techniques/author/`
   both converge here. Telnet: `technique draft|show|set|restrict|grant|damage|condition|price|author|discard`
   (`cmd:perm(Builder)` — staff/GM only).
-- **Cast observation (#2710, ADR-0170; #2734, ADR-0187):** `resolve_cast_audience(*,
-  caster, technique, cast_openly=False) -> CastAudience`
+- **Cast observation (#2710, ADR-0170; #2734, ADR-0187; #2905, ADR-0199):**
+  `resolve_cast_audience(*, caster, technique, cast_openly=False) -> CastAudience`
   (`world/magic/services/cast_observation.py`) — who perceived a cast worked in a
   concealed `TechniqueStyle.cast_concealment` style, and **how much of it they could
-  attribute**, resolved per co-located observer at cast time. Concealment hides
+  attribute**, resolved per co-located observer at cast time. Concealment prefers the
+  technique's gift's style when set, falling back to the caster's Path style exactly
+  as before (#2905, ADR-0199) — a species-granted Minor Gift casts however the gift
+  says, not however the caster's Path does. Concealment hides
   attribution, not the event: `full` (caster + technique) / `vague` (the effect, plus
   that it was a working) / `effect_only` (the effect alone). Only a technique with
   `has_perceptible_effect=False` still hides outright; a `SAME`-reach technique is never
@@ -1862,13 +1865,19 @@ Secrets, souls with per-life-knowledge reincarnation chains, app-in slots/pools.
   `mint_from_pool`/`claim_appable_node`/`define_deferred`); `OMNISCIENT` sentinel.
   `world.roster.services.heredity` (#2815) — Parent Dominance:
   `derive_lines_for_child`/`derivable_species`/`inherited_options`
-- **Surfaces:** `families/:id/tree/` + `families/:id/slots/` REST; CG slot claim
+- **Surfaces:** `families/` (+`has_open_positions`/`area_id` filters) +
+  `families/:id/tree/` + `families/:id/slots/` REST — the same `FamilyViewSet`
+  is also mounted at `/api/character-creation/families/` for CG; (#3003)
+  `kin/tree/<character_id>/` (viewer-filtered graph payload for one character)
+  + `kin/relationship/?a=&b=` (viewer-derived relationship label); CG slot claim
   (draft `claimed_kin_slot/_pool`, `_bind_kinship_node` at finalize; FE
   `KinSlotPicker`); CG invented parents (`second_parent_species` + draft_data
   names/genders → `_bind_invented_parents` + `_pin_heredity_back_inference` at
   finalize; FE `InventedParentsCard`); parent-aware
   `form-options/:species_id/?draft=` (inherited option groups + `is_required`);
-  telnet `sheet/family`; staff admin. Seeds: cluster `kinship`
+  telnet `sheet/family`; staff admin. (#3003) Character-sheet FE:
+  `KinshipPanel` (Kinship tab, `KinTreeGraph` + relationship readout). Seeds:
+  cluster `kinship`
 - **Consumed by:** #1884 recognition/succession law; #1985 estates (future);
   future child-generation spec (deferred, #2815)
 - **Source:** `src/world/roster/models/families.py`, `services/kinship.py`,
@@ -3723,6 +3732,36 @@ registering a service strategy + per-kind details model.
   check/consequence-pool path — see `trap_services.py`'s `check_room_traps_on_entry` /
   `check_traps_at_position`. Not a `RoomFeatureInstance` kind; a plain FK to `RoomProfile`
   since a room may hold several.
+  - **Placement is situation-driven** (ADR-0199): the authored blueprint is
+    `mechanics.SituationTrapLink`, and `instantiate_situation` mints an armed `Trap` per
+    link. There is no standalone trap catalog row and no `place_trap` verb; a GM places
+    traps with `set_situation` (telnet `setsituation <name|id>`).
+  - **GM management** (#3002, `actions/definitions/traps.py`): `list_room_traps`,
+    `arm_trap` and `gm_disarm_trap`, telnet `gm trap list|arm <id>|disarm <id>`. Each is
+    gated on `MinimumGMLevelPrerequisite(JUNIOR)`, and each resolves the trap strictly
+    within the actor's own room - but WHICH traps in that room an actor may act on is a
+    per-row rule (`_room_traps`): staff and the active scene's GM may act on every trap
+    there; anyone else (e.g. a JUNIOR GM staging a room ahead of a scene) may only act on
+    traps they placed themselves (`created_by_sheet` matches their own sheet).
+    `list_room_traps` returns a filtered list rather than refusing outright. These actions
+    also reach technique-conjured zone hazards (see "Lifetime" below), not just
+    situation-placed traps - `arm_trap` refuses to re-arm one whose duration is already
+    spent (`duration_rounds == 0`). `arm_trap` deliberately leaves `detected_by` alone, so
+    a re-armed trap fires for newcomers and stays inert for anyone who already resolved
+    it. `gm_disarm_trap` rolls nothing, unlike the player's `disarm_trap`, which rolls
+    `disarm_check_type` and fires the trap on a failed roll.
+  - **Lifetime:** a GM-placed trap carries `created_by_sheet` (stamped by
+    `instantiate_situation`'s `placed_by_sheet` kwarg) and is disarmed at scene end by
+    `teardown_conjured_hazards`, wired into `finish_scene_full` beside the obstacle and
+    rampart teardowns. An admin-authored trap has a null `created_by_sheet` and stays
+    armed permanently. That teardown saves per instance rather than bulk-updating,
+    because a bulk `.update()` sends no `post_save` and leaves SharedMemoryModel's
+    identity map serving a stale `is_armed`.
+  - **The player half is NOT wired.** `disarm_trap` is registered but unreachable: it
+    needs a `trap_id`, and no serializer, ViewSet, URL, telnet command or frontend surface
+    exposes a `Trap` to a player. `search_room` (`world/clues/services.py`) finds clues and
+    concealed characters only and never touches traps. `Trap.is_hidden` is written by
+    `instantiate_situation` and read by nothing; it is the field waiting on that surface.
 - **`PreparedGround`** (`world.room_features.models`, #2646): a room a character has
   prepared as their battleground ahead of time — "the fight was won yesterday." Plain FK
   to `RoomProfile` (a room may hold several characters' prepared grounds) but `prepared_by`
@@ -6068,7 +6107,18 @@ funeral finish, executor will-reading, or the deadline sweeper (14 real days, PL
 ### Dreams (#2290)
 The dream realm — a parallel layer on the room graph for sleeping/unconscious characters.
 Dream reflections, mental fatigue dream danger, Dream Peril consequence pool (nightmares/
-madness/death), thread-gated dreamwalking with escape lever, and the deep dreaming area.
+madness/death, narrated to the player via `character.msg`), thread-gated dreamwalking with
+escape lever, and the deep dreaming area.
+- **Models (#3003):** `DreamwalkPresence` — persisted dreamwalk anchor keyed on the host
+  sheet (see ADR-0198), replacing the process-local `ndb.dreamwalk_destination` stash.
+- **Services (#3003):** `dreamspace_for(sheet)` (the single "whose dreamspace does this
+  character perceive" resolution point — every viewer-facing caller routes through it),
+  `co_dreamers_for`, `start_dreamwalk`/`end_dreamwalk`, `has_dream_bond`,
+  `dreamwalk_candidates_for`.
+- **Surfaces (#3003):** `GET /api/dreams/<character_id>/` (dream-state payload — co-dreamers,
+  dreamwalk host/candidates, descend/ascend availability, wake-blocked flag); FE
+  `frontend/src/dreams/` (`DreamspacePanel`, takes over the play view's Room tab while
+  dreamside).
 - **Source:** `src/world/dreams/`
 - **Details:** [dreams.md](dreams.md)
 

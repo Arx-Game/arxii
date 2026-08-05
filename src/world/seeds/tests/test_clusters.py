@@ -31,6 +31,7 @@ class TestClusterRegistry(TestCase):
                 "battles",
                 "reactive_challenges",
                 "consent",
+                "boundaries",
                 "character_creation",
                 "missions",
                 "tutorial",

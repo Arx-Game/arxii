@@ -99,8 +99,10 @@ breakdown = get_goal_bonuses_breakdown(character_sheet)
 # over-cap (MAX_GOAL_POINTS=30) / duplicate-domain.
 created = set_character_goals(character=character, goals=[{"domain": 1, "points": 10, "notes": ""}])
 
-# Create a goal-progress journal entry (records xp_awarded=1 on the row; the
-# actual XP grant to the account is a pre-existing TODO).
+# Create a goal-progress journal entry and grant weekly-capped XP to the
+# character's account. The first 3 entries each game week grant 1 XP each
+# (GOAL_LOG_XP); entries past the cap record xp_awarded=0. GoalJournal.game_week
+# (FK to GameWeek) records which week the entry counted against.
 journal = log_goal_progress(character=character, domain=None, title="T", content="...", is_public=False)
 ```
 
@@ -150,7 +152,7 @@ Requires `X-Character-ID` header. Weekly revision limit enforced (first-time set
 
 ### Journals
 - `GET /api/goals/journals/` - List character's journal entries
-- `POST /api/goals/journals/` - Create journal entry (awards 1 XP)
+- `POST /api/goals/journals/` - Create journal entry (awards 1 XP for the first three entries each game week)
 - `GET /api/goals/journals/public/` - List public journal entries (paginated)
 
 **Public journals query params:**

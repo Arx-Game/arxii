@@ -56,7 +56,11 @@ class SetCharacterGoalsAction(Action):
 
 @dataclass
 class LogGoalProgressAction(Action):
-    """Log a journal entry about goal progress (awards 1 XP)."""
+    """Log a journal entry about goal progress (weekly-capped XP, #3004).
+
+    Grants 1 XP for each of the first three entries a character logs per
+    game week; entries past the cap are recorded but grant nothing.
+    """
 
     key: str = "log_goal_progress"
     name: str = "Log Goal Progress"
