@@ -72,7 +72,7 @@ from __future__ import annotations
 from datetime import timedelta
 from unittest.mock import MagicMock, patch
 
-from django.test import TestCase
+from django.test import TestCase, tag
 from evennia.utils.idmapper import models as idmapper_models
 
 from actions.definitions.npc_services import resolve_npc_offer, start_npc_interaction
@@ -228,7 +228,11 @@ class TutorialChainJourneyE2ETests(TestCase):
             .first()
         )
 
+    @tag("postgres")
     def test_full_tutorial_chain_journey_over_telnet(self) -> None:  # noqa: PLR0915 - one journey
+        """PG-only: the T4/T5 Academy Registrar offer materializes an NPC via
+        name_culture_for_room(), which walks the areas_areaclosure materialized
+        view (PG-only) - mirrors test_gossip_telnet_e2e.py's tag rationale."""
         persona = self.sheet.primary_persona
 
         # --- T1: Arrival (ROOM_TRIGGER) -----------------------------------

@@ -60,10 +60,14 @@ def assert_sampling_allowed() -> None:
     """Refuse sample invention against a non-empty content universe (#3017).
 
     Called by ``seed_dev_database()`` between the content load and the cluster
-    loop. A database that has ever loaded real content has rows in some
-    ``CONTENT_MODELS`` table, so sampling can never mix invented rows into it;
-    the downstream guards (test_no_content_slop, the ADR-0191 addition gate)
-    become defense in depth instead of the only line.
+    loop: within a single press, once any ``CONTENT_MODELS`` table has a row
+    (authored, or just loaded by this same press), sampling is refused for the
+    rest of that press, so it can never mix invented rows into a real content
+    universe; the downstream guards (test_no_content_slop, the ADR-0191
+    addition gate) become defense in depth instead of the only line. This
+    enforcement is scoped to a ``seed_dev_database()`` call, not a standing
+    database-wide invariant - a direct cluster-seeder call (test-only; see
+    ``world.seeds.tests.press_helpers``) sits outside this gate by design.
     """
     if not sample_content_enabled():
         return
