@@ -27,6 +27,11 @@ walks an authored transition graph)
   independently, so a clear day trends to overcast before it storms; a sparse
   graph falls back to an unweighted roll rather than freezing.
 - **`WeatherEmit`** — the season/phase-appropriate flavor line pushed on change.
+  Identified by a stable `key` (`<weather-type-slug>-<nnn>`, #2980), not by its
+  `text`: the text is a writer-replaceable PLACEHOLDER line, and an identity
+  derived from it would fork the row on every rewrite instead of updating it in
+  place. A null `key` means the row predates the re-key and the content
+  pipeline cannot address it yet.
 - **`RegionWeatherState`** — the live per-region row (current type, last roll).
 - **`FeastDay`** — authored calendar days with their own weather flavor.
 

@@ -6517,6 +6517,24 @@ Admin-hosted, superuser-only HTMX dashboards for difficulty tuning/simulation an
   section for the full model list and natural keys. M2M resolution happens BEFORE the
   `update_or_create` write, so an unresolvable M2M target defers or skips the whole
   entry rather than leaving a half-loaded row with an empty M2M set.
+- **Content credit (#2980, ADR-0196):** every prose-bearing content model (83 of
+  them, `world/migrations/0105_credited_content.py`) inherits the abstract
+  `CreditedContent` (`world.contributors.models`), four nullable columns
+  (`written_by`/`written_on`/`reviewed_by`/`reviewed_on`) pointing at
+  `ContentContributor`, a content model in its own right (natural key `name`,
+  registered in `CONTENT_MODELS`). The credit columns round-trip on both
+  pipeline paths with no extra plumbing: fixture-JSON rows carry them as
+  ordinary `fields`, and the four markdown domains carry them as frontmatter
+  keys (`_apply_credit_meta` in `content_fixtures.py`), coercing a
+  `yaml.safe_load`-parsed date to an ISO string before `write_fixtures`
+  serializes it, since `json.dumps` rejects a bare `datetime.date`. The account
+  link lives on `evennia_extensions.PlayerData.contributor` (nullable
+  OneToOne), not on `ContentContributor`, per ADR-0010. Which text fields
+  count as prose at all is an exhaustive, test-guarded classification in
+  `core_management/prose_fields.py`, not a name heuristic, which missed nine
+  models on a first pass. `tools/prose_report.py` (`just prose-report`) walks a
+  content-repo checkout with no Django and no database and reports the
+  writer/reviewer backlog per domain.
 - **Grid content export/import (#2436/#2448):** rooms/areas are no longer deferred —
   `Area`/`RoomProfile` gained permanent identity keys (`slug`/`fixture_key`) and a
   `GridOrigin` export gate (see the Areas section above). `core_management.grid_export.

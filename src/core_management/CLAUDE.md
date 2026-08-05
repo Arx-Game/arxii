@@ -97,3 +97,34 @@ of every entry; the gate keys on the **domain**, not the entry, and
 
 Entry points: `--allow-additions` on `tools/export_content.py`, and a checkbox on the
 admin export page.
+
+## Content credit and the prose backlog report (#2980, ADR-0196)
+
+Every prose-bearing content model inherits the abstract `CreditedContent`
+(`world.contributors.models`): four nullable columns, `written_by`, `written_on`,
+`reviewed_by`, `reviewed_on`, the two `_by` columns FKs to `ContentContributor`
+(a content model in its own right, natural key `name`, registered in
+`CONTENT_MODELS`). Which text fields on a content model count as prose at all
+is decided by `core_management/prose_fields.py`: an exhaustive, test-guarded
+list (`PROSE_FIELD_NAMES` / `NON_PROSE_TEXT_FIELDS`) covering every content
+text-field name, not a name heuristic, because a heuristic tried first
+silently missed nine models carrying real player-facing prose.
+
+Fixture-JSON rows carry the four credit columns as ordinary `fields`, same as
+any other column, so `content_export`/`load_entries` need no extra code for
+them. The four markdown domains (`content/codex_entries`, `content/beginnings`,
+`content/starting_areas`, `content/traditions`) carry them as frontmatter
+keys instead, applied by `_apply_credit_meta` in `content_fixtures.py`: the
+two `_by` keys resolve as natural-key references, and the two `_on` date keys
+are coerced to ISO strings, because `yaml.safe_load` turns an unquoted
+`2026-08-04` into a `datetime.date` and `write_fixtures` serializes the
+builder's output with `json.dumps`, which raises on a bare date object. An
+absent key stays absent rather than clearing an existing credit, the same
+"omission means leave this column alone" rule every other optional field
+follows.
+
+`core_management/prose_report.py` plus `tools/prose_report.py` (`just
+prose-report`) report the writer/reviewer backlog by scanning a content-repo
+checkout directly, no Django and no database, the same contract
+`content_health.py` keeps: `uv run python tools/prose_report.py
+[--content-path /path/to/checkout]`.
