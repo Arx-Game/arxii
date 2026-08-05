@@ -189,8 +189,12 @@ section for the full #2428/#2440/#2441/#2442 build record.
   fuzzy capacity; CG lineage stage claims a position (`KinSlotPicker`) and
   finalization binds the sheet, inheriting a living tree. Deferred
   definitions (leave parents blank, define later, review-gated).
-- Surfaces: viewer-aware tree + slots REST, telnet `sheet/family`, staff
-  admin, PLACEHOLDER ducal demo seed (cluster `kinship`).
+- Surfaces: viewer-aware tree + slots REST (families list filterable by
+  `has_open_positions`/`area_id`), telnet `sheet/family`, staff admin,
+  PLACEHOLDER ducal demo seed (cluster `kinship`). (#3003) Character-sheet
+  web surface: `kin/tree/<character_id>/` + `kin/relationship/?a=&b=` REST,
+  rendered by the `KinshipPanel` sheet tab (`KinTreeGraph` + relationship
+  readout).
 - Consumed next by #1884 (recognition, succession law, fealty).
 
 

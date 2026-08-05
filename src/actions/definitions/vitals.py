@@ -184,10 +184,11 @@ class WakeAction(Action):
                     success=False,
                     message="You are lost in the dream; you cannot wake until the danger passes.",
                 )
-            # Check for escape lever — dreamwalk destination stored on the character's
-            # ndb. Evennia's ndb handler returns None for unset attributes, so no
-            # getattr-default is needed (and it would mask nothing here anyway).
-            destination = actor.ndb.dreamwalk_destination
+            # Check for escape lever — the dreamwalk presence row, if any, whose
+            # host's current location is the escape destination (#3003).
+            from world.dreams.services import end_dreamwalk  # noqa: PLC0415
+
+            destination = end_dreamwalk(sheet)
 
             remove_condition(actor, sleeping_template)
 

@@ -155,8 +155,11 @@ class DreamwalkAction(Action):
     share a dreamspace automatically (no dreamwalk needed).
 
     On success, the dreamer's perception relocates to the target's dream
-    room. The target's physical room is stored for the escape lever
-    (``wake there`` — wake at the target's location instead of own body's).
+    room. A ``DreamwalkPresence`` row anchors the walker to the host
+    *sheet* (#3003) rather than stashing a destination; the escape lever
+    (``wake there`` — wake at the target's location instead of own body's)
+    resolves the destination dynamically from the host's current location
+    at wake time, so it still follows the host if they've moved.
     """
 
     key: str = "dreamwalk"
@@ -173,7 +176,11 @@ class DreamwalkAction(Action):
     ) -> ActionResult:
         from django.core.exceptions import ObjectDoesNotExist  # noqa: PLC0415
 
-        from world.dreams.services import get_dream_space  # noqa: PLC0415
+        from world.dreams.services import (  # noqa: PLC0415
+            get_dream_space,
+            has_dream_bond,
+            start_dreamwalk,
+        )
         from world.vitals.services import perceives_dreamside  # noqa: PLC0415
 
         try:
@@ -190,10 +197,26 @@ class DreamwalkAction(Action):
                 message="You must be dreaming to dreamwalk.",
             )
 
-        # Resolve the target character
+        # Resolve the target character. Telnet passes an already-resolved
+        # ObjectDB; the web dispatcher's websocket resolver never touches a
+        # bare ``target`` kwarg (only ``<field>_id`` names route through
+        # ``_resolve_registry_kwargs``), and co-location-scoped visibility
+        # (``_is_visible_to``/``can_perceive``) is the wrong gate here anyway —
+        # a dreamwalk target is by definition NOT co-located (see the
+        # same-room short-circuit below). So resolve a plain pk ourselves,
+        # mirroring ``_resolve_room()`` (definitions/locations.py:92-100)
+        # rather than declaring ``objectdb_target_kwargs``.
         target = kwargs.get("target")
         if target is None:
             return ActionResult(success=False, message="Dreamwalk to whom?")
+        if isinstance(target, int):
+            from evennia.objects.models import ObjectDB  # noqa: PLC0415
+
+            target = ObjectDB.objects.filter(pk=target).first()
+            if target is None:
+                return ActionResult(
+                    success=False, message="You cannot find that person in the dream."
+                )
 
         try:
             target_sheet = target.sheet_data
@@ -217,7 +240,7 @@ class DreamwalkAction(Action):
             )
 
         # Gate: check for RELATIONSHIP_TRACK/CAPSTONE thread or soul tether
-        if not _has_dream_bond(sheet, target_sheet):
+        if not has_dream_bond(sheet, target_sheet):
             return ActionResult(
                 success=False,
                 message="You have no bond strong enough to reach that person in dreams.",
@@ -231,42 +254,11 @@ class DreamwalkAction(Action):
                 message="You cannot find their dream.",
             )
 
-        # Store the dreamwalk destination for the escape lever (on the character's ndb,
-        # since ConditionInstance is a plain Django model without ndb)
-        actor.ndb.dreamwalk_destination = target.location
+        # Anchor the walker's perception to the target's dreamspace (#3003) —
+        # the presence row is the escape lever ``wake`` reads via end_dreamwalk().
+        start_dreamwalk(dreamer=sheet, host=target_sheet)
 
         return ActionResult(
             success=True,
             message=f"You dreamwalk toward {target.key}...",
         )
-
-
-def _has_dream_bond(source_sheet, target_sheet) -> bool:
-    """Check if the source has a thread or soul tether bond to the target."""
-    from world.magic.constants import TargetKind  # noqa: PLC0415
-    from world.magic.models import Thread  # noqa: PLC0415
-    from world.relationships.models import CharacterRelationship  # noqa: PLC0415
-
-    # Check for RELATIONSHIP_TRACK or RELATIONSHIP_CAPSTONE threads
-    relationship_kinds = {TargetKind.RELATIONSHIP_TRACK, TargetKind.RELATIONSHIP_CAPSTONE}
-    threads = Thread.objects.filter(
-        owner=source_sheet,
-        target_kind__in=relationship_kinds,
-        retired_at__isnull=True,
-    )
-    for thread in threads:
-        if thread.target_kind == TargetKind.RELATIONSHIP_TRACK:
-            progress = thread.target_relationship_track
-            if progress is not None and progress.relationship.target == target_sheet:
-                return True
-        elif thread.target_kind == TargetKind.RELATIONSHIP_CAPSTONE:
-            capstone = thread.target_capstone
-            if capstone is not None and capstone.relationship.target == target_sheet:
-                return True
-
-    # Check for soul tether bond
-    return CharacterRelationship.objects.filter(
-        source=source_sheet,
-        target=target_sheet,
-        is_soul_tether=True,
-    ).exists()

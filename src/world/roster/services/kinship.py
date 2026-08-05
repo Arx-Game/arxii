@@ -438,17 +438,6 @@ def define_deferred(  # noqa: PLR0913 — keyword-only
 # ---------------------------------------------------------------------------
 
 
-@dataclass
-class KinFact:
-    """One visible kinship fact about a person, ready for rendering."""
-
-    person: Kinsperson
-    label: str
-    kind: str = ""
-    is_true: bool = True
-    via_secret: bool = False
-
-
 def _visible_edges(q: Q, viewer: object) -> list[ParentageEdge]:
     edges = ParentageEdge.objects.filter(q).select_related("child", "parent", "secret")
     return [e for e in edges if fact_visible(e, viewer)]
@@ -659,12 +648,94 @@ def derive_blood_only(a: Kinsperson, b: Kinsperson, viewer: object) -> bool:
 
 @dataclass
 class FamilyTreePayload:
-    """Viewer-appropriate graph payload for a family's tree."""
+    """Viewer-appropriate graph payload for a family's tree (or an ego-centric one).
 
-    family: Family
+    ``family`` is ``None`` for a familyless subject's payload (Misbegotten,
+    tarot-named) — having no house is not the same as having no kin, so the
+    node/edge/union lists are populated the same way either way.
+    """
+
+    family: Family | None = None
     nodes: list[dict] = field(default_factory=list)
     parentage: list[dict] = field(default_factory=list)
     unions: list[dict] = field(default_factory=list)
+
+
+def _node_dict(person: Kinsperson) -> dict:
+    """One Kinsperson as a payload node dict — the single node-shape definition."""
+    return {
+        "id": person.pk,
+        "name": person.display_name,
+        "tier": person.definition_tier,
+        "family_id": person.family_id,
+        "is_deceased": person.is_deceased,
+        "is_appable": person.is_appable and person.sheet_id is None,
+        # CharacterSheet pk when this node is sheet-bound, else null (#3003
+        # Task 8) — a distinct id space from ``person.pk`` above; the web
+        # kinship panel needs it to query GET .../kin/relationship/ without
+        # conflating Kinsperson pks with CharacterSheet pks.
+        "sheet_id": person.sheet_id,
+        "gender": person.gender.name if person.gender_id else "",
+        "age": person.age,
+        "description": person.description,
+    }
+
+
+def _edge_dict(edge: ParentageEdge) -> dict:
+    """One parentage edge as a payload dict — the single edge-shape definition.
+
+    ``edge`` reaches here only after passing ``fact_visible`` for the viewer
+    (public record, a knowing viewer, or ``OMNISCIENT`` — see
+    ``_populate_edges_and_unions``), so a non-public edge at this point is,
+    by construction, one the viewer sees only via secret knowledge or staff
+    bypass — hence ``via_secret`` needs no further per-viewer check beyond
+    ``is_public_record``.
+    """
+    return {
+        "child_id": edge.child_id,
+        "parent_id": edge.parent_id,
+        "kind": edge.kind,
+        "is_true": edge.is_true,
+        "via_secret": not edge.is_public_record,
+    }
+
+
+def _union_dict(union: Union, member_pks: list[int]) -> dict:
+    """One union as a payload dict — the single union-shape definition."""
+    return {
+        "id": union.pk,
+        "kind": union.kind.name,
+        "member_ids": member_pks,
+        "ended": union.ended_at is not None,
+    }
+
+
+def _populate_edges_and_unions(
+    payload: FamilyTreePayload, people: dict[int, Kinsperson], viewer: object
+) -> None:
+    """Fill ``payload.parentage``/``.unions`` from visible facts among ``people``.
+
+    Shared by ``family_tree_for`` and ``kin_tree_for_sheet`` — how ``people``
+    gets assembled differs (family membership vs. an ego-centric walk), but
+    turning that node set into visible edges/unions is identical.
+    """
+    edges = _visible_edges(Q(child_id__in=people) | Q(parent_id__in=people), viewer)
+    for edge in edges:
+        if edge.child_id not in people or edge.parent_id not in people:
+            continue
+        payload.parentage.append(_edge_dict(edge))
+
+    seen_unions: set[int] = set()
+    for person in people.values():
+        for union in unions_of(person, viewer):
+            if union.pk in seen_unions:
+                continue
+            member_pks = [m.pk for m in union.members.all() if m.pk in people]
+            min_rendered = 2
+            if len(member_pks) < min_rendered:
+                continue
+            seen_unions.add(union.pk)
+            payload.unions.append(_union_dict(union, member_pks))
 
 
 def family_tree_for(family: Family, viewer: object) -> FamilyTreePayload:
@@ -687,54 +758,42 @@ def family_tree_for(family: Family, viewer: object) -> FamilyTreePayload:
             people.setdefault(partner.pk, partner)
 
     payload = FamilyTreePayload(family=family)
-    for person in people.values():
-        payload.nodes.append(
-            {
-                "id": person.pk,
-                "name": person.display_name,
-                "tier": person.definition_tier,
-                "family_id": person.family_id,
-                "is_deceased": person.is_deceased,
-                "is_appable": person.is_appable and person.sheet_id is None,
-                "gender": person.gender.name if person.gender_id else "",
-                "age": person.age,
-                "description": person.description,
-            }
-        )
+    payload.nodes = [_node_dict(p) for p in people.values()]
+    _populate_edges_and_unions(payload, people, viewer)
+    return payload
 
-    edges = _visible_edges(Q(child_id__in=people.keys()) | Q(parent_id__in=people.keys()), viewer)
-    for edge in edges:
-        if edge.child_id not in people or edge.parent_id not in people:
-            continue
-        truth_known = edge.secret is not None and _viewer_knows(edge.secret, viewer)
-        payload.parentage.append(
-            {
-                "child_id": edge.child_id,
-                "parent_id": edge.parent_id,
-                "kind": edge.kind,
-                "is_true": edge.is_true,
-                "via_secret": not edge.is_public_record and (viewer is None or truth_known),
-            }
-        )
 
-    seen_unions: set[int] = set()
-    for person in people.values():
-        for union in unions_of(person, viewer):
-            if union.pk in seen_unions:
-                continue
-            member_pks = [m.pk for m in union.members.all() if m.pk in people]
-            min_rendered = 2
-            if len(member_pks) < min_rendered:
-                continue
-            seen_unions.add(union.pk)
-            payload.unions.append(
-                {
-                    "id": union.pk,
-                    "kind": union.kind.name,
-                    "member_ids": member_pks,
-                    "ended": union.ended_at is not None,
-                }
-            )
+def kin_tree_for_sheet(sheet: CharacterSheet, viewer: object) -> FamilyTreePayload:
+    """The kin graph centred on ``sheet``, viewer-filtered.
+
+    Family-bound characters get their family's tree unchanged (delegates to
+    ``family_tree_for``). Familyless characters (Misbegotten, tarot-named)
+    get an ego-centric payload built from the same walks and the same
+    node/edge/union dict shapes, so having no house is not the same as
+    having no kin. No ``Kinsperson`` node at all (no CG kinship record yet)
+    returns an empty payload.
+    """
+    node = Kinsperson.objects.filter(sheet=sheet).first()
+    if node is None:
+        return FamilyTreePayload(family=None)
+    if node.family is not None:
+        return family_tree_for(node.family, viewer)
+
+    people = {node.pk: node}
+    for edge in parents_of(node, viewer, include_foster=True):
+        people.setdefault(edge.parent_id, edge.parent)
+    for edge in children_of(node, viewer, include_foster=True):
+        people.setdefault(edge.child_id, edge.child)
+    for sibling in _people_by_id(set(siblings_of(node, viewer))).values():
+        people.setdefault(sibling.pk, sibling)
+    for partner in spouses_of(node, viewer):
+        people.setdefault(partner.pk, partner)
+    for step in step_parents_of(node, viewer):
+        people.setdefault(step.pk, step)
+
+    payload = FamilyTreePayload(family=None)
+    payload.nodes = [_node_dict(p) for p in people.values()]
+    _populate_edges_and_unions(payload, people, viewer)
     return payload
 
 

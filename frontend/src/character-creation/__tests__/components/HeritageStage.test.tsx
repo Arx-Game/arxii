@@ -37,8 +37,6 @@ vi.mock('../../api', () => ({
   getSpecies: vi.fn(),
   getCGPointBudget: vi.fn(),
   getFamiliesWithOpenPositions: vi.fn(),
-  getFamilyTree: vi.fn(),
-  createFamily: vi.fn(),
   updateDraft: vi.fn(),
   getCGExplanations: vi.fn(),
 }));

@@ -10,7 +10,6 @@ import {
   createDraft,
   getCGExplanations,
   getConsequencePoolCatalog,
-  createFamily,
   createGift,
   createTechnique,
   deleteDraft,
@@ -32,7 +31,6 @@ import {
   getClaimableTitles,
   getFamilySlots,
   getHouseClaim,
-  getFamilyTree,
   getFormOptions,
   getGenders,
   getGift,
@@ -80,8 +78,6 @@ export const characterCreationKeys = {
   families: (areaId: number) => [...characterCreationKeys.all, 'families', areaId] as const,
   familiesWithOpenPositions: (areaId?: number) =>
     [...characterCreationKeys.all, 'families-open', areaId] as const,
-  familyTree: (familyId: number) =>
-    [...characterCreationKeys.all, 'family-tree', familyId] as const,
   draft: () => [...characterCreationKeys.all, 'draft'] as const,
   canCreate: () => [...characterCreationKeys.all, 'can-create'] as const,
   heightBands: () => [...characterCreationKeys.all, 'height-bands'] as const,
@@ -322,24 +318,6 @@ export function useFamilySlots(familyId: number | undefined) {
     queryKey: ['family-slots', familyId],
     queryFn: () => getFamilySlots(familyId!),
     enabled: familyId !== undefined,
-  });
-}
-
-export function useFamilyTree(familyId: number | undefined) {
-  return useQuery({
-    queryKey: characterCreationKeys.familyTree(familyId!),
-    queryFn: () => getFamilyTree(familyId!),
-    enabled: !!familyId,
-  });
-}
-
-export function useCreateFamily() {
-  const queryClient = useQueryClient();
-  return useMutation({
-    mutationFn: createFamily,
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: characterCreationKeys.all });
-    },
   });
 }
 
