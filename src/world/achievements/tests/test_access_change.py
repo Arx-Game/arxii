@@ -6,8 +6,12 @@ from world.achievements.constants import AccessChangeSource
 from world.achievements.factories import AchievementFactory
 from world.achievements.models import CharacterAchievement, Discovery
 from world.character_sheets.factories import CharacterSheetFactory
+from world.codex.factories import (
+    BeginningsCodexGrantFactory,
+    CodexEntryFactory,
+)
 from world.conditions.factories import CapabilityTypeFactory
-from world.magic.factories import TechniqueFactory
+from world.magic.factories import PathGiftGrantFactory, TechniqueFactory
 from world.narrative.constants import NarrativeCategory
 from world.narrative.models import NarrativeMessage, NarrativeMessageDelivery
 from world.roster.factories import RosterEntryFactory, RosterTenureFactory
@@ -304,3 +308,50 @@ class AnnounceAccessChangeCapabilityTest(TestCase):
         )
         msg = NarrativeMessage.objects.latest("id")
         self.assertIn("phasewalk", msg.body)
+
+
+class AnnounceAccessChangeCgCatalogExclusionTest(TestCase):
+    def _tenured_sheet(self):
+        roster_entry = RosterEntryFactory()
+        RosterTenureFactory(roster_entry=roster_entry, end_date=None)
+        return roster_entry.character_sheet
+
+    def test_beginnings_granted_codex_entry_never_fires_even_via_a_non_cg_route(self):
+        ach = AchievementFactory(hidden=True)
+        entry = CodexEntryFactory(discovery_achievement=ach)
+        BeginningsCodexGrantFactory(entry=entry)
+        sheet = self._tenured_sheet()
+        from world.achievements.discovery import announce_access_change
+
+        announce_access_change(
+            sheet, gained=[entry], lost=[], source=AccessChangeSource.CODEX_LEARNING
+        )
+
+        self.assertFalse(CharacterAchievement.objects.filter(achievement=ach).exists())
+
+    def test_non_catalog_codex_entry_fires_normally(self):
+        ach = AchievementFactory(hidden=True)
+        entry = CodexEntryFactory(discovery_achievement=ach)
+        sheet = self._tenured_sheet()
+        from world.achievements.discovery import announce_access_change
+
+        announce_access_change(
+            sheet, gained=[entry], lost=[], source=AccessChangeSource.CODEX_LEARNING
+        )
+
+        self.assertTrue(
+            CharacterAchievement.objects.filter(character_sheet=sheet, achievement=ach).exists()
+        )
+
+    def test_catalog_technique_never_fires(self):
+        ach = AchievementFactory(hidden=True)
+        tech = TechniqueFactory(discovery_achievement=ach)
+        PathGiftGrantFactory(gift=tech.gift).starter_techniques.add(tech)
+        sheet = self._tenured_sheet()
+        from world.achievements.discovery import announce_access_change
+
+        announce_access_change(
+            sheet, gained=[tech], lost=[], source=AccessChangeSource.CHARACTER_CREATION
+        )
+
+        self.assertFalse(CharacterAchievement.objects.filter(achievement=ach).exists())

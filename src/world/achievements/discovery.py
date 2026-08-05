@@ -76,13 +76,15 @@ def announce_access_change(character_sheet, *, gained, lost, source):
     if not _ceremony_eligible(character_sheet):
         return
 
+    excluded_ids = _cg_catalog_exclusions(gained)
+
     for item in gained:
         # Only DiscoverableContent subclasses carry discovery_achievement;
         # CapabilityType grants never do.
         from world.achievements.models import DiscoverableContent  # noqa: PLC0415
 
         ach = item.discovery_achievement if isinstance(item, DiscoverableContent) else None
-        if ach is None:
+        if ach is None or item.pk in excluded_ids:
             continue
         from world.achievements.models import CharacterAchievement  # noqa: PLC0415
 
@@ -119,3 +121,60 @@ def _ceremony_eligible(character_sheet):
     if tenure is None:
         return False
     return not is_staff_observer(tenure.player_data.account)
+
+
+def _cg_catalog_exclusions(gained):
+    """Pks of ``gained`` items reachable through a CG catalog table.
+
+    Common knowledge — nearly every character reaches this content automatically at
+    character creation, so it never fires the discovery ceremony regardless of the
+    route (CG grant, research, teaching) or timing used to reach it (#2899).
+    """
+    from world.codex.models import CodexEntry  # noqa: PLC0415
+    from world.magic.models import Technique  # noqa: PLC0415
+
+    codex_ids = [item.pk for item in gained if isinstance(item, CodexEntry)]
+    technique_ids = [item.pk for item in gained if isinstance(item, Technique)]
+    excluded = set()
+    if codex_ids:
+        excluded |= _cg_catalog_codex_entry_ids(codex_ids)
+    if technique_ids:
+        excluded |= _cg_catalog_technique_ids(technique_ids)
+    return excluded
+
+
+def _cg_catalog_codex_entry_ids(entry_ids):
+    """Entries granted by a Beginning/Tradition/Path/Distinction/Species/Resonance."""
+    from django.db.models import Q  # noqa: PLC0415
+
+    from world.codex.models import CodexEntry  # noqa: PLC0415
+
+    return set(
+        CodexEntry.objects.filter(pk__in=entry_ids)
+        .filter(
+            Q(beginnings_grants__isnull=False)
+            | Q(tradition_grants__isnull=False)
+            | Q(path_grants__isnull=False)
+            | Q(distinction_grants__isnull=False)
+            | Q(species__isnull=False)
+            | Q(resonances__isnull=False)
+        )
+        .values_list("pk", flat=True)
+        .distinct()
+    )
+
+
+def _cg_catalog_technique_ids(technique_ids):
+    """Techniques in a Path's starter pool or a Tradition's special-technique set."""
+    from django.db.models import Q  # noqa: PLC0415
+
+    from world.magic.models import Technique  # noqa: PLC0415
+
+    return set(
+        Technique.objects.filter(pk__in=technique_ids)
+        .filter(
+            Q(granted_by_path_gifts__isnull=False) | Q(granted_by_tradition_gifts__isnull=False)
+        )
+        .values_list("pk", flat=True)
+        .distinct()
+    )

@@ -130,3 +130,17 @@ class GrantCodexEntryAnnouncesAccessChangeTests(TestCase):
         grant_codex_entry(roster_entry, self.entry)
 
         self.assertEqual(NarrativeMessage.objects.count(), count_after_first)
+
+    def test_beginnings_catalog_entry_does_not_fire_discovery_through_grant_codex_entry(self):
+        from world.achievements.factories import AchievementFactory
+        from world.codex.factories import BeginningsCodexGrantFactory
+
+        ach = AchievementFactory(hidden=True)
+        entry = CodexEntryFactory(discovery_achievement=ach)
+        BeginningsCodexGrantFactory(entry=entry)
+        roster_entry = RosterEntryFactory()
+        RosterTenureFactory(roster_entry=roster_entry, end_date=None)
+
+        grant_codex_entry(roster_entry, entry)
+
+        self.assertFalse(CharacterAchievement.objects.filter(achievement=ach).exists())

@@ -149,6 +149,13 @@ Called whenever any mechanism changes what techniques/capabilities a character c
   `announce_achievement` (gamewide first-ever body if it's a Discovery, personal otherwise).
 - **Never branches on source** — covenant, form shapeshift, and CG gift/technique grant are all identical.
 - `source` is an `AccessChangeSource` TextChoices value (drives the lead-in text label).
+- **Two eligibility gates run before the per-item loop, both source-agnostic:** (1) the receiving
+  character must have a current, non-staff `RosterTenure` (`_ceremony_eligible`) — a mid-CG,
+  GM-created-and-untenured, or staff-piloted sheet never fires the ceremony, though the plain
+  gained/lost message above still sends; (2) content reachable through a CG catalog table never
+  fires the ceremony regardless of route (`_cg_catalog_exclusions` — covers `CodexEntry` via
+  Beginnings/Tradition/Path/Distinction/Species/Resonance grants, and `Technique` via
+  `PathGiftGrant`/`TraditionGiftGrant`). See #2899.
 
 Current callers:
 - `world/forms/services.py` — assume / revert alternate self
