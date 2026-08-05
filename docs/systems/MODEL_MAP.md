@@ -1,9 +1,3 @@
-warning: `VIRTUAL_ENV=/workspaces/arxii/.venv` does not match the project environment path `.venv` and will be ignored; use `--active` to target the active environment instead
-Using CPython 3.13.0 interpreter at: /home/vscode/.local/share/mise/installs/python/3.13.0/bin/python3.13
-Creating virtual environment at: .venv
-   Building arxii @ file:///workspaces/arxii/.claude/worktrees/feature-2899-codex-entries-cannot-be-discoverable-no
-      Built arxii @ file:///workspaces/arxii/.claude/worktrees/feature-2899-codex-entries-cannot-be-discoverable-no
-Installed 101 packages in 3.62s
 # Arx II Model Introspection Report
 # Generated for CLAUDE.md enrichment
 
