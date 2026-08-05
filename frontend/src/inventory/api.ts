@@ -221,6 +221,15 @@ export interface VisibleWornItem {
   equipment_layer: EquipmentLayer;
 }
 
+/** A visible body marking (#2985) — tattoo, scar, brand, birthmark, rune. */
+export interface VisibleMarking {
+  id: number;
+  name: string;
+  kind: string;
+  body_region: BodyRegion;
+  description: string;
+}
+
 /**
  * Fetch the visible-worn list for a target character, observed by the
  * caller's currently active character (``observerId``).
@@ -242,6 +251,24 @@ export async function listVisibleWornItems(
   // The visible-worn list endpoint is computed from a service rather than a
   // queryset, so it returns a plain array (no DRF pagination wrapper).
   return (await res.json()) as VisibleWornItem[];
+}
+
+/**
+ * Fetch the visible body markings for a target character (#2985) — the
+ * sibling of the visible-worn list, same observer/permission contract.
+ */
+export async function listVisibleMarkings(
+  characterId: number,
+  observerId: number
+): Promise<VisibleMarking[]> {
+  const res = await apiFetch(
+    `${BASE_URL}/visible-markings/?character=${characterId}&observer=${observerId}`
+  );
+  if (!res.ok) {
+    throw new Error(await readError(res, 'Failed to load visible markings'));
+  }
+  // Computed from a service, plain array — no pagination wrapper.
+  return (await res.json()) as VisibleMarking[];
 }
 
 /**

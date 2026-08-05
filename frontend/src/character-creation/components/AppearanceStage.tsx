@@ -29,6 +29,7 @@ import {
   useHeightBands,
   useUpdateDraft,
 } from '../queries';
+import { MarkingsEditor } from './MarkingsEditor';
 import type {
   Build,
   CharacterDraft,
@@ -542,6 +543,11 @@ export function AppearanceStage({
             (Optional, appended to automatic descriptions)
           </p>
         </div>
+      </section>
+
+      {/* Body markings (#2985) */}
+      <section className="space-y-4">
+        <MarkingsEditor />
       </section>
     </motion.div>
   );

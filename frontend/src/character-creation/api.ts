@@ -189,6 +189,46 @@ export async function deleteDraft(draftId: number): Promise<void> {
   }
 }
 
+/** A CG-authored body marking (#2985) — materialized onto the character at finalization. */
+export interface DraftMarking {
+  id: number;
+  body_region: string;
+  kind: string;
+  name: string;
+  description: string;
+}
+
+export type DraftMarkingCreate = Omit<DraftMarking, 'id'>;
+
+export async function listDraftMarkings(): Promise<DraftMarking[]> {
+  const res = await apiFetch(`${BASE_URL}/draft-markings/`);
+  if (!res.ok) {
+    throw new Error('Failed to load markings');
+  }
+  return res.json();
+}
+
+export async function createDraftMarking(data: DraftMarkingCreate): Promise<DraftMarking> {
+  const res = await apiFetch(`${BASE_URL}/draft-markings/`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(data),
+  });
+  if (!res.ok) {
+    throw new Error('Failed to add marking');
+  }
+  return res.json();
+}
+
+export async function deleteDraftMarking(markingId: number): Promise<void> {
+  const res = await apiFetch(`${BASE_URL}/draft-markings/${markingId}/`, {
+    method: 'DELETE',
+  });
+  if (!res.ok) {
+    throw new Error('Failed to remove marking');
+  }
+}
+
 export async function submitDraftForReview(
   draftId: number,
   submissionNotes: string

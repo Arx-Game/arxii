@@ -35,6 +35,7 @@ from world.items.filters import (
     InteractionTypeFilter,
     ItemTemplateFilter,
     QualityTierFilter,
+    VisibleMarkingFilter,
     VisibleWornItemFilter,
 )
 from world.items.models import (
@@ -77,6 +78,7 @@ from world.items.serializers import (
     StyleSerializer,
     UseItemResultSerializer,
     UseItemSerializer,
+    VisibleMarkingSerializer,
     VisibleWornItemSerializer,
 )
 from world.items.services.appearance import LAYER_RANK, visible_worn_items_for
@@ -1290,6 +1292,34 @@ class VisibleWornItemViewSet(viewsets.ViewSet):
         if observer_obj.db_location_id != target.db_location_id:
             return None
         return _VisibleWornContext(target=target, observer=observer_obj)
+
+
+class VisibleMarkingViewSet(VisibleWornItemViewSet):
+    """List visible body markings for a character (#2985).
+
+    The sibling of the visible-worn endpoint — same ``character``/``observer``
+    parameters, same permission rules and out-of-scope-returns-``[]``
+    contract (inherited via ``_resolve_observer``); the payload is computed
+    by ``visible_markings_for`` (coverage + reveal + disguise-overlay
+    resolution). A separate endpoint because the worn list's response is a
+    bare array that cannot grow a ``markings`` block without a breaking
+    shape change.
+    """
+
+    filterset_class = VisibleMarkingFilter
+
+    def list(self, request: Request) -> Response:
+        """Return the visible-markings list for ``?character=<pk>``."""
+        from world.forms.services.markings import visible_markings_for  # noqa: PLC0415
+
+        user = cast(AccountDB, request.user)
+        observer = self._resolve_observer(request, user)
+        if observer is None:
+            return Response([])
+
+        markings = visible_markings_for(observer.target, observer=observer.observer)
+        serializer = VisibleMarkingSerializer(markings, many=True)
+        return Response(serializer.data)
 
 
 class VisibleItemDetailViewSet(viewsets.ViewSet):

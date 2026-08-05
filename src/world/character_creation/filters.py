@@ -6,6 +6,7 @@ from django.db import models
 from django.db.models import QuerySet
 import django_filters
 
+from world.character_creation.models import DraftMarking
 from world.character_sheets.models import Gender, Pronouns
 from world.classes.models import Path
 from world.magic.models import Gift, GlimpseTag, Technique, Tradition
@@ -177,3 +178,11 @@ class GlimpseTagFilter(django_filters.FilterSet):
     ) -> QuerySet[GlimpseTag]:
         """Include tags with no path restriction OR tags restricted to this path."""
         return queryset.filter(models.Q(paths__isnull=True) | models.Q(paths=value)).distinct()
+
+
+class DraftMarkingFilter(django_filters.FilterSet):
+    """Filters for the CG draft-markings endpoint (#2985)."""
+
+    class Meta:
+        model = DraftMarking
+        fields = ["kind", "body_region"]

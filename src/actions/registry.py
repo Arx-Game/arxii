@@ -163,6 +163,7 @@ from actions.definitions.evidence import (
     StartFrameJobAction,
 )
 from actions.definitions.fashion import (
+    CoverUpAction,
     JudgePresentationAction,
     PresentOutfitAction,
     RevealAction,
@@ -579,6 +580,7 @@ _ALL_ACTIONS: list[Action] = [
     JudgePresentationAction(),
     ShowcaseAction(),
     RevealAction(),
+    CoverUpAction(),
     PoseEndorseAction(),
     SceneEntryEndorseAction(),
     StylePresentationEndorseAction(),

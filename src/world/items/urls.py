@@ -19,6 +19,7 @@ from world.items.views import (
     ReclamationClaimViewSet,
     StyleViewSet,
     VisibleItemDetailViewSet,
+    VisibleMarkingViewSet,
     VisibleWornItemViewSet,
 )
 from world.items.views_station import LabStationViewSet
@@ -39,6 +40,7 @@ router.register("inventory", ItemInstanceViewSet, basename="item-instance")
 router.register("outfits", OutfitViewSet, basename="outfit")
 router.register("outfit-slots", OutfitSlotViewSet, basename="outfit-slot")
 router.register("visible-worn", VisibleWornItemViewSet, basename="visible-worn")
+router.register("visible-markings", VisibleMarkingViewSet, basename="visible-marking")
 router.register(
     "visible-item-detail",
     VisibleItemDetailViewSet,

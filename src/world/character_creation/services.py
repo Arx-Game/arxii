@@ -146,6 +146,9 @@ def finalize_character(
     # Create true form from appearance form traits
     _create_true_form(character, draft.draft_data)
 
+    # Materialize CG-authored body markings onto the true form (#2985).
+    _materialize_draft_markings(sheet, draft)
+
     # Create stat trait values, skills, goals, distinctions, path history, post-CG bonuses
     _apply_character_mechanics(character, draft)
 
@@ -1069,6 +1072,26 @@ def _create_distinction_modifiers_bulk(sheet: CharacterSheet, char_distinctions:
         reconcile_distinction_resonance_grants(char_dist)
         reconcile_distinction_asset_grants(char_dist)
         reconcile_distinction_regard_seeds(char_dist)
+
+
+def _materialize_draft_markings(sheet: Any, draft: CharacterDraft) -> None:
+    """Copy CG-authored ``DraftMarking`` rows onto the character's TRUE form (#2985).
+
+    Goes through ``grant_marking``, which get-or-creates the TRUE form — a
+    species with no required form traits legally reaches here with none.
+    """
+    from world.forms.constants import MarkingSource  # noqa: PLC0415
+    from world.forms.services.markings import grant_marking  # noqa: PLC0415
+
+    for draft_marking in draft.markings.all():
+        grant_marking(
+            sheet,
+            body_region=draft_marking.body_region,
+            kind=draft_marking.kind,
+            name=draft_marking.name,
+            description=draft_marking.description,
+            source=MarkingSource.CHARGEN,
+        )
 
 
 def _create_true_form(character: ObjectDB, draft_data: dict) -> None:

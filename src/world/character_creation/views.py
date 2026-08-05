@@ -29,6 +29,7 @@ from world.character_creation.constants import (
 from world.character_creation.filters import (
     CGGiftOptionFilter,
     CGTechniqueOptionFilter,
+    DraftMarkingFilter,
     FamilyFilter,
     GenderFilter,
     GlimpseTagFilter,
@@ -43,6 +44,7 @@ from world.character_creation.models import (
     CGPointBudget,
     CharacterDraft,
     DraftApplication,
+    DraftMarking,
     OriginTemplate,
     OriginTemplateSlot,
     StartingArea,
@@ -61,6 +63,7 @@ from world.character_creation.serializers import (
     DraftApplicationCommentSerializer,
     DraftApplicationDetailSerializer,
     DraftApplicationSerializer,
+    DraftMarkingSerializer,
     GenderSerializer,
     HouseClaimStatusSerializer,
     PathSerializer,
@@ -596,6 +599,32 @@ class CGExplanationsView(APIView):
     def get(self, request: Request) -> Response:
         """Return all CG explanation rows as {key: text, ...}."""
         return Response(CGExplanationsSerializer.to_dict())
+
+
+class DraftMarkingViewSet(viewsets.ModelViewSet):
+    """CRUD for the requester's own CG draft markings (#2985).
+
+    Rows are scoped to the requesting account's draft; ``draft`` is never
+    client-supplied — creation binds to the account's sole draft, mirroring
+    the one-draft-per-account invariant of ``CharacterDraftViewSet``.
+    """
+
+    pagination_class = None  # CG stage data — small bounded list (ADR-0138 pattern)
+    serializer_class = DraftMarkingSerializer
+    permission_classes = [IsAuthenticated]
+    filter_backends = [DjangoFilterBackend]
+    filterset_class = DraftMarkingFilter
+
+    def get_queryset(self) -> QuerySet[DraftMarking]:
+        """Return only markings on the current user's draft."""
+        return DraftMarking.objects.filter(draft__account=self.request.user)
+
+    def perform_create(self, serializer: BaseSerializer[Any]) -> None:
+        """Bind the new marking to the requester's draft."""
+        draft = CharacterDraft.objects.filter(account=self.request.user).first()
+        if draft is None:
+            raise ValidationError({"detail": "You have no character draft in progress."})
+        serializer.save(draft=draft)
 
 
 class CharacterDraftViewSet(viewsets.ModelViewSet):

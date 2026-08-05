@@ -622,7 +622,14 @@ Explicitly NOT in this slice (parked):
 - ~~Inventory service functions~~ — **done** (pick_up, drop, give, equip, unequip, put_in, take_out — backing 7 Action classes; telnet commands and existing web action dispatcher both supported)
 - ~~Saved outfits (Phase A)~~ — **done** (Outfit / OutfitSlot models, apply_outfit / undress / save_outfit / delete_outfit / add_outfit_slot / remove_outfit_slot services, ApplyOutfit/Undress actions, `wear outfit <name>` + `undress` telnet commands, REST CRUD, wardrobe page)
 - ~~Item stats model~~ — **done** (#508: `ItemTemplate` base combat stats — `weapon_damage_type`, `base_weapon_damage`, `base_armor_soak`, `max_durability`, gated by `gear_archetype`; `ItemInstance` derives `effective_weapon_damage` / `effective_armor_soak` / `is_broken` from quality tier and `durability`; `decrement_item_durability` service; combat wiring — armor soak in `apply_damage_to_participant`, equipped-weapon damage via `TechniqueDamageProfile.uses_equipped_weapon`, durability decremented on landed/soaked hits)
-- Visible equipment display — what others see when looking at a character; perception-layer integration into `look` output (not started)
+- Visible equipment display — **SHIPPED across #2965/#2985**: observer-filtered
+  `look` sections (`get_display_worn` "Wearing:" + `get_display_markings`
+  "Markings:"), web observer endpoints (`visible-worn`, `visible-markings`),
+  layered coverage + Reveal/Cover. Body markings (tattoos/scars/brands/
+  birthmarks/runes) are `FormMarking` rows on the `CharacterForm` —
+  CG-authored (`DraftMarking` + Appearance-stage editor), GM-granted, or
+  system-written via `grant_marking` (combat/soulfray scar sourcing is
+  TehomCD's follow-on consumer).
 - ~~Item interaction service functions — using items, consuming charges~~ — **done** (#509: `use_item` service, `on_use_pool` schema, soft/hard delete, `POST /api/items/inventory/<pk>/use/`)
 - ~~Frontend "use item" UI~~ — **done** (#1026: `is_usable` serializer field, `useUseItem` hook, Use button in `ItemDetailPanel` with inline result block; reusable and consumable branches both handled)
 - ~~Use-item Action class~~ — **done** (#1024: `UseItemAction` + `CmdUse` telnet command + `on_use_target_kind` validated targeted use + enforced prerequisite gate in `Action.run()`)

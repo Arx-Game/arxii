@@ -51,3 +51,8 @@ export function humanizeRegionLayer(region: BodyRegion, layer: EquipmentLayer): 
   const layerLabel = LAYER_LABELS[layer] ?? layer;
   return `${regionLabel} (${layerLabel})`;
 }
+
+/** Region label alone — markings (#2985) have no equipment layer. */
+export function humanizeRegion(region: BodyRegion): string {
+  return REGION_LABELS[region] ?? region;
+}

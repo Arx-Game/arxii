@@ -69,6 +69,7 @@ def equip_item(
     char_obj.equipped_items.invalidate()
     _recompute_body_persona_items_prestige(character_sheet)
     _reconcile_sun_exposure(char_obj)
+    _reconceal_markings(character_sheet, item_instance, body_region)
     return equipped
 
 
@@ -84,6 +85,22 @@ def unequip_item(*, equipped_item: EquippedItem) -> None:
     sheet.character.equipped_items.invalidate()
     _recompute_body_persona_items_prestige(sheet)
     _reconcile_sun_exposure(sheet.character)
+
+
+def _reconceal_markings(
+    character_sheet: object, item_instance: ItemInstance, body_region: str
+) -> None:
+    """Covering skin re-conceals it (#2985): a non-revealing garment landing on a
+    region clears any revealed marking there — the reveal state's natural end,
+    mirroring how ``EquippedItem.revealed_at`` dies with its row."""
+    from typing import cast  # noqa: PLC0415
+
+    from world.character_sheets.models import CharacterSheet  # noqa: PLC0415
+    from world.forms.services.markings import clear_revealed_markings  # noqa: PLC0415
+
+    if item_instance.template.is_revealing:
+        return
+    clear_revealed_markings(cast(CharacterSheet, character_sheet), {body_region})
 
 
 def _reconcile_sun_exposure(char_obj: object) -> None:

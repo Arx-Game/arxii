@@ -19,11 +19,11 @@ class CharacterState(BaseState):
     def appearance_template(self) -> str:
         """Template for ``return_appearance``.
 
-        Renders name, description, then optional status and worn sections.
-        Each optional section is omitted entirely when its display method
-        returns an empty string.
+        Renders name, description, then optional status, worn, and markings
+        sections. Each optional section is omitted entirely when its display
+        method returns an empty string.
         """
-        return "{name}\n{desc}{status_section}{worn_section}"
+        return "{name}\n{desc}{status_section}{worn_section}{markings_section}"
 
     def get_categories(self) -> dict:
         # For now, no extra character-specific categories.
@@ -136,6 +136,27 @@ class CharacterState(BaseState):
         )
         return f"|wWearing:|n {names}."
 
+    def get_display_markings(
+        self,
+        looker: "BaseState | object | None" = None,
+        **kwargs: "Kwargs",
+    ) -> str:
+        """Return the visible body markings as look-output text (#2985).
+
+        Empty string when nothing is visible — the appearance template omits
+        the section, matching ``get_display_worn``. Visibility (coverage,
+        reveal state, disguise/overlay resolution) is entirely
+        ``visible_markings_for``'s contract.
+        """
+        from world.forms.services.markings import visible_markings_for  # noqa: PLC0415
+
+        observer = looker.obj if looker is not None and hasattr(looker, "obj") else None
+        visible = visible_markings_for(self.obj, observer=observer)
+        if not visible:
+            return ""
+        parts = [f"{m.name} ({m.get_body_region_display().lower()})" for m in visible]
+        return f"|wMarkings:|n {iter_to_str(parts, endsep=', and')}."
+
     def get_display_status(
         self,
         looker: "BaseState | object | None" = None,
@@ -233,12 +254,14 @@ class CharacterState(BaseState):
         desc = self.get_display_desc(mode=mode, **kwargs)
         worn = self.get_display_worn(**kwargs)
         status = self.get_display_status(**kwargs)
+        markings = self.get_display_markings(**kwargs)
 
         appearance = self.appearance_template.format(
             name=name,
             desc=desc,
             status_section=f"\n{status}" if status else "",
             worn_section=f"\n{worn}" if worn else "",
+            markings_section=f"\n{markings}" if markings else "",
         )
         return self.format_appearance(appearance, **kwargs)
 

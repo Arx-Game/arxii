@@ -11,6 +11,7 @@ from world.forms.models import (
     CharacterFormValue,
     FormCombatProfile,
     FormCombatProfileEffect,
+    FormMarking,
     FormTrait,
     FormTraitOption,
     HeightBand,
@@ -163,13 +164,25 @@ class CharacterFormValueInline(admin.TabularInline):
     autocomplete_fields = ["trait", "option"]
 
 
+class FormMarkingInline(admin.TabularInline):
+    model = FormMarking
+    extra = 0
+
+
 @admin.register(CharacterForm)
 class CharacterFormAdmin(admin.ModelAdmin):
     autocomplete_fields = ["character"]
     list_display = ["character", "name", "form_type", "is_player_created", "created_at"]
     list_filter = ["form_type", "is_player_created"]
     search_fields = ["character__db_key", "name"]
-    inlines = [CharacterFormValueInline]
+    inlines = [CharacterFormValueInline, FormMarkingInline]
+
+
+@admin.register(FormMarking)
+class FormMarkingAdmin(admin.ModelAdmin):
+    list_display = ["form", "name", "kind", "body_region", "source", "revealed_at"]
+    list_filter = ["kind", "source", "body_region"]
+    search_fields = ["name", "form__character__db_key"]
 
 
 @admin.register(CharacterFormState)

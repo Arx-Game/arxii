@@ -193,14 +193,16 @@ class ShowcaseAction(Action):
 
 @dataclass
 class RevealAction(Action):
-    """Dramatically reveal a concealed worn piece (#2965).
+    """Dramatically reveal a concealed worn piece (#2965) or body marking (#2985).
 
     The reveal is the moment a concealed thing starts to openly count:
     social-facing effects (accents, prestige) read only visible pieces, so
     revealing flips the piece into the visible set until it is unequipped
-    (the state lives on the EquippedItem rows and dies with them). Legend
-    never needed revealing — it pierces concealment. Extensible to other
-    concealed features (tattoos, scars) when their models exist.
+    (the state lives on the EquippedItem rows and dies with them) or covered
+    (``cover``). Legend never needed revealing — it pierces concealment.
+    Markings (#2985): pass ``marking_id`` instead of ``item_id`` to bare a
+    tattoo/scar/brand concealed by clothing; scoped to the wearer's TRUE-form
+    markings — exactly the set the equip hook re-conceals.
     """
 
     key: str = "reveal"
@@ -224,6 +226,9 @@ class RevealAction(Action):
         sheet = resolve_actor_sheet(actor)
         if sheet is None or sheet.character_id is None:
             return ActionResult(success=False, message="You have nothing worn to reveal.")
+        marking_id = kwargs.get("marking_id")
+        if marking_id is not None:
+            return self._reveal_marking(actor, sheet, marking_id, context)
         item_id = kwargs.get("item_id")
         rows = list(
             EquippedItem.objects.filter(character_id=sheet.character_id)
@@ -260,3 +265,157 @@ class RevealAction(Action):
             success=True,
             message=f"You reveal {piece.display_name} — it counts for all to see now.",
         )
+
+    def _reveal_marking(
+        self,
+        actor: ObjectDB,
+        sheet: Any,
+        marking_id: Any,
+        context: ActionContext | None,
+    ) -> ActionResult:
+        from world.forms.models import FormMarking, FormType  # noqa: PLC0415
+        from world.forms.services.markings import (  # noqa: PLC0415
+            marking_is_concealed,
+            reveal_marking,
+        )
+
+        marking = FormMarking.objects.filter(
+            pk=marking_id, form__character=sheet, form__form_type=FormType.TRUE
+        ).first()
+        if marking is None:
+            return ActionResult(success=False, message="You bear no such marking.")
+        if marking.revealed_at is not None or not marking_is_concealed(actor, marking):
+            return ActionResult(success=False, message="That is already plainly visible.")
+        reveal_marking(marking)
+        sdm = context.scene_data if context else SceneDataManager()
+        actor_state = sdm.initialize_state_for_object(actor)
+        message_location(
+            actor_state,
+            f"$You() $conj(bare) {marking.name}, hidden until this moment.",
+        )
+        return ActionResult(
+            success=True,
+            message=f"You bare {marking.name} — it is there for all to see now.",
+        )
+
+
+@dataclass
+class CoverUpAction(Action):
+    """Tuck a revealed thing back away (#2985) — the inverse of Reveal.
+
+    Rolling the sleeve back down: clears the reveal state on a worn piece
+    (#2965's gap — a revealed piece previously stayed counting until unequip)
+    or a TRUE-form body marking, without re-equipping anything. Requires that
+    the target would actually be concealed absent the reveal — a covering
+    layer above the piece, or a non-revealing garment at the marking's
+    region; otherwise there is nothing to cover it with.
+    """
+
+    key: str = "cover"
+    name: str = "Cover"
+    icon: str = "eye-off"
+    category: str = "items"
+    target_type: TargetType = TargetType.SELF
+
+    def execute(
+        self,
+        actor: ObjectDB,
+        context: ActionContext | None = None,
+        **kwargs: Any,
+    ) -> ActionResult:
+        from actions.prerequisites import resolve_actor_sheet  # noqa: PLC0415
+
+        sheet = resolve_actor_sheet(actor)
+        if sheet is None or sheet.character_id is None:
+            return ActionResult(success=False, message="You have nothing to cover.")
+        marking_id = kwargs.get("marking_id")
+        if marking_id is not None:
+            return self._cover_marking(actor, sheet, marking_id, context)
+        item_id = kwargs.get("item_id")
+        if item_id is not None:
+            return self._cover_item(actor, sheet, item_id, context)
+        return ActionResult(success=False, message="Cover what? (a worn piece or a marking)")
+
+    def _cover_marking(
+        self,
+        actor: ObjectDB,
+        sheet: Any,
+        marking_id: Any,
+        context: ActionContext | None,
+    ) -> ActionResult:
+        from world.forms.models import FormMarking, FormType  # noqa: PLC0415
+        from world.forms.services.markings import (  # noqa: PLC0415
+            cover_marking,
+            marking_is_concealed,
+        )
+
+        marking = FormMarking.objects.filter(
+            pk=marking_id, form__character=sheet, form__form_type=FormType.TRUE
+        ).first()
+        if marking is None:
+            return ActionResult(success=False, message="You bear no such marking.")
+        if marking.revealed_at is None:
+            return ActionResult(success=False, message="That is not bared to begin with.")
+        if not marking_is_concealed(actor, marking):
+            return ActionResult(
+                success=False,
+                message="There is nothing to cover it with — it shows regardless.",
+            )
+        cover_marking(marking)
+        sdm = context.scene_data if context else SceneDataManager()
+        actor_state = sdm.initialize_state_for_object(actor)
+        message_location(
+            actor_state,
+            f"$You() $conj(tuck) {marking.name} away out of sight.",
+        )
+        return ActionResult(success=True, message=f"You cover {marking.name} back up.")
+
+    def _cover_item(
+        self,
+        actor: ObjectDB,
+        sheet: Any,
+        item_id: Any,
+        context: ActionContext | None,
+    ) -> ActionResult:
+        from world.items.models import EquippedItem, TemplateSlot  # noqa: PLC0415
+        from world.items.services.visibility import compute_worn_visibility  # noqa: PLC0415
+
+        rows = list(
+            EquippedItem.objects.filter(character_id=sheet.character_id)
+            .select_related("item_instance__template")
+            .prefetch_related(
+                Prefetch(
+                    "item_instance__template__slots",
+                    queryset=TemplateSlot.objects.all(),
+                    to_attr="cached_slots",
+                )
+            )
+        )
+        mine = [row for row in rows if row.item_instance_id == item_id]
+        if not mine:
+            return ActionResult(success=False, message="You aren't wearing that.")
+        if all(row.revealed_at is None for row in mine):
+            return ActionResult(success=False, message="That is not revealed to begin with.")
+        # Would it be concealed absent the reveal state? Trial in memory, then
+        # persist only when covering actually conceals something.
+        previous = {row.pk: row.revealed_at for row in mine}
+        for row in mine:
+            row.revealed_at = None
+        if compute_worn_visibility(rows).is_visible(item_id):
+            for row in mine:
+                row.revealed_at = previous[row.pk]
+            return ActionResult(
+                success=False,
+                message="There is nothing to cover it with — it shows regardless.",
+            )
+        EquippedItem.objects.filter(
+            character_id=sheet.character_id, item_instance_id=item_id
+        ).update(revealed_at=None)
+        piece = mine[0].item_instance
+        sdm = context.scene_data if context else SceneDataManager()
+        actor_state = sdm.initialize_state_for_object(actor)
+        message_location(
+            actor_state,
+            f"$You() $conj(tuck) {piece.display_name} away out of sight.",
+        )
+        return ActionResult(success=True, message=f"You cover {piece.display_name} back up.")
