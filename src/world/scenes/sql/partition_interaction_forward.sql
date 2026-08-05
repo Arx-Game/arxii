@@ -11,8 +11,10 @@
 -- 8. Adds BRIN indexes for efficient time-range scans
 -- 9. Sets the composite PK to (id, timestamp)
 --
--- Referenced by: tools/build_schema.py's SQL_FILES list (the #2906 single-app
--- collapse squashed the per-app migration that used to RunSQL this file).
+-- Applied by: src/world/migrations/0108_partition_interaction.py (RunSQL), and
+-- listed in tools/build_schema.py's SQL_FILES so CI, the parity tier, and the
+-- devcontainer apply it too (#2982 restored both after the #2906 single-app
+-- collapse's plain makemigrations silently dropped the RunSQL step).
 
 -- 1. Rename the Django-created table
 ALTER TABLE arxii_interaction RENAME TO arxii_interaction_old;

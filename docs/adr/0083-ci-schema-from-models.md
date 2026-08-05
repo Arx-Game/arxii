@@ -60,5 +60,13 @@ applies normally instead of colliding. `post-create.sh` also refuses to bootstra
 into a database that is non-empty and wasn't built by this path (detect and refuse,
 never auto-drop - see `docs/devcontainer-setup.md`).
 
+**Update (#2982):** splitting per-PR CI off the migration chain meant nothing per-PR
+inspected the migrated schema, and the nightly workflow's drift gate compares models to
+migrations rather than to the resulting schema - so a lost `RunSQL` (#2906's squash
+silently dropped the `arxii_interaction` partition rewrite) was invisible to every gate
+at once. Per-PR coverage is now the structural `standalone-sql-wiring` hook
+(`tools/check_standalone_sql_wiring.py`); nightly coverage is a full `pg_catalog` diff
+between the two paths (`tools/compare_schemas.py`).
+
 > Status: accepted · Source: CI-speedup branch, task 5 · Related: ADR-0013 (schema-only
 > migrations pre-production), ADR-0021 (merge queue + single-leaf migration guard)

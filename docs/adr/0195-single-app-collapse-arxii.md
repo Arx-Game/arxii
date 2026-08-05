@@ -95,12 +95,15 @@ one migration rewrite instead of two.
   partition/materialized-view SQL and seeds) with no migration replay at all, in 321s -
   about 6.5x faster than `main`'s migration replay and about 5x faster than the
   collapsed-and-inlined migration replay. Schema equivalence between the two paths was
-  verified by an exhaustive `pg_catalog` diff (tables, columns with type/nullability/
-  default, PKs, FKs with `ON DELETE`, unique and check constraints, index definitions,
-  sequences) - empty diff, 21,417 lines compared. This ADR's migration-speed work matters
-  for deploys that must replay migration *history* (e.g. an existing database moving
-  forward one release at a time); it does not change which path a fresh clone or CI
-  scratch database should take.
+  checked at the time by a `pg_catalog` diff and reported empty. **That check was not
+  sound** - #2982 later found the collapsed chain had lost the `arxii_interaction`
+  partition rewrite and its composite FKs entirely, so the two paths were *not*
+  equivalent when this ADR was written. The gap is closed by
+  `src/world/migrations/0108_partition_interaction.py`, and equivalence is now
+  machine-checked nightly by `tools/compare_schemas.py` rather than asserted once by
+  hand. This ADR's migration-speed work matters for deploys that must replay migration
+  *history* (e.g. an existing database moving forward one release at a time); it does
+  not change which path a fresh clone or CI scratch database should take.
 - **Dev databases cannot be migrated across this change.** All 1026 tables changed name
   (every `<oldapp>_<model>` table becomes `arxii_<model>`), so there is no migration path
   from a pre-collapse schema to the post-collapse one - only rebuild-and-reseed. This is a

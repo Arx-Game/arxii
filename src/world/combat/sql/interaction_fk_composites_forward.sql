@@ -8,8 +8,10 @@
 -- write path can set interaction_id + interaction_timestamp in the same
 -- save() / transaction without ordering concerns.
 --
--- Referenced by: tools/build_schema.py's SQL_FILES list (the #2906 single-app
--- collapse squashed the per-app migration that used to RunSQL this file).
+-- Applied by: src/world/migrations/0108_partition_interaction.py (RunSQL), and
+-- listed in tools/build_schema.py's SQL_FILES so CI, the parity tier, and the
+-- devcontainer apply it too (#2982 restored both after the #2906 single-app
+-- collapse's plain makemigrations silently dropped the RunSQL step).
 
 ALTER TABLE arxii_combatroundaction
     ADD CONSTRAINT combat_roundaction_interaction_fk
