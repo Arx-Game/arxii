@@ -18,7 +18,11 @@ partition exists (guards the one object already known to have been lost, and not
 **Trade-offs:** a genuinely wrong constraint *name* will not be caught. Accepted - no code in
 this repo resolves a constraint by name, and `ON CONFLICT ON CONSTRAINT` is unused. Three
 vendored Django/allauth through-table PK-width differences remain allowlisted with a stated
-reason, since CLAUDE.md forbids editing dependency code.
+reason, since CLAUDE.md forbids editing dependency code. `compare_schemas.py` also does not
+compare view and materialized-view defining queries, functions, triggers, or extensions - only
+`pg_catalog` object presence and shape. There is no divergence today because both paths apply
+the same `.sql` files, but a query, function, trigger, or extension could drift silently
+between the two paths without this diff catching it.
 
 > Status: accepted · Source: #2982 · Related: ADR-0083 (CI schema from models), ADR-0195
 > (single-app collapse's now-corrected equivalence claim), ADR-0018 (range-partition the

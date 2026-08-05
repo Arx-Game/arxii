@@ -24,6 +24,13 @@ directions so neither half can rot again.
 is forward-only by construction, so a reverse file legitimately appears in a
 migration and nowhere else.
 
+This hook does not assert that every ``.sql`` file on disk is either wired or
+explicitly exempt - a file wired into neither path is invisible to it.
+``src/world/societies/sql/society_prestige_ranking.sql`` is exactly that case:
+its model was deleted pre-#2906, so it is applied by neither path and kept
+in-repo only as a frozen reference (see ``tools/build_schema.py`` and
+``0101_create_materialized_views.py``'s docstring).
+
 Run via the pre-commit hook of the same name. Deliberately parses
 ``tools/build_schema.py`` with ``ast`` rather than importing it - importing pulls
 in Django and this check must stay fast and database-free.

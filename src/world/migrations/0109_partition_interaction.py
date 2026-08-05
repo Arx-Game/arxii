@@ -26,6 +26,11 @@ Ordering notes, because this is a table rewrite rather than additive DDL:
   database level only - migration state already carries them from CreateModel.
   ``AddField`` there resolves to ``schema_editor.add_field``, the same call
   ``tools/build_schema.py`` makes, so both paths name their objects identically.
+  On a non-empty ``arxii_interaction``, this ``AddField`` pair re-creates both
+  columns NULL - the forward SQL's ``INSERT ... SELECT`` never copies them, so
+  whatever values a row held in ``fury_committed_id`` or ``writer_account_id``
+  do not survive the rewrite. That is sanctioned pre-production by ADR-0013
+  (no ``RunPython`` data migrations; no production data exists yet to lose).
 * The rewrite's ``DROP TABLE arxii_interaction_old CASCADE`` is not lossy: all
   23 concrete FKs pointing at ``Interaction`` are declared
   ``db_constraint=False`` (a FK to a partitioned table cannot reference the
