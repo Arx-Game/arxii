@@ -1,0 +1,76 @@
+{% extends "admin/base_site.html" %}
+{% load i18n %}
+
+{% block title %}{{ title }} | {% translate 'Site administration' %}{% endblock %}
+
+{% block breadcrumbs %}
+<div class="breadcrumbs">
+    <a href="{% url 'admin:index' %}">{% translate 'Home' %}</a>
+    &rsaquo; <a href="{% url 'admin_game_setup' %}">Game Setup</a>
+    &rsaquo; <a href="{% url 'admin_content_conflicts' %}">Load conflicts</a>
+    &rsaquo; {{ title }}
+</div>
+{% endblock %}
+
+{% block content %}
+<div id="content-main">
+
+    <div class="module" style="padding: 15px; margin-bottom: 20px;">
+        <h2 style="margin-top: 0;">{{ conflict.model_name }}: {{ conflict.natural_key }}</h2>
+        <p>
+            This row is credited (written-by is set) and the content repo's
+            current values differ from what is in the database. The row was
+            left untouched by the last load.
+        </p>
+    </div>
+
+    <div class="module" style="padding: 15px; margin-bottom: 20px;">
+        <table>
+            <thead>
+                <tr>
+                    <th>Field</th>
+                    <th>Database value</th>
+                    <th>Repo value</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for name, db_value, repo_value in conflict.fields %}
+                <tr>
+                    <td>{{ name }}</td>
+                    <td><pre>{{ db_value }}</pre></td>
+                    <td><pre>{{ repo_value }}</pre></td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+
+    <div class="module" style="padding: 15px;">
+        <p>
+            To take the repo version, delete this row and reload it from the
+            repo. Type the natural key exactly as shown above
+            (<code>{{ conflict.natural_key }}</code>) to confirm. There is no
+            bulk-resolve - this action affects only this one row.
+        </p>
+        <form method="post" action="{{ resolve_url }}">
+            {% csrf_token %}
+            <input type="hidden" name="model" value="{{ model_label }}">
+            <input type="hidden" name="key" value="{{ key }}">
+            <input type="hidden" name="digest" value="{{ conflict.digest }}">
+            <p>
+                <label for="typed_key">Type the natural key to confirm:</label>
+                <input type="text" id="typed_key" name="typed_key" size="60">
+            </p>
+            <div class="submit-row" style="padding: 12px;">
+                <input type="submit" value="Delete and reload from repo" class="default"
+                       style="padding: 10px 20px;">
+                <a href="{% url 'admin_content_conflicts' %}"
+                   style="padding: 10px 20px; margin-left: 10px;">
+                    Cancel
+                </a>
+            </div>
+        </form>
+    </div>
+
+</div>
+{% endblock %}

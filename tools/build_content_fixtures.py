@@ -141,10 +141,14 @@ def _print_load_report(world_result: WorldLoadResult, content_root: Path) -> boo
     """Print the ``--load`` summary + health report; return the health verdict.
 
     Summary covers content counts, grid counts, deferred, and skips (as
-    before). The health report (#2501) always follows: it groups
+    before), plus a conflicts section (#3017): credited rows (written_by
+    set) whose incoming values differed and were left untouched. Conflicts
+    are deliberate freezes, not corpus drift - they are reported for
+    operator visibility only and never fed into the health report below.
+    The health report (#2501) always follows: it groups
     ``world_result.skipped`` against ``fixtures/KNOWN_DRIFT.txt`` so expected,
     pre-existing drift doesn't drown out a genuinely new regression. The
-    returned bool is ``True`` iff every skip matched a known-drift pattern —
+    returned bool is ``True`` iff every skip matched a known-drift pattern -
     ``_run`` uses it to decide the ``--strict`` exit code.
     """
     print(f"loaded: {world_result.created} created, {world_result.updated} updated.")
@@ -165,6 +169,15 @@ def _print_load_report(world_result: WorldLoadResult, content_root: Path) -> boo
     if world_result.skipped:
         print(f"skipped: {len(world_result.skipped)} object(s):")
         for msg in world_result.skipped:
+            print(f"  {msg}")
+    if world_result.conflicts:
+        # Deliberate freezes (#3017), not corpus drift: a credited row a
+        # human already edited is left untouched when a re-run's incoming
+        # values differ. Reported here for operator visibility only - never
+        # folded into KNOWN_DRIFT.txt or the --strict exit code below, both
+        # of which track genuine skips.
+        print(f"Conflicts (credited rows left untouched): {len(world_result.conflicts)} object(s):")
+        for msg in world_result.conflicts:
             print(f"  {msg}")
 
     patterns = load_known_drift(content_root)

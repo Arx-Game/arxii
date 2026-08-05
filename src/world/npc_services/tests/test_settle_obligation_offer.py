@@ -10,7 +10,7 @@ is that caller.
 
 from __future__ import annotations
 
-from django.test import TestCase, override_settings
+from django.test import TestCase
 
 from world.currency.models import FavorTokenDetails
 from world.currency.services import mint_favor_token
@@ -22,6 +22,7 @@ from world.npc_services.factories import NPCRoleFactory, NPCServiceOfferFactory
 from world.npc_services.services import resolve_offer, start_interaction
 from world.scenes.factories import PersonaFactory
 from world.seeds.tests.content_stub import stub_content_root
+from world.seeds.tests.press_helpers import seed_dev_database_with_sample_topup
 from world.societies.constants import ObligationState
 from world.societies.factories import OrganizationFactory, OrganizationObligationFactory
 
@@ -128,8 +129,10 @@ class SettleObligationLoopEndToEndTests(TestCase):
     # "Commoner", "The Fool" — which the Big Button only creates with
     # SEED_SAMPLE_CONTENT on (#2698). Opting in here keeps that third-party
     # path covered; a maintainer press (flag off) seeds config only and those
-    # named rows come from the content repo instead.
-    @override_settings(SEED_SAMPLE_CONTENT=True)
+    # named rows come from the content repo instead. seed_dev_database()
+    # itself now refuses SEED_SAMPLE_CONTENT once the stub content root's own
+    # load makes the universe non-empty (#3017), so this presses once
+    # (sampling off) then tops up via seed_dev_database_with_sample_topup().
     @stub_content_root()
     def test_settle_at_registrar_unblocks_train_offer(self) -> None:  # noqa: PLR0915
         from evennia.accounts.models import AccountDB
@@ -145,7 +148,6 @@ class SettleObligationLoopEndToEndTests(TestCase):
             ACADEMY_REGISTRAR_ROLE_NAME,
         )
         from world.seeds.character_creation import DEFAULT_STAT_NAMES, ensure_shroudwatch_academy
-        from world.seeds.database import seed_dev_database
         from world.societies.models import OrganizationObligation
         from world.societies.obligation_services import has_open_obligation
         from world.tarot.models import TarotCard
@@ -159,7 +161,7 @@ class SettleObligationLoopEndToEndTests(TestCase):
         # technique to pick from the one the generalist trainer's TRAIN offer
         # teaches (below) — the post-settle TRAIN attempt would otherwise
         # refuse as "you already know this" rather than proving a new grant.
-        seed_dev_database()
+        seed_dev_database_with_sample_topup()
         academy = ensure_shroudwatch_academy()
 
         area = CharacterDraft._meta.get_field("selected_area").related_model.objects.get(

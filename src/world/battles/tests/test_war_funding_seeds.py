@@ -7,21 +7,30 @@ placeholder values, plus idempotency (re-running is a no-op).
 
 from __future__ import annotations
 
-from django.test import TestCase, override_settings
+from django.test import TestCase
 
 from world.projects.constants import ProjectKind
 from world.projects.models import ContributionMethod
 from world.seeds.database import seed_dev_database
 from world.seeds.tests.content_stub import stub_content_root
+from world.seeds.tests.press_helpers import seed_dev_database_with_sample_topup
 
 
-@override_settings(SEED_SAMPLE_CONTENT=True)  # backing check-content seeds gate on #2698
 class SeedWarFundingContributionMethodsTests(TestCase):
-    """The WAR_FUNDING ContributionMethod seed row shape and idempotency."""
+    """The WAR_FUNDING ContributionMethod seed row shape and idempotency.
+
+    Backing check-content seeds gate on #2698 (SEED_SAMPLE_CONTENT). Since
+    #3017's hard gate, seed_dev_database() itself refuses sampling once the
+    stub content root has loaded anything, so the first press runs via
+    seed_dev_database_with_sample_topup() (press_helpers.py) - a normal press
+    followed by a sampling-on top-up of every cluster seeder. Re-presses after
+    that (idempotency checks) use plain seed_dev_database(): sampling is off
+    by default, but everything needed already exists from the top-up.
+    """
 
     @stub_content_root()
     def test_seeds_three_methods(self) -> None:
-        seed_dev_database()
+        seed_dev_database_with_sample_topup()
 
         methods = ContributionMethod.objects.filter(kind=ProjectKind.WAR_FUNDING).order_by("name")
         self.assertEqual(methods.count(), 3)
@@ -40,7 +49,7 @@ class SeedWarFundingContributionMethodsTests(TestCase):
 
     @stub_content_root()
     def test_seed_is_idempotent(self) -> None:
-        seed_dev_database()
+        seed_dev_database_with_sample_topup()
         seed_dev_database()
 
         self.assertEqual(

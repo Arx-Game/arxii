@@ -841,6 +841,7 @@ def _import_ambient_lines(
     bundles: list[tuple[Path, dict]],
     area_by_path: dict[Path, Area],
     room_by_fixture_key: dict[str, RoomProfile],
+    result: GridImportResult,
 ) -> None:
     """Pass: per-bundle AmbientEmoteLine/AmbientEmoteCondition rows, then derive + install
     condition-group Triggers (#2471 v2).
@@ -896,7 +897,7 @@ def _import_ambient_lines(
                 created_lines.append(line)
 
             _install_ambient_triggers(
-                area, bundle_room_fixture_keys, room_by_fixture_key, created_lines
+                area, bundle_room_fixture_keys, room_by_fixture_key, created_lines, result
             )
 
 
@@ -927,7 +928,11 @@ def _ensure_ambient_trigger(room_objectdb: object, trigger_def: object) -> None:
 
 
 def _ensure_ambient_group_trigger(
-    scope: str, scope_key: str, compiled_filter: dict | None, line_ids: list[int]
+    scope: str,
+    scope_key: str,
+    compiled_filter: dict | None,
+    line_ids: list[int],
+    result: GridImportResult,
 ) -> object:
     """Idempotently create (or refresh) the derived TriggerDefinition for one condition
     group (#2471 v2). Name is deterministic from (scope, scope_key, filter digest), so
@@ -938,6 +943,15 @@ def _ensure_ambient_group_trigger(
     FlowDefinition/TriggerDefinition row-set is created rather than migrating the old
     one in place; the old (now-orphaned) rows are never deleted or deactivated — same
     report-never-delete deferral as this file's other sidecar types, not a bug.
+
+    ``TriggerDefinition`` carries ``CreditedContent`` (#3017): a row whose
+    ``written_by`` a staff admin has set is never overwritten here even when its
+    ``base_filter_condition`` would otherwise be refreshed (the digest-collision
+    branch above) - the row is left untouched and the conflict is appended to
+    ``result.reports``, same freeze the fixture loader and the weather seed apply
+    to their own credited rows. ``FlowDefinition`` (also ``CreditedContent``) is
+    only ever created-or-fetched-unchanged in this function (``get_or_create``
+    with no field updates on the existing-row path), so it needs no guard.
     """
     import hashlib  # noqa: PLC0415
     import json  # noqa: PLC0415
@@ -977,8 +991,14 @@ def _ensure_ambient_group_trigger(
         },
     )
     if not created and trigger_def.base_filter_condition != compiled_filter:
-        trigger_def.base_filter_condition = compiled_filter
-        trigger_def.save(update_fields=["base_filter_condition"])
+        if trigger_def.written_by_id is not None:
+            result.reports.append(
+                f"TriggerDefinition [{trigger_def.name}] is credited (written_by is set) "
+                "and differs from the grid pipeline's value. Row left untouched (#3017)."
+            )
+        else:
+            trigger_def.base_filter_condition = compiled_filter
+            trigger_def.save(update_fields=["base_filter_condition"])
     return trigger_def
 
 
@@ -1069,6 +1089,7 @@ def _install_group_triggers(
     groups: dict[tuple[str, str, str], list],
     bundle_room_fixture_keys: list[str],
     room_by_fixture_key: dict[str, RoomProfile],
+    result: GridImportResult,
 ) -> None:
     """Derive and install Triggers for each ambient condition group.
 
@@ -1080,6 +1101,8 @@ def _install_group_triggers(
         groups: The grouped lines from ``_group_ambient_lines``.
         bundle_room_fixture_keys: Fixture keys for every room in this bundle.
         room_by_fixture_key: Rooms imported in pass 2, keyed by fixture key.
+        result: Import outcome accumulator; a credited ``TriggerDefinition``
+            conflict (#3017) is appended to ``result.reports``.
     """
     import json  # noqa: PLC0415
 
@@ -1088,7 +1111,7 @@ def _install_group_triggers(
     for (scope, scope_key, compiled_json), group_lines in groups.items():
         compiled = json.loads(compiled_json)
         line_ids = [line.pk for line in group_lines]
-        trigger_def = _ensure_ambient_group_trigger(scope, scope_key, compiled, line_ids)
+        trigger_def = _ensure_ambient_group_trigger(scope, scope_key, compiled, line_ids, result)
         if scope == _AMBIENT_SCOPE_ROOM:
             _ensure_ambient_trigger(room_by_fixture_key[scope_key].objectdb, trigger_def)
         else:
@@ -1106,6 +1129,7 @@ def _install_ambient_triggers(
     bundle_room_fixture_keys: list[str],
     room_by_fixture_key: dict[str, RoomProfile],
     lines: list,
+    result: GridImportResult,
 ) -> None:
     """Group freshly-imported lines by compiled filter, derive/install Triggers (#2471 v2).
 
@@ -1119,7 +1143,7 @@ def _install_ambient_triggers(
         profile.objectdb_id: fixture_key for fixture_key, profile in room_by_fixture_key.items()
     }
     groups = _group_ambient_lines(lines, area, room_fixture_by_id)
-    _install_group_triggers(groups, bundle_room_fixture_keys, room_by_fixture_key)
+    _install_group_triggers(groups, bundle_room_fixture_keys, room_by_fixture_key, result)
 
 
 def _report_missing_clue_and_anchor_sidecars(
@@ -1213,7 +1237,7 @@ def load_grid_bundles(content_root: Path | None = None) -> GridImportResult:
     _import_exits(bundles, room_by_fixture_key, result)
     _report_orphaned_exits(bundles, result)
     _import_sidecars(bundles, area_by_path, room_by_fixture_key)
-    _import_ambient_lines(bundles, area_by_path, room_by_fixture_key)
+    _import_ambient_lines(bundles, area_by_path, room_by_fixture_key, result)
     _report_missing_authored(area_by_slug, room_by_fixture_key, result)
     _import_clue_and_anchor_sidecars(bundles, room_by_fixture_key, result)
     _report_missing_clue_and_anchor_sidecars(bundles, result)

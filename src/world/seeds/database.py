@@ -43,6 +43,7 @@ from core_management.content_fixtures import ContentError, load_world_content
 from core_management.content_repo import resolve_content_root
 from world.seeds.clusters import CLUSTER_SEEDERS, seeded_models
 from world.seeds.config_prerequisites import CONFIG_PREREQUISITES
+from world.seeds.sample_content import assert_sampling_allowed
 from world.seeds.types import SeedReport
 
 _MISSING_CONTENT_ROOT_MSG = (
@@ -95,6 +96,9 @@ def seed_dev_database(*, verbose: bool = False) -> SeedReport:
     report.clusters["content"] = load_content_first()
     if verbose:
         print(f"  content: +{report.clusters['content']} rows")
+
+    # Sample content may only be invented into an empty content universe (#3017).
+    assert_sampling_allowed()
 
     for name, seeder in CLUSTER_SEEDERS.items():
         before = _row_count()

@@ -68,5 +68,7 @@ def seed_weather_content() -> None:
             "an empty transition graph until it is authored."
         )
         return
-    counts = load_weather_seed(fixtures_dir)
+    counts, conflicts = load_weather_seed(fixtures_dir)
     logger.info("Weather corpus loaded: %s", counts)
+    for line in conflicts:
+        logger.warning(line)

@@ -6588,6 +6588,16 @@ Admin-hosted, superuser-only HTMX dashboards for difficulty tuning/simulation an
   models on a first pass. `tools/prose_report.py` (`just prose-report`) walks a
   content-repo checkout with no Django and no database and reports the
   writer/reviewer backlog per domain.
+- **Load conflicts (#3017, ADR-0201):** a credited row (`written_by` set) whose incoming corpus
+  value differs from the DB on any field is frozen rather than overwritten -
+  `content_fixtures._upsert_fixture_object` skips the write and reports a one-line diagnostic in
+  `result.conflicts`; the admin's Load Conflicts pages (`web/admin/content_conflict_views.py`)
+  are the only way back, via a typed-natural-key delete-then-reload, one row at a time, never a
+  bulk resolve. The same freeze reaches `grid_import`'s credited `TriggerDefinition` refresh
+  branch and `world.weather.seed`'s credited `WeatherEmit` upserts. Separately,
+  `world.seeds.sample_content.assert_sampling_allowed()` refuses `SEED_SAMPLE_CONTENT` invention
+  once any `CONTENT_MODELS` table already has a row within the same `seed_dev_database()` press.
+  See `src/core_management/CLAUDE.md`'s "Load conflicts" section and ADR-0201.
 - **Grid content export/import (#2436/#2448):** rooms/areas are no longer deferred —
   `Area`/`RoomProfile` gained permanent identity keys (`slug`/`fixture_key`) and a
   `GridOrigin` export gate (see the Areas section above). `core_management.grid_export.
@@ -6629,7 +6639,9 @@ Admin-hosted, superuser-only HTMX dashboards for difficulty tuning/simulation an
   `content_fixtures.py`. A health report (per-source skip counts, known-drift count, and
   every unexpected skip verbatim) always prints after the load summary, `--strict` or not,
   so a silent-skip regression (the #2501 root cause — 350 rows dropped with no signal) is
-  visible even on a plain `--load`. `--strict` requires `--load`.
+  visible even on a plain `--load`. `--strict` requires `--load`. A credited-row load conflict
+  (#3017, ADR-0201) never affects the `--strict` exit code - it is a distinct outcome from a
+  skip, reported separately.
   `CONTENT_MODELS` (`core_management/content_export.py`) also gained
   `mechanics.application`, `mechanics.prerequisite`, `mechanics.property`, and
   `mechanics.propertycategory` — the loader was already dynamic (any `NaturalKeyMixin`

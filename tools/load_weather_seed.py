@@ -72,9 +72,11 @@ def main() -> int:
     django.setup()
     from world.weather.seed import load_weather_seed  # noqa: PLC0415
 
-    counts = load_weather_seed(fixtures_dir)
+    counts, conflicts = load_weather_seed(fixtures_dir)
     for model, (created, updated) in counts.items():
         print(f"{model}: {created} created, {updated} updated.")
+    for line in conflicts:
+        print(f"CONFLICT: {line}")
     return 0
 
 

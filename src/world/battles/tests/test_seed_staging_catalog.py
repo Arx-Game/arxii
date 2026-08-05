@@ -11,7 +11,7 @@ it (cluster ordering in ``world.seeds.clusters``).
 
 from __future__ import annotations
 
-from django.test import TestCase, override_settings
+from django.test import TestCase
 
 from world.battles.constants import BattleSideRole, FortificationKind, UnitQuality
 from world.battles.models import (
@@ -22,6 +22,7 @@ from world.battles.models import (
 )
 from world.seeds.database import seed_dev_database
 from world.seeds.tests.content_stub import stub_content_root
+from world.seeds.tests.press_helpers import seed_dev_database_with_sample_topup
 
 
 class SeedBattleStagingCatalogTests(TestCase):
@@ -61,7 +62,6 @@ class SeedBattleStagingCatalogTests(TestCase):
         self.assertFalse(places["Gate Approach"].fortifications.exists())
         self.assertFalse(places["Inner Court"].fortifications.exists())
 
-    @override_settings(SEED_SAMPLE_CONTENT=True)
     @stub_content_root()
     def test_seeds_three_unit_templates_with_distinct_quality(self) -> None:
         """mechanics.Property/PropertyCategory and conditions.CapabilityType are
@@ -71,8 +71,13 @@ class SeedBattleStagingCatalogTests(TestCase):
         the CapabilityType half of this was already unauthored-in-stub before
         this slice (conditions.* landed first); the assertion was silently
         never reached because it followed the now-also-gated property check.
+
+        seed_dev_database() itself now refuses SEED_SAMPLE_CONTENT once the
+        stub content root's own load has populated any CONTENT_MODELS table
+        (#3017) - so this presses once with sampling off, then tops up the
+        gap via seed_dev_database_with_sample_topup() (see press_helpers.py).
         """
-        seed_dev_database()
+        seed_dev_database_with_sample_topup()
 
         names = ["Levy Spears", "Veteran Pikemen", "Raider Skirmishers"]
         templates = {t.name: t for t in BattleUnitTemplate.objects.filter(name__in=names)}

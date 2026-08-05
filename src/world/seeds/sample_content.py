@@ -56,6 +56,40 @@ def sample_content_enabled() -> bool:
     return bool(settings.SEED_SAMPLE_CONTENT)
 
 
+def assert_sampling_allowed() -> None:
+    """Refuse sample invention against a non-empty content universe (#3017).
+
+    Called by ``seed_dev_database()`` between the content load and the cluster
+    loop: within a single press, once any ``CONTENT_MODELS`` table has a row
+    (authored, or just loaded by this same press), sampling is refused for the
+    rest of that press, so it can never mix invented rows into a real content
+    universe; the downstream guards (test_no_content_slop, the ADR-0191
+    addition gate) become defense in depth instead of the only line. This
+    enforcement is scoped to a ``seed_dev_database()`` call, not a standing
+    database-wide invariant - a direct cluster-seeder call (test-only; see
+    ``world.seeds.tests.press_helpers``) sits outside this gate by design.
+    """
+    if not sample_content_enabled():
+        return
+    from core_management.content_export import CONTENT_MODELS  # noqa: PLC0415
+    from core_management.content_fixtures import (  # noqa: PLC0415
+        ContentError,
+        resolve_fixture_model,
+    )
+
+    nonempty = sorted(
+        label for label in CONTENT_MODELS if resolve_fixture_model(label).objects.exists()
+    )
+    if nonempty:
+        message = (
+            "ARXII_SEED_SAMPLE_CONTENT is enabled but the database already has "
+            f"content rows in: {', '.join(nonempty)}. Sample content may only be "
+            "invented into an empty content universe - turn sampling off, or start "
+            "from a fresh database with no content repo configured."
+        )
+        raise ContentError(message)
+
+
 def authored_or_sample[M: Model](
     model: type[M], defaults: dict[str, Any] | None, **lookup: Any
 ) -> M | None:

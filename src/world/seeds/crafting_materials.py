@@ -62,11 +62,17 @@ def seed_crafting_materials() -> None:
         )
         categories[name] = category
 
+    skipped = 0
     for category_name, name, value, grade in _MATERIALS:
+        existing = ItemTemplate.objects.filter(name=name).first()
+        if existing is not None and existing.written_by_id is not None:
+            logger.info("Skipping credited ItemTemplate %r - a human has written this row.", name)
+            skipped += 1
+            continue
         ItemTemplate.objects.update_or_create(
             name=name,
             defaults={
-                "description": f"PLACEHOLDER: {name.lower()} — crafting material.",
+                "description": f"PLACEHOLDER: {name.lower()} - crafting material.",
                 "is_active": True,
                 "value": value,
                 "material_category": categories[category_name],
@@ -74,9 +80,10 @@ def seed_crafting_materials() -> None:
             },
         )
     logger.info(
-        "Seeded %s material categories and %s generic material templates.",
+        "Seeded %s material categories and %s generic material templates (%s skipped, credited).",
         len(categories),
-        len(_MATERIALS),
+        len(_MATERIALS) - skipped,
+        skipped,
     )
     seed_accent_axes()
     seed_craft_skills()

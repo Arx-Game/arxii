@@ -285,3 +285,100 @@ class GridImportTests(TestCase):
             any("orphan" in line for line in result.reports),
             f"expected an orphan report, got: {result.reports}",
         )
+
+
+class AmbientTriggerCreditGuardTests(TestCase):
+    """``TriggerDefinition`` carries ``CreditedContent`` (#3017): the digest-collision
+    refresh branch in ``_ensure_ambient_group_trigger`` must never overwrite a row a
+    human has credited. A genuine sha1 digest collision cannot be forced from a
+    round-trip test, so these call the private helper directly against a row
+    pre-seeded under the exact name the helper would compute - the same
+    "existing row found, content differs" shape a real collision produces,
+    without depending on breaking sha1.
+    """
+
+    @staticmethod
+    def _trigger_name(compiled_filter: dict) -> str:
+        import hashlib
+        import json
+
+        digest = hashlib.sha1(  # noqa: S324 (content-addressing, not security)
+            json.dumps(compiled_filter, sort_keys=True).encode()
+        ).hexdigest()[:12]
+        return f"moved_ambient_room_taproom_{digest}"
+
+    def test_credited_trigger_definition_survives_a_differing_refresh(self) -> None:
+        from core_management.grid_import import GridImportResult, _ensure_ambient_group_trigger
+        from flows.constants import EventName
+        from flows.models import FlowDefinition
+        from flows.models.triggers import TriggerDefinition
+        from world.contributors.factories import ContentContributorFactory
+
+        compiled_filter = {"target": 5}
+        name = self._trigger_name(compiled_filter)
+        flow = FlowDefinition.objects.create(name=name)
+        credited = TriggerDefinition.objects.create(
+            name=name,
+            event_name=EventName.MOVED,
+            flow_definition=flow,
+            base_filter_condition={"target": 999},
+            written_by=ContentContributorFactory(),
+        )
+
+        result = GridImportResult()
+        returned = _ensure_ambient_group_trigger("room", "taproom", compiled_filter, [1, 2], result)
+
+        credited.refresh_from_db()
+        self.assertEqual(credited.base_filter_condition, {"target": 999})
+        self.assertEqual(returned.pk, credited.pk)
+        self.assertEqual(len(result.reports), 1)
+        self.assertIn(f"TriggerDefinition [{name}]", result.reports[0])
+        self.assertIn("#3017", result.reports[0])
+
+    def test_uncredited_trigger_definition_still_refreshes(self) -> None:
+        from core_management.grid_import import GridImportResult, _ensure_ambient_group_trigger
+        from flows.constants import EventName
+        from flows.models import FlowDefinition
+        from flows.models.triggers import TriggerDefinition
+
+        compiled_filter = {"target": 5}
+        name = self._trigger_name(compiled_filter)
+        flow = FlowDefinition.objects.create(name=name)
+        uncredited = TriggerDefinition.objects.create(
+            name=name,
+            event_name=EventName.MOVED,
+            flow_definition=flow,
+            base_filter_condition={"target": 999},
+        )
+
+        result = GridImportResult()
+        _ensure_ambient_group_trigger("room", "taproom", compiled_filter, [1, 2], result)
+
+        uncredited.refresh_from_db()
+        self.assertEqual(uncredited.base_filter_condition, compiled_filter)
+        self.assertEqual(result.reports, [])
+
+    def test_identical_credited_value_is_a_quiet_noop(self) -> None:
+        from core_management.grid_import import GridImportResult, _ensure_ambient_group_trigger
+        from flows.constants import EventName
+        from flows.models import FlowDefinition
+        from flows.models.triggers import TriggerDefinition
+        from world.contributors.factories import ContentContributorFactory
+
+        compiled_filter = {"target": 5}
+        name = self._trigger_name(compiled_filter)
+        flow = FlowDefinition.objects.create(name=name)
+        credited = TriggerDefinition.objects.create(
+            name=name,
+            event_name=EventName.MOVED,
+            flow_definition=flow,
+            base_filter_condition=compiled_filter,
+            written_by=ContentContributorFactory(),
+        )
+
+        result = GridImportResult()
+        _ensure_ambient_group_trigger("room", "taproom", compiled_filter, [1, 2], result)
+
+        credited.refresh_from_db()
+        self.assertEqual(credited.base_filter_condition, compiled_filter)
+        self.assertEqual(result.reports, [])

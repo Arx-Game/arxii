@@ -10,6 +10,7 @@ from django.urls import reverse
 from evennia.accounts.models import AccountDB
 
 from world.buildings.models import DecorationKind
+from world.contributors.factories import ContentContributorFactory
 from world.traits.models import Trait
 
 GOOD_SKILL = """---
@@ -124,3 +125,59 @@ class TestContentLoadConfigured(TestCase):
         self.assertTrue(
             any("does not exist" in str(m) or "invalid" in str(m).lower() for m in messages)
         )
+
+
+class TestContentLoadConflicts(TestCase):
+    """A credited row a re-run's incoming content differs from is left untouched (#3017).
+
+    The flash must surface it, not silently drop it: the admin's only way back
+    to the repo version is the typed-confirmation delete-then-reload flow, and
+    an operator can't reach for that if the flash never says a conflict happened.
+    """
+
+    @classmethod
+    def setUpTestData(cls) -> None:
+        cls.super = AccountDB.objects.create_superuser("rootadmin", "root@example.com", "pw-123456")
+
+    def setUp(self) -> None:
+        self.content = tempfile.TemporaryDirectory()
+        self.addCleanup(self.content.cleanup)
+        self.root = Path(self.content.name)
+
+    def test_run_flashes_conflict_count_and_one_warning_per_conflict(self) -> None:
+        ContentContributorFactory(name="Tehom")
+        _write(
+            self.root,
+            "skills/performance.md",
+            '---\nname: Performance\ncategory: social\nwritten_by: "Tehom"\n---\nHuman words.\n',
+        )
+        self.client.force_login(self.super)
+        with mock.patch.dict("os.environ", {"CONTENT_REPO_PATH": str(self.root)}):
+            self.client.post(reverse("admin_content_load_run"))
+        trait = Trait.objects.get(name="Performance")
+        self.assertIsNotNone(trait.written_by)
+
+        # Same credited row, incoming description now differs.
+        _write(
+            self.root,
+            "skills/performance.md",
+            "---\n"
+            "name: Performance\n"
+            "category: social\n"
+            'written_by: "Tehom"\n'
+            "---\n"
+            "Regenerated words.\n",
+        )
+        with mock.patch.dict("os.environ", {"CONTENT_REPO_PATH": str(self.root)}):
+            resp = self.client.post(reverse("admin_content_load_run"))
+        self.assertEqual(resp.status_code, 302)
+        self.assertEqual(resp.url, reverse("admin_game_setup"))
+
+        messages = list(resp.wsgi_request._messages)
+        self.assertTrue(any("1 conflicts" in str(m) for m in messages))
+        conflict_warnings = [str(m) for m in messages if str(m).startswith("CONFLICT:")]
+        self.assertEqual(len(conflict_warnings), 1)
+        self.assertIn("Performance", conflict_warnings[0])
+
+        trait.refresh_from_db()
+        self.assertEqual(trait.description, "Human words.")

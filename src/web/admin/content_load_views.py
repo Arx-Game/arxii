@@ -45,7 +45,9 @@ def content_load_run(request: HttpRequest) -> HttpResponse:
     purely to read ``placeholder_counts`` for the flash message — cheap,
     side-effect-free parsing (not a second load); ``load_world_content`` does
     the actual content-fixtures -> grid-bundles -> deferred-retry sequence
-    (#2448) and owns every create/update/skip/grid count reported below.
+    (#2448) and owns every create/update/skip/conflict/grid count reported
+    below. A conflict (#3017) is a credited row a re-run's incoming values
+    differ from - left untouched, not a skip, flashed as its own warning.
     """
     if not request.user.is_superuser:
         raise PermissionDenied
@@ -97,6 +99,7 @@ def content_load_run(request: HttpRequest) -> HttpResponse:
         if world_result.deferred_resolved
         else ""
     )
+    conflict_msg = f", {len(world_result.conflicts)} conflicts" if world_result.conflicts else ""
     grid = world_result.grid
     grid_created = grid.created_areas + grid.created_rooms + grid.created_exits
     grid_updated = grid.updated_areas + grid.updated_rooms + grid.updated_exits
@@ -106,10 +109,12 @@ def content_load_run(request: HttpRequest) -> HttpResponse:
     messages.success(
         request,
         f"Content load: {world_result.created} created, {world_result.updated} updated, "
-        f"{placeholders} placeholder entries{skip_msg}{deferred_msg}{grid_msg}",
+        f"{placeholders} placeholder entries{skip_msg}{deferred_msg}{conflict_msg}{grid_msg}",
     )
     for skip in world_result.skipped:
         messages.warning(request, skip)
+    for conflict in world_result.conflicts:
+        messages.warning(request, f"CONFLICT: {conflict}")
     for report in grid.reports:
         messages.warning(request, report)
     return HttpResponseRedirect(reverse("admin_game_setup"))

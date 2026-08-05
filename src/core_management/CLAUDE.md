@@ -140,3 +140,51 @@ prose-report`) report the writer/reviewer backlog by scanning a content-repo
 checkout directly, no Django and no database, the same contract
 `content_health.py` keeps: `uv run python tools/prose_report.py
 [--content-path /path/to/checkout]`.
+
+## Load conflicts (#3017, ADR-0201)
+
+A credited row (`written_by` set) whose incoming corpus value differs from what's on disk is
+never silently overwritten by a load. `_upsert_fixture_object` runs `_credited_conflicts`
+between the case-insensitive lookup and the write: if the row is credited and any incoming
+field (not just prose) differs, the write is skipped, `OUTCOME_CONFLICT` is returned, and a
+one-line diagnostic lands in `result.conflicts`. An uncredited row, or a credited row whose
+incoming values are byte-for-byte identical, upserts exactly as before. The guard applies
+everywhere `CreditedContent` is written, not only the fixture-JSON/markdown pipeline:
+`grid_import._ensure_ambient_group_trigger` freezes a credited `TriggerDefinition` on its
+digest-collision refresh branch (`FlowDefinition` is create-only in that module, so it needs no
+guard) and reports via `GridImportResult.reports`; `world.weather.seed.upsert_weather_emits`
+freezes a credited `WeatherEmit` the same way and returns its own `conflicts` list. Four
+surfaces expose this:
+
+- **The upsert guard itself** - `content_fixtures._upsert_fixture_object` /
+  `grid_import._ensure_ambient_group_trigger` / `weather.seed.upsert_weather_emits` - the single
+  point that actually refuses a write.
+- **The CLI** - `tools/build_content_fixtures.py --load` prints every conflict after the load
+  summary, same as it prints skips.
+- **The admin flash** - `web/admin/content_load_views.py`'s "Load private content repo" run
+  surfaces `world_result.conflicts` as flash messages after a load.
+- **The admin resolve pages** - `web/admin/content_conflict_views.py` (`_content_conflicts/`,
+  `_content_conflict/`, `_content_conflict_resolve/`) lists every current conflict via
+  `core_management.load_conflicts.scan_load_conflicts` (a read-only rerun of the same
+  resolution sequence, never writing), shows one conflict's field-by-field diff, and resolves it
+  with a typed-natural-key-confirmed delete-then-reload in one transaction. No bulk resolve
+  exists - clearing a human's credited edit is a one-row, one-confirmation action every time.
+
+Conflicts never affect `--strict`'s exit code - `--strict` (#2501) gates on unexplained
+`result.skipped` entries against `KNOWN_DRIFT.txt`; a conflict is a distinct outcome
+(`OUTCOME_CONFLICT`, not `OUTCOME_SKIPPED`) and is reported separately.
+
+`scan_load_conflicts` and the admin's single-entry reload resolve each object in isolation - no
+deferred-retry pass, no grid-bundle load, unlike `load_world_content`'s full sequence - so a row
+whose incoming FK target is itself new in the same corpus update may not surface as a conflict
+(or reload cleanly) until a full load brings that target in first. One-directional: it can
+under-report a conflict, never invent one, and the upsert guard is unaffected either way. See
+`load_conflicts.py`'s module docstring and ADR-0201.
+
+Separately, `world.seeds.sample_content.assert_sampling_allowed()` refuses `SEED_SAMPLE_CONTENT`
+invention once any `CONTENT_MODELS` table already has a row within the same
+`seed_dev_database()` press - called between the content load and the cluster loop, so a sample
+row can never mix into a real content universe within one press. This is per-press enforcement,
+not a standing database-wide invariant: the test-only cluster-seeder helpers in
+`world/seeds/tests/press_helpers.py` call a single cluster directly and sit outside this gate by
+design.

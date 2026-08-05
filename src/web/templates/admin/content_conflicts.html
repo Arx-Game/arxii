@@ -1,0 +1,62 @@
+{% extends "admin/base_site.html" %}
+{% load i18n %}
+
+{% block title %}{{ title }} | {% translate 'Site administration' %}{% endblock %}
+
+{% block breadcrumbs %}
+<div class="breadcrumbs">
+    <a href="{% url 'admin:index' %}">{% translate 'Home' %}</a>
+    &rsaquo; <a href="{% url 'admin_game_setup' %}">Game Setup</a>
+    &rsaquo; {{ title }}
+</div>
+{% endblock %}
+
+{% block content %}
+<div id="content-main">
+
+    <div class="module" style="padding: 15px; margin-bottom: 20px;">
+        <h2 style="margin-top: 0;">Load conflicts</h2>
+        <p>
+            A credited row (one with a written-by set) that the content repo's
+            current values differ from is left untouched by a content load,
+            not silently overwritten. Each row below is one such conflict.
+            Resolving one deletes the row and reloads it from the repo -
+            typed confirmation required, one row at a time.
+        </p>
+    </div>
+
+    <div class="module" style="padding: 15px;">
+        {% if conflicts %}
+        <table>
+            <thead>
+                <tr>
+                    <th>Model</th>
+                    <th>Natural key</th>
+                    <th>Differing fields</th>
+                    <th></th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for row in conflict_rows %}
+                <tr>
+                    <td>{{ row.conflict.model_name }}</td>
+                    <td><code>{{ row.conflict.natural_key }}</code></td>
+                    <td>
+                        {% for triple in row.conflict.fields %}
+                            {{ triple.0 }}{% if not forloop.last %}, {% endif %}
+                        {% endfor %}
+                    </td>
+                    <td>
+                        <a href="{{ row.detail_url }}">Review</a>
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+        {% else %}
+        <p>No load conflicts right now.</p>
+        {% endif %}
+    </div>
+
+</div>
+{% endblock %}

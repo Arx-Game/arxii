@@ -69,4 +69,12 @@ content repo and loads via the **`weather` seed cluster**
 `WEATHER_SEED_PATH` or `<content repo>/weather`. A missing corpus logs a warning
 and no-ops — the cron then runs against an empty transition graph, which is a
 content-authoring gap rather than a seeder bug. `tools/load_weather_seed.py`
-remains for out-of-band reloads.
+remains for out-of-band reloads. A credited `WeatherEmit` (`written_by` set) whose incoming
+corpus content or credit differs is frozen rather than overwritten - `seed.upsert_weather_emits`
+reports the conflict instead of writing it (#3017, ADR-0201). This freeze is reported by the seed
+loader itself (its return value, surfaced via log/CLI), not the admin's Load Conflicts page:
+that page's scan (`core_management.load_conflicts.scan_load_conflicts`) only reads the
+content-repo's exported `fixtures/`/markdown corpus, so a weather-seed conflict shows there only
+when the divergent value also lives in that exported copy. The override is deleting the row and
+re-running the seed (or the delete-then-reload flow on the admin page, when the row does surface
+there).

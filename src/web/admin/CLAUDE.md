@@ -42,6 +42,41 @@ copy says so.
   hint to set `CONTENT_REPO_PATH` in `src/.env` (the Import Data upload
   remains the path for ad-hoc fixture files either way).
 
+### Load Conflict Resolution (#3017)
+
+**Purpose:** the admin-side counterpart to the credited-row load guard in
+`core_management.content_fixtures._upsert_fixture_object` — a credited row
+(`written_by` set) whose incoming corpus value differs from the DB is left
+untouched by a load rather than silently overwritten. This surface lists
+every current such conflict and resolves one at a time by deleting the row
+and reloading it from the corpus, gated on typing the row's own natural key
+back exactly. Deliberately no bulk resolve: clearing a human's credited edit
+is a one-row, one-typed-confirmation action every time.
+
+- `content_conflict_views.py` — `content_conflicts` (GET, list every current
+  conflict via `core_management.load_conflicts.scan_load_conflicts`),
+  `content_conflict_detail` (GET, one conflict's field-by-field diff plus the
+  typed-confirmation form; querystring `model` + `key`), and
+  `content_conflict_resolve` (POST, superuser-only; refuses a wrong typed key
+  with the row untouched, otherwise deletes the row and reloads exactly that
+  one entry from the corpus inside one transaction — a `ProtectedError` or a
+  failed reload rolls the whole thing back and flashes an error). All three
+  resolve the content-repo path via the same `resolve_content_root()` as the
+  load view.
+- `templates/admin/content_conflicts.html`, `content_conflict_detail.html` —
+  mirror `content_load_confirm.html`'s structure: plain tables, no JS.
+- URLs: `_content_conflicts/` → `admin_content_conflicts` (GET list);
+  `_content_conflict/` → `admin_content_conflict_detail` (GET detail,
+  `?model=&key=`); `_content_conflict_resolve/` →
+  `admin_content_conflict_resolve` (POST resolve).
+- The Game Setup hub's "Load private content repo" step links here beside
+  the load/export/push links.
+- This guard does not reach the generic Import Data surface below (`services.execute_import`):
+  its merge/replace pipeline can overwrite a credited row's fields with no credit check at all.
+  That is deliberate, not a gap - Import Data is superuser-only disaster-recovery tooling with
+  its own dry-run diff preview, not the content pipeline this freeze protects. See ADR-0201's
+  trade-offs section and the "Export/Import System" section below.
+
 ### Content-Repo Export & Push (PR #2425; grid bundles added #2436/#2448)
 
 **Purpose:** the maintainers'-only inverse of the content-repo load above —
@@ -182,6 +217,11 @@ Defined in `services.py` as `HARDCODED_EXCLUDED_APPS` (canonical location, impor
 - `_seed_run/` - POST: runs `seed_dev_database()` then redirects to the Game Setup hub (superuser)
 - `_content_load/` - "Load private content repo" confirm page (superuser; #1220)
 - `_content_load_run/` - POST: builds + upserts the external content repo, then redirects to the Game Setup hub (superuser)
+- `_content_conflicts/` - "Load conflicts" list page (superuser; #3017)
+- `_content_conflict/` - one conflict's field-by-field diff + typed-confirmation
+  form (superuser; `?model=&key=`)
+- `_content_conflict_resolve/` - POST: typed-confirmation delete-then-reload
+  for one conflict (superuser)
 - `_content_export/` - "Export to content repo" preview page (superuser; PR #2425), model inventory + grid area/room counts
 - `_content_export_run/` - POST: writes flat fixtures + grid bundles to the content repo (superuser)
 - `_content_push/` - "Push content to lore repo" preview page (superuser; PR #2425), git status/diff-stat
