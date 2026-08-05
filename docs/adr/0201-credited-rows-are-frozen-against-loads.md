@@ -43,8 +43,11 @@ name is dropped and logged, never the row.
 **Trade-offs / accepted cost:**
 - No sync bookkeeping means the freeze cannot distinguish "someone hand-edited this row in the
   live DB and never exported it" from "the repo's fixture genuinely moved past what's in the DB" -
-  both look identical (a credited row, a differing incoming value) and both route through the same
-  resolution page. Ruled acceptable by Tehom, 2026-08-05, on #3017.
+  both look identical (a credited row, a differing incoming value), and each path reports it
+  through its own channel rather than one shared resolution page: the fixture pipeline surfaces
+  it on the admin's Load Conflicts page, `grid_import.py` through `GridImportResult.reports`, and
+  `world.weather.seed` through its own return value and log. Ruled acceptable by Tehom,
+  2026-08-05, on #3017.
 - The sample-content gate is per-press enforcement, not a standing database-wide invariant: it
   runs once, inside one `seed_dev_database()` call, between the content load and the cluster loop.
   A direct cluster-seeder call outside that call - the test-only helpers in

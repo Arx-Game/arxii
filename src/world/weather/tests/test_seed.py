@@ -350,6 +350,45 @@ class UpsertWeatherEmitsRawCreditFieldTests(TestCase):
         self.assertEqual((created, updated), (0, 1))
         self.assertEqual(existing.written_by, old_contributor)
 
+    def test_credited_row_reasserting_same_credit_and_content_is_a_quiet_noop(self) -> None:
+        """A routine reseed of an already-credited row - fixture re-asserts the SAME
+        resolvable ``written_by`` natural key plus identical content - must not false-freeze
+        under the widened comparison: no conflict, no change, the row upserts quietly.
+        """
+        from world.contributors.factories import ContentContributorFactory
+
+        contributor = ContentContributorFactory(name="Steady Writer")
+        existing = WeatherEmit.objects.create(
+            weather_type=WeatherType.objects.get(name="Storm"),
+            key="storm-001",
+            text="Rain lashes down in sheets.",
+            weight=2,
+            in_summer=True,
+            at_day=True,
+            written_by=contributor,
+        )
+        rows = [
+            {
+                "fields": {
+                    "weather_type": ["Storm"],
+                    "key": "storm-001",
+                    "text": "Rain lashes down in sheets.",
+                    "weight": 2,
+                    "in_summer": True,
+                    "at_day": True,
+                    "written_by": [contributor.name],
+                }
+            }
+        ]
+
+        created, updated, conflicts = upsert_weather_emits(rows)
+
+        existing.refresh_from_db()
+        self.assertEqual(conflicts, [])
+        self.assertEqual((created, updated), (0, 1))
+        self.assertEqual(existing.written_by, contributor)
+        self.assertEqual(existing.text, "Rain lashes down in sheets.")
+
     def test_uncredited_row_receiving_fixture_credit_updates(self) -> None:
         """Scenario (b): an uncredited existing row receiving fixture credit values."""
         from world.contributors.factories import ContentContributorFactory
