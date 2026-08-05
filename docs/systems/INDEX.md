@@ -618,11 +618,14 @@ Powers, affinities, auras, resonances, threads-as-currency, rituals, and Mage Sc
   `"magic"`) — single seam; telnet `CmdTechnique` and web `POST /api/magic/techniques/author/`
   both converge here. Telnet: `technique draft|show|set|restrict|grant|damage|condition|price|author|discard`
   (`cmd:perm(Builder)` — staff/GM only).
-- **Cast observation (#2710, ADR-0170; #2734, ADR-0187):** `resolve_cast_audience(*,
-  caster, technique, cast_openly=False) -> CastAudience`
+- **Cast observation (#2710, ADR-0170; #2734, ADR-0187; #2905, ADR-0197):**
+  `resolve_cast_audience(*, caster, technique, cast_openly=False) -> CastAudience`
   (`world/magic/services/cast_observation.py`) — who perceived a cast worked in a
   concealed `TechniqueStyle.cast_concealment` style, and **how much of it they could
-  attribute**, resolved per co-located observer at cast time. Concealment hides
+  attribute**, resolved per co-located observer at cast time. Concealment prefers the
+  technique's gift's style when set, falling back to the caster's Path style exactly
+  as before (#2905, ADR-0197) — a species-granted Minor Gift casts however the gift
+  says, not however the caster's Path does. Concealment hides
   attribution, not the event: `full` (caster + technique) / `vague` (the effect, plus
   that it was a working) / `effect_only` (the effect alone). Only a technique with
   `has_perceptible_effect=False` still hides outright; a `SAME`-reach technique is never
