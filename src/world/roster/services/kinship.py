@@ -438,17 +438,6 @@ def define_deferred(  # noqa: PLR0913 — keyword-only
 # ---------------------------------------------------------------------------
 
 
-@dataclass
-class KinFact:
-    """One visible kinship fact about a person, ready for rendering."""
-
-    person: Kinsperson
-    label: str
-    kind: str = ""
-    is_true: bool = True
-    via_secret: bool = False
-
-
 def _visible_edges(q: Q, viewer: object) -> list[ParentageEdge]:
     edges = ParentageEdge.objects.filter(q).select_related("child", "parent", "secret")
     return [e for e in edges if fact_visible(e, viewer)]
