@@ -15,6 +15,10 @@ if TYPE_CHECKING:
 def is_dream_engaged(character_sheet: CharacterSheet | None) -> bool:
     """True when an active scene round exists in the character's dream room.
 
+    The round is looked for in the character's *perceived* dream room, which
+    is the host's while dreamwalking (#3003) — a walker caught in the host's
+    peril cannot wake out of it just because their own dream room is quiet.
+
     Args:
         character_sheet: The character's sheet.
 
@@ -23,10 +27,9 @@ def is_dream_engaged(character_sheet: CharacterSheet | None) -> bool:
     """
     if character_sheet is None:
         return False
-    character = character_sheet.character
-    from world.dreams.services import get_dream_space  # noqa: PLC0415
+    from world.dreams.services import dreamspace_for  # noqa: PLC0415
 
-    dream_room = get_dream_space(room=character.location)
+    dream_room = dreamspace_for(character_sheet)
     if dream_room is None:
         return False
     from world.scenes.models import SceneRound  # noqa: PLC0415

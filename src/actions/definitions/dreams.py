@@ -173,7 +173,11 @@ class DreamwalkAction(Action):
     ) -> ActionResult:
         from django.core.exceptions import ObjectDoesNotExist  # noqa: PLC0415
 
-        from world.dreams.services import get_dream_space  # noqa: PLC0415
+        from world.dreams.services import (  # noqa: PLC0415
+            get_dream_space,
+            has_dream_bond,
+            start_dreamwalk,
+        )
         from world.vitals.services import perceives_dreamside  # noqa: PLC0415
 
         try:
@@ -217,7 +221,7 @@ class DreamwalkAction(Action):
             )
 
         # Gate: check for RELATIONSHIP_TRACK/CAPSTONE thread or soul tether
-        if not _has_dream_bond(sheet, target_sheet):
+        if not has_dream_bond(sheet, target_sheet):
             return ActionResult(
                 success=False,
                 message="You have no bond strong enough to reach that person in dreams.",
@@ -231,42 +235,11 @@ class DreamwalkAction(Action):
                 message="You cannot find their dream.",
             )
 
-        # Store the dreamwalk destination for the escape lever (on the character's ndb,
-        # since ConditionInstance is a plain Django model without ndb)
-        actor.ndb.dreamwalk_destination = target.location
+        # Anchor the walker's perception to the target's dreamspace (#3003) —
+        # the presence row is the escape lever ``wake`` reads via end_dreamwalk().
+        start_dreamwalk(dreamer=sheet, host=target_sheet)
 
         return ActionResult(
             success=True,
             message=f"You dreamwalk toward {target.key}...",
         )
-
-
-def _has_dream_bond(source_sheet, target_sheet) -> bool:
-    """Check if the source has a thread or soul tether bond to the target."""
-    from world.magic.constants import TargetKind  # noqa: PLC0415
-    from world.magic.models import Thread  # noqa: PLC0415
-    from world.relationships.models import CharacterRelationship  # noqa: PLC0415
-
-    # Check for RELATIONSHIP_TRACK or RELATIONSHIP_CAPSTONE threads
-    relationship_kinds = {TargetKind.RELATIONSHIP_TRACK, TargetKind.RELATIONSHIP_CAPSTONE}
-    threads = Thread.objects.filter(
-        owner=source_sheet,
-        target_kind__in=relationship_kinds,
-        retired_at__isnull=True,
-    )
-    for thread in threads:
-        if thread.target_kind == TargetKind.RELATIONSHIP_TRACK:
-            progress = thread.target_relationship_track
-            if progress is not None and progress.relationship.target == target_sheet:
-                return True
-        elif thread.target_kind == TargetKind.RELATIONSHIP_CAPSTONE:
-            capstone = thread.target_capstone
-            if capstone is not None and capstone.relationship.target == target_sheet:
-                return True
-
-    # Check for soul tether bond
-    return CharacterRelationship.objects.filter(
-        source=source_sheet,
-        target=target_sheet,
-        is_soul_tether=True,
-    ).exists()

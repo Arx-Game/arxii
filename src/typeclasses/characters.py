@@ -468,11 +468,13 @@ class Character(ObjectParent, DefaultCharacter):
 
         #2287/#2290: while Unconscious or Sleeping, perception relocates to the
         dream space — the frontend renders the dream side, not the waking room.
+        #3003: honours an active dreamwalk — a walker's room state follows the
+        host's dreamspace, not their own vacant one.
         """
         if not (self.has_account and self.location):
             return
         room = self.location
-        from world.dreams.services import get_dream_space
+        from world.dreams.services import dreamspace_for
         from world.vitals.services import perceives_dreamside
 
         try:
@@ -480,7 +482,7 @@ class Character(ObjectParent, DefaultCharacter):
         except ObjectDoesNotExist:
             sheet = None
         if perceives_dreamside(sheet):
-            room = get_dream_space(room=self.location) or room
+            room = dreamspace_for(sheet) or room
         caller_state = self.scene_state
         room_state = room.scene_state
         if caller_state and room_state:
