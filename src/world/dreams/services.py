@@ -122,6 +122,38 @@ def end_dreamwalk(sheet: CharacterSheet) -> ObjectDB | None:
     return destination
 
 
+def dreamwalk_candidates_for(sheet: CharacterSheet) -> list[CharacterSheet]:
+    """Bonded characters ``sheet`` could dreamwalk to right now (#3003).
+
+    Narrows to "currently dreaming" with a single bulk query (an active
+    Sleeping/Unconscious ConditionInstance, alive sheets only — both
+    conditions are UNTIL_CURED, so there is no lazy in-game-time expiry to
+    replicate here), then applies ``has_dream_bond`` per remaining
+    candidate. That per-candidate check is bounded by how many characters
+    are dreaming right now, not by the size of the character table, so it
+    does not reintroduce a query-per-row scan — and it reuses the existing
+    bond logic rather than re-deriving Thread/soul-tether rules in bulk.
+    """
+    from world.character_sheets.models import CharacterSheet  # noqa: PLC0415
+    from world.conditions.constants import UNCONSCIOUS_CONDITION_NAME  # noqa: PLC0415
+    from world.conditions.models import ConditionInstance  # noqa: PLC0415
+    from world.vitals.constants import (  # noqa: PLC0415
+        SLEEPING_CONDITION_NAME,
+        CharacterLifeState,
+    )
+
+    dreaming_target_ids = ConditionInstance.objects.filter(
+        condition__name__in=(SLEEPING_CONDITION_NAME, UNCONSCIOUS_CONDITION_NAME),
+        is_suppressed=False,
+    ).values_list("target_id", flat=True)
+    candidates = (
+        CharacterSheet.objects.filter(pk__in=dreaming_target_ids)
+        .exclude(pk=sheet.pk)
+        .exclude(vitals__life_state=CharacterLifeState.DEAD)
+    )
+    return [candidate for candidate in candidates if has_dream_bond(sheet, candidate)]
+
+
 def has_dream_bond(source_sheet: CharacterSheet, target_sheet: CharacterSheet) -> bool:
     """Check if the source has a thread or soul tether bond to the target."""
     from world.magic.constants import TargetKind  # noqa: PLC0415

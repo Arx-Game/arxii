@@ -6419,6 +6419,29 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
+  '/api/dreams/{character_id}/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /**
+     * @description Read-only dream-state payload for the dreamspace panel (#3003).
+     *
+     *     Visibility: staff, or an account with an active tenure on the character.
+     *     Everyone else receives 404 (same queryset rule as CharacterVitalsView) —
+     *     a 403 would confirm the character exists.
+     */
+    get: operations['dreams_retrieve'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   '/api/episode-progression-requirements/': {
     parameters: {
       query?: never;
@@ -24521,6 +24544,29 @@ export interface components {
      * @enum {string}
      */
     DrawModeEnum: 'menu' | 'pool';
+    /** @description A character referenced from the dream payload. */
+    DreamCharacterRef: {
+      id: number;
+      name: string;
+    };
+    /** @description The dreamspace room the character currently perceives. */
+    DreamRoom: {
+      id: number;
+      key: string;
+      description: string;
+    };
+    /** @description Everything the dreamspace panel needs for one character (#3003). */
+    DreamState: {
+      is_dreamside: boolean;
+      dream_room: components['schemas']['DreamRoom'] | null;
+      co_dreamers: components['schemas']['DreamCharacterRef'][];
+      dreamwalk_host: components['schemas']['DreamCharacterRef'] | null;
+      dreamwalk_candidates: components['schemas']['DreamCharacterRef'][];
+      can_descend: boolean;
+      descent_name: string;
+      can_ascend: boolean;
+      wake_blocked: boolean;
+    };
     /**
      * @description Read serializer for the DuelChallenge pending-challenge inbox.
      *
@@ -47818,6 +47864,27 @@ export interface operations {
       };
     };
   };
+  dreams_retrieve: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        character_id: number;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['DreamState'];
+        };
+      };
+    };
+  };
   episode_progression_requirements_list: {
     parameters: {
       query?: {
@@ -54041,9 +54108,7 @@ export interface operations {
   };
   magic_consequence_pool_catalog_list: {
     parameters: {
-      query?: {
-        action_category?: string;
-      };
+      query?: never;
       header?: never;
       path?: never;
       cookie?: never;
@@ -54065,8 +54130,7 @@ export interface operations {
       query?: never;
       header?: never;
       path: {
-        /** @description A unique integer value identifying this Consequence Pool. */
-        id: number;
+        id: string;
       };
       cookie?: never;
     };

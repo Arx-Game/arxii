@@ -9475,6 +9475,32 @@ paths:
               schema:
                 $ref: '#/components/schemas/DraftDistinctionSyncResult'
           description: ''
+  /api/dreams/{character_id}/:
+    get:
+      operationId: dreams_retrieve
+      description: |-
+        Read-only dream-state payload for the dreamspace panel (#3003).
+
+        Visibility: staff, or an account with an active tenure on the character.
+        Everyone else receives 404 (same queryset rule as CharacterVitalsView) —
+        a 403 would confirm the character exists.
+      parameters:
+      - in: path
+        name: character_id
+        schema:
+          type: integer
+        required: true
+      tags:
+      - dreams
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DreamState'
+          description: ''
   /api/episode-progression-requirements/:
     get:
       operationId: episode_progression_requirements_list
@@ -16648,11 +16674,6 @@ paths:
         resolve_cast_action_template enforces the same split at submit/finalize
         time. The technique builder's category-agnostic picker keeps the flat
         union by passing no param.
-      parameters:
-      - in: query
-        name: action_category
-        schema:
-          type: string
       tags:
       - magic
       security:
@@ -16684,8 +16705,7 @@ paths:
       - in: path
         name: id
         schema:
-          type: integer
-        description: A unique integer value identifying this Consequence Pool.
+          type: string
         required: true
       tags:
       - magic
@@ -42365,6 +42385,71 @@ components:
       description: |-
         * `menu` - Menu
         * `pool` - Pool
+    DreamCharacterRef:
+      type: object
+      description: A character referenced from the dream payload.
+      properties:
+        id:
+          type: integer
+        name:
+          type: string
+      required:
+      - id
+      - name
+    DreamRoom:
+      type: object
+      description: The dreamspace room the character currently perceives.
+      properties:
+        id:
+          type: integer
+        key:
+          type: string
+        description:
+          type: string
+      required:
+      - description
+      - id
+      - key
+    DreamState:
+      type: object
+      description: Everything the dreamspace panel needs for one character (#3003).
+      properties:
+        is_dreamside:
+          type: boolean
+        dream_room:
+          allOf:
+          - $ref: '#/components/schemas/DreamRoom'
+          nullable: true
+        co_dreamers:
+          type: array
+          items:
+            $ref: '#/components/schemas/DreamCharacterRef'
+        dreamwalk_host:
+          allOf:
+          - $ref: '#/components/schemas/DreamCharacterRef'
+          nullable: true
+        dreamwalk_candidates:
+          type: array
+          items:
+            $ref: '#/components/schemas/DreamCharacterRef'
+        can_descend:
+          type: boolean
+        descent_name:
+          type: string
+        can_ascend:
+          type: boolean
+        wake_blocked:
+          type: boolean
+      required:
+      - can_ascend
+      - can_descend
+      - co_dreamers
+      - descent_name
+      - dream_room
+      - dreamwalk_candidates
+      - dreamwalk_host
+      - is_dreamside
+      - wake_blocked
     DuelChallenge:
       type: object
       description: |-
