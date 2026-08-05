@@ -271,9 +271,10 @@ class UpsertWeatherEmitsRawCreditFieldTests(TestCase):
     def setUp(self) -> None:
         upsert_weather_types(TYPES)
 
-    def test_credited_row_with_matching_content_accepts_new_credit(self) -> None:
-        """Scenario (a): content matches (no freeze), fixture also carries credit values -
-        the credit write must actually land as a resolved instance, not raise or corrupt.
+    def test_credited_row_with_differing_credit_freezes(self) -> None:
+        """Content matches, but the fixture's ``written_by`` differs from the row's -
+        the credit fields are part of the comparison for a credited row, so this is a
+        differing-field conflict like any other and the row freezes untouched (#3017).
         """
         from world.contributors.factories import ContentContributorFactory
 
@@ -305,9 +306,49 @@ class UpsertWeatherEmitsRawCreditFieldTests(TestCase):
         created, updated, conflicts = upsert_weather_emits(rows)
 
         existing.refresh_from_db()
+        self.assertEqual((created, updated), (0, 0))
+        self.assertEqual(len(conflicts), 1)
+        self.assertIn("WeatherEmit [storm-001]", conflicts[0])
+        self.assertEqual(existing.written_by, old_contributor)
+
+    def test_credited_row_with_unresolvable_credit_and_matching_content_updates(self) -> None:
+        """An unresolvable ``written_by`` is dropped before the comparison runs (#2980's
+        drop-the-credit-never-the-row rule), so it is absent from the comparison entirely -
+        a credited row whose other fields match still upserts rather than freezing on a
+        phantom credit diff (#3017).
+        """
+        from world.contributors.factories import ContentContributorFactory
+
+        old_contributor = ContentContributorFactory(name="Existing Writer")
+        existing = WeatherEmit.objects.create(
+            weather_type=WeatherType.objects.get(name="Storm"),
+            key="storm-001",
+            text="Rain lashes down in sheets.",
+            weight=2,
+            in_summer=True,
+            at_day=True,
+            written_by=old_contributor,
+        )
+        rows = [
+            {
+                "fields": {
+                    "weather_type": ["Storm"],
+                    "key": "storm-001",
+                    "text": "Rain lashes down in sheets.",
+                    "weight": 2,
+                    "in_summer": True,
+                    "at_day": True,
+                    "written_by": ["Nobody By This Name"],
+                }
+            }
+        ]
+
+        created, updated, conflicts = upsert_weather_emits(rows)
+
+        existing.refresh_from_db()
         self.assertEqual(conflicts, [])
         self.assertEqual((created, updated), (0, 1))
-        self.assertEqual(existing.written_by, new_contributor)
+        self.assertEqual(existing.written_by, old_contributor)
 
     def test_uncredited_row_receiving_fixture_credit_updates(self) -> None:
         """Scenario (b): an uncredited existing row receiving fixture credit values."""

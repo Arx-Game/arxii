@@ -185,10 +185,15 @@ def upsert_weather_emits(objects: list[dict]) -> tuple[int, int, list[str]]:
     (``written_by`` set) whose incoming content differs from the seed corpus is
     left untouched instead of silently overwritten (#3017) - the same freeze
     ``core_management.content_fixtures`` applies to the fixture-loader path.
-    An uncredited row, or a credited row whose incoming values are identical,
-    upserts exactly as before this guard. Returns ``(created, updated,
-    conflicts)``: ``conflicts`` names every credited row the corpus left
-    untouched.
+    The comparison includes the credit fields themselves for a credited row, so
+    a matching-content row whose incoming ``written_by``/``reviewed_by`` differs
+    also freezes rather than silently accepting a new credit - the same
+    differing-credit-fields-alone-conflict rule the fixture path applies. An
+    uncredited row still accepts an incoming credit normally; that is the usual
+    crediting path, not a conflict. An uncredited row, or a credited row whose
+    incoming values (content and credit alike) are identical, upserts exactly
+    as before this guard. Returns ``(created, updated, conflicts)``:
+    ``conflicts`` names every credited row the corpus left untouched.
 
     A fixture row's own ``written_by``/``reviewed_by`` (its authored credit, not the
     guard above) is resolved from a natural-key ref via ``_resolve_credit_names``
@@ -198,7 +203,6 @@ def upsert_weather_emits(objects: list[dict]) -> tuple[int, int, list[str]]:
     from core_management.content_fixtures import fields_differing  # noqa: PLC0415
     from world.weather.models import WeatherEmit  # noqa: PLC0415
 
-    credit_keys = ("written_by", "reviewed_by", "written_on", "reviewed_on")
     created = updated = 0
     conflicts: list[str] = []
     for obj in objects:
@@ -208,8 +212,7 @@ def upsert_weather_emits(objects: list[dict]) -> tuple[int, int, list[str]]:
         _resolve_credit_names(fields, key)
         existing = WeatherEmit.objects.filter(key=key).first()
         if existing is not None and existing.written_by_id is not None:
-            comparable = {k: v for k, v in fields.items() if k not in credit_keys}
-            incoming = {"weather_type": weather_type, **comparable}
+            incoming = {"weather_type": weather_type, **fields}
             if fields_differing(WeatherEmit, existing, incoming):
                 conflicts.append(
                     f"WeatherEmit [{key}] is credited (written_by is set) and differs "

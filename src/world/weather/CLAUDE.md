@@ -142,10 +142,15 @@ Services (`world.weather.services`):
   (`--fixtures-dir` or `WEATHER_SEED_PATH`); not a management command. Existing rows predate the
   re-key and carry `key=NULL` until the content-repo pass assigns one; the corpus rows themselves
   are not this repo's job (#2980). `upsert_weather_emits` freezes a credited emit (`written_by`
-  set) whose incoming text differs instead of overwriting it, reporting the conflict in its
-  return value rather than writing it (#3017, ADR-0201) - resolved only via the admin's Load
-  Conflicts pages, same as the fixture pipeline. It also resolves a raw fixture credit
-  (`written_by`/`reviewed_by` as a natural-key list) via `_resolve_credit_names` before the
+  set) whose incoming content OR credit differs instead of overwriting it - the credit fields
+  themselves are part of the comparison for a credited row, so a matching-content row with a
+  differing incoming credit freezes too, not just a differing-text row - reporting the conflict
+  in its return value rather than writing it (#3017, ADR-0201). This freeze is reported by the
+  seed loader itself (log/CLI via its return value), not the admin's Load Conflicts page: that
+  page's scan only reads the content-repo's exported `fixtures/`/markdown corpus, so a
+  weather-seed conflict surfaces there only when the divergent value also lives in that exported
+  copy. The override is deleting the row and re-running the seed. It also resolves a raw fixture
+  credit (`written_by`/`reviewed_by` as a natural-key list) via `_resolve_credit_names` before the
   write, dropping an unresolvable name rather than raising (mirrors #2980's
   drop-the-credit-never-the-row rule).
 - **Wind as a mechanic** (flyers/arrows/gale spells, driven by the active weather's WIND) —
