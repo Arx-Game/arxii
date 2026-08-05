@@ -89,10 +89,128 @@ uv run pre-commit install
 uv run pre-commit install --hook-type pre-push
 
 # Wait for the db service (bounded — never hang first-run forever), then
-# apply schema (test-only DB, safe to recreate).
+# build the schema.
 timeout 90 bash -c 'until pg_isready -h db -U arxii -d arxiidev >/dev/null 2>&1; do sleep 1; done' \
   || { echo "db service did not become ready within 90s" >&2; exit 1; }
-uv run arx manage migrate
+
+# --- Stale-database guard (#2977) ------------------------------------------
+#
+# build_schema.py (invoked below) assumes an empty target - its own
+# docstring says so - and its internal idempotency check only asks whether
+# arxii_interaction is already partitioned; it does not check schema
+# *identity*. Pointed at a database that isn't empty and wasn't built by
+# this exact path, it would either collide (DuplicateTable, for tables that
+# already exist) or silently graft new tables next to stale ones without
+# reconciling the columns of whatever's already there against current model
+# state, producing a half-built database that looks fine until something
+# queries the wrong half.
+#
+# "Already built by this path" is judged the same way build_schema.py's own
+# `_schema_already_built()` does: arxii_interaction exists and is
+# partitioned (relkind = 'p'). That's deliberately narrower than "has any
+# arxii_* table at all" - a database with SOME arxii_* tables can still be a
+# half-finished `migrate` run sitting next to pre-#2906 debris (observed on
+# this exact machine: arxiidev currently holds 100 orphaned `scenes_*`
+# tables from before #2906 alongside 421 `arxii_*` tables from an
+# interrupted replay, with only 7 of 103 arxii migrations recorded as
+# applied), and that state must refuse too, not be waved through just
+# because some arxii_* tables happen to exist.
+#
+# Refuse rather than auto-drop: CLAUDE.md's "preserve the dev database" rule
+# exists precisely to stop tooling from destroying a developer's data, so
+# the default here is to instruct, not act.
+uv run python - <<'PY' || { echo "[post-create] refusing to bootstrap into a stale database (see message above)" >&2; exit 1; }
+import os
+import sys
+
+sys.path.insert(0, os.path.abspath("src"))
+os.environ.setdefault("DJANGO_SETTINGS_MODULE", "server.conf.settings")
+import django  # noqa: E402
+
+django.setup()
+
+from django.conf import settings  # noqa: E402
+from django.db import connection  # noqa: E402
+
+db = settings.DATABASES["default"]
+
+with connection.cursor() as cursor:
+    cursor.execute("SELECT count(*) FROM pg_tables WHERE schemaname = 'public'")
+    (table_count,) = cursor.fetchone()
+    cursor.execute("SELECT relkind FROM pg_class WHERE relname = 'arxii_interaction'")
+    row = cursor.fetchone()
+
+already_built = row is not None and row[0] == "p"
+if table_count == 0 or already_built:
+    sys.exit(0)
+
+print(
+    f"[post-create] target database {db['NAME']!r} is non-empty and was not built by "
+    "tools/build_schema.py",
+    file=sys.stderr,
+)
+print(
+    "[post-create] (arxii_interaction is not partitioned). Bootstrapping into it would "
+    "either collide",
+    file=sys.stderr,
+)
+print(
+    "[post-create] with existing tables or silently graft new ones next to stale/incomplete "
+    "ones, so",
+    file=sys.stderr,
+)
+print(
+    "[post-create] this refuses instead of guessing. Drop and recreate the database, then "
+    "re-run this",
+    file=sys.stderr,
+)
+print("[post-create] script (or 'just dc-build'):", file=sys.stderr)
+print(
+    f"[post-create]   PGPASSWORD={db['PASSWORD']} dropdb -h {db['HOST']} -U {db['USER']} "
+    f"{db['NAME']}",
+    file=sys.stderr,
+)
+print(
+    f"[post-create]   PGPASSWORD={db['PASSWORD']} createdb -h {db['HOST']} -U {db['USER']} "
+    f"{db['NAME']}",
+    file=sys.stderr,
+)
+sys.exit(1)
+PY
+
+# Build the schema straight from current model state instead of replaying
+# the full migration chain (#2977, continuing ADR-0083 which already moved
+# CI and both test tiers onto this path - the devcontainer was the last
+# environment still replaying). Measured on this box: ~5m21s versus
+# ~27m00s for `arx manage migrate` (#2906/#2977). Migration replay's cost
+# is dominated by Django's per-operation ProjectState re-rendering, not
+# real DDL, and build_schema.py skips that machinery by disabling
+# migrations and creating tables straight from model state, then applying
+# the raw partition/composite-FK/materialized-view SQL. It also runs the
+# two idempotent seed functions that plain `migrate` never does (ADR-0083's
+# trade-offs section): without them, `_get_social_engagement_category()`
+# (world/scenes/action_services.py) hard-fails on a missing row the first
+# time a scene-action-accept flow runs.
+uv run python tools/build_schema.py
+
+# build_schema.py disables migrations entirely while it runs, which means
+# it leaves NO django_migrations table at all. Left that way, the next real
+# `arx manage migrate` would see nothing recorded as applied and try to
+# CREATE TABLE every model from scratch, failing with DuplicateTable.
+# `--fake` records every migration in the chain as applied without
+# touching the schema (the schema is already there, built above), so the
+# ledger matches reality and a later incremental migration - e.g. after
+# `git pull` picks up a new migration file - applies normally instead of
+# trying to replay history that already happened by another route.
+uv run arx manage migrate --fake
+
+# Escape hatch: to exercise the real migration chain locally (e.g.
+# reproducing a migration-only bug), point DATABASE_URL at a fresh empty
+# database and run `uv run arx manage migrate` directly instead of the two
+# commands above. CI's nightly workflow
+# (.github/workflows/nightly-migration-replay.yml) is the standing coverage
+# for that path; this script no longer exercises it on every container
+# create.
 
 # Install required plugins idempotently. claude plugin commands are CLI-
 # safe (no Claude Code session needed). The named volume at
