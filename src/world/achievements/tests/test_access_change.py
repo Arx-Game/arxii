@@ -355,3 +355,45 @@ class AnnounceAccessChangeCgCatalogExclusionTest(TestCase):
         )
 
         self.assertFalse(CharacterAchievement.objects.filter(achievement=ach).exists())
+
+    def test_pk_collision_between_technique_and_codex_entry_does_not_cross_exclude(self):
+        """A catalog-linked Technique and a non-catalog CodexEntry that happen to share a
+        numeric pk (different tables, independent auto-increment counters) must not
+        cross-contaminate the exclusion set (#2899 fix-round).
+
+        The in-memory pk override below simulates the collision deterministically — the
+        entry's real DB row keeps its own actual pk untouched, only the local Python
+        object's `.pk` attribute (which is all `_cg_catalog_exclusions` and the loop guard
+        ever look at) is forced to match the catalog technique's pk.
+        """
+        catalog_ach = AchievementFactory(hidden=True)
+        catalog_tech = TechniqueFactory(discovery_achievement=catalog_ach)
+        PathGiftGrantFactory(gift=catalog_tech.gift).starter_techniques.add(catalog_tech)
+
+        entry_ach = AchievementFactory(hidden=True)
+        entry = CodexEntryFactory(discovery_achievement=entry_ach)
+        entry.pk = catalog_tech.pk
+
+        sheet = self._tenured_sheet()
+        from world.achievements.discovery import announce_access_change
+
+        announce_access_change(
+            sheet,
+            gained=[catalog_tech, entry],
+            lost=[],
+            source=AccessChangeSource.CODEX_LEARNING,
+        )
+
+        self.assertFalse(
+            CharacterAchievement.objects.filter(
+                character_sheet=sheet, achievement=catalog_ach
+            ).exists(),
+            "Catalog-linked Technique must still be excluded.",
+        )
+        self.assertTrue(
+            CharacterAchievement.objects.filter(
+                character_sheet=sheet, achievement=entry_ach
+            ).exists(),
+            "Non-catalog CodexEntry must still fire even though it shares a pk (in-memory, "
+            "post-override) with a catalog-linked Technique.",
+        )

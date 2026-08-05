@@ -84,7 +84,7 @@ def announce_access_change(character_sheet, *, gained, lost, source):
         from world.achievements.models import DiscoverableContent  # noqa: PLC0415
 
         ach = item.discovery_achievement if isinstance(item, DiscoverableContent) else None
-        if ach is None or item.pk in excluded_ids:
+        if ach is None or (type(item), item.pk) in excluded_ids:
             continue
         from world.achievements.models import CharacterAchievement  # noqa: PLC0415
 
@@ -124,11 +124,13 @@ def _ceremony_eligible(character_sheet):
 
 
 def _cg_catalog_exclusions(gained):
-    """Pks of ``gained`` items reachable through a CG catalog table.
+    """(type, pk) pairs for ``gained`` items reachable through a CG catalog table.
 
     Common knowledge — nearly every character reaches this content automatically at
     character creation, so it never fires the discovery ceremony regardless of the
-    route (CG grant, research, teaching) or timing used to reach it (#2899).
+    route (CG grant, research, teaching) or timing used to reach it (#2899). Keyed by
+    (type, pk) rather than bare pk so a CodexEntry and a Technique that happen to share
+    a numeric pk (different tables, independent auto-increment) can't collide.
     """
     from world.codex.models import CodexEntry  # noqa: PLC0415
     from world.magic.models import Technique  # noqa: PLC0415
@@ -137,9 +139,9 @@ def _cg_catalog_exclusions(gained):
     technique_ids = [item.pk for item in gained if isinstance(item, Technique)]
     excluded = set()
     if codex_ids:
-        excluded |= _cg_catalog_codex_entry_ids(codex_ids)
+        excluded |= {(CodexEntry, pk) for pk in _cg_catalog_codex_entry_ids(codex_ids)}
     if technique_ids:
-        excluded |= _cg_catalog_technique_ids(technique_ids)
+        excluded |= {(Technique, pk) for pk in _cg_catalog_technique_ids(technique_ids)}
     return excluded
 
 
