@@ -82,11 +82,21 @@ def co_dreamers_for(sheet: CharacterSheet) -> list[CharacterSheet]:
     itself when not walking), then a single query for every sheet anchored
     on it (the anchor plus anyone dreamwalking to the anchor) — no queries
     in a loop.
+
+    Also includes dreamside sheets sharing the anchor's *waking* room
+    (#3003 finding 3) — two characters asleep in the same physical room share
+    a dreamspace automatically, no dreamwalk needed (see ``DreamwalkAction``'s
+    docstring and ``docs/systems/dreams.md``). That same-room membership is
+    only well-defined when the room has a real ``DreamReflection``: the
+    liminal placeholder fallback (``ensure_dream_room``) is shared by every
+    unreflected sleeper in the game, so "same dreamspace" there would be
+    unbounded — this is the real constraint the anchor/presence-only query
+    above was protecting against, so the room branch is skipped for it.
     """
     from django.db.models import Q  # noqa: PLC0415
 
     from world.character_sheets.models import CharacterSheet  # noqa: PLC0415
-    from world.dreams.models import DreamwalkPresence  # noqa: PLC0415
+    from world.dreams.models import DreamReflection, DreamwalkPresence  # noqa: PLC0415
     from world.vitals.services import perceives_dreamside  # noqa: PLC0415
 
     target = dreamspace_for(sheet)
@@ -94,9 +104,13 @@ def co_dreamers_for(sheet: CharacterSheet) -> list[CharacterSheet]:
         return []
     presence = DreamwalkPresence.objects.filter(dreamer=sheet).select_related("host").first()
     anchor = presence.host if presence is not None else sheet
-    candidates = CharacterSheet.objects.filter(
-        Q(pk=anchor.pk) | Q(dreamwalk_presence__host=anchor)
-    ).exclude(pk=sheet.pk)
+    filters = Q(pk=anchor.pk) | Q(dreamwalk_presence__host=anchor)
+
+    anchor_location = _character_location(anchor)
+    if anchor_location is not None and DreamReflection.objects.for_waking_room(anchor_location):
+        filters |= Q(character__db_location_id=anchor_location.pk)
+
+    candidates = CharacterSheet.objects.filter(filters).exclude(pk=sheet.pk)
     return [candidate for candidate in candidates if perceives_dreamside(candidate)]
 
 

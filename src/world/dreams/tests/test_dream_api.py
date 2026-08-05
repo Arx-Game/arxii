@@ -7,9 +7,10 @@ from django.utils import timezone
 from rest_framework import status
 from rest_framework.test import APITestCase
 
-from evennia_extensions.factories import AccountFactory
+from evennia_extensions.factories import AccountFactory, ObjectDBFactory
+from world.character_sheets.services import create_character_with_sheet
 from world.conditions.models import ConditionTemplate
-from world.conditions.services import get_condition_instance
+from world.conditions.services import apply_condition, get_condition_instance
 from world.dreams.services import dreamspace_for, start_dreamwalk
 from world.dreams.tests import DreamSleeperTestMixin
 from world.relationships.factories import CharacterRelationshipFactory
@@ -87,13 +88,58 @@ class CharacterDreamStateViewTests(DreamSleeperTestMixin, APITestCase):
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         self.assertTrue(response.data["wake_blocked"])
 
-    def test_co_dreamers_lists_same_dreamspace_sleeper(self) -> None:
+    def test_co_dreamers_lists_dreamwalk_host(self) -> None:
+        """Dreamwalking to a host anchors co-dreamer listing on the host (#2290)."""
         host = self._sleeping_sheet("Host")
         start_dreamwalk(dreamer=self.sheet, host=host)
         response = self.client.get(self.url)
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         co_dreamer_ids = {entry["id"] for entry in response.data["co_dreamers"]}
         self.assertIn(host.pk, co_dreamer_ids)
+
+    def test_co_dreamers_lists_same_room_sleeper(self) -> None:
+        """Two characters sleeping in the same reflected waking room share a
+        dreamspace automatically, no dreamwalk needed (#3003 finding 3) — the
+        misnamed predecessor of this test actually started a dreamwalk rather
+        than exercising the same-room case; see
+        ``test_co_dreamers_lists_dreamwalk_host`` for that coverage.
+        """
+        roommate_char, roommate_sheet, _ = create_character_with_sheet(
+            character_key="Roommate",
+            primary_persona_name="Roommate",
+        )
+        roommate_char.location = self.sheet.character.location
+        roommate_char.save()
+        apply_condition(target=roommate_char, condition=self.template)
+
+        response = self.client.get(self.url)
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        co_dreamer_ids = {entry["id"] for entry in response.data["co_dreamers"]}
+        self.assertIn(roommate_sheet.pk, co_dreamer_ids)
+
+    def test_co_dreamers_excludes_same_room_sleeper_without_reflection(self) -> None:
+        """The liminal-placeholder fallback (no real ``DreamReflection``) must
+        NOT share co-dreamers by room — that would be unbounded (#3003
+        finding 3): every unreflected sleeper in the game resolves to the
+        same liminal room.
+        """
+        unreflected_room = ObjectDBFactory(
+            db_key="Unreflected Room", db_typeclass_path="typeclasses.rooms.Room"
+        )
+        self.sheet.character.location = unreflected_room
+        self.sheet.character.save()
+
+        roommate_char, _roommate_sheet, _ = create_character_with_sheet(
+            character_key="LiminalRoommate",
+            primary_persona_name="LiminalRoommate",
+        )
+        roommate_char.location = unreflected_room
+        roommate_char.save()
+        apply_condition(target=roommate_char, condition=self.template)
+
+        response = self.client.get(self.url)
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(response.data["co_dreamers"], [])
 
     def test_dreamwalk_candidates_lists_bonded_dreamer_and_excludes_unbonded(self) -> None:
         bonded = self._sleeping_sheet("Bonded")
