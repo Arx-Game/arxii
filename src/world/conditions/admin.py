@@ -15,6 +15,7 @@ from world.conditions.models import (
     DamageType,
     HazardResponseState,
 )
+from world.contributors.admin import CREDIT_FIELDSET
 
 # =============================================================================
 # Lookup Table Admins
@@ -175,6 +176,7 @@ class ConditionTemplateAdmin(admin.ModelAdmin):
                 ],
             },
         ),
+        CREDIT_FIELDSET,
     ]
 
     inlines = [

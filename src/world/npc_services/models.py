@@ -25,6 +25,7 @@ from core.descriptors import ReverseOneToOneOrNone
 from core.managers import ArxSharedMemoryManager
 from core.mixins import DiscriminatorMixin
 from core.natural_keys import NaturalKeyManager, NaturalKeyMixin
+from world.contributors.models import CreditedContent
 from world.npc_services.constants import (
     DrawMode,
     NpcRegardEventReason,
@@ -134,7 +135,7 @@ class NPCStanding(SharedMemoryModel):
         return f"{self.persona} ↔ {self.npc_persona} (affection={self.affection})"
 
 
-class NPCRole(NaturalKeyMixin, SharedMemoryModel):
+class NPCRole(NaturalKeyMixin, CreditedContent, SharedMemoryModel):
     """A kind of NPC role — a bundle of `NPCServiceOffer` rows.
 
     One role can be instantiated across the world as multiple class-1 NPCs

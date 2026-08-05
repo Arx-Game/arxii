@@ -9,6 +9,7 @@ from django.utils.functional import cached_property
 from evennia.utils.idmapper.models import SharedMemoryModel
 
 from core.natural_keys import NaturalKeyManager, NaturalKeyMixin
+from world.contributors.models import CreditedContent
 from world.magic.constants import GiftKind
 from world.magic.models.affinity import Resonance
 
@@ -17,7 +18,7 @@ class GiftManager(NaturalKeyManager):
     """Manager for Gift with natural key support."""
 
 
-class Gift(NaturalKeyMixin, SharedMemoryModel):
+class Gift(NaturalKeyMixin, CreditedContent, SharedMemoryModel):
     """
     A thematic collection of magical powers.
 
@@ -206,7 +207,7 @@ class TraditionManager(NaturalKeyManager):
     """Manager for Tradition with natural key support."""
 
 
-class Tradition(NaturalKeyMixin, SharedMemoryModel):
+class Tradition(NaturalKeyMixin, CreditedContent, SharedMemoryModel):
     """
     A magical tradition representing a school of practice or philosophy.
 

@@ -41,6 +41,7 @@ from world.character_creation.types import (
     StageValidationErrors,
 )
 from world.classes.models import PathStage
+from world.contributors.models import CreditedContent
 
 logger = logging.getLogger(__name__)
 
@@ -99,7 +100,7 @@ class CGPointBudget(NaturalKeyMixin, SharedMemoryModel):
         return budget.xp_conversion_rate if budget else 2
 
 
-class StartingArea(NaturalKeyMixin, SharedMemoryModel):
+class StartingArea(NaturalKeyMixin, CreditedContent, SharedMemoryModel):
     """
     A starting location/city that players can select in character creation.
 
@@ -215,7 +216,7 @@ class StartingArea(NaturalKeyMixin, SharedMemoryModel):
         return True  # AccessLevel.ALL
 
 
-class Beginnings(NaturalKeyMixin, SharedMemoryModel):
+class Beginnings(NaturalKeyMixin, CreditedContent, SharedMemoryModel):
     """
     Character creation worldbuilding paths for each starting area.
 
@@ -529,7 +530,7 @@ class OriginTemplateManager(NaturalKeyManager):
     """Manager for OriginTemplate with natural key support."""
 
 
-class OriginTemplate(NaturalKeyMixin, SharedMemoryModel):
+class OriginTemplate(NaturalKeyMixin, CreditedContent, SharedMemoryModel):
     """Authored origin-story frame for a Beginning (#2478).
 
     Content model — authored in the lore repo, exported/imported via
@@ -578,7 +579,7 @@ class OriginTemplateSlotManager(NaturalKeyManager):
     """Manager for OriginTemplateSlot with natural key support."""
 
 
-class OriginTemplateSlot(NaturalKeyMixin, SharedMemoryModel):
+class OriginTemplateSlot(NaturalKeyMixin, CreditedContent, SharedMemoryModel):
     """Authored slot prompt within an origin-story template (#2478).
 
     Content model — authored in the lore repo. No slug — natural key is
@@ -1409,7 +1410,7 @@ class DraftApplicationComment(SharedMemoryModel):
         return f"{self.get_comment_type_display()} on {self.application} at {self.created_at}"
 
 
-class CGExplanation(NaturalKeyMixin, SharedMemoryModel):
+class CGExplanation(NaturalKeyMixin, CreditedContent, SharedMemoryModel):
     """Key-value store for admin-editable CG explanatory text.
 
     Each row is one piece of CG copy (heading, intro, description, etc.).

@@ -31,6 +31,7 @@ from evennia.utils.idmapper.models import SharedMemoryModel
 from core.natural_keys import NaturalKeyManager, NaturalKeyMixin
 from world.buildings import room_constants
 from world.buildings.constants import ConditionTier
+from world.contributors.models import CreditedContent
 from world.locations.constants import StatKey
 
 # Cross-app FK string constants. Django resolves these lazily at app-ready
@@ -45,7 +46,7 @@ _ARCHITECTURAL_STYLE_FK = "arxii.ArchitecturalStyle"
 _ROOM_PROFILE_FK = "arxii.RoomProfile"
 
 
-class BuildingKind(NaturalKeyMixin, SharedMemoryModel):
+class BuildingKind(NaturalKeyMixin, CreditedContent, SharedMemoryModel):
     """An authorable category of building.
 
     Open catalog — rows authored by staff, not an enum. Each row carries
@@ -1389,7 +1390,7 @@ class StyleAffinity(SharedMemoryModel):
         return f"{self.style.name}: {self.stat_key} {self.value:+d}"
 
 
-class DecorationKind(NaturalKeyMixin, SharedMemoryModel):
+class DecorationKind(NaturalKeyMixin, CreditedContent, SharedMemoryModel):
     """A catalog decoration/furnishing that passively mods a room's comfort by presence (#1514).
 
     Lightweight + **stackable** — distinct from `RoomFeatureKind` (an *exclusive* capability you

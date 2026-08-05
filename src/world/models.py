@@ -44,6 +44,7 @@ import world.combat.models
 import world.companions.models
 import world.conditions.models
 import world.consent.models
+import world.contributors.models
 import world.covenants.models
 import world.currency.models
 import world.distinctions.models

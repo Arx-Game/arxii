@@ -18,6 +18,7 @@ from evennia_extensions.constants import ExitKind, RoomEnclosure
 from evennia_extensions.mixins import RelatedCacheClearingMixin
 from server.conf.serversession import ServerSession
 from world.areas.constants import GridOrigin
+from world.contributors.models import CreditedContent
 from world.roster.models import ApplicationStatus, ApprovalScope, RosterApplication
 
 # Type for Evennia command callers - can be Account, Session, or ObjectDB instance
@@ -107,6 +108,17 @@ class PlayerData(RelatedCacheClearingMixin, SharedMemoryModel):
     max_file_size = models.PositiveIntegerField(
         default=0,
         help_text="Max upload size per file in KB",
+    )
+
+    contributor = models.OneToOneField(
+        "arxii.ContentContributor",
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="player_data",
+        help_text="Content-credit identity for this account, if they author "
+        "content. The link lives here rather than on ContentContributor so the "
+        "exported corpus never carries a username (ADR-0010, ADR-0196).",
     )
 
     # Timestamps
@@ -248,7 +260,7 @@ class Artist(SharedMemoryModel):
         verbose_name_plural = "Artists"
 
 
-class Media(NaturalKeyMixin, SharedMemoryModel):
+class Media(NaturalKeyMixin, CreditedContent, SharedMemoryModel):
     """Cloudinary-backed image: player-uploaded media or staff-authored game art.
 
     Player-owned rows set ``player_data`` and leave ``slug`` null (created live

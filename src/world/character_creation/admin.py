@@ -17,6 +17,7 @@ from world.character_creation.models import (
     StartingArea,
 )
 from world.codex.models import BeginningsCodexGrant
+from world.contributors.admin import CREDIT_FIELDSET
 
 
 @admin.register(StartingArea)
@@ -47,6 +48,7 @@ class StartingAreaAdmin(admin.ModelAdmin):
                 "description": "Link to Evennia rooms.",
             },
         ),
+        CREDIT_FIELDSET,
     ]
 
 
@@ -118,6 +120,7 @@ class BeginningsAdmin(admin.ModelAdmin):
                 "description": "Internal classification and room override",
             },
         ),
+        CREDIT_FIELDSET,
     ]
 
     @admin.display(description="Species")

@@ -13,6 +13,7 @@ from evennia.utils.idmapper.models import SharedMemoryModel
 from core.descriptors import ReverseOneToOneOrNone
 from core.natural_keys import NaturalKeyManager, NaturalKeyMixin
 from world.areas.positioning.constants import PositionKind, RampartCrackState, RampartSignature
+from world.contributors.models import CreditedContent
 
 _DAMAGE_TYPE_MODEL = "arxii.DamageType"
 
@@ -504,7 +505,7 @@ class BlueprintPositionShelter(SharedMemoryModel):
         )
 
 
-class RampartElementProfile(NaturalKeyMixin, SharedMemoryModel):
+class RampartElementProfile(NaturalKeyMixin, CreditedContent, SharedMemoryModel):
     """A reusable element (Stone/Wind/Fire/Thorn/...) a Rampart is raised from (#2209).
 
     Authored content: one row per element, shared across every Rampart cast from

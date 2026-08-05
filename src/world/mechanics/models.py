@@ -23,6 +23,7 @@ if TYPE_CHECKING:
 
     from world.mechanics.types import PrerequisiteEvaluation
     from world.traits.models import Trait
+from world.contributors.models import CreditedContent
 from world.mechanics.constants import (
     SOURCE_TYPE_ACHIEVEMENT_REWARD,
     SOURCE_TYPE_DISTINCTION,
@@ -49,7 +50,7 @@ class ModifierCategoryManager(NaturalKeyManager):
     """Manager for ModifierCategory with natural key support."""
 
 
-class ModifierCategory(NaturalKeyMixin, SharedMemoryModel):
+class ModifierCategory(NaturalKeyMixin, CreditedContent, SharedMemoryModel):
     """
     Categories for organizing modifier targets.
 
@@ -88,7 +89,7 @@ class ModifierTargetManager(NaturalKeyManager):
     """Manager for ModifierTarget with natural key support, plus cached_all() (#1846)."""
 
 
-class ModifierTarget(NaturalKeyMixin, SharedMemoryModel):
+class ModifierTarget(NaturalKeyMixin, CreditedContent, SharedMemoryModel):
     """
     Unified registry of all things that can be modified.
 
@@ -464,7 +465,7 @@ class CharacterModifier(SharedMemoryModel):
 # ---------------------------------------------------------------------------
 
 
-class Prerequisite(NaturalKeyMixin, SharedMemoryModel):
+class Prerequisite(NaturalKeyMixin, CreditedContent, SharedMemoryModel):
     """
     Data-driven property check that gates Capability availability.
 
@@ -541,7 +542,7 @@ class Prerequisite(NaturalKeyMixin, SharedMemoryModel):
         return PrerequisiteEvaluation(met=True)
 
 
-class PropertyCategory(NaturalKeyMixin, SharedMemoryModel):
+class PropertyCategory(NaturalKeyMixin, CreditedContent, SharedMemoryModel):
     """Broad groupings for Properties (e.g., elemental, physical, social)."""
 
     name = models.CharField(max_length=100, unique=True)
@@ -560,7 +561,7 @@ class PropertyCategory(NaturalKeyMixin, SharedMemoryModel):
         return self.name
 
 
-class Property(NaturalKeyMixin, SharedMemoryModel):
+class Property(NaturalKeyMixin, CreditedContent, SharedMemoryModel):
     """
     A neutral descriptive tag on targets or environments.
 
@@ -733,7 +734,7 @@ class PropertyDetonation(SharedMemoryModel):
         return f"{self.property.name} (volatile)"
 
 
-class Application(NaturalKeyMixin, SharedMemoryModel):
+class Application(NaturalKeyMixin, CreditedContent, SharedMemoryModel):
     """
     Pure eligibility record: Capability + Property = 'you can attempt this'.
 
@@ -849,7 +850,7 @@ class TraitCapabilityDerivation(NaturalKeyMixin, SharedMemoryModel):
 # ---------------------------------------------------------------------------
 
 
-class ChallengeCategory(NaturalKeyMixin, SharedMemoryModel):
+class ChallengeCategory(NaturalKeyMixin, CreditedContent, SharedMemoryModel):
     """Broad groupings for Challenges (e.g., environmental, social, combat)."""
 
     name = models.CharField(max_length=100, unique=True)
@@ -868,7 +869,7 @@ class ChallengeCategory(NaturalKeyMixin, SharedMemoryModel):
         return self.name
 
 
-class ChallengeTemplate(NaturalKeyMixin, SharedMemoryModel):
+class ChallengeTemplate(NaturalKeyMixin, CreditedContent, SharedMemoryModel):
     """
     Reusable blueprint for a Challenge that can be placed in Situations.
 
@@ -998,7 +999,7 @@ class ChallengeTemplateConsequence(SharedMemoryModel):
         return f"{self.challenge_template.name}: {self.consequence.label}"
 
 
-class ChallengeApproach(NaturalKeyMixin, SharedMemoryModel):
+class ChallengeApproach(NaturalKeyMixin, CreditedContent, SharedMemoryModel):
     """
     A way to resolve a Challenge, linking an Application to a check type.
 
@@ -1118,7 +1119,7 @@ class ApproachConsequence(SharedMemoryModel):
 # ---------------------------------------------------------------------------
 
 
-class SituationTemplate(NaturalKeyMixin, SharedMemoryModel):
+class SituationTemplate(NaturalKeyMixin, CreditedContent, SharedMemoryModel):
     """
     A reusable collection of Challenges that form a coherent scenario.
 

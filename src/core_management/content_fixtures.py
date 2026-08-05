@@ -132,6 +132,18 @@ FIELD_DEFAULT_DESCRIPTION_TEMPLATE = "default_description_template"
 FIELD_VALUE = "value"
 FIELD_WEIGHT = "weight"
 
+# Credit keys (#2980). Written to prose-domain frontmatter and read back by every
+# builder, so a writer can record authorship in the lore repo and a staff member
+# can record it in admin, with either side surviving the round trip.
+FIELD_WRITTEN_BY = "written_by"
+FIELD_WRITTEN_ON = "written_on"
+FIELD_REVIEWED_BY = "reviewed_by"
+FIELD_REVIEWED_ON = "reviewed_on"
+
+CREDIT_META_KEYS = (FIELD_WRITTEN_BY, FIELD_WRITTEN_ON, FIELD_REVIEWED_BY, FIELD_REVIEWED_ON)
+CREDIT_NAME_KEYS = (FIELD_WRITTEN_BY, FIELD_REVIEWED_BY)
+CREDIT_DATE_KEYS = (FIELD_WRITTEN_ON, FIELD_REVIEWED_ON)
+
 # Prose fields for the multi-section domains (#2688). A domain whose model
 # carries more than one long-form text field maps ``## Heading`` sections in
 # the markdown body onto these, instead of the whole-body-to-one-field rule
@@ -340,14 +352,16 @@ def _build_trait_fixture(entry: ContentEntry, *, trait_type: str) -> dict:
     if category not in TRAIT_CATEGORIES:
         msg = f"{entry.path}: 'category' must be one of {sorted(TRAIT_CATEGORIES)}."
         raise ContentError(msg)
+    fields: dict = {
+        "name": name,
+        "trait_type": trait_type,
+        "category": category,
+        "description": entry.body,
+    }
+    _apply_credit_meta(entry, fields)
     return {
         "model": _fixture_model_label(Trait),
-        "fields": {
-            "name": name,
-            "trait_type": trait_type,
-            "category": category,
-            "description": entry.body,
-        },
+        "fields": fields,
     }
 
 
@@ -411,6 +425,7 @@ def _build_npc_role_fixture(entry: ContentEntry) -> dict:
 
     from world.npc_services.models import NPCRole  # noqa: PLC0415
 
+    _apply_credit_meta(entry, fields)
     return {"model": _fixture_model_label(NPCRole), "fields": fields}
 
 
@@ -441,6 +456,7 @@ def _build_item_template_fixture(entry: ContentEntry) -> dict:
 
     from world.items.models import ItemTemplate  # noqa: PLC0415
 
+    _apply_credit_meta(entry, fields)
     return {"model": _fixture_model_label(ItemTemplate), "fields": fields}
 
 
@@ -453,9 +469,11 @@ def _build_building_kind_fixture(entry: ContentEntry) -> dict:
     from world.buildings.models import BuildingKind  # noqa: PLC0415
 
     name = _require_name_and_body(entry)
+    fields: dict = {"name": name, "description": entry.body}
+    _apply_credit_meta(entry, fields)
     return {
         "model": _fixture_model_label(BuildingKind),
-        "fields": {"name": name, "description": entry.body},
+        "fields": fields,
     }
 
 
@@ -468,9 +486,11 @@ def _build_decoration_kind_fixture(entry: ContentEntry) -> dict:
     from world.buildings.models import DecorationKind  # noqa: PLC0415
 
     name = _require_name_and_body(entry)
+    fields: dict = {"name": name, "description": entry.body}
+    _apply_credit_meta(entry, fields)
     return {
         "model": _fixture_model_label(DecorationKind),
-        "fields": {"name": name, "description": entry.body},
+        "fields": fields,
     }
 
 
@@ -501,6 +521,45 @@ def _optional_meta_natural_key(entry: ContentEntry, key: str) -> list | None:
     if value is None or value == "":
         return None
     return list(value) if isinstance(value, list) else [value]
+
+
+def _apply_credit_meta(entry: ContentEntry, fields: dict) -> None:
+    """Copy any credit keys from frontmatter into *fields* (#2980).
+
+    Absent keys stay absent, which ``load_entries`` already reads as "leave this
+    column alone" (see the module docstring on optional fields), so an entry that
+    says nothing about authorship never clears a credit set in admin.
+
+    Dates are coerced to ISO strings: ``yaml.safe_load`` turns an unquoted
+    ``2026-08-04`` into a ``datetime.date``, and ``write_fixtures`` serializes
+    the builder's output with ``json.dumps``, which raises ``TypeError`` on a
+    date object. A quoted date arrives as a string already and passes straight
+    through; Django accepts either form on a ``DateField``.
+
+    This function only stages the raw values into *fields* - it does not resolve
+    them. Resolution is deliberately special-cased for credit (ADR-0196
+    Consequences, Tehom's ruling 2026-08-05): a ``written_by``/``reviewed_by``
+    naming a ``ContentContributor`` not present in the corpus, or a malformed
+    ``written_on``/``reviewed_on``, must NOT be able to fail the whole row the
+    way any other unresolved FK-by-name value still does - a credit is
+    editorial metadata, not content, and editorial metadata must not be able to
+    cost the content it describes. ``_resolve_or_drop_credit_fields`` (in
+    ``_upsert_fixture_object``, before the general FK/scalar pass) is where
+    that happens: it drops just the offending credit key and records a
+    diagnostic in ``result.skipped``, and the row loads with everything else
+    intact.
+    """
+    for key in CREDIT_NAME_KEYS:
+        value = _optional_meta_natural_key(entry, key)
+        if value is not None:
+            fields[key] = value
+    for key in CREDIT_DATE_KEYS:
+        if key not in entry.meta:
+            continue
+        value = entry.meta[key]
+        if value is None or value == "":
+            continue
+        fields[key] = value.isoformat() if hasattr(value, "isoformat") else str(value)
 
 
 def _build_codex_entry_fixture(entry: ContentEntry) -> dict:
@@ -536,6 +595,7 @@ def _build_codex_entry_fixture(entry: ContentEntry) -> dict:
             {"Lore": FIELD_LORE_CONTENT, "Mechanics": FIELD_MECHANICS_CONTENT},
         )
     )
+    _apply_credit_meta(entry, fields)
     return {"model": _fixture_model_label(CodexEntry), "fields": fields}
 
 
@@ -549,14 +609,13 @@ def _build_beginnings_fixture(entry: ContentEntry) -> dict:
     from world.character_creation.models import Beginnings  # noqa: PLC0415
 
     name = _require_name_and_body(entry)
-    return {
-        "model": _fixture_model_label(Beginnings),
-        "fields": {
-            "name": name,
-            "starting_area": _require_meta_natural_key(entry, "starting_area"),
-            FIELD_DESCRIPTION: entry.body,
-        },
+    fields: dict = {
+        "name": name,
+        "starting_area": _require_meta_natural_key(entry, "starting_area"),
+        FIELD_DESCRIPTION: entry.body,
     }
+    _apply_credit_meta(entry, fields)
+    return {"model": _fixture_model_label(Beginnings), "fields": fields}
 
 
 def _build_starting_area_fixture(entry: ContentEntry) -> dict:
@@ -584,6 +643,7 @@ def _build_starting_area_fixture(entry: ContentEntry) -> dict:
         value = _optional_meta_natural_key(entry, key)
         if value is not None:
             fields[key] = value
+    _apply_credit_meta(entry, fields)
     return {"model": _fixture_model_label(StartingArea), "fields": fields}
 
 
@@ -592,10 +652,9 @@ def _build_tradition_fixture(entry: ContentEntry) -> dict:
     from world.magic.models import Tradition  # noqa: PLC0415
 
     name = _require_name_and_body(entry)
-    return {
-        "model": _fixture_model_label(Tradition),
-        "fields": {"name": name, FIELD_DESCRIPTION: entry.body},
-    }
+    fields: dict = {"name": name, FIELD_DESCRIPTION: entry.body}
+    _apply_credit_meta(entry, fields)
+    return {"model": _fixture_model_label(Tradition), "fields": fields}
 
 
 DOMAIN_BUILDERS = {
@@ -659,11 +718,13 @@ DOMAIN_BUILDERS = {
 #: round-tripped — omitting a key already means "leave this column alone" on
 #: load, so a full-field export would silently convert admin-owned tuning
 #: columns (costs, difficulty, display order, publication flags) into
-#: markdown-owned ones across the whole corpus.
+#: markdown-owned ones across the whole corpus. The credit keys (#2980,
+#: ``CREDIT_META_KEYS``) are the one exception carried by every domain here:
+#: a writer/reviewer name + date, author-owned like the rest of ``meta``.
 MARKDOWN_EXPORT_DOMAINS: dict[str, dict] = {
     "codex.codexentry": {
         "domain": "content/codex_entries",
-        "meta": ["name", FIELD_SUBJECT, FIELD_SUMMARY],
+        "meta": ["name", FIELD_SUBJECT, FIELD_SUMMARY, *CREDIT_META_KEYS],
         "prose": [("Lore", FIELD_LORE_CONTENT), ("Mechanics", FIELD_MECHANICS_CONTENT)],
         # Nest by the entry's own subject so the tree stays navigable as this
         # domain grows; ``build_all`` uses rglob, so depth costs nothing.
@@ -671,19 +732,19 @@ MARKDOWN_EXPORT_DOMAINS: dict[str, dict] = {
     },
     "character_creation.beginnings": {
         "domain": "content/beginnings",
-        "meta": ["name", "starting_area"],
+        "meta": ["name", "starting_area", *CREDIT_META_KEYS],
         "prose": [(None, FIELD_DESCRIPTION)],
     },
     "character_creation.startingarea": {
         "domain": "content/starting_areas",
         # default_starting_room is bootstrap wiring, not admin tuning — the
         # fallback-room guarantee depends on it surviving the round trip.
-        "meta": ["name", "realm", "default_starting_room"],
+        "meta": ["name", "realm", "default_starting_room", *CREDIT_META_KEYS],
         "prose": [(None, FIELD_DESCRIPTION)],
     },
     "magic.tradition": {
         "domain": "content/traditions",
-        "meta": ["name"],
+        "meta": ["name", *CREDIT_META_KEYS],
         "prose": [(None, FIELD_DESCRIPTION)],
     },
 }
@@ -1072,6 +1133,87 @@ def _coerce_scalar_fields(model, fields: dict) -> None:
         fields[field_name] = field.to_python(value)
 
 
+def _resolve_or_drop_credit_fields(
+    model: type, fields: dict, source_path: Path | None, result: BuildResult
+) -> None:
+    """Resolve the four credit fields separately; drop a bad one instead of
+    failing the row (#2980, Tehom's ruling).
+
+    A credit is editorial metadata: who wrote or reviewed a row's prose. It has
+    no bearing on whether the row itself is valid content, so it must never be
+    able to cost the content it describes. Every OTHER FK-by-name or scalar
+    field in this pipeline still fails (and skips) the whole row on a bad value
+    - right for a field the row's own meaning depends on - but a misspelled
+    ``written_by`` or a malformed ``written_on`` must not delete an entry's
+    prose over a typo in a byline.
+
+    Runs BEFORE ``_resolve_natural_key_fields``/``_coerce_scalar_fields`` (the
+    general FK/scalar pass), and pops each of ``CREDIT_NAME_KEYS``/
+    ``CREDIT_DATE_KEYS`` out of *fields* first, so the general pass never sees a
+    credit field at all. A value that resolves cleanly is put straight back
+    already resolved/coerced - identical to what the general pass would have
+    done, so the happy path is unchanged. A value that fails is left OUT of
+    *fields* entirely: "key absent" is already this module's convention for
+    "leave this column alone" on ``update_or_create`` (see the module docstring
+    on optional-field semantics), so a dropped credit never clears one already
+    set on the row, and every other field on the row still loads normally.
+
+    Failures are not silent: each is appended to ``result.skipped``, the same
+    per-row diagnostic list the CLI (``tools/build_content_fixtures.py``) and
+    the admin ("Load private content repo" button) already surface.
+
+    A model that carries no ``key`` field at all (this function runs for every
+    upsert, not only ``CreditedContent`` models) is left untouched, same
+    schema-drift tolerance ``_coerce_scalar_fields`` already has - there is
+    nothing credit-specific to resolve there, so it falls through to the
+    general pass exactly as before this function existed.
+    """
+    from django.core.exceptions import (  # noqa: PLC0415
+        FieldDoesNotExist,
+        ObjectDoesNotExist,
+        ValidationError,
+    )
+
+    location = source_path if source_path is not None else model._meta.label  # noqa: SLF001
+
+    for key in CREDIT_NAME_KEYS:
+        value = fields.get(key)
+        if value is None:
+            continue
+        try:
+            field = model._meta.get_field(key)  # noqa: SLF001
+        except FieldDoesNotExist:
+            continue
+        related_model = field.related_model
+        del fields[key]
+        try:
+            fields[key] = related_model.objects.get_by_natural_key(*value)
+        except ObjectDoesNotExist:
+            result.skipped.append(
+                f"{location}: {model.__name__} credit {key!r} not applied - "
+                f"{related_model.__name__} {value!r} not found. The row still "
+                "loads; only the credit is missing."
+            )
+
+    for key in CREDIT_DATE_KEYS:
+        value = fields.get(key)
+        if value is None:
+            continue
+        try:
+            field = model._meta.get_field(key)  # noqa: SLF001
+        except FieldDoesNotExist:
+            continue
+        try:
+            field.to_python(value)
+        except ValidationError as exc:
+            del fields[key]
+            result.skipped.append(
+                f"{location}: {model.__name__} credit {key!r} not applied - "
+                f"{value!r} is not a valid date ({exc}). The row still loads; "
+                "only the credit is missing."
+            )
+
+
 def _upsert_fixture_object(  # noqa: C901 — one branch per distinct skip reason, see docstring
     model: type,
     obj: dict,
@@ -1114,6 +1256,13 @@ def _upsert_fixture_object(  # noqa: C901 — one branch per distinct skip reaso
     # to-one FK's natural key — pulled out here so _resolve_natural_key_fields
     # below never sees them, and applied via .set() after a successful upsert.
     m2m_fields = _pop_m2m_fields(model, fields)
+
+    # Credit fields (#2980, Tehom's ruling) resolve on their own, separately
+    # from and BEFORE every other FK/scalar field: an unresolvable written_by/
+    # reviewed_by or a malformed written_on/reviewed_on is dropped and
+    # diagnosed, never allowed to fail the whole row the way any other bad FK
+    # or scalar still does below. See _resolve_or_drop_credit_fields.
+    _resolve_or_drop_credit_fields(model, fields, source_path, result)
 
     # Resolve natural-key-list FK values in both the lookup (the natural-key
     # fields themselves) and the remaining defaults. Each except clause below

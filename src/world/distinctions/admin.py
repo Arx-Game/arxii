@@ -8,6 +8,7 @@ effects, prerequisites, and character distinction grants.
 from django.contrib import admin
 
 from world.codex.models import DistinctionCodexGrant
+from world.contributors.admin import CREDIT_FIELDSET
 from world.distinctions.models import (
     CharacterDistinction,
     CharacterDistinctionOther,
@@ -120,6 +121,7 @@ class DistinctionAdmin(admin.ModelAdmin):
             },
         ),
         ("Status", {"fields": ("is_active",)}),
+        CREDIT_FIELDSET,
     )
 
     @admin.display(boolean=True, description="Has Variants")

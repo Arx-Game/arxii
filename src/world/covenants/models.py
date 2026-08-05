@@ -20,6 +20,7 @@ from evennia.utils.idmapper.models import SharedMemoryModel
 from core.managers import ArxSharedMemoryManager
 from core.natural_keys import NaturalKeyManager, NaturalKeyMixin
 from world.battles.constants import BattleActionKind
+from world.contributors.models import CreditedContent
 from world.covenants.constants import (
     MENTOR_BOND_ADJACENCY_OFFSET,
     MENTOR_BOND_BAND_WIDTH,
@@ -247,7 +248,7 @@ class CovenantRoleManager(NaturalKeyManager):
     """Manager for CovenantRole with natural key support."""
 
 
-class CovenantRole(NaturalKeyMixin, AbstractSpecializedVariant, SharedMemoryModel):
+class CovenantRole(NaturalKeyMixin, AbstractSpecializedVariant, CreditedContent, SharedMemoryModel):
     """A role that a character can hold within a covenant.
 
     Lookup table — staff-authored, cached via SharedMemoryModel.
@@ -1792,7 +1793,7 @@ class VowSituationalPerkManager(NaturalKeyManager):
     """Manager for VowSituationalPerk with natural key support."""
 
 
-class VowSituationalPerk(NaturalKeyMixin, SharedMemoryModel):
+class VowSituationalPerk(NaturalKeyMixin, CreditedContent, SharedMemoryModel):
     """Authored per-vow situational perk: a conditional bonus that fires when
     its attached situations hold (#2536, Layer 4 of the vow-power model).
 
@@ -2151,7 +2152,7 @@ class InsightTableEntryManager(NaturalKeyManager):
     """Manager for InsightTableEntry with natural key support."""
 
 
-class InsightTableEntry(NaturalKeyMixin, SharedMemoryModel):
+class InsightTableEntry(NaturalKeyMixin, CreditedContent, SharedMemoryModel):
     """One curated entry in the Insight table (#2645 — the Know need's ace).
 
     Ratified design: `design/covenant-vows-consolidated.md` §5 (lore repo).
@@ -2220,7 +2221,7 @@ class WeaknessPoolEntryManager(NaturalKeyManager):
     """Manager for WeaknessPoolEntry with natural key support."""
 
 
-class WeaknessPoolEntry(NaturalKeyMixin, SharedMemoryModel):
+class WeaknessPoolEntry(NaturalKeyMixin, CreditedContent, SharedMemoryModel):
     """One authored candidate weakness for a specific boss (#2665).
 
     The Sage's successful reading creates a PendingSelection whose options

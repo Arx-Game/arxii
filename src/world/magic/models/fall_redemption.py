@@ -19,13 +19,14 @@ from django.db import models
 from evennia.utils.idmapper.models import SharedMemoryModel
 
 from core.natural_keys import NaturalKeyManager, NaturalKeyMixin
+from world.contributors.models import CreditedContent
 from world.magic.types.aura import AffinityType
 
 _RESONANCE_FK = "arxii.Resonance"
 _CONFIG_VERBOSE = "Fall / Redemption Config"
 
 
-class CompromiseActType(NaturalKeyMixin, SharedMemoryModel):
+class CompromiseActType(NaturalKeyMixin, CreditedContent, SharedMemoryModel):
     """Authored act category that grants non-native resonance when performed.
 
     Staff author rows like "Combat Kill" → a Primal predation resonance,

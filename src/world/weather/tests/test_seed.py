@@ -10,6 +10,7 @@ import json
 from django.test import TestCase
 
 from world.locations.constants import StatKey
+from world.weather.factories import WeatherTypeFactory
 from world.weather.models import FeastDay, WeatherEmit, WeatherType, WeatherTypeExposure
 from world.weather.seed import (
     load_weather_seed,
@@ -45,6 +46,7 @@ EMITS = [
         "model": "weather.weatheremit",
         "fields": {
             "weather_type": ["Storm"],
+            "key": "storm-001",
             "text": "Rain lashes down in sheets.",
             "weight": 2,
             "in_summer": True,
@@ -55,6 +57,7 @@ EMITS = [
         "model": "weather.weatheremit",
         "fields": {
             "weather_type": ["Clear"],
+            "key": "clear-001",
             "text": "The sky is a flawless blue.",
             "at_day": True,
         },
@@ -111,7 +114,7 @@ class UpsertWeatherExposuresTests(TestCase):
 
 
 class UpsertWeatherEmitsTests(TestCase):
-    """The crux: the keyless emit rows loaddata duplicates must upsert by (weather_type, text)."""
+    """The crux: the keyed emit rows loaddata duplicates must upsert by ``key`` (#2980)."""
 
     def setUp(self) -> None:
         upsert_weather_types(TYPES)
@@ -133,6 +136,7 @@ class UpsertWeatherEmitsTests(TestCase):
                 "model": "weather.weatheremit",
                 "fields": {
                     "weather_type": ["Storm"],
+                    "key": "storm-001",
                     "text": "Rain lashes down in sheets.",
                     "weight": 7,
                     "in_winter": True,
@@ -141,19 +145,38 @@ class UpsertWeatherEmitsTests(TestCase):
             },
         ]
         upsert_weather_emits(edited)
-        row = WeatherEmit.objects.get(text="Rain lashes down in sheets.")
+        row = WeatherEmit.objects.get(key="storm-001")
         assert row.weight == 7
         assert row.in_winter is True
         assert row.at_night is True
         assert WeatherEmit.objects.count() == 2  # no duplicate
 
-    def test_new_text_creates_a_new_row(self) -> None:
+    def test_edited_text_updates_the_same_row_instead_of_forking(self) -> None:
+        """The #2980 fix: rewriting the prose must update, not fork, the row it belongs to."""
+        upsert_weather_emits(EMITS)
+        rewritten = [
+            {
+                "model": "weather.weatheremit",
+                "fields": {
+                    "weather_type": ["Storm"],
+                    "key": "storm-001",
+                    "text": "A different line entirely.",
+                },
+            },
+        ]
+        created, updated = upsert_weather_emits(rewritten)
+        assert (created, updated) == (0, 1)
+        assert WeatherEmit.objects.count() == 2  # no fork, no orphaned placeholder
+        assert WeatherEmit.objects.get(key="storm-001").text == "A different line entirely."
+
+    def test_new_key_creates_a_new_row(self) -> None:
         upsert_weather_emits(EMITS)
         new_line = [
             {
                 "model": "weather.weatheremit",
                 "fields": {
                     "weather_type": ["Storm"],
+                    "key": "storm-002",
                     "text": "Thunder rolls overhead.",
                     "at_dusk": True,
                 },
@@ -162,6 +185,47 @@ class UpsertWeatherEmitsTests(TestCase):
         created, updated = upsert_weather_emits(new_line)
         assert (created, updated) == (1, 0)
         assert WeatherEmit.objects.count() == 3
+
+
+class WeatherEmitKeyIdentityTests(TestCase):
+    """A rewritten emit updates its row instead of forking a new one (#2980)."""
+
+    def test_natural_key_is_the_key_not_the_text(self):
+        self.assertEqual(WeatherEmit.identity_fields(), ["key"])
+
+    def test_rewriting_the_text_updates_in_place(self):
+        weather_type = WeatherTypeFactory(name="Stormy")
+        rows = [
+            {
+                "fields": {
+                    "weather_type": ["Stormy"],
+                    "key": "stormy-001",
+                    "text": "PLACEHOLDER: rain.",
+                    "weight": 10,
+                }
+            }
+        ]
+        created, updated = upsert_weather_emits(rows)
+        self.assertEqual((created, updated), (1, 0))
+
+        rows[0]["fields"]["text"] = "Thunder walks the rooftops."
+        created, updated = upsert_weather_emits(rows)
+        self.assertEqual((created, updated), (0, 1))
+        self.assertEqual(WeatherEmit.objects.filter(weather_type=weather_type).count(), 1)
+        self.assertEqual(
+            WeatherEmit.objects.get(key="stormy-001").text,
+            "Thunder walks the rooftops.",
+        )
+
+    def test_a_new_key_creates_a_new_row(self):
+        WeatherTypeFactory(name="Stormy")
+        upsert_weather_emits(
+            [{"fields": {"weather_type": ["Stormy"], "key": "stormy-001", "text": "One."}}]
+        )
+        created, _updated = upsert_weather_emits(
+            [{"fields": {"weather_type": ["Stormy"], "key": "stormy-002", "text": "Two."}}]
+        )
+        self.assertEqual(created, 1)
 
 
 class LoadWeatherSeedFromDirTests(TestCase):

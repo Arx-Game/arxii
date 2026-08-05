@@ -3,10 +3,11 @@ from django.utils.text import slugify
 from evennia.utils.idmapper.models import SharedMemoryModel
 
 from core.natural_keys import NaturalKeyManager, NaturalKeyMixin
+from world.contributors.models import CreditedContent
 from world.realms.constants import RealmTheme
 
 
-class Realm(NaturalKeyMixin, SharedMemoryModel):
+class Realm(NaturalKeyMixin, CreditedContent, SharedMemoryModel):
     """Canonical realm data (e.g., Arx, Luxan) used across the project.
 
     Keep this minimal for now: name and description, with optional crest.

@@ -17,9 +17,10 @@ from evennia.utils.idmapper.models import SharedMemoryModel
 from core.mixins import DiscriminatorMixin
 from core.natural_keys import NaturalKeyManager, NaturalKeyMixin
 from world.clues.constants import ClueResolution, ClueTargetKind
+from world.contributors.models import CreditedContent
 
 
-class Clue(NaturalKeyMixin, DiscriminatorMixin, SharedMemoryModel):
+class Clue(NaturalKeyMixin, DiscriminatorMixin, CreditedContent, SharedMemoryModel):
     """A pointer to one discoverable target. Always points at something (invariant).
 
     Add a new target kind by adding the value to ``ClueTargetKind``, a nullable

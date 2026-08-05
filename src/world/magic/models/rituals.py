@@ -12,6 +12,7 @@ from evennia.utils.idmapper.models import SharedMemoryModel
 
 from core.descriptors import ReverseOneToOneOrNone
 from core.natural_keys import NaturalKeyManager, NaturalKeyMixin
+from world.contributors.models import CreditedContent
 from world.magic.constants import ParticipationRule, RitualExecutionKind, TargetKind
 from world.magic.models.ritual_check_config import RitualCheckConfig
 
@@ -48,7 +49,7 @@ class ImbuingProseTemplate(SharedMemoryModel):
         return f"ImbuingProse({res} / {tk})"
 
 
-class Ritual(NaturalKeyMixin, SharedMemoryModel):
+class Ritual(NaturalKeyMixin, CreditedContent, SharedMemoryModel):
     """A ritual: authored magical procedure executed via service, flow, or scene action.
 
     Spec A §4.3. Each Ritual is dispatched via one of three modes:

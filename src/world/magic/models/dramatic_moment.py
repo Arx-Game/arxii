@@ -12,11 +12,12 @@ from django.db.models import Q
 from evennia.utils.idmapper.models import SharedMemoryModel
 
 from core.natural_keys import NaturalKeyManager, NaturalKeyMixin
+from world.contributors.models import CreditedContent
 from world.magic.constants import SuggestionStatus
 from world.societies.renown_config import RenownAwardConfig
 
 
-class DramaticMomentType(NaturalKeyMixin, RenownAwardConfig):
+class DramaticMomentType(NaturalKeyMixin, CreditedContent, RenownAwardConfig):
     """Staff-authored lookup describing a type of dramatic moment.
 
     Staff tags a character in a scene with a DramaticMomentType to fire both

@@ -410,6 +410,10 @@ check-push:
 check-content:
     uv run python tools/build_content_fixtures.py --check
 
+# Report how much player-facing prose is still a placeholder, by area.
+prose-report:
+    uv run python tools/prose_report.py
+
 gen-api-types:
     uv run arx manage spectacular --file schema.json --validate
     pnpm --prefix frontend generate:types

@@ -15,13 +15,14 @@ from django.utils.functional import cached_property
 from evennia.utils.idmapper.models import SharedMemoryModel
 
 from core.natural_keys import NaturalKeyManager, NaturalKeyMixin
+from world.contributors.models import CreditedContent
 from world.traits.constants import PrimaryStat
 
 if TYPE_CHECKING:
     from world.codex.models import CodexEntry
 
 
-class Species(NaturalKeyMixin, SharedMemoryModel):
+class Species(NaturalKeyMixin, CreditedContent, SharedMemoryModel):
     """
     Core species/subspecies definition with optional parent hierarchy.
 
@@ -288,7 +289,7 @@ class SpeciesGiftGrant(NaturalKeyMixin, SharedMemoryModel):
             raise ValidationError({"gift": "Species grants must reference a MINOR gift."})
 
 
-class Language(NaturalKeyMixin, SharedMemoryModel):
+class Language(NaturalKeyMixin, CreditedContent, SharedMemoryModel):
     """
     Languages available in the game.
 

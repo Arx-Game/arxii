@@ -13,6 +13,7 @@ from evennia.utils.idmapper.models import SharedMemoryModel
 
 from core.managers import ArxSharedMemoryManager
 from core.natural_keys import NaturalKeyManager, NaturalKeyMixin
+from world.contributors.models import CreditedContent
 from world.traits.models import Trait, TraitType
 
 if TYPE_CHECKING:
@@ -22,7 +23,7 @@ if TYPE_CHECKING:
 CHARACTER_SHEET_MODEL = "arxii.CharacterSheet"
 
 
-class Skill(NaturalKeyMixin, SharedMemoryModel):
+class Skill(NaturalKeyMixin, CreditedContent, SharedMemoryModel):
     """
     Parent skill definition linked to Trait system.
 

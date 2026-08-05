@@ -16,6 +16,7 @@ from evennia.utils.idmapper.models import SharedMemoryModel
 
 from actions.constants import ActionCategory
 from core.natural_keys import NaturalKeyManager, NaturalKeyMixin
+from world.contributors.models import CreditedContent
 
 
 class PathStage(models.IntegerChoices):
@@ -29,7 +30,7 @@ class PathStage(models.IntegerChoices):
     TRANSCENDENT = 6, "Transcendent"  # Level 21+ - beyond mortal
 
 
-class Path(NaturalKeyMixin, SharedMemoryModel):
+class Path(NaturalKeyMixin, CreditedContent, SharedMemoryModel):
     """
     Character path definition with evolution hierarchy.
 
@@ -296,7 +297,7 @@ class ClassStageHealthRate(SharedMemoryModel):
         return f"{self.character_class.name} @ stage {self.stage}: {self.health_per_level}/lvl"
 
 
-class Aspect(NaturalKeyMixin, SharedMemoryModel):
+class Aspect(NaturalKeyMixin, CreditedContent, SharedMemoryModel):
     """
     Broad character archetype that provides bonuses to matching checks.
 

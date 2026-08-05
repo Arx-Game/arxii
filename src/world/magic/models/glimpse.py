@@ -15,6 +15,7 @@ from django.db import models
 from evennia.utils.idmapper.models import SharedMemoryModel
 
 from core.natural_keys import NaturalKeyManager, NaturalKeyMixin
+from world.contributors.models import CreditedContent
 from world.magic.constants import GlimpseTagAxis
 
 
@@ -22,7 +23,7 @@ class GlimpseTagManager(NaturalKeyManager):
     """Manager for GlimpseTag with natural key support."""
 
 
-class GlimpseTag(NaturalKeyMixin, SharedMemoryModel):
+class GlimpseTag(NaturalKeyMixin, CreditedContent, SharedMemoryModel):
     """One authored choice in the guided glimpse flow (#2427).
 
     Content model — authored in the lore repo, exported/imported via

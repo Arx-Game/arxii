@@ -457,6 +457,17 @@ builds and upserts (`update_or_create` by natural key) the maintainers' private 
 defaults" seed button, which is create-if-missing over in-repo seed content, not an external
 upsert. _Avoid_: seed run, import (Import Data is the separate ad-hoc-fixture-upload path).
 
+## Content authoring (#2980)
+
+**Content contributor**:
+A person credited for authored content: a writer, a reviewer, or an artist. Identified by
+name, not by account, so someone with no game account can be credited. _Avoid_: author,
+artist (an `Artist` is the separate player-commission profile), staff writer.
+
+**Credited content**:
+A content row that records who wrote its prose and who reviewed it. A row with no writer is
+still a placeholder.
+
 ## Process & design tenets
 
 **Journey**:

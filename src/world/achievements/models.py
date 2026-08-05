@@ -17,6 +17,7 @@ from world.achievements.constants import (
     NotificationLevel,
     RewardType,
 )
+from world.contributors.models import CreditedContent
 
 # String model reference for the CharacterSheet FK target. Using a single
 # constant keeps the lazy "app_label.ModelName" reference consistent across the
@@ -24,7 +25,7 @@ from world.achievements.constants import (
 CHARACTER_SHEET_MODEL = "arxii.CharacterSheet"
 
 
-class StatDefinition(NaturalKeyMixin, SharedMemoryModel):
+class StatDefinition(NaturalKeyMixin, CreditedContent, SharedMemoryModel):
     """
     Defines a trackable stat with display metadata.
 
@@ -100,7 +101,7 @@ class StatTracker(SharedMemoryModel):
         return f"{self.character_sheet} - {self.stat.key}: {self.value}"
 
 
-class Achievement(NaturalKeyMixin, SharedMemoryModel):
+class Achievement(NaturalKeyMixin, CreditedContent, SharedMemoryModel):
     """
     Definition of an achievement that characters can earn.
 
@@ -194,7 +195,7 @@ class DiscoverableContent(models.Model):
         abstract = True
 
 
-class AchievementStatRequirement(NaturalKeyMixin, SharedMemoryModel):
+class AchievementStatRequirement(NaturalKeyMixin, CreditedContent, SharedMemoryModel):
     """
     A stat threshold that must be met for an achievement.
 
@@ -332,7 +333,7 @@ class CharacterAchievement(SharedMemoryModel):
         return f"{self.character_sheet} - {self.achievement.name}"
 
 
-class RewardDefinition(NaturalKeyMixin, SharedMemoryModel):
+class RewardDefinition(NaturalKeyMixin, CreditedContent, SharedMemoryModel):
     """
     Defines a reward that can be granted by achievements.
 

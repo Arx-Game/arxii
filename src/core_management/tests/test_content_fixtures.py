@@ -1,5 +1,6 @@
 """Content pipeline (#944): parsing, validation, fixture shape, idempotent load."""
 
+import datetime
 import json
 from pathlib import Path
 import tempfile
@@ -1220,3 +1221,227 @@ A Princess of the Leviathan is given a healthy amount of distance by her peers.
         outcome = load_world_content(self.root)
         assert outcome.created == 0, (outcome.created, outcome.updated)
         assert HouseAspectOption.objects.filter(name="The Leviathan").count() == 1
+
+
+class MarkdownCreditRoundTripTests(TestCase):
+    """Credit keys survive render -> parse for a prose domain (#2980)."""
+
+    def setUp(self) -> None:
+        self.tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(self.tmp.cleanup)
+        self.tmpdir = self.tmp.name
+
+    def test_render_emits_credit_frontmatter(self):
+        from core_management.content_fixtures import (
+            MARKDOWN_EXPORT_DOMAINS,
+            render_entry_markdown,
+        )
+
+        spec = MARKDOWN_EXPORT_DOMAINS["magic.tradition"]
+        rendered = render_entry_markdown(
+            {
+                "name": "Thornwake",
+                "description": "Authored prose.",
+                "written_by": ["Tehom"],
+                "written_on": "2026-08-04",
+                "reviewed_by": None,
+                "reviewed_on": None,
+            },
+            spec,
+        )
+        self.assertIn('written_by: "Tehom"', rendered)
+        self.assertIn('written_on: "2026-08-04"', rendered)
+        # Absent credits are omitted rather than written as null.
+        self.assertNotIn("reviewed_by", rendered)
+
+    def test_builder_reads_credit_frontmatter_back(self):
+        from core_management.content_fixtures import (
+            _build_tradition_fixture,
+            parse_content_file,
+        )
+
+        path = Path(self.tmpdir) / "thornwake.md"
+        path.write_text(
+            "---\n"
+            'name: "Thornwake"\n'
+            'written_by: "Tehom"\n'
+            "written_on: 2026-08-04\n"
+            "---\n\n"
+            "Authored prose.\n",
+            encoding="utf-8",
+        )
+        entry = parse_content_file(path, "content/traditions")
+        fields = _build_tradition_fixture(entry)["fields"]
+        self.assertEqual(fields["written_by"], ["Tehom"])
+        # yaml.safe_load returns a datetime.date here; json.dumps would raise on
+        # it in write_fixtures, so the builder must hand back an ISO string.
+        self.assertEqual(fields["written_on"], "2026-08-04")
+        self.assertIsInstance(fields["written_on"], str)
+
+    def test_absent_credit_keys_are_omitted_entirely(self):
+        from core_management.content_fixtures import (
+            _build_tradition_fixture,
+            parse_content_file,
+        )
+
+        path = Path(self.tmpdir) / "plain.md"
+        path.write_text(
+            '---\nname: "Plain"\n---\n\nProse.\n',
+            encoding="utf-8",
+        )
+        entry = parse_content_file(path, "content/traditions")
+        fields = _build_tradition_fixture(entry)["fields"]
+        for key in ("written_by", "written_on", "reviewed_by", "reviewed_on"):
+            self.assertNotIn(key, fields)
+
+
+class CreditEndToEndLoadTests(TestCase):
+    """A credit written into an authored file survives onto the DB row (#2980).
+
+    Every other credit test in this module stops at the builder's ``fields``
+    dict (``MarkdownCreditRoundTripTests``). Nothing exercises the actual seam
+    this branch exists to create: ``build_all`` -> ``load_entries`` -> a real
+    ``CreditedContent`` column on a saved row. Covers two of the six fixture-JSON
+    domains fix 1 wired ``_apply_credit_meta`` into (``skills/`` and ``items/``),
+    so this also proves that wiring end-to-end and not just at the builder level
+    - a second, non-``Trait`` domain is the case that would have caught
+    ``ItemTemplate``/``NPCRole``/``BuildingKind``/``DecorationKind`` missing
+    ``CreditedContent`` entirely (#2980 fix wave follow-up): the builder emits
+    ``written_by``/``written_on`` regardless, so a fields-only test never
+    notices the column doesn't exist on the model.
+    """
+
+    def setUp(self) -> None:
+        self.tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(self.tmp.cleanup)
+        self.root = Path(self.tmp.name)
+
+    def test_written_by_and_written_on_land_on_the_row(self) -> None:
+        from world.contributors.factories import ContentContributorFactory
+
+        ContentContributorFactory(name="Tehom")
+        _write(
+            self.root,
+            "skills/performance.md",
+            "---\n"
+            "name: Performance\n"
+            "category: social\n"
+            'written_by: "Tehom"\n'
+            "written_on: 2026-08-04\n"
+            "---\n"
+            "PLACEHOLDER Captivating an audience through music, oration, or storytelling.\n",
+        )
+        created, updated, _ = load_entries(build_all(self.root))
+        assert (created, updated) == (1, 0)
+
+        trait = Trait.objects.get(name="Performance")
+        assert trait.written_by is not None
+        assert trait.written_by.name == "Tehom"
+        assert trait.written_on == datetime.date(2026, 8, 4)
+
+    def test_written_by_and_written_on_land_on_an_item_template_row(self) -> None:
+        """Non-``Trait`` domain (#2980 fix wave follow-up): ``ItemTemplate`` had no
+        ``CreditedContent`` parent even though ``_build_item_template_fixture``
+        already called ``_apply_credit_meta``, so a credited ``items/`` entry
+        raised ``FieldError`` in ``load_entries`` and the whole row was skipped -
+        invisible in ``test_written_by_and_written_on_land_on_the_row`` above
+        because that only exercises ``Trait``, which already had the mixin.
+        """
+        from world.contributors.factories import ContentContributorFactory
+
+        ContentContributorFactory(name="Tehom")
+        _write(
+            self.root,
+            "items/iron_longsword.md",
+            "---\n"
+            "name: Iron Longsword\n"
+            "value: 40\n"
+            "weight: 3.5\n"
+            'written_by: "Tehom"\n'
+            "written_on: 2026-08-04\n"
+            "---\n"
+            "A well-balanced blade, plain but serviceable.\n",
+        )
+        created, updated, _ = load_entries(build_all(self.root))
+        assert (created, updated) == (1, 0)
+
+        item = ItemTemplate.objects.get(name="Iron Longsword")
+        assert item.written_by is not None
+        assert item.written_by.name == "Tehom"
+        assert item.written_on == datetime.date(2026, 8, 4)
+
+    def test_unknown_written_by_is_dropped_but_the_row_still_loads(self) -> None:
+        """Tehom's ruling (#2980): a credit is editorial metadata and must never
+        be able to cost the content it describes. A ``written_by`` naming a
+        ``ContentContributor`` that does not exist drops that ONE field and the
+        row loads with the rest of its data intact - not skip the whole entry
+        the way any other unresolved FK-by-name value still does.
+        """
+        _write(
+            self.root,
+            "skills/performance.md",
+            "---\n"
+            "name: Performance\n"
+            "category: social\n"
+            'written_by: "Nobody Real"\n'
+            "---\n"
+            "PLACEHOLDER Captivating an audience through music, oration, or storytelling.\n",
+        )
+        result = build_all(self.root)
+        created, updated, _ = load_entries(result)
+        assert (created, updated) == (1, 0)
+
+        trait = Trait.objects.get(name="Performance")
+        assert "PLACEHOLDER" in trait.description
+        assert trait.written_by is None
+        assert any("Nobody Real" in msg for msg in result.skipped)
+
+    def test_malformed_written_on_is_dropped_but_the_row_still_loads(self) -> None:
+        """Same ruling, the date half: a malformed ``written_on`` drops only that
+        field via ``_coerce_scalar_fields``'s ``ValidationError`` path, diagnosed
+        the same way as an unresolved contributor name above.
+        """
+        _write(
+            self.root,
+            "skills/performance.md",
+            "---\n"
+            "name: Performance\n"
+            "category: social\n"
+            'written_on: "not-a-date"\n'
+            "---\n"
+            "PLACEHOLDER Captivating an audience through music, oration, or storytelling.\n",
+        )
+        result = build_all(self.root)
+        created, updated, _ = load_entries(result)
+        assert (created, updated) == (1, 0)
+
+        trait = Trait.objects.get(name="Performance")
+        assert "PLACEHOLDER" in trait.description
+        assert trait.written_on is None
+        assert any("not-a-date" in msg for msg in result.skipped)
+
+    def test_known_written_by_still_credits_the_row(self) -> None:
+        """Happy path proof: a contributor that DOES exist is unaffected by the
+        drop-on-failure change above - no diagnostic, credit lands as before.
+        """
+        from world.contributors.factories import ContentContributorFactory
+
+        ContentContributorFactory(name="Tehom")
+        _write(
+            self.root,
+            "skills/performance.md",
+            "---\n"
+            "name: Performance\n"
+            "category: social\n"
+            'written_by: "Tehom"\n'
+            "---\n"
+            "PLACEHOLDER Captivating an audience through music, oration, or storytelling.\n",
+        )
+        result = build_all(self.root)
+        created, updated, _ = load_entries(result)
+        assert (created, updated) == (1, 0)
+        assert not result.skipped
+
+        trait = Trait.objects.get(name="Performance")
+        assert trait.written_by is not None
+        assert trait.written_by.name == "Tehom"

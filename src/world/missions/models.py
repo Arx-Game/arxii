@@ -25,6 +25,7 @@ from django.utils import timezone
 from evennia.utils.idmapper.models import SharedMemoryModel
 
 from core.natural_keys import NaturalKeyManager, NaturalKeyMixin
+from world.contributors.models import CreditedContent
 from world.missions.constants import (
     LEGEND_RISK_FLOOR_TIER,
     MAX_PERCENT_REPLACE,
@@ -79,7 +80,7 @@ _DURABLE_EXTERNAL_ACTS = frozenset({ExternalAct.THREAD_WOVEN, ExternalAct.COVENA
 # ---------------------------------------------------------------------------
 
 
-class MissionCategory(NaturalKeyMixin, SharedMemoryModel):
+class MissionCategory(NaturalKeyMixin, CreditedContent, SharedMemoryModel):
     """A content-type tag a :class:`MissionTemplate` can carry (multi-valued).
 
     Examples: assassination, investigation, courtly, heist, social, combat.
@@ -111,7 +112,7 @@ class MissionCategory(NaturalKeyMixin, SharedMemoryModel):
         return self.name
 
 
-class MissionTemplate(NaturalKeyMixin, SharedMemoryModel):
+class MissionTemplate(NaturalKeyMixin, CreditedContent, SharedMemoryModel):
     """An authored mission: the static graph plus its availability metadata.
 
     A template owns one graph of :class:`MissionNode` rows (entered at the
@@ -258,7 +259,7 @@ class MissionTemplate(NaturalKeyMixin, SharedMemoryModel):
         return self.name
 
 
-class MissionNode(NaturalKeyMixin, SharedMemoryModel):
+class MissionNode(NaturalKeyMixin, CreditedContent, SharedMemoryModel):
     """One decision point in a mission graph.
 
     Exactly one node per template is the ``is_entry`` node. Multi-participant
@@ -478,7 +479,7 @@ class MissionNode(NaturalKeyMixin, SharedMemoryModel):
         return f"{self.template.name}:{self.key}"
 
 
-class MissionOption(NaturalKeyMixin, SharedMemoryModel):
+class MissionOption(NaturalKeyMixin, CreditedContent, SharedMemoryModel):
     """One choice available at a :class:`MissionNode`.
 
     An option is either AUTHORED (hand-written) or CHALLENGE (references a
@@ -742,7 +743,7 @@ class MissionOption(NaturalKeyMixin, SharedMemoryModel):
         return f"{self.node}#{self.order}"
 
 
-class MissionOptionRoute(NaturalKeyMixin, SharedMemoryModel):
+class MissionOptionRoute(NaturalKeyMixin, CreditedContent, SharedMemoryModel):
     """Where a :class:`MissionOption` leads.
 
     For a CHECK option there is one route per resolved ``traits.CheckOutcome``
@@ -848,7 +849,7 @@ class MissionOptionRoute(NaturalKeyMixin, SharedMemoryModel):
         return f"{self.option} [{tier}]"
 
 
-class MissionOptionRouteCandidate(NaturalKeyMixin, SharedMemoryModel):
+class MissionOptionRouteCandidate(NaturalKeyMixin, CreditedContent, SharedMemoryModel):
     """One weighted destination in a randomized :class:`MissionOptionRoute`.
 
     When the parent route's ``is_random_set`` is true the engine picks one
@@ -926,7 +927,7 @@ class MissionOptionRouteCandidate(NaturalKeyMixin, SharedMemoryModel):
         return f"{self.route} → {self.target_node} ({self.weight})"
 
 
-class MissionOptionRouteReward(NaturalKeyMixin, SharedMemoryModel):
+class MissionOptionRouteReward(NaturalKeyMixin, CreditedContent, SharedMemoryModel):
     """Authored reward template attached to a route OR a route candidate.
 
     Phase 5b.0 closed the Phase-3 gap that left no authored source for

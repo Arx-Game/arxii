@@ -2,6 +2,7 @@ from django.contrib import admin
 
 from world.classes.models import Aspect, Path, PathAspect
 from world.codex.models import PathCodexGrant
+from world.contributors.admin import CREDIT_FIELDSET
 from world.progression.models import CodexKnowledgeRequirement, TraitRequirement
 from world.skills.models import PathSkillSuggestion
 
@@ -80,6 +81,7 @@ class PathAdmin(admin.ModelAdmin):
         (None, {"fields": ("name", "description", "stage", "minimum_level")}),
         ("Display", {"fields": ("icon_url", "sort_order", "is_active")}),
         ("Evolution", {"fields": ("parent_paths",)}),
+        CREDIT_FIELDSET,
     )
 
     @admin.display(description="Parents")
