@@ -134,8 +134,8 @@ Services (`world.weather.services`):
   a second `loaddata`: `loaddata` can't UPDATE idmapper rows and (pre-#2980) DUPLICATED the
   text-keyed `WeatherEmit` rows on any rewrite (#944/#946). `seed.load_weather_seed(fixtures_dir)`
   upserts each model by natural identity (`WeatherType`→name, `WeatherTypeExposure`→(type, axis),
-  `WeatherEmit`→`key` — a stable `<weather-type-slug>-<nnn>` assigned once and never derived from
-  the text, #2980 — `FeastDay`→(month, day)), so editing a magnitude/weight/flag/text and
+  `WeatherEmit`→`key` (a stable `<weather-type-slug>-<nnn>` assigned once and never derived from
+  the text, #2980), `FeastDay`→(month, day)), so editing a magnitude/weight/flag/text and
   re-running mutates in place instead of forking a new row. The same generated fixture JSON stays
   valid for fresh-DB `loaddata`. Invoke via the tools wrapper `tools/load_weather_seed.py`
   (`--fixtures-dir` or `WEATHER_SEED_PATH`); not a management command. Existing rows predate the

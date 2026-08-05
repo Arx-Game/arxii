@@ -1,10 +1,11 @@
 """Idempotent upsert loader for the weather seed corpus (#1522).
 
-``loaddata`` can seed a *fresh* database but cannot **re-seed** an edited corpus here, for two
-reasons: (1) SharedMemoryModel's identity map intercepts construction-by-pk and returns the
-cached instance, silently discarding a fixture's new field values, so natural-key ``loaddata``
-INSERTs but never UPDATEs idmapper rows (#944/#946); and (2) ``WeatherEmit`` has no natural key,
-so a second ``loaddata`` DUPLICATES every emit row rather than updating it.
+``loaddata`` can seed a *fresh* database but cannot **re-seed** an edited corpus here:
+SharedMemoryModel's identity map intercepts construction-by-pk and returns the cached instance,
+silently discarding a fixture's new field values, so natural-key ``loaddata`` INSERTs but never
+UPDATEs idmapper rows (#944/#946). ``WeatherEmit`` felt this worst before #2980: its natural key
+was the emit's own text, so a second ``loaddata`` after a rewrite didn't just fail to update the
+line - it forked a second row and left the old placeholder behind.
 
 This module re-seeds with ``update_or_create`` instead — the same fix
 ``core_management.content_fixtures.load_entries`` uses — keyed on each model's natural identity,
@@ -17,7 +18,7 @@ Identity keys (what "the same row" means on re-seed):
 - ``WeatherTypeExposure``  → ``(weather_type, stat_key)`` (its unique constraint)
 - ``WeatherTypeShelter``   → ``(weather_type, damage_type)`` (its unique constraint, #2845)
 - ``WeatherTransition``    → ``(from_type, to_type)`` (its unique constraint, #2845)
-- ``WeatherEmit``          → ``key`` (its stable identity, #2980 — NOT the text)
+- ``WeatherEmit``          → ``key`` (its stable identity, #2980 - NOT the text)
 - ``FeastDay``             → ``(ic_month, ic_day)`` (its unique constraint)
 
 Editing an emit's *text* therefore updates the row in place, the same as any other field (#2980):
