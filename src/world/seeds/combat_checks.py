@@ -2,8 +2,8 @@
 
 Stands up the ``Melee Combat`` parent skill (Trait-backed,
 ``TraitCategory.COMBAT``) with three weapon-class specializations
-(Small / Medium / Heavy Weapons — aligned to
-``progression.services.scene_integration``'s ``weapon_map`` keys) and a
+(Small / Medium / Heavy Weapons — local to this seed, see
+``_WEAPON_SPECIALIZATIONS`` below) and a
 ``Melee Attack`` ``CheckType`` composed as ``strength + Melee Combat
 (+ owned weapon specialization)``. Mirrors ``world/seeds/social_checks.py``
 (#1689).

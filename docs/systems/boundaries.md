@@ -384,11 +384,12 @@ Mirrors `world.consent.factories.make_default_categories()`'s pattern exactly: p
 `ContentTheme.objects.get_or_create(key=..., defaults={...})` per theme (not the
 `ContentThemeFactory` sequence factory — sidesteps the FactoryBoy
 `django_get_or_create` gotcha where a pre-existing row silently drops non-lookup
-kwargs), idempotent, safe to call multiple times. **Not yet wired into a
-`world/seeds/clusters.py` cluster / `arx seed dev`** (unlike consent's
-`"consent"` cluster) — that wiring was out of this task's scope; today the starter
-set is reached by calling `make_default_content_themes()` directly (tests, a shell,
-or a future seed cluster).
+kwargs), idempotent, safe to call multiple times. Note the consent parallel is the
+factory shape only, not the seed wiring: consent's `"consent"` cluster calls the
+separate, richer `world.seeds.consent.seed_social_consent_categories()`, not
+`make_default_categories()` directly. Wired into the `"boundaries"` cluster
+(`world/seeds/clusters.py`), which calls `make_default_content_themes()` directly —
+reached via `arx seed dev` / the Big Button (#3004).
 
 ---
 

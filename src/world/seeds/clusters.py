@@ -391,6 +391,12 @@ def _seed_gm() -> None:
     GMRewardConfig.load()
 
 
+def _seed_boundaries() -> None:
+    from world.boundaries.factories import make_default_content_themes  # noqa: PLC0415
+
+    make_default_content_themes()
+
+
 def _seed_skills() -> None:
     from world.seeds.game_content.skills import (  # noqa: PLC0415
         seed_skill_breakthrough_catalog,
@@ -488,6 +494,10 @@ CLUSTER_SEEDERS: dict[str, Callable[[], None]] = {
     "reactive_challenges": _seed_reactive_challenges,
     # Consent: seeds default SocialConsentCategory rows; tags ActionTemplates if present.
     "consent": _seed_consent,
+    # Boundaries: seeds the starter ContentTheme catalog (hard-line taxonomy) so
+    # PlayerBoundary.theme and StakeTemplate.content_themes have rows to point at
+    # on a fresh clone. Self-contained; no ordering dependency (#3004).
+    "boundaries": _seed_boundaries,
     # Character-creation "world" content (Realm/StartingArea/Beginnings/Species/
     # Gender/TarotCard/HeightBand/Build/stats/Rosters/Path) — after magic because
     # finalize_character picks the magic-seeded catalog Gift/Technique + resonance
@@ -659,6 +669,7 @@ def seeded_models_by_cluster() -> dict[str, list[type[Model]]]:
     from actions.models import ActionTemplate, ConsequencePool  # noqa: PLC0415
     from world.agriculture.models import CropType  # noqa: PLC0415
     from world.battles.models import BattleMapBlueprint, BattleUnitTemplate  # noqa: PLC0415
+    from world.boundaries.models import ContentTheme  # noqa: PLC0415
     from world.buildings.models import (  # noqa: PLC0415
         BuildingKind,
         DecorationKind,
@@ -787,6 +798,10 @@ def seeded_models_by_cluster() -> dict[str, list[type[Model]]]:
         # (#2636 — activates the #1273/#1744/#1228/#2210 content family).
         "reactive_challenges": [ChallengeTemplate],
         "consent": [SocialConsentCategory],
+        # Boundaries: the starter ContentTheme catalog (hard-line taxonomy) so
+        # PlayerBoundary.theme and StakeTemplate.content_themes have rows to
+        # point at on a fresh clone (#3004).
+        "boundaries": [ContentTheme],
         "character_creation": [StartingArea, Beginnings, Species, CGExplanation],
         # Missions: the starter notice board (#2121) — 1 BOARD MissionGiver +
         # 3 OPEN MissionTemplate rows so `mission opportunities` isn't

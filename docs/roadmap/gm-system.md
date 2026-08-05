@@ -226,13 +226,12 @@ Potential GM-specific tooling that may warrant a future phase:
   outcomes without *deciding* them — `perform_check` still resolves by player roll
   (ADR-0030), and the shift is catalog-bounded, not fiat (ADR-0110).
 - `GMAwardAction`/`GMApplyConditionAction` (#2118) are a deliberate, narrow exception
-  to "rewards are not a GM concern" above: they exist specifically because the
-  story-beat automatic-award pipeline (`award_scene_development_points`) has zero
-  production callers and is bug-for-bug broken (reads a nonexistent `scene.title`) —
-  see #2118's spec. They are fiat (JUNIOR-tier GM trust required, unlike the
-  no-floor check-invocation verb) and meant for improvised story moments the broken
-  pipeline can't reach, not a replacement for story-beat rewards once that pipeline
-  is fixed or reviving `award_scene_development_points` is designed properly.
+  to "rewards are not a GM concern" above: they exist specifically because there is no
+  automatic story-beat award pipeline: the broken `award_scene_development_points`
+  scaffold was removed in #3004 (see `docs/roadmap/planned-systems.md` for the
+  recorded intent). They are fiat (JUNIOR-tier GM trust required, unlike the
+  no-floor check-invocation verb) and meant for improvised story moments, not a
+  replacement for story-beat rewards if that pipeline is designed and built.
 
 ### Phase 5 — Dashboards and UI (deferred until after Stories)
 The GM dashboard is story-shaped, not roster-shaped. What GMs actually

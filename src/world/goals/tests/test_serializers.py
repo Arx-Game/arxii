@@ -236,7 +236,7 @@ class GoalJournalCreateSerializerTests(TestCase):
         cls.domain = GoalDomainFactory(name="Mastery")
 
     def test_creates_journal_with_valid_data(self):
-        """Creates journal with valid data."""
+        """Validates valid data (create() is the service's job, not the serializer's)."""
         data = {
             "domain": self.domain.id,
             "title": "Skill Progress",
@@ -245,14 +245,11 @@ class GoalJournalCreateSerializerTests(TestCase):
         }
         serializer = GoalJournalCreateSerializer(data=data)
         assert serializer.is_valid(), serializer.errors
-
-        journal = serializer.save(character=self.character)
-        assert journal.domain == self.domain
-        assert journal.title == "Skill Progress"
-        assert journal.xp_awarded == 1  # Default XP
+        assert serializer.validated_data["domain"] == self.domain
+        assert serializer.validated_data["title"] == "Skill Progress"
 
     def test_creates_journal_without_domain(self):
-        """Creates journal without specifying domain."""
+        """Validates data without a domain specified."""
         data = {
             "title": "General Thoughts",
             "content": "Some content here...",
@@ -260,10 +257,8 @@ class GoalJournalCreateSerializerTests(TestCase):
         }
         serializer = GoalJournalCreateSerializer(data=data)
         assert serializer.is_valid()
-
-        journal = serializer.save(character=self.character)
-        assert journal.domain is None
-        assert journal.is_public is True
+        assert serializer.validated_data.get("domain") is None
+        assert serializer.validated_data["is_public"] is True
 
     def test_rejects_invalid_domain_id(self):
         """Rejects journal with invalid domain ID."""
@@ -275,18 +270,6 @@ class GoalJournalCreateSerializerTests(TestCase):
         serializer = GoalJournalCreateSerializer(data=data)
         assert not serializer.is_valid()
         assert "domain" in serializer.errors
-
-    def test_awards_xp_on_creation(self):
-        """Journal creation awards XP."""
-        data = {
-            "title": "My Journal",
-            "content": "Some reflections",
-        }
-        serializer = GoalJournalCreateSerializer(data=data)
-        serializer.is_valid()
-        journal = serializer.save(character=self.character)
-
-        assert journal.xp_awarded == 1
 
 
 class GoalRevisionSerializerTests(TestCase):

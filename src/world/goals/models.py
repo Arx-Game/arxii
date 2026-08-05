@@ -112,6 +112,14 @@ class GoalJournal(SharedMemoryModel):
         default=0,
         help_text="XP awarded for this journal entry.",
     )
+    game_week = models.ForeignKey(
+        "arxii.GameWeek",
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="goal_journals",
+        help_text="GameWeek this entry counted against for the weekly XP cap",
+    )
     created_at = models.DateTimeField(auto_now_add=True)
 
     def __str__(self) -> str:
