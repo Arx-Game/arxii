@@ -215,13 +215,24 @@ applies exactly the standalone SQL files listed in its `SQL_FILES` constant (the
 rewrite, composite FKs, materialized views) plus the idempotent seed functions; it does not
 replay migrations, so it has no way to discover a new standalone SQL artifact on its own.
 
-**Rule: a migration that adds `RunSQL` DDL for a materialized view, a range partition, a custom
-constraint, or any other object that can't be expressed as a plain model field must add the
-matching `.sql` file to `SQL_FILES` in `tools/build_schema.py`, in the same PR.** Nightly full
-migration replay (`nightly-migration-replay.yml`) exercises the real migration and will build the
-object correctly; CI and local test/dev DBs built via `build_schema.py` will not, and — unless a
-test actually exercises that object — the omission fails silently rather than loudly: no error,
-just an object that's simply never there in any schema-from-models DB.
+**Rule: the wiring is bidirectional, and both halves are enforced by
+`tools/check_standalone_sql_wiring.py` (the `standalone-sql-wiring` pre-commit hook).** A migration
+that adds `RunSQL` DDL for a materialized view, a range partition, a custom constraint, or any other
+object that can't be expressed as a plain model field must add the matching `.sql` file to
+`SQL_FILES` in `tools/build_schema.py`, and a file in `SQL_FILES` must be applied by some
+migration. #2906's squash broke the second direction: it regenerated the chain with a plain
+`makemigrations`, which only emits `CreateModel`, so the `RunSQL` that partitioned
+`arxii_interaction` vanished while the file stayed in `SQL_FILES`. That went unnoticed for two
+months (#2982) because the per-PR drift gate compares models to *migrations* and never inspects the
+resulting *schema*. `*_reverse.sql` files are exempt from the `SQL_FILES` direction, since
+`build_schema.py` is forward-only by construction.
+
+Nightly full migration replay (`nightly-migration-replay.yml`) exercises the real migration and will
+build the object correctly; CI and local test/dev DBs built via `build_schema.py` will not, and,
+unless a test actually exercises that object, the omission fails silently rather than loudly: no
+error, just an object that's simply never there in any schema-from-models DB. The nightly workflow
+now also diffs the two resulting schemas directly (`tools/compare_schemas.py`), so a divergence
+fails there even if the wiring hook is somehow satisfied.
 
 ### Fuzzy/partial object search is broken on PostgreSQL
 
@@ -229,13 +240,14 @@ Evennia's `ObjectDB.objects.get_objs_with_key_or_alias(exact=False)` (the path `
 
 This is an Evennia library bug, not repo code — don't try to "fix" it in the command layer. Any telnet command or test relying on partial/prefix name resolution will pass locally and fail on PG. Resolve targets by **full name** (`db_key__iexact`, the exact-match path) instead, and don't write tests asserting partial-name search works.
 
-### Partitioned `scenes_interaction` traps (Postgres-only, invisible on SQLite)
+### Partitioned `arxii_interaction` traps (Postgres-only, invisible on SQLite)
 
-`scenes_interaction` is a Postgres range-partitioned table built by raw SQL at `scenes/0004_partition_interaction`. The `check_partition_sql_drift.py` pre-commit hook forces the partition SQL's CREATE TABLE + INSERT column lists to match the current `Interaction` model. Two traps:
+`arxii_interaction` is a Postgres range-partitioned table built by raw SQL at
+`src/world/migrations/0109_partition_interaction`. The `check_partition_sql_drift.py` pre-commit hook forces the partition SQL's CREATE TABLE + INSERT column lists to match the current `Interaction` model. Two traps:
 
-1. **A new column that can only be added by a later migration** (e.g. an FK to a model created after the partition migration) does not exist on the pre-partition `_old` table, so the partition SQL's `INSERT ... SELECT <col> ... FROM _old` fails with `UndefinedColumn`. All backend shards + `api-types-drift` fail at the `migrate` step; the SQLite fast tier never runs the partition SQL, so it's invisible locally. Fix: keep the post-partition column OUT of both partition SQL files (forward and reverse) so they represent the schema *at partition time*; the late `AddField` cascades via `ALTER TABLE` to all partitions. Add the column name to the `POST_PARTITION_COLUMNS` exclusion set in `tools/check_partition_sql_drift.py`.
+1. **A new column that can only be added by a later migration** (e.g. an FK to a model created after the partition migration) does not exist on the pre-partition `_old` table, so the partition SQL's `INSERT ... SELECT <col> ... FROM _old` fails with `UndefinedColumn`. All backend shards + `api-types-drift` fail at the `migrate` step; the SQLite fast tier never runs the partition SQL, so it's invisible locally. Fix: keep the post-partition column OUT of both partition SQL files (forward and reverse) so they represent the schema *at partition time*; a later `AddField` cascades via `ALTER TABLE` to all partitions. Add the column name to the `POST_PARTITION_COLUMNS` exclusion set in `tools/check_partition_sql_drift.py`.
 2. **A new FK on another model referencing `scenes.Interaction`** fails Postgres `migrate` with `InvalidForeignKey: there is no unique constraint matching given keys` — a FK to a partitioned table can't reference the plain PK. Counter-intuitively, "a FK *to* the partitioned table is the safe direction" is wrong on PG. Fix: add `db_constraint=False` to the field (mirror `SceneActionRequest.result_interaction`) — the ORM relation is unaffected, and `db_constraint=False` fields don't trip the drift hook.
 
-Always verify a migration touching `Interaction` on a real throwaway Postgres DB (host `db`, user/pass `arxii`/`arxii`) before pushing.
+Always verify a migration touching `Interaction` on a real throwaway Postgres DB (host `db`, user/pass `arxii`/`arxii`) before pushing. The nightly replay now also asserts the partition exists and diffs both construction paths, so a regression here fails nightly even if it slips past a local check.
 
 **Related runtime trap (not migration-time):** annotating a per-row aggregate onto the partitioned `Interaction` queryset — e.g. `.annotate(reaction_count=Count("reactions"))` — 500s on Postgres (the full-row SELECT forces a `GROUP BY` PG rejects, since PG's real PK is composite `(id, timestamp)` while Django groups by `id` alone) but passes the SQLite fast tier, which doesn't enforce `GROUP BY` strictness. Fix: don't aggregate on the partitioned model directly — pull visible row ids with `.values_list("pk", "timestamp")`, aggregate counts on the **child** table grouped by its plain FK column, and rank in Python. Verify any reel/ranking/aggregate query touching a partitioned table with `just test-parity` on real Postgres before pushing.

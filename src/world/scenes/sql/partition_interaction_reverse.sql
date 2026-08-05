@@ -1,8 +1,9 @@
 -- Reverse: convert partitioned arxii_interaction back to a regular table.
 --
--- Kept for reference only: no migration currently applies this reverse SQL
--- (the #2906 single-app collapse squashed the per-app migration chain that
--- used to RunSQL it; tools/build_schema.py builds forward-only from models).
+-- Applied by: src/world/migrations/0109_partition_interaction.py, as the
+-- reverse_sql of the RunSQL that applies partition_interaction_forward.sql.
+-- Not listed in tools/build_schema.py's SQL_FILES - build_schema.py builds
+-- forward-only from models, so reverse files have no direction to satisfy there.
 
 -- 1. Rename partitioned table
 ALTER TABLE arxii_interaction RENAME TO arxii_interaction_partitioned;

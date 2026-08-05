@@ -79,7 +79,7 @@ designer walks to validate new techniques.
 **In scope:**
 
 - New `CombatRoundAction.interaction` FK + `interaction_timestamp`
-  denormalized field (composite-FK target onto partitioned `scenes_interaction`).
+  denormalized field (composite-FK target onto partitioned `arxii_interaction`).
 - New `ClashContribution.interaction` FK + `interaction_timestamp`.
 - New service `create_action_interaction(participant, round_number)` —
   builds an ACTION-mode `Interaction` per resolved PC action / clash
@@ -237,7 +237,7 @@ interaction_timestamp = models.DateTimeField(
     db_index=True,
     help_text=(
         "Denormalized from interaction.timestamp. Required because "
-        "scenes_interaction is range-partitioned by timestamp — the composite "
+        "arxii_interaction is range-partitioned by timestamp — the composite "
         "FK constraint targets (interaction_id, interaction_timestamp). "
         "Populated atomically with interaction_id by create_action_interaction."
     ),
@@ -518,7 +518,7 @@ def _resolve_pc_action(
 ```
 
 The `interaction_timestamp` denormalization is non-optional — the composite
-FK constraint to the partitioned `scenes_interaction` requires both columns
+FK constraint to the partitioned `arxii_interaction` requires both columns
 populated. Set both fields in the same `save()` call.
 
 For clash contributions, the equivalent wiring lives in `run_clash_round`
@@ -1052,30 +1052,33 @@ via the shared hook — no duplicate dispatch path.
 
 ### Schema migrations
 
-Two migrations. The Django ORM migration is thin; the raw SQL lives in
-committed `.sql` files (durable artifact that survives migration wipes
-pre-prod, mirroring `scenes/sql/partition_interaction_forward.sql`).
+Post-#2906 there is one app (`arxii`), so both the ORM fields and the raw SQL land in the same
+migration chain rather than a per-app pair. The raw SQL lives in committed `.sql` files (durable
+artifact that survives migration wipes pre-prod, mirroring
+`scenes/sql/partition_interaction_forward.sql`), applied by
+`src/world/migrations/0109_partition_interaction.py`.
 
 | Migration | App | Contents |
 | --- | --- | --- |
-| `00XX_resolution_loop_models` | combat | ORM-only. Adds `CombatRoundAction.interaction` + `interaction_timestamp`. Adds `ClashContribution.interaction` + `interaction_timestamp`. Adds `ThreatPoolEntry.effect_properties` M2M to `mechanics.Property`. Adds `ClashConfig.clash_min_intensity`. `db_constraint=False` on the `interaction` FKs since the composite constraint is added by the next migration. |
-| `00YY_interaction_fk_composites` | combat | Raw SQL via `migrations.RunSQL(_read_sql(...))`. Files: `combat/sql/interaction_fk_composites_forward.sql` + `_reverse.sql`. Adds composite FK constraints `(interaction_id, interaction_timestamp) → scenes_interaction (id, timestamp)` on `combat_combatroundaction` and `combat_clashcontribution`. `ON DELETE SET NULL DEFERRABLE INITIALLY DEFERRED`. |
+| ORM fields | arxii | ORM-only. Adds `CombatRoundAction.interaction` + `interaction_timestamp`. Adds `ClashContribution.interaction` + `interaction_timestamp`. Adds `ThreatPoolEntry.effect_properties` M2M to `mechanics.Property`. Adds `ClashConfig.clash_min_intensity`. `db_constraint=False` on the `interaction` FKs since the composite constraint is added by the SQL below. |
+| `0109_partition_interaction` | arxii | Raw SQL via `migrations.RunSQL(_read_sql(...))`. Files: `combat/sql/interaction_fk_composites_forward.sql` + `_reverse.sql`. Adds composite FK constraints `(interaction_id, interaction_timestamp) → arxii_interaction (id, timestamp)` on `arxii_combatroundaction` and `arxii_clashcontribution`. `ON DELETE SET NULL DEFERRABLE INITIALLY DEFERRED`. |
 
 **Raw SQL discipline:** every `migrations.RunSQL(...)` call reads from a
 committed `.sql` file. No inline SQL strings in migration files. Same
-pattern `scenes/migrations/0003_partition_interaction.py` already follows:
+pattern `0101_create_materialized_views.py`'s `_read_sql(subpackage, filename)` shape follows,
+reading from a `<subpackage>/sql/` directory rather than a single app-local one:
 
 ```python
-SQL_DIR = Path(__file__).resolve().parent.parent / "sql"
+_WORLD_DIR = Path(__file__).resolve().parent.parent
 
-def _read_sql(filename: str) -> str:
-    return (SQL_DIR / filename).read_text()
+def _read_sql(subpackage: str, filename: str) -> str:
+    return (_WORLD_DIR / subpackage / "sql" / filename).read_text()
 
 class Migration(migrations.Migration):
     operations = [
         migrations.RunSQL(
-            sql=_read_sql("interaction_fk_composites_forward.sql"),
-            reverse_sql=_read_sql("interaction_fk_composites_reverse.sql"),
+            sql=_read_sql("combat", "interaction_fk_composites_forward.sql"),
+            reverse_sql=_read_sql("combat", "interaction_fk_composites_reverse.sql"),
         ),
     ]
 ```
@@ -1085,7 +1088,10 @@ SQL files committed to `src/world/combat/sql/`:
 - `interaction_fk_composites_reverse.sql`
 
 Pre-prod migration wipes don't lose this work — the SQL files are the
-durable artifact; the new post-wipe migrations re-reference them.
+durable artifact; the new post-wipe migrations re-reference them. #2906's squash violated exactly
+this invariant for the `arxii_interaction` partition rewrite (the `RunSQL` step itself was dropped,
+not just re-pointed at a new migration file), and the gap is now machine-enforced by
+`tools/check_standalone_sql_wiring.py` rather than resting on this paragraph alone.
 
 No magic-app, conditions-app, or partition migrations needed: the
 opposition system uses existing `mechanics.Property`; conditions don't
