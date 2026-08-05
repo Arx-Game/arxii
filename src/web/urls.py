@@ -37,6 +37,7 @@ urlpatterns = [
     path("api/fatigue/", include("world.fatigue.urls")),
     path("api/agriculture/", include("world.agriculture.urls")),
     path("api/vitals/", include("world.vitals.urls")),
+    path("api/dreams/", include("world.dreams.urls")),
     path("api/action-points/", include("world.action_points.urls")),
     path("api/areas/", include("world.areas.urls")),
     path("api/world-builder/", include("world.areas.builder_urls")),

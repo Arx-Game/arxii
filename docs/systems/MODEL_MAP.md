@@ -1441,6 +1441,8 @@
   - distinctions <- distinctions.CharacterDistinction
   - distinction_other_entries <- distinctions.CharacterDistinctionOther
   - sheet_update_requests <- distinctions.SheetUpdateRequest
+  - dreamwalk_presence <- dreams.DreamwalkPresence
+  - dream_visitors <- dreams.DreamwalkPresence
   - will <- estates.Will
   - estate_settlement <- estates.EstateSettlement
   - fatigue <- fatigue.FatiguePool
@@ -3337,8 +3339,19 @@
   - dream_room -> evennia_extensions.RoomProfile [OneToOne]
   - descent_target -> evennia_extensions.RoomProfile [FK] (nullable)
 
+### DreamwalkPresence
+**Foreign Keys:**
+  - dreamer -> character_sheets.CharacterSheet [OneToOne]
+  - host -> character_sheets.CharacterSheet [FK]
+
 ### Service Functions
+- `co_dreamers_for(sheet: 'CharacterSheet') -> 'list[CharacterSheet]' - Other dreamside sheets resolving to the same dreamspace as ``sheet``.`
+- `dreamspace_for(sheet: 'CharacterSheet | None') -> 'ObjectDB | None' - The dreamspace this sheet perceives, honouring an active dreamwalk.`
+- `dreamwalk_candidates_for(sheet: 'CharacterSheet') -> 'list[CharacterSheet]' - Bonded characters ``sheet`` could dreamwalk to right now (#3003).`
+- `end_dreamwalk(sheet: 'CharacterSheet') -> 'ObjectDB | None' - Clear any dreamwalk and return the host's location (the wake escape lever).`
 - `get_dream_space(*, room: 'ObjectDB') -> 'ObjectDB | None' - Return the dream room for a physical waking room.`
+- `has_dream_bond(source_sheet: 'CharacterSheet', target_sheet: 'CharacterSheet') -> 'bool' - Check if the source has a thread or soul tether bond to the target.`
+- `start_dreamwalk(*, dreamer: 'CharacterSheet', host: 'CharacterSheet') -> 'DreamwalkPresence' - Anchor ``dreamer``'s perception to ``host``'s dreamspace (idempotent).`
 
 
 ## world.estates

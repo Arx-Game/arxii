@@ -6,6 +6,7 @@ from evennia_extensions.factories import ObjectDBFactory
 from world.character_sheets.services import create_character_with_sheet
 from world.conditions.models import ConditionTemplate
 from world.conditions.services import apply_condition
+from world.relationships.models import CharacterRelationship
 from world.vitals.constants import SLEEPING_CONDITION_NAME
 from world.vitals.seeds import (
     ensure_dream_room,
@@ -71,3 +72,32 @@ class DreamwalkActionTests(TestCase):
         result = DreamwalkAction().run(self.char, target=self.target_char)
         assert not result.success
         assert "not dreaming" in result.message.lower() or "dream" in result.message.lower()
+
+    def test_dreamwalk_resolves_plain_int_target(self):
+        """The web dispatcher sends ``target`` as a bare pk int, never an
+        ObjectDB (#3003 finding 1) — ``_resolve_registry_kwargs`` only
+        resolves ``<field>_id``-named kwargs, so ``execute()`` must resolve
+        a plain int itself. This is the regression test
+        ``src/actions/CLAUDE.md`` requires: call ``.run()`` with a plain int,
+        not a mock, not a pre-resolved object.
+        """
+        from actions.definitions.dreams import DreamwalkAction
+
+        CharacterRelationship.objects.create(
+            source=self.sheet,
+            target=self.target_sheet,
+            is_soul_tether=True,
+            is_pending=False,
+        )
+
+        result = DreamwalkAction().run(self.char, target=self.target_char.pk)
+        assert result.success, result.message
+
+    def test_dreamwalk_plain_int_target_not_found(self):
+        """An int that resolves to no object collapses to the same
+        not-found message as an unresolvable sheet — no new failure mode."""
+        from actions.definitions.dreams import DreamwalkAction
+
+        result = DreamwalkAction().run(self.char, target=999999999)
+        assert not result.success
+        assert result.message == "You cannot find that person in the dream."

@@ -19,7 +19,11 @@ from world.instances.constants import InstanceStatus
 
 | Model | Purpose | Key Fields |
 |-------|---------|------------|
-| `InstancedRoom` | Lifecycle tracker for a temporary room | `room` (OneToOne to `evennia_extensions.RoomProfile`, #2608), `owner` (FK to `character_sheets.CharacterSheet`, nullable), `return_location` (FK to ObjectDB, nullable — a **deliberate keeper**: the captivity path stamps a raw, unvalidated `character.location` with no Room guarantee), `source_key` (placeholder for future mission FK), `status` (InstanceStatus), `created_at`, `completed_at` |
+| `InstancedRoom` | Lifecycle tracker for a temporary room | `room` (OneToOne to `evennia_extensions.RoomProfile`, #2608), `owner` (FK to `character_sheets.CharacterSheet`, nullable, `related_name="owned_instances"`), `gm_owner` (FK to `gm.GMProfile`, nullable — the GM who spun this instance up, e.g. story scene rooms, #2450; also `related_name="owned_instances"`, on a different model, so both FKs' reverse accessors coexist without collision), `return_location` (FK to ObjectDB, nullable — a **deliberate keeper**: the captivity path stamps a raw, unvalidated `character.location` with no Room guarantee), `source_key` (placeholder for future mission FK), `status` (InstanceStatus), `created_at`, `completed_at` |
+
+`owner` and `gm_owner` are independent nullable FKs, not a mutually-exclusive pair
+enforced anywhere — a player-owned instance and a GM-spun instance both use the
+same lifecycle machinery, and either, both, or neither may be set on a given row.
 
 ---
 

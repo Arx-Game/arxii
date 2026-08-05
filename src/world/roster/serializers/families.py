@@ -7,6 +7,7 @@ know) — never raw graph rows.
 
 from rest_framework import serializers
 
+from world.roster.constants import RelationshipType
 from world.roster.models import Family, KinSlotPool, Kinsperson
 
 
@@ -35,6 +36,11 @@ class KinspersonNodeSerializer(serializers.Serializer):
     family_id = serializers.IntegerField(allow_null=True)
     is_deceased = serializers.BooleanField()
     is_appable = serializers.BooleanField()
+    # CharacterSheet pk this node is bound to, or null for an unplayed NPC
+    # (#3003 Task 8): the tree's own ``id`` is a Kinsperson pk, a different id
+    # space from the relationship endpoint's ``a``/``b`` — a viewer needs this
+    # to query relatedness for a node without conflating the two spaces.
+    sheet_id = serializers.IntegerField(allow_null=True)
     gender = serializers.CharField(allow_blank=True)
     age = serializers.IntegerField(allow_null=True)
     description = serializers.CharField(allow_blank=True)
@@ -60,12 +66,38 @@ class UnionEdgeSerializer(serializers.Serializer):
 
 
 class FamilyTreeSerializer(serializers.Serializer):
-    """Viewer-aware graph payload for GET /api/roster/families/{id}/tree/."""
+    """Viewer-aware graph payload for GET /api/roster/families/{id}/tree/.
 
-    family = FamilySerializer()
+    ``family`` is null for an ego-centric payload (``kin_tree_for_sheet``'s
+    familyless branch) — a character with no house can still have kin.
+    """
+
+    family = FamilySerializer(allow_null=True)
     nodes = KinspersonNodeSerializer(many=True)
     parentage = ParentageEdgeSerializer(many=True)
     unions = UnionEdgeSerializer(many=True)
+
+
+class KinRelationshipQuerySerializer(serializers.Serializer):
+    """Query params for GET /api/roster/kin/relationship/ (#3003).
+
+    ``a``/``b`` are character ids (``CharacterSheet`` pks) — validated here,
+    never read off ``request.query_params`` directly in the view.
+    """
+
+    a = serializers.IntegerField(required=True)
+    b = serializers.IntegerField(required=True)
+
+
+class KinRelationshipSerializer(serializers.Serializer):
+    """Response for GET /api/roster/kin/relationship/ (#3003).
+
+    ``label`` is a viewer-derived ``RelationshipType`` value, or null when
+    the two people have no visible relationship (including a hidden one the
+    viewer has not learned).
+    """
+
+    label = serializers.ChoiceField(choices=RelationshipType.choices, allow_null=True)
 
 
 class KinSlotSerializer(serializers.ModelSerializer):
