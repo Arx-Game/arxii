@@ -138,7 +138,10 @@ class KinRelationshipViewTests(APITestCase):
         kinship.record_parentage(child=cls.cousin_node, parent=cls.aunt)
 
         # Hidden half-sibling: shares the mother, but that edge is secret.
-        cls.half_sibling_sheet, _ = _sheet_with_account("HalfSibling")
+        # record_parentage's hidden-secret minting anchors the subject on the
+        # child (about=child) — so half_sibling_node/-account is the secret's
+        # own subject (ADR-0097: no implicit pass for the subject either).
+        cls.half_sibling_sheet, cls.half_sibling_account = _sheet_with_account("HalfSibling")
         cls.half_sibling_node = kinship.create_person(
             tier=DefinitionTier.PC, sheet=cls.half_sibling_sheet
         )
@@ -148,6 +151,9 @@ class KinRelationshipViewTests(APITestCase):
             is_public_record=False,
             secret_content="A hidden half-sibling shares Mother's blood PLACEHOLDER.",
         )
+
+        # A real sheet with no Kinsperson node at all (no CG kinship record).
+        cls.unbound_sheet, _ = _sheet_with_account("Unbound")
 
         cls.staff_account = AccountFactory(is_staff=True)
 
@@ -177,6 +183,36 @@ class KinRelationshipViewTests(APITestCase):
         )
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         self.assertEqual(response.data["label"], RelationshipType.HALF_SIBLING)
+
+    def test_subject_of_hidden_secret_gets_no_implicit_pass(self) -> None:
+        """ADR-0097: even the secret's own subject doesn't see it unlearned."""
+        self.client.force_authenticate(user=self.half_sibling_account)
+        response = self.client.get(
+            "/api/roster/kin/relationship/",
+            {"a": self.half_sibling_sheet.pk, "b": self.viewer_sheet.pk},
+        )
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertIsNone(response.data["label"])
+
+    def test_unbound_character_is_null_not_404(self) -> None:
+        """A real CharacterSheet with no Kinsperson node is a valid empty
+        state (200, null), distinct from a CharacterSheet that doesn't exist
+        (404) — matches ``kin_tree_for_sheet``'s own empty-payload branch."""
+        self.client.force_authenticate(user=self.viewer_account)
+        response = self.client.get(
+            "/api/roster/kin/relationship/",
+            {"a": self.viewer_sheet.pk, "b": self.unbound_sheet.pk},
+        )
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertIsNone(response.data["label"])
+
+    def test_nonexistent_character_404(self) -> None:
+        self.client.force_authenticate(user=self.viewer_account)
+        response = self.client.get(
+            "/api/roster/kin/relationship/",
+            {"a": self.viewer_sheet.pk, "b": 999999},
+        )
+        self.assertEqual(response.status_code, status.HTTP_404_NOT_FOUND)
 
     def test_missing_query_params_is_bad_request(self) -> None:
         self.client.force_authenticate(user=self.viewer_account)

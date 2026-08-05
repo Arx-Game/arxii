@@ -128,6 +128,12 @@ class KinRelationshipView(APIView):
     "cousin" is ever stored. No visibility logic lives here: ``viewer`` is
     threaded straight into ``derive_relationship``, which gates on
     ``fact_visible`` the same way the tree endpoint does.
+
+    Two distinct "nothing there" cases, kept apart the same way
+    ``kin_tree_for_sheet`` keeps them apart: a ``CharacterSheet`` pk that
+    doesn't exist is a genuine 404, while a real ``CharacterSheet`` with no
+    ``Kinsperson`` node yet (no CG kinship record) is a valid empty state —
+    200 with ``{"label": null}``, not a 404.
     """
 
     permission_classes = [IsAuthenticated]
@@ -142,9 +148,23 @@ class KinRelationshipView(APIView):
     def get(self, request: Request) -> Response:
         query = KinRelationshipQuerySerializer(data=request.query_params)
         query.is_valid(raise_exception=True)
-        node_a = Kinsperson.objects.filter(sheet_id=query.validated_data["a"]).first()
-        node_b = Kinsperson.objects.filter(sheet_id=query.validated_data["b"]).first()
-        if node_a is None or node_b is None:
+        a_id = query.validated_data["a"]
+        b_id = query.validated_data["b"]
+
+        existing_sheet_ids = set(
+            CharacterSheet.objects.filter(pk__in=(a_id, b_id)).values_list("pk", flat=True)
+        )
+        if a_id not in existing_sheet_ids or b_id not in existing_sheet_ids:
             raise NotFound
-        label = derive_relationship(node_a, node_b, _viewer_entry(request))
+
+        nodes_by_sheet_id = {
+            node.sheet_id: node for node in Kinsperson.objects.filter(sheet_id__in=(a_id, b_id))
+        }
+        node_a = nodes_by_sheet_id.get(a_id)
+        node_b = nodes_by_sheet_id.get(b_id)
+        label = (
+            None
+            if node_a is None or node_b is None
+            else derive_relationship(node_a, node_b, _viewer_entry(request))
+        )
         return Response(KinRelationshipSerializer({"label": label}).data)

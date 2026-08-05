@@ -1862,7 +1862,9 @@ Secrets, souls with per-life-knowledge reincarnation chains, app-in slots/pools.
   `mint_from_pool`/`claim_appable_node`/`define_deferred`); `OMNISCIENT` sentinel.
   `world.roster.services.heredity` (#2815) — Parent Dominance:
   `derive_lines_for_child`/`derivable_species`/`inherited_options`
-- **Surfaces:** `families/:id/tree/` + `families/:id/slots/` REST; CG slot claim
+- **Surfaces:** `families/:id/tree/` + `families/:id/slots/` REST; (#3003)
+  `kin/tree/<character_id>/` (viewer-filtered graph payload for one character)
+  + `kin/relationship/?a=&b=` (viewer-derived relationship label); CG slot claim
   (draft `claimed_kin_slot/_pool`, `_bind_kinship_node` at finalize; FE
   `KinSlotPicker`); CG invented parents (`second_parent_species` + draft_data
   names/genders → `_bind_invented_parents` + `_pin_heredity_back_inference` at

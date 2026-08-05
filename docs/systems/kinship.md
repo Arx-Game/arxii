@@ -90,8 +90,12 @@ definitions both tree builders share — never duplicate them.
 
 - REST: `GET /api/roster/families/` (+`has_open_positions` filter),
   `families/:id/tree/` (viewer-filtered graph payload),
-  `families/:id/slots/` (slot browser). Writes go through services (CG
-  finalization + staff admin) — deliberately no generic CRUD.
+  `families/:id/slots/` (slot browser). (#3003) `kin/tree/<character_id>/`
+  (viewer-filtered graph payload centred on one character — delegates to
+  `kin_tree_for_sheet`) and `kin/relationship/?a=&b=` (viewer-derived
+  `RelationshipType` label between two characters, or `null` — delegates to
+  `derive_relationship`, its first production caller). Writes go through
+  services (CG finalization + staff admin) — deliberately no generic CRUD.
 - CG: draft fields `claimed_kin_slot(_id)` / `claimed_kin_pool(_id)` /
   `defer_parents`; `finalize_character` → `_bind_kinship_node` (claim →
   mint → self-serve fallback). FE: `KinSlotPicker` in LineageStage.

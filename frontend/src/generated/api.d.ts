@@ -17125,6 +17125,12 @@ export interface paths {
      *     "cousin" is ever stored. No visibility logic lives here: ``viewer`` is
      *     threaded straight into ``derive_relationship``, which gates on
      *     ``fact_visible`` the same way the tree endpoint does.
+     *
+     *     Two distinct "nothing there" cases, kept apart the same way
+     *     ``kin_tree_for_sheet`` keeps them apart: a ``CharacterSheet`` pk that
+     *     doesn't exist is a genuine 404, while a real ``CharacterSheet`` with no
+     *     ``Kinsperson`` node yet (no CG kinship record) is a valid empty state —
+     *     200 with ``{"label": null}``, not a 404.
      */
     get: operations['roster_kin_relationship_retrieve'];
     put?: never;
