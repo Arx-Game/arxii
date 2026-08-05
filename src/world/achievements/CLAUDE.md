@@ -129,6 +129,8 @@ single nullable `discovery_achievement` FK (→ `Achievement`, `on_delete=PROTEC
 to any content model whose instances can trigger a first-ever Discovery ceremony. Inherited by:
 - `world.magic.Technique` — a technique can be marked discoverable (first character ever to gain it)
 - `world.covenants.CovenantRole` — a sub-role can be marked discoverable at its thread threshold
+- `world.codex.CodexEntry` — a piece of lore can be marked discoverable (first character ever to
+  learn it); see the CG-catalog exclusion note under `announce_access_change` below (#2899)
 
 `discovery_achievement = None` means the content is not discoverable and `announce_access_change`
 skips the Discovery path for it. See **ADR-0061** for the architectural decision (GenericFK and
