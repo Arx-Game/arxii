@@ -90,7 +90,7 @@ function SelectedKinDetail({ characterId, node }: SelectedKinDetailProps) {
         <p className="text-xs text-muted-foreground">This is the character you're viewing.</p>
       ) : relatableSheetId == null ? (
         <p className="text-xs text-muted-foreground">
-          No linked character record for this person — relatedness can't be checked from here.
+          No linked character record for this person - relatedness can't be checked from here.
         </p>
       ) : (
         <p className="text-sm">

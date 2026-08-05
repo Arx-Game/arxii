@@ -155,8 +155,11 @@ class DreamwalkAction(Action):
     share a dreamspace automatically (no dreamwalk needed).
 
     On success, the dreamer's perception relocates to the target's dream
-    room. The target's physical room is stored for the escape lever
-    (``wake there`` — wake at the target's location instead of own body's).
+    room. A ``DreamwalkPresence`` row anchors the walker to the host
+    *sheet* (#3003) rather than stashing a destination; the escape lever
+    (``wake there`` — wake at the target's location instead of own body's)
+    resolves the destination dynamically from the host's current location
+    at wake time, so it still follows the host if they've moved.
     """
 
     key: str = "dreamwalk"
