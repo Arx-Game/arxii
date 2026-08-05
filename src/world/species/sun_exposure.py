@@ -135,17 +135,14 @@ def _clothing_protection(character) -> tuple[int, int, int]:
     (``world.locations.character_comfort._worn_garment_mitigation``).
     """
     from world.items.models import GarmentMitigation  # noqa: PLC0415
+    from world.items.services.appearance import covered_regions  # noqa: PLC0415
 
-    covered_regions: set[str] = set()
-    template_ids: set[int] = set()
-    for row in character.equipped_items:
-        template = row.item_instance.template
-        template_ids.add(template.pk)
-        if not template.is_revealing and row.body_region in SUN_COVERAGE_REGIONS:
-            covered_regions.add(row.body_region)
+    # The shared skin-coverage predicate (#2985); SUN only counts its own regions.
+    sun_covered = covered_regions(character) & set(SUN_COVERAGE_REGIONS)
+    template_ids: set[int] = {row.item_instance.template.pk for row in character.equipped_items}
     coverage = min(
         CLOTHING_COVERAGE_CAP,
-        len(covered_regions) * SUN_PROTECTION_PER_REGION,
+        len(sun_covered) * SUN_PROTECTION_PER_REGION,
     )
     authored = 0
     resonance_authored = 0

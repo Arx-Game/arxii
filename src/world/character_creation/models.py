@@ -42,6 +42,8 @@ from world.character_creation.types import (
 )
 from world.classes.models import PathStage
 from world.contributors.models import CreditedContent
+from world.forms.constants import MarkingKind
+from world.items.constants import BodyRegion
 
 logger = logging.getLogger(__name__)
 
@@ -1277,6 +1279,35 @@ class CharacterDraft(SharedMemoryModel):
 
 
 SOFT_DELETE_DAYS = 14
+
+
+class DraftMarking(SharedMemoryModel):
+    """A body marking authored during CG (#2985), materialized onto the created
+    TRUE ``CharacterForm`` at finalization via ``grant_marking``.
+
+    The first per-row draft child model in CG (other stages ride ``draft_data``
+    or draft FKs) — a real model rather than JSON per ADR-0007, since markings
+    are structured rows the finalizer copies verbatim.
+    """
+
+    draft = models.ForeignKey(
+        CharacterDraft,
+        on_delete=models.CASCADE,
+        related_name="markings",
+    )
+    body_region = models.CharField(max_length=20, choices=BodyRegion.choices)
+    kind = models.CharField(max_length=20, choices=MarkingKind.choices)
+    name = models.CharField(max_length=100)
+    description = models.TextField(blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["created_at"]
+        verbose_name = "Draft Marking"
+        verbose_name_plural = "Draft Markings"
+
+    def __str__(self) -> str:
+        return f"{self.draft}: {self.name} ({self.get_body_region_display()})"
 
 
 class DraftApplication(SharedMemoryModel):

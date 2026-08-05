@@ -4,6 +4,8 @@ from django.utils.functional import cached_property
 from evennia.utils.idmapper.models import SharedMemoryModel
 
 from core.natural_keys import NaturalKeyManager, NaturalKeyMixin
+from world.forms.constants import MarkingKind, MarkingSource
+from world.items.constants import BodyRegion
 from world.species.models import Species
 
 SCENES_PERSONA_FK = "arxii.Persona"
@@ -354,6 +356,63 @@ class CharacterFormValue(SharedMemoryModel):
 
     def __str__(self):
         return f"{self.form}: {self.trait.display_name}={self.option.display_name}"
+
+
+class FormMarking(SharedMemoryModel):
+    """A permanent skin feature of a specific body (#2985): tattoo, scar, brand,
+    birthmark, or rune.
+
+    Anchored on ``CharacterForm`` (not the sheet) so the render composition holds:
+    a shapeshifted or successfully disguised body presents ITS form's markings,
+    never the real form's. Concealment rides the #2846 coverage semantics — a
+    marking is visible iff no equipped non-revealing garment covers its region,
+    or it has been deliberately revealed (``revealed_at``, Reveal/Cover parity
+    with ``EquippedItem.revealed_at``). All writes go through
+    ``world.forms.services.markings.grant_marking``.
+    """
+
+    form = models.ForeignKey(
+        CharacterForm,
+        on_delete=models.CASCADE,
+        related_name="markings",
+    )
+    body_region = models.CharField(
+        max_length=20,
+        choices=BodyRegion.choices,
+        help_text="Where on the body the marking sits (same vocabulary as equipment slots).",
+    )
+    kind = models.CharField(max_length=20, choices=MarkingKind.choices)
+    name = models.CharField(
+        max_length=100,
+        help_text='The look-line label ("a columbina-mask tattoo").',
+    )
+    description = models.TextField(
+        blank=True,
+        help_text="Prose shown on close inspection / web detail.",
+    )
+    revealed_at = models.DateTimeField(
+        null=True,
+        blank=True,
+        help_text=(
+            "Set by the Reveal action: a deliberately bared marking counts as "
+            "visible despite covering garments. Cleared by Cover or by equipping "
+            "a non-revealing garment over the region."
+        ),
+    )
+    source = models.CharField(
+        max_length=20,
+        choices=MarkingSource.choices,
+        default=MarkingSource.GM_GRANT,
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["created_at"]
+        verbose_name = "Form Marking"
+        verbose_name_plural = "Form Markings"
+
+    def __str__(self) -> str:
+        return f"{self.form}: {self.name} ({self.get_body_region_display()})"
 
 
 class CharacterFormState(SharedMemoryModel):

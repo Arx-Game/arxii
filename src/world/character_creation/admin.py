@@ -12,6 +12,7 @@ from world.character_creation.models import (
     CharacterOriginSlot,
     DraftApplication,
     DraftApplicationComment,
+    DraftMarking,
     OriginTemplate,
     OriginTemplateSlot,
     StartingArea,
@@ -159,9 +160,15 @@ class CharacterOriginSlotAdmin(admin.ModelAdmin):
     autocomplete_fields = ["sheet"]
 
 
+class DraftMarkingInline(admin.TabularInline):
+    model = DraftMarking
+    extra = 0
+
+
 @admin.register(CharacterDraft)
 class CharacterDraftAdmin(admin.ModelAdmin):
     autocomplete_fields = ["account"]
+    inlines = [DraftMarkingInline]
     list_display = [
         "__str__",
         "account",
