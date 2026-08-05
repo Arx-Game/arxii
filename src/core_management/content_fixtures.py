@@ -164,6 +164,7 @@ OUTCOME_CREATED = "created"
 OUTCOME_UPDATED = "updated"
 OUTCOME_SKIPPED = "skipped"
 OUTCOME_DEFERRED = "deferred"
+OUTCOME_CONFLICT = "conflict"
 
 
 class ContentError(Exception):
@@ -215,6 +216,10 @@ class BuildResult:
     # missing NaturalKeyMixin, etc.). Collected during build, surfaced to the
     # operator by the CLI / admin button.
     skipped: list[str] = field(default_factory=list)
+    # Credited rows (written_by set) whose incoming values differ - left
+    # untouched by the load, resolved only via the admin delete-then-reload
+    # flow (#3017). Separate from ``skipped``: not a corpus-health failure.
+    conflicts: list[str] = field(default_factory=list)
 
 
 def parse_content_file(path: Path, domain: str) -> ContentEntry:
@@ -1065,30 +1070,85 @@ def _case_insensitive_lookup(model, lookup: dict) -> dict:
     return result
 
 
-def _get_or_create_case_insensitive(model, lookup: dict, fields: dict) -> tuple:
-    """Match an existing row by natural key case-insensitively, or create one.
+def _find_existing_case_insensitive(model, lookup: dict):
+    """Return the existing row matching *lookup* case-insensitively, or None.
 
-    Returns ``(instance, created)``. A hand-rolled get/create instead of
-    ``update_or_create`` (#2687): Django's ``update_or_create`` can't take an
-    ``__iexact`` lookup — it drops ``LOOKUP_SEP`` keys when building the
-    create-path params, so the row would be created with that field unset.
+    A hand-rolled get instead of folding this into ``update_or_create``
+    (#2687): Django's ``update_or_create`` can't take an ``__iexact`` lookup -
+    it drops ``LOOKUP_SEP`` keys when building the create-path params, so the
+    row would be created with that field unset.
 
-    Split out of ``_upsert_fixture_object`` (#2687 review) both to keep the
-    ``try`` scoped to ONLY the lookup — a ``model.DoesNotExist`` raised from
-    inside a custom ``save()`` override on the update path must not be
-    misclassified as "row not found" and silently retried as a create — and to
-    keep ``_upsert_fixture_object``'s own branch count (ruff PLR0912) at parity
-    with the single ``update_or_create`` call it replaces.
+    Kept as its own function, scoped to ONLY the lookup (#2687 review) - a
+    ``model.DoesNotExist`` raised from inside a custom ``save()`` override on
+    the update path must not be misclassified as "row not found" and silently
+    retried as a create.
     """
     try:
-        instance = model.objects.get(**_case_insensitive_lookup(model, lookup))
+        return model.objects.get(**_case_insensitive_lookup(model, lookup))
     except model.DoesNotExist:
-        return model.objects.create(**lookup, **fields), True
+        return None
 
+
+def _apply_or_create(model, existing, lookup: dict, fields: dict) -> tuple:
+    """Apply *fields* to *existing*, or create a new row with the fixture's casing.
+
+    Returns ``(instance, created)``. Split out of the old
+    ``_get_or_create_case_insensitive`` (#3017) so the credited-row conflict
+    check in ``_upsert_fixture_object`` can run between the lookup
+    (``_find_existing_case_insensitive``) and the write - a conflict must
+    never reach this function at all.
+    """
+    if existing is None:
+        return model.objects.create(**lookup, **fields), True
     for field_name, value in fields.items():
-        setattr(instance, field_name, value)
-    instance.save()
-    return instance, False
+        setattr(existing, field_name, value)
+    existing.save()
+    return existing, False
+
+
+def fields_differing(model, instance, resolved_fields: dict) -> list[str]:
+    """Names of fields in *resolved_fields* whose values differ from *instance*.
+
+    Values must already be resolved/coerced (FKs are model instances, scalars
+    are field-native types). FKs compare by pk via ``attname`` so an idmapper
+    instance and a freshly resolved one never false-positive.
+    """
+    differing: list[str] = []
+    for name, value in resolved_fields.items():
+        field_obj = model._meta.get_field(name)  # noqa: SLF001
+        if field_obj.is_relation:
+            current = getattr(instance, field_obj.attname)
+            incoming = value.pk if value is not None else None
+        else:
+            current = getattr(instance, name)
+            incoming = field_obj.to_python(value)
+        if current != incoming:
+            differing.append(name)
+    return differing
+
+
+def _credited_conflicts(model, existing, fields: dict, resolved_m2m: dict) -> list[str]:
+    """Differing field names when *existing* is a credited row, else [].
+
+    Only a row that is both (a) an instance of a ``CreditedContent`` subclass
+    and (b) actually has ``written_by`` set is guarded (#3017) - an
+    uncredited row upserts exactly as before. The any-diff rule applies to
+    every incoming field, not just prose: a mechanical/flag field differing
+    freezes the row the same as a prose field, since the guard exists to
+    protect a human's editorial pass over the whole row, not just its text.
+    """
+    from world.contributors.models import CreditedContent  # noqa: PLC0415
+
+    if existing is None or not issubclass(model, CreditedContent):
+        return []
+    if existing.written_by_id is None:
+        return []
+    differing = fields_differing(model, existing, fields)
+    for name, instances in resolved_m2m.items():
+        current = set(getattr(existing, name).values_list("pk", flat=True))
+        if current != {inst.pk for inst in instances}:
+            differing.append(name)
+    return differing
 
 
 def _coerce_scalar_fields(model, fields: dict) -> None:
@@ -1282,9 +1342,28 @@ def _upsert_fixture_object(  # noqa: C901 — one branch per distinct skip reaso
         _coerce_scalar_fields(model, fields)
         # Case-insensitive upsert (#2687): match an existing row regardless of
         # casing, but write a NEW row with the fixture's own casing. See
-        # _get_or_create_case_insensitive's docstring for why this can't be a
+        # _find_existing_case_insensitive's docstring for why this can't be a
         # plain update_or_create call.
-        instance, created = _get_or_create_case_insensitive(model, lookup, fields)
+        existing = _find_existing_case_insensitive(model, lookup)
+        # Credited-row guard (#3017): a row a human has credited (written_by
+        # set) whose incoming values differ from what's on disk is left
+        # untouched rather than silently overwritten - the only way back is
+        # the admin's typed-confirmation delete-then-reload flow. An
+        # uncredited row, or a credited row whose incoming values are
+        # byte-for-byte identical, upserts exactly as before this guard.
+        conflict_fields = _credited_conflicts(model, existing, fields, resolved_m2m)
+        if conflict_fields:
+            location = source_path if source_path is not None else model._meta.label  # noqa: SLF001
+            key_display = ", ".join(str(v) for v in lookup.values())
+            result.conflicts.append(
+                f"{location}: {model.__name__} [{key_display}] is credited "
+                "(written_by is set) and differs from the incoming entry on: "
+                f"{', '.join(conflict_fields)}. The row was left untouched. To "
+                "take the repo version, resolve it in admin (Load conflicts): "
+                "delete the row with typed confirmation and it reloads from the corpus."
+            )
+            return OUTCOME_CONFLICT
+        instance, created = _apply_or_create(model, existing, lookup, fields)
     except UnresolvedNaturalKeyError as exc:
         # Must be caught before the broader ContentError clause below (it's a
         # subclass) — this is the ONLY failure mode ever deferred.
@@ -1427,6 +1506,8 @@ def load_entries(
                 updated_count += 1
             elif outcome == OUTCOME_DEFERRED:
                 deferred.append((obj, source_path))
+            # OUTCOME_SKIPPED / OUTCOME_CONFLICT: message already appended to
+            # result.skipped / result.conflicts - no counter to bump.
     return created_count, updated_count, deferred
 
 
@@ -1441,6 +1522,10 @@ class WorldLoadResult:
     pass (visibility into how much the content-then-grid ordering mattered
     this run). ``skipped`` is the terminal skip list: an object still
     unresolved after retrying stopped making progress is a genuine gap, not a race.
+    ``conflicts`` is separate from ``skipped``: a credited row (written_by
+    set) whose incoming values differ was left untouched (#3017) - not a
+    corpus-health failure, just a row waiting on the admin delete-then-reload
+    flow to take the repo's version.
     """
 
     created: int
@@ -1448,6 +1533,7 @@ class WorldLoadResult:
     grid: GridImportResult
     skipped: list[str]
     deferred_resolved: int
+    conflicts: list[str]
 
 
 def _retry_deferred(
@@ -1494,7 +1580,11 @@ def _retry_deferred(
                 deferred_resolved += 1
             elif outcome == OUTCOME_DEFERRED:
                 still_pending.append((obj, source_path))
-            # OUTCOME_SKIPPED: message already appended to result.skipped.
+            # OUTCOME_SKIPPED / OUTCOME_CONFLICT: message already appended to
+            # result.skipped / result.conflicts. A conflict is terminal on
+            # first detection (the guard runs only after every FK resolved),
+            # so it is never re-deferred here - it falls through exactly like
+            # OUTCOME_SKIPPED, not appended to still_pending.
         return still_pending
 
     pending = deferred
@@ -1563,6 +1653,7 @@ def load_world_content(content_root: Path) -> WorldLoadResult:
         grid=grid,
         skipped=result.skipped,
         deferred_resolved=deferred_resolved,
+        conflicts=result.conflicts,
     )
 
 
