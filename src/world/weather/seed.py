@@ -131,25 +131,47 @@ def upsert_weather_transitions(objects: list[dict]) -> tuple[int, int]:
     return created, updated
 
 
-def upsert_weather_emits(objects: list[dict]) -> tuple[int, int]:
+def upsert_weather_emits(objects: list[dict]) -> tuple[int, int, list[str]]:
     """Upsert ``WeatherEmit`` rows keyed on ``key`` - the line's stable identity.
 
     Keyed on the authored ``key`` rather than the text (#2980), so rewriting a
     placeholder line updates the row it belongs to. Keying on the text, as this
     did until #2980, made every rewrite a new row and left the placeholder behind.
+
+    ``WeatherEmit`` carries ``CreditedContent``: a row a human has credited
+    (``written_by`` set) whose incoming content differs from the seed corpus is
+    left untouched instead of silently overwritten (#3017) - the same freeze
+    ``core_management.content_fixtures`` applies to the fixture-loader path.
+    An uncredited row, or a credited row whose incoming values are identical,
+    upserts exactly as before this guard. Returns ``(created, updated,
+    conflicts)``: ``conflicts`` names every credited row the corpus left
+    untouched.
     """
+    from core_management.content_fixtures import fields_differing  # noqa: PLC0415
     from world.weather.models import WeatherEmit  # noqa: PLC0415
 
+    credit_keys = ("written_by", "reviewed_by", "written_on", "reviewed_on")
     created = updated = 0
+    conflicts: list[str] = []
     for obj in objects:
         fields = _fields(obj)
         weather_type = _resolve_weather_type(fields.pop("weather_type"))
         key = fields.pop("key")
+        existing = WeatherEmit.objects.filter(key=key).first()
+        if existing is not None and existing.written_by_id is not None:
+            comparable = {k: v for k, v in fields.items() if k not in credit_keys}
+            incoming = {"weather_type": weather_type, **comparable}
+            if fields_differing(WeatherEmit, existing, incoming):
+                conflicts.append(
+                    f"WeatherEmit [{key}] is credited (written_by is set) and differs "
+                    "from the seed corpus. Row left untouched (#3017)."
+                )
+                continue
         _, was_created = WeatherEmit.objects.update_or_create(
             key=key, defaults={"weather_type": weather_type, **fields}
         )
         created, updated = (created + 1, updated) if was_created else (created, updated + 1)
-    return created, updated
+    return created, updated, conflicts
 
 
 def upsert_feast_days(objects: list[dict]) -> tuple[int, int]:
@@ -179,14 +201,19 @@ def _read(fixtures_dir: Path, filename: str) -> list[dict]:
     return json.loads(path.read_text(encoding="utf-8"))
 
 
-def load_weather_seed(fixtures_dir: Path) -> dict[str, tuple[int, int]]:
-    """Re-seed the weather corpus from a fixtures dir, idempotently. Returns per-model counts.
+def load_weather_seed(fixtures_dir: Path) -> tuple[dict[str, tuple[int, int]], list[str]]:
+    """Re-seed the weather corpus from a fixtures dir, idempotently.
 
     Reads ``weather_types.json`` → ``weather_type_exposures.json`` → ``weather_emits.json`` →
     ``feast_days.json`` (optional) in dependency order and upserts each. Safe to run repeatedly:
     unchanged rows report as updates, not duplicates.
+
+    Returns ``(counts, conflicts)``: ``counts`` is the per-model ``(created, updated)`` tally;
+    ``conflicts`` lists every credited ``WeatherEmit`` (#3017) the corpus tried to overwrite and
+    left untouched instead (see ``upsert_weather_emits``). Every other model has no credited-row
+    guard, so it never contributes to ``conflicts``.
     """
-    return {
+    counts: dict[str, tuple[int, int]] = {
         "weather_types": upsert_weather_types(_read(fixtures_dir, WEATHER_TYPES_FILE)),
         "weather_type_exposures": upsert_weather_type_exposures(
             _read(fixtures_dir, WEATHER_TYPE_EXPOSURES_FILE)
@@ -197,6 +224,10 @@ def load_weather_seed(fixtures_dir: Path) -> dict[str, tuple[int, int]]:
         "weather_transitions": upsert_weather_transitions(
             _read(fixtures_dir, WEATHER_TRANSITIONS_FILE)
         ),
-        "weather_emits": upsert_weather_emits(_read(fixtures_dir, WEATHER_EMITS_FILE)),
-        "feast_days": upsert_feast_days(_read(fixtures_dir, FEAST_DAYS_FILE)),
     }
+    emits_created, emits_updated, conflicts = upsert_weather_emits(
+        _read(fixtures_dir, WEATHER_EMITS_FILE)
+    )
+    counts["weather_emits"] = (emits_created, emits_updated)
+    counts["feast_days"] = upsert_feast_days(_read(fixtures_dir, FEAST_DAYS_FILE))
+    return counts, conflicts

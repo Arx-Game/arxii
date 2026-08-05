@@ -120,13 +120,15 @@ class UpsertWeatherEmitsTests(TestCase):
         upsert_weather_types(TYPES)
 
     def test_reload_does_not_duplicate_keyless_emits(self) -> None:
-        created, updated = upsert_weather_emits(EMITS)
+        created, updated, conflicts = upsert_weather_emits(EMITS)
         assert (created, updated) == (2, 0)
+        assert conflicts == []
         assert WeatherEmit.objects.count() == 2
 
         # The bug under test: a second load must NOT create 2 more rows.
-        created, updated = upsert_weather_emits(EMITS)
+        created, updated, conflicts = upsert_weather_emits(EMITS)
         assert (created, updated) == (0, 2)
+        assert conflicts == []
         assert WeatherEmit.objects.count() == 2
 
     def test_edited_emit_weight_and_flags_update_in_place(self) -> None:
@@ -164,8 +166,9 @@ class UpsertWeatherEmitsTests(TestCase):
                 },
             },
         ]
-        created, updated = upsert_weather_emits(rewritten)
+        created, updated, conflicts = upsert_weather_emits(rewritten)
         assert (created, updated) == (0, 1)
+        assert conflicts == []
         assert WeatherEmit.objects.count() == 2  # no fork, no orphaned placeholder
         assert WeatherEmit.objects.get(key="storm-001").text == "A different line entirely."
 
@@ -182,9 +185,79 @@ class UpsertWeatherEmitsTests(TestCase):
                 },
             },
         ]
-        created, updated = upsert_weather_emits(new_line)
+        created, updated, conflicts = upsert_weather_emits(new_line)
         assert (created, updated) == (1, 0)
+        assert conflicts == []
         assert WeatherEmit.objects.count() == 3
+
+
+class UpsertWeatherEmitsCreditGuardTests(TestCase):
+    """``WeatherEmit`` carries ``CreditedContent``: a credited row's content must survive a
+    re-seed that would otherwise overwrite it (#3017), mirroring the fixture loader's guard.
+    """
+
+    def setUp(self) -> None:
+        upsert_weather_types(TYPES)
+
+    def test_credited_emit_with_differing_text_is_left_untouched(self) -> None:
+        from world.contributors.factories import ContentContributorFactory
+
+        contributor = ContentContributorFactory()
+        credited = WeatherEmit.objects.create(
+            weather_type=WeatherType.objects.get(name="Storm"),
+            key="storm-001",
+            text="A writer's polished line.",
+            weight=5,
+            written_by=contributor,
+        )
+
+        created, updated, conflicts = upsert_weather_emits(EMITS)
+
+        credited.refresh_from_db()
+        self.assertEqual(credited.text, "A writer's polished line.")
+        self.assertEqual(credited.weight, 5)
+        self.assertEqual((created, updated), (1, 0))  # only clear-001 was created
+        self.assertEqual(len(conflicts), 1)
+        self.assertIn("WeatherEmit [storm-001]", conflicts[0])
+        self.assertIn("#3017", conflicts[0])
+
+    def test_uncredited_emit_still_updates(self) -> None:
+        uncredited = WeatherEmit.objects.create(
+            weather_type=WeatherType.objects.get(name="Storm"),
+            key="storm-001",
+            text="A placeholder line.",
+            weight=1,
+        )
+
+        created, updated, conflicts = upsert_weather_emits(EMITS)
+
+        uncredited.refresh_from_db()
+        self.assertEqual(uncredited.text, "Rain lashes down in sheets.")
+        self.assertEqual((created, updated), (1, 1))
+        self.assertEqual(conflicts, [])
+
+    def test_identical_credited_emit_is_a_quiet_noop(self) -> None:
+        from world.contributors.factories import ContentContributorFactory
+
+        contributor = ContentContributorFactory()
+        # Matches EMITS's storm-001 fixture row exactly (see module constant above).
+        storm_text = "Rain lashes down in sheets."
+        credited = WeatherEmit.objects.create(
+            weather_type=WeatherType.objects.get(name="Storm"),
+            key="storm-001",
+            text=storm_text,
+            weight=2,
+            in_summer=True,
+            at_day=True,
+            written_by=contributor,
+        )
+
+        created, updated, conflicts = upsert_weather_emits(EMITS)
+
+        credited.refresh_from_db()
+        self.assertEqual(credited.text, storm_text)
+        self.assertEqual((created, updated), (1, 1))  # storm-001 upserts, clear-001 creates
+        self.assertEqual(conflicts, [])
 
 
 class WeatherEmitKeyIdentityTests(TestCase):
@@ -205,12 +278,14 @@ class WeatherEmitKeyIdentityTests(TestCase):
                 }
             }
         ]
-        created, updated = upsert_weather_emits(rows)
+        created, updated, conflicts = upsert_weather_emits(rows)
         self.assertEqual((created, updated), (1, 0))
+        self.assertEqual(conflicts, [])
 
         rows[0]["fields"]["text"] = "Thunder walks the rooftops."
-        created, updated = upsert_weather_emits(rows)
+        created, updated, conflicts = upsert_weather_emits(rows)
         self.assertEqual((created, updated), (0, 1))
+        self.assertEqual(conflicts, [])
         self.assertEqual(WeatherEmit.objects.filter(weather_type=weather_type).count(), 1)
         self.assertEqual(
             WeatherEmit.objects.get(key="stormy-001").text,
@@ -222,7 +297,7 @@ class WeatherEmitKeyIdentityTests(TestCase):
         upsert_weather_emits(
             [{"fields": {"weather_type": ["Stormy"], "key": "stormy-001", "text": "One."}}]
         )
-        created, _updated = upsert_weather_emits(
+        created, _updated, _conflicts = upsert_weather_emits(
             [{"fields": {"weather_type": ["Stormy"], "key": "stormy-002", "text": "Two."}}]
         )
         self.assertEqual(created, 1)
@@ -262,19 +337,21 @@ class LoadWeatherSeedFromDirTests(TestCase):
             tmp_path = Path(tmp)
             self._write_corpus(tmp_path)
 
-            counts = load_weather_seed(tmp_path)
+            counts, conflicts = load_weather_seed(tmp_path)
             assert counts["weather_types"] == (2, 0)
             assert counts["weather_type_exposures"] == (2, 0)
             assert counts["weather_emits"] == (2, 0)
             assert counts["feast_days"] == (1, 0)
+            assert conflicts == []
             assert WeatherType.objects.count() == 2
             assert WeatherEmit.objects.count() == 2
             assert FeastDay.objects.count() == 1
 
             # Re-seed: everything updates, nothing duplicates.
-            counts = load_weather_seed(tmp_path)
+            counts, conflicts = load_weather_seed(tmp_path)
             assert counts["weather_emits"] == (0, 2)
             assert counts["feast_days"] == (0, 1)
+            assert conflicts == []
             assert WeatherEmit.objects.count() == 2
             assert FeastDay.objects.count() == 1
 
@@ -285,7 +362,8 @@ class LoadWeatherSeedFromDirTests(TestCase):
         with tempfile.TemporaryDirectory() as tmp:
             tmp_path = Path(tmp)
             (tmp_path / "weather_types.json").write_text(json.dumps(TYPES), encoding="utf-8")
-            counts = load_weather_seed(tmp_path)
+            counts, conflicts = load_weather_seed(tmp_path)
             assert counts["weather_types"] == (2, 0)
             assert counts["feast_days"] == (0, 0)
+            assert conflicts == []
             assert FeastDay.objects.count() == 0
