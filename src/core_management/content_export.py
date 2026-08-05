@@ -19,6 +19,7 @@ standalone). All Django imports are deferred.
 
 from __future__ import annotations
 
+from contextlib import suppress
 from dataclasses import dataclass, field
 import json
 import logging
@@ -279,6 +280,23 @@ EXPORT_FILTERS: dict[str, dict[str, object]] = {
 }
 
 
+def _markdown_entry_path(root: Path, spec: dict, fields: dict) -> Path:
+    """Return the file a prose-domain record renders to (#3018).
+
+    Shared by ``_write_markdown_entries`` (whole-domain export) and
+    ``export_single_row`` (row-level export) so the slug/nesting rule can
+    never drift between the two callers.
+    """
+    domain_dir = root / spec["domain"]
+    out_dir = domain_dir
+    subdir_key = spec.get("subdir_from")
+    if subdir_key:
+        value = fields.get(subdir_key)
+        if isinstance(value, list) and value:
+            out_dir = domain_dir / content_slug(str(value[-1]))
+    return out_dir / f"{content_slug(fields['name'])}.md"
+
+
 def _write_markdown_entries(
     root: Path, spec: dict, serialized: str, *, allow_additions: bool = False
 ) -> tuple[list[Path], list[str]]:
@@ -308,17 +326,11 @@ def _write_markdown_entries(
     withheld: list[str] = []
     for record in json.loads(serialized):
         fields = record["fields"]
-        out_dir = domain_dir
-        subdir_key = spec.get("subdir_from")
-        if subdir_key:
-            value = fields.get(subdir_key)
-            if isinstance(value, list) and value:
-                out_dir = domain_dir / content_slug(str(value[-1]))
-        out_path = out_dir / f"{content_slug(fields['name'])}.md"
+        out_path = _markdown_entry_path(root, spec, fields)
         if gate_on and not out_path.exists():
             withheld.append(str(fields.get("name", out_path.stem)))
             continue
-        out_dir.mkdir(parents=True, exist_ok=True)
+        out_path.parent.mkdir(parents=True, exist_ok=True)
         out_path.write_text(render_entry_markdown(fields, spec), encoding="utf-8")
         written.append(out_path)
     return written, withheld
@@ -534,6 +546,105 @@ def _write_one_model(
     out_path.write_text(json.dumps(records, indent=2) + "\n", encoding="utf-8")
     result.written.append(out_path)
     result.total_records += len(records)
+
+
+@dataclass
+class RowExportResult:
+    """Outcome of a single-row export (#3018)."""
+
+    paths: list[Path]
+    is_addition: bool
+    model_label: str
+    natural_key: str
+    refused: str | None = None
+
+
+def export_single_row(instance, *, content_root: Path) -> RowExportResult:
+    """Write ONE row's corpus form into the lore checkout working tree.
+
+    Reuses the corpus exporter's serializer and natural-key identity so a
+    row-level export can never disagree with a full export about a record's
+    shape. JSON domains re-emit the model's file with the exporter's canonical
+    formatting after replacing or appending the one record - a file predating
+    canonical formatting shows a one-time whole-file reformat in the diff
+    preview, which is the accepted trade against byte-surgery (#3018 spec).
+    Addition-vs-update is decided with the ADR-0191 record keys; the CALLER
+    enforces the explicit new-row acknowledgment - this function only reports.
+    """
+    from django.core import serializers  # noqa: PLC0415
+
+    model = type(instance)
+    model_name = model.__name__.lower()
+    model_label = f"{domain_of(model)}.{model_name}"
+    if model_label not in CONTENT_MODELS and model_label not in MARKDOWN_EXPORT_DOMAINS:
+        return RowExportResult(
+            [],
+            False,
+            model_label,
+            "",
+            refused=(f"{model.__name__} is not a content model; the content repo does not own it."),
+        )
+    predicate = EXPORT_FILTERS.get(model_label)
+    if predicate is not None and not model.objects.filter(pk=instance.pk, **predicate).exists():
+        return RowExportResult(
+            [],
+            False,
+            model_label,
+            "",
+            refused=(
+                f"This {model.__name__} row is excluded from export (player-owned rows "
+                "stay out of the corpus)."
+            ),
+        )
+    data = serializers.serialize(
+        "json",
+        model.objects.filter(pk=instance.pk),
+        indent=2,
+        use_natural_foreign_keys=True,
+        use_natural_primary_keys=True,
+    )
+    record = json.loads(data)[0]
+    key_fields = _natural_key_fields(model)
+    key_display = ", ".join(
+        str(v)
+        for v in ([record["fields"].get(f) for f in key_fields] if key_fields else [instance.pk])
+    )
+
+    spec = MARKDOWN_EXPORT_DOMAINS.get(model_label)
+    if spec is not None:
+        out_path = _markdown_entry_path(content_root, spec, record["fields"])
+        is_addition = not out_path.exists()
+        out_path.parent.mkdir(parents=True, exist_ok=True)
+        out_path.write_text(render_entry_markdown(record["fields"], spec), encoding="utf-8")
+        return RowExportResult([out_path], is_addition, model_label, key_display)
+
+    out_dir = content_root / "fixtures" / domain_of(model)
+    out_path = out_dir / f"{model_name}.json"
+    existing_keys = _existing_record_keys(out_path, key_fields) if key_fields is not None else None
+    row_key = _record_key(record["fields"], key_fields) if key_fields else None
+    is_addition = existing_keys is None or row_key not in existing_keys
+    records: list[dict] = []
+    if out_path.exists():
+        with suppress(OSError, ValueError):
+            loaded = json.loads(out_path.read_text(encoding="utf-8"))
+            if isinstance(loaded, list):
+                records = loaded
+    replaced = False
+    for i, existing in enumerate(records):
+        if (
+            key_fields
+            and isinstance(existing, dict)
+            and isinstance(existing.get("fields"), dict)
+            and _record_key(existing["fields"], key_fields) == row_key
+        ):
+            records[i] = record
+            replaced = True
+            break
+    if not replaced:
+        records.append(record)
+    out_dir.mkdir(parents=True, exist_ok=True)
+    out_path.write_text(json.dumps(records, indent=2) + "\n", encoding="utf-8")
+    return RowExportResult([out_path], is_addition, model_label, key_display)
 
 
 def _apply_addition_gate(
