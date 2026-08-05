@@ -1694,12 +1694,15 @@ class ItemCreateCraftViewSet(viewsets.ViewSet):
     def create(self, request: Request) -> Response:
         """Roll the crafting check and (on success) mint a new ItemInstance."""
         from actions.definitions.crafting import CreateItemAction  # noqa: PLC0415
+        from world.items.models import Style  # noqa: PLC0415
         from world.mechanics.models import ModifierTarget  # noqa: PLC0415
 
         template_pk = request.data.get("template")
         custom_name = request.data.get("custom_name", "")
         custom_description = request.data.get("custom_description", "")
         accent_pks = request.data.get("accent_targets") or []
+        style_pks = request.data.get("styles") or []
+        silhouette_id = request.data.get("silhouette")
         if not template_pk:
             raise serializers.ValidationError({"template": "This field is required."})
         try:
@@ -1713,6 +1716,9 @@ class ItemCreateCraftViewSet(viewsets.ViewSet):
             raise serializers.ValidationError(
                 {"accent_targets": "One or more accents are not styleable axes."}
             )
+        styles = list(Style.objects.filter(pk__in=style_pks))
+        if len(styles) != len(set(style_pks)):
+            raise serializers.ValidationError({"styles": "One or more styles are unknown."})
         actor_sheet = _resolve_actor_sheet(request, body_key="crafter_sheet_id")
         action_result = CreateItemAction().run(
             actor=actor_sheet.character,
@@ -1720,6 +1726,8 @@ class ItemCreateCraftViewSet(viewsets.ViewSet):
             custom_name=custom_name,
             custom_description=custom_description,
             accent_targets=accent_targets,
+            silhouette_id=silhouette_id,
+            styles=styles,
         )
         if not action_result.success:
             raise serializers.ValidationError({"non_field_errors": [action_result.message]})
@@ -1735,6 +1743,7 @@ class ItemCreateCraftViewSet(viewsets.ViewSet):
                     {"target": a.target.name, "level": a.level.level, "adverb": a.level.name}
                     for a in result.accents
                 ],
+                "styles": [{"style": item_style.style.name} for item_style in result.styles],
             },
             status=status_code,
         )

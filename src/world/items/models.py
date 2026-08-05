@@ -2012,6 +2012,18 @@ class Silhouette(NaturalKeyMixin, SharedMemoryModel):
         help_text="The broad wearable family; crafter picks are validated within it.",
     )
     description = models.TextField(blank=True)
+    exposes_skin = models.BooleanField(
+        default=False,
+        help_text=(
+            "Whether this cut bares the skin of the regions it occupies (#2985): "
+            "a plunging bodice shows the chest tattoo and lets the sun bite; a "
+            "high-collared doublet does neither. Revealing-ness is SHAPE, so it "
+            "lives on the silhouette (Apostate's ruling, 2026-08-05) — the "
+            "crafter's cut pick at making decides it per instance. Composes with "
+            "ItemTemplate.is_revealing (material sheerness) as an OR: either "
+            "bares the skin."
+        ),
+    )
     is_active = models.BooleanField(default=True)
 
     objects = NaturalKeyManager()

@@ -49,6 +49,8 @@ class ItemCreateResult:
     consequence_label: str | None = None
     # ItemAccent rows that realized (#2878); () when none requested/realized.
     accents: tuple = ()
+    # ItemStyle rows that took at making (#2985); () when none requested/took.
+    styles: tuple = ()
 
 
 @dataclass(frozen=True)
