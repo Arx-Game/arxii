@@ -22,6 +22,10 @@ Durance and Audere Majora. A separate path exists for CG/setup time:
 `apply_class_level_advance`. Never mutate `CharacterClassLevel` rows directly
 outside these two sanctioned paths.
 
+`apply_class_level_advance` also calls `world.stories.services.reactivity.on_character_level_changed`
+after the level write, re-evaluating level-gated story beats. `set_primary_class_level`
+(CG/seed-time) deliberately does not — it runs outside story participation.
+
 ### AbstractClassLevelAdvancement (abstract model)
 
 Abstract base shared by `ClassLevelAdvancement` (this app) and
