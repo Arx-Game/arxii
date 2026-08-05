@@ -55,6 +55,18 @@ PLANNED-UNBUILT tier here. Where a planned system *does* already have an issue/m
   unwired (#2161).
 - ✅ **New-player onboarding tutorial** — DONE (#1035; T1–T7 mission chain + e2e journey). Still
   `intent`: **friend list / "looking for RP" finder**; rich-text composer / conversation threading.
+- **Automatic scene / story-beat development awards** — granting development points from
+  scene participation and completed story beats, rather than only per-resolved-check.
+  `intent`. A 2025-08 scaffold (`world/progression/services/scene_integration.py`:
+  `award_scene_development_points`, `calculate_automatic_scene_awards`, and three
+  category helpers) was **removed in #3004** as uncalled and broken — it read a
+  nonexistent `Scene.title` and would have raised on first call, and its award
+  calculation was a participation stub with an unwritten TODO list. Removing dead code
+  is not a ruling that the feature is unwanted: `docs/roadmap/gm-system.md` still treats
+  story-beat rewards as revivable, and `GMAwardAction` is explicitly *not* their
+  replacement. What exists today is per-check development (`award_check_development`,
+  wired via `world/fatigue/action_pipeline.py`) and GM fiat (`GMAwardAction`); neither
+  awards from scene participation. Design is open.
 
 ## Combat depth
 
