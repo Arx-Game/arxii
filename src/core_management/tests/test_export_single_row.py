@@ -82,6 +82,78 @@ class RowExportTests(TestCase):
         assert len(records) == 1
         assert records[0]["fields"]["name"] == "Solo Effect"
 
+    def test_json_casing_only_rename_replaces_not_appends(self) -> None:
+        """A case-only natural-key rename still matches the loader's iexact identity (#2687).
+
+        The corpus file already holds "Performance"; the DB row's name is now
+        "PERFORMANCE" with an edited description. An exact-match comparison
+        would treat these as two different rows and append a second record,
+        which the (case-insensitive) loader would then collapse back into one
+        on the next load - an order-dependent double-apply. The merge must
+        instead recognize the row and replace in place.
+        """
+        from world.magic.factories import EffectTypeFactory
+
+        effect = EffectTypeFactory(name="Performance", description="Original")
+        first = export_single_row(effect, content_root=self.root)
+        assert first.is_addition is True
+
+        effect.name = "PERFORMANCE"
+        effect.description = "Updated"
+        effect.save()
+
+        result = export_single_row(effect, content_root=self.root)
+
+        assert result.is_addition is False
+        path = self.root / "fixtures" / "magic" / "effecttype.json"
+        records = json.loads(path.read_text(encoding="utf-8"))
+        assert len(records) == 1
+        assert records[0]["fields"]["name"] == "PERFORMANCE"
+        assert records[0]["fields"]["description"] == "Updated"
+
+    def test_json_fk_list_key_component_casing_rename_replaces_not_appends(self) -> None:
+        """A case-only rename on an FK the natural key nests as a list also merges (#2687).
+
+        ``checks.checktypetrait``'s natural key is ``[check_type, trait]``, and
+        ``check_type`` itself serializes as a natural-key list (not a scalar) -
+        exercising the recursive fold over a nested list, not just a bare string
+        field.
+        """
+        from decimal import Decimal
+
+        from world.checks.factories import (
+            CheckCategoryFactory,
+            CheckTypeFactory,
+            CheckTypeTraitFactory,
+        )
+        from world.traits.factories import TraitFactory
+        from world.traits.models import TraitType
+
+        category = CheckCategoryFactory(name="Row Export Case Category")
+        check_type = CheckTypeFactory(name="performance", category=category)
+        trait = TraitFactory(name="row_export_case_trait", trait_type=TraitType.OTHER)
+        link = CheckTypeTraitFactory(check_type=check_type, trait=trait, weight=Decimal("1.00"))
+
+        first = export_single_row(link, content_root=self.root)
+        assert first.is_addition is True
+
+        # Case-only rename of the FK target's name - the link row itself is
+        # untouched, but the nested natural-key list it serializes now carries
+        # different casing at that inner element.
+        check_type.name = "PERFORMANCE"
+        check_type.save()
+        link.weight = Decimal("2.00")
+        link.save()
+
+        result = export_single_row(link, content_root=self.root)
+
+        assert result.is_addition is False
+        path = self.root / "fixtures" / "checks" / "checktypetrait.json"
+        records = json.loads(path.read_text(encoding="utf-8"))
+        assert len(records) == 1
+        assert records[0]["fields"]["check_type"][0] == "PERFORMANCE"
+        assert records[0]["fields"]["weight"] == "2.00"
+
     def test_markdown_row_writes_one_file(self) -> None:
         """A CodexEntry writes exactly one markdown file with its credit intact."""
         from world.codex.factories import (

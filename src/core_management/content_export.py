@@ -386,6 +386,32 @@ def _record_key(record_fields: dict, key_fields: list[str]) -> str:
     return json.dumps([record_fields.get(f) for f in key_fields], sort_keys=True)
 
 
+def _record_key_folded(record_fields: dict, key_fields: list[str]) -> str:
+    """Case-normalized ``_record_key``, matching the loader's iexact semantics (#2687).
+
+    Deliberately diverges from ``_record_key``'s exact-match identity, which
+    ``_apply_addition_gate`` (the corpus-wide export's addition gate) uses and
+    keeps using unchanged - that gate only ever compares two exports produced
+    by the same serializer settings on the same pass, so casing never drifts
+    between its two sides. ``export_single_row``'s JSON path is different: it
+    is a read-modify-write merge against a file that may already hold a row
+    under different casing (e.g. a name edited in admin), and the loader
+    resolves natural keys case-insensitively - so an exact-match comparison
+    there would append a second record instead of replacing the first, and the
+    next load would then treat both records as the same row (order-dependent
+    double-apply).
+    """
+
+    def fold(value: object) -> object:
+        if isinstance(value, str):
+            return value.casefold()
+        if isinstance(value, list):
+            return [fold(v) for v in value]
+        return value
+
+    return json.dumps([fold(record_fields.get(f)) for f in key_fields], sort_keys=True)
+
+
 def _existing_record_keys(out_path: Path, key_fields: list[str]) -> set[str] | None:
     """Return the natural keys already in the corpus file, or None if absent.
 
@@ -570,6 +596,11 @@ def export_single_row(instance, *, content_root: Path) -> RowExportResult:
     preview, which is the accepted trade against byte-surgery (#3018 spec).
     Addition-vs-update is decided with the ADR-0191 record keys; the CALLER
     enforces the explicit new-row acknowledgment - this function only reports.
+    The JSON merge below relies on every ``CONTENT_MODELS``/``MARKDOWN_EXPORT_DOMAINS``
+    row carrying ``NaturalKeyMixin`` (pinned by
+    ``test_content_models_all_have_natural_key``) - a model with no natural key
+    would make ``key_fields`` None and every export append a fresh record
+    instead of replacing one, which is why that invariant must hold.
     """
     from django.core import serializers  # noqa: PLC0415
 
@@ -620,22 +651,34 @@ def export_single_row(instance, *, content_root: Path) -> RowExportResult:
 
     out_dir = content_root / "fixtures" / domain_of(model)
     out_path = out_dir / f"{model_name}.json"
-    existing_keys = _existing_record_keys(out_path, key_fields) if key_fields is not None else None
-    row_key = _record_key(record["fields"], key_fields) if key_fields else None
-    is_addition = existing_keys is None or row_key not in existing_keys
+    # Case-folded comparison throughout (_record_key_folded, not _record_key):
+    # this is a read-modify-write merge against one file, and the loader
+    # matches natural keys case-insensitively (#2687) - see that helper's
+    # docstring for why this path must diverge from the corpus-wide gate.
+    row_key_folded = _record_key_folded(record["fields"], key_fields) if key_fields else None
     records: list[dict] = []
     if out_path.exists():
         with suppress(OSError, ValueError):
             loaded = json.loads(out_path.read_text(encoding="utf-8"))
             if isinstance(loaded, list):
                 records = loaded
+    existing_folded = (
+        {
+            _record_key_folded(r["fields"], key_fields)
+            for r in records
+            if isinstance(r, dict) and isinstance(r.get("fields"), dict)
+        }
+        if key_fields
+        else set()
+    )
+    is_addition = not out_path.exists() or row_key_folded not in existing_folded
     replaced = False
     for i, existing in enumerate(records):
         if (
             key_fields
             and isinstance(existing, dict)
             and isinstance(existing.get("fields"), dict)
-            and _record_key(existing["fields"], key_fields) == row_key
+            and _record_key_folded(existing["fields"], key_fields) == row_key_folded
         ):
             records[i] = record
             replaced = True
