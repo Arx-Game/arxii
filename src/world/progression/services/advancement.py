@@ -59,8 +59,10 @@ def primary_class_level(character: ObjectDB) -> CharacterClassLevel | None:  # n
 def apply_class_level_advance(sheet: CharacterSheet, *, level_after: int) -> None:
     """Write ``level_after`` to the primary CharacterClassLevel and invalidate the sheet cache.
 
-    Pure level-write + cache invalidation — no receipt creation, no scene side-effects.
-    Those belong to the caller (cross_threshold or the Durance action).
+    Also re-evaluates level-gated story reactivity (``on_character_level_changed``)
+    and recomputes ``max_health`` from the new level via
+    ``recompute_max_health_with_threads``. Receipt creation still belongs to the
+    caller (cross_threshold or the Durance action) — this spine does not create one.
 
     No-op when the character has no CharacterClassLevel rows.
     """

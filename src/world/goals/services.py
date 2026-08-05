@@ -218,6 +218,7 @@ def log_goal_progress(
     character's account; entries past the cap are recorded with
     ``xp_awarded=0``. ``domain`` may be ``None`` for unattributed reflections.
     """
+    from world.character_sheets.models import CharacterSheet  # noqa: PLC0415
     from world.game_clock.week_services import get_current_game_week  # noqa: PLC0415
     from world.goals.models import GoalJournal  # noqa: PLC0415
     from world.progression.services.awards import award_xp  # noqa: PLC0415
@@ -226,6 +227,15 @@ def log_goal_progress(
     account = character.character.db_account
 
     with transaction.atomic():
+        # Serialize concurrent grants for this character so the weekly cap can't
+        # be exceeded by simultaneous requests (the count below is otherwise a
+        # read-then-write race — #3004 fix round 1). Locking the count query
+        # itself would not work: SELECT ... FOR UPDATE over zero matching rows
+        # locks nothing, which is exactly the case on a character's first entry
+        # of the week. There is no weekly tracker row to lock (unlike
+        # world.journals's WeeklyJournalXP), so lock the character's own row.
+        CharacterSheet.objects.select_for_update().filter(pk=character.pk).exists()
+
         already_awarded = GoalJournal.objects.filter(
             character=character,
             game_week=game_week,
