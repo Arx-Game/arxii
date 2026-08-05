@@ -30,7 +30,10 @@ logger = logging.getLogger(__name__)
 _GIT_TRUE = "true"
 _GIT_ORIGIN = "origin"
 _GIT_MAIN = "main"
-_GIT_FIXTURES_PATHSPEC = "fixtures/"
+# The four markdown prose domains (codex entries, beginnings, starting areas,
+# traditions) live under content/, not fixtures/ - staging only fixtures/ left
+# them silently unpushed by the corpus push (pre-existing gap, #3018).
+_GIT_CONTENT_PATHSPECS = ("fixtures/", "content/")
 
 
 class ContentPushError(Exception):
@@ -159,9 +162,10 @@ def _push_with_rebase_retry(root: Path, result: PushResult) -> None:
 def push_content_to_repo(content_root: Path | None = None) -> PushResult:
     """Stage, commit, and push fixture changes in the lore repo.
 
-    Stages all changes under ``fixtures/``, commits with an auto-generated
-    message, and pushes to ``origin main``. If the push is rejected (remote
-    has newer commits), pulls with ``--rebase`` and retries once.
+    Stages all changes under ``fixtures/`` and ``content/``, commits with an
+    auto-generated message, and pushes to ``origin main``. If the push is
+    rejected (remote has newer commits), pulls with ``--rebase`` and retries
+    once.
 
     Returns a ``PushResult``. If there are no changes to commit, returns
     early with ``committed=False``.
@@ -181,12 +185,14 @@ def push_content_to_repo(content_root: Path | None = None) -> PushResult:
 
     result = PushResult()
 
-    # Stage all changes under fixtures/.
-    fixtures_dir = root / "fixtures"
-    if not fixtures_dir.is_dir():
+    # Stage all changes under fixtures/ and content/ - a pathspec for a
+    # directory that doesn't exist in this checkout makes `git add` fail
+    # outright, so only pass the ones actually present.
+    pathspecs = [p for p in _GIT_CONTENT_PATHSPECS if (root / p).is_dir()]
+    if not pathspecs:
         return result
 
-    _run_git(root, "add", "--all", "--", _GIT_FIXTURES_PATHSPEC)
+    _run_git(root, "add", "--all", "--", *pathspecs)
 
     result.files_staged = _staged_file_count(root)
     if result.files_staged == 0:

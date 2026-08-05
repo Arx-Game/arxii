@@ -134,6 +134,21 @@ external = ["STRING_LITERAL", "PREFETCH_STRING", "SHARED_MEMORY", "USE_FILTERSET
     "EM101",   # string literal in exception — user-facing error text
     "EM102",   # f-string in exception — formatted git error output
 ]
+# Content session module - same subprocess-git-CLI shape as content_push.py
+"src/core_management/content_session.py" = [
+    "S603",    # subprocess without shell check - git CLI calls
+    "S607",    # partial executable path - git is always on PATH
+    "TRY003",  # long exception messages - user-facing error text
+    "EM101",   # string literal in exception - user-facing error text
+    "EM102",   # f-string in exception - formatted git error output
+]
+# Shared GitHub REST client - HTTP error text is inherently descriptive
+"src/core_management/github_rest.py" = [
+    "TRY003",  # long exception messages - user-facing error text
+    "EM101",   # string literal in exception - user-facing error text
+    "EM102",   # f-string in exception - formatted status-code error text
+    "PLR2004", # magic values - 200/300 are the HTTP success-range bounds
+]
 "src/web/admin/content_push_views.py" = [
     "S603",    # subprocess without shell check — git CLI calls
     "S607",    # partial executable path — git is always on PATH

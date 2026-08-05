@@ -147,6 +147,23 @@ class ContentPushTests(TestCase):
         assert "notes.md" not in show.stdout
         assert "fixtures/" in show.stdout
 
+    def test_push_stages_content_dir_too(self) -> None:
+        """A modified file under content/ is staged and committed alongside fixtures/."""
+        self._write_fixture()
+        content_dir = self.root / "content" / "codex_entries"
+        content_dir.mkdir(parents=True, exist_ok=True)
+        prose_path = content_dir / "entry.md"
+        prose_path.write_text("# Entry\n\nSome prose.\n", encoding="utf-8")
+        result = push_content_to_repo(self.root)
+        assert result.committed
+        show = subprocess.run(
+            ["git", "-C", str(self.root), "show", "--stat", "--name-only", "HEAD"],
+            capture_output=True,
+            text=True,
+            check=True,
+        )
+        assert "content/codex_entries/entry.md" in show.stdout
+
     def test_push_commit_message_includes_file_count(self) -> None:
         """The auto-generated commit message mentions the file count."""
         self._write_fixture()

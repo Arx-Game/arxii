@@ -1,0 +1,236 @@
+"""Tests for the row-level content export session (#3018)."""
+
+from __future__ import annotations
+
+from pathlib import Path
+import subprocess
+import tempfile
+from unittest import mock
+
+from django.test import TestCase
+
+from core_management.content_push import ContentPushError
+from core_management.content_session import (
+    SESSION_BRANCH,
+    _remote_slug,
+    commit_row_export,
+    discard_row_export,
+    ensure_session_branch,
+    open_session_pr,
+    row_diff,
+    session_diff,
+    session_state,
+)
+
+
+def _run(repo: Path, *args: str) -> subprocess.CompletedProcess[str]:
+    """Run a git command in ``repo``, raising on failure."""
+    return subprocess.run(
+        ["git", "-C", str(repo), *args], capture_output=True, text=True, check=True
+    )
+
+
+def _init_origin_and_clone(origin: Path, clone: Path) -> None:
+    """Bare origin + a configured clone, seeded with one commit on main and pushed."""
+    subprocess.run(
+        ["git", "init", "--bare", "-b", "main", str(origin)], capture_output=True, check=True
+    )
+    subprocess.run(["git", "clone", str(origin), str(clone)], capture_output=True, check=True)
+    _run(clone, "config", "user.email", "test@example.com")
+    _run(clone, "config", "user.name", "Test")
+    (clone / "README.md").write_text("# test repo\n", encoding="utf-8")
+    _run(clone, "add", ".")
+    _run(clone, "commit", "-m", "initial")
+    _run(clone, "push", "-u", "origin", "main")
+
+
+class ContentSessionTests(TestCase):
+    """Tests for the branch-as-session git flow."""
+
+    def setUp(self) -> None:
+        self.tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(self.tmp.cleanup)
+        base = Path(self.tmp.name)
+        self.origin = base / "origin.git"
+        self.root = base / "clone"
+        _init_origin_and_clone(self.origin, self.root)
+
+    def _write_row(self, name: str = "row.json", content: str = '{"a": 1}\n') -> Path:
+        """Write a dummy content row and return its absolute path."""
+        path = self.root / "content" / name
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(content, encoding="utf-8")
+        return path
+
+    def test_ensure_creates_branch_from_origin_main(self) -> None:
+        ensure_session_branch(self.root)
+        branch = _run(self.root, "branch", "--show-current").stdout.strip()
+        assert branch == SESSION_BRANCH
+
+    def test_ensure_reuses_unmerged_branch(self) -> None:
+        ensure_session_branch(self.root)
+        path = self._write_row()
+        commit_row_export(self.root, [path], "row export")
+        log_before = _run(self.root, "log", "--oneline", "-1").stdout
+
+        ensure_session_branch(self.root)
+
+        branch = _run(self.root, "branch", "--show-current").stdout.strip()
+        log_after = _run(self.root, "log", "--oneline", "-1").stdout
+        assert branch == SESSION_BRANCH
+        assert log_before == log_after
+        assert "row export" in log_after
+
+    def test_ensure_recreates_after_merge(self) -> None:
+        ensure_session_branch(self.root)
+        path = self._write_row()
+        commit_row_export(self.root, [path], "row export")
+        _run(self.root, "push", "-u", "origin", SESSION_BRANCH)
+
+        # Simulate the session PR merging: a second clone fast-forwards
+        # origin/main to the session branch's tip and pushes it.
+        merger = Path(self.tmp.name) / "merger"
+        subprocess.run(
+            ["git", "clone", str(self.origin), str(merger)], capture_output=True, check=True
+        )
+        _run(merger, "config", "user.email", "test@example.com")
+        _run(merger, "config", "user.name", "Test")
+        _run(merger, "fetch", "origin", SESSION_BRANCH)
+        _run(merger, "merge", "--ff-only", f"origin/{SESSION_BRANCH}")
+        _run(merger, "push", "origin", "main")
+
+        ensure_session_branch(self.root)
+
+        branch = _run(self.root, "branch", "--show-current").stdout.strip()
+        assert branch == SESSION_BRANCH
+        log = _run(self.root, "log", "--oneline", "origin/main..HEAD").stdout
+        assert log.strip() == ""
+
+    def test_ensure_refuses_dirty_foreign_branch(self) -> None:
+        (self.root / "dirty.txt").write_text("uncommitted", encoding="utf-8")
+
+        with self.assertRaises(ContentPushError) as ctx:
+            ensure_session_branch(self.root)
+        assert "uncommitted changes" in str(ctx.exception)
+
+        branch = _run(self.root, "branch", "--show-current").stdout.strip()
+        assert branch == "main"
+        status = _run(self.root, "status", "--short").stdout
+        assert "dirty.txt" in status
+
+    def test_commit_row_export_commits_named_paths_only(self) -> None:
+        ensure_session_branch(self.root)
+        target = self._write_row("target.json")
+        self._write_row("other.json")
+
+        sha = commit_row_export(self.root, [target], "export target")
+
+        assert sha
+        status = _run(self.root, "status", "--short").stdout
+        assert "other.json" in status
+        assert "target.json" not in status
+
+    def test_discard_restores_tracked_and_removes_new(self) -> None:
+        ensure_session_branch(self.root)
+        tracked = self._write_row("tracked.json")
+        commit_row_export(self.root, [tracked], "seed tracked")
+        tracked.write_text('{"a": 2}\n', encoding="utf-8")
+        new_file = self._write_row("new.json")
+
+        discard_row_export(self.root, [tracked, new_file])
+
+        assert tracked.read_text(encoding="utf-8") == '{"a": 1}\n'
+        assert not new_file.exists()
+        status = _run(self.root, "status", "--short").stdout
+        assert status.strip() == ""
+
+    def test_row_and_session_diff_render(self) -> None:
+        ensure_session_branch(self.root)
+        path = self._write_row("diffme.json")
+        commit_row_export(self.root, [path], "seed diffme")
+        path.write_text('{"a": 2}\n', encoding="utf-8")
+
+        diff = row_diff(self.root, [path])
+        assert diff.strip()
+        assert "diffme.json" in diff
+
+        s_diff = session_diff(self.root)
+        assert "diffme.json" in s_diff
+
+    def test_open_session_pr_posts_and_returns_url(self) -> None:
+        # origin stays the local bare fixture repo (the push must succeed for
+        # real); only the derived owner/repo slug is mocked, so the REST call
+        # shape can be asserted without an actual GitHub-shaped remote URL.
+        ensure_session_branch(self.root)
+        path = self._write_row("pr.json")
+        commit_row_export(self.root, [path], "pr row")
+
+        with (
+            self.settings(GITHUB_ISSUE_TOKEN="tok"),
+            mock.patch(
+                "core_management.content_session._remote_slug", return_value=("acme", "lore")
+            ),
+            mock.patch("core_management.github_rest.requests.get") as mock_get,
+            mock.patch("core_management.github_rest.requests.post") as mock_post,
+        ):
+            mock_get.return_value.status_code = 200
+            mock_get.return_value.json.return_value = []
+            mock_post.return_value.status_code = 201
+            mock_post.return_value.json.return_value = {
+                "html_url": "https://github.com/acme/lore/pull/9"
+            }
+            url = open_session_pr(self.root, title="t", body="b")
+
+        assert url == "https://github.com/acme/lore/pull/9"
+        get_url = mock_get.call_args.args[0]
+        assert "head=acme:content-export-session" in get_url
+        assert "state=open" in get_url
+        post_payload = mock_post.call_args.kwargs["json"]
+        assert post_payload["head"] == SESSION_BRANCH
+        assert post_payload["base"] == "main"
+        # The session branch was pushed to origin before the REST calls.
+        log = _run(self.origin, "log", "--oneline", "-1", SESSION_BRANCH).stdout
+        assert "pr row" in log
+
+    def test_open_session_pr_reuses_open_pr(self) -> None:
+        ensure_session_branch(self.root)
+        path = self._write_row("pr2.json")
+        commit_row_export(self.root, [path], "pr row 2")
+
+        with (
+            self.settings(GITHUB_ISSUE_TOKEN="tok"),
+            mock.patch(
+                "core_management.content_session._remote_slug", return_value=("acme", "lore")
+            ),
+            mock.patch("core_management.github_rest.requests.get") as mock_get,
+            mock.patch("core_management.github_rest.requests.post") as mock_post,
+        ):
+            mock_get.return_value.status_code = 200
+            mock_get.return_value.json.return_value = [
+                {"html_url": "https://github.com/acme/lore/pull/3"}
+            ]
+            url = open_session_pr(self.root, title="t", body="b")
+
+        assert url == "https://github.com/acme/lore/pull/3"
+        mock_post.assert_not_called()
+
+    def test_remote_slug_parses_both_url_forms(self) -> None:
+        _run(self.root, "remote", "set-url", "origin", "https://github.com/acme/lore.git")
+        assert _remote_slug(self.root) == ("acme", "lore")
+
+        _run(self.root, "remote", "set-url", "origin", "git@github.com:acme/lore")
+        assert _remote_slug(self.root) == ("acme", "lore")
+
+    def test_session_state_reports_branch_commits_and_dirty(self) -> None:
+        ensure_session_branch(self.root)
+        path = self._write_row("state.json")
+        commit_row_export(self.root, [path], "state commit")
+        self._write_row("untracked.json")
+
+        state = session_state(self.root)
+
+        assert state.branch == SESSION_BRANCH
+        assert state.on_session is True
+        assert any("state commit" in line for line in state.commits)
+        assert "state.json" in state.diff_stat
+        assert any("untracked.json" in line for line in state.dirty)
