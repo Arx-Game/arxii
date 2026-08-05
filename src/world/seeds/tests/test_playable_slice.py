@@ -7,20 +7,30 @@ factory-built character's check resolving. The full character-creation
 pipeline and a live multi-round encounter are Phase 2, out of scope here.
 """
 
-from django.test import TestCase, override_settings
+from django.test import TestCase
 
 from world.character_sheets.factories import CharacterSheetFactory
 from world.seeds.database import seed_dev_database
 from world.seeds.tests.content_stub import stub_content_root
+from world.seeds.tests.press_helpers import seed_dev_database_with_sample_topup
 
 
-@override_settings(SEED_SAMPLE_CONTENT=True)  # combat check-content seeds gate on #2698
 class TestPlayableSlice(TestCase):
+    """Combat check-content seeds gate on #2698 (SEED_SAMPLE_CONTENT).
+
+    Since #3017's hard gate, a press against the stub content root must run
+    via seed_dev_database_with_sample_topup() (press_helpers.py) rather than
+    plain seed_dev_database() under an ambient SEED_SAMPLE_CONTENT=True
+    override - the stub's own load already makes the content universe
+    non-empty, so sampling inside the same seed_dev_database() call is now
+    refused (#3017).
+    """
+
     @stub_content_root()
     def test_resolution_tables_seeded(self) -> None:
         from world.traits.models import CheckRank, ResultChart
 
-        seed_dev_database()
+        seed_dev_database_with_sample_topup()
         self.assertGreater(CheckRank.objects.count(), 0)
         self.assertGreater(ResultChart.objects.count(), 0)
 
@@ -28,7 +38,7 @@ class TestPlayableSlice(TestCase):
     def test_combat_resolution_content_present(self) -> None:
         from world.checks.models import CheckType
 
-        seed_dev_database()
+        seed_dev_database_with_sample_topup()
         # penetration + flee CheckTypes seeded by the combat cluster
         self.assertTrue(CheckType.objects.filter(name__in=["penetration", "flee"]).exists())
 
@@ -51,7 +61,7 @@ class TestPlayableSlice(TestCase):
             Trait,
         )
 
-        seed_dev_database()
+        seed_dev_database_with_sample_topup()
         ResultChart.clear_cache()
         Trait.flush_instance_cache()
         CharacterTraitValue.flush_instance_cache()
@@ -76,14 +86,14 @@ class TestPlayableSlice(TestCase):
         self.assertIsInstance(result.outcome, CheckOutcome)
 
 
-@override_settings(SEED_SAMPLE_CONTENT=True)
 class TestSeededCharacterCreation(TestCase):
     """The #1333 proof: a clean DB seeded via the Big Button can run CG.
 
     Builds a CharacterDraft against the SEEDED CG-world content (not test-only
     rows) and asserts ``finalize_character`` produces a CharacterSheet + primary
     Persona without raising. This is the test that closes the "fresh DB cannot
-    run character creation" gap.
+    run character creation" gap. See TestPlayableSlice's docstring above for
+    why this presses via seed_dev_database_with_sample_topup() (#3017).
     """
 
     @stub_content_root()
@@ -100,7 +110,7 @@ class TestSeededCharacterCreation(TestCase):
         from world.tarot.models import TarotCard
         from world.traits.models import Trait, TraitType
 
-        seed_dev_database()
+        seed_dev_database_with_sample_topup()
 
         area = CharacterDraft._meta.get_field("selected_area").related_model.objects.get(
             name="Arx City"
@@ -210,7 +220,7 @@ class TestSeededCharacterCreation(TestCase):
 
         from world.character_creation.models import Beginnings, CharacterDraft
 
-        seed_dev_database()
+        seed_dev_database_with_sample_topup()
 
         beginnings = list(Beginnings.objects.filter(is_active=True))
         self.assertTrue(

@@ -160,7 +160,6 @@ class TestClusterRegistry(TestCase):
         db_value = CGExplanation.objects.filter(key="origin_heading").values("text").get()
         self.assertEqual(db_value["text"], "staff-edited")
 
-    @override_settings(SEED_SAMPLE_CONTENT=True)
     def test_every_active_beginning_has_a_seeded_tradition(self) -> None:
         """Seed-integrity regression net (#2426 whole-branch-review finding).
 
@@ -173,10 +172,13 @@ class TestClusterRegistry(TestCase):
         stub content root carries an equivalent-shaped stand-in.
         """
         from world.character_creation.models import Beginnings
-        from world.seeds.database import seed_dev_database
+        from world.seeds.tests.press_helpers import seed_dev_database_with_sample_topup
 
+        # seed_dev_database() itself refuses SEED_SAMPLE_CONTENT once the stub
+        # content root's own load makes the universe non-empty (#3017), so
+        # this presses once (sampling off) then tops up any gaps.
         with stub_content_root():
-            seed_dev_database()
+            seed_dev_database_with_sample_topup()
 
         beginnings = Beginnings.objects.filter(is_active=True)
         self.assertTrue(beginnings.exists(), "expected at least one active seeded Beginning")

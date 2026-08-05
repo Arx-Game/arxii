@@ -16,7 +16,7 @@ from __future__ import annotations
 
 from datetime import timedelta
 
-from django.test import TestCase, override_settings
+from django.test import TestCase
 
 from world.missions.constants import DeedRewardSink, ExternalAct, GiverKind, OptionKind
 from world.missions.models import (
@@ -29,9 +29,9 @@ from world.missions.models import (
 from world.npc_services.constants import OfferKind
 from world.npc_services.models import MissionOfferDetails, NPCRole, NPCServiceOffer
 from world.seeds.character_creation import ensure_canonical_fallback_room
-from world.seeds.database import seed_dev_database
 from world.seeds.game_content.tutorial import seed_tutorial_dev
 from world.seeds.tests.content_stub import stub_content_root
+from world.seeds.tests.press_helpers import seed_dev_database_with_sample_topup
 
 _T1_NAME = "Arrival"
 _T2_NAME = "What the Walls Remember"
@@ -47,14 +47,13 @@ def _gate_for(template: MissionTemplate) -> dict:
     return {"leaf": "has_completed_mission", "params": {"template_id": template.pk}}
 
 
-@override_settings(SEED_SAMPLE_CONTENT=True)  # missions.* tutorial-chain content gates on #2698
 class SeedTutorialDevTests(TestCase):
     """Row shape of the T1-T7 chain + idempotency."""
 
     @classmethod
     def setUpTestData(cls) -> None:
         with stub_content_root():
-            seed_dev_database()
+            seed_dev_database_with_sample_topup()
         cls.t1 = MissionTemplate.objects.get(name=_T1_NAME)
         cls.t2 = MissionTemplate.objects.get(name=_T2_NAME)
         cls.t3 = MissionTemplate.objects.get(name=_T3_NAME)
@@ -244,7 +243,6 @@ class SeedTutorialDevTests(TestCase):
             self.assertTrue(option.node.is_entry)
 
 
-@override_settings(SEED_SAMPLE_CONTENT=True)  # missions.* tutorial-chain content gates on #2698
 class MissionOptionRouteQueryHelperTests(TestCase):
     """Sanity: the chain's routes are structurally reachable via ORM lookups
     the way the reward-emission engine walks them (no orphaned FKs)."""
@@ -252,7 +250,7 @@ class MissionOptionRouteQueryHelperTests(TestCase):
     @classmethod
     def setUpTestData(cls) -> None:
         with stub_content_root():
-            seed_dev_database()
+            seed_dev_database_with_sample_topup()
 
     def test_every_chain_template_has_exactly_one_entry_node(self) -> None:
         for name in (_T1_NAME, _T2_NAME, _T3_NAME, _T4_NAME, _T5_NAME, _T6_NAME, _T7_NAME):
@@ -269,7 +267,6 @@ class MissionOptionRouteQueryHelperTests(TestCase):
             self.assertIsNone(route.target_node_id)
 
 
-@override_settings(SEED_SAMPLE_CONTENT=True)  # missions.* tutorial-chain content gates on #2698
 class AuditLegendFloorTutorialChainTests(TestCase):
     """``audit_legend_floor`` (#2051 risk-floor guard) reports no violations
     for the seeded T1-T7 chain templates (#1035 review fold-in F2) — a
@@ -280,7 +277,7 @@ class AuditLegendFloorTutorialChainTests(TestCase):
     @classmethod
     def setUpTestData(cls) -> None:
         with stub_content_root():
-            seed_dev_database()
+            seed_dev_database_with_sample_topup()
 
     def test_no_legend_floor_violations_for_tutorial_chain(self) -> None:
         # Management commands are discovered per INSTALLED_APP, so #2906's collapse

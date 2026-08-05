@@ -11,7 +11,7 @@ from __future__ import annotations
 
 from unittest import mock
 
-from django.test import TestCase, override_settings
+from django.test import TestCase
 
 from world.classes.factories import CharacterClassFactory
 from world.classes.models import Path, PathStage
@@ -31,6 +31,7 @@ from world.progression.seeds import (
 from world.progression.services.advancement import convene_durance_at_site
 from world.seeds.database import seed_dev_database
 from world.seeds.tests.content_stub import stub_content_root
+from world.seeds.tests.press_helpers import seed_dev_database_with_sample_topup
 
 _CHECK_PATH = "world.progression.services.spends.check_requirements_for_unlock"
 
@@ -39,11 +40,15 @@ class SeedDurancePrerequisitesTests(TestCase):
     """seed_dev_database() (magic + progression clusters) content shape."""
 
     @stub_content_root()
-    @override_settings(SEED_SAMPLE_CONTENT=True)
     def test_ritual_of_the_durance_is_seeded_by_name(self) -> None:
         """ "Ritual of the Durance" is content-repo-owned (#2698) — sample
-        content must be on for the stub root to yield the row this asserts."""
-        seed_dev_database()
+        content must be on for the stub root to yield the row this asserts.
+
+        seed_dev_database() itself now refuses SEED_SAMPLE_CONTENT once the
+        stub content root's own load makes the universe non-empty (#3017), so
+        this presses once (sampling off) then tops up via
+        seed_dev_database_with_sample_topup()."""
+        seed_dev_database_with_sample_topup()
         self.assertTrue(Ritual.objects.filter(name="Ritual of the Durance").exists())
 
     @stub_content_root()
@@ -85,13 +90,15 @@ class SeedDurationOfficiantsIdempotencyTests(TestCase):
         self.assertEqual(site.officiant.current_level, 20)
 
 
-@override_settings(SEED_SAMPLE_CONTENT=True)
 class FirstDuranceWithNoLiveOfficiantTests(TestCase):
     """The symptom fix: the first-ever Durance needs no live higher-level PC (#2121).
 
     "Ritual of the Durance" is content-repo-owned (#2698); ``SEED_SAMPLE_CONTENT``
     opts this suite into the sample-seeding path so ``convene_durance_at_site``
-    has a real Ritual row to fire.
+    has a real Ritual row to fire. seed_dev_database() itself now refuses
+    SEED_SAMPLE_CONTENT once the stub content root's own load makes the
+    universe non-empty (#3017), so this presses via
+    seed_dev_database_with_sample_topup() instead of an ambient override.
     """
 
     @stub_content_root()
@@ -99,7 +106,7 @@ class FirstDuranceWithNoLiveOfficiantTests(TestCase):
         from world.character_sheets.factories import CharacterSheetFactory
         from world.seeds.character_creation import ensure_canonical_fallback_room
 
-        seed_dev_database()
+        seed_dev_database_with_sample_topup()
         self.room = ensure_canonical_fallback_room()
         self.path = Path.objects.get(name=_DURANCE_OFFICIANT_PATH_NAMES[0])
         self.assertEqual(self.path.stage, PathStage.PROSPECT)

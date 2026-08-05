@@ -72,7 +72,7 @@ from __future__ import annotations
 from datetime import timedelta
 from unittest.mock import MagicMock, patch
 
-from django.test import TestCase, override_settings
+from django.test import TestCase
 from evennia.utils.idmapper import models as idmapper_models
 
 from actions.definitions.npc_services import resolve_npc_offer, start_npc_interaction
@@ -107,9 +107,9 @@ from world.npc_services.constants import SummonsStatus
 from world.npc_services.models import NPCServiceOffer, OfferSummons
 from world.npc_services.summons import respond_to_summons
 from world.seeds.character_creation import ensure_canonical_fallback_room
-from world.seeds.database import seed_dev_database
 from world.seeds.game_content.tutorial import seed_tutorial_dev
 from world.seeds.tests.content_stub import stub_content_root
+from world.seeds.tests.press_helpers import seed_dev_database_with_sample_topup
 from world.traits.factories import TraitFactory
 
 
@@ -132,9 +132,14 @@ def _said(caller: object) -> str:
     return "\n".join(chunks)
 
 
-@override_settings(SEED_SAMPLE_CONTENT=True)  # missions.* tutorial-chain content gates on #2698
 class TutorialChainJourneyE2ETests(TestCase):
-    """Walk the seeded T1-T7 tutorial chain end to end over the telnet seam."""
+    """Walk the seeded T1-T7 tutorial chain end to end over the telnet seam.
+
+    missions.* tutorial-chain content gates on #2698 (SEED_SAMPLE_CONTENT).
+    seed_dev_database() itself now refuses sampling once the stub content
+    root's own load makes the universe non-empty (#3017), so this presses via
+    seed_dev_database_with_sample_topup() instead of an ambient override.
+    """
 
     @stub_content_root()
     def setUp(self) -> None:
@@ -145,7 +150,7 @@ class TutorialChainJourneyE2ETests(TestCase):
         # exactly as a real deploy seeds them (cluster ordering in
         # world.seeds.clusters). Mirrors test_tutorial_seed.py's setup.
         # seed_tutorial_dev() re-run is idempotent and returns the templates.
-        seed_dev_database()
+        seed_dev_database_with_sample_topup()
         result = seed_tutorial_dev()
         (
             self.t1,

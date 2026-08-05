@@ -12,7 +12,7 @@ seeds them (cluster ordering in ``world.seeds.clusters``).
 
 from __future__ import annotations
 
-from django.test import TestCase, override_settings
+from django.test import TestCase
 
 from evennia_extensions.factories import CharacterFactory
 from world.character_sheets.factories import CharacterSheetFactory
@@ -20,10 +20,10 @@ from world.missions.models import MissionGiver, MissionNode, MissionTemplate
 from world.missions.services.opportunities import opportunities_for_character
 from world.seeds.database import seed_dev_database
 from world.seeds.tests.content_stub import stub_content_root
+from world.seeds.tests.press_helpers import seed_dev_database_with_sample_topup
 from world.traits.models import CheckOutcome
 
 
-@override_settings(SEED_SAMPLE_CONTENT=True)  # missions.* demo content gates on #2698
 class SeedMissionsDevTests(TestCase):
     """The "missions" cluster's row shape + idempotency."""
 
@@ -39,7 +39,7 @@ class SeedMissionsDevTests(TestCase):
 
     @stub_content_root()
     def test_seeds_one_board_giver_and_three_open_templates(self) -> None:
-        seed_dev_database()
+        seed_dev_database_with_sample_topup()
 
         # #2862 added a second BOARD giver (the covert Back Room Wall) — fetch
         # the starter board by name, same scoping the template set already uses.
@@ -73,7 +73,7 @@ class SeedMissionsDevTests(TestCase):
 
     @stub_content_root()
     def test_rerun_is_idempotent_no_op(self) -> None:
-        seed_dev_database()
+        seed_dev_database_with_sample_topup()
         giver_count = MissionGiver.objects.count()
         template_count = MissionTemplate.objects.count()
         node_count = MissionNode.objects.count()
@@ -86,7 +86,7 @@ class SeedMissionsDevTests(TestCase):
 
     @stub_content_root()
     def test_rerun_preserves_staff_edit_to_template(self) -> None:
-        seed_dev_database()
+        seed_dev_database_with_sample_topup()
         template = MissionTemplate.objects.first()
         template.summary = "Staff-rewritten summary."
         template.save(update_fields=["summary"])
@@ -97,7 +97,6 @@ class SeedMissionsDevTests(TestCase):
         self.assertEqual(template.summary, "Staff-rewritten summary.")
 
 
-@override_settings(SEED_SAMPLE_CONTENT=True)  # missions.* demo content gates on #2698
 class MissionOpportunitiesFromSeededStartingRoomTests(TestCase):
     """The symptom fix: `mission opportunities` shows content from spawn (#2121)."""
 
@@ -105,7 +104,7 @@ class MissionOpportunitiesFromSeededStartingRoomTests(TestCase):
     def test_here_group_non_empty_at_the_seeded_starting_room(self) -> None:
         from world.seeds.character_creation import ensure_canonical_fallback_room
 
-        seed_dev_database()
+        seed_dev_database_with_sample_topup()
         room = ensure_canonical_fallback_room()
 
         character = CharacterFactory()
