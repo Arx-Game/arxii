@@ -36,6 +36,11 @@ class KinspersonNodeSerializer(serializers.Serializer):
     family_id = serializers.IntegerField(allow_null=True)
     is_deceased = serializers.BooleanField()
     is_appable = serializers.BooleanField()
+    # CharacterSheet pk this node is bound to, or null for an unplayed NPC
+    # (#3003 Task 8): the tree's own ``id`` is a Kinsperson pk, a different id
+    # space from the relationship endpoint's ``a``/``b`` — a viewer needs this
+    # to query relatedness for a node without conflating the two spaces.
+    sheet_id = serializers.IntegerField(allow_null=True)
     gender = serializers.CharField(allow_blank=True)
     age = serializers.IntegerField(allow_null=True)
     description = serializers.CharField(allow_blank=True)

@@ -48011,6 +48011,9 @@ components:
           type: boolean
         is_appable:
           type: boolean
+        sheet_id:
+          type: integer
+          nullable: true
         gender:
           type: string
         age:
@@ -48027,6 +48030,7 @@ components:
       - is_appable
       - is_deceased
       - name
+      - sheet_id
       - tier
     KnownSecret:
       type: object

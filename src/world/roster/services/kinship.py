@@ -681,6 +681,11 @@ def _node_dict(person: Kinsperson) -> dict:
         "family_id": person.family_id,
         "is_deceased": person.is_deceased,
         "is_appable": person.is_appable and person.sheet_id is None,
+        # CharacterSheet pk when this node is sheet-bound, else null (#3003
+        # Task 8) — a distinct id space from ``person.pk`` above; the web
+        # kinship panel needs it to query GET .../kin/relationship/ without
+        # conflating Kinsperson pks with CharacterSheet pks.
+        "sheet_id": person.sheet_id,
         "gender": person.gender.name if person.gender_id else "",
         "age": person.age,
         "description": person.description,
