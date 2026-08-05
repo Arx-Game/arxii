@@ -180,7 +180,7 @@ class CharacterFormAdmin(admin.ModelAdmin):
 
 @admin.register(FormMarking)
 class FormMarkingAdmin(admin.ModelAdmin):
-    list_display = ["form", "name", "kind", "body_region", "source", "revealed_at"]
+    list_display = ["form", "name", "kind", "body_region", "source", "created_at"]
     list_filter = ["kind", "source", "body_region"]
     search_fields = ["name", "form__character__db_key"]
 

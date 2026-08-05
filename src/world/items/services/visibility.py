@@ -1,13 +1,19 @@
-"""Worn-item visibility (#2965): what observers can actually see.
+"""Worn-item visibility: the top-down layer walk (#2985, superseding #2965).
 
-Apostate's coverage/concealment ruling: social-facing effects (accents,
-prestige) read only VISIBLE pieces; wearer-facing effects (comfort, armor,
-mitigation) always read everything worn; LEGEND pierces concealment (it is
-magical — ownership carries it). A piece is visible iff at least one of the
-body-region slots it occupies is not covered by a ``covers_lower_layers``
-slot on a higher layer at the same region — or it has been deliberately
-REVEALED (``EquippedItem.revealed_at``; the state dies naturally with the
-row on unequip).
+Apostate's ruling (2026-08-05): plain cuts CONCEAL what lies beneath them by
+default; exposure is authored or performed. A worn layer is *see-through* when
+any of three inputs says so:
+
+- **cut** — the instance's effective silhouette has ``exposes_beneath``
+  (the slit gown shows the stockings, or the skin when nothing is under);
+- **material** — the template is ``is_revealing`` (sheer lace);
+- **worn open** — ``EquippedItem.opened_at`` set by the show verb.
+
+Per region, the outermost layer always shows; each deeper layer shows iff every
+layer above it is see-through; skin (and its markings) shows iff ALL layers are
+— one rule, three inputs, no per-slot covers flag and no state on the hidden
+thing. Wearer-facing effects (comfort, armor, mitigation) never read this —
+they read everything worn.
 
 Operates purely on prefetched ``EquippedItem`` rows (with
 ``item_instance__template`` selected and the template's ``cached_slots``
@@ -36,12 +42,32 @@ _LAYER_ORDER: dict[str, int] = {
 }
 
 
+def is_see_through(row: EquippedItem) -> bool:
+    """Whether this worn row exposes what lies beneath it (#2985).
+
+    Cut, material, or worn-open — any one suffices. THE single predicate the
+    layer walk, the skin/coverage read, and the show/conceal verbs all share.
+    ACCESSORY-layer pieces (jewelry, scarves, trims) never conceal beneath —
+    they adorn a region, they don't blanket it; anything veil-like enough to
+    hide things is authored as a garment layer.
+    """
+    if row.equipment_layer == EquipmentLayer.ACCESSORY:
+        return True
+    if row.opened_at is not None:
+        return True
+    instance = row.item_instance
+    if instance.template.is_revealing:
+        return True
+    silhouette = instance.effective_silhouette
+    return silhouette is not None and silhouette.exposes_beneath
+
+
 @dataclass(frozen=True)
 class WornVisibility:
     """Per-instance visibility over one equipment snapshot."""
 
     # instance_id -> number of its occupied region-slots an observer can see
-    # (0 = fully concealed). Revealed pieces count ALL their occupied slots.
+    # (0 = fully concealed).
     visible_slot_counts: dict[int, int]
     # instance_id -> total occupied region-slots (the coverage weight).
     occupied_slot_counts: dict[int, int]
@@ -50,43 +76,29 @@ class WornVisibility:
         return self.visible_slot_counts.get(instance_id, 0) > 0
 
 
-def _covers(row: EquippedItem) -> bool:
-    """Whether this equipped row's slot hides lower layers at its region."""
-    for slot in row.item_instance.template.cached_slots:
-        if slot.body_region == row.body_region and slot.equipment_layer == row.equipment_layer:
-            return bool(slot.covers_lower_layers)
-    return False
-
-
 def compute_worn_visibility(equipped_rows: Iterable[EquippedItem]) -> WornVisibility:
     """Resolve which worn pieces (and how many of their slots) are visible.
 
-    A row is concealed when any row at the SAME body region on a HIGHER
-    layer covers lower layers. A revealed piece (``revealed_at`` set) counts
-    every slot it occupies regardless of covering — the drama of the reveal
-    is that the concealed thing now openly counts.
+    The top-down walk per region: the outermost layer always shows; each
+    deeper layer shows iff every layer above it at that region is
+    see-through (``is_see_through`` — cut, material, or worn open).
     """
     rows = list(equipped_rows)
     by_region: dict[str, list[EquippedItem]] = {}
     for row in rows:
         by_region.setdefault(row.body_region, []).append(row)
 
-    revealed_ids = {row.item_instance_id for row in rows if row.revealed_at is not None}
     visible: dict[int, int] = {}
     occupied: dict[int, int] = {}
 
     for region_rows in by_region.values():
-        covering_orders = [
-            _LAYER_ORDER.get(row.equipment_layer, 0) for row in region_rows if _covers(row)
-        ]
+        # Outermost first.
+        region_rows.sort(key=lambda r: _LAYER_ORDER.get(r.equipment_layer, 99), reverse=True)
+        walk_open = True
         for row in region_rows:
             occupied[row.item_instance_id] = occupied.get(row.item_instance_id, 0) + 1
-            order = _LAYER_ORDER.get(row.equipment_layer, 0)
-            concealed = any(cover > order for cover in covering_orders)
-            if not concealed:
+            if walk_open:
                 visible[row.item_instance_id] = visible.get(row.item_instance_id, 0) + 1
-
-    for instance_id in revealed_ids:
-        visible[instance_id] = occupied.get(instance_id, 0)
+                walk_open = is_see_through(row)
 
     return WornVisibility(visible_slot_counts=visible, occupied_slot_counts=occupied)

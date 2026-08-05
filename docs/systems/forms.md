@@ -41,7 +41,7 @@ from world.forms.models import (
 |-------|---------|------------|
 | `CharacterForm` | A saved set of form trait values | `character` (FK ObjectDB), `name`, `form_type` (FormType), `is_player_created`, `concealment_level` (ConcealmentLevel, #1272), `created_at` |
 | `CharacterFormValue` | Single trait value within a form | `form` (FK), `trait` (FK), `option` (FK) |
-| `FormMarking` | A permanent skin feature of a specific body (#2985): tattoo/scar/brand/birthmark/rune | `form` (FK CharacterForm, `related_name="markings"`), `body_region` (items.BodyRegion), `kind` (MarkingKind), `name`, `description`, `revealed_at` (nullable — Reveal/Cover state), `source` (MarkingSource: CHARGEN/GM_GRANT/SYSTEM), `created_at` |
+| `FormMarking` | A permanent skin feature of a specific body (#2985): tattoo/scar/brand/birthmark/rune | `form` (FK CharacterForm, `related_name="markings"`), `body_region` (items.BodyRegion), `kind` (MarkingKind), `name`, `description`, `source` (MarkingSource: CHARGEN/GM_GRANT/SYSTEM), `created_at` — no visibility state: the #2985 layer walk decides (ADR-0199) |
 | `CharacterFormState` | Tracks active form + disguise overlay (OneToOne per character) | `character` (OneToOne ObjectDB), `active_form` (FK CharacterForm, nullable), `active_fake_overlay` (FK CharacterForm, nullable, #1110), `overlay_kind` (DisguiseKind, #1110) |
 | `TemporaryFormChange` | Temporary override on top of active form | `character` (FK), `trait` (FK), `option` (FK), `source_type`, `source_id`, `duration_type`, `expires_at`, `expires_after_scenes` |
 | `FormCombatProfile` | Battle-form stat-suite (alt-self modifiers) | `form` (FK CharacterForm), `display_name`, `depth` (band-selection axis; crit→highest, mid→middle, fail→lowest) |
@@ -108,9 +108,6 @@ from world.forms.services.markings import (  # body markings (#2985)
     remove_marking,         # admin-only MVP
     visible_markings_for,   # observer-filtered read: presented-form resolution + covered_regions + revealed_at
     marking_is_concealed,
-    reveal_marking,
-    cover_marking,
-    clear_revealed_markings,  # equip hook: a non-revealing garment landing on a region re-conceals it
     ensure_true_form,       # get-or-create — species without required form traits legally lack one
 )
 

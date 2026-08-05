@@ -1,17 +1,17 @@
-"""Visibility computation for worn equipment.
+"""Visibility computation for worn equipment — the look-output service.
 
-The look-output service: which of a character's worn items are visible to
-an observer. Reads from the cached ``character.equipped_items`` handler
-(``CharacterEquipmentHandler``), applies per-(body_region, equipment_layer)
-hiding via ``TemplateSlot.covers_lower_layers``.
+Which of a character's worn items (and how much skin) an observer can see,
+under the #2985 layer walk: plain cuts conceal beneath by default; a layer is
+see-through by cut (``Silhouette.exposes_beneath``), material
+(``ItemTemplate.is_revealing``), or being worn open (``EquippedItem.opened_at``
+— the show verb). See ``world.items.services.visibility`` for the walk itself.
 
-Layer hiding is bypassed for self-look and staff observers - see
+Layer hiding is bypassed for self-look and staff observers — see
 ``visible_worn_items_for`` for the contract.
 
 The handler does the DB load on its first access for a given character;
 this service runs zero queries thereafter. The handler's prefetch chain
-covers ``item_instance.template.cached_slots``, so ``_slot_for_row`` is
-also free.
+covers ``item_instance.template.cached_slots``.
 """
 
 from __future__ import annotations
@@ -23,10 +23,10 @@ from evennia.objects.models import ObjectDB
 
 from core_management.permissions import is_staff_observer
 from world.items.constants import EquipmentLayer
+from world.items.services.visibility import is_see_through
 
 if TYPE_CHECKING:
-    from world.items.models import EquippedItem, ItemInstance, TemplateSlot
-
+    from world.items.models import EquippedItem, ItemInstance
 
 # Layer order from skin (lowest, closest to body) to accessory (highest).
 LAYER_ORDER = (
@@ -55,10 +55,9 @@ def visible_worn_items_for(
 ) -> list[VisibleWornItem]:
     """Return ``character``'s worn items visible to ``observer``.
 
-    Walks ``EquippedItem`` rows for the character. For each body region,
-    finds the highest layer whose ``TemplateSlot.covers_lower_layers`` is
-    True; items at or above that layer are visible, items below are
-    concealed.
+    Runs the #2985 layer walk over the cached ``EquippedItem`` rows: per
+    region, the outermost layer shows; deeper layers show iff everything
+    above them is see-through (cut / material / worn open).
 
     Layer hiding is bypassed when:
         - ``observer is character`` (looking at yourself), OR
@@ -69,11 +68,8 @@ def visible_worn_items_for(
     bypass_hiding = observer is character or is_staff_observer(observer)
 
     # Read from the cached equipment handler — one DB load per character on
-    # first access, zero queries thereafter (Spec D §3.3). The handler's
-    # prefetch chain covers ``item_instance.template.cached_slots`` so the
-    # slot lookup in ``_slot_for_row`` is also free.
+    # first access, zero queries thereafter (Spec D §3.3).
     rows = list(character.equipped_items)
-
     if not rows:
         return []
 
@@ -87,70 +83,40 @@ def visible_worn_items_for(
             for row in rows
         ]
 
-    # Group rows by body region.
-    region_to_rows: dict[str, list[EquippedItem]] = {}
-    for row in rows:
-        region_to_rows.setdefault(row.body_region, []).append(row)
+    return [
+        VisibleWornItem(
+            item_instance=row.item_instance,
+            body_region=row.body_region,
+            equipment_layer=row.equipment_layer,
+        )
+        for row in rows
+        if _slot_shows(rows, row)
+    ]
 
-    visible: list[VisibleWornItem] = []
-    for region_rows in region_to_rows.values():
-        # Sort by layer rank (lowest to highest).
-        region_rows.sort(key=lambda r: LAYER_RANK.get(r.equipment_layer, 99))
 
-        # Find the index of the highest covering layer.
-        cover_idx = -1
-        for idx, row in enumerate(region_rows):
-            slot = _slot_for_row(row)
-            if slot is not None and slot.covers_lower_layers:
-                cover_idx = idx  # highest wins (ascending iteration)
-
-        # Items at or above the cover index are visible.
-        # cover_idx == -1 means nothing covers; all visible.
-        for idx, row in enumerate(region_rows):
-            if idx >= cover_idx:
-                visible.append(
-                    VisibleWornItem(
-                        item_instance=row.item_instance,
-                        body_region=row.body_region,
-                        equipment_layer=row.equipment_layer,
-                    )
-                )
-
-    return visible
+def _slot_shows(rows: list[EquippedItem], row: EquippedItem) -> bool:
+    """Whether this specific (region, layer) slot survives the walk."""
+    rank = LAYER_RANK.get(row.equipment_layer, 99)
+    return all(
+        is_see_through(other)
+        for other in rows
+        if other.body_region == row.body_region and LAYER_RANK.get(other.equipment_layer, 99) > rank
+    )
 
 
 def covered_regions(character: ObjectDB) -> set[str]:
-    """Body regions covered by an equipped non-revealing garment (#2846/#2985).
+    """Body regions whose SKIN is covered (#2846/#2985).
 
-    THE skin-coverage predicate: skin at a region is covered iff ANY worn
-    layer there conceals what lies beneath it — the top-down layer walk
-    (#2985) reduced to an AND, since order doesn't matter for the bottom of
-    the stack. A garment conceals unless its cut exposes beneath (the
-    instance's effective silhouette's ``exposes_beneath`` — the crafter's
-    pick at making; the slit gown over stockings shows stockings, over
-    nothing shows skin) or its material does (``ItemTemplate.is_revealing``,
-    a sheer lace veil). Either alone exposes the layer below.
-    Consumers: felt sun exposure (``world.species.sun_exposure``) and
-    body-marking visibility (``world.forms.services.markings``). Zero queries
-    beyond warm FK caches — reads the cached equipment handler.
+    The layer walk reduced to its bottom: skin at a region is covered iff ANY
+    worn layer there is not see-through — order doesn't matter for the bottom
+    of the stack. The slit gown over stockings shows stockings (skin covered);
+    over nothing, skin and its markings. Consumers: felt sun exposure
+    (``world.species.sun_exposure``) and body-marking visibility
+    (``world.forms.services.markings``). Zero queries — reads the cached
+    equipment handler.
     """
     covered: set[str] = set()
     for row in character.equipped_items:
-        instance = row.item_instance
-        if instance.template.is_revealing:
-            continue
-        silhouette = instance.effective_silhouette
-        if silhouette is not None and silhouette.exposes_beneath:
-            continue
-        covered.add(row.body_region)
+        if not is_see_through(row):
+            covered.add(row.body_region)
     return covered
-
-
-def _slot_for_row(row: EquippedItem) -> TemplateSlot | None:
-    """Return the TemplateSlot for ``row``'s template at the row's region+layer."""
-    template = row.item_instance.template
-    slots = template.cached_slots
-    for slot in slots:
-        if slot.body_region == row.body_region and slot.equipment_layer == row.equipment_layer:
-            return slot
-    return None

@@ -119,19 +119,23 @@ class CmdShowcase(ArxCommand):
 
 
 class CmdReveal(ArxCommand):
-    """Dramatically reveal a concealed worn piece or body marking.
+    """Show a body part, worn piece, or marking (#2985).
 
     Usage:
-        reveal <item name or #id>
-        reveal <marking name>
+        show <body part>        (show torso, show left arm)
+        show <item name or #id>
+        show <marking name>
+        reveal ...              (same command)
 
-    A concealed piece's accents and prestige lie dormant until seen; the
-    reveal is the moment it starts to openly count. It stays revealed until
-    you take it off, dress over it anew, or cover it. A marking (tattoo,
-    scar, brand) concealed by clothing can be bared the same way (#2985).
+    Declarative: name the goal and the layer walk parts whatever covers it.
+    Showing a body part bares it down to skin — coat parts, doublet opens,
+    the runes show. Showing a piece opens only the layers above it: the hot
+    doublet shows, the skin stays covered. Dressing at the region closes
+    everything back up; so does conceal.
     """
 
     key = "reveal"
+    aliases = ["show"]
     locks = "cmd:all()"
 
     def func(self) -> None:
@@ -139,36 +143,31 @@ class CmdReveal(ArxCommand):
 
         raw = (self.args or "").strip()
         if not raw:
-            self.msg("Reveal what? Usage: reveal <item name, marking name, or #id>")
+            self.msg("Show what? Usage: show <body part, item, or marking>")
             return
-        try:
-            item_id = _resolve_worn_item_id(self.caller, raw)
-        except CommandError as item_err:
-            marking_id = _resolve_marking_id_or_none(self.caller, raw)
-            if marking_id is None:
-                self.msg(str(item_err))
-                return
-            result = RevealAction().run(actor=self.caller, marking_id=marking_id)
-            if result.message:
-                self.msg(result.message)
+        kwargs = _resolve_show_target(self.caller, raw)
+        if kwargs is None:
             return
-        result = RevealAction().run(actor=self.caller, item_id=item_id)
+        result = RevealAction().run(actor=self.caller, **kwargs)
         if result.message:
             self.msg(result.message)
 
 
 class CmdCover(ArxCommand):
-    """Tuck a revealed piece or marking back away (#2985).
+    """Conceal a body part, worn piece, or marking (#2985).
 
     Usage:
-        cover <item name or #id>
-        cover <marking name>
+        conceal <body part>     (conceal torso, conceal left arm)
+        conceal <item name or #id>
+        conceal <marking name>
+        cover ...               (same command)
 
-    The inverse of reveal — roll the sleeve back down. Works only when
-    something worn would actually conceal it.
+    The inverse of show — close the worn-open layers back up. Honest when
+    fabric cannot help: if nothing you wear covers it, it says so.
     """
 
     key = "cover"
+    aliases = ["conceal"]
     locks = "cmd:all()"
 
     def func(self) -> None:
@@ -176,22 +175,41 @@ class CmdCover(ArxCommand):
 
         raw = (self.args or "").strip()
         if not raw:
-            self.msg("Cover what? Usage: cover <item name, marking name, or #id>")
+            self.msg("Conceal what? Usage: conceal <body part, item, or marking>")
             return
-        try:
-            item_id = _resolve_worn_item_id(self.caller, raw)
-        except CommandError as item_err:
-            marking_id = _resolve_marking_id_or_none(self.caller, raw)
-            if marking_id is None:
-                self.msg(str(item_err))
-                return
-            result = CoverUpAction().run(actor=self.caller, marking_id=marking_id)
-            if result.message:
-                self.msg(result.message)
+        kwargs = _resolve_show_target(self.caller, raw)
+        if kwargs is None:
             return
-        result = CoverUpAction().run(actor=self.caller, item_id=item_id)
+        result = CoverUpAction().run(actor=self.caller, **kwargs)
         if result.message:
             self.msg(result.message)
+
+
+def _resolve_show_target(caller: Any, token: str) -> dict | None:
+    """Resolve a show/conceal target: body part first, then worn item, then marking.
+
+    Returns action kwargs, or None after messaging the caller.
+    """
+    from world.items.constants import BodyRegion  # noqa: PLC0415
+
+    lowered = token.lower().replace(" ", "_")
+    if lowered in BodyRegion.values:
+        return {"body_region": lowered}
+    for region in BodyRegion:
+        if region.label.lower() == token.lower():
+            return {"body_region": region.value}
+    try:
+        return {"item_id": _resolve_worn_item_id(caller, token)}
+    except CommandError as item_err:
+        try:
+            marking_id = _resolve_marking_id_or_none(caller, token)
+        except CommandError as marking_err:
+            caller.msg(str(marking_err))
+            return None
+        if marking_id is None:
+            caller.msg(str(item_err))
+            return None
+        return {"marking_id": marking_id}
 
 
 def _resolve_marking_id_or_none(caller: Any, token: str) -> int | None:

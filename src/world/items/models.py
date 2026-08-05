@@ -724,10 +724,6 @@ class TemplateSlot(SharedMemoryModel):
         max_length=20,
         choices=EquipmentLayer.choices,
     )
-    covers_lower_layers = models.BooleanField(
-        default=False,
-        help_text=("Whether this slot hides items on lower layers at the same region."),
-    )
 
     class Meta:
         constraints = [
@@ -1272,13 +1268,14 @@ class EquippedItem(SharedMemoryModel):
         max_length=20,
         choices=EquipmentLayer.choices,
     )
-    revealed_at = models.DateTimeField(
+    opened_at = models.DateTimeField(
         null=True,
         blank=True,
         help_text=(
-            "Set by the Reveal action (#2965): a deliberately revealed piece "
-            "counts for social-facing effects despite covering layers. The "
-            "state dies with this row on unequip — no cleanup needed."
+            "Worn open (#2985): the show verb parts this garment so whatever "
+            "lies beneath it shows — the next layer, or skin at the bottom of "
+            "the stack. Cleared by conceal or by dressing at the region; dies "
+            "with the row on unequip."
         ),
     )
 

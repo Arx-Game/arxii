@@ -13,6 +13,20 @@ The wearable FORM — the fashion noun (#2907): boot, thigh-high boot, stiletto 
 _Avoid_: Cut (reserved for gemstones), Form (collides with the forms app), shape
 _Avoid_: aesthetic, look, vibe
 
+**Worn Open**:
+The performed exposure state (#2985, ADR-0199): the show verb sets `EquippedItem.opened_at`
+on the covering garments so whatever lies beneath shows — the next layer, or skin at the
+bottom of the stack. Cleared by conceal or by dressing at the region; dies with the row on
+unequip. The state always lives on the coverer, never on the hidden thing.
+_Avoid_: revealed (the old hidden-thing state), unbuttoned
+
+**Show / Conceal**:
+The declarative exposure verbs (keys `reveal`/`cover`; telnet aliases show/reveal and
+conceal/cover): the player names the GOAL — a body part, worn piece, or marking — and the
+layer walk computes which covering garments to part or close. Honest when fabric cannot
+help ("nothing you wear covers that").
+_Avoid_: toggle visibility, flash
+
 **Audacity**:
 A Style's ordinal daring tier (Understated/Expressive/Bold/Outrageous, `StyleAudacity`) that scales how much that Style is mechanically rewarded — both the passive motif-coherence bonus and peer style-presentation endorsements read the worn/matched Style's audacity through the staff-tunable `AudacityTuning` singleton (default multipliers 0.75/1.00/1.35/1.75). Daring styles are rewarded mechanically, not just narratively.
 _Avoid_: boldness, daring level, flashiness

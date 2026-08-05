@@ -193,20 +193,20 @@ class ShowcaseAction(Action):
 
 @dataclass
 class RevealAction(Action):
-    """Dramatically reveal a concealed worn piece (#2965) or body marking (#2985).
+    """Show a body part, worn piece, or marking (#2985) — alias: show.
 
-    The reveal is the moment a concealed thing starts to openly count:
-    social-facing effects (accents, prestige) read only visible pieces, so
-    revealing flips the piece into the visible set until it is unequipped
-    (the state lives on the EquippedItem rows and dies with them) or covered
-    (``cover``). Legend never needed revealing — it pierces concealment.
-    Markings (#2985): pass ``marking_id`` instead of ``item_id`` to bare a
-    tattoo/scar/brand concealed by clothing; scoped to the wearer's TRUE-form
-    markings — exactly the set the equip hook re-conceals.
+    Declarative by target: the player names the GOAL and the layer walk
+    computes which covering garments to part. ``body_region`` bares the skin
+    there (every blocking layer at the region is worn open — coat parts,
+    doublet opens, the runes show); ``item_id`` opens only the layers above
+    that piece (the hot doublet shows, the skin stays covered);
+    ``marking_id`` is the region path with the marking's name in the echo.
+    State lives on the covering garments (``EquippedItem.opened_at``), never
+    on the hidden thing; dressing at the region re-closes it.
     """
 
     key: str = "reveal"
-    name: str = "Reveal"
+    name: str = "Show"
     icon: str = "eye"
     category: str = "items"
     target_type: TargetType = TargetType.SELF
@@ -217,102 +217,108 @@ class RevealAction(Action):
         context: ActionContext | None = None,
         **kwargs: Any,
     ) -> ActionResult:
-        from django.utils import timezone  # noqa: PLC0415
-
         from actions.prerequisites import resolve_actor_sheet  # noqa: PLC0415
-        from world.items.models import EquippedItem, TemplateSlot  # noqa: PLC0415
-        from world.items.services.visibility import compute_worn_visibility  # noqa: PLC0415
 
         sheet = resolve_actor_sheet(actor)
         if sheet is None or sheet.character_id is None:
-            return ActionResult(success=False, message="You have nothing worn to reveal.")
+            return ActionResult(success=False, message="You have nothing to show.")
         marking_id = kwargs.get("marking_id")
         if marking_id is not None:
-            return self._reveal_marking(actor, sheet, marking_id, context)
+            return self._show_marking(actor, sheet, marking_id, context)
+        body_region = kwargs.get("body_region")
+        if body_region is not None:
+            return self._show_region(actor, sheet, body_region, context, label=None)
         item_id = kwargs.get("item_id")
-        rows = list(
-            EquippedItem.objects.filter(character_id=sheet.character_id)
-            .select_related("item_instance__template")
-            .prefetch_related(
-                Prefetch(
-                    "item_instance__template__slots",
-                    queryset=TemplateSlot.objects.all(),
-                    to_attr="cached_slots",
-                )
-            )
+        if item_id is not None:
+            return self._show_item(actor, sheet, item_id, context)
+        return ActionResult(
+            success=False, message="Show what? (a body part, a worn piece, or a marking)"
         )
+
+    def _show_region(
+        self,
+        actor: ObjectDB,
+        sheet: Any,
+        body_region: str,
+        context: ActionContext | None,
+        *,
+        label: str | None,
+    ) -> ActionResult:
+        from world.items.constants import BodyRegion  # noqa: PLC0415
+        from world.items.services.visibility import is_see_through  # noqa: PLC0415
+
+        if body_region not in BodyRegion.values:
+            return ActionResult(success=False, message="You have no such body part.")
+        rows = _equipped_rows(sheet)
+        blockers = [
+            row for row in rows if row.body_region == body_region and not is_see_through(row)
+        ]
+        region_label = BodyRegion(body_region).label.lower()
+        shown = label or f"your {region_label}"
+        if not blockers:
+            return ActionResult(success=False, message="That is already plainly visible.")
+        _open_rows(blockers)
+        _refresh_equipment(actor)
+        sdm = context.scene_data if context else SceneDataManager()
+        actor_state = sdm.initialize_state_for_object(actor)
+        message_location(
+            actor_state,
+            f"$You() $conj(part) $pron(your) clothing, baring {label or region_label}.",
+        )
+        return ActionResult(success=True, message=f"You bare {shown} for all to see.")
+
+    def _show_item(
+        self,
+        actor: ObjectDB,
+        sheet: Any,
+        item_id: Any,
+        context: ActionContext | None,
+    ) -> ActionResult:
+        rows = _equipped_rows(sheet)
         mine = [row for row in rows if row.item_instance_id == item_id]
         if not mine:
             return ActionResult(success=False, message="You aren't wearing that.")
-        visibility = compute_worn_visibility(rows)
-        if visibility.is_visible(item_id):
+        blockers = _blockers_above(rows, mine)
+        if not blockers:
             return ActionResult(success=False, message="That is already plainly visible.")
-        now = timezone.now()
-        EquippedItem.objects.filter(
-            character_id=sheet.character_id, item_instance_id=item_id
-        ).update(revealed_at=now)
-        for row in mine:
-            row.revealed_at = now
-
+        _open_rows(blockers)
+        _refresh_equipment(actor)
         piece = mine[0].item_instance
         sdm = context.scene_data if context else SceneDataManager()
         actor_state = sdm.initialize_state_for_object(actor)
         message_location(
             actor_state,
-            f"$You() $conj(reveal) {piece.display_name}, hidden until this moment.",
+            f"$You() $conj(part) $pron(your) outer layers, revealing {piece.display_name}.",
         )
         return ActionResult(
             success=True,
-            message=f"You reveal {piece.display_name} — it counts for all to see now.",
+            message=f"You show {piece.display_name} — it counts for all to see now.",
         )
 
-    def _reveal_marking(
+    def _show_marking(
         self,
         actor: ObjectDB,
         sheet: Any,
         marking_id: Any,
         context: ActionContext | None,
     ) -> ActionResult:
-        from world.forms.models import FormMarking, FormType  # noqa: PLC0415
-        from world.forms.services.markings import (  # noqa: PLC0415
-            marking_is_concealed,
-            reveal_marking,
-        )
-
-        marking = FormMarking.objects.filter(
-            pk=marking_id, form__character=sheet, form__form_type=FormType.TRUE
-        ).first()
+        marking = _own_marking(sheet, marking_id)
         if marking is None:
             return ActionResult(success=False, message="You bear no such marking.")
-        if marking.revealed_at is not None or not marking_is_concealed(actor, marking):
-            return ActionResult(success=False, message="That is already plainly visible.")
-        reveal_marking(marking)
-        sdm = context.scene_data if context else SceneDataManager()
-        actor_state = sdm.initialize_state_for_object(actor)
-        message_location(
-            actor_state,
-            f"$You() $conj(bare) {marking.name}, hidden until this moment.",
-        )
-        return ActionResult(
-            success=True,
-            message=f"You bare {marking.name} — it is there for all to see now.",
-        )
+        return self._show_region(actor, sheet, marking.body_region, context, label=marking.name)
 
 
 @dataclass
 class CoverUpAction(Action):
-    """Tuck a revealed thing back away (#2985) — the inverse of Reveal.
+    """Conceal a body part, worn piece, or marking (#2985) — alias: conceal.
 
-    Rolling the sleeve back down: clears the reveal state on a worn piece
-    (#2965's gap — a revealed piece previously stayed counting until unequip)
-    or a TRUE-form body marking, without re-equipping anything. Requires that
-    the target would actually be concealed absent the reveal — a covering
-    layer above the piece, or a non-revealing garment at the marking's
-    region; otherwise there is nothing to cover it with.
+    The inverse of show: closes the worn-open layers back up. Honest when
+    fabric cannot help — if nothing worn covers the region (a plunging cut,
+    sheer cloth, bare skin), it says so instead of pretending.
     """
 
     key: str = "cover"
-    name: str = "Cover"
+    name: str = "Conceal"
     icon: str = "eye-off"
     category: str = "items"
     target_type: TargetType = TargetType.SELF
@@ -327,95 +333,155 @@ class CoverUpAction(Action):
 
         sheet = resolve_actor_sheet(actor)
         if sheet is None or sheet.character_id is None:
-            return ActionResult(success=False, message="You have nothing to cover.")
+            return ActionResult(success=False, message="You have nothing to conceal.")
         marking_id = kwargs.get("marking_id")
         if marking_id is not None:
-            return self._cover_marking(actor, sheet, marking_id, context)
+            marking = _own_marking(sheet, marking_id)
+            if marking is None:
+                return ActionResult(success=False, message="You bear no such marking.")
+            return self._conceal_region(
+                actor, sheet, marking.body_region, context, label=marking.name
+            )
+        body_region = kwargs.get("body_region")
+        if body_region is not None:
+            return self._conceal_region(actor, sheet, body_region, context, label=None)
         item_id = kwargs.get("item_id")
         if item_id is not None:
-            return self._cover_item(actor, sheet, item_id, context)
-        return ActionResult(success=False, message="Cover what? (a worn piece or a marking)")
+            return self._conceal_item(actor, sheet, item_id, context)
+        return ActionResult(
+            success=False, message="Conceal what? (a body part, a worn piece, or a marking)"
+        )
 
-    def _cover_marking(
+    def _conceal_region(
         self,
         actor: ObjectDB,
         sheet: Any,
-        marking_id: Any,
+        body_region: str,
         context: ActionContext | None,
+        *,
+        label: str | None,
     ) -> ActionResult:
-        from world.forms.models import FormMarking, FormType  # noqa: PLC0415
-        from world.forms.services.markings import (  # noqa: PLC0415
-            cover_marking,
-            marking_is_concealed,
-        )
+        from world.items.constants import BodyRegion  # noqa: PLC0415
+        from world.items.services.visibility import is_see_through  # noqa: PLC0415
 
-        marking = FormMarking.objects.filter(
-            pk=marking_id, form__character=sheet, form__form_type=FormType.TRUE
-        ).first()
-        if marking is None:
-            return ActionResult(success=False, message="You bear no such marking.")
-        if marking.revealed_at is None:
-            return ActionResult(success=False, message="That is not bared to begin with.")
-        if not marking_is_concealed(actor, marking):
+        if body_region not in BodyRegion.values:
+            return ActionResult(success=False, message="You have no such body part.")
+        rows = _equipped_rows(sheet)
+        at_region = [row for row in rows if row.body_region == body_region]
+        opened = [row for row in at_region if row.opened_at is not None]
+        _close_rows(opened)
+        _refresh_equipment(actor)
+        region_label = BodyRegion(body_region).label.lower()
+        covered = any(not is_see_through(row) for row in at_region)
+        target = label or f"your {region_label}"
+        if not covered:
             return ActionResult(
                 success=False,
-                message="There is nothing to cover it with — it shows regardless.",
+                message=f"Nothing you wear covers {target} — it shows regardless.",
             )
-        cover_marking(marking)
+        if not opened:
+            return ActionResult(success=False, message="That is already covered.")
         sdm = context.scene_data if context else SceneDataManager()
         actor_state = sdm.initialize_state_for_object(actor)
         message_location(
             actor_state,
-            f"$You() $conj(tuck) {marking.name} away out of sight.",
+            "$You() $conj(close) $pron(your) clothing back up.",
         )
-        return ActionResult(success=True, message=f"You cover {marking.name} back up.")
+        return ActionResult(success=True, message=f"You cover {target} back up.")
 
-    def _cover_item(
+    def _conceal_item(
         self,
         actor: ObjectDB,
         sheet: Any,
         item_id: Any,
         context: ActionContext | None,
     ) -> ActionResult:
-        from world.items.models import EquippedItem, TemplateSlot  # noqa: PLC0415
         from world.items.services.visibility import compute_worn_visibility  # noqa: PLC0415
 
-        rows = list(
-            EquippedItem.objects.filter(character_id=sheet.character_id)
-            .select_related("item_instance__template")
-            .prefetch_related(
-                Prefetch(
-                    "item_instance__template__slots",
-                    queryset=TemplateSlot.objects.all(),
-                    to_attr="cached_slots",
-                )
-            )
-        )
+        rows = _equipped_rows(sheet)
         mine = [row for row in rows if row.item_instance_id == item_id]
         if not mine:
             return ActionResult(success=False, message="You aren't wearing that.")
-        if all(row.revealed_at is None for row in mine):
-            return ActionResult(success=False, message="That is not revealed to begin with.")
-        # Would it be concealed absent the reveal state? Trial in memory, then
-        # persist only when covering actually conceals something.
-        previous = {row.pk: row.revealed_at for row in mine}
-        for row in mine:
-            row.revealed_at = None
+        opened_above = _blockers_above(rows, mine, opened_only=True)
+        _close_rows(opened_above)
+        _refresh_equipment(actor)
+        piece = mine[0].item_instance
         if compute_worn_visibility(rows).is_visible(item_id):
-            for row in mine:
-                row.revealed_at = previous[row.pk]
             return ActionResult(
                 success=False,
-                message="There is nothing to cover it with — it shows regardless.",
+                message=(f"Nothing you wear covers {piece.display_name} — it shows regardless."),
             )
-        EquippedItem.objects.filter(
-            character_id=sheet.character_id, item_instance_id=item_id
-        ).update(revealed_at=None)
-        piece = mine[0].item_instance
         sdm = context.scene_data if context else SceneDataManager()
         actor_state = sdm.initialize_state_for_object(actor)
         message_location(
             actor_state,
-            f"$You() $conj(tuck) {piece.display_name} away out of sight.",
+            f"$You() $conj(close) $pron(your) outer layers over {piece.display_name}.",
         )
         return ActionResult(success=True, message=f"You cover {piece.display_name} back up.")
+
+
+def _equipped_rows(sheet: Any) -> list:
+    """The wearer's EquippedItem rows with the walk's prefetch chain warm."""
+    from world.items.models import EquippedItem, TemplateSlot  # noqa: PLC0415
+
+    return list(
+        EquippedItem.objects.filter(character_id=sheet.character_id)
+        .select_related("item_instance__template")
+        .prefetch_related(
+            Prefetch(
+                "item_instance__template__slots",
+                queryset=TemplateSlot.objects.all(),
+                to_attr="cached_slots",
+            )
+        )
+    )
+
+
+def _blockers_above(rows: list, mine: list, *, opened_only: bool = False) -> list:
+    """Rows above any of ``mine``'s slots that block (or, for conceal, are open)."""
+    from world.items.services.appearance import LAYER_RANK  # noqa: PLC0415
+    from world.items.services.visibility import is_see_through  # noqa: PLC0415
+
+    blockers = []
+    for target_row in mine:
+        rank = LAYER_RANK.get(target_row.equipment_layer, 99)
+        for row in rows:
+            if row.body_region != target_row.body_region or row.pk == target_row.pk:
+                continue
+            if LAYER_RANK.get(row.equipment_layer, 99) <= rank:
+                continue
+            if opened_only:
+                if row.opened_at is not None and row not in blockers:
+                    blockers.append(row)
+            elif not is_see_through(row) and row not in blockers:
+                blockers.append(row)
+    return blockers
+
+
+def _open_rows(rows: list) -> None:
+    from django.utils import timezone  # noqa: PLC0415
+
+    now = timezone.now()
+    for row in rows:
+        row.opened_at = now
+        row.save(update_fields=["opened_at"])
+
+
+def _close_rows(rows: list) -> None:
+    for row in rows:
+        row.opened_at = None
+        row.save(update_fields=["opened_at"])
+
+
+def _refresh_equipment(actor: ObjectDB) -> None:
+    """Invalidate the wearer's cached equipment handler after state changes."""
+    actor.equipped_items.invalidate()
+
+
+def _own_marking(sheet: Any, marking_id: Any) -> Any:
+    """One of the wearer's own TRUE-form markings, or None."""
+    from world.forms.models import FormMarking, FormType  # noqa: PLC0415
+
+    return FormMarking.objects.filter(
+        pk=marking_id, form__character=sheet, form__form_type=FormType.TRUE
+    ).first()

@@ -39,7 +39,7 @@ from world.items.constants import (
 | Model | Purpose | Key Fields |
 |-------|---------|------------|
 | `ItemTemplate` | Archetype definition for an item type | `name`, `description`, `weight`, `size`, `value`, `is_active`, `is_revealing` (#2846 — a garment whose covered regions still expose skin: contributes no sun coverage in `world.species.sun_exposure` and does not conceal body markings, #2985 — both read the shared `covered_regions` predicate), container fields, stacking fields, consumable fields, crafting fields, `interactions` (M2M to InteractionType), `minimum_quality_tier` (FK), `tied_resonance` (FK to `magic.Resonance`, nullable — marks a template as a *touchstone*) + `resonance_tier` (FK to `magic.ResonanceTier`, nullable — potency floor; `CheckConstraint` requires both set together or both null, #707), `weapon_class` (FK to `WeaponClass`, `PROTECT`, nullable — #2879; null falls back to the coarser `gear_archetype` stat map; see `world.combat.stat_mapping.weapon_stat_override`) |
-| `TemplateSlot` | Body region + layer an item occupies | `template` (FK), `body_region`, `equipment_layer`, `covers_lower_layers` |
+| `TemplateSlot` | Body region + layer an item occupies | `template` (FK), `body_region`, `equipment_layer` |
 | `TemplateInteraction` | Flavor text for a specific interaction on a template | `template` (FK), `interaction_type` (FK), `flavor_text` |
 
 ### Per-Item State
@@ -703,33 +703,39 @@ Returns `{"action_points": n, "anima": n, "materials": k}`.
   Engagement signal: `create_style_presentation_endorsement` bumps the
   endorsee's unsettled showing (`record_showing_engagement`).
 
-### Coverage, concealment & the Reveal (#2965, ADR-0194)
+### Coverage & concealment: the layer walk + show/conceal (#2985, ADR-0199; refines ADR-0194)
 
-- **Visibility** (`services/visibility.py`, `compute_worn_visibility`) — pure
-  function over prefetched `EquippedItem` rows: a slot is concealed when a
-  higher layer at the same region has `covers_lower_layers`; a piece is
-  visible iff any occupied slot shows, or it is REVEALED
-  (`EquippedItem.revealed_at` — set by `RevealAction`, dies with the row on
-  unequip). Memoized on `CharacterEquipmentHandler`.
-- **The three-way split:** `crafted_modifier_total` counts recipe modifiers
-  ONCE per distinct piece and accents × visible slot count (a 3-slot gown's
-  menace ×3); the prestige walk counts each piece once, visible pieces
-  contribute polish/worth/accents while concealed pieces contribute ONLY
-  `legend_value` (legend is magical — pierces concealment). Wearer-facing
-  systems (comfort/armor/mitigation) are untouched and read everything worn.
-- **Reveal**: `RevealAction` (key `reveal`) + telnet `reveal <item>` — a
-  deliberate dramatic broadcast that flips a concealed worn piece into the
-  visible set. Also bares a concealed body marking via `marking_id`
-  (#2985 — `FormMarking`, see `docs/systems/forms.md`).
-- **Cover** (#2985): `CoverUpAction` (key `cover`) + telnet `cover <item|marking>`
-  — the inverse verb: clears `revealed_at` on a worn piece or TRUE-form
-  marking without re-equipping ("roll the sleeve back down"). Requires that
-  something worn would actually conceal the target; closes #2965's gap where
-  a revealed piece stayed counting until unequip.
+- **The walk** (`services/visibility.py`, `compute_worn_visibility`) — pure
+  function over prefetched `EquippedItem` rows. Per region, top-down: the
+  outermost layer always shows; each deeper layer shows iff every layer above
+  it is *see-through* (`is_see_through` — THE single predicate): exposing cut
+  (`Silhouette.exposes_beneath`, the crafter's pick at making), sheer material
+  (`ItemTemplate.is_revealing`), or worn open (`EquippedItem.opened_at`).
+  **Plain cuts conceal beneath by default** (Apostate's ruling); ACCESSORY
+  pieces never conceal (adornments, not blankets). No per-slot covers flag,
+  no state on the hidden thing.
+- **The three-way split (ADR-0194, unchanged):** `crafted_modifier_total`
+  counts recipe modifiers ONCE per distinct piece and accents × visible slot
+  count; the prestige walk counts each piece once, visible pieces contribute
+  polish/worth/accents while concealed pieces contribute ONLY `legend_value`
+  (legend is magical — pierces concealment). Wearer-facing systems
+  (comfort/armor/mitigation) are untouched and read everything worn.
+- **Show** (`RevealAction`, key `reveal`; telnet `show`/`reveal`) —
+  declarative by target: `show <body part>` opens every blocking layer at the
+  region down to skin (coat parts, doublet opens, the runes show);
+  `show <piece>` opens only the layers above that piece (the hot doublet
+  shows, the skin stays covered); `show <marking>` is the region path with
+  the marking's name in the echo. State lives on the covering garments
+  (`opened_at`), never on the hidden thing.
+- **Conceal** (`CoverUpAction`, key `cover`; telnet `conceal`/`cover`) — the
+  inverse: closes the worn-open layers back up, honest when fabric cannot
+  help ("nothing you wear covers that"). Dressing at a region also re-closes
+  it (`equip_item`'s `_close_opened_layers` hook).
 - **Skin coverage** (#2985): `covered_regions(character)`
-  (`services/appearance.py`) is THE shared predicate — every region occupied
-  by an equipped non-revealing garment. Consumers: felt sun exposure
-  (`world.species.sun_exposure._clothing_protection`, refactored onto it) and
+  (`services/appearance.py`) is the walk reduced to its bottom — skin covered
+  iff ANY worn layer at the region is not see-through. The slit gown over
+  stockings shows stockings; over nothing, skin and its markings. Consumers:
+  felt sun exposure (`world.species.sun_exposure._clothing_protection`) and
   body-marking visibility (`world.forms.services.markings`). The
   visible-markings observer endpoint (`GET /api/items/visible-markings/`,
   `VisibleMarkingViewSet`) is a sibling of visible-worn — same
