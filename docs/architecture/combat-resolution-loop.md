@@ -79,7 +79,7 @@ designer walks to validate new techniques.
 **In scope:**
 
 - New `CombatRoundAction.interaction` FK + `interaction_timestamp`
-  denormalized field (composite-FK target onto partitioned `scenes_interaction`).
+  denormalized field (composite-FK target onto partitioned `arxii_interaction`).
 - New `ClashContribution.interaction` FK + `interaction_timestamp`.
 - New service `create_action_interaction(participant, round_number)` —
   builds an ACTION-mode `Interaction` per resolved PC action / clash
@@ -237,7 +237,7 @@ interaction_timestamp = models.DateTimeField(
     db_index=True,
     help_text=(
         "Denormalized from interaction.timestamp. Required because "
-        "scenes_interaction is range-partitioned by timestamp — the composite "
+        "arxii_interaction is range-partitioned by timestamp — the composite "
         "FK constraint targets (interaction_id, interaction_timestamp). "
         "Populated atomically with interaction_id by create_action_interaction."
     ),
@@ -518,7 +518,7 @@ def _resolve_pc_action(
 ```
 
 The `interaction_timestamp` denormalization is non-optional — the composite
-FK constraint to the partitioned `scenes_interaction` requires both columns
+FK constraint to the partitioned `arxii_interaction` requires both columns
 populated. Set both fields in the same `save()` call.
 
 For clash contributions, the equivalent wiring lives in `run_clash_round`

@@ -219,17 +219,17 @@ replay migrations, so it has no way to discover a new standalone SQL artifact on
 `tools/check_standalone_sql_wiring.py` (the `standalone-sql-wiring` pre-commit hook).** A migration
 that adds `RunSQL` DDL for a materialized view, a range partition, a custom constraint, or any other
 object that can't be expressed as a plain model field must add the matching `.sql` file to
-`SQL_FILES` in `tools/build_schema.py` — and a file in `SQL_FILES` must be applied by some
+`SQL_FILES` in `tools/build_schema.py`, and a file in `SQL_FILES` must be applied by some
 migration. #2906's squash broke the second direction: it regenerated the chain with a plain
 `makemigrations`, which only emits `CreateModel`, so the `RunSQL` that partitioned
 `arxii_interaction` vanished while the file stayed in `SQL_FILES`. That went unnoticed for two
 months (#2982) because the per-PR drift gate compares models to *migrations* and never inspects the
-resulting *schema*. `*_reverse.sql` files are exempt from the `SQL_FILES` direction —
+resulting *schema*. `*_reverse.sql` files are exempt from the `SQL_FILES` direction, since
 `build_schema.py` is forward-only by construction.
 
 Nightly full migration replay (`nightly-migration-replay.yml`) exercises the real migration and will
-build the object correctly; CI and local test/dev DBs built via `build_schema.py` will not, and —
-unless a test actually exercises that object — the omission fails silently rather than loudly: no
+build the object correctly; CI and local test/dev DBs built via `build_schema.py` will not, and,
+unless a test actually exercises that object, the omission fails silently rather than loudly: no
 error, just an object that's simply never there in any schema-from-models DB. The nightly workflow
 now also diffs the two resulting schemas directly (`tools/compare_schemas.py`), so a divergence
 fails there even if the wiring hook is somehow satisfied.
