@@ -8,7 +8,9 @@ import { ConversationSidebar } from './components/ConversationSidebar';
 import { FocusPanel } from './components/FocusPanel';
 import { SidebarTabPanel } from './components/SidebarTabPanel';
 import { DreamspacePanel } from '@/dreams/components/DreamspacePanel';
-import { useDreamState } from '@/dreams/queries';
+import { dreamKeys, useDreamState } from '@/dreams/queries';
+import { useActionResult } from '@/hooks/actionResultBus';
+import type { ActionResultPayload } from '@/hooks/types';
 import { PresencePanel } from './components/PresencePanel';
 import { CeremonyRoomCard } from '@/ceremonies/CeremonyRoomCard';
 import { EventsSidebarPanel } from '@/events/components/EventsSidebarPanel';
@@ -106,6 +108,33 @@ export function GamePage() {
   // `room_state` websocket push, so web and telnet agree by construction.
   const { data: dreamState } = useDreamState(activeCharacterId ?? 0);
   const isDreaming = Boolean(activeCharacterId && active && dreamState?.is_dreamside);
+
+  // Dreamspace takeover trigger (#3003 review fix, finding 2): the global
+  // query client's 5-minute `staleTime` (queryClient.ts) means `useDreamState`
+  // above never refetches on its own — its only prior invalidator lived
+  // inside `DreamspacePanel`, which isn't mounted until AFTER the takeover
+  // has already happened, so falling asleep never re-triggered the check that
+  // would swap `FocusPanel` for `DreamspacePanel`. Chose the `useActionResult`
+  // bus over driving `isDreaming` off the `room_state` frame: `room_state`
+  // (a) carries no `is_dreamside` field today, and (b) isn't re-sent when
+  // Sleeping/Unconscious is applied (only movement re-sends it), so "driving
+  // off it" would need new backend plumbing on both counts. The action-result
+  // bus is the mechanism `DreamspacePanel` itself already relies on for this
+  // exact purpose (see its own `handleActionResult` — "peril outcomes, forced
+  // wakes, and a co-dreamer's arrival all surface without polling"); mirroring
+  // it here at the GamePage level just gives entry the same trigger exit
+  // already had, with no new backend surface.
+  const dreamActionResultClient = useQueryClient();
+  const handleDreamStateActionResult = useCallback(
+    (_payload: ActionResultPayload) => {
+      if (!activeCharacterId) return;
+      dreamActionResultClient
+        .invalidateQueries({ queryKey: dreamKeys.state(activeCharacterId) })
+        .catch(() => {});
+    },
+    [activeCharacterId, dreamActionResultClient]
+  );
+  useActionResult(handleDreamStateActionResult);
 
   const activeSession = active ? sessions[active] : null;
   const roomData = activeSession?.room ?? null;

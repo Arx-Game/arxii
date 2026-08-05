@@ -21,6 +21,9 @@ import {
 import type { MyRosterEntry } from '@/roster/types';
 import type { InteractionWsPayload } from '@/hooks/types';
 import type { DreamState } from '@/dreams/types';
+import { dreamKeys } from '@/dreams/queries';
+import { emitActionResult } from '@/hooks/actionResultBus';
+import { QueryClient } from '@tanstack/react-query';
 
 const ACTIVE_NAME = 'Aria';
 
@@ -155,9 +158,18 @@ const mockUseDreamState = vi.fn(
     isLoading: false,
   })
 );
-vi.mock('@/dreams/queries', () => ({
-  useDreamState: (characterId: number) => mockUseDreamState(characterId),
-}));
+// Keeps `dreamKeys` real (imported from the actual module) while overriding
+// only `useDreamState` — GamePage also imports `dreamKeys` directly (#3003
+// review finding 2's action-result-driven invalidation), and a factory that
+// omits it left `dreamKeys` `undefined` in GamePage's scope: harmless until
+// the next test exercises an action-result callback against it (finding 4).
+vi.mock('@/dreams/queries', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('@/dreams/queries')>();
+  return {
+    ...actual,
+    useDreamState: (characterId: number) => mockUseDreamState(characterId),
+  };
+});
 
 // EndorsementControl mounts its own hook machinery per-pose (#1138); stubbed
 // here since this test is about feed/threading composition, not endorsements.
@@ -1372,6 +1384,40 @@ describe('GamePage', () => {
 
       expect(screen.queryByTestId('dreamspace-panel')).not.toBeInTheDocument();
       expect(screen.getByText(/no location data available/i)).toBeInTheDocument();
+    });
+
+    // Review finding 2: GamePage stays mounted across a sleep/knockout
+    // transition, and DreamspacePanel (the only prior invalidator of
+    // dreamKeys) isn't mounted until AFTER the takeover already happened —
+    // so nothing ever refetched and the panel never swapped on entry. This
+    // proves the fix: GamePage itself now subscribes to the action-result
+    // bus (mirroring DreamspacePanel's own subscription) and invalidates the
+    // active character's dream-state query on every action result, the same
+    // trigger that already drove the (working) exit transition.
+    it('invalidates the active character dream-state query on the next action result', () => {
+      store.dispatch(setAccount(mockAccount));
+      store.dispatch(startSession(ACTIVE_NAME));
+      // Default mock from beforeEach: data undefined (not dreaming) — the
+      // FocusPanel-mounted state the transition starts from.
+
+      renderWithProviders(<GamePage />);
+      expect(screen.queryByTestId('dreamspace-panel')).not.toBeInTheDocument();
+
+      const invalidateSpy = vi.spyOn(QueryClient.prototype, 'invalidateQueries');
+
+      // The server has no dedicated "you fell asleep" push; the actual swap
+      // is React Query's job once invalidated (already proven above and in
+      // DreamspacePanel.test.tsx) — what this test proves is that GamePage
+      // asks for that refetch, on the right query key, the moment ANY action
+      // result arrives (self-dispatched sleep, a wake attempt, or any other
+      // action fired while this trigger is armed).
+      emitActionResult({ success: true, message: null, data: null });
+
+      expect(invalidateSpy).toHaveBeenCalledWith({
+        queryKey: dreamKeys.state(rosterEntry.character_id),
+      });
+
+      invalidateSpy.mockRestore();
     });
   });
 });
