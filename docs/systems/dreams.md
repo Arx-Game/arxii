@@ -22,7 +22,7 @@ The `Sleeping` ConditionTemplate (`world/vitals/seeds.py`) mirrors `Unconscious`
 
 `get_dream_space(room)` (`world/dreams/services.py`) takes the waking room's ObjectDB and returns the dream room's **`ObjectDB`** — the DreamReflection's dream_room if one exists (dereferenced via `.objectdb`, since #2608 retargeted `DreamReflection.dream_room` onto `RoomProfile`), or the liminal placeholder room (#2287) as fallback. It stays the room-level primitive — "what is this room's dreamspace" — and is the one thing `dreamspace_for()` below delegates to.
 
-`dreamspace_for(sheet)` (`world/dreams/services.py`, #3003) is the character-level resolution point — "whose dreamspace does this character perceive" — layered on top of `get_dream_space()`. It honours an active `DreamwalkPresence` row: a dreamwalking sheet perceives its host's dreamspace (following the host if the host moves) rather than its own room's, falling back to its own room when there is no active dreamwalk or the host is no longer dreamside. `co_dreamers_for(sheet)` lists the other dreamside sheets sharing that resolution (the host plus any other visitors). Every viewer-facing caller (look, the web room-state push, the dream-engagement wake gate) is meant to route through `dreamspace_for()` so telnet and web never disagree — as of #3003 this is the service layer only; wiring the callers is a follow-up task.
+`dreamspace_for(sheet)` (`world/dreams/services.py`, #3003) is the character-level resolution point — "whose dreamspace does this character perceive" — layered on top of `get_dream_space()`. It honours an active `DreamwalkPresence` row: a dreamwalking sheet perceives its host's dreamspace (following the host if the host moves) rather than its own room's, falling back to its own room when there is no active dreamwalk or the host is no longer dreamside. `co_dreamers_for(sheet)` lists the other dreamside sheets sharing that resolution (the host plus any other visitors). Every viewer-facing caller — `LookAction`'s dreamside look-at-room branch, `Character.send_room_state()`'s web push, and `is_dream_engaged()`'s wake-danger gate — routes through `dreamspace_for()` so telnet and web never disagree; `DreamwalkAction`/`WakeAction` write/read the anchor via `start_dreamwalk`/`end_dreamwalk`.
 
 ## Danger: Mental Fatigue + Dream Peril Pool
 
@@ -43,7 +43,7 @@ The Dream Peril consequence pool has four outcomes:
 - Soul Tether bond (`CharacterRelationship.is_soul_tether=True`)
 - Same-room sleepers share a dreamspace automatically (no dreamwalk needed)
 
-**Escape lever**: dreamwalk destination stored on `actor.ndb.dreamwalk_destination`. When the dreamwalker wakes, `WakeAction` moves their body to the destination room — an escape from physical confinement. (#3003 adds a persisted `DreamwalkPresence` row + `start_dreamwalk`/`end_dreamwalk`/`has_dream_bond` services alongside this ndb stash — see Models below; `DreamwalkAction` itself is not yet repointed onto them, that's a follow-up task.)
+**Escape lever**: `DreamwalkAction` anchors the walker via `start_dreamwalk(dreamer=sheet, host=target_sheet)` — a persisted `DreamwalkPresence` row (#3003), replacing the earlier process-local `actor.ndb.dreamwalk_destination` stash. When the dreamwalker wakes, `WakeAction` calls `end_dreamwalk(sheet)` to pop the row and moves their body to the host's current location — an escape from physical confinement.
 
 ## Deep Dreaming
 
