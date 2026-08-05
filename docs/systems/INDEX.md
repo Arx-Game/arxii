@@ -6077,7 +6077,7 @@ Dream reflections, mental fatigue dream danger, Dream Peril consequence pool (ni
 madness/death, narrated to the player via `character.msg`), thread-gated dreamwalking with
 escape lever, and the deep dreaming area.
 - **Models (#3003):** `DreamwalkPresence` — persisted dreamwalk anchor keyed on the host
-  sheet (see ADR-0197), replacing the process-local `ndb.dreamwalk_destination` stash.
+  sheet (see ADR-0198), replacing the process-local `ndb.dreamwalk_destination` stash.
 - **Services (#3003):** `dreamspace_for(sheet)` (the single "whose dreamspace does this
   character perceive" resolution point — every viewer-facing caller routes through it),
   `co_dreamers_for`, `start_dreamwalk`/`end_dreamwalk`, `has_dream_bond`,

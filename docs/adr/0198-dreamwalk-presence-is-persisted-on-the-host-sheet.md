@@ -1,4 +1,4 @@
-# ADR-0197: Dreamwalk presence is a persisted row keyed on the host sheet, not ephemeral per-process state
+# ADR-0198: Dreamwalk presence is a persisted row keyed on the host sheet, not ephemeral per-process state
 
 #3003 replaces the pre-existing `ndb.dreamwalk_destination` stash with `DreamwalkPresence`, a
 `SharedMemoryModel` row FK'd `dreamer -> CharacterSheet` (unique) and `host -> CharacterSheet`.
