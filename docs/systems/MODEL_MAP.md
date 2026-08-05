@@ -4965,6 +4965,7 @@
   - parent -> magic.Gift [FK] (nullable)
   - creator -> character_sheets.CharacterSheet [FK] (nullable)
   - codex_entry -> codex.CodexEntry [FK] (nullable)
+  - style -> magic.TechniqueStyle [FK] (nullable)
   - resonances -> magic.Resonance [M2M]
 **Pointed to by:**
   - organization_grants <- societies.OrganizationGiftGrant
@@ -5595,6 +5596,7 @@
   - reviewed_by -> contributors.ContentContributor [FK] (nullable)
 **Pointed to by:**
   - paths <- classes.Path
+  - gifts <- magic.Gift
   - capability_requirements <- magic.StyleCapabilityRequirement
 
 ### TechniqueTeachingOffer
