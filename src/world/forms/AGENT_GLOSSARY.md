@@ -20,6 +20,15 @@ character may assume as a single shapeshift/identity shift. Stored in
 `forms.AlternateSelf`; the currently assumed one is tracked per-character in
 `forms.ActiveAlternateSelf`. _Avoid_: alt form, shape.
 
+**Marking**:
+A permanent skin feature of a specific body — tattoo, scar, brand, birthmark, or rune
+(`MarkingKind`; RUNE = magical inscription, Apostate's 2026-08-05 ruling replacing the
+blurry RITUAL_MARK). Stored as `forms.FormMarking` rows on a `CharacterForm` (#2985),
+so disguises/shapeshifts present their own form's markings. Concealed by non-revealing
+garments at the region (the shared `covered_regions` predicate); bared by Reveal,
+re-hidden by Cover or by dressing over it. All writes go through `grant_marking`.
+_Avoid_: tattoo model, scar model, body art (as system names).
+
 **In Control**:
 Whether the character is currently in control of their own actions. Derived from active
 conditions whose `ConditionCategory.alters_behavior=True` — e.g. the fury `Berserk`

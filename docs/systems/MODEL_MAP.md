@@ -926,6 +926,9 @@
   - building -> buildings.Building [FK]
 
 ### BuildingKind
+**Foreign Keys:**
+  - written_by -> contributors.ContentContributor [FK] (nullable)
+  - reviewed_by -> contributors.ContentContributor [FK] (nullable)
 **Pointed to by:**
   - allowed_in_wards <- areas.Area
   - property_grant_profiles <- buildings.PropertyGrantProfile
@@ -994,6 +997,9 @@
   - kind -> buildings.DecorationKind [FK]
 
 ### DecorationKind
+**Foreign Keys:**
+  - written_by -> contributors.ContentContributor [FK] (nullable)
+  - reviewed_by -> contributors.ContentContributor [FK] (nullable)
 **Pointed to by:**
   - affinities <- buildings.DecorationAffinity
   - placements <- buildings.RoomDecoration
@@ -1229,6 +1235,7 @@
   - build -> forms.Build [FK] (nullable)
   - target_table -> gm.GMTable [FK] (nullable)
 **Pointed to by:**
+  - markings <- character_creation.DraftMarking
   - application <- character_creation.DraftApplication
   - house_claim <- societies.HouseClaim
 
@@ -1250,6 +1257,10 @@
 **Foreign Keys:**
   - application -> character_creation.DraftApplication [FK]
   - author -> evennia.AccountDB [FK] (nullable)
+
+### DraftMarking
+**Foreign Keys:**
+  - draft -> character_creation.CharacterDraft [FK]
 
 ### OriginTemplate
 **Foreign Keys:**
@@ -3510,6 +3521,7 @@
 **Pointed to by:**
   - pull_effect_targets <- magic.ThreadPullEffect
   - values <- forms.CharacterFormValue
+  - markings <- forms.FormMarking
   - active_for <- forms.CharacterFormState
   - overlay_for <- forms.CharacterFormState
   - combat_profiles <- forms.FormCombatProfile
@@ -3550,6 +3562,10 @@
 **Foreign Keys:**
   - profile -> forms.FormCombatProfile [FK]
   - target -> mechanics.ModifierTarget [FK]
+
+### FormMarking
+**Foreign Keys:**
+  - form -> forms.CharacterForm [FK]
 
 ### FormTrait
 **Foreign Keys:**
@@ -4158,6 +4174,8 @@
 
 ### ItemTemplate
 **Foreign Keys:**
+  - written_by -> contributors.ContentContributor [FK] (nullable)
+  - reviewed_by -> contributors.ContentContributor [FK] (nullable)
   - material_category -> items.MaterialCategory [FK] (nullable)
   - on_use_pool -> actions.ConsequencePool [FK] (nullable)
   - on_use_check_type -> checks.CheckType [FK] (nullable)
@@ -6461,6 +6479,8 @@
 
 ### NPCRole
 **Foreign Keys:**
+  - written_by -> contributors.ContentContributor [FK] (nullable)
+  - reviewed_by -> contributors.ContentContributor [FK] (nullable)
   - faction_affiliation -> societies.Organization [FK] (nullable)
   - teaches_tradition -> magic.Tradition [FK] (nullable)
 **Pointed to by:**

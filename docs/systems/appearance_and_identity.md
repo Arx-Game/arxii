@@ -124,6 +124,14 @@ artist changes persona with an *identical* body; a curse changes the body and
 
 - Normalized traits via `FormTrait` / `FormTraitOption` / `CharacterForm` /
   `CharacterFormValue` (`world/forms`). `TraitType` is `COLOR` / `STYLE`.
+- **Body markings (BUILT, #2985):** `FormMarking` rows on the form — tattoos, scars,
+  brands, birthmarks, runes, each on a `BodyRegion`. Anchored on the FORM (not the
+  sheet) precisely so this document's composition holds: an unpierced fake overlay
+  presents the overlay form's markings (identifying marks are what a disguise exists
+  to hide); owner/staff ground truth reads the real form. Concealment rides #2846's
+  skin-coverage predicate (`covered_regions`); Reveal/Cover manage a `revealed_at`
+  state whose clearing path is dressing over the region. Write seam: `grant_marking`
+  (CG `DraftMarking` materialization, GM grant, future combat/soulfray scar writers).
 - **Three real anchors, not one:**
   - `current_real_form` — what the body is right now (= true form unless shapeshifted).
   - `true_form` — the **shapeshift return point**: the current real *human* body

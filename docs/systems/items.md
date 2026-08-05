@@ -38,7 +38,7 @@ from world.items.constants import (
 
 | Model | Purpose | Key Fields |
 |-------|---------|------------|
-| `ItemTemplate` | Archetype definition for an item type | `name`, `description`, `weight`, `size`, `value`, `is_active`, `is_revealing` (#2846 — a garment whose covered regions still expose skin: contributes no sun coverage in `world.species.sun_exposure`; the future tattoo/skin-visibility consumer reads the same flag), container fields, stacking fields, consumable fields, crafting fields, `interactions` (M2M to InteractionType), `minimum_quality_tier` (FK), `tied_resonance` (FK to `magic.Resonance`, nullable — marks a template as a *touchstone*) + `resonance_tier` (FK to `magic.ResonanceTier`, nullable — potency floor; `CheckConstraint` requires both set together or both null, #707), `weapon_class` (FK to `WeaponClass`, `PROTECT`, nullable — #2879; null falls back to the coarser `gear_archetype` stat map; see `world.combat.stat_mapping.weapon_stat_override`) |
+| `ItemTemplate` | Archetype definition for an item type | `name`, `description`, `weight`, `size`, `value`, `is_active`, `is_revealing` (#2846 — a garment whose covered regions still expose skin: contributes no sun coverage in `world.species.sun_exposure` and does not conceal body markings, #2985 — both read the shared `covered_regions` predicate), container fields, stacking fields, consumable fields, crafting fields, `interactions` (M2M to InteractionType), `minimum_quality_tier` (FK), `tied_resonance` (FK to `magic.Resonance`, nullable — marks a template as a *touchstone*) + `resonance_tier` (FK to `magic.ResonanceTier`, nullable — potency floor; `CheckConstraint` requires both set together or both null, #707), `weapon_class` (FK to `WeaponClass`, `PROTECT`, nullable — #2879; null falls back to the coarser `gear_archetype` stat map; see `world.combat.stat_mapping.weapon_stat_override`) |
 | `TemplateSlot` | Body region + layer an item occupies | `template` (FK), `body_region`, `equipment_layer`, `covers_lower_layers` |
 | `TemplateInteraction` | Flavor text for a specific interaction on a template | `template` (FK), `interaction_type` (FK), `flavor_text` |
 
@@ -701,7 +701,21 @@ Returns `{"action_points": n, "anima": n, "materials": k}`.
   systems (comfort/armor/mitigation) are untouched and read everything worn.
 - **Reveal**: `RevealAction` (key `reveal`) + telnet `reveal <item>` — a
   deliberate dramatic broadcast that flips a concealed worn piece into the
-  visible set. Extensible to tattoos/scars when their models exist.
+  visible set. Also bares a concealed body marking via `marking_id`
+  (#2985 — `FormMarking`, see `docs/systems/forms.md`).
+- **Cover** (#2985): `CoverUpAction` (key `cover`) + telnet `cover <item|marking>`
+  — the inverse verb: clears `revealed_at` on a worn piece or TRUE-form
+  marking without re-equipping ("roll the sleeve back down"). Requires that
+  something worn would actually conceal the target; closes #2965's gap where
+  a revealed piece stayed counting until unequip.
+- **Skin coverage** (#2985): `covered_regions(character)`
+  (`services/appearance.py`) is THE shared predicate — every region occupied
+  by an equipped non-revealing garment. Consumers: felt sun exposure
+  (`world.species.sun_exposure._clothing_protection`, refactored onto it) and
+  body-marking visibility (`world.forms.services.markings`). The
+  visible-markings observer endpoint (`GET /api/items/visible-markings/`,
+  `VisibleMarkingViewSet`) is a sibling of visible-worn — same
+  `character`/`observer` params and out-of-scope-returns-`[]` contract.
 
 ### Accent lifecycle & recycling (#2886)
 

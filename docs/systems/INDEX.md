@@ -882,9 +882,11 @@ shapeshift lifecycle.
   normalized layer renders "Red-Green" honestly under descriptor concealment),
   `CharacterKnownStyle` (#2632 — learned by having it done: NPC stylist or a knowing PC
   stylist teaches on application), `FormCombatProfile`, `FormCombatProfileEffect`,
-  `AlternateSelf`, `ActiveAlternateSelf`
+  `AlternateSelf`, `ActiveAlternateSelf`, `FormMarking` (#2985 — tattoo/scar/brand/
+  birthmark/rune on a form's body region; concealed by clothing, Reveal/Cover state)
 - **Enums:** `TraitType` (color/style/feature — FEATURE = structural species markers:
-  horns, wings, fangs, #2815), `FormType` (TRUE/ALTERNATE/DISGUISE), `DurationType`
+  horns, wings, fangs, #2815), `FormType` (TRUE/ALTERNATE/DISGUISE), `DurationType`,
+  `MarkingKind` / `MarkingSource` (#2985, `constants.py`)
 - **Key Services:** `assume_alternate_self(sheet, alt)`, `revert_alternate_self(sheet)`,
   `switch_form(character, target_form)`, `revert_to_true_form(character)`,
   `get_presented_appearance(character)` (normalized = joined blend components when present),
@@ -892,7 +894,8 @@ shapeshift lifecycle.
   component rows; a full application clears components),
   `knows_style(sheet, option)` / `learn_style(sheet, option)` (#2632),
   `trigger_transformation(sheet, alt, *, cause, instance_value=1.0)` (the seam both non-command cause-paths call; #1604),
-  `identification_difficulty(viewer_sheet, target_character)` / `attempt_identification(viewer, target, guess_name=None)` (`world/forms/services/identification.py`, #1107 slice 5 — the PC-to-PC "who's really under this mask" check; second `PersonaDiscovery` producer, see [appearance_and_identity.md](appearance_and_identity.md) §"Identification loop (slice 5)")
+  `identification_difficulty(viewer_sheet, target_character)` / `attempt_identification(viewer, target, guess_name=None)` (`world/forms/services/identification.py`, #1107 slice 5 — the PC-to-PC "who's really under this mask" check; second `PersonaDiscovery` producer, see [appearance_and_identity.md](appearance_and_identity.md) §"Identification loop (slice 5)"),
+  `grant_marking(sheet, ...)` / `visible_markings_for(character, observer)` (`world/forms/services/markings.py`, #2985 — the marking write seam + the observer-filtered read behind look's "Markings:" line and `GET /api/items/visible-markings/`)
 - **Key Exceptions:** `RevertBlockedError`, `AlternateSelfActiveError`, `FormOwnershipError`,
   `TraitNotBlendableError`, `StyleNotKnownError` (#2632; items-side wrappers
   `BlendNotSupported` / `StyleNotKnown` / `StyleChoiceRequired` on `use_item`)
