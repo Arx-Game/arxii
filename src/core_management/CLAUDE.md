@@ -123,6 +123,18 @@ absent key stays absent rather than clearing an existing credit, the same
 "omission means leave this column alone" rule every other optional field
 follows.
 
+**Known asymmetry:** `NPCRole`, `ItemTemplate`, `BuildingKind` and `DecorationKind`
+carry `CreditedContent` and are authored through `DOMAIN_BUILDERS` (`npc_roles/`,
+`items/`, `building_kinds/`, `decoration_kinds/`) same as every other domain, but
+none of the four is registered in `CONTENT_MODELS`. So a credit written into one of
+their files loads into the database fine (`build_all` -> `load_entries`), but
+`content_export` never writes it back out - `CONTENT_MODELS` is what
+`export_to_content_repo` walks. This is a one-way credit path, not a bug to paper
+over here; whether these four belong in `CONTENT_MODELS` is a separate decision
+than "does the model have the columns," and adding them pulls in the same
+additions-gate and round-trip questions ADR-0191 already settled for the domains
+that are registered.
+
 `core_management/prose_report.py` plus `tools/prose_report.py` (`just
 prose-report`) report the writer/reviewer backlog by scanning a content-repo
 checkout directly, no Django and no database, the same contract

@@ -22,6 +22,7 @@ from actions.constants import TargetKind
 from core.descriptors import ReverseOneToOneOrNone
 from core.managers import ArxSharedMemoryManager
 from core.natural_keys import NaturalKeyManager, NaturalKeyMixin
+from world.contributors.models import CreditedContent
 from world.forms.models import ConcealmentLevel, DisguiseKind
 from world.items.constants import (
     PROVENANCE_EVENT_TYPES,
@@ -250,7 +251,7 @@ class WeaponClass(NaturalKeyMixin, SharedMemoryModel):
         return self.name
 
 
-class ItemTemplate(NaturalKeyMixin, SharedMemoryModel):
+class ItemTemplate(NaturalKeyMixin, CreditedContent, SharedMemoryModel):
     """
     Archetype definition for an item type (e.g., "iron longsword", "silk shirt").
 

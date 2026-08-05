@@ -1301,9 +1301,14 @@ class CreditEndToEndLoadTests(TestCase):
     Every other credit test in this module stops at the builder's ``fields``
     dict (``MarkdownCreditRoundTripTests``). Nothing exercises the actual seam
     this branch exists to create: ``build_all`` -> ``load_entries`` -> a real
-    ``CreditedContent`` column on a saved row. Uses ``skills/``, one of the six
-    fixture-JSON domains fix 1 wired ``_apply_credit_meta`` into, so this also
-    proves that wiring end-to-end and not just at the builder level.
+    ``CreditedContent`` column on a saved row. Covers two of the six fixture-JSON
+    domains fix 1 wired ``_apply_credit_meta`` into (``skills/`` and ``items/``),
+    so this also proves that wiring end-to-end and not just at the builder level
+    - a second, non-``Trait`` domain is the case that would have caught
+    ``ItemTemplate``/``NPCRole``/``BuildingKind``/``DecorationKind`` missing
+    ``CreditedContent`` entirely (#2980 fix wave follow-up): the builder emits
+    ``written_by``/``written_on`` regardless, so a fields-only test never
+    notices the column doesn't exist on the model.
     """
 
     def setUp(self) -> None:
@@ -1333,3 +1338,34 @@ class CreditEndToEndLoadTests(TestCase):
         assert trait.written_by is not None
         assert trait.written_by.name == "Tehom"
         assert trait.written_on == datetime.date(2026, 8, 4)
+
+    def test_written_by_and_written_on_land_on_an_item_template_row(self) -> None:
+        """Non-``Trait`` domain (#2980 fix wave follow-up): ``ItemTemplate`` had no
+        ``CreditedContent`` parent even though ``_build_item_template_fixture``
+        already called ``_apply_credit_meta``, so a credited ``items/`` entry
+        raised ``FieldError`` in ``load_entries`` and the whole row was skipped -
+        invisible in ``test_written_by_and_written_on_land_on_the_row`` above
+        because that only exercises ``Trait``, which already had the mixin.
+        """
+        from world.contributors.factories import ContentContributorFactory
+
+        ContentContributorFactory(name="Tehom")
+        _write(
+            self.root,
+            "items/iron_longsword.md",
+            "---\n"
+            "name: Iron Longsword\n"
+            "value: 40\n"
+            "weight: 3.5\n"
+            'written_by: "Tehom"\n'
+            "written_on: 2026-08-04\n"
+            "---\n"
+            "A well-balanced blade, plain but serviceable.\n",
+        )
+        created, updated, _ = load_entries(build_all(self.root))
+        assert (created, updated) == (1, 0)
+
+        item = ItemTemplate.objects.get(name="Iron Longsword")
+        assert item.written_by is not None
+        assert item.written_by.name == "Tehom"
+        assert item.written_on == datetime.date(2026, 8, 4)
