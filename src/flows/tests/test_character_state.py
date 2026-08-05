@@ -31,13 +31,12 @@ class CharacterStateDisplayWornTests(TestCase):
         self.context = MagicMock()
         self.state = CharacterState(self.character, context=self.context)
 
-    def _equip(self, region: str, layer: str, name: str, *, covers: bool = False) -> None:
+    def _equip(self, region: str, layer: str, name: str) -> None:
         template = ItemTemplateFactory(name=name)
         TemplateSlotFactory(
             template=template,
             body_region=region,
             equipment_layer=layer,
-            covers_lower_layers=covers,
         )
         item_obj = ObjectDBFactory(
             db_key=f"{name}_obj",
@@ -71,7 +70,7 @@ class CharacterStateDisplayWornTests(TestCase):
     def test_get_display_worn_hides_concealed_items_for_other_observer(self) -> None:
         # Coat covers shirt
         self._equip(BodyRegion.TORSO, EquipmentLayer.BASE, "Shirt")
-        self._equip(BodyRegion.TORSO, EquipmentLayer.OVER, "Coat", covers=True)
+        self._equip(BodyRegion.TORSO, EquipmentLayer.OVER, "Coat")
 
         observer_char = CharacterFactory(db_key="ObsChar")
         observer_account = AccountFactory(username="obs_account")
@@ -87,7 +86,7 @@ class CharacterStateDisplayWornTests(TestCase):
 
     def test_get_display_worn_shows_concealed_for_self_looker(self) -> None:
         self._equip(BodyRegion.TORSO, EquipmentLayer.BASE, "Shirt")
-        self._equip(BodyRegion.TORSO, EquipmentLayer.OVER, "Coat", covers=True)
+        self._equip(BodyRegion.TORSO, EquipmentLayer.OVER, "Coat")
         # Self-look: pass own state
         result = self.state.get_display_worn(looker=self.state)
         self.assertIn("Shirt", result)

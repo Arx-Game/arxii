@@ -207,6 +207,7 @@ treat those names as hints to confirm, not gospel.
 - [0169 — Capability magnitude curves geometrically with contextual power, uncapped](0169-capability-magnitude-curves-geometrically-with-contextual-power.md) (#2708; builds on ADR-0164, ADR-0034; related ADR-0144)
 - [0190 — PC sustained actions extend ADR-0161's pre-armed shape, with a rolled — not ramped — budget](0190-pc-sustained-actions-absorption-budget.md) (#2705; extends ADR-0161; related ADR-0007, ADR-0118)
 - [0198 — Dreamwalk presence is a persisted row keyed on the host sheet, not ephemeral per-process state](0198-dreamwalk-presence-is-persisted-on-the-host-sheet.md) (#3003; related ADR-0008, ADR-0131)
+- [0199 — Concealment defaults on; exposure is cut, material, or performed](0199-concealment-defaults-on-exposure-is-cut-material-or-performed.md) (#2985; refines ADR-0194)
 
 ### Gift & resonance economy
 - [0050 — Gifts are Major or Minor; species abilities are a species-granted Minor Gift](0050-gifts-are-major-or-minor-species-abilities-are-minor-gifts.md)

@@ -1192,8 +1192,8 @@ class _VisibleWornContext:
 
 
 def _is_concealed_for_observer(item: ItemInstance, wearing_character: ObjectDB) -> bool:
-    """Whether ``item`` is concealed by a higher covering layer at the
-    same body region.
+    """Whether ``item`` is concealed by a higher non-see-through layer at the
+    same body region (#2985 layer walk).
 
     Walks the cached ``equipped_items`` handler — no queries when the
     handler is warm. Returns True if the item is not equipped (so it
@@ -1207,24 +1207,20 @@ def _is_concealed_for_observer(item: ItemInstance, wearing_character: ObjectDB) 
     if target_row is None:
         return True  # not equipped → not visible to others
 
+    from world.items.services.visibility import is_see_through  # noqa: PLC0415
+
     target_region = target_row.body_region
     target_rank = LAYER_RANK.get(target_row.equipment_layer, 99)
 
+    # #2985 layer walk: concealed iff ANY layer above at the region is not
+    # see-through (plain cuts conceal beneath by default).
     for row in wearing_character.equipped_items:
-        if row.pk == target_row.pk:
+        if row.pk == target_row.pk or row.body_region != target_region:
             continue
-        if row.body_region != target_region:
+        if LAYER_RANK.get(row.equipment_layer, 99) <= target_rank:
             continue
-        other_rank = LAYER_RANK.get(row.equipment_layer, 99)
-        if other_rank <= target_rank:
-            continue
-        for slot in row.item_instance.template.cached_slots:
-            if (
-                slot.body_region == target_region
-                and slot.equipment_layer == row.equipment_layer
-                and slot.covers_lower_layers
-            ):
-                return True
+        if not is_see_through(row):
+            return True
     return False
 
 

@@ -9,9 +9,23 @@ A cultural/historical fashion register an item can carry (Arxian Court, Old-Regi
 _Avoid_: intent adjectives as style names, vibe words that shadow an accent axis
 
 **Silhouette**:
-The wearable FORM — the fashion noun (#2907): boot, thigh-high boot, stiletto heel. Umbrella hierarchy via `parent`; grouped by `WearFamily`; authored default on `ItemTemplate.silhouette` with a family-validated crafter pick at making stored on `ItemInstance.silhouette` (`effective_silhouette` resolves the fallback). Litmus test vs Style: if it changes the SHAPE it's a (sub-)silhouette; if it changes how the piece reads while the shape stays, it's a Style. Revealing-ness is shape, so it lives here: `exposes_skin` (#2985, Apostate's 2026-08-05 ruling) marks cuts that bare the skin of their regions — read by the shared `covered_regions` predicate (marking visibility + felt sun exposure), OR-composed with `ItemTemplate.is_revealing` (material sheerness). Prose never says "silhouette" for garments/jewelry — `silhouette_prose_noun` gives "cut"/"setting" ("Cut" as a model name is reserved for future gem cuts).
+The wearable FORM — the fashion noun (#2907): boot, thigh-high boot, stiletto heel. Umbrella hierarchy via `parent`; grouped by `WearFamily`; authored default on `ItemTemplate.silhouette` with a family-validated crafter pick at making stored on `ItemInstance.silhouette` (`effective_silhouette` resolves the fallback). Litmus test vs Style: if it changes the SHAPE it's a (sub-)silhouette; if it changes how the piece reads while the shape stays, it's a Style. Revealing-ness is shape, so it lives here: `exposes_beneath` (#2985, Apostate's 2026-08-05 ruling) marks cuts that expose whatever lies beneath them — the slit gown shows the stockings, or the skin and its markings when nothing is underneath; skin is just what you find when you run out of layers, and plain cuts conceal beneath by default. Read by the shared `covered_regions` predicate (marking visibility + felt sun exposure), OR-composed with `ItemTemplate.is_revealing` (material sheerness). Prose never says "silhouette" for garments/jewelry — `silhouette_prose_noun` gives "cut"/"setting" ("Cut" as a model name is reserved for future gem cuts).
 _Avoid_: Cut (reserved for gemstones), Form (collides with the forms app), shape
 _Avoid_: aesthetic, look, vibe
+
+**Worn Open**:
+The performed exposure state (#2985, ADR-0199): the show verb sets `EquippedItem.opened_at`
+on the covering garments so whatever lies beneath shows — the next layer, or skin at the
+bottom of the stack. Cleared by conceal or by dressing at the region; dies with the row on
+unequip. The state always lives on the coverer, never on the hidden thing.
+_Avoid_: revealed (the old hidden-thing state), unbuttoned
+
+**Show / Conceal**:
+The declarative exposure verbs (keys `reveal`/`cover`; telnet aliases show/reveal and
+conceal/cover): the player names the GOAL — a body part, worn piece, or marking — and the
+layer walk computes which covering garments to part or close. Honest when fabric cannot
+help ("nothing you wear covers that").
+_Avoid_: toggle visibility, flash
 
 **Audacity**:
 A Style's ordinal daring tier (Understated/Expressive/Bold/Outrageous, `StyleAudacity`) that scales how much that Style is mechanically rewarded — both the passive motif-coherence bonus and peer style-presentation endorsements read the worn/matched Style's audacity through the staff-tunable `AudacityTuning` singleton (default multipliers 0.75/1.00/1.35/1.75). Daring styles are rewarded mechanically, not just narratively.

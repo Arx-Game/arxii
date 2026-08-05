@@ -36553,7 +36553,7 @@ export interface components {
       readonly name: string;
       readonly wear_family: string;
       readonly prose_noun: string;
-      readonly exposes_skin: boolean;
+      readonly exposes_beneath: boolean;
     };
     /** @description Read serializer for SineatingOffer payloads returned by the request endpoint. */
     SineatingOffer: {
@@ -38658,8 +38658,6 @@ export interface components {
       readonly body_region_display: string;
       readonly equipment_layer: components['schemas']['EquipmentLayerEnum'];
       readonly equipment_layer_display: string;
-      /** @description Whether this slot hides items on lower layers at the same region. */
-      readonly covers_lower_layers: boolean;
     };
     /** @description Serialize tenure galleries. */
     TenureGallery: {

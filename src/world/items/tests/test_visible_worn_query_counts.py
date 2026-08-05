@@ -83,11 +83,13 @@ class _SharedSetupMixin:
         # other regions. Multiple items per character ensures any per-row
         # query would multiply.
         self.items: list = []
-        self._equip_item("QCShirt", BodyRegion.TORSO, EquipmentLayer.BASE, covers=False)
-        self._equip_item("QCCoat", BodyRegion.TORSO, EquipmentLayer.OVER, covers=True)
-        self._equip_item("QCScarf", BodyRegion.TORSO, EquipmentLayer.ACCESSORY, covers=False)
-        self._equip_item("QCBoots", BodyRegion.FEET, EquipmentLayer.BASE, covers=False)
-        self._equip_item("QCRing", BodyRegion.LEFT_FINGER, EquipmentLayer.ACCESSORY, covers=False)
+        # #2985: the plain coat conceals the shirt by default; the accessory
+        # scarf/ring never conceal beneath (adornments, not blankets).
+        self._equip_item("QCShirt", BodyRegion.TORSO, EquipmentLayer.BASE)
+        self._equip_item("QCCoat", BodyRegion.TORSO, EquipmentLayer.OVER)
+        self._equip_item("QCScarf", BodyRegion.TORSO, EquipmentLayer.ACCESSORY)
+        self._equip_item("QCBoots", BodyRegion.FEET, EquipmentLayer.BASE)
+        self._equip_item("QCRing", BodyRegion.LEFT_FINGER, EquipmentLayer.ACCESSORY)
 
         self.client = APIClient()
 
@@ -96,15 +98,12 @@ class _SharedSetupMixin:
         name: str,
         region: str,
         layer: str,
-        *,
-        covers: bool,
     ) -> None:
         template = ItemTemplateFactory(name=name)
         TemplateSlotFactory(
             template=template,
             body_region=region,
             equipment_layer=layer,
-            covers_lower_layers=covers,
         )
         item_obj = ObjectDBFactory(
             db_key=f"{name}_obj",
@@ -158,7 +157,6 @@ class VisibleWornServiceQueryCountTests(_SharedSetupMixin, TestCase):
             template=template,
             body_region=BodyRegion.TORSO,
             equipment_layer=EquipmentLayer.BASE,
-            covers_lower_layers=False,
         )
         cold_obj = ObjectDBFactory(
             db_key="QCColdShirtObj",
@@ -245,7 +243,7 @@ class VisibleItemDetailQueryCountTests(_SharedSetupMixin, TestCase):
         ``_is_concealed_for_observer`` walks the cached equipped_items
         handler that was warmed by the prior GET.
         """
-        # Coat was equipped at TORSO/OVER with covers_lower_layers=True —
+        # Coat was equipped at TORSO/OVER — plain cuts conceal by default (#2985) —
         # it's the visible item for same-room observers.
         coat = next(item for item in self.items if item.template.name == "QCCoat")
 

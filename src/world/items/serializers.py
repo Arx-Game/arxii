@@ -113,7 +113,6 @@ class TemplateSlotSerializer(serializers.ModelSerializer):
             "body_region_display",
             "equipment_layer",
             "equipment_layer_display",
-            "covers_lower_layers",
         ]
         read_only_fields = fields
 
@@ -350,9 +349,9 @@ class SilhouetteReadSerializer(serializers.Serializer):
     name = serializers.CharField(read_only=True)
     wear_family = serializers.CharField(read_only=True)
     prose_noun = serializers.CharField(read_only=True)
-    # Whether this cut bares the skin of its regions (#2985) — the crafting
-    # picker badges revealing cuts; look/marking visibility reads it server-side.
-    exposes_skin = serializers.BooleanField(read_only=True)
+    # Whether this cut exposes the layer beneath it (#2985) — the crafting
+    # picker badges revealing cuts; the visibility walk reads it server-side.
+    exposes_beneath = serializers.BooleanField(read_only=True)
 
 
 class ItemInstanceReadSerializer(serializers.ModelSerializer):

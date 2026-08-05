@@ -65048,11 +65048,11 @@ components:
         prose_noun:
           type: string
           readOnly: true
-        exposes_skin:
+        exposes_beneath:
           type: boolean
           readOnly: true
       required:
-      - exposes_skin
+      - exposes_beneath
       - id
       - name
       - prose_noun
@@ -69354,14 +69354,9 @@ components:
         equipment_layer_display:
           type: string
           readOnly: true
-        covers_lower_layers:
-          type: boolean
-          readOnly: true
-          description: Whether this slot hides items on lower layers at the same region.
       required:
       - body_region
       - body_region_display
-      - covers_lower_layers
       - equipment_layer
       - equipment_layer_display
     TenureGallery:

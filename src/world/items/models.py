@@ -724,10 +724,6 @@ class TemplateSlot(SharedMemoryModel):
         max_length=20,
         choices=EquipmentLayer.choices,
     )
-    covers_lower_layers = models.BooleanField(
-        default=False,
-        help_text=("Whether this slot hides items on lower layers at the same region."),
-    )
 
     class Meta:
         constraints = [
@@ -1272,13 +1268,14 @@ class EquippedItem(SharedMemoryModel):
         max_length=20,
         choices=EquipmentLayer.choices,
     )
-    revealed_at = models.DateTimeField(
+    opened_at = models.DateTimeField(
         null=True,
         blank=True,
         help_text=(
-            "Set by the Reveal action (#2965): a deliberately revealed piece "
-            "counts for social-facing effects despite covering layers. The "
-            "state dies with this row on unequip — no cleanup needed."
+            "Worn open (#2985): the show verb parts this garment so whatever "
+            "lies beneath it shows — the next layer, or skin at the bottom of "
+            "the stack. Cleared by conceal or by dressing at the region; dies "
+            "with the row on unequip."
         ),
     )
 
@@ -2012,16 +2009,17 @@ class Silhouette(NaturalKeyMixin, SharedMemoryModel):
         help_text="The broad wearable family; crafter picks are validated within it.",
     )
     description = models.TextField(blank=True)
-    exposes_skin = models.BooleanField(
+    exposes_beneath = models.BooleanField(
         default=False,
         help_text=(
-            "Whether this cut bares the skin of the regions it occupies (#2985): "
-            "a plunging bodice shows the chest tattoo and lets the sun bite; a "
-            "high-collared doublet does neither. Revealing-ness is SHAPE, so it "
-            "lives on the silhouette (Apostate's ruling, 2026-08-05) — the "
-            "crafter's cut pick at making decides it per instance. Composes with "
-            "ItemTemplate.is_revealing (material sheerness) as an OR: either "
-            "bares the skin."
+            "Whether this cut exposes whatever lies beneath it (#2985): the slit "
+            "gown shows the stockings — or the skin and its markings when nothing "
+            "is underneath. ONE axis, no skin special-case: skin is just what you "
+            "find when you run out of layers (Apostate's ruling, 2026-08-05; "
+            "plain cuts conceal beneath by default). Revealing-ness is SHAPE, so "
+            "it lives on the silhouette — the crafter's cut pick at making "
+            "decides it per instance. Composes with ItemTemplate.is_revealing "
+            "(material sheerness) as an OR: either exposes the layer below."
         ),
     )
     is_active = models.BooleanField(default=True)

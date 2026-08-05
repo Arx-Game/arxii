@@ -364,10 +364,10 @@ class FormMarking(SharedMemoryModel):
 
     Anchored on ``CharacterForm`` (not the sheet) so the render composition holds:
     a shapeshifted or successfully disguised body presents ITS form's markings,
-    never the real form's. Concealment rides the #2846 coverage semantics — a
-    marking is visible iff no equipped non-revealing garment covers its region,
-    or it has been deliberately revealed (``revealed_at``, Reveal/Cover parity
-    with ``EquippedItem.revealed_at``). All writes go through
+    never the real form's. Markings carry NO visibility state of their own
+    (#2985): the layer walk decides — a marking shows iff every worn layer at
+    its region is see-through (exposing cut, sheer material, or worn open via
+    the show verb). All writes go through
     ``world.forms.services.markings.grant_marking``.
     """
 
@@ -389,15 +389,6 @@ class FormMarking(SharedMemoryModel):
     description = models.TextField(
         blank=True,
         help_text="Prose shown on close inspection / web detail.",
-    )
-    revealed_at = models.DateTimeField(
-        null=True,
-        blank=True,
-        help_text=(
-            "Set by the Reveal action: a deliberately bared marking counts as "
-            "visible despite covering garments. Cleared by Cover or by equipping "
-            "a non-revealing garment over the region."
-        ),
     )
     source = models.CharField(
         max_length=20,
