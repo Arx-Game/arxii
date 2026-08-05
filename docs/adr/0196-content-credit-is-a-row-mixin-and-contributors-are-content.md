@@ -64,12 +64,20 @@ will supersede part of ADR-0146. `WeatherEmit` rows carrying a null `key`
 predate the emit re-key done alongside this change and are not addressable by
 the content pipeline until backfilled.
 
-A `written_by` naming a `ContentContributor` that is not in the corpus raises
-`UnresolvedNaturalKeyError` at load time, and (same as any other unresolved FK
-in this pipeline) the whole row is skipped - not just the credit column. A
-malformed `written_on` fails the same way via `_coerce_scalar_fields`. So a
-misspelled writer name or a bad date on one line costs that entry's entire
-prose, not just its attribution. This is existing pipeline semantics for every
-FK-by-name field, not something new `CreditedContent` introduced, but it bites
-harder here because credit is the field most likely to be hand-typed by a
-writer rather than copy-pasted from an existing value.
+A `written_by`/`reviewed_by` naming a `ContentContributor` that is not in the
+corpus, or a malformed `written_on`/`reviewed_on`, no longer costs the row.
+Every OTHER FK-by-name or scalar field in this pipeline still fails (and
+skips) the whole row on a bad value - right when the field is part of what
+the row *means* - but a credit is editorial metadata, not content: it has no
+bearing on whether the row itself is valid, so a misspelled writer name must
+not delete an entire entry's authored prose over a typo in a byline (Tehom's
+ruling, 2026-08-05). `_upsert_fixture_object` resolves the four credit fields
+separately, and up front, via `_resolve_or_drop_credit_fields`: a value that
+resolves is applied exactly as before; a value that fails is dropped from
+that one row's `fields` (same "absent means leave this column alone"
+convention every other optional field already follows) and the rest of the
+row loads normally. The failure is never silent - it is appended to
+`result.skipped`, the same per-row diagnostic list the CLI and the admin's
+"Load private content repo" button already surface for every other skip
+reason, so an operator still sees the typo, just without losing the prose
+over it.

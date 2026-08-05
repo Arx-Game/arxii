@@ -536,15 +536,18 @@ def _apply_credit_meta(entry: ContentEntry, fields: dict) -> None:
     date object. A quoted date arrives as a string already and passes straight
     through; Django accepts either form on a ``DateField``.
 
-    Hazard (ADR-0196 Consequences): a ``written_by``/``reviewed_by`` naming a
-    ``ContentContributor`` not present in the corpus raises
-    ``UnresolvedNaturalKeyError`` in ``load_entries``, and a malformed
-    ``written_on``/``reviewed_on`` fails the same way via
-    ``_coerce_scalar_fields`` - both skip the WHOLE row, not just the credit
-    columns, same as any other unresolved FK-by-name value in this pipeline.
-    Do not change that resolution behavior here; it is deliberate, existing
-    pipeline semantics for every natural-key field, not something to
-    special-case for credit.
+    This function only stages the raw values into *fields* - it does not resolve
+    them. Resolution is deliberately special-cased for credit (ADR-0196
+    Consequences, Tehom's ruling 2026-08-05): a ``written_by``/``reviewed_by``
+    naming a ``ContentContributor`` not present in the corpus, or a malformed
+    ``written_on``/``reviewed_on``, must NOT be able to fail the whole row the
+    way any other unresolved FK-by-name value still does - a credit is
+    editorial metadata, not content, and editorial metadata must not be able to
+    cost the content it describes. ``_resolve_or_drop_credit_fields`` (in
+    ``_upsert_fixture_object``, before the general FK/scalar pass) is where
+    that happens: it drops just the offending credit key and records a
+    diagnostic in ``result.skipped``, and the row loads with everything else
+    intact.
     """
     for key in CREDIT_NAME_KEYS:
         value = _optional_meta_natural_key(entry, key)
@@ -1130,6 +1133,87 @@ def _coerce_scalar_fields(model, fields: dict) -> None:
         fields[field_name] = field.to_python(value)
 
 
+def _resolve_or_drop_credit_fields(
+    model: type, fields: dict, source_path: Path | None, result: BuildResult
+) -> None:
+    """Resolve the four credit fields separately; drop a bad one instead of
+    failing the row (#2980, Tehom's ruling).
+
+    A credit is editorial metadata: who wrote or reviewed a row's prose. It has
+    no bearing on whether the row itself is valid content, so it must never be
+    able to cost the content it describes. Every OTHER FK-by-name or scalar
+    field in this pipeline still fails (and skips) the whole row on a bad value
+    - right for a field the row's own meaning depends on - but a misspelled
+    ``written_by`` or a malformed ``written_on`` must not delete an entry's
+    prose over a typo in a byline.
+
+    Runs BEFORE ``_resolve_natural_key_fields``/``_coerce_scalar_fields`` (the
+    general FK/scalar pass), and pops each of ``CREDIT_NAME_KEYS``/
+    ``CREDIT_DATE_KEYS`` out of *fields* first, so the general pass never sees a
+    credit field at all. A value that resolves cleanly is put straight back
+    already resolved/coerced - identical to what the general pass would have
+    done, so the happy path is unchanged. A value that fails is left OUT of
+    *fields* entirely: "key absent" is already this module's convention for
+    "leave this column alone" on ``update_or_create`` (see the module docstring
+    on optional-field semantics), so a dropped credit never clears one already
+    set on the row, and every other field on the row still loads normally.
+
+    Failures are not silent: each is appended to ``result.skipped``, the same
+    per-row diagnostic list the CLI (``tools/build_content_fixtures.py``) and
+    the admin ("Load private content repo" button) already surface.
+
+    A model that carries no ``key`` field at all (this function runs for every
+    upsert, not only ``CreditedContent`` models) is left untouched, same
+    schema-drift tolerance ``_coerce_scalar_fields`` already has - there is
+    nothing credit-specific to resolve there, so it falls through to the
+    general pass exactly as before this function existed.
+    """
+    from django.core.exceptions import (  # noqa: PLC0415
+        FieldDoesNotExist,
+        ObjectDoesNotExist,
+        ValidationError,
+    )
+
+    location = source_path if source_path is not None else model._meta.label  # noqa: SLF001
+
+    for key in CREDIT_NAME_KEYS:
+        value = fields.get(key)
+        if value is None:
+            continue
+        try:
+            field = model._meta.get_field(key)  # noqa: SLF001
+        except FieldDoesNotExist:
+            continue
+        related_model = field.related_model
+        del fields[key]
+        try:
+            fields[key] = related_model.objects.get_by_natural_key(*value)
+        except ObjectDoesNotExist:
+            result.skipped.append(
+                f"{location}: {model.__name__} credit {key!r} not applied - "
+                f"{related_model.__name__} {value!r} not found. The row still "
+                "loads; only the credit is missing."
+            )
+
+    for key in CREDIT_DATE_KEYS:
+        value = fields.get(key)
+        if value is None:
+            continue
+        try:
+            field = model._meta.get_field(key)  # noqa: SLF001
+        except FieldDoesNotExist:
+            continue
+        try:
+            field.to_python(value)
+        except ValidationError as exc:
+            del fields[key]
+            result.skipped.append(
+                f"{location}: {model.__name__} credit {key!r} not applied - "
+                f"{value!r} is not a valid date ({exc}). The row still loads; "
+                "only the credit is missing."
+            )
+
+
 def _upsert_fixture_object(  # noqa: C901 — one branch per distinct skip reason, see docstring
     model: type,
     obj: dict,
@@ -1172,6 +1256,13 @@ def _upsert_fixture_object(  # noqa: C901 — one branch per distinct skip reaso
     # to-one FK's natural key — pulled out here so _resolve_natural_key_fields
     # below never sees them, and applied via .set() after a successful upsert.
     m2m_fields = _pop_m2m_fields(model, fields)
+
+    # Credit fields (#2980, Tehom's ruling) resolve on their own, separately
+    # from and BEFORE every other FK/scalar field: an unresolvable written_by/
+    # reviewed_by or a malformed written_on/reviewed_on is dropped and
+    # diagnosed, never allowed to fail the whole row the way any other bad FK
+    # or scalar still does below. See _resolve_or_drop_credit_fields.
+    _resolve_or_drop_credit_fields(model, fields, source_path, result)
 
     # Resolve natural-key-list FK values in both the lookup (the natural-key
     # fields themselves) and the remaining defaults. Each except clause below

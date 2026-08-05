@@ -1369,3 +1369,79 @@ class CreditEndToEndLoadTests(TestCase):
         assert item.written_by is not None
         assert item.written_by.name == "Tehom"
         assert item.written_on == datetime.date(2026, 8, 4)
+
+    def test_unknown_written_by_is_dropped_but_the_row_still_loads(self) -> None:
+        """Tehom's ruling (#2980): a credit is editorial metadata and must never
+        be able to cost the content it describes. A ``written_by`` naming a
+        ``ContentContributor`` that does not exist drops that ONE field and the
+        row loads with the rest of its data intact - not skip the whole entry
+        the way any other unresolved FK-by-name value still does.
+        """
+        _write(
+            self.root,
+            "skills/performance.md",
+            "---\n"
+            "name: Performance\n"
+            "category: social\n"
+            'written_by: "Nobody Real"\n'
+            "---\n"
+            "PLACEHOLDER Captivating an audience through music, oration, or storytelling.\n",
+        )
+        result = build_all(self.root)
+        created, updated, _ = load_entries(result)
+        assert (created, updated) == (1, 0)
+
+        trait = Trait.objects.get(name="Performance")
+        assert "PLACEHOLDER" in trait.description
+        assert trait.written_by is None
+        assert any("Nobody Real" in msg for msg in result.skipped)
+
+    def test_malformed_written_on_is_dropped_but_the_row_still_loads(self) -> None:
+        """Same ruling, the date half: a malformed ``written_on`` drops only that
+        field via ``_coerce_scalar_fields``'s ``ValidationError`` path, diagnosed
+        the same way as an unresolved contributor name above.
+        """
+        _write(
+            self.root,
+            "skills/performance.md",
+            "---\n"
+            "name: Performance\n"
+            "category: social\n"
+            'written_on: "not-a-date"\n'
+            "---\n"
+            "PLACEHOLDER Captivating an audience through music, oration, or storytelling.\n",
+        )
+        result = build_all(self.root)
+        created, updated, _ = load_entries(result)
+        assert (created, updated) == (1, 0)
+
+        trait = Trait.objects.get(name="Performance")
+        assert "PLACEHOLDER" in trait.description
+        assert trait.written_on is None
+        assert any("not-a-date" in msg for msg in result.skipped)
+
+    def test_known_written_by_still_credits_the_row(self) -> None:
+        """Happy path proof: a contributor that DOES exist is unaffected by the
+        drop-on-failure change above - no diagnostic, credit lands as before.
+        """
+        from world.contributors.factories import ContentContributorFactory
+
+        ContentContributorFactory(name="Tehom")
+        _write(
+            self.root,
+            "skills/performance.md",
+            "---\n"
+            "name: Performance\n"
+            "category: social\n"
+            'written_by: "Tehom"\n'
+            "---\n"
+            "PLACEHOLDER Captivating an audience through music, oration, or storytelling.\n",
+        )
+        result = build_all(self.root)
+        created, updated, _ = load_entries(result)
+        assert (created, updated) == (1, 0)
+        assert not result.skipped
+
+        trait = Trait.objects.get(name="Performance")
+        assert trait.written_by is not None
+        assert trait.written_by.name == "Tehom"
