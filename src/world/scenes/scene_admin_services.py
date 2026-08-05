@@ -159,7 +159,7 @@ def finish_scene_full(scene: Scene, by_account: AccountDB | None = None) -> None
     3. ``process_deferred_fatigue_resets`` — drains any pending fatigue-reset
        tasks for all participant accounts.
     4. ``teardown_conjured_hazards`` (alongside ``teardown_conjured_obstacles`` /
-       ``teardown_ramparts``) — disarms any Trap the scene's room holds whose
+       ``teardown_ramparts``): disarms any Trap the scene's room holds whose
        ``created_by_sheet`` is set, i.e. a GM-placed trap rather than a
        staff-authored one.
     5. ``broadcast_scene_message(scene, SceneAction.END)`` — pushes the END

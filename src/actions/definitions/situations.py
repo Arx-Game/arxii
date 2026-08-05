@@ -10,7 +10,7 @@ so both gate at JUNIOR.
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import TYPE_CHECKING, Any
+from typing import Any
 
 from django.core.exceptions import ObjectDoesNotExist
 from django.db import transaction
@@ -29,26 +29,10 @@ from world.mechanics.situation_services import (
     instantiate_situation,
 )
 
-if TYPE_CHECKING:
-    from world.character_sheets.models import CharacterSheet
-
 _CHALLENGE_CATALOG_HINT = "Place which challenge? (try `setsituation find <term>`)"
 _NO_SUCH_CHALLENGE = "That challenge template does not exist."
 _TARGET_NAME_REQUIRED = "Name what embodies the challenge (e.g. 'the barred gate')."
 _TARGET_NAME_MAX_LENGTH = 100
-
-
-def _actor_sheet(actor: ObjectDB) -> CharacterSheet | None:
-    """The placing GM's sheet, or None for an actor with no sheet.
-
-    Best-effort: a staff actor driving a puppet without a sheet still places the
-    situation; it just carries no provenance, and so is treated as authored
-    content that survives scene end.
-    """
-    try:
-        return actor.sheet_data
-    except (AttributeError, ObjectDoesNotExist):
-        return None
 
 
 @dataclass
@@ -91,7 +75,7 @@ class SetSituationAction(Action):
             return ActionResult(success=False, message="That situation template does not exist.")
 
         try:
-            instantiate_situation(template, actor.location, placed_by_sheet=_actor_sheet(actor))
+            instantiate_situation(template, actor.location, placed_by_sheet=actor.character_sheet)
         except ObjectDoesNotExist:
             return ActionResult(
                 success=False,
