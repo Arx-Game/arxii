@@ -532,15 +532,28 @@ bootstrap (#2977) assumes an empty target, or one it already built itself; anyth
 else (an old pre-#2906 database, or one built by some other route) gets refused
 rather than silently grafted onto. The failure message names the exact commands, but
 in short: drop and recreate the database, then re-run `post-create.sh` (or `just
-dc-build`):
+dc-build`). `PGPASSWORD` is the password from `DATABASE_URL` in `src/.env` - export
+it yourself (the failure message never prints it):
 
 ```bash
-PGPASSWORD=arxii dropdb -h db -U arxii arxiidev
-PGPASSWORD=arxii createdb -h db -U arxii arxiidev
+export PGPASSWORD=... # the password from DATABASE_URL in src/.env
+dropdb -h db -U arxii arxiidev
+createdb -h db -U arxii arxiidev
 ```
 
 This is deliberate, not a bug - CLAUDE.md's "preserve the dev database" rule means
 tooling never drops a developer's database automatically, even a stale one.
+
+One consequence worth knowing about ahead of time: because the migration chain is
+currently missing the `arxii_interaction` partition rewrite and its composite FK
+constraints (a pre-existing gap from the #2906 squash, unrelated to this bootstrap
+change - see #<N>), a database built by a **fully successful**
+`arx manage migrate` also ends up with an unpartitioned `arxii_interaction`. That
+means this guard refuses it too, reporting it as "not built by
+tools/build_schema.py" even though nothing actually failed. That's arguably correct
+- such a database genuinely has the less-correct schema - but it's surprising if
+you hit it after a clean `migrate`. It resolves itself once the migration chain
+regains the partition/composite-FK SQL.
 
 **Network call hangs or fails inside the container** — a needed host is not in the
 firewall allowlist. Check `.devcontainer/init-firewall.sh`, add the host, then

@@ -164,17 +164,17 @@ print(
     "re-run this",
     file=sys.stderr,
 )
-print("[post-create] script (or 'just dc-build'):", file=sys.stderr)
 print(
-    f"[post-create]   PGPASSWORD={db['PASSWORD']} dropdb -h {db['HOST']} -U {db['USER']} "
-    f"{db['NAME']}",
+    "[post-create] script (or 'just dc-build'). PGPASSWORD is the password from "
+    "DATABASE_URL",
     file=sys.stderr,
 )
 print(
-    f"[post-create]   PGPASSWORD={db['PASSWORD']} createdb -h {db['HOST']} -U {db['USER']} "
-    f"{db['NAME']}",
+    "[post-create] in src/.env - export it yourself (never printed here), then:",
     file=sys.stderr,
 )
+print(f"[post-create]   dropdb -h {db['HOST']} -U {db['USER']} {db['NAME']}", file=sys.stderr)
+print(f"[post-create]   createdb -h {db['HOST']} -U {db['USER']} {db['NAME']}", file=sys.stderr)
 sys.exit(1)
 PY
 
