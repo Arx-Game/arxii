@@ -437,7 +437,7 @@ Check compositions are authored as seed data (the design tenet: **stat + skill (
 | `security` (#2180, #2757) | `Athletics` | Athletics (skill) + situational stat (default: strength; `resolve_security_check` passes `stat_override` from `SecurityCheckKind`) |
 | `security` | `Lockpick` / `Guard Detection` | wits+Skulduggery / perception+Investigation |
 
-**Resist checks** (Reflexes, Escalation Pace, Endurance, Mortal Resolve) are the tenet-permitted single-stat exception — they seed exactly one `CheckTypeTrait`. The `Melee Combat` skill catalog (with weapon-class specializations aligned to `progression.services.scene_integration`'s `weapon_map`) is seeded by the `combat_checks` cluster; the penetration/flee retrofits depend on it.
+**Resist checks** (Reflexes, Escalation Pace, Endurance, Mortal Resolve) are the tenet-permitted single-stat exception — they seed exactly one `CheckTypeTrait`. The `Melee Combat` skill catalog (with weapon-class specializations local to the `combat_checks` seed) is seeded by the `combat_checks` cluster; the penetration/flee retrofits depend on it.
 
 **Technique routing (#1706):** `resolve_cast_action_template` reads `Technique.action_category` — a `PHYSICAL` technique with no chosen consequence-pool flavor resolves to the combat `Melee Attack` `ActionTemplate` (so physical attacks roll a combat check, not the magic fallback); non-physical techniques resolve to the magic standalone cast template.
 
