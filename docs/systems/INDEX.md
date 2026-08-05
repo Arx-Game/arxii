@@ -1862,7 +1862,9 @@ Secrets, souls with per-life-knowledge reincarnation chains, app-in slots/pools.
   `mint_from_pool`/`claim_appable_node`/`define_deferred`); `OMNISCIENT` sentinel.
   `world.roster.services.heredity` (#2815) — Parent Dominance:
   `derive_lines_for_child`/`derivable_species`/`inherited_options`
-- **Surfaces:** `families/:id/tree/` + `families/:id/slots/` REST; (#3003)
+- **Surfaces:** `families/` (+`has_open_positions`/`area_id` filters) +
+  `families/:id/tree/` + `families/:id/slots/` REST — the same `FamilyViewSet`
+  is also mounted at `/api/character-creation/families/` for CG; (#3003)
   `kin/tree/<character_id>/` (viewer-filtered graph payload for one character)
   + `kin/relationship/?a=&b=` (viewer-derived relationship label); CG slot claim
   (draft `claimed_kin_slot/_pool`, `_bind_kinship_node` at finalize; FE
@@ -1870,7 +1872,9 @@ Secrets, souls with per-life-knowledge reincarnation chains, app-in slots/pools.
   names/genders → `_bind_invented_parents` + `_pin_heredity_back_inference` at
   finalize; FE `InventedParentsCard`); parent-aware
   `form-options/:species_id/?draft=` (inherited option groups + `is_required`);
-  telnet `sheet/family`; staff admin. Seeds: cluster `kinship`
+  telnet `sheet/family`; staff admin. (#3003) Character-sheet FE:
+  `KinshipPanel` (Kinship tab, `KinTreeGraph` + relationship readout). Seeds:
+  cluster `kinship`
 - **Consumed by:** #1884 recognition/succession law; #1985 estates (future);
   future child-generation spec (deferred, #2815)
 - **Source:** `src/world/roster/models/families.py`, `services/kinship.py`,
@@ -6070,7 +6074,18 @@ funeral finish, executor will-reading, or the deadline sweeper (14 real days, PL
 ### Dreams (#2290)
 The dream realm — a parallel layer on the room graph for sleeping/unconscious characters.
 Dream reflections, mental fatigue dream danger, Dream Peril consequence pool (nightmares/
-madness/death), thread-gated dreamwalking with escape lever, and the deep dreaming area.
+madness/death, narrated to the player via `character.msg`), thread-gated dreamwalking with
+escape lever, and the deep dreaming area.
+- **Models (#3003):** `DreamwalkPresence` — persisted dreamwalk anchor keyed on the host
+  sheet (see ADR-0197), replacing the process-local `ndb.dreamwalk_destination` stash.
+- **Services (#3003):** `dreamspace_for(sheet)` (the single "whose dreamspace does this
+  character perceive" resolution point — every viewer-facing caller routes through it),
+  `co_dreamers_for`, `start_dreamwalk`/`end_dreamwalk`, `has_dream_bond`,
+  `dreamwalk_candidates_for`.
+- **Surfaces (#3003):** `GET /api/dreams/<character_id>/` (dream-state payload — co-dreamers,
+  dreamwalk host/candidates, descend/ascend availability, wake-blocked flag); FE
+  `frontend/src/dreams/` (`DreamspacePanel`, takes over the play view's Room tab while
+  dreamside).
 - **Source:** `src/world/dreams/`
 - **Details:** [dreams.md](dreams.md)
 

@@ -88,9 +88,14 @@ definitions both tree builders share — never duplicate them.
 
 ## Surfaces
 
-- REST: `GET /api/roster/families/` (+`has_open_positions` filter),
+- REST: `GET /api/roster/families/` (+`has_open_positions` and `area_id`
+  filters — `area_id` resolves through `StartingArea.realm`, matching
+  families with that realm or with no `origin_realm` at all),
   `families/:id/tree/` (viewer-filtered graph payload),
-  `families/:id/slots/` (slot browser). (#3003) `kin/tree/<character_id>/`
+  `families/:id/slots/` (slot browser). The same `FamilyViewSet` is also
+  mounted at `GET /api/character-creation/families/` (`character_creation/
+  urls.py:38`) for the CG Lineage stage, producing two operation ids for one
+  ViewSet. (#3003) `kin/tree/<character_id>/`
   (viewer-filtered graph payload centred on one character — delegates to
   `kin_tree_for_sheet`) and `kin/relationship/?a=&b=` (viewer-derived
   `RelationshipType` label between two characters, or `null` — delegates to
@@ -99,6 +104,13 @@ definitions both tree builders share — never duplicate them.
 - CG: draft fields `claimed_kin_slot(_id)` / `claimed_kin_pool(_id)` /
   `defer_parents`; `finalize_character` → `_bind_kinship_node` (claim →
   mint → self-serve fallback). FE: `KinSlotPicker` in LineageStage.
+- (#3003) FE: `frontend/src/kinship/components/KinshipPanel.tsx` — a Kinship
+  tab on the character sheet, rendering the family tree via `KinTreeGraph`
+  and the pairwise relationship label for the selected node. Each node dict
+  in the tree payload (`_node_dict`) carries `sheet_id` (the bound
+  `CharacterSheet` pk, or `null` when the node is unsheeted) — a distinct id
+  space from the `Kinsperson` pk used for `id`, needed so the panel can call
+  `kin/relationship/?a=&b=` without conflating the two.
 - Telnet: `sheet/family` (alias `kin`) section — the viewer's own visible
   kin, labeled.
 - Admin: Kinsperson (+parentage/membership inlines), ParentageEdge,

@@ -22,7 +22,7 @@ The `Sleeping` ConditionTemplate (`world/vitals/seeds.py`) mirrors `Unconscious`
 
 `get_dream_space(room)` (`world/dreams/services.py`) takes the waking room's ObjectDB and returns the dream room's **`ObjectDB`** — the DreamReflection's dream_room if one exists (dereferenced via `.objectdb`, since #2608 retargeted `DreamReflection.dream_room` onto `RoomProfile`), or the liminal placeholder room (#2287) as fallback. It stays the room-level primitive — "what is this room's dreamspace" — and is the one thing `dreamspace_for()` below delegates to.
 
-`dreamspace_for(sheet)` (`world/dreams/services.py`, #3003) is the character-level resolution point — "whose dreamspace does this character perceive" — layered on top of `get_dream_space()`. It honours an active `DreamwalkPresence` row: a dreamwalking sheet perceives its host's dreamspace (following the host if the host moves) rather than its own room's, falling back to its own room when there is no active dreamwalk or the host is no longer dreamside. `co_dreamers_for(sheet)` lists the other dreamside sheets sharing that resolution (the host plus any other visitors). Every viewer-facing caller — `LookAction`'s dreamside look-at-room branch, `Character.send_room_state()`'s web push, and `is_dream_engaged()`'s wake-danger gate — routes through `dreamspace_for()` so telnet and web never disagree; `DreamwalkAction`/`WakeAction` write/read the anchor via `start_dreamwalk`/`end_dreamwalk`.
+`dreamspace_for(sheet)` (`world/dreams/services.py`, #3003) is the character-level resolution point — "whose dreamspace does this character perceive" — layered on top of `get_dream_space()`. It honours an active `DreamwalkPresence` row: a dreamwalking sheet perceives its host's dreamspace (following the host if the host moves) rather than its own room's, falling back to its own room when there is no active dreamwalk or the host is no longer dreamside. `co_dreamers_for(sheet)` lists the other dreamside sheets sharing that resolution (the host plus any other visitors) with a single bulk query, never a query per candidate. Every viewer-facing caller — `LookAction`'s dreamside look-at-room branch, `Character.send_room_state()`'s web push, and `is_dream_engaged()`'s wake-danger gate — routes through `dreamspace_for()` so telnet and web never disagree; `DreamwalkAction`/`WakeAction` write/read the anchor via `start_dreamwalk`/`end_dreamwalk`. `has_dream_bond(source_sheet, target_sheet)` checks the RELATIONSHIP_TRACK/CAPSTONE-thread-or-soul-tether gate `DreamwalkAction` requires; `dreamwalk_candidates_for(sheet)` (#3003) lists everyone `sheet` could dreamwalk to right now — narrows to currently-dreaming sheets with one bulk query, then applies `has_dream_bond` per remaining candidate — feeding the web dreamwalk-target picker.
 
 ## Danger: Mental Fatigue + Dream Peril Pool
 
@@ -36,6 +36,8 @@ The Dream Peril consequence pool has four outcomes:
 
 `DreamPerilConfig` singleton (pk=1) stores the resist check type (stability-based) and difficulty.
 
+`resolve_dream_peril_collapse()` returns a `DreamPerilResult` carrying a player-facing `message` alongside `died`/`outcome_label`; its caller in `resolve_fatigue_collapse()` (`world/fatigue/services.py`) sends it straight to the character via `character.msg(result.message)`, so the outcome — waking shaken, nightmares, madness, or death — is narrated to the player in the moment, not just recorded as a condition/state change discovered after the fact.
+
 ## Dreamwalking
 
 `DreamwalkAction` (key `"dreamwalk"`) — requires Sleeping/Unconscious (must be dreamside). Gated by:
@@ -43,7 +45,9 @@ The Dream Peril consequence pool has four outcomes:
 - Soul Tether bond (`CharacterRelationship.is_soul_tether=True`)
 - Same-room sleepers share a dreamspace automatically (no dreamwalk needed)
 
-**Escape lever**: `DreamwalkAction` anchors the walker via `start_dreamwalk(dreamer=sheet, host=target_sheet)` — a persisted `DreamwalkPresence` row (#3003), replacing the earlier process-local `actor.ndb.dreamwalk_destination` stash. When the dreamwalker wakes, `WakeAction` calls `end_dreamwalk(sheet)` to pop the row and moves their body to the host's current location — an escape from physical confinement.
+`DreamwalkAction` anchors the walker via `start_dreamwalk(dreamer=sheet, host=target_sheet)` — a persisted `DreamwalkPresence` row (#3003; see ADR-0197), replacing the earlier process-local `actor.ndb.dreamwalk_destination` stash. That row does more than back the escape lever: for as long as it exists, every viewer-facing perception call (`look`, the web room-state push, the wake-danger gate) routes through `dreamspace_for()` and resolves to the host's dreamspace instead of the walker's own room, so the walker actually experiences the host's dream — shares the same co-dreamer list (`co_dreamers_for`), sees the same peril, and follows the host if the host's physical body moves while the walk is active.
+
+**Escape lever**: when the dreamwalker wakes, `WakeAction` calls `end_dreamwalk(sheet)` to pop the row and moves their body to the host's *current* location (resolved fresh at wake time, not the location stored at dreamwalk-start) — an escape from physical confinement.
 
 ## Deep Dreaming
 
@@ -78,6 +82,20 @@ Deep dreaming uses real ObjectDB movement — standard exit traversal, scene rou
 | `DreamwalkAction` | `dreamwalk` | Thread-gated travel to bonded dreamer's dreamspace |
 | `DescendAction` | `descend` | Descend from dream reflection into deep dreaming |
 | `AscendAction` | `ascend` | Return from deep dreaming to dream reflection |
+
+## Surfaces (#3003)
+
+- REST: `GET /api/dreams/<character_id>/` (`CharacterDreamStateView`, read-only) —
+  `is_dreamside`, the current `dream_room` (id/key/description), `co_dreamers` (via
+  `co_dreamers_for`), `dreamwalk_host` (the anchor, if any), `dreamwalk_candidates` (via
+  `dreamwalk_candidates_for`), `can_descend`/`descent_name`, `can_ascend`, and
+  `wake_blocked` (via `is_dream_engaged`). Visibility: staff, or an account with an
+  active tenure on the character — otherwise 404 (never 403, to avoid confirming the
+  character exists).
+- FE: `frontend/src/dreams/` — `DreamspacePanel` takes over the play view's Room tab
+  while a character is dreamside (mirrors the server's own dreamside room-swap rule),
+  reading the state above via `useDreamState` and surfacing the dreamwalk-candidate
+  picker and descend/ascend controls.
 
 ## Integration Points
 

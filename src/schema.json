@@ -4078,6 +4078,10 @@ paths:
       description: Families list/detail + the viewer-aware tree and CG slot browser.
       parameters:
       - in: query
+        name: area_id
+        schema:
+          type: string
+      - in: query
         name: has_open_positions
         schema:
           type: boolean
@@ -27494,6 +27498,10 @@ paths:
       operationId: roster_families_list
       description: Families list/detail + the viewer-aware tree and CG slot browser.
       parameters:
+      - in: query
+        name: area_id
+        schema:
+          type: string
       - in: query
         name: has_open_positions
         schema:

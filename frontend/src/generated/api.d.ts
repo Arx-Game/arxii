@@ -43464,6 +43464,7 @@ export interface operations {
   character_creation_families_list: {
     parameters: {
       query?: {
+        area_id?: string;
         has_open_positions?: boolean;
       };
       header?: never;
@@ -63577,6 +63578,7 @@ export interface operations {
   roster_families_list: {
     parameters: {
       query?: {
+        area_id?: string;
         has_open_positions?: boolean;
       };
       header?: never;
