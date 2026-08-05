@@ -101,6 +101,84 @@ class TestContentRowExportViewsConfigured(TestCase):
         branch = run_git(self.root, "branch", "--show-current").stdout.strip()
         self.assertEqual(branch, "content-export-session")
 
+    def test_export_refuses_while_same_model_pending(self) -> None:
+        """Exporting row B while row A (same model) is still pending is refused.
+
+        ``ensure_session_branch``'s dirty-tree check now fires even on the
+        session branch itself (#3018 review), so B is never written at all -
+        the operator is redirected to A's diff page instead, with a flash
+        naming A as the pending export.
+        """
+        first = EffectTypeFactory(name="Row Pending A")
+        second = EffectTypeFactory(name="Row Pending B")
+
+        first_resp = self._export("magic.effecttype", first.pk)
+        self.assertEqual(first_resp.status_code, 302)
+
+        second_resp = self._export("magic.effecttype", second.pk)
+
+        self.assertEqual(second_resp.status_code, 302)
+        diff_url = reverse("admin_content_export_row_diff")
+        expected = f"{diff_url}?model=magic.effecttype&pk={first.pk}"
+        self.assertEqual(second_resp.url, expected)
+        msgs = [str(m) for m in second_resp.wsgi_request._messages]
+        self.assertTrue(any("Pending:" in m for m in msgs))
+        self.assertTrue(any("Pending: EffectType [Row Pending A]" in m for m in msgs))
+
+        path = self.root / "fixtures" / "magic" / "effecttype.json"
+        content = path.read_text(encoding="utf-8")
+        self.assertIn("Row Pending A", content)
+        self.assertNotIn("Row Pending B", content)
+
+    def test_export_succeeds_after_confirming_pending(self) -> None:
+        """Once A is confirmed (committed), exporting B proceeds normally."""
+        first = EffectTypeFactory(name="Row Sequence A")
+        second = EffectTypeFactory(name="Row Sequence B")
+
+        self._export("magic.effecttype", first.pk)
+        diff_resp = self._diff("magic.effecttype", first.pk)
+        with self._env():
+            self.client.post(
+                reverse("admin_content_export_row_confirm"),
+                {
+                    "model": "magic.effecttype",
+                    "pk": first.pk,
+                    "digest": diff_resp.context["digest"],
+                    "action": "confirm",
+                    "new_row": "1",
+                },
+            )
+
+        second_resp = self._export("magic.effecttype", second.pk)
+
+        self.assertEqual(second_resp.status_code, 302)
+        diff_url = reverse("admin_content_export_row_diff")
+        expected = f"{diff_url}?model=magic.effecttype&pk={second.pk}"
+        self.assertEqual(second_resp.url, expected)
+        path = self.root / "fixtures" / "magic" / "effecttype.json"
+        self.assertIn("Row Sequence B", path.read_text(encoding="utf-8"))
+
+    def test_export_refuses_while_cross_model_pending(self) -> None:
+        """A pending export on a different model also refuses the next export."""
+        from world.traits.factories import TraitFactory
+        from world.traits.models import TraitType
+
+        pending_effect = EffectTypeFactory(name="Row Cross Pending")
+        other_trait = TraitFactory(name="row_cross_pending_trait", trait_type=TraitType.OTHER)
+
+        self._export("magic.effecttype", pending_effect.pk)
+
+        resp = self._export("traits.trait", other_trait.pk)
+
+        self.assertEqual(resp.status_code, 302)
+        diff_url = reverse("admin_content_export_row_diff")
+        expected = f"{diff_url}?model=magic.effecttype&pk={pending_effect.pk}"
+        self.assertEqual(resp.url, expected)
+        msgs = [str(m) for m in resp.wsgi_request._messages]
+        self.assertTrue(any("Pending: EffectType [Row Cross Pending]" in m for m in msgs))
+        trait_path = self.root / "fixtures" / "traits" / "trait.json"
+        self.assertFalse(trait_path.exists())
+
     def test_diff_page_shows_git_diff_and_addition_checkbox_only_for_additions(self) -> None:
         from core_management.content_export import export_to_content_repo
 
@@ -124,7 +202,9 @@ class TestContentRowExportViewsConfigured(TestCase):
         self.assertContains(update_resp, "Updated")
 
         # Confirm (commit) the update before starting a second pending export -
-        # the session flow never has two uncommitted row exports at once.
+        # ensure_session_branch refuses a dirty tree even on the session
+        # branch itself, so the flow enforces at most one uncommitted row
+        # export at a time (see test_export_refuses_while_another_pending*).
         with self._env():
             self.client.post(
                 reverse("admin_content_export_row_confirm"),

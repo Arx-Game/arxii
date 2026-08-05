@@ -116,7 +116,8 @@ class ContentSessionTests(TestCase):
 
         with self.assertRaises(ContentPushError) as ctx:
             ensure_session_branch(self.root)
-        assert "uncommitted changes" in str(ctx.exception)
+        assert "pending export" in str(ctx.exception)
+        assert "Confirm or discard it" in str(ctx.exception)
 
         branch = _run(self.root, "branch", "--show-current").stdout.strip()
         assert branch == SESSION_BRANCH

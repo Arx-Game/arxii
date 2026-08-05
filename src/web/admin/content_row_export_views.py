@@ -22,9 +22,19 @@ mirroring the corpus-wide export's addition gate (ADR-0191) at row scope.
 pending export - a second call would flip its own ``is_addition`` reading
 (the row would already be in the file it just wrote). So the diff and
 confirm views never re-export; they recompute the same output path(s)
-``export_single_row`` would have used via a small read-only helper below,
-and carry the one thing genuinely lost between requests - whether this
-export was an addition - in the request session, keyed by (model, pk).
+``export_single_row`` would have used via a small read-only helper below.
+
+At most one pending row export can exist at a time - enforced not here but
+one layer down, by ``content_session.ensure_session_branch`` refusing any
+dirty working tree (git state is the only truth that holds across browsers/
+operators; request-session bookkeeping is not). This module still keeps one
+piece of state in the request session - ``is_addition`` and the identity of
+the currently pending row, since neither survives a re-derivation without
+re-exporting (which would flip ``is_addition`` itself). When
+``ensure_session_branch`` refuses a second export because a first is still
+pending, that session record is what lets the flash name the pending row and
+the redirect send the operator straight to its diff page instead of a dead
+end.
 """
 
 from __future__ import annotations
@@ -78,9 +88,64 @@ def _changelist_url(model: type) -> str:
     return reverse(f"admin:{app_label}_{model_name}_changelist")
 
 
-def _addition_session_key(model_label: str, pk: object) -> str:
-    """Session key carrying one pending export's addition state across requests."""
-    return f"content_export_row:{model_label}:{pk}:is_addition"
+_PENDING_EXPORT_SESSION_KEY = "content_export_row:pending"
+
+
+def _set_pending_export(request: HttpRequest, model_label: str, pk: object, result) -> None:
+    """Record the just-written pending export as the session's single pending record.
+
+    A single key, not one keyed by ``(model_label, pk)``: at most one pending
+    export can exist at a time (enforced by ``ensure_session_branch``), so
+    there is never a need to remember more than one, and a stray leftover
+    key from an abandoned export session can never linger under this
+    invariant.
+    """
+    request.session[_PENDING_EXPORT_SESSION_KEY] = {
+        "model_label": model_label,
+        "pk": pk,
+        "natural_key": result.natural_key,
+        "is_addition": result.is_addition,
+    }
+
+
+def _pending_export(request: HttpRequest) -> dict | None:
+    """Return the session's pending-export record, or ``None`` if there isn't one."""
+    return request.session.get(_PENDING_EXPORT_SESSION_KEY)
+
+
+def _clear_pending_export(request: HttpRequest) -> None:
+    """Forget the session's pending-export record (after a confirm or discard)."""
+    request.session.pop(_PENDING_EXPORT_SESSION_KEY, None)
+
+
+def _is_pending_addition(request: HttpRequest, model_label: str, pk: object) -> bool:
+    """True when the session's pending-export record is this row and it's an addition.
+
+    Defaults to ``False`` (never spuriously shows the new-row checkbox) when
+    the session record is missing or names a different row - e.g. a direct
+    hit on a stale diff URL after another operator's export replaced this
+    session's pending record.
+    """
+    pending = _pending_export(request)
+    if pending is None:
+        return False
+    same_row = pending["model_label"] == model_label and str(pending["pk"]) == str(pk)
+    return same_row and bool(pending["is_addition"])
+
+
+def _pending_export_display_name(model_label: str) -> str:
+    """Return the pending export's model class name, falling back to its label.
+
+    Only used for a flash message, so an unresolvable label (a very stale
+    session surviving a model rename) degrades to showing the raw label
+    rather than raising out of an error-handling path.
+    """
+    from core.app_domains import resolve_model_by_name  # noqa: PLC0415
+
+    try:
+        return resolve_model_by_name(model_label).__name__
+    except LookupError:
+        return model_label
 
 
 def _row_export_preview(instance, content_root: Path) -> tuple[list[Path], str]:
@@ -199,15 +264,20 @@ def content_export_row(request: HttpRequest) -> HttpResponse:
     try:
         ensure_session_branch(content_root)
     except ContentPushError as exc:
-        messages.error(request, str(exc))
-        return HttpResponseRedirect(_change_url(model, pk))
+        pending = _pending_export(request)
+        if pending is None:
+            messages.error(request, str(exc))
+            return HttpResponseRedirect(_change_url(model, pk))
+        pending_name = _pending_export_display_name(pending["model_label"])
+        messages.error(request, f"{exc} Pending: {pending_name} [{pending['natural_key']}].")
+        return HttpResponseRedirect(_diff_url(pending["model_label"], pending["pk"]))
 
     result = export_single_row(instance, content_root=content_root)
     if result.refused is not None:
         messages.error(request, result.refused)
         return HttpResponseRedirect(_change_url(model, pk))
 
-    request.session[_addition_session_key(result.model_label, pk)] = result.is_addition
+    _set_pending_export(request, result.model_label, pk, result)
     return HttpResponseRedirect(_diff_url(result.model_label, pk))
 
 
@@ -241,7 +311,7 @@ def content_export_row_diff(request: HttpRequest) -> HttpResponse:
         )
         return HttpResponseRedirect(_change_url(model, pk))
 
-    is_addition = request.session.get(_addition_session_key(model_label, pk), False)
+    is_addition = _is_pending_addition(request, model_label, pk)
     digest = hashlib.sha256(diff_text.encode("utf-8")).hexdigest()
 
     context = {
@@ -282,12 +352,11 @@ def _run_confirmed_action(
     pk = instance.pk
     model_label = request.POST.get("model", "")
     diff_url = _diff_url(model_label, pk)
-    session_key = _addition_session_key(model_label, pk)
     action = request.POST.get("action", "")
 
     if action == _ACTION_DISCARD:
         discard_row_export(content_root, paths)
-        request.session.pop(session_key, None)
+        _clear_pending_export(request)
         messages.info(request, f"Discarded the pending export of {model.__name__} [{natural_key}].")
         return HttpResponseRedirect(_change_url(model, pk))
 
@@ -295,7 +364,7 @@ def _run_confirmed_action(
         messages.error(request, "Unknown export action.")
         return HttpResponseRedirect(diff_url)
 
-    is_addition = request.session.get(session_key, False)
+    is_addition = _is_pending_addition(request, model_label, pk)
     if is_addition and not request.POST.get("new_row"):
         messages.error(
             request, "Check the new-row box to confirm this export adds a row to the corpus."
@@ -308,7 +377,7 @@ def _run_confirmed_action(
         messages.error(request, str(exc))
         return HttpResponseRedirect(diff_url)
 
-    request.session.pop(session_key, None)
+    _clear_pending_export(request)
     messages.success(request, f"Committed {model.__name__} [{natural_key}] as {sha}.")
     # Redirects to the Game Setup hub for now - Task 4 adds the session page
     # (admin_content_session) and this line moves there once it lands.

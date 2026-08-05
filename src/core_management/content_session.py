@@ -83,31 +83,56 @@ def _to_relative(repo: Path, paths: list[Path]) -> list[str]:
 
 
 def _dirty_refusal_message(branch: str) -> str:
-    """Return the standard refusal text for a dirty tree on ``branch``."""
+    """Return the standard refusal text for a dirty tree on a non-session ``branch``."""
     return (
         f"working tree has uncommitted changes on '{branch}' - commit or "
         "clean them first; the session flow never stashes work."
     )
 
 
+def _pending_export_refusal_message() -> str:
+    """Return the refusal text for a dirty tree already on the session branch.
+
+    A dirty tree here always means a prior row's export is still
+    uncommitted/undiscarded (#3018 review) - there is no other legitimate
+    way for the session branch to be dirty, since nothing but
+    ``content_export_row`` ever writes to it outside a commit.
+    """
+    return (
+        "The content checkout has uncommitted changes from a pending export. "
+        "Confirm or discard it before exporting another row."
+    )
+
+
 def ensure_session_branch(content_root: Path) -> None:
     """Ensure the checkout is on ``SESSION_BRANCH``, fresh off ``origin/main`` if merged.
 
-    Fetches origin first. If the working tree is dirty, raises
-    ``ContentPushError`` without touching anything else - the session flow
-    never stashes work. This applies on any branch, including the session
-    branch itself: a dirty session branch that turns out to be merged would
-    otherwise have its uncommitted changes silently discarded by the
-    detach-and-delete recreate below. If the session branch already exists
-    and is fully merged into ``origin/main`` (its PR landed), the stale
-    branch is deleted and recreated fresh; otherwise the existing branch
-    (with its unmerged commits) is reused.
+    Fetches origin first, then refuses ANY dirty working tree - including
+    when already on the session branch. This function's only caller is the
+    row-export POST (``content_export_row``), which requires the tree to be
+    clean by definition: enforcing that here (against git state, the only
+    truth that holds across browsers/operators) is what guarantees the
+    flow's core invariant, at most one pending row export at a time. Without
+    this, exporting a second row while a first is still uncommitted would
+    merge both rows' writes into one file, and the second row's diff/commit/
+    discard would silently carry the first row's pending changes along with
+    it (#3018 review - live-reproduced: two same-model exports collapsed
+    into one commit under the second row's message).
+
+    This also protects the merged-branch recreate below: a dirty session
+    branch that turns out to be merged would otherwise have its uncommitted
+    changes silently discarded by the detach-and-delete. If the session
+    branch already exists and is fully merged into ``origin/main`` (its PR
+    landed), the stale branch is deleted and recreated fresh; otherwise the
+    existing branch (with its unmerged commits) is reused.
     """
     _run_git(content_root, "fetch", _GIT_ORIGIN)
 
     branch = _current_branch(content_root)
     dirty = _short_status_lines(content_root)
-    if dirty and branch != SESSION_BRANCH:
+    if dirty:
+        if branch == SESSION_BRANCH:
+            raise ContentPushError(_pending_export_refusal_message())
         raise ContentPushError(_dirty_refusal_message(branch))
 
     branch_exists = _git_ok(
@@ -123,8 +148,6 @@ def ensure_session_branch(content_root: Path) -> None:
         )
         if merged:
             if branch == SESSION_BRANCH:
-                if dirty:
-                    raise ContentPushError(_dirty_refusal_message(branch))
                 _run_git(content_root, "checkout", "--detach", f"{_GIT_ORIGIN}/{_GIT_MAIN}")
             _run_git(content_root, "branch", "-D", SESSION_BRANCH)
             branch_exists = False
