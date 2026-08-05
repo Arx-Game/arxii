@@ -122,11 +122,14 @@ def visible_worn_items_for(
 def covered_regions(character: ObjectDB) -> set[str]:
     """Body regions covered by an equipped non-revealing garment (#2846/#2985).
 
-    THE skin-coverage predicate: a garment covers every region it is equipped
-    over UNLESS it bares the skin — by material (``ItemTemplate.is_revealing``,
-    a sheer lace veil) or by cut (the instance's effective silhouette's
-    ``exposes_skin``, a plunging bodice — the crafter's pick at making).
-    Either alone exposes; a modest cut in sheer cloth still shows the ink.
+    THE skin-coverage predicate: skin at a region is covered iff ANY worn
+    layer there conceals what lies beneath it — the top-down layer walk
+    (#2985) reduced to an AND, since order doesn't matter for the bottom of
+    the stack. A garment conceals unless its cut exposes beneath (the
+    instance's effective silhouette's ``exposes_beneath`` — the crafter's
+    pick at making; the slit gown over stockings shows stockings, over
+    nothing shows skin) or its material does (``ItemTemplate.is_revealing``,
+    a sheer lace veil). Either alone exposes the layer below.
     Consumers: felt sun exposure (``world.species.sun_exposure``) and
     body-marking visibility (``world.forms.services.markings``). Zero queries
     beyond warm FK caches — reads the cached equipment handler.
@@ -137,7 +140,7 @@ def covered_regions(character: ObjectDB) -> set[str]:
         if instance.template.is_revealing:
             continue
         silhouette = instance.effective_silhouette
-        if silhouette is not None and silhouette.exposes_skin:
+        if silhouette is not None and silhouette.exposes_beneath:
             continue
         covered.add(row.body_region)
     return covered

@@ -656,12 +656,17 @@ Returns `{"action_points": n, "anima": n, "materials": k}`.
   for garments, "setting" for jewelry, "silhouette" otherwise.
   `InvalidSilhouetteChoice` covers bad picks. Read shape:
   `SilhouetteReadSerializer` nested on the inventory item payload.
-  **`exposes_skin` (#2985):** whether the cut bares the skin of its regions —
-  revealing-ness is SHAPE (the silhouette litmus test), so the crafter's cut
-  pick decides it per instance. `covered_regions` reads
-  `effective_silhouette.exposes_skin` OR `ItemTemplate.is_revealing`
-  (material sheerness): either alone exposes — a modest cut in sheer cloth
-  still shows the ink. Consumers: marking visibility + felt sun exposure.
+  **`exposes_beneath` (#2985):** whether the cut exposes whatever lies
+  beneath it — ONE axis, no skin special-case (the slit gown shows the
+  stockings, or the skin and its markings when nothing is underneath; plain
+  cuts conceal beneath by default — Apostate's rulings, 2026-08-05).
+  Revealing-ness is SHAPE (the silhouette litmus test), so the crafter's cut
+  pick decides it per instance. `covered_regions` is the layer walk reduced
+  to its bottom: skin covered iff any worn layer there conceals beneath —
+  `effective_silhouette.exposes_beneath` OR `ItemTemplate.is_revealing`
+  (material sheerness) exposes; either alone. Consumers: marking visibility
+  + felt sun exposure. The full top-down walk (which GARMENT layers show,
+  the `opened` wear state, show/conceal verbs) is the next slice.
 - **Styles are chosen at making too (#2985):** `craft_create_item(styles=[…])`
   → capacity-validated before any roll (`_validate_style_choices`), priced
   into the shared ambition penalty/cost multiplier alongside accents, then
