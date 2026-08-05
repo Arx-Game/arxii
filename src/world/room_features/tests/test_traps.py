@@ -12,10 +12,12 @@ authored damage. Disarm routes the same pool through ``disarm_check_type``.
 from unittest.mock import patch
 
 from django.test import TestCase
+from evennia import create_object
 
 from actions.factories import ConsequencePoolEntryFactory, ConsequencePoolFactory
 from actions.registry import get_action
 from evennia_extensions.factories import CharacterFactory, RoomProfileFactory
+from evennia_extensions.models import RoomProfile
 from world.areas.positioning.factories import PositionFactory
 from world.areas.positioning.services import place_in_position
 from world.character_sheets.factories import CharacterSheetFactory
@@ -37,6 +39,7 @@ from world.mechanics.effect_handlers import apply_effect
 from world.mechanics.factories import SituationTemplateFactory, SituationTrapLinkFactory
 from world.mechanics.situation_services import instantiate_situation
 from world.room_features.factories import TrapFactory
+from world.room_features.models import Trap
 from world.room_features.trap_services import check_room_traps_on_entry, check_traps_at_position
 from world.traits.factories import CheckOutcomeFactory
 from world.vitals.factories import CharacterVitalsFactory
@@ -329,3 +332,61 @@ class SituationInstantiatedTrapEntryTest(_TrapSceneMixin, TestCase):
 
         assert self._health() == 100
         assert self.sheet in self.trap.detected_by.all()
+
+
+class GMPlacedTrapProvenanceTest(TestCase):
+    """A GM-placed trap records who placed it, and stops at scene end (#3002)."""
+
+    def setUp(self) -> None:
+        super().setUp()
+        self.room = create_object("typeclasses.rooms.Room", key="Ambush Site", nohome=True)
+        self.room_profile, _ = RoomProfile.objects.get_or_create(objectdb=self.room)
+
+    def test_instantiate_situation_stamps_the_placing_sheet(self) -> None:
+        from world.mechanics.factories import (
+            SituationTemplateFactory,
+            SituationTrapLinkFactory,
+        )
+        from world.mechanics.situation_services import instantiate_situation
+
+        template = SituationTemplateFactory()
+        SituationTrapLinkFactory(situation_template=template, name="Spike Pit")
+        sheet = CharacterSheetFactory()
+
+        instantiate_situation(template, self.room, placed_by_sheet=sheet)
+
+        trap = Trap.objects.get(room_profile=self.room_profile, name="Spike Pit")
+        assert trap.created_by_sheet_id == sheet.pk
+
+    def test_instantiate_situation_without_a_sheet_leaves_provenance_null(self) -> None:
+        from world.mechanics.factories import (
+            SituationTemplateFactory,
+            SituationTrapLinkFactory,
+        )
+        from world.mechanics.situation_services import instantiate_situation
+
+        template = SituationTemplateFactory()
+        SituationTrapLinkFactory(situation_template=template, name="Spike Pit")
+
+        instantiate_situation(template, self.room)
+
+        trap = Trap.objects.get(room_profile=self.room_profile, name="Spike Pit")
+        assert trap.created_by_sheet_id is None
+
+    def test_scene_finish_disarms_gm_traps_and_spares_authored_ones(self) -> None:
+        from world.scenes.factories import SceneFactory
+        from world.scenes.scene_admin_services import finish_scene_full
+
+        sheet = CharacterSheetFactory()
+        gm_trap = TrapFactory(
+            room_profile=self.room_profile, name="GM Snare", created_by_sheet=sheet
+        )
+        authored_trap = TrapFactory(room_profile=self.room_profile, name="Ancient Pit")
+        scene = SceneFactory(location=self.room)
+
+        finish_scene_full(scene)
+
+        gm_trap.refresh_from_db()
+        authored_trap.refresh_from_db()
+        assert gm_trap.is_armed is False
+        assert authored_trap.is_armed is True

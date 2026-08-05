@@ -198,7 +198,14 @@ def teardown_conjured_hazards(room: ObjectDB) -> None:
     """
     from world.room_features.models import Trap  # noqa: PLC0415
 
-    Trap.objects.filter(
+    conjured = Trap.objects.filter(
         created_by_sheet__isnull=False,
         room_profile__objectdb=room,
-    ).update(is_armed=False)
+    )
+    # Per-instance save, not a bulk update: Trap is a SharedMemoryModel, and a
+    # bulk .update() sends no post_save signal, so the idmapper identity map
+    # keeps serving a stale is_armed=True to anything already holding that
+    # Trap (e.g. a GM's own trap listing right after this teardown runs).
+    for hazard in conjured:
+        hazard.is_armed = False
+        hazard.save(update_fields=["is_armed"])
