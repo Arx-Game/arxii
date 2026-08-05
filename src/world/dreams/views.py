@@ -17,7 +17,12 @@ from world.character_sheets.models import CharacterSheet
 from world.dreams.engagement import is_dream_engaged
 from world.dreams.models import DreamReflection
 from world.dreams.serializers import DreamStateSerializer
-from world.dreams.services import co_dreamers_for, dreamspace_for, dreamwalk_candidates_for
+from world.dreams.services import (
+    _character_location,
+    co_dreamers_for,
+    dreamspace_for,
+    dreamwalk_candidates_for,
+)
 from world.roster.models import RosterEntry
 from world.vitals.services import perceives_dreamside
 
@@ -63,8 +68,7 @@ class CharacterDreamStateView(APIView):
                 "description": room.item_data.get_display_description(),
             }
 
-        character = sheet.character
-        location = character.location if character is not None else None
+        location = _character_location(sheet)
         reflection = DreamReflection.objects.for_waking_room(location)
         descent_target = reflection.descent_target if reflection is not None else None
         can_descend = descent_target is not None
