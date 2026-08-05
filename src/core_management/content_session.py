@@ -31,6 +31,9 @@ _GIT_MAIN = "main"
 
 _HTTPS_REMOTE = re.compile(r"^https://github\.com/(?P<owner>[^/]+)/(?P<repo>[^/]+?)(?:\.git)?/?$")
 _SSH_REMOTE = re.compile(r"^git@github\.com:(?P<owner>[^/]+)/(?P<repo>[^/]+?)(?:\.git)?/?$")
+# Strips a userinfo/credential segment (user:token@ or token@) from a URL
+# before it ever reaches an error message - an https remote can carry one.
+_URL_CREDENTIALS = re.compile(r"//[^/@]+@")
 
 
 @dataclass
@@ -79,25 +82,33 @@ def _to_relative(repo: Path, paths: list[Path]) -> list[str]:
     return rels
 
 
+def _dirty_refusal_message(branch: str) -> str:
+    """Return the standard refusal text for a dirty tree on ``branch``."""
+    return (
+        f"working tree has uncommitted changes on '{branch}' - commit or "
+        "clean them first; the session flow never stashes work."
+    )
+
+
 def ensure_session_branch(content_root: Path) -> None:
     """Ensure the checkout is on ``SESSION_BRANCH``, fresh off ``origin/main`` if merged.
 
-    Fetches origin first. If the working tree is dirty on a branch other than
-    the session branch, raises ``ContentPushError`` without touching anything
-    else - the session flow never stashes work. If the session branch already
-    exists and is fully merged into ``origin/main`` (its PR landed), the stale
-    branch is deleted and recreated fresh; otherwise the existing branch (with
-    its unmerged commits) is reused.
+    Fetches origin first. If the working tree is dirty, raises
+    ``ContentPushError`` without touching anything else - the session flow
+    never stashes work. This applies on any branch, including the session
+    branch itself: a dirty session branch that turns out to be merged would
+    otherwise have its uncommitted changes silently discarded by the
+    detach-and-delete recreate below. If the session branch already exists
+    and is fully merged into ``origin/main`` (its PR landed), the stale
+    branch is deleted and recreated fresh; otherwise the existing branch
+    (with its unmerged commits) is reused.
     """
     _run_git(content_root, "fetch", _GIT_ORIGIN)
 
     branch = _current_branch(content_root)
     dirty = _short_status_lines(content_root)
     if dirty and branch != SESSION_BRANCH:
-        raise ContentPushError(
-            f"working tree has uncommitted changes on '{branch}' - commit or "
-            "clean them first; the session flow never stashes work."
-        )
+        raise ContentPushError(_dirty_refusal_message(branch))
 
     branch_exists = _git_ok(
         content_root, "show-ref", "--verify", "--quiet", f"refs/heads/{SESSION_BRANCH}"
@@ -112,6 +123,8 @@ def ensure_session_branch(content_root: Path) -> None:
         )
         if merged:
             if branch == SESSION_BRANCH:
+                if dirty:
+                    raise ContentPushError(_dirty_refusal_message(branch))
                 _run_git(content_root, "checkout", "--detach", f"{_GIT_ORIGIN}/{_GIT_MAIN}")
             _run_git(content_root, "branch", "-D", SESSION_BRANCH)
             branch_exists = False
@@ -136,11 +149,11 @@ def commit_row_export(content_root: Path, paths: list[Path], message: str) -> st
 
 def discard_row_export(content_root: Path, paths: list[Path]) -> None:
     """Discard uncommitted changes to ``paths`` - restore tracked, delete new."""
-    for path, rel in zip(paths, _to_relative(content_root, paths), strict=True):
+    for rel in _to_relative(content_root, paths):
         if _git_ok(content_root, "ls-files", "--error-unmatch", "--", rel):
             _run_git(content_root, "checkout", "--", rel)
         else:
-            Path(path).unlink(missing_ok=True)
+            (content_root / rel).unlink(missing_ok=True)
 
 
 def _session_commits(content_root: Path) -> list[str]:
@@ -186,7 +199,10 @@ def _remote_slug(content_root: Path) -> tuple[str, str]:
         match = pattern.match(url)
         if match:
             return match.group("owner"), match.group("repo")
-    raise ContentPushError(f"origin remote URL is not a GitHub URL this session flow parses: {url}")
+    safe_url = _URL_CREDENTIALS.sub("//", url)
+    raise ContentPushError(
+        f"origin remote URL is not a GitHub URL this session flow parses: {safe_url}"
+    )
 
 
 def open_session_pr(content_root: Path, *, title: str, body: str) -> str:

@@ -21,6 +21,7 @@ from core_management.content_session import (
     session_diff,
     session_state,
 )
+from core_management.github_rest import GitHubRestError, github_request
 
 
 def _run(repo: Path, *args: str) -> subprocess.CompletedProcess[str]:
@@ -105,6 +106,40 @@ class ContentSessionTests(TestCase):
         assert branch == SESSION_BRANCH
         log = _run(self.root, "log", "--oneline", "origin/main..HEAD").stdout
         assert log.strip() == ""
+
+    def test_ensure_refuses_dirty_tree_on_merged_session_branch(self) -> None:
+        """A dirty working tree must refuse even when the merged-recreate path would fire.
+
+        Without this check, ensure_session_branch would detach off the session
+        branch and force-delete it out from under uncommitted local changes.
+        """
+        ensure_session_branch(self.root)
+        path = self._write_row()
+        commit_row_export(self.root, [path], "row export")
+        _run(self.root, "push", "-u", "origin", SESSION_BRANCH)
+
+        merger = Path(self.tmp.name) / "merger2"
+        subprocess.run(
+            ["git", "clone", str(self.origin), str(merger)], capture_output=True, check=True
+        )
+        _run(merger, "config", "user.email", "test@example.com")
+        _run(merger, "config", "user.name", "Test")
+        _run(merger, "fetch", "origin", SESSION_BRANCH)
+        _run(merger, "merge", "--ff-only", f"origin/{SESSION_BRANCH}")
+        _run(merger, "push", "origin", "main")
+
+        # Still on SESSION_BRANCH locally, now with an uncommitted change.
+        (self.root / "dirty2.txt").write_text("uncommitted", encoding="utf-8")
+
+        with self.assertRaises(ContentPushError) as ctx:
+            ensure_session_branch(self.root)
+        assert "uncommitted changes" in str(ctx.exception)
+
+        branch = _run(self.root, "branch", "--show-current").stdout.strip()
+        assert branch == SESSION_BRANCH
+        # Nothing was deleted or detached - the session commit is still HEAD.
+        log = _run(self.root, "log", "--oneline", "-1").stdout
+        assert "row export" in log
 
     def test_ensure_refuses_dirty_foreign_branch(self) -> None:
         (self.root / "dirty.txt").write_text("uncommitted", encoding="utf-8")
@@ -221,6 +256,21 @@ class ContentSessionTests(TestCase):
         _run(self.root, "remote", "set-url", "origin", "git@github.com:acme/lore")
         assert _remote_slug(self.root) == ("acme", "lore")
 
+    def test_remote_slug_failure_message_strips_embedded_credentials(self) -> None:
+        token = "ghp_supersecrettoken123"  # noqa: S105 - test fixture value, not a real secret
+        _run(
+            self.root,
+            "remote",
+            "set-url",
+            "origin",
+            f"https://{token}@github.com/acme/lore.git",
+        )
+
+        with self.assertRaises(ContentPushError) as ctx:
+            _remote_slug(self.root)
+
+        assert token not in str(ctx.exception)
+
     def test_session_state_reports_branch_commits_and_dirty(self) -> None:
         ensure_session_branch(self.root)
         path = self._write_row("state.json")
@@ -234,3 +284,17 @@ class ContentSessionTests(TestCase):
         assert any("state commit" in line for line in state.commits)
         assert "state.json" in state.diff_stat
         assert any("untracked.json" in line for line in state.dirty)
+
+    def test_github_request_wraps_non_json_success_body(self) -> None:
+        """A 2xx response with a non-JSON body raises GitHubRestError, not a bare ValueError."""
+        with (
+            self.settings(GITHUB_ISSUE_TOKEN="tok"),
+            mock.patch("core_management.github_rest.requests.get") as mock_get,
+        ):
+            mock_get.return_value.status_code = 200
+            mock_get.return_value.json.side_effect = ValueError("not json")
+
+            with self.assertRaises(GitHubRestError) as ctx:
+                github_request("GET", "/repos/acme/lore/pulls")
+
+        assert "200" in str(ctx.exception)

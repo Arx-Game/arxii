@@ -16,12 +16,13 @@ from typing import TYPE_CHECKING
 
 from django.conf import settings
 
-# Not called directly here anymore (create_github_issue delegates to
-# github_rest.github_request), but kept as a module attribute: existing tests
-# patch world.player_submissions.github_issues.requests.post, and patching an
-# attribute on this shared requests module also redirects github_rest's own
+# requests.post itself is no longer called from here (create_github_issue
+# delegates to github_rest.github_request) - kept for requests.codes.created
+# below, and as a module attribute existing tests patch directly:
+# world.player_submissions.github_issues.requests.post. Patching an attribute
+# on this shared requests module also redirects github_rest's own
 # requests.post call, since both modules hold the same module object.
-import requests  # noqa: F401
+import requests
 
 from core_management.github_rest import GitHubRestError, github_request
 
@@ -134,9 +135,13 @@ def create_github_issue(*, title: str, body: str, labels: list[str]) -> tuple[in
             "POST",
             f"/repos/{repo}/issues",
             payload={"title": title, "body": body, "labels": labels},
+            expected_status=requests.codes.created,
         )
     except GitHubRestError as exc:
-        msg = f"Could not file the GitHub issue ({exc})."
+        if exc.status_code is None:
+            msg = "Could not reach GitHub to file the issue. Please try again."
+        else:
+            msg = f"GitHub rejected the issue (HTTP {exc.status_code})."
         raise GitHubIssueError(msg) from exc
     if not isinstance(data, dict):
         msg = "GitHub returned an unexpected response shape while filing the issue."

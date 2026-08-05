@@ -24,7 +24,17 @@ _METHOD_POST = "POST"
 
 
 class GitHubRestError(Exception):
-    """A GitHub REST call failed. Message carries the status code only, never the body."""
+    """A GitHub REST call failed. Message carries the status code only, never the body.
+
+    ``status_code`` is None for a transport-level failure (could not reach GitHub at
+    all) and set for any other failure (unexpected status, non-JSON body) - callers
+    that need to tell those apart (to reproduce a pre-existing message, say) can
+    branch on it without parsing the message text.
+    """
+
+    def __init__(self, message: str, *, status_code: int | None = None) -> None:
+        super().__init__(message)
+        self.status_code = status_code
 
 
 def _auth_token() -> str:
@@ -37,14 +47,23 @@ def _auth_token() -> str:
     return settings.GITHUB_ISSUE_TOKEN
 
 
-def github_request(method: str, path: str, *, payload: dict | None = None) -> dict | list:
+def github_request(
+    method: str,
+    path: str,
+    *,
+    payload: dict | None = None,
+    expected_status: int | None = None,
+) -> dict | list:
     """One authenticated call to api.github.com; raises GitHubRestError.
 
     Token from settings.GITHUB_ISSUE_TOKEN (falls back to GH_TOKEN in settings);
     headers Bearer + application/vnd.github+json + X-GitHub-Api-Version
-    2022-11-28; timeout 10s; non-2xx raises with the status code ONLY (the
-    body may echo a private repo name and error text travels into admin
-    flashes).
+    2022-11-28; timeout 10s. By default any 2xx status is a success; pass
+    ``expected_status`` to require an exact status code instead (GitHub's
+    issue-creation endpoint, for instance, only ever succeeds with 201).
+    Non-success and a non-JSON success body both raise with the status code
+    ONLY (the body may echo a private repo name and error text travels into
+    admin flashes).
     """
     token = _auth_token()
     if not token:
@@ -66,6 +85,19 @@ def github_request(method: str, path: str, *, payload: dict | None = None) -> di
             raise GitHubRestError(f"Unsupported GitHub REST method: {method}")
     except requests.RequestException as exc:
         raise GitHubRestError("Could not reach GitHub.") from exc
-    if not (200 <= response.status_code < 300):
-        raise GitHubRestError(f"GitHub REST call failed (HTTP {response.status_code}).")
-    return response.json()
+    if expected_status is not None:
+        succeeded = response.status_code == expected_status
+    else:
+        succeeded = 200 <= response.status_code < 300
+    if not succeeded:
+        raise GitHubRestError(
+            f"GitHub REST call failed (HTTP {response.status_code}).",
+            status_code=response.status_code,
+        )
+    try:
+        return response.json()
+    except ValueError as exc:
+        raise GitHubRestError(
+            f"GitHub returned a non-JSON response (HTTP {response.status_code}).",
+            status_code=response.status_code,
+        ) from exc
