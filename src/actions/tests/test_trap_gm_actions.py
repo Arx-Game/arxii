@@ -55,6 +55,21 @@ class GMTrapActionTestBase(TestCase):
         invalidate_active_scene_cache(self.room)
         return character
 
+    def _gm_in_someone_elses_scene(self, level: str = GMLevel.JUNIOR) -> object:
+        """GM trust at ``level``, standing in a room whose active scene ANOTHER GM runs.
+
+        The exact case the gate exists to refuse: a scene IS running here, so a
+        naive "is there a scene" check would pass, but this actor is not its GM.
+        """
+        self._gm_in_scene(db_key="the-real-gm")
+        character = CharacterFactory(db_key="interloper-gm", location=self.room)
+        CharacterSheetFactory(character=character)
+        entry = RosterEntryFactory(character_sheet__character=character)
+        tenure = RosterTenureFactory(roster_entry=entry, end_date=None)
+        GMProfileFactory(account=tenure.player_data.account, level=level)
+        invalidate_active_scene_cache(self.room)
+        return character
+
 
 class ListRoomTrapsActionTest(GMTrapActionTestBase):
     def test_scene_gm_sees_the_trap(self) -> None:
@@ -88,6 +103,22 @@ class ListRoomTrapsActionTest(GMTrapActionTestBase):
 
         assert result.success is True
         assert result.data["traps"] == []
+
+    def test_gm_in_someone_elses_scene_sees_nothing_they_did_not_place(self) -> None:
+        """The anti-metagaming case the gate exists for: a scene IS active in this
+        room, but this GM does not run it and placed none of these traps. They must
+        see nothing and be unable to touch anything - otherwise a JUNIOR GM could
+        stand in another GM's dungeon and read its hazards for their own PC."""
+        actor = self._gm_in_someone_elses_scene()
+
+        listing = ListRoomTrapsAction().run(actor)
+        disarm = GmDisarmTrapAction().run(actor, trap_id=self.trap.pk)
+
+        assert listing.success is True
+        assert listing.data["traps"] == []
+        assert disarm.success is False
+        self.trap.refresh_from_db()
+        assert self.trap.is_armed is True
 
     def test_scene_gm_manages_a_trap_it_did_not_place(self) -> None:
         """The widened gate must not narrow the mid-scene case: the scene's GM still

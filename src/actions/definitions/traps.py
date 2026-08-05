@@ -7,6 +7,7 @@ from typing import TYPE_CHECKING, Any
 
 from actions.base import Action
 from actions.prerequisites import (
+    IsSceneGMPrerequisite,
     MinimumGMLevelPrerequisite,
     Prerequisite,
 )
@@ -106,21 +107,13 @@ def _may_manage_every_trap(actor: ObjectDB) -> bool:
     """Whether the actor may manage every trap in their room, not just their own.
 
     True for staff, or for the GM of the active scene at the actor's location.
-    Mirrors ``IsSceneGMPrerequisite`` (``actions/prerequisites.py:185``): staff
-    bypass, else resolve the actor's active scene and require
-    ``scene.is_gm(account)``.
+    Delegates to ``IsSceneGMPrerequisite`` rather than restating its staff-bypass
+    plus ``get_active_scene``/``scene.is_gm`` logic, so the two can never drift.
+    It is used here as a per-row predicate instead of an entry gate: failing it
+    narrows the actor to traps they placed themselves rather than refusing the
+    action outright.
     """
-    from commands.utils.gm_resolution import resolve_account_or_none  # noqa: PLC0415
-    from core_management.permissions import is_staff_observer  # noqa: PLC0415
-    from world.scenes.interaction_services import get_active_scene  # noqa: PLC0415
-
-    if is_staff_observer(actor):
-        return True
-    if actor.location is None:
-        return False
-    account = resolve_account_or_none(actor)
-    scene = get_active_scene(actor.location)
-    return scene is not None and scene.is_gm(account)
+    return IsSceneGMPrerequisite().is_met(actor)[0]
 
 
 def _room_traps(actor: ObjectDB):
