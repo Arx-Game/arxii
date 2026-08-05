@@ -132,17 +132,6 @@ class GoalJournalCreateSerializer(serializers.ModelSerializer):
         model = GoalJournal
         fields = ["domain", "title", "content", "is_public"]
 
-    def create(self, validated_data: dict) -> GoalJournal:
-        """Create journal entry with XP award."""
-        # XP awarded could be calculated based on content length, etc.
-        # For now, a flat 1 XP per journal entry
-        xp_awarded = 1
-
-        return GoalJournal.objects.create(
-            xp_awarded=xp_awarded,
-            **validated_data,
-        )
-
 
 class GoalRevisionSerializer(serializers.ModelSerializer):
     """Serializer for GoalRevision records."""

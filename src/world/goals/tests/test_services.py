@@ -2,6 +2,7 @@
 
 from django.test import TestCase
 
+from evennia_extensions.factories import AccountFactory
 from world.character_sheets.factories import CharacterSheetFactory
 from world.distinctions.models import (
     CharacterDistinction,
@@ -10,13 +11,16 @@ from world.distinctions.models import (
     DistinctionEffect,
 )
 from world.goals.factories import CharacterGoalFactory, GoalDomainFactory
+from world.goals.models import GoalJournal
 from world.goals.services import (
     get_goal_bonus,
     get_goal_bonuses_breakdown,
     get_total_goal_points,
+    log_goal_progress,
 )
 from world.mechanics.models import ModifierCategory, ModifierTarget
 from world.mechanics.services import create_distinction_modifiers
+from world.progression.models.rewards import ExperiencePointsData
 
 
 class GetGoalBonusTest(TestCase):
@@ -475,3 +479,54 @@ class ApplyGoalTests(TestCase):
         assert get_daily_application_budget(self.character_sheet) == 2
         apply_goal(self.goal)
         apply_goal(self.goal)  # second use allowed by the distinction
+
+
+class LogGoalProgressXPTests(TestCase):
+    """log_goal_progress grants real account XP, capped per game week (#3004)."""
+
+    def setUp(self) -> None:
+        self.account = AccountFactory()
+        self.sheet = CharacterSheetFactory()
+        self.sheet.character.db_account = self.account
+        self.sheet.character.save()
+
+    def _log(self, title: str) -> GoalJournal:
+        return log_goal_progress(
+            character=self.sheet,
+            domain=None,
+            title=title,
+            content="Progress notes.",
+        )
+
+    def test_first_log_grants_xp_to_the_account(self) -> None:
+        journal = self._log("First")
+        assert journal.xp_awarded == 1
+        tracker = ExperiencePointsData.objects.get(account=self.account)
+        assert tracker.total_earned == 1
+
+    def test_fourth_log_in_the_same_week_grants_nothing(self) -> None:
+        for i in range(3):
+            self._log(f"Entry {i}")
+        fourth = self._log("Fourth")
+
+        assert fourth.xp_awarded == 0
+        tracker = ExperiencePointsData.objects.get(account=self.account)
+        assert tracker.total_earned == 3
+
+    def test_entry_records_the_game_week_it_counted_against(self) -> None:
+        journal = self._log("First")
+        assert journal.game_week is not None
+
+    def test_cap_resets_on_a_new_game_week(self) -> None:
+        """The ladder is per game week, so a rollover restores the grant."""
+        from world.game_clock.week_services import advance_game_week
+
+        for i in range(3):
+            self._log(f"Entry {i}")
+        advance_game_week()
+
+        fresh = self._log("New week")
+
+        assert fresh.xp_awarded == 1
+        tracker = ExperiencePointsData.objects.get(account=self.account)
+        assert tracker.total_earned == 4

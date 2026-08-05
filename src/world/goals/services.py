@@ -6,6 +6,9 @@ Service layer for goal bonus calculations with percentage modifiers.
 
 from typing import TYPE_CHECKING
 
+from django.db import transaction
+
+from world.goals.constants import GOAL_LOG_XP
 from world.goals.models import CharacterGoal
 from world.goals.types import GoalBonusBreakdown
 from world.mechanics.constants import (
@@ -209,24 +212,49 @@ def log_goal_progress(
     content: str,
     is_public: bool = False,
 ) -> "GoalJournal":
-    """Create a goal-progress journal entry (records 1 XP on the row).
+    """Create a goal-progress journal entry and grant weekly-capped XP.
 
-    Records ``xp_awarded=1`` on the ``GoalJournal`` row; actually granting the
-    XP to the character's account is a pre-existing TODO (the former inline
-    ``GoalJournalCreateSerializer.create`` had the same gap). Mirrors the
-    former inline ``GoalJournalViewSet.create``. ``domain`` may be ``None`` for
-    unattributed reflections.
+    The first ``len(GOAL_LOG_XP)`` entries each game week grant XP to the
+    character's account; entries past the cap are recorded with
+    ``xp_awarded=0``. ``domain`` may be ``None`` for unattributed reflections.
     """
+    from world.game_clock.week_services import get_current_game_week  # noqa: PLC0415
     from world.goals.models import GoalJournal  # noqa: PLC0415
+    from world.progression.services.awards import award_xp  # noqa: PLC0415
 
-    return GoalJournal.objects.create(
-        character=character,
-        domain=domain,
-        title=title,
-        content=content,
-        is_public=is_public,
-        xp_awarded=1,
-    )
+    game_week = get_current_game_week()
+    account = character.character.db_account
+
+    with transaction.atomic():
+        already_awarded = GoalJournal.objects.filter(
+            character=character,
+            game_week=game_week,
+            xp_awarded__gt=0,
+        ).count()
+
+        if account is not None and already_awarded < len(GOAL_LOG_XP):
+            xp_amount = GOAL_LOG_XP[already_awarded]
+        else:
+            xp_amount = 0
+
+        journal = GoalJournal.objects.create(
+            character=character,
+            domain=domain,
+            title=title,
+            content=content,
+            is_public=is_public,
+            xp_awarded=xp_amount,
+            game_week=game_week,
+        )
+
+        if xp_amount > 0:
+            award_xp(
+                account=account,
+                amount=xp_amount,
+                description=f"Goal progress: {title}",
+            )
+
+    return journal
 
 
 def get_goal_bonuses_breakdown(
