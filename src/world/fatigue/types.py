@@ -31,11 +31,16 @@ class FatigueCollapseResult:
     The caller decides *whether* collapse risk applies (zone/effort gate); this
     captures the result of the endurance + power-through rolls and the strain
     damage applied to health.
+
+    ``outcome_label``/``message`` are populated only on the #2290 dream-peril
+    branch; every other collapse path leaves them empty.
     """
 
     collapsed: bool
     powered_through: bool
     strain_damage: int
+    outcome_label: str = ""
+    message: str = ""
 
 
 @dataclass
