@@ -655,9 +655,27 @@ def export_single_row(instance, *, content_root: Path) -> RowExportResult:
     # this is a read-modify-write merge against one file, and the loader
     # matches natural keys case-insensitively (#2687) - see that helper's
     # docstring for why this path must diverge from the corpus-wide gate.
+    is_addition = _merge_record_into_fixture_file(out_path, record, key_fields)
+    return RowExportResult([out_path], is_addition, model_label, key_display)
+
+
+def _merge_record_into_fixture_file(
+    out_path: Path, record: dict, key_fields: list[str] | None
+) -> bool:
+    """Read-modify-write one record into a JSON fixture file; return is_addition.
+
+    Extracted from ``export_single_row`` to keep that function under the
+    complexity ceiling; behavior is unchanged. An existing record whose
+    case-folded natural key (``_record_key_folded``) matches ``record`` is
+    replaced in place; otherwise ``record`` is appended. The return value is
+    True when the row's natural key was not already present in the file
+    (a first-export addition) - the same value ``export_single_row`` reports
+    as ``RowExportResult.is_addition``.
+    """
+    file_existed = out_path.exists()
     row_key_folded = _record_key_folded(record["fields"], key_fields) if key_fields else None
     records: list[dict] = []
-    if out_path.exists():
+    if file_existed:
         with suppress(OSError, ValueError):
             loaded = json.loads(out_path.read_text(encoding="utf-8"))
             if isinstance(loaded, list):
@@ -671,7 +689,7 @@ def export_single_row(instance, *, content_root: Path) -> RowExportResult:
         if key_fields
         else set()
     )
-    is_addition = not out_path.exists() or row_key_folded not in existing_folded
+    is_addition = not file_existed or row_key_folded not in existing_folded
     replaced = False
     for i, existing in enumerate(records):
         if (
@@ -685,9 +703,9 @@ def export_single_row(instance, *, content_root: Path) -> RowExportResult:
             break
     if not replaced:
         records.append(record)
-    out_dir.mkdir(parents=True, exist_ok=True)
+    out_path.parent.mkdir(parents=True, exist_ok=True)
     out_path.write_text(json.dumps(records, indent=2) + "\n", encoding="utf-8")
-    return RowExportResult([out_path], is_addition, model_label, key_display)
+    return is_addition
 
 
 def _apply_addition_gate(
