@@ -14,6 +14,7 @@ from django.db.models import Q
 from django.utils.functional import cached_property
 from evennia.utils.idmapper.models import SharedMemoryModel
 
+from core.natural_keys import NaturalKeyManager, NaturalKeyMixin
 from world.items.crafting.constants import CostConsumption, CraftingRecipeKind
 from world.room_features.models import RoomFeatureInstance
 
@@ -30,12 +31,15 @@ _ITEM_INSTANCE_FK = "arxii.ItemInstance"
 _CONSEQUENCE_FK = "arxii.Consequence"
 
 
-class CraftingRecipe(SharedMemoryModel):
+class CraftingRecipe(NaturalKeyMixin, SharedMemoryModel):
     """Top-level recipe that drives a crafting workflow.
 
     Each recipe kind is unique (one recipe per kind for now) and carries the
     check configuration, resource costs, and default consumption policy for
     crafting attempts.
+
+    Carries `NaturalKeyMixin` (#3006) so the recipe family is lore-authorable:
+    `name` is already unique, so it is the natural key with no schema change.
     """
 
     name = models.CharField(max_length=200, unique=True)
@@ -139,6 +143,11 @@ class CraftingRecipe(SharedMemoryModel):
         ),
     )
 
+    objects = NaturalKeyManager()
+
+    class NaturalKeyConfig:
+        fields = ["name"]
+
     class Meta:
         app_label = "arxii"
         ordering = ["name"]
@@ -146,6 +155,11 @@ class CraftingRecipe(SharedMemoryModel):
             models.UniqueConstraint(
                 fields=["kind", "output_item_template"],
                 name="items_craftingrecipe_kind_output_unique",
+                # Postgres NULLs are distinct by default, so without this the
+                # constraint does NOT enforce one-row-per-kind for the
+                # null-output attach/cut kinds (#3006) — the seeded-default +
+                # fixture-upsert single-row assumption needs a real guarantee.
+                nulls_distinct=False,
             ),
         ]
 
@@ -158,11 +172,19 @@ class CraftingRecipe(SharedMemoryModel):
         return list(self.modifier_outcomes.all().select_related("target"))
 
 
-class CraftingMaterialRequirement(SharedMemoryModel):
+class CraftingMaterialRequirement(NaturalKeyMixin, SharedMemoryModel):
     """An ingredient required to attempt a crafting recipe.
 
     Each row declares one item template (and optional minimum quality) that must
     be present in the crafter's inventory when initiating a crafting attempt.
+
+    Carries `NaturalKeyMixin` (#3006). Unlike the sibling crafting models this
+    had no `UniqueConstraint` at all before #3006 added the two partial ones
+    below, one per XOR branch — the natural key mirrors that XOR: it spans
+    both `item_template` and `material_category`, and whichever branch is
+    null on a given row resolves as `None` (the mixin's null-FK handling,
+    mirroring `conditions.ConditionCheckModifier`'s check_type/check_category
+    XOR).
     """
 
     recipe = models.ForeignKey(
@@ -211,6 +233,12 @@ class CraftingMaterialRequirement(SharedMemoryModel):
         ),
     )
 
+    objects = NaturalKeyManager()
+
+    class NaturalKeyConfig:
+        fields = ["recipe", "item_template", "material_category"]
+        dependencies = ["arxii.CraftingRecipe", "arxii.ItemTemplate", "arxii.MaterialCategory"]
+
     class Meta:
         app_label = "arxii"
         constraints = [
@@ -226,6 +254,18 @@ class CraftingMaterialRequirement(SharedMemoryModel):
                 check=Q(required_value__isnull=True) | Q(material_category__isnull=False),
                 name="items_craftingmaterialrequirement_value_needs_category",
             ),
+            # #3006: this model had no UniqueConstraint at all before this pair —
+            # one per XOR branch, both partial so the null branch never collides.
+            models.UniqueConstraint(
+                fields=["recipe", "item_template"],
+                condition=Q(item_template__isnull=False),
+                name="items_craftingmaterialrequirement_recipe_template_unique",
+            ),
+            models.UniqueConstraint(
+                fields=["recipe", "material_category"],
+                condition=Q(material_category__isnull=False),
+                name="items_craftingmaterialrequirement_recipe_category_unique",
+            ),
         ]
 
     def __str__(self) -> str:
@@ -235,11 +275,14 @@ class CraftingMaterialRequirement(SharedMemoryModel):
         return f"{self.quantity}x {target} for {self.recipe}"
 
 
-class CraftingSkillCap(SharedMemoryModel):
+class CraftingSkillCap(NaturalKeyMixin, SharedMemoryModel):
     """Maps a minimum skill value to the maximum quality tier craftable.
 
     Rows are ordered by ``min_skill_value``; the classmethod ``for_skill`` returns
     the max_quality_tier of the highest row whose threshold the crafter meets.
+
+    Carries `NaturalKeyMixin` (#3006): the key is the existing
+    ``(recipe, min_skill_value)`` UniqueConstraint below.
     """
 
     recipe = models.ForeignKey(
@@ -256,6 +299,12 @@ class CraftingSkillCap(SharedMemoryModel):
         related_name="+",
         help_text="Highest quality tier achievable at this skill band.",
     )
+
+    objects = NaturalKeyManager()
+
+    class NaturalKeyConfig:
+        fields = ["recipe", "min_skill_value"]
+        dependencies = ["arxii.CraftingRecipe"]
 
     class Meta:
         app_label = "arxii"
@@ -289,12 +338,20 @@ class CraftingSkillCap(SharedMemoryModel):
         return row.max_quality_tier
 
 
-class CraftingRecipeConsequence(SharedMemoryModel):
+class CraftingRecipeConsequence(NaturalKeyMixin, SharedMemoryModel):
     """A weighted consequence pool entry for a crafting recipe.
 
     Pulls from the generic ``checks.Consequence`` model; optionally overrides
     the consequence weight and declares how ingredient costs are consumed if
     this consequence fires.
+
+    Carries `NaturalKeyMixin` (#3006): the key is the existing
+    ``(recipe, consequence)`` UniqueConstraint below. Caveat: ``checks.Consequence``
+    itself carries no natural key (no live caller needs one today — the same gap
+    ``mechanics.ChallengeTemplateConsequence`` already lives with unregistered), so
+    a fixture-authored row here resolves its ``consequence`` component by raw pk,
+    not a portable key. Fine for round-tripping within one database; giving
+    ``Consequence`` a natural key is a separate, broader change out of scope here.
     """
 
     recipe = models.ForeignKey(
@@ -318,6 +375,12 @@ class CraftingRecipeConsequence(SharedMemoryModel):
         default=CostConsumption.FULL,
         help_text="How ingredient costs are consumed when this consequence fires.",
     )
+
+    objects = NaturalKeyManager()
+
+    class NaturalKeyConfig:
+        fields = ["recipe", "consequence"]
+        dependencies = ["arxii.CraftingRecipe"]
 
     class Meta:
         app_label = "arxii"
