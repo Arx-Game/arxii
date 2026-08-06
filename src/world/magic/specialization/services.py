@@ -110,8 +110,80 @@ def provision_additional_gift_thread(
     return provision_latent_gift_thread(sheet, gift, resonance=resonance)
 
 
+def _first_gift_thread_resonance(sheet: CharacterSheet) -> Resonance | None:
+    """The character's main resonance: their earliest active GIFT thread's (the CG pick)."""
+    threads = [
+        t
+        for t in sheet.character.threads.all()
+        if t.target_kind == TargetKind.GIFT and t.retired_at is None
+    ]
+    if not threads:
+        return None
+    return min(threads, key=lambda t: t.pk).resonance
+
+
+def _resolve_grant_resonance(
+    sheet: CharacterSheet, gift: Gift, *, preferred: Resonance | None = None
+) -> Resonance:
+    """Grant-time resonance policy (#2971). Empty supported set = unrestricted (#2968).
+
+    In order, taking the first that resolves:
+
+    1. ``preferred`` (the caller's explicit pick), when the gift's supported set is
+       empty OR contains it — an explicit pick outside a non-empty set is NOT used
+       verbatim; it falls through to the set policy below instead.
+    2. An existing active GIFT thread already covering ``gift`` (lineage-aware, via
+       ``gift_threads_for``) — its resonance, regardless of the supported-set shape.
+       Without this step, an unconditional re-grant (e.g. ``grant_path_magic`` looping
+       over ``PathGiftGrant`` rows for a gift the character already owns) could
+       resolve a DIFFERENT resonance from the set/claim policy below and mint a
+       second thread on the same gift; this makes a re-grant a true no-op.
+    3. A non-empty supported set: the member the character has already claimed, else
+       the set's first member.
+    4. An empty supported set with no thread on this gift yet: the character's
+       earliest active GIFT thread's resonance, on ANY gift (their "main" one).
+    5. The character's highest-``lifetime_earned`` claimed resonance.
+    6. The character's anima-ritual resonance.
+
+    Raises ``GiftResonanceUnresolvable`` when none of the above resolves anything.
+    """
+    from world.magic.exceptions import GiftResonanceUnresolvable  # noqa: PLC0415
+    from world.magic.models import CharacterResonance  # noqa: PLC0415
+
+    supported = gift.cached_resonances
+    if preferred is not None and (not supported or any(r.pk == preferred.pk for r in supported)):
+        return preferred
+    covering = gift_threads_for(sheet.character, gift)
+    if covering:
+        return min(covering, key=lambda t: t.pk).resonance
+    if supported:
+        claimed_ids = set(
+            CharacterResonance.objects.filter(character_sheet=sheet).values_list(
+                "resonance_id", flat=True
+            )
+        )
+        return next((r for r in supported if r.pk in claimed_ids), supported[0])
+    thread_resonance = _first_gift_thread_resonance(sheet)
+    if thread_resonance is not None:
+        return thread_resonance
+    claimed = (
+        CharacterResonance.objects.filter(character_sheet=sheet)
+        .select_related("resonance")
+        .order_by("-lifetime_earned", "resonance_id")
+        .first()
+    )
+    if claimed is not None:
+        return claimed.resonance
+    from world.magic.services.gain import anima_ritual_resonance  # noqa: PLC0415
+
+    main = anima_ritual_resonance(sheet)
+    if main is not None:
+        return main
+    raise GiftResonanceUnresolvable
+
+
 def grant_gift_to_character(
-    sheet: CharacterSheet, gift: Gift, *, resonance: Resonance | None
+    sheet: CharacterSheet, gift: Gift, *, resonance: Resonance | None = None
 ) -> tuple[CharacterGift, bool]:
     """Mint (idempotently) the CharacterGift link + the latent GIFT thread.
 
@@ -120,16 +192,21 @@ def grant_gift_to_character(
     path-crossing grant (#1579) and species-gift provisioning (#1580) so there is
     one place that does this, not a per-source copy.
 
-    ``resonance`` is the already-resolved resonance for the latent thread — each
-    caller applies its own resonance-selection policy; ``None`` skips thread
-    provisioning (e.g. a gift that supports no resonances). Returns
+    ``resonance`` is the caller's preferred resonance for the latent thread, if any;
+    ``None`` (the default) means "resolve one for me." Either way, the resonance is
+    run through ``_resolve_grant_resonance`` (#2971) and a thread is ALWAYS
+    provisioned — a granted gift with an empty supported set no longer silently
+    skips thread provisioning, since that left characters holding a gift and its
+    techniques with no GIFT thread to read a resonance from anywhere downstream
+    (cast resolution, dramatic-moment grants, ...). Raises
+    ``GiftResonanceUnresolvable`` when nothing resolves. Returns
     ``(character_gift, created)``.
     """
     from world.magic.models import CharacterGift  # noqa: PLC0415
 
     character_gift, created = CharacterGift.objects.get_or_create(character=sheet, gift=gift)
-    if resonance is not None:
-        provision_latent_gift_thread(sheet, gift, resonance=resonance)
+    resolved = _resolve_grant_resonance(sheet, gift, preferred=resonance)
+    provision_latent_gift_thread(sheet, gift, resonance=resolved)
     return character_gift, created
 
 
