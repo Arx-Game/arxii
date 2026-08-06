@@ -69,17 +69,18 @@ def _entry(value: object, *, relation: str, direction: str) -> RelatedEntry:
     )
 
 
-def _forward_neighbors(instance: object, model: type) -> list[tuple[object, str]]:
-    """Return `(value, field_name)` pairs for every forward FK/O2O/M2M value set.
+def _forward_relation_fields(model: type) -> list[tuple[str, bool]]:
+    """Return `(field_name, is_many)` for every forward FK/O2O/M2M field.
 
     Field selection per the Task 6 brief: `field.is_relation and
     (field.many_to_one or field.one_to_one or field.many_to_many) and
     field.concrete` - the concrete check is what excludes reverse relation
     objects (`ManyToOneRel`/`OneToOneRel`/`ManyToManyRel`, all
     `concrete=False`) from this loop, since `_meta.get_fields()` returns both
-    directions in one list.
+    directions in one list. No DB access here - this only classifies fields,
+    it never resolves a value.
     """
-    pairs: list[tuple[object, str]] = []
+    fields: list[tuple[str, bool]] = []
     for field in model._meta.get_fields():  # noqa: SLF001
         if not (
             field.is_relation
@@ -87,22 +88,17 @@ def _forward_neighbors(instance: object, model: type) -> list[tuple[object, str]
             and (field.many_to_one or field.one_to_one or field.many_to_many)
         ):
             continue
-        if field.many_to_many:
-            values = list(getattr(instance, field.name).all())
-        else:
-            value = getattr(instance, field.name, None)
-            values = [value] if value is not None else []
-        pairs.extend((value, field.name) for value in values)
-    return pairs
+        fields.append((field.name, field.many_to_many))
+    return fields
 
 
-def _reverse_neighbors(instance: object, model: type) -> list[tuple[object, str]]:
-    """Return `(value, accessor_name)` pairs for every reverse FK/O2O/M2M row.
+def _reverse_relation_accessors(model: type) -> list[str]:
+    """Return the accessor name for every reverse FK/O2O/M2M relation.
 
     Field selection: `field.auto_created and not field.concrete` picks out
     the `ManyToOneRel`/`OneToOneRel`/`ManyToManyRel` objects `_meta
     .get_fields()` synthesizes for the far side of every relation pointed at
-    this model.
+    this model. No DB access here either.
 
     Skipping `related_name="+"` needs no extra check here: `get_fields()`
     defaults to `include_hidden=False`, which already drops a "+" relation
@@ -116,23 +112,52 @@ def _reverse_neighbors(instance: object, model: type) -> list[tuple[object, str]
     checking it here would be dead code - the filtering already happened one
     layer up, inside `get_fields()` itself.
     """
-    pairs: list[tuple[object, str]] = []
+    accessors: list[str] = []
     for field in model._meta.get_fields():  # noqa: SLF001
         if not (field.auto_created and not field.concrete):
             continue
-        accessor = field.get_accessor_name()
-        try:
-            raw = getattr(instance, accessor)
-        except ObjectDoesNotExist:
-            raw = None
-        if raw is None:
-            values: list[object] = []
-        elif hasattr(raw, "all"):
-            values = list(raw.all())
-        else:
-            values = [raw]
-        pairs.extend((value, accessor) for value in values)
-    return pairs
+        accessors.append(field.get_accessor_name())
+    return accessors
+
+
+class _RelatedCollector:
+    """Accumulates `RelatedEntry` rows against a shared, running `cap`.
+
+    Bounds how many rows any single relation is ever asked to fetch: a
+    many-relation's queryset is sliced to `[: remaining + 1]` before it is
+    materialized (`remaining` being what is left of the running cap) - the
+    `+1` is a sentinel row used only to detect overflow, discarded right
+    after. No relation, however large (an ever-growing audit-ledger reverse
+    FK, for instance), is ever asked to pull more than `cap + 1` rows into
+    memory. When a relation does overflow, the returned `truncated` count
+    stays exact rather than degrading to a lower bound: one extra `.count()`
+    query (an aggregate, not a row fetch) on that relation alone reports
+    precisely how many more rows it holds beyond what fit.
+    """
+
+    def __init__(self, cap: int) -> None:
+        self.cap = cap
+        self.entries: list[RelatedEntry] = []
+        self.truncated = 0
+
+    def add_many(self, queryset, *, relation: str, direction: str) -> None:
+        remaining = self.cap - len(self.entries)
+        if remaining <= 0:
+            self.truncated += queryset.count()
+            return
+        chunk = list(queryset[: remaining + 1])
+        for value in chunk[:remaining]:
+            self.entries.append(_entry(value, relation=relation, direction=direction))
+        if len(chunk) > remaining:
+            self.truncated += queryset.count() - remaining
+
+    def add_one(self, value: object | None, *, relation: str, direction: str) -> None:
+        if value is None:
+            return
+        if len(self.entries) >= self.cap:
+            self.truncated += 1
+            return
+        self.entries.append(_entry(value, relation=relation, direction=direction))
 
 
 def related_entries(
@@ -143,25 +168,32 @@ def related_entries(
     Returns `(entries, truncated_count)`: `entries` is capped at `cap` rows
     total across every forward and reverse relation combined, worst-first-
     free (no sort - relation declaration order, forward before reverse);
-    `truncated_count` is how many more neighbor rows exist beyond the cap.
-
-    Scale ceiling: this materializes every neighbor row (via `list()` on
-    each relation's queryset/manager) before capping, so a row with a
-    reverse relation carrying thousands of rows pulls all of them into
-    memory before the cap trims the result - fine for the workbench's actual
-    per-row neighbor counts today. If a model ever grows a relation at that
-    scale, this needs per-relation query slicing instead of a post-hoc cap.
+    `truncated_count` is exactly how many more neighbor rows exist beyond
+    the cap (see `_RelatedCollector`'s docstring for how that stays exact
+    without over-fetching).
     """
-    forward = [
-        _entry(value, relation=name, direction="forward")
-        for value, name in _forward_neighbors(instance, type(instance))
-    ]
-    reverse = [
-        _entry(value, relation=name, direction="reverse")
-        for value, name in _reverse_neighbors(instance, type(instance))
-    ]
-    all_entries = forward + reverse
-    return all_entries[:cap], max(0, len(all_entries) - cap)
+    model = type(instance)
+    collector = _RelatedCollector(cap)
+
+    for name, is_many in _forward_relation_fields(model):
+        if is_many:
+            collector.add_many(getattr(instance, name).all(), relation=name, direction="forward")
+        else:
+            collector.add_one(getattr(instance, name, None), relation=name, direction="forward")
+
+    for accessor in _reverse_relation_accessors(model):
+        try:
+            raw = getattr(instance, accessor)
+        except ObjectDoesNotExist:
+            raw = None
+        if raw is None:
+            continue
+        if hasattr(raw, "all"):
+            collector.add_many(raw.all(), relation=accessor, direction="reverse")
+        else:
+            collector.add_one(raw, relation=accessor, direction="reverse")
+
+    return collector.entries, collector.truncated
 
 
 def prose_mentions(
@@ -173,16 +205,21 @@ def prose_mentions(
     field (`prose_fields_for`) of each model in turn; `exclude` is the
     `(model, pk)` of the row being edited, dropped from its own model's
     results so a row never lists itself as a mention of its own name.
-    Returns as soon as `cap` rows are collected, without scanning the
-    remaining models - `prose_mentions` never reports how many more exist
-    (unlike `related_entries`), so there is nothing left to compute once the
-    cap is hit.
+    Stops scanning models once `cap` rows are collected - `prose_mentions`
+    never reports how many more exist (unlike `related_entries`), so there
+    is nothing left to compute once the cap is hit. Each model's query is
+    itself sliced to `[: cap - len(entries)]` before being iterated, so no
+    single model - even one with a very large matching set - is ever asked
+    to fetch more rows than could still fit under the cap.
     """
     if not name:
         return []
 
     entries: list[RelatedEntry] = []
     for model in credited_content_models():
+        remaining = cap - len(entries)
+        if remaining <= 0:
+            break
         prose_names = prose_fields_for(model)
         if not prose_names:
             continue
@@ -192,8 +229,7 @@ def prose_mentions(
         queryset = model.objects.filter(query)
         if exclude is not None and exclude[0] is model:
             queryset = queryset.exclude(pk=exclude[1])
-        for value in queryset:
-            if len(entries) >= cap:
-                return entries
-            entries.append(_entry(value, relation="mention", direction="mention"))
+        entries.extend(
+            _entry(value, relation="mention", direction="mention") for value in queryset[:remaining]
+        )
     return entries

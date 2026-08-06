@@ -94,6 +94,49 @@ class RelatedEntriesTests(TestCase):
         self.assertEqual(len(capped_entries), 1)
         self.assertEqual(capped_truncated, total - 1)
 
+    def test_cap_bounds_a_large_relation_and_still_reports_the_exact_remainder(self) -> None:
+        # 8 extra restrictions - a relation that alone already exceeds a
+        # small cap, standing in for an ever-growing reverse relation (e.g.
+        # an audit-ledger FK) that must never be fully materialized before
+        # the cap trims it.
+        extra_restrictions = [RestrictionFactory() for _ in range(8)]
+        self.technique.restrictions.add(*extra_restrictions)
+
+        full_entries, full_truncated = related_entries(self.technique)
+        self.assertEqual(full_truncated, 0)
+        total = len(full_entries)
+        self.assertGreaterEqual(total, 10)
+
+        capped_entries, capped_truncated = related_entries(self.technique, cap=3)
+
+        self.assertEqual(len(capped_entries), 3)
+        self.assertEqual(capped_truncated, total - 3)
+
+    def test_forward_m2m_query_is_sliced_at_the_database_not_materialized_in_full(self) -> None:
+        from django.db import connection
+        from django.test.utils import CaptureQueriesContext
+
+        for _ in range(8):
+            self.technique.restrictions.add(RestrictionFactory())
+
+        # cap=3: `gift` and `effect_type` (the only two set forward FKs ahead
+        # of `restrictions` in field order) already consume 2 of the 3 slots,
+        # leaving exactly 1 slot of room when the 9-row `restrictions` M2M is
+        # reached - enough to force the overflow/LIMIT branch in `add_many`
+        # rather than the cap<=0 branch, which would only ever run a bare
+        # `.count()` with no LIMIT at all.
+        with CaptureQueriesContext(connection) as ctx:
+            related_entries(self.technique, cap=3)
+
+        restriction_queries = [
+            q["sql"] for q in ctx.captured_queries if "restriction" in q["sql"].lower()
+        ]
+        self.assertTrue(restriction_queries, "expected a query against the restriction table")
+        self.assertTrue(
+            any("LIMIT" in sql.upper() for sql in restriction_queries),
+            "expected the restrictions query to carry a LIMIT clause, not fetch every row",
+        )
+
 
 class ProseMentionsTests(TestCase):
     """`prose_mentions` scanning every credited model's prose for a name."""

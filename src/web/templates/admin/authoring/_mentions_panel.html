@@ -17,6 +17,9 @@
       <td>{{ row.entry.model_name }}</td>
       <td>{{ row.entry.label }}</td>
       <td>
+        {# prose_mentions() only ever scans credited_content_models(), so #}
+        {# row.entry.credited is never None here - unlike the related-entries #}
+        {# panel, this table needs no "credited is None" branch. #}
         {% if row.entry.credited %}
         <span class="badge">{% translate "Written" %}</span>
         {% else %}
