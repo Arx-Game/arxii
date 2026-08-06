@@ -91,9 +91,21 @@ _QUEUE_DISPLAY_CAP = 100
 _CREDIT_FIELD_NAMES = frozenset({"written_by", "written_on", "reviewed_by", "reviewed_on"})
 
 _FREEZE_SENTENCE = (
-    "This row is now credited: content loads will not overwrite it until the corpus "
-    "catches up. Export it to the content repo to close the loop."
+    "This row is now credited: content loads will not overwrite it until the corpus catches up."
 )
+
+#: Rendered only inside the `content_exportable` branch (see
+#: `_editor_panel.html`) - a non-exportable credited model (the four
+#: builder-domain models) shows "This model stays in the database only..."
+#: instead, so this clause must never render alongside that one (#3019
+#: review: the two used to be one contradictory sentence).
+_EXPORT_SENTENCE = "Export it to the content repo to close the loop."
+
+#: HX-Trigger event name the stats/queue panels listen for (see
+#: `dashboard.html`'s `hx-trigger="load, authoring-backlog-changed
+#: from:body"`) so a credit or review stamp refreshes them without a full
+#: page reload (#3019 review, Minor 5).
+_BACKLOG_CHANGED_EVENT = "authoring-backlog-changed"
 
 
 def _setup_required(request: HttpRequest) -> bool:
@@ -175,7 +187,9 @@ def authoring_queue_fragment(request: HttpRequest) -> HttpResponse:
         "domains": domains,
         "selected_domain": request.GET.get("domain", ""),
         "selected_status": request.GET.get("status", ""),
+        "status_choices": BacklogStatusFilter.choices,
         "query": request.GET.get("q", ""),
+        "editor_url": reverse("admin_authoring_editor"),
     }
     return render(request, "admin/authoring/_queue_panel.html", context)
 
@@ -274,6 +288,7 @@ def _build_editor_context(target: _EditorTarget, flags: _EditorFlags) -> dict:
         "reviewed": flags.reviewed,
         "needs_setup": flags.needs_setup,
         "freeze_sentence": _FREEZE_SENTENCE,
+        "export_sentence": _EXPORT_SENTENCE,
     }
     if target.model is not None and target.instance is not None:
         field_errors = flags.field_errors or {}
@@ -382,7 +397,9 @@ def authoring_editor_credit(request: HttpRequest) -> HttpResponse:
     target.instance.written_by = contributor
     target.instance.written_on = timezone.now().date()
     target.instance.save()
-    return _render_editor_fragment(request, target, _EditorFlags(credited=True))
+    response = _render_editor_fragment(request, target, _EditorFlags(credited=True))
+    response["HX-Trigger"] = _BACKLOG_CHANGED_EVENT
+    return response
 
 
 @superuser_required
@@ -405,7 +422,9 @@ def authoring_editor_review(request: HttpRequest) -> HttpResponse:
     target.instance.reviewed_by = contributor
     target.instance.reviewed_on = timezone.now().date()
     target.instance.save()
-    return _render_editor_fragment(request, target, _EditorFlags(reviewed=True))
+    response = _render_editor_fragment(request, target, _EditorFlags(reviewed=True))
+    response["HX-Trigger"] = _BACKLOG_CHANGED_EVENT
+    return response
 
 
 def _workbench_url(entry: RelatedEntry) -> str | None:

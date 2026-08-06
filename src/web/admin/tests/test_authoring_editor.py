@@ -149,6 +149,30 @@ class TestAuthoringEditorGet(AuthoringEditorTestCase):
         self.assertEqual(resp.status_code, 200)
         self.assertIn("does not exist", resp.content.decode())
 
+    def test_each_action_button_is_an_hx_post_targeting_the_editor_panel(self) -> None:
+        """Each Save/Save-and-credit/Mark-reviewed button posts via htmx (#3019 review).
+
+        A plain form POST inside this htmx fragment used to navigate the
+        whole browser to a chrome-less bare fragment on the first click - no
+        admin CSS, no htmx loaded, the related panel stuck on "Loading...".
+        Each button now carries its own ``hx-post`` to its own view, all
+        sharing ``hx-target="#authoring-editor"`` so the response re-swaps
+        back into the same panel instead of navigating away.
+        """
+        entry = self._entry(lore_content="Button wiring check.")
+        self.client.force_login(self.super)
+
+        resp = self.client.get(
+            reverse("admin_authoring_editor"),
+            {"model": "codex.CodexEntry", "pk": entry.pk},
+        )
+        body = resp.content.decode()
+
+        self.assertIn(f'hx-post="{reverse("admin_authoring_editor_save")}"', body)
+        self.assertIn(f'hx-post="{reverse("admin_authoring_editor_credit")}"', body)
+        self.assertIn(f'hx-post="{reverse("admin_authoring_editor_review")}"', body)
+        self.assertEqual(body.count('hx-target="#authoring-editor"'), 3)
+
 
 class TestAuthoringEditorSave(AuthoringEditorTestCase):
     def test_staff_non_superuser_forbidden(self) -> None:
@@ -255,14 +279,61 @@ class TestAuthoringEditorCredit(AuthoringEditorTestCase):
         self.assertEqual(written_on, timezone.now().date())
 
         body = resp.content.decode()
+        # Split into two sentences (#3019 review, Item 3): the freeze clause
+        # always renders after a credit stamp; the export clause only
+        # alongside a real exportable handoff form, never contradicting a
+        # non-exportable model's "stays in the database only" message.
         self.assertIn(
             "This row is now credited: content loads will not overwrite it until the "
-            "corpus catches up. Export it to the content repo to close the loop.",
+            "corpus catches up.",
             body,
         )
+        self.assertIn("Export it to the content repo to close the loop.", body)
         self.assertIn(f'action="{reverse("admin_content_export_row")}"', body)
         self.assertIn('name="model" value="codex.codexentry"', body)
         self.assertIn(f'name="pk" value="{entry.pk}"', body)
+
+    def test_credit_success_sets_hx_trigger_backlog_changed_header(self) -> None:
+        """A successful credit stamp fires the stats/queue panels' refresh event.
+
+        `dashboard.html`'s stats and queue sections listen for
+        `authoring-backlog-changed from:body` so a stamp updates their
+        counts without a full page reload (#3019 review, Minor 5).
+        """
+        entry = self._entry(lore_content="Trigger header lore.")
+        self.client.force_login(self.super)
+
+        resp = self.client.post(
+            reverse("admin_authoring_editor_credit"),
+            {
+                "model": "codex.CodexEntry",
+                "pk": str(entry.pk),
+                "lore_content": "Trigger header lore.",
+            },
+        )
+
+        self.assertEqual(resp.status_code, 200)
+        self.assertEqual(resp["HX-Trigger"], "authoring-backlog-changed")
+
+    def test_credit_validation_failure_omits_hx_trigger_header(self) -> None:
+        """A re-render with nothing stamped must not fire the refresh event."""
+        entry = self._entry(lore_content="Kept lore.")
+        overlong_summary = "x" * 301
+        self.client.force_login(self.super)
+
+        resp = self.client.post(
+            reverse("admin_authoring_editor_credit"),
+            {
+                "model": "codex.CodexEntry",
+                "pk": str(entry.pk),
+                "summary": overlong_summary,
+                "lore_content": "Kept lore.",
+            },
+        )
+
+        self.assertEqual(resp.status_code, 200)
+        self.assertIn(overlong_summary, resp.content.decode())
+        self.assertNotIn("HX-Trigger", resp)
 
     def test_saves_posted_prose_before_stamping(self) -> None:
         entry = self._entry(lore_content="Old lore.")
@@ -302,10 +373,19 @@ class TestAuthoringEditorCredit(AuthoringEditorTestCase):
 
         self.assertEqual(resp.status_code, 200)
         body = resp.content.decode()
+        # The freeze clause still renders (this row IS credited) - only the
+        # export clause and handoff form are suppressed, since this model
+        # has nowhere to export to (#3019 review, Item 3).
+        self.assertIn(
+            "This row is now credited: content loads will not overwrite it until the "
+            "corpus catches up.",
+            body,
+        )
         self.assertIn(
             "This model stays in the database only; the content repo does not carry it.",
             body,
         )
+        self.assertNotIn("Export it to the content repo to close the loop.", body)
         self.assertNotIn("content-export-row-form", body)
         self.assertNotIn("Export to content repo", body)
 

@@ -63,6 +63,7 @@
 {% if credited %}
 <p class="successnote">{{ freeze_sentence }}</p>
 {% if instance|content_exportable %}
+<p>{{ export_sentence }}</p>
 <form method="post" action="{% url 'admin_content_export_row' %}" class="content-export-row-form">
   {% csrf_token %}
   <input type="hidden" name="model" value="{{ instance|content_model_label }}">
@@ -106,13 +107,16 @@
   </div>
   {% endfor %}
   <div class="editor-actions">
-    <button type="submit" formaction="{% url 'admin_authoring_editor_save' %}">
+    <button type="submit" hx-post="{% url 'admin_authoring_editor_save' %}"
+            hx-target="#authoring-editor" hx-swap="innerHTML">
       {% translate "Save" %}
     </button>
-    <button type="submit" formaction="{% url 'admin_authoring_editor_credit' %}">
+    <button type="submit" hx-post="{% url 'admin_authoring_editor_credit' %}"
+            hx-target="#authoring-editor" hx-swap="innerHTML">
       {% translate "Save and credit" %}
     </button>
-    <button type="submit" formaction="{% url 'admin_authoring_editor_review' %}">
+    <button type="submit" hx-post="{% url 'admin_authoring_editor_review' %}"
+            hx-target="#authoring-editor" hx-swap="innerHTML">
       {% translate "Mark reviewed" %}
     </button>
   </div>

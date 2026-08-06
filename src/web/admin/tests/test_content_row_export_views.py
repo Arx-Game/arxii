@@ -491,3 +491,52 @@ class TestContentRowExportViewsConfigured(TestCase):
         self.assertIn("Some out-of-character mechanics text.", body)
         log = run_git(self.root, "log", "--oneline", "-1").stdout
         self.assertIn("Export CodexEntry", log)
+
+    def test_export_diff_confirm_for_model_with_no_registered_modeladmin(self) -> None:
+        """Credited+exportable models with no ModelAdmin degrade to the workbench link.
+
+        13 credited+exportable models (e.g. ``missions.MissionTemplate``) never
+        got a ``ModelAdmin`` registered. Exporting one used to 500 the diff
+        page on ``NoReverseMatch`` building its (nonexistent) admin
+        change-form URL (#3019 review, Item 2) - it now degrades to a
+        workbench editor link, which always resolves regardless of the admin
+        registry.
+        """
+        from world.contributors.factories import ContentContributorFactory
+        from world.missions.factories import MissionTemplateFactory
+
+        template = MissionTemplateFactory(
+            name="Row No ModelAdmin",
+            written_by=ContentContributorFactory(name="Row No ModelAdmin Writer"),
+        )
+
+        export_resp = self._export("missions.missiontemplate", template.pk)
+        self.assertEqual(export_resp.status_code, 302)
+
+        diff_resp = self._diff("missions.missiontemplate", template.pk)
+        self.assertEqual(diff_resp.status_code, 200)
+        self.assertIsNone(diff_resp.context["change_url"])
+        workbench_url = (
+            f"{reverse('admin_authoring_editor')}?model=missions.missiontemplate&pk={template.pk}"
+        )
+        self.assertEqual(diff_resp.context["workbench_url"], workbench_url)
+        # The template auto-escapes the querystring's "&" to "&amp;" - assert
+        # against the rendered (escaped) form, not the raw context value.
+        self.assertContains(diff_resp, workbench_url.replace("&", "&amp;"))
+
+        with self._env():
+            confirm_resp = self.client.post(
+                reverse("admin_content_export_row_confirm"),
+                {
+                    "model": "missions.missiontemplate",
+                    "pk": template.pk,
+                    "digest": diff_resp.context["digest"],
+                    "action": "confirm",
+                    "new_row": "1",
+                },
+            )
+
+        self.assertEqual(confirm_resp.status_code, 302)
+        self.assertEqual(confirm_resp.url, reverse("admin_content_session"))
+        log = run_git(self.root, "log", "--oneline", "-1").stdout
+        self.assertIn("Export MissionTemplate", log)

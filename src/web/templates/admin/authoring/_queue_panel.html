@@ -63,15 +63,11 @@
     <label for="queue-status">{% translate "Status" %}</label>
     <select id="queue-status" name="status">
       <option value="">{% translate "All statuses" %}</option>
-      <option value="placeholder" {% if selected_status == "placeholder" %}selected{% endif %}>
-        {% translate "Placeholder" %}
+      {% for value, label in status_choices %}
+      <option value="{{ value }}" {% if selected_status == value %}selected{% endif %}>
+        {{ label }}
       </option>
-      <option value="unwritten" {% if selected_status == "unwritten" %}selected{% endif %}>
-        {% translate "Unwritten" %}
-      </option>
-      <option value="unreviewed" {% if selected_status == "unreviewed" %}selected{% endif %}>
-        {% translate "Unreviewed" %}
-      </option>
+      {% endfor %}
     </select>
   </div>
   <div class="tuning-field">
@@ -101,7 +97,8 @@
     {% for row in rows %}
     <tr>
       <td>
-        <a href="#" hx-get="{% url 'admin_authoring_editor' %}?model={{ row.model_label|urlencode }}&pk={{ row.pk }}"
+        <a href="#"
+           hx-get="{{ editor_url }}?model={{ row.model_label|urlencode }}&amp;pk={{ row.pk }}"
            hx-target="#authoring-editor" hx-swap="innerHTML">
           {{ row.identity }}
         </a>

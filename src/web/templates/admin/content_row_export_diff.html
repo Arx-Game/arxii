@@ -57,7 +57,8 @@
             <input type="hidden" name="action" value="discard">
             <div class="submit-row" style="padding: 12px;">
                 <input type="submit" value="Discard this export" style="padding: 10px 20px;">
-                <a href="{{ change_url }}" style="padding: 10px 20px; margin-left: 10px;">
+                <a href="{{ change_url|default:workbench_url }}"
+                   style="padding: 10px 20px; margin-left: 10px;">
                     Back without discarding
                 </a>
             </div>
