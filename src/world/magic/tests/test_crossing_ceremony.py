@@ -192,3 +192,31 @@ class BackwardsCompatibilityTests(TestCase):
         from world.covenants.discovery import fire_variant_discoveries
 
         self.assertIs(fire_variant_discoveries, execute_crossing_ceremonies)
+
+
+class ExecuteCeremonyBeatEligibilityTests(TestCase):
+    """execute_ceremony_beat respects the achievement-eligibility gate (#3024)."""
+
+    def test_ineligible_sheet_gets_no_grant_and_no_gamewide_message(self) -> None:
+        from world.achievements.factories import AchievementFactory
+        from world.achievements.models import CharacterAchievement, Discovery
+        from world.character_sheets.factories import CharacterSheetFactory
+        from world.magic.crossing.ceremony import CeremonyNarrative, execute_ceremony_beat
+
+        sheet = CharacterSheetFactory()  # no tenure: ineligible
+        achievement = AchievementFactory(name="Beat Gate", slug="beat-gate")
+        execute_ceremony_beat(
+            sheet=sheet,
+            narrative=CeremonyNarrative(first_body="A first.", personal_body="You did it."),
+            achievement=achievement,
+        )
+        self.assertFalse(CharacterAchievement.objects.filter(character_sheet=sheet).exists())
+        self.assertFalse(Discovery.objects.filter(achievement=achievement).exists())
+        # is_first derives from grant results, so the message must be personal,
+        # not gamewide: exactly the one delivery, to the sheet itself.
+        from world.narrative.models import NarrativeMessageDelivery
+
+        self.assertTrue(
+            NarrativeMessageDelivery.objects.filter(recipient_character_sheet=sheet).exists()
+        )
+        self.assertEqual(NarrativeMessageDelivery.objects.count(), 1)
