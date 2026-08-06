@@ -1,5 +1,5 @@
 {% extends "admin/change_form.html" %}
-{% load i18n admin_modify content_export_tags %}
+{% load i18n admin_modify content_export_tags authoring_tags %}
 
 {# Override the OUTER object-tools block, not the nested object-tools-items #}
 {# block, and reproduce Django's stock structure verbatim (see #}
@@ -24,6 +24,11 @@
         </form>
     </li>
     {% endif %}
+    {% if original and request.user.is_superuser %}{% with wb=original|workbench_url %}{% if wb %}
+    <li>
+        <a href="{{ wb }}" class="workbench-open-link">Open in Authoring Workbench</a>
+    </li>
+    {% endif %}{% endwith %}{% endif %}
     {% change_form_object_tools %}
   </ul>
 {% endif %}
