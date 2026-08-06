@@ -174,6 +174,14 @@ def _crafting_rows() -> None:
     (`world.items.seeds_facet_reagents.ensure_facet_attach_reagent_requirement`,
     orphaned since #707 added it with only a test call site) so the facet reagent
     default ships with the recipe it belongs to.
+
+    Unlike `wire_enchanting_crafting`, this entry deliberately creates NO
+    `CheckTypeTrait` weight row on `check_type` — trait composition is content,
+    authored lore-side (same split as the #2882 CheckTypes). Until a
+    `CheckTypeTrait` is authored against "Enchanting", `_compute_check_breakdown`
+    (`world.checks.services:785`) finds an empty `check_type.traits` and the
+    seeded check contributes zero trait points: checks still resolve (safe), just
+    flat, with no skill/stat swing until the content lands.
     """
     from world.checks.models import CheckCategory, CheckType  # noqa: PLC0415
     from world.items.crafting.constants import CraftingRecipeKind  # noqa: PLC0415
