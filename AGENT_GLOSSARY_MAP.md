@@ -406,6 +406,13 @@ source (alternate-self shapeshift, covenant role, character creation). Handled b
 `announce_access_change` in `achievements/discovery.py`; callers never branch on source.
 _Avoid_: ability grant, capability notification, technique change.
 
+**Eligible earner**:
+A character sheet currently piloted by a regular player, holding a current, non-staff RosterTenure.
+Only eligible earners can earn a CharacterAchievement, claim a first-ever Discovery, receive
+rewards, or fire the stories reactivity hook. Enforced by the single `can_earn_achievements`
+predicate inside `grant_achievement`, so every caller inherits it (#3024, ADR-0202).
+_Avoid_: ceremony eligible (the narrower pre-#3024 term), tenured sheet (staff tenures are still ineligible).
+
 ## Public-event vectors
 
 **Scene**:

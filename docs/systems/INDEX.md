@@ -2638,18 +2638,23 @@ gains a discoverable content item for the first time.
 - **Handlers:** `character_sheet.stats` (`StatHandler`) — `get(stat_def) -> int`,
   `increment(stat_def, n) -> int` (atomic F() expression; checks requirement thresholds after increment)
 - **Key Services (`world/achievements/services.py`):** `grant_achievement(achievement,
-  sheets) -> list[CharacterAchievement]`, `apply_achievement_rewards(sheet, achievement)`,
+  sheets) -> list[CharacterAchievement]` (drops any sheet that fails
+  `can_earn_achievements`, returning `[]` and creating no Discovery if none remain),
+  `can_earn_achievements(character_sheet) -> bool` (current, non-staff `RosterTenure`; #3024,
+  ADR-0202), `apply_achievement_rewards(sheet, achievement)`,
   `get_stat(sheet, stat_def) -> int`, `increment_stat(sheet, stat_def, n) -> int`
 - **Access-change + discovery surface (`world/achievements/discovery.py` — ADR-0061):**
   - `announce_access_change(character_sheet, *, gained, lost, source)` — sends an ABILITY
     `NarrativeMessage` to the character listing what techniques/capabilities changed, then for
     each gained item with a non-null `discovery_achievement` FK fires `grant_achievement` and
     `announce_achievement`. Source-agnostic: callers never branch on covenant vs. form vs. CG.
-    Gated by two eligibility checks before the per-item loop (#2899): (1) a live, non-staff
-    `RosterTenure` (`_ceremony_eligible`); (2) content reachable through a CG catalog table is
-    excluded regardless of route (`_cg_catalog_exclusions`). Both gates apply only to callers of
-    this function — other ceremony-firing paths (e.g. `execute_ceremony_beat`) sit outside it;
-    see `world/achievements/CLAUDE.md`.
+    Gated by two eligibility checks before the per-item loop: (1) the same `can_earn_achievements`
+    predicate `grant_achievement` enforces globally (#3024, ADR-0202), checked again here only to
+    skip the ceremony (not the plain gained/lost message) early; (2) content reachable through a
+    CG catalog table is excluded regardless of route (`_cg_catalog_exclusions`, #2899). Gate (2)
+    remains local to this function by design; gate (1) is inherited by every `grant_achievement`
+    caller, including paths outside this function such as `execute_ceremony_beat`; see
+    `world/achievements/CLAUDE.md`.
   - `announce_achievement(earners, *, is_first, first_body, personal_body, category)` —
     gamewide to all active player sheets when `is_first` (first-ever Discovery); otherwise
     personal to the earner list.

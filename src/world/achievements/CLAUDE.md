@@ -150,27 +150,21 @@ Called whenever any mechanism changes what techniques/capabilities a character c
 - **Never branches on source** — covenant, form shapeshift, and CG gift/technique grant are all identical.
 - `source` is an `AccessChangeSource` TextChoices value (drives the lead-in text label).
 - **Two eligibility gates run before the per-item loop, both source-agnostic:** (1) the receiving
-  character must have a current, non-staff `RosterTenure` (`_ceremony_eligible`) — a mid-CG,
-  GM-created-and-untenured, or staff-piloted sheet never fires the ceremony, though the plain
-  gained/lost message above still sends; (2) content reachable through a CG catalog table never
-  fires the ceremony regardless of route (`_cg_catalog_exclusions` — covers `CodexEntry` via
-  Beginnings/Tradition/Path/Distinction/Species/Resonance grants, and `Technique` via
-  `PathGiftGrant`/`TraditionGiftGrant`). See #2899.
-- **Scope: these two gates only apply to callers of `announce_access_change` itself** — the six
-  callers listed above. Several other discovery-ceremony-firing paths call `grant_achievement`/
-  `announce_achievement` directly instead, bypassing this function (and both gates) entirely:
-  `world/combat/combo_discovery.py` (ComboDefinition) and `world/magic/services/signature.py`
-  (SignatureMotifBonus) — both via the shared `execute_ceremony_beat` helper
-  (`world/magic/crossing/ceremony.py`) — plus `world/magic/crossing/handlers.py` and
-  `world/magic/services/crossing.py` (crossing variants/options, also via `execute_ceremony_beat`),
-  and `world/magic/services/aura.py` (aura threshold crossings, calling `grant_achievement`
-  directly, not via `execute_ceremony_beat`). `execute_ceremony_beat` is a separate,
-  ungated ceremony-firing path outside `announce_access_change`'s scope.
-- A related gap: `character_sheet.stats.increment` (`StatHandler`) checks achievement stat
-  requirements and can grant an achievement independent of `announce_access_change` entirely —
-  so an untenured/staff character can still earn a stat-triggered achievement (including
-  consuming the first-ever Discovery slot) through that path. Neither gate above covers it;
-  tracked as #3024.
+  character must have a current, non-staff `RosterTenure`, which is now the shared
+  `can_earn_achievements` predicate in `achievements/services.py`, enforced globally inside
+  `grant_achievement` itself, not a local check here. `announce_access_change` additionally skips
+  its own ceremony for an ineligible sheet before the per-item loop, so the plain gained/lost
+  message above still sends even when the ceremony is skipped; (2) content reachable through a CG
+  catalog table never fires the ceremony regardless of route (`_cg_catalog_exclusions`, covering
+  `CodexEntry` via Beginnings/Tradition/Path/Distinction/Species/Resonance grants, and `Technique`
+  via `PathGiftGrant`/`TraditionGiftGrant`). See #2899.
+- Every `grant_achievement` caller (the stat-threshold path, worship favor, `execute_ceremony_beat`
+  for crossing/combo/signature ceremony beats, and aura thresholds) now inherits the eligibility
+  invariant at the chokepoint, not just the six `announce_access_change` callers listed below.
+  `execute_ceremony_beat`'s `is_first` derives from the `grant_achievement` results, so an
+  ineligible sheet can never trigger the gamewide first-ever announcement (#3024, ADR-0202). The
+  CG-catalog exclusion gate (2) above remains `announce_access_change`-local by design, since it is
+  about content reachability, not earner eligibility.
 
 Current callers:
 - `world/forms/services.py` — assume / revert alternate self
@@ -193,7 +187,10 @@ Sends one `NarrativeMessage`:
   using `first_body` (which must NOT name the discoverer).
 - `is_first=False` → **personal** to the `earners` list, using `personal_body`.
 
-Also used directly by `world/covenants/discovery.py::_notify` (sub-role discovery ceremony).
+`world/covenants/discovery.py` is now a backwards-compatible re-export shim around
+`world.magic.crossing.ceremony.execute_crossing_ceremonies` (ADR-0094); it has no `_notify`
+function. `announce_achievement`'s direct callers are `announce_access_change` (in its per-item
+loop above) and `execute_ceremony_beat` (`world/magic/crossing/ceremony.py`).
 
 ## Key Rules
 
@@ -207,3 +204,5 @@ Also used directly by `world/covenants/discovery.py::_notify` (sub-role discover
 - Character ownership queries use RosterTenure chain, NOT db_account
 - **`announce_access_change` is source-agnostic** — never add a source branch inside it;
   place source-specific pre/post logic in the caller instead
+- **Only eligible earners (current, non-staff tenure, `can_earn_achievements`) can earn
+  achievements**, enforced inside `grant_achievement`, never per-caller

@@ -27,3 +27,7 @@ _Avoid_: discoverable mixin (it is a base class, not a mixin), achievement holde
 **Access change**:
 The event of a character gaining or losing access to techniques or capabilities, regardless of source (alternate-self shapeshift, covenant role engagement/disengagement, character creation). A single surface — `announce_access_change` in `achievements/discovery.py` — handles notification and fires any first-ever Discovery ceremony; callers never branch on the source.
 _Avoid_: ability change, capability notification, technique grant (too narrow)
+
+**Eligible earner**:
+A character sheet currently piloted by a regular player, i.e. holding a current, non-staff RosterTenure. Only eligible earners can earn a CharacterAchievement, claim a first-ever Discovery, receive rewards, or fire the stories reactivity hook. The single predicate is `can_earn_achievements` in `achievements/services.py`, enforced inside `grant_achievement` so every caller inherits it (#3024, ADR-0202).
+_Avoid_: ceremony eligible (the narrower pre-#3024 term), tenured sheet (staff tenures are still ineligible)
