@@ -155,7 +155,14 @@ def _resolve_grant_resonance(
         return preferred
     covering = gift_threads_for(sheet.character, gift)
     if covering:
-        return min(covering, key=lambda t: t.pk).resonance
+        # ``gift_threads_for`` sorts direct-hold-first (a thread whose
+        # ``target_gift`` is this exact gift beats an ancestor-gift thread) —
+        # take covering[0], not the lowest-pk thread, or a lower-pk ancestor
+        # thread could win over a direct hold and mint a second thread on the
+        # same gift (idempotency in ``provision_latent_gift_thread`` is keyed
+        # on the exact (owner, gift, resonance) triple, not "any covering
+        # thread").
+        return covering[0].resonance
     if supported:
         claimed_ids = set(
             CharacterResonance.objects.filter(character_sheet=sheet).values_list(

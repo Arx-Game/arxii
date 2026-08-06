@@ -423,8 +423,10 @@ def _weave_gift_thread(
     # 2026-08-04). Resonance comes from the thread the player weaves, not from
     # the gift; the set is only an optional narrowing. Every one of the 17
     # authored gifts carries an empty set, so the old reading locked all of
-    # them out of this path while character creation -- which calls
-    # ``provision_latent_gift_thread`` directly, ungated -- happily let them in.
+    # them out of this path. Character creation goes through
+    # ``grant_gift_to_character`` (#2971), which resolves a resonance via
+    # ``_resolve_grant_resonance`` and always provisions a thread — an empty
+    # supported set is UNRESTRICTED there too, not a skip.
     supported = gift.cached_resonances
     if supported and not any(r.pk == resonance.pk for r in supported):
         from world.magic.exceptions import UnsupportedGiftResonanceError  # noqa: PLC0415

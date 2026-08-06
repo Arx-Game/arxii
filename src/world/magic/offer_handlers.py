@@ -187,6 +187,7 @@ class CrossingOfferHandler:
             AudereMajoraOfferNotFoundError,
             AudereMajoraOfferStaleError,
             AudereMajoraPathError,
+            GiftResonanceUnresolvable,
             ProtagonismLockedError,
         )
         from world.magic.types import AlterationGateError  # noqa: PLC0415
@@ -228,6 +229,7 @@ class CrossingOfferHandler:
             AudereMajoraPathError,
             ProtagonismLockedError,
             AlterationGateError,
+            GiftResonanceUnresolvable,
         ) as exc:
             raise CommandError(str(exc)) from exc
 

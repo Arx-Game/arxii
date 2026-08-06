@@ -170,6 +170,41 @@ class GrantGiftToCharacterAlwaysProvisionsTests(TestCase):
         )
         self.assertFalse(CharacterGift.objects.filter(character=sheet, gift=gift).exists())
 
+    def test_regrant_prefers_direct_hold_over_lower_pk_ancestor_thread(self):
+        """Covering-thread step must prefer a DIRECT thread on the granted gift
+        over a lower-pk ancestor-gift thread (#2971 final-review fix).
+
+        ``gift_threads_for`` sorts direct-hold-first regardless of pk order;
+        the resolver must honor that ordering (``covering[0]``), not re-sort
+        by pk (``min(covering, key=lambda t: t.pk)``), or an older ancestor
+        thread wins and a bare re-grant of the child mints a second thread on
+        the same gift (idempotency in ``provision_latent_gift_thread`` is
+        keyed on the exact (owner, gift, resonance) triple).
+        """
+        sheet = CharacterSheetFactory()
+        parent_gift = GiftFactory()
+        child_gift = GiftFactory(parent=parent_gift)
+        ancestor_resonance = ResonanceFactory()
+        direct_resonance = ResonanceFactory()
+
+        # Ancestor-gift thread minted FIRST (lower pk).
+        grant_gift_to_character(sheet, parent_gift, resonance=ancestor_resonance)
+        # Direct thread on the child gift, minted SECOND (higher pk), at a
+        # different resonance.
+        grant_gift_to_character(sheet, child_gift, resonance=direct_resonance)
+        thread_count_before = Thread.objects.filter(owner=sheet).count()
+
+        resolved = _resolve_grant_resonance(sheet, child_gift)
+        _character_gift, created = grant_gift_to_character(sheet, child_gift)
+
+        self.assertEqual(resolved, direct_resonance)
+        self.assertFalse(created)
+        self.assertEqual(Thread.objects.filter(owner=sheet).count(), thread_count_before)
+        direct_thread = Thread.objects.get(
+            owner=sheet, target_kind=TargetKind.GIFT, target_gift=child_gift
+        )
+        self.assertEqual(direct_thread.resonance, direct_resonance)
+
     def test_regrant_of_owned_gift_is_a_true_noop_using_gifts_own_thread(self):
         """An unconditional re-grant of an already-owned gift must not mint a
         second thread at a different resonance (#2971 spec-review delta).

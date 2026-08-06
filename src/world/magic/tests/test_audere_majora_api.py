@@ -15,6 +15,8 @@ Covers:
 
 from __future__ import annotations
 
+from unittest.mock import patch
+
 from rest_framework.test import APITestCase
 
 from world.classes.factories import PathFactory
@@ -22,7 +24,7 @@ from world.classes.models import PathStage
 from world.conditions.factories import ConditionStageFactory, ConditionTemplateFactory
 from world.magic.audere import SOULFRAY_CONDITION_NAME
 from world.magic.audere_majora import PendingAudereMajoraOffer
-from world.magic.exceptions import AudereMajoraOfferNotFoundError
+from world.magic.exceptions import AudereMajoraOfferNotFoundError, GiftResonanceUnresolvable
 from world.magic.factories import IntensityTierFactory, wire_audere_power_multipliers
 from world.magic.tests.majora_fixtures import build_crossing_world
 from world.progression.models import PathIntent
@@ -389,6 +391,34 @@ class AudereMajoraRespondViewTests(APITestCase):
         self.assertEqual(response.status_code, 400, response.content)
         # Offer row survives the ownership rejection
         self.assertTrue(PendingAudereMajoraOffer.objects.filter(pk=offer.pk).exists())
+
+    def test_respond_accept_unresolvable_gift_resonance_400(self) -> None:
+        """A ``GiftResonanceUnresolvable`` from ``resolve_audere_majora_offer`` (e.g. the
+        crossed-into path's gift grant can't resolve a resonance, #2971 final-review fix)
+        maps to 400 with its user_message — not an unhandled 500.
+        """
+        _character, _sheet, _threshold, _prospect, puissant_path, offer = self._build_my_offer(
+            20, "_unresolvable"
+        )
+
+        self.client.force_authenticate(user=self.my_account)
+        with patch(
+            "world.magic.audere_majora.resolve_audere_majora_offer",
+            side_effect=GiftResonanceUnresolvable,
+        ):
+            response = self.client.post(
+                _RESPOND_URL,
+                {
+                    "offer_id": offer.pk,
+                    "accept": True,
+                    "path_id": puissant_path.pk,
+                    "declaration_text": "I step beyond the threshold and claim my becoming.",
+                },
+                format="json",
+            )
+
+        self.assertEqual(response.status_code, 400, response.content)
+        self.assertIn(GiftResonanceUnresolvable.user_message, str(response.data))
 
     def test_respond_unknown_offer_id_400(self) -> None:
         """An unknown offer_id returns 400 with 'No pending Crossing offer found.'."""
