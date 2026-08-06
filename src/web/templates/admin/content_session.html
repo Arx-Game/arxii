@@ -50,7 +50,13 @@
         <p>
             The working tree has uncommitted changes - a pending row export
             still needs to be confirmed or discarded.
+            {% if pending_row %}
+            Pending export: {{ pending_row.model_name }}
+            [<code>{{ pending_row.natural_key }}</code>] -
+            <a href="{{ pending_row.diff_url }}">review it</a>.
+            {% endif %}
         </p>
+        <pre>{{ dirty_text }}</pre>
     </div>
     {% endif %}
 
