@@ -164,8 +164,9 @@ of every single row needing its own PR.
   `ModelAdmin` (13 as of #3019 review, e.g. `missions.MissionTemplate`,
   `magic.PortalAnchorKind`), and building that URL for one used to raise
   `NoReverseMatch` and 500 the diff page. Every caller degrades `None` to
-  `_workbench_url` - an Authoring Workbench editor deep-link, which always
-  resolves regardless of the admin registry.
+  `web/admin/authoring/links.py:workbench_editor_url` - an Authoring
+  Workbench editor deep-link, which always resolves regardless of the admin
+  registry.
 - **One session branch, one pending export at a time** -
   `core_management.content_session` (`ensure_session_branch`,
   `commit_row_export`, `discard_row_export`) keeps every exported-but-not-
@@ -372,6 +373,37 @@ to `_authoring/` (`admin_authoring`).
   `test_authoring_reference.py`.
 - Deliberate no-ADR: the decisions here were recorded in the approved #3019
   spec, the same precedent #3018 set above.
+
+### Stock-admin complement (#3020)
+
+The stock changelists carry the same credit story the workbench queue tells:
+
+- **Credit-status filter + column, injected registry-wide** -
+  `world/contributors/admin.py` defines `CreditStatusListFilter`
+  (`?credit=unwritten|written|reviewed`, a three-way partition derived from
+  `written_by`/`reviewed_by` - never stored) and the `credit_status` cell,
+  which links each row into the workbench editor whenever the model has
+  prose fields. `web/admin/apps.py:_attach_credit_admin_extras` attaches
+  both to every `credited_content_models()` entry registered in
+  `admin.site` at ready() time (same window as `_patch_external_admins`);
+  no admin lists them by hand. Credited models without a registered admin
+  are skipped - the workbench is their surface.
+- **Fieldset coverage is enforced, not hoped for** - `web_admin.E001`
+  (`checks.py:check_credited_admin_fieldsets`) errors when a credited
+  model's admin declares explicit `fieldsets` without the four credit
+  fields (an explicit fieldsets otherwise silently hides them -
+  `ItemTemplateAdmin` shipped that way until #3020). Fix by appending
+  `CREDIT_FIELDSET`; nested side-by-side field tuples are flattened, so
+  that layout cannot evade the check.
+- **Change-form deep link** - `templatetags/authoring_tags.py:workbench_url`
+  + a superuser-only "Open in Authoring Workbench" object-tool `<li>` in
+  `change_form.html`, beside the #3018 export button, for credited models
+  with prose fields. All deep links share one URL builder:
+  `web/admin/authoring/links.py:workbench_editor_url` (promoted from
+  `content_row_export_views`).
+- Tests: `tests/test_credit_admin_extras.py`,
+  `tests/test_change_form_workbench_link.py`, `tests/test_authoring_links.py`,
+  plus the E001 class in `tests/test_admin_checks.py`.
 
 **When Asked About**
 
