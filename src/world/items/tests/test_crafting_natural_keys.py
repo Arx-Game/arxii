@@ -222,6 +222,78 @@ class CraftingNaturalKeyRoundTripTests(TestCase):
         assert category_key == ("Direct XOR Recipe", None, "Direct XOR Gemstones")
         assert CraftingMaterialRequirement.objects.get_by_natural_key(*category_key) == category_row
 
+    def test_quality_tier_natural_key_get_by_natural_key(self) -> None:
+        """`natural_key()` / `get_by_natural_key()` agree for QualityTier (#3006 task 6b).
+
+        `CraftingSkillCap.max_quality_tier` is an FK-by-name value in
+        lore-authored crafting fixtures — without this, `_resolve_natural_key_fields`
+        crashes with `AttributeError: 'SharedMemoryManager' object has no attribute
+        'get_by_natural_key'` on a real `--load`.
+        """
+        from world.items.factories import QualityTierFactory
+        from world.items.models import QualityTier
+
+        tier = QualityTierFactory(name="Round Trip Tier")
+
+        key = tier.natural_key()
+        assert key == ("Round Trip Tier",)
+        assert QualityTier.objects.get_by_natural_key(*key) == tier
+
+    def test_quality_tier_round_trips_via_skill_cap(self) -> None:
+        """QualityTier resolves through a real export -> load_entries round trip."""
+        from world.items.factories import (
+            CraftingRecipeFactory,
+            CraftingSkillCapFactory,
+            QualityTierFactory,
+        )
+
+        tier = QualityTierFactory(name="Masterwork Round Trip")
+        recipe = CraftingRecipeFactory(name="Quality Tier Recipe")
+        CraftingSkillCapFactory(recipe=recipe, min_skill_value=40, max_quality_tier=tier)
+
+        self._round_trip()
+
+        cap_path = self.root / "fixtures" / "items" / "craftingskillcap.json"
+        records = json.loads(cap_path.read_text())
+        record = next(r for r in records if r["fields"]["min_skill_value"] == 40)
+        assert record["fields"]["max_quality_tier"] == ["Masterwork Round Trip"]
+
+    def test_specialization_natural_key_get_by_natural_key(self) -> None:
+        """`natural_key()` / `get_by_natural_key()` agree for Specialization (#3006 task 6b).
+
+        `CraftingRecipe.specialization` is an FK-by-name value in lore-authored
+        crafting fixtures — same failure mode as QualityTier above. Keyed on
+        `(parent_skill, name)`, the model's existing `unique_together`.
+        """
+        from world.skills.factories import SpecializationFactory
+        from world.skills.models import Specialization
+
+        spec = SpecializationFactory(name="Round Trip Brewing")
+
+        key = spec.natural_key()
+        assert key == (spec.parent_skill.natural_key()[0], "Round Trip Brewing")
+        assert Specialization.objects.get_by_natural_key(*key) == spec
+
+    def test_specialization_round_trips_via_recipe(self) -> None:
+        """Specialization resolves through a real export -> load_entries round trip."""
+        from world.items.factories import CraftingRecipeFactory
+        from world.skills.factories import SpecializationFactory
+
+        spec = SpecializationFactory(name="Round Trip Enchanting")
+        recipe = CraftingRecipeFactory(name="Specialization Recipe", specialization=spec)
+
+        self._round_trip()
+
+        recipe_path = self.root / "fixtures" / "items" / "craftingrecipe.json"
+        records = {r["fields"]["name"]: r for r in json.loads(recipe_path.read_text())}
+        record = records["Specialization Recipe"]
+        assert record["fields"]["specialization"] == [
+            spec.parent_skill.natural_key()[0],
+            "Round Trip Enchanting",
+        ]
+        recipe.refresh_from_db()
+        assert recipe.specialization_id == spec.pk
+
     def test_material_requirement_both_branches_same_recipe_round_trip_together(self) -> None:
         """Both XOR branches on the same recipe round-trip without collision.
 

@@ -50,12 +50,18 @@ FACET_MODEL = "arxii.Facet"
 RESONANCE_MODEL = "arxii.Resonance"
 
 
-class QualityTier(SharedMemoryModel):
+class QualityTier(NaturalKeyMixin, SharedMemoryModel):
     """
     Discrete quality level for items, reusable across systems.
 
     Color-coded tiers (e.g., Common=white, Fine=green, Masterwork=purple)
     provide consistent visual language for quality/difficulty throughout the game.
+
+    Carries `NaturalKeyMixin` (#3006 task 6b, mirroring `MaterialCategory`): `name`
+    is already unique, so it needs no schema change. Required so
+    `CraftingSkillCap.max_quality_tier` — an FK-by-name value in lore-authored
+    crafting fixtures — can resolve at content-load time instead of crashing
+    `_resolve_natural_key_fields` with a missing `get_by_natural_key`.
     """
 
     name = models.CharField(max_length=50, unique=True)
@@ -82,6 +88,11 @@ class QualityTier(SharedMemoryModel):
         default=0,
         help_text="Display ordering (lower = worse quality).",
     )
+
+    objects = NaturalKeyManager()
+
+    class NaturalKeyConfig:
+        fields = ["name"]
 
     class Meta:
         ordering = ["sort_order"]
