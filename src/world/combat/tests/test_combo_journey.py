@@ -42,6 +42,7 @@ from world.magic.factories import (
     TechniqueFactory,
 )
 from world.mechanics.factories import CharacterEngagementFactory
+from world.roster.factories import grant_test_tenure
 from world.scenes.constants import RoundStatus
 from world.vitals.models import CharacterVitals
 
@@ -108,6 +109,8 @@ class ComboJourneyTests(TestCase):
     def _setup_pc(self, *, effect: object, speed_rank: int) -> None:
         """Create a PC participant with a technique matching the given effect type."""
         sheet = CharacterSheetFactory()
+        # Achievement eligibility requires a live, non-staff RosterTenure (#3024).
+        grant_test_tenure(sheet)
         role = CovenantRoleFactory(speed_rank=speed_rank)
         participant = CombatParticipantFactory(
             encounter=self.encounter,
