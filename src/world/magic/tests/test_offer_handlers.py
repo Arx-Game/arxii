@@ -101,7 +101,11 @@ class CrossingOfferHandlerAcceptTests(TestCase):
 
     A ``GiftResonanceUnresolvable`` from ``resolve_audere_majora_offer`` (e.g. the
     crossed-into path's gift grant can't resolve a resonance) must map to the
-    handler's ``CommandError`` idiom, not propagate as an unhandled exception.
+    handler's ``CommandError`` idiom, not propagate as an unhandled exception —
+    and the telnet player must see the exception's own ``user_message``, not a
+    blank string. Every exception in the handler's catch tuple is raised bare (no
+    message args) at its raise sites, so the old ``CommandError(str(exc))`` idiom
+    always produced ``""`` — the player-visible text was silently discarded.
     """
 
     def test_accept_maps_unresolvable_gift_resonance_to_command_error(self) -> None:
@@ -116,12 +120,15 @@ class CrossingOfferHandlerAcceptTests(TestCase):
             "world.magic.audere_majora.resolve_audere_majora_offer",
             side_effect=GiftResonanceUnresolvable,
         ):
-            with self.assertRaises(CommandError):
+            with self.assertRaises(CommandError) as ctx:
                 CrossingOfferHandler().accept(
                     offer,
                     character,
                     f"path={puissant_path.name} declaration=I step beyond.",
                 )
+
+        self.assertEqual(ctx.exception.msg, GiftResonanceUnresolvable.user_message)
+        self.assertTrue(ctx.exception.msg)
 
 
 @override_settings(SEED_SAMPLE_CONTENT=True)

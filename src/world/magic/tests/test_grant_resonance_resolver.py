@@ -170,38 +170,49 @@ class GrantGiftToCharacterAlwaysProvisionsTests(TestCase):
         )
         self.assertFalse(CharacterGift.objects.filter(character=sheet, gift=gift).exists())
 
-    def test_regrant_prefers_direct_hold_over_lower_pk_ancestor_thread(self):
+    def test_regrant_prefers_direct_hold_over_lower_pk_descendant_thread(self):
         """Covering-thread step must prefer a DIRECT thread on the granted gift
-        over a lower-pk ancestor-gift thread (#2971 final-review fix).
+        over a lower-pk thread on a DESCENDANT gift (#2971 final-review fix).
 
-        ``gift_threads_for`` sorts direct-hold-first regardless of pk order;
-        the resolver must honor that ordering (``covering[0]``), not re-sort
-        by pk (``min(covering, key=lambda t: t.pk)``), or an older ancestor
-        thread wins and a bare re-grant of the child mints a second thread on
-        the same gift (idempotency in ``provision_latent_gift_thread`` is
-        keyed on the exact (owner, gift, resonance) triple).
+        ``gift_threads_for(character, X)`` returns threads whose ``target_gift``
+        is ``X`` itself or a DESCENDANT of ``X`` (``X.pk`` must be in the
+        thread's own gift's ``lineage_ids``, which walks from that gift UPWARD
+        through its ancestors) — so querying for a CHILD gift never sees a
+        thread on its PARENT (the parent isn't a descendant of the child); the
+        ambiguous case is the reverse. A thread on the child gift DOES cover
+        the parent (the child's lineage includes the parent), so querying for
+        the PARENT while the character holds both a lower-pk thread on the
+        CHILD and a higher-pk DIRECT thread on the parent itself must resolve
+        the direct thread's resonance, not the child's — ``gift_threads_for``
+        sorts direct-hold-first regardless of pk order, and the resolver must
+        honor that ordering (``covering[0]``) rather than re-sorting by pk
+        (``min(covering, key=lambda t: t.pk)``), or the older child-gift thread
+        wins and a bare re-grant of the parent mints a second thread on it
+        (idempotency in ``provision_latent_gift_thread`` is keyed on the exact
+        (owner, gift, resonance) triple).
         """
         sheet = CharacterSheetFactory()
         parent_gift = GiftFactory()
         child_gift = GiftFactory(parent=parent_gift)
-        ancestor_resonance = ResonanceFactory()
+        descendant_resonance = ResonanceFactory()
         direct_resonance = ResonanceFactory()
 
-        # Ancestor-gift thread minted FIRST (lower pk).
-        grant_gift_to_character(sheet, parent_gift, resonance=ancestor_resonance)
-        # Direct thread on the child gift, minted SECOND (higher pk), at a
-        # different resonance.
-        grant_gift_to_character(sheet, child_gift, resonance=direct_resonance)
+        # Descendant (child-gift) thread minted FIRST (lower pk) — covers the
+        # parent via lineage, but is NOT a direct hold on it.
+        grant_gift_to_character(sheet, child_gift, resonance=descendant_resonance)
+        # Direct thread on the parent gift itself, minted SECOND (higher pk),
+        # at a different resonance.
+        grant_gift_to_character(sheet, parent_gift, resonance=direct_resonance)
         thread_count_before = Thread.objects.filter(owner=sheet).count()
 
-        resolved = _resolve_grant_resonance(sheet, child_gift)
-        _character_gift, created = grant_gift_to_character(sheet, child_gift)
+        resolved = _resolve_grant_resonance(sheet, parent_gift)
+        _character_gift, created = grant_gift_to_character(sheet, parent_gift)
 
         self.assertEqual(resolved, direct_resonance)
         self.assertFalse(created)
         self.assertEqual(Thread.objects.filter(owner=sheet).count(), thread_count_before)
         direct_thread = Thread.objects.get(
-            owner=sheet, target_kind=TargetKind.GIFT, target_gift=child_gift
+            owner=sheet, target_kind=TargetKind.GIFT, target_gift=parent_gift
         )
         self.assertEqual(direct_thread.resonance, direct_resonance)
 
