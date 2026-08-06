@@ -234,6 +234,7 @@ treat those names as hints to confirm, not gospel.
 - [0113 — A technique-driven entrance carries the cast: one check, not two](0113-entrance-carries-the-cast.md)
 - [0136 — Cantrips retired for authored CG catalogs; tradition-gated magic selection](0136-cantrips-retired-for-authored-cg-catalogs-tradition-gated-magic-selection.md) (extends ADR-0063, ADR-0055, ADR-0072; #2426)
 - [0137 — Golden Hares: deed-denominated Academy favor tokens](0137-golden-hares-deed-denominated-academy-favor-tokens.md) (extends ADR-0053; related ADR-0136; #2428/#2440/#2441/#2442)
+- [0203 — A granted gift always gets a thread: resonance resolves inside the grant primitive](0203-a-granted-gift-always-gets-a-thread.md) (#2971; extends ADR-0052, ADR-0055)
 
 ### Story & stakes
 - [0067 — Beat.risk is the stakes-wager declaration](0067-beat-risk-is-the-stakes-wager-declaration.md)
