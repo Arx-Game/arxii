@@ -49,14 +49,33 @@
 <p class="successnote">{% translate "Marked reviewed." %}</p>
 {% endif %}
 
+{% if general_errors %}
+<div class="errornote">
+  <p>{% translate "This row cannot be saved:" %}</p>
+  <ul>
+    {% for message in general_errors %}
+    <li>{{ message }}</li>
+    {% endfor %}
+  </ul>
+</div>
+{% endif %}
+
 {% if credited %}
 <p class="successnote">{{ freeze_sentence }}</p>
+{% if instance|content_exportable %}
 <form method="post" action="{% url 'admin_content_export_row' %}" class="content-export-row-form">
   {% csrf_token %}
   <input type="hidden" name="model" value="{{ instance|content_model_label }}">
   <input type="hidden" name="pk" value="{{ instance.pk }}">
-  <button type="submit" class="content-export-row-btn">{% translate "Export to content repo" %}</button>
+  <button type="submit" class="content-export-row-btn">
+    {% translate "Export to content repo" %}
+  </button>
 </form>
+{% else %}
+<p>
+  {% translate "This model stays in the database only; the content repo does not carry it." %}
+</p>
+{% endif %}
 {% endif %}
 
 <h3>{% translate "Mechanical fields" %}</h3>

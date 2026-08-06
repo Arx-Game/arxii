@@ -249,6 +249,7 @@ def _build_editor_context(target: _EditorTarget, flags: _EditorFlags) -> dict:
     if target.model is not None and target.instance is not None:
         field_errors = flags.field_errors or {}
         prose_names = prose_fields_for(target.model)
+        prose_set = set(prose_names)
         context["instance"] = target.instance
         context["prose_fields"] = [
             {
@@ -261,6 +262,19 @@ def _build_editor_context(target: _EditorTarget, flags: _EditorFlags) -> dict:
         context["mechanical_fields"] = _mechanical_fields(
             target.model, target.instance, prose_names
         )
+        # A full_clean() failure keyed on a mechanical field (or Django's own
+        # "__all__" non-field-error key) has no textarea to show it next to -
+        # without this, that failure mode re-renders with every input
+        # looking untouched and no visible sign anything went wrong (#3019
+        # review). Collected here, not in `_apply_prose_edits`, so both the
+        # save and credit views get it for free through the same context
+        # builder.
+        context["general_errors"] = [
+            f"{field}: {message}"
+            for field, messages in field_errors.items()
+            if field not in prose_set
+            for message in messages
+        ]
     return context
 
 

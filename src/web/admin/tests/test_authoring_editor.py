@@ -1,5 +1,8 @@
 """Tests for the Authoring Workbench row editor fragments (#3019 Task 5)."""
 
+from unittest.mock import patch
+
+from django.core.exceptions import ValidationError
 from django.test import TestCase
 from django.urls import reverse
 from django.utils import timezone
@@ -9,6 +12,7 @@ from evennia_extensions.models import PlayerData
 from world.codex.factories import CodexEntryFactory
 from world.codex.models import CodexEntry
 from world.contributors.factories import ContentContributorFactory
+from world.npc_services.factories import NPCRoleFactory
 
 
 def _make_account(username: str, *, superuser: bool = True) -> AccountDB:
@@ -200,6 +204,31 @@ class TestAuthoringEditorSave(AuthoringEditorTestCase):
         (summary,) = _db_values(entry.pk, "summary")
         self.assertEqual(summary, "")
 
+    def test_mechanical_field_validation_error_shows_banner_and_does_not_save(self) -> None:
+        entry = self._entry(lore_content="Untouched lore.")
+        self.client.force_login(self.super)
+
+        with patch.object(
+            CodexEntry, "full_clean", side_effect=ValidationError({"name": ["boom"]})
+        ):
+            resp = self.client.post(
+                reverse("admin_authoring_editor_save"),
+                {
+                    "model": "codex.CodexEntry",
+                    "pk": str(entry.pk),
+                    "lore_content": "Attempted new lore.",
+                },
+            )
+
+        self.assertEqual(resp.status_code, 200)
+        body = resp.content.decode()
+        self.assertIn("This row cannot be saved:", body)
+        self.assertIn("boom", body)
+        self.assertNotIn("Saved.", body)
+
+        (lore_content,) = _db_values(entry.pk, "lore_content")
+        self.assertEqual(lore_content, "Untouched lore.")
+
 
 class TestAuthoringEditorCredit(AuthoringEditorTestCase):
     def test_staff_non_superuser_forbidden(self) -> None:
@@ -252,6 +281,34 @@ class TestAuthoringEditorCredit(AuthoringEditorTestCase):
         self.assertEqual(lore_content, "New credited lore.")
         self.assertIsNotNone(written_by_id)
 
+    def test_non_exportable_credited_model_shows_sentence_not_handoff_form(self) -> None:
+        # NPCRole is credited (CreditedContent) but is one of the four
+        # builder-domain models outside CONTENT_MODELS/MARKDOWN_EXPORT_DOMAINS
+        # - and has no registered ModelAdmin at all, so the pre-fix
+        # unconditional handoff form would 500 (NoReverseMatch inside
+        # content_export_row's refusal redirect) the moment an operator
+        # clicked it (#3019 review).
+        role = NPCRoleFactory(description="Some role flavor.")
+        self.client.force_login(self.super)
+
+        resp = self.client.post(
+            reverse("admin_authoring_editor_credit"),
+            {
+                "model": "npc_services.NPCRole",
+                "pk": str(role.pk),
+                "description": "Some role flavor.",
+            },
+        )
+
+        self.assertEqual(resp.status_code, 200)
+        body = resp.content.decode()
+        self.assertIn(
+            "This model stays in the database only; the content repo does not carry it.",
+            body,
+        )
+        self.assertNotIn("content-export-row-form", body)
+        self.assertNotIn("Export to content repo", body)
+
     def test_unlinked_operator_gets_setup_guidance_and_stamps_nothing(self) -> None:
         lonely = _make_account("editorlonely")
         entry = self._entry(lore_content="Untouched lore.")
@@ -303,6 +360,28 @@ class TestAuthoringEditorReview(AuthoringEditorTestCase):
         self.assertEqual(reviewed_by_id, self.writer.pk)
         self.assertEqual(reviewed_on, timezone.now().date())
         self.assertEqual(written_by_id, self.writer.pk)
+
+    def test_unlinked_operator_gets_setup_guidance_and_stamps_nothing(self) -> None:
+        lonely = _make_account("editorreviewlonely")
+        entry = self._entry(
+            lore_content="Untouched review lore.",
+            written_by=self.writer,
+            written_on=timezone.now().date(),
+        )
+        self.client.force_login(lonely)
+
+        resp = self.client.post(
+            reverse("admin_authoring_editor_review"),
+            {"model": "codex.CodexEntry", "pk": str(entry.pk)},
+        )
+
+        self.assertEqual(resp.status_code, 200)
+        body = resp.content.decode()
+        self.assertIn(f'href="{reverse("admin_authoring")}"', body)
+
+        reviewed_by_id, reviewed_on = _db_values(entry.pk, "reviewed_by_id", "reviewed_on")
+        self.assertIsNone(reviewed_by_id)
+        self.assertIsNone(reviewed_on)
 
     def test_reviewer_may_equal_author_unenforced(self) -> None:
         entry = self._entry(
