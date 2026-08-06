@@ -38,6 +38,13 @@ _TEXT_SUFFIXES = frozenset({".md", ".txt", ".json"})
 _DEFAULT_CAP = 200
 _DEFAULT_BUDGET_SECONDS = 30
 
+#: A 2MB text file is not a reference doc - it is exactly the kind of file
+#: the Arx I dump's largest offenders are (see the module docstring:
+#: event-logs/objects), and scanning one line by line is exactly what the
+#: wall-clock budget below cannot survive if a single file eats the whole
+#: 30s on its own. Skipped outright before it is ever opened.
+_MAX_FILE_BYTES = 2 * 1024 * 1024
+
 #: Directory names under a content root that carry staff-only prose - never
 #: shipped to players, but useful cross-reference material for a writer.
 _STAFF_DOC_DIRS = ("design", "world_bibles")
@@ -112,8 +119,8 @@ def db_search(query: str, *, cap: int = _DEFAULT_CAP) -> list[DbSearchGroup]:
     return groups
 
 
-def _iter_text_files(root: Path):
-    """Yield every `_TEXT_SUFFIXES` file under `root`, never leaving `root`.
+def _iter_text_files(root: Path, deadline: float):
+    """Yield every `_TEXT_SUFFIXES` file under `root` up to `_MAX_FILE_BYTES`, never leaving `root`.
 
     `os.walk` does not follow symlinked directories by default (`followlinks`
     defaults to `False`), so a symlinked subdirectory pointing outside `root`
@@ -122,11 +129,27 @@ def _iter_text_files(root: Path):
     and re-checked with `is_relative_to` before it is opened - the same
     escape guard the lore repo's `write_editor.reference._targets`/
     `read_file` use, applied per file here instead of per configured domain.
+
+    `deadline` (a `time.monotonic()` value, matching `file_search`'s own) is
+    checked at both the per-directory and per-file level, not just inside
+    `file_search`'s own line loop - without this, a root with tens of
+    thousands of files (the Arx I dump again) keeps enumerating candidates
+    for the full walk even after the search budget is already spent, before
+    `file_search` ever gets another chance to look at the clock.
     """
     for base, _dirs, names in os.walk(root):
+        if time.monotonic() > deadline:
+            return
         for name in names:
+            if time.monotonic() > deadline:
+                return
             candidate = Path(base) / name
             if candidate.suffix not in _TEXT_SUFFIXES:
+                continue
+            try:
+                if candidate.stat().st_size > _MAX_FILE_BYTES:
+                    continue
+            except OSError:
                 continue
             resolved = candidate.resolve()
             if not resolved.is_relative_to(root):
@@ -149,6 +172,14 @@ def file_search(
     root can be large (the Arx I dump in particular). Each hit records the
     file's path relative to the root it was found under, its 1-based line
     number, and that line's text, stripped and trimmed to 200 characters.
+
+    Contract: no single file scan can exceed the budget by more than one
+    line - the deadline is re-checked on every line, not just between files
+    - and files over 2MB are skipped outright before they are ever opened
+    (see `_iter_text_files`), so neither a single oversized line nor a
+    single oversized file can blow through `budget_seconds` on its own; a
+    deadline hit mid-file returns whatever hits were already collected
+    rather than finishing that file's remaining lines.
     """
     needle = query.strip().casefold()
     hits: list[FileSearchHit] = []
@@ -159,7 +190,7 @@ def file_search(
     for raw_root in roots:
         root = raw_root.resolve()
         root_label = root.name
-        for path in _iter_text_files(root):
+        for path in _iter_text_files(root, deadline):
             if len(hits) >= cap or time.monotonic() > deadline:
                 return hits
             try:
@@ -167,6 +198,8 @@ def file_search(
             except OSError:
                 continue
             for line_no, line in enumerate(text.splitlines(), start=1):
+                if time.monotonic() > deadline:
+                    return hits
                 if needle not in line.casefold():
                     continue
                 hits.append(
@@ -177,7 +210,7 @@ def file_search(
                         text=line.strip()[:200],
                     )
                 )
-                if len(hits) >= cap or time.monotonic() > deadline:
+                if len(hits) >= cap:
                     return hits
     return hits
 
@@ -206,7 +239,10 @@ def reference_roots(*, staff_docs: bool, arx1: bool) -> list[Path]:
                 roots.append(candidate)
 
     if arx1:
-        candidate = content_root.parent / "arx1"
+        # resolve() first: CONTENT_REPO_PATH may itself be a symlink, and
+        # its sibling directory only lives next to where that symlink
+        # actually points, not next to the symlink itself.
+        candidate = content_root.resolve().parent / "arx1"
         if candidate.is_dir():
             roots.append(candidate)
 

@@ -137,6 +137,38 @@ class FileSearchTests(TestCase):
 
         self.assertEqual(hits, [])
 
+    def test_file_over_size_cap_is_skipped(self) -> None:
+        # seek/truncate to produce a sparse file just over the 2MB cap,
+        # rather than actually writing 2MB - the needle sits at the very
+        # start, so a hit here would prove the size guard was never applied.
+        huge = self.root / "huge.md"
+        with huge.open("wb") as fh:
+            fh.write(b"griefsong appears right at the start\n")
+            fh.seek(2 * 1024 * 1024 + 100)
+            fh.truncate()
+
+        hits = file_search("griefsong", [self.root])
+
+        self.assertEqual(hits, [])
+
+    def test_deadline_checked_mid_file_returns_partial_hits(self) -> None:
+        # Three matching lines in one file; the mocked clock reports "still
+        # within budget" for every check up through the first line's match,
+        # then "over budget" on the very next check (before line two) - if
+        # the deadline is only checked between files, this file would still
+        # be scanned to completion and all three lines would show up.
+        target = self.root / "long.md"
+        target.write_text("cline one\ncline two\ncline three\n")
+
+        with mock.patch(
+            "web.admin.authoring.reference.time.monotonic",
+            side_effect=[0, 0, 0, 0, 0, 100],
+        ):
+            hits = file_search("cline", [self.root], budget_seconds=1)
+
+        self.assertEqual(len(hits), 1)
+        self.assertEqual(hits[0].line, 1)
+
 
 class ReferenceRootsTests(TestCase):
     """`reference_roots` against a tmp content root."""
