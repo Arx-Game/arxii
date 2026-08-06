@@ -15,12 +15,14 @@ from world.magic.factories import (
     ThreadFactory,
 )
 from world.magic.specialization.models import TechniqueVariant
+from world.roster.factories import grant_test_tenure
 
 
 class GiftVariantDiscoveryTests(TestCase):
     @classmethod
     def setUpTestData(cls) -> None:
         cls.sheet = CharacterSheetFactory()
+        grant_test_tenure(cls.sheet)
         cls.gift = GiftFactory()
         cls.resonance = ResonanceFactory()
         cls.gift.resonances.add(cls.resonance)
