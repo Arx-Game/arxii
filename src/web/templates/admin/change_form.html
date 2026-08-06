@@ -1,0 +1,16 @@
+{% extends "admin/change_form.html" %}
+{% load i18n content_export_tags %}
+
+{% block object-tools-items %}
+    {% if original and request.user.is_superuser and original|content_exportable %}
+    <li>
+        <form method="post" action="{% url 'admin_content_export_row' %}" class="content-export-row-form">
+            {% csrf_token %}
+            <input type="hidden" name="model" value="{{ original|content_model_label }}">
+            <input type="hidden" name="pk" value="{{ original.pk }}">
+            <button type="submit" class="content-export-row-btn">Export to content repo</button>
+        </form>
+    </li>
+    {% endif %}
+    {{ block.super }}
+{% endblock %}

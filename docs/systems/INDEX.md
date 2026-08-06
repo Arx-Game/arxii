@@ -6598,6 +6598,14 @@ Admin-hosted, superuser-only HTMX dashboards for difficulty tuning/simulation an
   `world.seeds.sample_content.assert_sampling_allowed()` refuses `SEED_SAMPLE_CONTENT` invention
   once any `CONTENT_MODELS` table already has a row within the same `seed_dev_database()` press.
   See `src/core_management/CLAUDE.md`'s "Load conflicts" section and ADR-0201.
+- **Row-level export and content session (#3018):** a superuser-only "Export to content repo"
+  button on any change form (`web/templates/admin/change_form.html`, gated by
+  `web/admin/templatetags/content_export_tags.py`'s `CONTENT_MODELS`/`MARKDOWN_EXPORT_DOMAINS`
+  membership check) writes `core_management.content_export.export_single_row()`'s output onto a
+  shared branch (`core_management.content_session.SESSION_BRANCH`), one commit per row behind a
+  digest-guarded diff confirm, then bundles the accumulated commits into a single pull request
+  via the shared `core_management.github_rest` REST client. See the "Row export and content
+  session" section in `src/web/admin/CLAUDE.md` and `src/core_management/CLAUDE.md`.
 - **Grid content export/import (#2436/#2448):** rooms/areas are no longer deferred —
   `Area`/`RoomProfile` gained permanent identity keys (`slug`/`fixture_key`) and a
   `GridOrigin` export gate (see the Areas section above). `core_management.grid_export.
