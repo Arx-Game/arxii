@@ -9,6 +9,11 @@ and `?q=` filters over the already-sorted rows in a single Python-side scan
 (no per-filter rescans, no extra DB queries - `build_backlog()` is the only
 query-issuing call in either fragment).
 
+Task 4 gates the dashboard on a linked `ContentContributor` (see
+`web.admin.authoring.contributors`): an unlinked account gets the setup panel
+in place of the stats/queue skeleton, and `authoring_setup` is the plain-POST
+handler that panel submits to.
+
 Task 5 replaces `authoring_editor` wholesale with the real row editor; it is
 registered here only so the queue panel's row links resolve to something
 during this task's tests, per the URL name it will keep using
@@ -17,20 +22,22 @@ during this task's tests, per the URL name it will keep using
 
 from __future__ import annotations
 
-from django.core.exceptions import PermissionDenied
+from django.contrib import messages
 from django.http import HttpRequest, HttpResponse
-from django.shortcuts import render
+from django.shortcuts import redirect, render
+from django.views.decorators.http import require_POST
 
 from web.admin.authoring.backlog import BacklogRow, build_backlog
+from web.admin.authoring.contributors import current_contributor, link_contributor
 from web.admin.constants import BacklogStatusFilter
 from web.admin.tuning.views import superuser_required
+from world.contributors.models import ContentContributor
 
 _QUEUE_DISPLAY_CAP = 100
 
 
-def _setup_required(request: HttpRequest) -> bool:  # noqa: ARG001 - Task 4 reads request.user
-    # Task 4 replaces this with the contributor check.
-    return False
+def _setup_required(request: HttpRequest) -> bool:
+    return current_contributor(request.user) is None
 
 
 def _row_matches(row: BacklogRow, domain: str, status: str, query: str) -> bool:
@@ -62,10 +69,18 @@ def _filtered_rows(rows: list[BacklogRow], request: HttpRequest) -> list[Backlog
 
 @superuser_required
 def authoring_dashboard(request: HttpRequest) -> HttpResponse:
-    """Authoring Workbench dashboard skeleton: stats + queue HTMX panels."""
-    if _setup_required(request):
-        raise PermissionDenied
-    context = {"title": "Authoring Workbench"}
+    """Authoring Workbench dashboard: setup panel first, stats + queue after.
+
+    An unlinked account sees the setup panel in place of the stats/queue
+    skeleton (#3019 Task 4) - every downstream panel assumes a contributor
+    identity, so the gate wires one up before any of them ever load.
+    """
+    context = {"title": "Authoring Workbench", "setup_required": _setup_required(request)}
+    if context["setup_required"]:
+        context["unlinked_contributors"] = ContentContributor.objects.filter(
+            player_data__isnull=True
+        )
+        context["suggested_name"] = request.user.username
     return render(request, "admin/authoring/dashboard.html", context)
 
 
@@ -119,3 +134,32 @@ def authoring_editor(request: HttpRequest) -> HttpResponse:
         "pk": request.GET.get("pk", ""),
     }
     return render(request, "admin/authoring/_editor_panel.html", context)
+
+
+@superuser_required
+@require_POST
+def authoring_setup(request: HttpRequest) -> HttpResponse:
+    """Create-or-pick a contributor and link it to the account (#3019 Task 4).
+
+    A plain form POST from `_setup_panel.html`, not an HTMX fragment - the
+    happy path is a full-page redirect back to the dashboard, which now
+    renders the normal stats/queue skeleton once the link exists. A repeat
+    POST from an already-linked account (a stale tab, a double submit) is a
+    no-op flash rather than a second link attempt.
+    """
+    if current_contributor(request.user) is not None:
+        messages.info(request, "Your author credit is already linked.")
+        return redirect("admin_authoring")
+
+    name = request.POST.get("name", "")
+    existing_pk_raw = request.POST.get("existing_pk", "")
+    existing_pk = int(existing_pk_raw) if existing_pk_raw.isdigit() else None
+
+    try:
+        contributor = link_contributor(request.user, name=name, existing_pk=existing_pk)
+    except ValueError as exc:
+        messages.error(request, str(exc))
+        return redirect("admin_authoring")
+
+    messages.success(request, f'Linked your author credit to "{contributor.name}".')
+    return redirect("admin_authoring")

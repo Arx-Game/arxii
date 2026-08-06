@@ -6,6 +6,7 @@ from django.test import TestCase
 from django.urls import reverse
 from evennia.accounts.models import AccountDB
 
+from evennia_extensions.models import PlayerData
 from world.contributors.factories import ContentContributorFactory
 from world.traits.models import Trait, TraitCategory, TraitType
 
@@ -19,6 +20,12 @@ class AuthoringViewsTestCase(TestCase):
         cls.staff.save()
         cls.writer = ContentContributorFactory(name="Writer")
         cls.reviewer = ContentContributorFactory(name="Reviewer")
+        # These fragment/dashboard tests exercise the post-setup dashboard, not
+        # the setup gate itself (that gate is covered in test_authoring_setup.py)
+        # - so cls.super carries a linked contributor from the start.
+        PlayerData.objects.create(
+            account=cls.super, contributor=ContentContributorFactory(name="Root Admin")
+        )
 
     def _trait(
         self, name: str, description: str, *, written: bool = False, reviewed: bool = False

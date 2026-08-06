@@ -5,6 +5,9 @@
 {% include "admin/tuning/_panel_css.html" %}
 <div id="authoring-root" hx-headers='{"x-csrftoken": "{{ csrf_token }}"}'>
   <h1>Authoring Workbench</h1>
+  {% if setup_required %}
+    {% include "admin/authoring/_setup_panel.html" %}
+  {% else %}
   <p>Worst-first backlog queue across every credited content model.</p>
 
   <section class="tuning-panel" id="panel-authoring-stats"
@@ -20,6 +23,7 @@
   <section class="tuning-panel" id="authoring-editor">
     <p>Select a row from the queue below to start editing.</p>
   </section>
+  {% endif %}
 </div>
 <script src="{% static 'admin/js/vendor/htmx.min.js' %}" defer></script>
 {% endblock %}

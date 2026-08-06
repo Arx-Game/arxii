@@ -7,6 +7,7 @@ from web.admin.authoring.views import (
     authoring_dashboard,
     authoring_editor,
     authoring_queue_fragment,
+    authoring_setup,
     authoring_stats_fragment,
 )
 from web.admin.content_conflict_views import (
@@ -139,5 +140,6 @@ urlpatterns = [
     path("_authoring/stats/", authoring_stats_fragment, name="admin_authoring_stats"),
     path("_authoring/queue/", authoring_queue_fragment, name="admin_authoring_queue"),
     path("_authoring/editor/", authoring_editor, name="admin_authoring_editor"),
+    path("_authoring/setup/", authoring_setup, name="admin_authoring_setup"),
     path("", arx_admin_site.urls),
 ]
