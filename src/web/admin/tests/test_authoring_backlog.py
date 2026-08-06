@@ -3,20 +3,28 @@
 Uses real credited models directly - ``Trait`` (single prose field, mirrors
 ``test_prose_credits.py``'s pattern), ``ItemTemplate`` (a builder-domain model
 outside ``CONTENT_MODELS``, proving the mixin-iteration path pulls it in
-anyway), and ``TarotCard`` (two prose fields on one row, for the word-count
-summation check). No other credited model gets a row anywhere in this file,
-so any domain not named here contributes zero rows and therefore no
-``DomainStats`` entry - that absence is itself an assertion in
-``test_domain_with_zero_rows_has_no_stats_entry``.
+anyway), ``TarotCard`` (two prose fields on one row, for the word-count
+summation check), ``Beginnings`` (an FK-typed natural-key field,
+``starting_area``, for the identity-display fix), and ``ChallengeApproach``
+(both of its natural-key fields are FK-typed, for the one-query-per-model
+check on a composite key needing two spans). No other credited model gets a
+row anywhere in this file, so any domain not named here contributes zero rows
+and therefore no ``DomainStats`` entry - that absence is itself an assertion
+in ``test_domain_with_zero_rows_has_no_stats_entry``.
 """
 
 from datetime import date
 
+from django.db import connection
 from django.test import TestCase
+from django.test.utils import CaptureQueriesContext
 
-from web.admin.authoring.backlog import build_backlog
+from web.admin.authoring.backlog import _rows_for_model, build_backlog
+from world.character_creation.factories import BeginningsFactory, StartingAreaFactory
 from world.contributors.factories import ContentContributorFactory
 from world.items.factories import ItemTemplateFactory
+from world.mechanics.factories import ChallengeApproachFactory
+from world.mechanics.models import ChallengeApproach
 from world.tarot.constants import ArcanaType
 from world.tarot.models import TarotCard
 from world.traits.models import Trait, TraitCategory, TraitType
@@ -113,6 +121,38 @@ class BuildBacklogTests(TestCase):
         rows, _ = build_backlog()
         labels = {r.model_label for r in rows}
         self.assertIn("items.ItemTemplate", labels)
+
+    def test_fk_natural_key_field_shows_related_name_not_raw_pk(self):
+        area = StartingAreaFactory(name="The Sleeper's Rest")
+        BeginningsFactory(
+            starting_area=area,
+            name="Sleeper",
+            description="Ordinary finished worldbuilding text for this path.",
+        )
+
+        rows, _ = build_backlog()
+        row = next(r for r in rows if r.model_label == "character_creation.Beginnings")
+        self.assertEqual(row.identity, "The Sleeper's Rest, Sleeper")
+
+    def test_fk_span_preserves_one_query_per_model(self):
+        # ChallengeApproach's natural key is (challenge_template, application) and
+        # BOTH fields are FK-typed - challenge_template spans to
+        # ChallengeTemplate.name, application spans to Application.name. Calling
+        # `_rows_for_model` directly (rather than the full `build_backlog`, which
+        # would also fire one query per *other* credited model) isolates exactly
+        # the query this one model's scan issues.
+        ChallengeApproachFactory(custom_description="Ordinary finished approach description text.")
+
+        with CaptureQueriesContext(connection) as ctx:
+            rows = _rows_for_model(ChallengeApproach, None)
+
+        self.assertEqual(len(ctx.captured_queries), 1)
+        self.assertEqual(len(rows), 1)
+        # The values_list span becomes a SQL join inside that one query rather
+        # than a second query per related row - if a future edit regressed to a
+        # per-row lookup, this row count check alone wouldn't catch it, but the
+        # query count above would.
+        self.assertNotRegex(rows[0].identity, r"^\d+, \d+$")
 
     def test_domain_stats_aggregate_correctly(self):
         self._trait("Stats Alpha", "One two three four.")
