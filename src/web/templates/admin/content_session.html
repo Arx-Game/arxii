@@ -1,0 +1,103 @@
+{% extends "admin/base_site.html" %}
+{% load i18n %}
+
+{% block title %}{{ title }} | {% translate 'Site administration' %}{% endblock %}
+
+{% block breadcrumbs %}
+<div class="breadcrumbs">
+    <a href="{% url 'admin:index' %}">{% translate 'Home' %}</a>
+    &rsaquo; <a href="{% url 'admin_game_setup' %}">Game Setup</a>
+    &rsaquo; {{ title }}
+</div>
+{% endblock %}
+
+{% block content %}
+<div id="content-main">
+
+    <div class="module" style="padding: 15px; margin-bottom: 20px;">
+        <h2 style="margin-top: 0;">Content session</h2>
+        <p>Branch: <code>{{ state.branch }}</code></p>
+        {% if not state.on_session %}
+        <p>
+            No content session is open yet. Exporting a row from any content
+            model's change form starts one.
+        </p>
+        {% endif %}
+    </div>
+
+    {% if state.on_session %}
+    <div class="module" style="padding: 15px; margin-bottom: 20px;">
+        <h3 style="margin-top: 0;">Commits</h3>
+        {% if state.commits %}
+        <ul>
+            {% for commit in state.commits %}
+            <li><code>{{ commit }}</code></li>
+            {% endfor %}
+        </ul>
+        {% else %}
+        <p>No commits on this session branch yet.</p>
+        {% endif %}
+    </div>
+
+    <div class="module" style="padding: 15px; margin-bottom: 20px;">
+        <h3 style="margin-top: 0;">Diff</h3>
+        <p>{{ state.diff_stat }}</p>
+        <pre>{{ diff_text }}</pre>
+    </div>
+
+    {% if state.dirty %}
+    <div class="module" style="padding: 15px; margin-bottom: 20px;">
+        <p>
+            The working tree has uncommitted changes - a pending row export
+            still needs to be confirmed or discarded.
+            {% if pending_row %}
+            Pending export: {{ pending_row.model_name }}
+            [<code>{{ pending_row.natural_key }}</code>] -
+            <a href="{{ pending_row.diff_url }}">review it</a>.
+            {% endif %}
+        </p>
+        <pre>{{ dirty_text }}</pre>
+        <form method="post" action="{{ discard_all_url }}">
+            {% csrf_token %}
+            <p>
+                <label for="discard_confirm">
+                    <input type="checkbox" id="discard_confirm" name="discard_confirm">
+                    Discard ALL pending changes shown above - this cannot be undone.
+                </label>
+            </p>
+            <div class="submit-row" style="padding: 12px;">
+                <input type="submit" value="Discard all pending changes"
+                       class="deletelink" style="padding: 10px 20px;">
+            </div>
+        </form>
+    </div>
+    {% endif %}
+
+    <div class="module" style="padding: 15px;">
+        <h3 style="margin-top: 0;">Open the session pull request</h3>
+        <p>
+            Pushes the session branch and opens its pull request, reusing an
+            already-open one instead of filing a duplicate.
+        </p>
+        <form method="post" action="{{ pr_url }}">
+            {% csrf_token %}
+            <p>
+                <label for="pr_title">Title</label><br>
+                <input type="text" id="pr_title" name="title" value="{{ pr_title }}"
+                       style="width: 100%;">
+            </p>
+            <p>
+                <label for="pr_body">Body</label><br>
+                <textarea id="pr_body" name="body" rows="4"
+                          style="width: 100%;">{{ pr_body }}</textarea>
+            </p>
+            <div class="submit-row" style="padding: 12px;">
+                <input type="submit" value="Open pull request" class="default"
+                       style="padding: 10px 20px;">
+            </div>
+        </form>
+    </div>
+    {% endif %}
+
+</div>
+{% endblock %}

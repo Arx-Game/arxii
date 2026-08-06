@@ -15,15 +15,22 @@ import re
 from typing import TYPE_CHECKING
 
 from django.conf import settings
+
+# requests.post itself is no longer called from here (create_github_issue
+# delegates to github_rest.github_request) - kept for requests.codes.created
+# below, and as a module attribute existing tests patch directly:
+# world.player_submissions.github_issues.requests.post. Patching an attribute
+# on this shared requests module also redirects github_rest's own
+# requests.post call, since both modules hold the same module object.
 import requests
+
+from core_management.github_rest import GitHubRestError, github_request
 
 if TYPE_CHECKING:
     from collections.abc import Iterable
 
     from world.player_submissions.models import BugReport, SystemErrorReport
 
-_GITHUB_API = "https://api.github.com"
-_REQUEST_TIMEOUT = 10
 _REDACTED = "[redacted]"
 
 
@@ -124,23 +131,21 @@ def create_github_issue(*, title: str, body: str, labels: list[str]) -> tuple[in
         msg = "GitHub issue filing is not configured on this server."
         raise GitHubIssueError(msg)
     try:
-        response = requests.post(
-            f"{_GITHUB_API}/repos/{repo}/issues",
-            json={"title": title, "body": body, "labels": labels},
-            headers={
-                "Authorization": f"Bearer {token}",
-                "Accept": "application/vnd.github+json",
-                "X-GitHub-Api-Version": "2022-11-28",
-            },
-            timeout=_REQUEST_TIMEOUT,
+        data = github_request(
+            "POST",
+            f"/repos/{repo}/issues",
+            payload={"title": title, "body": body, "labels": labels},
+            expected_status=requests.codes.created,
         )
-    except requests.RequestException as exc:
-        msg = "Could not reach GitHub to file the issue. Please try again."
+    except GitHubRestError as exc:
+        if exc.status_code is None:
+            msg = "Could not reach GitHub to file the issue. Please try again."
+        else:
+            msg = f"GitHub rejected the issue (HTTP {exc.status_code})."
         raise GitHubIssueError(msg) from exc
-    if response.status_code != requests.codes.created:
-        msg = f"GitHub rejected the issue (HTTP {response.status_code})."
+    if not isinstance(data, dict):
+        msg = "GitHub returned an unexpected response shape while filing the issue."
         raise GitHubIssueError(msg)
-    data = response.json()
     return data["number"], data["html_url"]
 
 

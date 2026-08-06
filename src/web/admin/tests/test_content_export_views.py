@@ -15,6 +15,7 @@ from django.test import TestCase
 from django.urls import reverse
 from evennia.accounts.models import AccountDB
 
+from core_management.tests._git_fixtures import init_origin_and_clone, run_git
 from world.magic.models import EffectType
 
 
@@ -94,3 +95,37 @@ class TestContentExportConfigured(TestCase):
         messages = [str(m) for m in resp.wsgi_request._messages]
         self.assertTrue(any("Content export" in m for m in messages))
         self.assertTrue(any("Grid export" in m for m in messages))
+
+
+class TestContentExportRunRefusesOnSessionBranch(TestCase):
+    """The corpus export must refuse to run on the row-export session branch (#3018 review)."""
+
+    @classmethod
+    def setUpTestData(cls) -> None:
+        cls.super = AccountDB.objects.create_superuser("rootadmin", "root@example.com", "pw-123456")
+
+    def setUp(self) -> None:
+        self.tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(self.tmp.cleanup)
+        base = Path(self.tmp.name)
+        self.origin = base / "origin.git"
+        self.root = base / "clone"
+        init_origin_and_clone(self.origin, self.root)
+        self.client.force_login(self.super)
+
+    def test_run_on_session_branch_refuses_and_redirects(self) -> None:
+        from core_management.content_session import SESSION_BRANCH, ensure_session_branch
+
+        with mock.patch.dict("os.environ", {"CONTENT_REPO_PATH": str(self.root)}):
+            ensure_session_branch(self.root)
+            resp = self.client.post(reverse("admin_content_export_run"))
+
+        self.assertEqual(resp.status_code, 302)
+        self.assertEqual(resp.url, reverse("admin_game_setup"))
+        messages = [str(m) for m in resp.wsgi_request._messages]
+        self.assertTrue(any("row-export session branch" in m for m in messages))
+        branch = run_git(self.root, "branch", "--show-current").stdout.strip()
+        self.assertEqual(branch, SESSION_BRANCH)
+        # Nothing was exported - the branch check runs before any writing.
+        exported_path = self.root / "fixtures" / "magic" / "effecttype.json"
+        self.assertFalse(exported_path.exists())

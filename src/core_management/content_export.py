@@ -19,6 +19,7 @@ standalone). All Django imports are deferred.
 
 from __future__ import annotations
 
+from contextlib import suppress
 from dataclasses import dataclass, field
 import json
 import logging
@@ -279,6 +280,23 @@ EXPORT_FILTERS: dict[str, dict[str, object]] = {
 }
 
 
+def _markdown_entry_path(root: Path, spec: dict, fields: dict) -> Path:
+    """Return the file a prose-domain record renders to (#3018).
+
+    Shared by ``_write_markdown_entries`` (whole-domain export) and
+    ``export_single_row`` (row-level export) so the slug/nesting rule can
+    never drift between the two callers.
+    """
+    domain_dir = root / spec["domain"]
+    out_dir = domain_dir
+    subdir_key = spec.get("subdir_from")
+    if subdir_key:
+        value = fields.get(subdir_key)
+        if isinstance(value, list) and value:
+            out_dir = domain_dir / content_slug(str(value[-1]))
+    return out_dir / f"{content_slug(fields['name'])}.md"
+
+
 def _write_markdown_entries(
     root: Path, spec: dict, serialized: str, *, allow_additions: bool = False
 ) -> tuple[list[Path], list[str]]:
@@ -308,17 +326,11 @@ def _write_markdown_entries(
     withheld: list[str] = []
     for record in json.loads(serialized):
         fields = record["fields"]
-        out_dir = domain_dir
-        subdir_key = spec.get("subdir_from")
-        if subdir_key:
-            value = fields.get(subdir_key)
-            if isinstance(value, list) and value:
-                out_dir = domain_dir / content_slug(str(value[-1]))
-        out_path = out_dir / f"{content_slug(fields['name'])}.md"
+        out_path = _markdown_entry_path(root, spec, fields)
         if gate_on and not out_path.exists():
             withheld.append(str(fields.get("name", out_path.stem)))
             continue
-        out_dir.mkdir(parents=True, exist_ok=True)
+        out_path.parent.mkdir(parents=True, exist_ok=True)
         out_path.write_text(render_entry_markdown(fields, spec), encoding="utf-8")
         written.append(out_path)
     return written, withheld
@@ -372,6 +384,32 @@ def _record_key(record_fields: dict, key_fields: list[str]) -> str:
     serializer settings and cannot disagree about how an FK is represented.
     """
     return json.dumps([record_fields.get(f) for f in key_fields], sort_keys=True)
+
+
+def _record_key_folded(record_fields: dict, key_fields: list[str]) -> str:
+    """Case-normalized ``_record_key``, matching the loader's iexact semantics (#2687).
+
+    Deliberately diverges from ``_record_key``'s exact-match identity, which
+    ``_apply_addition_gate`` (the corpus-wide export's addition gate) uses and
+    keeps using unchanged - that gate only ever compares two exports produced
+    by the same serializer settings on the same pass, so casing never drifts
+    between its two sides. ``export_single_row``'s JSON path is different: it
+    is a read-modify-write merge against a file that may already hold a row
+    under different casing (e.g. a name edited in admin), and the loader
+    resolves natural keys case-insensitively - so an exact-match comparison
+    there would append a second record instead of replacing the first, and the
+    next load would then treat both records as the same row (order-dependent
+    double-apply).
+    """
+
+    def fold(value: object) -> object:
+        if isinstance(value, str):
+            return value.casefold()
+        if isinstance(value, list):
+            return [fold(v) for v in value]
+        return value
+
+    return json.dumps([fold(record_fields.get(f)) for f in key_fields], sort_keys=True)
 
 
 def _existing_record_keys(out_path: Path, key_fields: list[str]) -> set[str] | None:
@@ -534,6 +572,158 @@ def _write_one_model(
     out_path.write_text(json.dumps(records, indent=2) + "\n", encoding="utf-8")
     result.written.append(out_path)
     result.total_records += len(records)
+
+
+@dataclass
+class RowExportResult:
+    """Outcome of a single-row export (#3018)."""
+
+    paths: list[Path]
+    is_addition: bool
+    model_label: str
+    natural_key: str
+    refused: str | None = None
+
+
+def export_single_row(instance, *, content_root: Path) -> RowExportResult:
+    """Write ONE row's corpus form into the lore checkout working tree.
+
+    Reuses the corpus exporter's serializer and natural-key identity so a
+    row-level export can never disagree with a full export about a record's
+    shape. JSON domains re-emit the model's file with the exporter's canonical
+    formatting after replacing or appending the one record - a file predating
+    canonical formatting shows a one-time whole-file reformat in the diff
+    preview, which is the accepted trade against byte-surgery (#3018 spec).
+    Addition-vs-update is decided with the ADR-0191 record keys; the CALLER
+    enforces the explicit new-row acknowledgment - this function only reports.
+    The JSON merge below relies on every ``CONTENT_MODELS``/``MARKDOWN_EXPORT_DOMAINS``
+    row carrying ``NaturalKeyMixin`` (pinned by
+    ``test_content_models_all_have_natural_key``) - a model with no natural key
+    would make ``key_fields`` None and every export append a fresh record
+    instead of replacing one, which is why that invariant must hold.
+    """
+    from django.core import serializers  # noqa: PLC0415
+
+    model = type(instance)
+    model_name = model.__name__.lower()
+    model_label = f"{domain_of(model)}.{model_name}"
+    # Defense-in-depth against a path-traversal taint finding (pythonsecurity:S2083):
+    # re-derive the label by looking it up IN the allowlist constants themselves,
+    # rather than trusting the string built above. `canonical` is then a value that
+    # provably originates from CONTENT_MODELS/MARKDOWN_EXPORT_DOMAINS, not from
+    # `model`/`instance`, so every path segment derived from it below breaks the
+    # taint chain a static analyzer traces back to the request - not just a
+    # runtime membership check, but a guarantee visible to taint analysis too.
+    canonical = next((known for known in CONTENT_MODELS if known == model_label), None)
+    if canonical is None:
+        canonical = next((known for known in MARKDOWN_EXPORT_DOMAINS if known == model_label), None)
+    if canonical is None:
+        return RowExportResult(
+            [],
+            False,
+            model_label,
+            "",
+            refused=(f"{model.__name__} is not a content model; the content repo does not own it."),
+        )
+    model_label = canonical
+    canonical_domain, _, canonical_name = canonical.partition(".")
+    predicate = EXPORT_FILTERS.get(model_label)
+    if predicate is not None and not model.objects.filter(pk=instance.pk, **predicate).exists():
+        return RowExportResult(
+            [],
+            False,
+            model_label,
+            "",
+            refused=(
+                f"This {model.__name__} row is excluded from export (player-owned rows "
+                "stay out of the corpus)."
+            ),
+        )
+    data = serializers.serialize(
+        "json",
+        model.objects.filter(pk=instance.pk),
+        indent=2,
+        use_natural_foreign_keys=True,
+        use_natural_primary_keys=True,
+    )
+    record = json.loads(data)[0]
+    key_fields = _natural_key_fields(model)
+    key_display = ", ".join(
+        str(v)
+        for v in ([record["fields"].get(f) for f in key_fields] if key_fields else [instance.pk])
+    )
+
+    # spec["domain"]/content_slug() are hardcoded allowlist constants and a
+    # sanitized slug respectively, not request-derived - the markdown path is
+    # already taint-safe without further changes here.
+    spec = MARKDOWN_EXPORT_DOMAINS.get(model_label)
+    if spec is not None:
+        out_path = _markdown_entry_path(content_root, spec, record["fields"])
+        is_addition = not out_path.exists()
+        out_path.parent.mkdir(parents=True, exist_ok=True)
+        out_path.write_text(render_entry_markdown(record["fields"], spec), encoding="utf-8")
+        return RowExportResult([out_path], is_addition, model_label, key_display)
+
+    # Path segments below come from `canonical` (allowlist-derived), not from
+    # `domain_of(model)`/`model_name` (model-class-derived), so the sink is
+    # anchored to the allowlist rather than to `model`.
+    out_dir = content_root / "fixtures" / canonical_domain
+    out_path = out_dir / f"{canonical_name}.json"
+    # Case-folded comparison throughout (_record_key_folded, not _record_key):
+    # this is a read-modify-write merge against one file, and the loader
+    # matches natural keys case-insensitively (#2687) - see that helper's
+    # docstring for why this path must diverge from the corpus-wide gate.
+    is_addition = _merge_record_into_fixture_file(out_path, record, key_fields)
+    return RowExportResult([out_path], is_addition, model_label, key_display)
+
+
+def _merge_record_into_fixture_file(
+    out_path: Path, record: dict, key_fields: list[str] | None
+) -> bool:
+    """Read-modify-write one record into a JSON fixture file; return is_addition.
+
+    Extracted from ``export_single_row`` to keep that function under the
+    complexity ceiling; behavior is unchanged. An existing record whose
+    case-folded natural key (``_record_key_folded``) matches ``record`` is
+    replaced in place; otherwise ``record`` is appended. The return value is
+    True when the row's natural key was not already present in the file
+    (a first-export addition) - the same value ``export_single_row`` reports
+    as ``RowExportResult.is_addition``.
+    """
+    file_existed = out_path.exists()
+    row_key_folded = _record_key_folded(record["fields"], key_fields) if key_fields else None
+    records: list[dict] = []
+    if file_existed:
+        with suppress(OSError, ValueError):
+            loaded = json.loads(out_path.read_text(encoding="utf-8"))
+            if isinstance(loaded, list):
+                records = loaded
+    existing_folded = (
+        {
+            _record_key_folded(r["fields"], key_fields)
+            for r in records
+            if isinstance(r, dict) and isinstance(r.get("fields"), dict)
+        }
+        if key_fields
+        else set()
+    )
+    is_addition = not file_existed or row_key_folded not in existing_folded
+    replaced = False
+    for i, existing in enumerate(records):
+        if (
+            key_fields
+            and isinstance(existing, dict)
+            and isinstance(existing.get("fields"), dict)
+            and _record_key_folded(existing["fields"], key_fields) == row_key_folded
+        ):
+            records[i] = record
+            replaced = True
+            break
+    if not replaced:
+        records.append(record)
+    out_path.parent.mkdir(parents=True, exist_ok=True)
+    out_path.write_text(json.dumps(records, indent=2) + "\n", encoding="utf-8")
+    return is_addition
 
 
 def _apply_addition_gate(

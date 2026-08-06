@@ -1,0 +1,30 @@
+{% extends "admin/change_form.html" %}
+{% load i18n admin_modify content_export_tags %}
+
+{# Override the OUTER object-tools block, not the nested object-tools-items #}
+{# block, and reproduce Django's stock structure verbatim (see #}
+{# .venv/lib/python3.13/site-packages/django/contrib/admin/templates/admin/ #}
+{# change_form.html). SonarCloud's fragment parser analyzes each overridden #}
+{# block in isolation, so a bare <li> inside object-tools-items looked like #}
+{# it was outside any <ul> even though it renders inside the stock <ul #}
+{# class="object-tools"> at runtime (Web:ItemTagNotWithinContainerTagCheck). #}
+{# Owning the <ul> ourselves keeps the fragment self-contained for analysis #}
+{# while keeping the add-form/popup exclusion Django's own gate provides. #}
+{% block object-tools %}
+{% if change and not is_popup %}
+  <ul class="object-tools">
+    {% if original and request.user.is_superuser and original|content_exportable %}
+    <li>
+        <form method="post" action="{% url 'admin_content_export_row' %}"
+              class="content-export-row-form">
+            {% csrf_token %}
+            <input type="hidden" name="model" value="{{ original|content_model_label }}">
+            <input type="hidden" name="pk" value="{{ original.pk }}">
+            <button type="submit" class="content-export-row-btn">Export to content repo</button>
+        </form>
+    </li>
+    {% endif %}
+    {% change_form_object_tools %}
+  </ul>
+{% endif %}
+{% endblock %}

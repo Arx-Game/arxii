@@ -1,0 +1,68 @@
+{% extends "admin/base_site.html" %}
+{% load i18n %}
+
+{% block title %}{{ title }} | {% translate 'Site administration' %}{% endblock %}
+
+{% block breadcrumbs %}
+<div class="breadcrumbs">
+    <a href="{% url 'admin:index' %}">{% translate 'Home' %}</a>
+    &rsaquo; <a href="{% url 'admin_game_setup' %}">Game Setup</a>
+    &rsaquo; {{ title }}
+</div>
+{% endblock %}
+
+{% block content %}
+<div id="content-main">
+
+    <div class="module" style="padding: 15px; margin-bottom: 20px;">
+        <h2 style="margin-top: 0;">{{ title }}</h2>
+        <p>Natural key: <code>{{ natural_key }}</code></p>
+        {% if is_addition %}
+        <p>
+            This row is not yet in the content repo. Committing this export
+            adds a new row to the corpus rather than updating an existing one.
+        </p>
+        {% endif %}
+    </div>
+
+    <div class="module" style="padding: 15px; margin-bottom: 20px;">
+        <pre>{{ diff_text }}</pre>
+    </div>
+
+    <div class="module" style="padding: 15px;">
+        <form method="post" action="{{ confirm_url }}">
+            {% csrf_token %}
+            <input type="hidden" name="model" value="{{ model_label }}">
+            <input type="hidden" name="pk" value="{{ pk }}">
+            <input type="hidden" name="digest" value="{{ digest }}">
+            <input type="hidden" name="action" value="confirm">
+            {% if is_addition %}
+            <p>
+                <label for="new_row">
+                    <input type="checkbox" id="new_row" name="new_row" value="1">
+                    This adds a new row to the content repo.
+                </label>
+            </p>
+            {% endif %}
+            <div class="submit-row" style="padding: 12px;">
+                <input type="submit" value="Commit export" class="default"
+                       style="padding: 10px 20px;">
+            </div>
+        </form>
+        <form method="post" action="{{ confirm_url }}">
+            {% csrf_token %}
+            <input type="hidden" name="model" value="{{ model_label }}">
+            <input type="hidden" name="pk" value="{{ pk }}">
+            <input type="hidden" name="digest" value="{{ digest }}">
+            <input type="hidden" name="action" value="discard">
+            <div class="submit-row" style="padding: 12px;">
+                <input type="submit" value="Discard this export" style="padding: 10px 20px;">
+                <a href="{{ change_url }}" style="padding: 10px 20px; margin-left: 10px;">
+                    Back without discarding
+                </a>
+            </div>
+        </form>
+    </div>
+
+</div>
+{% endblock %}

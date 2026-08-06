@@ -8,6 +8,8 @@ here) is located via the ``CONTENT_REPO_PATH`` environment variable. Drives
 
 from __future__ import annotations
 
+from pathlib import Path
+
 from django.contrib import messages
 from django.contrib.admin.views.decorators import staff_member_required
 from django.core.exceptions import PermissionDenied
@@ -119,6 +121,43 @@ def _grid_preview_context() -> dict:
     }
 
 
+def _refuse_if_on_session_branch(
+    request: HttpRequest, content_root: Path | None
+) -> HttpResponse | None:
+    """Refuse a corpus export while the checkout is on the row-export session branch.
+
+    A corpus-wide export writes to the checkout's actual working tree, same
+    as a row export does - running it while the checkout is still on the
+    row-export session branch would mix a whole-corpus pass into that
+    branch's small, per-row commits (#3018 review). The row-export flow
+    never touches main, so this can only ever misfire the other direction.
+    Split out of ``content_export_run`` (ruff C901) to keep that view's own
+    branching under the complexity ceiling.
+
+    A ``ContentPushError`` here means the checkout isn't a usable git repo at
+    all (or the branch lookup otherwise failed) - that can never be the
+    session branch, so this guard stays silent and lets the export attempt
+    proceed to its own, more specific error handling.
+    """
+    from core_management.content_push import ContentPushError  # noqa: PLC0415
+    from core_management.content_session import SESSION_BRANCH, _current_branch  # noqa: PLC0415
+
+    if content_root is None:
+        return None
+    try:
+        on_session_branch = _current_branch(content_root) == SESSION_BRANCH
+    except ContentPushError:
+        return None
+    if not on_session_branch:
+        return None
+    messages.error(
+        request,
+        "The content checkout is on the row-export session branch. Finish "
+        "or discard the session before running a corpus export.",
+    )
+    return HttpResponseRedirect(reverse("admin_game_setup"))
+
+
 @staff_member_required
 @require_POST
 def content_export_run(request: HttpRequest) -> HttpResponse:
@@ -130,7 +169,13 @@ def content_export_run(request: HttpRequest) -> HttpResponse:
         ContentExportError,
         export_to_content_repo,
     )
+    from core_management.content_repo import resolve_content_root  # noqa: PLC0415
     from core_management.grid_export import export_grid_bundles  # noqa: PLC0415
+
+    content_root = resolve_content_root()
+    bail = _refuse_if_on_session_branch(request, content_root)
+    if bail is not None:
+        return bail
 
     # Off by default: the export withholds rows the corpus does not already have,
     # so a database seeded with sample content cannot launder them in as lore

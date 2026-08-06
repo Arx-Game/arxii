@@ -194,3 +194,38 @@ row can never mix into a real content universe within one press. This is per-pre
 not a standing database-wide invariant: the test-only cluster-seeder helpers in
 `world/seeds/tests/press_helpers.py` call a single cluster directly and sit outside this gate by
 design.
+
+## Row-level export and content session (#3018)
+
+`content_export.export_single_row(instance, content_root=...) -> RowExportResult` is the
+row-scoped sibling of `export_to_content_repo`: it writes exactly one instance's corpus form
+(flat JSON via the normal serializer path, or markdown for a `MARKDOWN_EXPORT_DOMAINS` model)
+into the target file(s) an ordinary export would have used, and reports whether the row's
+natural key was already present (`is_addition`) or is being refused outright
+(`RowExportResult.refused` - the model is not corpus-owned, or `EXPORT_FILTERS` excludes this
+particular row). It never commits anything itself; that is `content_session.commit_row_export`'s
+job, one layer up.
+
+`content_session.py` turns a sequence of these single-row writes into one reviewable batch: a
+fixed branch, `content-export-session`, created fresh off `origin/main` (or reused while its
+pull request is still open), holding one small commit per confirmed row. Git state is the only
+truth this tracks - there is no database table recording which rows are pending - so
+`ensure_session_branch` refuses to start on a dirty working tree, which is what keeps at most
+one row export pending at a time across browsers and operators. `open_session_pr` pushes the
+branch and opens (or reuses) its pull request through `core_management.github_rest
+.github_request`, a small shared client both this module and the player-submissions GitHub-issue
+filer use - `settings.GITHUB_ISSUE_TOKEN` (falling back to the `GH_TOKEN` env var), owner/repo
+parsed from the checkout's own `origin` remote URL rather than named anywhere in code. Error
+messages from that client never echo the response body, only the status code, since GitHub can
+echo request details (including a private repo name) back in an error body and this text
+reaches admin flashes verbatim.
+
+`content_push.push_content_to_repo`'s corpus-wide commit now stages `content/` alongside
+`fixtures/` (`_GIT_CONTENT_PATHSPECS`) - previously only `fixtures/` was staged, so the four
+markdown prose domains never traveled with a whole-corpus push even though `export_to_content_
+repo` already wrote them.
+
+The admin surface driving all of this - the change-form button, the digest-guarded diff/confirm
+pages, and the session page's open-pull-request form - lives in `web/admin/content_row_export_
+views.py`, `web/admin/content_session_views.py`, and `web/templates/admin/change_form.html`.
+See `web/admin/CLAUDE.md`'s "Row export and content session" section for that side of the flow.

@@ -117,6 +117,88 @@ If an agent is asked about any of these topics, this is the system:
 - "content inventory / what's seeded"
 - "Game Setup button at the top of Django admin"
 
+### Row export and content session (#3018)
+
+**Purpose:** a row-level counterpart to the whole-corpus export above. A
+superuser editing one record in any change form can send that single row's
+corpus form to the lore checkout, review its diff, and commit it - without
+running a full export/push over every content model. Rows accumulate on one
+shared branch until the operator opens a pull request for the batch, instead
+of every single row needing its own PR.
+
+- **The button** - `templates/admin/change_form.html` (site-wide override of
+  Django's stock change form, extending it the same way
+  `change_list.html` extends its own stock template - see that file's
+  docstring precedent) adds an `object-tools-items` entry: a small POST form
+  to `admin_content_export_row` carrying the row's `<domain>.<model_name>`
+  label and pk as hidden fields. It only renders for a superuser, on a
+  change form (not add), for a model the new
+  `web/admin/templatetags/content_export_tags.py` filters
+  (`content_exportable`, `content_model_label`) recognize as corpus-owned -
+  registered in `core_management.content_export.CONTENT_MODELS` or
+  `core_management.content_fixtures.MARKDOWN_EXPORT_DOMAINS`.
+- **Write + diff confirm** - `content_row_export_views.py`:
+  `content_export_row` (POST from the button) ensures the session branch
+  (below) and writes the row via
+  `core_management.content_export.export_single_row`, then redirects to
+  `content_export_row_diff` (GET), which renders the working-tree diff
+  behind a sha256 digest of that diff text.
+  `content_export_row_confirm` (POST, `action=confirm|discard`) re-checks
+  the posted digest against a freshly recomputed one before doing anything -
+  a mismatch means the tree changed since the diff page rendered and is
+  refused unconditionally, the same idiom as the load-conflict resolve
+  page. An addition (the row's natural key is not yet in the corpus) also
+  requires an explicit "new_row" checkbox, mirroring the corpus-wide
+  export's addition gate (ADR-0191) at row scope. Addition-ness is derived
+  straight from git `HEAD` at both diff-render and confirm time
+  (`content_session.row_is_addition_at_head`, fail-closed on any git/parse
+  trouble), not read out of the request session - a session record only
+  ever answered for the browser that ran the export, so a second browser
+  hitting either URL directly used to see a default of "not an addition"
+  and could commit a genuine addition with no checkbox at all (#3018
+  review).
+- **One session branch, one pending export at a time** -
+  `core_management.content_session` (`ensure_session_branch`,
+  `commit_row_export`, `discard_row_export`) keeps every exported-but-not-
+  yet-PR'd row as its own small commit on a fixed branch,
+  `content-export-session`, created fresh off `origin/main` (or reused if
+  its prior pull request has not merged yet). Git state, not a database
+  table, is the source of truth: `ensure_session_branch` refuses to start a
+  new row export while the working tree is already dirty, which is how at
+  most one pending export exists at a time across browsers and operators.
+- **The session page and its pull request** - `content_session_views.py`:
+  `content_session` (GET, `admin_content_session`) shows the branch's
+  commit list and full diff against `origin/main`, naming the currently
+  pending row (if any) with a link straight to its diff page.
+  `content_session_pr` (POST, `admin_content_session_pr`) pushes the branch
+  and opens (or reuses) its pull request via
+  `core_management.content_session.open_session_pr`, one REST call through
+  the shared `core_management.github_rest.github_request` client
+  (`settings.GITHUB_ISSUE_TOKEN`, falling back to the `GH_TOKEN` env var;
+  no token configured is refused with a plain message). The target
+  owner/repo is parsed from the checkout's own `origin` remote URL - the
+  lore repo is never named anywhere in this code.
+- The corpus-wide push (`content_push_run` above) now stages `content/` as
+  well as `fixtures/` when committing, so the markdown prose domains travel
+  with the same pipeline as the flat JSON fixtures.
+- URLs: `_content_export_row/` (POST write), `_content_export_row_diff/`
+  (GET diff), `_content_export_row_confirm/` (POST commit/discard),
+  `_content_session/` (GET session page), `_content_session_pr/` (POST open
+  pull request).
+- Tests: `tests/test_content_row_export_views.py`,
+  `tests/test_content_session_views.py`,
+  `tests/test_change_form_export_button.py`.
+- Deliberate no-ADR: the decisions here were recorded in the approved #3018
+  spec, and ADR-0191/ADR-0201 already carry the addition-gate and credited-
+  row-freeze rationale this flow reuses.
+
+**When Asked About**
+
+If an agent is asked about any of these topics, this is the system:
+- "export one row from the admin"
+- "the Export to content repo button on a change form"
+- "content session / session branch / one PR per session"
+
 ## Game Tuning & Game Ops Dashboards (#1221)
 
 **Purpose:** Two superuser-only, admin-hosted HTMX dashboards linked from the Game Setup
@@ -226,6 +308,16 @@ Defined in `services.py` as `HARDCODED_EXCLUDED_APPS` (canonical location, impor
 - `_content_export_run/` - POST: writes flat fixtures + grid bundles to the content repo (superuser)
 - `_content_push/` - "Push content to lore repo" preview page (superuser; PR #2425), git status/diff-stat
 - `_content_push_run/` - POST: commits + pushes the content-repo working tree (superuser)
+- `_content_export_row/` - POST: writes one row's corpus form to the session branch, then
+  redirects to its diff page (superuser; #3018)
+- `_content_export_row_diff/` - GET: one pending row export's diff behind a digest
+  (superuser; `?model=&pk=`; #3018)
+- `_content_export_row_confirm/` - POST: commits or discards one pending row export
+  after the digest re-checks out (superuser; #3018)
+- `_content_session/` - GET: the content session page - commit list, full diff, open-PR
+  form (superuser; #3018)
+- `_content_session_pr/` - POST: pushes the session branch and opens (or reuses) its
+  pull request (superuser; #3018)
 - `_game_setup/` - "Game Setup" hub: wayfinding + per-cluster content inventory (superuser; #1333)
 - `_tuning/` - Game Tuning dashboard skeleton (superuser; #1221); `_tuning/checks/`,
   `_tuning/consequences/`, `_tuning/conditions/`, `_tuning/simulation/` - the four HTMX panel fragments

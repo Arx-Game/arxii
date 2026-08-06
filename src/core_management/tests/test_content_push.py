@@ -12,6 +12,7 @@ from django.test import TestCase
 
 from core_management.content_push import (
     ContentPushError,
+    _run_git,
     push_content_to_repo,
 )
 
@@ -146,6 +147,50 @@ class ContentPushTests(TestCase):
         )
         assert "notes.md" not in show.stdout
         assert "fixtures/" in show.stdout
+
+    def test_push_stages_content_dir_too(self) -> None:
+        """A modified file under content/ is staged and committed alongside fixtures/."""
+        self._write_fixture()
+        content_dir = self.root / "content" / "codex_entries"
+        content_dir.mkdir(parents=True, exist_ok=True)
+        prose_path = content_dir / "entry.md"
+        prose_path.write_text("# Entry\n\nSome prose.\n", encoding="utf-8")
+        result = push_content_to_repo(self.root)
+        assert result.committed
+        show = subprocess.run(
+            ["git", "-C", str(self.root), "show", "--stat", "--name-only", "HEAD"],
+            capture_output=True,
+            text=True,
+            check=True,
+        )
+        assert "content/codex_entries/entry.md" in show.stdout
+
+    def test_run_git_failure_scrubs_credentials_from_remote_url(self) -> None:
+        """A failed git command never leaks a token-as-username remote URL (#3018 review).
+
+        ``_run_git`` embeds git's stderr verbatim into ``ContentPushError``,
+        and a failed push/fetch can quote a credential-bearing remote URL
+        back in full. Modern git already redacts userinfo from its own
+        "unable to access" messages for the common network-failure case, so
+        this drives ``_run_git`` directly against a stubbed subprocess result
+        carrying a credentialed URL in stderr - the scenario the scrub
+        actually exists to catch regardless of which git failure mode
+        produces it.
+        """
+        token = "ghp_supersecrettoken123"  # noqa: S105 - test fixture value, not a real secret
+        stderr = f"fatal: repository 'https://{token}@github.com/acme/lore.git/' not found"
+        fake_result = subprocess.CompletedProcess(
+            args=["git", "fetch", "origin"], returncode=128, stdout="", stderr=stderr
+        )
+
+        with (
+            mock.patch("core_management.content_push.subprocess.run", return_value=fake_result),
+            self.assertRaises(ContentPushError) as ctx,
+        ):
+            _run_git(self.root, "fetch", "origin")
+
+        assert token not in str(ctx.exception)
+        assert "github.com/acme/lore.git" in str(ctx.exception)
 
     def test_push_commit_message_includes_file_count(self) -> None:
         """The auto-generated commit message mentions the file count."""
