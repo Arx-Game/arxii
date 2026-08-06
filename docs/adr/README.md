@@ -145,6 +145,7 @@ treat those names as hints to confirm, not gospel.
 - [0060 — Reactive defenses are mutation-only DAMAGE_PRE_APPLY flow handlers with a shared anima-cost pattern](0060-reactive-defenses-are-mutation-only-flow-handlers.md)
 - [0118 — Declared guardian reactions roll the caster's cast check outside `use_technique`](0118-guardian-reaction-seam.md) (extends ADR-0060/0096)
 - [0061 — Access-change fires one shared surface; discoverability is a shared abstract base](0061-access-change-fires-one-surface-discoverable-is-shared-base.md)
+- [0202 - Achievement earning is gated at the grant_achievement chokepoint, not per-caller](0202-achievement-earning-gated-at-grant-chokepoint.md) (#3024; extends ADR-0061, #2899)
 - [0069 — Succor is a RoundContext capability; location shelter is a hard gate, not arithmetic resistance](0069-succor-roundcontext-capability.md)
 - [0070 — NPC ontology: Functionary, Standing, and Story NPCs as class-1..4](0070-npc-ontology-functionary-standing-story.md)
 - [0073 — Environmental vulnerabilities are ConditionDamageOverTime rows riding the peril pipeline](0073-environmental-vulnerabilities-are-dot-rows-riding-the-peril-pipeline.md)

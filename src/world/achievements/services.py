@@ -48,6 +48,27 @@ def increment_stat(character_sheet: CharacterSheet, stat: StatDefinition, amount
     return character_sheet.stats.increment(stat, amount)
 
 
+def can_earn_achievements(character_sheet: CharacterSheet) -> bool:
+    """Whether ``character_sheet`` may earn achievements at all (#3024).
+
+    Requires a current, non-staff RosterTenure: the character must be piloted
+    by a regular player right now. A sheet mid-character-creation (no
+    RosterEntry yet), a GM-created sheet sitting untenured on the Available
+    roster, a true NPC, or a staff-piloted sheet never earns a
+    CharacterAchievement, never claims a first-ever Discovery, never receives
+    rewards, and never fires the stories reactivity hook. Enforced inside
+    ``grant_achievement`` so every caller inherits it (extends the #2899
+    ceremony rule; see ADR-0202).
+    """
+    from core_management.permissions import is_staff_observer  # noqa: PLC0415
+
+    roster_entry = character_sheet.roster_entry_or_none
+    tenure = roster_entry.current_tenure if roster_entry is not None else None
+    if tenure is None:
+        return False
+    return not is_staff_observer(tenure.player_data.account)
+
+
 def grant_achievement(
     achievement: Achievement, character_sheets: list[CharacterSheet]
 ) -> list[CharacterAchievement]:
@@ -60,7 +81,14 @@ def grant_achievement(
     After commit, notifies the stories reactivity service so any active
     stories with ACHIEVEMENT_HELD beats for this achievement are
     re-evaluated (and flip SUCCESS when the requirement is met).
+
+    Ineligible sheets (see ``can_earn_achievements``) are dropped; if none
+    remain, returns ``[]`` and no Discovery is created.
     """
+    character_sheets = [s for s in character_sheets if can_earn_achievements(s)]
+    if not character_sheets:
+        return []
+
     from world.stories.services.reactivity import on_achievement_earned  # noqa: PLC0415
 
     with transaction.atomic():
@@ -97,6 +125,9 @@ def _check_achievements(character_sheet: CharacterSheet, stat: StatDefinition) -
     Find active, unearned achievements with requirements on the given stat
     and grant any whose requirements are fully met.
     """
+    if not can_earn_achievements(character_sheet):
+        return
+
     earned_ids = CharacterAchievement.objects.filter(character_sheet=character_sheet).values_list(
         "achievement_id", flat=True
     )

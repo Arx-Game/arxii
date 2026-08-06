@@ -13,6 +13,7 @@ from evennia_extensions.factories import (  # noqa: F401  (CharacterFactory re-e
 )
 from evennia_extensions.models import Artist, PlayerData
 from world.character_sheets.factories import CharacterSheetFactory
+from world.character_sheets.models import CharacterSheet
 from world.roster.models import (
     Family,
     GameInvite,
@@ -264,3 +265,15 @@ class GameInviteFactory(factory_django.DjangoModelFactory):
     token = factory.Sequence(lambda n: f"test-token-{n:048d}")
     message = factory.Faker("sentence")
     status = InviteStatus.PENDING
+
+
+def grant_test_tenure(character_sheet: CharacterSheet) -> RosterTenure:
+    """Give ``character_sheet`` a live, non-staff tenure (achievement-eligible, #3024).
+
+    Reuses the sheet's existing RosterEntry when one exists (a second would
+    violate the OneToOne); otherwise creates one.
+    """
+    entry = character_sheet.roster_entry_or_none
+    if entry is None:
+        entry = RosterEntryFactory(character_sheet=character_sheet)
+    return RosterTenureFactory(roster_entry=entry, end_date=None)

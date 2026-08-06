@@ -87,6 +87,7 @@ from world.magic.seeds_resonance import first_authored_resonance
 from world.magic.services.resonance_environment import evaluate_resonance_environment
 from world.magic.services.techniques import use_technique
 from world.magic.tests._cache_isolation import ResonanceCacheIsolationMixin
+from world.roster.factories import grant_test_tenure
 from world.traits.models import CheckOutcome
 
 
@@ -201,6 +202,7 @@ class MagicStoryPipelineTests(ResonanceCacheIsolationMixin, EvenniaTestCase):
         # Build an Abyssal-aura caster.  CharacterSheetFactory creates an
         # ObjectDB character + CharacterSheet + PRIMARY Persona in one shot.
         self.sheet = CharacterSheetFactory()
+        grant_test_tenure(self.sheet)  # achievement eligibility gate (#3024)
         self.caster = self.sheet.character  # ObjectDB
 
         # CharacterAura: abyssal=100 so caster_alignment=1.0 against any room.
@@ -1313,6 +1315,7 @@ class MagicStoryPipelineTests(ResonanceCacheIsolationMixin, EvenniaTestCase):
         # No StoryProgress — story routing is not required for the Discovery assertion.
         # ------------------------------------------------------------------
         second_sheet = CharacterSheetFactory()
+        grant_test_tenure(second_sheet)  # achievement eligibility gate (#3024)
         second_caster = second_sheet.character
 
         CharacterAuraFactory(

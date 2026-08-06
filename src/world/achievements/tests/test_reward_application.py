@@ -24,11 +24,13 @@ from world.distinctions.types import DistinctionOrigin
 from world.mechanics.factories import ModifierCategoryFactory, ModifierTargetFactory
 from world.mechanics.models import CharacterModifier
 from world.mechanics.services import get_modifier_total
+from world.roster.factories import grant_test_tenure
 
 
 class RewardApplicationTests(TestCase):
     def setUp(self) -> None:
         self.sheet = CharacterSheetFactory()
+        grant_test_tenure(self.sheet)
         self.achievement = AchievementFactory(name="Sample Rewarding Achievement")
         self.allure = ModifierTargetFactory(
             name="allure", category=ModifierCategoryFactory(name="roll_modifier")
@@ -84,6 +86,7 @@ class DistinctionRewardApplicationTests(TestCase):
 
     def setUp(self) -> None:
         self.sheet = CharacterSheetFactory()
+        grant_test_tenure(self.sheet)
         self.achievement = AchievementFactory(name="Sample Distinction Achievement")
         self.distinction = DistinctionFactory(name="Silver Tongue", max_rank=5)
 

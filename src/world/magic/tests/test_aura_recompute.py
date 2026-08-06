@@ -8,6 +8,7 @@ from world.character_sheets.factories import CharacterSheetFactory
 from world.magic.factories import AffinityFactory, CharacterAuraFactory, ResonanceFactory
 from world.magic.models import CharacterAura, CharacterResonance
 from world.magic.services.aura import recompute_aura
+from world.roster.factories import grant_test_tenure
 
 
 class RecomputeAuraTests(TestCase):
@@ -124,6 +125,7 @@ class FireAuraThresholdCrossingsTests(TestCase):
     @classmethod
     def setUpTestData(cls):
         cls.sheet = CharacterSheetFactory()
+        grant_test_tenure(cls.sheet)
         CharacterAuraFactory(character=cls.sheet)
         cls.abyssal = AffinityFactory(name="Abyssal")
         cls.abyssal_resonance = ResonanceFactory(affinity=cls.abyssal)

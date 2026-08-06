@@ -47,7 +47,7 @@ from world.magic.specialization.services import (
     provision_latent_gift_thread,
     resolve_specialized_variant,
 )
-from world.roster.factories import RosterEntryFactory
+from world.roster.factories import RosterEntryFactory, grant_test_tenure
 from world.scenes.cast_services import request_technique_cast
 from world.scenes.tests.cast_test_helpers import CastScenarioMixin
 
@@ -67,6 +67,8 @@ class GiftSpecializationE2ETest(TestCase):
         # Codex unlock is keyed on RosterEntry; ensure one exists so the full
         # discovery beat (achievement + codex) can be asserted end-to-end.
         RosterEntryFactory(character_sheet=cls.sheet)
+        # Achievement eligibility requires a live, non-staff RosterTenure (#3024).
+        grant_test_tenure(cls.sheet)
         cls.gift = GiftFactory()
         cls.resonance = ResonanceFactory()
         cls.gift.resonances.add(cls.resonance)

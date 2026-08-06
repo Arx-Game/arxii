@@ -34,11 +34,13 @@ from world.missions.factories import (
 )
 from world.missions.services.cron import apply_mission_reward_batch
 from world.missions.services.rewards import apply_deed_rewards, emit_terminal_rewards
+from world.roster.factories import grant_test_tenure
 
 
 class DeedResonanceAuraDriftE2ETest(TestCase):
     def test_full_deed_to_achievement_pipeline(self):
         sheet = CharacterSheetFactory()
+        grant_test_tenure(sheet)
         CharacterAuraFactory(character=sheet)
         abyssal = AffinityFactory(name="Abyssal")
         cruelty = ResonanceFactory(name="Cruelty", affinity=abyssal)

@@ -64,7 +64,7 @@ from world.magic.services import spend_resonance_for_imbuing, spend_resonance_fo
 from world.magic.specialization.models import TechniqueVariant
 from world.magic.specialization.services import resolve_specialized_variant
 from world.magic.types import PullActionContext
-from world.roster.factories import RosterEntryFactory
+from world.roster.factories import RosterEntryFactory, grant_test_tenure
 from world.species.factories import SpeciesFactory, SpeciesGiftGrantFactory
 
 
@@ -139,6 +139,8 @@ class _SpeciesGiftJourneyBase(TestCase):
         # Codex unlock is keyed on RosterEntry; ensure one so the discovery beat
         # (achievement + codex) can be asserted end-to-end.
         RosterEntryFactory(character_sheet=sheet)
+        # Achievement eligibility requires a live, non-staff RosterTenure (#3024).
+        grant_test_tenure(sheet)
         draft = CharacterDraftFactory(
             selected_tradition=self.tradition,
             draft_data={

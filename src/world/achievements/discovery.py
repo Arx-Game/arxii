@@ -14,7 +14,7 @@ identical regardless of source — never branch on covenant (spec Decision 11).
 """
 
 from world.achievements.constants import AccessChangeSource
-from world.achievements.services import grant_achievement
+from world.achievements.services import can_earn_achievements, grant_achievement
 
 
 def announce_achievement(
@@ -73,7 +73,8 @@ def announce_access_change(character_sheet, *, gained, lost, source):
             category=NarrativeCategory.ABILITY,
             sender_account=None,
         )
-    if not _ceremony_eligible(character_sheet):
+    # Same current-tenure, non-staff gate as the grant_achievement chokepoint (#3024).
+    if not can_earn_achievements(character_sheet):
         return
 
     excluded_ids = _cg_catalog_exclusions(gained)
@@ -104,23 +105,6 @@ def announce_access_change(character_sheet, *, gained, lost, source):
             personal_body=f"You have manifested {name}.",
             category=NarrativeCategory.ABILITY,
         )
-
-
-def _ceremony_eligible(character_sheet):
-    """Whether ``character_sheet`` can trigger the discovery/achievement ceremony.
-
-    Requires a current, non-staff RosterTenure. A sheet mid-character-creation (no
-    RosterEntry yet), a GM-created sheet sitting untenured on the Available roster,
-    or one piloted by a staff account never fires the ceremony — the plain
-    gained/lost narrative message above this check is unaffected (#2899).
-    """
-    from core_management.permissions import is_staff_observer  # noqa: PLC0415
-
-    roster_entry = character_sheet.roster_entry_or_none
-    tenure = roster_entry.current_tenure if roster_entry is not None else None
-    if tenure is None:
-        return False
-    return not is_staff_observer(tenure.player_data.account)
 
 
 def _cg_catalog_exclusions(gained):

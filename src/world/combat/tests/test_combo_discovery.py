@@ -11,6 +11,7 @@ from world.combat.constants import ComboLearningMethod
 from world.combat.factories import ComboDefinitionFactory, ComboSlotFactory
 from world.combat.models import ComboLearning
 from world.magic.factories import EffectTypeFactory, ResonanceFactory
+from world.roster.factories import grant_test_tenure
 
 
 class FireComboDiscoveryTests(TestCase):
@@ -89,6 +90,7 @@ class FireComboDiscoveryTests(TestCase):
         effect_type = EffectTypeFactory()
         ComboSlotFactory(combo=combo, required_action_type=effect_type)
         sheet = CharacterSheetFactory()
+        grant_test_tenure(sheet)
 
         fire_combo_discovery(combo=combo, participant_sheets=[sheet])
 

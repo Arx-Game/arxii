@@ -11,6 +11,7 @@ from world.achievements.factories import (
 from world.achievements.models import CharacterAchievement, Discovery, StatTracker
 from world.achievements.services import get_stat, grant_achievement, increment_stat
 from world.character_sheets.factories import CharacterSheetFactory
+from world.roster.factories import grant_test_tenure
 
 
 class GetStatTest(TestCase):
@@ -34,6 +35,7 @@ class IncrementStatTest(TestCase):
     @classmethod
     def setUpTestData(cls) -> None:
         cls.sheet = CharacterSheetFactory()
+        grant_test_tenure(cls.sheet)
         cls.new_stat = StatDefinitionFactory(key="new_stat", name="New Stat")
         cls.combat_stat = StatDefinitionFactory(key="combat_wins", name="Combat Wins")
         cls.quest_stat = StatDefinitionFactory(key="quests", name="Quests")
@@ -142,7 +144,9 @@ class GrantAchievementTest(TestCase):
     def setUpTestData(cls) -> None:
         cls.achievement = AchievementFactory()
         cls.sheet1 = CharacterSheetFactory()
+        grant_test_tenure(cls.sheet1)
         cls.sheet2 = CharacterSheetFactory()
+        grant_test_tenure(cls.sheet2)
 
     def test_single_grant_creates_discovery(self) -> None:
         results = grant_achievement(self.achievement, [self.sheet1])
@@ -202,6 +206,7 @@ class GrantAchievementStoryReactivityTest(TestCase):
         from world.stories.models import BeatCompletion
 
         sheet = CharacterSheetFactory()
+        grant_test_tenure(sheet)
         story = StoryFactory(scope=StoryScope.CHARACTER, character_sheet=sheet)
         episode = EpisodeFactory(chapter=ChapterFactory(story=story))
         StoryProgressFactory(
@@ -243,6 +248,7 @@ class GrantAchievementStoryReactivityTest(TestCase):
         from world.stories.models import BeatCompletion
 
         sheet = CharacterSheetFactory()
+        grant_test_tenure(sheet)
         story = StoryFactory(scope=StoryScope.CHARACTER, character_sheet=sheet)
         episode = EpisodeFactory(chapter=ChapterFactory(story=story))
         StoryProgressFactory(
@@ -263,3 +269,72 @@ class GrantAchievementStoryReactivityTest(TestCase):
         grant_achievement(achievement, [sheet])
         count_after_second = BeatCompletion.objects.count()
         self.assertEqual(count_after_first, count_after_second)
+
+
+class AchievementEligibilityGateTest(TestCase):
+    """#3024: only sheets piloted by a regular player may earn achievements."""
+
+    @classmethod
+    def setUpTestData(cls) -> None:
+        cls.stat = StatDefinitionFactory(key="gate_stat", name="Gate Stat")
+        cls.achievement = AchievementFactory(name="Gate Test", slug="gate-test")
+        AchievementStatRequirementFactory(achievement=cls.achievement, stat=cls.stat, threshold=3)
+
+    def test_untenured_sheet_stat_increment_never_grants(self) -> None:
+        sheet = CharacterSheetFactory()
+        for _ in range(5):
+            increment_stat(sheet, self.stat)
+        self.assertEqual(get_stat(sheet, self.stat), 5)  # tracking continues
+        self.assertFalse(CharacterAchievement.objects.filter(character_sheet=sheet).exists())
+        self.assertFalse(Discovery.objects.filter(achievement=self.achievement).exists())
+
+    def test_staff_piloted_sheet_never_grants(self) -> None:
+        from evennia_extensions.factories import AccountFactory
+        from world.roster.factories import (
+            PlayerDataFactory,
+            RosterEntryFactory,
+            RosterTenureFactory,
+        )
+
+        sheet = CharacterSheetFactory()
+        RosterTenureFactory(
+            roster_entry=RosterEntryFactory(character_sheet=sheet),
+            player_data=PlayerDataFactory(account=AccountFactory(is_staff=True)),
+            end_date=None,
+        )
+        for _ in range(5):
+            increment_stat(sheet, self.stat)
+        self.assertFalse(CharacterAchievement.objects.filter(character_sheet=sheet).exists())
+
+    def test_grant_filters_mixed_co_discoverer_list(self) -> None:
+        from world.roster.factories import grant_test_tenure
+
+        eligible = CharacterSheetFactory()
+        grant_test_tenure(eligible)
+        ineligible = CharacterSheetFactory()
+        results = grant_achievement(self.achievement, [eligible, ineligible])
+        self.assertEqual(len(results), 1)
+        self.assertEqual(results[0].character_sheet, eligible)
+        self.assertIsNotNone(results[0].discovery_id)
+        self.assertFalse(CharacterAchievement.objects.filter(character_sheet=ineligible).exists())
+
+    def test_all_ineligible_grant_is_a_noop(self) -> None:
+        sheet = CharacterSheetFactory()
+        results = grant_achievement(self.achievement, [sheet])
+        self.assertEqual(results, [])
+        self.assertFalse(Discovery.objects.filter(achievement=self.achievement).exists())
+
+    def test_npc_then_tenured_earns_on_next_increment(self) -> None:
+        from world.roster.factories import grant_test_tenure
+
+        sheet = CharacterSheetFactory()
+        for _ in range(5):
+            increment_stat(sheet, self.stat)  # accrues past threshold, no grant
+        self.assertFalse(CharacterAchievement.objects.filter(character_sheet=sheet).exists())
+        grant_test_tenure(sheet)
+        increment_stat(sheet, self.stat)
+        self.assertTrue(
+            CharacterAchievement.objects.filter(
+                character_sheet=sheet, achievement=self.achievement
+            ).exists()
+        )
