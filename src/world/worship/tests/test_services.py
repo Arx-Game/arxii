@@ -6,6 +6,7 @@ from django.utils.text import slugify
 from world.achievements.models import Achievement, CharacterAchievement
 from world.character_sheets.factories import CharacterSheetFactory
 from world.character_sheets.models import Gender
+from world.roster.factories import grant_test_tenure
 from world.worship.constants import (
     GODS_FAVORITE_CHOSEN,
     GODS_FAVORITE_PRINCE,
@@ -71,17 +72,21 @@ class GodsFavoriteTests(TestCase):
 
     def test_first_worshipper_becomes_favorite_with_gender_variant(self) -> None:
         sheet = CharacterSheetFactory(gender=self.female)
+        grant_test_tenure(sheet)
         bump_devotion(sheet, self.being, 10)
         self.assertIn(GODS_FAVORITE_PRINCESS, self._earned(sheet))
 
     def test_nonbinary_or_unset_gender_gets_chosen(self) -> None:
         sheet = CharacterSheetFactory(gender=None)
+        grant_test_tenure(sheet)
         bump_devotion(sheet, self.being, 5)
         self.assertIn(GODS_FAVORITE_CHOSEN, self._earned(sheet))
 
     def test_tie_grants_and_leapfrog_grants_while_prior_holder_keeps(self) -> None:
         first = CharacterSheetFactory(gender=self.male)
         second = CharacterSheetFactory(gender=self.female)
+        grant_test_tenure(first)
+        grant_test_tenure(second)
         bump_devotion(first, self.being, 10)
         self.assertIn(GODS_FAVORITE_PRINCE, self._earned(first))
         # Tie at 10 grants to the second character too.
@@ -95,6 +100,8 @@ class GodsFavoriteTests(TestCase):
     def test_trailing_worshipper_gets_nothing(self) -> None:
         leader = CharacterSheetFactory(gender=self.male)
         trailer = CharacterSheetFactory(gender=self.female)
+        grant_test_tenure(leader)
+        grant_test_tenure(trailer)
         bump_devotion(leader, self.being, 50)
         bump_devotion(trailer, self.being, 10)
         self.assertEqual(self._earned(trailer), set())
@@ -105,6 +112,11 @@ class GodsFavoriteTests(TestCase):
         standing = bump_devotion(sheet, self.being, 10)
         self.assertEqual(standing.favor, 10)
         self.assertEqual(self._earned(sheet), set())
+
+    def test_untenured_top_favor_never_earns_gods_favorite(self) -> None:
+        sheet = CharacterSheetFactory(gender=self.female)
+        bump_devotion(sheet, self.being, 10)
+        self.assertFalse(CharacterAchievement.objects.filter(character_sheet=sheet).exists())
 
 
 class EstablishPatronageTests(TestCase):
