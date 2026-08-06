@@ -38,6 +38,7 @@ class ConfigPrerequisiteTests(TestCase):
             "combat_stats",
             "projects",
             "ships",
+            "crafting",
         }
         missing = expected - set(CONFIG_PREREQUISITES)
         self.assertFalse(missing, f"unregistered prerequisites: {sorted(missing)}")
@@ -120,6 +121,65 @@ class ConfigPrerequisiteTests(TestCase):
         )
         config = DreamPerilConfig.objects.get(pk=1)
         self.assertEqual(config.resist_check_type_id, bare.pk)
+
+    def test_crafting_recipes_are_seeded_with_a_check_type(self) -> None:
+        from world.items.crafting.constants import CraftingRecipeKind
+        from world.items.crafting.models import CraftingRecipe
+
+        CONFIG_PREREQUISITES["crafting"]()
+
+        for kind in (
+            CraftingRecipeKind.FACET_ATTACH,
+            CraftingRecipeKind.STYLE_ATTACH,
+            CraftingRecipeKind.GEM_CUT,
+        ):
+            recipe = CraftingRecipe.objects.get(kind=kind, output_item_template=None)
+            self.assertIsNotNone(
+                recipe.check_type,
+                f"{kind} recipe seeded with no check_type — it would be disabled",
+            )
+
+    def test_crafting_prerequisite_is_idempotent(self) -> None:
+        from world.items.crafting.models import CraftingRecipe
+
+        CONFIG_PREREQUISITES["crafting"]()
+        first = CraftingRecipe.objects.count()
+
+        CONFIG_PREREQUISITES["crafting"]()
+
+        self.assertEqual(CraftingRecipe.objects.count(), first)
+
+    def test_crafting_check_type_is_reattached_to_a_pre_existing_bare_recipe(self) -> None:
+        """The `if created:` trap, crafting flavor: a fixture-supplied recipe row
+        arrives with `check_type=None` and must not stay disabled.
+        """
+        from world.items.crafting.constants import CraftingRecipeKind
+        from world.items.crafting.models import CraftingRecipe
+
+        bare = CraftingRecipe.objects.create(
+            name="Attach Facet (Enchanting)", kind=CraftingRecipeKind.FACET_ATTACH
+        )
+        self.assertIsNone(bare.check_type)
+
+        CONFIG_PREREQUISITES["crafting"]()
+
+        bare.refresh_from_db()
+        self.assertIsNotNone(bare.check_type)
+
+    def test_crafting_prerequisite_seeds_the_facet_reagent_requirement(self) -> None:
+        from world.items.crafting.constants import CraftingRecipeKind
+        from world.items.crafting.models import CraftingRecipe
+        from world.items.models import CraftingMaterialRequirement
+
+        CONFIG_PREREQUISITES["crafting"]()
+
+        facet_recipe = CraftingRecipe.objects.get(
+            kind=CraftingRecipeKind.FACET_ATTACH, output_item_template=None
+        )
+        self.assertTrue(
+            CraftingMaterialRequirement.objects.filter(recipe=facet_recipe).exists(),
+            "facet-attach recipe seeded with no reagent requirement",
+        )
 
 
 class ConfigPrerequisiteFreshDatabaseTests(TestCase):
