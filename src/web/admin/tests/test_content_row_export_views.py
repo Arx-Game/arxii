@@ -441,3 +441,53 @@ class TestContentRowExportViewsConfigured(TestCase):
         self.assertTrue(any("excluded from export" in m for m in msgs))
         status = run_git(self.root, "status", "--short").stdout
         self.assertEqual(status.strip(), "")
+
+    def test_markdown_domain_row_exports_diffs_and_confirms(self) -> None:
+        """A markdown-domain row (CodexEntry) round-trips through export/diff/confirm.
+
+        Every other test in this module drives a flat-JSON model
+        (``magic.effecttype``). This covers the other export shape - one
+        markdown file per row, under ``content/`` rather than ``fixtures/``
+        - through the exact same three views.
+        """
+        from core_management.content_fixtures import content_slug
+        from world.codex.factories import CodexEntryFactory
+
+        entry = CodexEntryFactory(
+            name="Row Markdown Entry",
+            summary="A short summary.",
+            lore_content="Some in-character lore text.",
+            mechanics_content="Some out-of-character mechanics text.",
+        )
+
+        export_resp = self._export("codex.codexentry", entry.pk)
+        self.assertEqual(export_resp.status_code, 302)
+
+        diff_resp = self._diff("codex.codexentry", entry.pk)
+        self.assertEqual(diff_resp.status_code, 200)
+        self.assertTrue(diff_resp.context["diff_text"].strip())
+        self.assertContains(diff_resp, "Some in-character lore text.")
+
+        with self._env():
+            confirm_resp = self.client.post(
+                reverse("admin_content_export_row_confirm"),
+                {
+                    "model": "codex.codexentry",
+                    "pk": entry.pk,
+                    "digest": diff_resp.context["digest"],
+                    "action": "confirm",
+                    "new_row": "1",
+                },
+            )
+        self.assertEqual(confirm_resp.status_code, 302)
+        self.assertEqual(confirm_resp.url, reverse("admin_content_session"))
+
+        entry_dir = self.root / "content" / "codex_entries"
+        expected_name = f"{content_slug(entry.name)}.md"
+        matches = list(entry_dir.rglob(expected_name))
+        self.assertEqual(len(matches), 1)
+        body = matches[0].read_text(encoding="utf-8")
+        self.assertIn("Some in-character lore text.", body)
+        self.assertIn("Some out-of-character mechanics text.", body)
+        log = run_git(self.root, "log", "--oneline", "-1").stdout
+        self.assertIn("Export CodexEntry", log)

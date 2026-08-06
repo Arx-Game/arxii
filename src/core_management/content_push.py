@@ -20,6 +20,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 import logging
 from pathlib import Path
+import re
 import subprocess
 
 from core_management.content_repo import resolve_content_root
@@ -34,6 +35,14 @@ _GIT_MAIN = "main"
 # traditions) live under content/, not fixtures/ - staging only fixtures/ left
 # them silently unpushed by the corpus push (pre-existing gap, #3018).
 _GIT_CONTENT_PATHSPECS = ("fixtures/", "content/")
+# Strips a userinfo/credential segment (user:token@ or token@) from a URL
+# before it ever reaches an error message - an https remote can carry one,
+# and a failed push/fetch embeds git's stderr verbatim, which can quote the
+# remote URL back in full (#3018 review). Canonical location: ``_run_git``
+# (below) is the one place a git failure message is built, so every caller
+# of it - including ``content_session.py``, which imports this - is scrubbed
+# for free rather than needing its own copy of this pattern.
+_URL_CREDENTIALS = re.compile(r"//[^/@]+@")
 
 
 class ContentPushError(Exception):
@@ -56,7 +65,11 @@ class PushResult:
 def _run_git(repo: Path, *args: str) -> subprocess.CompletedProcess[str]:
     """Run a git command in ``repo`` and return the completed process.
 
-    Raises ``ContentPushError`` if git exits non-zero.
+    Raises ``ContentPushError`` if git exits non-zero. A failed push or fetch
+    can quote the remote URL back in its stderr, and an https remote can
+    carry a token-as-username credential - so the message is scrubbed with
+    ``_URL_CREDENTIALS`` before it ever reaches an exception a caller might
+    flash to an admin page (#3018 review).
     """
     result = subprocess.run(
         ["git", "-C", str(repo), *args],
@@ -66,8 +79,9 @@ def _run_git(repo: Path, *args: str) -> subprocess.CompletedProcess[str]:
         timeout=120,
     )
     if result.returncode != 0:
+        safe_stderr = _URL_CREDENTIALS.sub("//", result.stderr.strip())
         raise ContentPushError(
-            f"git {' '.join(args)} failed (exit {result.returncode}):\n{result.stderr.strip()}"
+            f"git {' '.join(args)} failed (exit {result.returncode}):\n{safe_stderr}"
         )
     return result
 

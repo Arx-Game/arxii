@@ -23,7 +23,11 @@ import re
 import subprocess
 
 from core_management.content_export import _record_key_folded
-from core_management.content_push import ContentPushError, _run_git
+from core_management.content_push import (
+    _URL_CREDENTIALS,
+    ContentPushError,
+    _run_git,
+)
 from core_management.github_rest import GitHubRestError, github_request
 
 SESSION_BRANCH = "content-export-session"
@@ -33,9 +37,10 @@ _GIT_MAIN = "main"
 
 _HTTPS_REMOTE = re.compile(r"^https://github\.com/(?P<owner>[^/]+)/(?P<repo>[^/]+?)(?:\.git)?/?$")
 _SSH_REMOTE = re.compile(r"^git@github\.com:(?P<owner>[^/]+)/(?P<repo>[^/]+?)(?:\.git)?/?$")
-# Strips a userinfo/credential segment (user:token@ or token@) from a URL
-# before it ever reaches an error message - an https remote can carry one.
-_URL_CREDENTIALS = re.compile(r"//[^/@]+@")
+# ``_URL_CREDENTIALS`` (imported above) lives in ``content_push.py`` now -
+# ``_run_git`` is defined there, and it is the one place a git failure
+# message is actually built, so the scrub belongs where the risk originates
+# rather than duplicated here (#3018 review).
 
 
 @dataclass
