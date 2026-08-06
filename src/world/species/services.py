@@ -270,7 +270,10 @@ def provision_species_gifts(sheet: CharacterSheet, *, resonance=None) -> list[Ch
     """Mint the species' Minor Gift(s) + latent GIFT thread + any drawback. Idempotent.
 
     ``resonance`` is the player's CG-chosen gift resonance (the same value the Major-gift
-    block resolves). When None, falls back to each gift's first supported resonance.
+    block resolves). When None, ``grant_gift_to_character`` resolves it via the shared
+    grant-time resolver (``_resolve_grant_resonance``) — for a Minor Gift this typically
+    anchors to the Major-gift thread's resonance, since that thread already exists by the
+    time this runs.
 
     Called from finalize_magic_data after the Major-gift block so the species
     gift thread anchors to the same resonance as the player's Major-gift thread.
@@ -285,8 +288,7 @@ def provision_species_gifts(sheet: CharacterSheet, *, resonance=None) -> list[Ch
     ).select_related("gift", "drawback_condition", "benefit_condition", "drawback_distinction")
     minted: list[CharacterGift] = []
     for grant in grants:
-        res = resonance or grant.gift.resonances.first()
-        cg, _ = grant_gift_to_character(sheet, grant.gift, resonance=res)
+        cg, _ = grant_gift_to_character(sheet, grant.gift, resonance=resonance)
         minted.append(cg)
         if grant.drawback_condition_id is not None:
             _apply_permanent_condition_once(sheet.character, grant.drawback_condition)

@@ -14,6 +14,7 @@ from world.classes.models import PathStage
 from world.magic.audere_majora import resolve_audere_majora_offer
 from world.magic.constants import TargetKind
 from world.magic.factories import (
+    CharacterResonanceFactory,
     GiftFactory,
     ResonanceFactory,
     TechniqueFactory,
@@ -99,6 +100,36 @@ class PathCrossingGrantE2ETests(TestCase):
         # (base form at thread level 0 — usable, ready to specialize as the thread grows).
         resolved = resolve_specialized_variant(entity=self.warrior_attack, character=self.character)
         self.assertEqual(resolved.name, self.warrior_attack.name)
+
+    def test_grant_of_empty_resonance_gift_still_leaves_a_gift_thread(self) -> None:
+        """A gift with an EMPTY resonance set (the 17-of-18 normal case, #2971)
+
+        still gets a GIFT thread — previously the grant silently skipped thread
+        provisioning when the gift supported no resonances, leaving a character
+        holding a gift (and its techniques) with no thread to read a resonance
+        from anywhere downstream (cast resolution, dramatic-moment grants, ...).
+        The shared resolver's claimed-resonance fallback anchors the thread.
+        """
+        claimed_resonance = ResonanceFactory(name="Claimed_e2e")
+        CharacterResonanceFactory(character_sheet=self.sheet, resonance=claimed_resonance)
+
+        empty_gift = GiftFactory(name="Hollowform_e2e")  # no resonances added — empty set
+        quiet_path = PathFactory(name="Quiet Path_e2e", stage=PathStage.PUISSANT, is_active=True)
+        quiet_path.parent_paths.add(self.prospect_path)
+        PathGiftGrant.objects.create(path=quiet_path, gift=empty_gift)
+
+        from world.magic.services.path_magic import grant_path_magic
+
+        grant_path_magic(self.sheet, quiet_path)
+
+        self.assertTrue(
+            CharacterGift.objects.filter(character=self.sheet, gift=empty_gift).exists()
+        )
+        thread = Thread.objects.filter(
+            owner=self.sheet, target_kind=TargetKind.GIFT, target_gift=empty_gift
+        ).first()
+        self.assertIsNotNone(thread)
+        self.assertEqual(thread.resonance_id, claimed_resonance.pk)
 
     def test_grant_is_idempotent_on_recross(self) -> None:
         from world.magic.services.path_magic import grant_path_magic

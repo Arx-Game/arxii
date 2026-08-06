@@ -24,22 +24,6 @@ from world.magic.types.path_magic import PathMagicGrantResult
 if TYPE_CHECKING:
     from world.character_sheets.models import CharacterSheet
     from world.classes.models import Path
-    from world.magic.models.affinity import Resonance
-    from world.magic.models.gifts import Gift
-
-
-def _grant_resonance_for(gift: Gift, claimed_ids: set[int]) -> Resonance | None:
-    """Resonance for a newly-granted gift's latent thread.
-
-    Prefer a resonance the character has already claimed (``claimed_ids``) that the
-    gift supports; otherwise the gift's first supported resonance; ``None`` if the
-    gift supports none (then the thread is not provisioned, mirroring CG). The
-    player commits their true choice later via the Rite of Weaving.
-    """
-    supported = gift.cached_resonances
-    if not supported:
-        return None
-    return next((r for r in supported if r.pk in claimed_ids), supported[0])
 
 
 @transaction.atomic
@@ -51,7 +35,6 @@ def grant_path_magic(sheet: CharacterSheet, path: Path) -> PathMagicGrantResult:
     ``PathGiftGrant`` rows is a no-op).
     """
     from world.magic.models import (  # noqa: PLC0415
-        CharacterResonance,
         CharacterTechnique,
         PathGiftGrant,
     )
@@ -60,19 +43,12 @@ def grant_path_magic(sheet: CharacterSheet, path: Path) -> PathMagicGrantResult:
     )
 
     grants = PathGiftGrant.objects.filter(path=path).select_related("gift")
-    # The character's claimed resonances, fetched once (not per granted gift).
-    claimed_ids = set(
-        CharacterResonance.objects.filter(character_sheet=sheet).values_list(
-            "resonance_id", flat=True
-        )
-    )
 
     granted_gifts: list = []
     granted_techniques: list = []
     for grant in grants:
         gift = grant.gift
-        resonance = _grant_resonance_for(gift, claimed_ids)
-        _, gift_created = grant_gift_to_character(sheet, gift, resonance=resonance)
+        _, gift_created = grant_gift_to_character(sheet, gift)
         if gift_created:
             granted_gifts.append(gift)
         for technique in grant.starter_techniques.all():
