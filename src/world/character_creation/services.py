@@ -1524,6 +1524,13 @@ def _finalize_anima_ritual(draft: CharacterDraft, sheet: CharacterSheet) -> None
     highest-CG-skill defaults. Both are customisable post-CG.
     CharacterRitualKnowledge is created so the ritual gate in the scene action
     menu is satisfied.
+
+    The CG-picked gift resonance (``selected_gift_resonance_id``, resolved the
+    same way ``finalize_magic_data`` resolves it for the gift thread) is also
+    passed through: the anima ritual IS the character's magical identity, so
+    it carries the same resonance as the gift the ritual was built to recover
+    (#2971).
+
     Guard: if the sheet has no RosterEntry yet (e.g. in isolated unit tests that
     call finalize_magic_data directly), skip — the CharacterRitualKnowledge cannot
     be created without a roster_entry FK. finalize_character always creates the
@@ -1555,6 +1562,13 @@ def _finalize_anima_ritual(draft: CharacterDraft, sheet: CharacterSheet) -> None
 
         skill = Skill.objects.filter(pk=skill_id).first()
 
+    resonance = None
+    resonance_id = draft.draft_data.get("selected_gift_resonance_id")
+    if resonance_id:
+        from world.magic.models import Resonance  # noqa: PLC0415
+
+        resonance = Resonance.objects.filter(pk=resonance_id).first()
+
     provision_player_anima_ritual(
         account=draft.account,
         character_sheet=sheet,
@@ -1562,6 +1576,7 @@ def _finalize_anima_ritual(draft: CharacterDraft, sheet: CharacterSheet) -> None
         ritual_name=ritual_name,
         stat=stat,
         skill=skill,
+        resonance=resonance,
     )
 
 

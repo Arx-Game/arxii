@@ -103,16 +103,27 @@ for the five-branch validation gate this data must satisfy before submission.
   draft has no `selected_gift_id` — only legacy/test-only draft_data reaches this,
   since `compute_magic_errors` requires the key on any draft that reaches submission.
 - The resonance is read from `draft.draft_data["selected_gift_resonance_id"]`
-  (required by `compute_magic_errors`) and resolved to a `Resonance` row; `None`
-  when unset or invalid. As of #2971, `None` no longer skips thread provisioning —
+  (required by `compute_magic_errors`, which as of #2971 also rejects a stale pick —
+  a pk pointing at a since-deleted `Resonance` — with the same "Select a gift
+  resonance" error as an unset one) and resolved to a `Resonance` row; `None` when
+  unset or invalid. As of #2971, `None` no longer skips thread provisioning —
   `grant_gift_to_character` always runs it through the shared grant-time resolver
   (`_resolve_grant_resonance`: an existing thread already on this gift → the
   gift's supported-set policy → the character's own main-resonance fallbacks) and
   ALWAYS provisions the latent GIFT thread. If nothing resolves at all (a fresh CG
   character with no claimed resonance, no thread, and no anima ritual — the common
-  case here, since anima rituals are set up post-CG), it raises
+  case here, since the gift/technique link (Step 1) runs before the anima ritual is
+  provisioned (Step 6) in `finalize_magic_data`'s ordering), it raises
   `GiftResonanceUnresolvable` and `finalize_magic_data` fails loudly rather than
   minting a character holding a gift with no thread to cast from.
+- **The anima ritual now carries the CG pick too (#2971 Task 3).** The anima ritual
+  IS the character's magical identity, so `_finalize_anima_ritual` resolves the same
+  `selected_gift_resonance_id` (the identical pattern `finalize_magic_data` uses for
+  the gift thread) and passes it to `provision_player_anima_ritual(...,
+  resonance=...)`, which writes it onto the created `RitualCheckConfig.resonance`.
+  `world.magic.services.gain.anima_ritual_resonance(sheet)` — one of the grant-time
+  resolver's own fallback rungs above — now resolves for every freshly finalized
+  character instead of always returning `None` at CG time.
 - `draft.draft_data["selected_technique_ids"]` names the chosen catalog
   `Technique`s (drawn from the gift's pool ∪ the tradition's signature set); each
   gets a `CharacterTechnique.objects.get_or_create` link. `announce_access_change`

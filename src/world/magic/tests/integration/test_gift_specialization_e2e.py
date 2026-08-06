@@ -145,6 +145,38 @@ class GiftSpecializationE2ETest(TestCase):
                 ).exists()
             )
 
+    def test_anima_ritual_resonance_resolves_once_cg_records_it(self) -> None:
+        """anima_ritual_resonance (Task 1's public seam, world.magic.services.gain)
+        now resolves once CG's anima-ritual provisioning carries the picked
+        resonance (#2971 Task 3) — the anima ritual IS the character's magical
+        identity, the same identity the latent GIFT thread above anchors to.
+        """
+        from evennia.accounts.models import AccountDB
+
+        from world.magic.services.anima import provision_player_anima_ritual
+        from world.magic.services.gain import anima_ritual_resonance
+        from world.skills.factories import SkillFactory
+        from world.traits.factories import StatTraitFactory
+
+        self.assertIsNone(anima_ritual_resonance(self.sheet))
+
+        account = AccountDB.objects.create(username=f"identity_ritual_{id(self)}")
+        provision_player_anima_ritual(
+            account=account,
+            character_sheet=self.sheet,
+            roster_entry=self.sheet.roster_entry,
+            ritual_name="Identity Ritual",
+            stat=StatTraitFactory(),
+            skill=SkillFactory(),
+            resonance=self.resonance,
+        )
+        # Mirrors the runtime path: get_character_anima_ritual queries
+        # author_account=character.db_account.
+        self.sheet.character.db_account = account
+        self.sheet.character.save(update_fields=["db_account"])
+
+        self.assertEqual(anima_ritual_resonance(self.sheet), self.resonance)
+
     def test_base_form_resolves_without_thread(self) -> None:
         # A character with the technique but no GIFT thread still resolves to parent.
         other_sheet = CharacterSheetFactory()
