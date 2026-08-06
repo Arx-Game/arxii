@@ -114,3 +114,24 @@ def resolve_model_by_name(model_key: str) -> type[models.Model]:
         f"disambiguate: {candidate_names}"
     )
     raise LookupError(msg)
+
+
+def credited_content_models() -> list[type[models.Model]]:
+    """Concrete models inheriting CreditedContent, sorted by (domain, name).
+
+    The authoring workbench's iteration set (#3019): deliberately BROADER than
+    content_export.CONTENT_MODELS - the four builder-domain models carry
+    credit but sit outside the export registry, and coverage of the mixin is
+    what test_prose_credits enforces. The CONTENT_MODELS label loops elsewhere
+    are a different, export-owned set; do not consolidate them onto this.
+    """
+    from django.apps import apps as dj_apps  # noqa: PLC0415
+
+    from world.contributors.models import CreditedContent  # noqa: PLC0415
+
+    found = [
+        m
+        for m in dj_apps.get_models()
+        if issubclass(m, CreditedContent) and not m._meta.abstract  # noqa: SLF001
+    ]
+    return sorted(found, key=lambda m: (domain_of(m), m.__name__.lower()))
