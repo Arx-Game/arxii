@@ -11,6 +11,7 @@ from django.utils import timezone
 from evennia.utils.idmapper.models import SharedMemoryModel
 
 from core.natural_keys import NaturalKeyManager, NaturalKeyMixin
+from world.achievements.models import DiscoverableContent
 from world.action_points.models import ActionPointPool
 from world.codex.constants import CodexKnowledgeStatus
 from world.consent.models import VisibilityMixin
@@ -161,7 +162,7 @@ def refresh_codex_breadcrumbs() -> None:
         cursor.execute("REFRESH MATERIALIZED VIEW codex_subjectbreadcrumb")
 
 
-class CodexEntry(NaturalKeyMixin, CreditedContent, SharedMemoryModel):
+class CodexEntry(NaturalKeyMixin, CreditedContent, DiscoverableContent, SharedMemoryModel):
     """
     An individual piece of lore that can be known/taught/learned.
     """

@@ -73,13 +73,18 @@ def announce_access_change(character_sheet, *, gained, lost, source):
             category=NarrativeCategory.ABILITY,
             sender_account=None,
         )
+    if not _ceremony_eligible(character_sheet):
+        return
+
+    excluded_ids = _cg_catalog_exclusions(gained)
+
     for item in gained:
         # Only DiscoverableContent subclasses carry discovery_achievement;
         # CapabilityType grants never do.
         from world.achievements.models import DiscoverableContent  # noqa: PLC0415
 
         ach = item.discovery_achievement if isinstance(item, DiscoverableContent) else None
-        if ach is None:
+        if ach is None or (type(item), item.pk) in excluded_ids:
             continue
         from world.achievements.models import CharacterAchievement  # noqa: PLC0415
 
@@ -99,3 +104,79 @@ def announce_access_change(character_sheet, *, gained, lost, source):
             personal_body=f"You have manifested {name}.",
             category=NarrativeCategory.ABILITY,
         )
+
+
+def _ceremony_eligible(character_sheet):
+    """Whether ``character_sheet`` can trigger the discovery/achievement ceremony.
+
+    Requires a current, non-staff RosterTenure. A sheet mid-character-creation (no
+    RosterEntry yet), a GM-created sheet sitting untenured on the Available roster,
+    or one piloted by a staff account never fires the ceremony — the plain
+    gained/lost narrative message above this check is unaffected (#2899).
+    """
+    from core_management.permissions import is_staff_observer  # noqa: PLC0415
+
+    roster_entry = character_sheet.roster_entry_or_none
+    tenure = roster_entry.current_tenure if roster_entry is not None else None
+    if tenure is None:
+        return False
+    return not is_staff_observer(tenure.player_data.account)
+
+
+def _cg_catalog_exclusions(gained):
+    """(type, pk) pairs for ``gained`` items reachable through a CG catalog table.
+
+    Common knowledge — nearly every character reaches this content automatically at
+    character creation, so it never fires the discovery ceremony regardless of the
+    route (CG grant, research, teaching) or timing used to reach it (#2899). Keyed by
+    (type, pk) rather than bare pk so a CodexEntry and a Technique that happen to share
+    a numeric pk (different tables, independent auto-increment) can't collide.
+    """
+    from world.codex.models import CodexEntry  # noqa: PLC0415
+    from world.magic.models import Technique  # noqa: PLC0415
+
+    codex_ids = [item.pk for item in gained if isinstance(item, CodexEntry)]
+    technique_ids = [item.pk for item in gained if isinstance(item, Technique)]
+    excluded = set()
+    if codex_ids:
+        excluded |= {(CodexEntry, pk) for pk in _cg_catalog_codex_entry_ids(codex_ids)}
+    if technique_ids:
+        excluded |= {(Technique, pk) for pk in _cg_catalog_technique_ids(technique_ids)}
+    return excluded
+
+
+def _cg_catalog_codex_entry_ids(entry_ids):
+    """Entries granted by a Beginning/Tradition/Path/Distinction/Species/Resonance."""
+    from django.db.models import Q  # noqa: PLC0415
+
+    from world.codex.models import CodexEntry  # noqa: PLC0415
+
+    return set(
+        CodexEntry.objects.filter(pk__in=entry_ids)
+        .filter(
+            Q(beginnings_grants__isnull=False)
+            | Q(tradition_grants__isnull=False)
+            | Q(path_grants__isnull=False)
+            | Q(distinction_grants__isnull=False)
+            | Q(species__isnull=False)
+            | Q(resonances__isnull=False)
+        )
+        .values_list("pk", flat=True)
+        .distinct()
+    )
+
+
+def _cg_catalog_technique_ids(technique_ids):
+    """Techniques in a Path's starter pool or a Tradition's special-technique set."""
+    from django.db.models import Q  # noqa: PLC0415
+
+    from world.magic.models import Technique  # noqa: PLC0415
+
+    return set(
+        Technique.objects.filter(pk__in=technique_ids)
+        .filter(
+            Q(granted_by_path_gifts__isnull=False) | Q(granted_by_tradition_gifts__isnull=False)
+        )
+        .values_list("pk", flat=True)
+        .distinct()
+    )

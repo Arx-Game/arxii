@@ -1851,6 +1851,7 @@
 **Foreign Keys:**
   - written_by -> contributors.ContentContributor [FK] (nullable)
   - reviewed_by -> contributors.ContentContributor [FK] (nullable)
+  - discovery_achievement -> achievements.Achievement [FK] (nullable)
   - subject -> codex.CodexSubject [FK]
   - modifier_target -> mechanics.ModifierTarget [OneToOne] (nullable)
   - art -> evennia_extensions.Media [FK] (nullable)

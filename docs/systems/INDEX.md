@@ -2628,12 +2628,13 @@ gains a discoverable content item for the first time.
   `ConditionStatRule` (bridge: condition event type → stat increment; composite natural key
   `(stat, condition, event_type)`; `CONTENT_MODELS` since #2832),
   **`DiscoverableContent`** (abstract base — adds nullable `discovery_achievement` FK to any
-  content model whose instances can be discovered for the first time; inherited by `Technique`
-  and `CovenantRole`; null = not discoverable; see ADR-0061)
+  content model whose instances can be discovered for the first time; inherited by `Technique`,
+  `CovenantRole`, and `CodexEntry`; null = not discoverable; see ADR-0061)
 - **Enums:** `NotificationLevel` (PERSONAL / ROOM / GAMEWIDE), `ComparisonType` (GTE / EQ / LTE),
   `RewardType` (TITLE / BONUS / COSMETIC / PRESTIGE / DISTINCTION), `ConditionEventType` (GAINED),
   `AccessChangeSource` (ASSUMED_ALTERNATE_SELF / REVERTED_ALTERNATE_SELF /
-  COVENANT_ROLE_ENGAGED / COVENANT_ROLE_DISENGAGED / CHARACTER_CREATION)
+  COVENANT_ROLE_ENGAGED / COVENANT_ROLE_DISENGAGED / CHARACTER_CREATION / PATH_ADVANCEMENT /
+  GIFT_ACQUISITION / TECHNIQUE_GRANT / ACADEMY_TRAINING / CODEX_LEARNING)
 - **Handlers:** `character_sheet.stats` (`StatHandler`) — `get(stat_def) -> int`,
   `increment(stat_def, n) -> int` (atomic F() expression; checks requirement thresholds after increment)
 - **Key Services (`world/achievements/services.py`):** `grant_achievement(achievement,
@@ -2644,16 +2645,25 @@ gains a discoverable content item for the first time.
     `NarrativeMessage` to the character listing what techniques/capabilities changed, then for
     each gained item with a non-null `discovery_achievement` FK fires `grant_achievement` and
     `announce_achievement`. Source-agnostic: callers never branch on covenant vs. form vs. CG.
+    Gated by two eligibility checks before the per-item loop (#2899): (1) a live, non-staff
+    `RosterTenure` (`_ceremony_eligible`); (2) content reachable through a CG catalog table is
+    excluded regardless of route (`_cg_catalog_exclusions`). Both gates apply only to callers of
+    this function — other ceremony-firing paths (e.g. `execute_ceremony_beat`) sit outside it;
+    see `world/achievements/CLAUDE.md`.
   - `announce_achievement(earners, *, is_first, first_body, personal_body, category)` —
     gamewide to all active player sheets when `is_first` (first-ever Discovery); otherwise
     personal to the earner list.
 - **Wired callers of `announce_access_change`:** `world/forms/services.py` (assume/revert
   alternate self), `world/covenants/services.py` (engage/disengage covenant role, via
-  `_announce_capability_diff`), `world/character_creation/services.py` (CG starter-catalog Gift/Technique grant)
+  `_announce_capability_diff`), `world/character_creation/services.py` (CG starter-catalog
+  Gift/Technique grant), `world/magic/services/technique_acquisition.py` (`learn_technique`),
+  `world/magic/services/path_magic.py` (`grant_path_magic`), `world/codex/services.py`
+  (`grant_codex_entry`, #2899)
 - **API Endpoints:**
   - `GET /api/achievements/character-titles/?character_sheet=<id>` — earned titles, newest first
 - **Integrates with:** magic (`Technique` inherits `DiscoverableContent`; `discovery_achievement`
-  FK), covenants (`CovenantRole` inherits `DiscoverableContent`), narrative
+  FK), covenants (`CovenantRole` inherits `DiscoverableContent`), codex (`CodexEntry` inherits
+  `DiscoverableContent`; `codex.entries_learned` stat, #2899), narrative
   (`send_narrative_message` with ABILITY category), roster (`active_player_character_sheets()`
   for gamewide first-ever recipient selection), mechanics (BONUS reward → `CharacterModifier`),
   societies (PRESTIGE reward → `award_deed_prestige`), distinctions (DISTINCTION reward →

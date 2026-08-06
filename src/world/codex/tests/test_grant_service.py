@@ -11,10 +11,13 @@ from unittest.mock import patch
 
 from django.test import TestCase
 
+from world.achievements.factories import AchievementFactory
+from world.achievements.models import CharacterAchievement
 from world.codex.constants import CodexKnowledgeStatus
 from world.codex.factories import CodexEntryFactory
 from world.codex.models import CharacterCodexKnowledge
 from world.codex.services import grant_codex_entry
+from world.narrative.models import NarrativeMessage
 from world.roster.factories import RosterEntryFactory, RosterTenureFactory
 
 HOOK = "world.stories.services.reactivity.on_codex_entry_unlocked"
@@ -90,3 +93,93 @@ class GrantCodexEntryTests(TestCase):
         knowledge, _ = grant_codex_entry(roster_entry, self.entry, learned_from=tenure)
 
         self.assertEqual(knowledge.learned_from, tenure)
+
+
+class GrantCodexEntryAnnouncesAccessChangeTests(TestCase):
+    @classmethod
+    def setUpTestData(cls):
+        cls.entry = CodexEntryFactory(name="Announced Entry")
+
+    def test_newly_known_sends_the_gained_narrative_message(self):
+        roster_entry = RosterEntryFactory()
+
+        grant_codex_entry(roster_entry, self.entry)
+
+        msg = NarrativeMessage.objects.latest("id")
+        self.assertIn("Announced Entry", msg.body)
+
+    def test_newly_known_with_achievement_and_live_tenure_fires_discovery(self):
+        ach = AchievementFactory(hidden=True)
+        entry = CodexEntryFactory(name="Ceremony Entry", discovery_achievement=ach)
+        roster_entry = RosterEntryFactory()
+        RosterTenureFactory(roster_entry=roster_entry, end_date=None)
+
+        grant_codex_entry(roster_entry, entry)
+
+        self.assertTrue(
+            CharacterAchievement.objects.filter(
+                character_sheet=roster_entry.character_sheet, achievement=ach
+            ).exists()
+        )
+
+    def test_repeat_grant_does_not_resend_the_message(self):
+        roster_entry = RosterEntryFactory()
+        grant_codex_entry(roster_entry, self.entry)
+        count_after_first = NarrativeMessage.objects.count()
+
+        grant_codex_entry(roster_entry, self.entry)
+
+        self.assertEqual(NarrativeMessage.objects.count(), count_after_first)
+
+    def test_beginnings_catalog_entry_does_not_fire_discovery_through_grant_codex_entry(self):
+        from world.achievements.factories import AchievementFactory
+        from world.codex.factories import BeginningsCodexGrantFactory
+
+        ach = AchievementFactory(hidden=True)
+        entry = CodexEntryFactory(discovery_achievement=ach)
+        BeginningsCodexGrantFactory(entry=entry)
+        roster_entry = RosterEntryFactory()
+        RosterTenureFactory(roster_entry=roster_entry, end_date=None)
+
+        grant_codex_entry(roster_entry, entry)
+
+        self.assertFalse(CharacterAchievement.objects.filter(achievement=ach).exists())
+
+
+class GrantCodexEntryStatTrackingTests(TestCase):
+    @classmethod
+    def setUpTestData(cls):
+        cls.entry = CodexEntryFactory(name="Stat Entry")
+
+    def test_newly_known_increments_entries_learned_stat(self):
+        from world.achievements.models import StatDefinition
+
+        roster_entry = RosterEntryFactory()
+
+        grant_codex_entry(roster_entry, self.entry)
+
+        stat_def = StatDefinition.objects.get(key="codex.entries_learned")
+        self.assertEqual(roster_entry.character_sheet.stats.get(stat_def), 1)
+
+    def test_repeat_grant_does_not_increment_again(self):
+        from world.achievements.models import StatDefinition
+
+        roster_entry = RosterEntryFactory()
+        grant_codex_entry(roster_entry, self.entry)
+
+        grant_codex_entry(roster_entry, self.entry)
+
+        stat_def = StatDefinition.objects.get(key="codex.entries_learned")
+        self.assertEqual(roster_entry.character_sheet.stats.get(stat_def), 1)
+
+    def test_two_different_entries_increment_to_two(self):
+        from world.achievements.models import StatDefinition
+
+        other_entry = CodexEntryFactory(name="Second Stat Entry")
+        roster_entry = RosterEntryFactory()
+        grant_codex_entry(roster_entry, self.entry)
+
+        grant_codex_entry(roster_entry, other_entry)
+
+        stat_def = StatDefinition.objects.get(key="codex.entries_learned")
+        self.assertEqual(roster_entry.character_sheet.stats.get(stat_def), 2)

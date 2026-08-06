@@ -129,6 +129,8 @@ single nullable `discovery_achievement` FK (→ `Achievement`, `on_delete=PROTEC
 to any content model whose instances can trigger a first-ever Discovery ceremony. Inherited by:
 - `world.magic.Technique` — a technique can be marked discoverable (first character ever to gain it)
 - `world.covenants.CovenantRole` — a sub-role can be marked discoverable at its thread threshold
+- `world.codex.CodexEntry` — a piece of lore can be marked discoverable (first character ever to
+  learn it); see the CG-catalog exclusion note under `announce_access_change` below (#2899)
 
 `discovery_achievement = None` means the content is not discoverable and `announce_access_change`
 skips the Discovery path for it. See **ADR-0061** for the architectural decision (GenericFK and
@@ -147,11 +149,42 @@ Called whenever any mechanism changes what techniques/capabilities a character c
   `announce_achievement` (gamewide first-ever body if it's a Discovery, personal otherwise).
 - **Never branches on source** — covenant, form shapeshift, and CG gift/technique grant are all identical.
 - `source` is an `AccessChangeSource` TextChoices value (drives the lead-in text label).
+- **Two eligibility gates run before the per-item loop, both source-agnostic:** (1) the receiving
+  character must have a current, non-staff `RosterTenure` (`_ceremony_eligible`) — a mid-CG,
+  GM-created-and-untenured, or staff-piloted sheet never fires the ceremony, though the plain
+  gained/lost message above still sends; (2) content reachable through a CG catalog table never
+  fires the ceremony regardless of route (`_cg_catalog_exclusions` — covers `CodexEntry` via
+  Beginnings/Tradition/Path/Distinction/Species/Resonance grants, and `Technique` via
+  `PathGiftGrant`/`TraditionGiftGrant`). See #2899.
+- **Scope: these two gates only apply to callers of `announce_access_change` itself** — the six
+  callers listed above. Several other discovery-ceremony-firing paths call `grant_achievement`/
+  `announce_achievement` directly instead, bypassing this function (and both gates) entirely:
+  `world/combat/combo_discovery.py` (ComboDefinition) and `world/magic/services/signature.py`
+  (SignatureMotifBonus) — both via the shared `execute_ceremony_beat` helper
+  (`world/magic/crossing/ceremony.py`) — plus `world/magic/crossing/handlers.py` and
+  `world/magic/services/crossing.py` (crossing variants/options, also via `execute_ceremony_beat`),
+  and `world/magic/services/aura.py` (aura threshold crossings, calling `grant_achievement`
+  directly, not via `execute_ceremony_beat`). `execute_ceremony_beat` is a separate,
+  ungated ceremony-firing path outside `announce_access_change`'s scope.
+- A related gap: `character_sheet.stats.increment` (`StatHandler`) checks achievement stat
+  requirements and can grant an achievement independent of `announce_access_change` entirely —
+  so an untenured/staff character can still earn a stat-triggered achievement (including
+  consuming the first-ever Discovery slot) through that path. Neither gate above covers it;
+  tracked as #3024.
 
 Current callers:
 - `world/forms/services.py` — assume / revert alternate self
 - `world/covenants/services.py` — `_announce_capability_diff` (engage / disengage covenant role)
 - `world/character_creation/services.py` — CG gift/technique grant (`AccessChangeSource.CHARACTER_CREATION`)
+- `world/magic/services/technique_acquisition.py::learn_technique` — a character learns a
+  technique post-CG (`AccessChangeSource.TECHNIQUE_GRANT`)
+- `world/magic/services/path_magic.py::grant_path_magic` — advancing into a new Path
+  (`AccessChangeSource.PATH_ADVANCEMENT`)
+- `world/codex/services.py::grant_codex_entry` — every route that lands a character on KNOWN
+  (CG grant, clue-research payoff, the crossing ceremony) on `newly_known`
+  (`AccessChangeSource.CODEX_LEARNING`, #2899). `CodexTeachingOffer.accept` only opens the
+  UNCOVERED row — a taught entry fires the ceremony once something else (e.g. research)
+  completes it through this same function.
 
 ### `announce_achievement(earners, *, is_first, first_body, personal_body, category)`
 
