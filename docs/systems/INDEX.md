@@ -4208,12 +4208,16 @@ Items, equipment, inventory, and currency. Spec D PR1 shipped facets, equip/uneq
   (`RESTORE_FATIGUE` → new `fatigue.services.recover_fatigue`; `RESTORE_ANIMA` clamped —
   consumption, never regeneration; `INTOXICATE` → `imbibe`) make every edible pure content:
   a consumable ItemTemplate + deterministic on-use pool (`seed_consumable_catalog` — bread,
-  stew, wine, ale, firebrandy, Cardian Ambrosia, all PLACEHOLDER). Cooking tradeskill
+  stew, wine, ale, firebrandy, Cardian Ambrosia, all PLACEHOLDER). Cooking check-spine
   activation (`world/seeds/provisioning_checks.py`, cluster `provisioning`): Cooking
   skill/CheckType (wits+agility avg + Cooking, Brewing spec linked as a
-  `CheckTypeSpecialization` row at weight 1.0 — #2894), first LIVE QualityTier ladder
-  (Common/Fine/Masterwork), stationless ITEM_CREATE recipes (Hearty Stew, Honeyed Wine) +
-  ingredients + skill caps. Event catering: `EventCatering` snapshot rows
+  `CheckTypeSpecialization` row at weight 1.0 — #2894), the live 12-rung QualityTier
+  ladder (Poor→Legendary, #2878) + the 7-rung AccentLevel ladder. **The stationless
+  ITEM_CREATE recipes (Hearty Stew, Honeyed Wine, Dream Dust, Haze) + their ingredient
+  ItemTemplates + skill caps moved to the lore repo (#3006 Task 4)** — the seeder no
+  longer mints them (see "Production data path" above); a fresh deploy with no lore
+  fixtures has the Cooking check spine but no recipes to roll it against. Event
+  catering: `EventCatering` snapshot rows
   (#2869 reshaped: `designate_catering_container` flags a vessel — banquet table,
   amphora, tray — and the `put_in` path tags any consumable set out in it via
   `tag_catered_provision`; nothing is consumed, and the tag is permanent and deduped
@@ -4288,7 +4292,18 @@ holder is never notified a claim exists.
     seeds a generic reagent requirement onto a FACET_ATTACH recipe, content-only, #707),
     `CraftingSkillCap` (skill-rank → quality ceiling ladder), `CraftingRecipeConsequence`
     (weighted consequence pool entry with per-row `cost_consumption` override). Replaces
-    the old `FacetCraftingConfig` singleton.
+    the old `FacetCraftingConfig` singleton. **Production data path (#3006):** all four
+    models (+ `MaterialCategory`) carry natural keys and are in `CONTENT_MODELS`, so the
+    lore repo authors/overrides recipes, skill caps, material requirements, and
+    consequence rows directly; `CONFIG_PREREQUISITES["crafting"]` seeds a floor row for
+    each null-`check_type`-raising kind (`FACET_ATTACH`/`STYLE_ATTACH`/`GEM_CUT`, one
+    shared "Enchanting" `CheckType`, plus the FACET_ATTACH reagent default) before the
+    content load so a fresh deploy is never `CraftingNotConfigured`; authored fixtures win
+    via upsert. `ITEM_CREATE` recipes raise nothing when absent, so they're pure content —
+    the four example recipes (Hearty Stew, Honeyed Wine, Dream Dust, Haze) moved out of
+    `world.seeds.provisioning_checks` to the lore repo; that seeder now only ensures the
+    Cooking check spine + QualityTier/AccentLevel ladders. See `docs/systems/items.md`
+    "Production data path" for detail.
   - **`MaterialCategory`** (`world.items.models`, lookup) — a crafting-equivalence class of
     materials (e.g. "Precious Gemstones"); `ItemTemplate.material_category` FK points into it
     (specific→general, ADR-0010). The *eligibility* axis only; value-denominated requirements

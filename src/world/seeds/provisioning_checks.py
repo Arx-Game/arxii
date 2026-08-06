@@ -1,14 +1,22 @@
-"""Cooking tradeskill + food/drink crafting content (#2852).
+"""Cooking tradeskill check-ladder content (#2852, trimmed by #3006).
 
-Activates the built-and-wired crafting engine for provisioning: the Cooking
-skill (+ Brewing specialization) and its CheckType (wits + Cooking), the
-live QualityTier ladder (the 12-rung #2878 ladder, Poor→Legendary; quality
-tiers previously existed only in test factories) plus the 7-rung AccentLevel
-ladder, example ITEM_CREATE recipes (Hearty Stew, Honeyed Wine —
-``requires_station=False``: kitchens, not labs), ingredient templates, and
-skill-cap ladders so output quality clamps to the cook's skill. Quality
-matters downstream: the event catering loop (#2852) sums quality multipliers
-into host prestige — rich preparations are the money sink and the grandeur.
+Activates the built-and-wired crafting engine's check spine for provisioning:
+the Cooking skill (+ Brewing specialization) and its CheckType (wits +
+Cooking), the live QualityTier ladder (the 12-rung #2878 ladder,
+Poor→Legendary; quality tiers previously existed only in test factories)
+plus the 7-rung AccentLevel ladder. Quality matters downstream: the event
+catering loop (#2852) sums quality multipliers into host prestige — rich
+preparations are the money sink and the grandeur.
+
+The four example ITEM_CREATE recipes this module used to seed directly
+(Hearty Stew, Honeyed Wine, Dream Dust, Haze) — plus their ingredient
+ItemTemplates and skill-cap ladders — moved to the lore repo (#3006):
+``CraftingRecipe``/``CraftingSkillCap``/``CraftingMaterialRequirement`` are
+now ``CONTENT_MODELS`` (natural-keyed, #3006 Task 1), so a seeder minting
+them directly would violate the #2698 "seeders never write content" rule
+(see ``world.seeds.tests.test_no_content_slop``). Recipes are authored
+content now; this module only ensures the check/skill/quality-ladder
+machinery they roll against.
 
 Mirrors ``social_checks.py``: skills/traits/checktypes are content-repo-owned
 (#2698), looked up via ``authored_or_sample``; magnitudes PLACEHOLDER.
@@ -17,41 +25,10 @@ Mirrors ``social_checks.py``: skills/traits/checktypes are content-repo-owned
 from __future__ import annotations
 
 from decimal import Decimal
-import logging
-
-logger = logging.getLogger(__name__)
 
 COOKING_SKILL_NAME = "Cooking"
 COOKING_CHECK_NAME = "Cooking"
 BREWING_SPECIALIZATION_NAME = "Brewing"
-
-# Recipes exercising a specialization (#2886 — spec is additive with the
-# skill on the roll AND the quality cap; Apostate: 50+50 ≡ 100).
-_RECIPE_SPECIALIZATIONS = {"Honeyed Wine": BREWING_SPECIALIZATION_NAME}
-
-# (output template name, ((ingredient template name, quantity), ...), workshop_gated)
-_RECIPE_ROWS = (
-    ("Hearty Stew", (("Sack of Grain", 1), ("Wild Herbs", 1)), False),
-    ("Honeyed Wine", (("Orchard Honey", 2),), False),
-    # #2862 — illicit refinement, gated on the Workshop of Iniquity. Rolls the
-    # Cooking check as PLACEHOLDER (a dedicated refining skill is a flagged
-    # skill-list hole, not force-fit).
-    ("Dream Dust", (("Duskpetal Resin", 2),), True),
-    ("Haze", (("Hazeleaf", 2),), True),
-)
-
-# MaterialCategory content (#2862) — the model has existed contentless since #684.
-_MATERIAL_CATEGORIES = (
-    ("Botanical", "Herbs, resins, and leaves — culinary or contraband."),
-    ("Provision", "Grains, honeys, and stock for the table."),
-)
-_INGREDIENT_CATEGORY = {
-    "Sack of Grain": "Provision",
-    "Wild Herbs": "Botanical",
-    "Orchard Honey": "Provision",
-    "Duskpetal Resin": "Botanical",
-    "Hazeleaf": "Botanical",
-}
 
 # The 12-rung quality ladder (#2878). Rung = sort_order; 1-9 are mundane-
 # reachable (Arx 1's adjectives, PLACEHOLDER names pending Apostate's rename
@@ -75,19 +52,6 @@ _QUALITY_TIERS = (
 )
 #: The 3-row placeholder ladder this 12-rung ladder replaces; deleted on seed.
 _LEGACY_TIER_NAMES = ("Common", "Masterwork")
-# (min skill value, tier name) — the cook's skill caps output quality.
-# Retuned for the 12-rung ladder (#2886): caps sit ~1-2 rungs above a
-# crafter's typical score so a hot roll can genuinely punch upward (the
-# "wow" outcome, Apostate's ruling 2026-08-02) while a novice with great
-# materials still squanders them. Trait values are the internal ×10 scale
-# (player-facing 3.0 = 30). PLACEHOLDER tuning.
-_SKILL_CAP_LADDER = (
-    (0, "Well-Crafted"),
-    (20, "Fine"),
-    (30, "Exceptional"),
-    (40, "Superb"),
-    (55, "Perfect"),
-)
 
 # The benefit-only Accent ladder (#2878): 7 adverbs, thread-gated past
 # BASE_MAX_ACCENT_LEVEL. Content lands in the Accents phase; the ladder is
@@ -104,16 +68,13 @@ _ACCENT_LEVELS = (
 
 
 def seed_provisioning_content() -> None:
-    """Seed the Cooking tradeskill + food/drink recipes (idempotent)."""
-    from world.seeds.game_content.items import seed_consumable_catalog  # noqa: PLC0415
+    """Seed the Cooking check spine + quality/accent ladders (idempotent).
 
-    seed_consumable_catalog()  # output templates must exist regardless of cluster order
-    check_type = _ensure_cooking_check()
-    tiers = _ensure_quality_tiers()
-    if check_type is None:
-        logger.warning("Cooking check unavailable (unauthored Trait/Skill); recipes skipped.")
-        return
-    _ensure_recipes(check_type, tiers)
+    Recipes that roll this check are authored content now (#3006) — this
+    only ensures the machinery they depend on exists.
+    """
+    _ensure_cooking_check()
+    _ensure_quality_tiers()
 
 
 def _ensure_cooking_check():
@@ -226,100 +187,3 @@ def _ensure_quality_tiers() -> dict[str, object]:
     for level, name in _ACCENT_LEVELS:
         AccentLevel.objects.update_or_create(level=level, defaults={"name": name})
     return tiers
-
-
-def _recipe_specialization(output_name: str):
-    """The Specialization row a recipe exercises, or None (#2886)."""
-    from world.skills.models import Specialization  # noqa: PLC0415
-
-    spec_name = _RECIPE_SPECIALIZATIONS.get(output_name)
-    if spec_name is None:
-        return None
-    return Specialization.objects.filter(name=spec_name).first()
-
-
-def _ensure_recipes(check_type, tiers: dict[str, object]) -> None:
-    """The example ITEM_CREATE recipes + ingredients + skill caps."""
-    from world.items.crafting.constants import CraftingRecipeKind  # noqa: PLC0415
-    from world.items.crafting.models import (  # noqa: PLC0415
-        CraftingRecipe,
-    )
-    from world.items.models import (  # noqa: PLC0415
-        ItemTemplate,
-        MaterialCategory,
-    )
-    from world.room_features.seeds import (  # noqa: PLC0415
-        ensure_workshop_of_iniquity_kind,
-    )
-    from world.traits.models import Trait, TraitType  # noqa: PLC0415
-
-    categories: dict[str, object] = {}
-    for cat_name, cat_desc in _MATERIAL_CATEGORIES:
-        category, _created = MaterialCategory.objects.get_or_create(
-            name=cat_name, defaults={"description": cat_desc}
-        )
-        categories[cat_name] = category
-    workshop_kind = ensure_workshop_of_iniquity_kind()
-    skill_trait = Trait.objects.filter(name=COOKING_SKILL_NAME, trait_type=TraitType.SKILL).first()
-    for output_name, ingredients, workshop_gated in _RECIPE_ROWS:
-        output = ItemTemplate.objects.filter(name=output_name).first()
-        if output is None:
-            logger.warning("Recipe output template %r missing; recipe skipped.", output_name)
-            continue
-        verb = "Refine" if workshop_gated else "Cook"
-        recipe, _created = CraftingRecipe.objects.get_or_create(
-            kind=CraftingRecipeKind.ITEM_CREATE,
-            output_item_template=output,
-            defaults={
-                "name": f"{verb}: {output_name}",
-                "check_type": check_type,
-                "skill_trait": skill_trait,
-                "base_difficulty": 20 if workshop_gated else 10,
-                "specialization": _recipe_specialization(output_name),
-                "success_level_step": 10,
-                "min_success_level": 1,
-                "action_point_cost": 2,
-                "requires_station": False,
-                "required_feature_kind": workshop_kind if workshop_gated else None,
-            },
-        )
-        _ensure_recipe_ingredients(recipe, ingredients, categories)
-        _ensure_recipe_skill_caps(recipe, tiers)
-
-
-def _ensure_recipe_ingredients(recipe, ingredients, categories: dict[str, object]) -> None:
-    """The recipe's material requirements, minting any missing ingredient template."""
-    from world.items.crafting.models import CraftingMaterialRequirement  # noqa: PLC0415
-    from world.items.models import ItemTemplate  # noqa: PLC0415
-
-    for ingredient_name, quantity in ingredients:
-        ingredient, _created = ItemTemplate.objects.get_or_create(
-            name=ingredient_name,
-            defaults={
-                "description": f"PLACEHOLDER: {ingredient_name.lower()} — cooking stock.",
-                "is_active": True,
-                "material_category": categories.get(
-                    _INGREDIENT_CATEGORY.get(ingredient_name, ""),
-                ),
-            },
-        )
-        CraftingMaterialRequirement.objects.get_or_create(
-            recipe=recipe,
-            item_template=ingredient,
-            defaults={"quantity": quantity},
-        )
-
-
-def _ensure_recipe_skill_caps(recipe, tiers: dict[str, object]) -> None:
-    """The recipe's skill-value -> max-quality-tier ladder, skipping unseeded tiers."""
-    from world.items.crafting.models import CraftingSkillCap  # noqa: PLC0415
-
-    for min_skill, tier_name in _SKILL_CAP_LADDER:
-        tier = tiers.get(tier_name)
-        if tier is None:
-            continue
-        CraftingSkillCap.objects.get_or_create(
-            recipe=recipe,
-            min_skill_value=min_skill,
-            defaults={"max_quality_tier": tier},
-        )

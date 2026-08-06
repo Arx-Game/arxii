@@ -220,8 +220,16 @@ The enchant-and-attach flow for facets and styles is fully playable end-to-end.
   `CraftingNotConfigured` for any of the three — `wire_enchanting_crafting()`
   (`world/items/factories.py`) remains a separate, richer FactoryBoy chain
   (trait weight, skill-cap ladder, consequence pool) used only by tests; the
-  content repo may still upsert over the seeded rows by name. ITEM_CREATE's
-  seeded content is the #2852 provisioning cluster, unchanged.
+  content repo may still upsert over the seeded rows by name. ITEM_CREATE
+  raises nothing when no recipe exists (an empty recipe list, not a config
+  exception), so per the seeder-vs-fixture dividing line it is pure content,
+  not a seeded default: the four example recipes the #2852 provisioning
+  cluster used to hardcode (Hearty Stew, Honeyed Wine, Dream Dust, Haze) moved
+  to the lore repo in #3006 Task 4, together with their ingredient
+  `ItemTemplate`s and skill-cap ladders. `world.seeds.provisioning_checks`
+  now only ensures the Cooking check spine + QualityTier/AccentLevel ladders
+  those recipes roll against — a fresh deploy mints nothing via ITEM_CREATE
+  until the lore repo ships recipe fixtures.
 
 **Deferred to follow-up issues:**
 - ~~Item-creation pipeline (crafted items with stats, facets, fashion properties)~~ — **DONE (#2195).** `CraftingRecipeKind.ITEM_CREATE` + `ItemCreateHandler` mints a new `ItemInstance` from a recipe's `output_item_template`, with player-authored name/description, quality-scaled stats via `CraftingRecipeModifier`, `OwnershipEvent.CREATED` provenance, and physical `ObjectDB` materialization. `run_crafting_recipe` accepts `item_instance=None` for ITEM_CREATE; `build_crafting_quote` resolves by `(kind, output_template)`. `CreateItemAction` (telnet `craft create` + `POST /api/items/crafting/create/`) is the shared seam.

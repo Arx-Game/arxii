@@ -364,6 +364,7 @@
 
 ### Service Functions
 - `apply_achievement_rewards(character_sheet: 'CharacterSheet', achievement: 'Achievement') -> 'None' - Apply an achievement's rewards to a character — title / bonus / prestige / distinction`
+- `can_earn_achievements(character_sheet: 'CharacterSheet') -> 'bool' - Whether ``character_sheet`` may earn achievements at all (#3024).`
 - `get_stat(character_sheet: 'CharacterSheet', stat: 'StatDefinition') -> 'int' - Return current value of a stat tracker, 0 if it doesn't exist.`
 - `grant_achievement(achievement: 'Achievement', character_sheets: 'list[CharacterSheet]') -> 'list[CharacterAchievement]' - Grant an achievement to one or more characters simultaneously.`
 - `increment_stat(character_sheet: 'CharacterSheet', stat: 'StatDefinition', amount: 'int' = 1) -> 'int' - Increment a stat tracker (create if needed) and check for achievements.`
@@ -3684,6 +3685,7 @@
   - technique_progress_weekly <- magic.TechniqueProgressWeekly
   - purse_drain_weeks <- currency.PurseDrainWeek
   - gm_reward_trackers <- gm.GMWeeklyRewardTracker
+  - goal_journals <- goals.GoalJournal
   - journal_xp_trackers <- journals.WeeklyJournalXP
   - relationships <- relationships.CharacterRelationship
 
@@ -3905,6 +3907,7 @@
 **Foreign Keys:**
   - character -> character_sheets.CharacterSheet [FK]
   - domain -> mechanics.ModifierTarget [FK] (nullable)
+  - game_week -> game_clock.GameWeek [FK] (nullable)
 
 ### GoalRevision
 **Foreign Keys:**
@@ -3916,7 +3919,7 @@
 - `get_goal_bonus(character: 'CharacterSheet', domain: 'ModifierTarget') -> int - Get the goal bonus for a specific domain, applying percentage modifiers.`
 - `get_goal_bonuses_breakdown(character: 'CharacterSheet') -> dict[str, world.goals.types.GoalBonusBreakdown] - Get breakdown of all goal bonuses for a character.`
 - `get_total_goal_points(character: 'CharacterSheet') -> int - Get the total goal points available for a character to distribute.`
-- `log_goal_progress(*, character: 'CharacterSheet', domain: 'ModifierTarget | None', title: str, content: str, is_public: bool = False) -> 'GoalJournal' - Create a goal-progress journal entry (records 1 XP on the row).`
+- `log_goal_progress(*, character: 'CharacterSheet', domain: 'ModifierTarget | None', title: str, content: str, is_public: bool = False) -> 'GoalJournal' - Create a goal-progress journal entry and grant weekly-capped XP.`
 - `set_character_goals(*, character: 'CharacterSheet', goals: list['GoalInputData']) -> list[world.goals.models.CharacterGoal] - Replace a character's goal allocations, enforcing the weekly revision limit.`
 
 

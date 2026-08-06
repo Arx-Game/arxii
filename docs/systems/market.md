@@ -39,10 +39,15 @@ skill source**, buyer present at the shop, fee charged up front — Arx 1's
 craft-with-a-crafter's-skill loop made consensual and priced).
 `MarketServiceError.user_message` on refusals.
 
-**Honest scope note:** the codebase has no item-*minting* crafting flow
-(crafting = facet/style attachment). Ware stock therefore comes from
-existing channels (crafter-held instances); when a minting journey ships,
-listings consume it unchanged.
+**Honest scope note:** item-*minting* crafting (`ITEM_CREATE`) is a real, wired
+flow — `craft_create_item` (`world/items/services/crafting.py`) delegates to
+`run_crafting_recipe` and backs a real action (#2211/#2881). What's still
+gapped is *production data*: `ITEM_CREATE` recipes are lore-authored content
+(`CONTENT_MODELS`, #3006) with none authored yet, so a fresh deploy mints
+nothing until the lore repo ships example recipes. Ware stock in this market
+still comes from existing channels (crafter-held instances) in the meantime;
+once ITEM_CREATE recipes are authored, listings can consume minted stock
+unchanged.
 
 ## Surfaces
 

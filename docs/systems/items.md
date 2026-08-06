@@ -507,6 +507,49 @@ handler — no schema change required.
 the highest band at or below the crafter's skill rank (or `None` when no rows exist /
 skill is below every band).
 
+### Production data path (#3006)
+
+All four recipe-family models — `CraftingRecipe` (key: `name`), `CraftingSkillCap`
+(key: `recipe` + `min_skill_value`), `CraftingMaterialRequirement` (key: `recipe` +
+whichever of `item_template`/`material_category` the row's XOR branch populates —
+its own `UniqueConstraint` pair, added by this change), and `CraftingRecipeConsequence`
+(key: `recipe` + `consequence`) — carry `NaturalKeyMixin`/`NaturalKeyConfig` and are
+registered in `core_management.content_export.CONTENT_MODELS` (Task 1). The lore repo
+can now author or override any recipe, its skill caps, material requirements, and
+consequence rows via the normal `load_world_content()` fixture pipeline, the same as
+any other content model; an authored row wins over a seeded default through the
+upsert. `MaterialCategory` also gained a natural key (`name`) so
+`CraftingMaterialRequirement`'s category branch resolves portably instead of falling
+back to a raw pk.
+
+`CraftingRecipe`'s `UniqueConstraint(kind, output_item_template)` sets
+`nulls_distinct=False` (Postgres-only — the constraint drops entirely on SQLite,
+which doesn't support the option) so the null-`output_item_template` attach/cut
+kinds are actually capped at one row per kind.
+
+The three kind-keyed recipes that hard-error without a row (`FACET_ATTACH`,
+`STYLE_ATTACH`, `GEM_CUT` — `_resolve_recipe_for_run`/`_resolve_recipe_for_quote`
+raise `CraftingNotConfigured` on `DoesNotExist`) get a seeded default from
+`CONFIG_PREREQUISITES["crafting"]` (`world.seeds.config_prerequisites._crafting_rows`,
+Task 2) — it runs **before** the content load (ADR-0171), so a fresh deploy is never
+`CraftingNotConfigured` even with zero lore fixtures. All three resolve against one
+shared "Enchanting" `CheckType` (matching the name the test-only
+`wire_enchanting_crafting` factory chain uses); the facet reagent default
+(`ensure_facet_attach_reagent_requirement`, previously orphaned since #707) is wired
+into the same prerequisite so `FACET_ATTACH` ships with a real material cost. The
+seeded rows carry no `CheckTypeTrait` composition — that's content, authored
+lore-side — so checks resolve but roll flat until the trait weights land.
+
+The four example `ITEM_CREATE` recipes that used to be hardcoded in
+`world.seeds.provisioning_checks` (Hearty Stew, Honeyed Wine, Dream Dust, Haze) —
+plus their ingredient `ItemTemplate`s and skill-cap ladders — moved to the lore
+repo (Task 4): `ITEM_CREATE` raises nothing when no recipe exists (an empty recipe
+list, not a config exception), so per the seeder-vs-fixture dividing line
+(#2882/#3006) it belongs in content, not a seeded default.
+`provisioning_checks.seed_provisioning_content()` now only ensures the Cooking
+check spine (skill + CheckType + Brewing specialization) and the QualityTier/
+AccentLevel ladders those recipes roll against.
+
 ### FACET_ATTACH reagent content (#707)
 
 `world.items.seeds_facet_reagents.ensure_facet_attach_reagent_requirement(recipe)`
@@ -520,9 +563,10 @@ fashion-item facet attachment share the one FACET_ATTACH recipe) cost a real mat
 Per ADR-0087's rejected-alternative note, FACET_ATTACH reagents stay exact-template
 matching (no touchstone-mode) — attaching a facet to someone else's garment isn't a
 personal-resonance act. Proven end-to-end by
-`world/items/tests/test_facet_attach_material_e2e.py`; the seed helper is not yet
-invoked from a production content loader (framework-proving scope only, mirroring the
-touchstone/reagent seeds in `world.magic`).
+`world/items/tests/test_facet_attach_material_e2e.py`; the seed helper is now wired
+into a production path — `CONFIG_PREREQUISITES["crafting"]` calls it against the
+seeded FACET_ATTACH default row (#3006 Task 2, see "Production data path" above) —
+rather than the test-only call site this note originally described.
 
 ### Handler Registry (`crafting/registry.py`, `crafting/handlers.py`)
 
