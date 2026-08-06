@@ -84,11 +84,13 @@ Two callers deliberately create UNCOVERED rows and must keep doing so, because t
   you a lead, not the answer;
 - `CodexTeachingOffer.accept` — the learner has paid AP and now has to make progress.
 
-**Not yet wired: achievements.** `CodexEntry` does not inherit
-`world.achievements.models.DiscoverableContent` (Technique, ComboDefinition and
-SignatureMotifBonus do), so no codex entry can carry a `discovery_achievement`, and
-nothing calls `announce_access_change` or `increment_stat` for codex knowledge.
-`grant_codex_entry` is the seam that would carry it.
+**Wired to achievements (#2899).** `CodexEntry` inherits
+`world.achievements.models.DiscoverableContent` (a nullable `discovery_achievement` FK),
+so a codex entry can carry a discovery achievement the same way Technique and
+CovenantRole do. `grant_codex_entry` is the seam that carries it: on `newly_known` it
+calls `announce_access_change` (gated on a live, non-staff `RosterTenure` and excluded
+for CG-catalog content — see `world/achievements/CLAUDE.md` for the full mechanism) and
+increments the `codex.entries_learned` `StatDefinition`.
 
 ---
 

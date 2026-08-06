@@ -10,6 +10,7 @@ from world.codex.factories import (
     BeginningsCodexGrantFactory,
     CodexEntryFactory,
 )
+from world.codex.models import CodexEntry
 from world.conditions.factories import CapabilityTypeFactory
 from world.magic.factories import PathGiftGrantFactory, TechniqueFactory
 from world.narrative.constants import NarrativeCategory
@@ -361,17 +362,25 @@ class AnnounceAccessChangeCgCatalogExclusionTest(TestCase):
         numeric pk (different tables, independent auto-increment counters) must not
         cross-contaminate the exclusion set (#2899 fix-round).
 
-        The in-memory pk override below simulates the collision deterministically — the
-        entry's real DB row keeps its own actual pk untouched, only the local Python
-        object's `.pk` attribute (which is all `_cg_catalog_exclusions` and the loop guard
-        ever look at) is forced to match the catalog technique's pk.
+        The colliding ``CodexEntry`` is built with ``CodexEntry()`` — a bare constructor
+        call with no pk supplied — and only THEN has `.pk` set to force the collision.
+        Evennia's idmapper (`SharedMemoryModelBase.__call__`) only registers an instance
+        in the class-wide instance cache when a pk can be inferred from the constructor
+        args/kwargs; with none supplied here, `_get_cache_key` returns None and the
+        instance is built without ever touching the cache, so it is never saved and never
+        cached under any key. Mutating `.pk` on a live, DB-created instance (which idmapper
+        already cached under its real pk) would instead leave a stale cache entry that
+        outlives this test's transaction rollback — that unsafe pattern is what this
+        replaces.
         """
         catalog_ach = AchievementFactory(hidden=True)
         catalog_tech = TechniqueFactory(discovery_achievement=catalog_ach)
         PathGiftGrantFactory(gift=catalog_tech.gift).starter_techniques.add(catalog_tech)
 
         entry_ach = AchievementFactory(hidden=True)
-        entry = CodexEntryFactory(discovery_achievement=entry_ach)
+        entry = CodexEntry()
+        entry.discovery_achievement = entry_ach
+        entry.name = "Colliding Entry"
         entry.pk = catalog_tech.pk
 
         sheet = self._tenured_sheet()
