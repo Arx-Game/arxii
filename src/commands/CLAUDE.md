@@ -69,12 +69,13 @@ actions, backends, and service functions.
   (`secure <container>=<open|friends|owner_only>`) — the #1909 physical-currency
   interplay commands.
 - **`evennia_overrides/exit_command.py`**: `CmdExit` (dynamic exit traversal)
-- **`crafting.py`**: `CmdCraft` (`craft`, #1866) — the telnet face of facet/style
-  crafting. One `ArxCommand` parses `craft facet <name> item=<id>`,
-  `craft removefacet <item_facet id>`, `craft style <name> item=<id>`,
-  `craft quote facet=<name>|style=<name> item=<id>` and calls `AttachFacetAction`/
-  `DetachFacetAction`/`AttachStyleAction` directly (`actions/definitions/crafting.py`)
-  — the same seam `ItemFacetViewSet`/`ItemStyleCraftViewSet` now dispatch through.
+- **`crafting.py`**: `CmdCraft` (`craft`, #1866, gem cut added #3006 Task 3) — the
+  telnet face of facet/style/gem crafting. One `ArxCommand` parses `craft facet
+  <name> item=<id>`, `craft removefacet <item_facet id>`, `craft style <name>
+  item=<id>`, `craft quote facet=<name>|style=<name> item=<id>`, and `craft cut
+  item=<id>`, calling `AttachFacetAction`/`DetachFacetAction`/`AttachStyleAction`/
+  `CutGemAction` directly (`actions/definitions/crafting.py`) — the same seam
+  `ItemFacetViewSet`/`ItemStyleCraftViewSet`/`GemCutViewSet` now dispatch through.
   No business logic in the command.
 - **`investigation.py`**: `CmdSearch` (`search`, alias `investigate`, #1866) — a bare
   telnet delegate to the pre-existing `SearchAction` (`actions/definitions/

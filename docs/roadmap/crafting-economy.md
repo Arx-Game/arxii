@@ -129,6 +129,15 @@ The enchant-and-attach flow for facets and styles is fully playable end-to-end.
 - **Gem cutting (Build 0b, slice 3) — DONE.** `cut_gem()` reuses a `GEM_CUT` `CraftingRecipe` +
   `perform_check` (skill feeds the roll) and resolves `success_level` to an improved cut `GemGrade`;
   a botch **shatters** the stone. The risky value-add axis, kept in the crafting family.
+  **Player-reachable (#3006 Task 3) — DONE.** `CutGemAction` (key `cut_gem`, REGISTRY,
+  `OwnsItemInstancePrerequisite` — the gem must be a held `ItemInstance`) is the shared
+  `action.run()` seam; `GET/POST /api/items/gem-cuts/` + `GET .../quote/`
+  (`GemCutViewSet`, mirrors `ItemFacetViewSet`/`ItemStyleCraftViewSet`) is the web face,
+  and `craft cut item=<id>` (`CmdCraft`) the telnet one. The quote reports `ap_cost` /
+  `base_difficulty` / `min_success_level` plus an explicit shatter-risk sentence — a
+  botch deletes the gem — before the player commits. Market service-craft (cutting a
+  catalog-row gem never yet minted as a held instance) stays out of scope; see
+  `CutGemAction`'s docstring.
 
 - **Risky adornment prying (Build 0b, slice 6) — DONE.** `pry_adornment()` completes the adornment
   lifecycle: a risky `perform_check` removes a set gem — freed to the pryer on success, **shattered**
@@ -200,18 +209,25 @@ The enchant-and-attach flow for facets and styles is fully playable end-to-end.
   (costs, affordability, skill-capped max tier, failure risk) with no mutation;
   exposed as `GET /api/items/item-facets/quote/` and `GET /api/items/item-styles/quote/`.
 
-- **Test-wired only, NOT seeded** (corrected 2026-08-01, #2878 verify pass):
-  `wire_enchanting_crafting()` is a FactoryBoy chain in `world/items/factories.py`
-  referenced solely by test setUp — no `world/seeds/` cluster calls it. FACET_ATTACH,
-  STYLE_ATTACH, and GEM_CUT recipes have **no production seed path**; only
-  ITEM_CREATE has seeded content (the #2852 provisioning cluster). A live deployment
-  raises `CraftingNotConfigured` for the other three kinds until content lands.
+- **Kind-keyed production seed rows** (corrected 2026-08-06, #3006 Task 2 —
+  supersedes the 2026-08-01 "no production seed path" note below).
+  `CONFIG_PREREQUISITES["crafting"]` (`world.seeds.config_prerequisites`) now
+  `get_or_create`s a name-stable, natural-keyed `CraftingRecipe` floor row for
+  each of FACET_ATTACH, STYLE_ATTACH, and GEM_CUT (a shared "Enchanting"
+  `CheckType`, `base_difficulty=0`, `min_success_level=1`), runs before the
+  content load, and re-attaches `check_type` on an `if created:`-trap
+  fixture-supplied row. A fresh deploy therefore no longer raises
+  `CraftingNotConfigured` for any of the three — `wire_enchanting_crafting()`
+  (`world/items/factories.py`) remains a separate, richer FactoryBoy chain
+  (trait weight, skill-cap ladder, consequence pool) used only by tests; the
+  content repo may still upsert over the seeded rows by name. ITEM_CREATE's
+  seeded content is the #2852 provisioning cluster, unchanged.
 
 **Deferred to follow-up issues:**
 - ~~Item-creation pipeline (crafted items with stats, facets, fashion properties)~~ — **DONE (#2195).** `CraftingRecipeKind.ITEM_CREATE` + `ItemCreateHandler` mints a new `ItemInstance` from a recipe's `output_item_template`, with player-authored name/description, quality-scaled stats via `CraftingRecipeModifier`, `OwnershipEvent.CREATED` provenance, and physical `ObjectDB` materialization. `run_crafting_recipe` accepts `item_instance=None` for ITEM_CREATE; `build_crafting_quote` resolves by `(kind, output_template)`. `CreateItemAction` (telnet `craft create` + `POST /api/items/crafting/create/`) is the shared seam.
-- Telnet crafting action — **DONE (#1866).** `CmdCraft`
-  (`src/commands/crafting.py`) drives facet attach/detach + style attach
-  through `AttachFacetAction`/`DetachFacetAction`/`AttachStyleAction`
+- Telnet crafting action — **DONE (#1866, gem cut added #3006 Task 3).** `CmdCraft`
+  (`src/commands/crafting.py`) drives facet attach/detach + style attach + gem cut
+  through `AttachFacetAction`/`DetachFacetAction`/`AttachStyleAction`/`CutGemAction`
   (distinct from the #1234 `station` command, which manages the station,
   not the craft itself).
 

@@ -104,6 +104,17 @@ class CmdCraftTests(TestCase):
         assert mocked.call_args.kwargs["style"] == style
         assert mocked.call_args.kwargs["item_instance"] == instance
 
+    def test_craft_cut_dispatches_cut_gem_action(self):
+        caller, item_obj, instance = self._make_caller_with_item()
+        caller.search = MagicMock(return_value=item_obj)
+        with patch("commands.crafting.CutGemAction.run") as mocked:
+            from actions.types import ActionResult
+
+            mocked.return_value = ActionResult(success=True, message="Cut.")
+            self._run(caller, f"cut item={item_obj.id}")
+        mocked.assert_called_once()
+        assert mocked.call_args.kwargs["item_instance"] == instance
+
     def test_craft_quote_calls_build_crafting_quote(self):
         caller, item_obj, _instance = self._make_caller_with_item()
         from world.magic.models import Facet

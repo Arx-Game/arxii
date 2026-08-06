@@ -786,14 +786,29 @@ domain-specific result dataclasses.
 `compute_quality_score(check_result, *, step, min_success_level) -> int` is co-located
 here (imported by `crafting/quality.py`).
 
-### Telnet + Action layer (#1866)
+### Telnet + Action layer (#1866, gem cut added #3006 Task 3)
 
 `AttachFacetAction`/`DetachFacetAction`/`AttachStyleAction`
 (`actions/definitions/crafting.py`) wrap `craft_attach_facet`/
 `remove_facet_from_item`/`craft_attach_style`; `ItemFacetViewSet`/
 `ItemStyleCraftViewSet` dispatch through them (closing the ADR-0001
 web-bypasses-actions gap), and telnet `CmdCraft` (`craft
-facet/removefacet/style/quote`) reaches the same seam.
+facet/removefacet/style/quote/cut`) reaches the same seam.
+
+`CutGemAction` (key `cut_gem`, same file) wraps `world.items.gems.services.cut_gem`
+directly — it does **not** go through `run_crafting_recipe`/the handler registry;
+gem cutting is a single skill-check-and-resolve with no attach/create handler, no
+consequence pool, and no material staging. It resolves the `GEM_CUT`
+`CraftingRecipe` via the same `_resolve_recipe_for_run` seam `run_crafting_recipe`
+uses. `GemCutViewSet` (`GET/POST /api/items/gem-cuts/`, `GET .../quote/`) mirrors
+`ItemFacetViewSet`/`ItemStyleCraftViewSet`'s create+quote shape; the quote uses the
+bespoke `build_gem_cut_quote` (`world.items.gems.services`), not
+`build_crafting_quote` — the generic quote's material/skill-cap/consequence-pool
+shape doesn't apply, and the quote's job here is mainly to surface the shatter-risk
+sentence before the player commits. `OwnsItemInstancePrerequisite` gates the target
+(a held `ItemInstance`); `NotAGem`/`CraftingNotConfigured`/`CraftingCostUnaffordable`
+map to failure results. Market service-craft (cutting a catalog-row gem never yet
+minted as a held instance) is out of scope.
 
 ### Quote Endpoint (`crafting/services.py` + `views.py`)
 

@@ -29,6 +29,7 @@ from world.character_sheets.models import CharacterSheet
 from world.items.exceptions import (
     CraftingNotConfigured,
     ItemError,
+    NotAGem,
 )
 from world.items.filters import (
     FashionPresentationFilter,
@@ -60,6 +61,9 @@ from world.items.serializers import (
     FacetCraftResultSerializer,
     FashionJudgementSerializer,
     FashionPresentationSerializer,
+    GemCutQuoteSerializer,
+    GemCutResultSerializer,
+    GemCutWriteSerializer,
     InteractionTypeSerializer,
     ItemFacetReadSerializer,
     ItemFacetWriteSerializer,
@@ -150,6 +154,30 @@ class ItemFacetWritePermission(PlayerOrStaffPermission):
 
 class ItemStyleWritePermission(PlayerOrStaffPermission):
     """Allow style-attach only if the user owns the item_instance, or is staff."""
+
+    def has_permission_for_player(self, request: Request, view: APIView) -> bool:
+        # POST: check the item_instance the request is targeting.
+        if request.method == "POST":
+            instance_pk = request.data.get("item_instance")
+            if instance_pk is None:
+                return True
+            user = cast(AccountDB, request.user)
+            return ItemInstance.objects.filter(
+                pk=instance_pk,
+                holder_character_sheet_id__in=RosterEntry.objects.for_account(user).values(
+                    "character_sheet_id"
+                ),
+            ).exists()
+        return True
+
+    def has_object_permission_for_player(
+        self, request: Request, view: APIView, obj: object
+    ) -> bool:
+        return True
+
+
+class GemCutWritePermission(PlayerOrStaffPermission):
+    """Allow a gem-cut attempt only if the user holds the item_instance, or is staff."""
 
     def has_permission_for_player(self, request: Request, view: APIView) -> bool:
         # POST: check the item_instance the request is targeting.
@@ -1619,6 +1647,75 @@ class ItemStyleCraftViewSet(viewsets.ViewSet):
         except CraftingNotConfigured as exc:
             raise serializers.ValidationError({"non_field_errors": [exc.user_message]}) from exc
         return Response(CraftingQuoteSerializer(quote).data)
+
+
+@extend_schema(tags=["items"])
+class GemCutViewSet(viewsets.ViewSet):
+    """ViewSet for gem cutting: POST rolls the check and cuts a held gem.
+
+    Mirrors ``ItemFacetViewSet.create``/``ItemStyleCraftViewSet.create`` —
+    validates ``item_instance`` ownership, dispatches through ``CutGemAction``,
+    and returns the outcome (new grade + worth, or shatter + worth lost). See
+    ``CutGemAction`` for why cutting a market catalog-row gem (never yet minted
+    as a held ``ItemInstance``) is out of scope.
+    """
+
+    http_method_names = ["get", "post", "head", "options"]
+    permission_classes = [GemCutWritePermission]
+    serializer_class = GemCutResultSerializer
+
+    @extend_schema(request=GemCutWriteSerializer, responses=GemCutResultSerializer)
+    def create(self, request: Request) -> Response:
+        """Roll the GEM_CUT check and cut the gem, via the Action."""
+        from actions.definitions.crafting import CutGemAction  # noqa: PLC0415
+
+        serializer = GemCutWriteSerializer(data=request.data, context={"request": request})
+        serializer.is_valid(raise_exception=True)
+        item_instance = serializer.validated_data["item_instance"]
+        actor = item_instance.holder_character_sheet.character
+        action_result = CutGemAction().run(actor=actor, item_instance=item_instance)
+        if not action_result.success:
+            raise serializers.ValidationError({"non_field_errors": [action_result.message]})
+        result = action_result.data["result"]
+        return Response(GemCutResultSerializer(result).data, status=200)
+
+    @extend_schema(
+        responses=GemCutQuoteSerializer,
+        parameters=[
+            OpenApiParameter(
+                name="item_instance",
+                type=OpenApiTypes.INT,
+                location=OpenApiParameter.QUERY,
+                required=True,
+                description="ItemInstance pk (a held gem) to quote a cut attempt for.",
+            ),
+        ],
+    )
+    @action(detail=False, methods=[HTTPMethod.GET], url_path="quote")
+    def quote(self, request: Request) -> Response:
+        """Return a read-only cost+shatter-risk quote for cutting a gem (no mutation)."""
+        from world.items.gems.services import build_gem_cut_quote  # noqa: PLC0415
+
+        user = cast(AccountDB, request.user)
+        instance_pk = _parse_int_param(request.query_params.get("item_instance"))  # noqa: USE_FILTERSET
+        if instance_pk is None:
+            raise serializers.ValidationError({"item_instance": REQUIRED_QUERY_PARAM_MESSAGE})
+        try:
+            item_instance = ItemInstance.objects.select_related(
+                "holder_character_sheet__character"
+            ).get(pk=instance_pk)
+        except ItemInstance.DoesNotExist as exc:
+            raise NotFound from exc
+        if not user.is_staff and not _user_holds_item(user, item_instance):
+            raise NotFound
+        if item_instance.gem_or_none is None:
+            raise serializers.ValidationError({"non_field_errors": [NotAGem.user_message]})
+        crafter_character = item_instance.holder_character_sheet.character
+        try:
+            quote = build_gem_cut_quote(crafter_character=crafter_character)
+        except CraftingNotConfigured as exc:
+            raise serializers.ValidationError({"non_field_errors": [exc.user_message]}) from exc
+        return Response(GemCutQuoteSerializer(quote).data)
 
 
 @extend_schema(tags=["items"])

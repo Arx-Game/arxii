@@ -23,6 +23,8 @@ from actions.prerequisites import (
     Prerequisite,
 )
 from actions.types import ActionResult, TargetType
+from world.items.crafting.constants import CraftingRecipeKind
+from world.items.crafting.services import _resolve_recipe_for_run
 from world.items.exceptions import (
     CraftingCostUnaffordable,
     CraftingNotConfigured,
@@ -34,6 +36,7 @@ from world.items.exceptions import (
     StyleAlreadyAttached,
     StyleCapacityExceeded,
 )
+from world.items.gems.services import cut_gem
 from world.items.services.crafting import craft_attach_facet, craft_attach_style, craft_create_item
 from world.items.services.facets import remove_facet_from_item
 from world.roster.selectors import get_account_for_character
@@ -96,6 +99,62 @@ class AttachFacetAction(Action):
         except _CRAFT_EXCEPTIONS as exc:
             return ActionResult(success=False, message=exc.user_message)
         return ActionResult(success=True, data={"result": result})
+
+
+@dataclass
+class CutGemAction(Action):
+    """Roll the GEM_CUT crafting recipe and cut a held gem (Build 0b slice 3, #3006 Task 3).
+
+    Consumes ``cut_gem`` (``world.items.gems.services``) directly, not
+    ``run_crafting_recipe`` — gem cutting is a single skill-check-and-resolve with
+    no attach/create handler, no consequence pool, and no material staging, so it
+    doesn't share the generic FACET_ATTACH/STYLE_ATTACH/ITEM_CREATE handler shape.
+    Resolves the ``GEM_CUT`` recipe through the same ``_resolve_recipe_for_run``
+    seam ``run_crafting_recipe`` uses, so the Task 2 seeded default row
+    (``CONFIG_PREREQUISITES["crafting"]``) is what makes a fresh deploy playable —
+    without it, a missing recipe fails clean via ``CraftingNotConfigured`` rather
+    than there being no way at all to cut a gem.
+
+    Market service-craft (cutting a catalog-row gem that has never been minted
+    as an ``ItemInstance``) is deliberately out of scope: like
+    ``AttachFacetAction``, this action only ever targets an already-minted,
+    actor-held instance. A market-side cut would need its own catalog-row
+    target resolution and is a separable surface, not a variant of this one.
+    """
+
+    key: str = "cut_gem"
+    name: str = "Cut Gem"
+    icon: str = "gem"
+    category: str = "items"
+    target_type: TargetType = TargetType.SELF
+
+    def get_prerequisites(self) -> list[Prerequisite]:
+        return [OwnsItemInstancePrerequisite()]
+
+    def execute(
+        self,
+        actor: ObjectDB,
+        context: ActionContext | None = None,
+        **kwargs: Any,
+    ) -> ActionResult:
+        item_instance: ItemInstance | None = kwargs.get("item_instance")
+        if item_instance is None:
+            return ActionResult(success=False, message="Cut what gem?")
+        try:
+            recipe = _resolve_recipe_for_run(kind=CraftingRecipeKind.GEM_CUT)
+            result = cut_gem(
+                gem_instance=item_instance,
+                crafter_character=actor,
+                recipe=recipe,
+            )
+        except _CRAFT_EXCEPTIONS as exc:
+            return ActionResult(success=False, message=exc.user_message)
+        if result.shattered:
+            message = f"The stone shatters! You lose {result.worth_lost} coppers of worth."
+        else:
+            grade_label = result.new_cut_grade.label if result.new_cut_grade else "cut"
+            message = f"The cut improves to {grade_label}, now worth {result.worth} coppers."
+        return ActionResult(success=True, message=message, data={"result": result})
 
 
 @dataclass

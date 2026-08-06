@@ -14,6 +14,7 @@ from actions.definitions.crafting import (
     AttachFacetAction,
     AttachStyleAction,
     CreateItemAction,
+    CutGemAction,
     DetachFacetAction,
 )
 from commands.command import ArxCommand
@@ -22,7 +23,7 @@ from commands.exceptions import CommandError
 _USAGE = (
     "Usage: craft facet <name> item=<id> | craft removefacet <item_facet_id> | "
     "craft style <name> item=<id> | craft quote facet=<name>|style=<name> item=<id> | "
-    "craft create <template>=<custom name>, <custom description>"
+    "craft create <template>=<custom name>, <custom description> | craft cut item=<id>"
 )
 
 
@@ -74,6 +75,7 @@ class CmdCraft(ArxCommand):
             "style": self._do_style,
             "quote": self._do_quote,
             "create": self._do_create,
+            "cut": self._do_cut,
         }.get(subverb)
         if handler is None:
             self.msg(f"Unknown craft action '{subverb}'. {_USAGE}")
@@ -183,6 +185,13 @@ class CmdCraft(ArxCommand):
             f"Cost: {quote.costs}. Affordable: {quote.affordable}. "
             f"Max quality tier: {quote.max_quality_tier}."
         )
+
+    def _do_cut(self, rest: str) -> None:
+        kwargs = _parse_kwargs(rest)
+        item_instance = self._resolve_item_instance(kwargs.get("item", ""))
+        result = CutGemAction().run(actor=self.caller, item_instance=item_instance)
+        if result.message:
+            self.msg(result.message)
 
     def _do_create(self, rest: str) -> None:
         from world.items.models import ItemTemplate  # noqa: PLC0415

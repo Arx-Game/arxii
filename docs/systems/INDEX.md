@@ -4324,7 +4324,16 @@ holder is never notified a claim exists.
     and resolves `success_level` **directly to an improved cut `GemGrade`** (`resolve_cut_grade` —
     no `QualityTier` detour, since the framework's outcome type doesn't fit a gem grade). A botch
     (`success_level < min`) **shatters** the stone (deleted); success advances the cut ladder and
-    worth recomputes. Returns `CutResult`. Deferred: a hard skill-value cap (`CraftingSkillCap`
+    worth recomputes. Returns `CutResult`. **Player-reachable (#3006 Task 3):** `CutGemAction`
+    (key `cut_gem`, `actions/definitions/crafting.py`) wraps `cut_gem` directly — not
+    `run_crafting_recipe`/the handler registry, since gem cutting has no attach/create
+    handler, consequence pool, or material staging — resolving the `GEM_CUT` recipe via
+    the same `_resolve_recipe_for_run` seam `run_crafting_recipe` uses (the Task 2 seeded
+    default row is what makes a fresh deploy playable). `GemCutViewSet`
+    (`GET/POST /api/items/gem-cuts/`, `GET .../quote/`) mirrors `ItemFacetViewSet`/
+    `ItemStyleCraftViewSet`; the quote (`build_gem_cut_quote`) reports AP cost/difficulty
+    plus an explicit shatter-risk sentence before the player commits. Telnet: `craft cut
+    item=<id>` (`CmdCraft`). Deferred: a hard skill-value cap (`CraftingSkillCap`
     style) and the consequence-pool narrative outcomes; risky adornment prying reuses this shatter
     spine.
   - **Gem mining engine** (`world.items.gems.mining.roll_gem_haul`, Build 0b slice 4) — the pure,
@@ -4554,8 +4563,9 @@ holder is never notified a claim exists.
   - `GET /api/items/inventory/` — read-only inventory list (`.in_play()` filtered)
   - `POST /api/items/inventory/<pk>/use/` — use item; owner-or-staff gated; returns
     `UseItemResult` (`charges_remaining`, `consumed`, `result_text`); `ItemError` → HTTP 400
-- **Telnet (#1866):** `CmdCraft` (`craft`, `commands/crafting.py`) drives facet/style
-  attach-detach through `AttachFacetAction`/`DetachFacetAction`/`AttachStyleAction`
+- **Telnet (#1866, gem cut #3006 Task 3):** `CmdCraft` (`craft`, `commands/crafting.py`) drives
+  facet/style attach-detach + gem cut (`craft cut item=<id>`) through
+  `AttachFacetAction`/`DetachFacetAction`/`AttachStyleAction`/`CutGemAction`
   (`actions/definitions/crafting.py`); `CmdOutfit` (`outfit`, `commands/outfit.py`)
   drives outfit CRUD through `SaveOutfitAction`/`RenameOutfitAction`/
   `DeleteOutfitAction`/`AddOutfitSlotAction`/`RemoveOutfitSlotAction`

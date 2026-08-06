@@ -230,3 +230,55 @@ def cut_gem(
     return CutResult(
         shattered=False, new_cut_grade=new_cut, worth=compute_gem_worth(gem), worth_lost=0
     )
+
+
+#: Surfaced to the player at quote time — before the attempt, since ``cut_gem``
+#: deletes the stone outright on a botch (#3006 Task 3).
+GEM_CUT_SHATTER_RISK_MESSAGE = (
+    "A botched cut shatters the stone outright: you lose the gem and its worth."
+)
+
+
+@dataclass(frozen=True)
+class GemCutQuote:
+    """Read-only cost + shatter-risk snapshot for a potential ``cut_gem`` attempt.
+
+    Deliberately not ``world.items.crafting.services.CraftingQuote`` — ``cut_gem``
+    bypasses ``run_crafting_recipe`` entirely (no material staging, no
+    consequence pool), so the generic quote's materials/failure-risk-pool shape
+    doesn't apply. This is the bespoke, much smaller snapshot cut_gem's own risk
+    profile needs.
+    """
+
+    ap_cost: int
+    ap_have: int
+    base_difficulty: int
+    min_success_level: int
+    affordable: bool
+    shatter_risk_message: str
+
+
+def build_gem_cut_quote(*, crafter_character: ObjectDB) -> GemCutQuote:
+    """Return a read-only cost+risk snapshot for cutting a gem (no mutation).
+
+    Resolves the ``GEM_CUT`` recipe via the same ``_resolve_recipe_for_quote``
+    seam ``build_crafting_quote`` uses (Task 2 seeds the floor row), and reports
+    the AP cost/difficulty alongside the shatter-risk sentence a player must see
+    before committing. Raises ``CraftingNotConfigured`` if the recipe is
+    missing or has no ``check_type``.
+    """
+    from world.action_points.models import ActionPointPool  # noqa: PLC0415
+    from world.items.crafting.constants import CraftingRecipeKind  # noqa: PLC0415
+    from world.items.crafting.services import _resolve_recipe_for_quote  # noqa: PLC0415
+
+    recipe = _resolve_recipe_for_quote(kind=CraftingRecipeKind.GEM_CUT)
+    pool = ActionPointPool.get_or_create_for_character(crafter_character)
+    ap_have = pool.current if pool is not None else 0
+    return GemCutQuote(
+        ap_cost=recipe.action_point_cost,
+        ap_have=ap_have,
+        base_difficulty=recipe.base_difficulty,
+        min_success_level=recipe.min_success_level,
+        affordable=ap_have >= recipe.action_point_cost,
+        shatter_risk_message=GEM_CUT_SHATTER_RISK_MESSAGE,
+    )
