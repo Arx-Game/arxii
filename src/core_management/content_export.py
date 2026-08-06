@@ -607,7 +607,17 @@ def export_single_row(instance, *, content_root: Path) -> RowExportResult:
     model = type(instance)
     model_name = model.__name__.lower()
     model_label = f"{domain_of(model)}.{model_name}"
-    if model_label not in CONTENT_MODELS and model_label not in MARKDOWN_EXPORT_DOMAINS:
+    # Defense-in-depth against a path-traversal taint finding (pythonsecurity:S2083):
+    # re-derive the label by looking it up IN the allowlist constants themselves,
+    # rather than trusting the string built above. `canonical` is then a value that
+    # provably originates from CONTENT_MODELS/MARKDOWN_EXPORT_DOMAINS, not from
+    # `model`/`instance`, so every path segment derived from it below breaks the
+    # taint chain a static analyzer traces back to the request - not just a
+    # runtime membership check, but a guarantee visible to taint analysis too.
+    canonical = next((known for known in CONTENT_MODELS if known == model_label), None)
+    if canonical is None:
+        canonical = next((known for known in MARKDOWN_EXPORT_DOMAINS if known == model_label), None)
+    if canonical is None:
         return RowExportResult(
             [],
             False,
@@ -615,6 +625,8 @@ def export_single_row(instance, *, content_root: Path) -> RowExportResult:
             "",
             refused=(f"{model.__name__} is not a content model; the content repo does not own it."),
         )
+    model_label = canonical
+    canonical_domain, _, canonical_name = canonical.partition(".")
     predicate = EXPORT_FILTERS.get(model_label)
     if predicate is not None and not model.objects.filter(pk=instance.pk, **predicate).exists():
         return RowExportResult(
@@ -641,6 +653,9 @@ def export_single_row(instance, *, content_root: Path) -> RowExportResult:
         for v in ([record["fields"].get(f) for f in key_fields] if key_fields else [instance.pk])
     )
 
+    # spec["domain"]/content_slug() are hardcoded allowlist constants and a
+    # sanitized slug respectively, not request-derived - the markdown path is
+    # already taint-safe without further changes here.
     spec = MARKDOWN_EXPORT_DOMAINS.get(model_label)
     if spec is not None:
         out_path = _markdown_entry_path(content_root, spec, record["fields"])
@@ -649,8 +664,11 @@ def export_single_row(instance, *, content_root: Path) -> RowExportResult:
         out_path.write_text(render_entry_markdown(record["fields"], spec), encoding="utf-8")
         return RowExportResult([out_path], is_addition, model_label, key_display)
 
-    out_dir = content_root / "fixtures" / domain_of(model)
-    out_path = out_dir / f"{model_name}.json"
+    # Path segments below come from `canonical` (allowlist-derived), not from
+    # `domain_of(model)`/`model_name` (model-class-derived), so the sink is
+    # anchored to the allowlist rather than to `model`.
+    out_dir = content_root / "fixtures" / canonical_domain
+    out_path = out_dir / f"{canonical_name}.json"
     # Case-folded comparison throughout (_record_key_folded, not _record_key):
     # this is a read-modify-write merge against one file, and the loader
     # matches natural keys case-insensitively (#2687) - see that helper's
