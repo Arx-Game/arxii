@@ -4,9 +4,7 @@ from django.db import migrations, models
 
 
 class Migration(migrations.Migration):
-    dependencies = [
-        ("arxii", "0108_codexentry_discovery_achievement"),
-    ]
+    dependencies = [("arxii", "0116_codexentry_discovery_achievement")]
 
     operations = [
         migrations.AlterField(

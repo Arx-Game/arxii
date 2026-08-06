@@ -5,9 +5,7 @@ import django.db.models.deletion
 
 
 class Migration(migrations.Migration):
-    dependencies = [
-        ("arxii", "0107_credit_authoring_domain_models"),
-    ]
+    dependencies = [("arxii", "0115_remove_equippeditem_revealed_at_and_more")]
 
     operations = [
         migrations.AddField(
