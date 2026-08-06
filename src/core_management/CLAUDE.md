@@ -147,6 +147,18 @@ checkout directly, no Django and no database, the same contract
 `content_health.py` keeps: `uv run python tools/prose_report.py
 [--content-path /path/to/checkout]`.
 
+`prose_fields.py`'s `prose_fields_for(model)` is promoted production code, not
+test-only: it is the shared classification the Authoring Workbench's backlog
+scan, row editor, related-entries/mentions search, and reference search
+(`web.admin.authoring`, #3019) all call directly, alongside the original
+`test_prose_credits` coverage guard - the Django-free-import contract on the
+rest of this module is preserved since `prose_fields_for` defers its own
+`django.db.models` import inside the function body. `core.app_domains
+.credited_content_models()` (sorted, concrete `CreditedContent` subclasses)
+is the workbench's iteration set, and is deliberately broader than
+`CONTENT_MODELS` above - see that module and `src/web/admin/CLAUDE.md`'s
+"Authoring Workbench" section.
+
 ## Load conflicts (#3017, ADR-0201)
 
 A credited row (`written_by` set) whose incoming corpus value differs from what's on disk is
