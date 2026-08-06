@@ -6,6 +6,9 @@ from web.admin import arx_admin_site
 from web.admin.authoring.views import (
     authoring_dashboard,
     authoring_editor,
+    authoring_editor_credit,
+    authoring_editor_review,
+    authoring_editor_save,
     authoring_queue_fragment,
     authoring_setup,
     authoring_stats_fragment,
@@ -140,6 +143,17 @@ urlpatterns = [
     path("_authoring/stats/", authoring_stats_fragment, name="admin_authoring_stats"),
     path("_authoring/queue/", authoring_queue_fragment, name="admin_authoring_queue"),
     path("_authoring/editor/", authoring_editor, name="admin_authoring_editor"),
+    path("_authoring/editor/save/", authoring_editor_save, name="admin_authoring_editor_save"),
+    path(
+        "_authoring/editor/credit/",
+        authoring_editor_credit,
+        name="admin_authoring_editor_credit",
+    ),
+    path(
+        "_authoring/editor/review/",
+        authoring_editor_review,
+        name="admin_authoring_editor_review",
+    ),
     path("_authoring/setup/", authoring_setup, name="admin_authoring_setup"),
     path("", arx_admin_site.urls),
 ]
