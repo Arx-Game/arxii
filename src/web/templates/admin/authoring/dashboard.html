@@ -23,6 +23,11 @@
   <section class="tuning-panel" id="authoring-editor">
     <p>Select a row from the queue below to start editing.</p>
   </section>
+
+  <section class="tuning-panel" id="panel-authoring-reference"
+           hx-get="{% url 'admin_authoring_reference' %}" hx-trigger="load">
+    <p>Loading reference search&hellip;</p>
+  </section>
   {% endif %}
 </div>
 <script src="{% static 'admin/js/vendor/htmx.min.js' %}" defer></script>

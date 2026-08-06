@@ -48,6 +48,17 @@ actually having a registered `ModelAdmin` - three of the four builder-domain
 models (`NPCRole`, `BuildingKind`, `DecorationKind`) carry `CreditedContent`
 but were never `@admin.register`ed, so an unconditional `reverse()` there
 would 500 the moment one of them turned up as a neighbor.
+
+Task 7 (`authoring_reference`) is the dashboard-level reference search pane -
+independent of any one row, driven by `web.admin.authoring.reference`. A
+plain query box plus three checkboxes: DB search (every credited model's
+prose, default on) and two opt-in file corpora, staff docs and the Arx I
+dump (both default off - slow, and off the DB entirely). `_reference_toggle`
+tells "never submitted" (the panel's first `hx-trigger="load"` fetch, no
+querystring at all) from "submitted with this box unchecked" (an unchecked
+HTML checkbox is simply absent from its own form's querystring) by keying
+off whether `q` is present at all - `q` is always sent by the panel's own
+form, checked or not, so its presence alone marks a real submission.
 """
 
 from __future__ import annotations
@@ -66,6 +77,7 @@ from core.app_domains import credited_content_models, resolve_model_by_name
 from core_management.prose_fields import prose_fields_for
 from web.admin.authoring.backlog import BacklogRow, build_backlog
 from web.admin.authoring.contributors import current_contributor, link_contributor
+from web.admin.authoring.reference import db_search, file_search, reference_roots
 from web.admin.authoring.relations import RelatedEntry, prose_mentions, related_entries
 from web.admin.constants import BacklogStatusFilter
 from web.admin.tuning.views import superuser_required
@@ -478,6 +490,57 @@ def authoring_mentions_fragment(request: HttpRequest) -> HttpResponse:
     mentions = prose_mentions(str(target.instance), exclude=(target.model, target.instance.pk))
     context = {"rows": [_entry_row(entry) for entry in mentions]}
     return render(request, "admin/authoring/_mentions_panel.html", context)
+
+
+def _reference_toggle(request: HttpRequest, name: str, *, default: bool, submitted: bool) -> bool:
+    """This checkbox's checked state: `default` before any submission, else read from GET.
+
+    An unchecked HTML checkbox sends nothing at all, so `name not in
+    request.GET` is ambiguous between "never submitted" and "submitted
+    unchecked" on its own - `submitted` (whether `q` is present) resolves
+    that ambiguity for every checkbox on the panel in one place.
+    """
+    if not submitted:
+        return default
+    return request.GET.get(name) == "1"
+
+
+@superuser_required
+def authoring_reference(request: HttpRequest) -> HttpResponse:
+    """GET the reference search pane fragment (#3019 Task 7).
+
+    Query input plus three checkboxes: DB search (every credited model's
+    prose, default on) and two opt-in file corpora, staff docs and the Arx I
+    dump (both default off - see `web.admin.authoring.reference`'s module
+    docstring for why). An empty query renders the empty prompt and runs no
+    search at all, DB or file; an unchecked file-corpus box means
+    `reference_roots` is asked for that root not at all, so it never even
+    reaches the "does this directory exist" check.
+    """
+    submitted = "q" in request.GET
+    query = (request.GET.get("q") or "").strip()
+    search_db = _reference_toggle(request, "db", default=True, submitted=submitted)
+    staff_docs = _reference_toggle(request, "staff_docs", default=False, submitted=submitted)
+    arx1 = _reference_toggle(request, "arx1", default=False, submitted=submitted)
+
+    db_groups = []
+    file_hits = []
+    if query:
+        if search_db:
+            db_groups = db_search(query)
+        roots = reference_roots(staff_docs=staff_docs, arx1=arx1)
+        if roots:
+            file_hits = file_search(query, roots)
+
+    context = {
+        "query": query,
+        "search_db": search_db,
+        "staff_docs": staff_docs,
+        "arx1": arx1,
+        "db_groups": db_groups,
+        "file_hits": file_hits,
+    }
+    return render(request, "admin/authoring/_reference_panel.html", context)
 
 
 @superuser_required
