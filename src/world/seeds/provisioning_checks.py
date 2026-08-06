@@ -8,6 +8,14 @@ plus the 7-rung AccentLevel ladder. Quality matters downstream: the event
 catering loop (#2852) sums quality multipliers into host prestige — rich
 preparations are the money sink and the grandeur.
 
+``_ensure_cooking_check()`` and ``_ensure_quality_tiers()`` are the load-bearing
+halves lore-repo ITEM_CREATE recipe fixtures FK by natural key (the "Cooking"
+CheckType, the QualityTier ladder), so their pre-content home is now
+``world.seeds.config_prerequisites.CONFIG_PREREQUISITES["provisioning"]`` (#3006
+Task 5) — that entry runs BEFORE ``load_world_content()``, ahead of the
+`seed_provisioning_content()` call below, which still calls both (idempotent) so
+existing callers/tests of the cluster entry keep working.
+
 The four example ITEM_CREATE recipes this module used to seed directly
 (Hearty Stew, Honeyed Wine, Dream Dust, Haze) — plus their ingredient
 ItemTemplates and skill-cap ladders — moved to the lore repo (#3006):

@@ -347,6 +347,12 @@ def _seed_criminal_mission(  # noqa: PLR0913
     )
     if option is None:
         return template
+    # Reward ItemTemplates are lore-authored content resolved by name at seed time
+    # (#3006) — this is a soft lookup (`.first()`, not `authored_or_sample`), so an
+    # unauthored name silently drops the reward instead of failing loud. "The First
+    # Run"'s "Duskpetal Resin" is the live example: the template is authored
+    # lore-side per #3006, but until that lands (or on a content universe that
+    # never authors it) this mission seeds with no item reward.
     item_template = ItemTemplate.objects.filter(name=item_name).first() if item_name else None
     tier_money = {
         "Critical Failure": 0,

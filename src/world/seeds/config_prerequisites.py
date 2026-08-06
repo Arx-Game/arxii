@@ -224,6 +224,26 @@ def _crafting_rows() -> None:
             ensure_facet_attach_reagent_requirement(recipe)
 
 
+def _provisioning_rows() -> None:
+    """The Cooking CheckType (+ Brewing) and QualityTier/AccentLevel ladders (#3006).
+
+    Lore-repo ITEM_CREATE recipe fixtures FK the "Cooking" CheckType and the
+    QualityTier ladder by natural key, but both used to be created only by
+    `seed_provisioning_content()`, a `CLUSTER_SEEDERS` entry that runs AFTER
+    `load_world_content()`. On a fresh one-shot seed the recipe fixtures would
+    defer and drop — the #2882 ordering trap this registry exists to prevent. Calls
+    the same `provisioning_checks` helpers `seed_provisioning_content()` still
+    calls (idempotent double-run), rather than duplicating their bodies.
+    """
+    from world.seeds.provisioning_checks import (  # noqa: PLC0415
+        _ensure_cooking_check,
+        _ensure_quality_tiers,
+    )
+
+    _ensure_cooking_check()
+    _ensure_quality_tiers()
+
+
 def _ships_rows() -> None:
     """The `speed` CapabilityType `materialize_ship_as_battle_vehicle` FKs by name.
 
@@ -265,4 +285,5 @@ CONFIG_PREREQUISITES: dict[str, Callable[[], None]] = {
     "projects": _projects_rows,
     "ships": _ships_rows,
     "crafting": _crafting_rows,
+    "provisioning": _provisioning_rows,
 }

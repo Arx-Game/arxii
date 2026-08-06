@@ -1,11 +1,14 @@
 """Code-required content rows are declared and ensured before the content load (#2724)."""
 
-from django.test import TestCase
+from django.test import TestCase, override_settings
 
-from world.checks.models import CheckType, CheckTypeTrait
+from world.checks.models import CheckType, CheckTypeSpecialization, CheckTypeTrait
+from world.items.models import AccentLevel, QualityTier
 from world.seeds.config_prerequisites import CONFIG_PREREQUISITES
+from world.seeds.provisioning_checks import BREWING_SPECIALIZATION_NAME, COOKING_CHECK_NAME
+from world.skills.models import Specialization
 from world.traits.factories import StatTraitFactory
-from world.traits.models import Trait
+from world.traits.models import Trait, TraitType
 
 
 class ConfigPrerequisiteTests(TestCase):
@@ -39,6 +42,7 @@ class ConfigPrerequisiteTests(TestCase):
             "projects",
             "ships",
             "crafting",
+            "provisioning",
         }
         missing = expected - set(CONFIG_PREREQUISITES)
         self.assertFalse(missing, f"unregistered prerequisites: {sorted(missing)}")
@@ -255,3 +259,57 @@ class ConfigPrerequisiteFreshDatabaseTests(TestCase):
             CheckTypeTrait.objects.filter(check_type=config.resist_check_type).exists(),
             "Dream Peril Resolve composition was not attached against a fresh database",
         )
+
+
+@override_settings(SEED_SAMPLE_CONTENT=True)  # authored_or_sample needs sampling on (#2698)
+class ProvisioningPrerequisiteTests(TestCase):
+    """The `provisioning` entry moves the Cooking check + quality ladder pre-content (#3006).
+
+    Lore-repo ITEM_CREATE recipe fixtures FK the "Cooking" CheckType and the
+    QualityTier ladder by natural key — previously these only existed after
+    `seed_provisioning_content()`, a cluster seeder that ran AFTER the content
+    load, so a fresh one-shot seed would defer and drop the fixtures (#2882
+    shape). This entry calls the same `provisioning_checks` helpers pre-content.
+    """
+
+    def test_seeds_cooking_check_with_wits_agility_cooking_composition(self) -> None:
+        CONFIG_PREREQUISITES["provisioning"]()
+
+        check_type = CheckType.objects.get(name=COOKING_CHECK_NAME)
+        trait_names = set(
+            CheckTypeTrait.objects.filter(check_type=check_type).values_list(
+                "trait__name", flat=True
+            )
+        )
+        self.assertEqual(trait_names, {"wits", "agility", "Cooking"})
+        self.assertEqual(Trait.objects.get(name="Cooking").trait_type, TraitType.SKILL)
+
+    def test_seeds_brewing_specialization_attached_to_cooking_check(self) -> None:
+        CONFIG_PREREQUISITES["provisioning"]()
+
+        check_type = CheckType.objects.get(name=COOKING_CHECK_NAME)
+        specialization = Specialization.objects.get(name=BREWING_SPECIALIZATION_NAME)
+        self.assertTrue(
+            CheckTypeSpecialization.objects.filter(
+                check_type=check_type, specialization=specialization
+            ).exists()
+        )
+
+    def test_seeds_the_full_quality_and_accent_ladders(self) -> None:
+        CONFIG_PREREQUISITES["provisioning"]()
+
+        self.assertEqual(QualityTier.objects.count(), 12)
+        legendary = QualityTier.objects.get(name="Legendary")
+        self.assertEqual(legendary.sort_order, 12)
+        self.assertEqual(AccentLevel.objects.count(), 7)
+        self.assertEqual(AccentLevel.objects.get(level=1).name, "slightly")
+
+    def test_provisioning_prerequisite_is_idempotent(self) -> None:
+        CONFIG_PREREQUISITES["provisioning"]()
+        CONFIG_PREREQUISITES["provisioning"]()
+
+        check_type = CheckType.objects.get(name=COOKING_CHECK_NAME)
+        # skill + wits + agility, no duplicates.
+        self.assertEqual(CheckTypeTrait.objects.filter(check_type=check_type).count(), 3)
+        self.assertEqual(QualityTier.objects.count(), 12)
+        self.assertEqual(AccentLevel.objects.count(), 7)
