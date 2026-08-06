@@ -6693,6 +6693,15 @@ Admin-hosted, superuser-only HTMX dashboards for difficulty tuning/simulation an
   mentions pane, and reference search over the database plus opt-in staff-
   docs/Arx I file corpora. See the "Authoring Workbench" section in
   `src/web/admin/CLAUDE.md`.
+- **Stock-admin credit complement (#3020):** every registered credited-model admin
+  gets a `credit_status` changelist filter and linked column
+  (`world/contributors/admin.py`'s `CreditStatusListFilter`/`credit_status`),
+  attached uniformly by `web/admin/apps.py`'s `_attach_credit_admin_extras`, a
+  `web_admin.E001` system check (`web/admin/checks.py`'s
+  `check_credited_admin_fieldsets`) that catches a fieldset missing credit
+  coverage, and an "Open in Authoring Workbench" deep link on the change form
+  (`web/admin/templatetags/authoring_tags.py`, built from the shared
+  `web/admin/authoring/links.py`'s `workbench_editor_url`).
 - **Permissions:** every view superuser-only (`web.admin.tuning.views.superuser_required`,
   mirroring `game_setup_views.py`'s gate).
 - **Source:** `src/web/admin/tuning/`, `src/web/admin/content_load_views.py`,
