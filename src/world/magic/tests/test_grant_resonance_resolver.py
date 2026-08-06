@@ -22,7 +22,7 @@ from world.magic.factories import (
     ResonanceFactory,
     RitualCheckConfigFactory,
 )
-from world.magic.models import Thread
+from world.magic.models import CharacterGift, Thread
 from world.magic.specialization.services import (
     _resolve_grant_resonance,
     grant_gift_to_character,
@@ -151,6 +151,12 @@ class GrantGiftToCharacterAlwaysProvisionsTests(TestCase):
         self.assertEqual(gift_threads[0].resonance, ritual_resonance)
 
     def test_unresolvable_grant_raises_and_mints_no_thread(self):
+        """Resolution runs BEFORE the ``CharacterGift`` row is minted (#2971
+        review fix), so an unresolvable grant leaves no trace at all — no
+        thread AND no CharacterGift. A CharacterGift with no thread is the
+        exact corrupted state #2971 exists to eliminate; committing the
+        CharacterGift first would just move that state to the failure path.
+        """
         sheet = CharacterSheetFactory()
         gift = GiftFactory()
 
@@ -162,6 +168,7 @@ class GrantGiftToCharacterAlwaysProvisionsTests(TestCase):
                 owner=sheet, target_kind=TargetKind.GIFT, target_gift=gift
             ).exists()
         )
+        self.assertFalse(CharacterGift.objects.filter(character=sheet, gift=gift).exists())
 
     def test_regrant_of_owned_gift_is_a_true_noop_using_gifts_own_thread(self):
         """An unconditional re-grant of an already-owned gift must not mint a

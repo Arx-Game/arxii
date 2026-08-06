@@ -198,14 +198,17 @@ def grant_gift_to_character(
     provisioned — a granted gift with an empty supported set no longer silently
     skips thread provisioning, since that left characters holding a gift and its
     techniques with no GIFT thread to read a resonance from anywhere downstream
-    (cast resolution, dramatic-moment grants, ...). Raises
-    ``GiftResonanceUnresolvable`` when nothing resolves. Returns
-    ``(character_gift, created)``.
+    (cast resolution, dramatic-moment grants, ...). Resolution runs BEFORE the
+    ``CharacterGift`` row is minted, so a ``GiftResonanceUnresolvable`` raise leaves
+    no trace — a partially-granted gift (a ``CharacterGift`` with no thread) is the
+    exact corrupted state #2971 eliminates, and minting first would just move it to
+    the failure path. Raises ``GiftResonanceUnresolvable`` when nothing resolves.
+    Returns ``(character_gift, created)``.
     """
     from world.magic.models import CharacterGift  # noqa: PLC0415
 
-    character_gift, created = CharacterGift.objects.get_or_create(character=sheet, gift=gift)
     resolved = _resolve_grant_resonance(sheet, gift, preferred=resonance)
+    character_gift, created = CharacterGift.objects.get_or_create(character=sheet, gift=gift)
     provision_latent_gift_thread(sheet, gift, resonance=resolved)
     return character_gift, created
 

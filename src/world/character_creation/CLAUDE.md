@@ -104,9 +104,15 @@ for the five-branch validation gate this data must satisfy before submission.
   since `compute_magic_errors` requires the key on any draft that reaches submission.
 - The resonance is read from `draft.draft_data["selected_gift_resonance_id"]`
   (required by `compute_magic_errors`) and resolved to a `Resonance` row; `None`
-  when unset or invalid — `grant_gift_to_character` skips thread provisioning in
-  that case (no fallback-to-first-supported-resonance; that fallback only existed
-  in the old CG-creates-a-new-technique path).
+  when unset or invalid. As of #2971, `None` no longer skips thread provisioning —
+  `grant_gift_to_character` always runs it through the shared grant-time resolver
+  (`_resolve_grant_resonance`: an existing thread already on this gift → the
+  gift's supported-set policy → the character's own main-resonance fallbacks) and
+  ALWAYS provisions the latent GIFT thread. If nothing resolves at all (a fresh CG
+  character with no claimed resonance, no thread, and no anima ritual — the common
+  case here, since anima rituals are set up post-CG), it raises
+  `GiftResonanceUnresolvable` and `finalize_magic_data` fails loudly rather than
+  minting a character holding a gift with no thread to cast from.
 - `draft.draft_data["selected_technique_ids"]` names the chosen catalog
   `Technique`s (drawn from the gift's pool ∪ the tradition's signature set); each
   gets a `CharacterTechnique.objects.get_or_create` link. `announce_access_change`
