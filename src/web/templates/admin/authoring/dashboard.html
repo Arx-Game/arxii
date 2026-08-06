@@ -1,0 +1,25 @@
+{% extends "admin/base_site.html" %}
+{% load i18n static %}
+
+{% block content %}
+{% include "admin/tuning/_panel_css.html" %}
+<div id="authoring-root" hx-headers='{"x-csrftoken": "{{ csrf_token }}"}'>
+  <h1>Authoring Workbench</h1>
+  <p>Worst-first backlog queue across every credited content model.</p>
+
+  <section class="tuning-panel" id="panel-authoring-stats"
+           hx-get="{% url 'admin_authoring_stats' %}" hx-trigger="load">
+    <p>Loading stats&hellip;</p>
+  </section>
+
+  <section class="tuning-panel" id="panel-authoring-queue"
+           hx-get="{% url 'admin_authoring_queue' %}" hx-trigger="load">
+    <p>Loading queue&hellip;</p>
+  </section>
+
+  <section class="tuning-panel" id="authoring-editor">
+    <p>Select a row from the queue below to start editing.</p>
+  </section>
+</div>
+<script src="{% static 'admin/js/vendor/htmx.min.js' %}" defer></script>
+{% endblock %}

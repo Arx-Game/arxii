@@ -1,0 +1,42 @@
+{% load i18n %}
+<style>
+  #panel-authoring-stats table.tuning-table th,
+  #panel-authoring-stats table.tuning-table td {
+    border-bottom: 1px solid var(--hairline-color);
+    padding: 0.4rem 0.5rem;
+    text-align: left;
+    vertical-align: middle;
+  }
+</style>
+
+<h2>{% translate "Backlog by Domain" %}</h2>
+<p>
+  {% translate "Row, credit, and word counts for every credited content model, grouped by domain." %}
+</p>
+
+<table class="tuning-table">
+  <thead>
+    <tr>
+      <th>{% translate "Domain" %}</th>
+      <th>{% translate "Rows" %}</th>
+      <th>{% translate "Unwritten" %}</th>
+      <th>{% translate "Unreviewed" %}</th>
+      <th>{% translate "Words (total)" %}</th>
+      <th>{% translate "Words (unwritten)" %}</th>
+    </tr>
+  </thead>
+  <tbody>
+    {% for domain_stats in stats %}
+    <tr>
+      <td>{{ domain_stats.domain }}</td>
+      <td>{{ domain_stats.rows }}</td>
+      <td>{{ domain_stats.unwritten }}</td>
+      <td>{{ domain_stats.unreviewed }}</td>
+      <td>{{ domain_stats.words_total }}</td>
+      <td>{{ domain_stats.words_unwritten }}</td>
+    </tr>
+    {% empty %}
+    <tr><td colspan="6">{% translate "No credited content models have any rows yet." %}</td></tr>
+    {% endfor %}
+  </tbody>
+</table>
