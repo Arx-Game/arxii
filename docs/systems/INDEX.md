@@ -6702,6 +6702,9 @@ Admin-hosted, superuser-only HTMX dashboards for difficulty tuning/simulation an
   coverage, and an "Open in Authoring Workbench" deep link on the change form
   (`web/admin/templatetags/authoring_tags.py`, built from the shared
   `web/admin/authoring/links.py`'s `workbench_editor_url`).
+- **Operator guide:** `docs/systems/content-authoring.md` - the end-to-end staff
+  walkthrough (load, find gaps, edit/credit, row export, session PR, conflict
+  resolution) across #3017-#3020.
 - **Permissions:** every view superuser-only (`web.admin.tuning.views.superuser_required`,
   mirroring `game_setup_views.py`'s gate).
 - **Source:** `src/web/admin/tuning/`, `src/web/admin/content_load_views.py`,
