@@ -1,0 +1,48 @@
+{% load i18n %}
+{% if error %}
+<p class="errornote">{{ error }}</p>
+{% else %}
+<table class="tuning-table">
+  <thead>
+    <tr>
+      <th>{% translate "Model" %}</th>
+      <th>{% translate "Entry" %}</th>
+      <th>{% translate "Credit" %}</th>
+      <th>{% translate "Links" %}</th>
+    </tr>
+  </thead>
+  <tbody>
+    {% for row in rows %}
+    <tr>
+      <td>{{ row.entry.model_name }}</td>
+      <td>{{ row.entry.label }}</td>
+      <td>
+        {% if row.entry.credited %}
+        <span class="badge">{% translate "Written" %}</span>
+        {% else %}
+        <span class="badge badge-placeholder">{% translate "Unwritten" %}</span>
+        {% endif %}
+        {% if row.entry.reviewed %}
+        <span class="badge">{% translate "Reviewed" %}</span>
+        {% else %}
+        <span class="badge badge-placeholder">{% translate "Unreviewed" %}</span>
+        {% endif %}
+      </td>
+      <td>
+        {% if row.workbench_url %}
+        <a href="#" hx-get="{{ row.workbench_url }}"
+           hx-target="#authoring-editor" hx-swap="innerHTML">
+          {% translate "Open in editor" %}
+        </a>
+        {% endif %}
+        {% if row.admin_url %}
+        <a href="{{ row.admin_url }}">{% translate "View in admin" %}</a>
+        {% endif %}
+      </td>
+    </tr>
+    {% empty %}
+    <tr><td colspan="4">{% translate "No mentions found." %}</td></tr>
+    {% endfor %}
+  </tbody>
+</table>
+{% endif %}

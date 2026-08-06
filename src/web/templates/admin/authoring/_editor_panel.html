@@ -118,4 +118,18 @@
   </div>
 </form>
 
+<section id="authoring-related"
+         hx-get="{% url 'admin_authoring_related' %}?model={{ model_label|urlencode }}&pk={{ pk }}"
+         hx-trigger="load">
+  <p>Loading related entries&hellip;</p>
+</section>
+
+<h3>{% translate "Mentions" %}</h3>
+<button type="button"
+        hx-get="{% url 'admin_authoring_mentions' %}?model={{ model_label|urlencode }}&pk={{ pk }}"
+        hx-target="#authoring-mentions" hx-swap="innerHTML">
+  {% translate "Search for mentions" %}
+</button>
+<div id="authoring-mentions"></div>
+
 {% endif %}

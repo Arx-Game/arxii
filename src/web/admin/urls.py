@@ -9,7 +9,9 @@ from web.admin.authoring.views import (
     authoring_editor_credit,
     authoring_editor_review,
     authoring_editor_save,
+    authoring_mentions_fragment,
     authoring_queue_fragment,
+    authoring_related_fragment,
     authoring_setup,
     authoring_stats_fragment,
 )
@@ -155,5 +157,7 @@ urlpatterns = [
         name="admin_authoring_editor_review",
     ),
     path("_authoring/setup/", authoring_setup, name="admin_authoring_setup"),
+    path("_authoring/related/", authoring_related_fragment, name="admin_authoring_related"),
+    path("_authoring/mentions/", authoring_mentions_fragment, name="admin_authoring_mentions"),
     path("", arx_admin_site.urls),
 ]

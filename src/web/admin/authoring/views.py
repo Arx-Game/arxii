@@ -33,16 +33,32 @@ itself behind that gate. `Mark reviewed` only ever stamps
 `reviewed_by`/`reviewed_on` - it never touches authorship, and never applies
 pending prose edits, so a reviewer can confirm review without accidentally
 overwriting someone else's in-flight prose edit sitting in the textarea.
+
+Task 6 (`authoring_related_fragment` + `authoring_mentions_fragment`) adds two
+read-only panels below the editor, both driven by `web.admin.authoring
+.relations` and gated through the same `_resolve_target`. The related-entries
+panel loads automatically (`_editor_panel.html`'s `hx-trigger="load"`); the
+mentions search only runs when the operator clicks the button, since an
+OR-`icontains` scan across every credited model's prose fields is real work
+a page load shouldn't pay for unconditionally. Each row's links are built
+here, not carried on `RelatedEntry` itself: a workbench editor link only for
+neighbor models `credited_content_models()` covers (`entry.credited is not
+None` is the same signal), and an admin change-form link gated on the model
+actually having a registered `ModelAdmin` - three of the four builder-domain
+models (`NPCRole`, `BuildingKind`, `DecorationKind`) carry `CreditedContent`
+but were never `@admin.register`ed, so an unconditional `reverse()` there
+would 500 the moment one of them turned up as a neighbor.
 """
 
 from __future__ import annotations
 
 from dataclasses import dataclass
 
-from django.contrib import messages
+from django.contrib import admin, messages
 from django.core.exceptions import ValidationError
 from django.http import HttpRequest, HttpResponse, QueryDict
 from django.shortcuts import redirect, render
+from django.urls import NoReverseMatch, reverse
 from django.utils import timezone
 from django.views.decorators.http import require_POST
 
@@ -50,6 +66,7 @@ from core.app_domains import credited_content_models, resolve_model_by_name
 from core_management.prose_fields import prose_fields_for
 from web.admin.authoring.backlog import BacklogRow, build_backlog
 from web.admin.authoring.contributors import current_contributor, link_contributor
+from web.admin.authoring.relations import RelatedEntry, prose_mentions, related_entries
 from web.admin.constants import BacklogStatusFilter
 from web.admin.tuning.views import superuser_required
 from world.contributors.models import ContentContributor
@@ -377,6 +394,90 @@ def authoring_editor_review(request: HttpRequest) -> HttpResponse:
     target.instance.reviewed_on = timezone.now().date()
     target.instance.save()
     return _render_editor_fragment(request, target, _EditorFlags(reviewed=True))
+
+
+def _workbench_url(entry: RelatedEntry) -> str | None:
+    """Editor deep-link for `entry`, or `None` when its model isn't credited.
+
+    `entry.credited is not None` is the same signal `_resolve_target` gates
+    on (`model in credited_content_models()`): `RelatedEntry.credited` is set
+    from `isinstance(value, CreditedContent)`, and every concrete
+    `CreditedContent` subclass is exactly what `credited_content_models()`
+    enumerates - so this never needs to re-import or re-call that function.
+    """
+    if entry.credited is None:
+        return None
+    return f"{reverse('admin_authoring_editor')}?model={entry.model_label}&pk={entry.pk}"
+
+
+def _admin_change_url(entry: RelatedEntry) -> str | None:
+    """Admin change-form link for `entry`, or `None` when it has no `ModelAdmin`.
+
+    Three of the four builder-domain models `credited_content_models()`
+    covers (`NPCRole`, `BuildingKind`, `DecorationKind`) have never been
+    `@admin.register`ed - checking `admin.site._registry` first keeps an
+    unregistered model from ever reaching `reverse()`; the `NoReverseMatch`
+    catch below is defense in depth for any other reason `admin:<label>_
+    <model>_change` might not resolve (mirrors `content_row_export_views
+    ._change_url`'s app_label/model_name lookup, but never assumes the URL
+    exists the way that helper does).
+    """
+    try:
+        model = resolve_model_by_name(entry.model_label)
+    except LookupError:
+        return None
+    if model not in admin.site._registry:  # noqa: SLF001
+        return None
+    app_label = model._meta.app_label  # noqa: SLF001
+    model_name = model._meta.model_name  # noqa: SLF001
+    try:
+        return reverse(f"admin:{app_label}_{model_name}_change", args=[entry.pk])
+    except NoReverseMatch:
+        return None
+
+
+def _entry_row(entry: RelatedEntry) -> dict:
+    return {
+        "entry": entry,
+        "workbench_url": _workbench_url(entry),
+        "admin_url": _admin_change_url(entry),
+    }
+
+
+@superuser_required
+def authoring_related_fragment(request: HttpRequest) -> HttpResponse:
+    """GET the related-entries panel for `?model=<label>&pk=` (#3019 Task 6).
+
+    Loads automatically below the editor (`_editor_panel.html`'s
+    `hx-trigger="load"`) - a structural FK/M2M walk is cheap enough to run
+    unconditionally, unlike the mentions search below.
+    """
+    target = _resolve_target(request.GET.get("model", ""), request.GET.get("pk", ""))
+    if target.error:
+        return render(request, "admin/authoring/_related_panel.html", {"error": target.error})
+
+    entries, truncated = related_entries(target.instance)
+    context = {"rows": [_entry_row(entry) for entry in entries], "truncated": truncated}
+    return render(request, "admin/authoring/_related_panel.html", context)
+
+
+@superuser_required
+def authoring_mentions_fragment(request: HttpRequest) -> HttpResponse:
+    """GET the prose-mentions panel for `?model=<label>&pk=` (#3019 Task 6).
+
+    Only ever runs from the editor's "Search for mentions" button click, not
+    on load - an OR-`icontains` scan of every credited model's prose fields
+    is real query work, unlike the structural related-entries walk above.
+    Searches for `str(target.instance)` (its natural display name) and
+    excludes the row being edited from its own results.
+    """
+    target = _resolve_target(request.GET.get("model", ""), request.GET.get("pk", ""))
+    if target.error:
+        return render(request, "admin/authoring/_mentions_panel.html", {"error": target.error})
+
+    mentions = prose_mentions(str(target.instance), exclude=(target.model, target.instance.pk))
+    context = {"rows": [_entry_row(entry) for entry in mentions]}
+    return render(request, "admin/authoring/_mentions_panel.html", context)
 
 
 @superuser_required
