@@ -17,6 +17,7 @@ from evennia.utils.idmapper.models import SharedMemoryModel
 
 from core.descriptors import ReverseOneToOneOrNone
 from core.mixins import DiscriminatorMixin
+from core.natural_keys import NaturalKeyManager, NaturalKeyMixin
 from world.locations.constants import HolderType
 from world.room_features.constants import (
     BRIG_CAPACITY_PER_LEVEL,
@@ -32,7 +33,7 @@ _PERSONA_MODEL = "arxii.Persona"
 CHARACTER_SHEET_MODEL = "arxii.CharacterSheet"
 
 
-class RoomFeatureKind(SharedMemoryModel):
+class RoomFeatureKind(NaturalKeyMixin, SharedMemoryModel):
     """Catalog row for a kind of installable room feature.
 
     Open catalog — staff-authorable. Plan 4 ships exactly one row
@@ -44,6 +45,13 @@ class RoomFeatureKind(SharedMemoryModel):
     install/upgrade handler from
     :mod:`world.room_features.services`) with the catalog metadata the
     install UI needs to filter and present choices.
+
+    Carries `NaturalKeyMixin` (#3006 task 6c, mirroring `QualityTier`): `name`
+    is already unique, so it needs no schema change. Required so
+    `CraftingRecipe.required_feature_kind` — an FK-by-name value in
+    lore-authored crafting fixtures — can resolve at content-load time
+    instead of crashing `_resolve_natural_key_fields` with a missing
+    `get_by_natural_key`.
     """
 
     name = models.CharField(max_length=100, unique=True)
@@ -89,6 +97,11 @@ class RoomFeatureKind(SharedMemoryModel):
             "driven regardless. Plan 4 §E."
         ),
     )
+
+    objects = NaturalKeyManager()
+
+    class NaturalKeyConfig:
+        fields = ["name"]
 
     class Meta:
         constraints = [

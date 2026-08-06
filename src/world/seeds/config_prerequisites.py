@@ -182,6 +182,14 @@ def _crafting_rows() -> None:
     ._calculate_trait_points` finds an empty `check_type.traits` and the seeded
     check contributes zero trait points: checks still resolve (safe), just flat,
     with no skill/stat swing until the content lands.
+
+    Also calls `ensure_workshop_of_iniquity_kind()` (#3006 task 6c): the
+    "Workshop of Iniquity" `RoomFeatureKind` is code-referenced by its
+    `service_strategy` (justice frame-jobs, `world.justice.frame_jobs
+    ._workshop_in_room`) AND now FK'd by lore-authored crafting fixtures via
+    `CraftingRecipe.required_feature_kind` — either caller needing the row before
+    it exists is a prerequisite-timing bug, so it belongs pre-content like the
+    rest of this registry.
     """
     from world.checks.models import CheckCategory, CheckType  # noqa: PLC0415
     from world.items.crafting.constants import CraftingRecipeKind  # noqa: PLC0415
@@ -189,6 +197,9 @@ def _crafting_rows() -> None:
     from world.items.seeds_facet_reagents import (  # noqa: PLC0415
         ensure_facet_attach_reagent_requirement,
     )
+    from world.room_features.seeds import ensure_workshop_of_iniquity_kind  # noqa: PLC0415
+
+    ensure_workshop_of_iniquity_kind()
 
     category, _ = CheckCategory.objects.get_or_create(
         name="Crafting",

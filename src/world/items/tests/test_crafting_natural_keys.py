@@ -294,6 +294,51 @@ class CraftingNaturalKeyRoundTripTests(TestCase):
         recipe.refresh_from_db()
         assert recipe.specialization_id == spec.pk
 
+    def test_room_feature_kind_natural_key_get_by_natural_key(self) -> None:
+        """`natural_key()` / `get_by_natural_key()` agree for RoomFeatureKind (#3006 task 6c).
+
+        `CraftingRecipe.required_feature_kind` is an FK-by-name value in
+        lore-authored crafting fixtures — same failure mode as QualityTier and
+        Specialization above. Uses the real seeded "Workshop of Iniquity" kind
+        (`ensure_workshop_of_iniquity_kind`) rather than a factory row, proving
+        the actual production round trip the load loop hit.
+        """
+        from world.room_features.models import RoomFeatureKind
+        from world.room_features.seeds import (
+            WORKSHOP_OF_INIQUITY_KIND_NAME,
+            ensure_workshop_of_iniquity_kind,
+        )
+
+        kind = ensure_workshop_of_iniquity_kind()
+
+        key = kind.natural_key()
+        assert key == (WORKSHOP_OF_INIQUITY_KIND_NAME,)
+        assert RoomFeatureKind.objects.get_by_natural_key(*key) == kind
+
+    def test_room_feature_kind_round_trips_via_recipe(self) -> None:
+        """RoomFeatureKind resolves through a real export -> load_entries round trip."""
+        from world.items.factories import CraftingRecipeFactory
+        from world.room_features.seeds import (
+            WORKSHOP_OF_INIQUITY_KIND_NAME,
+            ensure_workshop_of_iniquity_kind,
+        )
+
+        kind = ensure_workshop_of_iniquity_kind()
+        recipe = CraftingRecipeFactory(
+            name="Feature Kind Recipe",
+            required_feature_kind=kind,
+        )
+
+        self._round_trip()
+
+        recipe_path = self.root / "fixtures" / "items" / "craftingrecipe.json"
+        records = {r["fields"]["name"]: r for r in json.loads(recipe_path.read_text())}
+        record = records["Feature Kind Recipe"]
+        assert record["fields"]["required_feature_kind"] == [WORKSHOP_OF_INIQUITY_KIND_NAME]
+
+        recipe.refresh_from_db()
+        assert recipe.required_feature_kind_id == kind.pk
+
     def test_material_requirement_both_branches_same_recipe_round_trip_together(self) -> None:
         """Both XOR branches on the same recipe round-trip without collision.
 

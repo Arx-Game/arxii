@@ -185,6 +185,21 @@ class ConfigPrerequisiteTests(TestCase):
             "facet-attach recipe seeded with no reagent requirement",
         )
 
+    def test_crafting_prerequisite_seeds_the_workshop_of_iniquity_kind(self) -> None:
+        """#3006 task 6c: the row a justice-frame-jobs check AND a lore-authored
+        `CraftingRecipe.required_feature_kind` fixture both need must exist
+        pre-content, not only when `seed_room_features_dev` happens to have run.
+        """
+        from world.room_features.models import RoomFeatureKind
+        from world.room_features.seeds import WORKSHOP_OF_INIQUITY_KIND_NAME
+
+        CONFIG_PREREQUISITES["crafting"]()
+
+        self.assertTrue(
+            RoomFeatureKind.objects.filter(name=WORKSHOP_OF_INIQUITY_KIND_NAME).exists(),
+            "crafting prerequisite ran but the Workshop of Iniquity kind row is missing",
+        )
+
 
 class ConfigPrerequisiteFreshDatabaseTests(TestCase):
     """The actual first-Big-Button-press condition: zero Trait rows exist yet.
