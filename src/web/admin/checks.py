@@ -19,6 +19,9 @@ EVENNIA_LARGE_TABLE_LABELS = {
     "scripts.ScriptDB",
 }
 
+#: The four columns CreditedContent adds - what CREDIT_FIELDSET shows.
+CREDIT_FIELD_NAMES = ("written_by", "written_on", "reviewed_by", "reviewed_on")
+
 # Arx-specific large tables. Staff add models here as the game grows.
 # Grouped by domain for readability.
 LARGE_TABLE_MODELS = {
@@ -158,3 +161,53 @@ def _find_large_table_fk_violations(model, admin_cls, exempt, protected):
             )
         )
     return violations
+
+
+@register()
+def check_credited_admin_fieldsets(app_configs, **kwargs):  # noqa: ARG001
+    """Fieldsets-declaring admins for credited models must include the credit fields.
+
+    An explicit ``fieldsets`` shows only what it names, so a credited model's
+    admin declaring one without the credit fields silently hides who wrote
+    the row (#3020 - ``ItemTemplateAdmin`` shipped that way). Emits
+    ``web_admin.E001`` per violating admin.
+    """
+    from core.app_domains import credited_content_models  # noqa: PLC0415
+
+    errors = []
+    credited = set(credited_content_models())
+    for model, admin_cls in admin.site._registry.items():  # noqa: SLF001
+        if model not in credited or not admin_cls.fieldsets:
+            continue
+        declared = _declared_fieldset_fields(admin_cls.fieldsets)
+        missing = [name for name in CREDIT_FIELD_NAMES if name not in declared]
+        if missing:
+            errors.append(
+                Error(
+                    f"{type(admin_cls).__name__} declares fieldsets for credited model "
+                    f"{model.__name__} without the credit fields: {', '.join(missing)}.",
+                    hint=(
+                        "Append CREDIT_FIELDSET from world.contributors.admin to the "
+                        "fieldsets declaration."
+                    ),
+                    id="web_admin.E001",
+                )
+            )
+    return errors
+
+
+def _declared_fieldset_fields(fieldsets):
+    """Flatten every field name a fieldsets declaration shows, one nested level deep.
+
+    A ``fields`` entry may itself be a tuple/list (Django's side-by-side
+    widget layout); flatten it so that layout cannot evade the check. No
+    current admin uses it - this is check hardening, not a live case.
+    """
+    declared: set[str] = set()
+    for _label, options in fieldsets:
+        for entry in options.get("fields", ()):
+            if isinstance(entry, (list, tuple)):
+                declared.update(entry)
+            else:
+                declared.add(entry)
+    return declared

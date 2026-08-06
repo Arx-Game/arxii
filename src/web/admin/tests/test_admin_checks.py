@@ -6,7 +6,9 @@ from django.test import TestCase
 from web.admin.checks import (
     _is_large_table,
     check_admin_fk_widgets,
+    check_credited_admin_fieldsets,
 )
+from world.magic.models import EffectType
 
 
 class IsLargeTableTest(TestCase):
@@ -108,3 +110,41 @@ class CheckAdminFkWidgetsTest(TestCase):
                     str(error),
                     f"Exempt field '{exempt_field}' appeared in error: {error}",
                 )
+
+
+class CreditedAdminFieldsetsCheckTests(TestCase):
+    """web_admin.E001: fieldsets-declaring credited admins must show the credit fields."""
+
+    def test_live_registry_is_clean(self) -> None:
+        # Permanently guards the ItemTemplateAdmin fix and the 7 admins that
+        # already carry CREDIT_FIELDSET.
+        self.assertEqual(check_credited_admin_fieldsets(None), [])
+
+    def _with_registered_fieldsets(self, fieldsets):
+        bad = admin.ModelAdmin(EffectType, admin.site)
+        bad.fieldsets = fieldsets
+        original = admin.site._registry[EffectType]
+        admin.site._registry[EffectType] = bad
+        try:
+            return check_credited_admin_fieldsets(None)
+        finally:
+            admin.site._registry[EffectType] = original
+
+    def test_missing_credit_fields_is_an_error(self) -> None:
+        errors = self._with_registered_fieldsets([(None, {"fields": ["name", "description"]})])
+
+        self.assertEqual([e.id for e in errors], ["web_admin.E001"])
+        self.assertIn("reviewed_on", errors[0].msg)
+
+    def test_nested_tuple_layout_cannot_evade_the_check(self) -> None:
+        errors = self._with_registered_fieldsets(
+            [
+                (None, {"fields": ["name"]}),
+                (
+                    "Credit",
+                    {"fields": [("written_by", "written_on"), ("reviewed_by", "reviewed_on")]},
+                ),
+            ]
+        )
+
+        self.assertEqual(errors, [])
