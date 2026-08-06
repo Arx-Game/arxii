@@ -3,6 +3,19 @@
 from django.urls import path
 
 from web.admin import arx_admin_site
+from web.admin.authoring.views import (
+    authoring_dashboard,
+    authoring_editor,
+    authoring_editor_credit,
+    authoring_editor_review,
+    authoring_editor_save,
+    authoring_mentions_fragment,
+    authoring_queue_fragment,
+    authoring_reference,
+    authoring_related_fragment,
+    authoring_setup,
+    authoring_stats_fragment,
+)
 from web.admin.content_conflict_views import (
     content_conflict_detail,
     content_conflict_resolve,
@@ -129,5 +142,24 @@ urlpatterns = [
     path("_ops/story/", ops_story_fragment, name="admin_ops_story"),
     path("_ops/reports/", ops_reports_fragment, name="admin_ops_reports"),
     path("_ops/tech/", ops_tech_fragment, name="admin_ops_tech"),
+    path("_authoring/", authoring_dashboard, name="admin_authoring"),
+    path("_authoring/stats/", authoring_stats_fragment, name="admin_authoring_stats"),
+    path("_authoring/queue/", authoring_queue_fragment, name="admin_authoring_queue"),
+    path("_authoring/editor/", authoring_editor, name="admin_authoring_editor"),
+    path("_authoring/editor/save/", authoring_editor_save, name="admin_authoring_editor_save"),
+    path(
+        "_authoring/editor/credit/",
+        authoring_editor_credit,
+        name="admin_authoring_editor_credit",
+    ),
+    path(
+        "_authoring/editor/review/",
+        authoring_editor_review,
+        name="admin_authoring_editor_review",
+    ),
+    path("_authoring/setup/", authoring_setup, name="admin_authoring_setup"),
+    path("_authoring/related/", authoring_related_fragment, name="admin_authoring_related"),
+    path("_authoring/mentions/", authoring_mentions_fragment, name="admin_authoring_mentions"),
+    path("_authoring/reference/", authoring_reference, name="admin_authoring_reference"),
     path("", arx_admin_site.urls),
 ]

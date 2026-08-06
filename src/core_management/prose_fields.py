@@ -20,6 +20,12 @@ the em-dash-in-identifiers linter, this one is exhaustive per content model fiel
 and drives the credit backlog report. They already disagree in one spot
 (``narration_snippet`` here vs ``narrative_snippet`` there); do not assume they
 agree, and do not merge them - they serve different callers.
+
+``prose_fields_for`` (below) is the one function in this module that touches
+Django, and it defers the import inside the function body so the module as a
+whole stays importable without a configured Django: the lore repo's write
+editor imports this module directly, outside the Django project, and only
+needs the two frozensets above.
 """
 
 from __future__ import annotations
@@ -98,3 +104,24 @@ NON_PROSE_TEXT_FIELDS = frozenset(
         "variable_name",
     }
 )
+
+
+def prose_fields_for(model) -> list[str]:
+    """Names of *model*'s prose fields, in field-declaration order.
+
+    The classification the coverage tests enforce: a CharField/TextField
+    without choices whose name is in PROSE_FIELD_NAMES. Promoted from
+    test_prose_credits._text_fields so production code (the authoring
+    workbench, #3019) and the guard tests share one definition.
+    """
+    from django.db import models as dj_models  # noqa: PLC0415
+
+    out: list[str] = []
+    for field in model._meta.get_fields():  # noqa: SLF001
+        if not isinstance(field, (dj_models.CharField, dj_models.TextField)):
+            continue
+        if field.choices:
+            continue
+        if field.name in PROSE_FIELD_NAMES:
+            out.append(field.name)
+    return out

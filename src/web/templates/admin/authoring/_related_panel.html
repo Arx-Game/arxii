@@ -1,0 +1,76 @@
+{% load i18n %}
+<style>
+  #authoring-related table.tuning-table th,
+  #authoring-related table.tuning-table td {
+    border-bottom: 1px solid var(--hairline-color);
+    padding: 0.3rem 0.5rem;
+    text-align: left;
+    vertical-align: top;
+  }
+  #authoring-related .queue-cap-note {
+    color: var(--body-quiet-color);
+    font-size: 0.9rem;
+  }
+</style>
+
+<h3>{% translate "Related entries" %}</h3>
+{% if error %}
+<p class="errornote">{{ error }}</p>
+{% else %}
+{% if truncated %}
+<p class="queue-cap-note">
+  {% blocktranslate %}{{ truncated }} more not shown.{% endblocktranslate %}
+</p>
+{% endif %}
+<table class="tuning-table">
+  <thead>
+    <tr>
+      <th>{% translate "Relation" %}</th>
+      <th>{% translate "Direction" %}</th>
+      <th>{% translate "Model" %}</th>
+      <th>{% translate "Entry" %}</th>
+      <th>{% translate "Credit" %}</th>
+      <th>{% translate "Links" %}</th>
+    </tr>
+  </thead>
+  <tbody>
+    {% for row in rows %}
+    <tr>
+      <td>{{ row.entry.relation }}</td>
+      <td>{{ row.entry.direction }}</td>
+      <td>{{ row.entry.model_name }}</td>
+      <td>{{ row.entry.label }}</td>
+      <td>
+        {% if row.entry.credited is not None %}
+          {% if row.entry.credited %}
+          <span class="badge">{% translate "Written" %}</span>
+          {% else %}
+          <span class="badge badge-placeholder">{% translate "Unwritten" %}</span>
+          {% endif %}
+          {% if row.entry.reviewed %}
+          <span class="badge">{% translate "Reviewed" %}</span>
+          {% else %}
+          <span class="badge badge-placeholder">{% translate "Unreviewed" %}</span>
+          {% endif %}
+        {% else %}
+        -
+        {% endif %}
+      </td>
+      <td>
+        {% if row.workbench_url %}
+        <a href="#" hx-get="{{ row.workbench_url }}"
+           hx-target="#authoring-editor" hx-swap="innerHTML">
+          {% translate "Open in editor" %}
+        </a>
+        {% endif %}
+        {% if row.admin_url %}
+        <a href="{{ row.admin_url }}">{% translate "View in admin" %}</a>
+        {% endif %}
+      </td>
+    </tr>
+    {% empty %}
+    <tr><td colspan="6">{% translate "No related entries." %}</td></tr>
+    {% endfor %}
+  </tbody>
+</table>
+{% endif %}

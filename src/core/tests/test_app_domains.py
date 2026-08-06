@@ -4,8 +4,12 @@ from django.apps import apps
 from django.test import TestCase
 
 from actions.models import ActionTemplate
-from core.app_domains import domain_of
+from core.app_domains import credited_content_models, domain_of
+from world.buildings.models import BuildingKind, DecorationKind
+from world.contributors.models import CreditedContent
+from world.items.models import ItemTemplate
 from world.magic.models import Technique
+from world.npc_services.models import NPCRole
 
 # src/ — three levels up from src/core/tests/test_app_domains.py. Mirrors
 # tools/check_missing_migrations.py's own "first-party = lives under src/"
@@ -96,3 +100,34 @@ class DomainOfTest(TestCase):
         # (e.g. a label-format drift broke the lookup), the loop above would
         # pass vacuously with zero assertions.
         self.assertGreater(checked, 900)
+
+
+class CreditedContentModelsTest(TestCase):
+    def test_only_concrete_credited_content_subclasses_are_returned(self):
+        found = credited_content_models()
+        self.assertNotIn(CreditedContent, found)
+        for model in found:
+            with self.subTest(model=model.__name__):
+                self.assertTrue(issubclass(model, CreditedContent))
+                self.assertFalse(model._meta.abstract)
+
+    def test_includes_the_four_builder_domain_models_outside_content_models(self):
+        # #3019's whole reason to be broader than content_export.CONTENT_MODELS:
+        # these four carry CreditedContent but sit outside the export registry
+        # (see core_management/CLAUDE.md, "Known asymmetry").
+        found = credited_content_models()
+        for model in (ItemTemplate, NPCRole, BuildingKind, DecorationKind):
+            with self.subTest(model=model.__name__):
+                self.assertIn(model, found)
+
+    def test_excludes_a_non_credited_model(self):
+        found = credited_content_models()
+        self.assertNotIn(ActionTemplate, found)
+
+    def test_sorted_by_domain_then_name(self):
+        found = credited_content_models()
+        keys = [(domain_of(m), m.__name__.lower()) for m in found]
+        self.assertEqual(keys, sorted(keys))
+
+    def test_stable_across_repeated_calls(self):
+        self.assertEqual(credited_content_models(), credited_content_models())

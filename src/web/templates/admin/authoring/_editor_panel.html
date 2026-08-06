@@ -1,0 +1,139 @@
+{% load i18n content_export_tags %}
+<style>
+  #authoring-editor .prose-field {
+    display: flex;
+    flex-direction: column;
+    margin-bottom: 1rem;
+  }
+  #authoring-editor .prose-field label {
+    font-weight: bold;
+    margin-bottom: 0.25rem;
+  }
+  #authoring-editor .prose-field textarea {
+    font-family: monospace;
+    width: 100%;
+    min-height: 6rem;
+  }
+  #authoring-editor table.tuning-table th,
+  #authoring-editor table.tuning-table td {
+    border-bottom: 1px solid var(--hairline-color);
+    padding: 0.3rem 0.5rem;
+    text-align: left;
+    vertical-align: top;
+  }
+  #authoring-editor .editor-actions {
+    margin-top: 1rem;
+    display: flex;
+    gap: 0.5rem;
+  }
+</style>
+
+<h2>{% blocktranslate %}Editing {{ model_label }} #{{ pk }}{% endblocktranslate %}</h2>
+
+{% if error %}
+<p class="errornote">{{ error }}</p>
+{% else %}
+
+{% if needs_setup %}
+<p class="errornote">
+  {% translate "Link your author credit before crediting or reviewing a row." %}
+  <a href="{% url 'admin_authoring' %}">{% translate "Set up your author credit" %}</a>
+</p>
+{% endif %}
+
+{% if saved %}
+<p class="successnote">{% translate "Saved." %}</p>
+{% endif %}
+
+{% if reviewed %}
+<p class="successnote">{% translate "Marked reviewed." %}</p>
+{% endif %}
+
+{% if general_errors %}
+<div class="errornote">
+  <p>{% translate "This row cannot be saved:" %}</p>
+  <ul>
+    {% for message in general_errors %}
+    <li>{{ message }}</li>
+    {% endfor %}
+  </ul>
+</div>
+{% endif %}
+
+{% if credited %}
+<p class="successnote">{{ freeze_sentence }}</p>
+{% if instance|content_exportable %}
+<p>{{ export_sentence }}</p>
+<form method="post" action="{% url 'admin_content_export_row' %}" class="content-export-row-form">
+  {% csrf_token %}
+  <input type="hidden" name="model" value="{{ instance|content_model_label }}">
+  <input type="hidden" name="pk" value="{{ instance.pk }}">
+  <button type="submit" class="content-export-row-btn">
+    {% translate "Export to content repo" %}
+  </button>
+</form>
+{% else %}
+<p>
+  {% translate "This model stays in the database only; the content repo does not carry it." %}
+</p>
+{% endif %}
+{% endif %}
+
+<h3>{% translate "Mechanical fields" %}</h3>
+<table class="tuning-table">
+  <tbody>
+    {% for field in mechanical_fields %}
+    <tr><th>{{ field.name }}</th><td>{{ field.value }}</td></tr>
+    {% endfor %}
+    <tr><th>{% translate "Written by" %}</th><td>{{ instance.written_by|default:"-" }}</td></tr>
+    <tr><th>{% translate "Written on" %}</th><td>{{ instance.written_on|default:"-" }}</td></tr>
+    <tr><th>{% translate "Reviewed by" %}</th><td>{{ instance.reviewed_by|default:"-" }}</td></tr>
+    <tr><th>{% translate "Reviewed on" %}</th><td>{{ instance.reviewed_on|default:"-" }}</td></tr>
+  </tbody>
+</table>
+
+<h3>{% translate "Prose" %}</h3>
+<form method="post">
+  {% csrf_token %}
+  <input type="hidden" name="model" value="{{ model_label }}">
+  <input type="hidden" name="pk" value="{{ pk }}">
+  {% for field in prose_fields %}
+  <div class="prose-field">
+    <label for="id_{{ field.name }}">{{ field.name }}</label>
+    <textarea name="{{ field.name }}" id="id_{{ field.name }}">{{ field.value }}</textarea>
+    {% if field.errors %}
+    <span class="errornote">{{ field.errors|join:" " }}</span>
+    {% endif %}
+  </div>
+  {% endfor %}
+  <div class="editor-actions">
+    <button type="submit" hx-post="{% url 'admin_authoring_editor_save' %}"
+            hx-target="#authoring-editor" hx-swap="innerHTML">
+      {% translate "Save" %}
+    </button>
+    <button type="submit" hx-post="{% url 'admin_authoring_editor_credit' %}"
+            hx-target="#authoring-editor" hx-swap="innerHTML">
+      {% translate "Save and credit" %}
+    </button>
+    <button type="submit" hx-post="{% url 'admin_authoring_editor_review' %}"
+            hx-target="#authoring-editor" hx-swap="innerHTML">
+      {% translate "Mark reviewed" %}
+    </button>
+  </div>
+</form>
+
+<section id="authoring-related"
+         hx-get="{% url 'admin_authoring_related' %}?model={{ model_label|urlencode }}&pk={{ pk }}"
+         hx-trigger="load">
+  <p>Loading related entries&hellip;</p>
+</section>
+
+<h3>{% translate "Mentions" %}</h3>
+<button type="button"
+        hx-get="{% url 'admin_authoring_mentions' %}?model={{ model_label|urlencode }}&pk={{ pk }}"
+        hx-target="#authoring-mentions" hx-swap="innerHTML">
+  {% translate "Search for mentions" %}
+</button>
+<div id="authoring-mentions"></div>
+
+{% endif %}

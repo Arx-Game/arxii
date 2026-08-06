@@ -1,0 +1,25 @@
+{% load i18n %}
+<section class="tuning-panel" id="panel-authoring-setup">
+  <h2>Set up your author credit.</h2>
+  <p>Prose you credit is stamped with a contributor name that travels into
+    the exported corpus. Pick an existing unclaimed name or choose the name
+    you write under.</p>
+  <form method="post" action="{% url 'admin_authoring_setup' %}">
+    {% csrf_token %}
+    <p>
+      <label for="id_existing_pk">Claim an existing name</label><br>
+      <select name="existing_pk" id="id_existing_pk">
+        <option value="">---------</option>
+        {% for contributor in unlinked_contributors %}
+        <option value="{{ contributor.pk }}">{{ contributor.name }}</option>
+        {% endfor %}
+      </select>
+      <br><small>Picking a name from the list wins over the text field.</small>
+    </p>
+    <p>
+      <label for="id_name">Or create a new name</label><br>
+      <input type="text" name="name" id="id_name" value="{{ suggested_name }}">
+    </p>
+    <button type="submit">Link and continue</button>
+  </form>
+</section>

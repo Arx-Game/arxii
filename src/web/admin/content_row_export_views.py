@@ -50,7 +50,7 @@ import json
 from pathlib import Path
 from urllib.parse import urlencode
 
-from django.contrib import messages
+from django.contrib import admin, messages
 from django.contrib.admin.views.decorators import staff_member_required
 from django.core.exceptions import PermissionDenied
 from django.http import HttpRequest, HttpResponse, HttpResponseRedirect
@@ -74,14 +74,37 @@ def _diff_url(model_label: str, pk: object) -> str:
     return f"{reverse('admin_content_export_row_diff')}?{query}"
 
 
-def _change_url(model: type, pk: object) -> str:
-    """Build this model's admin change-form URL for ``pk``.
+def _workbench_url(model_label: str, pk: object) -> str:
+    """Build the Authoring Workbench editor deep-link for this row.
+
+    Unlike ``_change_url``, this always resolves - ``admin_authoring_editor``
+    is a fixed route, not one built per-model off the admin registry - so
+    it's the fallback destination every ``_change_url`` call site degrades to
+    when a model has no registered ``ModelAdmin`` (#3019 review, Item 2).
+    """
+    query = urlencode({"model": model_label, "pk": pk})
+    return f"{reverse('admin_authoring_editor')}?{query}"
+
+
+def _change_url(model: type, pk: object) -> str | None:
+    """Build this model's admin change-form URL for ``pk``, or ``None`` if it can't.
 
     ``admin:arxii_<model_name>_change`` may look hardcodable, but every
     first-party model's real Django ``app_label`` is ``arxii`` post-collapse
     (#2906) - reading it off ``model._meta`` rather than assuming the string
     keeps this correct if that ever changes again.
+
+    Returns ``None`` when ``model`` has no registered ``ModelAdmin`` - a
+    credited+exportable model is not guaranteed to have one (13 such models
+    as of #3019 review, e.g. ``missions.MissionTemplate``,
+    ``magic.PortalAnchorKind``), and building this URL for one of them used
+    to raise ``NoReverseMatch`` and 500 the diff page. Mirrors
+    ``web.admin.authoring.views._admin_change_url``'s registry check. Every
+    caller here degrades to ``_workbench_url`` (a route that always exists)
+    instead of assuming this resolves.
     """
+    if model not in admin.site._registry:  # noqa: SLF001
+        return None
     app_label = model._meta.app_label  # noqa: SLF001
     model_name = model._meta.model_name  # noqa: SLF001
     return reverse(f"admin:{app_label}_{model_name}_change", args=[pk])
@@ -280,7 +303,7 @@ def content_export_row(request: HttpRequest) -> HttpResponse:
         pending = _pending_export(request)
         if pending is None:
             messages.error(request, str(exc))
-            return HttpResponseRedirect(_change_url(model, pk))
+            return HttpResponseRedirect(_change_url(model, pk) or _workbench_url(model_label, pk))
         pending_name = _pending_export_display_name(pending["model_label"])
         messages.error(request, f"{exc} Pending: {pending_name} [{pending['natural_key']}].")
         return HttpResponseRedirect(_diff_url(pending["model_label"], pending["pk"]))
@@ -288,7 +311,7 @@ def content_export_row(request: HttpRequest) -> HttpResponse:
     result = export_single_row(instance, content_root=content_root)
     if result.refused is not None:
         messages.error(request, result.refused)
-        return HttpResponseRedirect(_change_url(model, pk))
+        return HttpResponseRedirect(_change_url(model, pk) or _workbench_url(model_label, pk))
 
     _set_pending_export(request, result.model_label, pk, result)
     return HttpResponseRedirect(_diff_url(result.model_label, pk))
@@ -322,7 +345,7 @@ def content_export_row_diff(request: HttpRequest) -> HttpResponse:
         messages.info(
             request, f"Nothing to review for {model.__name__} [{natural_key}] - export it first."
         )
-        return HttpResponseRedirect(_change_url(model, pk))
+        return HttpResponseRedirect(_change_url(model, pk) or _workbench_url(model_label, pk))
 
     is_addition = _derive_is_addition(content_root, model, paths, fields)
     digest = hashlib.sha256(diff_text.encode("utf-8")).hexdigest()
@@ -337,6 +360,7 @@ def content_export_row_diff(request: HttpRequest) -> HttpResponse:
         "digest": digest,
         "confirm_url": reverse("admin_content_export_row_confirm"),
         "change_url": _change_url(model, pk),
+        "workbench_url": _workbench_url(model_label, pk),
     }
     return render(request, "admin/content_row_export_diff.html", context)
 
@@ -373,7 +397,7 @@ def _run_confirmed_action(
         discard_row_export(content_root, paths)
         _clear_pending_export(request)
         messages.info(request, f"Discarded the pending export of {model.__name__} [{natural_key}].")
-        return HttpResponseRedirect(_change_url(model, pk))
+        return HttpResponseRedirect(_change_url(model, pk) or _workbench_url(model_label, pk))
 
     if action != _ACTION_CONFIRM:
         messages.error(request, "Unknown export action.")

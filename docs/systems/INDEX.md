@@ -6686,6 +6686,13 @@ Admin-hosted, superuser-only HTMX dashboards for difficulty tuning/simulation an
   `docs/systems/checks.md`'s "Seeded Compositions" section and `docs/systems/magic.md`'s
   "Content pipeline" section for the two cases, and ADR-0171 for why this is a real owner
   column rather than a name-pattern exclusion.
+- **Authoring Workbench (#3019):** a superuser-only dashboard (`_authoring/`,
+  `admin_authoring`) surfacing a worst-first prose backlog queue across every
+  `core.app_domains.credited_content_models()` model, a prose-only row editor
+  with a guided first-run contributor setup gate, a related-entries/prose-
+  mentions pane, and reference search over the database plus opt-in staff-
+  docs/Arx I file corpora. See the "Authoring Workbench" section in
+  `src/web/admin/CLAUDE.md`.
 - **Permissions:** every view superuser-only (`web.admin.tuning.views.superuser_required`,
   mirroring `game_setup_views.py`'s gate).
 - **Source:** `src/web/admin/tuning/`, `src/web/admin/content_load_views.py`,

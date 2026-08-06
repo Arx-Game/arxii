@@ -156,7 +156,16 @@ of every single row needing its own PR.
   ever answered for the browser that ran the export, so a second browser
   hitting either URL directly used to see a default of "not an addition"
   and could commit a genuine addition with no checkbox at all (#3018
-  review).
+  review). Every "back to the change form" link/redirect
+  (`content_export_row`'s refusals, the diff page's back-link, discard) goes
+  through `_change_url`, which builds the target model's admin change-form
+  URL **only when that model is in `admin.site._registry`** and returns
+  `None` otherwise - not every credited+exportable model has a registered
+  `ModelAdmin` (13 as of #3019 review, e.g. `missions.MissionTemplate`,
+  `magic.PortalAnchorKind`), and building that URL for one used to raise
+  `NoReverseMatch` and 500 the diff page. Every caller degrades `None` to
+  `_workbench_url` - an Authoring Workbench editor deep-link, which always
+  resolves regardless of the admin registry.
 - **One session branch, one pending export at a time** -
   `core_management.content_session` (`ensure_session_branch`,
   `commit_row_export`, `discard_row_export`) keeps every exported-but-not-
@@ -198,6 +207,179 @@ If an agent is asked about any of these topics, this is the system:
 - "export one row from the admin"
 - "the Export to content repo button on a change form"
 - "content session / session branch / one PR per session"
+
+## Authoring Workbench (#3019)
+
+**Purpose:** a superuser-only dashboard for writing and reviewing the prose
+backlog across every credited content model in one place - a worst-first
+queue (placeholder text first, then unwritten, then unreviewed), a row
+editor scoped to prose fields only, and reference search - instead of a
+writer hunting through the stock Django admin's per-model change lists one
+model at a time.
+
+**Location:** header link ("Authoring Workbench" button, superuser-only,
+beside Tuning/Ops) and a "Author content" link on the Game Setup hub, both
+to `_authoring/` (`admin_authoring`).
+
+- **Backlog data tier** - `web/admin/authoring/backlog.py`:
+  `build_backlog(scope=None)` scans every model
+  `core.app_domains.credited_content_models()` returns, skips any with no
+  `core_management.prose_fields.prose_fields_for` fields, and issues one
+  `values_list` per remaining model (pk, natural-key fields, the
+  `written_by_id`/`reviewed_by_id` credit columns, every prose field).
+  `credited_content_models()` is deliberately broader than
+  `core_management.content_export.CONTENT_MODELS` - four builder-domain
+  models (`ItemTemplate`, `NPCRole`, `BuildingKind`, `DecorationKind`) carry
+  `CreditedContent` but sit outside the export registry. Rows sort
+  worst-first: placeholder-marked, then unwritten, then unreviewed, then
+  alphabetically by domain and identity. An FK-typed natural-key field spans
+  one hop into the related row's own first natural-key field for display
+  (`"The Sleeper's Rest, Sleeper"`, not a raw related pk) - still one query
+  per model, since the span is a SQL join; a related field that is itself
+  FK-typed is left as its raw id (documented non-recursive limitation).
+  `scope`, when given, narrows every model's queryset uniformly - the seam a
+  future GM-restricted variant can use without this module knowing who is
+  asking.
+- **Dashboard + stats/queue fragments** - `authoring_dashboard` (GET) renders
+  the setup panel in place of the stats/queue skeleton for an unlinked
+  account (see the setup gate below), else the two HTMX panels:
+  `authoring_stats_fragment` (per-domain rows/unwritten/unreviewed/word-count
+  rollup) and `authoring_queue_fragment` (the worst-first queue itself,
+  filterable by `?domain=`, `?status=` - `web.admin.constants
+  .BacklogStatusFilter`: `placeholder`/`unwritten`/`unreviewed` - and `?q=`
+  against the row's identity string, one Python-side scan over
+  `build_backlog()`'s already-sorted rows, capped at 100 displayed rows with
+  a "Showing 100 of N" note when truncated).
+- **Guided first-run contributor setup gate** - `authoring/contributors.py`:
+  `current_contributor(user)` reads `request.user -> PlayerData ->
+  ContentContributor`, `None` at any missing link; `link_contributor(user,
+  *, name="", existing_pk=None)` creates-or-picks one atomically and links
+  it. The dashboard shows the setup panel (pick an existing unlinked
+  contributor from a `<select>`, or type a new name, prefilled with the
+  account's username) instead of the stats/queue skeleton until this link
+  exists - every downstream panel assumes a contributor identity. No silent
+  auto-create: a blank name, an em/en-dash name, a name already linked to
+  another account, or an `existing_pk` already linked elsewhere all refuse
+  with a coherent message rather than creating or reassigning anything.
+  Picking from the list wins over the text field when both are submitted.
+  Race-idempotent: a truly concurrent double-submit that gets past the
+  sequential no-op check races unique-constraint writes inside
+  `link_contributor`'s `transaction.atomic()` block; the resulting
+  `IntegrityError` is caught after rollback and resolved by re-reading
+  `current_contributor` - if the race already linked this same account, that
+  is returned as success, otherwise the caller gets a "claimed a moment ago"
+  `ValueError`, never a raw 500. `authoring_setup` (POST-only) is the panel's
+  submit handler, always redirecting back to the dashboard with a flash.
+- **The prose row editor** - `authoring_editor` (GET, `?model=<domain
+  .Model>&pk=`) via the shared `_resolve_target` gate (unknown model, a
+  model outside `credited_content_models()`, or a missing row all render the
+  same flash-in-fragment error instead of the form). One textarea per prose
+  field **in field-declaration order** (`prose_fields_for` iterates
+  `model._meta.get_fields()`, e.g. `CodexEntry` renders `summary`,
+  `lore_content`, `mechanics_content` in that order, never alphabetized).
+  `authoring_editor_save` (POST) assigns only `prose_fields_for(model)` keys
+  actually present in the POST body - allowlist-only: a mechanical field
+  smuggled into the POST under its own name is never read, let alone
+  assigned - then `full_clean()` + `save()`; a validation failure re-renders
+  with nothing persisted. `authoring_editor_credit` (POST) runs that same
+  prose save first (only if prose keys were posted) and stamps
+  `written_by`/`written_on` from the operator's own linked contributor;
+  `authoring_editor_review` (POST) only ever stamps `reviewed_by`/
+  `reviewed_on` and never touches prose or authorship - **credit and review
+  stamping are separate actions**, so confirming review never silently
+  overwrites an in-flight, unsaved prose edit. Either POST view falls back
+  to the setup-gate guidance line (no stamp written) when the operator has
+  no linked contributor, since this editor is reachable by direct URL and
+  is not itself behind the dashboard's setup gate. A `full_clean()` failure
+  keyed on a mechanical field or Django's own `"__all__"` key has no
+  textarea to render next to, so it surfaces in a **mechanical-error
+  banner** above the form instead of vanishing silently. After a successful
+  credit stamp, the freeze clause ("This row is now credited: content loads
+  will not overwrite it until the corpus catches up.") always renders, and
+  the export handoff form (reusing
+  `content_export_tags.content_exportable`/`content_model_label` from the
+  row-export system above) plus its own export clause ("Export it to the
+  content repo to close the loop.") render only **inside the
+  `content_exportable` branch** - the four builder-domain models carry
+  credit but are not exportable at all, so they show the sentence "This
+  model stays in the database only; the content repo does not carry it."
+  in the handoff form's place instead (#3019 review: the freeze and export
+  clauses used to be one sentence, rendering the export clause even for a
+  non-exportable model directly above the "stays in the database only"
+  line it contradicted). `content_exportable` only rules out the four
+  builder-domain models here - it says nothing about whether an
+  *exportable* model has a `ModelAdmin` to link back to. Thirteen other
+  credited+exportable models never got one (e.g. `missions.MissionTemplate`,
+  `magic.PortalAnchorKind`) - that gap is closed one layer down, in the
+  row-export system's own `_change_url` (below), not by this gate.
+- **Related-entries pane + prose mentions** - `authoring/relations.py`:
+  `related_entries(instance, cap=50)` walks every forward FK/O2O/M2M field
+  and every reverse FK/O2O/M2M relation (a `related_name="+"` relation is
+  already absent from `_meta.get_fields()`'s default `include_hidden=False`
+  list, so no extra check is needed), loading automatically below the
+  editor. `prose_mentions(name, exclude=None, cap=200, scope=None)`
+  OR-`icontains` scans every credited model's `prose_fields_for` columns for
+  `name`, excluding the edited row's own `(model, pk)`; it only runs on the
+  operator's explicit "Search for mentions" click, since it is real query
+  work a page load should not pay unconditionally. `scope`, when given,
+  narrows every model's queryset the same way `build_backlog`'s does (#3019
+  review, Item 4) - workbench callers pass nothing. Both use **bounded
+  per-relation slices**, never materializing more than a relation's share of
+  the cap before iterating: `related_entries` slices each many-relation's
+  queryset to `[: remaining + 1]` (the `+1` a discard-after-use overflow
+  sentinel) and, on overflow, issues one exact `.count()` on that relation
+  alone so the returned truncated-count is precise, never a lower bound;
+  `prose_mentions` slices each model's queryset to `[: cap - len(entries)]`
+  before iterating. Each entry links to its workbench editor (only when its
+  model is itself credited) and to its Django admin change form (only when
+  that model has a registered `ModelAdmin` - three of the four builder-
+  domain models never were).
+- **Reference search** - `authoring/reference.py`: `db_search(query,
+  scope=None)` is an `icontains` scan across every credited model's prose
+  fields, **on by default**; `scope`, when given, narrows every model's
+  queryset the same way `build_backlog`'s does (#3019 review, Item 4) -
+  workbench callers pass nothing. `file_search(query, roots)` covers two
+  **opt-in** file
+  corpora - this repo's own staff docs (`design/`, `world_bibles/` under the
+  content root) and the maintainers' Arx I dump (the content root's sibling
+  `arx1/` directory) - both **default off**, resolved via
+  `reference_roots(staff_docs=, arx1=)`. `file_search` is a minimal,
+  deliberately duplicated port of the private lore repo's
+  `tools/write_editor/reference.py` search semantics (fixed-string,
+  case-insensitive, per-line): a **2MB per-file size cap** skips any
+  candidate before it is ever opened, a wall-clock **30-second budget**
+  (`time.monotonic`) is checked at the per-directory, per-file, and
+  per-line level so no single oversized file or line can blow through it on
+  its own, and a **symlink escape guard** (`resolved.is_relative_to(root)`)
+  keeps a symlinked file from reading outside its configured root. A missing
+  or unconfigured `CONTENT_REPO_PATH`, or any individual root that does not
+  exist, is silently omitted rather than raised - DB search still works with
+  no content repo configured at all.
+- **URLs** (`_authoring/...`, all superuser-only): `_authoring/` ->
+  `admin_authoring` (dashboard), `_authoring/stats/` ->
+  `admin_authoring_stats`, `_authoring/queue/` -> `admin_authoring_queue`,
+  `_authoring/setup/` -> `admin_authoring_setup` (POST), `_authoring/editor/`
+  -> `admin_authoring_editor` (`?model=&pk=`), `_authoring/editor/save/` ->
+  `admin_authoring_editor_save` (POST), `_authoring/editor/credit/` ->
+  `admin_authoring_editor_credit` (POST), `_authoring/editor/review/` ->
+  `admin_authoring_editor_review` (POST), `_authoring/related/` ->
+  `admin_authoring_related` (`?model=&pk=`), `_authoring/mentions/` ->
+  `admin_authoring_mentions` (`?model=&pk=`), `_authoring/reference/` ->
+  `admin_authoring_reference` (`?q=&db=&staff_docs=&arx1=`).
+- Tests: `web/admin/tests/test_authoring_backlog.py`,
+  `test_authoring_views.py`, `test_authoring_setup.py`,
+  `test_authoring_editor.py`, `test_authoring_relations.py`,
+  `test_authoring_reference.py`.
+- Deliberate no-ADR: the decisions here were recorded in the approved #3019
+  spec, the same precedent #3018 set above.
+
+**When Asked About**
+
+If an agent is asked about any of these topics, this is the system:
+- "authoring workbench / prose backlog queue in admin"
+- "who still needs to write or review this content model"
+- "the row editor for credited content"
+- "reference search across the content database / staff docs / Arx I dump"
 
 ## Game Tuning & Game Ops Dashboards (#1221)
 

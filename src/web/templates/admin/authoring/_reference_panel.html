@@ -1,0 +1,123 @@
+{% load i18n %}
+<style>
+  #panel-authoring-reference .tuning-form {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 1.5rem;
+    margin-bottom: 1rem;
+  }
+  #panel-authoring-reference .tuning-field {
+    display: flex;
+    flex-direction: column;
+    min-width: 16rem;
+  }
+  #panel-authoring-reference .tuning-field label {
+    font-size: 0.85rem;
+    margin-bottom: 0.25rem;
+  }
+  #panel-authoring-reference .tuning-checkbox {
+    display: flex;
+    align-items: center;
+    gap: 0.4rem;
+    font-size: 0.85rem;
+  }
+  #panel-authoring-reference table.tuning-table th,
+  #panel-authoring-reference table.tuning-table td {
+    border-bottom: 1px solid var(--hairline-color);
+    padding: 0.3rem 0.5rem;
+    text-align: left;
+    vertical-align: top;
+  }
+  #panel-authoring-reference .reference-empty {
+    color: var(--body-quiet-color);
+  }
+</style>
+
+<h2>{% translate "Reference Search" %}</h2>
+<p>
+  {% translate "Look up how a name or phrase is used elsewhere - in the database, and, opt-in, in the raw file corpora outside it." %}
+</p>
+
+<form class="tuning-form" hx-get="{% url 'admin_authoring_reference' %}"
+      hx-target="#panel-authoring-reference" hx-trigger="submit">
+  <div class="tuning-field">
+    <label for="reference-q">{% translate "Search" %}</label>
+    <input type="text" id="reference-q" name="q" value="{{ query }}"
+           placeholder="{% translate 'Name or phrase...' %}">
+  </div>
+  <div class="tuning-field">
+    <button type="submit">{% translate "Search" %}</button>
+  </div>
+  <label class="tuning-checkbox">
+    <input type="checkbox" name="db" value="1" {% if search_db %}checked{% endif %}>
+    {% translate "Database (credited content prose)" %}
+  </label>
+  <label class="tuning-checkbox">
+    <input type="checkbox" name="staff_docs" value="1" {% if staff_docs %}checked{% endif %}>
+    {% translate "Staff docs (design, world bibles)" %}
+  </label>
+  <label class="tuning-checkbox">
+    <input type="checkbox" name="arx1" value="1" {% if arx1 %}checked{% endif %}>
+    {% translate "Arx I dump (slow, large)" %}
+  </label>
+</form>
+
+{% if not query %}
+<p class="reference-empty">
+  {% translate "Type a name or phrase above to search." %}
+</p>
+{% else %}
+
+{% if search_db %}
+<h3>{% translate "Database" %}</h3>
+{% for group in db_groups %}
+<table class="tuning-table">
+  <thead>
+    <tr><th colspan="2">{{ group.model_name }}</th></tr>
+  </thead>
+  <tbody>
+    {% for hit in group.hits %}
+    <tr>
+      <td>
+        <a href="#" hx-get="{% url 'admin_authoring_editor' %}?model={{ group.model_label|urlencode }}&pk={{ hit.pk }}"
+           hx-target="#authoring-editor" hx-swap="innerHTML">
+          {{ hit.label }}
+        </a>
+      </td>
+    </tr>
+    {% endfor %}
+  </tbody>
+</table>
+{% empty %}
+<p class="reference-empty">{% translate "No database matches." %}</p>
+{% endfor %}
+{% endif %}
+
+{% if staff_docs or arx1 %}
+<h3>{% translate "Files" %}</h3>
+<table class="tuning-table">
+  <thead>
+    <tr>
+      <th>{% translate "Root" %}</th>
+      <th>{% translate "Path" %}</th>
+      <th>{% translate "Line" %}</th>
+      <th>{% translate "Text" %}</th>
+    </tr>
+  </thead>
+  <tbody>
+    {% for hit in file_hits %}
+    <tr>
+      <td>{{ hit.root_label }}</td>
+      <td>{{ hit.path }}</td>
+      <td>{{ hit.line }}</td>
+      <td>{{ hit.text }}</td>
+    </tr>
+    {% empty %}
+    <tr><td colspan="4">{% translate "No file matches." %}</td></tr>
+    {% endfor %}
+  </tbody>
+</table>
+{% endif %}
+
+{% endif %}

@@ -7,19 +7,15 @@ from django.test import SimpleTestCase, TestCase
 
 from core.app_domains import resolve_model_by_name
 from core_management.content_export import CONTENT_MODELS
-from core_management.prose_fields import NON_PROSE_TEXT_FIELDS, PROSE_FIELD_NAMES
+from core_management.prose_fields import (
+    NON_PROSE_TEXT_FIELDS,
+    PROSE_FIELD_NAMES,
+    prose_fields_for,
+)
+from world.codex.models import CodexEntry
 from world.contributors.factories import ContentContributorFactory
 from world.contributors.models import CreditedContent
 from world.traits.models import Trait, TraitCategory, TraitType
-
-
-def _text_fields(model: type[models.Model]) -> list[str]:
-    """Return ``model``'s free-text field names (choice fields are enums, not text)."""
-    return [
-        field.name
-        for field in model._meta.get_fields()
-        if isinstance(field, (models.TextField, models.CharField)) and not field.choices
-    ]
 
 
 def _content_models() -> list[tuple[str, type[models.Model]]]:
@@ -34,11 +30,18 @@ def _content_models() -> list[tuple[str, type[models.Model]]]:
 
 class ProseFieldClassificationTests(SimpleTestCase):
     def test_every_text_field_on_a_content_model_is_classified(self):
+        # Deliberately NOT prose_fields_for: that function already filters to
+        # PROSE_FIELD_NAMES, so it cannot surface a field that belongs in
+        # neither set. This test needs every free-text field, classified or
+        # not, which is exactly what it is checking for completeness.
         unclassified = {
-            f"{label}.{name}"
+            f"{label}.{field.name}"
             for label, model in _content_models()
-            for name in _text_fields(model)
-            if name not in PROSE_FIELD_NAMES and name not in NON_PROSE_TEXT_FIELDS
+            for field in model._meta.get_fields()
+            if isinstance(field, (models.TextField, models.CharField))
+            and not field.choices
+            and field.name not in PROSE_FIELD_NAMES
+            and field.name not in NON_PROSE_TEXT_FIELDS
         }
         self.assertEqual(
             unclassified,
@@ -57,8 +60,7 @@ class ProseCreditCoverageTests(SimpleTestCase):
         missing = [
             label
             for label, model in _content_models()
-            if any(name in PROSE_FIELD_NAMES for name in _text_fields(model))
-            and not issubclass(model, CreditedContent)
+            if prose_fields_for(model) and not issubclass(model, CreditedContent)
         ]
         self.assertEqual(
             missing,
@@ -68,12 +70,29 @@ class ProseCreditCoverageTests(SimpleTestCase):
         )
 
     def test_the_guard_is_not_passing_vacuously(self):
-        credited = [
-            label
-            for label, model in _content_models()
-            if any(name in PROSE_FIELD_NAMES for name in _text_fields(model))
-        ]
+        credited = [label for label, model in _content_models() if prose_fields_for(model)]
         self.assertGreater(len(credited), 75)
+
+
+class ProseFieldDeclarationOrderTests(SimpleTestCase):
+    """`prose_fields_for` returns field-declaration order, not alphabetical (#3019).
+
+    CodexEntry is the multi-prose-field case the Task 1 review flagged as
+    untested: `summary`, `lore_content`, `mechanics_content` are declared in
+    that order on the model (`world/codex/models.py`) but sort
+    alphabetically as `lore_content`, `mechanics_content`, `summary` - a
+    regression that silently reordered fields would pass every other guard
+    in this module while still breaking the authoring workbench's editor,
+    which renders one textarea per name in exactly this order (see
+    `web.admin.tests.test_authoring_editor
+    .TestAuthoringEditorGet.test_textareas_render_in_declaration_order`).
+    """
+
+    def test_codex_entry_prose_fields_are_in_declaration_order(self):
+        self.assertEqual(
+            prose_fields_for(CodexEntry),
+            ["summary", "lore_content", "mechanics_content"],
+        )
 
 
 class CreditedRowTests(TestCase):

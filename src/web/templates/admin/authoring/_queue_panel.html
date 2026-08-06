@@ -1,0 +1,121 @@
+{% load i18n %}
+<style>
+  #panel-authoring-queue .tuning-form {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 1.5rem;
+    margin-bottom: 1rem;
+  }
+  #panel-authoring-queue .tuning-field {
+    display: flex;
+    flex-direction: column;
+    min-width: 12rem;
+  }
+  #panel-authoring-queue .tuning-field label {
+    font-size: 0.85rem;
+    margin-bottom: 0.25rem;
+  }
+  #panel-authoring-queue table.tuning-table th,
+  #panel-authoring-queue table.tuning-table td {
+    border-bottom: 1px solid var(--hairline-color);
+    padding: 0.4rem 0.5rem;
+    text-align: left;
+    vertical-align: middle;
+  }
+  #panel-authoring-queue .badge {
+    display: inline-block;
+    font-size: 0.75rem;
+    padding: 0.1rem 0.4rem;
+    border-radius: 2px;
+    margin-right: 0.25rem;
+    border: 1px solid var(--hairline-color);
+    color: var(--body-quiet-color);
+  }
+  #panel-authoring-queue .badge-placeholder {
+    color: var(--error-fg);
+    border-color: var(--error-fg);
+  }
+  #panel-authoring-queue .queue-cap-note {
+    color: var(--body-quiet-color);
+    font-size: 0.9rem;
+  }
+</style>
+
+<h2>{% translate "Backlog Queue" %}</h2>
+<p>
+  {% translate "Worst-first: placeholder-marked rows first, then unwritten, then unreviewed." %}
+</p>
+
+<form class="tuning-form" hx-get="{% url 'admin_authoring_queue' %}"
+      hx-target="#panel-authoring-queue" hx-trigger="change, keyup changed delay:300ms">
+  <div class="tuning-field">
+    <label for="queue-domain">{% translate "Domain" %}</label>
+    <select id="queue-domain" name="domain">
+      <option value="">{% translate "All domains" %}</option>
+      {% for domain in domains %}
+      <option value="{{ domain }}" {% if domain == selected_domain %}selected{% endif %}>
+        {{ domain }}
+      </option>
+      {% endfor %}
+    </select>
+  </div>
+  <div class="tuning-field">
+    <label for="queue-status">{% translate "Status" %}</label>
+    <select id="queue-status" name="status">
+      <option value="">{% translate "All statuses" %}</option>
+      {% for value, label in status_choices %}
+      <option value="{{ value }}" {% if selected_status == value %}selected{% endif %}>
+        {{ label }}
+      </option>
+      {% endfor %}
+    </select>
+  </div>
+  <div class="tuning-field">
+    <label for="queue-q">{% translate "Search" %}</label>
+    <input type="text" id="queue-q" name="q" value="{{ query }}"
+           placeholder="{% translate 'Name contains...' %}">
+  </div>
+</form>
+
+{% if capped %}
+<p class="queue-cap-note">
+  {% blocktranslate %}Showing {{ display_cap }} of {{ total }}.{% endblocktranslate %}
+</p>
+{% endif %}
+
+<table class="tuning-table">
+  <thead>
+    <tr>
+      <th>{% translate "Identity" %}</th>
+      <th>{% translate "Model" %}</th>
+      <th>{% translate "Domain" %}</th>
+      <th>{% translate "Words" %}</th>
+      <th>{% translate "Flags" %}</th>
+    </tr>
+  </thead>
+  <tbody>
+    {% for row in rows %}
+    <tr>
+      <td>
+        <a href="#"
+           hx-get="{{ editor_url }}?model={{ row.model_label|urlencode }}&amp;pk={{ row.pk }}"
+           hx-target="#authoring-editor" hx-swap="innerHTML">
+          {{ row.identity }}
+        </a>
+      </td>
+      <td>{{ row.model_name }}</td>
+      <td>{{ row.domain }}</td>
+      <td>{{ row.words }}</td>
+      <td>
+        {% if row.has_placeholder %}
+        <span class="badge badge-placeholder">{% translate "Placeholder" %}</span>
+        {% endif %}
+        {% if not row.written %}<span class="badge">{% translate "Unwritten" %}</span>{% endif %}
+        {% if not row.reviewed %}<span class="badge">{% translate "Unreviewed" %}</span>{% endif %}
+      </td>
+    </tr>
+    {% empty %}
+    <tr><td colspan="5">{% translate "No rows match these filters." %}</td></tr>
+    {% endfor %}
+  </tbody>
+</table>
