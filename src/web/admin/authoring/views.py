@@ -143,9 +143,18 @@ def authoring_setup(request: HttpRequest) -> HttpResponse:
 
     A plain form POST from `_setup_panel.html`, not an HTMX fragment - the
     happy path is a full-page redirect back to the dashboard, which now
-    renders the normal stats/queue skeleton once the link exists. A repeat
-    POST from an already-linked account (a stale tab, a double submit) is a
-    no-op flash rather than a second link attempt.
+    renders the normal stats/queue skeleton once the link exists.
+
+    Two ways a repeat submit can land here, both handled without a 500: a
+    sequential re-POST from an already-linked account (a stale tab, a slow
+    double-click that landed after the first response) is caught by the
+    `current_contributor` check right below and flashed as a no-op; a truly
+    concurrent double-submit that gets past that check on both requests races
+    unique-constraint writes inside `link_contributor`, which resolves it
+    itself - idempotent success if the race linked this same account, a
+    coherent "someone else just took it" `ValueError` otherwise. Either way
+    this view only ever sees a `ValueError` or a contributor, never a raw
+    `IntegrityError`.
     """
     if current_contributor(request.user) is not None:
         messages.info(request, "Your author credit is already linked.")
