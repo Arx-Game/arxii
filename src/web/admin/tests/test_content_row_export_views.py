@@ -328,6 +328,100 @@ class TestContentRowExportViewsConfigured(TestCase):
         status = run_git(self.root, "status", "--short").stdout
         self.assertEqual(status.strip(), "")
 
+    def test_second_browser_diff_shows_addition_checkbox_and_enforces_it(self) -> None:
+        """A second browser's request session never ran the export (#3018 review).
+
+        The original design read ``is_addition`` out of the exporting browser's
+        request session, which defaulted to ``False`` for anyone else - so a
+        second superuser hitting this diff URL directly could confirm a
+        genuine addition with no new-row checkbox at all. It must now be
+        derived straight from git, so a fresh client (standing in for a
+        second browser/operator, never touching ``self.client``'s session)
+        sees the same checkbox and enforcement as the browser that exported.
+        """
+        from django.test import Client
+
+        added = EffectTypeFactory(name="Row Second Browser Addition")
+        self._export("magic.effecttype", added.pk)
+
+        second = Client()
+        second.force_login(self.super)
+
+        with self._env():
+            diff_resp = second.get(
+                reverse("admin_content_export_row_diff"),
+                {"model": "magic.effecttype", "pk": added.pk},
+            )
+        self.assertEqual(diff_resp.status_code, 200)
+        self.assertTrue(diff_resp.context["is_addition"])
+        self.assertContains(diff_resp, 'name="new_row"')
+        digest = diff_resp.context["digest"]
+
+        with self._env():
+            refused = second.post(
+                reverse("admin_content_export_row_confirm"),
+                {
+                    "model": "magic.effecttype",
+                    "pk": added.pk,
+                    "digest": digest,
+                    "action": "confirm",
+                },
+            )
+        self.assertEqual(refused.status_code, 302)
+        msgs = [str(m) for m in refused.wsgi_request._messages]
+        self.assertTrue(any("new-row box" in m for m in msgs))
+        log = run_git(self.root, "log", "--oneline", "-5").stdout
+        self.assertNotIn("Export EffectType", log)
+
+        with self._env():
+            committed = second.post(
+                reverse("admin_content_export_row_confirm"),
+                {
+                    "model": "magic.effecttype",
+                    "pk": added.pk,
+                    "digest": digest,
+                    "action": "confirm",
+                    "new_row": "1",
+                },
+            )
+        self.assertEqual(committed.status_code, 302)
+        self.assertEqual(committed.url, reverse("admin_content_session"))
+        log = run_git(self.root, "log", "--oneline", "-1").stdout
+        self.assertIn("Export EffectType", log)
+
+    def test_second_browser_diff_update_row_stays_not_addition(self) -> None:
+        """An update row derives ``is_addition = False`` for a fresh session too.
+
+        The fail-closed fix must not over-fire on the far more common case -
+        editing a row the corpus already has - or every ordinary update would
+        start spuriously demanding the new-row checkbox.
+        """
+        from django.test import Client
+
+        from core_management.content_export import export_to_content_repo
+
+        seeded = EffectTypeFactory(name="Row Second Browser Update", description="Original")
+        with self._env():
+            export_to_content_repo(self.root)
+        run_git(self.root, "add", ".")
+        run_git(self.root, "commit", "-m", "seed corpus")
+        run_git(self.root, "push", "-u", "origin", "main")
+
+        seeded.description = "Updated"
+        seeded.save()
+        self._export("magic.effecttype", seeded.pk)
+
+        second = Client()
+        second.force_login(self.super)
+        with self._env():
+            diff_resp = second.get(
+                reverse("admin_content_export_row_diff"),
+                {"model": "magic.effecttype", "pk": seeded.pk},
+            )
+        self.assertEqual(diff_resp.status_code, 200)
+        self.assertFalse(diff_resp.context["is_addition"])
+        self.assertNotContains(diff_resp, 'name="new_row"')
+
     def test_refused_export_flashes_and_never_touches_git(self) -> None:
         from world.character_sheets.factories import CharacterSheetFactory
         from world.magic.seeds_checks import ensure_character_magic_check_type

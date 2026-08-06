@@ -14,10 +14,12 @@ from core_management.content_session import (
     SESSION_BRANCH,
     _remote_slug,
     commit_row_export,
+    discard_all_pending,
     discard_row_export,
     ensure_session_branch,
     open_session_pr,
     row_diff,
+    row_is_addition_at_head,
     session_diff,
     session_state,
 )
@@ -163,6 +165,44 @@ class ContentSessionTests(TestCase):
         status = _run(self.root, "status", "--short").stdout
         assert status.strip() == ""
 
+    def test_discard_all_pending_restores_tracked_and_removes_untracked(self) -> None:
+        ensure_session_branch(self.root)
+        tracked = self._write_row("tracked.json")
+        commit_row_export(self.root, [tracked], "seed tracked")
+        tracked.write_text('{"a": 2}\n', encoding="utf-8")
+        new_file = self._write_row("brand_new.json")
+
+        discard_all_pending(self.root)
+
+        assert tracked.read_text(encoding="utf-8") == '{"a": 1}\n'
+        assert not new_file.exists()
+        status = _run(self.root, "status", "--short").stdout
+        assert status.strip() == ""
+
+    def test_discard_all_pending_handles_missing_fixtures_directory(self) -> None:
+        """One of the two pathspecs having zero tracked entries must not fail the call.
+
+        ``git checkout -- fixtures/ content/`` errors outright if EITHER
+        pathspec matches no tracked file - the common case here, since this
+        checkout never wrote anything under ``fixtures/`` at all.
+        """
+        ensure_session_branch(self.root)
+        assert not (self.root / "fixtures").exists()
+        self._write_row("untracked.json")
+
+        discard_all_pending(self.root)
+
+        status = _run(self.root, "status", "--short").stdout
+        assert status.strip() == ""
+
+    def test_discard_all_pending_is_noop_on_clean_tree(self) -> None:
+        ensure_session_branch(self.root)
+
+        discard_all_pending(self.root)
+
+        status = _run(self.root, "status", "--short").stdout
+        assert status.strip() == ""
+
     def test_row_and_session_diff_render(self) -> None:
         ensure_session_branch(self.root)
         path = self._write_row("diffme.json")
@@ -193,6 +233,47 @@ class ContentSessionTests(TestCase):
         assert '+{"a": 1}' in diff
         status = _run(self.root, "status", "--short").stdout
         assert "?? content/" in status
+
+    def test_row_is_addition_at_head_untracked_path_is_addition(self) -> None:
+        ensure_session_branch(self.root)
+        path = self._write_row("brand_new.json", '[{"model": "m", "fields": {"name": "A"}}]\n')
+
+        assert row_is_addition_at_head(self.root, [path], ["name"], {"name": "A"}) is True
+
+    def test_row_is_addition_at_head_json_key_present_is_not_addition(self) -> None:
+        ensure_session_branch(self.root)
+        path = self._write_row("known.json", '[{"model": "m", "fields": {"name": "A"}}]\n')
+        commit_row_export(self.root, [path], "seed known row")
+
+        assert row_is_addition_at_head(self.root, [path], ["name"], {"name": "A"}) is False
+
+    def test_row_is_addition_at_head_json_key_absent_is_addition(self) -> None:
+        ensure_session_branch(self.root)
+        path = self._write_row("known2.json", '[{"model": "m", "fields": {"name": "A"}}]\n')
+        commit_row_export(self.root, [path], "seed known2 row")
+
+        assert row_is_addition_at_head(self.root, [path], ["name"], {"name": "B"}) is True
+
+    def test_row_is_addition_at_head_folds_case(self) -> None:
+        ensure_session_branch(self.root)
+        path = self._write_row("cased.json", '[{"model": "m", "fields": {"name": "Alpha"}}]\n')
+        commit_row_export(self.root, [path], "seed cased row")
+
+        assert row_is_addition_at_head(self.root, [path], ["name"], {"name": "alpha"}) is False
+
+    def test_row_is_addition_at_head_no_key_fields_fails_closed(self) -> None:
+        ensure_session_branch(self.root)
+        path = self._write_row("nokey.json", '[{"model": "m", "fields": {"name": "A"}}]\n')
+        commit_row_export(self.root, [path], "seed nokey row")
+
+        assert row_is_addition_at_head(self.root, [path], None, {"name": "A"}) is True
+
+    def test_row_is_addition_at_head_unparseable_json_fails_closed(self) -> None:
+        ensure_session_branch(self.root)
+        path = self._write_row("bad.json", "not json\n")
+        commit_row_export(self.root, [path], "seed bad row")
+
+        assert row_is_addition_at_head(self.root, [path], ["name"], {"name": "A"}) is True
 
     def test_open_session_pr_posts_and_returns_url(self) -> None:
         # origin stays the local bare fixture repo (the push must succeed for

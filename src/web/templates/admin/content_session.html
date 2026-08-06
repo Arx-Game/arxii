@@ -57,6 +57,19 @@
             {% endif %}
         </p>
         <pre>{{ dirty_text }}</pre>
+        <form method="post" action="{{ discard_all_url }}">
+            {% csrf_token %}
+            <p>
+                <label for="discard_confirm">
+                    <input type="checkbox" id="discard_confirm" name="discard_confirm">
+                    Discard ALL pending changes shown above - this cannot be undone.
+                </label>
+            </p>
+            <div class="submit-row" style="padding: 12px;">
+                <input type="submit" value="Discard all pending changes"
+                       class="deletelink" style="padding: 10px 20px;">
+            </div>
+        </form>
     </div>
     {% endif %}
 

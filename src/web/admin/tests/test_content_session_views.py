@@ -44,6 +44,9 @@ class TestContentSessionViewsGate(TestCase):
         resp = self.client.post(reverse("admin_content_session_pr"), {"title": "t", "body": "b"})
         self.assertEqual(resp.status_code, 403)
 
+        resp = self.client.post(reverse("admin_content_session_discard"))
+        self.assertEqual(resp.status_code, 403)
+
 
 class TestContentSessionViewsConfigured(TestCase):
     """A tmp clone of a tmp bare origin, standing in for a content-repo checkout."""
@@ -188,3 +191,45 @@ class TestContentSessionViewsConfigured(TestCase):
         self.assertTrue(any("could not open the session pull request" in m for m in msgs))
         self.assertContains(resp, "My typed title")
         self.assertContains(resp, "My typed body")
+
+    def test_discard_all_without_checkbox_refuses_and_leaves_tree_dirty(self) -> None:
+        ensure_session_branch(self.root)
+        self._write_row("keepme.json")
+
+        with self._env():
+            resp = self.client.post(reverse("admin_content_session_discard"), {})
+
+        self.assertEqual(resp.status_code, 302)
+        self.assertEqual(resp.url, reverse("admin_content_session"))
+        msgs = [str(m) for m in resp.wsgi_request._messages]
+        self.assertTrue(any("Check the confirmation box" in m for m in msgs))
+        self.assertTrue((self.root / "content" / "keepme.json").exists())
+
+    def test_discard_all_with_checkbox_cleans_working_tree(self) -> None:
+        """Discard-all restores tracked edits and removes untracked additions."""
+        ensure_session_branch(self.root)
+        tracked = self._write_row("tracked.json")
+        commit_row_export(self.root, [tracked], "seed tracked")
+        tracked.write_text('{"a": 2}\n', encoding="utf-8")
+        self._write_row("brand_new.json")
+
+        session = self.client.session
+        session[_PENDING_EXPORT_SESSION_KEY] = {
+            "model_label": "magic.effecttype",
+            "pk": "42",
+            "natural_key": "Discard Me",
+        }
+        session.save()
+
+        with self._env():
+            resp = self.client.post(
+                reverse("admin_content_session_discard"), {"discard_confirm": "1"}
+            )
+
+        self.assertEqual(resp.status_code, 302)
+        self.assertEqual(resp.url, reverse("admin_content_session"))
+        msgs = [str(m) for m in resp.wsgi_request._messages]
+        self.assertTrue(any("Discarded all pending changes" in m for m in msgs))
+        self.assertEqual(tracked.read_text(encoding="utf-8"), '{"a": 1}\n')
+        self.assertFalse((self.root / "content" / "brand_new.json").exists())
+        self.assertNotIn(_PENDING_EXPORT_SESSION_KEY, self.client.session)

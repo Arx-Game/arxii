@@ -149,7 +149,14 @@ of every single row needing its own PR.
   refused unconditionally, the same idiom as the load-conflict resolve
   page. An addition (the row's natural key is not yet in the corpus) also
   requires an explicit "new_row" checkbox, mirroring the corpus-wide
-  export's addition gate (ADR-0191) at row scope.
+  export's addition gate (ADR-0191) at row scope. Addition-ness is derived
+  straight from git `HEAD` at both diff-render and confirm time
+  (`content_session.row_is_addition_at_head`, fail-closed on any git/parse
+  trouble), not read out of the request session - a session record only
+  ever answered for the browser that ran the export, so a second browser
+  hitting either URL directly used to see a default of "not an addition"
+  and could commit a genuine addition with no checkbox at all (#3018
+  review).
 - **One session branch, one pending export at a time** -
   `core_management.content_session` (`ensure_session_branch`,
   `commit_row_export`, `discard_row_export`) keeps every exported-but-not-

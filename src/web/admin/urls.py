@@ -16,7 +16,11 @@ from web.admin.content_row_export_views import (
     content_export_row_confirm,
     content_export_row_diff,
 )
-from web.admin.content_session_views import content_session, content_session_pr
+from web.admin.content_session_views import (
+    content_session,
+    content_session_discard,
+    content_session_pr,
+)
 from web.admin.game_setup_views import game_setup
 from web.admin.seed_views import seed_confirm, seed_run
 from web.admin.sphinx_views import sphinx_audit
@@ -87,6 +91,11 @@ urlpatterns = [
     ),
     path("_content_session/", content_session, name="admin_content_session"),
     path("_content_session_pr/", content_session_pr, name="admin_content_session_pr"),
+    path(
+        "_content_session_discard/",
+        content_session_discard,
+        name="admin_content_session_discard",
+    ),
     path(
         "_content_export/",
         content_export_preview,

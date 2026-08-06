@@ -27,14 +27,20 @@ confirm views never re-export; they recompute the same output path(s)
 At most one pending row export can exist at a time - enforced not here but
 one layer down, by ``content_session.ensure_session_branch`` refusing any
 dirty working tree (git state is the only truth that holds across browsers/
-operators; request-session bookkeeping is not). This module still keeps one
-piece of state in the request session - ``is_addition`` and the identity of
-the currently pending row, since neither survives a re-derivation without
-re-exporting (which would flip ``is_addition`` itself). When
+operators; request-session bookkeeping is not). Addition-ness is derived the
+same way, straight from git at both diff-render and confirm time
+(``_derive_is_addition``, delegating to ``content_session
+.row_is_addition_at_head``) - fixed after review (#3018) found the original
+design read it out of the request session instead, which only ever answered
+for the browser that ran the export: a second browser opening the same diff
+URL directly saw a default of "not an addition" and could commit a genuine
+addition with no new-row checkbox at all. This module still keeps one piece
+of state in the request session - the identity of the currently pending row
+(model, pk, natural key) - purely as a courtesy: when
 ``ensure_session_branch`` refuses a second export because a first is still
-pending, that session record is what lets the flash name the pending row and
-the redirect send the operator straight to its diff page instead of a dead
-end.
+pending, that record is what lets the flash name the pending row and the
+redirect send the operator straight to its diff page instead of a dead end.
+It is never consulted for anything that gates a commit.
 """
 
 from __future__ import annotations
@@ -99,12 +105,16 @@ def _set_pending_export(request: HttpRequest, model_label: str, pk: object, resu
     there is never a need to remember more than one, and a stray leftover
     key from an abandoned export session can never linger under this
     invariant.
+
+    Carries only the identity needed to name the pending row in a flash
+    message (see the module docstring) - no ``is_addition``, which is
+    derived fresh from git on every diff render and confirm instead (#3018
+    review).
     """
     request.session[_PENDING_EXPORT_SESSION_KEY] = {
         "model_label": model_label,
         "pk": pk,
         "natural_key": result.natural_key,
-        "is_addition": result.is_addition,
     }
 
 
@@ -118,19 +128,20 @@ def _clear_pending_export(request: HttpRequest) -> None:
     request.session.pop(_PENDING_EXPORT_SESSION_KEY, None)
 
 
-def _is_pending_addition(request: HttpRequest, model_label: str, pk: object) -> bool:
-    """True when the session's pending-export record is this row and it's an addition.
+def _derive_is_addition(content_root: Path, model: type, paths: list[Path], fields: dict) -> bool:
+    """Return whether this pending row export is an addition, derived from git HEAD.
 
-    Defaults to ``False`` (never spuriously shows the new-row checkbox) when
-    the session record is missing or names a different row - e.g. a direct
-    hit on a stale diff URL after another operator's export replaced this
-    session's pending record.
+    Replaces the old request-session lookup (see the module docstring's
+    #3018-review note) - delegates the actual git plumbing to
+    ``content_session.row_is_addition_at_head``, which fails closed on any
+    git/parse trouble so uncertainty here can never suppress the new-row
+    checkbox.
     """
-    pending = _pending_export(request)
-    if pending is None:
-        return False
-    same_row = pending["model_label"] == model_label and str(pending["pk"]) == str(pk)
-    return same_row and bool(pending["is_addition"])
+    from core_management.content_export import _natural_key_fields  # noqa: PLC0415
+    from core_management.content_session import row_is_addition_at_head  # noqa: PLC0415
+
+    key_fields = _natural_key_fields(model)
+    return row_is_addition_at_head(content_root, paths, key_fields, fields)
 
 
 def _pending_export_display_name(model_label: str) -> str:
@@ -148,15 +159,17 @@ def _pending_export_display_name(model_label: str) -> str:
         return model_label
 
 
-def _row_export_preview(instance, content_root: Path) -> tuple[list[Path], str]:
-    """Recompute ``export_single_row``'s output path(s) and natural-key display.
+def _row_export_preview(instance, content_root: Path) -> tuple[list[Path], str, dict]:
+    """Recompute ``export_single_row``'s output path(s), key display, and fields.
 
     Read-only: mirrors that function's path/key derivation exactly (same
     serializer call, same natural-key fields, same markdown-vs-JSON path
     formula) but never writes anything. The diff and confirm views need to
     know where the pending export landed without re-running the write that
     would flip its own addition bookkeeping a second time (see module
-    docstring).
+    docstring). The returned ``fields`` dict is this row's serialized field
+    values - needed by ``_derive_is_addition`` to check the row's own
+    natural key against what git's ``HEAD`` copy of the file actually holds.
     """
     from django.core import serializers  # noqa: PLC0415
 
@@ -178,7 +191,7 @@ def _row_export_preview(instance, content_root: Path) -> tuple[list[Path], str]:
     )
     records = json.loads(data)
     if not records:
-        return [], ""
+        return [], "", {}
     fields = records[0]["fields"]
     key_fields = _natural_key_fields(model)
     key_display = ", ".join(
@@ -187,10 +200,10 @@ def _row_export_preview(instance, content_root: Path) -> tuple[list[Path], str]:
 
     spec = MARKDOWN_EXPORT_DOMAINS.get(model_label)
     if spec is not None:
-        return [_markdown_entry_path(content_root, spec, fields)], key_display
+        return [_markdown_entry_path(content_root, spec, fields)], key_display, fields
 
     out_path = content_root / "fixtures" / domain_of(model) / f"{model_name}.json"
-    return [out_path], key_display
+    return [out_path], key_display, fields
 
 
 def _resolve_model_and_instance(model_label: str, pk: str):
@@ -303,7 +316,7 @@ def content_export_row_diff(request: HttpRequest) -> HttpResponse:
     if bail is not None:
         return bail
 
-    paths, natural_key = _row_export_preview(instance, content_root)
+    paths, natural_key, fields = _row_export_preview(instance, content_root)
     diff_text = row_diff(content_root, paths)
     if not diff_text.strip():
         messages.info(
@@ -311,7 +324,7 @@ def content_export_row_diff(request: HttpRequest) -> HttpResponse:
         )
         return HttpResponseRedirect(_change_url(model, pk))
 
-    is_addition = _is_pending_addition(request, model_label, pk)
+    is_addition = _derive_is_addition(content_root, model, paths, fields)
     digest = hashlib.sha256(diff_text.encode("utf-8")).hexdigest()
 
     context = {
@@ -332,15 +345,16 @@ def _run_confirmed_action(
     request: HttpRequest,
     content_root: Path,
     instance: object,
-    natural_key: str,
-    paths: list[Path],
+    preview: tuple[list[Path], str, dict],
 ) -> HttpResponse:
     """Apply ``action=confirm|discard`` once the digest has already checked out.
 
     Split out of ``content_export_row_confirm`` (ruff PLR0911) so that view's
     own preamble (superuser gate, content-root check, model/instance
     resolution, digest check) stays separate from this branch's several
-    possible outcomes.
+    possible outcomes. ``preview`` is ``_row_export_preview``'s
+    ``(paths, natural_key, fields)`` result, passed through as one value to
+    stay under the argument-count ceiling (ruff PLR0913).
     """
     from core_management.content_push import ContentPushError  # noqa: PLC0415
     from core_management.content_session import (  # noqa: PLC0415
@@ -348,6 +362,7 @@ def _run_confirmed_action(
         discard_row_export,
     )
 
+    paths, natural_key, fields = preview
     model = type(instance)
     pk = instance.pk
     model_label = request.POST.get("model", "")
@@ -364,7 +379,10 @@ def _run_confirmed_action(
         messages.error(request, "Unknown export action.")
         return HttpResponseRedirect(diff_url)
 
-    is_addition = _is_pending_addition(request, model_label, pk)
+    # Derived straight from git HEAD, not the request session (#3018 review) -
+    # only computed here, not for the discard branch above, since discard
+    # never needs to know.
+    is_addition = _derive_is_addition(content_root, model, paths, fields)
     if is_addition and not request.POST.get("new_row"):
         messages.error(
             request, "Check the new-row box to confirm this export adds a row to the corpus."
@@ -411,7 +429,7 @@ def content_export_row_confirm(request: HttpRequest) -> HttpResponse:
     if bail is not None:
         return bail
 
-    paths, natural_key = _row_export_preview(instance, content_root)
+    paths, natural_key, fields = _row_export_preview(instance, content_root)
     diff_text = row_diff(content_root, paths)
     digest = hashlib.sha256(diff_text.encode("utf-8")).hexdigest()
 
@@ -421,4 +439,4 @@ def content_export_row_confirm(request: HttpRequest) -> HttpResponse:
         )
         return HttpResponseRedirect(_diff_url(model_label, pk))
 
-    return _run_confirmed_action(request, content_root, instance, natural_key, paths)
+    return _run_confirmed_action(request, content_root, instance, (paths, natural_key, fields))

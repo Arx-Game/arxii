@@ -7,21 +7,29 @@ accumulated state - the branch name, the commit list, the full diff against
 ``origin/main`` - and the one action that turns it into review: pushing the
 branch and opening (or reusing) its pull request.
 
-Two views: ``content_session`` (GET) renders the page; ``content_session_pr``
+Three views: ``content_session`` (GET) renders the page; ``content_session_pr``
 (POST) reads the posted title/body, calls ``core_management.content_session
 .open_session_pr``, and redirects back to the session page with a flash on
-success. ``open_session_pr``, ``session_diff`` and ``session_state`` are
-imported at module scope (not the local-import idiom the sibling row-export
-views use) so a test can mock ``open_session_pr`` directly at this module's
-import site without needing a real GitHub-shaped remote.
+success; ``content_session_discard`` (POST) is the strand-recovery escape
+hatch - it wipes every uncommitted change under ``fixtures/`` and ``content/``
+via ``content_session.discard_all_pending``, gated on a checkbox because it
+has no per-file review. ``open_session_pr``, ``session_diff`` and
+``session_state`` are imported at module scope (not the local-import idiom
+the sibling row-export views use) so a test can mock ``open_session_pr``
+directly at this module's import site without needing a real GitHub-shaped
+remote.
 
-A dirty working tree (``SessionState.dirty``) always means a row export is
+A dirty working tree (``SessionState.dirty``) usually means a row export is
 sitting uncommitted, pending confirm or discard (see
-``content_session.ensure_session_branch``'s docstring) - the page renders
-those ``git status --short`` lines verbatim so the operator can see which
-files, and when the *same browser session* holds the row-export module's
-pending-export record (#3018 review), names that row with a link straight to
-its diff page instead of leaving the operator to go hunting for it.
+``content_session.ensure_session_branch``'s docstring), but that is not the
+*only* way it can be dirty - a crashed browser mid-review, or an operator who
+wants out of a pending row without walking through its own diff page, both
+leave the same dirty tree with nothing left to point the pending-export
+record at. The page renders those ``git status --short`` lines verbatim, and
+when the *same browser session* holds the row-export module's pending-export
+record (#3018 review), names that row with a link straight to its diff page;
+either way, "Discard all pending changes" is always available as the general
+recovery, not conditioned on that record existing.
 """
 
 from __future__ import annotations
@@ -38,11 +46,13 @@ from django.views.decorators.http import require_GET, require_POST
 from core_management.content_push import ContentPushError
 from core_management.content_session import (
     SessionState,
+    discard_all_pending,
     open_session_pr,
     session_diff,
     session_state,
 )
 from web.admin.content_row_export_views import (
+    _clear_pending_export,
     _diff_url,
     _pending_export,
     _pending_export_display_name,
@@ -97,6 +107,7 @@ def _session_context(
         "pr_title": pr_title,
         "pr_body": pr_body,
         "pr_url": reverse("admin_content_session_pr"),
+        "discard_all_url": reverse("admin_content_session_discard"),
     }
 
 
@@ -160,4 +171,36 @@ def content_session_pr(request: HttpRequest) -> HttpResponse:
         return render(request, "admin/content_session.html", context)
 
     messages.success(request, f"Opened the session pull request: {url}")
+    return HttpResponseRedirect(reverse("admin_content_session"))
+
+
+@staff_member_required
+@require_POST
+def content_session_discard(request: HttpRequest) -> HttpResponse:
+    """Discard every uncommitted change on the session branch. Strand recovery (#3018 review).
+
+    Requires the ``discard_confirm`` checkbox - the same "you must
+    deliberately opt in" idiom the load-conflict resolve page uses for its
+    typed natural key, since ``content_session.discard_all_pending`` throws
+    away uncommitted work with no per-file review and no undo. Also clears
+    this browser's own pending-export record, if it holds one, since
+    whatever it was pointing at just got wiped.
+    """
+    if not request.user.is_superuser:
+        raise PermissionDenied
+
+    from core_management.content_repo import resolve_content_root  # noqa: PLC0415
+
+    content_root = resolve_content_root()
+    if content_root is None:
+        messages.error(request, _CONTENT_ROOT_UNSET_MSG)
+        return HttpResponseRedirect(reverse("admin_game_setup"))
+
+    if not request.POST.get("discard_confirm"):
+        messages.error(request, "Check the confirmation box to discard all pending changes.")
+        return HttpResponseRedirect(reverse("admin_content_session"))
+
+    discard_all_pending(content_root)
+    _clear_pending_export(request)
+    messages.success(request, "Discarded all pending changes on the content session branch.")
     return HttpResponseRedirect(reverse("admin_content_session"))

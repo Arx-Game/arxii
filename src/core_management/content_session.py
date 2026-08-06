@@ -17,10 +17,12 @@ shared ``github_rest`` client.
 from __future__ import annotations
 
 from dataclasses import dataclass
+import json
 from pathlib import Path
 import re
 import subprocess
 
+from core_management.content_export import _record_key_folded
 from core_management.content_push import ContentPushError, _run_git
 from core_management.github_rest import GitHubRestError, github_request
 
@@ -95,8 +97,13 @@ def _pending_export_refusal_message() -> str:
 
     A dirty tree here always means a prior row's export is still
     uncommitted/undiscarded (#3018 review) - there is no other legitimate
-    way for the session branch to be dirty, since nothing but
-    ``content_export_row`` ever writes to it outside a commit.
+    way for the session branch to *become* dirty, since nothing but
+    ``content_export_row`` ever writes to it outside a commit. Getting back
+    out of it does not have to mean confirming or discarding that specific
+    row, though - ``discard_all_pending`` (wired to the content session
+    page's "Discard all pending changes" button, #3018 review) wipes
+    whatever is dirty in one step, for a browser that can no longer reach the
+    pending row's own diff page or simply does not want to review it.
     """
     return (
         "The content checkout has uncommitted changes from a pending export. "
@@ -157,6 +164,42 @@ def ensure_session_branch(content_root: Path) -> None:
             _run_git(content_root, "switch", SESSION_BRANCH)
     else:
         _run_git(content_root, "switch", "-c", SESSION_BRANCH, f"{_GIT_ORIGIN}/{_GIT_MAIN}")
+
+
+#: The only two directories the row-export flow ever writes to - the sole
+#: pathspecs ``discard_all_pending`` is ever allowed to touch, so it can never
+#: become a bare ``git clean`` that sweeps an unrelated untracked file.
+_DISCARD_PATHSPECS = ("fixtures/", "content/")
+
+
+def discard_all_pending(content_root: Path) -> None:
+    """Discard every uncommitted change under ``fixtures/`` and ``content/`` (#3018 review).
+
+    The strand-recovery counterpart to a stuck pending row export: an
+    operator who cannot or does not want to confirm it (a crashed browser
+    mid-review, or simply changing their mind about a row) needs a way back
+    to a clean working tree without hand-running git. Scoped to
+    ``_DISCARD_PATHSPECS`` ONLY, always via explicit ``--`` pathspecs - never
+    a bare ``git clean``, which would happily sweep an unrelated untracked
+    file the operator left in the checkout for some other reason.
+
+    ``git checkout -- <pathspec>`` errors outright if the pathspec matches no
+    tracked file at all - exactly the common case for a row's first-ever
+    export, which by definition never committed anything under that
+    directory - so each pathspec is checked with ``git ls-files`` first and
+    only passed to ``checkout`` when something tracked actually needs
+    restoring. ``git clean -fd`` carries no such restriction and always runs
+    for both, since an untracked leftover (the addition case) is exactly what
+    it exists to remove.
+    """
+    to_restore = [
+        pathspec
+        for pathspec in _DISCARD_PATHSPECS
+        if _run_git(content_root, "ls-files", "--", pathspec).stdout.strip()
+    ]
+    if to_restore:
+        _run_git(content_root, "checkout", "--", *to_restore)
+    _run_git(content_root, "clean", "-fd", "--", *_DISCARD_PATHSPECS)
 
 
 def commit_row_export(content_root: Path, paths: list[Path], message: str) -> str:
@@ -243,6 +286,87 @@ def row_diff(content_root: Path, paths: list[Path]) -> str:
         parts.append(_run_git(content_root, "diff", "--", *tracked).stdout)
     parts.extend(_no_index_diff(content_root, rel) for rel in untracked)
     return "".join(parts)
+
+
+def _json_row_present_at_head(
+    content_root: Path, rel: str, key_fields: list[str], record_fields: dict
+) -> bool:
+    """True only if ``rel``'s ``HEAD`` copy is valid JSON containing this row's key.
+
+    Split out of ``row_is_addition_at_head`` (ruff PLR0911) - every failure
+    mode along the way (a failed ``git show``, unparseable content, an
+    unexpected shape) returns ``False`` here, which that caller reads as
+    "not affirmatively found" and therefore an addition (fail closed).
+    """
+    result = subprocess.run(
+        ["git", "-C", str(content_root), "show", f"HEAD:{rel}"],
+        check=False,
+        capture_output=True,
+        text=True,
+        timeout=120,
+    )
+    if result.returncode != 0:
+        return False
+    try:
+        head_records = json.loads(result.stdout)
+    except ValueError:
+        return False
+    if not isinstance(head_records, list):
+        return False
+    row_key = _record_key_folded(record_fields, key_fields)
+    head_keys = {
+        _record_key_folded(entry["fields"], key_fields)
+        for entry in head_records
+        if isinstance(entry, dict) and isinstance(entry.get("fields"), dict)
+    }
+    return row_key in head_keys
+
+
+def row_is_addition_at_head(
+    content_root: Path,
+    paths: list[Path],
+    key_fields: list[str] | None,
+    record_fields: dict,
+) -> bool:
+    """Return whether a pending row export is an addition, straight from git HEAD.
+
+    Fixes a spec hole (#3018 review): the row-export request-session record
+    only ever answers for the browser that ran the export, so a second
+    browser opening the same diff URL directly (or a fresh session after the
+    first cleared) saw a default of ``False`` and could confirm a genuine
+    addition with no new-row checkbox at all. Git state, not the request
+    session, is the only truth that holds across browsers and operators - the
+    same principle ``ensure_session_branch`` already applies to "is a row
+    pending."
+
+    A path not tracked at ``HEAD`` at all is unconditionally an addition - a
+    file git has never seen cannot already contain this row (covers both the
+    markdown case, one file per row, and a JSON fixture file's first-ever
+    write). A tracked JSON fixture file can still be missing this particular
+    row - ``export_single_row`` merges into a file that may hold other rows -
+    so its ``HEAD`` copy is parsed and the row's folded natural key (the same
+    case-insensitive comparison ``export_single_row`` itself uses) is looked
+    up inside it directly.
+
+    Fails closed on every uncertain case: no usable natural key, a ``git
+    show`` failure, or content that doesn't parse as the expected JSON
+    fixture shape all return ``True`` (addition) rather than ``False`` - the
+    new-row checkbox is only ever skipped when the row is affirmatively
+    found at ``HEAD``, never because this couldn't tell.
+    """
+    for path in paths:
+        rel = _to_relative(content_root, [path])[0]
+        if not _git_ok(content_root, "ls-files", "--error-unmatch", "--", rel):
+            return True
+        if not rel.endswith(".json"):
+            # A tracked markdown file is one row's whole identity - being
+            # tracked at HEAD already proves the row is known there.
+            continue
+        if key_fields is None or not _json_row_present_at_head(
+            content_root, rel, key_fields, record_fields
+        ):
+            return True
+    return False
 
 
 def session_diff(content_root: Path) -> str:
