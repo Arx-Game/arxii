@@ -32,6 +32,15 @@ _DASH_NAME_MESSAGE = (
     "Contributor names use a hyphen, not a dash. Retype the name with a hyphen instead."
 )
 
+#: Matches `ContentContributor.name`'s `max_length` - checked here, before
+#: `create()`, rather than left to hit the column limit: SQLite has no
+#: length constraint at all (silently truncates or accepts it), so this
+#: refusal only ever surfaces on Postgres without the explicit check here
+#: (#3019 review, Minor).
+_MAX_NAME_LENGTH = 100
+
+_LONG_NAME_MESSAGE = f"Contributor names are at most {_MAX_NAME_LENGTH} characters long."
+
 _RACE_MESSAGE = "That name was claimed a moment ago. Pick it from the list or choose another."
 
 
@@ -60,11 +69,12 @@ def link_contributor(
     """Create-or-pick and link atomically; returns the contributor.
 
     Raises ValueError with a user-facing message on: blank name, em/en dash
-    in name, name colliding with a contributor already linked to another
-    account, existing_pk already linked elsewhere, existing_pk out of range.
-    Creates PlayerData for the account if absent. Picking an UNLINKED existing
-    contributor by exact name match through the create path links it rather
-    than erroring on unique.
+    in name, name over ContentContributor.name's max_length, name colliding
+    with a contributor already linked to another account, existing_pk
+    already linked elsewhere, existing_pk out of range. Creates PlayerData
+    for the account if absent. Picking an UNLINKED existing contributor by
+    exact name match through the create path links it rather than erroring
+    on unique.
 
     A write that loses a concurrent-submit race raises IntegrityError inside
     the atomic block, which is caught here only after the block has rolled
@@ -95,6 +105,8 @@ def link_contributor(
                     raise ValueError(msg)
                 if any(char in stripped_name for char in _DASH_CHARACTERS):
                     raise ValueError(_DASH_NAME_MESSAGE)
+                if len(stripped_name) > _MAX_NAME_LENGTH:
+                    raise ValueError(_LONG_NAME_MESSAGE)
 
                 contributor = ContentContributor.objects.filter(name=stripped_name).first()
                 if contributor is not None:

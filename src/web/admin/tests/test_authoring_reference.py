@@ -73,6 +73,21 @@ class DbSearchTests(TestCase):
     def test_no_match_returns_no_groups(self) -> None:
         self.assertEqual(db_search("Nonexistent Phrase Xyzzy"), [])
 
+    def test_scope_callable_narrows_every_model_before_matching(self) -> None:
+        """`scope` is the seam a future GM-restricted variant would use (#3019 review, Item 4).
+
+        Mirrors `test_authoring_backlog.TestBuildBacklog
+        .test_scope_callable_excludes_a_row_from_every_model` - same idiom,
+        applied here to `db_search` instead of `build_backlog`.
+        """
+        other = TechniqueFactory(name="Scoped Out Technique", description="Ember accents here too.")
+
+        groups = db_search("Ember", scope=lambda qs: qs.exclude(pk=other.pk))
+
+        hit_pks = {hit.pk for group in groups for hit in group.hits}
+        self.assertIn(self.subject.pk, hit_pks)
+        self.assertNotIn(other.pk, hit_pks)
+
 
 class FileSearchTests(TestCase):
     """`file_search` over a tmp file tree."""

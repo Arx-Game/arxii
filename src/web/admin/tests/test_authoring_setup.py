@@ -101,6 +101,20 @@ class TestLinkContributor(TestCase):
         with self.assertRaises(ValueError):
             link_contributor(other, existing_pk=contributor.pk)
 
+    def test_refuses_name_over_max_length(self) -> None:
+        """A name over ``ContentContributor.name``'s 100-char max_length is refused up front.
+
+        SQLite has no column-length constraint at all, so this only ever
+        surfaces on Postgres without the explicit check in
+        ``link_contributor`` - it would 500 there instead of failing cleanly
+        (#3019 review, Minor).
+        """
+        account = _make_account("overlongname")
+        with self.assertRaises(ValueError) as ctx:
+            link_contributor(account, name="x" * 101)
+        self.assertIn("100", str(ctx.exception))
+        self.assertFalse(ContentContributor.objects.filter(name__startswith="x" * 101).exists())
+
     def test_existing_pk_beyond_integer_range_is_coherent_not_a_500(self) -> None:
         account = _make_account("absurdpkmodel")
         with self.assertRaises(ValueError) as ctx:

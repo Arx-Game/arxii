@@ -17,7 +17,9 @@ rather than merged into one.
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from dataclasses import dataclass
+from typing import TYPE_CHECKING
 
 from django.core.exceptions import ObjectDoesNotExist
 from django.db.models import Q
@@ -25,6 +27,9 @@ from django.db.models import Q
 from core.app_domains import credited_content_models, domain_of
 from core_management.prose_fields import prose_fields_for
 from world.contributors.models import CreditedContent
+
+if TYPE_CHECKING:
+    from django.db.models import QuerySet
 
 #: Total RelatedEntry rows related_entries() ever returns, across every
 #: forward and reverse relation combined - not a per-relation share. A single
@@ -197,7 +202,11 @@ def related_entries(
 
 
 def prose_mentions(
-    name: str, *, exclude: tuple[type, object] | None = None, cap: int = _DEFAULT_MENTIONS_CAP
+    name: str,
+    *,
+    exclude: tuple[type, object] | None = None,
+    cap: int = _DEFAULT_MENTIONS_CAP,
+    scope: Callable[[QuerySet], QuerySet] | None = None,
 ) -> list[RelatedEntry]:
     """Rows across every credited content model whose prose contains `name`.
 
@@ -211,6 +220,12 @@ def prose_mentions(
     itself sliced to `[: cap - len(entries)]` before being iterated, so no
     single model - even one with a very large matching set - is ever asked
     to fetch more rows than could still fit under the cap.
+
+    `scope`, when given, narrows every model's queryset uniformly before the
+    `icontains` filter and `exclude` are applied - the same seam
+    `web.admin.authoring.backlog.build_backlog` and `reference.db_search`
+    expose, so a future GM-restricted variant can reuse it without this
+    module knowing who's asking. Workbench callers pass nothing.
     """
     if not name:
         return []
@@ -226,7 +241,10 @@ def prose_mentions(
         query = Q()
         for field_name in prose_names:
             query |= Q(**{f"{field_name}__icontains": name})
-        queryset = model.objects.filter(query)
+        queryset = model.objects.all()
+        if scope is not None:
+            queryset = scope(queryset)
+        queryset = queryset.filter(query)
         if exclude is not None and exclude[0] is model:
             queryset = queryset.exclude(pk=exclude[1])
         entries.extend(

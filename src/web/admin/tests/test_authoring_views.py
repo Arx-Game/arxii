@@ -174,12 +174,25 @@ class TestAuthoringEditorFragment(AuthoringViewsTestCase):
         resp = self.client.get(reverse("admin_authoring_editor"))
         self.assertEqual(resp.status_code, 403)
 
-    def test_superuser_gets_loading_shell(self) -> None:
+    def test_superuser_gets_editor_form_for_a_real_row(self) -> None:
+        """A real Trait row renders its prose editor, not just the error shell.
+
+        The original version of this test never created the Trait it
+        queried for, so ``pk=1`` almost always resolved to a missing row -
+        it was unknowingly asserting against the "does not exist" error
+        fragment's own ``<h2>Editing traits.Trait #1</h2>`` heading (which
+        renders regardless of whether the row resolved), not a loaded editor
+        (#3019 review, Minor).
+        """
+        trait = self._trait("Editor Shell Trait", "Some prose worth editing.")
         self.client.force_login(self.super)
+
         resp = self.client.get(
-            reverse("admin_authoring_editor"), {"model": "traits.Trait", "pk": "1"}
+            reverse("admin_authoring_editor"), {"model": "traits.Trait", "pk": str(trait.pk)}
         )
+
         self.assertEqual(resp.status_code, 200)
         body = resp.content.decode()
-        self.assertIn("traits.Trait", body)
-        self.assertIn("1", body)
+        self.assertNotIn("does not exist", body)
+        self.assertIn('<textarea name="description" id="id_description">', body)
+        self.assertIn("Some prose worth editing.", body)

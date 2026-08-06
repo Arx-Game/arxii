@@ -40,11 +40,14 @@
 </p>
 
 <form class="tuning-form" hx-get="{% url 'admin_authoring_reference' %}"
-      hx-target="#panel-authoring-reference" hx-trigger="change, keyup changed delay:300ms">
+      hx-target="#panel-authoring-reference" hx-trigger="submit">
   <div class="tuning-field">
     <label for="reference-q">{% translate "Search" %}</label>
     <input type="text" id="reference-q" name="q" value="{{ query }}"
            placeholder="{% translate 'Name or phrase...' %}">
+  </div>
+  <div class="tuning-field">
+    <button type="submit">{% translate "Search" %}</button>
   </div>
   <label class="tuning-checkbox">
     <input type="checkbox" name="db" value="1" {% if search_db %}checked{% endif %}>

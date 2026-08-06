@@ -20,16 +20,21 @@ CLI. The duplication is deliberate, not an oversight.
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from dataclasses import dataclass, field
 import os
 from pathlib import Path
 import time
+from typing import TYPE_CHECKING
 
 from django.db.models import Q
 
 from core.app_domains import credited_content_models, domain_of
 from core_management.content_repo import resolve_content_root
 from core_management.prose_fields import prose_fields_for
+
+if TYPE_CHECKING:
+    from django.db.models import QuerySet
 
 #: Only these suffixes are ever opened - the file corpora are prose/notes
 #: trees, not something this pane should be walking binaries or code in.
@@ -77,7 +82,12 @@ class FileSearchHit:
     text: str
 
 
-def db_search(query: str, *, cap: int = _DEFAULT_CAP) -> list[DbSearchGroup]:
+def db_search(
+    query: str,
+    *,
+    cap: int = _DEFAULT_CAP,
+    scope: Callable[[QuerySet], QuerySet] | None = None,
+) -> list[DbSearchGroup]:
     """`icontains` search across every credited model's prose fields, grouped by model.
 
     Fixed-string, case-insensitive (SQL `LIKE` under `icontains`) - no regex,
@@ -88,6 +98,12 @@ def db_search(query: str, *, cap: int = _DEFAULT_CAP) -> list[DbSearchGroup]:
     ever iterated - so no single model, however large, is asked to fetch
     more rows than could still fit under the cap. A model with zero matches
     contributes no group at all (never an empty one).
+
+    `scope`, when given, narrows every model's queryset uniformly before the
+    `icontains` filter is applied - the same seam `web.admin.authoring
+    .backlog.build_backlog` exposes, so a future GM-restricted variant of
+    reference search can reuse it without this module knowing who's asking.
+    Workbench callers pass nothing.
     """
     query = query.strip()
     if not query:
@@ -104,7 +120,10 @@ def db_search(query: str, *, cap: int = _DEFAULT_CAP) -> list[DbSearchGroup]:
         field_query = Q()
         for field_name in prose_names:
             field_query |= Q(**{f"{field_name}__icontains": query})
-        queryset = model.objects.filter(field_query)
+        queryset = model.objects.all()
+        if scope is not None:
+            queryset = scope(queryset)
+        queryset = queryset.filter(field_query)
         hits = [DbSearchHit(label=str(value), pk=value.pk) for value in queryset[:remaining]]
         if not hits:
             continue

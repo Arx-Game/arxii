@@ -6686,7 +6686,7 @@ Admin-hosted, superuser-only HTMX dashboards for difficulty tuning/simulation an
   `core.app_domains.credited_content_models()` model, a prose-only row editor
   with a guided first-run contributor setup gate, a related-entries/prose-
   mentions pane, and reference search over the database plus opt-in staff-
-  docs/Arx-I file corpora. See the "Authoring Workbench" section in
+  docs/Arx I file corpora. See the "Authoring Workbench" section in
   `src/web/admin/CLAUDE.md`.
 - **Permissions:** every view superuser-only (`web.admin.tuning.views.superuser_required`,
   mirroring `game_setup_views.py`'s gate).

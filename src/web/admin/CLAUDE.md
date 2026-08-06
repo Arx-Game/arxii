@@ -156,7 +156,16 @@ of every single row needing its own PR.
   ever answered for the browser that ran the export, so a second browser
   hitting either URL directly used to see a default of "not an addition"
   and could commit a genuine addition with no checkbox at all (#3018
-  review).
+  review). Every "back to the change form" link/redirect
+  (`content_export_row`'s refusals, the diff page's back-link, discard) goes
+  through `_change_url`, which builds the target model's admin change-form
+  URL **only when that model is in `admin.site._registry`** and returns
+  `None` otherwise - not every credited+exportable model has a registered
+  `ModelAdmin` (13 as of #3019 review, e.g. `missions.MissionTemplate`,
+  `magic.PortalAnchorKind`), and building that URL for one used to raise
+  `NoReverseMatch` and 500 the diff page. Every caller degrades `None` to
+  `_workbench_url` - an Authoring Workbench editor deep-link, which always
+  resolves regardless of the admin registry.
 - **One session branch, one pending export at a time** -
   `core_management.content_session` (`ensure_session_branch`,
   `commit_row_export`, `discard_row_export`) keeps every exported-but-not-
@@ -285,24 +294,36 @@ to `_authoring/` (`admin_authoring`).
   keyed on a mechanical field or Django's own `"__all__"` key has no
   textarea to render next to, so it surfaces in a **mechanical-error
   banner** above the form instead of vanishing silently. After a successful
-  credit stamp, the export handoff form (reusing
+  credit stamp, the freeze clause ("This row is now credited: content loads
+  will not overwrite it until the corpus catches up.") always renders, and
+  the export handoff form (reusing
   `content_export_tags.content_exportable`/`content_model_label` from the
-  row-export system above) is **gated on `content_exportable`** - the four
-  builder-domain models carry credit but are not exportable, and would
-  otherwise 500 on `NoReverseMatch` when the handoff redirects through a
-  change-form URL that does not exist for them - showing the sentence "This
+  row-export system above) plus its own export clause ("Export it to the
+  content repo to close the loop.") render only **inside the
+  `content_exportable` branch** - the four builder-domain models carry
+  credit but are not exportable at all, so they show the sentence "This
   model stays in the database only; the content repo does not carry it."
-  in its place.
+  in the handoff form's place instead (#3019 review: the freeze and export
+  clauses used to be one sentence, rendering the export clause even for a
+  non-exportable model directly above the "stays in the database only"
+  line it contradicted). `content_exportable` only rules out the four
+  builder-domain models here - it says nothing about whether an
+  *exportable* model has a `ModelAdmin` to link back to. Thirteen other
+  credited+exportable models never got one (e.g. `missions.MissionTemplate`,
+  `magic.PortalAnchorKind`) - that gap is closed one layer down, in the
+  row-export system's own `_change_url` (below), not by this gate.
 - **Related-entries pane + prose mentions** - `authoring/relations.py`:
   `related_entries(instance, cap=50)` walks every forward FK/O2O/M2M field
   and every reverse FK/O2O/M2M relation (a `related_name="+"` relation is
   already absent from `_meta.get_fields()`'s default `include_hidden=False`
   list, so no extra check is needed), loading automatically below the
-  editor. `prose_mentions(name, exclude=None, cap=200)` OR-`icontains`
-  scans every credited model's `prose_fields_for` columns for `name`,
-  excluding the edited row's own `(model, pk)`; it only runs on the
+  editor. `prose_mentions(name, exclude=None, cap=200, scope=None)`
+  OR-`icontains` scans every credited model's `prose_fields_for` columns for
+  `name`, excluding the edited row's own `(model, pk)`; it only runs on the
   operator's explicit "Search for mentions" click, since it is real query
-  work a page load should not pay unconditionally. Both use **bounded
+  work a page load should not pay unconditionally. `scope`, when given,
+  narrows every model's queryset the same way `build_backlog`'s does (#3019
+  review, Item 4) - workbench callers pass nothing. Both use **bounded
   per-relation slices**, never materializing more than a relation's share of
   the cap before iterating: `related_entries` slices each many-relation's
   queryset to `[: remaining + 1]` (the `+1` a discard-after-use overflow
@@ -313,9 +334,12 @@ to `_authoring/` (`admin_authoring`).
   model is itself credited) and to its Django admin change form (only when
   that model has a registered `ModelAdmin` - three of the four builder-
   domain models never were).
-- **Reference search** - `authoring/reference.py`: `db_search(query)` is an
-  `icontains` scan across every credited model's prose fields, **on by
-  default**; `file_search(query, roots)` covers two **opt-in** file
+- **Reference search** - `authoring/reference.py`: `db_search(query,
+  scope=None)` is an `icontains` scan across every credited model's prose
+  fields, **on by default**; `scope`, when given, narrows every model's
+  queryset the same way `build_backlog`'s does (#3019 review, Item 4) -
+  workbench callers pass nothing. `file_search(query, roots)` covers two
+  **opt-in** file
   corpora - this repo's own staff docs (`design/`, `world_bibles/` under the
   content root) and the maintainers' Arx I dump (the content root's sibling
   `arx1/` directory) - both **default off**, resolved via

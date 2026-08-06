@@ -169,6 +169,27 @@ class ProseMentionsTests(TestCase):
     def test_empty_name_returns_no_mentions(self) -> None:
         self.assertEqual(prose_mentions(""), [])
 
+    def test_scope_callable_narrows_every_model_before_matching(self) -> None:
+        """`scope` is the seam a future GM-restricted variant would use (#3019 review, Item 4).
+
+        Mirrors `test_authoring_backlog.TestBuildBacklog
+        .test_scope_callable_excludes_a_row_from_every_model` - same idiom,
+        applied here to `prose_mentions` instead of `build_backlog`.
+        """
+        subject = TechniqueFactory(name="Scoped Mentions Subject")
+        visible = TechniqueFactory(description="Scoped Mentions Subject appears here too.")
+        hidden = TechniqueFactory(description="Scoped Mentions Subject appears here as well.")
+
+        mentions = prose_mentions(
+            subject.name,
+            exclude=(Technique, subject.pk),
+            scope=lambda qs: qs.exclude(pk=hidden.pk),
+        )
+
+        mentioned_pks = {e.pk for e in mentions if e.model_name == "Technique"}
+        self.assertIn(visible.pk, mentioned_pks)
+        self.assertNotIn(hidden.pk, mentioned_pks)
+
 
 class AuthoringRelatedFragmentViewTests(TestCase):
     @classmethod
