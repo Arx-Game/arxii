@@ -135,3 +135,27 @@ class MaturationNotAStatError(MaturationError):
     """Maturation points buy primary stats only."""
 
     user_message = "Maturation points can only be spent on stats."
+
+
+class StatPointError(Exception):
+    """Base for Level Stat Point failures (#3001)."""
+
+    user_message = "This stat point could not be spent."
+
+
+class StatPointNoPointsError(StatPointError):
+    """No unspent level point is available at the character's current level."""
+
+    user_message = "You have no stat points available to spend."
+
+
+class StatPointCapReachedError(StatPointError):
+    """The target stat already sits at the character's stage cap."""
+
+    user_message = "That stat is already at the maximum your stage allows."
+
+
+class StatPointNotAStatError(StatPointError):
+    """Level stat points buy primary stats only."""
+
+    user_message = "Stat points can only be spent on stats."

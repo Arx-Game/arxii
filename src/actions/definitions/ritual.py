@@ -72,6 +72,7 @@ class PerformRitualAction(Action):
             InvalidImbueAmount,
             ResonanceInsufficient,
             RitualComponentError,
+            RitualPoolError,
             XPInsufficient,
         )
         from world.magic.services.ritual_dispatch import dispatch_ritual  # noqa: PLC0415
@@ -83,9 +84,26 @@ class PerformRitualAction(Action):
         components = kwargs.pop("components_provided", [])
         sheet = actor.sheet_data
 
+        # #3001: visibility IS eligibility — a non-hedge rite is closed to a
+        # character with no magical profile, at browse and perform alike.
+        from world.magic.exceptions import HedgeInaccessibleError  # noqa: PLC0415
+        from world.magic.services.ritual_pool import ritual_visible_to  # noqa: PLC0415
+
+        if not ritual_visible_to(sheet, ritual):
+            return ActionResult(success=False, message=HedgeInaccessibleError.user_message)
+
         try:
             with transaction.atomic():
                 self._validate_components(ritual, components, sheet)
+
+                # #3001: a solo perform auto-channels the performer's own anima
+                # toward the requirement, then gates. Spent like components —
+                # a fizzle still consumed the pool (return inside the atomic
+                # block commits). Deliberately NOT threaded through ``kwargs``:
+                # any kwarg blocks sustained-ritual declaration below.
+                pool_gate = self._resolve_anima_pool(ritual, sheet)
+                if pool_gate is not None and not pool_gate.proceeded:
+                    return ActionResult(success=False, message=pool_gate.message)
 
                 # Components are consumed above — that is what makes a broken
                 # sustained ritual genuinely spent (#2705, D2/Task 5). Must run
@@ -111,6 +129,7 @@ class PerformRitualAction(Action):
             InvalidImbueAmount,
             XPInsufficient,
             GhostTutorError,
+            RitualPoolError,
         ) as exc:
             return ActionResult(success=False, message=exc.user_message)
 
@@ -122,7 +141,11 @@ class PerformRitualAction(Action):
         return ActionResult(
             success=True,
             message=msg,
-            data={"execution_kind": ritual.execution_kind, "result": result},
+            data={
+                "execution_kind": ritual.execution_kind,
+                "result": result,
+                "spectacular": bool(pool_gate is not None and pool_gate.spectacular),
+            },
         )
 
     # ------------------------------------------------------------------
@@ -139,4 +162,27 @@ class PerformRitualAction(Action):
 
         resolve_and_consume_ritual_components(
             ritual=ritual, components=components, performer_sheet=performer_sheet
+        )
+
+    def _resolve_anima_pool(self, ritual: Any, performer_sheet: Any) -> Any:
+        """Auto-channel the performer's anima and gate the rite on it (#3001).
+
+        Returns ``None`` for folk rites (``anima_requirement == 0``), else a
+        ``PoolGateResult``. Raises ``RitualPoolError`` when the performer has
+        no anima at all to channel.
+        """
+        from world.magic.services.ritual_pool import (  # noqa: PLC0415
+            contribute_channel,
+            resolve_pool_gate,
+        )
+
+        if ritual.anima_requirement <= 0:
+            return None
+        contribution = contribute_channel(
+            ritual=ritual,
+            contributor_sheet=performer_sheet,
+            amount=ritual.anima_requirement,
+        )
+        return resolve_pool_gate(
+            ritual=ritual, performer_sheet=performer_sheet, pool=contribution.amount
         )

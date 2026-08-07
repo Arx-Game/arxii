@@ -30,7 +30,7 @@ class TestAnimaRegenPipeline(TestCase):
     """Full daily anima regen tick pipeline — all gating paths.
 
     setUpTestData seeds:
-    - Magic config singletons (AnimaConfig with daily_regen_percent=5,
+    - Magic config singletons (AnimaConfig with daily_regen_amount=1,
       daily_regen_blocking_property_key="blocks_anima_regen")
     - SoulfrayContent (5 stages; stages 2–5 carry the blocks_anima_regen
       Property) via the idempotent SoulfrayContentFactory() call embedded
@@ -62,10 +62,10 @@ class TestAnimaRegenPipeline(TestCase):
     # -----------------------------------------------------------------------
 
     def test_baseline_regen_restores_anima(self) -> None:
-        """Depleted anima + no blocking conditions → tick restores by daily_regen_percent.
+        """Depleted anima + no blocking conditions → tick restores by daily_regen_amount.
 
-        AnimaConfig.daily_regen_percent=5, maximum=100 → regen floor = 5.
-        After tick, current should be 5 (floor((100 * 5) // 100)).
+        AnimaConfig.daily_regen_amount=1 (#3001 flat trickle), maximum=100 →
+        after the tick, current should be exactly 1.
         """
         from world.character_sheets.factories import CharacterSheetFactory
         from world.magic.factories import CharacterAnimaFactory
@@ -77,9 +77,8 @@ class TestAnimaRegenPipeline(TestCase):
         summary = anima_regen_tick()
 
         anima.refresh_from_db()
-        expected_regen = (100 * 5) // 100  # = 5
         self.assertGreaterEqual(summary.regenerated, 1)
-        self.assertEqual(anima.current, expected_regen)
+        self.assertEqual(anima.current, 1)
 
     # -----------------------------------------------------------------------
     # Scenario 2: Soulfray stage 2 (Tearing) blocks regen
@@ -146,9 +145,8 @@ class TestAnimaRegenPipeline(TestCase):
 
         anima.refresh_from_db()
         # Character should be regenerated (stage 1 does not block).
-        expected_regen = (100 * 5) // 100  # = 5
         self.assertGreaterEqual(summary.regenerated, 1)
-        self.assertEqual(anima.current, expected_regen)
+        self.assertEqual(anima.current, 1)
 
     # -----------------------------------------------------------------------
     # Scenario 4: CharacterEngagement blocks regen

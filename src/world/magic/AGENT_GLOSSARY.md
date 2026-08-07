@@ -129,7 +129,17 @@ Spending Resonance currency to advance an existing Thread's developed points and
 Creating a new Thread on an anchor the character is unlocked to weave on. Player-facing it is the Rite of Weaving, a CEREMONY-kind Ritual completed by the `weave` finisher.
 
 **Ritual**:
-An authored magical procedure dispatched in one of four ways: SERVICE (invokes a service-function path), FLOW (invokes a flow definition), CEREMONY (creates a pending effect a finisher command later consumes), or SCENE_ACTION (fires a check via a `RitualCheckConfig` sidecar). Performance converges on the single `perform_ritual` Action.
+An authored magical procedure dispatched in one of four ways: SERVICE (invokes a service-function path), FLOW (invokes a flow definition), CEREMONY (creates a pending effect a finisher command later consumes), or SCENE_ACTION (fires a check via a `RitualCheckConfig` sidecar). Performance converges on the single `perform_ritual` Action. "Spell" is an acceptable in-prose synonym for a ritual in player-facing narrative text, but `Ritual` is the only mechanical term — never mint a `Spell` model or code identifier (#3001, ADR-0205; and "spell" stays on Technique's avoid list, since the sheet's technique section is historically the "spellbook").
+
+**Anima Pool (ritual)**:
+The per-performance pot of anima a `Ritual.anima_requirement > 0` rite consumes, filled by `RitualAnimaContribution` rows: **channel** (own anima), **prick** (one drop — 1 anima, trivial damage), **gash** ((1d6+1) × level, a real wound), **sacrifice** (a victim drained wholesale). The price is the only framework gate — no Gifted-check anywhere in ritual dispatch. Underfilled pools roll a deficit-bumped check and can fizzle (consuming the pool); ≥2× the requirement unlocks the spectacular tier. (#3001, ADR-0205.)
+_Avoid_: mana, spell points; conflating with the anima-ritual (the personal recovery rite).
+
+**Death Harvest**:
+The ×`AnimaConfig.death_harvest_multiplier` (20) yield of a killing anima drain — feeding gorge or ritual sacrifice — measured against the victim's full maximum, not what remained. The metaphysical engine of ritual murder, and why anima-feeders are tempted to finish victims. Fires the "Murder by Anima Drain" compromise taint (+5 Praedari). (#3001.)
+
+**Hedge-Accessible**:
+`Ritual.hedge_accessible` — the single visibility-and-eligibility predicate (`ritual_visible_to`) for rites open to characters with no magical profile (no `CharacterAura`). Non-hedge rites are hidden from and refused to quiescent performers at browse and solo perform alike; session rituals gate inside their own service functions instead. (#3001.)
 
 **Sanctum**:
 A leveled room that serves as a Thread anchor via `target_sanctum_details`, capped at the sanctum feature's level × 10. A Sanctum-anchored Thread is pull-applicable (an in-sanctum boost) while the character is in the Sanctum's room.

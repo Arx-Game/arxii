@@ -462,10 +462,12 @@ def ensure_ravenous_condition() -> "ConditionTemplate":
 def ensure_appetite_upkeep() -> None:
     """Idempotently seed the appetite upkeep configs (#2853, PLACEHOLDER magnitudes).
 
-    Blood appetite (vampires' anchor): weekly -1, floor 10% of maximum.
-    Essence appetite: no upkeep by default — the Shade condition's daily -1 /
-    floor 0 config rides its own distinction wiring at Shade content time (the
-    half-living tiers' ruled penalty is no-regen only).
+    Blood appetite (vampires' anchor): daily -1, floor 10% of maximum (rounded
+    up) — #3001 ruled the drain daily so vampires net a pure -1/day against the
+    regen tick's appetite-holder skip. Essence appetite: no upkeep by default —
+    the Shade condition's daily -1 / floor 0 config rides its own distinction
+    wiring at Shade content time (the half-living tiers' ruled penalty is
+    no-regen only).
     """
     from world.magic.models.appetites import AppetitePeriod, AppetiteUpkeep
 
@@ -473,7 +475,7 @@ def ensure_appetite_upkeep() -> None:
     AppetiteUpkeep.objects.get_or_create(
         distinction=blood,
         defaults={
-            "period": AppetitePeriod.WEEKLY,
+            "period": AppetitePeriod.DAILY,
             "amount": 1,
             "floor_percent": 10,
         },

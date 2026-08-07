@@ -40,6 +40,7 @@ class TraitChangeSource(models.TextChoices):
     CHARACTER_CREATION = "character_creation", "Character Creation"
     DEVELOPMENT_LEVEL_UP = "development_level_up", "Development Level-Up"
     MATURATION = "maturation", "Maturation"
+    LEVEL_STAT_POINT = "level_stat_point", "Level Stat Point"
     GM_GRANT = "gm_grant", "GM Grant"
 
 

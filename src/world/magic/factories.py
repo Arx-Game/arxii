@@ -1609,7 +1609,7 @@ class AnimaConfigFactory(factory.django.DjangoModelFactory):
         django_get_or_create = ("id",)
 
     id = 1
-    daily_regen_percent = 5
+    daily_regen_amount = 1
     daily_regen_blocking_property_key = "blocks_anima_regen"
 
 

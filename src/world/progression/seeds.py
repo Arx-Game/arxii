@@ -302,3 +302,24 @@ def seed_major_gift_technique_level_requirement() -> ClassLevelUnlock:
         },
     )
     return unlock
+
+
+def seed_maturation_stat_caps() -> None:
+    """Seed the per-stage stat caps (#3001 ruling: 5/6/11/16/21/25).
+
+    Shared by the maturation and level-stat-point spend paths. get_or_create
+    keeps a staff retune on re-run (PLACEHOLDER tuning values).
+    """
+    from world.classes.models import PathStage  # noqa: PLC0415
+    from world.progression.models import MaturationStatCap  # noqa: PLC0415
+
+    caps = {
+        PathStage.PROSPECT: 5,
+        PathStage.POTENTIAL: 6,
+        PathStage.PUISSANT: 11,
+        PathStage.TRUE: 16,
+        PathStage.GRAND: 21,
+        PathStage.TRANSCENDENT: 25,
+    }
+    for stage, cap in caps.items():
+        MaturationStatCap.objects.get_or_create(path_stage=stage, defaults={"stat_cap": cap})

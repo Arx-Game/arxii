@@ -96,3 +96,40 @@ class SetPrimaryClassLevelTests(TestCase):
         # Class A must now be demoted.
         ccl_a = CharacterClassLevel.objects.get(character=self.sheet, character_class=self.klass)
         self.assertFalse(ccl_a.is_primary)
+
+
+class EnsureClassStageHealthRatesTests(TestCase):
+    """#3001: seed the never-authored per-stage health rates."""
+
+    def test_seeds_every_class_and_stage_idempotently(self):
+        from world.classes.factories import CharacterClassFactory
+        from world.classes.models import ClassStageHealthRate
+        from world.classes.services import ensure_class_stage_health_rates
+
+        CharacterClassFactory()
+        CharacterClassFactory()
+        base = ClassStageHealthRate.objects.count()
+        created = ensure_class_stage_health_rates()
+        self.assertEqual(created + base, ClassStageHealthRate.objects.count())
+        again = ensure_class_stage_health_rates()
+        self.assertEqual(again, 0)
+
+    def test_rates_flow_into_base_max_health(self):
+        from world.character_sheets.factories import CharacterSheetFactory
+        from world.classes.factories import CharacterClassFactory
+        from world.classes.services import (
+            DEFAULT_HEALTH_PER_LEVEL,
+            ensure_class_stage_health_rates,
+            set_primary_class_level,
+        )
+        from world.vitals.services import derive_base_max_health
+
+        klass = CharacterClassFactory()
+        ensure_class_stage_health_rates()
+        sheet = CharacterSheetFactory()
+        set_primary_class_level(sheet.character, klass, 3)
+
+        base = derive_base_max_health(sheet)
+
+        stamina_term = sheet.character.traits.get_trait_value("stamina") * 3
+        self.assertEqual(base, 3 * DEFAULT_HEALTH_PER_LEVEL + stamina_term)

@@ -1375,6 +1375,7 @@
   - development_points <- progression.DevelopmentPoints
   - development_transactions <- progression.DevelopmentTransaction
   - weekly_skill_usage <- progression.WeeklySkillUsage
+  - level_stat_point_spends <- progression.LevelStatPointSpend
   - unlocks <- progression.CharacterUnlock
   - audere_majora_offers <- magic.PendingAudereMajoraOffer
   - audere_majora_crossings <- magic.AudereMajoraCrossing
@@ -1405,6 +1406,8 @@
   - resonance_grants <- magic.ResonanceGrant
   - motif <- magic.Motif
   - reincarnations <- magic.Reincarnation
+  - ritual_anima_contributions <- magic.RitualAnimaContribution
+  - ritual_sacrifices_suffered <- magic.RitualAnimaContribution
   - pending_ritual_effects <- magic.PendingRitualEffect
   - founded_sanctums <- magic.SanctumDetails
   - sanctum_pending_payouts <- magic.SanctumPendingPayout
@@ -1769,6 +1772,7 @@
   - aspect -> classes.Aspect [FK]
 
 ### Service Functions
+- `ensure_class_stage_health_rates() -> int - Seed per-stage health rates for every CharacterClass (#3001).`
 - `ensure_default_character_class() -> world.classes.models.CharacterClass - Get or create the single shared default CharacterClass (#3038).`
 - `is_crossing_level(level: int) -> bool - Return True if ``level`` is a PathStage crossing boundary.`
 - `set_primary_class_level(character: object, character_class: object, level: int) -> object - Set the character's primary class level and recompute level-derived health.`
@@ -5294,6 +5298,7 @@
   - known_by_records <- magic.CharacterRitualKnowledge
   - liturgy <- magic.RitualLiturgy
   - check_config <- magic.RitualCheckConfig
+  - anima_contributions <- magic.RitualAnimaContribution
   - requirements <- magic.RitualComponentRequirement
   - pending_effects <- magic.PendingRitualEffect
   - covenant_rite <- covenants.CovenantRite
@@ -5301,6 +5306,13 @@
   - technique_grants <- magic.TechniqueGrant
   - installs_room_features <- room_features.RoomFeatureKindInstallRitual
   - capstone_events <- relationships.RelationshipCapstone
+
+### RitualAnimaContribution
+**Foreign Keys:**
+  - session -> magic.RitualSession [FK] (nullable)
+  - ritual -> magic.Ritual [FK]
+  - contributor -> character_sheets.CharacterSheet [FK]
+  - victim -> character_sheets.CharacterSheet [FK] (nullable)
 
 ### RitualCheckConfig
 **Foreign Keys:**
@@ -5328,6 +5340,7 @@
   - initiator -> character_sheets.CharacterSheet [FK]
   - scene -> scenes.Scene [FK] (nullable)
 **Pointed to by:**
+  - anima_contributions <- magic.RitualAnimaContribution
   - participants <- magic.RitualSessionParticipant
   - references <- magic.RitualSessionReference
 
@@ -6854,6 +6867,11 @@
   - class_level_unlock -> progression.ClassLevelUnlock [FK] (nullable)
   - thread_crossing_threshold -> magic.ThreadCrossingThreshold [FK] (nullable)
   - path -> classes.Path [FK] (nullable)
+
+### LevelStatPointSpend
+**Foreign Keys:**
+  - character_sheet -> character_sheets.CharacterSheet [FK]
+  - trait -> traits.Trait [FK]
 
 ### MajorGiftTechniqueRequirement
 **Foreign Keys:**
@@ -9317,6 +9335,7 @@
   - development_points <- progression.DevelopmentPoints
   - development_transactions <- progression.DevelopmentTransaction
   - weekly_skill_usage <- progression.WeeklySkillUsage
+  - level_stat_point_spends <- progression.LevelStatPointSpend
   - xp_costs <- progression.TraitXPCost
   - rating_unlocks <- progression.TraitRatingUnlock
   - trait_requirements <- progression.TraitRequirement

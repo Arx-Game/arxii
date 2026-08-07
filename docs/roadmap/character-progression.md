@@ -13,7 +13,7 @@ The central spine connecting every system in the game. Characters develop throug
 - **Skills:** Develop through use, with XP spent at threshold unlocks (10, 20, 30, 40, 50). Development points accumulate through skill use on missions, in training scenes, and during GM adventures
 - **Path steps:** Levels on a character's magical calling. Requirements get harder as you climb — need legend, XP, skills, magical affinity. Paths progress through tiers: Prospect, Potential (3-5), Puissant (6-10), and beyond
 - **Audere Majora / Crossing the Threshold:** Dramatic breakthrough moments at steps after multiples of 5 (6, 11, 16, 21). The true power tier gates — characters must have a narrative breakthrough to advance
-- **Spells:** Independent of Path — even quiescent (non-magical) characters can use hedge magic. In the hands of the truly powerful, spells are devastating
+- **Rituals ("spells"):** Independent of Path — generalized rites anyone may attempt when they can pay the anima pool's price (#3001, ADR-0205). Hedge-accessible rites are the folk floor; the deep ones demand pools a quiescent can only fill with blood. In the hands of the truly powerful, the same rites are routine
 - **Path discovery:** Characters can research and unlock new Paths, eventually switching their calling
 - **The Durance:** Each character's overarching story of magical discovery and who they truly are
 

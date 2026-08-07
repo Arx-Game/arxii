@@ -56,6 +56,7 @@ from world.progression.models.rewards import (
     XPTransaction,
     cumulative_dp_for_level,
 )
+from world.progression.models.stat_points import LevelStatPointSpend
 from world.progression.models.unlocks import (
     AbstractClassLevelRequirement,
     AbstractUnlockRequirement,
@@ -113,6 +114,7 @@ __all__ = [
     "KudosTransaction",
     "LegendRequirement",
     "LevelRequirement",
+    "LevelStatPointSpend",
     "MajorGiftTechniqueRequirement",
     "MaturationSpend",
     "MaturationStatCap",

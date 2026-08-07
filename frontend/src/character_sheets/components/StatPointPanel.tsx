@@ -1,9 +1,10 @@
 /**
- * Maturation Point panel (#2756) — owner-only sheet section.
+ * Level Stat Point panel (#3001) — owner-only sheet section.
  *
- * Shows points earned by actually aging (milestones every 3rd matured year
- * from 21) and lets the owner spend them: +1 to a stat, capped per stage.
- * Reads GET /maturation/ and writes POST /spend-maturation-point/.
+ * Shows points earned by leveling (+1 per class level past the first) and
+ * lets the owner spend them: +1 to a stat, capped per stage (the same
+ * MaturationStatCap table the maturation panel binds to).
+ * Reads GET /stat-points/ and writes POST /spend-stat-point/.
  */
 
 import { apiFetch } from '@/evennia_replacements/api';
@@ -11,49 +12,48 @@ import { SpendableStatList, type SpendableStat } from './SpendableStatList';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useState } from 'react';
 
-interface MaturationState {
+interface StatPointState {
   available_points: number;
   stat_cap: number | null;
-  matured_years: number;
-  next_milestone_year: number;
+  level: number;
   stats: SpendableStat[];
 }
 
-async function fetchMaturation(sheetId: number): Promise<MaturationState> {
-  const res = await apiFetch(`/api/character-sheets/${sheetId}/maturation/`);
-  if (!res.ok) throw new Error('Failed to load maturation state');
-  return (await res.json()) as MaturationState;
+async function fetchStatPoints(sheetId: number): Promise<StatPointState> {
+  const res = await apiFetch(`/api/character-sheets/${sheetId}/stat-points/`);
+  if (!res.ok) throw new Error('Failed to load stat point state');
+  return (await res.json()) as StatPointState;
 }
 
-async function spendPoint(sheetId: number, traitId: number): Promise<MaturationState> {
-  const res = await apiFetch(`/api/character-sheets/${sheetId}/spend-maturation-point/`, {
+async function spendPoint(sheetId: number, traitId: number): Promise<StatPointState> {
+  const res = await apiFetch(`/api/character-sheets/${sheetId}/spend-stat-point/`, {
     method: 'POST',
     body: JSON.stringify({ trait_id: traitId }),
   });
   if (!res.ok) {
     const data = (await res.json().catch(() => null)) as { detail?: string } | null;
-    throw new Error(data?.detail ?? 'Failed to spend maturation point');
+    throw new Error(data?.detail ?? 'Failed to spend stat point');
   }
-  return (await res.json()) as MaturationState;
+  return (await res.json()) as StatPointState;
 }
 
-interface MaturationPanelProps {
+interface StatPointPanelProps {
   sheetId: number;
 }
 
-export function MaturationPanel({ sheetId }: MaturationPanelProps) {
+export function StatPointPanel({ sheetId }: StatPointPanelProps) {
   const queryClient = useQueryClient();
   const [error, setError] = useState<string | null>(null);
   const { data } = useQuery({
-    queryKey: ['maturation', sheetId],
-    queryFn: () => fetchMaturation(sheetId),
+    queryKey: ['stat-points', sheetId],
+    queryFn: () => fetchStatPoints(sheetId),
   });
 
   const spend = useMutation({
     mutationFn: (traitId: number) => spendPoint(sheetId, traitId),
     onSuccess: (state) => {
       setError(null);
-      queryClient.setQueryData(['maturation', sheetId], state);
+      queryClient.setQueryData(['stat-points', sheetId], state);
       void queryClient.invalidateQueries({ queryKey: ['character-sheet', sheetId] });
     },
     onError: (err: Error) => setError(err.message),
@@ -63,11 +63,11 @@ export function MaturationPanel({ sheetId }: MaturationPanelProps) {
 
   return (
     <section>
-      <h3 className="text-xl font-semibold">Maturation</h3>
+      <h3 className="text-xl font-semibold">Stat Points</h3>
       <p className="text-sm text-muted-foreground">
         {data.available_points > 0
-          ? `${data.available_points} point${data.available_points === 1 ? '' : 's'} earned by the years; spend them below.`
-          : `No points waiting. The next milestone arrives at age ${data.next_milestone_year}.`}
+          ? `${data.available_points} point${data.available_points === 1 ? '' : 's'} earned by your levels; spend them below.`
+          : 'No stat points waiting. Each new level grants one.'}
       </p>
       {error && <p className="mt-1 text-sm text-destructive">{error}</p>}
       {data.available_points > 0 && (
