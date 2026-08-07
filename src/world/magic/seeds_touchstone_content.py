@@ -106,12 +106,22 @@ def ensure_sanctification_requirements(ritual: Ritual) -> None:
     test-fixture builder for suites that need the templates directly.
 
     A reagent that doesn't resolve is explicitly skipped — ``continue``,
-    never passed through to ``get_or_create``.
-    ``RitualComponentRequirement.item_template`` is nullable (the
-    touchstone-mode row above is keyed on ``item_template=None``), so a naive
+    never passed through to ``get_or_create``. This guards an invariant, not
+    an active bug in today's code: ``RitualComponentRequirement.item_template``
+    is nullable, and the touchstone-mode row above is itself keyed on
+    ``item_template=None`` — created earlier in this same call, before the
+    reagent loop runs. So under the CURRENT ordering, an unguarded
     ``get_or_create(ritual=ritual, item_template=None, ...)`` for a missing
-    reagent would silently COLLIDE with that touchstone-mode row instead of
-    being skipped.
+    reagent would just re-fetch that already-existing touchstone-mode row
+    (``created=False``; ``get_or_create`` never re-applies ``defaults`` to a
+    row it finds) — harmless today. The guard exists to keep "at most one
+    ``item_template=None`` row per ritual" true even if the touchstone-mode
+    and reagent blocks are ever reordered: a reagent processed BEFORE the
+    touchstone-mode row would otherwise CREATE a row with ``item_template=
+    None`` *and* ``min_touchstone_tier=None`` (from this loop's own
+    ``defaults``) — a row matching neither mode — after which the touchstone-
+    mode ``get_or_create`` (keyed on ``min_touchstone_tier=tiers[1]``) would
+    fail to match it and create a second, genuine null-``item_template`` row.
     """
     from world.magic.models import RitualComponentRequirement  # noqa: PLC0415
     from world.seeds.sample_content import authored_or_sample  # noqa: PLC0415

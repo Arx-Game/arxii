@@ -1625,7 +1625,10 @@ production seeder. `ensure_sanctification_requirements(ritual)` (called uncondit
 `RitualComponentRequirement` (tier-based, no `ItemTemplate` lookup needed) plus one
 template-mode requirement per reagent it resolves via `authored_or_sample` by name — a reagent
 absent from the content repo (and `SEED_SAMPLE_CONTENT` off) is skipped (`continue`), not
-passed through as `item_template=None`, since that would collide with the touchstone-mode row.
+passed through as `item_template=None`, to protect the "at most one null-`item_template` row per
+ritual" invariant against a future reordering of the touchstone/reagent blocks — today's fixed
+ordering (touchstone-mode row created first) makes an unguarded call a harmless re-fetch of that
+row, not an active collision.
 So a real "sanctum install" requires a touchstone tied to the founding Resonance (tier ≥ Faint,
 attuned to the founder) plus whichever of the three reagents are authored — content-repo work,
 not seeder work. A full per-resonance/per-tier catalog is separate content-authoring work, not
