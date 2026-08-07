@@ -22731,7 +22731,7 @@ export interface components {
        * @description When this achievement was earned
        */
       readonly earned_at: string;
-      /** @description Return True if the character was a discoverer of this achievement. */
+      /** @description Return True if the character's earning tenure was a discoverer (#3055). */
       readonly is_discoverer: boolean;
     };
     /** @description Serializer for CharacterAnima records. */
@@ -24394,7 +24394,14 @@ export interface components {
        * @description When this achievement was first discovered
        */
       readonly discovered_at: string;
-      /** @description Return display names of characters who discovered this achievement. */
+      /**
+       * @description Return display names of the tenures who discovered this achievement.
+       *
+       *     Primary (``discovered_by_tenure``) plus shared co-discoverers
+       *     (``shared_with_tenures``), resolved through each tenure's roster entry to
+       *     the character's display name (#3055 -- there is no longer a
+       *     ``CharacterAchievement.discovery`` FK to walk).
+       */
       readonly discoverer_names: string[];
     };
     /**
