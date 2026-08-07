@@ -123,8 +123,37 @@ def _user_holds_item(user: AccountDB, item: ItemInstance) -> bool:
     return _user_plays_pk(user, item.holder_character_sheet_id)
 
 
-class ItemFacetWritePermission(PlayerOrStaffPermission):
-    """Allow attach/remove only if the user owns the item_instance, or is staff."""
+def _get_owned_item_instance(request: Request, instance_pk: int) -> ItemInstance:
+    """Fetch ``item_instance`` by pk, 404 unless the requester holds it (or is staff).
+
+    Shared by the quote endpoints on ``ItemFacetViewSet``, ``ItemStyleCraftViewSet``,
+    and ``GemCutViewSet`` — identical lookup + ownership gate ahead of building a
+    quote for whatever's being attached or cut. Callers validate ``instance_pk`` is
+    present before calling; the required-param error differs per endpoint (facet vs
+    style vs gem), so that check stays with the caller.
+    """
+    user = cast(AccountDB, request.user)
+    try:
+        item_instance = ItemInstance.objects.select_related(
+            "holder_character_sheet__character"
+        ).get(pk=instance_pk)
+    except ItemInstance.DoesNotExist as exc:
+        raise NotFound from exc
+    if not user.is_staff and not _user_holds_item(user, item_instance):
+        raise NotFound
+    return item_instance
+
+
+class _ItemInstanceOwnerWritePermission(PlayerOrStaffPermission):
+    """Base for write permissions gated on ownership of a targeted item_instance.
+
+    Shared by ``ItemFacetWritePermission``, ``ItemStyleWritePermission``, and
+    ``GemCutWritePermission`` — all three gate POST identically (the acting user
+    must hold the ``item_instance`` named in the request body, or be staff) and
+    default to an open object-level check. ``ItemFacetWritePermission`` is the
+    only one with a real per-object gate (DELETE on an attached facet), so it
+    overrides ``has_object_permission_for_player``.
+    """
 
     def has_permission_for_player(self, request: Request, view: APIView) -> bool:
         # POST: check the item_instance the request is targeting.
@@ -147,57 +176,27 @@ class ItemFacetWritePermission(PlayerOrStaffPermission):
         return True  # DELETE checked at object level
 
     def has_object_permission_for_player(
-        self, request: Request, view: APIView, obj: ItemFacet
+        self, request: Request, view: APIView, obj: object
     ) -> bool:
-        return _user_holds_item(cast(AccountDB, request.user), obj.item_instance)
+        return True
 
 
-class ItemStyleWritePermission(PlayerOrStaffPermission):
+class ItemFacetWritePermission(_ItemInstanceOwnerWritePermission):
+    """Allow attach/remove only if the user owns the item_instance, or is staff."""
+
+    def has_object_permission_for_player(
+        self, request: Request, view: APIView, obj: object
+    ) -> bool:
+        facet = cast(ItemFacet, obj)
+        return _user_holds_item(cast(AccountDB, request.user), facet.item_instance)
+
+
+class ItemStyleWritePermission(_ItemInstanceOwnerWritePermission):
     """Allow style-attach only if the user owns the item_instance, or is staff."""
 
-    def has_permission_for_player(self, request: Request, view: APIView) -> bool:
-        # POST: check the item_instance the request is targeting.
-        if request.method == "POST":
-            instance_pk = request.data.get("item_instance")
-            if instance_pk is None:
-                return True
-            user = cast(AccountDB, request.user)
-            return ItemInstance.objects.filter(
-                pk=instance_pk,
-                holder_character_sheet_id__in=RosterEntry.objects.for_account(user).values(
-                    "character_sheet_id"
-                ),
-            ).exists()
-        return True
 
-    def has_object_permission_for_player(
-        self, request: Request, view: APIView, obj: object
-    ) -> bool:
-        return True
-
-
-class GemCutWritePermission(PlayerOrStaffPermission):
+class GemCutWritePermission(_ItemInstanceOwnerWritePermission):
     """Allow a gem-cut attempt only if the user holds the item_instance, or is staff."""
-
-    def has_permission_for_player(self, request: Request, view: APIView) -> bool:
-        # POST: check the item_instance the request is targeting.
-        if request.method == "POST":
-            instance_pk = request.data.get("item_instance")
-            if instance_pk is None:
-                return True
-            user = cast(AccountDB, request.user)
-            return ItemInstance.objects.filter(
-                pk=instance_pk,
-                holder_character_sheet_id__in=RosterEntry.objects.for_account(user).values(
-                    "character_sheet_id"
-                ),
-            ).exists()
-        return True
-
-    def has_object_permission_for_player(
-        self, request: Request, view: APIView, obj: object
-    ) -> bool:
-        return True
 
 
 class ItemTemplatePagination(PageNumberPagination):
@@ -434,21 +433,13 @@ class ItemFacetViewSet(viewsets.ViewSet):
         from world.items.crafting.services import build_crafting_quote  # noqa: PLC0415
         from world.magic.models import Facet  # noqa: PLC0415
 
-        user = cast(AccountDB, request.user)
         instance_pk = _parse_int_param(request.query_params.get("item_instance"))  # noqa: USE_FILTERSET
         facet_pk = _parse_int_param(request.query_params.get("facet"))  # noqa: USE_FILTERSET
         if instance_pk is None:
             raise serializers.ValidationError({"item_instance": REQUIRED_QUERY_PARAM_MESSAGE})
         if facet_pk is None:
             raise serializers.ValidationError({"facet": REQUIRED_QUERY_PARAM_MESSAGE})
-        try:
-            item_instance = ItemInstance.objects.select_related(
-                "holder_character_sheet__character"
-            ).get(pk=instance_pk)
-        except ItemInstance.DoesNotExist as exc:
-            raise NotFound from exc
-        if not user.is_staff and not _user_holds_item(user, item_instance):
-            raise NotFound
+        item_instance = _get_owned_item_instance(request, instance_pk)
         try:
             facet = Facet.objects.get(pk=facet_pk)
         except Facet.DoesNotExist as exc:
@@ -1616,21 +1607,13 @@ class ItemStyleCraftViewSet(viewsets.ViewSet):
         from world.items.crafting.services import build_crafting_quote  # noqa: PLC0415
         from world.items.models import Style  # noqa: PLC0415
 
-        user = cast(AccountDB, request.user)
         instance_pk = _parse_int_param(request.query_params.get("item_instance"))  # noqa: USE_FILTERSET
         style_pk = _parse_int_param(request.query_params.get("style"))  # noqa: USE_FILTERSET
         if instance_pk is None:
             raise serializers.ValidationError({"item_instance": REQUIRED_QUERY_PARAM_MESSAGE})
         if style_pk is None:
             raise serializers.ValidationError({"style": REQUIRED_QUERY_PARAM_MESSAGE})
-        try:
-            item_instance = ItemInstance.objects.select_related(
-                "holder_character_sheet__character"
-            ).get(pk=instance_pk)
-        except ItemInstance.DoesNotExist as exc:
-            raise NotFound from exc
-        if not user.is_staff and not _user_holds_item(user, item_instance):
-            raise NotFound
+        item_instance = _get_owned_item_instance(request, instance_pk)
         try:
             style = Style.objects.get(pk=style_pk)
         except Style.DoesNotExist as exc:
@@ -1696,18 +1679,10 @@ class GemCutViewSet(viewsets.ViewSet):
         """Return a read-only cost+shatter-risk quote for cutting a gem (no mutation)."""
         from world.items.gems.services import build_gem_cut_quote  # noqa: PLC0415
 
-        user = cast(AccountDB, request.user)
         instance_pk = _parse_int_param(request.query_params.get("item_instance"))  # noqa: USE_FILTERSET
         if instance_pk is None:
             raise serializers.ValidationError({"item_instance": REQUIRED_QUERY_PARAM_MESSAGE})
-        try:
-            item_instance = ItemInstance.objects.select_related(
-                "holder_character_sheet__character"
-            ).get(pk=instance_pk)
-        except ItemInstance.DoesNotExist as exc:
-            raise NotFound from exc
-        if not user.is_staff and not _user_holds_item(user, item_instance):
-            raise NotFound
+        item_instance = _get_owned_item_instance(request, instance_pk)
         if item_instance.gem_or_none is None:
             raise serializers.ValidationError({"non_field_errors": [NotAGem.user_message]})
         crafter_character = item_instance.holder_character_sheet.character
