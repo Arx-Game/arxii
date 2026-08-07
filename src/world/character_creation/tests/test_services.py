@@ -38,7 +38,13 @@ from world.skills.factories import SkillFactory
 from world.species.models import Species
 from world.tarot.constants import ArcanaType
 from world.tarot.models import TarotCard
-from world.traits.models import CharacterTraitValue, Trait, TraitType
+from world.traits.models import (
+    CharacterTraitChange,
+    CharacterTraitValue,
+    Trait,
+    TraitChangeSource,
+    TraitType,
+)
 
 # Shared stats dict used by all finalization tests (12 stats, 1-5 scale, sum=24)
 DEFAULT_STATS = {
@@ -249,6 +255,19 @@ class CharacterFinalizationTests(FinalizationTestMixin, TestCase):
             character_id=character.pk, trait=self.stats["willpower"]
         )
         assert willpower_value.value == 20
+
+    def test_finalize_stamps_character_trait_change_baseline(self):
+        """CG finalize stamps a CharacterTraitChange for each baseline stat value (#3055)."""
+        draft = self._create_complete_draft(stats=DEFAULT_STATS)
+
+        character = finalize_character(draft, add_to_roster=True)
+
+        changes = CharacterTraitChange.objects.filter(character_sheet_id=character.pk)
+        assert changes.count() == 12
+        strength_change = changes.get(trait=self.stats["strength"])
+        assert strength_change.old_value == 0
+        assert strength_change.new_value == 20
+        assert strength_change.source == TraitChangeSource.CHARACTER_CREATION
 
     def test_staff_add_to_roster_stamps_staff_provenance(self):
         """add_to_roster (staff direct-add) records STAFF provenance + the actor (#1506)."""
@@ -698,6 +717,22 @@ class FinalizeCharacterSkillsTests(FinalizationTestMixin, TestCase):
         assert skill_value.value == 30
         assert skill_value.development_points == 0
         assert skill_value.rust_points == 0
+
+    def test_finalize_stamps_character_trait_change_for_skill_bridge(self):
+        """The CG skill->trait bridge row also stamps a CharacterTraitChange (#3055)."""
+        draft = self._create_complete_draft()
+        draft.draft_data["skills"] = {str(self.melee_skill.pk): 30}
+        draft.draft_data["specializations"] = {}
+        draft.save()
+
+        character = finalize_character(draft, add_to_roster=True)
+
+        change = CharacterTraitChange.objects.get(
+            character_sheet_id=character.pk, trait=self.melee_skill.trait
+        )
+        assert change.old_value == 0
+        assert change.new_value == 30
+        assert change.source == TraitChangeSource.CHARACTER_CREATION
 
     def test_finalize_creates_specialization_values(self):
         """Finalization should create CharacterSpecializationValue records."""
@@ -1304,6 +1339,24 @@ class FinalizeGiftAndTechniquesTests(TestCase):
             )
         )
         assert linked == {self.technique_one.id, self.technique_two.id}
+
+    def test_gift_and_techniques_carry_character_creation_origin(self) -> None:
+        """CG finalize's CharacterGift and CharacterTechnique rows carry
+        origin=CHARACTER_CREATION (#3055)."""
+        from world.character_creation.services import finalize_magic_data
+        from world.character_sheets.factories import CharacterSheetFactory
+        from world.magic.constants import AcquisitionOrigin
+        from world.magic.models import CharacterGift, CharacterTechnique
+
+        sheet = CharacterSheetFactory()
+        draft = self._create_draft(technique_ids=[self.technique_one.id, self.technique_two.id])
+
+        finalize_magic_data(draft, sheet)
+
+        char_gift = CharacterGift.objects.get(character=sheet)
+        assert char_gift.origin == AcquisitionOrigin.CHARACTER_CREATION
+        for ct in CharacterTechnique.objects.filter(character=sheet):
+            assert ct.origin == AcquisitionOrigin.CHARACTER_CREATION
 
     def test_latent_gift_thread_carries_chosen_resonance(self) -> None:
         """The provisioned latent GIFT thread's resonance matches the CG pick."""

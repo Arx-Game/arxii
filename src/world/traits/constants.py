@@ -13,7 +13,12 @@ from django.db import models
 # moves them by single points). Canonical definition lives in
 # world.traits.models (this module imports models, so it can't be defined here);
 # re-exported for the many display-edge consumers.
-from world.traits.models import STAT_DISPLAY_DIVISOR, TraitCategory, TraitType  # noqa: F401
+from world.traits.models import (  # noqa: F401
+    STAT_DISPLAY_DIVISOR,
+    TraitCategory,
+    TraitChangeSource,
+    TraitType,
+)
 
 
 class PrimaryStat(models.TextChoices):

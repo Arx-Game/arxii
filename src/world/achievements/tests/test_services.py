@@ -172,6 +172,16 @@ class GrantAchievementTest(TestCase):
         discovery = Discovery.objects.get(achievement=self.achievement)
         self.assertEqual(discovery.discoverers.count(), 2)
 
+    def test_batch_grant_stamps_earned_by_tenure_per_co_earner(self) -> None:
+        """#3055: every co-earner's own CharacterAchievement carries its own
+        earned_by_tenure -- an individually durable (player, character) pairing,
+        not just the primary Discovery slot's discoverer."""
+        results = grant_achievement(self.achievement, [self.sheet1, self.sheet2])
+
+        by_sheet = {r.character_sheet_id: r for r in results}
+        self.assertEqual(by_sheet[self.sheet1.pk].earned_by_tenure_id, self.tenure1.pk)
+        self.assertEqual(by_sheet[self.sheet2.pk].earned_by_tenure_id, self.tenure2.pk)
+
     def test_party_grant_discovery_slot_goes_to_first_sheet_tenure(self) -> None:
         """#3055: for a party grant, the Discovery slot anchors to the FIRST sheet
         in the list (the triggering sheet) -- co-earners still get

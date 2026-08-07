@@ -646,3 +646,46 @@ GLIMPSE_AXIS_CONFIG: dict[GlimpseTagAxis, GlimpseAxisRule] = {
     GlimpseTagAxis.CHOOSING: GlimpseAxisRule(multi=False, prose_prompt=False),
     GlimpseTagAxis.REFLECTION: GlimpseAxisRule(multi=True, prose_prompt=False),
 }
+
+
+class AcquisitionOrigin(models.TextChoices):
+    """How a character came to hold a CharacterTechnique or CharacterGift (#3055).
+
+    The ``DistinctionOrigin`` pattern (``world.distinctions.types``) generalized to
+    the two magic-acquisition models that lacked any discriminator. A single shared
+    enum (not one per model) because the vocabulary overlaps heavily and both models
+    answer the same question — "how did this land on the sheet" — for the same
+    acquisition-provenance ledger; neither model is expected to use every value
+    (e.g. no ``CharacterTechnique`` site sets ``SPECIES_GRANT`` today — species
+    provisioning only grants the ``CharacterGift``, not its techniques individually).
+    Named after the real creation sites, inventoried against code, not invented:
+
+    - ``CHARACTER_CREATION`` — CG finalize links the catalog pick (gift stage).
+    - ``PATH_GRANT`` — ``grant_path_magic`` at a path-crossing threshold.
+    - ``SPECIES_GRANT`` — ``provision_species_gifts`` (Minor Gift from species).
+    - ``TRAINED`` — the shared ``learn_technique`` mint seam (ritual ``TechniqueGrant``
+      dispatch or a completed ``TechniqueProgress`` training meter) for techniques;
+      ``charge_and_learn``'s implicit first-gift acquisition for gifts — both are the
+      "acquired via training/teaching investment" family.
+    - ``ROLE_GRANT`` — a covenant role's ``granted_gifts`` auto-grant
+      (``_grant_role_gifts_and_techniques``); auto-revoked on disengage.
+    - ``ORGANIZATION_GRANT`` — weaving an ORGANIZATION thread mints the org's
+      acquired-gift techniques at the thread's resonance (technique-only).
+    - ``ALTERNATE_SELF_GRANT`` — an alt-self's ability-suite grant
+      (``world.forms.services``), tied to a ``ModifierSource`` and revoked on revert
+      (technique-only).
+    - ``AUTHORED`` — the technique-authoring budget builder mints a brand-new
+      ``Technique`` and binds it to its designer (``author_technique``, technique-only).
+    - ``GM_GRANT`` — reserved for the JUNIOR-gated GM story-reward surface (#3055
+      slice 1c, not yet built); included now so 1c needs no further migration.
+    """
+
+    CHARACTER_CREATION = "character_creation", "Character Creation"
+    PATH_GRANT = "path_grant", "Path Grant"
+    SPECIES_GRANT = "species_grant", "Species Grant"
+    TRAINED = "trained", "Trained"
+    ROLE_GRANT = "role_grant", "Covenant Role Grant"
+    ORGANIZATION_GRANT = "organization_grant", "Organization Grant"
+    ALTERNATE_SELF_GRANT = "alternate_self_grant", "Alternate Self Grant"
+    AUTHORED = "authored", "Authored"
+    GM_GRANT = "gm_grant", "GM Grant"

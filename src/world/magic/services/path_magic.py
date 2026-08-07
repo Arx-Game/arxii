@@ -34,6 +34,7 @@ def grant_path_magic(sheet: CharacterSheet, path: Path) -> PathMagicGrantResult:
     not listed in the returned result. Safe to call for any path (a path with no
     ``PathGiftGrant`` rows is a no-op).
     """
+    from world.magic.constants import AcquisitionOrigin  # noqa: PLC0415
     from world.magic.models import (  # noqa: PLC0415
         CharacterTechnique,
         PathGiftGrant,
@@ -48,12 +49,14 @@ def grant_path_magic(sheet: CharacterSheet, path: Path) -> PathMagicGrantResult:
     granted_techniques: list = []
     for grant in grants:
         gift = grant.gift
-        _, gift_created = grant_gift_to_character(sheet, gift)
+        _, gift_created = grant_gift_to_character(sheet, gift, origin=AcquisitionOrigin.PATH_GRANT)
         if gift_created:
             granted_gifts.append(gift)
         for technique in grant.starter_techniques.all():
             _, tech_created = CharacterTechnique.objects.get_or_create(
-                character=sheet, technique=technique
+                character=sheet,
+                technique=technique,
+                defaults={"origin": AcquisitionOrigin.PATH_GRANT},
             )
             if tech_created:
                 granted_techniques.append(technique)

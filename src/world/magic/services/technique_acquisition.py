@@ -138,8 +138,15 @@ def learn_technique(  # noqa: PLR0913
     # TODO(#1732-deferred): XP spend when xp_cost > 0 — needs XPTransaction wiring.
     _ = xp_cost
 
-    # 6. Mint (ap_cost == 0 path — immediate).
-    ct = CharacterTechnique.objects.create(character=learner, technique=technique)
+    # 6. Mint (ap_cost == 0 path — immediate). This is the shared mint seam for
+    # both a ritual TechniqueGrant dispatch and a completed TechniqueProgress
+    # meter (#3055) — both are the "acquired via training/teaching investment"
+    # family, regardless of the AccessChangeSource narrative label passed in.
+    from world.magic.constants import AcquisitionOrigin  # noqa: PLC0415
+
+    ct = CharacterTechnique.objects.create(
+        character=learner, technique=technique, origin=AcquisitionOrigin.TRAINED
+    )
 
     # 7. Announce.
     announce_access_change(

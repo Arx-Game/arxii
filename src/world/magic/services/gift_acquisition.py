@@ -17,7 +17,7 @@ from typing import TYPE_CHECKING
 from django.db import transaction
 
 from world.character_sheets.models import CharacterSheet
-from world.magic.constants import GiftKind, TargetKind
+from world.magic.constants import AcquisitionOrigin, GiftKind, TargetKind
 from world.magic.exceptions import XPInsufficient
 from world.magic.models import (
     CharacterGiftUnlock,
@@ -400,7 +400,7 @@ def charge_and_learn(  # noqa: PLR0913 - shared core for two front doors; params
 
     # 4. Implicit gift acquisition (first technique).
     if not has_gift:
-        grant_gift_to_character(sheet, gift)
+        grant_gift_to_character(sheet, gift, origin=AcquisitionOrigin.TRAINED)
 
     # 5. Check technique cap (after acquisition so the thread exists for depth).
     current_count = count_techniques_for_gift(sheet, cap_gift)

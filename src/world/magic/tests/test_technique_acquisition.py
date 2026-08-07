@@ -5,7 +5,7 @@ from django.test import TestCase
 from world.achievements.constants import AccessChangeSource
 from world.action_points.models import ActionPointPool
 from world.character_sheets.factories import CharacterSheetFactory
-from world.magic.constants import GiftKind, TargetKind
+from world.magic.constants import AcquisitionOrigin, GiftKind, TargetKind
 from world.magic.exceptions import (
     GiftNotOwned,
     TechniqueCapExceeded,
@@ -47,6 +47,21 @@ class LearnTechniqueTest(TestCase):
         )
         self.assertEqual(ct.character, self.sheet)
         self.assertEqual(ct.technique, self.technique)
+
+    def test_learned_technique_carries_trained_origin(self):
+        """A technique minted via learn_technique carries origin=TRAINED (#3055).
+
+        This is the shared mint seam for both a ritual TechniqueGrant dispatch and
+        a completed TechniqueProgress training meter — regardless of the
+        AccessChangeSource narrative label passed in, the acquisition-provenance
+        origin is always TRAINED.
+        """
+        ct = learn_technique(
+            self.sheet,
+            self.technique,
+            source=AccessChangeSource.TECHNIQUE_GRANT,
+        )
+        self.assertEqual(ct.origin, AcquisitionOrigin.TRAINED)
 
     def test_gift_not_owned_raises(self):
         other_gift = GiftFactory(kind=GiftKind.MINOR)

@@ -10,7 +10,7 @@ from evennia.utils.idmapper.models import SharedMemoryModel
 
 from core.natural_keys import NaturalKeyManager, NaturalKeyMixin
 from world.contributors.models import CreditedContent
-from world.magic.constants import GiftKind
+from world.magic.constants import AcquisitionOrigin, GiftKind
 from world.magic.models.affinity import Resonance
 
 
@@ -209,6 +209,14 @@ class CharacterGift(SharedMemoryModel):
     acquired_at = models.DateTimeField(
         auto_now_add=True,
         help_text="When this gift was acquired.",
+    )
+    origin = models.CharField(
+        max_length=30,
+        choices=AcquisitionOrigin.choices,
+        default=AcquisitionOrigin.CHARACTER_CREATION,
+        help_text="How this gift was acquired (#3055). Default covers pre-existing rows "
+        "minted before this field existed, which were overwhelmingly CG gift-stage picks; "
+        "every creation site now sets this explicitly.",
     )
 
     class Meta:

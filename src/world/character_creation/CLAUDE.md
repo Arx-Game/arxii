@@ -126,8 +126,14 @@ for the five-branch validation gate this data must satisfy before submission.
   character instead of always returning `None` at CG time.
 - `draft.draft_data["selected_technique_ids"]` names the chosen catalog
   `Technique`s (drawn from the gift's pool ∪ the tradition's signature set); each
-  gets a `CharacterTechnique.objects.get_or_create` link. `announce_access_change`
-  fires once with every linked technique as `gained`.
+  gets a `CharacterTechnique.objects.get_or_create` link (`origin=CHARACTER_CREATION`,
+  #3055 — same for the gift link's `grant_gift_to_character(..., origin=...)` call).
+  `announce_access_change` fires once with every linked technique as `gained`.
+- **Trait/skill baseline stamp (#3055):** `_create_stat_values`/`_create_skill_values`/
+  `_apply_post_cg_bonuses` (`services.py`) each also write a `traits.CharacterTraitChange`
+  row (`source=CHARACTER_CREATION`, `old_value=0` for the brand-new stat/skill rows) —
+  the acquisition-provenance record for the values CG stamps in place. See
+  `docs/systems/INDEX.md`'s Traits entry.
 - **Outcome-flavor consequence-pool selection is dropped entirely** (spec
   correction on #2426) — every catalog technique already carries its own authored
   `action_template`; finalize no longer reads a `selected_consequence_pool_id` key

@@ -24,7 +24,7 @@ from world.progression.types import DevelopmentSource
 from world.skills.factories import CharacterSkillValueFactory, SkillFactory
 from world.skills.models import CharacterSkillValue
 from world.traits.factories import TraitFactory
-from world.traits.models import CharacterTraitValue
+from world.traits.models import CharacterTraitChange, CharacterTraitValue, TraitChangeSource
 
 
 class CumulativeDpForLevelTest(TestCase):
@@ -113,6 +113,10 @@ class DevelopmentPointsAwardTest(TestCase):
         # Trait value should stay at 10
         tv = CharacterTraitValue.objects.get(character=self.character.sheet_data, trait=self.trait)
         assert tv.value == 10
+        # No level-up means no acquisition-provenance record either (#3055).
+        assert not CharacterTraitChange.objects.filter(
+            character_sheet=self.character.sheet_data, trait=self.trait
+        ).exists()
 
     def test_award_single_level_up(self) -> None:
         """Awarding exactly 100 dp triggers 10->11."""
@@ -123,6 +127,19 @@ class DevelopmentPointsAwardTest(TestCase):
         assert level_ups == [(10, 11)]
         tv = CharacterTraitValue.objects.get(character=self.character.sheet_data, trait=self.trait)
         assert tv.value == 11
+
+    def test_award_single_level_up_records_trait_change(self) -> None:
+        """A level-up writes a CharacterTraitChange (old=10, new=11, DEVELOPMENT_LEVEL_UP)."""
+        dev = DevelopmentPoints.objects.create(
+            character_sheet=self.sheet, trait=self.trait, total_earned=0
+        )
+        dev.award_points(100)
+        change = CharacterTraitChange.objects.get(
+            character_sheet=self.character.sheet_data, trait=self.trait
+        )
+        assert change.old_value == 10
+        assert change.new_value == 11
+        assert change.source == TraitChangeSource.DEVELOPMENT_LEVEL_UP
 
     def test_award_multiple_level_ups(self) -> None:
         """Awarding 300 dp triggers 10->11 and 11->12 (thresholds: 100, 300)."""

@@ -18,9 +18,29 @@ from evennia.utils.idmapper.models import SharedMemoryModel
 
 from core.natural_keys import NaturalKeyManager, NaturalKeyMixin
 from world.contributors.models import CreditedContent
+from world.roster.models import RosterTenure
 
 if TYPE_CHECKING:
     pass
+
+
+class TraitChangeSource(models.TextChoices):
+    """How a CharacterTraitValue's value came to change in place (#3055).
+
+    Acquisition-provenance discriminator for CharacterTraitChange — the
+    ``DistinctionOrigin`` pattern (``world.distinctions.types``) generalized to
+    trait/skill value mutation. Every production writer that mutates an
+    existing (or stamps a brand-new) ``CharacterTraitValue.value`` records one
+    of these in the same transaction; a mutation with no matching row is a
+    bug, not a silent gap. Defined here (not ``constants.py``) for the same
+    reason ``TraitType``/``TraitCategory`` are — ``constants.py`` re-exports
+    all three from this module to avoid a circular import.
+    """
+
+    CHARACTER_CREATION = "character_creation", "Character Creation"
+    DEVELOPMENT_LEVEL_UP = "development_level_up", "Development Level-Up"
+    MATURATION = "maturation", "Maturation"
+    GM_GRANT = "gm_grant", "GM Grant"
 
 
 class TraitType(models.TextChoices):
@@ -281,6 +301,72 @@ class CharacterTraitValue(SharedMemoryModel):
         except ImportError:
             # Handler not available during tests sometimes
             pass
+
+
+class CharacterTraitChange(SharedMemoryModel):
+    """Durable acquisition-provenance record for an in-place trait/skill value change (#3055).
+
+    ``CharacterTraitValue.value`` mutates in place (a stat raised via
+    development level-ups, the CG baseline stamp, a maturation spend, ...)
+    and leaves no authored-value record of its own — unlike
+    ``CharacterTechnique``/``CharacterGift`` (own ``origin`` field) or
+    ``CharacterXPTransaction``/``ResonanceGrant``/``ClassLevelAdvancement``
+    (already-adequate receipts). This is the missing record: every production
+    writer of ``CharacterTraitValue.value`` creates one of these in the same
+    transaction as the mutation, so pristine (CG/authoring) state can be
+    derived from provenance rather than snapshotted, and a future GM story
+    reward (source=GM_GRANT, #3055 slice 1c) has somewhere to stamp itself.
+    """
+
+    character_sheet = models.ForeignKey(
+        "arxii.CharacterSheet",
+        on_delete=models.CASCADE,
+        related_name="trait_changes",
+        help_text="The character whose trait value changed.",
+    )
+    trait = models.ForeignKey(
+        Trait,
+        on_delete=models.CASCADE,
+        related_name="character_changes",
+        help_text="The trait whose value changed.",
+    )
+    old_value = models.IntegerField(
+        help_text="The trait's internal-scale value before this change (0 for a brand-new "
+        "CharacterTraitValue row that didn't exist yet).",
+    )
+    new_value = models.IntegerField(
+        help_text="The trait's internal-scale value after this change.",
+    )
+    source = models.CharField(
+        max_length=30,
+        choices=TraitChangeSource.choices,
+        help_text="How this value change came about.",
+    )
+    granting_tenure = models.ForeignKey(
+        RosterTenure,
+        null=True,
+        blank=True,
+        on_delete=models.PROTECT,
+        related_name="granted_trait_changes",
+        help_text="The GM's tenure that granted this change, when source=GM_GRANT (#3055 "
+        "slice 1c). Null for every automatic/self-driven source. PROTECT: tenures are "
+        "never deleted post-release (mirrors Discovery.discovered_by_tenure, #3060).",
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering: ClassVar[list[str]] = ["-created_at"]
+        indexes: ClassVar[list[models.Index]] = [
+            models.Index(fields=["character_sheet", "-created_at"]),
+        ]
+        verbose_name = "Character Trait Change"
+        verbose_name_plural = "Character Trait Changes"
+
+    def __str__(self) -> str:
+        return (
+            f"{self.character_sheet}: {self.trait.name} "
+            f"{self.old_value}->{self.new_value} ({self.source})"
+        )
 
 
 # Check Resolution System Models

@@ -278,6 +278,7 @@ def provision_species_gifts(sheet: CharacterSheet, *, resonance=None) -> list[Ch
     Called from finalize_magic_data after the Major-gift block so the species
     gift thread anchors to the same resonance as the player's Major-gift thread.
     """
+    from world.magic.constants import AcquisitionOrigin  # noqa: PLC0415
     from world.magic.specialization.services import grant_gift_to_character  # noqa: PLC0415
 
     if sheet.species_id is None:
@@ -288,7 +289,9 @@ def provision_species_gifts(sheet: CharacterSheet, *, resonance=None) -> list[Ch
     ).select_related("gift", "drawback_condition", "benefit_condition", "drawback_distinction")
     minted: list[CharacterGift] = []
     for grant in grants:
-        cg, _ = grant_gift_to_character(sheet, grant.gift, resonance=resonance)
+        cg, _ = grant_gift_to_character(
+            sheet, grant.gift, resonance=resonance, origin=AcquisitionOrigin.SPECIES_GRANT
+        )
         minted.append(cg)
         if grant.drawback_condition_id is not None:
             _apply_permanent_condition_once(sheet.character, grant.drawback_condition)

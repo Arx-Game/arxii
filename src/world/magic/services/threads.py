@@ -700,13 +700,18 @@ def weave_thread(  # noqa: PLR0913
     # acquired gifts whose supported-resonance set contains the thread's chosen
     # resonance. Idempotent — existing technique ownership is skipped.
     if target_kind == TargetKind.ORGANIZATION:
+        from world.magic.constants import AcquisitionOrigin  # noqa: PLC0415
         from world.magic.models import CharacterTechnique  # noqa: PLC0415
 
         org = target  # type: ignore[assignment]
         handler = org.gift_grants_handler
         techniques = handler.acquired_techniques_for(resonance)
         for technique in techniques:
-            CharacterTechnique.objects.get_or_create(character=character_sheet, technique=technique)
+            CharacterTechnique.objects.get_or_create(
+                character=character_sheet,
+                technique=technique,
+                defaults={"origin": AcquisitionOrigin.ORGANIZATION_GRANT},
+            )
 
     _satisfy_thread_woven(character_sheet)
 

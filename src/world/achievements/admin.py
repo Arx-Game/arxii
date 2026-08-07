@@ -73,9 +73,16 @@ class StatTrackerAdmin(admin.ModelAdmin):
 class CharacterAchievementAdmin(admin.ModelAdmin):
     """Admin for CharacterAchievement model."""
 
-    list_display = ["character_sheet", "achievement", "earned_at", "is_discoverer"]
+    list_display = [
+        "character_sheet",
+        "achievement",
+        "earned_at",
+        "earned_by_tenure",
+        "is_discoverer",
+    ]
     list_filter = ["achievement"]
     raw_id_fields = ["character_sheet"]
+    autocomplete_fields = ["earned_by_tenure"]
 
     @admin.display(boolean=True)
     def is_discoverer(self, obj: CharacterAchievement) -> bool:

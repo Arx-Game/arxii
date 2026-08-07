@@ -797,6 +797,7 @@ def _grant_role_gifts_and_techniques(membership: CharacterCovenantRole) -> None:
     Does NOT revoke techniques the character learned independently — only
     grants role-specific ones.
     """
+    from world.magic.constants import AcquisitionOrigin  # noqa: PLC0415
     from world.magic.models import (  # noqa: PLC0415  # noqa: PLC0415
         CharacterGift,
         CharacterTechnique,
@@ -815,13 +816,14 @@ def _grant_role_gifts_and_techniques(membership: CharacterCovenantRole) -> None:
         CharacterGift.objects.get_or_create(
             character=sheet,
             gift=gift,
+            defaults={"origin": AcquisitionOrigin.ROLE_GRANT},
         )
         # Mint CharacterTechnique for each of the gift's techniques.
         for technique in Technique.objects.filter(gift=gift):
             CharacterTechnique.objects.get_or_create(
                 character=sheet,
                 technique=technique,
-                defaults={"role_source": membership},
+                defaults={"role_source": membership, "origin": AcquisitionOrigin.ROLE_GRANT},
             )
 
 

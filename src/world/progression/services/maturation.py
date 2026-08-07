@@ -20,7 +20,13 @@ from world.progression.exceptions import (
 from world.progression.models import MaturationSpend, MaturationStatCap
 from world.progression.services.skill_development import get_character_path_level
 from world.traits.constants import STAT_DISPLAY_DIVISOR
-from world.traits.models import CharacterTraitValue, Trait, TraitType
+from world.traits.models import (
+    CharacterTraitChange,
+    CharacterTraitValue,
+    Trait,
+    TraitChangeSource,
+    TraitType,
+)
 
 if TYPE_CHECKING:
     from world.character_sheets.models import CharacterSheet
@@ -94,8 +100,16 @@ def spend_maturation_point(sheet: "CharacterSheet", trait: Trait) -> MaturationS
     if cap is not None and trait_value.value >= cap * STAT_DISPLAY_DIVISOR:
         raise MaturationCapReachedError(MaturationCapReachedError.user_message)
 
+    old_value = trait_value.value
     trait_value.value += STAT_DISPLAY_DIVISOR
     trait_value.save()
+    CharacterTraitChange.objects.create(
+        character_sheet=sheet,
+        trait=trait,
+        old_value=old_value,
+        new_value=trait_value.value,
+        source=TraitChangeSource.MATURATION,
+    )
     return MaturationSpend.objects.create(
         character_sheet=sheet,
         trait=trait,
@@ -122,8 +136,16 @@ def sync_maturation_spends(sheet: "CharacterSheet") -> int:
         trait_value, _ = CharacterTraitValue.objects.get_or_create(
             character=sheet, trait=spend.trait, defaults={"value": 0}
         )
+        old_value = trait_value.value
         trait_value.value += delta
         trait_value.save()
+        CharacterTraitChange.objects.create(
+            character_sheet=sheet,
+            trait=spend.trait,
+            old_value=old_value,
+            new_value=trait_value.value,
+            source=TraitChangeSource.MATURATION,
+        )
         spend.is_active = should_be_active
         spend.save()
         flipped += 1

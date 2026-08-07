@@ -117,10 +117,12 @@ def grant_achievement(
         results: list[CharacterAchievement] = []
         newly_earned: list[CharacterSheet] = []
         for sheet in character_sheets:
+            # can_earn_achievements already guarantees a current tenure exists.
+            earning_tenure = sheet.roster_entry_or_none.current_tenure
             char_achievement, created = CharacterAchievement.objects.get_or_create(
                 character_sheet=sheet,
                 achievement=achievement,
-                defaults={"discovery": discovery},
+                defaults={"discovery": discovery, "earned_by_tenure": earning_tenure},
             )
             results.append(char_achievement)
             if created:

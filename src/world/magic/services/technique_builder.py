@@ -450,11 +450,14 @@ def validate_design_for_character(
 @transaction.atomic
 def author_technique(character, design: TechniqueDesignInput):
     """Player path: enforce PlayerPolicy, build, bind CharacterTechnique."""
+    from world.magic.constants import AcquisitionOrigin  # noqa: PLC0415
     from world.magic.models import CharacterTechnique  # noqa: PLC0415
 
     breakdown = enforce_policy(design, PlayerPolicy(), character)
     tech = build_technique(design, creator=character)
-    CharacterTechnique.objects.create(character=character, technique=tech)
+    CharacterTechnique.objects.create(
+        character=character, technique=tech, origin=AcquisitionOrigin.AUTHORED
+    )
     return tech, breakdown
 
 

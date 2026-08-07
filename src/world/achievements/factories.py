@@ -79,6 +79,7 @@ class CharacterAchievementFactory(factory_django.DjangoModelFactory):
 
     character_sheet = factory.SubFactory(CharacterSheetFactory)
     achievement = factory.SubFactory(AchievementFactory)
+    earned_by_tenure = factory.SubFactory(RosterTenureFactory)
 
 
 class RewardDefinitionFactory(factory_django.DjangoModelFactory):

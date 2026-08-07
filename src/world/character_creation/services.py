@@ -764,6 +764,23 @@ def _create_stat_values(
     ]
     _character_trait_value_cls.objects.bulk_create(trait_values)
 
+    # Acquisition-provenance baseline stamp (#3055): a brand-new
+    # CharacterTraitValue row has no prior authored value, so old_value=0.
+    from world.traits.models import CharacterTraitChange, TraitChangeSource  # noqa: PLC0415
+
+    CharacterTraitChange.objects.bulk_create(
+        [
+            CharacterTraitChange(
+                character_sheet=character.sheet_data,
+                trait=tv.trait,
+                old_value=0,
+                new_value=tv.value,
+                source=TraitChangeSource.CHARACTER_CREATION,
+            )
+            for tv in trait_values
+        ]
+    )
+
 
 def _create_path_history(character: ObjectDB, draft: CharacterDraft) -> None:
     """Create the path history record for the character's chosen path.
@@ -852,13 +869,23 @@ def _apply_post_cg_bonuses(
     post_cg_bonuses = draft.draft_data.get("stats_post_cg_bonuses", {})
     if not post_cg_bonuses:
         return
+    from world.traits.models import CharacterTraitChange, TraitChangeSource  # noqa: PLC0415
+
     for stat_name, bonus in post_cg_bonuses.items():
         trait_value = _character_trait_value_cls.objects.filter(
             character_id=character.pk, trait__name=stat_name
         ).first()
         if trait_value:
+            old_value = trait_value.value
             trait_value.value += int(bonus) * STAT_DISPLAY_DIVISOR
             trait_value.save()
+            CharacterTraitChange.objects.create(
+                character_sheet=character.sheet_data,
+                trait=trait_value.trait,
+                old_value=old_value,
+                new_value=trait_value.value,
+                source=TraitChangeSource.CHARACTER_CREATION,
+            )
 
 
 def _create_worship_declaration(character: ObjectDB, draft: CharacterDraft) -> None:
@@ -1231,7 +1258,11 @@ def _create_skill_values(character: ObjectDB, draft: CharacterDraft) -> None:
         Skill,
         Specialization,
     )
-    from world.traits.models import CharacterTraitValue  # noqa: PLC0415
+    from world.traits.models import (  # noqa: PLC0415
+        CharacterTraitChange,
+        CharacterTraitValue,
+        TraitChangeSource,
+    )
 
     skills_data = draft.draft_data.get("skills", {})
     specializations_data = draft.draft_data.get("specializations", {})
@@ -1261,6 +1292,21 @@ def _create_skill_values(character: ObjectDB, draft: CharacterDraft) -> None:
                     character.key,
                 )
     CharacterTraitValue.objects.bulk_create(skill_trait_values)
+
+    # Acquisition-provenance baseline stamp (#3055): the skill-trait bridge
+    # rows above are all brand-new, so old_value=0.
+    CharacterTraitChange.objects.bulk_create(
+        [
+            CharacterTraitChange(
+                character_sheet=tv.character,
+                trait=tv.trait,
+                old_value=0,
+                new_value=tv.value,
+                source=TraitChangeSource.CHARACTER_CREATION,
+            )
+            for tv in skill_trait_values
+        ]
+    )
 
     # Create specialization values
     for spec_id, value in specializations_data.items():
@@ -1363,6 +1409,7 @@ def _finalize_gift_and_techniques(draft: CharacterDraft, sheet: CharacterSheet) 
     if not gift_id:
         return
 
+    from world.magic.constants import AcquisitionOrigin  # noqa: PLC0415
     from world.magic.models import (  # noqa: PLC0415
         CharacterTechnique,
         Gift,
@@ -1378,12 +1425,18 @@ def _finalize_gift_and_techniques(draft: CharacterDraft, sheet: CharacterSheet) 
     # weaving a (latent) thread.
     resonance_id = draft.draft_data.get("selected_gift_resonance_id")
     resonance = Resonance.objects.filter(pk=resonance_id).first() if resonance_id else None
-    grant_gift_to_character(sheet, gift, resonance=resonance)
+    grant_gift_to_character(
+        sheet, gift, resonance=resonance, origin=AcquisitionOrigin.CHARACTER_CREATION
+    )
 
     technique_ids = draft.draft_data.get("selected_technique_ids") or []
     techniques = list(Technique.objects.filter(pk__in=technique_ids))
     for technique in techniques:
-        CharacterTechnique.objects.get_or_create(character=sheet, technique=technique)
+        CharacterTechnique.objects.get_or_create(
+            character=sheet,
+            technique=technique,
+            defaults={"origin": AcquisitionOrigin.CHARACTER_CREATION},
+        )
 
     from world.achievements.constants import AccessChangeSource  # noqa: PLC0415
     from world.achievements.discovery import announce_access_change  # noqa: PLC0415

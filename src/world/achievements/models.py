@@ -340,6 +340,18 @@ class CharacterAchievement(SharedMemoryModel):
         related_name="discoverers",
         help_text="The discovery record if this character was among the first to find it",
     )
+    earned_by_tenure = models.ForeignKey(
+        RosterTenure,
+        on_delete=models.PROTECT,
+        related_name="earned_achievements",
+        help_text="The tenure (character piloted by a player) that earned this achievement "
+        "(#3055). Stamped from the sheet's current tenure inside grant_achievement — the "
+        "same eligibility gate (can_earn_achievements) that already guarantees one exists. "
+        "Required: an achievement is an acquisition-provenance record, and every co-earner "
+        "of a party grant gets their own individually durable (player, character) pairing, "
+        "not just the primary Discovery slot's discoverer. PROTECT: tenures are never "
+        "deleted post-release (mirrors Discovery.discovered_by_tenure, #3060).",
+    )
 
     class Meta:
         constraints = [

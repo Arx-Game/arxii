@@ -75,6 +75,11 @@ First-time-earned record. OneToOne to Achievement.
 ### CharacterAchievement
 Records when a character earned an achievement.
 - FK to Discovery if they were a co-discoverer
+- Required `earned_by_tenure` FK -> `roster.RosterTenure` (`on_delete=PROTECT`, #3055):
+  stamped from the earning sheet's current tenure inside `grant_achievement` (the same
+  `can_earn_achievements` gate already guarantees one exists). Every co-earner of a party
+  grant gets their own individually durable (player, character) pairing, not just the
+  primary Discovery slot's discoverer — the acquisition-provenance ledger's achievement leg.
 - UniqueConstraint on character_sheet + achievement
 
 ## Reward application (#1522)

@@ -322,6 +322,7 @@
   - character_sheet -> character_sheets.CharacterSheet [FK]
   - achievement -> achievements.Achievement [FK]
   - discovery -> achievements.Discovery [FK] (nullable)
+  - earned_by_tenure -> roster.RosterTenure [FK]
 
 ### CharacterTitle
 **Foreign Keys:**
@@ -1354,6 +1355,7 @@
   - captivities <- captivity.Captivity
   - ceremony_honors <- ceremonies.CeremonyHonoree
   - trait_values <- traits.CharacterTraitValue
+  - trait_changes <- traits.CharacterTraitChange
   - character_class_levels <- classes.CharacterClassLevel
   - origin_slots <- character_creation.CharacterOriginSlot
   - audere_offers <- magic.PendingAudereOffer
@@ -7509,6 +7511,7 @@
   - media <- roster.TenureMedia
   - discoveries <- achievements.Discovery
   - shared_discoveries <- achievements.Discovery
+  - earned_achievements <- achievements.CharacterAchievement
   - consent_groups <- consent.ConsentGroup
   - consent_memberships <- consent.ConsentGroupMember
   - social_consent_preference <- consent.SocialConsentPreference
@@ -7521,6 +7524,7 @@
   - treasured_subjects <- boundaries.TreasuredSubject
   - treasuredsubject_visible <- boundaries.TreasuredSubject
   - treasuredsubject_excluded <- boundaries.TreasuredSubject
+  - granted_trait_changes <- traits.CharacterTraitChange
   - codex_taught <- codex.CharacterCodexKnowledge
   - codex_teaching_offers <- codex.CodexTeachingOffer
   - codexteachingoffer_visible <- codex.CodexTeachingOffer
@@ -9248,6 +9252,12 @@
 
 ## world.traits
 
+### CharacterTraitChange
+**Foreign Keys:**
+  - character_sheet -> character_sheets.CharacterSheet [FK]
+  - trait -> traits.Trait [FK]
+  - granting_tenure -> roster.RosterTenure [FK] (nullable)
+
 ### CharacterTraitValue
 **Foreign Keys:**
   - character -> character_sheets.CharacterSheet [FK]
@@ -9304,6 +9314,7 @@
   - capability_derivations <- mechanics.TraitCapabilityDerivation
   - rank_descriptions <- traits.TraitRankDescription
   - character_values <- traits.CharacterTraitValue
+  - character_changes <- traits.CharacterTraitChange
   - classes_requiring_trait <- classes.CharacterClass
   - maturation_spends <- progression.MaturationSpend
   - development_points <- progression.DevelopmentPoints
