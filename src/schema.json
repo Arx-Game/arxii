@@ -14294,6 +14294,50 @@ paths:
               schema:
                 $ref: '#/components/schemas/FashionPresentation'
           description: ''
+  /api/items/gem-cuts/:
+    post:
+      operationId: items_gem_cuts_create
+      description: Roll the GEM_CUT check and cut the gem, via the Action.
+      tags:
+      - items
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/GemCutWriteRequest'
+        required: true
+      security:
+      - cookieAuth: []
+      responses:
+        '201':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/GemCutResult'
+          description: ''
+  /api/items/gem-cuts/quote/:
+    get:
+      operationId: items_gem_cuts_quote_retrieve
+      description: Return a read-only cost+shatter-risk quote for cutting a gem (no
+        mutation).
+      parameters:
+      - in: query
+        name: item_instance
+        schema:
+          type: integer
+        description: ItemInstance pk (a held gem) to quote a cut attempt for.
+        required: true
+      tags:
+      - items
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/GemCutQuote'
+          description: ''
   /api/items/interaction-types/:
     get:
       operationId: items_interaction_types_list
@@ -45334,6 +45378,69 @@ components:
         * `jewelry` - Jewelry
         * `clothing` - Clothing
         * `other` - Other
+    GemCutQuote:
+      type: object
+      description: |-
+        Read-only cost + shatter-risk quote for a potential gem-cut attempt.
+
+        Deliberately not ``CraftingQuoteSerializer`` — ``cut_gem`` bypasses
+        ``run_crafting_recipe`` (no material staging, no consequence pool), so the
+        generic quote shape doesn't apply; ``shatter_risk_message`` is the one
+        sentence the player must see before risking the stone (a botch deletes it).
+      properties:
+        ap_cost:
+          type: integer
+        ap_have:
+          type: integer
+        base_difficulty:
+          type: integer
+        min_success_level:
+          type: integer
+        affordable:
+          type: boolean
+        shatter_risk_message:
+          type: string
+      required:
+      - affordable
+      - ap_cost
+      - ap_have
+      - base_difficulty
+      - min_success_level
+      - shatter_risk_message
+    GemCutResult:
+      type: object
+      description: 'Response for a gem-cut attempt: new grade + worth, or shatter
+        + worth lost.'
+      properties:
+        shattered:
+          type: boolean
+        new_cut_grade:
+          type: string
+          nullable: true
+          readOnly: true
+        worth:
+          type: integer
+        worth_lost:
+          type: integer
+      required:
+      - new_cut_grade
+      - shattered
+      - worth
+      - worth_lost
+    GemCutWriteRequest:
+      type: object
+      description: |-
+        Write serializer for a gem-cut attempt (POST) — input validation only.
+
+        The viewset drives ``CutGemAction`` directly; this only parses/validates the
+        ``item_instance`` the attempt targets. Not a ``ModelSerializer`` — a cut
+        mutates the gem's existing ``GemInstanceDetails`` row in place, it never
+        creates a new attachment row the way ``ItemFacet``/``ItemStyle`` do.
+      properties:
+        item_instance:
+          type: integer
+      required:
+      - item_instance
     Gemit:
       type: object
       description: Full Gemit representation for list and create responses.

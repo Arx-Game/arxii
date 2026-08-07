@@ -103,6 +103,7 @@ from actions.definitions.crafting import (
     AttachFacetAction,
     AttachStyleAction,
     CreateItemAction,
+    CutGemAction,
     DetachFacetAction,
 )
 from actions.definitions.crossing import resolve_crossing_offer
@@ -573,6 +574,8 @@ _ALL_ACTIONS: list[Action] = [
     DetachFacetAction(),
     AttachStyleAction(),
     CreateItemAction(),
+    # #3006 Task 3 — gem cutting is player-reachable.
+    CutGemAction(),
     ApplyOutfitAction(),
     UndressAction(),
     # #1866 — outfit CRUD telnet coverage.

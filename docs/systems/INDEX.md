@@ -4208,12 +4208,16 @@ Items, equipment, inventory, and currency. Spec D PR1 shipped facets, equip/uneq
   (`RESTORE_FATIGUE` → new `fatigue.services.recover_fatigue`; `RESTORE_ANIMA` clamped —
   consumption, never regeneration; `INTOXICATE` → `imbibe`) make every edible pure content:
   a consumable ItemTemplate + deterministic on-use pool (`seed_consumable_catalog` — bread,
-  stew, wine, ale, firebrandy, Cardian Ambrosia, all PLACEHOLDER). Cooking tradeskill
+  stew, wine, ale, firebrandy, Cardian Ambrosia, all PLACEHOLDER). Cooking check-spine
   activation (`world/seeds/provisioning_checks.py`, cluster `provisioning`): Cooking
   skill/CheckType (wits+agility avg + Cooking, Brewing spec linked as a
-  `CheckTypeSpecialization` row at weight 1.0 — #2894), first LIVE QualityTier ladder
-  (Common/Fine/Masterwork), stationless ITEM_CREATE recipes (Hearty Stew, Honeyed Wine) +
-  ingredients + skill caps. Event catering: `EventCatering` snapshot rows
+  `CheckTypeSpecialization` row at weight 1.0 — #2894), the live 12-rung QualityTier
+  ladder (Poor→Legendary, #2878) + the 7-rung AccentLevel ladder. **The stationless
+  ITEM_CREATE recipes (Hearty Stew, Honeyed Wine, Dream Dust, Haze) + their ingredient
+  ItemTemplates + skill caps moved to the lore repo (#3006 Task 4)** — the seeder no
+  longer mints them (see "Production data path" above); a fresh deploy with no lore
+  fixtures has the Cooking check spine but no recipes to roll it against. Event
+  catering: `EventCatering` snapshot rows
   (#2869 reshaped: `designate_catering_container` flags a vessel — banquet table,
   amphora, tray — and the `put_in` path tags any consumable set out in it via
   `tag_catered_provision`; nothing is consumed, and the tag is permanent and deduped
@@ -4288,7 +4292,18 @@ holder is never notified a claim exists.
     seeds a generic reagent requirement onto a FACET_ATTACH recipe, content-only, #707),
     `CraftingSkillCap` (skill-rank → quality ceiling ladder), `CraftingRecipeConsequence`
     (weighted consequence pool entry with per-row `cost_consumption` override). Replaces
-    the old `FacetCraftingConfig` singleton.
+    the old `FacetCraftingConfig` singleton. **Production data path (#3006):** all four
+    models (+ `MaterialCategory`) carry natural keys and are in `CONTENT_MODELS`, so the
+    lore repo authors/overrides recipes, skill caps, material requirements, and
+    consequence rows directly; `CONFIG_PREREQUISITES["crafting"]` seeds a floor row for
+    each null-`check_type`-raising kind (`FACET_ATTACH`/`STYLE_ATTACH`/`GEM_CUT`, one
+    shared "Enchanting" `CheckType`, plus the FACET_ATTACH reagent default) before the
+    content load so a fresh deploy is never `CraftingNotConfigured`; authored fixtures win
+    via upsert. `ITEM_CREATE` recipes raise nothing when absent, so they're pure content —
+    the four example recipes (Hearty Stew, Honeyed Wine, Dream Dust, Haze) moved out of
+    `world.seeds.provisioning_checks` to the lore repo; that seeder now only ensures the
+    Cooking check spine + QualityTier/AccentLevel ladders. See `docs/systems/items.md`
+    "Production data path" for detail.
   - **`MaterialCategory`** (`world.items.models`, lookup) — a crafting-equivalence class of
     materials (e.g. "Precious Gemstones"); `ItemTemplate.material_category` FK points into it
     (specific→general, ADR-0010). The *eligibility* axis only; value-denominated requirements
@@ -4324,7 +4339,16 @@ holder is never notified a claim exists.
     and resolves `success_level` **directly to an improved cut `GemGrade`** (`resolve_cut_grade` —
     no `QualityTier` detour, since the framework's outcome type doesn't fit a gem grade). A botch
     (`success_level < min`) **shatters** the stone (deleted); success advances the cut ladder and
-    worth recomputes. Returns `CutResult`. Deferred: a hard skill-value cap (`CraftingSkillCap`
+    worth recomputes. Returns `CutResult`. **Player-reachable (#3006 Task 3):** `CutGemAction`
+    (key `cut_gem`, `actions/definitions/crafting.py`) wraps `cut_gem` directly — not
+    `run_crafting_recipe`/the handler registry, since gem cutting has no attach/create
+    handler, consequence pool, or material staging — resolving the `GEM_CUT` recipe via
+    the same `_resolve_recipe_for_run` seam `run_crafting_recipe` uses (the Task 2 seeded
+    default row is what makes a fresh deploy playable). `GemCutViewSet`
+    (`GET/POST /api/items/gem-cuts/`, `GET .../quote/`) mirrors `ItemFacetViewSet`/
+    `ItemStyleCraftViewSet`; the quote (`build_gem_cut_quote`) reports AP cost/difficulty
+    plus an explicit shatter-risk sentence before the player commits. Telnet: `craft cut
+    item=<id>` (`CmdCraft`). Deferred: a hard skill-value cap (`CraftingSkillCap`
     style) and the consequence-pool narrative outcomes; risky adornment prying reuses this shatter
     spine.
   - **Gem mining engine** (`world.items.gems.mining.roll_gem_haul`, Build 0b slice 4) — the pure,
@@ -4554,8 +4578,9 @@ holder is never notified a claim exists.
   - `GET /api/items/inventory/` — read-only inventory list (`.in_play()` filtered)
   - `POST /api/items/inventory/<pk>/use/` — use item; owner-or-staff gated; returns
     `UseItemResult` (`charges_remaining`, `consumed`, `result_text`); `ItemError` → HTTP 400
-- **Telnet (#1866):** `CmdCraft` (`craft`, `commands/crafting.py`) drives facet/style
-  attach-detach through `AttachFacetAction`/`DetachFacetAction`/`AttachStyleAction`
+- **Telnet (#1866, gem cut #3006 Task 3):** `CmdCraft` (`craft`, `commands/crafting.py`) drives
+  facet/style attach-detach + gem cut (`craft cut item=<id>`) through
+  `AttachFacetAction`/`DetachFacetAction`/`AttachStyleAction`/`CutGemAction`
   (`actions/definitions/crafting.py`); `CmdOutfit` (`outfit`, `commands/outfit.py`)
   drives outfit CRUD through `SaveOutfitAction`/`RenameOutfitAction`/
   `DeleteOutfitAction`/`AddOutfitSlotAction`/`RemoveOutfitSlotAction`

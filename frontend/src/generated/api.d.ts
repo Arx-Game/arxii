@@ -9037,6 +9037,40 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
+  '/api/items/gem-cuts/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /** @description Roll the GEM_CUT check and cut the gem, via the Action. */
+    post: operations['items_gem_cuts_create'];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/items/gem-cuts/quote/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /** @description Return a read-only cost+shatter-risk quote for cutting a gem (no mutation). */
+    get: operations['items_gem_cuts_quote_retrieve'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   '/api/items/interaction-types/': {
     parameters: {
       query?: never;
@@ -25985,6 +26019,40 @@ export interface components {
       | 'jewelry'
       | 'clothing'
       | 'other';
+    /**
+     * @description Read-only cost + shatter-risk quote for a potential gem-cut attempt.
+     *
+     *     Deliberately not ``CraftingQuoteSerializer`` — ``cut_gem`` bypasses
+     *     ``run_crafting_recipe`` (no material staging, no consequence pool), so the
+     *     generic quote shape doesn't apply; ``shatter_risk_message`` is the one
+     *     sentence the player must see before risking the stone (a botch deletes it).
+     */
+    GemCutQuote: {
+      ap_cost: number;
+      ap_have: number;
+      base_difficulty: number;
+      min_success_level: number;
+      affordable: boolean;
+      shatter_risk_message: string;
+    };
+    /** @description Response for a gem-cut attempt: new grade + worth, or shatter + worth lost. */
+    GemCutResult: {
+      shattered: boolean;
+      readonly new_cut_grade: string | null;
+      worth: number;
+      worth_lost: number;
+    };
+    /**
+     * @description Write serializer for a gem-cut attempt (POST) — input validation only.
+     *
+     *     The viewset drives ``CutGemAction`` directly; this only parses/validates the
+     *     ``item_instance`` the attempt targets. Not a ``ModelSerializer`` — a cut
+     *     mutates the gem's existing ``GemInstanceDetails`` row in place, it never
+     *     creates a new attachment row the way ``ItemFacet``/``ItemStyle`` do.
+     */
+    GemCutWriteRequest: {
+      item_instance: number;
+    };
     /** @description Full Gemit representation for list and create responses. */
     Gemit: {
       readonly id: number;
@@ -52077,6 +52145,51 @@ export interface operations {
         };
         content: {
           'application/json': components['schemas']['FashionPresentation'];
+        };
+      };
+    };
+  };
+  items_gem_cuts_create: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['GemCutWriteRequest'];
+      };
+    };
+    responses: {
+      201: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['GemCutResult'];
+        };
+      };
+    };
+  };
+  items_gem_cuts_quote_retrieve: {
+    parameters: {
+      query: {
+        /** @description ItemInstance pk (a held gem) to quote a cut attempt for. */
+        item_instance: number;
+      };
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['GemCutQuote'];
         };
       };
     };

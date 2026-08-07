@@ -1,7 +1,8 @@
-"""Tests for the crafting Actions (facet/style attach, facet detach)."""
+"""Tests for the crafting Actions (facet/style attach, facet detach, gem cut)."""
 
 from __future__ import annotations
 
+from decimal import Decimal
 from unittest.mock import patch
 
 from django.test import TestCase
@@ -9,14 +10,28 @@ from django.test import TestCase
 from actions.definitions.crafting import (
     AttachFacetAction,
     AttachStyleAction,
+    CutGemAction,
     DetachFacetAction,
 )
 from evennia_extensions.factories import AccountFactory, CharacterFactory, ObjectDBFactory
+from world.action_points.factories import ActionPointPoolFactory
 from world.character_sheets.factories import CharacterSheetFactory
+from world.checks.factories import CheckTypeFactory
+from world.checks.test_helpers import force_check_outcome
+from world.items.crafting.constants import CraftingRecipeKind
 from world.items.exceptions import FacetAlreadyAttached
-from world.items.factories import ItemInstanceFactory, ItemTemplateFactory
+from world.items.factories import (
+    CraftingRecipeFactory,
+    GemGradeFactory,
+    GemInstanceDetailsFactory,
+    ItemInstanceFactory,
+    ItemTemplateFactory,
+)
+from world.items.gems.constants import GemAxis
+from world.items.models import ItemInstance
 from world.items.types import FacetCraftResult, StyleCraftResult
 from world.roster.factories import PlayerDataFactory, RosterEntryFactory, RosterTenureFactory
+from world.traits.factories import CheckOutcomeFactory
 
 
 class AttachFacetActionTests(TestCase):
@@ -179,3 +194,148 @@ class DetachFacetActionTests(TestCase):
             action_result = DetachFacetAction().run(actor=actor, item_facet=item_facet)
         assert action_result.success
         mocked.assert_called_once_with(item_facet=item_facet)
+
+
+class CutGemActionTests(TestCase):
+    """#3006 Task 3 — CutGemAction happy/shatter/not-a-gem/not-held/no-AP."""
+
+    @classmethod
+    def setUpTestData(cls):
+        cls.uncut = GemGradeFactory(
+            axis=GemAxis.CUT, sort_order=1, label="cga-uncut", multiplier=Decimal("1.0")
+        )
+        cls.rough = GemGradeFactory(
+            axis=GemAxis.CUT, sort_order=2, label="cga-rough", multiplier=Decimal("1.2")
+        )
+
+    def _actor_with_ap(self, ap: int = 200):
+        room = ObjectDBFactory(db_key="CutGemRoom", db_typeclass_path="typeclasses.rooms.Room")
+        actor = CharacterFactory(db_key=f"CutGemAlice{ap}", location=room)
+        sheet = CharacterSheetFactory(character=actor)
+        ActionPointPoolFactory(character=sheet, current=ap, maximum=200)
+        return actor, sheet
+
+    def _gem(self, sheet, value: int = 100, cut=None) -> ItemInstance:
+        template = ItemTemplateFactory(value=value)
+        instance = ItemInstanceFactory(template=template, holder_character_sheet=sheet)
+        GemInstanceDetailsFactory(
+            item_instance=instance,
+            size_grade=GemGradeFactory(axis=GemAxis.SIZE, multiplier=Decimal("1.0")),
+            purity_grade=GemGradeFactory(axis=GemAxis.PURITY, multiplier=Decimal("1.0")),
+            cut_grade=cut or self.uncut,
+        )
+        instance.refresh_from_db()
+        return instance
+
+    def test_cut_success_improves_grade(self):
+        actor, sheet = self._actor_with_ap()
+        CraftingRecipeFactory(
+            kind=CraftingRecipeKind.GEM_CUT,
+            check_type=CheckTypeFactory(),
+            min_success_level=1,
+            action_point_cost=5,
+        )
+        gem = self._gem(sheet, value=100)
+        with force_check_outcome(CheckOutcomeFactory(name="CutGemActionOk", success_level=1)):
+            action_result = CutGemAction().run(actor=actor, item_instance=gem)
+        assert action_result.success
+        result = action_result.data["result"]
+        assert not result.shattered
+        assert result.new_cut_grade == self.rough
+        assert result.worth == 120
+
+    def test_cut_shatter_deletes_the_instance(self):
+        actor, sheet = self._actor_with_ap()
+        CraftingRecipeFactory(
+            kind=CraftingRecipeKind.GEM_CUT,
+            check_type=CheckTypeFactory(),
+            min_success_level=1,
+            action_point_cost=5,
+        )
+        gem = self._gem(sheet, value=100)
+        gem_pk = gem.pk
+        with force_check_outcome(CheckOutcomeFactory(name="CutGemActionBotch", success_level=-1)):
+            action_result = CutGemAction().run(actor=actor, item_instance=gem)
+        assert action_result.success
+        result = action_result.data["result"]
+        assert result.shattered
+        assert result.worth_lost == 100
+        assert not ItemInstance.objects.filter(pk=gem_pk).exists()
+        assert "shatter" in action_result.message.lower()
+
+    def test_cut_not_a_gem_fails_clean(self):
+        actor, sheet = self._actor_with_ap()
+        CraftingRecipeFactory(kind=CraftingRecipeKind.GEM_CUT, check_type=CheckTypeFactory())
+        not_a_gem = ItemInstanceFactory(holder_character_sheet=sheet)
+        action_result = CutGemAction().run(actor=actor, item_instance=not_a_gem)
+        assert not action_result.success
+        assert action_result.message
+
+    def test_cut_requires_holding_the_gem(self):
+        actor, _sheet = self._actor_with_ap()
+        other_actor = CharacterFactory(db_key="CutGemOtherOwner", location=actor.location)
+        other_sheet = CharacterSheetFactory(character=other_actor)
+        CraftingRecipeFactory(kind=CraftingRecipeKind.GEM_CUT, check_type=CheckTypeFactory())
+        gem = self._gem(other_sheet)
+        action_result = CutGemAction().run(actor=actor, item_instance=gem)
+        assert not action_result.success
+
+    def test_cut_missing_item_fails_clean(self):
+        actor, _sheet = self._actor_with_ap()
+        action_result = CutGemAction().run(actor=actor)
+        assert not action_result.success
+
+    def test_cut_unaffordable_ap_fails_clean(self):
+        actor, sheet = self._actor_with_ap(ap=0)
+        CraftingRecipeFactory(
+            kind=CraftingRecipeKind.GEM_CUT,
+            check_type=CheckTypeFactory(),
+            action_point_cost=5,
+        )
+        gem = self._gem(sheet)
+        action_result = CutGemAction().run(actor=actor, item_instance=gem)
+        assert not action_result.success
+
+
+class CutGemFreshDeployJourneyTests(TestCase):
+    """#3006 Task 3 — the fresh-deploy story: the Task 2 seeded default is reachable.
+
+    No hand-authored ``CraftingRecipe`` here — only
+    ``CONFIG_PREREQUISITES["crafting"]`` (what a real fresh-DB "press the Big
+    Button" run does), proving a brand new deploy can actually cut a gem
+    end to end through the Action, not just that the row exists.
+    """
+
+    def test_fresh_seed_config_makes_gem_cutting_reachable(self):
+        from world.seeds.config_prerequisites import CONFIG_PREREQUISITES
+
+        CONFIG_PREREQUISITES["crafting"]()
+
+        room = ObjectDBFactory(db_key="GemJourneyRoom", db_typeclass_path="typeclasses.rooms.Room")
+        actor = CharacterFactory(db_key="GemJourneyAlice", location=room)
+        sheet = CharacterSheetFactory(character=actor)
+        ActionPointPoolFactory(character=sheet, current=200, maximum=200)
+        uncut = GemGradeFactory(
+            axis=GemAxis.CUT, sort_order=1, label="journey-uncut", multiplier=Decimal("1.0")
+        )
+        GemGradeFactory(
+            axis=GemAxis.CUT, sort_order=2, label="journey-rough", multiplier=Decimal("1.2")
+        )
+        template = ItemTemplateFactory(value=100)
+        gem = ItemInstanceFactory(template=template, holder_character_sheet=sheet)
+        GemInstanceDetailsFactory(
+            item_instance=gem,
+            size_grade=GemGradeFactory(axis=GemAxis.SIZE, multiplier=Decimal("1.0")),
+            purity_grade=GemGradeFactory(axis=GemAxis.PURITY, multiplier=Decimal("1.0")),
+            cut_grade=uncut,
+        )
+        gem.refresh_from_db()
+
+        with force_check_outcome(CheckOutcomeFactory(name="GemJourneyOk", success_level=1)):
+            action_result = CutGemAction().run(actor=actor, item_instance=gem)
+
+        assert action_result.success
+        result = action_result.data["result"]
+        assert not result.shattered
+        assert result.new_cut_grade is not None
+        assert result.worth > 0

@@ -261,6 +261,127 @@ class StyleQuoteTests(CraftingApiTestCase):
         self.assertEqual(response.status_code, status.HTTP_404_NOT_FOUND)
 
 
+class GemCutApiTests(CraftingApiTestCase):
+    """Tests for POST /api/items/gem-cuts/ + GET /api/items/gem-cuts/quote/ (#3006 Task 3).
+
+    ``cut_gem`` bypasses ``run_crafting_recipe`` entirely (no station/skill-cap
+    machinery), so unlike ``FacetQuoteTests``/``StyleQuoteTests`` this doesn't
+    need ``wire_enchanting_crafting``'s trait/lab-station wiring — a bare
+    GEM_CUT recipe is enough.
+    """
+
+    def setUp(self) -> None:
+        super().setUp()
+        from decimal import Decimal
+
+        from world.action_points.factories import ActionPointPoolFactory
+        from world.checks.factories import CheckTypeFactory
+        from world.items.crafting.constants import CraftingRecipeKind
+        from world.items.factories import (
+            CraftingRecipeFactory,
+            GemGradeFactory,
+            GemInstanceDetailsFactory,
+        )
+        from world.items.gems.constants import GemAxis
+
+        self.uncut = GemGradeFactory(
+            axis=GemAxis.CUT, sort_order=1, label="api-uncut", multiplier=Decimal("1.0")
+        )
+        self.rough = GemGradeFactory(
+            axis=GemAxis.CUT, sort_order=2, label="api-rough", multiplier=Decimal("1.2")
+        )
+        self.gem_recipe = CraftingRecipeFactory(
+            kind=CraftingRecipeKind.GEM_CUT,
+            check_type=CheckTypeFactory(),
+            min_success_level=1,
+            action_point_cost=5,
+        )
+        ActionPointPoolFactory(character=self.owner_sheet, current=200, maximum=200)
+        gem_template = ItemTemplateFactory(name="GemCutApiTemplate", value=100)
+        self.gem_item = ItemInstanceFactory(
+            template=gem_template, holder_character_sheet=self.owner_sheet
+        )
+        GemInstanceDetailsFactory(
+            item_instance=self.gem_item,
+            size_grade=GemGradeFactory(axis=GemAxis.SIZE, multiplier=Decimal("1.0")),
+            purity_grade=GemGradeFactory(axis=GemAxis.PURITY, multiplier=Decimal("1.0")),
+            cut_grade=self.uncut,
+        )
+        self.gem_item.refresh_from_db()
+        self.non_gem_item = ItemInstanceFactory(
+            template=self.template, holder_character_sheet=self.owner_sheet
+        )
+
+    def test_quote_returns_costs_and_shatter_risk(self) -> None:
+        response = self.client.get(
+            "/api/items/gem-cuts/quote/", {"item_instance": self.gem_item.pk}
+        )
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(response.data["ap_cost"], 5)
+        self.assertEqual(response.data["base_difficulty"], self.gem_recipe.base_difficulty)
+        self.assertEqual(response.data["min_success_level"], 1)
+        self.assertTrue(response.data["affordable"])
+        self.assertIn("shatter", response.data["shatter_risk_message"].lower())
+
+    def test_quote_rejects_non_owner_with_404(self) -> None:
+        self.client.force_authenticate(user=self.non_owner)
+        response = self.client.get(
+            "/api/items/gem-cuts/quote/", {"item_instance": self.gem_item.pk}
+        )
+        self.assertEqual(response.status_code, status.HTTP_404_NOT_FOUND)
+
+    def test_quote_requires_item_instance_param(self) -> None:
+        response = self.client.get("/api/items/gem-cuts/quote/")
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+
+    def test_quote_rejects_non_gem_item(self) -> None:
+        response = self.client.get(
+            "/api/items/gem-cuts/quote/", {"item_instance": self.non_gem_item.pk}
+        )
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+
+    def test_post_success_returns_new_grade_and_worth(self) -> None:
+        from world.checks.test_helpers import force_check_outcome
+        from world.traits.factories import CheckOutcomeFactory
+
+        with force_check_outcome(CheckOutcomeFactory(name="GemCutApiOk", success_level=1)):
+            response = self.client.post(
+                "/api/items/gem-cuts/", {"item_instance": self.gem_item.pk}, format="json"
+            )
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertFalse(response.data["shattered"])
+        self.assertEqual(response.data["new_cut_grade"], "api-rough")
+        self.assertEqual(response.data["worth"], 120)
+
+    def test_post_shatter_returns_worth_lost_and_deletes_instance(self) -> None:
+        from world.checks.test_helpers import force_check_outcome
+        from world.items.models import ItemInstance
+        from world.traits.factories import CheckOutcomeFactory
+
+        gem_pk = self.gem_item.pk
+        with force_check_outcome(CheckOutcomeFactory(name="GemCutApiBotch", success_level=-1)):
+            response = self.client.post(
+                "/api/items/gem-cuts/", {"item_instance": self.gem_item.pk}, format="json"
+            )
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertTrue(response.data["shattered"])
+        self.assertEqual(response.data["worth_lost"], 100)
+        self.assertFalse(ItemInstance.objects.filter(pk=gem_pk).exists())
+
+    def test_post_rejects_non_owner(self) -> None:
+        self.client.force_authenticate(user=self.non_owner)
+        response = self.client.post(
+            "/api/items/gem-cuts/", {"item_instance": self.gem_item.pk}, format="json"
+        )
+        self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
+
+    def test_post_not_a_gem_returns_400(self) -> None:
+        response = self.client.post(
+            "/api/items/gem-cuts/", {"item_instance": self.non_gem_item.pk}, format="json"
+        )
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+
+
 class CraftingQuoteSerializerStationStatusTests(TestCase):
     """Direct serializer round-trip for ``station_status`` (#1234).
 

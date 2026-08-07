@@ -3,8 +3,12 @@
 from django.test import TestCase
 
 from world.items.constants import StyleAudacity
-from world.items.models import Style
-from world.seeds.game_content.items import _STYLE_VOCABULARY, seed_style_vocabulary
+from world.items.models import ItemTemplate, Style
+from world.seeds.game_content.items import (
+    _STYLE_VOCABULARY,
+    seed_consumable_catalog,
+    seed_style_vocabulary,
+)
 
 
 class StyleVocabularySeedTests(TestCase):
@@ -35,3 +39,28 @@ class StyleVocabularySeedTests(TestCase):
         seed_style_vocabulary()
         after = Style.objects.filter(name__in=list(_STYLE_VOCABULARY)).count()
         self.assertEqual(before, after)
+
+
+class ConsumableCatalogSeedTests(TestCase):
+    """#3006: a lore-authored ItemTemplate must not be skipped past on reload."""
+
+    def test_authored_template_is_decorated_not_skipped(self) -> None:
+        """A pre-existing bare row (name + description only, no mechanics) must gain
+        the on-use pool and consumable flags, while its authored description survives
+        untouched — mechanics are seeder-owned decoration, prose is not.
+        """
+        authored_description = "A rich, hand-written stew description from the lore repo."
+        bare = ItemTemplate.objects.create(
+            name="Hearty Stew",
+            description=authored_description,
+        )
+        self.assertIsNone(bare.on_use_pool_id)
+
+        seed_consumable_catalog()
+
+        bare.refresh_from_db()
+        self.assertIsNotNone(bare.on_use_pool_id)
+        self.assertTrue(bare.is_consumable)
+        self.assertEqual(bare.max_charges, 1)
+        self.assertTrue(bare.is_active)
+        self.assertEqual(bare.description, authored_description)

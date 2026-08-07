@@ -80,12 +80,18 @@ class Skill(NaturalKeyMixin, CreditedContent, SharedMemoryModel):
         return list(self.specializations.all())
 
 
-class Specialization(SharedMemoryModel):
+class Specialization(NaturalKeyMixin, SharedMemoryModel):
     """
     Specialization under a parent skill.
 
     Specializations are specific applications of a skill (e.g., Swords under
     Melee Combat) that stack with the parent when applicable.
+
+    Carries `NaturalKeyMixin` (#3006 task 6b): the key is `(parent_skill, name)`,
+    the existing `unique_together` below — no schema change needed. Required so
+    `CraftingRecipe.specialization` — an FK-by-name value in lore-authored
+    crafting fixtures — can resolve at content-load time instead of crashing
+    `_resolve_natural_key_fields` with a missing `get_by_natural_key`.
     """
 
     name = models.CharField(
@@ -114,6 +120,12 @@ class Specialization(SharedMemoryModel):
         default=True,
         help_text="Whether this specialization is available for use",
     )
+
+    objects = NaturalKeyManager()
+
+    class NaturalKeyConfig:
+        fields = ["parent_skill", "name"]
+        dependencies = ["arxii.Skill"]
 
     class Meta:
         unique_together = ["parent_skill", "name"]

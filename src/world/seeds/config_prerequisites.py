@@ -150,6 +150,111 @@ def _projects_rows() -> None:
     _ensure_contribution_stat_def()
 
 
+def _crafting_rows() -> None:
+    """Kind-keyed `CraftingRecipe` rows `run_crafting_recipe` needs a non-null
+    `check_type` to resolve (#3006).
+
+    FACET_ATTACH / STYLE_ATTACH / GEM_CUT each need exactly one row
+    (`output_item_template=None`) before any crafting attempt of that kind can
+    resolve — Task 1 gave `CraftingRecipe.name` a natural key so a lore fixture can
+    upsert over these, but nothing seeded a floor row for the Big Button to press.
+    The "Enchanting" CheckType/category names match the test-only
+    `wire_enchanting_crafting` factory chain (`world.items.factories:322`), so a
+    fixture or gameplay lookup by that name resolves to the same row rather than
+    minting a duplicate. Tuning values (`base_difficulty`/`success_level_step`/
+    `min_success_level`) mirror what `wire_enchanting_crafting` sets for
+    FACET_ATTACH/STYLE_ATTACH; GEM_CUT has no such precedent, so it takes the same
+    values as the model's own field defaults.
+
+    Unconditionally re-attaches `check_type` when a pre-existing row (e.g. fixture-
+    supplied) has it null — same `if created:` trap fatigue/dreams guard against
+    above: a bare fixture row must not survive this prerequisite still disabled.
+
+    Also wires the FACET_ATTACH reagent requirement
+    (`world.items.seeds_facet_reagents.ensure_facet_attach_reagent_requirement`,
+    orphaned since #707 added it with only a test call site) so the facet reagent
+    default ships with the recipe it belongs to.
+
+    Unlike `wire_enchanting_crafting`, this entry deliberately creates NO
+    `CheckTypeTrait` weight row on `check_type` — trait composition is content,
+    authored lore-side (same split as the #2882 CheckTypes). Until a
+    `CheckTypeTrait` is authored against "Enchanting", `world.checks.services
+    ._calculate_trait_points` finds an empty `check_type.traits` and the seeded
+    check contributes zero trait points: checks still resolve (safe), just flat,
+    with no skill/stat swing until the content lands.
+
+    Also calls `ensure_workshop_of_iniquity_kind()` (#3006 task 6c): the
+    "Workshop of Iniquity" `RoomFeatureKind` is code-referenced by its
+    `service_strategy` (justice frame-jobs, `world.justice.frame_jobs
+    ._workshop_in_room`) AND now FK'd by lore-authored crafting fixtures via
+    `CraftingRecipe.required_feature_kind` — either caller needing the row before
+    it exists is a prerequisite-timing bug, so it belongs pre-content like the
+    rest of this registry.
+    """
+    from world.checks.models import CheckCategory, CheckType  # noqa: PLC0415
+    from world.items.crafting.constants import CraftingRecipeKind  # noqa: PLC0415
+    from world.items.crafting.models import CraftingRecipe  # noqa: PLC0415
+    from world.items.seeds_facet_reagents import (  # noqa: PLC0415
+        ensure_facet_attach_reagent_requirement,
+    )
+    from world.room_features.seeds import ensure_workshop_of_iniquity_kind  # noqa: PLC0415
+
+    ensure_workshop_of_iniquity_kind()
+
+    category, _ = CheckCategory.objects.get_or_create(
+        name="Crafting",
+        defaults={"description": "Checks rolled to attempt a crafting recipe."},
+    )
+    check_type, _ = CheckType.objects.get_or_create(
+        name="Enchanting",
+        category=category,
+        defaults={"description": "The enchanting craft: facets, styles, and gem work."},
+    )
+
+    recipe_names = {
+        CraftingRecipeKind.FACET_ATTACH: "Attach Facet (Enchanting)",
+        CraftingRecipeKind.STYLE_ATTACH: "Attach Style (Enchanting)",
+        CraftingRecipeKind.GEM_CUT: "Cut Gem (Enchanting)",
+    }
+    for kind, name in recipe_names.items():
+        recipe, created = CraftingRecipe.objects.get_or_create(
+            name=name,
+            defaults={
+                "kind": kind,
+                "check_type": check_type,
+                "output_item_template": None,
+                "base_difficulty": 0,
+                "success_level_step": 10,
+                "min_success_level": 1,
+            },
+        )
+        if not created and recipe.check_type_id is None:
+            recipe.check_type = check_type
+            recipe.save(update_fields=["check_type"])
+        if kind == CraftingRecipeKind.FACET_ATTACH:
+            ensure_facet_attach_reagent_requirement(recipe)
+
+
+def _provisioning_rows() -> None:
+    """The Cooking CheckType (+ Brewing) and QualityTier/AccentLevel ladders (#3006).
+
+    Lore-repo ITEM_CREATE recipe fixtures FK the "Cooking" CheckType and the
+    QualityTier ladder by natural key, but both used to be created only by
+    `seed_provisioning_content()`, a `CLUSTER_SEEDERS` entry that runs AFTER
+    `load_world_content()`. On a fresh one-shot seed the recipe fixtures would
+    defer and drop — the #2882 ordering trap this registry exists to prevent. Calls
+    the same `provisioning_checks` helpers `seed_provisioning_content()` still
+    calls (idempotent double-run), rather than duplicating their bodies.
+    """
+    from world.seeds.provisioning_checks import (  # noqa: PLC0415
+        _ensure_cooking_check,
+        _ensure_quality_tiers,
+    )
+
+    _ensure_cooking_check()
+    _ensure_quality_tiers()
+
+
 def _ships_rows() -> None:
     """The `speed` CapabilityType `materialize_ship_as_battle_vehicle` FKs by name.
 
@@ -190,4 +295,6 @@ CONFIG_PREREQUISITES: dict[str, Callable[[], None]] = {
     "combat_stats": _combat_stats_rows,
     "projects": _projects_rows,
     "ships": _ships_rows,
+    "crafting": _crafting_rows,
+    "provisioning": _provisioning_rows,
 }

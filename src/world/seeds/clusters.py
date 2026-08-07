@@ -685,11 +685,11 @@ def seeded_models_by_cluster() -> dict[str, list[type[Model]]]:
     from world.conditions.models import ConditionTemplate  # noqa: PLC0415
     from world.consent.models import SocialConsentCategory  # noqa: PLC0415
     from world.gm.models import GMLevelCap, GMRewardConfig, SituationKind  # noqa: PLC0415
-    from world.items.crafting.models import CraftingRecipe  # noqa: PLC0415
     from world.items.market.models import MarketSquare  # noqa: PLC0415
     from world.items.models import (  # noqa: PLC0415
         ItemTemplate,
         MaterialCategory,
+        QualityTier,
         Silhouette,
         Style,
     )
@@ -740,10 +740,11 @@ def seeded_models_by_cluster() -> dict[str, list[type[Model]]]:
         # Social: seeds Persuasion/Performance skills + their specializations + the
         # stat+skill(+spec) social CheckType compositions (#1688).
         "social": [Specialization],
-        # Provisioning (#2852): the Cooking tradeskill + food/drink recipes + the
-        # first live QualityTier ladder. Skill/CheckType rows counted under "checks";
-        # the recipe rows are the representative content.
-        "provisioning": [CraftingRecipe],
+        # Provisioning (#2852): the Cooking tradeskill check spine + the first live
+        # QualityTier ladder. Skill/CheckType rows counted under "checks"; recipes
+        # that roll this check are authored content now (#3006), so QualityTier is
+        # the representative row this cluster itself creates.
+        "provisioning": [QualityTier],
         # Generic material ladders (#2878 Phase F): graded base templates per
         # category; named canon rows await Apostate's worksheet.
         "crafting_materials": [MaterialCategory],

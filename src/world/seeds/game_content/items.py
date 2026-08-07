@@ -368,7 +368,7 @@ def seed_consumable_catalog() -> None:
             effect_type=effect_type,
             defaults=kwargs,
         )
-        ItemTemplate.objects.get_or_create(
+        template, created = ItemTemplate.objects.get_or_create(
             name=name,
             defaults={
                 "description": f"PLACEHOLDER: {name.lower()} — #2852 consumables catalog.",
@@ -378,6 +378,17 @@ def seed_consumable_catalog() -> None:
                 "on_use_pool": pool,
             },
         )
+        # The `if created:` trap (#2724-flavor, see config_prerequisites._crafting_rows):
+        # a lore-authored row (name + description only) arrives with no on_use_pool —
+        # reattach the mechanics without touching the authored description.
+        if not created and template.on_use_pool_id is None:
+            template.on_use_pool = pool
+            template.is_consumable = True
+            template.max_charges = 1
+            template.is_active = True
+            template.save(
+                update_fields=["on_use_pool", "is_consumable", "max_charges", "is_active"]
+            )
 
 
 # ---------------------------------------------------------------------------

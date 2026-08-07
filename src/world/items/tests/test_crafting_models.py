@@ -1,7 +1,7 @@
 """Tests for world.items.crafting models — Task 1 & 2: CraftingRecipe and related models."""
 
 from django.db import IntegrityError
-from django.test import TestCase
+from django.test import TestCase, tag
 
 from world.items.crafting.constants import (
     LAB_BASE_DURABILITY_PER_LEVEL,
@@ -71,6 +71,7 @@ class CraftingRecipeModelTests(TestCase):
         """PARTIAL_FRACTION is 0.5."""
         self.assertEqual(PARTIAL_FRACTION, 0.5)
 
+    @tag("postgres")  # nulls_distinct=False (#3006) drops the whole constraint on SQLite
     def test_composite_kind_output_constraint(self) -> None:
         """Two ITEM_CREATE recipes with the same output template violate the constraint."""
         from world.items.factories import ItemTemplateFactory

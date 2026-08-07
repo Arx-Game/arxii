@@ -507,6 +507,49 @@ handler — no schema change required.
 the highest band at or below the crafter's skill rank (or `None` when no rows exist /
 skill is below every band).
 
+### Production data path (#3006)
+
+All four recipe-family models — `CraftingRecipe` (key: `name`), `CraftingSkillCap`
+(key: `recipe` + `min_skill_value`), `CraftingMaterialRequirement` (key: `recipe` +
+whichever of `item_template`/`material_category` the row's XOR branch populates —
+its own `UniqueConstraint` pair, added by this change), and `CraftingRecipeConsequence`
+(key: `recipe` + `consequence`) — carry `NaturalKeyMixin`/`NaturalKeyConfig` and are
+registered in `core_management.content_export.CONTENT_MODELS` (Task 1). The lore repo
+can now author or override any recipe, its skill caps, material requirements, and
+consequence rows via the normal `load_world_content()` fixture pipeline, the same as
+any other content model; an authored row wins over a seeded default through the
+upsert. `MaterialCategory` also gained a natural key (`name`) so
+`CraftingMaterialRequirement`'s category branch resolves portably instead of falling
+back to a raw pk.
+
+`CraftingRecipe`'s `UniqueConstraint(kind, output_item_template)` sets
+`nulls_distinct=False` (Postgres-only — the constraint drops entirely on SQLite,
+which doesn't support the option) so the null-`output_item_template` attach/cut
+kinds are actually capped at one row per kind.
+
+The three kind-keyed recipes that hard-error without a row (`FACET_ATTACH`,
+`STYLE_ATTACH`, `GEM_CUT` — `_resolve_recipe_for_run`/`_resolve_recipe_for_quote`
+raise `CraftingNotConfigured` on `DoesNotExist`) get a seeded default from
+`CONFIG_PREREQUISITES["crafting"]` (`world.seeds.config_prerequisites._crafting_rows`,
+Task 2) — it runs **before** the content load (ADR-0171), so a fresh deploy is never
+`CraftingNotConfigured` even with zero lore fixtures. All three resolve against one
+shared "Enchanting" `CheckType` (matching the name the test-only
+`wire_enchanting_crafting` factory chain uses); the facet reagent default
+(`ensure_facet_attach_reagent_requirement`, previously orphaned since #707) is wired
+into the same prerequisite so `FACET_ATTACH` ships with a real material cost. The
+seeded rows carry no `CheckTypeTrait` composition — that's content, authored
+lore-side — so checks resolve but roll flat until the trait weights land.
+
+The four example `ITEM_CREATE` recipes that used to be hardcoded in
+`world.seeds.provisioning_checks` (Hearty Stew, Honeyed Wine, Dream Dust, Haze) —
+plus their ingredient `ItemTemplate`s and skill-cap ladders — moved to the lore
+repo (Task 4): `ITEM_CREATE` raises nothing when no recipe exists (an empty recipe
+list, not a config exception), so per the seeder-vs-fixture dividing line
+(#2882/#3006) it belongs in content, not a seeded default.
+`provisioning_checks.seed_provisioning_content()` now only ensures the Cooking
+check spine (skill + CheckType + Brewing specialization) and the QualityTier/
+AccentLevel ladders those recipes roll against.
+
 ### FACET_ATTACH reagent content (#707)
 
 `world.items.seeds_facet_reagents.ensure_facet_attach_reagent_requirement(recipe)`
@@ -520,9 +563,10 @@ fashion-item facet attachment share the one FACET_ATTACH recipe) cost a real mat
 Per ADR-0087's rejected-alternative note, FACET_ATTACH reagents stay exact-template
 matching (no touchstone-mode) — attaching a facet to someone else's garment isn't a
 personal-resonance act. Proven end-to-end by
-`world/items/tests/test_facet_attach_material_e2e.py`; the seed helper is not yet
-invoked from a production content loader (framework-proving scope only, mirroring the
-touchstone/reagent seeds in `world.magic`).
+`world/items/tests/test_facet_attach_material_e2e.py`; the seed helper is now wired
+into a production path — `CONFIG_PREREQUISITES["crafting"]` calls it against the
+seeded FACET_ATTACH default row (#3006 Task 2, see "Production data path" above) —
+rather than the test-only call site this note originally described.
 
 ### Handler Registry (`crafting/registry.py`, `crafting/handlers.py`)
 
@@ -786,14 +830,29 @@ domain-specific result dataclasses.
 `compute_quality_score(check_result, *, step, min_success_level) -> int` is co-located
 here (imported by `crafting/quality.py`).
 
-### Telnet + Action layer (#1866)
+### Telnet + Action layer (#1866, gem cut added #3006 Task 3)
 
 `AttachFacetAction`/`DetachFacetAction`/`AttachStyleAction`
 (`actions/definitions/crafting.py`) wrap `craft_attach_facet`/
 `remove_facet_from_item`/`craft_attach_style`; `ItemFacetViewSet`/
 `ItemStyleCraftViewSet` dispatch through them (closing the ADR-0001
 web-bypasses-actions gap), and telnet `CmdCraft` (`craft
-facet/removefacet/style/quote`) reaches the same seam.
+facet/removefacet/style/quote/cut`) reaches the same seam.
+
+`CutGemAction` (key `cut_gem`, same file) wraps `world.items.gems.services.cut_gem`
+directly — it does **not** go through `run_crafting_recipe`/the handler registry;
+gem cutting is a single skill-check-and-resolve with no attach/create handler, no
+consequence pool, and no material staging. It resolves the `GEM_CUT`
+`CraftingRecipe` via the same `_resolve_recipe_for_run` seam `run_crafting_recipe`
+uses. `GemCutViewSet` (`GET/POST /api/items/gem-cuts/`, `GET .../quote/`) mirrors
+`ItemFacetViewSet`/`ItemStyleCraftViewSet`'s create+quote shape; the quote uses the
+bespoke `build_gem_cut_quote` (`world.items.gems.services`), not
+`build_crafting_quote` — the generic quote's material/skill-cap/consequence-pool
+shape doesn't apply, and the quote's job here is mainly to surface the shatter-risk
+sentence before the player commits. `OwnsItemInstancePrerequisite` gates the target
+(a held `ItemInstance`); `NotAGem`/`CraftingNotConfigured`/`CraftingCostUnaffordable`
+map to failure results. Market service-craft (cutting a catalog-row gem never yet
+minted as a held instance) is out of scope.
 
 ### Quote Endpoint (`crafting/services.py` + `views.py`)
 

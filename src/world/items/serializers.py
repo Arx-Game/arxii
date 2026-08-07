@@ -230,6 +230,47 @@ class StyleCraftResultSerializer(serializers.Serializer):
         return obj.outcome.success_level if obj.outcome else None
 
 
+class GemCutWriteSerializer(serializers.Serializer):
+    """Write serializer for a gem-cut attempt (POST) — input validation only.
+
+    The viewset drives ``CutGemAction`` directly; this only parses/validates the
+    ``item_instance`` the attempt targets. Not a ``ModelSerializer`` — a cut
+    mutates the gem's existing ``GemInstanceDetails`` row in place, it never
+    creates a new attachment row the way ``ItemFacet``/``ItemStyle`` do.
+    """
+
+    item_instance = serializers.PrimaryKeyRelatedField(queryset=ItemInstance.objects.all())
+
+
+class GemCutResultSerializer(serializers.Serializer):
+    """Response for a gem-cut attempt: new grade + worth, or shatter + worth lost."""
+
+    shattered = serializers.BooleanField()
+    new_cut_grade = serializers.SerializerMethodField()
+    worth = serializers.IntegerField()
+    worth_lost = serializers.IntegerField()
+
+    def get_new_cut_grade(self, obj) -> str | None:
+        return obj.new_cut_grade.label if obj.new_cut_grade else None
+
+
+class GemCutQuoteSerializer(serializers.Serializer):
+    """Read-only cost + shatter-risk quote for a potential gem-cut attempt.
+
+    Deliberately not ``CraftingQuoteSerializer`` — ``cut_gem`` bypasses
+    ``run_crafting_recipe`` (no material staging, no consequence pool), so the
+    generic quote shape doesn't apply; ``shatter_risk_message`` is the one
+    sentence the player must see before risking the stone (a botch deletes it).
+    """
+
+    ap_cost = serializers.IntegerField()
+    ap_have = serializers.IntegerField()
+    base_difficulty = serializers.IntegerField()
+    min_success_level = serializers.IntegerField()
+    affordable = serializers.BooleanField()
+    shatter_risk_message = serializers.CharField()
+
+
 class CraftingQuoteMaterialSerializer(serializers.Serializer):
     """One material requirement row within a crafting quote."""
 

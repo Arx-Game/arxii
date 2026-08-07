@@ -162,7 +162,11 @@ CONTENT_MODELS: frozenset[str] = frozenset(
         "gm.checktypesituationfit",
         "gm.situationdifficultyguide",
         "gm.consequencepoolguide",
-        # items
+        # items — crafting (#3006)
+        "items.craftingmaterialrequirement",
+        "items.craftingrecipe",
+        "items.craftingrecipeconsequence",
+        "items.craftingskillcap",
         "items.itemtemplateproperty",
         # magic
         "magic.affinity",

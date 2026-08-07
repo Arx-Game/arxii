@@ -50,12 +50,18 @@ FACET_MODEL = "arxii.Facet"
 RESONANCE_MODEL = "arxii.Resonance"
 
 
-class QualityTier(SharedMemoryModel):
+class QualityTier(NaturalKeyMixin, SharedMemoryModel):
     """
     Discrete quality level for items, reusable across systems.
 
     Color-coded tiers (e.g., Common=white, Fine=green, Masterwork=purple)
     provide consistent visual language for quality/difficulty throughout the game.
+
+    Carries `NaturalKeyMixin` (#3006 task 6b, mirroring `MaterialCategory`): `name`
+    is already unique, so it needs no schema change. Required so
+    `CraftingSkillCap.max_quality_tier` — an FK-by-name value in lore-authored
+    crafting fixtures — can resolve at content-load time instead of crashing
+    `_resolve_natural_key_fields` with a missing `get_by_natural_key`.
     """
 
     name = models.CharField(max_length=50, unique=True)
@@ -82,6 +88,11 @@ class QualityTier(SharedMemoryModel):
         default=0,
         help_text="Display ordering (lower = worse quality).",
     )
+
+    objects = NaturalKeyManager()
+
+    class NaturalKeyConfig:
+        fields = ["name"]
 
     class Meta:
         ordering = ["sort_order"]
@@ -140,7 +151,7 @@ class AccentLevel(SharedMemoryModel):
         return f"{self.name} ({self.level})"
 
 
-class MaterialCategory(SharedMemoryModel):
+class MaterialCategory(NaturalKeyMixin, SharedMemoryModel):
     """A crafting-equivalence class of materials (e.g. "Precious Gemstones").
 
     Recipes may target a category so that any member template satisfies the
@@ -148,6 +159,13 @@ class MaterialCategory(SharedMemoryModel):
     separate concern deferred to Build 0b (the gemstone-value ladder). FK
     direction is specific→general (ADR-0010): templates point here; this model
     imports nothing from its consumers.
+
+    Carries `NaturalKeyMixin` (#3006, mirroring `ItemTemplate`): `name` is
+    already unique, so it needs no schema change. Not itself registered in
+    `CONTENT_MODELS` (tuning stays out, same reasoning as `ItemTemplate`) —
+    this exists so `CraftingMaterialRequirement`'s material_category branch of
+    its recipe/item_template/material_category XOR natural key resolves
+    portably instead of falling back to a raw pk.
     """
 
     name = models.CharField(max_length=100, unique=True)
@@ -156,6 +174,11 @@ class MaterialCategory(SharedMemoryModel):
         default=0,
         help_text="Display ordering (lower first).",
     )
+
+    objects = NaturalKeyManager()
+
+    class NaturalKeyConfig:
+        fields = ["name"]
 
     class Meta:
         ordering = ["sort_order", "name"]
