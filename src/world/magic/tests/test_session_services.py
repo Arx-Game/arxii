@@ -498,6 +498,79 @@ class FireSessionTests(TestCase):
         self.assertTrue(RitualSession.objects.filter(pk=session.pk).exists())
 
 
+class FireSessionPoolGateTests(TestCase):
+    """#3001: fire_session gates on the anima pool."""
+
+    def _ready_session(self, *, anima_requirement):
+        from world.character_sheets.factories import CharacterSheetFactory
+        from world.magic.constants import ParticipationRule
+        from world.magic.factories import RitualFactory
+        from world.magic.services.sessions import accept_session, draft_session
+
+        ritual = RitualFactory(
+            participation_rule=ParticipationRule.FORMATION,
+            execution_kind="SERVICE",
+            service_function_path="world.magic.tests.test_session_services.dummy_fire_service",
+            anima_requirement=anima_requirement,
+        )
+        initiator = CharacterSheetFactory()
+        invitee = CharacterSheetFactory()
+        session = draft_session(
+            ritual=ritual,
+            initiator=initiator,
+            proposed_terms="x",
+            session_kwargs={},
+            invitee_sheets=[invitee],
+            session_references=[],
+            initiator_participant_kwargs={},
+            initiator_references=[],
+            expires_at=datetime.now(UTC) + timedelta(hours=1),
+        )
+        invitee_p = session.participants.get(character_sheet=invitee)
+        accept_session(participant=invitee_p, participant_kwargs={}, references=[])
+        return session
+
+    def _fill_pool(self, session, amount):
+        from world.magic.models.ritual_pool import RitualAnimaContribution
+
+        RitualAnimaContribution.objects.create(
+            session=session,
+            ritual=session.ritual,
+            contributor=session.initiator,
+            kind="CHANNEL",
+            amount=amount,
+        )
+
+    def test_filled_pool_fires_and_stashes_gate_outcome(self):
+        from world.magic.services.sessions import fire_session
+
+        session = self._ready_session(anima_requirement=10)
+        self._fill_pool(session, 10)
+        result = fire_session(session=session)
+        self.assertEqual(result["anima_pool"], {"spectacular": False, "deficit": 0})
+
+    def test_overfilled_pool_marks_spectacular(self):
+        from world.magic.services.sessions import fire_session
+
+        session = self._ready_session(anima_requirement=10)
+        self._fill_pool(session, 20)
+        result = fire_session(session=session)
+        self.assertTrue(result["anima_pool"]["spectacular"])
+
+    def test_underfilled_pool_without_check_config_fizzles_and_consumes(self):
+        from world.magic.exceptions import RitualFizzledError
+        from world.magic.models.sessions import RitualSession
+        from world.magic.services.sessions import fire_session
+
+        session = self._ready_session(anima_requirement=10)
+        self._fill_pool(session, 3)
+        session_pk = session.pk
+        with self.assertRaises(RitualFizzledError):
+            fire_session(session=session)
+        # The rite happened and died: session (and its pool) consumed.
+        self.assertFalse(RitualSession.objects.filter(pk=session_pk).exists())
+
+
 class CancelSessionTests(TestCase):
     def test_cancel_deletes_session(self):
         from world.character_sheets.factories import CharacterSheetFactory

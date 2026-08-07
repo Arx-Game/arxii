@@ -63568,7 +63568,15 @@ components:
         participant_fields:
           type: string
           readOnly: true
+        anima_requirement:
+          type: integer
+          readOnly: true
+        anima_pool_total:
+          type: integer
+          readOnly: true
       required:
+      - anima_pool_total
+      - anima_requirement
       - created_at
       - expires_at
       - id

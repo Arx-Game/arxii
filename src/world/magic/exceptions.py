@@ -280,6 +280,16 @@ class ThresholdNotMetError(RitualSessionError):
     SAFE_MESSAGES = frozenset({user_message})
 
 
+class RitualFizzledError(RitualSessionError):
+    """#3001: the pool never met the anima requirement and the deficit check failed.
+
+    The session and its pool are consumed — the rite happened, and it died.
+    """
+
+    user_message = "The rite gutters and dies - the pool never held enough anima."
+    SAFE_MESSAGES = frozenset({user_message})
+
+
 class RequiredReferenceMissingError(RitualSessionError):
     user_message = "A required choice was not provided."
     SAFE_MESSAGES = frozenset({user_message})

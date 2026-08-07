@@ -35918,6 +35918,8 @@ export interface components {
       readonly participants: components['schemas']['RitualSessionParticipantSummary'][];
       readonly session_references: string;
       readonly participant_fields: string;
+      readonly anima_requirement: number;
+      readonly anima_pool_total: number;
     };
     /**
      * @description Write-only serializer for POST /api/rituals/sessions/ (draft a session).

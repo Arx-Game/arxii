@@ -27,6 +27,7 @@ from world.conditions.models import (
 from world.items.models import ItemInstance
 from world.magic.constants import (
     ALTERATION_TIER_CAPS,
+    AnimaContributionKind,
     GlimpseTagAxis,
     TargetKind,
     anima_band_for,
@@ -2990,6 +2991,8 @@ class RitualSessionDetailSerializer(serializers.ModelSerializer):
     )
     session_references = serializers.SerializerMethodField()
     participant_fields = serializers.SerializerMethodField()
+    anima_requirement = serializers.IntegerField(source="ritual.anima_requirement", read_only=True)
+    anima_pool_total = serializers.SerializerMethodField()
 
     class Meta:
         model = RitualSession
@@ -3006,6 +3009,8 @@ class RitualSessionDetailSerializer(serializers.ModelSerializer):
             "participants",
             "session_references",
             "participant_fields",
+            "anima_requirement",
+            "anima_pool_total",
         ]
         read_only_fields = fields
 
@@ -3016,6 +3021,11 @@ class RitualSessionDetailSerializer(serializers.ModelSerializer):
         if initiator is None:
             return ""
         return active_persona_for_sheet(initiator).name
+
+    def get_anima_pool_total(self, obj: object) -> int:
+        from world.magic.services.ritual_pool import pool_total  # noqa: PLC0415
+
+        return pool_total(obj)
 
     def get_session_references(self, obj: object) -> list[dict[str, object]]:
         """Summarise session-level references (participant=None).
@@ -3226,6 +3236,42 @@ class RitualSessionAcceptSerializer(serializers.Serializer):
     def validate_references(self, value: list[dict]) -> list:  # type: ignore[override]
         """Validate reference spec shape (well-formedness only)."""
         return _parse_reference_specs(value)
+
+
+class RitualSessionContributeSerializer(serializers.Serializer):
+    """POST /api/magic/ritual-sessions/{id}/contribute/ (#3001).
+
+    ``kind`` picks the contribution route; CHANNEL requires ``amount``;
+    SACRIFICE requires ``victim_sheet_id`` naming an NPC sheet (PLACEHOLDER
+    consent rail: player-account victims are rejected outright — PC sacrifice
+    waits on a consent flow).
+    """
+
+    kind = serializers.ChoiceField(choices=AnimaContributionKind.choices)
+    amount = serializers.IntegerField(required=False, min_value=1)
+    victim_sheet_id = serializers.IntegerField(required=False)
+    lethal = serializers.BooleanField(required=False, default=False)
+
+    def validate(self, attrs: dict) -> dict:
+        kind = attrs["kind"]
+        if kind == AnimaContributionKind.CHANNEL and attrs.get("amount") is None:
+            raise serializers.ValidationError({"amount": "Channeling requires an amount."})
+        if kind == AnimaContributionKind.SACRIFICE:
+            victim_id = attrs.get("victim_sheet_id")
+            if victim_id is None:
+                raise serializers.ValidationError(
+                    {"victim_sheet_id": "A sacrifice requires a victim."}
+                )
+            victim = CharacterSheet.objects.filter(pk=victim_id).first()
+            if victim is None:
+                raise serializers.ValidationError({"victim_sheet_id": "No such character."})
+            character = victim.character
+            if character is not None and character.db_account is not None:
+                raise serializers.ValidationError(
+                    {"victim_sheet_id": "Only NPCs may be offered as sacrifices."}
+                )
+            attrs["victim_sheet"] = victim
+        return attrs
 
 
 # =============================================================================

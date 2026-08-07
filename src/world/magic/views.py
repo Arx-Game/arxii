@@ -2452,6 +2452,71 @@ class RitualSessionViewSet(viewsets.ModelViewSet):
         return Response(out.data, status=status.HTTP_200_OK)
 
     @action(detail=True, methods=["post"])
+    def contribute(self, request: Request, pk: int | None = None) -> Response:
+        """Pay anima into the session's pool (#3001): channel, prick, gash, or sacrifice."""
+        from world.magic.constants import AnimaContributionKind, ParticipantState  # noqa: PLC0415
+        from world.magic.exceptions import RitualPoolError  # noqa: PLC0415
+        from world.magic.models.sessions import RitualSessionParticipant  # noqa: PLC0415
+        from world.magic.serializers import (  # noqa: PLC0415
+            RitualSessionContributeSerializer,
+            RitualSessionDetailSerializer,
+        )
+        from world.magic.services import ritual_pool  # noqa: PLC0415
+
+        session = self.get_object()
+        user = request.user
+        my_sheet_ids = set(RosterEntry.objects.for_account(cast(AccountDB, user)).character_ids())
+        contributor_sheet = None
+        if session.initiator_id in my_sheet_ids:
+            contributor_sheet = session.initiator
+        else:
+            participant = RitualSessionParticipant.objects.filter(
+                session=session,
+                character_sheet_id__in=my_sheet_ids,
+                state=ParticipantState.ACCEPTED,
+            ).first()
+            if participant is not None:
+                contributor_sheet = participant.character_sheet
+        if contributor_sheet is None:
+            return Response(
+                {"detail": "Only the initiator or an accepted participant may contribute."},
+                status=status.HTTP_403_FORBIDDEN,
+            )
+        serializer = RitualSessionContributeSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        data = serializer.validated_data
+        kind = data["kind"]
+        try:
+            if kind == AnimaContributionKind.CHANNEL:
+                ritual_pool.contribute_channel(
+                    ritual=session.ritual,
+                    contributor_sheet=contributor_sheet,
+                    amount=data["amount"],
+                    session=session,
+                )
+            elif kind == AnimaContributionKind.PRICK:
+                ritual_pool.contribute_prick(
+                    ritual=session.ritual, contributor_sheet=contributor_sheet, session=session
+                )
+            elif kind == AnimaContributionKind.GASH:
+                ritual_pool.contribute_gash(
+                    ritual=session.ritual, contributor_sheet=contributor_sheet, session=session
+                )
+            else:
+                ritual_pool.contribute_sacrifice(
+                    ritual=session.ritual,
+                    sacrificer_sheet=contributor_sheet,
+                    victim_sheet=data["victim_sheet"],
+                    lethal=data["lethal"],
+                    session=session,
+                )
+        except RitualPoolError as exc:
+            return Response({"detail": exc.user_message}, status=status.HTTP_400_BAD_REQUEST)
+        session.refresh_from_db()
+        out = RitualSessionDetailSerializer(session, context={"request": request})
+        return Response(out.data, status=status.HTTP_200_OK)
+
+    @action(detail=True, methods=["post"])
     def fire(self, request: Request, pk: int | None = None) -> Response:
         """Initiator-only fire. Returns {result_kind, result_id} envelope."""
         from world.covenants.exceptions import CovenantError  # noqa: PLC0415
