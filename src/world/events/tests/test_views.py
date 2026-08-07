@@ -627,25 +627,41 @@ class EventInviteBlockMuteVisibilityTestCase(APITestCase):
         )
 
     def test_block_does_not_affect_the_inviters_own_create_response(self) -> None:
-        """Leak check: inviting a blocked account still returns a normal invitation_id."""
+        """Leak check (#2996): the write path (``invite_persona``) is deliberately untouched
+        by block/mute (write-then-filter) -- inviting a blocked account must return a response
+        byte-identical (field-for-field, ids/timestamps aside) to inviting an unblocked one.
+        """
         Block.objects.create(
             owner=self.invitee_tenure.player_data,
             blocked_player=self.inviter_tenure.player_data,
             account_level=True,
         )
         self.client.force_authenticate(user=self.inviter_account)
-        # Give the inviter host permission on a fresh event they own outright.
-        own_event = EventFactory(is_public=False, status=EventStatus.DRAFT)
-        EventHostFactory(event=own_event, persona=self.inviter_persona)
+        # Same target persona for both calls (on separate events) so every field the
+        # serializer exposes besides id/invited_at is expected to match exactly.
         target = PersonaFactory()
-        response = self.client.post(
+
+        blocked_event = EventFactory(is_public=False, status=EventStatus.DRAFT)
+        EventHostFactory(event=blocked_event, persona=self.inviter_persona)
+        blocked_response = self.client.post(
             "/api/events/invitations/",
-            {
-                "event": own_event.id,
-                "target_type": "persona",
-                "target_id": target.id,
-            },
+            {"event": blocked_event.id, "target_type": "persona", "target_id": target.id},
             format="json",
         )
-        self.assertEqual(response.status_code, status.HTTP_201_CREATED)
-        self.assertIn("id", response.data)
+
+        control_event = EventFactory(is_public=False, status=EventStatus.DRAFT)
+        EventHostFactory(event=control_event, persona=self.inviter_persona)
+        control_response = self.client.post(
+            "/api/events/invitations/",
+            {"event": control_event.id, "target_type": "persona", "target_id": target.id},
+            format="json",
+        )
+
+        self.assertEqual(blocked_response.status_code, status.HTTP_201_CREATED)
+        self.assertEqual(control_response.status_code, status.HTTP_201_CREATED)
+        blocked_data = blocked_response.data
+        control_data = control_response.data
+        self.assertEqual(set(blocked_data.keys()), set(control_data.keys()))
+        unique_fields = {"id", "invited_at"}
+        for field in set(blocked_data.keys()) - unique_fields:
+            self.assertEqual(blocked_data[field], control_data[field], field)
