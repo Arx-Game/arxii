@@ -31,6 +31,7 @@ import {
   useMotifStyleBindings,
   useBindMotifStyle,
   useUnbindMotifStyle,
+  useTrainTechnique,
   magicKeys,
 } from '../queries';
 import { __resetImbuingRitualIdCacheForTests } from '../api';
@@ -64,6 +65,7 @@ vi.mock('../api', () => ({
   getMotifStyleBindings: vi.fn(),
   bindMotifStyle: vi.fn(),
   unbindMotifStyle: vi.fn(),
+  trainTechnique: vi.fn(),
 }));
 
 import * as api from '../api';
@@ -81,6 +83,24 @@ function createWrapper() {
   return function Wrapper({ children }: { children: ReactNode }) {
     return <QueryClientProvider client={queryClient}>{children}</QueryClientProvider>;
   };
+}
+
+/** Like createWrapper, but also returns the QueryClient so a test can spy on invalidateQueries. */
+function createWrapperWithClient() {
+  const client = new QueryClient({
+    defaultOptions: {
+      queries: {
+        retry: false,
+        gcTime: 0,
+      },
+    },
+  });
+
+  function Wrapper({ children }: { children: ReactNode }) {
+    return <QueryClientProvider client={client}>{children}</QueryClientProvider>;
+  }
+
+  return { wrapper: Wrapper, client };
 }
 
 // ---------------------------------------------------------------------------
@@ -942,5 +962,63 @@ describe('useUnbindMotifStyle', () => {
     });
 
     expect(api.unbindMotifStyle).toHaveBeenCalledWith(11, { style_id: 1 });
+  });
+});
+
+describe('useTrainTechnique', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it('calls trainTechnique with the character id (X-Character-ID scoping) and payload', async () => {
+    vi.mocked(api.trainTechnique).mockResolvedValue({
+      technique_id: 11,
+      outcome_name: 'Solid Progress',
+      points_before: 4,
+      points_after: 6,
+      total_required: 10,
+      technique_acquired: false,
+      self_study: false,
+    });
+
+    const { result } = renderHook(() => useTrainTechnique(10), { wrapper: createWrapper() });
+    await act(async () => {
+      await result.current.mutateAsync({ techniqueId: 11, body: { ap_to_invest: 3 } });
+    });
+
+    expect(api.trainTechnique).toHaveBeenCalledWith(10, 11, { ap_to_invest: 3 });
+  });
+
+  it('invalidates both techniqueProgress(characterSheetId) and the character-sheet query on success', async () => {
+    vi.mocked(api.trainTechnique).mockResolvedValue({
+      technique_id: 11,
+      outcome_name: 'Breakthrough',
+      points_before: 8,
+      points_after: 10,
+      total_required: 10,
+      technique_acquired: true,
+      self_study: true,
+    });
+
+    const { wrapper, client } = createWrapperWithClient();
+    const invalidateSpy = vi.spyOn(client, 'invalidateQueries');
+
+    const { result } = renderHook(() => useTrainTechnique(10), { wrapper });
+    await act(async () => {
+      await result.current.mutateAsync({ techniqueId: 11 });
+    });
+
+    // A completed session mints a CharacterTechnique, rendered by SpellbookTab from
+    // the character-sheet cache, not from the meter list — both keys must be
+    // invalidated regardless of whether this particular session completed the meter
+    // (unconditional, mirroring useBindMotifStyle/useUnbindMotifStyle's precedent).
+    await waitFor(() => {
+      expect(invalidateSpy).toHaveBeenCalledWith({
+        queryKey: ['magic', 'technique-progress', 10],
+      });
+    });
+    expect(invalidateSpy).toHaveBeenCalledWith({
+      queryKey: ['character-sheets', 10],
+    });
   });
 });

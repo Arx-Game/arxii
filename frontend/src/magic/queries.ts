@@ -923,7 +923,13 @@ export function useTechniqueProgress(characterId: number) {
  * scoping convention as `useBindMotifStyle`).
  *
  * On success invalidates the meter list so the refetched progress/teacher/
- * weekly-remaining figures reflect the session immediately.
+ * weekly-remaining figures reflect the session immediately, plus the
+ * character-sheet query (`['character-sheets', characterSheetId]`, per
+ * `character_sheets/queries.ts`' `useCharacterSheetQuery` — same pattern as
+ * `useBindMotifStyle`/`useUnbindMotifStyle` above) — a completed session can
+ * mint a `CharacterTechnique`, which `SpellbookTab` renders from that sheet
+ * payload, not from this meter list. Unconditional (not gated on
+ * `technique_acquired`) to match that precedent.
  */
 export function useTrainTechnique(characterSheetId: number) {
   const qc = useQueryClient();
@@ -934,6 +940,7 @@ export function useTrainTechnique(characterSheetId: number) {
       qc.invalidateQueries({ queryKey: magicKeys.techniqueProgress(characterSheetId) }).catch(
         () => {}
       );
+      qc.invalidateQueries({ queryKey: ['character-sheets', characterSheetId] }).catch(() => {});
     },
   });
 }

@@ -4,7 +4,7 @@
  * Mirrors MotifStylePanel.test.tsx's mock-the-hook-module idiom (no msw).
  */
 
-import { screen } from '@testing-library/react';
+import { fireEvent, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { vi } from 'vitest';
 import { renderWithProviders } from '@/test/utils/renderWithProviders';
@@ -128,6 +128,25 @@ describe('TechniqueProgressPanel', () => {
 
     expect(trainMutate).toHaveBeenCalledWith(
       { techniqueId: 11, body: { ap_to_invest: 3 } },
+      expect.anything()
+    );
+  });
+
+  it('treats a non-integer AP input as unset rather than sending a fractional value', async () => {
+    const { trainMutate } = setupMocks({});
+    renderWithProviders(<TechniqueProgressPanel characterSheetId={10} />);
+
+    fireEvent.change(screen.getByTestId('technique-progress-ap-input-11'), {
+      target: { value: '2.5' },
+    });
+    // fireEvent.submit dispatches the submit event directly, bypassing the
+    // browser's native step-mismatch constraint validation (which a real click
+    // on the Train button would trigger, given `step={1}` on the input) — this
+    // isolates the JS-level Number.isInteger guard the fix added.
+    fireEvent.submit(screen.getAllByTestId('technique-progress-row')[0]);
+
+    expect(trainMutate).toHaveBeenCalledWith(
+      { techniqueId: 11, body: undefined },
       expect.anything()
     );
   });

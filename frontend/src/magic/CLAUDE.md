@@ -283,7 +283,12 @@ React Query hooks with a `magicKeys` query key factory.
 - `useTrainTechnique(characterSheetId)` — takes `{techniqueId, body?}`; calls
   `api.trainTechnique(characterSheetId, techniqueId, body)`; invalidates
   `techniqueProgress(characterSheetId)` on success so the refetched
-  progress/teacher/weekly-remaining figures reflect the session immediately
+  progress/teacher/weekly-remaining figures reflect the session immediately, plus
+  `['character-sheets', characterSheetId]` (unconditional, mirroring
+  `useBindMotifStyle`/`useUnbindMotifStyle`) — a completed session mints a
+  `CharacterTechnique`, which `SpellbookTab` renders from the sheet payload, not
+  from the meter list, so without this the new technique wouldn't appear until an
+  unrelated refetch
 
 **Note:** `previewPull` is NOT a hook — it's a plain `api.previewPull(body)` async function.
 Pull previews are user-driven and ephemeral; components should debounce calls manually.
@@ -312,7 +317,11 @@ Covers: `useSoulTetherDetail`, `usePendingSineatingOffers`, `usePendingStageAdva
 `usePatchThreadNarrative`, `useRetireThread`, `useImbueThread`, `useCrossXPLock`,
 `useAcceptTeachingOffer`, `useNextPathOptions`, `useMotifStyleBindings`/
 `useBindMotifStyle`/`useUnbindMotifStyle` (character-id threading into the api call +
-query key, #2030 review fix), and `magicKeys` shape assertions.
+query key, #2030 review fix), `useTrainTechnique` (character-id threading + the
+`createWrapperWithClient`/`invalidateSpy` idiom pinning that a completed session
+invalidates BOTH `techniqueProgress(characterSheetId)` and
+`['character-sheets', characterSheetId]`, #2739 review fix), and `magicKeys` shape
+assertions.
 
 The imbue tests call `__resetImbuingRitualIdCacheForTests()` in `beforeEach`.
 
@@ -572,10 +581,11 @@ than an empty card.
 
 ### `components/TechniqueProgressPanel.test.tsx` (#2739 Task 3)
 
-7 unit tests (mocks `../queries`, no msw — mirrors `MotifStylePanel.test.tsx`'s idiom).
+8 unit tests (mocks `../queries`, no msw — mirrors `MotifStylePanel.test.tsx`'s idiom).
 Covers: meter rows render name/fraction/teacher-or-self-study/weekly-remaining;
 `useTechniqueProgress`/`useTrainTechnique` are both called with `characterSheetId`; the
-empty state; the train mutation payload with and without an AP input value; the
+empty state; the train mutation payload with and without an AP input value; a
+non-integer AP input (e.g. `2.5`) is treated as unset rather than sent fractional; the
 success-outcome line after a train call resolves; the 400 `detail` message renders under
 the row that failed.
 

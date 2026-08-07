@@ -42,7 +42,8 @@ export function TechniqueProgressPanel({ characterSheetId }: Props) {
     event.preventDefault();
     const raw = apInputs[techniqueId];
     const parsed = raw ? Number(raw) : undefined;
-    const body = parsed && parsed > 0 ? { ap_to_invest: parsed } : undefined;
+    const body =
+      parsed && Number.isInteger(parsed) && parsed > 0 ? { ap_to_invest: parsed } : undefined;
     setFailedTechniqueId(null);
     train.mutate(
       { techniqueId, body },
@@ -117,6 +118,7 @@ export function TechniqueProgressPanel({ characterSheetId }: Props) {
                         data-testid={`technique-progress-ap-input-${meter.technique_id}`}
                         type="number"
                         min={1}
+                        step={1}
                         className="h-9 w-24 rounded-md border border-input bg-transparent px-2 text-sm shadow-sm focus:outline-none focus:ring-1 focus:ring-ring"
                         value={apInputs[meter.technique_id] ?? ''}
                         onChange={(event) =>
