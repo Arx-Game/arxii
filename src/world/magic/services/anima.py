@@ -44,10 +44,15 @@ def deduct_anima(character: ObjectDB, effective_cost: int, *, lethal: bool = Tru
         anima = CharacterAnima.objects.select_for_update().get(character_id=character.pk)
         if not lethal:
             # Non-lethal: never spend past available anima — no life-force draw.
-            effective_cost = min(effective_cost, anima.current)
-        deficit = max(effective_cost - anima.current, 0)
-        anima.current = max(anima.current - effective_cost, 0)
-        anima.save(update_fields=["current"])
+            effective_cost = min(effective_cost, anima.current + anima.glut)
+        # #2853 ruled "spends draw glut first" (the feeding high burns before the
+        # real pool); implemented here in #3001 — it was documented but inert.
+        from_glut = min(effective_cost, anima.glut)
+        remainder = effective_cost - from_glut
+        deficit = max(remainder - anima.current, 0)
+        anima.glut -= from_glut
+        anima.current = max(anima.current - remainder, 0)
+        anima.save(update_fields=["current", "glut"])
     return deficit
 
 

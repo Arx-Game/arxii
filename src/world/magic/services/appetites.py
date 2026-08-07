@@ -69,7 +69,9 @@ def appetite_upkeep_tick(period: str) -> int:
             )
             if not created:
                 continue
-            floor = (anima.maximum * config.floor_percent) // 100
+            # Ceil, not floor-division (#3001 ruling): 10% of a 105 pool holds 11
+            # back, so a small floor never rounds away to nothing.
+            floor = -(-anima.maximum * config.floor_percent // 100)
             drain = min(config.amount, max(0, anima.current - floor))
             if drain:
                 anima.current -= drain
