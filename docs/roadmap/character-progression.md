@@ -34,6 +34,20 @@ The central spine connecting every system in the game. Characters develop throug
   and deed. Personas present in the scene are recorded as `WITNESSED` via
   `grant_deed_knowledge` + `scene_witness_personas`. No deed is created when
   `threshold.risk == NONE` or the character has no primary persona.
+- **Technique training meters, check-based sessions, and their player-facing trigger
+  (#2711/#2727/#2739):** `TechniqueProgress` per-(character × technique) development
+  meters (mounted via a teaching offer or an Academy TRAIN offer, #2711) accrue
+  through checked training sessions — `resolve_training_check` (#2727) rolls
+  intellect + Arcane Theory against a tier/level/teacher-scaled difficulty and maps
+  the outcome to a dev-point multiplier (botch/failure 0×, partial 0.5×, success
+  1.0×, critical 1.5×; AP is always spent regardless of outcome). #2739 built the
+  missing production caller: `TrainTechniqueAction` is the shared `action.run()`
+  seam telnet (`train <technique>[=<ap>]` / bare `train` for the meter list) and
+  web (`GET`/`POST /api/magic/technique-progress/`) converge on, with a frontend
+  meter panel (`TechniqueProgressPanel`, mounted in the character sheet's Spellbook
+  tab) making the loop visible — progress bar/fraction, teacher-or-self-study,
+  weekly remaining, a Train button with an optional AP input. See
+  `docs/systems/magic.md`'s "Check-Based Training Session Trigger" section.
 - **Tests:** Extensive tests for traits, skills, kudos, character XP, path history, legend
 
 ## What's Needed for MVP

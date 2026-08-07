@@ -31,6 +31,7 @@ import type {
   SineatingRespondRequest,
   StageAdvanceRespondRequest,
   TechniqueDesignRequest,
+  TrainTechniqueRequest,
   UnbindMotifStyleRequest,
   WeaveThreadRequest,
 } from './types';
@@ -94,6 +95,9 @@ export const magicKeys = {
   motifStyleBindings: (characterId: number) =>
     [...magicKeys.all, 'motif-styles', 'bindings', characterId] as const,
   styleCatalog: () => [...magicKeys.all, 'motif-styles', 'catalog'] as const,
+
+  techniqueProgress: (characterId: number) =>
+    [...magicKeys.all, 'technique-progress', characterId] as const,
 };
 
 // ---------------------------------------------------------------------------
@@ -898,4 +902,38 @@ export function useToggleGlimpseDistinction(auraId: number, characterSheetId: nu
     },
     isPending: link.isPending || unlink.isPending,
   };
+}
+
+// ---------------------------------------------------------------------------
+// Technique progress meters, #2739
+// ---------------------------------------------------------------------------
+
+/** The given character's in-progress technique training meters. Disabled when id ≤ 0. */
+export function useTechniqueProgress(characterId: number) {
+  return useQuery({
+    queryKey: magicKeys.techniqueProgress(characterId),
+    queryFn: () => api.getTechniqueProgress(characterId),
+    enabled: characterId > 0,
+  });
+}
+
+/**
+ * Run one training session against a technique's meter for the given
+ * character (`characterSheetId` backs the `X-Character-ID` header, same
+ * scoping convention as `useBindMotifStyle`).
+ *
+ * On success invalidates the meter list so the refetched progress/teacher/
+ * weekly-remaining figures reflect the session immediately.
+ */
+export function useTrainTechnique(characterSheetId: number) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ techniqueId, body }: { techniqueId: number; body?: TrainTechniqueRequest }) =>
+      api.trainTechnique(characterSheetId, techniqueId, body),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: magicKeys.techniqueProgress(characterSheetId) }).catch(
+        () => {}
+      );
+    },
+  });
 }

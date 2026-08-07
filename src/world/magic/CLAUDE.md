@@ -380,6 +380,61 @@ serializer (`_RemovedConditionSpecSerializer`), admin (`TechniqueRemovedConditio
   now forwards `ritual=ritual` to the service function, so technique-granting
   rituals can resolve their `TechniqueGrant` row.
 
+### Check-based training + its player-facing trigger (#2727, #2739)
+
+`resolve_training_check(learner, progress, *, ap_to_invest, teacher=None)`
+(`services/technique_training.py`, #2727) is the check layer sitting on top of
+`contribute_to_technique_progress` (above): the learner rolls intellect + "Arcane
+Theory" (the "Technique Training" `CheckType`, seeded by
+`ensure_technique_training_content()`) against `target_difficulty = (technique.tier
+× step) − (learner_level // divisor) − teacher_skill_bonus + (self_study_penalty
+if teacher is None)`, and the outcome maps to a dev-point multiplier via
+`TrainingOutcomeAward(OutcomeTierAward)` (botch/failure 0×, partial 0.5×, success
+1.0×, critical 1.5×) — AP is always spent regardless of outcome; only the
+dev-point yield varies. Four tuning knobs live on `GiftAcquisitionConfig`. This
+seam shipped with no production caller until #2739:
+
+- **Action** — `TrainTechniqueAction` (`actions/definitions/technique_training.py`,
+  key `train_technique`, REGISTRY, `category="magic"`, `target_type=SELF`). Kwargs
+  `technique_id` (the `Technique` pk, resolved against the learner's own open
+  `TechniqueProgress` meter — no meter is a clean failure naming the two front
+  doors above that create one) and `ap_to_invest` (defaults to 1; a value ≤ 0 is
+  rejected; the seam spends it in full and raises on pool/cap overruns rather than
+  this action pre-bounding it). Resolves a co-present teacher —
+  `progress.teacher_tenure` counts only when that tenure's live character shares
+  the learner's room *at session time*; otherwise self-study rates apply silently
+  (Decision 3a — never a location hard-block; true for both PC-teacher meters and
+  Academy TRAIN meters). Maps `WeeklyTrainingCapExceeded`/`MagicError` to a failure
+  `ActionResult`; also catches a bare `ValueError` from `learn_technique` (reached
+  on meter completion, raised when the learner already holds the
+  `CharacterTechnique` — a stale meter left open after the technique arrived by
+  another route) the same way. Success `data`:
+  `{technique_id, outcome_name, points_before, points_after, total_required,
+  technique_acquired, self_study}`.
+- **Telnet** — `CmdTrain` (`commands/training.py`, key `train`, verified free).
+  `train <technique>[=<ap>]` resolves the technique by name and dispatches the
+  action; bare `train` lists the caller's open `TechniqueProgress` meters (name,
+  progress/total, teacher-or-dash) — a read path, no dispatch.
+- **Web** — `TechniqueProgressViewSet` (`views_technique_progress.py`, routed at
+  `/api/magic/technique-progress/` in `urls.py`). `list` returns the scoped
+  character's own meters via `TechniqueProgressSerializer` (technique id/name,
+  `points_accumulated`/`total_required`, `teacher_name` — `RosterTenure
+  .display_name`, null for self-study — `source_label` from
+  `TechniqueProgress.get_source_display()`, and `weekly_remaining`, computed by one
+  batched query over the listed meters' technique ids so the list stays O(1)
+  queries regardless of meter count). `POST <technique_id>/train/`
+  (`TrainTechniqueRequestSerializer`, body `{ap_to_invest?}`) dispatches the
+  action, mapping a failure `ActionResult` to HTTP 400 `{detail}`. `<technique_id>`
+  is the `Technique` pk (matching the action's own kwarg), not the
+  `TechniqueProgress` row's pk, so a technique with no meter surfaces the action's
+  own "you aren't training that" failure as a clean 400 rather than a
+  router-level 404. Character scoping mirrors `MotifStyleViewSet` (#2030): an
+  `X-Character-ID` header, validated as owned via `CharacterContextMixin`, takes
+  precedence over the caller's active puppet.
+- **Frontend** — `TechniqueProgressPanel` (`frontend/src/magic/components/`),
+  mounted in `SpellbookTab` below `MotifStylePanel`, own-view only. See
+  `frontend/src/magic/CLAUDE.md` for the query/mutation wire contract.
+
 ### Starter Gift Catalog (CG Technique Picks, #2426; content pipeline #2474)
 
 The pre-#2426 design used a staff-curated `Cantrip` starter-technique-template model

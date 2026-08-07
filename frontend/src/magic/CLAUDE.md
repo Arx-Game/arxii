@@ -221,6 +221,7 @@ React Query hooks with a `magicKeys` query key factory.
 - `magicKeys.pathIntent(characterId)` → `['magic', 'path-intent', characterId]`
 - `magicKeys.motifStyleBindings(characterId)` → `['magic', 'motif-styles', 'bindings', characterId]`
 - `magicKeys.styleCatalog()` → `['magic', 'motif-styles', 'catalog']`
+- `magicKeys.techniqueProgress(characterId)` → `['magic', 'technique-progress', characterId]`
 
 **Alteration read hooks:**
 
@@ -248,6 +249,9 @@ React Query hooks with a `magicKeys` query key factory.
   (`X-Character-ID` header); the given character's current Style bindings; disabled
   when `characterId ≤ 0`
 - `useStyleCatalog()` — GET `/api/items/styles/`; the Style catalog for the bind form's picker
+- `useTechniqueProgress(characterId)` — GET `/api/magic/technique-progress/`
+  (`X-Character-ID` header); the given character's in-progress training meters;
+  disabled when `characterId ≤ 0`
 
 **Mutation hooks:**
 
@@ -276,9 +280,27 @@ React Query hooks with a `magicKeys` query key factory.
   (`['character-sheets', characterSheetId]`, per `character_sheets/queries.ts`'
   `useCharacterSheetQuery`) — the sheet's `magic.motif.resonances[*].styles` mirrors
   the same bindings
+- `useTrainTechnique(characterSheetId)` — takes `{techniqueId, body?}`; calls
+  `api.trainTechnique(characterSheetId, techniqueId, body)`; invalidates
+  `techniqueProgress(characterSheetId)` on success so the refetched
+  progress/teacher/weekly-remaining figures reflect the session immediately
 
 **Note:** `previewPull` is NOT a hook — it's a plain `api.previewPull(body)` async function.
 Pull previews are user-driven and ephemeral; components should debounce calls manually.
+
+**Technique progress meters (#2739):**
+
+- `getTechniqueProgress(characterId)` — GET `/api/magic/technique-progress/`
+  (`X-Character-ID` header) → `TechniqueProgressMeter[]` (bare array — the
+  view's `list` returns `Response(serializer.data)` directly, no pagination
+  class). Wire contract: `TechniqueProgressViewSet`
+  (`src/world/magic/views_technique_progress.py`).
+- `trainTechnique(characterId, techniqueId, body?)` — POST
+  `/api/magic/technique-progress/{technique_id}/train/` (`X-Character-ID`
+  header), body `TrainTechniqueRequest` (`{ap_to_invest?}`) → `TrainTechniqueResult`.
+  `techniqueId` is the `Technique` pk (matching `TrainTechniqueAction`'s own
+  kwarg), not the `TechniqueProgress` row's pk. 400s (no meter, weekly cap hit,
+  can't afford the AP, stale meter) carry a `{detail}` string via `readErrorDetail`.
 
 ### `__tests__/queries.test.tsx`
 
@@ -527,6 +549,35 @@ until both selects have a value; "claim a resonance first" empty state (and no
 selects rendered); the bind and unbind mutations' 400 `detail` messages both render;
 `useMotifStyleBindings`/`useBindMotifStyle`/`useUnbindMotifStyle` are all called with
 `characterSheetId` (cross-character scoping, #2030 review fix).
+
+### `components/TechniqueProgressPanel.tsx` (#2739 Task 3)
+
+Card rendered in `SpellbookTab.tsx`, own-view only, below `MotifStylePanel` — the
+player-facing meter panel that makes the training-check loop (Task 1's
+`TrainTechniqueAction`, Task 2's web endpoints) visible in the game UI. Lists the
+character's `useTechniqueProgress(characterSheetId)` rows, one card per meter: technique
+name, a `Progress` bar + `points_accumulated`/`total_required` fraction, a "Taught by
+`teacher_name`" or "Self-study" badge, `weekly_remaining` (when non-null), an optional
+AP-to-invest number input, and a Train button. Submitting calls
+`useTrainTechnique(characterSheetId).mutate({ techniqueId, body })` — `body` is omitted
+(server default) when the AP input is blank. On success the session outcome renders
+inline (`data-testid="technique-progress-result-{techniqueId}"` — "you've learned X!"
+when `technique_acquired`, else `"{outcome_name}: {points_after}/{total_required}."`,
+mirroring `TrainTechniqueAction`'s own message); the query invalidation refetches the row
+so the bar/fraction/weekly-remaining stay live. On a 400 the server's `detail` message
+renders under the row that triggered it
+(`data-testid="technique-progress-error-{techniqueId}"`). Empty state is a single quiet
+line (`data-testid="technique-progress-empty"`, "Nothing in training right now.") rather
+than an empty card.
+
+### `components/TechniqueProgressPanel.test.tsx` (#2739 Task 3)
+
+7 unit tests (mocks `../queries`, no msw — mirrors `MotifStylePanel.test.tsx`'s idiom).
+Covers: meter rows render name/fraction/teacher-or-self-study/weekly-remaining;
+`useTechniqueProgress`/`useTrainTechnique` are both called with `characterSheetId`; the
+empty state; the train mutation payload with and without an AP input value; the
+success-outcome line after a train call resolves; the 400 `detail` message renders under
+the row that failed.
 
 ## Data Flow
 

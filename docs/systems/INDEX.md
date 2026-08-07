@@ -2865,8 +2865,42 @@ register as additional kinds.
   dev points). Difficulty: `target_difficulty = (technique.tier × step)
   − (learner_level // divisor) − teacher_skill_bonus
   + (self_study_penalty if teacher is None)`. Four tuning knobs on
-  `GiftAcquisitionConfig`. No production caller yet — the player-facing
-  training trigger is a deferred follow-up.
+  `GiftAcquisitionConfig`.
+- **Player-facing training trigger (#2739):** the production caller #2727 shipped
+  without. `TrainTechniqueAction` (`actions/definitions/technique_training.py`, key
+  `"train_technique"`, REGISTRY, `category="magic"`) is the `action.run()` seam
+  telnet and web converge on — resolves the learner's `TechniqueProgress` meter for
+  a `technique_id` kwarg (no meter → clean failure naming the front doors that
+  create one: accepting a teaching offer or an Academy TRAIN offer), resolves a
+  co-present teacher (`progress.teacher_tenure`'s character sharing the learner's
+  room *at session time* — Decision 3a: never a location hard-block, silent
+  self-study fallback otherwise, true for both PC-teacher and Academy meters), and
+  calls `resolve_training_check`. `ap_to_invest` defaults to 1 (no base-session-cost
+  constant exists yet) and is rejected when non-positive; the action does not
+  pre-bound it further — the seam spends it in full and raises
+  `WeeklyTrainingCapExceeded`/`MagicError` (mapped to failure `ActionResult`s) or a
+  bare `ValueError` (mapped the same way) when the meter's technique arrived by
+  another route while the meter sat open (a staff grant, a `TechniqueGrant` item).
+  **Telnet:** `CmdTrain` (`commands/training.py`, key `"train"`) — `train <technique>
+  [=<ap>]` dispatches the action by resolved `technique_id`; bare `train` lists the
+  caller's `TechniqueProgress` meters (name, progress/total, teacher-or-dash) with no
+  dispatch. **Web:** `TechniqueProgressViewSet`
+  (`world/magic/views_technique_progress.py`, routed at
+  `/api/magic/technique-progress/`) — `GET` lists the scoped character's own meters
+  (`TechniqueProgressSerializer`: technique id/name, `points_accumulated`/
+  `total_required`, teacher name-or-null via `RosterTenure.display_name`, source
+  label, a batched-query `weekly_remaining`); `POST <technique_id>/train/` dispatches
+  the action, mapping a failure `ActionResult` to HTTP 400 with its message.
+  Character scoping mirrors `MotifStyleViewSet` (#2030): `X-Character-ID` header,
+  validated as owned, takes precedence over the active puppet. `<technique_id>` is
+  the `Technique` pk (matching the action's own kwarg), not the `TechniqueProgress`
+  row's pk — a technique with no meter yet surfaces the action's own "you aren't
+  training that" failure as a clean 400 rather than a router-level 404. **Frontend:**
+  `TechniqueProgressPanel` (`frontend/src/magic/components/`), mounted in
+  `SpellbookTab` below `MotifStylePanel`, own-view only — one card per meter (progress
+  bar/fraction, teacher-or-self-study, weekly remaining, an optional AP-to-invest
+  input, a Train button); the session outcome and any 400 message render inline per
+  row. See `frontend/src/magic/CLAUDE.md` for the wire-contract detail.
 - **SETTLE_OBLIGATION — the Academy Registrar (#2428 whole-branch fix):** closes the gap
   where `societies.obligation_services.settle_obligation` (Task 1) shipped with no live
   caller — an Unbound Prospect had no in-game way to ever pay off their Academy entrance

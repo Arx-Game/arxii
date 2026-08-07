@@ -61,10 +61,11 @@ vi.mock('@/character_sheets/queries', () => ({
   useCharacterSheetQuery: vi.fn(),
 }));
 
-// MotifStylePanel (#2030) is mounted below the Motif card for the own view —
-// mock its hooks so this suite stays focused on SpellbookTab's own rendering
-// and never issues a real fetch. GlimpseEditorDialog's mutations (#2427) are
-// mocked here too, for the same reason.
+// MotifStylePanel (#2030) and TechniqueProgressPanel (#2739) are mounted below
+// the Motif card for the own view — mock their hooks so this suite stays
+// focused on SpellbookTab's own rendering and never issues a real fetch.
+// GlimpseEditorDialog's mutations (#2427) are mocked here too, for the same
+// reason.
 vi.mock('@/magic/queries', () => ({
   useMotifStyleBindings: vi.fn(),
   useStyleCatalog: vi.fn(),
@@ -74,6 +75,8 @@ vi.mock('@/magic/queries', () => ({
   useSetGlimpseTags: vi.fn(),
   useSetGlimpseProse: vi.fn(),
   useToggleGlimpseDistinction: vi.fn(),
+  useTechniqueProgress: vi.fn(),
+  useTrainTechnique: vi.fn(),
 }));
 
 // GlimpseEditorDialog reads the catalog via the character-creation module's
@@ -111,6 +114,16 @@ function mockMotifStyleQueries() {
     isError: false,
     error: null,
   } as unknown as ReturnType<typeof magicQueries.useUnbindMotifStyle>);
+  vi.mocked(magicQueries.useTechniqueProgress).mockReturnValue({
+    data: [],
+    isLoading: false,
+  } as unknown as ReturnType<typeof magicQueries.useTechniqueProgress>);
+  vi.mocked(magicQueries.useTrainTechnique).mockReturnValue({
+    mutate: vi.fn(),
+    isPending: false,
+    isError: false,
+    error: null,
+  } as unknown as ReturnType<typeof magicQueries.useTrainTechnique>);
 }
 
 const glimpseTagCatalog: GlimpseTagOption[] = [

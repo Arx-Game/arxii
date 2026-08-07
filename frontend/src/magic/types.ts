@@ -574,3 +574,44 @@ export interface TechniqueSignature {
   narrative_snippet: string;
   intensity_delta: number;
 }
+
+// ---------------------------------------------------------------------------
+// Technique progress meters, #2739
+//
+// GET /api/magic/technique-progress/, POST .../{technique_id}/train/ are a
+// plain ViewSet (no @extend_schema yet), so the generated schema records
+// "No response body" for both — these are local, hand-rolled to mirror
+// TechniqueProgressSerializer / TrainTechniqueAction.execute's `data` dict
+// (src/world/magic/serializers.py, src/actions/definitions/technique_training.py).
+// ---------------------------------------------------------------------------
+
+/** One row from GET /api/magic/technique-progress/ — a learner's in-progress training meter. */
+export interface TechniqueProgressMeter {
+  id: number;
+  technique_id: number;
+  technique_name: string;
+  points_accumulated: number;
+  total_required: number;
+  /** Anonymity-respecting display name (RosterTenure.display_name), or null for self-study. */
+  teacher_name: string | null;
+  /** TechniqueProgress.get_source_display() — e.g. "Teaching Offer" / "Academy Training". */
+  source_label: string;
+  /** Remaining weekly training points for this technique, or null when unavailable. */
+  weekly_remaining: number | null;
+}
+
+/** Request body for POST /api/magic/technique-progress/{technique_id}/train/. */
+export interface TrainTechniqueRequest {
+  ap_to_invest?: number;
+}
+
+/** Response for a successful training session — TrainTechniqueAction's result.data. */
+export interface TrainTechniqueResult {
+  technique_id: number;
+  outcome_name: string;
+  points_before: number;
+  points_after: number;
+  total_required: number;
+  technique_acquired: boolean;
+  self_study: boolean;
+}
