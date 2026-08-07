@@ -98,7 +98,15 @@ def grant_achievement(
 
         discovery = None
         if is_first_discovery:
-            discovery = Discovery.objects.create(achievement=achievement)
+            # The Discovery slot goes to the first (triggering) sheet in the list --
+            # callers order this deliberately for party grants. can_earn_achievements
+            # already filtered out sheets with no current tenure above, so this is
+            # guaranteed to resolve.
+            discovering_sheet = character_sheets[0]
+            discovering_tenure = discovering_sheet.roster_entry_or_none.current_tenure
+            discovery = Discovery.objects.create(
+                achievement=achievement, discovered_by_tenure=discovering_tenure
+            )
 
         results: list[CharacterAchievement] = []
         newly_earned: list[CharacterSheet] = []

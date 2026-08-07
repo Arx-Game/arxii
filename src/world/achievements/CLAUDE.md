@@ -57,6 +57,14 @@ here** — they attach to the *achievement* (see Reward application below); a ti
 ### Discovery
 First-time-earned record. OneToOne to Achievement.
 - Supports simultaneous co-discoverers (party kills, etc.)
+- `discovered_by_tenure` (required FK -> `roster.RosterTenure`, `on_delete=PROTECT`): the
+  tenure (character piloted by a player) that first discovered this achievement. Discoveries
+  are partly-OOC accolades players accumulate via their characters, and the tenure is the
+  (player-as-this-character) join object — a sheet with no player tenure is structurally
+  incapable of claiming a first-ever slot (#3055). `grant_achievement` resolves this from
+  the FIRST eligible sheet in the (already `can_earn_achievements`-filtered) list passed
+  in — the triggering sheet for party grants; co-earners still get `CharacterAchievement`
+  rows via the shared `discovery`, but only one Discovery row is ever created per achievement.
 
 ### CharacterAchievement
 Records when a character earned an achievement.

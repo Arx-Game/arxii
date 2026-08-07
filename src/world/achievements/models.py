@@ -18,6 +18,7 @@ from world.achievements.constants import (
     RewardType,
 )
 from world.contributors.models import CreditedContent
+from world.roster.models import RosterTenure
 
 # String model reference for the CharacterSheet FK target. Using a single
 # constant keeps the lazy "app_label.ModelName" reference consistent across the
@@ -275,6 +276,16 @@ class Discovery(SharedMemoryModel):
         on_delete=models.CASCADE,
         related_name="discovery",
         help_text="The achievement that was discovered",
+    )
+    discovered_by_tenure = models.ForeignKey(
+        RosterTenure,
+        on_delete=models.PROTECT,
+        related_name="discoveries",
+        help_text="The tenure (character piloted by a player) that first discovered "
+        "this achievement. Required: discoveries are partly-OOC accolades earned "
+        "through a character, and a sheet with no player tenure cannot claim a "
+        "first-ever slot (#3055). Tenures are never deleted post-release, so this "
+        "is PROTECT rather than CASCADE/SET_NULL.",
     )
     discovered_at = models.DateTimeField(
         auto_now_add=True,
