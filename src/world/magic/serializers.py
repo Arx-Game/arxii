@@ -2697,6 +2697,7 @@ class AudereMajoraRespondSerializer(serializers.Serializer):
         from world.magic.audere_majora import resolve_audere_majora_offer  # noqa: PLC0415
         from world.magic.exceptions import (  # noqa: PLC0415
             AudereMajoraOfferError,
+            GiftResonanceUnresolvable,
             ProtagonismLockedError,
         )
         from world.magic.types import AlterationGateError  # noqa: PLC0415
@@ -2714,6 +2715,8 @@ class AudereMajoraRespondSerializer(serializers.Serializer):
         except AlterationGateError as exc:
             raise serializers.ValidationError(exc.user_message) from exc
         except AudereMajoraOfferError as exc:
+            raise serializers.ValidationError(exc.user_message) from exc
+        except GiftResonanceUnresolvable as exc:
             raise serializers.ValidationError(exc.user_message) from exc
 
 

@@ -841,13 +841,14 @@ def _resolve_moment_resonance(
     4. the character's anima-ritual resonance — their "main" one.
 
     Step 4 exists because step 2 can come up empty even for a technique-driven
-    entrance. ``grant_gift_to_character`` skips thread provisioning entirely
-    when no resonance was chosen at CG, and ``gift_resonances_for`` then falls
-    back to the gift's authored supported set — which is empty for every
-    authored gift, since an empty set means "unrestricted". A character can
-    therefore hold a gift, know its techniques, and have no gift thread to read
-    a resonance from. Their anima ritual is the one place a "main" resonance is
-    always recorded, so it is the last resort before granting nothing.
+    entrance — e.g. a gift-holder whose thread was provisioned at a resonance
+    that isn't among the candidates already tried. Their anima ritual is the
+    one place a "main" resonance is always recorded, so it is the last resort
+    before granting nothing. (As of #2971, ``grant_gift_to_character`` always
+    provisions a GIFT thread, so step 2 is no longer the common failure case
+    it once was — this fallback stays as a defense for sheets whose thread
+    predates that guarantee, or whose thread's resonance the character never
+    claimed.)
     """
     from world.magic.specialization.services import gift_resonances_for  # noqa: PLC0415
 
@@ -861,7 +862,7 @@ def _resolve_moment_resonance(
         candidates.extend(gift_resonances_for(character_sheet.character, technique.gift))
     if moment_type.resonance_id:
         candidates.append(moment_type.resonance)
-    main = _anima_ritual_resonance(character_sheet)
+    main = anima_ritual_resonance(character_sheet)
     if main is not None:
         candidates.append(main)
 
@@ -873,7 +874,7 @@ def _resolve_moment_resonance(
     return None
 
 
-def _anima_ritual_resonance(character_sheet: CharacterSheet) -> Resonance | None:
+def anima_ritual_resonance(character_sheet: CharacterSheet) -> Resonance | None:
     """The character's anima-ritual resonance — their 'main' one, if authored.
 
     The anima ritual is per-character and carries a ``RitualCheckConfig`` whose

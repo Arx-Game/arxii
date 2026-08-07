@@ -244,19 +244,6 @@ def get_technique_cap_for_gift(sheet: CharacterSheet, gift: Gift) -> int:
 # ---------------------------------------------------------------------------
 
 
-def _resolve_resonance_for(gift: Gift, claimed_ids: set[int]):
-    """Resonance for a newly-granted gift's latent thread.
-
-    Prefer a claimed resonance in the gift's supported set; otherwise
-    the gift's first supported resonance; None if the gift supports none.
-    Lifted from path_magic._grant_resonance_for.
-    """
-    supported = gift.cached_resonances
-    if not supported:
-        return None
-    return next((r for r in supported if r.pk in claimed_ids), supported[0])
-
-
 def magic_learning_ap_cost_surcharge_percent(learner: CharacterSheet) -> int:
     """Live AP surcharge percent for magic-learning activities (#2442).
 
@@ -362,7 +349,6 @@ def charge_and_learn(  # noqa: PLR0913 - shared core for two front doors; params
         TechniqueCapExceeded,
     )
     from world.magic.models import (  # noqa: PLC0415
-        CharacterResonance,
         CharacterTechnique,
         TechniqueProgress,
     )
@@ -414,13 +400,7 @@ def charge_and_learn(  # noqa: PLR0913 - shared core for two front doors; params
 
     # 4. Implicit gift acquisition (first technique).
     if not has_gift:
-        claimed_ids = set(
-            CharacterResonance.objects.filter(character_sheet=sheet).values_list(
-                "resonance_id", flat=True
-            )
-        )
-        resonance = _resolve_resonance_for(gift, claimed_ids)
-        grant_gift_to_character(sheet, gift, resonance=resonance)
+        grant_gift_to_character(sheet, gift)
 
     # 5. Check technique cap (after acquisition so the thread exists for depth).
     current_count = count_techniques_for_gift(sheet, cap_gift)

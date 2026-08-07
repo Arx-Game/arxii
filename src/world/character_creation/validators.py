@@ -334,6 +334,7 @@ def compute_magic_errors(draft: CharacterDraft) -> list[str]:  # noqa: PLR0911
     5. Must have a valid anima_check_stat_id (a Trait with trait_type=STAT) and a
        valid anima_check_skill_id (an active Skill) — the character's Anima Check.
     """
+    from world.magic.models import Resonance  # noqa: PLC0415
     from world.magic.services.cg_catalog import (  # noqa: PLC0415
         get_gift_options,
         get_technique_options,
@@ -368,9 +369,12 @@ def compute_magic_errors(draft: CharacterDraft) -> list[str]:  # noqa: PLR0911
     if len(technique_ids) > picks:
         return [f"You may select at most {picks} techniques"]
 
-    # Resonance is required — anchors the latent GIFT thread (#1620)
+    # Resonance is required — anchors the latent GIFT thread (#1620). The pick
+    # must also still RESOLVE: a stale id (pointing at a since-deleted Resonance)
+    # is worthless to the grant-time resolver at finalize (#2971), so it fails
+    # validation here rather than raising GiftResonanceUnresolvable at submit.
     resonance_id = draft.draft_data.get("selected_gift_resonance_id")
-    if not resonance_id:
+    if not resonance_id or not Resonance.objects.filter(pk=resonance_id).exists():
         return ["Select a gift resonance"]
 
     stat_id = draft.draft_data.get("anima_check_stat_id")

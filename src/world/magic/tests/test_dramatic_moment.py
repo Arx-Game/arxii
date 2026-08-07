@@ -156,12 +156,10 @@ class CreateDramaticMomentTagServiceTest(TestCase):
     def test_falls_back_to_the_anima_ritual_resonance(self):
         """With nothing else to go on, the moment grants their 'main' resonance.
 
-        A character can hold a gift, know its techniques, and still have NO gift
-        thread: ``grant_gift_to_character`` skips thread provisioning when no
-        resonance was chosen at CG, and ``gift_resonances_for`` then falls back
-        to the gift's supported set, which is empty for every authored gift
-        (empty means unrestricted). Without this fallback such a character earns
-        renown but never any resonance.
+        Exercises the fallback directly (no gift/technique candidate at all) —
+        the anima ritual resonance is always available as a last resort before
+        granting nothing, independent of whatever a gift's GIFT thread resolves
+        to (``grant_gift_to_character`` always provisions one as of #2971).
         """
         from world.magic.factories import RitualCheckConfigFactory
 

@@ -263,6 +263,46 @@ class AcceptTechniqueOfferTest(TestCase):
         self.assertTrue(CharacterGift.objects.filter(character=self.sheet, gift=self.gift).exists())
 
     @patch("world.magic.services.gift_acquisition.enforce_advancement_gate")
+    def test_first_technique_from_empty_resonance_gift_leaves_a_gift_thread(self, mock_gate):
+        """Implicit gift acquisition (#2971) for a gift with an EMPTY resonance set
+
+        (the 17-of-18 normal case) still provisions a GIFT thread — previously this
+        silently minted a CharacterGift with no thread when the gift supported no
+        resonances, leaving nothing downstream (cast resolution, dramatic-moment
+        grants, ...) to read a resonance from.
+        """
+        mock_gate.return_value = None
+        from world.magic.constants import TargetKind
+        from world.magic.factories import CharacterResonanceFactory, TechniqueFactory
+        from world.magic.models import GiftUnlock, Thread
+
+        empty_gift = GiftFactory(kind=GiftKind.MINOR)  # no resonances added — empty set
+        technique = TechniqueFactory(gift=empty_gift)
+        empty_unlock = GiftUnlock.objects.create(gift=empty_gift, xp_cost=10)
+        # A resonance already claimed elsewhere — the resolver's claimed-resonance
+        # fallback anchors the new gift's thread to it.
+        CharacterResonanceFactory(character_sheet=self.sheet, resonance=self.resonance)
+
+        spend_xp_on_gift_unlock(self.sheet, empty_unlock)
+        offer = TechniqueTeachingOffer.objects.create(
+            teacher=self.teacher_tenure,
+            technique=technique,
+            pitch="empty resonance gift",
+            learn_ap_cost=5,
+            banked_ap=1,
+        )
+
+        from world.magic.services.gift_acquisition import accept_technique_offer
+
+        accept_technique_offer(self.sheet, offer)
+
+        thread = Thread.objects.filter(
+            owner=self.sheet, target_kind=TargetKind.GIFT, target_gift=empty_gift
+        ).first()
+        self.assertIsNotNone(thread)
+        self.assertEqual(thread.resonance_id, self.resonance.id)
+
+    @patch("world.magic.services.gift_acquisition.enforce_advancement_gate")
     def test_first_technique_without_unlock_raises(self, mock_gate):
         mock_gate.return_value = None
         offer = TechniqueTeachingOffer.objects.create(

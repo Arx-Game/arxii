@@ -187,6 +187,7 @@ class CrossingOfferHandler:
             AudereMajoraOfferNotFoundError,
             AudereMajoraOfferStaleError,
             AudereMajoraPathError,
+            GiftResonanceUnresolvable,
             ProtagonismLockedError,
         )
         from world.magic.types import AlterationGateError  # noqa: PLC0415
@@ -228,8 +229,17 @@ class CrossingOfferHandler:
             AudereMajoraPathError,
             ProtagonismLockedError,
             AlterationGateError,
+            GiftResonanceUnresolvable,
         ) as exc:
-            raise CommandError(str(exc)) from exc
+            # str(exc) is empty for every one of these — they're all raised bare
+            # (no message args) at their raise sites — so the bare-str idiom
+            # silently discarded each exception's own curated ``user_message``
+            # and surfaced "" to the telnet player (#2971 final-review fix).
+            # Every exception in this tuple declares ``user_message`` (directly
+            # or via its base — MagicError/AudereOfferError/CorruptionError chains,
+            # or a direct class attribute on AlterationGateError), so plain
+            # attribute access is used rather than getattr.
+            raise CommandError(exc.user_message) from exc
 
         return (
             f"You cross into {result.chosen_path_name} "

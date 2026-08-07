@@ -23,12 +23,15 @@ from commands.exceptions import CommandError
 from world.classes.factories import PathFactory
 from world.classes.models import PathStage
 from world.magic.entry_flourish import PendingEntryFlourishOffer
+from world.magic.exceptions import GiftResonanceUnresolvable
 from world.magic.factories import (
     CharacterResonanceFactory,
     ResonanceFactory,
     ensure_dramatic_entrance_content,
+    wire_audere_power_multipliers,
 )
 from world.magic.models.dramatic_moment import DramaticMomentSuggestion
+from world.magic.tests.majora_fixtures import build_crossing_world
 from world.magic.types.techniques import SoulfrayWarning
 from world.scenes.tests.cast_test_helpers import (
     CastScenarioMixin,
@@ -91,6 +94,41 @@ class TestResolvePathByName(TestCase):
         paths = _make_paths("Ironwood", "Ashfall")
         with self.assertRaises(CommandError):
             _resolve_path_by_name("", paths)
+
+
+class CrossingOfferHandlerAcceptTests(TestCase):
+    """``CrossingOfferHandler.accept`` error mapping (#2971 final-review fix).
+
+    A ``GiftResonanceUnresolvable`` from ``resolve_audere_majora_offer`` (e.g. the
+    crossed-into path's gift grant can't resolve a resonance) must map to the
+    handler's ``CommandError`` idiom, not propagate as an unhandled exception —
+    and the telnet player must see the exception's own ``user_message``, not a
+    blank string. Every exception in the handler's catch tuple is raised bare (no
+    message args) at its raise sites, so the old ``CommandError(str(exc))`` idiom
+    always produced ``""`` — the player-visible text was silently discarded.
+    """
+
+    def test_accept_maps_unresolvable_gift_resonance_to_command_error(self) -> None:
+        from world.magic.offer_handlers import CrossingOfferHandler
+
+        wire_audere_power_multipliers()
+        character, _sheet, _threshold, _prospect, puissant_path, offer = build_crossing_world(
+            15, "_offer_handler_unresolvable"
+        )
+
+        with patch(
+            "world.magic.audere_majora.resolve_audere_majora_offer",
+            side_effect=GiftResonanceUnresolvable,
+        ):
+            with self.assertRaises(CommandError) as ctx:
+                CrossingOfferHandler().accept(
+                    offer,
+                    character,
+                    f"path={puissant_path.name} declaration=I step beyond.",
+                )
+
+        self.assertEqual(ctx.exception.msg, GiftResonanceUnresolvable.user_message)
+        self.assertTrue(ctx.exception.msg)
 
 
 @override_settings(SEED_SAMPLE_CONTENT=True)

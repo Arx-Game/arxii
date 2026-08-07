@@ -296,6 +296,44 @@ class SpeciesGiftSpineSQLiteTest(_SpeciesGiftJourneyBase):
         # Beat 6: non-regression.
         self._assert_non_regression(sheet)
 
+    def test_provision_species_gifts_bare_call_anchors_to_major_gift_thread(self) -> None:
+        """A species Minor Gift with an EMPTY resonance set (the 17-of-18 normal
+
+        case, #2971) provisioned with no explicit resonance anchors to the
+        already-existing Major-gift thread's resonance, via the shared resolver's
+        ANY-gift-thread fallback — not the CG's explicit pick (which this test
+        deliberately withholds). ``finalize_magic_data`` guarantees species
+        provisioning runs AFTER the Major-gift grant (services.py:1587 -> 1601),
+        so this is the realistic call shape.
+        """
+        from world.magic.specialization.services import provision_latent_gift_thread
+        from world.species.services import provision_species_gifts
+
+        isolated_species = SpeciesFactory(name="Isolated Species_e2e")
+        sheet = CharacterSheetFactory(species=isolated_species)
+
+        # Simulate the ordering guarantee: the character already has a GIFT thread
+        # on an unrelated Major gift, at a resonance the empty-set minor gift
+        # could not have chosen on its own.
+        other_resonance = ResonanceFactory(name="Other_e2e")
+        provision_latent_gift_thread(sheet, self.major_gift, resonance=other_resonance)
+
+        empty_gift = GiftFactory(name="Bare Nightform_e2e", kind=GiftKind.MINOR)
+        SpeciesGiftGrantFactory(species=isolated_species, gift=empty_gift, drawback_condition=None)
+
+        minted = provision_species_gifts(sheet)  # no explicit resonance
+        self.assertEqual(len(minted), 1)
+        self.assertEqual(minted[0].gift_id, empty_gift.id)
+
+        thread = Thread.objects.get(
+            owner=sheet, target_kind=TargetKind.GIFT, target_gift=empty_gift
+        )
+        self.assertEqual(
+            thread.resonance_id,
+            other_resonance.id,
+            "the minor gift's thread anchors to the major-gift thread's resonance",
+        )
+
 
 @tag("postgres")
 class SpeciesGiftFullJourneyPostgresTest(_SpeciesGiftJourneyBase):

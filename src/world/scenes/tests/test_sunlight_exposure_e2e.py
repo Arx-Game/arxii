@@ -44,7 +44,7 @@ class SunlightExposureE2ETests(TestCase):
         from evennia import create_object
 
         from world.character_sheets.factories import CharacterSheetFactory
-        from world.magic.factories import GiftFactory
+        from world.magic.factories import GiftFactory, ResonanceFactory
         from world.species.factories import (
             SpeciesFactory,
             SpeciesGiftGrantFactory,
@@ -69,7 +69,13 @@ class SunlightExposureE2ETests(TestCase):
 
         sheet = CharacterSheetFactory(species=self.species)
         CharacterVitalsFactory(character_sheet=sheet, health=100, max_health=100)
-        provision_species_gifts(sheet)
+        # Real CG always resolves a gift resonance before this call — normally via
+        # the Major-gift thread that already exists by the time species-gift
+        # provisioning runs (see provision_species_gifts' docstring). This fixture
+        # skips CG entirely, so give it the same guarantee explicitly: a CG pick
+        # always resolves (#2971 — grant_gift_to_character now raises
+        # GiftResonanceUnresolvable instead of silently minting a threadless gift).
+        provision_species_gifts(sheet, resonance=ResonanceFactory())
         self.vampire = sheet.character
         self.vampire.db_location = self.room
         self.vampire.save(update_fields=["db_location"])

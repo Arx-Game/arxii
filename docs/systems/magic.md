@@ -1465,13 +1465,29 @@ ceremony-direct testing. (`world/covenants/discovery.py` re-exports it as
 - `TargetKind.GIFT` + `Thread.target_gift` FK (PROTECT) — a thread anchored to a Gift.
   One active GIFT thread per `(owner, gift)` for now (multi-resonance chooser is a deferred
   needs-design follow-up).
-- **Latent provisioning at CG** — `provision_latent_gift_thread(sheet, gift, *, resonance)`
-  (`world/magic/specialization/services.py`) creates the level-0 GIFT thread at
-  character-creation finalization, idempotent on `(owner, gift)` and write-once on resonance.
-  Wires from `finalize_magic_data` after `CharacterGift` creation, reading the chosen
-  `selected_gift_resonance_id` from `draft.draft_data` (frontend picker is built #1620;
-  the `GiftStage` funnel writes the key, #2426 Task 10; `compute_magic_errors` requires it.
-  Legacy/absent draft data falls back to `gift.resonances.first()`).
+- **Grant-time resonance resolution (#2971, ADR-0203)** — `grant_gift_to_character(sheet,
+  gift, *, resonance=None)` (`world/magic/specialization/services.py`) is the shared
+  gift-acquisition primitive every grant call site uses: CG's `_finalize_gift_and_techniques`
+  (reading `selected_gift_resonance_id` from `draft.draft_data` — frontend picker built #1620,
+  the `GiftStage` funnel writes the key, #2426 Task 10; `compute_magic_errors` requires it and,
+  as of #2971, also rejects a stale pick pointing at a deleted `Resonance`), the path-crossing
+  grant (`grant_path_magic`), species-gift provisioning (`provision_species_gifts`), and
+  `charge_and_learn`'s implicit gift acquisition. It mints the `CharacterGift` link and
+  **always** provisions the gift's latent level-0 GIFT thread — resonance is resolved by
+  `_resolve_grant_resonance` *before* the `CharacterGift` row is minted, so a raise leaves no
+  partial state (a `CharacterGift` with no thread — the exact corrupted state #2971 eliminates —
+  can never be created). Resolution order: the caller's explicit pick (when the gift's
+  supported set is empty or contains it) → an existing active GIFT thread already covering the
+  gift (lineage-aware, via `gift_threads_for` — makes a re-grant a true no-op) → the supported
+  set's claimed-or-first member → the character's own earliest GIFT thread's resonance → their
+  highest-`lifetime_earned` claimed resonance → the anima-ritual resonance. Raises
+  `GiftResonanceUnresolvable` when none of those resolves — an empty `Gift.resonances` (the
+  "unrestricted" weave-gate meaning, ADR-0052/#2967) no longer means "skip provisioning the
+  thread"; a fresh CG character with nothing else resolved is exactly the case CG guards
+  against by also always supplying a `selected_gift_resonance_id`.
+  `provision_latent_gift_thread(sheet, gift, *, resonance)` is the idempotent level-0 GIFT
+  thread writer `grant_gift_to_character` calls once resonance is resolved (write-once on
+  resonance) — no grant call site invokes it directly anymore.
 - **Weaving commits resonance** — `weave_thread(target_kind=GIFT)` commits/chooses a
   resonance onto the existing latent thread rather than creating a new one (validates the
   resonance is in the gift's supported set, else raises `UnsupportedGiftResonanceError`,
@@ -1492,6 +1508,15 @@ Proven end-to-end by `world/magic/tests/integration/test_gift_specialization_e2e
 CG provisioning → base resolve at level 0 → `gift_resonances_for` reads the thread's
 resonance → advance past `unlock_thread_level=3` → variant resolve (name/intensity/control
 deltas) → discovery beat fires (achievement + codex).
+
+**The anima ritual records the same CG pick too (#2971).** `_finalize_anima_ritual`
+(`world.character_creation.services`) resolves `selected_gift_resonance_id` the same way
+`_finalize_gift_and_techniques` does and passes it to `provision_player_anima_ritual(...,
+resonance=...)`, which writes it onto the created `RitualCheckConfig.resonance` — the anima
+ritual IS the character's magical identity, so CG now populates it there instead of leaving it
+`None` until a post-CG edit. `world.magic.services.gain.anima_ritual_resonance(sheet)` — one of
+`_resolve_grant_resonance`'s own fallback rungs above — resolves for every freshly finalized
+character as a result, instead of always returning `None` at CG time.
 
 ### Path-crossing grant — (Gift × Path) → base technique set (grants.py, services/path_magic.py — #1579)
 
@@ -1521,8 +1546,12 @@ natural key `(species, gift)`) is the through-model that links a species to one 
 `Gift`s with an optional `drawback_condition` FK to `conditions.ConditionTemplate`.
 `provision_species_gifts(sheet, *, resonance=None)` (`world/species/services.py`) is called
 from `finalize_magic_data` after the Major-gift block; it mints the MINOR `CharacterGift`
-(via the shared `grant_gift_to_character` primitive) and applies any drawback idempotently. The
-gift's GIFT thread carries a tier-0 `ThreadPullEffect` with `effect_kind=RESISTANCE` that nets
+(via the shared `grant_gift_to_character` primitive) and applies any drawback idempotently.
+`resonance=None` (the common case — species gifts have no CG-picker field of their own) lets
+`_resolve_grant_resonance` (#2971, ADR-0203) anchor the Minor Gift's thread to the character's
+Major-gift thread resonance, since that thread already exists by the time species gifts
+provision — never "no thread provisioned" the way an empty `Gift.resonances` set used to mean.
+The gift's GIFT thread carries a tier-0 `ThreadPullEffect` with `effect_kind=RESISTANCE` that nets
 against the drawback vulnerability at the combat-damage seam. `gift_thread_resistance(character,
 damage_type) -> int` (services/threads.py) returns the aggregate resistance (passive +
 active paid-pull snapshots). See ADR-0050, ADR-0071. E2E:

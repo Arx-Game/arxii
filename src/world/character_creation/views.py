@@ -91,6 +91,7 @@ from world.classes.models import Path, PathAspect, PathStage
 from world.codex.models import BeginningsCodexGrant, PathCodexGrant
 from world.forms.models import FormTrait, FormTraitOption, SpeciesFormTrait
 from world.forms.services import get_cg_form_options
+from world.magic.exceptions import GiftResonanceUnresolvable
 from world.magic.models import (
     Gift,
     GlimpseTag,
@@ -706,7 +707,7 @@ class CharacterDraftViewSet(viewsets.ModelViewSet):
                     "message": "Character added to roster.",
                 }
             )
-        except CharacterCreationError:
+        except (CharacterCreationError, GiftResonanceUnresolvable):
             logger.exception("Character creation failed while adding to roster.")
             return Response(
                 {"detail": "Character creation failed."},

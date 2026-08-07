@@ -435,6 +435,16 @@ class UnsupportedGiftResonanceError(MagicError):
     user_message = "That resonance is not supported by this gift."
 
 
+class GiftResonanceUnresolvable(MagicError):
+    """Raised when granting a gift (#2971) cannot resolve ANY resonance for its
+    latent GIFT thread — no explicit pick, no supported-set member, no existing
+    GIFT thread, no claimed resonance, and no anima-ritual resonance. A granted
+    gift must always get a thread; this is the fail-loud case where nothing was
+    available to weave it at."""
+
+    user_message = "You have no resonance to grant this gift a thread with yet."
+
+
 class TechniqueAuthoringNotPermitted(MagicError):
     user_message = "You are not permitted to author a technique at that tier."
 

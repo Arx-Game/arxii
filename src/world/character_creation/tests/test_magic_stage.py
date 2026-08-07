@@ -142,6 +142,22 @@ class MagicStageValidationTest(TestCase):
         errors = compute_magic_errors(draft)
         assert errors == ["Select a gift resonance"]
 
+    def test_stale_gift_resonance_pk_fails(self):
+        """A pick pointing at a since-deleted Resonance must not pass (#2971) — it
+        cannot resolve at finalize, so it fails validation the same as no pick.
+
+        Uses a throwaway Resonance (not the shared ``cls.resonance``) — deleting a
+        model instance nulls its in-memory ``pk``, which would poison every later
+        test in this class if the shared fixture were deleted instead.
+        """
+        doomed_resonance = ResonanceFactory()
+        doomed_id = doomed_resonance.id
+        draft = self._draft(selected_gift_resonance_id=doomed_id)
+        doomed_resonance.delete()
+
+        errors = compute_magic_errors(draft)
+        assert errors == ["Select a gift resonance"]
+
     def test_no_anima_check_stat_fails(self):
         draft = self._draft(anima_check_stat_id=None)
         errors = compute_magic_errors(draft)
