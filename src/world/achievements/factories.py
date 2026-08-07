@@ -19,6 +19,7 @@ from world.achievements.models import (
     StatTracker,
 )
 from world.character_sheets.factories import CharacterSheetFactory
+from world.roster.factories import RosterTenureFactory
 
 
 class StatDefinitionFactory(factory_django.DjangoModelFactory):
@@ -69,6 +70,7 @@ class DiscoveryFactory(factory_django.DjangoModelFactory):
         model = Discovery
 
     achievement = factory.SubFactory(AchievementFactory)
+    discovered_by_tenure = factory.SubFactory(RosterTenureFactory)
 
 
 class CharacterAchievementFactory(factory_django.DjangoModelFactory):

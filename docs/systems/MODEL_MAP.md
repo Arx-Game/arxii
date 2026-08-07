@@ -128,9 +128,9 @@
   - player_data -> evennia_extensions.PlayerData [FK] (nullable)
   - created_by -> evennia_extensions.Artist [FK] (nullable)
 **Pointed to by:**
+  - tenure_links <- roster.TenureMedia
   - condition_template_thumbnails <- conditions.ConditionTemplate
   - condition_stage_thumbnails <- conditions.ConditionStage
-  - tenure_links <- roster.TenureMedia
   - starting_area_crests <- character_creation.StartingArea
   - beginnings_art <- character_creation.Beginnings
   - codex_entries <- codex.CodexEntry
@@ -336,6 +336,8 @@
 ### Discovery
 **Foreign Keys:**
   - achievement -> achievements.Achievement [OneToOne]
+  - discovered_by_tenure -> roster.RosterTenure [FK]
+  - shared_with_tenures -> roster.RosterTenure [M2M]
 **Pointed to by:**
   - discoverers <- achievements.CharacterAchievement
 
@@ -1329,6 +1331,10 @@
   - created_by -> evennia.AccountDB [FK] (nullable)
   - durance_cohort -> progression.DuranceCohort [FK] (nullable)
 **Pointed to by:**
+  - applications <- roster.RosterApplication
+  - kinsperson <- roster.Kinsperson
+  - deferred_kin <- roster.Kinsperson
+  - roster_entry <- roster.RosterEntry
   - stat_trackers <- achievements.StatTracker
   - achievements <- achievements.CharacterAchievement
   - titles <- achievements.CharacterTitle
@@ -1344,10 +1350,6 @@
   - challenge_records <- mechanics.CharacterChallengeRecord
   - engagement <- mechanics.CharacterEngagement
   - battle_participations <- battles.BattleParticipant
-  - applications <- roster.RosterApplication
-  - kinsperson <- roster.Kinsperson
-  - deferred_kin <- roster.Kinsperson
-  - roster_entry <- roster.RosterEntry
   - treasured_by <- boundaries.TreasuredSubject
   - captivities <- captivity.Captivity
   - ceremony_honors <- ceremonies.CeremonyHonoree
@@ -1682,6 +1684,7 @@
   - outcome -> checks.ConsequenceOutcome [FK]
 
 ### Service Functions
+- `award_check_development(character_sheet: 'CharacterSheet', check_type: 'CheckType', effort_level: 'str | None', path_level: 'int') -> 'list[tuple[str, int, int]]' - Award dp to traits used in a check.`
 - `chart_has_success_outcomes(rank_difference: int) -> bool - Check if the ResultChart for this rank difference has any success outcomes.`
 - `collect_check_modifiers(character_sheet: 'CharacterSheet', check_type: 'CheckType', *, scene: 'Scene | None' = None, extra_contributions: list[world.checks.types.ModifierContribution] | None = None, skip_fashion: bool = False) -> world.checks.types.ModifierBreakdown - Aggregate all modifier contributions for a check into a ModifierBreakdown.`
 - `compute_check_rating(character: 'ObjectDB', check_type: 'CheckType', extra_modifiers: int = 0, *, level_override: int | None = None, stat_override: str | int | None = None) -> int - Return *character*'s pre-roll rating (total points) for *check_type* — no dice roll.`
@@ -6468,8 +6471,8 @@
   - room -> evennia_extensions.RoomProfile [FK]
   - persona -> scenes.Persona [FK] (nullable)
 **Pointed to by:**
-  - promotions <- assets.NPCAsset
   - kinspeople <- roster.Kinsperson
+  - promotions <- assets.NPCAsset
   - assignments <- npc_services.NPCAssignment
   - reaction_lines <- npc_services.NPCReactionLine
 
@@ -7076,9 +7079,9 @@
   - written_by -> contributors.ContentContributor [FK] (nullable)
   - reviewed_by -> contributors.ContentContributor [FK] (nullable)
 **Pointed to by:**
-  - areas <- areas.Area
   - families <- roster.Family
   - union_kinds <- roster.UnionKind
+  - areas <- areas.Area
   - starting_areas <- character_creation.StartingArea
   - profiles <- character_sheets.Profile
   - societies <- societies.Society
@@ -7504,6 +7507,8 @@
   - galleries <- roster.TenureGallery
   - shared_galleries <- roster.TenureGallery
   - media <- roster.TenureMedia
+  - discoveries <- achievements.Discovery
+  - shared_discoveries <- achievements.Discovery
   - consent_groups <- consent.ConsentGroup
   - consent_memberships <- consent.ConsentGroupMember
   - social_consent_preference <- consent.SocialConsentPreference

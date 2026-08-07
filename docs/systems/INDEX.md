@@ -2636,7 +2636,11 @@ gains a discoverable content item for the first time.
   achievement; composite natural key `(achievement, stat, threshold, comparison)`; `CONTENT_MODELS` since #2832;
   renamed from `AchievementRequirement` by #2906's Task 3, disambiguating it from
   `progression.AchievementRequirement`),
-  `Discovery` (OneToOne → `Achievement`; records first-ever earner timestamp),
+  `Discovery` (OneToOne → `Achievement`; records first-ever earner timestamp plus a required
+  `discovered_by_tenure` FK → `roster.RosterTenure` (`on_delete=PROTECT`) +
+  `shared_with_tenures` M2M for simultaneous co-discoverers, anchoring the
+  discovery to the (player-as-this-character) join object — a sheet with no player tenure is
+  structurally incapable of claiming a first-ever slot, #3055),
   `CharacterAchievement` (earned record; optional `discovery` FK when the earner was a co-discoverer),
   `RewardDefinition` (TITLE / BONUS / COSMETIC / PRESTIGE / DISTINCTION reward catalog;
   `distinction` nullable FK → `distinctions.Distinction`, mirrors `modifier_target`, #2037;
@@ -2658,7 +2662,11 @@ gains a discoverable content item for the first time.
   `increment(stat_def, n) -> int` (atomic F() expression; checks requirement thresholds after increment)
 - **Key Services (`world/achievements/services.py`):** `grant_achievement(achievement,
   sheets) -> list[CharacterAchievement]` (drops any sheet that fails
-  `can_earn_achievements`, returning `[]` and creating no Discovery if none remain),
+  `can_earn_achievements`, returning `[]` and creating no Discovery if none remain; for a
+  first-ever grant, the Discovery's `discovered_by_tenure` is the *first* eligible sheet in
+  the list — the triggering sheet for party grants; the remaining eligible sheets' tenures
+  land in `Discovery.shared_with_tenures` as simultaneous shared credit; co-earners still
+  get `CharacterAchievement` rows but no second Discovery, #3055),
   `can_earn_achievements(character_sheet) -> bool` (current, non-staff `RosterTenure`; #3024,
   ADR-0202), `apply_achievement_rewards(sheet, achievement)`,
   `get_stat(sheet, stat_def) -> int`, `increment_stat(sheet, stat_def, n) -> int`
