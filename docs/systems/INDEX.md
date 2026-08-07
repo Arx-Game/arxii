@@ -941,6 +941,10 @@ per-class, per-stage health rate authoring and the primary-class level service.
     — upserts the primary class level and triggers a full `recompute_max_health_with_threads`
     so vitals reflect the new level immediately. **Always use this, never mutate
     `CharacterClassLevel` rows directly.**
+  - `ensure_default_character_class() -> CharacterClass` — get-or-creates the single
+    shared placeholder `CharacterClass` (`DEFAULT_CHARACTER_CLASS_NAME`, "Adventurer")
+    every character is stamped with pre-class-selection (#3038); CG finalize and the
+    #2121 `select_initial_path` recovery seam both call it before stamping level 1.
 - **Key Methods:** `Path.parent_paths`, `Path.child_paths` (evolution hierarchy)
 - **Integrates with:** progression (level requirements), character_creation (Prospect
   selection), vitals (`derive_base_max_health` reads `ClassStageHealthRate` + `stage_for_level`)

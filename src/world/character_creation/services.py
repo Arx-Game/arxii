@@ -719,6 +719,7 @@ def _apply_character_mechanics(character: ObjectDB, draft: CharacterDraft) -> No
     _create_distinctions(character, draft)
     _create_worship_declaration(character, draft)
     _create_path_history(character, draft)
+    _stamp_default_class_level(character)
     _establish_chosen_patronage(character, draft)
     _apply_post_cg_bonuses(character, draft, CharacterTraitValue)
 
@@ -778,6 +779,33 @@ def _create_path_history(character: ObjectDB, draft: CharacterDraft) -> None:
         character=character.sheet_data,
         path=draft.selected_path,
     )
+
+
+def _stamp_default_class_level(character: ObjectDB) -> None:
+    """Stamp the level-1 primary CharacterClassLevel every finalized character needs (#3038).
+
+    No production path wrote a CharacterClassLevel row for a player character before
+    this: without one, ``advance_class_level_via_session`` (the Ritual of the Durance)
+    raises ``AdvancementRequirementsNotMet`` unconditionally, and
+    ``derive_base_max_health``'s class term is always 0. Uses the same shared default
+    CharacterClass the #2121 seeded Durance officiants and the level-2 gate anchor on
+    (``ensure_default_character_class``) — no class-selection UI exists yet, and
+    advancement only ever reads ``current_level``/Path lineage, never a specific
+    CharacterClass name.
+
+    ``set_primary_class_level`` is itself an upsert (keyed on character +
+    character_class), so calling this again (e.g. a re-finalize) never duplicates
+    the row.
+
+    Args:
+        character: The newly created ``ObjectDB`` character.
+    """
+    from world.classes.services import (  # noqa: PLC0415
+        ensure_default_character_class,
+        set_primary_class_level,
+    )
+
+    set_primary_class_level(character, ensure_default_character_class(), 1)
 
 
 def _establish_chosen_patronage(character: ObjectDB, draft: CharacterDraft) -> None:

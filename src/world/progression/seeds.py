@@ -151,10 +151,6 @@ def seed_kudos_content() -> None:
 
 # --- Durance officiant bootstrap (#2121) -----------------------------------
 
-#: PLACEHOLDER class stamped on every seeded Durance training officiant.
-#: assert_can_officiate never reads CharacterClass — only current_level (any
-#: class) and Path lineage — so one shared class suffices for all 5.
-_DURANCE_OFFICIANT_CLASS_NAME = "Adventurer"
 #: Comfortably above the only within-PROSPECT-stage Durance target (level 2 —
 #: PROSPECT covers levels 1-2; level 3 crosses to POTENTIAL via Audere Majora,
 #: not the Durance). assert_can_officiate only requires officiant > target.
@@ -209,19 +205,17 @@ def seed_durance_officiants() -> list:
 
     from world.areas.services import get_room_profile  # noqa: PLC0415
     from world.character_sheets.services import create_character_with_sheet  # noqa: PLC0415
-    from world.classes.models import CharacterClass, Path  # noqa: PLC0415
-    from world.classes.services import set_primary_class_level  # noqa: PLC0415
+    from world.classes.models import Path  # noqa: PLC0415
+    from world.classes.services import (  # noqa: PLC0415
+        ensure_default_character_class,
+        set_primary_class_level,
+    )
     from world.progression.models import CharacterPathHistory, DuranceTrainingSite  # noqa: PLC0415
     from world.seeds.character_creation import ensure_canonical_fallback_room  # noqa: PLC0415
 
     room = ensure_canonical_fallback_room()
     room_profile = get_room_profile(room)
-    officiant_class, _ = CharacterClass.objects.get_or_create(
-        name=_DURANCE_OFFICIANT_CLASS_NAME,
-        defaults={
-            "description": "PLACEHOLDER class stamped on seeded Durance training officiants.",
-        },
-    )
+    officiant_class = ensure_default_character_class()
 
     sites: list[DuranceTrainingSite] = []
     for path_name in _DURANCE_OFFICIANT_PATH_NAMES:
@@ -275,11 +269,13 @@ def seed_major_gift_technique_level_requirement() -> ClassLevelUnlock:
     (class, level) pair anywhere in the codebase yet (verified against code —
     this content is staff/admin-authored, never seeded) — this is the first.
 
-    Reuses the same PLACEHOLDER ``_DURANCE_OFFICIANT_CLASS_NAME`` ("Adventurer")
-    class ``seed_durance_officiants`` stamps on its officiants: per that
-    function's own docstring, ``assert_can_officiate`` and the Durance gate
-    read ``current_level``/Path lineage, never a specific ``CharacterClass``
-    name, so the same one shared class is the correct generic anchor for the
+    Reuses the same shared default CharacterClass
+    (``world.classes.services.ensure_default_character_class``) that
+    ``seed_durance_officiants`` stamps on its officiants and CG finalize now
+    stamps on every PC (#3038): per ``seed_durance_officiants``' own
+    docstring, ``assert_can_officiate`` and the Durance gate read
+    ``current_level``/Path lineage, never a specific ``CharacterClass`` name,
+    so the same one shared class is the correct generic anchor for the
     level-2 gate too. Idempotent via get_or_create; never overwrites a
     staff-adjusted row (an existing ``MajorGiftTechniqueRequirement`` for this
     unlock is left untouched, including a staff-retuned ``minimum_techniques``).
@@ -287,18 +283,13 @@ def seed_major_gift_technique_level_requirement() -> ClassLevelUnlock:
     Returns:
         The level-2 ``ClassLevelUnlock`` (created or fetched).
     """
-    from world.classes.models import CharacterClass  # noqa: PLC0415
+    from world.classes.services import ensure_default_character_class  # noqa: PLC0415
     from world.progression.models import (  # noqa: PLC0415
         ClassLevelUnlock,
         MajorGiftTechniqueRequirement,
     )
 
-    character_class, _ = CharacterClass.objects.get_or_create(
-        name=_DURANCE_OFFICIANT_CLASS_NAME,
-        defaults={
-            "description": "PLACEHOLDER class stamped on seeded Durance training officiants.",
-        },
-    )
+    character_class = ensure_default_character_class()
     unlock, _ = ClassLevelUnlock.objects.get_or_create(
         character_class=character_class, target_level=2
     )

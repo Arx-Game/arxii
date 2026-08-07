@@ -137,17 +137,28 @@ def select_initial_path(character: ObjectDB, path: Path) -> CharacterPathHistory
     recovery is meant to have; a bypassing character's magic provisioning (or
     lack of it) is a separate concern from "unblock the Durance."
 
+    Also stamps the level-1 primary CharacterClassLevel (#3038, the same shared
+    default CharacterClass CG finalize stamps) when the character has none yet —
+    the same CG-bypassing paths above never write one either, and
+    ``advance_class_level_via_session`` raises ``AdvancementRequirementsNotMet``
+    unconditionally with no class level on record. Never overwrites an existing
+    class level (a bypassing path could plausibly have set one some other way).
+
     Raises:
         PathAlreadySelectedError: the character already has a
             CharacterPathHistory row — this is not a general path-change tool
             (use ``cross_into_path`` for that).
     """
+    from world.classes.services import ensure_default_character_class, set_primary_class_level
     from world.progression.models import CharacterPathHistory
     from world.progression.selectors import current_path_for_character
 
     if current_path_for_character(character) is not None:
         raise PathAlreadySelectedError
-    return CharacterPathHistory.objects.create(character=character.sheet_data, path=path)
+    history = CharacterPathHistory.objects.create(character=character.sheet_data, path=path)
+    if primary_class_level(character) is None:
+        set_primary_class_level(character, ensure_default_character_class(), 1)
+    return history
 
 
 # =============================================================================

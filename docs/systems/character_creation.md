@@ -172,6 +172,23 @@ else a `SETTLED_BY_SPONSOR` row (`settled_at` stamped, `settled_by_token` left
 logged skip if the Academy isn't seeded. See `docs/systems/societies.md`'s
 Obligations section for the model/service detail.
 
+`finalize_character`'s `_apply_character_mechanics` also stamps a level-1 primary
+`CharacterClassLevel` on every finalized character (#3038,
+`_stamp_default_class_level`, called right after `_create_path_history`), via
+`world.classes.services.set_primary_class_level(character,
+ensure_default_character_class(), 1)`. Before this, no production path ever wrote
+a `CharacterClassLevel` for a player character, so `advance_class_level_via_session`
+(the Ritual of the Durance) raised `AdvancementRequirementsNotMet` unconditionally
+and the class term of `derive_base_max_health` was always 0.
+`ensure_default_character_class` (`world/classes/services.py`) get-or-creates the
+same single shared placeholder `CharacterClass` (`DEFAULT_CHARACTER_CLASS_NAME`,
+"Adventurer") the #2121 seeded Durance officiants and the level-2
+`ClassLevelUnlock` gate already anchor on — no class-selection UI exists yet, and
+advancement only ever reads `current_level`/Path lineage, never a specific
+`CharacterClass` name. The #2121 `select_initial_path` recovery seam
+(`world.progression.services.advancement`, for CG-bypassing characters) stamps the
+same level-1 class level when one is missing, without clobbering an existing one.
+
 ---
 
 ## Email Notifications (#2162)

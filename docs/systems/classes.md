@@ -84,7 +84,11 @@ CharacterClassLevel.objects.get(character=character, is_primary=True)
 ### Services (`world.classes.services`)
 
 ```python
-from world.classes.services import stage_for_level, set_primary_class_level
+from world.classes.services import (
+    ensure_default_character_class,
+    set_primary_class_level,
+    stage_for_level,
+)
 
 # Map a level to its PathStage band (breakpoints L1/3/6/11/16/21)
 stage = stage_for_level(5)   # PathStage.POTENTIAL (3 <= 5 < 6)
@@ -93,6 +97,11 @@ stage = stage_for_level(11)  # PathStage.TRUE
 # Set a character's primary class level and immediately recompute max_health.
 # Always use this — never mutate CharacterClassLevel rows directly.
 ccl = set_primary_class_level(character, character_class, level=7)
+
+# Get-or-create the single shared placeholder CharacterClass every character is
+# stamped with pre-class-selection (#3038) — CG finalize and the #2121
+# select_initial_path recovery seam both call this before stamping level 1.
+default_class = ensure_default_character_class()
 ```
 
 ### PathAspect
