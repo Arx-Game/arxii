@@ -1476,6 +1476,14 @@ def _seed_resonance_environment_rooms() -> None:
 def _seed_hallowed_threshold_story() -> None:
     """Seed the Hallowed Threshold Story DAG.
 
+    Test-fixture builder only (#2973) — no longer called by
+    ``seed_starter_magic_story()`` or ``seed_magic_dev()``. This story is
+    scaffolding for the story-pipeline test suite (`test_magic_seed.py`'s
+    ``SeedHallowedThresholdStoryTests`` and
+    ``integration_tests/test_magic_story_pipeline.py``), which call it
+    directly in their own setup; it has no non-test consumer and no
+    lore-repo destination.
+
     Structure:
       Story "The Hallowed Threshold" (CHARACTER scope, no character_sheet — template)
         Chapter "First Trial" (order=1)
@@ -2637,20 +2645,20 @@ def seed_facet_thread_unlock() -> FacetThreadUnlockResult:
 
 
 def seed_relationship_track_thread_unlock() -> RelationshipTrackThreadUnlockResult:
-    """Lazy-create the canonical RELATIONSHIP_TRACK ThreadWeavingUnlock (+ backing track).
+    """Resolve the RELATIONSHIP_TRACK ThreadWeavingUnlock (+ its backing track).
 
     Soul Tether formation (``accept_soul_tether`` in
     ``world.magic.services.soul_tether``) gates on the Sinner holding a
     ``CharacterThreadWeavingUnlock`` for ``TargetKind.RELATIONSHIP_TRACK``
     (``_validate_unlock``) before they can weave the RELATIONSHIP_CAPSTONE
     Thread that carries the Hollow. Unlike FACET, ``ThreadWeavingUnlock.unlock_track``
-    is a required non-null FK (per-kind CheckConstraint) — there is no
-    RelationshipTrack seeded anywhere in production content yet, so this
-    function also lazy-creates one canonical track ("Devotion") to hang the
-    unlock off of. This is the minimum authored content needed for the Rite of
-    the Soul Tether to be purchasable/reachable at all; a richer multi-track
-    catalog (Trust/Respect/Rivalry/Fear, etc.) is separate content-authoring
-    work, not framework work.
+    is a required non-null FK (per-kind CheckConstraint), so this function also
+    resolves the "Devotion" ``RelationshipTrack`` to hang the unlock off of —
+    both rows are content-repo-owned (#2973) and looked up via
+    ``authored_or_sample``, never lazy-created against a real deploy. This is
+    the minimum authored content needed for the Rite of the Soul Tether to be
+    purchasable/reachable at all; a richer multi-track catalog (Trust/Respect/
+    Rivalry/Fear, etc.) is separate content-authoring work, not framework work.
 
     Idempotent: the track and the unlock (keyed on the
     ``unique_threadweaving_unlock_track`` constraint's natural key:
@@ -2705,19 +2713,20 @@ def seed_starter_magic_story() -> None:
                                                 resolves the 5 reaction ConditionTemplate
                                                 rows by name (content-repo-owned, #2973)
      T13. _seed_resonance_alignment_boons() — ALIGNED boon tiers + named buffs
-      F. _seed_hallowed_threshold_story() — Story + Chapter + Episodes + Beats + Transitions
-                                            + TROs (self-skips when its 4 reaction
-                                            conditions aren't authored)
 
-    #2973: three former phases no longer run here — B (reaction conditions,
+    #2973: four former phases no longer run here — B (reaction conditions,
     ``_seed_hallowed_reaction_conditions()``), C (achievement bridge,
-    ``_seed_hallowed_achievement_bridge()``), and RC4 (cascade rooms,
-    ``_seed_resonance_environment_rooms()``). Each authored content-repo-owned
-    rows the seeder shouldn't own; all three survive as importable
-    test-fixture builders (the story-pipeline suite calls them directly in
-    its own setup) but no longer run as part of this orchestrator or
-    ``seed_magic_dev()``. Production content for them comes from the lore
-    repo.
+    ``_seed_hallowed_achievement_bridge()``), RC4 (cascade rooms,
+    ``_seed_resonance_environment_rooms()``), and F (the Hallowed Threshold
+    story, ``_seed_hallowed_threshold_story()`` — Story + Chapter + Episodes +
+    Beats + Transitions + TROs). B/C/RC4 authored content-repo-owned rows the
+    seeder shouldn't own; F is scaffolding for one suite with no non-test
+    consumer, so it moved to a test fixture rather than lore content. All four
+    survive as importable test-fixture builders (the story-pipeline suite
+    calls them directly in its own setup) but no longer run as part of this
+    orchestrator or ``seed_magic_dev()``. Production content for B/C/RC4
+    comes from the lore repo; F has no production destination — it never
+    ships.
 
     All remaining sub-helpers are idempotent (get_or_create at every layer),
     so the orchestrator itself is idempotent. Re-running on an edited DB
@@ -2729,7 +2738,6 @@ def seed_starter_magic_story() -> None:
     _seed_endure_hallowed_ground_check()
     _seed_resonance_environment_consequence_pools()  # T12: OPPOSED backfire pools
     _seed_resonance_alignment_boons()  # T13: ALIGNED boon tiers + named buffs
-    _seed_hallowed_threshold_story()
 
 
 def seed_magic_dev() -> MagicDevSeedResult:
@@ -2745,34 +2753,33 @@ def seed_magic_dev() -> MagicDevSeedResult:
        reference TRAIT rows on the first authored resonance; then
        ``seed_thread_survivability_tuning()`` —
        ThreadSurvivabilityTuning × 2 (DR + MAX_HEALTH baseline tuning rows, #1175)
-    4. ``author_reference_corruption_content()`` — Corruption ConditionTemplates
-       + CORRUPTION_TWIST entries for the first authored Primal and Abyssal
-       Resonance
-    5. ``seed_facet_thread_unlock()`` — single global FACET ThreadWeavingUnlock
-    6. ``seed_starter_magic_story()`` — magic-story pipeline slice (Affinities,
+    4. ``seed_facet_thread_unlock()`` — single global FACET ThreadWeavingUnlock
+    5. ``seed_starter_magic_story()`` — magic-story pipeline slice (Affinities,
        AffinityInteractions, OPPOSED backfire pools resolving the 5 reaction
-       conditions by name, ALIGNED boon tiers, Hallowed Threshold story;
-       #2973 — the cascade rooms + "Hallowed Rejection" and the achievement
-       bridge no longer seed here, they're lore-repo content)
-    7. ``seed_penetration_contest()`` — penetration CheckType + factor ladder +
+       conditions by name, ALIGNED boon tiers; #2973 — the cascade rooms +
+       "Hallowed Rejection", the achievement bridge, and the Hallowed
+       Threshold story no longer seed here — the first two are lore-repo
+       content, the story is a test fixture with no production destination)
+    6. ``seed_penetration_contest()`` — penetration CheckType + factor ladder +
        check-scoped ModifierTarget (#767)
-    8. ``seed_flee_check()`` — flee CheckType + ModifierTarget + FleeConfig
+    7. ``seed_flee_check()`` — flee CheckType + ModifierTarget + FleeConfig
        singleton + tier modifiers + starter consequence pool (#878)
-    9. ``seed_relationship_track_thread_unlock()`` — canonical "Devotion"
-       RelationshipTrack + its RELATIONSHIP_TRACK ThreadWeavingUnlock (#2027)
-    10. ``wire_soul_tether_content()`` — Soul Tether Rituals (accept_soul_tether,
-        soul_tether_rescue), Tether Strain / Soul Tether Active ConditionTemplates,
-        and the two reactive TriggerDefinitions (#2027). Previously created only
-        in tests/factories — Soul Tether was unreachable in a live game.
-    11. ``wire_covenant_lifecycle_rituals()`` — Covenant/org lifecycle Rituals
+    8. ``seed_relationship_track_thread_unlock()`` — RELATIONSHIP_TRACK
+       ThreadWeavingUnlock + its backing "Devotion" RelationshipTrack, both
+       resolved via ``authored_or_sample`` (content-repo-owned, #2698/#2973) (#2027)
+    9. ``wire_soul_tether_content()`` — Soul Tether Rituals (accept_soul_tether,
+       soul_tether_rescue), Tether Strain / Soul Tether Active ConditionTemplates,
+       and the two reactive TriggerDefinitions (#2027). Previously created only
+       in tests/factories — Soul Tether was unreachable in a live game.
+    10. ``wire_covenant_lifecycle_rituals()`` — Covenant/org lifecycle Rituals
         (Covenant Formation, Covenant Induction, Call the Banners, Mentor's Vow,
         Renew the Oath, Organization Induction) + the MentorBondConfig singleton
         (#2114). Previously created only in tests/factories — the fully-built
         covenant session machinery was unreachable in a live game.
-    12. ``ensure_dramatic_entrance_content()`` — "Grand Entrance" DramaticMomentType,
+    11. ``ensure_dramatic_entrance_content()`` — "Grand Entrance" DramaticMomentType,
         flagged ``suggest_on_technique_entrance=True`` (#2183). Without this, the
         technique-entrance suggestion bridge has nothing authored to surface.
-    13. ``ensure_portal_travel_content()`` — starter Mirror ``PortalAnchor`` rows
+    12. ``ensure_portal_travel_content()`` — starter Mirror ``PortalAnchor`` rows
         in seeded public rooms, on the content-authored "Mirror"
         ``PortalAnchorKind`` (#2222). The gift + technique it used to invent were
         removed in #2967; a real travel technique is lore-repo content.
@@ -2784,7 +2791,10 @@ def seed_magic_dev() -> MagicDevSeedResult:
     function no longer authors a synthetic one. Nor does ``MagicContent.create_all()``
     — its "Social Arts" Gift + 6 Techniques + 6 ActionEnhancements + variants left
     the production seeder (#2973); ``MagicContent`` survives as a test-fixture
-    builder only.
+    builder only. Nor does ``author_reference_corruption_content()`` — its 2
+    Corruption ConditionTemplates + 12 CORRUPTION_TWIST entries left the
+    production seeder too (#2973); it survives as a test-fixture builder the
+    ``test_reference_corruption_content.py`` suite calls directly.
 
     All writes are idempotent (get_or_create throughout). Re-running on a
     populated database is a no-op; staff edits to existing rows are preserved
@@ -2795,7 +2805,6 @@ def seed_magic_dev() -> MagicDevSeedResult:
         MagicDevSeedResult composing all sub-results.
     """
     from world.magic.factories import (  # noqa: PLC0415
-        author_reference_corruption_content,
         ensure_dramatic_entrance_content,
         wire_covenant_lifecycle_rituals,
         wire_soul_tether_content,
@@ -2810,7 +2819,6 @@ def seed_magic_dev() -> MagicDevSeedResult:
     rituals = seed_canonical_rituals()
     thread_pull_catalog = seed_thread_pull_catalog()
     seed_thread_survivability_tuning()
-    author_reference_corruption_content()
     # #2973: MagicContent.create_all() no longer runs here. Its Gift "Social
     # Arts" + 6 Techniques + 6 ActionEnhancements + variants are content-repo
     # rows the seeder shouldn't author (formerly gated behind
@@ -2818,7 +2826,9 @@ def seed_magic_dev() -> MagicDevSeedResult:
     # ungated). MagicContent survives as a test-fixture builder: the two
     # pipeline suites that need this content (test_social_magic_pipeline.py,
     # test_challenge_pipeline.py) call create_all() directly in their own
-    # setUpTestData.
+    # setUpTestData. Nor does author_reference_corruption_content() — its
+    # Corruption ConditionTemplates + CORRUPTION_TWIST entries are content-repo
+    # rows too (#2973); test_reference_corruption_content.py calls it directly.
     facet_thread_unlock = seed_facet_thread_unlock()
     relationship_track_thread_unlock = seed_relationship_track_thread_unlock()
     seed_starter_magic_story()

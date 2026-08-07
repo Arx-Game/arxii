@@ -57,7 +57,6 @@ Seeded by seed_starter_magic_story() itself:
 - ResonanceEnvironmentConfig (base_coefficient=1.000, caster_power_scalar=0.500,
   backfire_base_difficulty=30, backfire_difficulty_per_magnitude=0.500, balanced_band=10)
 - ConsequencePool for pair #4 with 4 Consequence rows keyed by CheckOutcome
-- Story "The Hallowed Threshold" with Chapter/Episodes/Beats/Transitions/TROs
 - CheckOutcomes "Critical Success", "Success", "Failure", "Critical Failure"
 
 #2973: no longer seeded by seed_starter_magic_story() — this suite is the
@@ -68,6 +67,9 @@ test-fixture-builder caller, provisioning them directly in setUpTestData:
   (via _seed_resonance_environment_rooms())
 - Achievements "Hallowed-Hardened", "Touched by Light", "Cast Out by the Light"
   (via _seed_hallowed_achievement_bridge())
+- Story "The Hallowed Threshold" with Chapter/Episodes/Beats/Transitions/TROs
+  (via _seed_hallowed_threshold_story() — a test fixture with no production
+  destination; see the docstring on _seed_hallowed_threshold_story() itself)
 """
 
 from __future__ import annotations
@@ -133,21 +135,26 @@ class MagicStoryPipelineTests(ResonanceCacheIsolationMixin, EvenniaTestCase):
         cls._author_stand_in_resonances()
         seed_starter_magic_story()
 
-        # #2973: the cascade rooms (+ "Hallowed Rejection") and the achievement
-        # bridge left the production seeder — they're lore-repo content now (or,
-        # for the rooms, ride the #2451 grid-bundle mechanism). This suite is
-        # exactly the test-fixture-builder caller the split named: provision
-        # them directly, the way lore content would land ahead of the cluster
-        # loop. The 5 reaction ConditionTemplates the achievement bridge needs
-        # are already resolved above, by seed_starter_magic_story() itself (via
+        # #2973: the cascade rooms (+ "Hallowed Rejection"), the achievement
+        # bridge, and the Hallowed Threshold story left the production seeder
+        # — the first two are lore-repo content now (or, for the rooms, ride
+        # the #2451 grid-bundle mechanism); the story is a test fixture with
+        # no production destination. This suite is exactly the
+        # test-fixture-builder caller the split named: provision them
+        # directly, the way lore content would land ahead of the cluster
+        # loop. The 5 reaction ConditionTemplates the achievement bridge and
+        # story both need are already resolved above, by
+        # seed_starter_magic_story() itself (via
         # _seed_resonance_environment_consequence_pools()).
         from integration_tests.game_content.magic import (
             _seed_hallowed_achievement_bridge,
+            _seed_hallowed_threshold_story,
             _seed_resonance_environment_rooms,
         )
 
         _seed_resonance_environment_rooms()
         _seed_hallowed_achievement_bridge()
+        _seed_hallowed_threshold_story()
 
         from evennia.objects.models import ObjectDB
 

@@ -631,7 +631,6 @@ class TestSeedMagicDev(TestCase):
     def test_first_call_creates_all_components(self) -> None:
         """Spot-check: at least one of every authored row family exists."""
         from world.checks.models import CheckType
-        from world.conditions.models import ConditionTemplate
         from world.magic.audere import AudereThreshold
         from world.magic.models import (
             AnimaConfig,
@@ -682,21 +681,12 @@ class TestSeedMagicDev(TestCase):
         # ahead of seed_dev_database()'s cluster loop, not by seed_magic_dev()
         # itself. Nothing to assert on this orchestrator's own output.
 
-        # --- author_reference_corruption_content: one Primal + one Abyssal ---
-        # Exactly one reference template per affinity, keyed to an authored
-        # resonance rather than an invented name (#2967). Which one is not
-        # asserted: the seed follows whichever row it placed first, so pinning
-        # the identity here would just re-encode the ordering it deliberately
-        # stopped depending on.
-        for affinity_name in ("Primal", "Abyssal"):
-            templates = ConditionTemplate.objects.filter(
-                corruption_resonance__affinity__name=affinity_name
-            )
-            self.assertEqual(
-                templates.count(),
-                1,
-                f"exactly one reference Corruption ConditionTemplate for {affinity_name}",
-            )
+        # Note: author_reference_corruption_content()'s reference Corruption
+        # ConditionTemplates (one per Primal/Abyssal) are no longer authored
+        # here either (#2973) — content-repo rows now; the factory survives as
+        # a test-fixture builder test_reference_corruption_content.py calls
+        # directly. Nothing to assert on this orchestrator's own output for
+        # that family.
 
         # Note: MagicContent.create_all()'s "Social Arts" Gift + 6 Techniques +
         # 6 ActionEnhancements are no longer authored here either (#2973) —
@@ -1069,12 +1059,26 @@ class SeedStarterMagicStoryStripsStandInsTests(TestCase):
             "without SEED_SAMPLE_CONTENT — they ride the #2451 grid bundle now (#2973)",
         )
 
+    def test_no_hallowed_threshold_story_authored(self) -> None:
+        from world.stories.models import Story
+
+        seed_starter_magic_story()
+        self.assertFalse(
+            Story.objects.filter(title="The Hallowed Threshold").exists(),
+            "seed_starter_magic_story() must not author the Hallowed Threshold "
+            "story — _seed_hallowed_threshold_story() is a test-fixture builder "
+            "with no production destination now (#2973)",
+        )
+
 
 class SeedMagicDevStripsStandInsTests(TestCase):
-    """#2973 items 3 + 6: MagicContent.create_all() and the touchstone/reagent
-    content left ``seed_magic_dev()`` — they're content-repo rows now (or, for
-    ``MagicContent``/``ensure_touchstone_content()``, test-fixture builders a
-    suite must call directly).
+    """#2973 items 3 + 4 + 6 + 7 + 8: MagicContent.create_all(), the reference
+    Corruption content, the touchstone/reagent content, the Fall/Redemption
+    example rows, and the Devotion RelationshipTrack + unlock left
+    ``seed_magic_dev()`` — they're content-repo rows now (or, for
+    ``MagicContent``/``ensure_touchstone_content()``/
+    ``author_reference_corruption_content()``, test-fixture builders a suite
+    must call directly).
 
     No ``@override_settings(SEED_SAMPLE_CONTENT=True)`` here deliberately:
     this exercises the real default (off) production behavior, mirroring
@@ -1118,6 +1122,61 @@ class SeedMagicDevStripsStandInsTests(TestCase):
             "reagent ItemTemplates without SEED_SAMPLE_CONTENT — "
             "ensure_sanctification_requirements() resolves them via "
             "authored_or_sample now (#2973)",
+        )
+
+    def test_no_corruption_templates_authored(self) -> None:
+        from world.conditions.models import ConditionTemplate
+
+        seed_magic_dev()
+        self.assertFalse(
+            ConditionTemplate.objects.filter(corruption_resonance__isnull=False).exists(),
+            "seed_magic_dev() must not author reference Corruption "
+            "ConditionTemplates without SEED_SAMPLE_CONTENT — "
+            "author_reference_corruption_content() is a test-fixture builder "
+            "only now (#2973)",
+        )
+        self.assertFalse(
+            ConditionTemplate.objects.filter(name="Corruption Twist").exists(),
+            "seed_magic_dev() must not author the Corruption Twist category "
+            "without SEED_SAMPLE_CONTENT (#2973)",
+        )
+
+    def test_no_fall_redemption_example_rows_authored(self) -> None:
+        from world.magic.models import CompromiseActType, ResonanceConversion
+
+        seed_magic_dev()
+        self.assertFalse(
+            CompromiseActType.objects.exists(),
+            "seed_magic_dev() must not author example CompromiseActType rows "
+            "without SEED_SAMPLE_CONTENT — wire_fall_redemption_content() "
+            "resolves them via authored_or_sample (#2973)",
+        )
+        self.assertFalse(
+            ResonanceConversion.objects.exists(),
+            "seed_magic_dev() must not author example ResonanceConversion rows "
+            "without SEED_SAMPLE_CONTENT — wire_fall_redemption_content() "
+            "resolves them via authored_or_sample (#2973)",
+        )
+
+    def test_no_devotion_track_authored(self) -> None:
+        from world.magic.constants import TargetKind
+        from world.magic.models.weaving import ThreadWeavingUnlock
+        from world.relationships.models import RelationshipTrack
+
+        seed_magic_dev()
+        self.assertFalse(
+            RelationshipTrack.objects.filter(name="Devotion").exists(),
+            "seed_magic_dev() must not author the 'Devotion' RelationshipTrack "
+            "without SEED_SAMPLE_CONTENT — seed_relationship_track_thread_unlock() "
+            "resolves it via authored_or_sample (#2973)",
+        )
+        self.assertFalse(
+            ThreadWeavingUnlock.objects.filter(
+                target_kind=TargetKind.RELATIONSHIP_TRACK,
+            ).exists(),
+            "seed_magic_dev() must not author a RELATIONSHIP_TRACK "
+            "ThreadWeavingUnlock without SEED_SAMPLE_CONTENT — it has no "
+            "'Devotion' track to hang off of (#2973)",
         )
 
 
@@ -1578,6 +1637,7 @@ class SeedStarterMagicStoryOrchestratorTests(TestCase):
 
         from integration_tests.game_content.magic import (
             _seed_hallowed_achievement_bridge,
+            _seed_hallowed_threshold_story,
             _seed_resonance_environment_rooms,
         )
         from world.achievements.models import Achievement
@@ -1594,11 +1654,14 @@ class SeedStarterMagicStoryOrchestratorTests(TestCase):
         # are authored (#2967) — stand in for the content repo.
         _author_stand_in_resonances()
         seed_starter_magic_story()
-        # #2973: the cascade rooms (+ "Hallowed Rejection") and the achievement
-        # bridge left the production seeder — this suite provisions them
-        # directly in its own setup, the way lore-fixture content would.
+        # #2973: the cascade rooms (+ "Hallowed Rejection"), the achievement
+        # bridge, and the Hallowed Threshold story left the production seeder
+        # — this suite provisions them directly in its own setup, the way
+        # lore-fixture content (or, for the story, a dedicated test fixture)
+        # would.
         _seed_resonance_environment_rooms()
         _seed_hallowed_achievement_bridge()
+        _seed_hallowed_threshold_story()
 
         # Spot-check that representative content from each phase is present.
         # Phase RC1: 9 directed AffinityInteraction rows + config singleton
@@ -1773,10 +1836,18 @@ class SeedStarterMagicStoryOrchestratorTests(TestCase):
 
 @override_settings(SEED_SAMPLE_CONTENT=True)
 class TestSeedMagicDevIncludesStarterMagicStory(TestCase):
-    """Verify that seed_magic_dev() includes the magic-story slice content."""
+    """Verify that seed_magic_dev() includes the magic-story slice's own content.
+
+    #2973: the Hallowed Threshold Story itself is no longer part of this
+    contract — it left seed_starter_magic_story() (and therefore
+    seed_magic_dev()) as a test fixture with no production destination. See
+    SeedHallowedThresholdStoryTests for its own direct-call coverage and
+    SeedMagicDevStripsStandInsTests for the absence guard on a bare
+    seed_magic_dev() run.
+    """
 
     def test_seed_magic_dev_includes_starter_magic_story_content(self) -> None:
-        """seed_magic_dev() should seed the reaction/backfire chain + Hallowed Threshold story.
+        """seed_magic_dev() should seed the reaction/backfire chain.
 
         #2973: "Hallowed Rejection" (the flavor marker seeded alongside the demo
         rooms) left the production seeder along with the rooms themselves — it's
@@ -1790,7 +1861,6 @@ class TestSeedMagicDevIncludesStarterMagicStory(TestCase):
             AffinityInteraction,
             ResonanceAlignmentBoonTier,
         )
-        from world.stories.models import Story
 
         seed_magic_dev()
 
@@ -1798,10 +1868,6 @@ class TestSeedMagicDevIncludesStarterMagicStory(TestCase):
         self.assertTrue(
             ConditionTemplate.objects.filter(name="Tempered Against Light").exists(),
             "seed_magic_dev() must resolve the reaction conditions the backfire pools need",
-        )
-        self.assertTrue(
-            Story.objects.filter(title="The Hallowed Threshold").exists(),
-            "seed_magic_dev() must include Hallowed Threshold story",
         )
         # T12: OPPOSED consequence pools wired for pairs #4 and #7
         from world.magic.models.affinity import Affinity
@@ -1828,25 +1894,17 @@ class TestSeedMagicDevIncludesStarterMagicStory(TestCase):
     def test_seed_magic_dev_remains_idempotent_with_story_slice(self) -> None:
         """Re-running seed_magic_dev() produces stable counts after wiring slice."""
         from world.conditions.models import ConditionTemplate
-        from world.stories.models import Story
 
         seed_magic_dev()
         first_condition_count = ConditionTemplate.objects.count()
-        first_story_count = Story.objects.count()
 
         seed_magic_dev()
         second_condition_count = ConditionTemplate.objects.count()
-        second_story_count = Story.objects.count()
 
         self.assertEqual(
             first_condition_count,
             second_condition_count,
             "Condition counts must be stable across seed_magic_dev() runs",
-        )
-        self.assertEqual(
-            first_story_count,
-            second_story_count,
-            "Story counts must be stable across seed_magic_dev() runs",
         )
 
 
