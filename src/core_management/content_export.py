@@ -211,6 +211,13 @@ CONTENT_MODELS: frozenset[str] = frozenset(
         "mechanics.situationtemplate",
         "mechanics.situationchallengelink",
         "mechanics.situationtraplink",
+        # npc_services - builder-domain, but missions name NPCRole by natural
+        # key (MissionTemplate.report_to_role), so the role catalog must
+        # travel with the content that references it (ruled 2026-08-07;
+        # overturns the #3019-era builder-domain exclusion for this one
+        # model). Ordered before missions so report_to_role resolves in one
+        # load pass.
+        "npc_services.npcrole",
         # missions
         "missions.missioncategory",
         "missions.missiontemplate",

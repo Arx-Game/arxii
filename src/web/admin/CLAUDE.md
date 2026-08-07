@@ -229,9 +229,11 @@ to `_authoring/` (`admin_authoring`).
   `values_list` per remaining model (pk, natural-key fields, the
   `written_by_id`/`reviewed_by_id` credit columns, every prose field).
   `credited_content_models()` is deliberately broader than
-  `core_management.content_export.CONTENT_MODELS` - four builder-domain
-  models (`ItemTemplate`, `NPCRole`, `BuildingKind`, `DecorationKind`) carry
-  `CreditedContent` but sit outside the export registry. Rows sort
+  `core_management.content_export.CONTENT_MODELS` - three builder-domain
+  models (`ItemTemplate`, `BuildingKind`, `DecorationKind`) carry
+  `CreditedContent` but sit outside the export registry (`NPCRole` left the
+  exclusion 2026-08-07: missions name it by natural key, so it now rides
+  the catalog). Rows sort
   worst-first: placeholder-marked, then unwritten, then unreviewed, then
   alphabetically by domain and identity. An FK-typed natural-key field spans
   one hop into the related row's own first natural-key field for display
@@ -301,13 +303,13 @@ to `_authoring/` (`admin_authoring`).
   `content_export_tags.content_exportable`/`content_model_label` from the
   row-export system above) plus its own export clause ("Export it to the
   content repo to close the loop.") render only **inside the
-  `content_exportable` branch** - the four builder-domain models carry
+  `content_exportable` branch** - the three builder-domain models carry
   credit but are not exportable at all, so they show the sentence "This
   model stays in the database only; the content repo does not carry it."
   in the handoff form's place instead (#3019 review: the freeze and export
   clauses used to be one sentence, rendering the export clause even for a
   non-exportable model directly above the "stays in the database only"
-  line it contradicted). `content_exportable` only rules out the four
+  line it contradicted). `content_exportable` only rules out the three
   builder-domain models here - it says nothing about whether an
   *exportable* model has a `ModelAdmin` to link back to. Thirteen other
   credited+exportable models never got one (e.g. `missions.MissionTemplate`,

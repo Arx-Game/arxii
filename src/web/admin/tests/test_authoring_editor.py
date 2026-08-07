@@ -9,10 +9,10 @@ from django.utils import timezone
 from evennia.accounts.models import AccountDB
 
 from evennia_extensions.models import PlayerData
+from world.buildings.factories import BuildingKindFactory
 from world.codex.factories import CodexEntryFactory
 from world.codex.models import CodexEntry
 from world.contributors.factories import ContentContributorFactory
-from world.npc_services.factories import NPCRoleFactory
 
 
 def _make_account(username: str, *, superuser: bool = True) -> AccountDB:
@@ -353,21 +353,22 @@ class TestAuthoringEditorCredit(AuthoringEditorTestCase):
         self.assertIsNotNone(written_by_id)
 
     def test_non_exportable_credited_model_shows_sentence_not_handoff_form(self) -> None:
-        # NPCRole is credited (CreditedContent) but is one of the four
+        # BuildingKind is credited (CreditedContent) but is one of the three
         # builder-domain models outside CONTENT_MODELS/MARKDOWN_EXPORT_DOMAINS
-        # - and has no registered ModelAdmin at all, so the pre-fix
-        # unconditional handoff form would 500 (NoReverseMatch inside
+        # (NPCRole, the original sample here, was admitted to the catalog
+        # 2026-08-07) - and has no registered ModelAdmin at all, so the
+        # pre-fix unconditional handoff form would 500 (NoReverseMatch inside
         # content_export_row's refusal redirect) the moment an operator
         # clicked it (#3019 review).
-        role = NPCRoleFactory(description="Some role flavor.")
+        kind = BuildingKindFactory(description="Some building flavor.")
         self.client.force_login(self.super)
 
         resp = self.client.post(
             reverse("admin_authoring_editor_credit"),
             {
-                "model": "npc_services.NPCRole",
-                "pk": str(role.pk),
-                "description": "Some role flavor.",
+                "model": "buildings.BuildingKind",
+                "pk": str(kind.pk),
+                "description": "Some building flavor.",
             },
         )
 
