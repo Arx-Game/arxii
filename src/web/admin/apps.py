@@ -24,6 +24,7 @@ class AdminConfig(AppConfig):
         from web.admin import checks  # noqa: F401, PLC0415
 
         _patch_external_admins()
+        _attach_credit_admin_extras()
 
 
 def _patch_external_admins():
@@ -64,3 +65,31 @@ def _patch_external_admins():
 
     # Django's built-in Group admin — Group.user points to User (AccountDB)
     GroupAdmin.autocomplete_fields = ("user",)
+
+
+def _attach_credit_admin_extras():
+    """Attach the credit-status filter + column to every registered credited admin (#3020).
+
+    Runs at ready() time, after admin autodiscovery (django.contrib.admin
+    precedes web.admin in INSTALLED_APPS), so the registry is complete -
+    the same window ``_patch_external_admins`` uses. Mutates the registered
+    ModelAdmin INSTANCES, so Django's own admin checks still validate the
+    result. Idempotent via the membership guards. Credited models with no
+    registered admin are skipped - the Authoring Workbench is their surface.
+    """
+    from django.contrib import admin  # noqa: PLC0415
+
+    from core.app_domains import credited_content_models  # noqa: PLC0415
+    from world.contributors.admin import (  # noqa: PLC0415
+        CreditStatusListFilter,
+        credit_status,
+    )
+
+    for model in credited_content_models():
+        instance = admin.site._registry.get(model)  # noqa: SLF001
+        if instance is None:
+            continue
+        if CreditStatusListFilter not in instance.list_filter:
+            instance.list_filter = [*instance.list_filter, CreditStatusListFilter]
+        if credit_status not in instance.list_display:
+            instance.list_display = [*instance.list_display, credit_status]

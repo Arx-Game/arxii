@@ -2,6 +2,7 @@
 
 from django.contrib import admin
 
+from world.contributors.admin import CREDIT_FIELDSET
 from world.items.crafting.models import AccentArchetypeAllowance, AccentExclusion, ItemAccent
 from world.items.models import (
     AccentLevel,
@@ -270,6 +271,7 @@ class ItemTemplateAdmin(admin.ModelAdmin):
                 "classes": ["collapse"],
             },
         ),
+        CREDIT_FIELDSET,
     ]
     inlines = [
         TemplateSlotInline,
