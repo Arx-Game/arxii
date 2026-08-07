@@ -16,12 +16,13 @@ from actions.definitions.progression_rewards import SelectPathAction
 from commands.durance import CmdDurance
 from evennia_extensions.factories import AccountFactory, CharacterFactory
 from world.character_sheets.factories import CharacterSheetFactory
-from world.classes.factories import PathFactory
-from world.classes.models import PathStage
+from world.classes.factories import CharacterClassLevelFactory, PathFactory
+from world.classes.models import CharacterClassLevel, PathStage
+from world.classes.services import DEFAULT_CHARACTER_CLASS_NAME
 from world.progression.exceptions import PathAlreadySelectedError
 from world.progression.factories import CharacterPathHistoryFactory
 from world.progression.selectors import current_path_for_character
-from world.progression.services.advancement import select_initial_path
+from world.progression.services.advancement import primary_class_level, select_initial_path
 
 URL = "/api/progression/select-path/"
 
@@ -64,6 +65,30 @@ class SelectInitialPathServiceTests(TestCase):
         with patch("world.magic.services.path_magic.grant_path_magic") as mock_grant:
             select_initial_path(self.character, self.path)
         mock_grant.assert_not_called()
+
+    def test_stamps_a_level_one_class_level_when_none_exists(self) -> None:
+        """(#3038) The recovery seam also unblocks the Durance's class-level gate."""
+        self.assertIsNone(primary_class_level(self.character))
+
+        select_initial_path(self.character, self.path)
+
+        level = primary_class_level(self.character)
+        self.assertIsNotNone(level)
+        self.assertEqual(level.level, 1)
+        self.assertTrue(level.is_primary)
+        self.assertEqual(level.character_class.name, DEFAULT_CHARACTER_CLASS_NAME)
+
+    def test_does_not_overwrite_an_existing_class_level(self) -> None:
+        """(#3038) A bypassing character that already has a class level keeps it."""
+        existing = CharacterClassLevelFactory(character=self.sheet, level=7, is_primary=True)
+
+        select_initial_path(self.character, self.path)
+
+        levels = CharacterClassLevel.objects.filter(character_id=self.character.pk)
+        self.assertEqual(levels.count(), 1)
+        level = levels.first()
+        self.assertEqual(level.pk, existing.pk)
+        self.assertEqual(level.level, 7)
 
 
 # ---------------------------------------------------------------------------

@@ -1767,6 +1767,7 @@
   - aspect -> classes.Aspect [FK]
 
 ### Service Functions
+- `ensure_default_character_class() -> world.classes.models.CharacterClass - Get or create the single shared default CharacterClass (#3038).`
 - `is_crossing_level(level: int) -> bool - Return True if ``level`` is a PathStage crossing boundary.`
 - `set_primary_class_level(character: object, character_class: object, level: int) -> object - Set the character's primary class level and recompute level-derived health.`
 - `stage_for_level(level: int) -> int - Map a class level to its PathStage value (clamps <1 to PROSPECT).`

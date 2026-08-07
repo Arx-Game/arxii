@@ -128,6 +128,19 @@ The central spine connecting every system in the game. Characters develop throug
       Deliberately does NOT grant the path's magic (unlike `cross_into_path`) — narrower scope
       than a full CG replay. Telnet `durance selectpath <path>`; REST
       `GET`/`POST /api/progression/select-path/` (`SelectPathViewSet`).
+    - **CG class-level stamp ✅ shipped (#3038).** A fourth launch-blocking gap: no
+      production path ever wrote a `CharacterClassLevel` row for a player character
+      (only `seed_durance_officiants`'s NPCs got one), so
+      `advance_class_level_via_session` raised `AdvancementRequirementsNotMet`
+      unconditionally for every real PC and the class term of
+      `derive_base_max_health` was always 0 — the Durance was reachable in principle
+      but never actually completable by a CG-finalized character.
+      `world.classes.services.ensure_default_character_class()` centralizes the
+      shared placeholder `CharacterClass` get-or-create (previously duplicated in
+      `seeds.py`); CG finalize (`_apply_character_mechanics`) now stamps a level-1
+      primary `CharacterClassLevel` on every character, and `select_initial_path`
+      stamps the same for CG-bypassing characters that have none yet (without
+      clobbering an existing one).
 - Path step requirements engine — scaling requirements from trivial (level 2: 100 XP, 30 in primary skill, 10 legend, find a trainer, some gold) to nearly impossible (level 21: Audere Majora 4th crossing, extreme achievements, god-tier trainer quest). The Audere Majora crossing itself is built (see What Exists); this engine adds the legend/XP/trainer prerequisites for the non-boundary steps and feeds the boundary steps
 - Trainer system — finding trainers, training costs, trainer tiers
 - Path switching/discovery mechanics

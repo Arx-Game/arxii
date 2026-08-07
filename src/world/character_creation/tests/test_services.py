@@ -757,6 +757,52 @@ class FinalizeCharacterPathHistoryTests(FinalizationTestMixin, TestCase):
         self.assertEqual(history.path, self.path)
 
 
+class FinalizeCharacterClassLevelTests(FinalizationTestMixin, TestCase):
+    """Tests for the level-1 CharacterClassLevel stamp during finalization (#3038)."""
+
+    @classmethod
+    def setUpTestData(cls):
+        cls._setup_finalization_base(
+            cls, prefix="Class Level Test", height_min=1300, height_max=1400
+        )
+
+    def setUp(self):
+        self._flush_common_caches()
+        self.account = AccountDB.objects.create(username=f"classleveltest_{id(self)}")
+
+    def _create_complete_draft(self):
+        return self._create_base_draft(first_name="ClassLevelTest", skills={}, specializations={})
+
+    def test_finalize_stamps_level_one_primary_class_level(self):
+        """finalize_character creates exactly one level-1 primary CharacterClassLevel."""
+        from world.classes.models import CharacterClassLevel
+        from world.classes.services import DEFAULT_CHARACTER_CLASS_NAME
+
+        draft = self._create_complete_draft()
+
+        character = finalize_character(draft, add_to_roster=True)
+
+        levels = CharacterClassLevel.objects.filter(character_id=character.pk)
+        self.assertEqual(levels.count(), 1)
+        level = levels.first()
+        self.assertEqual(level.level, 1)
+        self.assertTrue(level.is_primary)
+        self.assertEqual(level.character_class.name, DEFAULT_CHARACTER_CLASS_NAME)
+
+    def test_stamping_twice_does_not_duplicate(self):
+        """set_primary_class_level is an upsert, so re-stamping never duplicates the row."""
+        from world.classes.models import CharacterClassLevel
+        from world.classes.services import ensure_default_character_class, set_primary_class_level
+
+        draft = self._create_complete_draft()
+        character = finalize_character(draft, add_to_roster=True)
+
+        set_primary_class_level(character, ensure_default_character_class(), 1)
+
+        levels = CharacterClassLevel.objects.filter(character_id=character.pk)
+        self.assertEqual(levels.count(), 1)
+
+
 class FinalizeCharacterGoalsTests(FinalizationTestMixin, TestCase):
     """Tests for goal creation during character finalization."""
 

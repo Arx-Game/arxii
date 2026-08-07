@@ -1,6 +1,16 @@
 """Service helpers for the classes app."""
 
-from world.classes.models import PathStage
+from world.classes.models import CharacterClass, PathStage
+
+#: The single shared placeholder CharacterClass stamped on every character (PC or
+#: NPC) until real class selection exists. Originally introduced by
+#: world.progression.seeds.seed_durance_officiants (#2121) for seeded Durance
+#: officiants; CG finalize and the #2121 select_initial_path recovery seam
+#: (world.progression.services.advancement) now stamp it on every PC too (#3038)
+#: — advancement only ever reads current_level/Path lineage, never a specific
+#: CharacterClass name, so one shared class is the correct generic anchor
+#: everywhere a class level is required.
+DEFAULT_CHARACTER_CLASS_NAME = "Adventurer"
 
 # (min_level, stage) descending — first whose min_level <= level wins.
 _STAGE_THRESHOLDS: list[tuple[int, int]] = [
@@ -11,6 +21,27 @@ _STAGE_THRESHOLDS: list[tuple[int, int]] = [
     (3, PathStage.POTENTIAL),
     (1, PathStage.PROSPECT),
 ]
+
+
+def ensure_default_character_class() -> CharacterClass:
+    """Get or create the single shared default CharacterClass (#3038).
+
+    Idempotent via get_or_create; never overwrites a staff-adjusted description
+    on an existing row. Callers: the #2121 seeded Durance officiants, CG
+    finalize's level-1 stamp, and the #2121 select_initial_path recovery seam
+    — see ``DEFAULT_CHARACTER_CLASS_NAME`` for why one shared class is correct
+    everywhere.
+
+    Returns:
+        The default CharacterClass (created or fetched).
+    """
+    character_class, _ = CharacterClass.objects.get_or_create(
+        name=DEFAULT_CHARACTER_CLASS_NAME,
+        defaults={
+            "description": "Default class stamped on characters before class selection exists.",
+        },
+    )
+    return character_class
 
 
 def stage_for_level(level: int) -> int:

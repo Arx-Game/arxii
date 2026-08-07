@@ -428,13 +428,28 @@ from world.progression.exceptions import PathAlreadySelectedError
 # (current_path_for_character stays None; assert_can_officiate can never
 # establish lineage). Raises PathAlreadySelectedError if a path is already
 # on record — one-time only, NOT a general path-change tool (cross_into_path
-# is that seam). Deliberately does NOT call grant_path_magic.
+# is that seam). Deliberately does NOT call grant_path_magic. Also stamps a
+# level-1 primary CharacterClassLevel when the character has none yet (#3038) —
+# never overwrites an existing one.
 select_initial_path(character, path)
 ```
 
 `SelectPathAction` (key `select_path`, `actions/definitions/progression_rewards.py`) is the
 action.run() seam both telnet (`durance selectpath <path name or id>`) and the web converge
 on; only the 5 PROSPECT paths are offered.
+
+**CG class-level stamp (#3038).** Before this, no production path ever wrote a
+`CharacterClassLevel` for a player character — only `seed_durance_officiants`'s
+NPCs got one — so `advance_class_level_via_session` raised
+`AdvancementRequirementsNotMet` unconditionally for every real PC.
+`world.classes.services.ensure_default_character_class()` centralizes the
+shared placeholder `CharacterClass` get-or-create that used to be duplicated
+across `seed_durance_officiants` and `seed_major_gift_technique_level_requirement`
+in `world/progression/seeds.py`. CG finalize (`character_creation.services.
+_apply_character_mechanics`) now calls `set_primary_class_level(character,
+ensure_default_character_class(), 1)` for every finalized character, and
+`select_initial_path` (above) does the same for CG-bypassing characters that
+have none yet.
 
 ### Path Selectors (`selectors.py` — #1700)
 
