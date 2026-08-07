@@ -121,6 +121,11 @@ def _ensure_steward_offers(organization) -> None:
     )
     if role is None:
         return
+    # faction_affiliation is installation config, not content - an authored
+    # row arrives with it null (#3036).
+    if role.faction_affiliation_id != organization.pk:
+        role.faction_affiliation = organization
+        role.save()
     for label, kind in (
         ("Dispatch a collection", OfferKind.COLLECTION),
         ("Invest in the domain", OfferKind.IMPROVEMENT),

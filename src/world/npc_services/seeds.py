@@ -360,6 +360,11 @@ def ensure_great_archive_librarian_role() -> NPCRole | None:
     )
     if role is None:
         return None
+    # faction_affiliation is installation config, not content - an authored
+    # row arrives with it null, and the offers refuse without a house (#3036).
+    if role.faction_affiliation_id != academy.pk:
+        role.faction_affiliation = academy
+        role.save()
 
     if achievement is None:
         # Achievement not authored and sampling is off — skip the offers that
@@ -457,6 +462,9 @@ def ensure_academy_registrar_role() -> NPCRole | None:
     )
     if role is None:
         return None
+    if role.faction_affiliation_id != academy.pk:
+        role.faction_affiliation = academy
+        role.save()
 
     offer, created = NPCServiceOffer.objects.get_or_create(
         role=role,
@@ -550,6 +558,9 @@ def ensure_academy_generalist_trainer_role() -> NPCRole | None:
     )
     if role is None:
         return None
+    if role.faction_affiliation_id != academy.pk:
+        role.faction_affiliation = academy
+        role.save()
 
     expected_labels: set[str] = set()
     for _gift_name, technique_name in _GENERALIST_TRAINER_STARTER_TECHNIQUES:
