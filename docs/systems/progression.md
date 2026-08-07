@@ -179,6 +179,18 @@ dev = DevelopmentPoints.objects.get(character=character, trait=trait)
 dev.award_points(5)
 ```
 
+**Check-based accrual (#3039).** `world.progression.services.skill_development
+.award_check_development(character_sheet, check_type, effort_level, path_level)`
+writes both `WeeklySkillUsage` (accumulator for the weekly audit/rust cron) and
+`DevelopmentPoints` (via `award_points`) for every trait the check used. Its sole
+caller is `world.checks.services._award_check_development`, hooked at the
+`perform_check` chokepoint — every check path (combat, scene actions, the test-rig
+forced-outcome path) awards, whether or not it goes through the fatigue action
+pipeline. Effort-gated: `effort_level is None` (or an effort level with 0 base dp,
+e.g. very-low/low) is a no-op, so the hook self-scopes to effort-bearing checks. A
+character with no `CharacterSheet` (objects, ephemeral opponents) is skipped
+silently.
+
 ### KudosClaimCategory
 
 ```python
@@ -648,9 +660,11 @@ Dispatches `SetPathIntentAction` / `ClearPathIntentAction`
 - **Traits**: `DevelopmentPoints.award_points()` auto-applies to `CharacterTraitValue`.
 - **Classes**: `ClassLevelUnlock`, `ClassXPCost`, and requirements reference `CharacterClass` and class levels.
 - **Scenes**: Scene completion (`on_scene_finished`) grants vote-budget bonuses. It does
-  not award development points — development comes from resolved checks
-  (`award_check_development`) and GM fiat (`GMAwardAction`). Awarding development from
-  scene participation is recorded as intent in `docs/roadmap/planned-systems.md`.
+  not award development points — development comes from resolved checks (hooked at the
+  `perform_check` chokepoint, #3039 — see "Check-based accrual" above) and GM fiat
+  (`GMAwardAction`). Awarding development from scene participation itself (independent
+  of any check resolved within it) is recorded as intent in
+  `docs/roadmap/planned-systems.md`.
 - **Character Creation**: CG-to-XP conversion via `award_cg_conversion_xp()` creates locked (non-transferable) `CharacterXP`.
 - **Magic — Ritual of the Durance (#1352):** `advance_class_level_via_session` is
   dispatched by `fire_session` for the "Ritual of the Durance" `Ritual` row (seeded via

@@ -25,10 +25,13 @@ from world.checks.services import (
     perform_check,
     preview_check_difficulty,
 )
+from world.checks.test_helpers import force_check_outcome
 from world.classes.factories import PathFactory
 from world.classes.models import Aspect, PathAspect, PathStage
 from world.conditions.factories import CapabilityTypeFactory
-from world.progression.models import CharacterPathHistory
+from world.fatigue.constants import EffortLevel
+from world.progression.models import CharacterPathHistory, DevelopmentPoints, WeeklySkillUsage
+from world.progression.services.skill_development import calculate_check_dev_points
 from world.traits.factories import CheckSystemSetupFactory
 from world.traits.models import (
     CharacterTraitValue,
@@ -683,3 +686,148 @@ class ComputeResistIncrementTests(TestCase):
         CheckType.objects.filter(name="Composure").delete()
         result = compute_resist_increment(self.character, resist_effort_level="high")
         assert result == 0
+
+
+class PerformCheckDevelopmentAwardTests(TestCase):
+    """#3039: perform_check is the sole chokepoint for check-based dp accrual.
+
+    Previously this only happened inside world.fatigue.action_pipeline
+    ._execute_action_with_fatigue, whose public wrapper had zero production
+    callers -- no character ever accrued WeeklySkillUsage/DevelopmentPoints.
+    """
+
+    @classmethod
+    def setUpTestData(cls):
+        Trait.flush_instance_cache()
+        cls.setup = CheckSystemSetupFactory.create()
+        PointConversionRange.objects.get_or_create(
+            trait_type=TraitType.STAT,
+            min_value=1,
+            defaults={"max_value": 100, "points_per_level": 1},
+        )
+        for rank_val, min_pts, name in [
+            (0, 0, "DpEffortNone"),
+            (1, 10, "DpEffortNovice"),
+            (2, 25, "DpEffortCompetent"),
+            (3, 50, "DpEffortExpert"),
+        ]:
+            CheckRank.objects.get_or_create(
+                rank=rank_val,
+                defaults={"min_points": min_pts, "name": name},
+            )
+        cls.sheet = CharacterSheetFactory()
+        cls.character = cls.sheet.character
+        cls.trait, _ = Trait.objects.get_or_create(
+            name="dp_award_test_strength",
+            defaults={
+                "trait_type": TraitType.STAT,
+                "category": TraitCategory.PHYSICAL,
+            },
+        )
+        cls.category = CheckCategoryFactory(name="dp_award_test_category")
+        cls.check_type = CheckTypeFactory(name="dp_award_test_strike", category=cls.category)
+        CheckTypeTraitFactory(
+            check_type=cls.check_type,
+            trait=cls.trait,
+            weight=Decimal("1.0"),
+        )
+
+    def setUp(self):
+        Trait.flush_instance_cache()
+        CharacterTraitValue.flush_instance_cache()
+        WeeklySkillUsage.flush_instance_cache()
+        DevelopmentPoints.flush_instance_cache()
+        ResultChart.clear_cache()
+        WeeklySkillUsage.objects.filter(character_sheet=self.sheet).delete()
+        DevelopmentPoints.objects.filter(character_sheet=self.sheet).delete()
+        CharacterTraitValue.objects.create(
+            character=self.character.sheet_data, trait=self.trait, value=30
+        )
+
+    def test_medium_effort_creates_usage_and_dev_points(self):
+        """A check with effort_level creates WeeklySkillUsage + DevelopmentPoints."""
+        perform_check(
+            self.character,
+            self.check_type,
+            target_difficulty=0,
+            effort_level=EffortLevel.MEDIUM,
+        )
+
+        expected_dp = calculate_check_dev_points(EffortLevel.MEDIUM, path_level=1)
+        usage = WeeklySkillUsage.objects.get(character_sheet=self.sheet, trait=self.trait)
+        assert usage.check_count == 1
+        assert usage.points_earned == expected_dp
+
+        dev = DevelopmentPoints.objects.get(character_sheet=self.sheet, trait=self.trait)
+        assert dev.total_earned == expected_dp
+
+    def test_none_effort_writes_nothing(self):
+        """A check with no effort_level writes no accrual rows."""
+        perform_check(
+            self.character,
+            self.check_type,
+            target_difficulty=0,
+            effort_level=None,
+        )
+
+        assert not WeeklySkillUsage.objects.filter(character_sheet=self.sheet).exists()
+        assert not DevelopmentPoints.objects.filter(character_sheet=self.sheet).exists()
+
+    def test_no_character_sheet_does_not_crash(self):
+        """A sheetless character (object/ephemeral opponent) is skipped silently."""
+        sheetless = CharacterFactory()
+
+        result = perform_check(
+            sheetless,
+            self.check_type,
+            target_difficulty=0,
+            effort_level=EffortLevel.MEDIUM,
+        )
+
+        assert result is not None
+        assert not WeeklySkillUsage.objects.filter(trait=self.trait).exists()
+        assert not DevelopmentPoints.objects.filter(trait=self.trait).exists()
+
+    def test_second_check_same_week_increments(self):
+        """A second check in the same game week upserts via the F() increment path,
+        rather than duplicating the WeeklySkillUsage row."""
+        perform_check(
+            self.character,
+            self.check_type,
+            target_difficulty=0,
+            effort_level=EffortLevel.MEDIUM,
+        )
+        perform_check(
+            self.character,
+            self.check_type,
+            target_difficulty=0,
+            effort_level=EffortLevel.MEDIUM,
+        )
+
+        expected_dp = calculate_check_dev_points(EffortLevel.MEDIUM, path_level=1)
+        usages = WeeklySkillUsage.objects.filter(character_sheet=self.sheet, trait=self.trait)
+        assert usages.count() == 1
+        usage_data = usages.values("check_count", "points_earned").first()
+        assert usage_data["check_count"] == 2
+        assert usage_data["points_earned"] == expected_dp * 2
+
+    def test_forced_outcome_path_also_awards(self):
+        """The test-rig forced-outcome path (force_check_outcome) awards too --
+        deliberate: integration tests that force an outcome should observe the
+        same accrual production checks do (#3039)."""
+        success_outcome = self.setup["outcomes"]["success"]
+        with force_check_outcome(success_outcome):
+            perform_check(
+                self.character,
+                self.check_type,
+                target_difficulty=0,
+                effort_level=EffortLevel.MEDIUM,
+            )
+
+        expected_dp = calculate_check_dev_points(EffortLevel.MEDIUM, path_level=1)
+        usage = WeeklySkillUsage.objects.get(character_sheet=self.sheet, trait=self.trait)
+        assert usage.check_count == 1
+        assert usage.points_earned == expected_dp
+
+        dev = DevelopmentPoints.objects.get(character_sheet=self.sheet, trait=self.trait)
+        assert dev.total_earned == expected_dp
