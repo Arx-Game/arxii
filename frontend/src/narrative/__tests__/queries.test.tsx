@@ -53,6 +53,7 @@ function createWrapper() {
           email_verified: true,
           can_create_characters: false,
           is_staff: false,
+          is_gm: false,
           available_characters: [],
           pending_applications: [],
         },

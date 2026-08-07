@@ -18,6 +18,8 @@ import type {
   BulletinPostUpdateBody,
   BulletinReplyCreateBody,
   BulletinReplyUpdateBody,
+  GMApplicationCreateBody,
+  GMApplicationCreateResponse,
   GMTable,
   GMTableCreateBody,
   GMTableMembership,
@@ -59,6 +61,7 @@ const TABLES_URL = '/api/gm/tables';
 const MEMBERSHIPS_URL = '/api/gm/table-memberships';
 const BULLETIN_POSTS_URL = '/api/table-bulletin-posts';
 const BULLETIN_REPLIES_URL = '/api/table-bulletin-replies';
+const GM_APPLICATIONS_URL = '/api/gm/applications';
 
 // ---------------------------------------------------------------------------
 // Tables CRUD
@@ -324,4 +327,25 @@ export async function updateBulletinReply(
 export async function deleteBulletinReply(id: number): Promise<void> {
   const res = await apiFetch(`${BULLETIN_REPLIES_URL}/${id}/`, { method: 'DELETE' });
   if (!res.ok) await throwApiError(res, `Failed to delete bulletin reply ${id}`);
+}
+
+// ---------------------------------------------------------------------------
+// GM application (#3041)
+// ---------------------------------------------------------------------------
+
+/**
+ * POST /api/gm/applications/
+ * Any authenticated player applies to become a GM. Rejected server-side if
+ * the account already has a GMProfile or a pending application.
+ */
+export async function createGMApplication(
+  data: GMApplicationCreateBody
+): Promise<GMApplicationCreateResponse> {
+  const res = await apiFetch(`${GM_APPLICATIONS_URL}/`, {
+    method: 'POST',
+    headers: jsonHeaders(),
+    body: JSON.stringify(data),
+  });
+  if (!res.ok) await throwApiError(res, 'Failed to submit GM application');
+  return res.json() as Promise<GMApplicationCreateResponse>;
 }

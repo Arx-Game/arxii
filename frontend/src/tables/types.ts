@@ -63,6 +63,22 @@ export interface GMTableMembershipCreateBody {
 }
 
 // ---------------------------------------------------------------------------
+// GM application (#3041) — player-facing "apply to be a GM" form.
+// Mirrors GMApplicationCreateSerializer, which only accepts/returns
+// application_text; the create endpoint is create-only for non-staff callers
+// (list/retrieve/update are staff-only), so there is no submitted-application
+// read path to reflect here.
+// ---------------------------------------------------------------------------
+
+export interface GMApplicationCreateBody {
+  application_text: string;
+}
+
+export interface GMApplicationCreateResponse {
+  application_text: string;
+}
+
+// ---------------------------------------------------------------------------
 // Paginated wrappers
 // ---------------------------------------------------------------------------
 
