@@ -120,3 +120,24 @@ class AccountLevelMuteTests(TestCase):
         # account_muted still resolves against the ORIGINAL player, per the snapshot contract.
         assert account_muted(viewer_player=self.muter, target_player=original_player) is True
         assert account_muted(viewer_player=self.muter, target_player=new_player) is False
+
+    def test_escalation_backfills_a_null_muted_player_snapshot(self) -> None:
+        """Final review (#2996): a mute created against a VACANT persona (no current player) has
+        nothing to snapshot at INSERT time -- ``muted_player`` stays null. If that persona later
+        gains a tenure and the owner re-issues the mute with ``account_level=True``, the
+        escalation must backfill the snapshot instead of silently no-op'ing forever (the update
+        branch only ever wrote ``mute_ic``/``mute_ooc``/``account_level`` before this fix).
+        """
+        persona = PersonaFactory()  # bare -- no RosterEntry, so no current player yet.
+        mute = set_mute(owner=self.muter, muted_persona=persona)
+        assert mute.muted_player_id is None
+
+        # The persona gains a tenure after the mute already exists.
+        roster_entry = RosterEntryFactory(character_sheet=persona.character_sheet)
+        player_data = PlayerDataFactory()
+        RosterTenureFactory(player_data=player_data, roster_entry=roster_entry)
+
+        mute = set_mute(owner=self.muter, muted_persona=persona, account_level=True)
+        assert mute.account_level is True
+        assert mute.muted_player_id == player_data.pk
+        assert account_muted(viewer_player=self.muter, target_player=player_data) is True

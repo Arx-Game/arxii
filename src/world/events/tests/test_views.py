@@ -665,3 +665,105 @@ class EventInviteBlockMuteVisibilityTestCase(APITestCase):
         unique_fields = {"id", "invited_at"}
         for field in set(blocked_data.keys()) - unique_fields:
             self.assertEqual(blocked_data[field], control_data[field], field)
+
+
+class EventInvitationListVisibilityTestCase(APITestCase):
+    """Final review (#2996) — ``EventInvitationViewSet.list`` used to return every invitation
+    row in the game to any authenticated caller, bypassing both the block/mute exclusion the
+    event-visibility side already applies AND any notion of "is this your invitation to see"
+    at all. This locks down the scoping fix: only the invitee, the event's host(s), and staff
+    may list a given invitation row, and a blocked/muted inviter is excluded even for the
+    invitee they targeted.
+    """
+
+    def setUp(self) -> None:
+        self.account = AccountFactory()
+        identity = CharacterSheetFactory()
+        self.invitee_tenure = RosterTenureFactory(
+            roster_entry__character_sheet__character=identity.character,
+            player_data__account=self.account,
+        )
+        self.invitee_persona = identity.primary_persona
+
+        self.inviter_account = AccountFactory()
+        inviter_identity = CharacterSheetFactory()
+        self.inviter_tenure = RosterTenureFactory(
+            roster_entry__character_sheet__character=inviter_identity.character,
+            player_data__account=self.inviter_account,
+        )
+        self.inviter_persona = inviter_identity.primary_persona
+
+        self.event = EventFactory(is_public=False)
+        EventHostFactory(event=self.event, persona=self.inviter_persona)
+        self.invitation = EventInvitationFactory(
+            event=self.event,
+            target_persona=self.invitee_persona,
+            invited_by=self.inviter_persona,
+        )
+
+        self.list_url = f"/api/events/invitations/?event={self.event.id}"
+
+    def _invitation_ids(self, response) -> list[int]:
+        results = response.data.get("results", response.data)
+        return [row["id"] for row in results]
+
+    def test_anonymous_cannot_list(self) -> None:
+        response = self.client.get(self.list_url)
+        self.assertIn(
+            response.status_code, (status.HTTP_401_UNAUTHORIZED, status.HTTP_403_FORBIDDEN)
+        )
+
+    def test_invitee_sees_their_own_invitation(self) -> None:
+        self.client.force_authenticate(user=self.account)
+        response = self.client.get(self.list_url)
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertIn(self.invitation.id, self._invitation_ids(response))
+
+    def test_host_sees_the_invitation_they_sent(self) -> None:
+        self.client.force_authenticate(user=self.inviter_account)
+        response = self.client.get(self.list_url)
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertIn(self.invitation.id, self._invitation_ids(response))
+
+    def test_unrelated_third_party_does_not_see_the_invitation(self) -> None:
+        """The pre-fix bug: an unrelated authenticated caller could list ANY invitation."""
+        third_party = AccountFactory()
+        third_identity = CharacterSheetFactory()
+        RosterTenureFactory(
+            roster_entry__character_sheet__character=third_identity.character,
+            player_data__account=third_party,
+        )
+        self.client.force_authenticate(user=third_party)
+        response = self.client.get(self.list_url)
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertNotIn(self.invitation.id, self._invitation_ids(response))
+
+    def test_staff_sees_the_invitation(self) -> None:
+        staff = AccountFactory(is_staff=True)
+        self.client.force_authenticate(user=staff)
+        response = self.client.get(self.list_url)
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertIn(self.invitation.id, self._invitation_ids(response))
+
+    def test_block_excludes_the_invitation_from_the_invitees_list(self) -> None:
+        Block.objects.create(
+            owner=self.invitee_tenure.player_data,
+            blocked_player=self.inviter_tenure.player_data,
+            account_level=True,
+        )
+        self.client.force_authenticate(user=self.account)
+        response = self.client.get(self.list_url)
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertNotIn(self.invitation.id, self._invitation_ids(response))
+
+    def test_mute_excludes_the_invitation_from_the_muters_list(self) -> None:
+        Mute.objects.create(
+            owner=self.invitee_tenure.player_data,
+            muted_persona=PersonaFactory(),
+            muted_player=self.inviter_tenure.player_data,
+            account_level=True,
+        )
+        self.client.force_authenticate(user=self.account)
+        response = self.client.get(self.list_url)
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertNotIn(self.invitation.id, self._invitation_ids(response))

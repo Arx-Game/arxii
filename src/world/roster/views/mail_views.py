@@ -19,7 +19,7 @@ from rest_framework.serializers import BaseSerializer
 from world.roster.models import PlayerMail
 from world.roster.serializers import PlayerMailSerializer, UnreadMailCountSerializer
 from world.roster.services.mail_notifications import notify_mail_arrived
-from world.scenes.block_services import blocked_player_ids_for
+from world.scenes.block_services import account_block_active, blocked_player_ids_for
 from world.scenes.mute_services import account_muted
 
 
@@ -76,6 +76,12 @@ class PlayerMailViewSet(
         serializes, so ``serializer.data`` is force-cached BEFORE that mutation — otherwise the
         sender's response would show the recipient's auto-filed state and leak the mute back to
         them (the exact byte-identity invariant #2996's write-then-filter contract requires).
+
+        The live websocket ping is a DIFFERENT leak surface than the inbox row: it names the
+        sender + subject directly to the recipient's client regardless of whether they ever open
+        the mail list, so it must be suppressed outright (not just filtered on read) when the
+        recipient has blocked or muted the sender — otherwise a blocked/muted sender's identity
+        reaches the recipient anyway, on account-level Block/Mute alike.
         """
         sender_tenure = serializer.validated_data["sender_tenure"]
         if (
@@ -89,20 +95,25 @@ class PlayerMailViewSet(
         _ = serializer.data
         sender_player = mail.sender_tenure.player_data if mail.sender_tenure_id else None
         recipient_player = mail.recipient_tenure.player_data
-        if (
-            sender_player is not None
-            and recipient_player is not None
-            and account_muted(viewer_player=recipient_player, target_player=sender_player)
-        ):
+        muted = sender_player is not None and account_muted(
+            viewer_player=recipient_player, target_player=sender_player
+        )
+        if muted:
             mail.read_date = timezone.now()
             mail.archived = True
             mail.save(update_fields=["read_date", "archived"])
+        blocked = sender_player is not None and account_block_active(
+            player_a=recipient_player, player_b=sender_player
+        )
         # Deferred via transaction.on_commit (the notify_battle_state_changed pattern,
         # battles/services.py) so the ping never fires on a row a concurrent reader can't
         # yet see -- fires correctly under autocommit even though this view has no
-        # explicit atomic block.
-        recipient_tenure = mail.recipient_tenure
-        transaction.on_commit(lambda: notify_mail_arrived(recipient_tenure, mail))
+        # explicit atomic block. Skipped entirely for a blocked or muted sender (#2996 final
+        # review) -- the write itself stays unconditional (write-then-filter), only the
+        # notification is suppressed.
+        if not blocked and not muted:
+            recipient_tenure = mail.recipient_tenure
+            transaction.on_commit(lambda: notify_mail_arrived(recipient_tenure, mail))
 
     @extend_schema(request=None, responses=PlayerMailSerializer, tags=["roster"])
     @action(detail=True, methods=[HTTPMethod.POST], url_path="mark-read")

@@ -370,7 +370,13 @@ class EventInvitationViewSet(
 
     def get_permissions(self) -> list:
         if self.action == "list":
-            return [IsAuthenticatedOrReadOnly()]
+            # #2996 final review: previously ``IsAuthenticatedOrReadOnly`` let ANY caller,
+            # including anonymous, list every EventInvitation row in the game. There is no
+            # legitimate anonymous consumer of this endpoint (invitation rows are read via
+            # ``EventDetailSerializer``'s nested ``invitations`` field for display; the
+            # frontend never calls this endpoint's ``list``) -- tighten to authenticated, and
+            # scope the queryset itself in ``get_queryset``/``_apply_list_visibility``.
+            return [IsAuthenticated()]
         # ``respond`` is the invitee RSVPing their *own* invitation — the
         # host-permission class does not apply (the invitee is rarely a host);
         # object-level "is this your invite" is enforced inside the Action.
@@ -379,11 +385,58 @@ class EventInvitationViewSet(
         return [IsAuthenticated(), IsInvitationEventHostOrStaff()]
 
     def get_queryset(self) -> QuerySet[EventInvitation]:
-        return EventInvitation.objects.select_related(
+        qs = EventInvitation.objects.select_related(
             "target_persona",
             "target_organization",
             "target_society",
         ).order_by("-pk")
+        if self.action != "list":
+            return qs
+        return self._apply_list_visibility(qs)
+
+    def _apply_list_visibility(self, qs: QuerySet[EventInvitation]) -> QuerySet[EventInvitation]:
+        """Scope ``list`` to invitations the caller can legitimately see (#2996 final review).
+
+        Before this fix ``list`` returned every ``EventInvitation`` row in the game to any
+        authenticated caller — letting a blocked or muted party read invitation rows that
+        ``EventViewSet._invited_event_ids`` was already hiding from them on the event-visibility
+        side, and letting anyone enumerate invitations for events they have no relationship to
+        at all. Mirrors ``EventViewSet._apply_visibility_filter``'s shape: staff see everything;
+        everyone else sees only invitations tied to an event they host, or targeting one of
+        their own personas — the two roles that legitimately see an invitation row — with the
+        same block/mute exclusion against the inviter that ``_invited_event_ids`` applies
+        (Python-side, since a NOT-condition on a multi-valued relation doesn't compose safely
+        with the sibling OR branches above it).
+        """
+        user = self.request.user
+        if user.is_staff:
+            return qs
+        persona_ids = self._active_persona_ids()
+        if not persona_ids:
+            return qs.none()
+        qs = qs.filter(
+            Q(event__hosts__persona_id__in=persona_ids)
+            | Q(target_type=InvitationTargetType.PERSONA, target_persona_id__in=persona_ids)
+        ).distinct()
+
+        try:
+            viewer_player = user.player_data
+        except AttributeError:
+            return qs
+        excluded_player_ids = blocked_player_ids_for(viewer_player) | muted_player_ids_for(
+            viewer_player=viewer_player
+        )
+        if not excluded_player_ids:
+            return qs
+
+        visible_ids: set[int] = set()
+        for invitation in qs.select_related("invited_by__character_sheet__roster_entry"):
+            inviter = invitation.invited_by
+            inviter_player = _persona_player(inviter) if inviter is not None else None
+            if inviter_player is not None and inviter_player.pk in excluded_player_ids:
+                continue
+            visible_ids.add(invitation.pk)
+        return qs.filter(pk__in=visible_ids)
 
     def get_serializer_class(self):  # type: ignore[override]
         if self.action == "create":

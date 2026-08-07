@@ -356,3 +356,48 @@ class PlayerMailBlockMuteTestCase(TestCase):
         # (see PlayerMailSerializer.Meta.fields); ``read_date`` is the one exposed field the
         # mutation touches.
         assert muted_response.json()["read_date"] is None
+
+    def test_block_suppresses_arrival_notification(self):
+        """Final review: the live push ping names the sender + subject directly, independent of
+        the inbox-row filter -- it must be suppressed outright for a blocked sender, not just
+        excluded from the recipient's list read.
+        """
+        Block.objects.create(
+            owner=self.recipient,
+            blocked_player=self.blocked_sender,
+            account_level=True,
+        )
+        with mock.patch("world.roster.views.mail_views.notify_mail_arrived") as mock_notify:
+            with self.captureOnCommitCallbacks(execute=True):
+                response = self._send(
+                    self.blocked_sender.account, self.blocked_tenure, "Blocked Sender Notify"
+                )
+        assert response.status_code == 201
+        mock_notify.assert_not_called()
+
+    def test_mute_suppresses_arrival_notification(self):
+        """Final review: a muted sender's mail is auto-filed AND must never ping either."""
+        muted_persona = PersonaFactory()
+        Mute.objects.create(
+            owner=self.recipient,
+            muted_persona=muted_persona,
+            muted_player=self.blocked_sender,
+            account_level=True,
+        )
+        with mock.patch("world.roster.views.mail_views.notify_mail_arrived") as mock_notify:
+            with self.captureOnCommitCallbacks(execute=True):
+                response = self._send(
+                    self.blocked_sender.account, self.blocked_tenure, "Muted Sender Notify"
+                )
+        assert response.status_code == 201
+        mock_notify.assert_not_called()
+
+    def test_unblocked_unmuted_control_still_notifies(self):
+        """Control: an ordinary sender's mail still schedules the arrival ping as before."""
+        with mock.patch("world.roster.views.mail_views.notify_mail_arrived") as mock_notify:
+            with self.captureOnCommitCallbacks(execute=True):
+                response = self._send(
+                    self.control_sender.account, self.control_tenure, "Control Notify"
+                )
+        assert response.status_code == 201
+        mock_notify.assert_called_once()

@@ -110,7 +110,14 @@ def set_mute(
         # case — no account_level passed, so it defaults False) must never silently downgrade
         # an existing account-level mute back to persona-scoped.
         mute.account_level = mute.account_level or account_level
-        mute.save(update_fields=["mute_ic", "mute_ooc", "account_level"])
+        # Backfill a null snapshot (#2996 final review): a mute created while the persona was
+        # vacant (no current player) never got a ``muted_player`` at INSERT time — the
+        # ``defaults`` dict only applies on create. Without this, escalating that same mute to
+        # account_level later (now that the persona HAS a player) leaves ``muted_player`` null
+        # forever, so ``account_muted``/``muted_player_ids_for`` can never match it — a silent
+        # no-op escalation. Only fills a null; never overwrites an already-pinned snapshot.
+        mute.muted_player = mute.muted_player or _persona_player(muted_persona)
+        mute.save(update_fields=["mute_ic", "mute_ooc", "account_level", "muted_player"])
     return mute
 
 
