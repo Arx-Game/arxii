@@ -1623,6 +1623,67 @@ automatically via `world.magic.services.tradition_membership.join_tradition` and
 the `CharacterDistinction` row (`ModifierSource.character_distinction` is `on_delete=CASCADE`),
 so the surcharge disappears the moment the drawback is shed, no separate cleanup needed.
 
+### Check-Based Training Session Trigger (#2739) [BUILT & WIRED]
+
+`resolve_training_check()` (`services/technique_training.py`, #2727) wraps
+`contribute_to_technique_progress` with a learning check — the learner rolls
+intellect + "Arcane Theory" against a difficulty derived from the technique's tier,
+the learner's level, and any teacher's skill bonus (self-study takes a flat
+penalty) — but shipped with no production caller: nothing dispatched it from telnet
+or the web. #2739 is that trigger, one seam for both surfaces:
+
+- **Action** — `TrainTechniqueAction` (`actions/definitions/technique_training.py`,
+  key `train_technique`, REGISTRY, `category="magic"`, `target_type=SELF`). Kwargs:
+  `technique_id` (the `Technique` pk — resolved against the learner's own open
+  `TechniqueProgress` meter; no meter is a clean failure naming the two front doors
+  that create one — accepting a teaching offer, or an Academy TRAIN offer, both
+  covered above), `ap_to_invest` (defaults to 1 — no base-session-cost constant
+  exists yet on `GiftAcquisitionConfig` or the seam itself; a supplied value ≤ 0 is
+  rejected). Resolves a co-present teacher: `progress.teacher_tenure` counts only
+  when that tenure's live character shares the learner's room *at session time* —
+  never a location hard-block (Decision 3a), true for both PC-teacher meters and
+  Academy TRAIN meters; a teacher out of the room silently drops to self-study
+  rates for that session. `resolve_training_check`'s own `WeeklyTrainingCapExceeded`
+  / `MagicError` raises map to failure `ActionResult`s; a bare `ValueError` from
+  `learn_technique` (reached on meter completion) — raised when the learner already
+  holds the `CharacterTechnique`, e.g. a stale meter left open after the technique
+  arrived by another route (a staff grant, a `TechniqueGrant` item) — maps to a
+  failure the same way rather than escaping as a traceback. On success, `data`
+  carries `{technique_id, outcome_name, points_before, points_after,
+  total_required, technique_acquired, self_study}`.
+- **Telnet** — `CmdTrain` (`commands/training.py`, key `train`). `train <technique>
+  [=<ap>]` resolves the technique by name and dispatches the action; bare `train`
+  lists the caller's open `TechniqueProgress` meters (name, progress/total,
+  teacher-or-dash) with no dispatch — a read path, not an action.
+- **Web** — `TechniqueProgressViewSet` (`world/magic/views_technique_progress.py`,
+  routed at `/api/magic/technique-progress/`). `list` returns the scoped
+  character's own meters via `TechniqueProgressSerializer` (technique id/name,
+  `points_accumulated`/`total_required`, teacher name-or-null via
+  `RosterTenure.display_name`, `source_label` from
+  `TechniqueProgress.get_source_display()`, and a batched-query
+  `weekly_remaining` — one `GameWeek` lookup + one config lookup + one query over
+  the listed meters' technique ids, never per-row). `POST
+  <technique_id>/train/` (`TrainTechniqueRequestSerializer`, body
+  `{ap_to_invest?}`) dispatches the action, mapping a failure `ActionResult` to
+  HTTP 400 with its message. `<technique_id>` is the `Technique` pk (matching the
+  action's own kwarg), not the `TechniqueProgress` row's pk, so a technique with
+  no meter surfaces the action's own "you aren't training that" failure as a clean
+  400 rather than a router-level 404. Character scoping mirrors
+  `MotifStyleViewSet` (#2030): an `X-Character-ID` header, validated as owned, takes
+  precedence over the caller's active puppet.
+- **Frontend** — `TechniqueProgressPanel` (`frontend/src/magic/components/`),
+  mounted in `SpellbookTab` below `MotifStylePanel`, own-view only. One card per
+  meter: a progress bar/fraction, a "Taught by `<name>`"/"Self-study" badge, weekly
+  remaining (when the server supplies it), an optional AP-to-invest number input,
+  and a Train button. The session outcome (or the server's 400 message) renders
+  inline per row; the mutation invalidates the meter query so the refetched
+  figures reflect the session immediately. See `frontend/src/magic/CLAUDE.md` for
+  the query/mutation wire contract.
+
+This closes the same "built but unreachable" gap the acquisition surface above
+closed for `spend_xp_on_gift_unlock`/`accept_technique_offer` — `resolve_training_check`
+now has exactly one production caller, shared by both client surfaces.
+
 ### Entry-Flourish Declaration (entry_flourish.py, models/endorsement.py — #1140)
 
 Poll-able offer created on a successful Entrance social action; the entrant picks one
@@ -2923,6 +2984,15 @@ the legacy ThreadType lookup no longer exists.
 | `/techniques/` | GET/POST/PATCH | Character techniques |
 | `/techniques/author/` | POST | Author a technique via `AuthorTechniqueAction`; 201/400/403 |
 | `/techniques/price/` | POST | Dry-run budget breakdown (read-only) |
+
+### Technique Progress / Training Session (#2739)
+
+| Endpoint | Method | Description |
+|----------|--------|-------------|
+| `/technique-progress/` | GET | The acting character's own `TechniqueProgress` meters (`X-Character-ID` header, mirrors `MotifStyleViewSet`'s scoping) — bare array, not paginated |
+| `/technique-progress/{technique_id}/train/` | POST | Runs one training session via `TrainTechniqueAction`; body `{ap_to_invest?}`. `{technique_id}` is the `Technique` pk, not the meter's own pk — a technique with no meter fails 400 with the action's own message, never a 404 |
+
+Telnet parity: `train <technique> [=<ap>]` / bare `train` for the meter list (`CmdTrain`).
 
 ### Mage Scars (renamed from Magical Scars — §7.2 display-only)
 

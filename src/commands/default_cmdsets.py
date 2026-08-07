@@ -166,6 +166,7 @@ from commands.story import CmdStory
 from commands.story_rooms import CmdJoinRoom, CmdLeaveRoom, CmdSceneRoom  # #2450
 from commands.technique import CmdTechnique
 from commands.threads import CmdThreads
+from commands.training import CmdTrain  # #2739
 from commands.travel import CmdTravel  # #2163
 from commands.turf import CmdTurf  # #2862 gap close
 from commands.vault import CmdVault
@@ -258,6 +259,8 @@ class CharacterCmdSet(default_cmds.CharacterCmdSet):
             CmdSignature,
             # #2030 — motif style-binding namespace (bindstyle/unbindstyle/list).
             CmdMotif,
+            # #2739 — technique training sessions (bare = list meters).
+            CmdTrain,
             # #2183 — dramatic-moment suggestion inbox (suggestions/confirm/dismiss).
             CmdMoment,
             CmdWeaveThread,

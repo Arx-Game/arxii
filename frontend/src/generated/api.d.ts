@@ -12537,6 +12537,72 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
+  '/api/magic/technique-progress/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /**
+     * @description List the acting character's technique-progress meters; train one via POST.
+     *
+     *     ``list`` returns the scoped character's own ``TechniqueProgress`` rows —
+     *     another account's meters are never visible. ``POST <technique_id>/train/``
+     *     dispatches :class:`TrainTechniqueAction` (#2739 Task 1); the ``<id>`` path
+     *     segment is the ``Technique`` pk (matching the action's own ``technique_id``
+     *     kwarg), not the ``TechniqueProgress`` row's pk, so a technique with no
+     *     meter yet cleanly surfaces the action's own "you aren't training that"
+     *     failure as a 400 rather than a router-level 404.
+     *
+     *     Character scoping mirrors ``MotifStyleViewSet`` (#2030): an
+     *     ``X-Character-ID`` header, once validated as owned via
+     *     ``CharacterContextMixin``, takes precedence over the caller's active
+     *     puppet; no header falls back to the puppet (400 if none); a header
+     *     naming an unowned character 404s rather than silently falling back.
+     */
+    get: operations['magic_technique_progress_retrieve'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/magic/technique-progress/{id}/train/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /**
+     * @description List the acting character's technique-progress meters; train one via POST.
+     *
+     *     ``list`` returns the scoped character's own ``TechniqueProgress`` rows —
+     *     another account's meters are never visible. ``POST <technique_id>/train/``
+     *     dispatches :class:`TrainTechniqueAction` (#2739 Task 1); the ``<id>`` path
+     *     segment is the ``Technique`` pk (matching the action's own ``technique_id``
+     *     kwarg), not the ``TechniqueProgress`` row's pk, so a technique with no
+     *     meter yet cleanly surfaces the action's own "you aren't training that"
+     *     failure as a 400 rather than a router-level 404.
+     *
+     *     Character scoping mirrors ``MotifStyleViewSet`` (#2030): an
+     *     ``X-Character-ID`` header, once validated as owned via
+     *     ``CharacterContextMixin``, takes precedence over the caller's active
+     *     puppet; no header falls back to the puppet (400 if none); a header
+     *     naming an unowned character 404s rather than silently falling back.
+     */
+    post: operations['magic_technique_progress_train_create'];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   '/api/magic/techniques/': {
     parameters: {
       query?: never;
@@ -56260,6 +56326,44 @@ export interface operations {
         content: {
           'application/json': components['schemas']['AcceptTechniqueOfferResponse'];
         };
+      };
+    };
+  };
+  magic_technique_progress_retrieve: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description No response body */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+    };
+  };
+  magic_technique_progress_train_create: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        id: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description No response body */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
       };
     };
   };

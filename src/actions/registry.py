@@ -442,6 +442,7 @@ from actions.definitions.tasking import (
     SuppressListenerAction,
 )
 from actions.definitions.technique_authoring import AuthorTechniqueAction
+from actions.definitions.technique_training import TrainTechniqueAction
 from actions.definitions.threads import WeaveThreadAction
 from actions.definitions.traps import (
     ArmTrapAction,
@@ -604,6 +605,7 @@ _ALL_ACTIONS: list[Action] = [
     PlaceChallengeAction(),
     PerformRitualAction(),
     AuthorTechniqueAction(),
+    TrainTechniqueAction(),
     ImbueAction(),
     WeaveThreadAction(),
     StartRoundAction(),

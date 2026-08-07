@@ -361,6 +361,7 @@ class ActionRegistryTests(TestCase):
             "give_writeup_kudos",
             "file_writeup_complaint",
             "author_technique",
+            "train_technique",
             "engage_covenant_membership",
             "disengage_covenant_membership",
             "leave_covenant",

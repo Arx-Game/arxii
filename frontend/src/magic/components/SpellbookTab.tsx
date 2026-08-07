@@ -27,6 +27,7 @@ import type { CharacterSheetAura, CharacterSheetTechnique } from '@/character_sh
 import type { TechniqueForm } from '@/magic/types';
 import { MotifStylePanel } from './MotifStylePanel';
 import { TechniqueEffectSummaryDisplay } from './TechniqueEffectSummary';
+import { TechniqueProgressPanel } from './TechniqueProgressPanel';
 import { GlimpseEditorDialog } from './glimpse/GlimpseEditorDialog';
 
 interface Props {
@@ -237,6 +238,8 @@ export function SpellbookTab({ characterId, isMyCharacter }: Props) {
       )}
 
       {isMyCharacter && magic && <MotifStylePanel characterSheetId={characterId} />}
+
+      {isMyCharacter && magic && <TechniqueProgressPanel characterSheetId={characterId} />}
 
       {magic?.aura && (
         <Card data-testid="spellbook-aura">

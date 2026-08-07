@@ -57,6 +57,7 @@ from world.magic.models import (
     SceneEntryEndorsement,
     StylePresentationEndorsement,
     Technique,
+    TechniqueProgress,
     TechniqueStyle,
     Thread,
     ThreadLevelUnlock,
@@ -3644,3 +3645,61 @@ class CrossingResultSerializer(serializers.Serializer):
     option_name = serializers.CharField()
     effect_kind = serializers.CharField()
     crossing_level = serializers.IntegerField()
+
+
+# =============================================================================
+# Technique progress meters — web surface for check-based training (#2739)
+# =============================================================================
+
+
+class TechniqueProgressSerializer(serializers.ModelSerializer):
+    """Read serializer for a learner's ``TechniqueProgress`` meter (#2739 Task 2).
+
+    ``weekly_remaining`` is populated only when the view supplies a
+    ``weekly_remaining_by_technique_id`` mapping in the serializer context — a
+    single batched query the view runs once per request (never per-row) — so
+    it degrades to ``None`` rather than firing an N+1 query when omitted.
+    """
+
+    technique_id = serializers.IntegerField(read_only=True)
+    technique_name = serializers.CharField(source="technique.name", read_only=True)
+    teacher_name = serializers.SerializerMethodField()
+    source_label = serializers.SerializerMethodField()
+    weekly_remaining = serializers.SerializerMethodField()
+
+    class Meta:
+        model = TechniqueProgress
+        fields = [
+            "id",
+            "technique_id",
+            "technique_name",
+            "points_accumulated",
+            "total_required",
+            "teacher_name",
+            "source_label",
+            "weekly_remaining",
+        ]
+        read_only_fields = fields
+
+    @extend_schema_field(serializers.CharField(allow_null=True))
+    def get_teacher_name(self, obj: TechniqueProgress) -> str | None:
+        """The teacher's anonymity-respecting display name, or ``None`` for self-study."""
+        if obj.teacher_tenure_id is None:
+            return None
+        return obj.teacher_tenure.display_name
+
+    def get_source_label(self, obj: TechniqueProgress) -> str:
+        return obj.get_source_display()
+
+    @extend_schema_field(serializers.IntegerField(allow_null=True))
+    def get_weekly_remaining(self, obj: TechniqueProgress) -> int | None:
+        remaining_by_id = self.context.get("weekly_remaining_by_technique_id")
+        if remaining_by_id is None:
+            return None
+        return remaining_by_id.get(obj.technique_id)
+
+
+class TrainTechniqueRequestSerializer(serializers.Serializer):
+    """Request shape for ``POST .../technique-progress/<technique_id>/train/``."""
+
+    ap_to_invest = serializers.IntegerField(required=False, min_value=1)

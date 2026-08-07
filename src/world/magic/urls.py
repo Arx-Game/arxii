@@ -151,6 +151,11 @@ from world.magic.views_motif_style import MotifStyleViewSet  # noqa: E402
 
 router.register("motif-styles", MotifStyleViewSet, basename="motif-style")
 
+# #2739 Task 2 — Technique progress meter web surface
+from world.magic.views_technique_progress import TechniqueProgressViewSet  # noqa: E402
+
+router.register("technique-progress", TechniqueProgressViewSet, basename="technique-progress")
+
 
 urlpatterns = [
     # Literal paths MUST come before *router.urls so that "rituals/perform/" is

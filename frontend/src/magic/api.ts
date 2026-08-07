@@ -66,10 +66,13 @@ import type {
   StageAdvanceRespondRequest,
   TechniqueCostBreakdown,
   TechniqueDesignRequest,
+  TechniqueProgressMeter,
   TetherBond,
   Thread,
   ThreadApplicability,
   ThreadHubSummary,
+  TrainTechniqueRequest,
+  TrainTechniqueResult,
   UnbindMotifStyleRequest,
   WeaveThreadRequest,
 } from './types';
@@ -105,6 +108,7 @@ const PATH_OPTIONS_URL = '/api/progression/path-options/';
 const MOTIF_STYLES_URL = '/api/magic/motif-styles';
 const ITEMS_STYLES_URL = '/api/items/styles';
 const CHARACTER_AURAS_URL = '/api/magic/character-auras';
+const TECHNIQUE_PROGRESS_URL = '/api/magic/technique-progress';
 
 // ---------------------------------------------------------------------------
 // Soul Tether reads
@@ -1176,4 +1180,52 @@ export async function unlinkGlimpseDistinction(
     await readErrorDetail(res, 'Failed to unlink distinction from the glimpse');
   }
   return res.json();
+}
+
+// ---------------------------------------------------------------------------
+// Technique progress meters, #2739
+//
+// Wire contract: TechniqueProgressViewSet (src/world/magic/views_technique_progress.py),
+// character scoping mirrors MotifStyleViewSet — X-Character-ID header, validated
+// as owned, takes precedence over the caller's active puppet.
+// ---------------------------------------------------------------------------
+
+/**
+ * GET /api/magic/technique-progress/
+ *
+ * The training meters (in-progress technique acquisitions) for the character
+ * named by the `X-Character-ID` header. Bare array — the view's `list` returns
+ * `Response(serializer.data)` directly, no pagination class.
+ */
+export async function getTechniqueProgress(characterId: number): Promise<TechniqueProgressMeter[]> {
+  const res = await apiFetch(`${TECHNIQUE_PROGRESS_URL}/`, {
+    headers: { 'X-Character-ID': String(characterId) },
+  });
+  if (!res.ok) throw new Error('Failed to load technique training meters');
+  return res.json() as Promise<TechniqueProgressMeter[]>;
+}
+
+/**
+ * POST /api/magic/technique-progress/{technique_id}/train/
+ *
+ * Runs one training session against an in-progress meter for the character
+ * named by the `X-Character-ID` header. `technique_id` is the `Technique` pk
+ * (matching `TrainTechniqueAction`'s own kwarg), not the `TechniqueProgress`
+ * row's pk. 400s (no meter, weekly cap hit, can't afford the AP, meter stale)
+ * carry a `{detail}` string — surfaced via `readErrorDetail`.
+ */
+export async function trainTechnique(
+  characterId: number,
+  techniqueId: number,
+  body?: TrainTechniqueRequest
+): Promise<TrainTechniqueResult> {
+  const res = await apiFetch(`${TECHNIQUE_PROGRESS_URL}/${techniqueId}/train/`, {
+    method: 'POST',
+    headers: { ...jsonHeaders(), 'X-Character-ID': String(characterId) },
+    body: JSON.stringify(body ?? {}),
+  });
+  if (!res.ok) {
+    await readErrorDetail(res, 'Failed to train that technique');
+  }
+  return res.json() as Promise<TrainTechniqueResult>;
 }
