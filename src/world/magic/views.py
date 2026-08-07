@@ -1069,10 +1069,14 @@ class RitualViewSet(viewsets.ModelViewSet):
         user = self.request.user
         if user.is_staff:
             return queryset
-        puppet = user.puppet
-        if puppet is None:
+        try:
+            puppet = user.puppet
+            sheet = puppet.sheet_data if puppet is not None else None
+        except AttributeError:
+            # Plain AccountDB rows (API-only auth, tests) carry no puppet
+            # machinery — fail open to the unfiltered catalog, same as an
+            # account browsing with no active character.
             return queryset
-        sheet = puppet.sheet_data
         if sheet is None or magical_profile(sheet) is not None:
             return queryset
         return queryset.filter(hedge_accessible=True)
