@@ -207,10 +207,12 @@ def _seed_progression() -> None:
     from world.progression.seeds import (  # noqa: PLC0415
         seed_durance_officiants,
         seed_major_gift_technique_level_requirement,
+        seed_maturation_stat_caps,
     )
 
     seed_durance_officiants()
     seed_major_gift_technique_level_requirement()
+    seed_maturation_stat_caps()
 
 
 def _seed_npc_services() -> None:

@@ -23,6 +23,7 @@ import { CluesTab } from '@/clues/components/CluesTab';
 import { CrimeTab } from '@/justice/components/CrimeTab';
 import { TitlesPanel } from '@/achievements/components/TitlesPanel';
 import { MaturationPanel } from '@/character_sheets/components/MaturationPanel';
+import { StatPointPanel } from '@/character_sheets/components/StatPointPanel';
 import { MechanicsSection } from '@/character_sheets/components/MechanicsSection';
 import { OriginStoryEditorDialog } from '@/character_sheets/components/OriginStoryEditorDialog';
 import { useCharacterSheetQuery } from '@/character_sheets/queries';
@@ -151,6 +152,7 @@ export function CharacterSheetPage() {
           {isMyCharacter && sheetPayload && (
             <OriginStoryEditorDialog characterId={entry.character.id} sheet={sheetPayload} />
           )}
+          {isMyCharacter && <StatPointPanel sheetId={entry.character.id} />}
           {isMyCharacter && <MaturationPanel sheetId={entry.character.id} />}
           <StatsSection
             age={entry.character.age}

@@ -3322,6 +3322,40 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
+  '/api/character-sheets/{id}/spend-stat-point/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /** @description Spend one Level Stat Point on +1 to a stat (#3001). */
+    post: operations['character_sheets_spend_stat_point_create'];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/character-sheets/{id}/stat-points/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /** @description The owner's Level Stat Point panel state (#3001). */
+    get: operations['character_sheets_stat_points_retrieve'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   '/api/characters/online/': {
     parameters: {
       query?: never;
@@ -37665,6 +37699,18 @@ export interface components {
       /** @description Rich description shown on hover/click in character creation */
       description: string;
     };
+    /**
+     * @description Response for CharacterSheetViewSet.stat-points (#3001): the level spend panel.
+     *
+     *     Reuses ``MaturationStatEntrySerializer`` rows and the maturation input
+     *     serializer for spends — one stat-row shape across both point pools.
+     */
+    StatPointState: {
+      available_points: number;
+      stat_cap: number | null;
+      level: number;
+      stats: components['schemas']['MaturationStatEntry'][];
+    };
     /** @description LAB station snapshot within a crafting quote (#1234). */
     StationStatus: {
       present: boolean;
@@ -44428,6 +44474,52 @@ export interface operations {
         };
         content: {
           'application/json': components['schemas']['MaturationState'];
+        };
+      };
+    };
+  };
+  character_sheets_spend_stat_point_create: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        id: string;
+      };
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['MaturationSpendInputRequest'];
+      };
+    };
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['StatPointState'];
+        };
+      };
+    };
+  };
+  character_sheets_stat_points_retrieve: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        id: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['StatPointState'];
         };
       };
     };

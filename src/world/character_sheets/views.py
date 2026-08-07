@@ -27,6 +27,7 @@ from world.character_sheets.serializers import (
     OriginSlotClearSerializer,
     OriginSlotInputSerializer,
     ProfileTextVersionSerializer,
+    StatPointStateSerializer,
     _viewer_is_privileged,
     get_character_sheet_queryset,
 )
@@ -180,6 +181,73 @@ class CharacterSheetViewSet(RetrieveModelMixin, GenericViewSet):
         except MaturationError as exc:
             return Response({"detail": exc.user_message}, status=status.HTTP_400_BAD_REQUEST)
         return self.maturation(request, pk=pk)
+
+    @extend_schema(responses={200: StatPointStateSerializer})
+    @action(detail=True, methods=[HTTPMethod.GET], url_path="stat-points")
+    def stat_points(self, request: Request, pk: int | None = None) -> Response:
+        """The owner's Level Stat Point panel state (#3001)."""
+        from world.progression.services.maturation import stat_cap_for  # noqa: PLC0415
+        from world.progression.services.skill_development import (  # noqa: PLC0415
+            get_character_path_level,
+        )
+        from world.progression.services.stat_points import available_stat_points  # noqa: PLC0415
+        from world.traits.constants import STAT_DISPLAY_DIVISOR  # noqa: PLC0415
+        from world.traits.models import CharacterTraitValue, Trait, TraitType  # noqa: PLC0415
+
+        sheet = self.get_object()
+        self._check_ownership(sheet)
+        cap = stat_cap_for(sheet)
+        # Stats store internal ×10 (#2894); the panel speaks display dots.
+        values = {
+            tv.trait_id: tv.value // STAT_DISPLAY_DIVISOR
+            for tv in CharacterTraitValue.objects.filter(
+                character=sheet, trait__trait_type=TraitType.STAT
+            )
+        }
+        stats = [
+            {
+                "trait_id": trait.pk,
+                "name": trait.name,
+                "value": values.get(trait.pk, 0),
+                "at_cap": cap is not None and values.get(trait.pk, 0) >= cap,
+            }
+            for trait in Trait.objects.filter(trait_type=TraitType.STAT, is_public=True).order_by(
+                "name"
+            )
+        ]
+        payload = StatPointStateSerializer(
+            {
+                "available_points": available_stat_points(sheet),
+                "stat_cap": cap,
+                "level": get_character_path_level(sheet.character),
+                "stats": stats,
+            }
+        )
+        return Response(payload.data)
+
+    @extend_schema(
+        request=MaturationSpendInputSerializer, responses={200: StatPointStateSerializer}
+    )
+    @action(detail=True, methods=[HTTPMethod.POST], url_path="spend-stat-point")
+    def spend_stat_point_action(self, request: Request, pk: int | None = None) -> Response:
+        """Spend one Level Stat Point on +1 to a stat (#3001)."""
+        from world.progression.exceptions import StatPointError  # noqa: PLC0415
+        from world.progression.services.stat_points import spend_level_stat_point  # noqa: PLC0415
+        from world.traits.models import Trait  # noqa: PLC0415
+
+        sheet = self.get_object()
+        self._check_ownership(sheet)
+        serializer = MaturationSpendInputSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        try:
+            trait = Trait.objects.get(pk=serializer.validated_data["trait_id"])
+        except Trait.DoesNotExist:
+            return Response({"detail": "Trait not found."}, status=status.HTTP_404_NOT_FOUND)
+        try:
+            spend_level_stat_point(sheet, trait)
+        except StatPointError as exc:
+            return Response({"detail": exc.user_message}, status=status.HTTP_400_BAD_REQUEST)
+        return self.stat_points(request, pk=pk)
 
     @extend_schema(responses={200: ProfileTextVersionSerializer(many=True)})
     @action(detail=True, methods=[HTTPMethod.GET], url_path="profile-text-versions")

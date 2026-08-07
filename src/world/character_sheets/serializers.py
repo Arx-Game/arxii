@@ -130,6 +130,19 @@ class MaturationStateSerializer(serializers.Serializer):
     stats = MaturationStatEntrySerializer(many=True)
 
 
+class StatPointStateSerializer(serializers.Serializer):
+    """Response for CharacterSheetViewSet.stat-points (#3001): the level spend panel.
+
+    Reuses ``MaturationStatEntrySerializer`` rows and the maturation input
+    serializer for spends — one stat-row shape across both point pools.
+    """
+
+    available_points = serializers.IntegerField()
+    stat_cap = serializers.IntegerField(allow_null=True)
+    level = serializers.IntegerField()
+    stats = MaturationStatEntrySerializer(many=True)
+
+
 # --- Tiny helpers for nested {id, name} representations ---
 
 

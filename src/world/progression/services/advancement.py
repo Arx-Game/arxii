@@ -94,6 +94,12 @@ def apply_class_level_advance(sheet: CharacterSheet, *, level_after: int) -> Non
 
     recompute_max_anima(sheet)
 
+    # Level stat points live in the levels themselves (#3001): reconcile spend
+    # activity so a reversal refunds and a re-level reactivates (no grant hook).
+    from world.progression.services.stat_points import sync_level_stat_point_spends
+
+    sync_level_stat_point_spends(sheet)
+
 
 def cross_into_path(sheet: CharacterSheet, path: Path) -> PathMagicGrantResult:
     """Switch ``sheet`` onto ``path`` and grant that path's magic (#1579).
