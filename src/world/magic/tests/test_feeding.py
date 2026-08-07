@@ -89,6 +89,85 @@ class FeedAnimaTest(TestCase):
         self.assertEqual(record.amount_mode, FeedMode.GORGE)
         self.assertTrue(record.lost_control)
 
+    def test_killing_drain_yields_death_harvest(self):
+        """#3001: a kill yields death_harvest_multiplier x the victim's FULL maximum.
+
+        Victim max 2 -> harvest 40 (x20). Feeder at 5/10 fills to 10 and banks
+        35 glut — the kill is a rush, not a tank.
+        """
+        _anima(self.feeder, current=5, maximum=10)
+        _anima(self.victim, current=2, maximum=2)
+        with (
+            _quiet_reconcile(),
+            patch("world.magic.services.feeding._maybe_kill_npc_victim", return_value=True),
+            patch("world.magic.services.feeding.grant_blood_taint"),
+        ):
+            outcome = feed_anima(self.feeder, self.victim, amount_mode=FeedMode.GORGE)
+        feeder_anima = CharacterAnima.objects.get(character=self.feeder)
+        self.assertEqual(outcome.death_harvest, 40)
+        self.assertEqual(feeder_anima.current, 10)
+        self.assertEqual(feeder_anima.glut, 35)
+
+    def test_killing_drain_fires_murder_taint(self):
+        _anima(self.feeder, current=10)
+        _anima(self.victim, current=2, maximum=2)
+        with (
+            _quiet_reconcile(),
+            patch("world.magic.services.feeding._maybe_kill_npc_victim", return_value=True),
+            patch("world.magic.services.feeding.grant_blood_taint") as taint,
+        ):
+            feed_anima(self.feeder, self.victim, amount_mode=FeedMode.GORGE)
+        from world.magic.services.feeding import MURDER_TAINT_ACT
+
+        taint.assert_called_once_with(self.feeder, MURDER_TAINT_ACT)
+
+    def test_essence_feeder_fires_seduction_taints(self):
+        _anima(self.feeder, current=5)
+        _anima(self.victim, current=3, maximum=3)
+        with (
+            _quiet_reconcile(),
+            patch("world.magic.services.feeding._feeder_is_essence_kind", return_value=True),
+            patch("world.magic.services.feeding.grant_blood_taint") as taint,
+        ):
+            feed_anima(self.feeder, self.victim, amount_mode=FeedMode.SIP)
+        from world.magic.services.feeding import SEDUCTION_TAINT_ACTS
+
+        called_acts = [call.args[1] for call in taint.call_args_list]
+        self.assertEqual(called_acts, list(SEDUCTION_TAINT_ACTS))
+
+    def test_blood_feeder_fires_no_taint_on_survivable_feed(self):
+        _anima(self.feeder, current=5)
+        _anima(self.victim, current=3, maximum=3)
+        with (
+            _quiet_reconcile(),
+            patch("world.magic.services.feeding.grant_blood_taint") as taint,
+        ):
+            feed_anima(self.feeder, self.victim, amount_mode=FeedMode.SIP)
+        taint.assert_not_called()
+
+    def test_grant_blood_taint_skips_unauthored_acts(self):
+        from world.magic.services.feeding import grant_blood_taint
+
+        # No CompromiseActType rows exist — must log-and-skip, never raise.
+        grant_blood_taint(self.feeder, "Murder by Anima Drain")
+
+    def test_grant_blood_taint_fires_authored_act(self):
+        from world.magic.factories import ResonanceFactory
+        from world.magic.models.fall_redemption import CompromiseActType
+        from world.magic.services.feeding import grant_blood_taint
+
+        resonance = ResonanceFactory()
+        CompromiseActType.objects.create(
+            name="Murder by Anima Drain",
+            target_resonance=resonance,
+            amount=5,
+            is_cruelty=True,
+        )
+        with patch("world.magic.services.fall_redemption.grant_resonance") as grant:
+            grant_blood_taint(self.feeder, "Murder by Anima Drain")
+        grant.assert_called_once()
+        self.assertEqual(grant.call_args.args[2], 5)
+
     def test_gorge_past_empty_kills_npc_and_mints_deed(self):
         _anima(self.feeder, current=10)
         _anima(self.victim, current=2, maximum=2)
