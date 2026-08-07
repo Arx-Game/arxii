@@ -2357,13 +2357,15 @@ _MIRROR_ANCHOR_KIND_NAME = "Mirror"
 #: "Seed content"). "The Wanderer's Rest" (the canonical fallback starting
 #: room every fresh character passes through) is guaranteed by calling
 #: ``ensure_canonical_fallback_room()`` directly. The two magic-story cascade
-#: rooms below are seeded earlier in THIS module by
-#: ``_seed_resonance_environment_rooms()`` (part of ``seed_starter_magic_story()``,
-#: which ``seed_magic_dev()`` calls before this function) — resolved
-#: defensively via ``filter().first()`` and skipped (never crash) when absent,
-#: e.g. if this function is ever called standalone ahead of that step. No
-#: other named public room exists in production seed content today (verified
-#: — grepped every ``game_content``/``seeds`` module for room creation).
+#: rooms below are no longer seeded by ``seed_magic_dev()`` (#2973 stripped
+#: ``_seed_resonance_environment_rooms()`` out of ``seed_starter_magic_story()``
+#: — it survives only as a test-fixture builder). In production these two rooms
+#: exist only once the lore repo's #2451 grid bundle authors rooms under these
+#: same ``db_key``s; until then — or if this function is ever called standalone
+#: ahead of that content load — they're resolved defensively via
+#: ``filter().first()`` and skipped (never crash) when absent. No other named
+#: public room exists in production seed content today (verified — grepped
+#: every ``game_content``/``seeds`` module for room creation).
 #: (room db_key, anchor's descriptive name)
 _MIRROR_ANCHOR_ROOM_SPECS: list[tuple[str, str]] = [
     ("The Hallowed Threshold (Low)", "a clouded looking-glass"),

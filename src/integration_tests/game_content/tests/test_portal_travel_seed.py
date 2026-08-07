@@ -89,7 +89,10 @@ class EnsurePortalTravelContentWithCascadeRoomsTests(TestCase):
 
     def test_anchors_reach_all_three_seeded_public_rooms(self) -> None:
         from world.magic.factories import AffinityFactory, ResonanceFactory
-        from world.seeds.game_content.magic import seed_starter_magic_story
+        from world.seeds.game_content.magic import (
+            _seed_resonance_environment_rooms,
+            seed_starter_magic_story,
+        )
 
         # The cascade rooms are only seeded when a Celestial and an Abyssal
         # resonance are authored (#2967) — stand in for the content repo.
@@ -97,6 +100,13 @@ class EnsurePortalTravelContentWithCascadeRoomsTests(TestCase):
         ResonanceFactory(affinity=AffinityFactory(name="Abyssal"))
 
         seed_starter_magic_story()
+        # #2973 stripped _seed_resonance_environment_rooms() out of
+        # seed_starter_magic_story() — the two cascade rooms this test asserts
+        # anchors in are lore-repo content now (the #2451 grid bundle). This
+        # suite is the test-fixture-builder caller the split named: provision
+        # them directly, mirroring test_magic_story_pipeline.py's
+        # setUpTestData.
+        _seed_resonance_environment_rooms()
         ensure_portal_travel_content()
 
         kind = PortalAnchorKind.objects.get(name=_MIRROR_ANCHOR_KIND_NAME)

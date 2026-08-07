@@ -439,7 +439,9 @@ strip-side re-export is gone; every caller imports `world.seeds.game_content.mag
 directly. `seed_magic_dev()` now authors only config; every KEEP-side lookup of
 authored content goes through `authored_or_sample()` (ADR-0168). Rationale + full
 per-item destination table: issue #2973. Doc detail: `docs/systems/magic.md`'s
-"Content-vs-config boundary" section, ADR-0142 (amended).
+"Per-caster technique forms" section (the stripped `MagicContent.create_all()`
+Gift/Technique/variant catalog) and "Portal travel" section (the stripped cascade
+rooms + the defensive `_MIRROR_ANCHOR_ROOM_SPECS` resolution), ADR-0142 (amended).
 
 ---
 
