@@ -9,6 +9,7 @@ tiers — since this action is the seam's first production caller.
 from __future__ import annotations
 
 from decimal import Decimal
+from unittest.mock import patch
 
 from django.test import TestCase
 
@@ -276,3 +277,34 @@ class TrainTechniqueActionFailureTests(TrainTechniqueActionTestBase):
             ).count(),
             1,
         )
+
+    def test_meter_deleted_mid_session_maps_to_failure_result_not_raise(self):
+        """A concurrent session completes+deletes the meter before this one's seam call.
+
+        contribute_to_technique_progress re-gets TechniqueProgress by pk under
+        select_for_update (technique_progress.py:132-138) -- two concurrent
+        sessions serialize on the weekly-tracker lock rather than racing on the
+        meter row itself, but if the first session's contribution completes
+        (and deletes) the meter while the second is blocked on that lock, the
+        second's re-get raises TechniqueProgress.DoesNotExist instead of
+        returning a stale row. A true concurrency repro is out of scope here;
+        this simulates the same observable seam-raise deterministically by
+        monkeypatching resolve_training_check to raise it directly (#2739
+        final-review finding).
+        """
+        self._make_progress(total_required=20)
+
+        # execute() does a local `from world.magic.services.technique_training
+        # import resolve_training_check` (a lint-suppressed local import) --
+        # it re-imports the name fresh from the source module on every call,
+        # so the patch target is the source module's attribute, not a
+        # module-level binding on actions.definitions.technique_training
+        # (there isn't one).
+        with patch(
+            "world.magic.services.technique_training.resolve_training_check",
+            side_effect=TechniqueProgress.DoesNotExist,
+        ):
+            result = self._run(technique_id=self.technique.pk, ap_to_invest=20)
+
+        self.assertFalse(result.success)
+        self.assertTrue(result.message)

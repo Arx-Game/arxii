@@ -53,8 +53,7 @@ class CmdTrain(ArxCommand):
         lines = ["Your in-progress technique meters:"]
         for meter in meters:
             tenure = meter.teacher_tenure
-            teacher_character = tenure.character if tenure is not None else None
-            teacher_name = teacher_character.key if teacher_character is not None else "-"
+            teacher_name = tenure.display_name if tenure is not None else "-"
             lines.append(
                 f"  {meter.technique.name}: {meter.points_accumulated}/"
                 f"{meter.total_required} (teacher: {teacher_name})"

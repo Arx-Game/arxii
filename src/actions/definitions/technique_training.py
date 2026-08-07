@@ -144,9 +144,7 @@ class TrainTechniqueAction(Action):
                 ap_to_invest=ap_to_invest,
                 teacher=teacher,
             )
-        except WeeklyTrainingCapExceeded as exc:
-            return ActionResult(success=False, message=exc.user_message)
-        except MagicError as exc:
+        except (WeeklyTrainingCapExceeded, MagicError) as exc:
             return ActionResult(success=False, message=exc.user_message)
         except ValueError as exc:
             # learn_technique (the meter-completion mint, reached via
@@ -156,6 +154,22 @@ class TrainTechniqueAction(Action):
             # grant, a TechniqueGrant item). Map it to a clean failure instead of
             # letting it escape as a traceback to telnet/web.
             return ActionResult(success=False, message=str(exc))
+        except TechniqueProgress.DoesNotExist:
+            # contribute_to_technique_progress re-gets the meter by pk under
+            # select_for_update (technique_progress.py:132-138) so two concurrent
+            # sessions serialize on the weekly-tracker lock rather than racing --
+            # but if the first session's contribution completed (and deleted) the
+            # meter while this one was blocked on the lock, the re-get raises this
+            # instead of returning a stale row. Same message shape as the
+            # already-knows failure above: training just finished, nothing left
+            # to train.
+            return ActionResult(
+                success=False,
+                message=(
+                    f"Your training in {technique_name} just completed. "
+                    "There's no meter left to train."
+                ),
+            )
 
         points_after = min(points_before + result.dev_points_contributed, total_required)
 

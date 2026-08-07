@@ -71,6 +71,12 @@ class CmdTrainBareListingTests(CmdTrainTestBase):
         self.assertIn("teacher: -", msg)
 
     def test_bare_train_lists_meter_with_teacher_name(self):
+        """The teacher column renders the tenure's display_name (#2739 final-review fix).
+
+        Not the bare character key -- mirrors the web serializer's
+        teacher_name (TechniqueProgressSerializer.get_teacher_name), which
+        also reads teacher_tenure.display_name, so telnet and web agree.
+        """
         technique = TechniqueFactory(name="Ember Lance")
         teacher_tenure = RosterTenureFactory()
         TechniqueProgress.objects.create(
@@ -87,7 +93,7 @@ class CmdTrainBareListingTests(CmdTrainTestBase):
             cmd.func()
 
         msg = mock_msg.call_args[0][0]
-        self.assertIn(teacher_tenure.character.key, msg)
+        self.assertIn(teacher_tenure.display_name, msg)
 
 
 class CmdTrainDispatchTests(CmdTrainTestBase):
