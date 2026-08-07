@@ -727,10 +727,14 @@ def _seed_hallowed_reaction_conditions() -> dict[str, ConditionTemplate]:
     content-repo-owned (#2698) — looked up rather than invented unless
     ``SEED_SAMPLE_CONTENT`` is on. Returns a dict of ``{name: ConditionTemplate}``
     for whichever of the 5 are actually present (authored, or sampled) — a
-    name absent from the dict means it isn't there yet. Downstream consumers
-    (``_seed_resonance_environment_consequence_pools``,
-    ``_seed_hallowed_achievement_bridge``, ``_seed_hallowed_threshold_story``)
-    key off this dict and skip whatever it's missing rather than raising.
+    name absent from the dict means it isn't there yet.
+
+    #2973: no longer called from ``seed_starter_magic_story()`` — the 5
+    conditions are lore-repo content, so the production seeder resolves them
+    itself via the same ``authored_or_sample``-by-name lookup, inline in
+    ``_seed_resonance_environment_consequence_pools()``. This function
+    survives as an importable test-fixture builder; suites that need the 5
+    conditions call it directly in their own setup.
     """
     from world.conditions.constants import DurationType  # noqa: PLC0415
     from world.conditions.models import ConditionCategory, ConditionTemplate  # noqa: PLC0415
@@ -921,10 +925,15 @@ def _seed_resonance_environment_consequence_pools() -> None:
     Depends on:
     - seed_canonical_affinities()      (Celestial/Primal/Abyssal must exist)
     - _seed_affinity_interactions()    (9 AffinityInteraction rows)
-    - _seed_hallowed_reaction_conditions() (all 5 ConditionTemplate rows —
-      content-repo-owned, #2698; any of the 5 may be absent)
     - _seed_endure_hallowed_ground_check() (ensures the resolution-spine
       CheckOutcome rows via seed_check_resolution_tables)
+
+    Resolves its own 5 reaction ``ConditionTemplate`` rows by name via
+    ``authored_or_sample`` (content-repo-owned, #2698) rather than depending
+    on ``_seed_hallowed_reaction_conditions()`` having run first — that
+    function is no longer part of the production seeder path (#2973); it
+    survives only as a test-fixture builder suites call directly. Any of the
+    5 may be absent (the lookup logs the miss rather than raising).
 
     Idempotent: get_or_create keyed on stable names at every layer.  Duplicate
     ConsequencePoolEntry rows are prevented by the (pool, consequence) unique
@@ -935,9 +944,11 @@ def _seed_resonance_environment_consequence_pools() -> None:
     (config) but skips the APPLY_CONDITION effect that would need the missing
     condition — the pool still seeds, just without teeth for that tier.
     """
-    from world.conditions.models import ConditionTemplate  # noqa: PLC0415
+    from world.conditions.constants import DurationType  # noqa: PLC0415
+    from world.conditions.models import ConditionCategory, ConditionTemplate  # noqa: PLC0415
     from world.magic.models.affinity import Affinity  # noqa: PLC0415
     from world.magic.models.resonance_environment import AffinityInteraction  # noqa: PLC0415
+    from world.seeds.sample_content import authored_or_sample  # noqa: PLC0415
     from world.traits.models import CheckOutcome  # noqa: PLC0415
 
     # --- Fetch CheckOutcome tiers (seeded by the resolution spine via
@@ -946,15 +957,44 @@ def _seed_resonance_environment_consequence_pools() -> None:
     for name in (_CRITICAL_SUCCESS, "Success", "Failure", _CRITICAL_FAILURE):
         outcome_map[name] = CheckOutcome.objects.get(name=name)
 
-    # --- Fetch injury ConditionTemplates (created by _seed_hallowed_reaction_conditions,
-    # content-repo-owned #2698) — a name absent from the DB is simply absent from
-    # this map; callers below skip the effect wiring for a missing condition. ---
-    cond_map: dict[str, ConditionTemplate] = {
-        template.name: template
-        for template in ConditionTemplate.objects.filter(
-            name__in=[spec["name"] for spec in _HALLOWED_REACTION_SPECS]
+    # --- Resolve the 5 reaction ConditionTemplates by name (content-repo-owned,
+    # #2698; #2973 — this used to read rows _seed_hallowed_reaction_conditions()
+    # authored earlier in the same orchestrator run; that step left the seeder,
+    # so this KEEP-side function now resolves each by name itself).
+    # authored_or_sample logs a warning and returns None when a name isn't
+    # authored and SEED_SAMPLE_CONTENT is off, or invents a sample row (from
+    # _HALLOWED_REACTION_SPECS, the single source of truth for these 5) when
+    # sampling is on. A name missing from this map is simply absent from it;
+    # callers below skip the APPLY_CONDITION effect wiring for it. ---
+    category = authored_or_sample(
+        ConditionCategory,
+        {
+            "description": "Magical conditions arising from spellcasting and aura interactions.",
+            "is_negative": True,
+            "display_order": 0,
+        },
+        name="Magical",
+    )
+    cond_map: dict[str, ConditionTemplate] = {}
+    for spec in _HALLOWED_REACTION_SPECS:
+        template = authored_or_sample(
+            ConditionTemplate,
+            {
+                "category": category,
+                "description": spec["description"],
+                "player_description": spec["player_description"],
+                "observer_description": spec["observer_description"],
+                "default_duration_type": DurationType.ROUNDS,
+                "default_duration_value": 3,
+                "is_stackable": False,
+                "max_stacks": 1,
+                "has_progression": False,
+                "can_be_dispelled": True,
+            },
+            name=spec["name"],
         )
-    }
+        if template is not None:
+            cond_map[spec["name"]] = template
 
     # --- Build both pools ---
     abyssal_celestial_pool = _build_hallowed_backfire_pool(
@@ -1230,15 +1270,24 @@ def _seed_hallowed_achievement_bridge() -> None:
     Discoveries fire automatically via the existing achievements engine when
     the first character earns each Achievement.
 
-    Depends on _seed_hallowed_reaction_conditions() having run first to
-    create the ConditionTemplate rows we reference — content-repo-owned
+    Depends on the 3 referenced ConditionTemplate rows (Tempered Against
+    Light / Singed / Hallowed Burn) already existing — content-repo-owned
     (#2698), so a given spec's condition may not exist; that spec is skipped
-    entirely (stat/rule/achievement all hang off the condition existing).
+    entirely (stat/rule/achievement all hang off the condition existing). In
+    the production path those rows come from
+    ``_seed_resonance_environment_consequence_pools()`` (which resolves them
+    by name via ``authored_or_sample``); a test-fixture caller of this
+    function directly should seed them first, e.g. via
+    ``_seed_hallowed_reaction_conditions()``.
 
     ``achievements.StatDefinition`` is ALSO content-repo-owned (#2698) —
     looked up rather than invented unless ``SEED_SAMPLE_CONTENT`` is on. A
     spec whose stat isn't authored/sampled skips its rule/achievement too
     (``ConditionStatRule.stat`` is a required FK).
+
+    #2973: no longer called from ``seed_starter_magic_story()`` — the stat/
+    achievement bridge rows are lore-repo content. This function survives as
+    an importable test-fixture builder only.
     """
     from world.achievements.constants import (  # noqa: PLC0415
         ComparisonType,
@@ -1337,6 +1386,12 @@ def _seed_resonance_environment_rooms() -> None:
       - LocationValueModifier: tag_room_resonance uses update_or_create keyed on
         (room_profile, resonance, source) then we set .value + .save() to tune
         magnitude — re-runs restore the desired value.
+
+    #2973: no longer called from ``seed_starter_magic_story()`` — the 3 rooms
+    (+ their resonance tags) ride the #2451 grid-bundle mechanism as lore-repo
+    content; "Hallowed Rejection" rides an ordinary lore fixture. This function
+    survives as a test-fixture builder; the story-pipeline suite calls it
+    directly in its own setup.
     """
     from evennia.objects.models import ObjectDB  # noqa: PLC0415
     from evennia.utils import create as evennia_create  # noqa: PLC0415
@@ -2652,27 +2707,36 @@ def seed_starter_magic_story() -> None:
       1. seed_canonical_affinities() — the 3 magic Affinities
      RC1. _seed_affinity_interactions() — 9 directed AffinityInteraction rows (needs affinities)
      RC1. _seed_resonance_environment_config() — ResonanceEnvironmentConfig singleton
-      B. _seed_hallowed_reaction_conditions() — 5 OPPOSED reaction conditions
-      C. _seed_hallowed_achievement_bridge() — stats, rules, achievements
-                                                (needs reaction conditions)
       A. _seed_endure_hallowed_ground_check() — CheckType + resolution spine
                                                 (via seed_check_resolution_tables)
-     RC4. _seed_resonance_environment_rooms() — 3 cascade rooms (needs resonances)
-      F. _seed_hallowed_threshold_story() — Story + Chapter + Episodes + Beats + Transitions + TROs
+     T12. _seed_resonance_environment_consequence_pools() — OPPOSED backfire pools;
+                                                resolves the 5 reaction ConditionTemplate
+                                                rows by name (content-repo-owned, #2973)
+     T13. _seed_resonance_alignment_boons() — ALIGNED boon tiers + named buffs
+      F. _seed_hallowed_threshold_story() — Story + Chapter + Episodes + Beats + Transitions
+                                            + TROs (self-skips when its 4 reaction
+                                            conditions aren't authored)
 
-    All sub-helpers are idempotent (get_or_create at every layer), so the
-    orchestrator itself is idempotent. Re-running on an edited DB preserves
-    edits (per project seed rule: never update_or_create).
+    #2973: three former phases no longer run here — B (reaction conditions,
+    ``_seed_hallowed_reaction_conditions()``), C (achievement bridge,
+    ``_seed_hallowed_achievement_bridge()``), and RC4 (cascade rooms,
+    ``_seed_resonance_environment_rooms()``). Each authored content-repo-owned
+    rows the seeder shouldn't own; all three survive as importable
+    test-fixture builders (the story-pipeline suite calls them directly in
+    its own setup) but no longer run as part of this orchestrator or
+    ``seed_magic_dev()``. Production content for them comes from the lore
+    repo.
+
+    All remaining sub-helpers are idempotent (get_or_create at every layer),
+    so the orchestrator itself is idempotent. Re-running on an edited DB
+    preserves edits (per project seed rule: never update_or_create).
     """
     seed_canonical_affinities()
     _seed_affinity_interactions()
     _seed_resonance_environment_config()
-    _seed_hallowed_reaction_conditions()
-    _seed_hallowed_achievement_bridge()
     _seed_endure_hallowed_ground_check()
     _seed_resonance_environment_consequence_pools()  # T12: OPPOSED backfire pools
     _seed_resonance_alignment_boons()  # T13: ALIGNED boon tiers + named buffs
-    _seed_resonance_environment_rooms()
     _seed_hallowed_threshold_story()
 
 
@@ -2696,7 +2760,10 @@ def seed_magic_dev() -> MagicDevSeedResult:
        ActionEnhancements
     6. ``seed_facet_thread_unlock()`` — single global FACET ThreadWeavingUnlock
     7. ``seed_starter_magic_story()`` — magic-story pipeline slice (Affinities,
-       Resonances, Hallowed Rejection conditions + triggers, Hallowed Threshold story)
+       AffinityInteractions, OPPOSED backfire pools resolving the 5 reaction
+       conditions by name, ALIGNED boon tiers, Hallowed Threshold story;
+       #2973 — the cascade rooms + "Hallowed Rejection" and the achievement
+       bridge no longer seed here, they're lore-repo content)
     8. ``seed_penetration_contest()`` — penetration CheckType + factor ladder +
        check-scoped ModifierTarget (#767)
     9. ``seed_flee_check()`` — flee CheckType + ModifierTarget + FleeConfig

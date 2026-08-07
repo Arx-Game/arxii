@@ -1024,6 +1024,64 @@ class SeedMintsNoResonanceTests(TestCase):
         self.assertEqual(Resonance.objects.count(), before)
 
 
+class SeedStarterMagicStoryStripsStandInsTests(TestCase):
+    """#2973: rooms, reaction conditions, and the achievement bridge left the
+    production seeder — they're lore-repo content now (or, for the rooms and
+    achievement bridge, test-fixture builders a suite must call directly).
+
+    No ``@override_settings(SEED_SAMPLE_CONTENT=True)`` here deliberately: this
+    exercises the real default (off) production behavior, where
+    ``seed_starter_magic_story()`` must author none of the three stripped
+    clusters even implicitly via its remaining phases.
+    """
+
+    def test_no_reaction_or_flavor_conditions_authored(self) -> None:
+        from world.conditions.models import ConditionTemplate
+
+        seed_starter_magic_story()
+        stripped_names = {
+            "Tempered Against Light",
+            "Singed",
+            "Burning",
+            "Hallowed Burn",
+            "Cast Disrupted",
+            "Hallowed Rejection",
+        }
+        self.assertFalse(
+            ConditionTemplate.objects.filter(name__in=stripped_names).exists(),
+            "seed_starter_magic_story() must not author reaction/flavor conditions "
+            "without SEED_SAMPLE_CONTENT — they're lore-owned content now (#2973)",
+        )
+
+    def test_no_achievement_bridge_authored(self) -> None:
+        from world.achievements.models import Achievement
+
+        seed_starter_magic_story()
+        self.assertFalse(
+            Achievement.objects.filter(
+                slug__in=["hallowed-hardened", "touched-by-light", "cast-out-by-the-light"],
+            ).exists(),
+            "seed_starter_magic_story() must not author the achievement bridge "
+            "without SEED_SAMPLE_CONTENT — it's lore-owned content now (#2973)",
+        )
+
+    def test_no_cascade_rooms_authored(self) -> None:
+        from evennia.objects.models import ObjectDB
+
+        seed_starter_magic_story()
+        self.assertFalse(
+            ObjectDB.objects.filter(
+                db_key__in=[
+                    "The Hallowed Threshold (Low)",
+                    "The Hallowed Threshold (High)",
+                    "The Resonant Sanctum (Aligned)",
+                ],
+            ).exists(),
+            "seed_starter_magic_story() must not author the cascade rooms "
+            "without SEED_SAMPLE_CONTENT — they ride the #2451 grid bundle now (#2973)",
+        )
+
+
 # ---------------------------------------------------------------------------
 # Task 13b — _seed_hallowed_reaction_conditions()
 # ---------------------------------------------------------------------------
@@ -1479,6 +1537,10 @@ class SeedStarterMagicStoryOrchestratorTests(TestCase):
         """Verify all representative content from each phase is present after one call."""
         from evennia.objects.models import ObjectDB
 
+        from integration_tests.game_content.magic import (
+            _seed_hallowed_achievement_bridge,
+            _seed_resonance_environment_rooms,
+        )
         from world.achievements.models import Achievement
         from world.checks.models import CheckType
         from world.conditions.models import ConditionTemplate
@@ -1493,15 +1555,20 @@ class SeedStarterMagicStoryOrchestratorTests(TestCase):
         # are authored (#2967) — stand in for the content repo.
         _author_stand_in_resonances()
         seed_starter_magic_story()
+        # #2973: the cascade rooms (+ "Hallowed Rejection") and the achievement
+        # bridge left the production seeder — this suite provisions them
+        # directly in its own setup, the way lore-fixture content would.
+        _seed_resonance_environment_rooms()
+        _seed_hallowed_achievement_bridge()
 
         # Spot-check that representative content from each phase is present.
         # Phase RC1: 9 directed AffinityInteraction rows + config singleton
         self.assertEqual(AffinityInteraction.objects.count(), 9)
         self.assertIsNotNone(ResonanceEnvironmentConfig.objects.filter(pk=1).first())
-        # Phase B: OPPOSED reaction conditions
+        # Phase B (rooms fixture) / T12: reaction + flavor conditions
         self.assertTrue(ConditionTemplate.objects.filter(name="Hallowed Rejection").exists())
         self.assertTrue(ConditionTemplate.objects.filter(name="Tempered Against Light").exists())
-        # Phase C: achievement bridge
+        # Phase C (achievement-bridge fixture): stat/achievement bridge
         self.assertTrue(Achievement.objects.filter(name="Hallowed-Hardened").exists())
         # Phase A: endure_hallowed_ground check type
         self.assertTrue(CheckType.objects.filter(name="endure_hallowed_ground").exists())
@@ -1537,7 +1604,7 @@ class SeedStarterMagicStoryOrchestratorTests(TestCase):
             ConditionTemplate.objects.filter(name="Empowered by Resonant Ground").exists(),
             "Empowered by Resonant Ground must not exist — removed in core-service rework",
         )
-        # Phase RC4: 3 cascade rooms
+        # Phase RC4 (rooms fixture): 3 cascade rooms
         self.assertEqual(
             ObjectDB.objects.filter(
                 db_key__in=[
@@ -1644,12 +1711,19 @@ class SeedStarterMagicStoryOrchestratorTests(TestCase):
         self.assertEqual(snapshot, recount)
 
     def test_orchestrator_preserves_edits(self) -> None:
-        """Editing a seeded row and re-running the orchestrator leaves the edit intact."""
+        """Editing a seeded row and re-running the orchestrator leaves the edit intact.
+
+        #2973: "Hallowed Rejection" left the orchestrator along with the rooms
+        fixture that used to seed it; "Tempered Against Light" is still
+        genuinely seeded by seed_starter_magic_story() itself (via
+        _seed_resonance_environment_consequence_pools()), so it's the right
+        marker for this test now.
+        """
         from integration_tests.game_content.magic import seed_starter_magic_story
         from world.conditions.models import ConditionTemplate
 
         seed_starter_magic_story()
-        marker = ConditionTemplate.objects.get(name="Hallowed Rejection")
+        marker = ConditionTemplate.objects.get(name="Tempered Against Light")
         marker.description = "edited by orchestrator idempotency test"
         marker.save()
 
@@ -1663,7 +1737,15 @@ class TestSeedMagicDevIncludesStarterMagicStory(TestCase):
     """Verify that seed_magic_dev() includes the magic-story slice content."""
 
     def test_seed_magic_dev_includes_starter_magic_story_content(self) -> None:
-        """seed_magic_dev() should seed Hallowed Rejection + Hallowed Threshold content."""
+        """seed_magic_dev() should seed the reaction/backfire chain + Hallowed Threshold story.
+
+        #2973: "Hallowed Rejection" (the flavor marker seeded alongside the demo
+        rooms) left the production seeder along with the rooms themselves — it's
+        lore-repo content now, no longer part of this contract. The 5 reaction
+        conditions the backfire pools need are still resolved here (by name, via
+        authored_or_sample), so "Tempered Against Light" is still a valid proof
+        that the chain runs end to end.
+        """
         from world.conditions.models import ConditionTemplate
         from world.magic.models.resonance_environment import (
             AffinityInteraction,
@@ -1675,8 +1757,8 @@ class TestSeedMagicDevIncludesStarterMagicStory(TestCase):
 
         # Spot-check that the magic-story slice content is now seeded too.
         self.assertTrue(
-            ConditionTemplate.objects.filter(name="Hallowed Rejection").exists(),
-            "seed_magic_dev() must include Hallowed Rejection condition",
+            ConditionTemplate.objects.filter(name="Tempered Against Light").exists(),
+            "seed_magic_dev() must resolve the reaction conditions the backfire pools need",
         )
         self.assertTrue(
             Story.objects.filter(title="The Hallowed Threshold").exists(),
