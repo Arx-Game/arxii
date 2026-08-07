@@ -20,6 +20,22 @@ sample-content fallback baked into arxii seeds for third-party instances that ne
 lore repo — deferred as a someday-aspiration, deliberately undesigned, since no such instance exists
 yet and building it now would resurrect exactly the drift problem this decision closes.
 
+**Update (#2972/#2973):** "one known remnant" undercounted it — #2972 found ten separate
+`world/seeds/game_content/magic.py` seeders still authoring content-repo-owned rows, each
+originally keyed to a `Resonance` the seeder itself invented (demo rooms, the "Hallowed
+Threshold" story, the "Social Arts" Gift/Techniques, Corruption templates, reaction
+conditions + achievement bridge, the touchstone/reagents, fall-redemption examples, and a
+lazy-created "Devotion" `RelationshipTrack`). Six of those eight actually needed stripping
+in #2973 — moved to a ruled destination (lore fixture, the #2451 grid bundle, or a test
+fixture). The other two, fall-redemption and "Devotion," #2972 itself had already converted
+to `authored_or_sample()` lookups before this ADR's #2973 series began; #2973 found no
+invention left, verified that against code, and added the regression tests that had never
+existed rather than moving anything. #2973 deleted the
+`integration_tests/game_content/magic.py` compatibility facade once its last strip-side
+re-export was gone. `seed_magic_dev` now authors only the config this ADR describes;
+KEEP-side lookups resolve authored content via `world.seeds.sample_content.authored_or_sample()`
+(ADR-0168) instead of inventing it.
+
 > Status: accepted · Source: issue #2474 Decision 5 · Related: ADR-0136 (CG catalog shape),
 > ADR-0140 (the sibling grid content-export pipeline this reuses the natural-key/`load_world_content`
-> machinery from)
+> machinery from), ADR-0168 (the seed boundary this remnant violated)

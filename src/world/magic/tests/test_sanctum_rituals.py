@@ -751,3 +751,139 @@ class PurgingGradedCheckTests(TestCase):
             perform_purging_ritual(
                 sanctum, owner, new_resonance=new_resonance, resonance_sacrificed=100
             )
+
+
+# ---------------------------------------------------------------------------
+# #2973 item 6 — ensure_sanctification_requirements() resolves reagents via
+# authored_or_sample instead of ensure_touchstone_content() minting them.
+# ---------------------------------------------------------------------------
+
+
+class EnsureSanctificationRequirementsTests(TestCase):
+    """No SEED_SAMPLE_CONTENT here deliberately — proves the real default
+    (off) production behavior: with none of the 3 reagent ItemTemplates
+    authored, ``ensure_sanctification_requirements`` must attach only the
+    touchstone-mode requirement and never invent a reagent template.
+
+    ``test_single_null_item_template_row_invariant`` guards the spec-review
+    finding directly, but see its docstring first: under TODAY's fixed
+    ordering (the touchstone-mode row, also ``item_template=None``, is
+    created before the reagent loop runs, in the same call) an unguarded
+    ``get_or_create(item_template=None)`` for a missing reagent would just
+    re-fetch that already-existing row harmlessly — there is no row-count
+    difference to catch here, and removing the ``if reagent is None:
+    continue`` guard does not fail this test. What the guard actually
+    protects is the invariant itself surviving a FUTURE reordering of the
+    two blocks (see the guard's docstring in seeds_touchstone_content.py),
+    so the test asserts the invariant directly rather than asserting
+    something today's ordering can't violate either way.
+    """
+
+    def test_no_reagents_authored_yields_touchstone_row_only(self) -> None:
+        from world.items.models import ItemTemplate
+        from world.magic.factories import RitualFactory
+        from world.magic.models import RitualComponentRequirement
+        from world.magic.seeds_touchstone_content import (
+            CANDLE_TEMPLATE_NAME,
+            INCENSE_TEMPLATE_NAME,
+            SALT_TEMPLATE_NAME,
+            ensure_sanctification_requirements,
+        )
+
+        ritual = RitualFactory()
+        ensure_sanctification_requirements(ritual)
+
+        requirements = RitualComponentRequirement.objects.filter(ritual=ritual)
+        self.assertEqual(
+            requirements.count(),
+            1,
+            "no reagents authored, so only the touchstone-mode row should exist",
+        )
+        only_row = requirements.get()
+        self.assertIsNone(only_row.item_template)
+        self.assertIsNotNone(only_row.min_touchstone_tier)
+        self.assertFalse(
+            ItemTemplate.objects.filter(
+                name__in=[CANDLE_TEMPLATE_NAME, SALT_TEMPLATE_NAME, INCENSE_TEMPLATE_NAME],
+            ).exists(),
+            "ensure_sanctification_requirements() must not invent reagent "
+            "templates without SEED_SAMPLE_CONTENT (#2973)",
+        )
+
+    def test_authored_reagents_are_attached(self) -> None:
+        from world.items.factories import ItemTemplateFactory
+        from world.magic.factories import RitualFactory
+        from world.magic.models import RitualComponentRequirement
+        from world.magic.seeds_touchstone_content import (
+            CANDLE_TEMPLATE_NAME,
+            INCENSE_TEMPLATE_NAME,
+            SALT_TEMPLATE_NAME,
+            ensure_sanctification_requirements,
+        )
+
+        candle = ItemTemplateFactory(name=CANDLE_TEMPLATE_NAME)
+        salt = ItemTemplateFactory(name=SALT_TEMPLATE_NAME)
+        incense = ItemTemplateFactory(name=INCENSE_TEMPLATE_NAME)
+
+        ritual = RitualFactory()
+        ensure_sanctification_requirements(ritual)
+
+        requirements = RitualComponentRequirement.objects.filter(ritual=ritual)
+        self.assertEqual(requirements.count(), 4, "touchstone-mode row + 3 reagent rows")
+        reagent_item_templates = set(
+            requirements.exclude(item_template=None).values_list("item_template", flat=True)
+        )
+        self.assertEqual(reagent_item_templates, {candle.pk, salt.pk, incense.pk})
+
+    def test_single_null_item_template_row_invariant(self) -> None:
+        """At most one item_template=None row per ritual, ever.
+
+        This is the invariant the ``continue`` guard exists to protect
+        against a future reordering of the touchstone-mode/reagent blocks
+        (see ``ensure_sanctification_requirements``'s docstring) — it does
+        NOT distinguish guarded from unguarded under today's fixed ordering
+        (see this class's docstring). Exercised across repeated calls and a
+        no-reagents -> all-reagents-authored state transition, since a
+        broken dual-null row (item_template=None AND min_touchstone_tier=
+        None) is the specific failure mode reordering could produce.
+        """
+        from world.items.factories import ItemTemplateFactory
+        from world.magic.factories import RitualFactory
+        from world.magic.models import RitualComponentRequirement
+        from world.magic.seeds_touchstone_content import (
+            CANDLE_TEMPLATE_NAME,
+            INCENSE_TEMPLATE_NAME,
+            SALT_TEMPLATE_NAME,
+            ensure_sanctification_requirements,
+        )
+
+        ritual = RitualFactory()
+
+        # No reagents authored yet — repeated calls must not multiply the
+        # touchstone-mode (null item_template) row.
+        ensure_sanctification_requirements(ritual)
+        ensure_sanctification_requirements(ritual)
+        null_rows = RitualComponentRequirement.objects.filter(ritual=ritual, item_template=None)
+        self.assertEqual(null_rows.count(), 1)
+
+        # Reagents get authored later; re-running must not add a second null
+        # row, and the 3 reagent-mode rows must land alongside it.
+        ItemTemplateFactory(name=CANDLE_TEMPLATE_NAME)
+        ItemTemplateFactory(name=SALT_TEMPLATE_NAME)
+        ItemTemplateFactory(name=INCENSE_TEMPLATE_NAME)
+        ensure_sanctification_requirements(ritual)
+
+        null_rows = RitualComponentRequirement.objects.filter(ritual=ritual, item_template=None)
+        self.assertEqual(
+            null_rows.count(),
+            1,
+            "authoring reagents afterward must not create a second null-item_template row",
+        )
+        self.assertIsNotNone(null_rows.get().min_touchstone_tier)
+        self.assertEqual(
+            RitualComponentRequirement.objects.filter(ritual=ritual)
+            .exclude(item_template=None)
+            .count(),
+            3,
+            "the 3 reagent-mode rows must exist alongside the single touchstone-mode row",
+        )

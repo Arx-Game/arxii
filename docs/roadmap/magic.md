@@ -381,6 +381,70 @@ lore-repo content, not synthetic in-repo seed data — closing the gap left when
 
 ---
 
+## Dev-seed content stand-ins retired (#2967/#2972/#2973 — BUILT, 2026-08-07)
+
+ADR-0142 said the `CLUSTER_SEEDERS` loop "now only seeds non-lore config/lookup
+tables and never authors catalog content again," naming `ensure_portal_travel_content()`'s
+Gift/Technique as the "one known remnant." It was not one remnant: #2972 found ten
+seeders in `world/seeds/game_content/magic.py` still authoring content-repo-owned
+rows, every one keyed to a `Resonance` the seeder itself invented — each one made a
+contentless feature look shipped. #2967 obliterated the portal-travel "Mirrorwalking"
+placeholder first (the fix that stopped seeders from inventing `Resonance` rows at
+all). #2973 then closed out the remaining eight, six of which needed an actual code
+change to strip (lore fixture, the #2451 grid bundle, or a test fixture — no
+non-test consumer):
+
+- 3 demo `ObjectDB` rooms + `LocationValueModifier` resonance tags + the "Hallowed
+  Rejection" `ConditionTemplate` (`_seed_resonance_environment_rooms`) — rooms ride
+  the #2451 grid bundle; the condition template rides an ordinary lore fixture.
+- The "Hallowed Threshold" `Story`/Chapter/Episodes/Beats
+  (`_seed_hallowed_threshold_story`) — test fixture only, no production destination.
+- The "Social Arts" `Gift` + 6 `Technique`s + 6 `ActionEnhancement`s + variants
+  (`MagicContent.create_all()`) — lore fixture; `MagicContent` survives as a
+  test-fixture builder.
+- 2 Corruption `ConditionTemplate`s + 12 `MagicalAlterationTemplate` twists
+  (`author_reference_corruption_content()`) — lore fixture; the factory survives as
+  a test-fixture builder for `test_reference_corruption_content.py`.
+- 5 hallowed reaction `ConditionTemplate`s + the achievement bridge
+  (`_seed_hallowed_reaction_conditions`/`_seed_hallowed_achievement_bridge`) —
+  lore fixture; KEEP-side consequence pools resolve them by name via
+  `authored_or_sample()`.
+- The touchstone `ItemTemplate` + 3 reagent templates (`ensure_touchstone_content()`)
+  — lore fixture; KEEP-side `ensure_sanctification_requirements` degrades loudly
+  (logged skip) when a reagent is absent instead of inventing one.
+
+The remaining two were **already clean going into this branch**, not stripped by
+it — #2973 verified them against code, found no lazy-create/invention path left,
+and added the regression coverage that had never existed for either:
+
+- 4 `CompromiseActType` + 6 `ResonanceConversion` fall-redemption examples
+  (`wire_fall_redemption_content()`) — `authored_or_sample()`-gated since #2972,
+  before this SDD series started. No production code changed; #2973 added
+  strip-absence tests (`test_no_fall_redemption_example_rows_authored`). Lore
+  authoring for these rows is still owed — the gate just means an absent row
+  degrades loudly instead of getting invented.
+- The "Devotion" `RelationshipTrack` (`seed_relationship_track_thread_unlock()`)
+  — `authored_or_sample()`-gated since #2698, predating this series; no lazy-create
+  path remained by the time #2973 looked. #2973 added strip-absence tests
+  (`test_no_devotion_track_authored`) and corrected stale docstring/CLAUDE.md
+  wording that still described a "lazy-creates ... canonical track" behavior the
+  code no longer had.
+
+`world/magic/seeds_resonance.py` (the `authored_or_sample`-based seam every stripped
+caller used to look content up instead of inventing it) survives — KEEP-side
+dependents remain (`seed_thread_pull_catalog`, `ensure_relationship_pull_content`,
+`world/seeds/game_content/combos.py`). The `integration_tests.game_content.magic`
+compatibility facade (roadmap task 3.2, #1220) is deleted now that its last
+strip-side re-export is gone; every caller imports `world.seeds.game_content.magic`
+directly. `seed_magic_dev()` now authors only config; every KEEP-side lookup of
+authored content goes through `authored_or_sample()` (ADR-0168). Rationale + full
+per-item destination table: issue #2973. Doc detail: `docs/systems/magic.md`'s
+"Per-caster technique forms" section (the stripped `MagicContent.create_all()`
+Gift/Technique/variant catalog) and "Portal travel" section (the stripped cascade
+rooms + the defensive `_MIRROR_ANCHOR_ROOM_SPECS` resolution), ADR-0142 (amended).
+
+---
+
 ## One-oracle merge — agency oracle reads technique grants (#2504 — BUILT, 2026-07-18)
 
 Before #2504, a technique-granted `CapabilityType` only fed the **availability** oracle

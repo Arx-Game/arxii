@@ -23,7 +23,7 @@ used to live here (#2426 Task 7, ``seed_starter_gift_catalog()``) is retired
 
 from django.test import TestCase, override_settings
 
-from integration_tests.game_content.magic import (
+from world.seeds.game_content.magic import (
     MagicConfigResult,
     RitualSeedResult,
     ThreadPullCatalogResult,
@@ -542,8 +542,8 @@ class TestSeedMagicDevCheckTypeConvergence(TestCase):
         Running both produces 2 CheckType rows.  After the fix, both helpers
         converge on the same (name='Magical Endurance', category__name='Magic') row.
         """
-        from integration_tests.game_content.magic import seed_magic_dev
         from world.checks.models import CheckCategory, CheckType
+        from world.seeds.game_content.magic import seed_magic_dev
 
         seed_magic_dev()
 
@@ -559,26 +559,32 @@ class TestSeedMagicDevCheckTypeConvergence(TestCase):
         )
 
 
-@override_settings(SEED_SAMPLE_CONTENT=True)
 class TestSeedMagicDevTechniqueIdempotency(TestCase):
     """TDD: guard for MagicContent.create_all() duplicate Technique bug.
 
     This test is written BEFORE the fix so it fails first, confirming the bug,
     then passes after MagicContent.create_all() switches to get_or_create.
+
+    #2973: seed_magic_dev() no longer calls MagicContent.create_all() at all
+    (the Social Arts Gift/Techniques/ActionEnhancements are content-repo rows
+    now) — this suite calls the factory directly, same as the two pipeline
+    suites (test_social_magic_pipeline.py, test_challenge_pipeline.py) that
+    keep it as a test fixture. No SEED_SAMPLE_CONTENT override needed:
+    create_all() was never gated on it.
     """
 
     @classmethod
     def setUpTestData(cls) -> None:
-        from integration_tests.game_content.magic import seed_magic_dev
+        from world.seeds.game_content.magic import MagicContent
 
         # Two calls — if create_all() is not idempotent, techniques double
-        seed_magic_dev()
-        seed_magic_dev()
+        MagicContent.create_all()
+        MagicContent.create_all()
 
     def test_social_techniques_exist_exactly_once(self) -> None:
         """Each of the 6 social action techniques must appear exactly once."""
-        from integration_tests.game_content.magic import ACTION_TECHNIQUE_MAP
         from world.magic.models import Technique
+        from world.seeds.game_content.magic import ACTION_TECHNIQUE_MAP
 
         for action_key, technique_name in ACTION_TECHNIQUE_MAP.items():
             with self.subTest(technique=technique_name):
@@ -586,13 +592,13 @@ class TestSeedMagicDevTechniqueIdempotency(TestCase):
                     Technique.objects.filter(name=technique_name).count(),
                     1,
                     f"Technique '{technique_name}' must exist exactly once after two "
-                    f"seed_magic_dev() calls (action_key={action_key!r})",
+                    f"MagicContent.create_all() calls (action_key={action_key!r})",
                 )
 
     def test_action_enhancements_exist_exactly_once(self) -> None:
         """Each of the 6 ActionEnhancement rows must appear exactly once."""
         from actions.models import ActionEnhancement
-        from integration_tests.game_content.magic import ACTION_TECHNIQUE_MAP
+        from world.seeds.game_content.magic import ACTION_TECHNIQUE_MAP
 
         for action_key in ACTION_TECHNIQUE_MAP:
             with self.subTest(action_key=action_key):
@@ -600,7 +606,7 @@ class TestSeedMagicDevTechniqueIdempotency(TestCase):
                     ActionEnhancement.objects.filter(base_action_key=action_key).count(),
                     1,
                     f"ActionEnhancement for '{action_key}' must exist exactly once after two "
-                    f"seed_magic_dev() calls",
+                    f"MagicContent.create_all() calls",
                 )
 
 
@@ -610,7 +616,7 @@ class TestSeedMagicDev(TestCase):
 
     @classmethod
     def setUpTestData(cls) -> None:
-        from integration_tests.game_content.magic import seed_magic_dev
+        from world.seeds.game_content.magic import seed_magic_dev
 
         # Stand in for the content repo. No seeder mints a Resonance any more
         # (#2967), and several steps below hang their config off whichever ones
@@ -625,7 +631,6 @@ class TestSeedMagicDev(TestCase):
     def test_first_call_creates_all_components(self) -> None:
         """Spot-check: at least one of every authored row family exists."""
         from world.checks.models import CheckType
-        from world.conditions.models import ConditionTemplate
         from world.magic.audere import AudereThreshold
         from world.magic.models import (
             AnimaConfig,
@@ -633,7 +638,6 @@ class TestSeedMagicDev(TestCase):
             MishapPoolTier,
             Ritual,
             SoulfrayConfig,
-            Technique,
         )
         from world.magic.models.corruption_config import CorruptionConfig
         from world.magic.models.gain_config import ResonanceGainConfig
@@ -677,30 +681,18 @@ class TestSeedMagicDev(TestCase):
         # ahead of seed_dev_database()'s cluster loop, not by seed_magic_dev()
         # itself. Nothing to assert on this orchestrator's own output.
 
-        # --- author_reference_corruption_content: one Primal + one Abyssal ---
-        # Exactly one reference template per affinity, keyed to an authored
-        # resonance rather than an invented name (#2967). Which one is not
-        # asserted: the seed follows whichever row it placed first, so pinning
-        # the identity here would just re-encode the ordering it deliberately
-        # stopped depending on.
-        for affinity_name in ("Primal", "Abyssal"):
-            templates = ConditionTemplate.objects.filter(
-                corruption_resonance__affinity__name=affinity_name
-            )
-            self.assertEqual(
-                templates.count(),
-                1,
-                f"exactly one reference Corruption ConditionTemplate for {affinity_name}",
-            )
+        # Note: author_reference_corruption_content()'s reference Corruption
+        # ConditionTemplates (one per Primal/Abyssal) are no longer authored
+        # here either (#2973) — content-repo rows now; the factory survives as
+        # a test-fixture builder test_reference_corruption_content.py calls
+        # directly. Nothing to assert on this orchestrator's own output for
+        # that family.
 
-        # --- MagicContent.create_all(): 6 social techniques ---
-        from integration_tests.game_content.magic import ACTION_TECHNIQUE_MAP
-
-        for technique_name in ACTION_TECHNIQUE_MAP.values():
-            self.assertTrue(
-                Technique.objects.filter(name=technique_name).exists(),
-                f"Social technique '{technique_name}' must exist",
-            )
+        # Note: MagicContent.create_all()'s "Social Arts" Gift + 6 Techniques +
+        # 6 ActionEnhancements are no longer authored here either (#2973) —
+        # content-repo rows now; MagicContent survives as a test-fixture
+        # builder the two pipeline suites call directly. Nothing to assert on
+        # this orchestrator's own output for that family.
 
         # --- CheckType canonical row (convergence guard) ---
         self.assertEqual(CheckType.objects.filter(name="Magical Endurance").count(), 1)
@@ -742,7 +734,7 @@ class TestSeedMagicDev(TestCase):
                 "check_categories": CheckCategory.objects.count(),
             }
 
-        from integration_tests.game_content.magic import seed_magic_dev
+        from world.seeds.game_content.magic import seed_magic_dev
 
         before = _snapshot()
         seed_magic_dev()
@@ -770,20 +762,6 @@ class TestSeedMagicDev(TestCase):
             1,
         )
 
-    def test_technique_idempotency_via_magic_content(self) -> None:
-        """The 6 social techniques must exist exactly once after two orchestrator calls."""
-        from integration_tests.game_content.magic import ACTION_TECHNIQUE_MAP
-        from world.magic.models import Technique
-
-        for action_key, technique_name in ACTION_TECHNIQUE_MAP.items():
-            with self.subTest(technique=technique_name):
-                self.assertEqual(
-                    Technique.objects.filter(name=technique_name).count(),
-                    1,
-                    f"Technique '{technique_name}' (action_key={action_key!r}) must exist "
-                    f"exactly once after two seed_magic_dev() calls",
-                )
-
 
 # ---------------------------------------------------------------------------
 # #2027 — Soul Tether content is reachable from seed_magic_dev() alone
@@ -805,7 +783,7 @@ class TestSeedMagicDevSoulTetherContent(TestCase):
 
     @classmethod
     def setUpTestData(cls) -> None:
-        from integration_tests.game_content.magic import seed_magic_dev
+        from world.seeds.game_content.magic import seed_magic_dev
 
         cls.result = seed_magic_dev()
 
@@ -864,10 +842,10 @@ class TestSeedMagicDevSoulTetherContent(TestCase):
     def test_idempotent_on_rerun(self) -> None:
         """Re-running the orchestrator does not duplicate any of the above."""
         from flows.models import TriggerDefinition
-        from integration_tests.game_content.magic import seed_magic_dev
         from world.magic.constants import TargetKind
         from world.magic.models import Ritual
         from world.magic.models.weaving import ThreadWeavingUnlock
+        from world.seeds.game_content.magic import seed_magic_dev
 
         seed_magic_dev()
 
@@ -956,14 +934,14 @@ class SeedEndureHallowedGroundCheckTests(TestCase):
         _seed_endure_hallowed_ground_check()'s Magic CheckCategory dependency
         only invents under SEED_SAMPLE_CONTENT — this test asserts on the real
         CheckType, so it opts in."""
-        from integration_tests.game_content.magic import _seed_endure_hallowed_ground_check
         from world.checks.models import CheckType
+        from world.seeds.game_content.magic import _seed_endure_hallowed_ground_check
 
         _seed_endure_hallowed_ground_check()
         self.assertTrue(CheckType.objects.filter(name="endure_hallowed_ground").exists())
 
     def test_ensures_canonical_resolution_spine(self):
-        from integration_tests.game_content.magic import _seed_endure_hallowed_ground_check
+        from world.seeds.game_content.magic import _seed_endure_hallowed_ground_check
         from world.traits.models import CheckOutcome, ResultChart, ResultChartOutcome
 
         _seed_endure_hallowed_ground_check()
@@ -985,8 +963,8 @@ class SeedEndureHallowedGroundCheckTests(TestCase):
         )
 
     def test_idempotent(self):
-        from integration_tests.game_content.magic import _seed_endure_hallowed_ground_check
         from world.checks.models import CheckType
+        from world.seeds.game_content.magic import _seed_endure_hallowed_ground_check
         from world.traits.models import ResultChart, ResultChartOutcome
 
         _seed_endure_hallowed_ground_check()
@@ -1016,12 +994,190 @@ class SeedMintsNoResonanceTests(TestCase):
         seed_canonical_affinities()
 
     def test_seed_starter_magic_story_creates_no_resonance(self) -> None:
-        from integration_tests.game_content.magic import seed_starter_magic_story
         from world.magic.models.affinity import Resonance
+        from world.seeds.game_content.magic import seed_starter_magic_story
 
         before = Resonance.objects.count()
         seed_starter_magic_story()
         self.assertEqual(Resonance.objects.count(), before)
+
+
+class SeedStarterMagicStoryStripsStandInsTests(TestCase):
+    """#2973: rooms, reaction conditions, and the achievement bridge left the
+    production seeder — they're lore-repo content now (or, for the rooms and
+    achievement bridge, test-fixture builders a suite must call directly).
+
+    No ``@override_settings(SEED_SAMPLE_CONTENT=True)`` here deliberately: this
+    exercises the real default (off) production behavior, where
+    ``seed_starter_magic_story()`` must author none of the three stripped
+    clusters even implicitly via its remaining phases.
+    """
+
+    def test_no_reaction_or_flavor_conditions_authored(self) -> None:
+        from world.conditions.models import ConditionTemplate
+
+        seed_starter_magic_story()
+        stripped_names = {
+            "Tempered Against Light",
+            "Singed",
+            "Burning",
+            "Hallowed Burn",
+            "Cast Disrupted",
+            "Hallowed Rejection",
+        }
+        self.assertFalse(
+            ConditionTemplate.objects.filter(name__in=stripped_names).exists(),
+            "seed_starter_magic_story() must not author reaction/flavor conditions "
+            "without SEED_SAMPLE_CONTENT — they're lore-owned content now (#2973)",
+        )
+
+    def test_no_achievement_bridge_authored(self) -> None:
+        from world.achievements.models import Achievement
+
+        seed_starter_magic_story()
+        self.assertFalse(
+            Achievement.objects.filter(
+                slug__in=["hallowed-hardened", "touched-by-light", "cast-out-by-the-light"],
+            ).exists(),
+            "seed_starter_magic_story() must not author the achievement bridge "
+            "without SEED_SAMPLE_CONTENT — it's lore-owned content now (#2973)",
+        )
+
+    def test_no_cascade_rooms_authored(self) -> None:
+        from evennia.objects.models import ObjectDB
+
+        seed_starter_magic_story()
+        self.assertFalse(
+            ObjectDB.objects.filter(
+                db_key__in=[
+                    "The Hallowed Threshold (Low)",
+                    "The Hallowed Threshold (High)",
+                    "The Resonant Sanctum (Aligned)",
+                ],
+            ).exists(),
+            "seed_starter_magic_story() must not author the cascade rooms "
+            "without SEED_SAMPLE_CONTENT — they ride the #2451 grid bundle now (#2973)",
+        )
+
+    def test_no_hallowed_threshold_story_authored(self) -> None:
+        from world.stories.models import Story
+
+        seed_starter_magic_story()
+        self.assertFalse(
+            Story.objects.filter(title="The Hallowed Threshold").exists(),
+            "seed_starter_magic_story() must not author the Hallowed Threshold "
+            "story — _seed_hallowed_threshold_story() is a test-fixture builder "
+            "with no production destination now (#2973)",
+        )
+
+
+class SeedMagicDevStripsStandInsTests(TestCase):
+    """#2973 items 3 + 4 + 6 + 7 + 8: MagicContent.create_all(), the reference
+    Corruption content, the touchstone/reagent content, the Fall/Redemption
+    example rows, and the Devotion RelationshipTrack + unlock left
+    ``seed_magic_dev()`` — they're content-repo rows now (or, for
+    ``MagicContent``/``ensure_touchstone_content()``/
+    ``author_reference_corruption_content()``, test-fixture builders a suite
+    must call directly).
+
+    No ``@override_settings(SEED_SAMPLE_CONTENT=True)`` here deliberately:
+    this exercises the real default (off) production behavior, mirroring
+    ``TestSeedMagicDevCheckTypeConvergence`` and
+    ``SeedStarterMagicStoryStripsStandInsTests`` above — a bare
+    ``seed_magic_dev()`` call against an empty database must not author any
+    of the stripped clusters, even implicitly via a remaining phase.
+    """
+
+    def test_no_social_arts_gift_authored(self) -> None:
+        from world.magic.models import Gift
+
+        seed_magic_dev()
+        self.assertFalse(
+            Gift.objects.filter(name="Social Arts").exists(),
+            "seed_magic_dev() must not author the 'Social Arts' Gift without "
+            "SEED_SAMPLE_CONTENT — MagicContent.create_all() is a test-fixture "
+            "builder only now (#2973)",
+        )
+
+    def test_no_touchstone_or_reagent_templates_authored(self) -> None:
+        from world.items.models import ItemTemplate
+        from world.magic.seeds_touchstone_content import (
+            CANDLE_TEMPLATE_NAME,
+            INCENSE_TEMPLATE_NAME,
+            SALT_TEMPLATE_NAME,
+            TOUCHSTONE_TEMPLATE_NAME,
+        )
+
+        seed_magic_dev()
+        self.assertFalse(
+            ItemTemplate.objects.filter(
+                name__in=[
+                    TOUCHSTONE_TEMPLATE_NAME,
+                    CANDLE_TEMPLATE_NAME,
+                    SALT_TEMPLATE_NAME,
+                    INCENSE_TEMPLATE_NAME,
+                ],
+            ).exists(),
+            "seed_magic_dev() must not author the example touchstone or generic "
+            "reagent ItemTemplates without SEED_SAMPLE_CONTENT — "
+            "ensure_sanctification_requirements() resolves them via "
+            "authored_or_sample now (#2973)",
+        )
+
+    def test_no_corruption_templates_authored(self) -> None:
+        from world.conditions.models import ConditionTemplate
+
+        seed_magic_dev()
+        self.assertFalse(
+            ConditionTemplate.objects.filter(corruption_resonance__isnull=False).exists(),
+            "seed_magic_dev() must not author reference Corruption "
+            "ConditionTemplates without SEED_SAMPLE_CONTENT — "
+            "author_reference_corruption_content() is a test-fixture builder "
+            "only now (#2973)",
+        )
+        self.assertFalse(
+            ConditionTemplate.objects.filter(name="Corruption Twist").exists(),
+            "seed_magic_dev() must not author the Corruption Twist category "
+            "without SEED_SAMPLE_CONTENT (#2973)",
+        )
+
+    def test_no_fall_redemption_example_rows_authored(self) -> None:
+        from world.magic.models import CompromiseActType, ResonanceConversion
+
+        seed_magic_dev()
+        self.assertFalse(
+            CompromiseActType.objects.exists(),
+            "seed_magic_dev() must not author example CompromiseActType rows "
+            "without SEED_SAMPLE_CONTENT — wire_fall_redemption_content() "
+            "resolves them via authored_or_sample (#2973)",
+        )
+        self.assertFalse(
+            ResonanceConversion.objects.exists(),
+            "seed_magic_dev() must not author example ResonanceConversion rows "
+            "without SEED_SAMPLE_CONTENT — wire_fall_redemption_content() "
+            "resolves them via authored_or_sample (#2973)",
+        )
+
+    def test_no_devotion_track_authored(self) -> None:
+        from world.magic.constants import TargetKind
+        from world.magic.models.weaving import ThreadWeavingUnlock
+        from world.relationships.models import RelationshipTrack
+
+        seed_magic_dev()
+        self.assertFalse(
+            RelationshipTrack.objects.filter(name="Devotion").exists(),
+            "seed_magic_dev() must not author the 'Devotion' RelationshipTrack "
+            "without SEED_SAMPLE_CONTENT — seed_relationship_track_thread_unlock() "
+            "resolves it via authored_or_sample (#2973)",
+        )
+        self.assertFalse(
+            ThreadWeavingUnlock.objects.filter(
+                target_kind=TargetKind.RELATIONSHIP_TRACK,
+            ).exists(),
+            "seed_magic_dev() must not author a RELATIONSHIP_TRACK "
+            "ThreadWeavingUnlock without SEED_SAMPLE_CONTENT — it has no "
+            "'Devotion' track to hang off of (#2973)",
+        )
 
 
 # ---------------------------------------------------------------------------
@@ -1032,8 +1188,8 @@ class SeedMintsNoResonanceTests(TestCase):
 @override_settings(SEED_SAMPLE_CONTENT=True)  # ConditionTemplate gates on #2698
 class SeedHallowedReactionConditionsTests(TestCase):
     def test_seeds_five_reaction_conditions(self):
-        from integration_tests.game_content.magic import _seed_hallowed_reaction_conditions
         from world.conditions.models import ConditionTemplate
+        from world.seeds.game_content.magic import _seed_hallowed_reaction_conditions
 
         _seed_hallowed_reaction_conditions()
         names = set(ConditionTemplate.objects.values_list("name", flat=True))
@@ -1047,8 +1203,8 @@ class SeedHallowedReactionConditionsTests(TestCase):
         self.assertGreaterEqual(names, expected)
 
     def test_idempotent(self):
-        from integration_tests.game_content.magic import _seed_hallowed_reaction_conditions
         from world.conditions.models import ConditionTemplate
+        from world.seeds.game_content.magic import _seed_hallowed_reaction_conditions
 
         _seed_hallowed_reaction_conditions()
         count_a = ConditionTemplate.objects.count()
@@ -1058,9 +1214,9 @@ class SeedHallowedReactionConditionsTests(TestCase):
 
     def test_burning_reuses_existing_factory_template(self):
         """If a Burning template already exists (factory-created), get_or_create reuses it."""
-        from integration_tests.game_content.magic import _seed_hallowed_reaction_conditions
         from world.conditions.factories import ConditionTemplateFactory
         from world.conditions.models import ConditionTemplate
+        from world.seeds.game_content.magic import _seed_hallowed_reaction_conditions
 
         # Pre-create a Burning template (mimics factory test setup).
         pre_existing = ConditionTemplateFactory(name="Burning")
@@ -1087,13 +1243,13 @@ class SeedHallowedReactionConditionsTests(TestCase):
 class SeedHallowedAchievementBridgeTests(TestCase):
     @classmethod
     def setUpTestData(cls):
-        from integration_tests.game_content.magic import _seed_hallowed_reaction_conditions
+        from world.seeds.game_content.magic import _seed_hallowed_reaction_conditions
 
         _seed_hallowed_reaction_conditions()
 
     def test_seeds_three_stat_definitions(self):
-        from integration_tests.game_content.magic import _seed_hallowed_achievement_bridge
         from world.achievements.models import StatDefinition
+        from world.seeds.game_content.magic import _seed_hallowed_achievement_bridge
 
         _seed_hallowed_achievement_bridge()
         keys = set(StatDefinition.objects.values_list("key", flat=True))
@@ -1105,9 +1261,9 @@ class SeedHallowedAchievementBridgeTests(TestCase):
         self.assertGreaterEqual(keys, expected)
 
     def test_seeds_three_condition_stat_rules(self):
-        from integration_tests.game_content.magic import _seed_hallowed_achievement_bridge
         from world.achievements.constants import ConditionEventType
         from world.achievements.models import ConditionStatRule
+        from world.seeds.game_content.magic import _seed_hallowed_achievement_bridge
 
         _seed_hallowed_achievement_bridge()
         # Each rule links one of the 3 reaction conditions to its corresponding stat.
@@ -1123,8 +1279,8 @@ class SeedHallowedAchievementBridgeTests(TestCase):
         self.assertGreaterEqual(rule_pairs, expected)
 
     def test_seeds_three_achievements(self):
-        from integration_tests.game_content.magic import _seed_hallowed_achievement_bridge
         from world.achievements.models import Achievement
+        from world.seeds.game_content.magic import _seed_hallowed_achievement_bridge
 
         _seed_hallowed_achievement_bridge()
         names = set(Achievement.objects.values_list("name", flat=True))
@@ -1132,8 +1288,8 @@ class SeedHallowedAchievementBridgeTests(TestCase):
         self.assertGreaterEqual(names, expected)
 
     def test_seeds_three_achievement_requirements(self):
-        from integration_tests.game_content.magic import _seed_hallowed_achievement_bridge
         from world.achievements.models import Achievement, AchievementStatRequirement
+        from world.seeds.game_content.magic import _seed_hallowed_achievement_bridge
 
         _seed_hallowed_achievement_bridge()
         for ach_name, stat_key in (
@@ -1150,8 +1306,8 @@ class SeedHallowedAchievementBridgeTests(TestCase):
             self.assertEqual(reqs.first().threshold, 1)
 
     def test_burning_has_no_stat_or_achievement(self):
-        from integration_tests.game_content.magic import _seed_hallowed_achievement_bridge
         from world.achievements.models import StatDefinition
+        from world.seeds.game_content.magic import _seed_hallowed_achievement_bridge
 
         _seed_hallowed_achievement_bridge()
         self.assertFalse(
@@ -1159,13 +1315,13 @@ class SeedHallowedAchievementBridgeTests(TestCase):
         )
 
     def test_idempotent(self):
-        from integration_tests.game_content.magic import _seed_hallowed_achievement_bridge
         from world.achievements.models import (
             Achievement,
             AchievementStatRequirement,
             ConditionStatRule,
             StatDefinition,
         )
+        from world.seeds.game_content.magic import _seed_hallowed_achievement_bridge
 
         _seed_hallowed_achievement_bridge()
         snapshot = (
@@ -1195,13 +1351,13 @@ class SeedHallowedAchievementBridgeTests(TestCase):
 class SeedResonanceEnvironmentRoomsTests(TestCase):
     @classmethod
     def setUpTestData(cls):
-        from integration_tests.game_content.magic import (
+        from world.magic.factories import ResonanceFactory
+        from world.magic.models.affinity import Affinity
+        from world.seeds.game_content.magic import (
             _seed_endure_hallowed_ground_check,
             _seed_hallowed_reaction_conditions,
             seed_canonical_affinities,
         )
-        from world.magic.factories import ResonanceFactory
-        from world.magic.models.affinity import Affinity
 
         seed_canonical_affinities()
         # The cascade rooms take whichever Celestial/Abyssal resonance the
@@ -1212,8 +1368,8 @@ class SeedResonanceEnvironmentRoomsTests(TestCase):
         _seed_endure_hallowed_ground_check()
 
     def test_seeds_hallowed_rejection_flavor_condition(self):
-        from integration_tests.game_content.magic import _seed_resonance_environment_rooms
         from world.conditions.models import ConditionTemplate
+        from world.seeds.game_content.magic import _seed_resonance_environment_rooms
 
         _seed_resonance_environment_rooms()
         self.assertTrue(
@@ -1223,7 +1379,7 @@ class SeedResonanceEnvironmentRoomsTests(TestCase):
     def test_seeds_three_rooms(self):
         from evennia.objects.models import ObjectDB
 
-        from integration_tests.game_content.magic import _seed_resonance_environment_rooms
+        from world.seeds.game_content.magic import _seed_resonance_environment_rooms
 
         _seed_resonance_environment_rooms()
         self.assertTrue(
@@ -1240,9 +1396,9 @@ class SeedResonanceEnvironmentRoomsTests(TestCase):
         """The Low celestial room resolves to magnitude 10 via effective_value."""
         from evennia.objects.models import ObjectDB
 
-        from integration_tests.game_content.magic import _seed_resonance_environment_rooms
         from world.locations.services import effective_value
         from world.magic.seeds_resonance import first_authored_resonance
+        from world.seeds.game_content.magic import _seed_resonance_environment_rooms
 
         _seed_resonance_environment_rooms()
         low = ObjectDB.objects.get(db_key="The Hallowed Threshold (Low)")
@@ -1253,9 +1409,9 @@ class SeedResonanceEnvironmentRoomsTests(TestCase):
         """The High celestial room resolves to magnitude 80 via effective_value."""
         from evennia.objects.models import ObjectDB
 
-        from integration_tests.game_content.magic import _seed_resonance_environment_rooms
         from world.locations.services import effective_value
         from world.magic.seeds_resonance import first_authored_resonance
+        from world.seeds.game_content.magic import _seed_resonance_environment_rooms
 
         _seed_resonance_environment_rooms()
         high = ObjectDB.objects.get(db_key="The Hallowed Threshold (High)")
@@ -1266,9 +1422,9 @@ class SeedResonanceEnvironmentRoomsTests(TestCase):
         """The Abyssal aligned room resolves to magnitude 60 via effective_value."""
         from evennia.objects.models import ObjectDB
 
-        from integration_tests.game_content.magic import _seed_resonance_environment_rooms
         from world.locations.services import effective_value
         from world.magic.seeds_resonance import first_authored_resonance
+        from world.seeds.game_content.magic import _seed_resonance_environment_rooms
 
         _seed_resonance_environment_rooms()
         sanctum = ObjectDB.objects.get(db_key="The Resonant Sanctum (Aligned)")
@@ -1279,11 +1435,11 @@ class SeedResonanceEnvironmentRoomsTests(TestCase):
         """Re-running _seed_resonance_environment_rooms() produces stable counts/values."""
         from evennia.objects.models import ObjectDB
 
-        from integration_tests.game_content.magic import _seed_resonance_environment_rooms
         from world.conditions.models import ConditionTemplate
         from world.locations.models import LocationValueModifier
         from world.locations.services import effective_value
         from world.magic.seeds_resonance import first_authored_resonance
+        from world.seeds.game_content.magic import _seed_resonance_environment_rooms
 
         _seed_resonance_environment_rooms()
         light = first_authored_resonance("Celestial")
@@ -1337,12 +1493,12 @@ class SeedResonanceEnvironmentRoomsTests(TestCase):
 class SeedHallowedThresholdStoryTests(TestCase):
     @classmethod
     def setUpTestData(cls):
-        from integration_tests.game_content.magic import _seed_hallowed_reaction_conditions
+        from world.seeds.game_content.magic import _seed_hallowed_reaction_conditions
 
         _seed_hallowed_reaction_conditions()
 
     def test_seeds_story(self):
-        from integration_tests.game_content.magic import _seed_hallowed_threshold_story
+        from world.seeds.game_content.magic import _seed_hallowed_threshold_story
         from world.stories.constants import StoryScope
         from world.stories.models import Story
 
@@ -1352,7 +1508,7 @@ class SeedHallowedThresholdStoryTests(TestCase):
         self.assertIsNone(story.character_sheet)  # template, not per-playthrough
 
     def test_seeds_chapter_and_four_episodes(self):
-        from integration_tests.game_content.magic import _seed_hallowed_threshold_story
+        from world.seeds.game_content.magic import _seed_hallowed_threshold_story
         from world.stories.models import Chapter, Episode
 
         _seed_hallowed_threshold_story()
@@ -1366,7 +1522,7 @@ class SeedHallowedThresholdStoryTests(TestCase):
         )
 
     def test_seeds_four_beats_on_source_episode(self):
-        from integration_tests.game_content.magic import _seed_hallowed_threshold_story
+        from world.seeds.game_content.magic import _seed_hallowed_threshold_story
         from world.stories.constants import BeatPredicateType
         from world.stories.models import Beat, Episode
 
@@ -1385,7 +1541,7 @@ class SeedHallowedThresholdStoryTests(TestCase):
         )
 
     def test_seeds_four_transitions(self):
-        from integration_tests.game_content.magic import _seed_hallowed_threshold_story
+        from world.seeds.game_content.magic import _seed_hallowed_threshold_story
         from world.stories.models import Episode, Transition
 
         _seed_hallowed_threshold_story()
@@ -1399,7 +1555,7 @@ class SeedHallowedThresholdStoryTests(TestCase):
         self.assertEqual(marked_path_transitions.count(), 2)
 
     def test_seeds_four_transition_required_outcomes(self):
-        from integration_tests.game_content.magic import _seed_hallowed_threshold_story
+        from world.seeds.game_content.magic import _seed_hallowed_threshold_story
         from world.stories.models import (
             Episode,
             Transition,
@@ -1417,7 +1573,7 @@ class SeedHallowedThresholdStoryTests(TestCase):
             )
 
     def test_zero_episode_progression_requirements_on_source(self):
-        from integration_tests.game_content.magic import _seed_hallowed_threshold_story
+        from world.seeds.game_content.magic import _seed_hallowed_threshold_story
         from world.stories.models import Episode, EpisodeProgressionRequirement
 
         _seed_hallowed_threshold_story()
@@ -1428,7 +1584,7 @@ class SeedHallowedThresholdStoryTests(TestCase):
         )
 
     def test_beats_have_authored_player_resolution_text(self):
-        from integration_tests.game_content.magic import _seed_hallowed_threshold_story
+        from world.seeds.game_content.magic import _seed_hallowed_threshold_story
         from world.stories.models import Beat, Episode
 
         _seed_hallowed_threshold_story()
@@ -1440,7 +1596,7 @@ class SeedHallowedThresholdStoryTests(TestCase):
             )
 
     def test_idempotent(self):
-        from integration_tests.game_content.magic import _seed_hallowed_threshold_story
+        from world.seeds.game_content.magic import _seed_hallowed_threshold_story
         from world.stories.models import (
             Beat,
             Chapter,
@@ -1487,21 +1643,34 @@ class SeedStarterMagicStoryOrchestratorTests(TestCase):
             ResonanceAlignmentBoonTier,
             ResonanceEnvironmentConfig,
         )
+        from world.seeds.game_content.magic import (
+            _seed_hallowed_achievement_bridge,
+            _seed_hallowed_threshold_story,
+            _seed_resonance_environment_rooms,
+        )
         from world.stories.models import Story
 
         # The cascade rooms only seed when a Celestial and an Abyssal resonance
         # are authored (#2967) — stand in for the content repo.
         _author_stand_in_resonances()
         seed_starter_magic_story()
+        # #2973: the cascade rooms (+ "Hallowed Rejection"), the achievement
+        # bridge, and the Hallowed Threshold story left the production seeder
+        # — this suite provisions them directly in its own setup, the way
+        # lore-fixture content (or, for the story, a dedicated test fixture)
+        # would.
+        _seed_resonance_environment_rooms()
+        _seed_hallowed_achievement_bridge()
+        _seed_hallowed_threshold_story()
 
         # Spot-check that representative content from each phase is present.
         # Phase RC1: 9 directed AffinityInteraction rows + config singleton
         self.assertEqual(AffinityInteraction.objects.count(), 9)
         self.assertIsNotNone(ResonanceEnvironmentConfig.objects.filter(pk=1).first())
-        # Phase B: OPPOSED reaction conditions
+        # Phase B (rooms fixture) / T12: reaction + flavor conditions
         self.assertTrue(ConditionTemplate.objects.filter(name="Hallowed Rejection").exists())
         self.assertTrue(ConditionTemplate.objects.filter(name="Tempered Against Light").exists())
-        # Phase C: achievement bridge
+        # Phase C (achievement-bridge fixture): stat/achievement bridge
         self.assertTrue(Achievement.objects.filter(name="Hallowed-Hardened").exists())
         # Phase A: endure_hallowed_ground check type
         self.assertTrue(CheckType.objects.filter(name="endure_hallowed_ground").exists())
@@ -1537,7 +1706,7 @@ class SeedStarterMagicStoryOrchestratorTests(TestCase):
             ConditionTemplate.objects.filter(name="Empowered by Resonant Ground").exists(),
             "Empowered by Resonant Ground must not exist — removed in core-service rework",
         )
-        # Phase RC4: 3 cascade rooms
+        # Phase RC4 (rooms fixture): 3 cascade rooms
         self.assertEqual(
             ObjectDB.objects.filter(
                 db_key__in=[
@@ -1644,12 +1813,19 @@ class SeedStarterMagicStoryOrchestratorTests(TestCase):
         self.assertEqual(snapshot, recount)
 
     def test_orchestrator_preserves_edits(self) -> None:
-        """Editing a seeded row and re-running the orchestrator leaves the edit intact."""
-        from integration_tests.game_content.magic import seed_starter_magic_story
+        """Editing a seeded row and re-running the orchestrator leaves the edit intact.
+
+        #2973: "Hallowed Rejection" left the orchestrator along with the rooms
+        fixture that used to seed it; "Tempered Against Light" is still
+        genuinely seeded by seed_starter_magic_story() itself (via
+        _seed_resonance_environment_consequence_pools()), so it's the right
+        marker for this test now.
+        """
         from world.conditions.models import ConditionTemplate
+        from world.seeds.game_content.magic import seed_starter_magic_story
 
         seed_starter_magic_story()
-        marker = ConditionTemplate.objects.get(name="Hallowed Rejection")
+        marker = ConditionTemplate.objects.get(name="Tempered Against Light")
         marker.description = "edited by orchestrator idempotency test"
         marker.save()
 
@@ -1660,27 +1836,38 @@ class SeedStarterMagicStoryOrchestratorTests(TestCase):
 
 @override_settings(SEED_SAMPLE_CONTENT=True)
 class TestSeedMagicDevIncludesStarterMagicStory(TestCase):
-    """Verify that seed_magic_dev() includes the magic-story slice content."""
+    """Verify that seed_magic_dev() includes the magic-story slice's own content.
+
+    #2973: the Hallowed Threshold Story itself is no longer part of this
+    contract — it left seed_starter_magic_story() (and therefore
+    seed_magic_dev()) as a test fixture with no production destination. See
+    SeedHallowedThresholdStoryTests for its own direct-call coverage and
+    SeedMagicDevStripsStandInsTests for the absence guard on a bare
+    seed_magic_dev() run.
+    """
 
     def test_seed_magic_dev_includes_starter_magic_story_content(self) -> None:
-        """seed_magic_dev() should seed Hallowed Rejection + Hallowed Threshold content."""
+        """seed_magic_dev() should seed the reaction/backfire chain.
+
+        #2973: "Hallowed Rejection" (the flavor marker seeded alongside the demo
+        rooms) left the production seeder along with the rooms themselves — it's
+        lore-repo content now, no longer part of this contract. The 5 reaction
+        conditions the backfire pools need are still resolved here (by name, via
+        authored_or_sample), so "Tempered Against Light" is still a valid proof
+        that the chain runs end to end.
+        """
         from world.conditions.models import ConditionTemplate
         from world.magic.models.resonance_environment import (
             AffinityInteraction,
             ResonanceAlignmentBoonTier,
         )
-        from world.stories.models import Story
 
         seed_magic_dev()
 
         # Spot-check that the magic-story slice content is now seeded too.
         self.assertTrue(
-            ConditionTemplate.objects.filter(name="Hallowed Rejection").exists(),
-            "seed_magic_dev() must include Hallowed Rejection condition",
-        )
-        self.assertTrue(
-            Story.objects.filter(title="The Hallowed Threshold").exists(),
-            "seed_magic_dev() must include Hallowed Threshold story",
+            ConditionTemplate.objects.filter(name="Tempered Against Light").exists(),
+            "seed_magic_dev() must resolve the reaction conditions the backfire pools need",
         )
         # T12: OPPOSED consequence pools wired for pairs #4 and #7
         from world.magic.models.affinity import Affinity
@@ -1707,25 +1894,17 @@ class TestSeedMagicDevIncludesStarterMagicStory(TestCase):
     def test_seed_magic_dev_remains_idempotent_with_story_slice(self) -> None:
         """Re-running seed_magic_dev() produces stable counts after wiring slice."""
         from world.conditions.models import ConditionTemplate
-        from world.stories.models import Story
 
         seed_magic_dev()
         first_condition_count = ConditionTemplate.objects.count()
-        first_story_count = Story.objects.count()
 
         seed_magic_dev()
         second_condition_count = ConditionTemplate.objects.count()
-        second_story_count = Story.objects.count()
 
         self.assertEqual(
             first_condition_count,
             second_condition_count,
             "Condition counts must be stable across seed_magic_dev() runs",
-        )
-        self.assertEqual(
-            first_story_count,
-            second_story_count,
-            "Story counts must be stable across seed_magic_dev() runs",
         )
 
 
@@ -1861,14 +2040,21 @@ class SeedMagicDevMagicChecksTests(TestCase):
         self.assertEqual(len(result.magic_checks.configs), 5)
 
 
-@override_settings(SEED_SAMPLE_CONTENT=True)
 class TestSeedMagicDevVariants(TestCase):
-    """seed_magic_dev authors starter gift-technique variants (#1581)."""
+    """MagicContent.create_all() authors gift-technique variants (#1581).
+
+    #2973: seed_magic_dev() no longer calls MagicContent.create_all() (the
+    Social Arts Gift/Techniques/variants are content-repo rows now) — this
+    suite calls the factory directly, same as the two pipeline suites that
+    keep it as a test fixture.
+    """
 
     @classmethod
     def setUpTestData(cls) -> None:
+        from world.seeds.game_content.magic import MagicContent
+
         cls.resonances = _author_stand_in_resonances()
-        cls.seed = seed_magic_dev()
+        cls.magic_content = MagicContent.create_all()
 
     def test_seed_authors_gift_technique_variants(self):
         from world.magic.specialization.models import TechniqueVariant

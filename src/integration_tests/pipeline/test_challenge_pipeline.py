@@ -14,12 +14,12 @@ from django.test import TestCase
 
 from integration_tests.game_content.challenges import ChallengeContent
 from integration_tests.game_content.characters import CharacterContent
-from integration_tests.game_content.magic import MagicContent
 from integration_tests.game_content.social import SocialContent
 from world.mechanics.constants import CapabilitySourceType
 from world.mechanics.models import ChallengeApproach, ChallengeInstance, CharacterChallengeRecord
 from world.mechanics.services import get_available_actions
 from world.mechanics.types import CapabilitySource
+from world.seeds.game_content.magic import MagicContent
 
 # ---------------------------------------------------------------------------
 # Test Class 1: Challenge Availability

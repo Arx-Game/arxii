@@ -12,12 +12,12 @@ from django.test import TestCase
 
 from evennia_extensions.factories import AccountFactory
 from integration_tests.game_content.characters import CharacterContent
-from integration_tests.game_content.magic import MagicContent
 from integration_tests.game_content.social import SocialContent
 from world.conditions.services import has_condition
 from world.scenes.action_constants import ConsentDecision
 from world.scenes.action_services import create_action_request, respond_to_action_request
 from world.scenes.factories import SceneFactory
+from world.seeds.game_content.magic import MagicContent
 
 
 class SocialMagicConsequenceTests(TestCase):

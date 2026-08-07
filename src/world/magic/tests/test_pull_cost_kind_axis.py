@@ -9,7 +9,6 @@ from __future__ import annotations
 
 from django.test import TestCase
 
-from integration_tests.game_content.magic import seed_thread_pull_catalog
 from world.magic.constants import TargetKind
 from world.magic.factories import (
     CharacterResonanceFactory,
@@ -21,6 +20,7 @@ from world.magic.factories import (
 )
 from world.magic.services.resonance import spend_resonance_for_imbuing
 from world.magic.services.threads import get_imbue_cost_multiplier
+from world.seeds.game_content.magic import seed_thread_pull_catalog
 
 
 class PullCostUniformAcrossKindsTests(TestCase):

@@ -14,11 +14,11 @@ from integration_tests.game_content.items import (
     ItemsDevSeedResult,
     seed_items_dev,
 )
-from integration_tests.game_content.magic import (
+from world.items.models import ItemTemplate, TemplateSlot
+from world.seeds.game_content.magic import (
     FacetThreadUnlockResult,
     seed_facet_thread_unlock,
 )
-from world.items.models import ItemTemplate, TemplateSlot
 
 
 class SeedItemsDevCreationTests(TestCase):

@@ -21,7 +21,6 @@ from django.test import TestCase, tag
 
 from actions.factories import ActionTemplateFactory
 from integration_tests.game_content.clash import ClashContent
-from integration_tests.game_content.magic import MagicContent
 from world.character_sheets.factories import CharacterSheetFactory
 from world.checks.test_helpers import force_check_outcome
 from world.combat.constants import (
@@ -74,6 +73,7 @@ from world.magic.factories import (
 from world.magic.models import PendingAlteration
 from world.mechanics.factories import CharacterEngagementFactory
 from world.scenes.constants import RoundStatus
+from world.seeds.game_content.magic import MagicContent
 from world.traits.factories import CheckOutcomeFactory
 from world.vitals.models import CharacterVitals
 

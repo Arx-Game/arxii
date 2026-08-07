@@ -42,24 +42,34 @@ Cascade math for the High celestial room (magnitude=80):
 ALIGNED room (Abyssal/Dissolution, magnitude=60):
   60 >= HIGH band threshold (min_magnitude=40) → "Abyssal Resonance - Deep Attunement"
 
-Test data dependencies (seeded by seed_starter_magic_story):
+Test data dependencies:
+
+Seeded by seed_starter_magic_story() itself:
 - ConditionTemplate "Singed", "Burning", "Tempered Against Light",
-  "Hallowed Burn", "Cast Disrupted"
+  "Hallowed Burn", "Cast Disrupted" (resolved by name via authored_or_sample
+  in _seed_resonance_environment_consequence_pools())
 - ConditionTemplate "Abyssal Resonance - Minor Attunement" (min_magnitude=1)
 - ConditionTemplate "Abyssal Resonance - Deep Attunement" (min_magnitude=40)
 - ResonanceAlignmentBoonTier rows on pair #5 (Abyssal→Abyssal)
-- Room "The Hallowed Threshold (Low)"   — Celestial cascade magnitude 10
-- Room "The Hallowed Threshold (High)"  — Celestial cascade magnitude 80
-- Room "The Resonant Sanctum (Aligned)" — Abyssal cascade magnitude 60
 - AffinityInteraction (Abyssal→Celestial) OPPOSED/REJECT/severity=1.00  (pair #4)
 - AffinityInteraction (Abyssal→Abyssal)  ALIGNED/AMPLIFY/severity=1.00  (pair #5)
 - AffinityInteraction (Abyssal→Primal)   OPPOSED/CORRUPT/aggressor=caster (pair #6)
 - ResonanceEnvironmentConfig (base_coefficient=1.000, caster_power_scalar=0.500,
   backfire_base_difficulty=30, backfire_difficulty_per_magnitude=0.500, balanced_band=10)
 - ConsequencePool for pair #4 with 4 Consequence rows keyed by CheckOutcome
-- Story "The Hallowed Threshold" with Chapter/Episodes/Beats/Transitions/TROs
-- Achievements "Hallowed-Hardened", "Touched by Light", "Cast Out by the Light"
 - CheckOutcomes "Critical Success", "Success", "Failure", "Critical Failure"
+
+#2973: no longer seeded by seed_starter_magic_story() — this suite is the
+test-fixture-builder caller, provisioning them directly in setUpTestData:
+- Room "The Hallowed Threshold (Low)"   — Celestial cascade magnitude 10
+- Room "The Hallowed Threshold (High)"  — Celestial cascade magnitude 80
+- Room "The Resonant Sanctum (Aligned)" — Abyssal cascade magnitude 60
+  (via _seed_resonance_environment_rooms())
+- Achievements "Hallowed-Hardened", "Touched by Light", "Cast Out by the Light"
+  (via _seed_hallowed_achievement_bridge())
+- Story "The Hallowed Threshold" with Chapter/Episodes/Beats/Transitions/TROs
+  (via _seed_hallowed_threshold_story() — a test fixture with no production
+  destination; see the docstring on _seed_hallowed_threshold_story() itself)
 """
 
 from __future__ import annotations
@@ -71,7 +81,6 @@ from django.test import override_settings
 from evennia.utils.test_resources import EvenniaTestCase
 from parameterized import parameterized
 
-from integration_tests.game_content.magic import seed_starter_magic_story
 from world.character_sheets.factories import CharacterSheetFactory
 from world.checks.test_helpers import force_check_outcome
 from world.conditions.models import ConditionInstance
@@ -88,6 +97,7 @@ from world.magic.services.resonance_environment import evaluate_resonance_enviro
 from world.magic.services.techniques import use_technique
 from world.magic.tests._cache_isolation import ResonanceCacheIsolationMixin
 from world.roster.factories import grant_test_tenure
+from world.seeds.game_content.magic import seed_starter_magic_story
 from world.traits.models import CheckOutcome
 
 
@@ -124,6 +134,27 @@ class MagicStoryPipelineTests(ResonanceCacheIsolationMixin, EvenniaTestCase):
         super().setUpTestData()
         cls._author_stand_in_resonances()
         seed_starter_magic_story()
+
+        # #2973: the cascade rooms (+ "Hallowed Rejection"), the achievement
+        # bridge, and the Hallowed Threshold story left the production seeder
+        # — the first two are lore-repo content now (or, for the rooms, ride
+        # the #2451 grid-bundle mechanism); the story is a test fixture with
+        # no production destination. This suite is exactly the
+        # test-fixture-builder caller the split named: provision them
+        # directly, the way lore content would land ahead of the cluster
+        # loop. The 5 reaction ConditionTemplates the achievement bridge and
+        # story both need are already resolved above, by
+        # seed_starter_magic_story() itself (via
+        # _seed_resonance_environment_consequence_pools()).
+        from world.seeds.game_content.magic import (
+            _seed_hallowed_achievement_bridge,
+            _seed_hallowed_threshold_story,
+            _seed_resonance_environment_rooms,
+        )
+
+        _seed_resonance_environment_rooms()
+        _seed_hallowed_achievement_bridge()
+        _seed_hallowed_threshold_story()
 
         from evennia.objects.models import ObjectDB
 

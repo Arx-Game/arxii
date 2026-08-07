@@ -710,8 +710,8 @@ _HALLOWED_REACTION_SPECS: list[dict[str, str]] = [
 ]
 
 
-def _seed_hallowed_reaction_conditions() -> dict[str, ConditionTemplate]:
-    """Seed the 5 reaction conditions for the Hallowed Threshold pipeline.
+def _resolve_hallowed_reaction_conditions() -> dict[str, ConditionTemplate]:
+    """Resolve the 5 reaction ConditionTemplates for the Hallowed Threshold pipeline.
 
     These conditions are applied on different check outcomes when an
     Abyssal-aligned caster uses a technique in a Celestial-aura room:
@@ -727,10 +727,15 @@ def _seed_hallowed_reaction_conditions() -> dict[str, ConditionTemplate]:
     content-repo-owned (#2698) — looked up rather than invented unless
     ``SEED_SAMPLE_CONTENT`` is on. Returns a dict of ``{name: ConditionTemplate}``
     for whichever of the 5 are actually present (authored, or sampled) — a
-    name absent from the dict means it isn't there yet. Downstream consumers
-    (``_seed_resonance_environment_consequence_pools``,
-    ``_seed_hallowed_achievement_bridge``, ``_seed_hallowed_threshold_story``)
-    key off this dict and skip whatever it's missing rather than raising.
+    name absent from the dict means it isn't there yet.
+
+    #2973: SINGLE SOURCE OF TRUTH for the authored_or_sample-by-name
+    resolution of these 5 templates — both
+    ``_seed_hallowed_reaction_conditions()`` (the test-fixture builder) and
+    ``_seed_resonance_environment_consequence_pools()`` (the KEEP-side
+    production resolver) call this rather than each re-stating the
+    category/defaults dict, so the two can't silently drift apart on the
+    sample-content path.
     """
     from world.conditions.constants import DurationType  # noqa: PLC0415
     from world.conditions.models import ConditionCategory, ConditionTemplate  # noqa: PLC0415
@@ -768,6 +773,24 @@ def _seed_hallowed_reaction_conditions() -> dict[str, ConditionTemplate]:
         if template is not None:
             conditions[spec["name"]] = template
     return conditions
+
+
+def _seed_hallowed_reaction_conditions() -> dict[str, ConditionTemplate]:
+    """Seed the 5 reaction conditions for the Hallowed Threshold pipeline.
+
+    Thin wrapper over ``_resolve_hallowed_reaction_conditions()`` (the single
+    source of truth for the authored_or_sample-by-name resolution) — kept as
+    its own name/signature because it's the public test-fixture builder suites
+    import directly.
+
+    #2973: no longer called from ``seed_starter_magic_story()`` — the 5
+    conditions are lore-repo content, so the production seeder resolves them
+    itself via ``_resolve_hallowed_reaction_conditions()``, called from
+    ``_seed_resonance_environment_consequence_pools()``. This function
+    survives as an importable test-fixture builder; suites that need the 5
+    conditions call it directly in their own setup.
+    """
+    return _resolve_hallowed_reaction_conditions()
 
 
 # ---------------------------------------------------------------------------
@@ -921,10 +944,17 @@ def _seed_resonance_environment_consequence_pools() -> None:
     Depends on:
     - seed_canonical_affinities()      (Celestial/Primal/Abyssal must exist)
     - _seed_affinity_interactions()    (9 AffinityInteraction rows)
-    - _seed_hallowed_reaction_conditions() (all 5 ConditionTemplate rows —
-      content-repo-owned, #2698; any of the 5 may be absent)
     - _seed_endure_hallowed_ground_check() (ensures the resolution-spine
       CheckOutcome rows via seed_check_resolution_tables)
+
+    Resolves its own 5 reaction ``ConditionTemplate`` rows by name via
+    ``_resolve_hallowed_reaction_conditions()`` (content-repo-owned, #2698)
+    rather than depending on ``_seed_hallowed_reaction_conditions()`` having
+    run first — that function is no longer part of the production seeder
+    path (#2973); it survives only as a test-fixture builder suites call
+    directly (and itself now delegates to the same resolver, so the two
+    can't drift apart). Any of the 5 may be absent (the lookup logs the miss
+    rather than raising).
 
     Idempotent: get_or_create keyed on stable names at every layer.  Duplicate
     ConsequencePoolEntry rows are prevented by the (pool, consequence) unique
@@ -935,7 +965,6 @@ def _seed_resonance_environment_consequence_pools() -> None:
     (config) but skips the APPLY_CONDITION effect that would need the missing
     condition — the pool still seeds, just without teeth for that tier.
     """
-    from world.conditions.models import ConditionTemplate  # noqa: PLC0415
     from world.magic.models.affinity import Affinity  # noqa: PLC0415
     from world.magic.models.resonance_environment import AffinityInteraction  # noqa: PLC0415
     from world.traits.models import CheckOutcome  # noqa: PLC0415
@@ -946,15 +975,15 @@ def _seed_resonance_environment_consequence_pools() -> None:
     for name in (_CRITICAL_SUCCESS, "Success", "Failure", _CRITICAL_FAILURE):
         outcome_map[name] = CheckOutcome.objects.get(name=name)
 
-    # --- Fetch injury ConditionTemplates (created by _seed_hallowed_reaction_conditions,
-    # content-repo-owned #2698) — a name absent from the DB is simply absent from
-    # this map; callers below skip the effect wiring for a missing condition. ---
-    cond_map: dict[str, ConditionTemplate] = {
-        template.name: template
-        for template in ConditionTemplate.objects.filter(
-            name__in=[spec["name"] for spec in _HALLOWED_REACTION_SPECS]
-        )
-    }
+    # --- Resolve the 5 reaction ConditionTemplates by name (content-repo-owned,
+    # #2698). _resolve_hallowed_reaction_conditions() is the single source of
+    # truth for this authored_or_sample-by-name lookup — it logs a warning and
+    # omits a name from the returned map when it isn't authored and
+    # SEED_SAMPLE_CONTENT is off, or invents a sample row (from
+    # _HALLOWED_REACTION_SPECS) when sampling is on. A name missing from the
+    # map is simply absent from it; callers below skip the APPLY_CONDITION
+    # effect wiring for it. ---
+    cond_map: dict[str, ConditionTemplate] = _resolve_hallowed_reaction_conditions()
 
     # --- Build both pools ---
     abyssal_celestial_pool = _build_hallowed_backfire_pool(
@@ -1230,15 +1259,24 @@ def _seed_hallowed_achievement_bridge() -> None:
     Discoveries fire automatically via the existing achievements engine when
     the first character earns each Achievement.
 
-    Depends on _seed_hallowed_reaction_conditions() having run first to
-    create the ConditionTemplate rows we reference — content-repo-owned
+    Depends on the 3 referenced ConditionTemplate rows (Tempered Against
+    Light / Singed / Hallowed Burn) already existing — content-repo-owned
     (#2698), so a given spec's condition may not exist; that spec is skipped
-    entirely (stat/rule/achievement all hang off the condition existing).
+    entirely (stat/rule/achievement all hang off the condition existing). In
+    the production path those rows come from
+    ``_seed_resonance_environment_consequence_pools()`` (which resolves them
+    by name via ``authored_or_sample``); a test-fixture caller of this
+    function directly should seed them first, e.g. via
+    ``_seed_hallowed_reaction_conditions()``.
 
     ``achievements.StatDefinition`` is ALSO content-repo-owned (#2698) —
     looked up rather than invented unless ``SEED_SAMPLE_CONTENT`` is on. A
     spec whose stat isn't authored/sampled skips its rule/achievement too
     (``ConditionStatRule.stat`` is a required FK).
+
+    #2973: no longer called from ``seed_starter_magic_story()`` — the stat/
+    achievement bridge rows are lore-repo content. This function survives as
+    an importable test-fixture builder only.
     """
     from world.achievements.constants import (  # noqa: PLC0415
         ComparisonType,
@@ -1337,6 +1375,12 @@ def _seed_resonance_environment_rooms() -> None:
       - LocationValueModifier: tag_room_resonance uses update_or_create keyed on
         (room_profile, resonance, source) then we set .value + .save() to tune
         magnitude — re-runs restore the desired value.
+
+    #2973: no longer called from ``seed_starter_magic_story()`` — the 3 rooms
+    (+ their resonance tags) ride the #2451 grid-bundle mechanism as lore-repo
+    content; "Hallowed Rejection" rides an ordinary lore fixture. This function
+    survives as a test-fixture builder; the story-pipeline suite calls it
+    directly in its own setup.
     """
     from evennia.objects.models import ObjectDB  # noqa: PLC0415
     from evennia.utils import create as evennia_create  # noqa: PLC0415
@@ -1431,6 +1475,14 @@ def _seed_resonance_environment_rooms() -> None:
 
 def _seed_hallowed_threshold_story() -> None:
     """Seed the Hallowed Threshold Story DAG.
+
+    Test-fixture builder only (#2973) — no longer called by
+    ``seed_starter_magic_story()`` or ``seed_magic_dev()``. This story is
+    scaffolding for the story-pipeline test suite (`test_magic_seed.py`'s
+    ``SeedHallowedThresholdStoryTests`` and
+    ``integration_tests/test_magic_story_pipeline.py``), which call it
+    directly in their own setup; it has no non-test consumer and no
+    lore-repo destination.
 
     Structure:
       Story "The Hallowed Threshold" (CHARACTER scope, no character_sheet — template)
@@ -2305,13 +2357,15 @@ _MIRROR_ANCHOR_KIND_NAME = "Mirror"
 #: "Seed content"). "The Wanderer's Rest" (the canonical fallback starting
 #: room every fresh character passes through) is guaranteed by calling
 #: ``ensure_canonical_fallback_room()`` directly. The two magic-story cascade
-#: rooms below are seeded earlier in THIS module by
-#: ``_seed_resonance_environment_rooms()`` (part of ``seed_starter_magic_story()``,
-#: which ``seed_magic_dev()`` calls before this function) — resolved
-#: defensively via ``filter().first()`` and skipped (never crash) when absent,
-#: e.g. if this function is ever called standalone ahead of that step. No
-#: other named public room exists in production seed content today (verified
-#: — grepped every ``game_content``/``seeds`` module for room creation).
+#: rooms below are no longer seeded by ``seed_magic_dev()`` (#2973 stripped
+#: ``_seed_resonance_environment_rooms()`` out of ``seed_starter_magic_story()``
+#: — it survives only as a test-fixture builder). In production these two rooms
+#: exist only once the lore repo's #2451 grid bundle authors rooms under these
+#: same ``db_key``s; until then — or if this function is ever called standalone
+#: ahead of that content load — they're resolved defensively via
+#: ``filter().first()`` and skipped (never crash) when absent. No other named
+#: public room exists in production seed content today (verified — grepped
+#: every ``game_content``/``seeds`` module for room creation).
 #: (room db_key, anchor's descriptive name)
 _MIRROR_ANCHOR_ROOM_SPECS: list[tuple[str, str]] = [
     ("The Hallowed Threshold (Low)", "a clouded looking-glass"),
@@ -2527,6 +2581,10 @@ class MagicDevSeedResult:
     Composes all Phase 1 seed results into one dataclass.
     ``author_reference_corruption_content()`` returns None so it is not
     represented here; callers can query Wild Hunt / Web of Spiders rows directly.
+    ``MagicContent.create_all()`` (Social Arts Gift/Techniques/ActionEnhancements)
+    is no longer called from this orchestrator (#2973 — content-repo-owned), so
+    there is no ``magic_content`` field either; callers needing that shape build
+    it directly via ``MagicContent.create_all()`` as a test fixture.
     ``penetration`` holds the penetration CheckType, factor ladder, and
     check-scoped ModifierTarget seeded by seed_penetration_contest() (#767).
     ``flee`` holds the flee CheckType, ModifierTarget, and FleeConfig singleton
@@ -2554,7 +2612,6 @@ class MagicDevSeedResult:
     config: MagicConfigResult
     rituals: RitualSeedResult
     thread_pull_catalog: ThreadPullCatalogResult
-    magic_content: MagicContentResult
     facet_thread_unlock: FacetThreadUnlockResult
     penetration: PenetrationContestResult
     flee: FleeSeedResult
@@ -2590,20 +2647,20 @@ def seed_facet_thread_unlock() -> FacetThreadUnlockResult:
 
 
 def seed_relationship_track_thread_unlock() -> RelationshipTrackThreadUnlockResult:
-    """Lazy-create the canonical RELATIONSHIP_TRACK ThreadWeavingUnlock (+ backing track).
+    """Resolve the RELATIONSHIP_TRACK ThreadWeavingUnlock (+ its backing track).
 
     Soul Tether formation (``accept_soul_tether`` in
     ``world.magic.services.soul_tether``) gates on the Sinner holding a
     ``CharacterThreadWeavingUnlock`` for ``TargetKind.RELATIONSHIP_TRACK``
     (``_validate_unlock``) before they can weave the RELATIONSHIP_CAPSTONE
     Thread that carries the Hollow. Unlike FACET, ``ThreadWeavingUnlock.unlock_track``
-    is a required non-null FK (per-kind CheckConstraint) — there is no
-    RelationshipTrack seeded anywhere in production content yet, so this
-    function also lazy-creates one canonical track ("Devotion") to hang the
-    unlock off of. This is the minimum authored content needed for the Rite of
-    the Soul Tether to be purchasable/reachable at all; a richer multi-track
-    catalog (Trust/Respect/Rivalry/Fear, etc.) is separate content-authoring
-    work, not framework work.
+    is a required non-null FK (per-kind CheckConstraint), so this function also
+    resolves the "Devotion" ``RelationshipTrack`` to hang the unlock off of —
+    both rows are content-repo-owned (#2973) and looked up via
+    ``authored_or_sample``, never lazy-created against a real deploy. This is
+    the minimum authored content needed for the Rite of the Soul Tether to be
+    purchasable/reachable at all; a richer multi-track catalog (Trust/Respect/
+    Rivalry/Fear, etc.) is separate content-authoring work, not framework work.
 
     Idempotent: the track and the unlock (keyed on the
     ``unique_threadweaving_unlock_track`` constraint's natural key:
@@ -2652,28 +2709,37 @@ def seed_starter_magic_story() -> None:
       1. seed_canonical_affinities() — the 3 magic Affinities
      RC1. _seed_affinity_interactions() — 9 directed AffinityInteraction rows (needs affinities)
      RC1. _seed_resonance_environment_config() — ResonanceEnvironmentConfig singleton
-      B. _seed_hallowed_reaction_conditions() — 5 OPPOSED reaction conditions
-      C. _seed_hallowed_achievement_bridge() — stats, rules, achievements
-                                                (needs reaction conditions)
       A. _seed_endure_hallowed_ground_check() — CheckType + resolution spine
                                                 (via seed_check_resolution_tables)
-     RC4. _seed_resonance_environment_rooms() — 3 cascade rooms (needs resonances)
-      F. _seed_hallowed_threshold_story() — Story + Chapter + Episodes + Beats + Transitions + TROs
+     T12. _seed_resonance_environment_consequence_pools() — OPPOSED backfire pools;
+                                                resolves the 5 reaction ConditionTemplate
+                                                rows by name (content-repo-owned, #2973)
+     T13. _seed_resonance_alignment_boons() — ALIGNED boon tiers + named buffs
 
-    All sub-helpers are idempotent (get_or_create at every layer), so the
-    orchestrator itself is idempotent. Re-running on an edited DB preserves
-    edits (per project seed rule: never update_or_create).
+    #2973: four former phases no longer run here — B (reaction conditions,
+    ``_seed_hallowed_reaction_conditions()``), C (achievement bridge,
+    ``_seed_hallowed_achievement_bridge()``), RC4 (cascade rooms,
+    ``_seed_resonance_environment_rooms()``), and F (the Hallowed Threshold
+    story, ``_seed_hallowed_threshold_story()`` — Story + Chapter + Episodes +
+    Beats + Transitions + TROs). B/C/RC4 authored content-repo-owned rows the
+    seeder shouldn't own; F is scaffolding for one suite with no non-test
+    consumer, so it moved to a test fixture rather than lore content. All four
+    survive as importable test-fixture builders (the story-pipeline suite
+    calls them directly in its own setup) but no longer run as part of this
+    orchestrator or ``seed_magic_dev()``. Production content for B/C/RC4
+    comes from the lore repo; F has no production destination — it never
+    ships.
+
+    All remaining sub-helpers are idempotent (get_or_create at every layer),
+    so the orchestrator itself is idempotent. Re-running on an edited DB
+    preserves edits (per project seed rule: never update_or_create).
     """
     seed_canonical_affinities()
     _seed_affinity_interactions()
     _seed_resonance_environment_config()
-    _seed_hallowed_reaction_conditions()
-    _seed_hallowed_achievement_bridge()
     _seed_endure_hallowed_ground_check()
     _seed_resonance_environment_consequence_pools()  # T12: OPPOSED backfire pools
     _seed_resonance_alignment_boons()  # T13: ALIGNED boon tiers + named buffs
-    _seed_resonance_environment_rooms()
-    _seed_hallowed_threshold_story()
 
 
 def seed_magic_dev() -> MagicDevSeedResult:
@@ -2689,33 +2755,33 @@ def seed_magic_dev() -> MagicDevSeedResult:
        reference TRAIT rows on the first authored resonance; then
        ``seed_thread_survivability_tuning()`` —
        ThreadSurvivabilityTuning × 2 (DR + MAX_HEALTH baseline tuning rows, #1175)
-    4. ``author_reference_corruption_content()`` — Corruption ConditionTemplates
-       + CORRUPTION_TWIST entries for the first authored Primal and Abyssal
-       Resonance
-    5. ``MagicContent.create_all()`` — 6 social action Techniques + 6
-       ActionEnhancements
-    6. ``seed_facet_thread_unlock()`` — single global FACET ThreadWeavingUnlock
-    7. ``seed_starter_magic_story()`` — magic-story pipeline slice (Affinities,
-       Resonances, Hallowed Rejection conditions + triggers, Hallowed Threshold story)
-    8. ``seed_penetration_contest()`` — penetration CheckType + factor ladder +
+    4. ``seed_facet_thread_unlock()`` — single global FACET ThreadWeavingUnlock
+    5. ``seed_starter_magic_story()`` — magic-story pipeline slice (Affinities,
+       AffinityInteractions, OPPOSED backfire pools resolving the 5 reaction
+       conditions by name, ALIGNED boon tiers; #2973 — the cascade rooms +
+       "Hallowed Rejection", the achievement bridge, and the Hallowed
+       Threshold story no longer seed here — the first two are lore-repo
+       content, the story is a test fixture with no production destination)
+    6. ``seed_penetration_contest()`` — penetration CheckType + factor ladder +
        check-scoped ModifierTarget (#767)
-    9. ``seed_flee_check()`` — flee CheckType + ModifierTarget + FleeConfig
+    7. ``seed_flee_check()`` — flee CheckType + ModifierTarget + FleeConfig
        singleton + tier modifiers + starter consequence pool (#878)
-    10. ``seed_relationship_track_thread_unlock()`` — canonical "Devotion"
-        RelationshipTrack + its RELATIONSHIP_TRACK ThreadWeavingUnlock (#2027)
-    11. ``wire_soul_tether_content()`` — Soul Tether Rituals (accept_soul_tether,
-        soul_tether_rescue), Tether Strain / Soul Tether Active ConditionTemplates,
-        and the two reactive TriggerDefinitions (#2027). Previously created only
-        in tests/factories — Soul Tether was unreachable in a live game.
-    12. ``wire_covenant_lifecycle_rituals()`` — Covenant/org lifecycle Rituals
+    8. ``seed_relationship_track_thread_unlock()`` — RELATIONSHIP_TRACK
+       ThreadWeavingUnlock + its backing "Devotion" RelationshipTrack, both
+       resolved via ``authored_or_sample`` (content-repo-owned, #2698/#2973) (#2027)
+    9. ``wire_soul_tether_content()`` — Soul Tether Rituals (accept_soul_tether,
+       soul_tether_rescue), Tether Strain / Soul Tether Active ConditionTemplates,
+       and the two reactive TriggerDefinitions (#2027). Previously created only
+       in tests/factories — Soul Tether was unreachable in a live game.
+    10. ``wire_covenant_lifecycle_rituals()`` — Covenant/org lifecycle Rituals
         (Covenant Formation, Covenant Induction, Call the Banners, Mentor's Vow,
         Renew the Oath, Organization Induction) + the MentorBondConfig singleton
         (#2114). Previously created only in tests/factories — the fully-built
         covenant session machinery was unreachable in a live game.
-    13. ``ensure_dramatic_entrance_content()`` — "Grand Entrance" DramaticMomentType,
+    11. ``ensure_dramatic_entrance_content()`` — "Grand Entrance" DramaticMomentType,
         flagged ``suggest_on_technique_entrance=True`` (#2183). Without this, the
         technique-entrance suggestion bridge has nothing authored to surface.
-    14. ``ensure_portal_travel_content()`` — starter Mirror ``PortalAnchor`` rows
+    12. ``ensure_portal_travel_content()`` — starter Mirror ``PortalAnchor`` rows
         in seeded public rooms, on the content-authored "Mirror"
         ``PortalAnchorKind`` (#2222). The gift + technique it used to invent were
         removed in #2967; a real travel technique is lore-repo content.
@@ -2724,7 +2790,13 @@ def seed_magic_dev() -> MagicDevSeedResult:
     here at this point (Task 7, #2426) is retired (#2474) — real starter-catalog
     content is lore-repo content loaded via ``load_world_content()`` ahead of
     this orchestrator in the dev-seed flow (``seed_dev_database()``); this
-    function no longer authors a synthetic one.
+    function no longer authors a synthetic one. Nor does ``MagicContent.create_all()``
+    — its "Social Arts" Gift + 6 Techniques + 6 ActionEnhancements + variants left
+    the production seeder (#2973); ``MagicContent`` survives as a test-fixture
+    builder only. Nor does ``author_reference_corruption_content()`` — its 2
+    Corruption ConditionTemplates + 12 CORRUPTION_TWIST entries left the
+    production seeder too (#2973); it survives as a test-fixture builder the
+    ``test_reference_corruption_content.py`` suite calls directly.
 
     All writes are idempotent (get_or_create throughout). Re-running on a
     populated database is a no-op; staff edits to existing rows are preserved
@@ -2735,7 +2807,6 @@ def seed_magic_dev() -> MagicDevSeedResult:
         MagicDevSeedResult composing all sub-results.
     """
     from world.magic.factories import (  # noqa: PLC0415
-        author_reference_corruption_content,
         ensure_dramatic_entrance_content,
         wire_covenant_lifecycle_rituals,
         wire_soul_tether_content,
@@ -2745,28 +2816,21 @@ def seed_magic_dev() -> MagicDevSeedResult:
         seed_flee_check,
         seed_penetration_contest,
     )
-    from world.seeds.sample_content import sample_content_enabled  # noqa: PLC0415
 
     config = seed_magic_config()
     rituals = seed_canonical_rituals()
     thread_pull_catalog = seed_thread_pull_catalog()
     seed_thread_survivability_tuning()
-    author_reference_corruption_content()
-    # MagicContent.create_all() is also a test-fixture builder (called directly
-    # by several test suites), so it stays an unconditional, unchanged content
-    # factory — only THIS production call site is gated (#2698). Its 6 social
-    # techniques + Gift/Affinity/Resonance/TechniqueStyle/EffectType rows are
-    # content-repo-owned; a real deploy needs them authored there.
-    if sample_content_enabled():
-        magic_content = MagicContent.create_all()
-    else:
-        logger.warning(
-            "Social-action MagicContent (Gift 'Social Arts' and its 6 techniques) is "
-            "not in the content repo. Skipping. Author it there and re-press the Big "
-            "Button, or set ARXII_SEED_SAMPLE_CONTENT=1 to have the seeder invent a "
-            "sample one (see #2698)."
-        )
-        magic_content = None
+    # #2973: MagicContent.create_all() no longer runs here. Its Gift "Social
+    # Arts" + 6 Techniques + 6 ActionEnhancements + variants are content-repo
+    # rows the seeder shouldn't author (formerly gated behind
+    # sample_content_enabled(), #2698 — now removed outright, not merely
+    # ungated). MagicContent survives as a test-fixture builder: the two
+    # pipeline suites that need this content (test_social_magic_pipeline.py,
+    # test_challenge_pipeline.py) call create_all() directly in their own
+    # setUpTestData. Nor does author_reference_corruption_content() — its
+    # Corruption ConditionTemplates + CORRUPTION_TWIST entries are content-repo
+    # rows too (#2973); test_reference_corruption_content.py calls it directly.
     facet_thread_unlock = seed_facet_thread_unlock()
     relationship_track_thread_unlock = seed_relationship_track_thread_unlock()
     seed_starter_magic_story()
@@ -2823,7 +2887,6 @@ def seed_magic_dev() -> MagicDevSeedResult:
         config=config,
         rituals=rituals,
         thread_pull_catalog=thread_pull_catalog,
-        magic_content=magic_content,
         facet_thread_unlock=facet_thread_unlock,
         penetration=penetration,
         flee=flee,
