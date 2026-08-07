@@ -12,9 +12,15 @@ name: Infra Validate
 
 on:
   push:
-    paths: ["infra/**", ".github/workflows/validate.yml"]
+    # src/server/conf/settings.py is included because acceptance.sh asserts
+    # cross-file contracts against it (the prod secret_settings overlay
+    # guard) — a src-side refactor drifted that check undetected once
+    # (2026-08-07) precisely because only infra/** triggered this workflow.
+    paths:
+      ["infra/**", ".github/workflows/validate.yml", "src/server/conf/settings.py"]
   pull_request:
-    paths: ["infra/**", ".github/workflows/validate.yml"]
+    paths:
+      ["infra/**", ".github/workflows/validate.yml", "src/server/conf/settings.py"]
   workflow_dispatch:
 
 permissions:
@@ -167,3 +173,10 @@ jobs:
             # static gate.
             "$bin" adapt --config "$rendered" --adapter caddyfile >/dev/null
           done
+
+  acceptance:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+      - name: acceptance.sh (cross-file infra safety contracts)
+        run: bash infra/scripts/acceptance.sh

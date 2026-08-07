@@ -245,7 +245,7 @@ chk   "django_hardening fails closed on empty ALLOWED_HOSTS" \
 # CLOUDINARY_CLOUD_NAME+API_KEY+API_SECRET settings.py's env() calls
 # actually use) was the #2236 review's headline finding.
 chk   "settings.py guards the prod secret_settings overlay import" \
-  "grep -q 'from server.conf.secret_settings import' src/server/conf/settings.py"
+  "grep -q 'import server.conf.secret_settings' src/server/conf/settings.py && grep -B1 'import server.conf.secret_settings' src/server/conf/settings.py | grep -q 'contextlib.suppress(ImportError)'"
 chk   "secrets_vault's EnvironmentFile renders SECRET_KEY and DATABASE_URL (settings.py's actual env-read contract)" \
   "grep -q 'ARXII_DJANGO_SECRET_KEY: SECRET_KEY' infra/ansible/roles/secrets_vault/defaults/main.yml && grep -q '^DATABASE_URL=' infra/ansible/roles/secrets_vault/templates/arxii.env.j2"
 
