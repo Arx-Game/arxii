@@ -269,6 +269,15 @@ class ParticipantState(models.TextChoices):
     DECLINED = "DECLINED", "Declined"
 
 
+class AnimaContributionKind(models.TextChoices):
+    """How anima entered a ritual's pool (#3001)."""
+
+    CHANNEL = "CHANNEL", "Channel (own anima)"
+    PRICK = "PRICK", "Prick (a drop of blood)"
+    GASH = "GASH", "Gash (a serious bleed)"
+    SACRIFICE = "SACRIFICE", "Sacrifice (a victim drained)"
+
+
 class ReferenceKind(models.TextChoices):
     COVENANT = "COVENANT", "Covenant"
     COVENANT_ROLE = "COVENANT_ROLE", "Covenant Role"

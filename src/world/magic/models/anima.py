@@ -148,13 +148,30 @@ class AnimaRitualPerformance(SharedMemoryModel):
 
 
 class AnimaConfig(SharedMemoryModel):
-    daily_regen_percent = models.PositiveIntegerField(
-        default=5,
-        help_text="% of CharacterAnima.maximum regenerated per daily tick",
+    # #3001: regen is a flat trickle, not a percentage — an archmage's pool refills
+    # in years, not weeks. Anima rituals, feeding, and blood ARE the recovery economy.
+    daily_regen_amount = models.PositiveIntegerField(
+        default=1,
+        help_text="Flat anima regenerated per daily tick (appetite holders never regen).",
     )
     daily_regen_blocking_property_key = models.SlugField(
         default="blocks_anima_regen",
         help_text="Property key on a ConditionStage that blocks anima regen",
+    )
+    level_zero_maximum = models.PositiveIntegerField(
+        default=10,
+        help_text="Maximum anima for a level-0 (quiescent/NPC) character.",
+    )
+    maximum_per_level = models.PositiveIntegerField(
+        default=100,
+        help_text="Maximum anima per character level (level N >= 1 has N x this).",
+    )
+    death_harvest_multiplier = models.PositiveIntegerField(
+        default=20,
+        help_text=(
+            "Killing a victim by anima drain yields this multiple of their full "
+            "maximum (#3001) - the metaphysical engine of ritual murder."
+        ),
     )
 
     @classmethod

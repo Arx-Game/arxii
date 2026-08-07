@@ -44,11 +44,55 @@ def deduct_anima(character: ObjectDB, effective_cost: int, *, lethal: bool = Tru
         anima = CharacterAnima.objects.select_for_update().get(character_id=character.pk)
         if not lethal:
             # Non-lethal: never spend past available anima — no life-force draw.
-            effective_cost = min(effective_cost, anima.current)
-        deficit = max(effective_cost - anima.current, 0)
-        anima.current = max(anima.current - effective_cost, 0)
-        anima.save(update_fields=["current"])
+            effective_cost = min(effective_cost, anima.current + anima.glut)
+        # #2853 ruled "spends draw glut first" (the feeding high burns before the
+        # real pool); implemented here in #3001 — it was documented but inert.
+        from_glut = min(effective_cost, anima.glut)
+        remainder = effective_cost - from_glut
+        deficit = max(remainder - anima.current, 0)
+        anima.glut -= from_glut
+        anima.current = max(anima.current - remainder, 0)
+        anima.save(update_fields=["current", "glut"])
     return deficit
+
+
+def recompute_max_anima(character_sheet: CharacterSheet) -> int:
+    """Recompute maximum anima from character level (#3001).
+
+    maximum = ``AnimaConfig.level_zero_maximum`` at level < 1, else
+    ``AnimaConfig.maximum_per_level * level``. Raising the maximum never fills
+    it — ``current`` is untouched on growth (a fresh level is a big empty pool
+    begging for ritual, feeding, or blood) and clamped on shrink
+    (clamp-not-injure, mirroring ``recompute_max_health``).
+
+    No-op (returns 0) when the sheet has no CharacterAnima row.
+    """
+    from world.magic.models.anima import AnimaConfig  # noqa: PLC0415
+    from world.progression.services.advancement import primary_class_level  # noqa: PLC0415
+
+    try:
+        anima = character_sheet.anima
+    except CharacterAnima.DoesNotExist:
+        return 0
+
+    config = AnimaConfig.get_singleton()
+    # No CharacterClassLevel row at all = a true level-0 quiescent (NPCs, sheets
+    # mid-CG) — get_character_path_level's default of 1 would wrongly give them
+    # a Gifted-sized pool, so detect rowlessness explicitly.
+    class_level = primary_class_level(character_sheet.character)
+    level = class_level.level if class_level is not None else 0
+    new_max = config.level_zero_maximum if level < 1 else config.maximum_per_level * level
+
+    update_fields: list[str] = []
+    if anima.maximum != new_max:
+        anima.maximum = new_max
+        update_fields.append("maximum")
+    if anima.current > new_max:
+        anima.current = new_max
+        update_fields.append("current")
+    if update_fields:
+        anima.save(update_fields=update_fields)
+    return new_max
 
 
 def get_character_anima_ritual(character):  # noqa: OBJECTDB_PARAM — Evennia character
@@ -537,14 +581,12 @@ def anima_regen_tick() -> AnimaRegenTickSummary:
             continue
         if char_id in appetite_ids:
             continue
-        # #2853: floor at 1 when regen is enabled at all — integer percent of a
-        # standard 10-point pool floors to 0, which made daily regen silently
-        # inert for every standard character. "Extremely slow" means a real
-        # trickle, not never.
-        if config.daily_regen_percent <= 0:
+        # #3001: flat trickle, deliberately painful at scale — a level-20 pool of
+        # 2000 refills in years. Anima rituals, feeding, and blood sacrifice are
+        # the real recovery economy; this is the floor under all of them.
+        if config.daily_regen_amount <= 0:
             continue
-        regen = max(1, (row.maximum * config.daily_regen_percent) // 100)
-        row.current = min(row.current + regen, row.maximum)
+        row.current = min(row.current + config.daily_regen_amount, row.maximum)
         to_update.append(row)
         regenerated += 1
 

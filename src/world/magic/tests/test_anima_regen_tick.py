@@ -58,7 +58,7 @@ class CharacterBelowMaxNoBlockingConditionsTests(TestCase):
     def test_character_below_max_no_blocking_conditions_regen_applied(self) -> None:
         """Character with current < maximum and no blocking conditions → regen applied."""
         config = AnimaConfig.get_singleton()
-        config.daily_regen_percent = 10
+        config.daily_regen_amount = 10
         config.save()
 
         sheet = CharacterSheetFactory()
@@ -143,7 +143,7 @@ class CharacterBelowMaxSoulfrayStage1RegenAppliedTests(TestCase):
     def test_character_below_max_soulfray_stage1_regen_applied(self) -> None:
         """Character with Soulfray stage 1 (no blocking property) → regen applied."""
         config = AnimaConfig.get_singleton()
-        config.daily_regen_percent = 10
+        config.daily_regen_amount = 10
         config.save()
 
         # Create the blocking property (exists but NOT attached to stage 1)
@@ -206,7 +206,7 @@ class CharacterEngagedSkippedTests(TestCase):
     def test_engaged_character_skipped(self) -> None:
         """Character with active CharacterEngagement → skipped."""
         config = AnimaConfig.get_singleton()
-        config.daily_regen_percent = 10
+        config.daily_regen_amount = 10
         config.save()
 
         sheet = CharacterSheetFactory()
@@ -243,7 +243,7 @@ class NCharactersSingleDigitQueryCountTests(TestCase):
     def test_n_characters_single_digit_query_count(self) -> None:
         """Create 10+ CharacterAnima rows → single-digit query count."""
         config = AnimaConfig.get_singleton()
-        config.daily_regen_percent = 10
+        config.daily_regen_amount = 10
         config.save()
 
         # Create 10 characters, all below max

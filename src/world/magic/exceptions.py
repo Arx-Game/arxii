@@ -84,6 +84,16 @@ class RitualComponentError(MagicError):
     user_message = "You do not have the required components for this ritual."
 
 
+class RitualPoolError(MagicError):
+    user_message = "You cannot contribute that to this ritual."
+
+
+class HedgeInaccessibleError(MagicError):
+    """#3001: a non-hedge ritual reached by a character with no magical profile."""
+
+    user_message = "The deeper mysteries of this rite are closed to you."
+
+
 class NoRitualConfigured(MagicError):
     user_message = "You don't have an anima ritual configured."
 
@@ -273,6 +283,16 @@ class SessionNotInPendingError(RitualSessionError):
 
 class ThresholdNotMetError(RitualSessionError):
     user_message = "Not enough participants have accepted yet."
+    SAFE_MESSAGES = frozenset({user_message})
+
+
+class RitualFizzledError(RitualSessionError):
+    """#3001: the pool never met the anima requirement and the deficit check failed.
+
+    The session and its pool are consumed — the rite happened, and it died.
+    """
+
+    user_message = "The rite gutters and dies - the pool never held enough anima."
     SAFE_MESSAGES = frozenset({user_message})
 
 

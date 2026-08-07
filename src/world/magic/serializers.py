@@ -27,6 +27,7 @@ from world.conditions.models import (
 from world.items.models import ItemInstance
 from world.magic.constants import (
     ALTERATION_TIER_CAPS,
+    AnimaContributionKind,
     GlimpseTagAxis,
     TargetKind,
     anima_band_for,
@@ -75,6 +76,32 @@ from world.roster.models import RosterEntry
 # Error messages — module constants keep tests stable and satisfy STRING_LITERAL.
 _ERR_CHARACTER_SHEET_NOT_OWNED = "character_sheet_id does not belong to the requesting account."
 _ERR_CHARACTER_SHEET_NOT_FOUND = "CharacterSheet not found."
+
+
+def _resolve_sheet_pk(value: int) -> CharacterSheet:
+    """Resolve a CharacterSheet by PK, raising the shared not-found error."""
+    try:
+        return CharacterSheet.objects.get(pk=value)
+    except CharacterSheet.DoesNotExist as exc:
+        raise serializers.ValidationError(_ERR_CHARACTER_SHEET_NOT_FOUND) from exc
+
+
+def _resolve_resonance_pk(value: int) -> "Resonance":
+    """Resolve a Resonance by PK, raising the shared not-found error."""
+    try:
+        return Resonance.objects.get(pk=value)
+    except Resonance.DoesNotExist as exc:
+        raise serializers.ValidationError(_ERR_RESONANCE_NOT_FOUND) from exc
+
+
+def _resolve_scene_pk(value: int) -> object:
+    """Resolve a Scene by PK, raising the shared not-found error."""
+    from world.scenes.models import Scene  # noqa: PLC0415
+
+    try:
+        return Scene.objects.get(pk=value)
+    except Scene.DoesNotExist as exc:
+        raise serializers.ValidationError(_ERR_SCENE_NOT_FOUND) from exc
 
 
 def _resolve_account_sheet(sheet_id: int, request) -> CharacterSheet:
@@ -1837,17 +1864,11 @@ class AcceptSoulTetherSerializer(serializers.Serializer):
 
     def validate_partner_sheet_id(self, value: int) -> CharacterSheet:
         """Resolve partner sheet (ownership NOT required — it's the other party)."""
-        try:
-            return CharacterSheet.objects.get(pk=value)
-        except CharacterSheet.DoesNotExist as exc:
-            raise serializers.ValidationError(_ERR_CHARACTER_SHEET_NOT_FOUND) from exc
+        return _resolve_sheet_pk(value)
 
     def validate_resonance_id(self, value: int) -> "Resonance":
         """Resolve resonance by PK."""
-        try:
-            return Resonance.objects.get(pk=value)
-        except Resonance.DoesNotExist as exc:
-            raise serializers.ValidationError(_ERR_RESONANCE_NOT_FOUND) from exc
+        return _resolve_resonance_pk(value)
 
     def validate(self, attrs: dict) -> dict:
         """Cross-field: actor cannot tether with themselves."""
@@ -2045,26 +2066,15 @@ class SineatingRequestSerializer(serializers.Serializer):
 
     def validate_sineater_sheet_id(self, value: int) -> CharacterSheet:
         """Resolve Sineater sheet."""
-        try:
-            return CharacterSheet.objects.get(pk=value)
-        except CharacterSheet.DoesNotExist as exc:
-            raise serializers.ValidationError(_ERR_CHARACTER_SHEET_NOT_FOUND) from exc
+        return _resolve_sheet_pk(value)
 
     def validate_resonance_id(self, value: int) -> "Resonance":
         """Resolve resonance by PK."""
-        try:
-            return Resonance.objects.get(pk=value)
-        except Resonance.DoesNotExist as exc:
-            raise serializers.ValidationError(_ERR_RESONANCE_NOT_FOUND) from exc
+        return _resolve_resonance_pk(value)
 
     def validate_scene_id(self, value: int) -> object:
         """Resolve scene by PK."""
-        from world.scenes.models import Scene  # noqa: PLC0415
-
-        try:
-            return Scene.objects.get(pk=value)
-        except Scene.DoesNotExist as exc:
-            raise serializers.ValidationError(_ERR_SCENE_NOT_FOUND) from exc
+        return _resolve_scene_pk(value)
 
     def create(self, validated_data: dict) -> object:
         """Delegate to request_sineating; surface typed errors as 400."""
@@ -2128,10 +2138,7 @@ class SineatingRespondSerializer(serializers.Serializer):
 
     def validate_sinner_sheet_id(self, value: int) -> CharacterSheet:
         """Resolve sinner sheet."""
-        try:
-            return CharacterSheet.objects.get(pk=value)
-        except CharacterSheet.DoesNotExist as exc:
-            raise serializers.ValidationError(_ERR_CHARACTER_SHEET_NOT_FOUND) from exc
+        return _resolve_sheet_pk(value)
 
     def create(self, validated_data: dict) -> object:
         """Resolve Sineating from the persisted pending offer; surface typed errors as 400.
@@ -2186,26 +2193,15 @@ class SoulTetherRescueSerializer(serializers.Serializer):
 
     def validate_sinner_sheet_id(self, value: int) -> CharacterSheet:
         """Resolve Sinner sheet."""
-        try:
-            return CharacterSheet.objects.get(pk=value)
-        except CharacterSheet.DoesNotExist as exc:
-            raise serializers.ValidationError(_ERR_CHARACTER_SHEET_NOT_FOUND) from exc
+        return _resolve_sheet_pk(value)
 
     def validate_resonance_id(self, value: int) -> "Resonance":
         """Resolve resonance by PK."""
-        try:
-            return Resonance.objects.get(pk=value)
-        except Resonance.DoesNotExist as exc:
-            raise serializers.ValidationError(_ERR_RESONANCE_NOT_FOUND) from exc
+        return _resolve_resonance_pk(value)
 
     def validate_scene_id(self, value: int) -> object:
         """Resolve scene by PK."""
-        from world.scenes.models import Scene  # noqa: PLC0415
-
-        try:
-            return Scene.objects.get(pk=value)
-        except Scene.DoesNotExist as exc:
-            raise serializers.ValidationError(_ERR_SCENE_NOT_FOUND) from exc
+        return _resolve_scene_pk(value)
 
     def create(self, validated_data: dict) -> object:
         """Delegate to perform_soul_tether_rescue; surface typed errors as 400."""
@@ -2381,10 +2377,7 @@ class StageAdvanceRespondSerializer(serializers.Serializer):
 
     def validate_sinner_sheet_id(self, value: int) -> CharacterSheet:
         """Resolve sinner sheet."""
-        try:
-            return CharacterSheet.objects.get(pk=value)
-        except CharacterSheet.DoesNotExist as exc:
-            raise serializers.ValidationError(_ERR_CHARACTER_SHEET_NOT_FOUND) from exc
+        return _resolve_sheet_pk(value)
 
     def create(self, validated_data: dict) -> object:
         """Resolve from the persisted pending offer; surface typed errors as 400.
@@ -2990,6 +2983,8 @@ class RitualSessionDetailSerializer(serializers.ModelSerializer):
     )
     session_references = serializers.SerializerMethodField()
     participant_fields = serializers.SerializerMethodField()
+    anima_requirement = serializers.IntegerField(source="ritual.anima_requirement", read_only=True)
+    anima_pool_total = serializers.SerializerMethodField()
 
     class Meta:
         model = RitualSession
@@ -3006,6 +3001,8 @@ class RitualSessionDetailSerializer(serializers.ModelSerializer):
             "participants",
             "session_references",
             "participant_fields",
+            "anima_requirement",
+            "anima_pool_total",
         ]
         read_only_fields = fields
 
@@ -3016,6 +3013,11 @@ class RitualSessionDetailSerializer(serializers.ModelSerializer):
         if initiator is None:
             return ""
         return active_persona_for_sheet(initiator).name
+
+    def get_anima_pool_total(self, obj: object) -> int:
+        from world.magic.services.ritual_pool import pool_total  # noqa: PLC0415
+
+        return pool_total(obj)
 
     def get_session_references(self, obj: object) -> list[dict[str, object]]:
         """Summarise session-level references (participant=None).
@@ -3226,6 +3228,42 @@ class RitualSessionAcceptSerializer(serializers.Serializer):
     def validate_references(self, value: list[dict]) -> list:  # type: ignore[override]
         """Validate reference spec shape (well-formedness only)."""
         return _parse_reference_specs(value)
+
+
+class RitualSessionContributeSerializer(serializers.Serializer):
+    """POST /api/magic/ritual-sessions/{id}/contribute/ (#3001).
+
+    ``kind`` picks the contribution route; CHANNEL requires ``amount``;
+    SACRIFICE requires ``victim_sheet_id`` naming an NPC sheet (PLACEHOLDER
+    consent rail: player-account victims are rejected outright — PC sacrifice
+    waits on a consent flow).
+    """
+
+    kind = serializers.ChoiceField(choices=AnimaContributionKind.choices)
+    amount = serializers.IntegerField(required=False, min_value=1)
+    victim_sheet_id = serializers.IntegerField(required=False)
+    lethal = serializers.BooleanField(required=False, default=False)
+
+    def validate(self, attrs: dict) -> dict:
+        kind = attrs["kind"]
+        if kind == AnimaContributionKind.CHANNEL and attrs.get("amount") is None:
+            raise serializers.ValidationError({"amount": "Channeling requires an amount."})
+        if kind == AnimaContributionKind.SACRIFICE:
+            victim_id = attrs.get("victim_sheet_id")
+            if victim_id is None:
+                raise serializers.ValidationError(
+                    {"victim_sheet_id": "A sacrifice requires a victim."}
+                )
+            victim = CharacterSheet.objects.filter(pk=victim_id).first()
+            if victim is None:
+                raise serializers.ValidationError({"victim_sheet_id": "No such character."})
+            character = victim.character
+            if character is not None and character.db_account is not None:
+                raise serializers.ValidationError(
+                    {"victim_sheet_id": "Only NPCs may be offered as sacrifices."}
+                )
+            attrs["victim_sheet"] = victim
+        return attrs
 
 
 # =============================================================================

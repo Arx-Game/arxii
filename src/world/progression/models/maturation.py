@@ -17,7 +17,10 @@ from world.classes.models import PathStage
 class MaturationStatCap(SharedMemoryModel):
     """Authored per-stage cap on any single stat's value (PLACEHOLDER tuning).
 
-    Seeded 5/6/11/16/21/26 for PROSPECT..TRANSCENDENT. Caps are display dots
+    Seeded 5/6/11/16/21/25 for PROSPECT..TRANSCENDENT (#3001 ruling). Shared by
+    the maturation spend path and the level stat point spend path (#3001) — a
+    stat's ceiling is a property of the stage band, regardless of which point
+    pool paid for the raise. Caps are display dots
     (stat storage is internal ×10 — #2894; the spend service multiplies at the
     comparison). The cap binds the maturation spend path; CG's
     ``STAT_MAX_VALUE`` (5) is the PROSPECT row enforced at creation time.

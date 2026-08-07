@@ -19,6 +19,7 @@ from world.items.factories import ItemInstanceFactory, ItemTemplateFactory
 from world.items.models import ItemInstance
 from world.magic.constants import RitualExecutionKind
 from world.magic.factories import (
+    CharacterAuraFactory,
     CharacterResonanceFactory,
     ResonanceFactory,
     ResonanceTierFactory,
@@ -30,6 +31,7 @@ from world.magic.factories import (
 class PerformRitualActionTouchstoneTests(TestCase):
     def setUp(self) -> None:
         self.sheet = CharacterSheetFactory()
+        CharacterAuraFactory(character=self.sheet)  # Gifted: hedge gate (#3001)
         self.character = self.sheet.character
         self.resonance = ResonanceFactory(name="Praedari")
         self.tier = ResonanceTierFactory(name="Faint", tier_level=1)

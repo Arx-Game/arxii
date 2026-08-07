@@ -28,6 +28,7 @@ Submodules (see Scope 6 §4.4):
 - rituals: Ritual, RitualComponentRequirement, ImbuingProseTemplate
 - portals: PortalAnchorKind, PortalAnchor (#2222)
 - ritual_check_config: RitualCheckConfig
+- ritual_pool: RitualAnimaContribution (#3001)
 - reincarnation: Reincarnation
 - grant: ResonanceGrant
 - progression_milestone: MagicProgressionMilestone
@@ -165,6 +166,7 @@ from world.magic.models.reincarnation import Reincarnation
 from world.magic.models.relationship_bond_pull_tuning import RelationshipBondPullTuning
 from world.magic.models.resonance_environment import AffinityInteraction, ResonanceEnvironmentConfig
 from world.magic.models.ritual_check_config import RitualCheckConfig
+from world.magic.models.ritual_pool import RitualAnimaContribution
 from world.magic.models.rituals import (
     ImbuingProseTemplate,
     PendingRitualEffect,
@@ -402,6 +404,8 @@ __all__ = [
     "Restriction",
     "RestrictionManager",
     "Ritual",
+    # ritual anima pool contributions (#3001)
+    "RitualAnimaContribution",
     "RitualCheckConfig",
     "RitualComponentRequirement",
     "RitualLiturgy",

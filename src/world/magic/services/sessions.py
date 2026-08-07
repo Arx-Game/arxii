@@ -19,6 +19,7 @@ from world.magic.constants import (
 )
 from world.magic.exceptions import (
     ParticipantCountError,
+    RitualFizzledError,
     SessionNotInPendingError,
     ThresholdNotMetError,
 )
@@ -57,6 +58,11 @@ def draft_session(  # noqa: PLR0913
     Raises ParticipantCountError if the ritual's min/max_participants bounds
     are violated by the total participant count (initiator + invitees).
     """
+    # NOTE (#3001): deliberately NO hedge-visibility gate here — session rituals
+    # (Durance, covenant formation, org induction, Soul Tether) gate inside
+    # their own service functions by design; an aura requirement at draft time
+    # would wrongly bar quiescent participants from social rites. The
+    # ritual_visible_to predicate binds the browse list and the solo perform.
     # Deduplicate the invitee list against the initiator (idiomatic — drafting
     # services shouldn't double-count the initiator if a caller passes them in).
     deduped_invitees = [s for s in invitee_sheets if s != initiator]
@@ -208,23 +214,46 @@ def fire_session(*, session: RitualSession) -> object:
     select_for_update on the session row serializes; loser sees DoesNotExist
     when it tries to acquire the lock on a row that's been deleted.
     """
+    from world.magic.services.ritual_pool import pool_total, resolve_pool_gate  # noqa: PLC0415
+
     with transaction.atomic():
         locked = RitualSession.objects.select_for_update().get(pk=session.pk)
         locked.refresh_from_db()
         # Threshold check using the locked row's current participant states:
         if not _threshold_currently_met(locked):
             raise ThresholdNotMetError
-        # Resolve the dispatched service via importlib:
-        module_path, _, fn_name = locked.ritual.service_function_path.rpartition(".")
-        module = importlib.import_module(module_path)
-        fn = getattr(module, fn_name)  # noqa: GETATTR_LITERAL — dynamic importlib resolution; loud
-        # Call the dispatched service. If it raises, transaction rolls back
-        # and the session stays alive for the initiator to retry or cancel.
-        result = fn(session=locked)
-        # Delete the session in the same transaction (CASCADE wipes participants
-        # and references):
-        locked.delete()
-        return result
+        # #3001 pool gate: an underfilled pool rolls the deficit check; a fizzle
+        # consumes the session AND the pool (the rite happened, and it died) —
+        # deleting inside this transaction, raising after it commits.
+        gate = resolve_pool_gate(
+            ritual=locked.ritual,
+            performer_sheet=locked.initiator,
+            pool=pool_total(locked),
+        )
+        if not gate.proceeded:
+            locked.delete()
+        else:
+            if locked.ritual.anima_requirement > 0:
+                # Stash the gate outcome where service functions already read
+                # session metadata, so a spectacular fill is visible to the rite.
+                # Folk rites (requirement 0) keep their kwargs untouched.
+                locked.session_kwargs = {
+                    **locked.session_kwargs,
+                    "anima_pool": {"spectacular": gate.spectacular, "deficit": gate.deficit},
+                }
+                locked.save(update_fields=["session_kwargs"])
+            # Resolve the dispatched service via importlib:
+            module_path, _, fn_name = locked.ritual.service_function_path.rpartition(".")
+            module = importlib.import_module(module_path)
+            fn = getattr(module, fn_name)  # noqa: GETATTR_LITERAL — dynamic importlib resolution; loud
+            # Call the dispatched service. If it raises, transaction rolls back
+            # and the session stays alive for the initiator to retry or cancel.
+            result = fn(session=locked)
+            # Delete the session in the same transaction (CASCADE wipes participants
+            # and references):
+            locked.delete()
+            return result
+    raise RitualFizzledError
 
 
 def _threshold_currently_met(session: RitualSession) -> bool:

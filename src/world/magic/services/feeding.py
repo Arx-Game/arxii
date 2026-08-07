@@ -38,6 +38,12 @@ RESTRAINT_DIFFICULTY = 0
 FEEDING_KILL_CRIME_SLUG = "murder"
 FEEDING_KILL_DEED_BASE_VALUE = 10
 
+# #3001 blood-magic taints: extraction is affinity-neutral; the METHOD carries
+# the taint. Authored CompromiseActType rows (content repo) resolved by name at
+# fire time — absent rows log and skip, never invent (#2698).
+MURDER_TAINT_ACT = "Murder by Anima Drain"
+SEDUCTION_TAINT_ACTS = ("Seduction Feeding - Deception", "Seduction Feeding - Predation")
+
 
 class FeedMode:
     SIP = "SIP"
@@ -56,6 +62,10 @@ class FeedingResult:
     lost_control: bool
     was_lethal: bool
     message: str
+    death_harvest: int = 0
+    """Total yield of a killing drain (#3001): death_harvest_multiplier x the
+    victim's full maximum, replacing the drained remainder. 0 on any survivable
+    feed."""
 
 
 def feed_anima(
@@ -94,17 +104,39 @@ def feed_anima(
     with transaction.atomic():
         victim_anima.current -= take
         victim_anima.save(update_fields=["current"])
-        room_for_current = feeder_anima.maximum - feeder_anima.current
-        to_current = min(take, room_for_current)
-        to_glut = take - to_current
-        feeder_anima.current += to_current
-        feeder_anima.glut += to_glut
-        feeder_anima.save(update_fields=["current", "glut"])
 
         victim_fatigue = _apply_victim_fatigue(victim_sheet, take)
         was_lethal = False
         if mode == FeedMode.GORGE and victim_anima.current <= 0:
             was_lethal = _maybe_kill_npc_victim(feeder_sheet, victim_sheet, scene)
+
+        # #3001: a killing drain yields death_harvest_multiplier x the victim's
+        # FULL maximum — the metaphysical reason vampires are tempted to finish
+        # people off. The windfall replaces the drained remainder; overfill
+        # lands in glut (the decaying high), so a kill is a rush, not a tank.
+        harvest = take
+        death_harvest = 0
+        if was_lethal:
+            from world.magic.models.anima import AnimaConfig  # noqa: PLC0415
+
+            config = AnimaConfig.get_singleton()
+            death_harvest = config.death_harvest_multiplier * victim_anima.maximum
+            harvest = death_harvest
+
+        room_for_current = feeder_anima.maximum - feeder_anima.current
+        to_current = min(harvest, room_for_current)
+        to_glut = harvest - to_current
+        feeder_anima.current += to_current
+        feeder_anima.glut += to_glut
+        feeder_anima.save(update_fields=["current", "glut"])
+
+        if was_lethal:
+            grant_blood_taint(feeder_sheet, MURDER_TAINT_ACT)
+        if take > 0 and _feeder_is_essence_kind(feeder_sheet):
+            # The succubi lane: an essence feed IS the seduction (#3001 ruling —
+            # +1 Insidia, +1 Praedari per feed).
+            for act_name in SEDUCTION_TAINT_ACTS:
+                grant_blood_taint(feeder_sheet, act_name)
 
         record = FeedingRecord.objects.create(
             feeder_sheet=feeder_sheet,
@@ -120,13 +152,46 @@ def feed_anima(
 
     _reconcile_both(feeder_sheet, victim_sheet)
     message = _result_message(mode, take, lost_control, was_lethal)
-    return FeedingResult(record, take, to_glut, victim_fatigue, lost_control, was_lethal, message)
+    return FeedingResult(
+        record,
+        take,
+        to_glut,
+        victim_fatigue,
+        lost_control,
+        was_lethal,
+        message,
+        death_harvest,
+    )
 
 
 def _anima_or_none(sheet) -> CharacterAnima | None:
     if sheet is None:
         return None
     return sheet.anima_or_none
+
+
+def grant_blood_taint(sheet, act_name: str) -> None:
+    """Fire an authored blood-magic CompromiseActType at *sheet*, if authored.
+
+    #3001: the extraction is neutral; the method (murder, seduction) grants the
+    abyssal resonance. Rows are content-repo authored — an absent row logs and
+    skips rather than being invented here (#2698). Shared by feeding kills and
+    ritual sacrifice (services/ritual_pool.py).
+    """
+    from world.magic.models.fall_redemption import CompromiseActType  # noqa: PLC0415
+    from world.magic.services.fall_redemption import grant_compromise_resonance  # noqa: PLC0415
+
+    act = CompromiseActType.objects.filter(name=act_name).first()
+    if act is None:
+        logger.info("Compromise act %r not authored; blood taint skipped.", act_name)
+        return
+    grant_compromise_resonance(sheet, act)
+
+
+def _feeder_is_essence_kind(feeder_sheet) -> bool:
+    from world.species.appetites import AppetiteKind, appetite_for  # noqa: PLC0415
+
+    return appetite_for(feeder_sheet) == AppetiteKind.ESSENCE
 
 
 def _is_ravenous(sheet) -> bool:

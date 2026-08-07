@@ -30,6 +30,7 @@ from world.items.factories import ItemInstanceFactory, ItemTemplateFactory
 from world.items.models import ItemInstance
 from world.magic.constants import RitualExecutionKind
 from world.magic.factories import (
+    CharacterAuraFactory,
     CharacterResonanceFactory,
     ResonanceFactory,
     ResonanceTierFactory,
@@ -68,6 +69,7 @@ class PerformRitualActionSustainedDeferralTests(TestCase):
 
     def setUp(self) -> None:
         self.sheet = CharacterSheetFactory()
+        CharacterAuraFactory(character=self.sheet)  # Gifted: hedge gate (#3001)
         self.character = self.sheet.character
 
     def _make_declaring_participant(self):
@@ -148,6 +150,7 @@ class PerformRitualActionSustainedComponentsSpentTests(TestCase):
 
     def setUp(self) -> None:
         self.sheet = CharacterSheetFactory()
+        CharacterAuraFactory(character=self.sheet)  # Gifted: hedge gate (#3001)
         self.character = self.sheet.character
         self.resonance = ResonanceFactory(name="Praedari-Sustained")
         self.tier = ResonanceTierFactory(name="Faint-Sustained", tier_level=1)

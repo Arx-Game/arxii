@@ -44,6 +44,35 @@ def ensure_default_character_class() -> CharacterClass:
     return character_class
 
 
+# PLACEHOLDER health rate (#3001): ~9/level derived from the authored damage
+# anchor (TechniqueDamageProfile base 3-5 + success levels) — a level-5 shrugs
+# off a skirmish; a level-0 villager (stamina x 3 health) dies to two bolts.
+DEFAULT_HEALTH_PER_LEVEL = 9
+
+
+def ensure_class_stage_health_rates() -> int:
+    """Seed per-stage health rates for every CharacterClass (#3001).
+
+    Before this, no ``ClassStageHealthRate`` rows were ever authored, so
+    ``derive_base_max_health``'s class term was 0 in practice — health did not
+    grow with level at all. Flat PLACEHOLDER rate across stages (Apostate
+    tunes shape later); get_or_create keeps staff retunes on re-run. Returns
+    the number of rows created.
+    """
+    from world.classes.models import ClassStageHealthRate  # noqa: PLC0415
+
+    created = 0
+    for character_class in CharacterClass.objects.all():
+        for stage in PathStage.values:
+            _, was_created = ClassStageHealthRate.objects.get_or_create(
+                character_class=character_class,
+                stage=stage,
+                defaults={"health_per_level": DEFAULT_HEALTH_PER_LEVEL},
+            )
+            created += int(was_created)
+    return created
+
+
 def stage_for_level(level: int) -> int:
     """Map a class level to its PathStage value (clamps <1 to PROSPECT)."""
     for min_level, stage in _STAGE_THRESHOLDS:
@@ -101,4 +130,9 @@ def set_primary_class_level(  # noqa: OBJECTDB_PARAM
         defaults={"level": level, "is_primary": True},
     )
     recompute_max_health_with_threads(sheet)
+    # #3001: anima maximum is level-derived too. No-ops when the sheet has no
+    # CharacterAnima row yet (CG stamps the level before the anima seed).
+    from world.magic.services.anima import recompute_max_anima  # noqa: PLC0415
+
+    recompute_max_anima(sheet)
     return ccl

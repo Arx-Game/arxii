@@ -81,6 +81,18 @@ Powers, affinities, auras, resonances, threads-as-currency, rituals, and Mage Sc
     (`constants.py`, PLACEHOLDER labels pending Apostate rewrite) derive the
     qualitative band word; `CharacterAnimaSerializer.band` surfaces it for the
     web Status tab + `sheet/status` telnet section (#1446)
+  - **Ritual anima pools / blood economy (#3001, ADR-0205):**
+    `Ritual.anima_requirement`, `RitualAnimaContribution` (audit; outlives its
+    session), `AnimaConfig` (flat `daily_regen_amount`, `level_zero_maximum` /
+    `maximum_per_level` = 10 / 100×level via `recompute_max_anima` on both
+    level-write spines, `death_harvest_multiplier` ×20). Services
+    (`services/ritual_pool.py`): `contribute_channel/prick/gash/sacrifice`,
+    `pool_total`, `resolve_pool_gate` (deficit-bumped check; fizzle consumes the
+    pool — `RitualFizzledError`), `ritual_visible_to` (hedge_accessible wired as
+    the browse+perform eligibility predicate). Blood taints via authored
+    `CompromiseActType` rows (`grant_blood_taint` in `services/feeding.py`);
+    killing drains yield ×20 the victim's maximum. Contribute endpoint on
+    `RitualSessionViewSet`; deep detail in `docs/systems/magic.md`
   - **Mage Scars (renamed from Magical Scars — display-only, §7.2):**
     `MagicalAlterationTemplate`, `PendingAlteration`, `MagicalAlterationEvent`
   - **Spec A Thread + Currency (NEW):** `Thread` (discriminator + typed FKs:
@@ -1623,7 +1635,9 @@ XP, kudos, development points, and unlock system. Contains the most explicit pre
 - **Models:** `ExperiencePointsData`, `XPTransaction`, `CharacterXP`, `DevelopmentPoints`, `DevelopmentTransaction`, `KudosPointsData`, `KudosTransaction`, `CharacterUnlock`, `XPCostChart`, `XPCostEntry`, `CharacterPathHistory`, `PathIntent` (player's declared next-path preference — one per character sheet; FK to `CharacterSheet` + `Path`), `KudosDifficultyWeight` (staff-tunable band→multiplier for good-sport kudos; one row per `DifficultyChoice`), `WeeklySocialEngagement` (per-account weekly pending-kudos accumulator; `pending_points`, `granted`, `game_week` FK; `distinct_initiators` is a derived property counting child rows), `WeeklyEngagementInitiator` (child row recording each unique initiator toward a ledger; `UniqueConstraint(ledger, initiator_account)`),
   **Class-Level Advancement (#1352):** `AbstractClassLevelAdvancement` (abstract base shared by `ClassLevelAdvancement` and `AudereMajoraCrossing`; carries `scene`, `declaration_interaction`, `level_before`, `level_after`, `created_at`), `ClassLevelAdvancement` (within-tier Durance receipt — `character_sheet`, `character_class`, `officiant`, `ritual`, `witnesses` M2M → `scenes.Persona`),
   **Training Site (#1700):** `DuranceTrainingSite` (room + trainer-of-record pair; enables site-convened sessions — `room_profile` FK → `RoomProfile`, `officiant` FK → `CharacterSheet`, `training_path` FK → `Path` (nullable), `is_active`; unique `(room_profile, officiant)`),
-  **Maturation Points (#2756, ADR-0172):** `MaturationStatCap` (authored per-`PathStage` stat cap, seeded 5/6/11/16/21/26 PLACEHOLDER) + `MaturationSpend` (sheet FK, trait FK, `milestone_year`, `is_active` — active iff `milestone_year <= sheet.matured_years`; unique per (sheet, milestone_year)). Services in `progression/services/maturation.py`: `milestone_count` / `available_points` / `spend_maturation_point` (+1 display dot = +10 internal, stage-capped; caps are authored in display dots and convert at the comparison — ADR-0193) / `sync_maturation_spends` (reversal deactivates, re-aging reactivates — every `matured_years` writer outside the birthday tick must call it)
+  **Maturation Points (#2756, ADR-0172):** `MaturationStatCap` (authored per-`PathStage` stat cap, seeded 5/6/11/16/21/25 per the #3001 ruling — `seed_maturation_stat_caps` in `progression/seeds.py`, previously never authored) + `MaturationSpend` (sheet FK, trait FK, `milestone_year`, `is_active` — active iff `milestone_year <= sheet.matured_years`; unique per (sheet, milestone_year)). Services in `progression/services/maturation.py`: `milestone_count` / `available_points` / `spend_maturation_point` (+1 display dot = +10 internal, stage-capped; caps are authored in display dots and convert at the comparison — ADR-0193) / `sync_maturation_spends` (reversal deactivates, re-aging reactivates — every `matured_years` writer outside the birthday tick must call it)
+
+  **Level Stat Points (#3001, ADR-0205):** `LevelStatPointSpend` (sheet FK, trait FK, `level_granted` 2..N, `is_active`; unique per (sheet, level_granted)) — one point per class level past the first, balance derived (`level − 1` minus active spends, no grant hook). Services in `progression/services/stat_points.py`: `stat_points_earned` / `available_stat_points` / `spend_level_stat_point` (same `MaturationStatCap` stage cap) / `sync_level_stat_point_spends` (called from `apply_class_level_advance` so reversals refund). API: `GET /api/character-sheets/{id}/stat-points/` + `POST .../spend-stat-point/`; frontend `StatPointPanel` beside `MaturationPanel`
 - **Unlock Requirements** (all have `is_met_by_character(character) -> tuple[bool, str]`):
   - `TraitRequirement` — checks CharacterTraitValue
   - `LevelRequirement` — checks character_class_levels

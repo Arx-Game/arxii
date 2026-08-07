@@ -786,7 +786,7 @@ def register_all_tasks() -> None:
             callable=appetite_daily_tick,
             interval=timedelta(hours=24),
             phase=CronPhase.DRAIN,
-            description="Daily appetite upkeep drains (shades) + glut decay (#2853).",
+            description="Daily appetite upkeep drains (vampires, shades) + glut decay (#3001).",
         )
     )
     register_task(
@@ -797,7 +797,7 @@ def register_all_tasks() -> None:
             anchor_weekday=0,
             anchor_hour_utc=5,
             phase=CronPhase.DRAIN,
-            description="Weekly appetite upkeep drains (vampires, floor 10%) (#2853).",
+            description="Weekly appetite upkeep drains (no authored rows since #3001 went daily).",
         )
     )
     register_task(

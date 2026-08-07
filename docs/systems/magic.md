@@ -1022,6 +1022,47 @@ themselves (no shop system exists) is documented in `docs/systems/items.md`
 (`grant_touchstone_item_to_character`). See ADR-0087 for the extension-vs-parallel-model
 decision and the `client_hosted` dispatch discovery.
 
+### Ritual anima pools & the blood economy (#3001, ADR-0205) [BUILT & WIRED]
+
+Rituals are the home of generalized magic — there is deliberately **no Gifted-gate in the
+ritual framework**; the price is the gate. Anima itself is a level-scaled economy: maximum
+= `AnimaConfig.level_zero_maximum` (10) at level 0, else `maximum_per_level` (100) × level
+(recomputed on both level-write spines — `apply_class_level_advance` and
+`set_primary_class_level` — plus CG finalize, via `recompute_max_anima`). Regen is a flat
+`AnimaConfig.daily_regen_amount` (1)/day; appetite holders never regen naturally (their
+delta is the `AppetiteUpkeep` drain — blood daily −1 floor ceil(10%), shade daily −1 floor
+0, essence 0). `deduct_anima` draws `glut` first (#2853's documented-but-inert rule, now
+real).
+
+- **`Ritual.anima_requirement`** (0 = folk rite) is powered by a pool of
+  `RitualAnimaContribution` rows (`models/ritual_pool.py` — audit rows that outlive their
+  session via SET_NULL). Contribution routes (`services/ritual_pool.py`):
+  `contribute_channel` (own anima, glut-first), `contribute_prick` (1 anima, trivial
+  damage), `contribute_gash` ((1d6+1) × level, a real wound + fatigue),
+  `contribute_sacrifice` (victim drained wholesale; reuses `feed_anima`'s kill guards).
+- **Death harvest:** a killing drain — feeding gorge or ritual sacrifice — yields
+  `AnimaConfig.death_harvest_multiplier` (20) × the victim's full maximum (feeder overflow
+  lands in `glut`; ritual harvests pour into the pool). Fires the murder taint.
+- **Blood taints:** extraction is affinity-neutral; the METHOD taints, via authored
+  `CompromiseActType` rows resolved by name at fire time (`grant_blood_taint` in
+  `services/feeding.py`, log-skip when unauthored): "Murder by Anima Drain" (+5 Praedari),
+  and both "Seduction Feeding" rows (+1 Insidia, +1 Praedari) on every essence-kind feed.
+- **Pool gate** (`resolve_pool_gate`): met → as authored; ≥2× → spectacular tier
+  (stashed into `session_kwargs["anima_pool"]` for requirement-bearing session rituals;
+  `ActionResult.data["spectacular"]` for solo performs); underfilled → the ritual's own
+  `RitualCheckConfig` check at a deficit-bumped difficulty, failure = fizzle that
+  **consumes** the session and pool (`RitualFizzledError`). Enforced at both dispatch
+  lanes: `fire_session` and `PerformRitualAction` (which auto-channels the solo performer
+  toward the requirement — never via kwargs, which would block sustained declaration).
+- **Hedge access:** `ritual_visible_to(sheet, ritual)` = `hedge_accessible` OR
+  `magical_profile(sheet)` — one predicate for browse (`RitualViewSet.get_queryset`) and
+  perform (`PerformRitualAction`). Session drafting is deliberately ungated (Durance/
+  covenant/induction rites gate in their own service functions).
+- **Contribute endpoint:** `POST /api/magic/ritual-sessions/{id}/contribute/`
+  (`{kind, amount?, victim_sheet_id?, lethal?}`; initiator or ACCEPTED participant;
+  NPC-only PLACEHOLDER consent rail on sacrifice victims). Session detail carries
+  `anima_requirement` + `anima_pool_total`.
+
 ### Sustained rituals — conducting a ritual under fire (#2705, ADR-0190)
 
 `RitualCheckConfig.sustained_rounds` (PositiveSmallInt, default 0) marks a ritual as

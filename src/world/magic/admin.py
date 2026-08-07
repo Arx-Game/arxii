@@ -50,6 +50,7 @@ from world.magic.models import (
     ResonanceGrant,
     Restriction,
     Ritual,
+    RitualAnimaContribution,
     RitualCheckConfig,
     RitualComponentRequirement,
     SanctumDissolutionRecoveryAward,
@@ -817,6 +818,7 @@ class RitualAdmin(admin.ModelAdmin):
         "name",
         "execution_kind",
         "hedge_accessible",
+        "anima_requirement",
         "glimpse_eligible",
     ]
     list_filter = ["execution_kind", "hedge_accessible", "glimpse_eligible"]
@@ -830,6 +832,22 @@ class RitualAdmin(admin.ModelAdmin):
     # service function and trigger it via the ritual UI. Manage these
     # fields via seed code instead.
     readonly_fields = ["execution_kind", "service_function_path", "flow"]
+
+
+@admin.register(RitualAnimaContribution)
+class RitualAnimaContributionAdmin(admin.ModelAdmin):
+    """Read-only audit of anima pool contributions (#3001)."""
+
+    list_display = ["ritual", "contributor", "kind", "amount", "victim", "was_lethal", "created_at"]
+    list_filter = ["kind", "was_lethal"]
+    raw_id_fields = ["session", "ritual", "contributor", "victim"]
+    list_select_related = ["ritual", "contributor", "victim"]
+
+    def has_add_permission(self, request) -> bool:  # noqa: ARG002
+        return False
+
+    def has_change_permission(self, request, obj=None) -> bool:  # noqa: ARG002
+        return False
 
 
 @admin.register(RitualComponentRequirement)

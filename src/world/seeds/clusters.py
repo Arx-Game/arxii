@@ -204,13 +204,18 @@ def _seed_tutorial() -> None:
 
 
 def _seed_progression() -> None:
+    from world.classes.services import ensure_class_stage_health_rates  # noqa: PLC0415
     from world.progression.seeds import (  # noqa: PLC0415
         seed_durance_officiants,
         seed_major_gift_technique_level_requirement,
+        seed_maturation_stat_caps,
     )
 
     seed_durance_officiants()
     seed_major_gift_technique_level_requirement()
+    seed_maturation_stat_caps()
+    # #3001: after officiants exist so every CharacterClass gets its rate rows.
+    ensure_class_stage_health_rates()
 
 
 def _seed_npc_services() -> None:

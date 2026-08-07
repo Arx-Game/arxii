@@ -34,6 +34,9 @@ class WeaveTelnetE2ETests(TestCase):
     @classmethod
     def setUpTestData(cls) -> None:
         cls.sheet = CharacterSheetFactory()
+        from world.magic.factories import CharacterAuraFactory
+
+        CharacterAuraFactory(character=cls.sheet)  # Gifted: hedge gate (#3001)
         cls.resonance = ResonanceFactory(name="Embers")
         cls.trait = TraitFactory()
         unlock = ThreadWeavingUnlockFactory(target_kind=TargetKind.TRAIT, unlock_trait=cls.trait)

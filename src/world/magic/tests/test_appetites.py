@@ -59,32 +59,41 @@ class AppetiteUpkeepTest(TestCase):
         self.vampire = CharacterSheetFactory()
         CharacterDistinction.objects.create(character=self.vampire, distinction=self.blood)
 
-    def test_weekly_drain_with_receipt_idempotency(self):
+    def test_daily_drain_with_receipt_idempotency(self):
+        """#3001 ruled the blood drain daily: -1/day toward the floor."""
         _anima(self.vampire, current=10)
         with patch("world.magic.services.appetites.reconcile_ravenous"):
-            drained = appetite_upkeep_tick(AppetitePeriod.WEEKLY)
+            drained = appetite_upkeep_tick(AppetitePeriod.DAILY)
             self.assertEqual(drained, 1)
             self.assertEqual(CharacterAnima.objects.get(character=self.vampire).current, 9)
-            again = appetite_upkeep_tick(AppetitePeriod.WEEKLY)
+            again = appetite_upkeep_tick(AppetitePeriod.DAILY)
         self.assertEqual(again, 0)
         self.assertEqual(CharacterAnima.objects.get(character=self.vampire).current, 9)
         self.assertEqual(AppetiteUpkeepReceipt.objects.count(), 1)
 
     def test_floor_stops_the_drain(self):
-        """Floor 10% of max 10 = 1: a starved vampire dims to the floor, never below."""
+        """Floor ceil(10% of max 10) = 1: a starved vampire dims to the floor, never below."""
         _anima(self.vampire, current=1)
         with patch("world.magic.services.appetites.reconcile_ravenous"):
-            drained = appetite_upkeep_tick(AppetitePeriod.WEEKLY)
+            drained = appetite_upkeep_tick(AppetitePeriod.DAILY)
         self.assertEqual(drained, 0)
         self.assertEqual(CharacterAnima.objects.get(character=self.vampire).current, 1)
         receipt = AppetiteUpkeepReceipt.objects.get()
         self.assertEqual(receipt.drained, 0)
 
+    def test_floor_rounds_up(self):
+        """#3001: 10% of a 105-max pool floors at 11 (ceil), not 10 (floor division)."""
+        _anima(self.vampire, current=11, maximum=105)
+        with patch("world.magic.services.appetites.reconcile_ravenous"):
+            drained = appetite_upkeep_tick(AppetitePeriod.DAILY)
+        self.assertEqual(drained, 0)
+        self.assertEqual(CharacterAnima.objects.get(character=self.vampire).current, 11)
+
     def test_glut_never_satisfies_the_floor(self):
         """A glutted-but-empty vampire still reads as at-floor: glut is not a tank."""
         _anima(self.vampire, current=1, glut=5)
         with patch("world.magic.services.appetites.reconcile_ravenous"):
-            appetite_upkeep_tick(AppetitePeriod.WEEKLY)
+            appetite_upkeep_tick(AppetitePeriod.DAILY)
         anima = CharacterAnima.objects.get(character=self.vampire)
         self.assertEqual(anima.current, 1)
         self.assertEqual(anima.glut, 5)
@@ -110,6 +119,30 @@ class GlutTest(TestCase):
         anima.current = 11
         with self.assertRaises(ValidationError):
             anima.save()
+
+    def test_spends_draw_glut_first(self):
+        """#2853 documented it, #3001 implements it: deduct_anima burns glut before current."""
+        from world.magic.services.anima import deduct_anima
+
+        sheet = CharacterSheetFactory()
+        _anima(sheet, current=8, glut=3)
+        deficit = deduct_anima(sheet.character, 5)
+        anima = CharacterAnima.objects.get(character=sheet)
+        self.assertEqual(deficit, 0)
+        self.assertEqual(anima.glut, 0)
+        self.assertEqual(anima.current, 6)
+
+    def test_nonlethal_spend_can_use_glut_past_current(self):
+        """Non-lethal clamps to current + glut, so the feeding high is spendable."""
+        from world.magic.services.anima import deduct_anima
+
+        sheet = CharacterSheetFactory()
+        _anima(sheet, current=2, glut=4)
+        deficit = deduct_anima(sheet.character, 10, lethal=False)
+        anima = CharacterAnima.objects.get(character=sheet)
+        self.assertEqual(deficit, 0)
+        self.assertEqual(anima.glut, 0)
+        self.assertEqual(anima.current, 0)
 
 
 class HungerSeverityTest(TestCase):

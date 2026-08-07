@@ -94,8 +94,14 @@ PLANNED-UNBUILT tier here. Where a planned system *does* already have an issue/m
 
 ## Magic & progression
 
-- **Spell system** — learnable, path-independent hedge magic usable by quiescent characters. No `Spell`
-  model; all casting still flows Gift/Path/Technique/Thread. `intent` — **#3001**.
+- ✅ **Ritual anima pools (the former "spell system")** — DONE (#3001, ADR-0205). All PCs are
+  Gifted, so the quiescent-floor framing dissolved; rituals became the generalized-magic home
+  instead of a `Spell` model. `Ritual.anima_requirement` + contribution routes
+  (channel/prick/gash/sacrifice, death harvest ×20), `hedge_accessible` wired as the
+  browse+perform eligibility predicate, blood-magic taints, anima 100×level with flat +1/day
+  regen, +1 stat point per level against the seeded stage caps, and the first authored
+  per-stage class health rates. Ritual catalog content (Mirrorwalking, demon rites) is a
+  separate authoring pass.
 - ✅ **Post-CG Gift acquisition** — DONE (#1579 path-crossing grant; #2116 XP-buy/teaching-offer
   surface: `learn`, `/api/magic/gift-unlocks/purchase/`).
 - ✅ **Trainer system** — DONE (#2440 TRAIN effect: NPC teaches a technique for AP + coin;
