@@ -47,26 +47,31 @@ _CLERK_OFFER_LABELS: frozenset[str] = frozenset(
 )
 
 
-def ensure_builders_guild_clerk_role() -> NPCRole:
-    """Get-or-create the Builders Guild Clerk role + its permit offers.
+def ensure_builders_guild_clerk_role() -> NPCRole | None:
+    """Look up (or, under SEED_SAMPLE_CONTENT, invent) the Builders Guild Clerk role.
 
     Idempotent. Safe to call from test setUp, app startup, or staff
     tooling. Each PERMIT offer is explicitly wired to a BuildingKind
     via ``PermitOfferDetails.building_kind``. Old-label offers from
     prior seed versions are cleaned up on each invocation.
+
+    ``NPCRole`` is content-repo-owned (#2698) — looked up rather than
+    invented unless ``SEED_SAMPLE_CONTENT`` is on. Returns ``None`` (seeding
+    no offers) when the role isn't authored/sampled.
     """
     from world.buildings.models import BuildingKind  # noqa: PLC0415
     from world.buildings.seeds import (  # noqa: PLC0415
         ensure_house_kind,
         ensure_urban_building_kinds,
     )
+    from world.seeds.sample_content import authored_or_sample  # noqa: PLC0415
 
     ensure_urban_building_kinds()
     ensure_house_kind()
 
-    role, _ = NPCRole.objects.get_or_create(
-        name=BUILDERS_GUILD_CLERK_ROLE_NAME,
-        defaults={
+    role = authored_or_sample(
+        NPCRole,
+        {
             "description": (
                 "Issues building permits on behalf of the Builders Guild. "
                 "Manages ward-level eligibility and negotiated permit terms."
@@ -77,7 +82,10 @@ def ensure_builders_guild_clerk_role() -> NPCRole:
             ),
             "default_rapport_starting_value": 0,
         },
+        name=BUILDERS_GUILD_CLERK_ROLE_NAME,
     )
+    if role is None:
+        return None
 
     # Idempotent cleanup: delete any offers on this role whose labels
     # are not in the current expected set (handles migration from old
@@ -297,11 +305,14 @@ def ensure_great_archive_self_study_achievement() -> Achievement | None:
     )
 
 
-def ensure_great_archive_librarian_role() -> NPCRole:
-    """Get-or-create the Great Archive Librarian role + its self-study TRAIN offers (#2440).
+def ensure_great_archive_librarian_role() -> NPCRole | None:
+    """Look up (or, under SEED_SAMPLE_CONTENT, invent) the Great Archive Librarian role.
 
     Mirrors ``ensure_builders_guild_clerk_role``'s shape: idempotent
     get-or-create role + offers, with stale-label cleanup on each call.
+    ``NPCRole`` is content-repo-owned (#2698) — looked up rather than
+    invented unless ``SEED_SAMPLE_CONTENT`` is on. Returns ``None`` (seeding
+    no offers) when the role isn't authored/sampled.
 
     Gate mechanism: reuses ``NPCServiceOffer.eligibility_rule`` — already THE
     predicate gate for offer visibility/selectability (``services.
@@ -323,14 +334,15 @@ def ensure_great_archive_librarian_role() -> NPCRole:
     ``teaches_tradition`` FK can't express — deferred, not this task's scope.
     """
     from world.seeds.character_creation import ensure_shroudwatch_academy  # noqa: PLC0415
+    from world.seeds.sample_content import authored_or_sample  # noqa: PLC0415
 
     academy = ensure_shroudwatch_academy()
     starter_techniques = _resolve_starter_techniques(_SELF_STUDY_STARTER_TECHNIQUES)
     achievement = ensure_great_archive_self_study_achievement()
 
-    role, _ = NPCRole.objects.get_or_create(
-        name=GREAT_ARCHIVE_LIBRARIAN_ROLE_NAME,
-        defaults={
+    role = authored_or_sample(
+        NPCRole,
+        {
             "description": (
                 "PLACEHOLDER: the archivist who lets a Prospect who has earned "
                 "the Archive's trust teach themselves from its shelves. Real "
@@ -344,7 +356,10 @@ def ensure_great_archive_librarian_role() -> NPCRole:
             "faction_affiliation": academy,
             "teaches_tradition": None,
         },
+        name=GREAT_ARCHIVE_LIBRARIAN_ROLE_NAME,
     )
+    if role is None:
+        return None
 
     if achievement is None:
         # Achievement not authored and sampling is off — skip the offers that
@@ -396,8 +411,8 @@ ACADEMY_REGISTRAR_ROLE_NAME = "Academy Registrar"
 _REGISTRAR_SETTLE_OFFER_LABEL = "Settle your Academy debt"
 
 
-def ensure_academy_registrar_role() -> NPCRole:
-    """Get-or-create the Academy Registrar role + its ungated SETTLE_OBLIGATION offer.
+def ensure_academy_registrar_role() -> NPCRole | None:
+    """Look up (or, under SEED_SAMPLE_CONTENT, invent) the Academy Registrar role.
 
     Closes the whole-branch-review Critical finding on #2428:
     ``world.societies.obligation_services.settle_obligation`` was authored (Task 1)
@@ -413,15 +428,18 @@ def ensure_academy_registrar_role() -> NPCRole:
     pass, same as every other Academy NPC role seeded here.
 
     Idempotent (get_or_create + stale-label cleanup), mirroring
-    ``ensure_builders_guild_clerk_role``'s shape.
+    ``ensure_builders_guild_clerk_role``'s shape. ``NPCRole`` is content-repo-owned
+    (#2698) — looked up rather than invented unless ``SEED_SAMPLE_CONTENT`` is on.
+    Returns ``None`` (seeding no offer) when the role isn't authored/sampled.
     """
     from world.seeds.character_creation import ensure_shroudwatch_academy  # noqa: PLC0415
+    from world.seeds.sample_content import authored_or_sample  # noqa: PLC0415
 
     academy = ensure_shroudwatch_academy()
 
-    role, _ = NPCRole.objects.get_or_create(
-        name=ACADEMY_REGISTRAR_ROLE_NAME,
-        defaults={
+    role = authored_or_sample(
+        NPCRole,
+        {
             "description": (
                 "PLACEHOLDER: keeps the Academy's entrance ledger. Takes a Golden "
                 "Hare in hand and marks a Prospect's debt paid. Real Registrar "
@@ -435,7 +453,10 @@ def ensure_academy_registrar_role() -> NPCRole:
             "faction_affiliation": academy,
             "teaches_tradition": None,
         },
+        name=ACADEMY_REGISTRAR_ROLE_NAME,
     )
+    if role is None:
+        return None
 
     offer, created = NPCServiceOffer.objects.get_or_create(
         role=role,
@@ -477,8 +498,8 @@ ACADEMY_GENERALIST_TRAINER_ROLE_NAME = "Academy Trainer"
 _GENERALIST_TRAINER_STARTER_TECHNIQUES: tuple[tuple[str, str], ...] = _SELF_STUDY_STARTER_TECHNIQUES
 
 
-def ensure_academy_generalist_trainer_role() -> NPCRole:
-    """Get-or-create the ungated Academy generalist trainer + its TRAIN offers.
+def ensure_academy_generalist_trainer_role() -> NPCRole | None:
+    """Look up (or, under SEED_SAMPLE_CONTENT, invent) the ungated Academy generalist trainer.
 
     Closes the whole-branch-review Important finding on #2428: without this seed,
     the only fresh-DB TRAIN offers were the Great Archive librarian's
@@ -497,16 +518,20 @@ def ensure_academy_generalist_trainer_role() -> NPCRole:
     spends here redeems to the Academy, same as every other Academy TRAIN offer.
 
     PLACEHOLDER description/flavor. Idempotent (get_or_create + stale-label
-    cleanup), mirroring ``ensure_great_archive_librarian_role``.
+    cleanup), mirroring ``ensure_great_archive_librarian_role``. ``NPCRole`` is
+    content-repo-owned (#2698) — looked up rather than invented unless
+    ``SEED_SAMPLE_CONTENT`` is on. Returns ``None`` (seeding no offers) when
+    the role isn't authored/sampled.
     """
     from world.seeds.character_creation import ensure_shroudwatch_academy  # noqa: PLC0415
+    from world.seeds.sample_content import authored_or_sample  # noqa: PLC0415
 
     academy = ensure_shroudwatch_academy()
     starter_techniques = _resolve_starter_techniques(_GENERALIST_TRAINER_STARTER_TECHNIQUES)
 
-    role, _ = NPCRole.objects.get_or_create(
-        name=ACADEMY_GENERALIST_TRAINER_ROLE_NAME,
-        defaults={
+    role = authored_or_sample(
+        NPCRole,
+        {
             "description": (
                 "PLACEHOLDER: an Academy instructor who teaches any Prospect the "
                 "basics of their own Path's starter Gift — no sponsorship, no "
@@ -521,7 +546,10 @@ def ensure_academy_generalist_trainer_role() -> NPCRole:
             "faction_affiliation": academy,
             "teaches_tradition": None,
         },
+        name=ACADEMY_GENERALIST_TRAINER_ROLE_NAME,
     )
+    if role is None:
+        return None
 
     expected_labels: set[str] = set()
     for _gift_name, technique_name in _GENERALIST_TRAINER_STARTER_TECHNIQUES:

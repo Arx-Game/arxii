@@ -233,12 +233,18 @@ def handle_town_crier_progression(
     The crier is a Functionary of the seeded "Town Crier" NPCRole, placed
     idempotently in the target room — the visible IC anchor for the same
     local-tidings reader the Notice Board provides.
+
+    ``NPCRole`` is content-repo-owned (#2698) — the row still installs even
+    when the "Town Crier" role isn't authored/sampled, but no crier
+    Functionary is placed in that case (nothing to place it as).
     """
     from world.npc_services.functionaries import place_functionary  # noqa: PLC0415
     from world.room_features.seeds import ensure_town_crier_role  # noqa: PLC0415
 
     details = _install_or_level_feature(project, target_level)
-    place_functionary(role=ensure_town_crier_role(), room=details.target_room_profile)
+    role = ensure_town_crier_role()
+    if role is not None:
+        place_functionary(role=role, room=details.target_room_profile)
 
 
 def active_hub_feature(room_profile: RoomProfile) -> RoomFeatureInstance | None:

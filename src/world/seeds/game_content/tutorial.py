@@ -122,10 +122,14 @@ class TutorialSeedResult:
     ``consent_template`` is the "Terms of Engagement" antagonism-consent primer (#2170) —
     a tutor-offered side-step gated on T1, parallel to the T2..T7 spine.
     ``None`` when T1 itself isn't authored/sampled.
+
+    ``tutor_role`` is ``None`` when the "Threshold Warden" ``NPCRole`` (content-
+    repo-owned, #2698) isn't authored/sampled — every tutor-offer/Functionary
+    step that depends on it is skipped in that case (see ``seed_tutorial_dev``).
     """
 
     templates: list[MissionTemplate]
-    tutor_role: NPCRole
+    tutor_role: NPCRole | None
     consent_template: MissionTemplate
 
 
@@ -340,17 +344,22 @@ def _seed_t2(room: ObjectDB, gate_template: MissionTemplate | None) -> MissionTe
     return template
 
 
-def _ensure_tutor_role() -> NPCRole:
-    """Get-or-create the tutor NPCRole (#1035).
+def _ensure_tutor_role() -> NPCRole | None:
+    """Look up (or, under SEED_SAMPLE_CONTENT, invent) the tutor NPCRole (#1035).
 
     Mirrors ``ensure_builders_guild_clerk_role`` (``npc_services/seeds.py``)
     — the established (role, label)-keyed idempotent offer pattern.
+    ``NPCRole`` is content-repo-owned (#2698) — looked up rather than
+    invented unless ``SEED_SAMPLE_CONTENT`` is on. Returns ``None`` when it
+    isn't authored/sampled; the caller skips every offer/Functionary step
+    that depends on it.
     """
     from world.npc_services.models import NPCRole  # noqa: PLC0415
+    from world.seeds.sample_content import authored_or_sample  # noqa: PLC0415
 
-    role, _ = NPCRole.objects.get_or_create(
-        name=_TUTOR_ROLE_NAME,
-        defaults={
+    return authored_or_sample(
+        NPCRole,
+        {
             "description": (
                 "A quiet guide who meets the newly arrived at the threshold of "
                 "the city and walks them through their first real steps."
@@ -361,8 +370,8 @@ def _ensure_tutor_role() -> NPCRole:
             ),
             "default_rapport_starting_value": 0,
         },
+        name=_TUTOR_ROLE_NAME,
     )
-    return role
 
 
 def _ensure_tutor_functionary(role: NPCRole, room: ObjectDB) -> None:
@@ -501,7 +510,7 @@ def _seed_t3(gate_template: MissionTemplate | None) -> MissionTemplate | None:
 
 
 def _seed_t4(
-    tutor_role: NPCRole, gate_template: MissionTemplate | None
+    tutor_role: NPCRole | None, gate_template: MissionTemplate | None
 ) -> tuple[MissionTemplate | None, MissionOptionRoute | None]:
     """T4 "A Simple Job" — BOARD, reusing seed_missions_dev's board giver.
 
@@ -512,6 +521,10 @@ def _seed_t4(
     This is the one demo mission the module docstring calls out explicitly:
     genuinely-unauthored placeholder content, exactly what
     ``SEED_SAMPLE_CONTENT`` exists for.
+
+    ``tutor_role`` may be ``None`` (the "Threshold Warden" role isn't
+    authored/sampled) — ``report_to_role`` is a nullable FK, so the template
+    still seeds, just without a report-to role wired.
     """
     if gate_template is None:
         return None, None
@@ -703,27 +716,39 @@ def seed_tutorial_dev() -> TutorialSeedResult:
     t1 = _seed_t1(room)
     t2 = _seed_t2(room, t1)
 
+    # "Threshold Warden" is content-repo-owned (#2698) — every offer/
+    # Functionary step below depends on it and is skipped when it isn't
+    # authored/sampled (see TutorialSeedResult's docstring).
     tutor_role = _ensure_tutor_role()
-    _ensure_tutor_functionary(tutor_role, room)
+    if tutor_role is not None:
+        _ensure_tutor_functionary(tutor_role, room)
 
     consent_primer = _seed_consent_primer(t1)
-    _ensure_offer(tutor_role, "A word about boundaries", consent_primer)
+    if tutor_role is not None:
+        _ensure_offer(tutor_role, "A word about boundaries", consent_primer)
 
     t3 = _seed_t3(t2)
-    _ensure_offer(tutor_role, "Kindle a first spark", t3)
+    if tutor_role is not None:
+        _ensure_offer(tutor_role, "Kindle a first spark", t3)
 
     t4, t4_terminal_route = _seed_t4(tutor_role, t3)
 
     t5 = _seed_t5(t4)
-    t5_offer = _ensure_offer(tutor_role, "Learn the loom's thread-work", t5)
+    t5_offer = (
+        _ensure_offer(tutor_role, "Learn the loom's thread-work", t5)
+        if tutor_role is not None
+        else None
+    )
 
     _ensure_t4_followon_reward(t4_terminal_route, t5_offer)
 
     t6 = _seed_t6(t5)
-    _ensure_offer(tutor_role, "Swear the first oath", t6)
+    if tutor_role is not None:
+        _ensure_offer(tutor_role, "Swear the first oath", t6)
 
     t7 = _seed_t7(t6)
-    _ensure_offer(tutor_role, "Answer the long dark's call", t7)
+    if tutor_role is not None:
+        _ensure_offer(tutor_role, "Answer the long dark's call", t7)
 
     return TutorialSeedResult(
         templates=[t for t in (t1, t2, t3, t4, t5, t6, t7) if t is not None],

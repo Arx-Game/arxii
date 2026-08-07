@@ -193,6 +193,12 @@ def _seed_cosmetic_templates() -> None:
 
 
 def _seed_stylist_role() -> None:
+    """Look up (or, under SEED_SAMPLE_CONTENT, invent) the stylist role + offers.
+
+    ``NPCRole`` is content-repo-owned (#2698) — looked up rather than invented
+    unless ``SEED_SAMPLE_CONTENT`` is on. Returns early, seeding no offers,
+    when the role isn't authored/sampled.
+    """
     from world.forms.models import FormTrait  # noqa: PLC0415
     from world.npc_services.constants import OfferKind  # noqa: PLC0415
     from world.npc_services.models import (  # noqa: PLC0415
@@ -200,17 +206,21 @@ def _seed_stylist_role() -> None:
         NPCServiceOffer,
         StylingOfferDetails,
     )
+    from world.seeds.sample_content import authored_or_sample  # noqa: PLC0415
 
-    role, _ = NPCRole.objects.get_or_create(
-        name=STYLIST_ROLE_NAME,
-        defaults={
+    role = authored_or_sample(
+        NPCRole,
+        {
             "description": "PLACEHOLDER — a fashionable stylist for hire.",
             "default_description_template": (
                 "PLACEHOLDER — scissors flash; the stylist appraises your look."
             ),
             "default_rapport_starting_value": 0,
         },
+        name=STYLIST_ROLE_NAME,
     )
+    if role is None:
+        return
 
     # Prismatic is Prism's Dye's magic (not a salon service) and multihued
     # awaits the dye-composition mechanics — neither is a stylist menu row.
@@ -239,16 +249,23 @@ def _seed_stylist_role() -> None:
 
 
 def _seed_profile_scribe_role() -> None:
+    """Look up (or, under SEED_SAMPLE_CONTENT, invent) the profile scribe role + offer.
+
+    ``NPCRole`` is content-repo-owned (#2698) — looked up rather than invented
+    unless ``SEED_SAMPLE_CONTENT`` is on. Returns early, seeding no offer,
+    when the role isn't authored/sampled.
+    """
     from world.npc_services.constants import OfferKind  # noqa: PLC0415
     from world.npc_services.models import (  # noqa: PLC0415
         NPCRole,
         NPCServiceOffer,
         ProfileRecordingOfferDetails,
     )
+    from world.seeds.sample_content import authored_or_sample  # noqa: PLC0415
 
-    role, _ = NPCRole.objects.get_or_create(
-        name=PROFILE_SCRIBE_ROLE_NAME,
-        defaults={
+    role = authored_or_sample(
+        NPCRole,
+        {
             "description": (
                 "PLACEHOLDER — an Archive scholar who records profiles of "
                 "notable persons for posterity."
@@ -258,7 +275,10 @@ def _seed_profile_scribe_role() -> None:
             ),
             "default_rapport_starting_value": 0,
         },
+        name=PROFILE_SCRIBE_ROLE_NAME,
     )
+    if role is None:
+        return
     offer, created = NPCServiceOffer.objects.get_or_create(
         role=role,
         label="Commission a recorded profile",
