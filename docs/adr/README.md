@@ -211,6 +211,7 @@ treat those names as hints to confirm, not gospel.
 - [0198 — Dreamwalk presence is a persisted row keyed on the host sheet, not ephemeral per-process state](0198-dreamwalk-presence-is-persisted-on-the-host-sheet.md) (#3003; related ADR-0008, ADR-0131)
 - [0199 — Concealment defaults on; exposure is cut, material, or performed](0199-concealment-defaults-on-exposure-is-cut-material-or-performed.md) (#2985; refines ADR-0194)
 - [0204 — Account-first block/mute extends #1278; IC stays flag-only; OOC is write-then-filter](0204-account-first-block-mute-extends-1278.md) (#2996; related ADR-0009, ADR-0007)
+- [0205 — Ritual anima pools replace a spell system; anima is a level-scaled, blood-payable economy](0205-ritual-anima-pools-replace-a-spell-system.md) (#3001)
 
 ### Gift & resonance economy
 - [0050 — Gifts are Major or Minor; species abilities are a species-granted Minor Gift](0050-gifts-are-major-or-minor-species-abilities-are-minor-gifts.md)

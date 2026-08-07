@@ -529,7 +529,12 @@ Lives in `magic/services/anima.py`. Scheduler entry point.
 5. For each row:
    - If `row.character_sheet.character_id in engaged_ids`, increment "engagement_blocked" counter, skip.
    - If `row.character_sheet.character_id in blocked_ids`, increment "condition_blocked" counter, skip.
-   - Compute `regen = floor(row.maximum * config.daily_regen_percent / 100)`; `row.current_anima = min(row.current_anima + regen, row.maximum)`; save.
+   - Appetite holders (vampires/dhampir/shades, #2853) are skipped — their delta comes from
+     `AppetiteUpkeep` drains, never natural regen.
+   - Apply the flat trickle (#3001, ADR-0205): `row.current = min(row.current +
+     config.daily_regen_amount, row.maximum)` (default 1/day — deliberately painful at
+     level-scaled pool sizes; anima rituals, feeding, and blood sacrifice are the real
+     recovery economy); save.
 6. Return `AnimaRegenTickSummary(examined, regenerated, engagement_blocked, condition_blocked)`.
 
 ### 5.6 Stage-entry aftermath hook

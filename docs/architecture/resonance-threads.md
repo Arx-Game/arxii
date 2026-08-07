@@ -2373,8 +2373,12 @@ Spec D owns:
   the appropriate normalized formula (matching the common × 10 scale used by
   TECHNIQUE / RELATIONSHIP_TRACK so the math composes uniformly). ROOM is handled via
   SANCTUM; there is no separate bare-ROOM `target_kind`.
-- Hedge-magic rules for Quiescent characters (when hedge_accessible rituals are
-  attemptable, what they can do, what they cost a Quiescent).
+- ~~Hedge-magic rules for Quiescent characters~~ — RESOLVED by #3001 (ADR-0205):
+  `hedge_accessible` is wired as the browse+perform eligibility predicate
+  (`ritual_visible_to`), and the cost is the anima pool — a quiescent pays in
+  blood (prick/gash/sacrifice) what the Gifted channel from their own pool.
+  The success-chance mechanic is the deficit-bumped check in
+  `resolve_pool_gate` (`world/magic/services/ritual_pool.py`).
 - Glimpse-triggering integration (when does a glimpse_eligible ritual actually
   trigger awakening; coordination with the progression/awakening design).
 - The catalog of witchy rituals (binding, summoning, divination, etc.).
