@@ -249,3 +249,30 @@ class TrainTechniqueActionFailureTests(TrainTechniqueActionTestBase):
 
         self.assertFalse(result.success)
         self.assertTrue(result.message)
+
+    def test_already_known_completion_maps_to_failure_result_not_raise(self):
+        """A stale open meter for a technique already learned by another route.
+
+        (e.g. a staff grant or a TechniqueGrant item) mints nothing further —
+        learn_technique's bare ValueError must be caught, not escape as a
+        traceback (#2739 review finding).
+        """
+        progress = self._make_progress(total_required=20)
+        CharacterTechnique.objects.create(character=self.learner, technique=self.technique)
+
+        with force_check_outcome(self.outcomes["Success"]):
+            result = self._run(technique_id=self.technique.pk, ap_to_invest=20)
+
+        self.assertFalse(result.success)
+        self.assertIn("already knows", result.message)
+        # contribute_to_technique_progress is @transaction.atomic, so the
+        # ValueError rolls back everything the session would have written
+        # (meter progress, AP spend) -- the meter survives untouched and no
+        # duplicate CharacterTechnique appears.
+        self.assertTrue(TechniqueProgress.objects.filter(pk=progress.pk).exists())
+        self.assertEqual(
+            CharacterTechnique.objects.filter(
+                character=self.learner, technique=self.technique
+            ).count(),
+            1,
+        )

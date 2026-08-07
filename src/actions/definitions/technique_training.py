@@ -96,7 +96,10 @@ class TrainTechniqueAction(Action):
             session resolves (including a botch — a botch still spends AP and
             still "succeeds" as a session). ``success=False`` with a player-safe
             ``message`` when there's no meter to train, AP is non-positive, the
-            weekly cap is hit, or the learner can't afford the AP.
+            weekly cap is hit, the learner can't afford the AP, or the session
+            would complete a meter for a technique the learner already knows
+            (a stale meter left open after the technique arrived by another
+            route, e.g. a staff grant or a TechniqueGrant item).
         """
         from world.magic.exceptions import MagicError, WeeklyTrainingCapExceeded  # noqa: PLC0415
         from world.magic.models import TechniqueProgress  # noqa: PLC0415
@@ -145,6 +148,14 @@ class TrainTechniqueAction(Action):
             return ActionResult(success=False, message=exc.user_message)
         except MagicError as exc:
             return ActionResult(success=False, message=exc.user_message)
+        except ValueError as exc:
+            # learn_technique (the meter-completion mint, reached via
+            # contribute_to_technique_progress) raises a bare ValueError when the
+            # learner already holds the CharacterTechnique — reachable when a meter
+            # is left open and the technique arrives by another route (a staff
+            # grant, a TechniqueGrant item). Map it to a clean failure instead of
+            # letting it escape as a traceback to telnet/web.
+            return ActionResult(success=False, message=str(exc))
 
         points_after = min(points_before + result.dev_points_contributed, total_required)
 
