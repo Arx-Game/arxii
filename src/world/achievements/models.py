@@ -287,6 +287,15 @@ class Discovery(SharedMemoryModel):
         "first-ever slot (#3055). Tenures are never deleted post-release, so this "
         "is PROTECT rather than CASCADE/SET_NULL.",
     )
+    shared_with_tenures = models.ManyToManyField(
+        RosterTenure,
+        blank=True,
+        related_name="shared_discoveries",
+        help_text="Tenures that co-discovered this achievement in the same moment as "
+        "the primary discoverer (a party or covenant finding it together). A "
+        "player's full discovery record is the union of their tenures' "
+        "'discoveries' (primary) and 'shared_discoveries' (shared credit) (#3055).",
+    )
     discovered_at = models.DateTimeField(
         auto_now_add=True,
         help_text="When this achievement was first discovered",

@@ -182,6 +182,18 @@ class GrantAchievementTest(TestCase):
         self.assertEqual(discovery.discovered_by_tenure_id, self.tenure1.pk)
         self.assertEqual(len(results), 2)
         self.assertEqual(Discovery.objects.filter(achievement=self.achievement).count(), 1)
+        # Simultaneous co-discoverers share the credit via the M2M (#3055 ruling).
+        self.assertEqual(
+            list(discovery.shared_with_tenures.values_list("pk", flat=True)),
+            [self.tenure2.pk],
+        )
+
+    def test_solo_discovery_has_no_shared_tenures(self) -> None:
+        """#3055: a solo first discovery leaves the shared-credit set empty."""
+        grant_achievement(self.achievement, [self.sheet1])
+
+        discovery = Discovery.objects.get(achievement=self.achievement)
+        self.assertEqual(discovery.shared_with_tenures.count(), 0)
 
     def test_subsequent_grant_no_discovery(self) -> None:
         # First character gets discovery

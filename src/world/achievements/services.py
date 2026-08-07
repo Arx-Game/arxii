@@ -107,6 +107,12 @@ def grant_achievement(
             discovery = Discovery.objects.create(
                 achievement=achievement, discovered_by_tenure=discovering_tenure
             )
+            # Simultaneous co-discoverers (a party/covenant finding it together)
+            # share the credit via the M2M; the primary FK stays the triggering
+            # tenure (#3055 ruling: required FK + shared set, not per-tenure rows).
+            co_tenures = [s.roster_entry_or_none.current_tenure for s in character_sheets[1:]]
+            if co_tenures:
+                discovery.shared_with_tenures.add(*co_tenures)
 
         results: list[CharacterAchievement] = []
         newly_earned: list[CharacterSheet] = []

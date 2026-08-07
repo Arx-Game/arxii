@@ -337,6 +337,7 @@
 **Foreign Keys:**
   - achievement -> achievements.Achievement [OneToOne]
   - discovered_by_tenure -> roster.RosterTenure [FK]
+  - shared_with_tenures -> roster.RosterTenure [M2M]
 **Pointed to by:**
   - discoverers <- achievements.CharacterAchievement
 
@@ -7507,6 +7508,7 @@
   - shared_galleries <- roster.TenureGallery
   - media <- roster.TenureMedia
   - discoveries <- achievements.Discovery
+  - shared_discoveries <- achievements.Discovery
   - consent_groups <- consent.ConsentGroup
   - consent_memberships <- consent.ConsentGroupMember
   - social_consent_preference <- consent.SocialConsentPreference

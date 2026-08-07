@@ -88,7 +88,7 @@ class DiscoveryAdmin(admin.ModelAdmin):
     """Admin for Discovery model."""
 
     list_display = ["achievement", "discovered_by_tenure", "discovered_at", "discoverer_count"]
-    autocomplete_fields = ["discovered_by_tenure"]
+    autocomplete_fields = ["discovered_by_tenure", "shared_with_tenures"]
 
     def discoverer_count(self, obj: Discovery) -> int:
         """Return the number of discoverers for this achievement."""

@@ -65,6 +65,12 @@ First-time-earned record. OneToOne to Achievement.
   the FIRST eligible sheet in the (already `can_earn_achievements`-filtered) list passed
   in — the triggering sheet for party grants; co-earners still get `CharacterAchievement`
   rows via the shared `discovery`, but only one Discovery row is ever created per achievement.
+- `shared_with_tenures` (M2M -> `roster.RosterTenure`): the OTHER simultaneous
+  co-discoverers of that first-ever grant (a party or covenant finding it together). A
+  player's full discovery record is the union of their tenures' `discoveries` (primary)
+  and `shared_discoveries` (shared credit); display may denote the latter as "shared"
+  (#3055 ruling). Later earners of the same achievement get neither — they were not
+  part of the first-discovery moment.
 
 ### CharacterAchievement
 Records when a character earned an achievement.
