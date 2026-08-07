@@ -321,7 +321,6 @@
 **Foreign Keys:**
   - character_sheet -> character_sheets.CharacterSheet [FK]
   - achievement -> achievements.Achievement [FK]
-  - discovery -> achievements.Discovery [FK] (nullable)
   - earned_by_tenure -> roster.RosterTenure [FK]
 
 ### CharacterTitle
@@ -339,8 +338,6 @@
   - achievement -> achievements.Achievement [OneToOne]
   - discovered_by_tenure -> roster.RosterTenure [FK]
   - shared_with_tenures -> roster.RosterTenure [M2M]
-**Pointed to by:**
-  - discoverers <- achievements.CharacterAchievement
 
 ### RewardDefinition
 **Foreign Keys:**
@@ -370,7 +367,7 @@
 - `apply_achievement_rewards(character_sheet: 'CharacterSheet', achievement: 'Achievement') -> 'None' - Apply an achievement's rewards to a character — title / bonus / prestige / distinction`
 - `can_earn_achievements(character_sheet: 'CharacterSheet') -> 'bool' - Whether ``character_sheet`` may earn achievements at all (#3024).`
 - `get_stat(character_sheet: 'CharacterSheet', stat: 'StatDefinition') -> 'int' - Return current value of a stat tracker, 0 if it doesn't exist.`
-- `grant_achievement(achievement: 'Achievement', character_sheets: 'list[CharacterSheet]') -> 'list[CharacterAchievement]' - Grant an achievement to one or more characters simultaneously.`
+- `grant_achievement(achievement: 'Achievement', character_sheets: 'list[CharacterSheet]') -> 'AchievementGrantResult' - Grant an achievement to one or more characters simultaneously.`
 - `increment_stat(character_sheet: 'CharacterSheet', stat: 'StatDefinition', amount: 'int' = 1) -> 'int' - Increment a stat tracker (create if needed) and check for achievements.`
 
 

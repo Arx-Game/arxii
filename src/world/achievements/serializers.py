@@ -10,6 +10,7 @@ from world.achievements.models import (
     Discovery,
     StatTracker,
 )
+from world.roster.models import RosterTenure
 
 
 class AchievementRewardSerializer(serializers.ModelSerializer):
@@ -36,12 +37,23 @@ class DiscoverySerializer(serializers.ModelSerializer):
         read_only_fields = fields
 
     def get_discoverer_names(self, obj: Discovery) -> list[str]:
-        """Return display names of characters who discovered this achievement."""
-        return list(
-            obj.discoverers.select_related(
-                "character_sheet", "character_sheet__character"
-            ).values_list("character_sheet__character__db_key", flat=True)
+        """Return display names of the tenures who discovered this achievement.
+
+        Primary (``discovered_by_tenure``) plus shared co-discoverers
+        (``shared_with_tenures``), resolved through each tenure's roster entry to
+        the character's display name (#3055 -- there is no longer a
+        ``CharacterAchievement.discovery`` FK to walk).
+        """
+        shared_ids = obj.shared_with_tenures.values_list("id", flat=True)
+        tenure_ids = [obj.discovered_by_tenure_id, *shared_ids]
+        tenures = RosterTenure.objects.filter(id__in=tenure_ids).select_related(
+            "roster_entry__character_sheet__character"
         )
+        return [
+            tenure.roster_entry.character_sheet.character.db_key
+            for tenure in tenures
+            if tenure.roster_entry_id is not None
+        ]
 
 
 class AchievementSerializer(serializers.ModelSerializer):
@@ -86,8 +98,8 @@ class CharacterAchievementSerializer(serializers.ModelSerializer):
         read_only_fields = fields
 
     def get_is_discoverer(self, obj: CharacterAchievement) -> bool:
-        """Return True if the character was a discoverer of this achievement."""
-        return obj.discovery_id is not None
+        """Return True if the character's earning tenure was a discoverer (#3055)."""
+        return obj.is_discoverer()
 
 
 class CharacterTitleSerializer(serializers.ModelSerializer):

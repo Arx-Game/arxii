@@ -2658,11 +2658,14 @@ gains a discoverable content item for the first time.
   `shared_with_tenures` M2M for simultaneous co-discoverers, anchoring the
   discovery to the (player-as-this-character) join object — a sheet with no player tenure is
   structurally incapable of claiming a first-ever slot, #3055),
-  `CharacterAchievement` (earned record; optional `discovery` FK when the earner was a
-  co-discoverer; required `earned_by_tenure` FK → `roster.RosterTenure` (`on_delete=PROTECT`,
-  #3055) — stamped from the earning sheet's current tenure inside `grant_achievement`, giving
-  every co-earner of a party grant their own individually durable (player, character) pairing,
-  not just the primary `Discovery` slot's discoverer),
+  `CharacterAchievement` (earned record; required `earned_by_tenure` FK →
+  `roster.RosterTenure` (`on_delete=PROTECT`, #3055) — stamped from the earning sheet's
+  current tenure inside `grant_achievement`, giving every co-earner of a party grant their
+  own individually durable (player, character) pairing, not just the primary `Discovery`
+  slot's discoverer. No `discovery` FK exists — removed #3055 as a redundant parallel
+  mechanism (credit died with the character, couldn't distinguish primary/shared);
+  `is_discoverer()` derives discoverer status by comparing `earned_by_tenure` against the
+  achievement's `Discovery.discovered_by_tenure`/`shared_with_tenures`),
   `RewardDefinition` (TITLE / BONUS / COSMETIC / PRESTIGE / DISTINCTION reward catalog;
   `distinction` nullable FK → `distinctions.Distinction`, mirrors `modifier_target`, #2037;
   natural key `key`; `CONTENT_MODELS` since #2832),
@@ -2682,14 +2685,17 @@ gains a discoverable content item for the first time.
 - **Handlers:** `character_sheet.stats` (`StatHandler`) — `get(stat_def) -> int`,
   `increment(stat_def, n) -> int` (atomic F() expression; checks requirement thresholds after increment)
 - **Key Services (`world/achievements/services.py`):** `grant_achievement(achievement,
-  sheets) -> list[CharacterAchievement]` (drops any sheet that fails
-  `can_earn_achievements`, returning `[]` and creating no Discovery if none remain; for a
-  first-ever grant, the Discovery's `discovered_by_tenure` is the *first* eligible sheet in
-  the list — the triggering sheet for party grants; the remaining eligible sheets' tenures
-  land in `Discovery.shared_with_tenures` as simultaneous shared credit; co-earners still
-  get `CharacterAchievement` rows but no second Discovery, #3055; every earner's own
-  `CharacterAchievement.earned_by_tenure` is stamped from that sheet's own current tenure,
-  #3055),
+  sheets) -> AchievementGrantResult` (`world/achievements/types.py` — frozen dataclass with
+  `character_achievements: list[CharacterAchievement]` and `created_discovery: Discovery |
+  None`, the latter non-None only when this call minted the achievement's Discovery row, the
+  "first-ever" ceremony signal `execute_ceremony_beat` reads). Drops any sheet that fails
+  `can_earn_achievements`, returning an empty result and creating no Discovery if none
+  remain; for a first-ever grant, the Discovery's `discovered_by_tenure` is the *first*
+  eligible sheet in the list — the triggering sheet for party grants; the remaining eligible
+  sheets' tenures land in `Discovery.shared_with_tenures` as simultaneous shared credit;
+  co-earners still get `CharacterAchievement` rows but no second Discovery, #3055; every
+  earner's own `CharacterAchievement.earned_by_tenure` is stamped from that sheet's own
+  current tenure, #3055),
   `can_earn_achievements(character_sheet) -> bool` (current, non-staff `RosterTenure`; #3024,
   ADR-0202), `apply_achievement_rewards(sheet, achievement)`,
   `get_stat(sheet, stat_def) -> int`, `increment_stat(sheet, stat_def, n) -> int`

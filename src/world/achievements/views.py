@@ -67,14 +67,25 @@ class CharacterAchievementViewSet(ReadOnlyModelViewSet):
     filterset_fields = ["character_sheet"]
 
     def get_queryset(self):  # type: ignore[override]
-        """Return character achievements with related data prefetched."""
+        """Return character achievements with related data prefetched.
+
+        ``achievement__discovery`` is select_related so ``is_discoverer()`` can read
+        ``discovered_by_tenure_id`` for free; the shared-co-discoverer M2M is
+        prefetched onto ``Discovery.cached_shared_tenures`` so no row triggers an
+        extra query for the shared-credit check (#3055 -- replaces the old
+        ``discovery`` FK select_related).
+        """
         return CharacterAchievement.objects.select_related(
-            "achievement", "discovery"
+            "achievement", "achievement__discovery"
         ).prefetch_related(
             Prefetch(
                 "achievement__rewards",
                 queryset=AchievementReward.objects.select_related("reward"),
                 to_attr="cached_rewards",
+            ),
+            Prefetch(
+                "achievement__discovery__shared_with_tenures",
+                to_attr="cached_shared_tenures",
             ),
         )
 

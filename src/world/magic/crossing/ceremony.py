@@ -113,8 +113,8 @@ def execute_ceremony_beat(
 
         from world.achievements.services import grant_achievement  # noqa: PLC0415
 
-        results = grant_achievement(achievement, [sheet])
-        is_first = bool(results and results[0].discovery_id is not None)
+        result = grant_achievement(achievement, [sheet])
+        is_first = result.created_discovery is not None
 
     if codex_entry is not None:
         _unlock_codex(sheet, codex_entry)
