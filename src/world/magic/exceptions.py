@@ -693,3 +693,16 @@ class WeeklyTrainingCapExceeded(TechniqueProgressError):
     """Raised when a learner tries to contribute past the weekly training cap."""
 
     user_message = "You've trained as much as you can this week."
+
+
+class TechniqueTrainingNotConfigured(MagicError):
+    """Raised when the "Technique Training" CheckType has not been authored (#3043).
+
+    ``resolve_training_check`` (``services/technique_training.py``) used to fall back
+    to ``CheckType.objects.first()`` on a missing row — an arbitrary, unrelated check
+    silently rolled in place of training. Subclasses ``MagicError`` (not
+    ``TechniqueProgressError``) so it is caught by ``TrainTechniqueAction``'s existing
+    ``except (WeeklyTrainingCapExceeded, MagicError)`` clause without widening it.
+    """
+
+    user_message = "Technique training is not configured on this server yet."

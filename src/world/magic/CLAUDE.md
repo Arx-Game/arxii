@@ -385,14 +385,29 @@ serializer (`_RemovedConditionSpecSerializer`), admin (`TechniqueRemovedConditio
 `resolve_training_check(learner, progress, *, ap_to_invest, teacher=None)`
 (`services/technique_training.py`, #2727) is the check layer sitting on top of
 `contribute_to_technique_progress` (above): the learner rolls intellect + "Arcane
-Theory" (the "Technique Training" `CheckType`, seeded by
-`ensure_technique_training_content()`) against `target_difficulty = (technique.tier
+Theory" (the "Technique Training" `CheckType`) against `target_difficulty = (technique.tier
 × step) − (learner_level // divisor) − teacher_skill_bonus + (self_study_penalty
 if teacher is None)`, and the outcome maps to a dev-point multiplier via
 `TrainingOutcomeAward(OutcomeTierAward)` (botch/failure 0×, partial 0.5×, success
 1.0×, critical 1.5×) — AP is always spent regardless of outcome; only the
 dev-point yield varies. Four tuning knobs live on `GiftAcquisitionConfig`. This
-seam shipped with no production caller until #2739:
+seam shipped with no production caller until #2739.
+
+**Content dependency, loud failure (#3043).** The "Technique Training" `CheckType`
+and its "Arcane Theory" trait are content models (`CONTENT_MODELS`, #2698), not
+unconditionally-seeded config — `ensure_technique_training_content()`
+(`world/seeds/game_content/magic.py`) resolves them via `authored_or_sample`
+(content-repo lookup first, sample stand-in only under `SEED_SAMPLE_CONTENT`,
+off by default) and always seeds the `TrainingOutcomeAward` tuning rows regardless.
+As of 2026-08-07 the CheckType/trait have not shipped in the lore repo
+(ArxII-lore#72), so a real deploy has no "Technique Training" `CheckType` yet.
+`resolve_training_check` used to fall back to `CheckType.objects.first()` on
+`DoesNotExist` — an arbitrary, unrelated check silently rolled in training's
+place. It now raises `TechniqueTrainingNotConfigured` (`exceptions.py`) instead;
+`TrainTechniqueAction`'s existing `except (…, MagicError)` clause already catches
+it (no widening needed) and surfaces `user_message` ("Technique training is not
+configured on this server yet.") as a failure `ActionResult` — a clean telnet
+message and an HTTP 400 `{"detail": …}` on the web endpoint below, never a 500.
 
 - **Action** — `TrainTechniqueAction` (`actions/definitions/technique_training.py`,
   key `train_technique`, REGISTRY, `category="magic"`, `target_type=SELF`). Kwargs

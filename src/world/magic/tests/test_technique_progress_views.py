@@ -408,3 +408,70 @@ class TechniqueProgressCharacterHeaderScopingTests(TechniqueProgressViewSetTestB
         )
 
         self.assertEqual(resp.status_code, 404)
+
+
+# ===========================================================================
+# missing "Technique Training" CheckType (#3043)
+# ===========================================================================
+
+
+class TechniqueProgressTrainMissingCheckTypeTests(TestCase):
+    """No silent CheckType.objects.first() fallback -- a clean 400 instead (#3043).
+
+    Setup mirrors ``TechniqueProgressViewSetTestBase`` but deliberately skips
+    seeding the "Technique Training" CheckType, mirroring a real deploy where
+    the content half of #3043 (ArxII-lore#72) hasn't shipped yet.
+    """
+
+    def setUp(self) -> None:
+        from evennia.utils.idmapper.models import flush_cache
+
+        flush_cache()
+        self.factory = APIRequestFactory()
+
+        self.room = ObjectDBFactory(
+            db_key="TrainingRoom", db_typeclass_path="typeclasses.rooms.Room"
+        )
+        self.learner = CharacterSheetFactory()
+        self.learner.character.location = self.room
+        self.learner.character.save()
+
+        self.pool = ActionPointPool.get_or_create_for_character(self.learner.character)
+        self.pool.current = 500
+        self.pool.save()
+
+        self.technique = TechniqueFactory()
+        CharacterGift.objects.create(character=self.learner, gift=self.technique.gift)
+        Thread.objects.create(
+            owner=self.learner,
+            resonance=ResonanceFactory(),
+            target_kind=TargetKind.GIFT,
+            target_gift=self.technique.gift,
+            level=0,
+        )
+        TechniqueProgress.objects.create(
+            character_sheet=self.learner,
+            technique=self.technique,
+            total_required=50,
+            source="gift_acquisition",
+        )
+
+    def _post_train(self, puppet, technique_id, payload=None):
+        request = self.factory.post(
+            f"/api/magic/technique-progress/{technique_id}/train/",
+            payload or {},
+            format="json",
+        )
+        force_authenticate(request, user=puppet)
+        view = TechniqueProgressViewSet.as_view({"post": "train"})
+        return view(request, pk=str(technique_id))
+
+    def test_train_missing_check_type_returns_400_plain_message(self) -> None:
+        resp = self._post_train(
+            _actor_user(self.learner.character), self.technique.pk, {"ap_to_invest": 20}
+        )
+
+        self.assertEqual(resp.status_code, 400)
+        self.assertEqual(
+            resp.data["detail"], "Technique training is not configured on this server yet."
+        )

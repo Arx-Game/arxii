@@ -1635,6 +1635,18 @@ the learner's level, and any teacher's skill bonus (self-study takes a flat
 penalty) — but shipped with no production caller: nothing dispatched it from telnet
 or the web. #2739 is that trigger, one seam for both surfaces:
 
+**Content dependency, loud failure (#3043).** The check rolled is the "Technique
+Training" `CheckType`, resolved by exact name. That row (plus the "Arcane Theory"
+trait it weights) is authored content, not seeded — as of 2026-08-07 it does not
+exist in any shipped content bundle (tracked in ArxII-lore#72). `resolve_training_check`
+used to fall back to `CheckType.objects.first()` on `DoesNotExist` — an arbitrary,
+unrelated check silently rolled in training's place on any deploy missing the row.
+It now raises `TechniqueTrainingNotConfigured` (`world/magic/exceptions.py`)
+instead, whose `user_message` ("Technique training is not configured on this
+server yet.") is what `TrainTechniqueAction`'s existing `except (…, MagicError)`
+clause surfaces — a clean failure `ActionResult` on telnet, HTTP 400 `{"detail": …}`
+on the web endpoint below. No player-facing string carries an em-dash.
+
 - **Action** — `TrainTechniqueAction` (`actions/definitions/technique_training.py`,
   key `train_technique`, REGISTRY, `category="magic"`, `target_type=SELF`). Kwargs:
   `technique_id` (the `Technique` pk — resolved against the learner's own open

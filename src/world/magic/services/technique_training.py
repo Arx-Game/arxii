@@ -51,19 +51,24 @@ def resolve_training_check(
         the minted CharacterTechnique if the meter filled.
 
     Raises:
+        TechniqueTrainingNotConfigured: If the "Technique Training" CheckType has
+            not been authored (content tracked in ArxII-lore#72).
         WeeklyTrainingCapExceeded: If the weekly cap is reached (from the seam).
         MagicError: If the learner can't afford the AP (from the seam).
     """
     from world.checks.models import CheckType  # noqa: PLC0415
+    from world.magic.exceptions import TechniqueTrainingNotConfigured  # noqa: PLC0415
 
     config = get_gift_acquisition_config()
     technique = progress.technique
 
-    # 1. Resolve the check type.
+    # 1. Resolve the check type. No silent fallback (#3043) — an arbitrary
+    # unrelated CheckType rolled in place of training is worse than a loud,
+    # named failure naming the missing content row.
     try:
         check_type = CheckType.objects.get(name=TECHNIQUE_TRAINING_CHECK_TYPE_NAME)
-    except CheckType.DoesNotExist:
-        check_type = CheckType.objects.first()
+    except CheckType.DoesNotExist as exc:
+        raise TechniqueTrainingNotConfigured from exc
 
     # 2. Compute target_difficulty from the three drivers.
     target_difficulty = technique.tier * config.training_tier_difficulty_step
