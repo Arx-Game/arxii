@@ -21,7 +21,8 @@ from world.room_features.models import RoomFeatureInstance
 if TYPE_CHECKING:
     from world.items.models import QualityTier
 
-# Cross-app FK strings — centralised to avoid duplicated-literal smell.
+# Cross-app FK strings and NaturalKeyConfig dependency literals — centralised
+# to avoid duplicated-literal smell.
 _CHECK_TYPE_FK = "arxii.CheckType"
 _TRAIT_FK = "arxii.Trait"
 _QUALITY_TIER_FK = "arxii.QualityTier"
@@ -29,6 +30,7 @@ _ITEM_TEMPLATE_FK = "arxii.ItemTemplate"
 _MODIFIER_TARGET_FK = "arxii.ModifierTarget"
 _ITEM_INSTANCE_FK = "arxii.ItemInstance"
 _CONSEQUENCE_FK = "arxii.Consequence"
+_CRAFTING_RECIPE_DEP = "arxii.CraftingRecipe"
 
 
 class CraftingRecipe(NaturalKeyMixin, SharedMemoryModel):
@@ -124,7 +126,7 @@ class CraftingRecipe(NaturalKeyMixin, SharedMemoryModel):
         ),
     )
     output_item_template = models.ForeignKey(
-        "arxii.ItemTemplate",
+        _ITEM_TEMPLATE_FK,
         on_delete=models.PROTECT,
         null=True,
         blank=True,
@@ -237,7 +239,7 @@ class CraftingMaterialRequirement(NaturalKeyMixin, SharedMemoryModel):
 
     class NaturalKeyConfig:
         fields = ["recipe", "item_template", "material_category"]
-        dependencies = ["arxii.CraftingRecipe", "arxii.ItemTemplate", "arxii.MaterialCategory"]
+        dependencies = [_CRAFTING_RECIPE_DEP, _ITEM_TEMPLATE_FK, "arxii.MaterialCategory"]
 
     class Meta:
         app_label = "arxii"
@@ -304,7 +306,7 @@ class CraftingSkillCap(NaturalKeyMixin, SharedMemoryModel):
 
     class NaturalKeyConfig:
         fields = ["recipe", "min_skill_value"]
-        dependencies = ["arxii.CraftingRecipe"]
+        dependencies = [_CRAFTING_RECIPE_DEP]
 
     class Meta:
         app_label = "arxii"
@@ -380,7 +382,7 @@ class CraftingRecipeConsequence(NaturalKeyMixin, SharedMemoryModel):
 
     class NaturalKeyConfig:
         fields = ["recipe", "consequence"]
-        dependencies = ["arxii.CraftingRecipe"]
+        dependencies = [_CRAFTING_RECIPE_DEP]
 
     class Meta:
         app_label = "arxii"
