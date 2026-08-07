@@ -88,6 +88,12 @@ def apply_class_level_advance(sheet: CharacterSheet, *, level_after: int) -> Non
 
     recompute_max_health_with_threads(sheet)
 
+    # Anima maximum scales with level too (#3001: 100 x level). Growth never fills
+    # the pool — recovery rituals, feeding, and blood are the refill economy.
+    from world.magic.services.anima import recompute_max_anima
+
+    recompute_max_anima(sheet)
+
 
 def cross_into_path(sheet: CharacterSheet, path: Path) -> PathMagicGrantResult:
     """Switch ``sheet`` onto ``path`` and grant that path's magic (#1579).

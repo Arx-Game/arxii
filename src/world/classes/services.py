@@ -101,4 +101,9 @@ def set_primary_class_level(  # noqa: OBJECTDB_PARAM
         defaults={"level": level, "is_primary": True},
     )
     recompute_max_health_with_threads(sheet)
+    # #3001: anima maximum is level-derived too. No-ops when the sheet has no
+    # CharacterAnima row yet (CG stamps the level before the anima seed).
+    from world.magic.services.anima import recompute_max_anima  # noqa: PLC0415
+
+    recompute_max_anima(sheet)
     return ccl

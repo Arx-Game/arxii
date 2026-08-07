@@ -1630,6 +1630,7 @@ def finalize_magic_data(draft: CharacterDraft, sheet: CharacterSheet) -> None:
         CharacterAura,
         CharacterTradition,
     )
+    from world.magic.services.anima import recompute_max_anima  # noqa: PLC0415
 
     # 1. Link the CG-chosen catalog Gift + Techniques
     _finalize_gift_and_techniques(draft, sheet)
@@ -1735,6 +1736,11 @@ def finalize_magic_data(draft: CharacterDraft, sheet: CharacterSheet) -> None:
         defaults={"current": 10, "maximum": 10},
     )
     get_or_create_fatigue_pool(sheet)
+    # #3001: maximum scales with level (100 x level for level >= 1). The stamped
+    # default class level (finalize step earlier) makes a fresh PC level 1, so
+    # this lifts the 10/10 default to 10/100 — current stays low by design:
+    # a new mage's first project is filling their pool.
+    recompute_max_anima(sheet)
 
     # 6. Create player anima Ritual + sidecar + CharacterRitualKnowledge.
     _finalize_anima_ritual(draft, sheet)
