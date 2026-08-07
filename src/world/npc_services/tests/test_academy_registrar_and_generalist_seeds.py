@@ -9,7 +9,7 @@ without first completing the Great Archive's (not-yet-authored) quest.
 
 from __future__ import annotations
 
-from django.test import TestCase
+from django.test import TestCase, override_settings
 
 from core_management.content_fixtures import ContentError
 from world.npc_services.constants import OfferKind
@@ -44,6 +44,7 @@ def _build_generalist_trainer_catalog():
     return MagicContent.create_starter_gift_catalog(specs)
 
 
+@override_settings(SEED_SAMPLE_CONTENT=True)
 class EnsureAcademyRegistrarRoleTests(TestCase):
     def test_creates_role_and_ungated_settle_offer(self) -> None:
         role = ensure_academy_registrar_role()
@@ -71,6 +72,7 @@ class EnsureAcademyRegistrarRoleTests(TestCase):
         )
 
 
+@override_settings(SEED_SAMPLE_CONTENT=True)
 class EnsureAcademyGeneralistTrainerRoleTests(TestCase):
     """#2474: the retired ``seed_starter_gift_catalog()`` used to synthesize its
     own catalog on every call, so these tests never needed one set up ahead of
@@ -135,6 +137,7 @@ class EnsureAcademyGeneralistTrainerRoleTests(TestCase):
         self.assertEqual(offers_first_pass, offers_second_pass)
 
 
+@override_settings(SEED_SAMPLE_CONTENT=True)
 class ResolveStarterTechniquesGiftScopingTests(TestCase):
     """#2474 review fix: a same-named Technique on the WRONG Gift must never be
     silently picked up by ``_resolve_starter_techniques``.
