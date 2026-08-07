@@ -24,6 +24,23 @@ allow-list lookup runs only when a section is actually FRIENDS-gated, so the all
 no query. Bio/story tiers (entangled with the presented-identity gating) and the player-facing
 tier-setting UI are follow-ups.
 
+## Web Sheet Mechanics Display (#3042)
+
+The `stats`/`skills` sections of `CharacterSheetSerializer` were always built (`_build_stats`/
+`_build_skills`) and gated by the tiers above, but had no frontend consumer — a player's own
+12 stats and skill ratings were invisible on the web sheet. `_build_stats` returns
+**display-scale** values (`tv.value // STAT_DISPLAY_DIVISOR`, ADR-0193 — stats store internal
+×10) so the client never has to know about the storage scale; `_build_skills` values are already
+true-scale (skills store and display the same number). `frontend/src/character_sheets/components/
+MechanicsSection.tsx` renders both on the character sheet's Sheet tab
+(`roster/pages/CharacterSheetPage.tsx`), reading `useCharacterSheetQuery` and rendering whatever
+`stats`/`skills` the API returns — it does not re-implement visibility client-side. The magic
+section's `resonances` (claimed-resonance balances, already serialized by `_build_magic_resonances`,
+#2032) similarly had no frontend consumer; `SpellbookTab.tsx` now renders a "Resonances" card
+alongside Gifts/Motif/Aura. Per-trait development-point progress is NOT part of this payload
+(deferred to #3039's landing) — the skill entry's `at_boundary` flag is the only progress signal
+shown today.
+
 ## Related Models
 
 All character-related models FK back to CharacterSheet:

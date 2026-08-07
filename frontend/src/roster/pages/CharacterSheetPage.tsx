@@ -23,6 +23,7 @@ import { CluesTab } from '@/clues/components/CluesTab';
 import { CrimeTab } from '@/justice/components/CrimeTab';
 import { TitlesPanel } from '@/achievements/components/TitlesPanel';
 import { MaturationPanel } from '@/character_sheets/components/MaturationPanel';
+import { MechanicsSection } from '@/character_sheets/components/MechanicsSection';
 import { OriginStoryEditorDialog } from '@/character_sheets/components/OriginStoryEditorDialog';
 import { useCharacterSheetQuery } from '@/character_sheets/queries';
 import { DistinctionsTab } from '@/distinctions/components/DistinctionsTab';
@@ -163,6 +164,9 @@ export function CharacterSheetPage() {
             vocation={entry.character.vocation}
             socialRank={entry.character.social_rank}
           />
+          {sheetPayload && (
+            <MechanicsSection stats={sheetPayload.stats} skills={sheetPayload.skills} />
+          )}
           <GalleriesSection galleries={entry.character.galleries} />
           <ApplicationSlot entry={entry} account={account} />
           {isMyCharacter && (

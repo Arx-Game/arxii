@@ -187,8 +187,9 @@ class ProfileIdentityPrivacyTests(APITestCase):
     def test_owner_sees_their_private_mechanical_sections(self) -> None:
         owner = AccountFactory()
         sheet = self._character_sheet(owner, fake_active=False)
+        # value=50 stores as internal ×10 (ADR-0193); the sheet shows the display value (5).
         CharacterTraitValueFactory(
-            character=sheet, trait=StatTraitFactory(name="strength"), value=5
+            character=sheet, trait=StatTraitFactory(name="strength"), value=50
         )
         data = self._get(sheet, owner).data
         assert data["stats"] == {"strength": 5}

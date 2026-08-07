@@ -84,12 +84,21 @@ export interface CharacterSheetAura {
   can_finish_glimpse: boolean;
 }
 
+/** Mirrors `world.character_sheets.types.ResonanceBalanceEntry`. */
+export interface CharacterSheetResonanceBalance {
+  name: string;
+  balance: number;
+  lifetime_earned: number;
+}
+
 /** Mirrors `world.character_sheets.types.MagicSection`. */
 export interface CharacterSheetMagic {
   gifts: CharacterSheetGift[];
   motif: CharacterSheetMotif | null;
   anima_ritual: CharacterSheetAnimaRitual | null;
   aura: CharacterSheetAura | null;
+  /** Claimed-resonance spendable balances (#2032/#3042) — sorted by name server-side. */
+  resonances: CharacterSheetResonanceBalance[];
 }
 
 /** Mirrors `world.character_sheets.types.DistinctionEntry`. */
@@ -104,13 +113,37 @@ export interface CharacterSheetDistinction {
   is_from_glimpse: boolean;
 }
 
+/** Mirrors `world.character_sheets.types.SkillRef`. */
+export interface CharacterSheetSkillRef {
+  id: number;
+  name: string;
+  category: string;
+}
+
+/** Mirrors `world.character_sheets.types.SpecializationEntry`. */
+export interface CharacterSheetSpecialization {
+  id: number;
+  name: string;
+  value: number;
+}
+
+/** Mirrors `world.character_sheets.types.SkillEntry`. */
+export interface CharacterSheetSkill {
+  skill: CharacterSheetSkillRef;
+  value: number;
+  /** True when the skill is parked at an XP boundary (19/29/39/49) — a breakthrough check. */
+  at_boundary: boolean;
+  specializations: CharacterSheetSpecialization[];
+}
+
 /**
  * The full `/api/character-sheets/{id}/` payload.
  *
- * `identity`, `appearance`, `stats`, `skills`, `path`, `story`, `goals`, `personas`, `theming`,
- * `profile_picture`, and `current_residence` are left loosely typed here — this task only needs
- * `distinctions` and `magic` typed precisely (Tasks 9 & 10); refine the rest as their consuming
- * sections land.
+ * `identity`, `appearance`, `path`, `story`, `goals`, `personas`, `theming`, `profile_picture`,
+ * and `current_residence` are left loosely typed here — refine as their consuming sections land.
+ * `stats` and `skills` were typed precisely in #3042 (mirroring
+ * `world.character_sheets.types._build_stats`/`SkillEntry`); `distinctions` and `magic` in
+ * Tasks 9 & 10.
  */
 export interface CharacterSheetOriginSlot {
   slot_id: number;
@@ -131,8 +164,9 @@ export interface CharacterSheetPayload {
   can_edit: boolean;
   identity: Record<string, unknown>;
   appearance: Record<string, unknown>;
-  stats: Record<string, unknown>;
-  skills: unknown[];
+  /** Stat name -> display value (already ÷10 from the ×10 internal storage, ADR-0193). */
+  stats: Record<string, number>;
+  skills: CharacterSheetSkill[];
   path: Record<string, unknown> | null;
   distinctions: CharacterSheetDistinction[];
   magic: CharacterSheetMagic | null;

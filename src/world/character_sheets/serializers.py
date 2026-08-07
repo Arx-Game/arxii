@@ -89,7 +89,7 @@ from world.scenes.constants import PersonaType
 from world.scenes.models import Persona
 from world.skills.models import CharacterSkillValue, CharacterSpecializationValue
 from world.skills.services import is_skill_at_xp_boundary
-from world.traits.models import CharacterTraitValue, TraitType
+from world.traits.models import STAT_DISPLAY_DIVISOR, CharacterTraitValue, TraitType
 
 
 class OriginSlotInputSerializer(serializers.Serializer):
@@ -547,11 +547,14 @@ _STATS_PREFETCH_RELATED: tuple[str | Prefetch, ...] = (
 
 
 def _build_stats(sheet: CharacterSheet) -> dict[str, int]:
-    """Build the stats section: a flat dict mapping stat name to value.
+    """Build the stats section: a flat dict mapping stat name to its display value.
 
-    The queryset is pre-filtered to stat-type traits via Prefetch in the viewset.
+    Stats store internal ×10 (ADR-0193, #2894: stat 2 -> stored 20); this converts to the
+    single-digit display scale (÷10) every other stat surface shows (the Maturation panel,
+    character creation) at the API edge, so the client never has to know about the storage
+    scale. The queryset is pre-filtered to stat-type traits via Prefetch in the viewset.
     """
-    return {tv.trait.name: tv.value for tv in sheet.cached_trait_values}
+    return {tv.trait.name: tv.value // STAT_DISPLAY_DIVISOR for tv in sheet.cached_trait_values}
 
 
 _SKILLS_SELECT_RELATED: tuple[str, ...] = ()
