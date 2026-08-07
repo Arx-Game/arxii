@@ -6,24 +6,17 @@
  * Reads GET /maturation/ and writes POST /spend-maturation-point/.
  */
 
-import { Button } from '@/components/ui/button';
 import { apiFetch } from '@/evennia_replacements/api';
+import { SpendableStatList, type SpendableStat } from './SpendableStatList';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useState } from 'react';
-
-interface MaturationStat {
-  trait_id: number;
-  name: string;
-  value: number;
-  at_cap: boolean;
-}
 
 interface MaturationState {
   available_points: number;
   stat_cap: number | null;
   matured_years: number;
   next_milestone_year: number;
-  stats: MaturationStat[];
+  stats: SpendableStat[];
 }
 
 async function fetchMaturation(sheetId: number): Promise<MaturationState> {
@@ -78,24 +71,12 @@ export function MaturationPanel({ sheetId }: MaturationPanelProps) {
       </p>
       {error && <p className="mt-1 text-sm text-destructive">{error}</p>}
       {data.available_points > 0 && (
-        <ul className="mt-2 space-y-1">
-          {data.stats.map((stat) => (
-            <li key={stat.trait_id} className="flex items-center justify-between gap-2">
-              <span className="capitalize">
-                {stat.name} ({stat.value}
-                {data.stat_cap !== null && ` / ${data.stat_cap}`})
-              </span>
-              <Button
-                size="sm"
-                variant="outline"
-                disabled={stat.at_cap || spend.isPending}
-                onClick={() => spend.mutate(stat.trait_id)}
-              >
-                +1
-              </Button>
-            </li>
-          ))}
-        </ul>
+        <SpendableStatList
+          stats={data.stats}
+          statCap={data.stat_cap}
+          disabled={spend.isPending}
+          onSpend={(traitId) => spend.mutate(traitId)}
+        />
       )}
     </section>
   );

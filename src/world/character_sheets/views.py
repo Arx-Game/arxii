@@ -35,6 +35,30 @@ from world.character_sheets.services import can_edit_character_sheet
 from world.scenes.block_services import sheet_blocked_for_viewer
 
 
+def _spendable_stat_rows(sheet: CharacterSheet, cap: int | None) -> list[dict]:
+    """Display-dot stat rows for the maturation/stat-point spend panels (#2756/#3001)."""
+    from world.traits.constants import STAT_DISPLAY_DIVISOR  # noqa: PLC0415
+    from world.traits.models import CharacterTraitValue, Trait, TraitType  # noqa: PLC0415
+
+    values = {
+        tv.trait_id: tv.value // STAT_DISPLAY_DIVISOR
+        for tv in CharacterTraitValue.objects.filter(
+            character=sheet, trait__trait_type=TraitType.STAT
+        )
+    }
+    return [
+        {
+            "trait_id": trait.pk,
+            "name": trait.name,
+            "value": values.get(trait.pk, 0),
+            "at_cap": cap is not None and values.get(trait.pk, 0) >= cap,
+        }
+        for trait in Trait.objects.filter(trait_type=TraitType.STAT, is_public=True).order_by(
+            "name"
+        )
+    ]
+
+
 class CharacterSheetViewSet(RetrieveModelMixin, GenericViewSet):
     """Read-only detail endpoint for character sheets, keyed by character pk.
 
@@ -120,33 +144,13 @@ class CharacterSheetViewSet(RetrieveModelMixin, GenericViewSet):
             milestone_count,
             stat_cap_for,
         )
-        from world.traits.constants import STAT_DISPLAY_DIVISOR  # noqa: PLC0415
-        from world.traits.models import CharacterTraitValue, Trait, TraitType  # noqa: PLC0415
 
         sheet = self.get_object()
         self._check_ownership(sheet)
         earned = milestone_count(sheet.matured_years)
         next_milestone = MATURATION_START_YEAR + earned * MATURATION_INTERVAL_YEARS
         cap = stat_cap_for(sheet)
-        # Stats store internal ×10 (#2894); the panel speaks display dots, the
-        # same scale the caps are authored in.
-        values = {
-            tv.trait_id: tv.value // STAT_DISPLAY_DIVISOR
-            for tv in CharacterTraitValue.objects.filter(
-                character=sheet, trait__trait_type=TraitType.STAT
-            )
-        }
-        stats = [
-            {
-                "trait_id": trait.pk,
-                "name": trait.name,
-                "value": values.get(trait.pk, 0),
-                "at_cap": cap is not None and values.get(trait.pk, 0) >= cap,
-            }
-            for trait in Trait.objects.filter(trait_type=TraitType.STAT, is_public=True).order_by(
-                "name"
-            )
-        ]
+        stats = _spendable_stat_rows(sheet, cap)
         payload = MaturationStateSerializer(
             {
                 "available_points": available_points(sheet),
@@ -191,30 +195,11 @@ class CharacterSheetViewSet(RetrieveModelMixin, GenericViewSet):
             get_character_path_level,
         )
         from world.progression.services.stat_points import available_stat_points  # noqa: PLC0415
-        from world.traits.constants import STAT_DISPLAY_DIVISOR  # noqa: PLC0415
-        from world.traits.models import CharacterTraitValue, Trait, TraitType  # noqa: PLC0415
 
         sheet = self.get_object()
         self._check_ownership(sheet)
         cap = stat_cap_for(sheet)
-        # Stats store internal ×10 (#2894); the panel speaks display dots.
-        values = {
-            tv.trait_id: tv.value // STAT_DISPLAY_DIVISOR
-            for tv in CharacterTraitValue.objects.filter(
-                character=sheet, trait__trait_type=TraitType.STAT
-            )
-        }
-        stats = [
-            {
-                "trait_id": trait.pk,
-                "name": trait.name,
-                "value": values.get(trait.pk, 0),
-                "at_cap": cap is not None and values.get(trait.pk, 0) >= cap,
-            }
-            for trait in Trait.objects.filter(trait_type=TraitType.STAT, is_public=True).order_by(
-                "name"
-            )
-        ]
+        stats = _spendable_stat_rows(sheet, cap)
         payload = StatPointStateSerializer(
             {
                 "available_points": available_stat_points(sheet),

@@ -78,6 +78,32 @@ _ERR_CHARACTER_SHEET_NOT_OWNED = "character_sheet_id does not belong to the requ
 _ERR_CHARACTER_SHEET_NOT_FOUND = "CharacterSheet not found."
 
 
+def _resolve_sheet_pk(value: int) -> CharacterSheet:
+    """Resolve a CharacterSheet by PK, raising the shared not-found error."""
+    try:
+        return CharacterSheet.objects.get(pk=value)
+    except CharacterSheet.DoesNotExist as exc:
+        raise serializers.ValidationError(_ERR_CHARACTER_SHEET_NOT_FOUND) from exc
+
+
+def _resolve_resonance_pk(value: int) -> "Resonance":
+    """Resolve a Resonance by PK, raising the shared not-found error."""
+    try:
+        return Resonance.objects.get(pk=value)
+    except Resonance.DoesNotExist as exc:
+        raise serializers.ValidationError(_ERR_RESONANCE_NOT_FOUND) from exc
+
+
+def _resolve_scene_pk(value: int) -> object:
+    """Resolve a Scene by PK, raising the shared not-found error."""
+    from world.scenes.models import Scene  # noqa: PLC0415
+
+    try:
+        return Scene.objects.get(pk=value)
+    except Scene.DoesNotExist as exc:
+        raise serializers.ValidationError(_ERR_SCENE_NOT_FOUND) from exc
+
+
 def _resolve_account_sheet(sheet_id: int, request) -> CharacterSheet:
     """Resolve ``sheet_id`` to a CharacterSheet owned by ``request.user``.
 
@@ -1838,17 +1864,11 @@ class AcceptSoulTetherSerializer(serializers.Serializer):
 
     def validate_partner_sheet_id(self, value: int) -> CharacterSheet:
         """Resolve partner sheet (ownership NOT required — it's the other party)."""
-        try:
-            return CharacterSheet.objects.get(pk=value)
-        except CharacterSheet.DoesNotExist as exc:
-            raise serializers.ValidationError(_ERR_CHARACTER_SHEET_NOT_FOUND) from exc
+        return _resolve_sheet_pk(value)
 
     def validate_resonance_id(self, value: int) -> "Resonance":
         """Resolve resonance by PK."""
-        try:
-            return Resonance.objects.get(pk=value)
-        except Resonance.DoesNotExist as exc:
-            raise serializers.ValidationError(_ERR_RESONANCE_NOT_FOUND) from exc
+        return _resolve_resonance_pk(value)
 
     def validate(self, attrs: dict) -> dict:
         """Cross-field: actor cannot tether with themselves."""
@@ -2046,26 +2066,15 @@ class SineatingRequestSerializer(serializers.Serializer):
 
     def validate_sineater_sheet_id(self, value: int) -> CharacterSheet:
         """Resolve Sineater sheet."""
-        try:
-            return CharacterSheet.objects.get(pk=value)
-        except CharacterSheet.DoesNotExist as exc:
-            raise serializers.ValidationError(_ERR_CHARACTER_SHEET_NOT_FOUND) from exc
+        return _resolve_sheet_pk(value)
 
     def validate_resonance_id(self, value: int) -> "Resonance":
         """Resolve resonance by PK."""
-        try:
-            return Resonance.objects.get(pk=value)
-        except Resonance.DoesNotExist as exc:
-            raise serializers.ValidationError(_ERR_RESONANCE_NOT_FOUND) from exc
+        return _resolve_resonance_pk(value)
 
     def validate_scene_id(self, value: int) -> object:
         """Resolve scene by PK."""
-        from world.scenes.models import Scene  # noqa: PLC0415
-
-        try:
-            return Scene.objects.get(pk=value)
-        except Scene.DoesNotExist as exc:
-            raise serializers.ValidationError(_ERR_SCENE_NOT_FOUND) from exc
+        return _resolve_scene_pk(value)
 
     def create(self, validated_data: dict) -> object:
         """Delegate to request_sineating; surface typed errors as 400."""
@@ -2129,10 +2138,7 @@ class SineatingRespondSerializer(serializers.Serializer):
 
     def validate_sinner_sheet_id(self, value: int) -> CharacterSheet:
         """Resolve sinner sheet."""
-        try:
-            return CharacterSheet.objects.get(pk=value)
-        except CharacterSheet.DoesNotExist as exc:
-            raise serializers.ValidationError(_ERR_CHARACTER_SHEET_NOT_FOUND) from exc
+        return _resolve_sheet_pk(value)
 
     def create(self, validated_data: dict) -> object:
         """Resolve Sineating from the persisted pending offer; surface typed errors as 400.
@@ -2187,26 +2193,15 @@ class SoulTetherRescueSerializer(serializers.Serializer):
 
     def validate_sinner_sheet_id(self, value: int) -> CharacterSheet:
         """Resolve Sinner sheet."""
-        try:
-            return CharacterSheet.objects.get(pk=value)
-        except CharacterSheet.DoesNotExist as exc:
-            raise serializers.ValidationError(_ERR_CHARACTER_SHEET_NOT_FOUND) from exc
+        return _resolve_sheet_pk(value)
 
     def validate_resonance_id(self, value: int) -> "Resonance":
         """Resolve resonance by PK."""
-        try:
-            return Resonance.objects.get(pk=value)
-        except Resonance.DoesNotExist as exc:
-            raise serializers.ValidationError(_ERR_RESONANCE_NOT_FOUND) from exc
+        return _resolve_resonance_pk(value)
 
     def validate_scene_id(self, value: int) -> object:
         """Resolve scene by PK."""
-        from world.scenes.models import Scene  # noqa: PLC0415
-
-        try:
-            return Scene.objects.get(pk=value)
-        except Scene.DoesNotExist as exc:
-            raise serializers.ValidationError(_ERR_SCENE_NOT_FOUND) from exc
+        return _resolve_scene_pk(value)
 
     def create(self, validated_data: dict) -> object:
         """Delegate to perform_soul_tether_rescue; surface typed errors as 400."""
@@ -2382,10 +2377,7 @@ class StageAdvanceRespondSerializer(serializers.Serializer):
 
     def validate_sinner_sheet_id(self, value: int) -> CharacterSheet:
         """Resolve sinner sheet."""
-        try:
-            return CharacterSheet.objects.get(pk=value)
-        except CharacterSheet.DoesNotExist as exc:
-            raise serializers.ValidationError(_ERR_CHARACTER_SHEET_NOT_FOUND) from exc
+        return _resolve_sheet_pk(value)
 
     def create(self, validated_data: dict) -> object:
         """Resolve from the persisted pending offer; surface typed errors as 400.
