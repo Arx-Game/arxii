@@ -88,6 +88,12 @@ class RitualPoolError(MagicError):
     user_message = "You cannot contribute that to this ritual."
 
 
+class HedgeInaccessibleError(MagicError):
+    """#3001: a non-hedge ritual reached by a character with no magical profile."""
+
+    user_message = "The deeper mysteries of this rite are closed to you."
+
+
 class NoRitualConfigured(MagicError):
     user_message = "You don't have an anima ritual configured."
 

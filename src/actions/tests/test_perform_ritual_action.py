@@ -10,7 +10,7 @@ from django.test import TestCase
 
 from actions.definitions.ritual import PerformRitualAction
 from world.magic.constants import RitualExecutionKind
-from world.magic.factories import CharacterResonanceFactory, RitualFactory
+from world.magic.factories import CharacterAuraFactory, CharacterResonanceFactory, RitualFactory
 from world.magic.models import PendingRitualEffect
 
 
@@ -19,6 +19,7 @@ class PerformRitualActionCeremonyTests(TestCase):
         self.cr = CharacterResonanceFactory()
         self.sheet = self.cr.character_sheet
         self.character = self.sheet.character
+        CharacterAuraFactory(character=self.sheet)  # Gifted: hedge gate (#3001)
         self.ritual = RitualFactory(
             name="Rite of Weaving",
             execution_kind=RitualExecutionKind.CEREMONY,
@@ -42,6 +43,7 @@ class PerformRitualActionPoolGateTests(TestCase):
         self.cr = CharacterResonanceFactory()
         self.sheet = self.cr.character_sheet
         self.character = self.sheet.character
+        CharacterAuraFactory(character=self.sheet)  # Gifted: hedge gate (#3001)
         self.anima, _ = CharacterAnima.objects.update_or_create(
             character=self.sheet, defaults={"current": 50, "maximum": 100}
         )

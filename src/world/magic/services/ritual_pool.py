@@ -237,6 +237,20 @@ def resolve_pool_gate(
     )
 
 
+def ritual_visible_to(sheet: CharacterSheet, ritual: Ritual) -> bool:
+    """Visibility IS eligibility (#3001): one predicate, browse and perform alike.
+
+    Hedge-accessible rituals are open to anyone with a sheet; everything else
+    needs a magical profile (a ``CharacterAura`` row — the sole
+    magic-capability gate, per ``magical_profile``'s own contract).
+    """
+    from world.magic.services.resonance_environment import magical_profile  # noqa: PLC0415
+
+    if ritual.hedge_accessible:
+        return True
+    return magical_profile(sheet) is not None
+
+
 def _roll_gash(level: int) -> int:
     """(1d6+1) x level — higher-level blood is simply more potent."""
     return (random.randint(1, GASH_DIE_SIZE) + GASH_DIE_BONUS) * max(1, level)  # noqa: S311 # NOSONAR game RNG, not crypto

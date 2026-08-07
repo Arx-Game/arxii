@@ -1055,6 +1055,28 @@ class RitualViewSet(viewsets.ModelViewSet):
             return RitualPatchSerializer
         return RitualSerializer
 
+    def get_queryset(self):
+        """Visibility IS eligibility (#3001): quiescent viewers see hedge rites only.
+
+        Staff and accounts with no active puppet see everything (backoffice
+        reads); a puppeted character with no magical profile browses only
+        ``hedge_accessible`` rituals — the same predicate the perform and
+        draft seams enforce (``ritual_visible_to``).
+        """
+        from world.magic.services.resonance_environment import magical_profile  # noqa: PLC0415
+
+        queryset = super().get_queryset()
+        user = self.request.user
+        if user.is_staff:
+            return queryset
+        puppet = user.puppet
+        if puppet is None:
+            return queryset
+        sheet = puppet.sheet_data
+        if sheet is None or magical_profile(sheet) is not None:
+            return queryset
+        return queryset.filter(hedge_accessible=True)
+
 
 def _validate_imbuing_amount(kwargs: dict) -> Response | None:
     """Validate the imbuing ``amount`` kwarg is a positive integer.

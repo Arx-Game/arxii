@@ -162,6 +162,46 @@ class ContributionTests(TestCase):
         self.assertEqual(ritual_id, self.ritual.pk)
 
 
+class HedgeVisibilityTests(TestCase):
+    """#3001: ritual_visible_to — one predicate for browse and perform."""
+
+    def test_hedge_ritual_visible_to_anyone(self):
+        from world.magic.services.ritual_pool import ritual_visible_to
+
+        sheet = CharacterSheetFactory()  # no CharacterAura row = quiescent
+        ritual = RitualFactory(hedge_accessible=True)
+        self.assertTrue(ritual_visible_to(sheet, ritual))
+
+    def test_deep_ritual_hidden_from_quiescent(self):
+        from world.magic.services.ritual_pool import ritual_visible_to
+
+        sheet = CharacterSheetFactory()
+        ritual = RitualFactory(hedge_accessible=False)
+        self.assertFalse(ritual_visible_to(sheet, ritual))
+
+    def test_deep_ritual_visible_with_magical_profile(self):
+        from world.magic.factories import CharacterAuraFactory
+        from world.magic.services.ritual_pool import ritual_visible_to
+
+        aura = CharacterAuraFactory()
+        ritual = RitualFactory(hedge_accessible=False)
+        self.assertTrue(ritual_visible_to(aura.character, ritual))
+
+    def test_perform_action_enforces_the_predicate(self):
+        from actions.definitions.ritual import PerformRitualAction
+        from world.magic.constants import RitualExecutionKind
+
+        sheet = CharacterSheetFactory()
+        ritual = RitualFactory(
+            hedge_accessible=False,
+            execution_kind=RitualExecutionKind.CEREMONY,
+            service_function_path="",
+        )
+        result = PerformRitualAction().run(sheet.character, ritual=ritual)
+        self.assertFalse(result.success)
+        self.assertIn("closed to you", result.message)
+
+
 class PoolGateTests(TestCase):
     def setUp(self):
         self.sheet = CharacterSheetFactory()

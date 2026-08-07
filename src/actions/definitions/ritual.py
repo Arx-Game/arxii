@@ -84,6 +84,14 @@ class PerformRitualAction(Action):
         components = kwargs.pop("components_provided", [])
         sheet = actor.sheet_data
 
+        # #3001: visibility IS eligibility — a non-hedge rite is closed to a
+        # character with no magical profile, at browse and perform alike.
+        from world.magic.exceptions import HedgeInaccessibleError  # noqa: PLC0415
+        from world.magic.services.ritual_pool import ritual_visible_to  # noqa: PLC0415
+
+        if not ritual_visible_to(sheet, ritual):
+            return ActionResult(success=False, message=HedgeInaccessibleError.user_message)
+
         try:
             with transaction.atomic():
                 self._validate_components(ritual, components, sheet)

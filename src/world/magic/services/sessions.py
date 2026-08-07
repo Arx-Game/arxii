@@ -58,6 +58,11 @@ def draft_session(  # noqa: PLR0913
     Raises ParticipantCountError if the ritual's min/max_participants bounds
     are violated by the total participant count (initiator + invitees).
     """
+    # NOTE (#3001): deliberately NO hedge-visibility gate here — session rituals
+    # (Durance, covenant formation, org induction, Soul Tether) gate inside
+    # their own service functions by design; an aura requirement at draft time
+    # would wrongly bar quiescent participants from social rites. The
+    # ritual_visible_to predicate binds the browse list and the solo perform.
     # Deduplicate the invitee list against the initiator (idiomatic — drafting
     # services shouldn't double-count the initiator if a caller passes them in).
     deduped_invitees = [s for s in invitee_sheets if s != initiator]

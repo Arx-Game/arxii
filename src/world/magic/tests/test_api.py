@@ -20,6 +20,7 @@ from world.items.factories import ItemInstanceFactory
 from world.magic.constants import EffectKind, TargetKind, VitalBonusTarget
 from world.magic.factories import (
     CharacterAnimaFactory,
+    CharacterAuraFactory,
     CharacterResonanceFactory,
     CharacterThreadWeavingUnlockFactory,
     ImbuingRitualFactory,
@@ -1074,6 +1075,7 @@ class RitualPerformViewTests(APITestCase):
         cls.character = CharacterFactory(db_key="RitualOwner")
         cls.sheet = CharacterSheetFactory(character=cls.character)
         _link_account_to_sheet(cls.account, cls.character, cls.sheet)
+        CharacterAuraFactory(character=cls.sheet)  # Gifted: hedge gate (#3001)
 
         cls.resonance = ResonanceFactory()
         cls.trait = TraitFactory()

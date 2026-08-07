@@ -33,6 +33,9 @@ class RitualTelnetE2ETests(TestCase):
     def setUpTestData(cls) -> None:
         cls.character = CharacterFactory(db_key="ImbuingMage")
         cls.sheet = CharacterSheetFactory(character=cls.character)
+        from world.magic.factories import CharacterAuraFactory
+
+        CharacterAuraFactory(character=cls.sheet)  # Gifted: hedge gate (#3001)
         cls.resonance = ResonanceFactory()
         cls.char_resonance = CharacterResonanceFactory(
             character_sheet=cls.sheet,
