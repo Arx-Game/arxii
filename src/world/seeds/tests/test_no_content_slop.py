@@ -89,24 +89,38 @@ from world.seeds.tests.content_stub import stub_content_root
 #: Fix the seeder (``authored_or_sample()``) instead.
 SEEDER_GRANDFATHERED_MODELS: frozenset[str] = frozenset()
 
-#: **What this guard cannot see (#2973):** two of the eight content stand-ins
-#: stripped from ``seed_magic_dev()``/``seed_starter_magic_story()`` targeted
-#: models that are deliberately NOT in ``CONTENT_MODELS`` — ``items.itemtemplate``
-#: (most ``ItemTemplate`` rows are legitimately seeder-owned config, so the whole
-#: model can't register) and ``stories.story``/``chapter``/``episode``/``beat``/
-#: ``transition`` (the "Hallowed Threshold" story is test-fixture scaffolding with
-#: no production destination — it never ships, so there is nothing to register
-#: against). This guard's growth check is blind to both by construction, not by
-#: oversight. Their regression coverage is the name-keyed strip-absence tests in
-#: ``integration_tests.game_content.tests.test_magic_seed``
-#: (``SeedMagicDevStripsStandInsTests.test_no_touchstone_or_reagent_templates_authored``,
-#: ``SeedStarterMagicStoryStripsStandInsTests.test_no_hallowed_threshold_story_authored``).
-#: Every other stripped stand-in (Social Arts Gift/Techniques, Corruption templates,
-#: reaction conditions + achievement bridge, fall-redemption examples, the Devotion
-#: RelationshipTrack) targets a registered ``CONTENT_MODELS`` entry, so the two tests
-#: below already assert the general invariant for them: a fresh
-#: ``seed_magic_dev()``/``seed_starter_magic_story()`` call (one of ``CLUSTER_SEEDERS``)
-#: authors zero rows in any registered content model.
+#: **What this guard cannot see (#2973):** its growth check only fires for models
+#: registered in ``CONTENT_MODELS``. Several rows the eight magic-seeder content
+#: stand-ins touched were never registered at all — either the whole model is a
+#: seeder/content mix (``items.itemtemplate``: most rows are legitimately
+#: seeder-owned config, so the model can't register wholesale) or the content has
+#: no lore-repo destination to register against (the "Hallowed Threshold"
+#: ``stories.*`` rows, test-fixture scaffolding that never ships). Constituent
+#: models this guard is blind to, by construction, not oversight: the demo
+#: ``ObjectDB`` rooms + ``LocationValueModifier`` tags (stand-in 1),
+#: ``stories.story``/``chapter``/``episode``/``beat``/``transition`` (stand-in 2),
+#: ``ActionEnhancement`` + ``TechniqueVariant`` (stand-in 3 — the "Social Arts"
+#: ``Gift``/``Technique`` rows themselves ARE registered, and ARE covered below),
+#: ``MagicalAlterationTemplate`` (stand-in 4's 12 corruption twists — the 2
+#: ``ConditionTemplate`` rows themselves ARE registered and covered), and
+#: ``items.itemtemplate`` (stand-in 6, the touchstone/reagents). Their regression
+#: coverage is entirely the name-keyed strip-absence tests in
+#: ``integration_tests.game_content.tests.test_magic_seed`` — see
+#: ``SeedMagicDevStripsStandInsTests``/``SeedStarterMagicStoryStripsStandInsTests``
+#: for the full list.
+#:
+#: Stand-ins 5 (reaction conditions + achievement bridge), 7 (fall-redemption
+#: examples), and 8 (the "Devotion" ``RelationshipTrack``) touch only registered
+#: models, so the two tests below already assert the general invariant for them
+#: directly: a fresh ``seed_magic_dev()``/``seed_starter_magic_story()`` call (one
+#: of ``CLUSTER_SEEDERS``) authors zero rows in any registered content model. Of
+#: those three, 7 and 8 were **already** ``authored_or_sample()``-gated before
+#: #2973 (#2698/#2972) — this guard already covered them pre-branch too. #2973
+#: didn't gate anything new there; it verified the gate against code and added the
+#: name-keyed strip-absence tests
+#: (``test_no_fall_redemption_example_rows_authored``,
+#: ``test_no_devotion_track_authored``) as belt-and-suspenders regression coverage
+#: alongside this pre-existing general guard.
 
 
 class SeedersDoNotCreateContentTests(TestCase):

@@ -390,8 +390,9 @@ seeders in `world/seeds/game_content/magic.py` still authoring content-repo-owne
 rows, every one keyed to a `Resonance` the seeder itself invented — each one made a
 contentless feature look shipped. #2967 obliterated the portal-travel "Mirrorwalking"
 placeholder first (the fix that stopped seeders from inventing `Resonance` rows at
-all); #2973 then moved the remaining eight stand-ins to their ruled destination
-(lore fixture, the #2451 grid bundle, or a test fixture — no non-test consumer):
+all). #2973 then closed out the remaining eight, six of which needed an actual code
+change to strip (lore fixture, the #2451 grid bundle, or a test fixture — no
+non-test consumer):
 
 - 3 demo `ObjectDB` rooms + `LocationValueModifier` resonance tags + the "Hallowed
   Rejection" `ConditionTemplate` (`_seed_resonance_environment_rooms`) — rooms ride
@@ -411,12 +412,23 @@ all); #2973 then moved the remaining eight stand-ins to their ruled destination
 - The touchstone `ItemTemplate` + 3 reagent templates (`ensure_touchstone_content()`)
   — lore fixture; KEEP-side `ensure_sanctification_requirements` degrades loudly
   (logged skip) when a reagent is absent instead of inventing one.
+
+The remaining two were **already clean going into this branch**, not stripped by
+it — #2973 verified them against code, found no lazy-create/invention path left,
+and added the regression coverage that had never existed for either:
+
 - 4 `CompromiseActType` + 6 `ResonanceConversion` fall-redemption examples
-  (`wire_fall_redemption_content()`) — lore fixture.
-- The lazy-created "Devotion" `RelationshipTrack`
-  (`seed_relationship_track_thread_unlock()`) — lore fixture; the seeder already
-  resolved the `ThreadWeavingUnlock` via `authored_or_sample()`, so the strip is
-  just removing the track's own lazy-create.
+  (`wire_fall_redemption_content()`) — `authored_or_sample()`-gated since #2972,
+  before this SDD series started. No production code changed; #2973 added
+  strip-absence tests (`test_no_fall_redemption_example_rows_authored`). Lore
+  authoring for these rows is still owed — the gate just means an absent row
+  degrades loudly instead of getting invented.
+- The "Devotion" `RelationshipTrack` (`seed_relationship_track_thread_unlock()`)
+  — `authored_or_sample()`-gated since #2698, predating this series; no lazy-create
+  path remained by the time #2973 looked. #2973 added strip-absence tests
+  (`test_no_devotion_track_authored`) and corrected stale docstring/CLAUDE.md
+  wording that still described a "lazy-creates ... canonical track" behavior the
+  code no longer had.
 
 `world/magic/seeds_resonance.py` (the `authored_or_sample`-based seam every stripped
 caller used to look content up instead of inventing it) survives — KEEP-side
