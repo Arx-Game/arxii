@@ -12,6 +12,7 @@ from datetime import timedelta
 import logging
 from typing import TYPE_CHECKING, Any
 
+from django.conf import settings
 from django.core.exceptions import ValidationError
 from django.db import transaction
 from django.db.models import Prefetch, QuerySet
@@ -1289,10 +1290,15 @@ def can_create_character(account: AbstractBaseUser | AnonymousUser) -> tuple[boo
     if account.is_staff:
         return True, ""
 
-    # Check email verification
-    # TODO: Integrate with actual email verification system
-    if hasattr(account, "email_verified") and not account.email_verified:
-        return False, "Email verification required"
+    # Check email verification. PlayerData.can_apply_for_characters() is the
+    # account's single source of truth for this gate (mirrors
+    # AccountPlayerSerializer.get_email_verified's allauth EmailAddress query);
+    # it's already what drives the frontend's can_create_characters field, so
+    # reuse it here instead of a parallel check (#3046: the old hasattr(account,
+    # "email_verified") check was always False since that attribute only ever
+    # existed on the serializer, never on AccountDB, so this gate was dead).
+    if not account.player_data.can_apply_for_characters():
+        return False, "Verify your email address to create a character."
 
     # Check trust level
     # TODO: Implement trust system - default to 0 (trusted) until then
@@ -1301,8 +1307,7 @@ def can_create_character(account: AbstractBaseUser | AnonymousUser) -> tuple[boo
         return False, "Account trust level too low"
 
     # Check character limit
-    # TODO: Make this configurable via django settings or model
-    max_characters = 3
+    max_characters = settings.CG_MAX_CHARACTERS
     current_count = account.character_drafts.count()
     # TODO: Also count actual characters owned by account
     if current_count >= max_characters:

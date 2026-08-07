@@ -12,7 +12,12 @@ from django.test.utils import CaptureQueriesContext
 from evennia.accounts.models import AccountDB
 
 from world.character_creation.models import Beginnings, CharacterDraft, StartingArea
-from world.character_creation.services import DraftIncompleteError, finalize_character
+from world.character_creation.services import (
+    DraftIncompleteError,
+    can_create_character,
+    finalize_character,
+    get_accessible_starting_areas,
+)
 from world.character_sheets.models import CharacterSheet, Gender
 from world.classes.factories import PathFactory
 from world.classes.models import PathStage
@@ -2252,3 +2257,126 @@ class FinalizeCharacterPreludeMissionTests(FinalizationTestMixin, TestCase):
 
         # Whole-transaction rollback: no Character/CharacterSheet left behind.
         assert CharacterSheet.objects.count() == sheet_count_before
+
+
+class CanCreateCharacterEmailVerificationTests(TestCase):
+    """can_create_character's email-verification gate (#3046).
+
+    The old ``hasattr(account, "email_verified")`` check was always False (that
+    attribute only ever existed on the serializer, never on AccountDB), so an
+    unverified account could create and submit characters. The real gate reuses
+    ``PlayerData.can_apply_for_characters()`` (allauth EmailAddress lookup) -
+    the same check that already drives the frontend's ``can_create_characters``
+    field.
+    """
+
+    def test_unverified_account_is_rejected_with_verification_reason(self):
+        from evennia_extensions.factories import AccountFactory, EmailAddressFactory
+
+        account = AccountFactory()
+        EmailAddressFactory(user=account, email=account.email, verified=False, primary=True)
+
+        can_create, reason = can_create_character(account)
+
+        assert can_create is False
+        assert reason == "Verify your email address to create a character."
+
+    def test_account_with_no_email_address_is_rejected(self):
+        from evennia_extensions.factories import AccountFactory
+
+        account = AccountFactory()
+        # No EmailAddress row at all - allauth has nothing to call verified.
+
+        can_create, reason = can_create_character(account)
+
+        assert can_create is False
+        assert reason == "Verify your email address to create a character."
+
+    def test_verified_account_passes_the_email_gate(self):
+        from evennia_extensions.factories import AccountFactory, EmailAddressFactory
+
+        account = AccountFactory()
+        EmailAddressFactory(user=account, email=account.email, verified=True, primary=True)
+
+        can_create, reason = can_create_character(account)
+
+        assert can_create is True
+        assert reason == ""
+
+    def test_staff_bypasses_the_email_gate(self):
+        from evennia_extensions.factories import AccountFactory
+
+        account = AccountFactory(is_staff=True)
+        # Deliberately no EmailAddress row - staff must not be blocked by it.
+
+        can_create, reason = can_create_character(account)
+
+        assert can_create is True
+        assert reason == ""
+
+
+class CanCreateCharacterMaxCharactersTests(TestCase):
+    """max_characters is configurable via CG_MAX_CHARACTERS (#3046, was hardcoded 3)."""
+
+    def test_max_characters_honors_settings_override(self):
+        from evennia_extensions.factories import AccountFactory, EmailAddressFactory
+        from world.character_creation.factories import CharacterDraftFactory
+
+        account = AccountFactory()
+        EmailAddressFactory(user=account, email=account.email, verified=True, primary=True)
+        CharacterDraftFactory(account=account)
+
+        with override_settings(CG_MAX_CHARACTERS=1):
+            can_create, reason = can_create_character(account)
+
+        assert can_create is False
+        assert reason == "Maximum of 1 characters reached"
+
+    def test_default_max_characters_is_three(self):
+        from django.conf import settings
+
+        assert settings.CG_MAX_CHARACTERS == 3
+
+
+class GetAccessibleStartingAreasTrustRequiredTests(TestCase):
+    """get_accessible_starting_areas must not 500 on a TRUST_REQUIRED area (#3046).
+
+    Before the fix, StartingArea.is_accessible_by raised NotImplementedError for
+    any non-staff account on a TRUST_REQUIRED area, and this function did not
+    catch it - one admin flipping an area's access level broke the origin stage
+    for everyone.
+    """
+
+    def test_trust_required_area_excluded_for_normal_account(self):
+        from evennia_extensions.factories import AccountFactory
+        from world.character_creation.factories import StartingAreaFactory
+        from world.character_creation.models import StartingArea
+
+        open_area = StartingAreaFactory(name="Open Area", access_level=StartingArea.AccessLevel.ALL)
+        gated_area = StartingAreaFactory(
+            name="Gated Area",
+            access_level=StartingArea.AccessLevel.TRUST_REQUIRED,
+            minimum_trust=5,
+        )
+        account = AccountFactory()
+
+        areas = get_accessible_starting_areas(account)
+
+        assert open_area in areas
+        assert gated_area not in areas
+
+    def test_trust_required_area_included_for_staff(self):
+        from evennia_extensions.factories import AccountFactory
+        from world.character_creation.factories import StartingAreaFactory
+        from world.character_creation.models import StartingArea
+
+        gated_area = StartingAreaFactory(
+            name="Gated Area Staff",
+            access_level=StartingArea.AccessLevel.TRUST_REQUIRED,
+            minimum_trust=5,
+        )
+        account = AccountFactory(is_staff=True)
+
+        areas = get_accessible_starting_areas(account)
+
+        assert gated_area in areas
