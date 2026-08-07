@@ -11278,7 +11278,6 @@ paths:
       - events
       security:
       - cookieAuth: []
-      - {}
       responses:
         '200':
           content:
