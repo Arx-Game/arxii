@@ -83,8 +83,6 @@ class ExecuteActionBasicTests(TestCase):
         """Action with check_fn passes effort modifier and fatigue penalty."""
         captured_args = {}
         mock_result = MagicMock()
-        mock_result.check_type = MagicMock()
-        mock_result.check_type.traits.select_related.return_value.all.return_value = []
 
         def mock_check(effort_mod, fatigue_pen):
             captured_args["effort_mod"] = effort_mod
@@ -101,6 +99,24 @@ class ExecuteActionBasicTests(TestCase):
         assert result.check_result is mock_result
         assert captured_args["effort_mod"] == 4  # EXTREME modifier
         assert captured_args["fatigue_pen"] == 0  # FRESH zone, no penalty
+
+    def test_pipeline_does_not_award_development(self):
+        """#3039: the pipeline no longer calls award_check_development itself —
+
+        that now happens inside perform_check. A check_fn's return value is
+        never inspected for a check_type, so level_ups is always empty here,
+        even with a real check_fn and EFFORT levels that would earn dp.
+        """
+        mock_result = MagicMock()
+
+        result = execute_action_with_fatigue(
+            self.sheet,
+            ActionCategory.PHYSICAL,
+            5,
+            EffortLevel.EXTREME,
+            check_fn=lambda *_args: mock_result,
+        )
+        assert result.level_ups == []
 
     def test_result_contains_effort_level(self):
         """ActionResult includes the effort level used."""

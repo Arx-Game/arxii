@@ -201,8 +201,14 @@ The central spine connecting every system in the game. Characters develop throug
   and use the fatigue pipeline, need action type definitions and resonance integration
 - **Action type definitions** — define base fatigue costs per action, which pool each draws from,
   and wire into the scene action request system
-- ~~**Development point hooks**~~ — DONE: dp awarded per check via action pipeline,
-  threshold-based level-ups, WeeklySkillUsage accumulator, weekly rust + audit cron
+- ~~**Development point hooks**~~ — DONE (#3039): dp awarded at the `perform_check`
+  chokepoint (`world.checks.services._award_check_development`), threshold-based
+  level-ups, WeeklySkillUsage accumulator, weekly rust + audit cron. Previously this
+  lived only in `world.fatigue.action_pipeline._execute_action_with_fatigue`, whose
+  public wrapper (`execute_action_with_fatigue`) had zero production callers — no
+  character ever accrued dp organically. The pipeline no longer awards; hooking on
+  `perform_check` instead covers every check path (combat, scenes, the test-rig
+  forced-outcome path included) in one place.
 - **Integration test for fatigue → check pipeline** — end-to-end test with real CheckRank/ResultChart
   fixture data (currently mocked)
 - **Unified dice roll system** — fatigue checks use perform_check but the broader game needs a

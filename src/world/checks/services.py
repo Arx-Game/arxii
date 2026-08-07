@@ -17,7 +17,10 @@ from world.checks.types import CheckResult, ModifierBreakdown, ModifierContribut
 from world.classes.models import PathAspect
 from world.fatigue.constants import EFFORT_CHECK_MODIFIER
 from world.progression.models import CharacterPathHistory
-from world.progression.services.skill_development import get_character_path_level
+from world.progression.services.skill_development import (
+    award_check_development,
+    get_character_path_level,
+)
 from world.traits.constants import PrimaryStat
 from world.traits.models import (
     CheckOutcome,
@@ -70,7 +73,11 @@ def perform_check(  # noqa: PLR0913 - optional effort/fatigue params extend exis
     6. Roll 1-100
     7. Apply rollmod: effective = max(1, min(100, roll + rollmod))
     8. Look up outcome on chart using effective roll
-    9. Return CheckResult
+    9. Award check-based development points (#3039) via ``_award_check_development`` —
+       the sole chokepoint for ``world.progression.services.skill_development
+       .award_check_development``. Covers both the rolled path and the test-rig
+       forced-outcome path (``_build_forced_check_result``) exactly once each.
+    10. Return CheckResult
 
     Args:
         character: The character performing the check.
@@ -111,7 +118,7 @@ def perform_check(  # noqa: PLR0913 - optional effort/fatigue params extend exis
 
     forced_outcome = _consume_forced_outcome()
     if forced_outcome is not None:
-        return _build_forced_check_result(
+        result = _build_forced_check_result(
             character=character,
             check_type=check_type,
             forced_outcome=forced_outcome,
@@ -124,6 +131,8 @@ def perform_check(  # noqa: PLR0913 - optional effort/fatigue params extend exis
             level_override=level_override,
             stat_override=stat_override,
         )
+        _award_check_development(character, check_type, effort_level)
+        return result
 
     breakdown = _compute_check_breakdown(
         character,
@@ -144,7 +153,48 @@ def perform_check(  # noqa: PLR0913 - optional effort/fatigue params extend exis
     outcome = _get_outcome_for_roll(breakdown.chart, effective_roll) if breakdown.chart else None
     outcome = _apply_outcome_guarantees(character, outcome, breakdown.chart, situation_ctx)
 
-    return _check_result(check_type, outcome, breakdown, effective_roll=effective_roll)
+    result = _check_result(check_type, outcome, breakdown, effective_roll=effective_roll)
+    _award_check_development(character, check_type, effort_level)
+    return result
+
+
+def _award_check_development(
+    character: "ObjectDB",
+    check_type: "CheckType",
+    effort_level: str | None,
+) -> None:
+    """Award check-based development points at the ``perform_check`` chokepoint (#3039).
+
+    Previously this lived in ``world.fatigue.action_pipeline
+    ._execute_action_with_fatigue``, whose public wrapper
+    (``execute_action_with_fatigue``) had zero production callers — combat and
+    scene action-resolution paths call ``perform_check``/``perform_check_with_modifiers``
+    directly, so no character ever accrued weekly skill usage or development points.
+    Hooking here instead covers every production check path in one place, including
+    the test-rig forced-outcome path (deliberate — integration tests that force an
+    outcome should observe the same accrual production checks do).
+
+    Cheap short-circuit on ``effort_level is None``: ``award_check_development``
+    itself also no-ops on ``None``, but checking here first skips the
+    ``CharacterSheet`` lookup entirely for the (common) no-effort case.
+
+    Skips silently, without raising, when *character* has no ``CharacterSheet``
+    (an ephemeral NPC, a GM puppet, or any non-character object) — development
+    points don't apply to non-characters.
+    """
+    if effort_level is None:
+        return
+
+    sheet = character.character_sheet  # type: ignore[attr-defined] — ObjectDB typeclass extension
+    if sheet is None:
+        return
+
+    award_check_development(
+        character_sheet=sheet,
+        check_type=check_type,
+        effort_level=effort_level,
+        path_level=get_character_path_level(character),
+    )
 
 
 def perform_check_with_modifiers(  # noqa: PLR0913 - mirrors perform_check signature

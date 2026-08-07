@@ -66,6 +66,14 @@ The checks app defines types of checks (Stealth, Diplomacy, Perception, etc.) an
    fired here if engaged, announces `"your vow lies dormant — {perk.name} would have answered
    here"` to the checker alone (never the room) — see `world.covenants.perks.services
    .dormant_perk_firings`/`announce_dormant_perks`.
+8. Check-based development points (#3039): `perform_check`'s own `_award_check_development`
+   forwards to `world.progression.services.skill_development.award_check_development`
+   for every trait the check used — the ONE chokepoint for check-driven dp accrual.
+   Runs after both the rolled path and the test-rig forced-outcome path (each exactly
+   once). Cheap no-op when `effort_level is None`; silently skipped when the character
+   has no `CharacterSheet`. Previously this lived only in `world.fatigue.action_pipeline
+   ._execute_action_with_fatigue`, whose public wrapper had zero production callers — the
+   pipeline no longer awards at all.
 
 ## Opposed checks — two mutually exclusive answers for the opposing side (#2707, ADR-0166)
 

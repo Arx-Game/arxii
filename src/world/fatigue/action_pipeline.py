@@ -2,6 +2,14 @@
 
 Orchestrates the full action pipeline: apply fatigue cost, compute effort/fatigue
 modifiers for checks, and handle collapse risk.
+
+Does NOT award development points. Check-based development accrual (#3039) lives
+on the ``world.checks.services.perform_check`` chokepoint (via
+``_award_check_development``), which every check path reaches whether or not it
+goes through this pipeline — previously this pipeline was the only caller of
+``award_check_development``, but its public wrapper (``execute_action_with_fatigue``)
+had zero production callers, so no character ever accrued development points.
+Hooking on ``perform_check`` instead means every check awards, this pipeline or not.
 """
 
 from __future__ import annotations
@@ -21,10 +29,6 @@ from world.fatigue.services import (
     should_check_collapse,
 )
 from world.fatigue.types import ActionResult
-from world.progression.services.skill_development import (
-    award_check_development,
-    get_character_path_level,
-)
 
 
 def execute_action_with_fatigue(
@@ -43,6 +47,10 @@ def execute_action_with_fatigue(
         4. If check_fn provided, execute it with (effort_modifier, fatigue_penalty).
         5. Check collapse risk (based on zone AFTER fatigue applied).
         6. Return result with all details.
+
+    Does NOT award development points — if ``check_fn`` calls ``perform_check``/
+    ``perform_check_with_modifiers``, development accrual already happened inside
+    that call (#3039). ``ActionResult.level_ups`` is always empty here.
 
     Args:
         character_sheet: The character's sheet.
@@ -86,18 +94,12 @@ def _execute_action_with_fatigue(
 
     # 4. Execute check if provided
     check_result = None
-    level_ups: list[tuple[str, int, int]] = []
     if check_fn is not None:
         check_result = check_fn(effort_modifier, fatigue_penalty)
 
-    # 4b. Award development points for qualifying checks.
-    if check_result is not None and effort_level:
-        level_ups = award_check_development(
-            character_sheet=character_sheet,
-            check_type=check_result.check_type,
-            effort_level=effort_level,
-            path_level=get_character_path_level(character_sheet.character),
-        )
+    # Development-point accrual (#3039) happens inside perform_check itself when
+    # check_fn calls it — not here. level_ups is always empty on this ActionResult.
+    level_ups: list[tuple[str, int, int]] = []
 
     # 5. Collapse risk (based on zone AFTER fatigue applied)
     fatigue_zone = get_fatigue_zone(character_sheet, fatigue_category)
