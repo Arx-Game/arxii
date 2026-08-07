@@ -9,7 +9,7 @@ from django.core.exceptions import ValidationError as DjangoValidationError
 from drf_spectacular.utils import extend_schema_field
 from rest_framework import serializers
 
-from world.missions.constants import DeedRewardSink, MissionStatus, NodeLocationMode
+from world.missions.constants import DeedRewardSink, MissionStatus, NodeLocationMode, ReportStyle
 from world.missions.models import (
     MissionCategory,
     MissionGiver,
@@ -664,6 +664,12 @@ class MissionAbandonResultSerializer(serializers.Serializer):
 
     id = serializers.IntegerField(read_only=True)
     status = serializers.CharField(read_only=True)
+
+
+class MissionReportRequestSerializer(serializers.Serializer):
+    """POST body for the #1753 report endpoint (#3040 — was unvalidated raw dict access)."""
+
+    style = serializers.ChoiceField(choices=ReportStyle.choices)
 
 
 class MissionReportResultSerializer(serializers.Serializer):

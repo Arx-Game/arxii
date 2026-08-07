@@ -27,6 +27,17 @@ rather than invented unless ``SEED_SAMPLE_CONTENT`` is on. A missing template
 skips its own graph and is never attached to the board giver; ``MissionGiver``
 itself is NOT a content model and still seeds unconditionally (an empty board
 under a real content repo is a content-authoring gap, not a seeder bug).
+
+Each starter template's ``report_to_role`` is set to the tutorial chain's
+"Threshold Warden" ``NPCRole`` (#3040): a BOARD-taken run (``take_from_board``)
+carries no ``source_offer``, so ``report_to_role_for`` would otherwise return
+``None`` and ``_finish_terminal`` jumps the run straight to COMPLETE, orphaning
+the authored MONEY reward line — the same gap T4 "A Simple Job"
+(``game_content/tutorial.py``) already fixed for its own board template. The
+Warden is reused rather than a board-specific role invented: both the board
+Object and the Warden Functionary sit in the SAME canonical starting room
+(``ensure_canonical_fallback_room``), so it's always the NPC actually
+co-located to report a board job's outcome to.
 """
 
 from __future__ import annotations
@@ -53,6 +64,7 @@ if TYPE_CHECKING:
 
     from world.checks.models import CheckType
     from world.missions.models import MissionGiver, MissionTemplate
+    from world.npc_services.models import NPCRole
 
 _BOARD_GIVER_NAME = "Arx City Notice Board"
 _BOARD_OBJECT_KEY = "a weathered notice board"
@@ -178,6 +190,7 @@ def _seed_mission_template(  # noqa: PLR0913
     level_band_min: int,
     level_band_max: int,
     base_reward: int,
+    report_to_role: NPCRole | None,
 ) -> MissionTemplate | None:
     """Look up (or, under SEED_SAMPLE_CONTENT, invent) one starter MissionTemplate + graph.
 
@@ -187,6 +200,10 @@ def _seed_mission_template(  # noqa: PLR0913
     rather than created unconditionally. Returns ``None`` when the template
     itself isn't authored/sampled; a missing entry node/option skips the rest
     of the graph the same way.
+
+    ``report_to_role`` (#3040): the tutorial chain's "Threshold Warden", or
+    ``None`` when it isn't authored/sampled yet — a nullable FK, so the
+    template still seeds either way (see the module docstring).
     """
     from world.missions.models import (  # noqa: PLC0415
         MissionNode,
@@ -212,6 +229,7 @@ def _seed_mission_template(  # noqa: PLR0913
             "percent_replace": 0,
             "cooldown": timedelta(0),
             "reward_group_rule": RewardGroupRule.ALL_EQUAL,
+            "report_to_role": report_to_role,
             "is_active": True,
             "visibility": MissionVisibility.OPEN,
         },
@@ -292,6 +310,7 @@ def seed_missions_dev() -> MissionsSeedResult:
     """
     from world.missions.factories import MissionGiverFactory  # noqa: PLC0415
     from world.seeds.character_creation import ensure_canonical_fallback_room  # noqa: PLC0415
+    from world.seeds.game_content.tutorial import ensure_tutor_role  # noqa: PLC0415
 
     room = ensure_canonical_fallback_room()
     board_obj = _ensure_notice_board_object(room)
@@ -300,8 +319,14 @@ def seed_missions_dev() -> MissionsSeedResult:
         giver_kind=GiverKind.BOARD,
         target=board_obj,
     )
+    # Self-contained (does not assume the "tutorial" cluster already ran) —
+    # idempotent either direction, exactly like T4's cross-call of THIS
+    # function from tutorial.py (see the module docstring, #3040).
+    report_to_role = ensure_tutor_role()
     templates = [
-        template for row in _TEMPLATES if (template := _seed_mission_template(*row)) is not None
+        template
+        for row in _TEMPLATES
+        if (template := _seed_mission_template(*row, report_to_role)) is not None
     ]
     if templates:
         giver.templates.add(*templates)  # idempotent M2M add

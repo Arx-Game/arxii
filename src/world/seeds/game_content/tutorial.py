@@ -275,8 +275,15 @@ def _seed_terminal_route(
     return route
 
 
-def _seed_t1(room: ObjectDB) -> MissionTemplate | None:
-    """T1 "Arrival" — ROOM_TRIGGER, no predecessor, OPEN visibility."""
+def _seed_t1(room: ObjectDB, tutor_role: NPCRole | None) -> MissionTemplate | None:
+    """T1 "Arrival" — ROOM_TRIGGER, no predecessor, OPEN visibility.
+
+    ``report_to_role=tutor_role`` (#3040): a ROOM_TRIGGER grant carries no
+    ``source_offer``, so without an explicit report target ``_finish_terminal``
+    would jump this run straight to COMPLETE and orphan its authored MONEY
+    line. ``tutor_role`` may be ``None`` (role not authored/sampled) — the
+    nullable FK, same degrade as T4.
+    """
     from world.missions.factories import MissionGiverFactory  # noqa: PLC0415
 
     template = _seed_template(
@@ -287,6 +294,7 @@ def _seed_t1(room: ObjectDB) -> MissionTemplate | None:
         ),
         risk_tier=1,
         visibility=MissionVisibility.OPEN,
+        report_to_role=tutor_role,
     )
     giver = MissionGiverFactory(
         name=_ROOM_TRIGGER_GIVER_NAME,
@@ -308,8 +316,14 @@ def _seed_t1(room: ObjectDB) -> MissionTemplate | None:
     return template
 
 
-def _seed_t2(room: ObjectDB, gate_template: MissionTemplate | None) -> MissionTemplate | None:
-    """T2 "What the Walls Remember" — ENVIRONMENTAL_DETAIL, gated on T1."""
+def _seed_t2(
+    room: ObjectDB, gate_template: MissionTemplate | None, tutor_role: NPCRole | None
+) -> MissionTemplate | None:
+    """T2 "What the Walls Remember" — ENVIRONMENTAL_DETAIL, gated on T1.
+
+    ``report_to_role=tutor_role`` (#3040): an ENVIRONMENTAL_DETAIL grant
+    carries no ``source_offer`` either — same orphaned-money gap as T1.
+    """
     if gate_template is None:
         return None
     from world.missions.factories import MissionGiverFactory  # noqa: PLC0415
@@ -322,6 +336,7 @@ def _seed_t2(room: ObjectDB, gate_template: MissionTemplate | None) -> MissionTe
         ),
         risk_tier=1,
         availability_rule=_has_completed(gate_template.pk),
+        report_to_role=tutor_role,
     )
     detail_obj = _ensure_detail_object(room)
     giver = MissionGiverFactory(
@@ -344,7 +359,7 @@ def _seed_t2(room: ObjectDB, gate_template: MissionTemplate | None) -> MissionTe
     return template
 
 
-def _ensure_tutor_role() -> NPCRole | None:
+def ensure_tutor_role() -> NPCRole | None:
     """Look up (or, under SEED_SAMPLE_CONTENT, invent) the tutor NPCRole (#1035).
 
     Mirrors ``ensure_builders_guild_clerk_role`` (``npc_services/seeds.py``)
@@ -353,6 +368,15 @@ def _ensure_tutor_role() -> NPCRole | None:
     invented unless ``SEED_SAMPLE_CONTENT`` is on. Returns ``None`` when it
     isn't authored/sampled; the caller skips every offer/Functionary step
     that depends on it.
+
+    Public (#3040): ``game_content/missions.py``'s starter board templates
+    reuse this SAME "Threshold Warden" row as their ``report_to_role`` — the
+    board and the tutor Functionary sit in the same canonical starting room
+    (``ensure_canonical_fallback_room``), so the Warden is always the NPC
+    actually co-located to report a board job's outcome to. Idempotent
+    either direction: whichever of "missions"/"tutorial" cluster runs first
+    creates the row, the other just finds it (mirrors ``_seed_t4``'s
+    already-established cross-call of ``seed_missions_dev()``).
     """
     from world.npc_services.models import NPCRole  # noqa: PLC0415
     from world.seeds.sample_content import authored_or_sample  # noqa: PLC0415
@@ -591,8 +615,19 @@ def _ensure_t4_followon_reward(
     )
 
 
-def _seed_t5(gate_template: MissionTemplate | None) -> MissionTemplate | None:
-    """T5 "The Loom" — NPC offer, EXTERNAL_ACT/THREAD_WOVEN (durable)."""
+def _seed_t5(
+    gate_template: MissionTemplate | None, tutor_role: NPCRole | None
+) -> MissionTemplate | None:
+    """T5 "The Loom" — NPC offer, EXTERNAL_ACT/THREAD_WOVEN (durable).
+
+    ``report_to_role=tutor_role`` (#3040): a normal tutor-offer acceptance
+    already carries ``source_offer.role=tutor_role`` and
+    ``report_to_role_for`` falls back to it, but a durable EXTERNAL_ACT
+    beat can also fast-forward-complete for a run granted with no offer
+    (e.g. ``staff_assign_mission`` direct grant, or a future retroactive-
+    completion path) — explicit like T4 makes the report target robust
+    regardless of how the run was granted, not just the offer path.
+    """
     if gate_template is None:
         return None
     template = _seed_template(
@@ -603,6 +638,7 @@ def _seed_t5(gate_template: MissionTemplate | None) -> MissionTemplate | None:
         ),
         risk_tier=2,
         availability_rule=_has_completed(gate_template.pk),
+        report_to_role=tutor_role,
     )
     # Durable act (#1035 Ruling 1): authored on the ENTRY node so
     # fast_forward_external_acts (enter_node) can resolve it immediately
@@ -620,8 +656,16 @@ def _seed_t5(gate_template: MissionTemplate | None) -> MissionTemplate | None:
     return template
 
 
-def _seed_t6(gate_template: MissionTemplate | None) -> MissionTemplate | None:
-    """T6 "Sworn Together" — NPC offer, EXTERNAL_ACT/COVENANT_SWORN (durable)."""
+def _seed_t6(
+    gate_template: MissionTemplate | None, tutor_role: NPCRole | None
+) -> MissionTemplate | None:
+    """T6 "Sworn Together" — NPC offer, EXTERNAL_ACT/COVENANT_SWORN (durable).
+
+    ``report_to_role=tutor_role`` (#3040) — same robustness rationale as T5
+    (proven by ``test_t6_fast_forwards_for_a_character_already_in_a_covenant``:
+    a staff-assigned, no-offer, fast-forwarded T6 now pauses at RESOLVED
+    instead of jumping straight to COMPLETE with its money orphaned).
+    """
     if gate_template is None:
         return None
     template = _seed_template(
@@ -632,6 +676,7 @@ def _seed_t6(gate_template: MissionTemplate | None) -> MissionTemplate | None:
         ),
         risk_tier=2,
         availability_rule=_has_completed(gate_template.pk),
+        report_to_role=tutor_role,
     )
     # Durable act (#1035 Ruling 1): entry node, same rationale as T5.
     option = _seed_entry_option(
@@ -647,8 +692,13 @@ def _seed_t6(gate_template: MissionTemplate | None) -> MissionTemplate | None:
     return template
 
 
-def _seed_t7(gate_template: MissionTemplate | None) -> MissionTemplate | None:
-    """T7 "The Long Dark" — NPC offer, risk_tier=4, first legend-risk mission."""
+def _seed_t7(
+    gate_template: MissionTemplate | None, tutor_role: NPCRole | None
+) -> MissionTemplate | None:
+    """T7 "The Long Dark" — NPC offer, risk_tier=4, first legend-risk mission.
+
+    ``report_to_role=tutor_role`` (#3040) — same robustness rationale as T5/T6.
+    """
     if gate_template is None:
         return None
     template = _seed_template(
@@ -659,6 +709,7 @@ def _seed_t7(gate_template: MissionTemplate | None) -> MissionTemplate | None:
         ),
         risk_tier=4,
         availability_rule=_has_completed(gate_template.pk),
+        report_to_role=tutor_role,
     )
     option = _seed_entry_option(
         template,
@@ -713,15 +764,18 @@ def seed_tutorial_dev() -> TutorialSeedResult:
 
     room = ensure_canonical_fallback_room()
 
-    t1 = _seed_t1(room)
-    t2 = _seed_t2(room, t1)
-
     # "Threshold Warden" is content-repo-owned (#2698) — every offer/
     # Functionary step below depends on it and is skipped when it isn't
-    # authored/sampled (see TutorialSeedResult's docstring).
-    tutor_role = _ensure_tutor_role()
+    # authored/sampled (see TutorialSeedResult's docstring). Resolved BEFORE
+    # T1/T2 (#3040) so their ``report_to_role`` can be set explicitly too —
+    # a ROOM_TRIGGER/ENVIRONMENTAL_DETAIL grant carries no ``source_offer``
+    # for ``report_to_role_for`` to fall back to.
+    tutor_role = ensure_tutor_role()
     if tutor_role is not None:
         _ensure_tutor_functionary(tutor_role, room)
+
+    t1 = _seed_t1(room, tutor_role)
+    t2 = _seed_t2(room, t1, tutor_role)
 
     consent_primer = _seed_consent_primer(t1)
     if tutor_role is not None:
@@ -733,7 +787,7 @@ def seed_tutorial_dev() -> TutorialSeedResult:
 
     t4, t4_terminal_route = _seed_t4(tutor_role, t3)
 
-    t5 = _seed_t5(t4)
+    t5 = _seed_t5(t4, tutor_role)
     t5_offer = (
         _ensure_offer(tutor_role, "Learn the loom's thread-work", t5)
         if tutor_role is not None
@@ -742,11 +796,11 @@ def seed_tutorial_dev() -> TutorialSeedResult:
 
     _ensure_t4_followon_reward(t4_terminal_route, t5_offer)
 
-    t6 = _seed_t6(t5)
+    t6 = _seed_t6(t5, tutor_role)
     if tutor_role is not None:
         _ensure_offer(tutor_role, "Swear the first oath", t6)
 
-    t7 = _seed_t7(t6)
+    t7 = _seed_t7(t6, tutor_role)
     if tutor_role is not None:
         _ensure_offer(tutor_role, "Answer the long dark's call", t7)
 

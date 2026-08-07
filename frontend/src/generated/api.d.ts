@@ -28324,6 +28324,18 @@ export interface components {
      * @enum {string}
      */
     MissionOptionSourceKindEnum: 'authored' | 'challenge';
+    /** @description POST body for the #1753 report endpoint (#3040 — was unvalidated raw dict access). */
+    MissionReportRequestRequest: {
+      style: components['schemas']['StyleEnum'];
+    };
+    /** @description Result of the #1753 report endpoint — run id/status, chosen style, check outcomes. */
+    MissionReportResult: {
+      readonly id: number;
+      readonly status: string;
+      readonly style: string;
+      readonly embellish_success: boolean | null;
+      readonly dodge_success: boolean | null;
+    };
     /**
      * @description List + detail serializer for MissionTemplate browse.
      *
@@ -38137,6 +38149,14 @@ export interface components {
       } | null;
       consequence_label: string | null;
     };
+    /**
+     * @description * `humble` - Humble
+     *     * `accurate` - Accurate
+     *     * `mostly_accurate` - Mostly accurate
+     *     * `embellished` - Embellished
+     * @enum {string}
+     */
+    StyleEnum: 'humble' | 'accurate' | 'mostly_accurate' | 'embellished';
     /**
      * @description Serializer for StylePresentationEndorsement create + read (Phase C Task C3, #1152).
      *
@@ -57722,10 +57742,29 @@ export interface operations {
       };
       cookie?: never;
     };
-    requestBody?: never;
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['MissionReportRequestRequest'];
+      };
+    };
     responses: {
-      /** @description No response body */
       200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['MissionReportResult'];
+        };
+      };
+      /** @description Unknown style / run not RESOLVED / no report-to role / no co-located Functionary of that role. */
+      400: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      /** @description Not a participant / no such mission. */
+      404: {
         headers: {
           [name: string]: unknown;
         };

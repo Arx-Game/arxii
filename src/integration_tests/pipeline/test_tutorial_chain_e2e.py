@@ -84,6 +84,7 @@ from world.covenants.constants import CovenantType
 from world.covenants.factories import CharacterCovenantRoleFactory, CovenantRoleFactory
 from world.covenants.services import create_covenant
 from world.covenants.types import CovenantFounder
+from world.currency.services import get_or_create_purse
 from world.magic.constants import TargetKind
 from world.magic.factories import (
     CharacterAnimaFactory,
@@ -254,7 +255,21 @@ class TutorialChainJourneyE2ETests(TestCase):
 
         _run(self.pc, f"resolve {instance_t1.pk} 1")
         instance_t1.refresh_from_db()
+        # T1 now carries an explicit report_to_role (#3040 — a ROOM_TRIGGER
+        # grant has no source_offer for report_to_role_for to fall back to),
+        # so it pauses at RESOLVED like every other step, not straight to
+        # COMPLETE.
+        self.assertEqual(instance_t1.status, MissionStatus.RESOLVED)
+        # #3040 — the regression this fix exists for: the authored MONEY line
+        # actually lands in the purse once reported, not just the RESOLVED
+        # status transition.
+        purse = get_or_create_purse(self.sheet)
+        balance_before_report = purse.balance
+        _run(self.pc, f"report {instance_t1.pk} humble")
+        instance_t1.refresh_from_db()
         self.assertEqual(instance_t1.status, MissionStatus.COMPLETE)
+        purse.refresh_from_db()
+        self.assertGreater(purse.balance, balance_before_report)
 
         # --- T2: What the Walls Remember (ENVIRONMENTAL_DETAIL) -----------
         from evennia.objects.models import ObjectDB
@@ -268,6 +283,10 @@ class TutorialChainJourneyE2ETests(TestCase):
         self.assertEqual(instance_t2.template_id, self.t2.pk)
 
         _run(self.pc, f"resolve {instance_t2.pk} 1")
+        instance_t2.refresh_from_db()
+        # Same #3040 fix as T1 — ENVIRONMENTAL_DETAIL carries no source_offer either.
+        self.assertEqual(instance_t2.status, MissionStatus.RESOLVED)
+        _run(self.pc, f"report {instance_t2.pk} humble")
         instance_t2.refresh_from_db()
         self.assertEqual(instance_t2.status, MissionStatus.COMPLETE)
 
@@ -468,6 +487,13 @@ class TutorialChainJourneyE2ETests(TestCase):
         all availability filters) since the point here is ``enter_node``'s
         fast-forward, not re-proving the chain's visibility gating (already
         covered by the primary journey's explicit T7-gate assertion).
+
+        Lands at RESOLVED, not COMPLETE (#3040): ``staff_assign_mission`` grants
+        with no ``source_offer``, so before T6 carried an explicit
+        ``report_to_role`` this fast-forwarded run would jump straight to
+        COMPLETE and orphan its authored MONEY line. T6 now sets
+        ``report_to_role=tutor_role`` explicitly (mirrors T4), so the run pauses
+        for a report exactly like every other path through the chain.
         """
         from world.missions.services.run import staff_assign_mission
 
@@ -476,5 +502,5 @@ class TutorialChainJourneyE2ETests(TestCase):
 
         instance = staff_assign_mission(self.t6, second_pc)
 
-        self.assertEqual(instance.status, MissionStatus.COMPLETE)
+        self.assertEqual(instance.status, MissionStatus.RESOLVED)
         self.assertIsNone(instance.current_node)

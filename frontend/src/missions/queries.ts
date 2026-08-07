@@ -16,6 +16,7 @@ import {
   inviteToMission,
   listJournal,
   listPendingInvites,
+  reportMission,
   resolveBeat,
   respondToMissionInvite,
   castGroupVote,
@@ -62,6 +63,7 @@ import type {
   MissionTemplateDetail,
   MissionTemplateFilters,
   PaginatedResponse,
+  ReportStyle,
 } from './types';
 
 export const missionKeys = {
@@ -403,6 +405,16 @@ export function useTellTale() {
   return useMutation({
     mutationFn: ({ instanceId, text }: { instanceId: number; text: string }) =>
       tellTale(instanceId, text),
+    onSuccess: () => qc.invalidateQueries({ queryKey: missionKeys.journal() }).catch(() => {}),
+  });
+}
+
+/** Report a RESOLVED run's outcome to its report-to Functionary (#1753/#3040). */
+export function useReportMission() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ instanceId, style }: { instanceId: number; style: ReportStyle }) =>
+      reportMission(instanceId, style),
     onSuccess: () => qc.invalidateQueries({ queryKey: missionKeys.journal() }).catch(() => {}),
   });
 }
