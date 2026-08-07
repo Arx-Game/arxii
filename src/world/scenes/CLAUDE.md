@@ -32,14 +32,25 @@ the unified Persona identity system, and non-combat scene rounds.
   Wired into the profile gate (404), the scene target picker, and feed visibility. The cron-clear
   (`finalize_expired_blocks`, wired into `game_clock` via `scenes.block_finalize`) is done.
   Supersedes the removed `evennia_extensions.PlayerBlockList`. Remaining: the awareness/"Character Has
-  You Blocked" surface (#2086). **Account-first default (#2996 Decision 1):** `create_block`'s own
-  default stays persona-narrow (`account_level=False`, unchanged for internal/test callers), but
-  the player-facing entry points (`CmdBlock`, `BlockViewSet.create`) now pass `account_level=True`
-  explicitly — `+block`/the web control are account-first by default; the persona-narrow shape
-  remains reachable by passing `account_level=False` explicitly. `block_services.account_block_active`
-  (#2996) is the account-first query seam every OOC surface (mail, journal reactions, event invites,
-  kudos, friend adds, ...) is meant to call — true when an account-level `Block` exists in either
-  direction, persona-agnostic.
+  You Blocked" surface (#2086). **Account-first default (#2996 Decision 1, ADR-0204):** `create_block`'s
+  own default stays persona-narrow (`account_level=False`, unchanged for internal/test callers), but
+  the player-facing entry points (`CmdBlock`/`CmdMute`, `BlockViewSet.create`/`MuteViewSet.create`)
+  now pass/default `account_level=True` — `+block`/`+mute` and the web controls are account-first by
+  default; the narrower persona-only shape stays reachable as an explicit advanced opt-out
+  (`+block/persona`, `+mute/persona`, or `account_level: false` on the create serializers).
+  `block_services.account_block_active`/`blocked_player_ids_for` (#2996) are the account-first query
+  seam — a single-pair check and a batched-ids sibling for queryset `.exclude()` call sites — every
+  OOC surface calls, never reimplementing the check: mail, journal reactions, event invites, kudos
+  (Task 2, #2996), journal feed visibility, pages/tells, and friend adds (Task 3, #2996) are all
+  wired. Pages/tells upgraded from flag-only to delivered-suppressed (the recipient never receives
+  it; the sender's own surface, including the pre-existing `BlockContactFlag` staff signal, stays
+  byte-identical) — the one IC-adjacent surface allowed to suppress delivery, since a page is
+  genuinely OOC and carries no RP-leak risk (unlike say/pose/whisper, which stay flag-only, see
+  ADR-0204). Journal feed visibility hides a blocked account's entries **both directions**
+  (`journals.services.exclude_blocked_and_muted_authors`). Friend adds
+  (`friend_services.add_friend`/`add_friend_all_characters`) reject a blocked pair with a shared
+  neutral failure — the fan-out path loops through the gated single-add rather than duplicating the
+  check.
 - **`Mute`** (#1278, #2996): the lighter, **one-way** sibling of Block — a player filters a persona
   out of their own view (IC and/or OOC), reversible, no enforcement, the muted party never aware.
   `mute_services.py` (`muted_persona_ids_for_viewer`, `set_mute`, `unmute`); the IC side is wired into
@@ -49,8 +60,13 @@ the unified Persona identity system, and non-combat scene rounds.
   exactly like `Block.blocked_player` (never re-derived from `muted_persona` at query time; null for
   mutes created before #2996, no data migration) — plus `account_level` (bool). `set_mute` gained the
   `account_level` opt-in (escalate-only on update, mirroring `share_block_account_wide`'s one-way
-  semantics — a plain IC/OOC scope toggle never downgrades an existing account-level mute).
-  `mute_services.account_muted` is the account-first query seam, mirroring `account_block_active`.
+  semantics — a plain IC/OOC scope toggle never downgrades an existing account-level mute). Now
+  defaults `True` from `+mute`/`MuteViewSet.create` too, for symmetry with Block's Decision 1 default
+  — persona-narrow stays reachable via `+mute/persona` or `account_level: false`.
+  `mute_services.account_muted`/`muted_player_ids_for` are the account-first query seams (single-pair
+  + batched), mirroring `account_block_active`/`blocked_player_ids_for` — one-way throughout: an
+  account-level mute only ever narrows the *muter's* own reads (journal feed, mail, event invites,
+  kudos, ...), never the muted party's.
 - **`BlockContactFlag`** (#1278): the anti-derivation awareness layer. When a *blocked* player reaches the
   blocker via another identity (circumvention the coded block can't prevent without leaking the alt),
   `block_services.flag_blocked_contact_attempt` records it for staff (anchored on accounts + personas;
@@ -298,6 +314,13 @@ Key service functions for scene round lifecycle:
   calls `add_friend` / `add_friend_all_characters`. Tenure-scoped + alt-private, mirroring the
   Block/Mute control API. Telnet parity is `CmdFriend`/`CmdUnfriend`/`CmdFriends`. React surface:
   `frontend/src/friends/` (`FriendsTab` self-only tab + `FriendButton` on other sheets).
+  **Account-block gate (#2996):** both `add_friend` and `add_friend_all_characters` reject with a
+  shared neutral `ValidationError` ("not available to add as a friend right now") when an
+  account-level `Block` sits between the two players (`block_services.account_block_active`,
+  either direction) — checked before any `Friendship` row is written. The fan-out path
+  (`add_friend_all_characters`) loops through `add_friend` per tenure rather than duplicating the
+  check; since the block test is player-level, not tenure-level, it resolves identically for
+  every one of the player's tenures.
 - **`RivalryViewSet`** (#2170): the web face of rival declarations (`/api/scenes/rivals/`) —
   list/declare/withdraw, same shape as friendships (`viewer`/`rival` as `RosterEntry` pks,
   resolved to tenures server-side, calling `declare_rival`). Double opt-in: the list queryset

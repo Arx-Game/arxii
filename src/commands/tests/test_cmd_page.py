@@ -13,6 +13,7 @@ from world.roster.factories import (
     RosterTenureFactory,
     TenureDisplaySettingsFactory,
 )
+from world.scenes.models import Block, BlockContactFlag
 
 
 class CmdPageTests(TestCase):
@@ -148,3 +149,71 @@ class CmdPageTests(TestCase):
             },
             "message": {"type": "string"},
         }
+
+
+class CmdPageAccountBlockTests(TestCase):
+    """#2996 Decision 2 — an account-level block upgrades pages to delivered-suppressed.
+
+    The sender's own surface (their own ``caller.msg`` response, plus the pre-existing
+    ``BlockContactFlag`` staff signal) is byte-identical write-then-filter; only the
+    recipient's ``character.msg`` delivery is skipped.
+    """
+
+    def setUp(self):
+        self.sender_account = AccountFactory(username="Sender")
+        self.sender_char = CharacterFactory(db_key="Sender")
+        sender_entry = RosterEntryFactory(character_sheet__character=self.sender_char)
+        self.sender_player = PlayerDataFactory(account=self.sender_account)
+        RosterTenureFactory(roster_entry=sender_entry, player_data=self.sender_player)
+        self.sender_char.msg = MagicMock()
+
+        self.receiver_account = AccountFactory(username="Receiver")
+        self.receiver_account.msg = MagicMock()
+        self.receiver_player = PlayerDataFactory(account=self.receiver_account)
+        self.receiver_char = CharacterFactory(db_key="Receiver")
+        self.receiver_char.msg = MagicMock()
+        receiver_entry = RosterEntryFactory(character_sheet__character=self.receiver_char)
+        RosterTenureFactory(roster_entry=receiver_entry, player_data=self.receiver_player)
+
+    def _page(self):
+        with patch(
+            "commands.evennia_overrides.communication.search.object_search",
+            return_value=[self.receiver_char],
+        ):
+            cmd = CmdPage()
+            cmd.caller = self.sender_account
+            cmd.caller.msg = MagicMock()
+            cmd.session = MagicMock(puppet=self.sender_char)
+            cmd.args = f"{self.receiver_char.db_key}=hello there"
+            cmd.func()
+        return cmd
+
+    def test_blocked_pair_page_is_not_delivered(self):
+        Block.objects.create(
+            owner=self.receiver_player, blocked_player=self.sender_player, account_level=True
+        )
+        self._page()
+        self.receiver_char.msg.assert_not_called()
+
+    def test_blocked_pair_senders_own_surface_is_unchanged(self):
+        """Write-then-filter: the sender's own response is identical to an unblocked send."""
+        Block.objects.create(
+            owner=self.receiver_player, blocked_player=self.sender_player, account_level=True
+        )
+        cmd = self._page()
+        cmd.caller.msg.assert_called_once_with(f"You page {self.receiver_char.key}: hello there")
+
+    def test_blocked_pair_still_flags_the_contact_attempt_for_staff(self):
+        """The existing staff contact-flagging keeps firing under delivery suppression."""
+        Block.objects.create(
+            owner=self.receiver_player, blocked_player=self.sender_player, account_level=True
+        )
+        self._page()
+        assert BlockContactFlag.objects.filter(
+            blocked_account_id=self.sender_account.pk,
+            blocker_account_id=self.receiver_account.pk,
+        ).exists()
+
+    def test_unblocked_pair_page_is_delivered_normally(self):
+        self._page()
+        self.receiver_char.msg.assert_called_once_with("Sender pages: hello there")

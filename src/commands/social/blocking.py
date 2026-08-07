@@ -18,6 +18,7 @@ if TYPE_CHECKING:
 
 _NO_IDENTITY = "You have no character identity to act with."
 _LOCK_ALL = "cmd:all()"
+_PERSONA_SWITCH = "persona"
 
 
 def _caller_persona(command: ArxCommand) -> Persona:
@@ -36,14 +37,31 @@ def _target_persona(command: ArxCommand, name: str) -> tuple[object, Persona]:
         raise CommandError(msg) from exc
 
 
+def _account_scope_from_switches(command: ArxCommand) -> bool:
+    """True (account-first) unless the caller passed /persona (#2996 Decision 1).
+
+    Reads ``switches`` defensively (not a bare ``command.switches``) because unit tests
+    routinely call ``func()`` directly without going through Evennia's ``parse()`` step that
+    would otherwise set it — a command instance built that way has no ``switches`` attribute
+    at all yet.
+    """
+    try:
+        switches = command.switches
+    except AttributeError:
+        switches = None
+    return _PERSONA_SWITCH not in {s.lower() for s in (switches or [])}
+
+
 class CmdBlock(ArxCommand):
-    """Block a character so you can't see or be targeted by them.
+    """Block a character's entire account so you can't see or be targeted by any of their faces.
 
     A reason is required and goes to staff, and a block only clears a full cron cycle after you
-    lift it, so blocks are deliberate.
+    lift it, so blocks are deliberate. Blocks the whole account by default (#2996) — use the
+    /persona switch for the advanced, narrower option of blocking only this one face.
 
     Usage:
-      +block <character>=<reason>
+      +block <character>=<reason>          - block their whole account (default)
+      +block/persona <character>=<reason>  - block only this one face (advanced)
     """
 
     key = "+block"
@@ -61,23 +79,26 @@ class CmdBlock(ArxCommand):
                 return
             blocker_persona = _caller_persona(self)
             target, target_persona = _target_persona(self, name)
+            # #2996 Decision 1: +block is account-first by default — blocks every face the
+            # target's player currently plays. /persona opts into the narrower advanced shape
+            # (create_block's own default, account_level=False) — only this exact face.
+            account_level = _account_scope_from_switches(self)
             try:
                 create_block(
                     blocker_account=self.account,
                     blocker_persona=blocker_persona,
                     blocked_persona=target_persona,
                     reason=reason,
-                    # #2996 Decision 1: +block is account-first by default. The persona-narrow
-                    # shape stays available to internal/advanced callers via create_block's own
-                    # default (account_level=False) — this command isn't one of them.
-                    account_level=True,
+                    account_level=account_level,
                 )
             except ValidationError as exc:
                 self.msg(exc.messages[0])
                 return
+            scope = "account" if account_level else "this character only"
             self.msg(
-                f"You have blocked {target}. It can only be lifted after a cron cycle. "
-                f"Use +shareblock {target} to extend it to all your characters."
+                f"You have blocked {target} ({scope}). It can only be lifted after a cron "
+                f"cycle."
+                + ("" if account_level else f" Use +shareblock {target} to extend it account-wide.")
             )
         except CommandError as err:
             self.msg(str(err))
@@ -144,10 +165,15 @@ class CmdShareBlock(ArxCommand):
 
 
 class CmdMute(ArxCommand):
-    """Quietly filter a character out of your own feed (they're never aware).
+    """Quietly filter a character's whole account out of your own feed (they're never aware).
+
+    Mutes the whole account by default (#2996) — every face that player currently plays — for
+    symmetry with block. Use the /persona switch for the advanced, narrower option of muting
+    only this one face.
 
     Usage:
-      +mute <character>[=ic|ooc|both]
+      +mute <character>[=ic|ooc|both]          - mute their whole account (default)
+      +mute/persona <character>[=ic|ooc|both]  - mute only this one face (advanced)
     """
 
     key = "+mute"
@@ -168,9 +194,20 @@ class CmdMute(ArxCommand):
             ooc = scope in ("", "ooc", "both")
             _, target_persona = _target_persona(self, name)
             owner, _ = PlayerData.objects.get_or_create(account=self.account)
-            set_mute(owner=owner, muted_persona=target_persona, ic=ic, ooc=ooc)
+            # #2996: +mute is account-first by default, mirroring +block's Decision 1 default.
+            # /persona opts into the narrower advanced shape (set_mute's own default,
+            # account_level=False) — only this exact face.
+            account_level = _account_scope_from_switches(self)
+            set_mute(
+                owner=owner,
+                muted_persona=target_persona,
+                ic=ic,
+                ooc=ooc,
+                account_level=account_level,
+            )
             scopes = "/".join(s for s, on in (("IC", ic), ("OOC", ooc)) if on)
-            self.msg(f"Muted {name} ({scopes}).")
+            account_note = "account" if account_level else "this character only"
+            self.msg(f"Muted {name} ({scopes}, {account_note}).")
         except CommandError as err:
             self.msg(str(err))
 
@@ -224,5 +261,8 @@ class CmdBlockList(ArxCommand):
             for b in blocks
         ] or ["  (none)"]
         lines.append("|wMuted:|n")
-        lines += [f"  {m.muted_persona.name}" for m in mutes] or ["  (none)"]
+        lines += [
+            f"  {m.muted_persona.name}" + (" (all my characters)" if m.account_level else "")
+            for m in mutes
+        ] or ["  (none)"]
         self.msg("\n".join(lines))

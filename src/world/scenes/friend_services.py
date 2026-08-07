@@ -9,6 +9,8 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
+from django.core.exceptions import ValidationError
+
 from world.scenes.models import Friendship, Rivalry
 
 if TYPE_CHECKING:
@@ -18,9 +20,39 @@ if TYPE_CHECKING:
     from evennia_extensions.models import PlayerData
     from world.roster.models import RosterTenure
 
+# Neutral and constant on purpose (#2996 Decision 2, mirrors journals.types.JournalError
+# .UNAVAILABLE) — a rejection here can't leak that a block is involved: "not available to
+# friend right now" has many innocent causes (no active tenure, moderation, ...). Never says
+# "blocked."
+_FRIEND_UNAVAILABLE = "That character is not available to add as a friend right now."
+
+
+def _raise_if_account_blocked(
+    *, friender_tenure: RosterTenure, friend_tenure: RosterTenure
+) -> None:
+    """Reject the add with a neutral failure when an account-level Block sits between them (#2996).
+
+    Fail-open when either side has no ``player_data`` (can't prove a block, so don't manufacture
+    one) — mirrors every other #2996 seam's policy.
+    """
+    from world.scenes.block_services import account_block_active  # noqa: PLC0415
+
+    friender_player = friender_tenure.player_data
+    friend_player = friend_tenure.player_data
+    if friender_player is None or friend_player is None:
+        return
+    if account_block_active(player_a=friender_player, player_b=friend_player):
+        raise ValidationError(_FRIEND_UNAVAILABLE)
+
 
 def add_friend(*, friender_tenure: RosterTenure, friend_tenure: RosterTenure) -> Friendship:
-    """Mark ``friend_tenure`` as a friend of ``friender_tenure`` (idempotent)."""
+    """Mark ``friend_tenure`` as a friend of ``friender_tenure`` (idempotent).
+
+    Rejects with a shared neutral failure when an account-level Block sits between the two
+    players, either direction (#2996 Decision 2) — checked before the write, so no ``Friendship``
+    row is ever created for a blocked pair.
+    """
+    _raise_if_account_blocked(friender_tenure=friender_tenure, friend_tenure=friend_tenure)
     friendship, _ = Friendship.objects.get_or_create(
         friender_tenure=friender_tenure, friend_tenure=friend_tenure
     )
@@ -32,6 +64,12 @@ def add_friend_all_characters(*, player_data: PlayerData, friend_tenure: RosterT
 
     The opt-in "friend from all my characters" — one ``Friendship`` row per active tenure the player
     holds (idempotent), each independently removable. Returns the number of the player's tenures.
+
+    Loops through ``add_friend`` per tenure (#2996) rather than writing ``Friendship`` rows
+    directly — the fan-out gets the same account-block gate as the single-add path for free,
+    with no separate check to keep in sync. The block test is player-level (not tenure-level),
+    so it resolves identically for every one of the player's tenures — a blocked pair fails on
+    the very first tenure, before any row is written.
     """
     from world.roster.models import RosterTenure  # noqa: PLC0415
 
@@ -41,7 +79,7 @@ def add_friend_all_characters(*, player_data: PlayerData, friend_tenure: RosterT
         )
     )
     for tenure in tenures:
-        Friendship.objects.get_or_create(friender_tenure=tenure, friend_tenure=friend_tenure)
+        add_friend(friender_tenure=tenure, friend_tenure=friend_tenure)
     return len(tenures)
 
 

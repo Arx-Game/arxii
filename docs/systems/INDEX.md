@@ -1292,6 +1292,12 @@ Character journal entries (public/private), praises, retorts, freeform tags, wee
   `/missions/journal` in the same PR — see Missions below and `journals/AGENT_GLOSSARY.md`'s
   disambiguation entry for the "journal" homonym across apps.
 - **Integrates with:** progression (weekly XP awards), achievements (`journals.total_written`/`total_public` stats), threads (`JournalEntry.related_threads` M2M)
+- **Account block/mute (#2996):** the public feed excludes an account-level-blocked account's
+  entries both directions, and an account-level-muted account's entries from the muter's own
+  feed only (`services.exclude_blocked_and_muted_authors`); a praise/retort response between a
+  blocked pair is rejected with a neutral shared failure, a muted pair's response persists but
+  is hidden from the entry author's own read only — see `world/scenes/CLAUDE.md`'s Block/Mute
+  entries and ADR-0204
 - **Source:** `src/world/journals/` (no dedicated `docs/systems/journals.md`; see the app's
   `CLAUDE.md` and `AGENT_GLOSSARY.md`)
 ### Action Points
@@ -2329,6 +2335,15 @@ action consent flow, and a three-mode non-combat round framework.
   within a room. `JoinPlaceAction`/`LeavePlaceAction` (`actions/definitions/places.py`)
   are the seam both `PlaceViewSet` (`place_views.py`) and telnet `CmdPlaces` (`places`,
   `commands/places.py`) dispatch through.
+- **Block/Mute/Friendship/Rivalry (#1278, #1727, #2170, #2996):** the OOC safety + connection
+  primitives, all keyed on `PlayerData`/`RosterTenure` (never derived from IC relationships).
+  `Block` (mutual, account-first by default since #2996) and `Mute` (one-way, also account-first
+  by default) are the enforcement primitives every OOC delivery seam (mail, journal
+  reactions/feed, event invites, kudos, pages/tells, friend adds) consults via the shared query
+  helpers `block_services.account_block_active`/`blocked_player_ids_for` and
+  `mute_services.account_muted`/`muted_player_ids_for`; `Friendship`/`Rivalry` are the positive
+  connection primitives (`friend_services.py`) feeding the `FRIENDS_WHITELIST`/`RIVALS` consent
+  modes. See `world/scenes/CLAUDE.md`'s Block/Mute entries and ADR-0204 for the full seam table.
 - **Integrates with:** roster (characters), stories (EpisodeScene join), instances (preservation check),
   flows (auto-logging via message_location), combat (encounter read gate + participation convergence via
   `Scene.objects.viewable_by` / `ensure_scene_participation`),

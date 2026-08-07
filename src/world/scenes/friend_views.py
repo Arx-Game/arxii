@@ -8,6 +8,7 @@ sides declare), withdraw. Tenure-scoped + alt-private, mirroring the Block/Mute 
 
 from __future__ import annotations
 
+from django.core.exceptions import ValidationError as DjangoValidationError
 from django.db.models import Exists, OuterRef, QuerySet
 from rest_framework import mixins, serializers, status
 from rest_framework.pagination import PageNumberPagination
@@ -63,11 +64,14 @@ class FriendshipViewSet(
         viewer_tenure = data["viewer"].current_tenure
         if friend_tenure is None or viewer_tenure is None:
             raise serializers.ValidationError(_NO_ACTIVE_TENURE)
-        if data["all_characters"]:
-            player_data, _ = PlayerData.objects.get_or_create(account=request.user)
-            add_friend_all_characters(player_data=player_data, friend_tenure=friend_tenure)
-            return Response(status=status.HTTP_201_CREATED)
-        friendship = add_friend(friender_tenure=viewer_tenure, friend_tenure=friend_tenure)
+        try:
+            if data["all_characters"]:
+                player_data, _ = PlayerData.objects.get_or_create(account=request.user)
+                add_friend_all_characters(player_data=player_data, friend_tenure=friend_tenure)
+                return Response(status=status.HTTP_201_CREATED)
+            friendship = add_friend(friender_tenure=viewer_tenure, friend_tenure=friend_tenure)
+        except DjangoValidationError as exc:
+            raise serializers.ValidationError(exc.messages) from exc
         return Response(FriendshipSerializer(friendship).data, status=status.HTTP_201_CREATED)
 
 

@@ -9911,6 +9911,9 @@ export interface paths {
      *     Supports query params:
      *     - ?author=<character_id> — filter by author
      *     - ?tag=<tag_name> — filter by tag name
+     *
+     *     Blocked/muted authors' entries are excluded (#2996 Decision 2) — see
+     *     ``exclude_blocked_and_muted_authors``.
      */
     get: operations['journals_entries_retrieve'];
     put?: never;
@@ -21957,17 +21960,33 @@ export interface components {
        */
       readonly pending_removal_at: string | null;
     };
-    /** @description Create a block: the player's own face, the target face, and a required reason. */
+    /**
+     * @description Create a block: the player's own face, the target face, and a required reason.
+     *
+     *     ``account_level`` defaults to ``True`` (#2996 Decision 1) — the web control is account-first
+     *     by default, same as ``+block``; the persona-narrow shape stays reachable as an explicit
+     *     advanced opt-out (``account_level: false``).
+     */
     BlockCreate: {
       blocker_persona: number;
       blocked_persona: number;
       reason: string;
+      /** @default true */
+      account_level: boolean;
     };
-    /** @description Create a block: the player's own face, the target face, and a required reason. */
+    /**
+     * @description Create a block: the player's own face, the target face, and a required reason.
+     *
+     *     ``account_level`` defaults to ``True`` (#2996 Decision 1) — the web control is account-first
+     *     by default, same as ``+block``; the persona-narrow shape stays reachable as an explicit
+     *     advanced opt-out (``account_level: false``).
+     */
     BlockCreateRequest: {
       blocker_persona: number;
       blocked_persona: number;
       reason: string;
+      /** @default true */
+      account_level: boolean;
     };
     /** @description A named front/zone within a BattleMapBlueprint, with its fortifications. */
     BlueprintBattlePlace: {
@@ -28583,24 +28602,42 @@ export interface components {
       readonly mute_ic: boolean;
       /** @description Hide this persona's OOC content. */
       readonly mute_ooc: boolean;
+      /** @description Opt-in: filter every character the muted player plays, not just this face. */
+      readonly account_level: boolean;
       /** Format: date-time */
       readonly created_at: string;
     };
-    /** @description Create/update a mute with IC/OOC scope. */
+    /**
+     * @description Create/update a mute with IC/OOC scope.
+     *
+     *     ``account_level`` defaults to ``True`` (#2996) — account-first for symmetry with Block and
+     *     with ``+mute``'s new default; the persona-narrow shape stays reachable as an explicit
+     *     advanced opt-out (``account_level: false``).
+     */
     MuteCreate: {
       muted_persona: number;
       /** @default true */
       mute_ic: boolean;
       /** @default true */
       mute_ooc: boolean;
+      /** @default true */
+      account_level: boolean;
     };
-    /** @description Create/update a mute with IC/OOC scope. */
+    /**
+     * @description Create/update a mute with IC/OOC scope.
+     *
+     *     ``account_level`` defaults to ``True`` (#2996) — account-first for symmetry with Block and
+     *     with ``+mute``'s new default; the persona-narrow shape stays reachable as an explicit
+     *     advanced opt-out (``account_level: false``).
+     */
     MuteCreateRequest: {
       muted_persona: number;
       /** @default true */
       mute_ic: boolean;
       /** @default true */
       mute_ooc: boolean;
+      /** @default true */
+      account_level: boolean;
     };
     /** @description One organization whose books the viewer may open. */
     MyBooksRow: {

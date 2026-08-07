@@ -148,7 +148,12 @@ For the first PR, everything is **staff-only**. Delegation tiers come later.
 
 The stub fields cover the data model, but the **full design of PlayerReport is a separate future design pass** because:
 - **Wording is safety-critical** — the form language must not alienate victims or encourage bad reports. This is extremely delicate UX work.
-- **Block/mute coupling** — the report flow should integrate with a to-be-designed block/mute system so reporters can take immediate action
+- **Block/mute coupling** — `world.scenes.Block`/`Mute` are BUILT & WIRED (#1278, account-first
+  by default + eight OOC delivery seams as of #2996 — see `docs/roadmap/ooc-social.md`'s "Built
+  — Account-First Block/Mute" section); what's still open is the report flow's integration —
+  letting a reporter block/mute in one step from the (not-yet-built) submission form, and
+  keeping `PlayerReport.blocked_or_muted` (BUILT, NOT WIRED) accurate when a block is created
+  from a report context
 - **Flow integrity** — the submission path needs thoughtful UX (where it lives, how accessible, how it confirms receipt)
 - **Evidence handling** — attaching scene logs, screenshots, timestamps; possibly redacting
 
@@ -160,7 +165,9 @@ The stub fields cover the data model, but the **full design of PlayerReport is a
 - **Roster app** — RosterApplication shows up in the inbox alongside new submissions; no migration
 - **Scenes app** — PlayerReport optionally references Scene and Interaction
 - **GM app (future)** — GMApplication will be another source the inbox reads from
-- **Block/mute system (future)** — PlayerReport submission flow will eventually couple with this
+- **Block/mute system (`world.scenes.Block`/`Mute`, #1278/#2996)** — built and wired
+  account-wide across every OOC delivery seam; the PlayerReport submission flow (Phase 5b, not
+  yet built) will eventually couple with it so a report can take immediate block/mute action
 
 ## Notes
 
@@ -170,4 +177,4 @@ Harassment reporting is the safety feature that has to work. Everything else can
 - Staff must be able to see accumulated history (patterns vs noise)
 - Reporter privacy must be preserved (staff sees everything; reported party never sees reporter identity)
 
-The first PR establishes the infrastructure. The full PlayerReport UX comes in a dedicated design pass when we have block/mute and a proper safety flow to build around.
+The first PR establishes the infrastructure. Block/mute now exists and is fully wired (#1278/#2996); the full PlayerReport UX (the player-facing submission form + its block/mute coupling) comes in a dedicated design pass, not this branch.

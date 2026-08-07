@@ -15461,6 +15461,9 @@ paths:
         Supports query params:
         - ?author=<character_id> — filter by author
         - ?tag=<tag_name> — filter by tag name
+
+        Blocked/muted authors' entries are excluded (#2996 Decision 2) — see
+        ``exclude_blocked_and_muted_authors``.
       tags:
       - journals
       security:
@@ -36511,8 +36514,12 @@ components:
       - reason
     BlockCreate:
       type: object
-      description: 'Create a block: the player''s own face, the target face, and a
-        required reason.'
+      description: |-
+        Create a block: the player's own face, the target face, and a required reason.
+
+        ``account_level`` defaults to ``True`` (#2996 Decision 1) — the web control is account-first
+        by default, same as ``+block``; the persona-narrow shape stays reachable as an explicit
+        advanced opt-out (``account_level: false``).
       properties:
         blocker_persona:
           type: integer
@@ -36521,14 +36528,21 @@ components:
         reason:
           type: string
           maxLength: 200
+        account_level:
+          type: boolean
+          default: true
       required:
       - blocked_persona
       - blocker_persona
       - reason
     BlockCreateRequest:
       type: object
-      description: 'Create a block: the player''s own face, the target face, and a
-        required reason.'
+      description: |-
+        Create a block: the player's own face, the target face, and a required reason.
+
+        ``account_level`` defaults to ``True`` (#2996 Decision 1) — the web control is account-first
+        by default, same as ``+block``; the persona-narrow shape stays reachable as an explicit
+        advanced opt-out (``account_level: false``).
       properties:
         blocker_persona:
           type: integer
@@ -36538,6 +36552,9 @@ components:
           type: string
           minLength: 1
           maxLength: 200
+        account_level:
+          type: boolean
+          default: true
       required:
       - blocked_persona
       - blocker_persona
@@ -50543,11 +50560,17 @@ components:
           type: boolean
           readOnly: true
           description: Hide this persona's OOC content.
+        account_level:
+          type: boolean
+          readOnly: true
+          description: 'Opt-in: filter every character the muted player plays, not
+            just this face.'
         created_at:
           type: string
           format: date-time
           readOnly: true
       required:
+      - account_level
       - created_at
       - id
       - mute_ic
@@ -50556,7 +50579,12 @@ components:
       - muted_persona_name
     MuteCreate:
       type: object
-      description: Create/update a mute with IC/OOC scope.
+      description: |-
+        Create/update a mute with IC/OOC scope.
+
+        ``account_level`` defaults to ``True`` (#2996) — account-first for symmetry with Block and
+        with ``+mute``'s new default; the persona-narrow shape stays reachable as an explicit
+        advanced opt-out (``account_level: false``).
       properties:
         muted_persona:
           type: integer
@@ -50564,13 +50592,21 @@ components:
           type: boolean
           default: true
         mute_ooc:
+          type: boolean
+          default: true
+        account_level:
           type: boolean
           default: true
       required:
       - muted_persona
     MuteCreateRequest:
       type: object
-      description: Create/update a mute with IC/OOC scope.
+      description: |-
+        Create/update a mute with IC/OOC scope.
+
+        ``account_level`` defaults to ``True`` (#2996) — account-first for symmetry with Block and
+        with ``+mute``'s new default; the persona-narrow shape stays reachable as an explicit
+        advanced opt-out (``account_level: false``).
       properties:
         muted_persona:
           type: integer
@@ -50578,6 +50614,9 @@ components:
           type: boolean
           default: true
         mute_ooc:
+          type: boolean
+          default: true
+        account_level:
           type: boolean
           default: true
       required:

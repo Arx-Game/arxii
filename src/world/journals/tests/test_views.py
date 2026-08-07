@@ -10,9 +10,9 @@ from evennia_extensions.factories import AccountFactory, CharacterFactory
 from world.character_sheets.factories import CharacterSheetFactory
 from world.journals.constants import ResponseType
 from world.journals.factories import JournalEntryFactory, JournalTagFactory
-from world.roster.factories import RosterTenureFactory
+from world.roster.factories import PlayerDataFactory, RosterTenureFactory
 from world.scenes.factories import PersonaFactory
-from world.scenes.models import Mute
+from world.scenes.models import Block, Mute
 
 
 class JournalEntryListTests(TestCase):
@@ -98,6 +98,102 @@ class JournalEntryFilterTests(TestCase):
         titles = [e["title"] for e in response.data["results"]]
         self.assertIn("Entry A", titles)
         self.assertNotIn("Entry B", titles)
+
+
+class JournalEntryFeedBlockMuteTests(TestCase):
+    """#2996 Decision 2 — journal feed visibility: block hides both directions, mute one-way."""
+
+    @classmethod
+    def setUpTestData(cls) -> None:
+        cls.viewer_player = PlayerDataFactory()
+        cls.viewer_tenure = RosterTenureFactory(player_data=cls.viewer_player)
+
+        cls.blocked_player = PlayerDataFactory()
+        cls.blocked_tenure = RosterTenureFactory(player_data=cls.blocked_player)
+        cls.blocked_entry = JournalEntryFactory(
+            author=cls.blocked_tenure.roster_entry.character_sheet,
+            title="From Blocked",
+            is_public=True,
+        )
+
+        cls.muted_player = PlayerDataFactory()
+        cls.muted_tenure = RosterTenureFactory(player_data=cls.muted_player)
+        cls.muted_entry = JournalEntryFactory(
+            author=cls.muted_tenure.roster_entry.character_sheet,
+            title="From Muted",
+            is_public=True,
+        )
+
+        cls.control_player = PlayerDataFactory()
+        cls.control_tenure = RosterTenureFactory(player_data=cls.control_player)
+        cls.control_entry = JournalEntryFactory(
+            author=cls.control_tenure.roster_entry.character_sheet,
+            title="From Control",
+            is_public=True,
+        )
+
+    def setUp(self) -> None:
+        self.client = APIClient()
+
+    def _titles(self) -> list[str]:
+        response = self.client.get("/api/journals/entries/")
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        return [e["title"] for e in response.data["results"]]
+
+    def test_no_block_or_mute_shows_everything(self) -> None:
+        self.client.force_authenticate(user=self.viewer_player.account)
+        titles = self._titles()
+        self.assertIn("From Blocked", titles)
+        self.assertIn("From Muted", titles)
+        self.assertIn("From Control", titles)
+
+    def test_blocked_authors_entry_hidden_from_viewer(self) -> None:
+        Block.objects.create(
+            owner=self.viewer_player, blocked_player=self.blocked_player, account_level=True
+        )
+        self.client.force_authenticate(user=self.viewer_player.account)
+        titles = self._titles()
+        self.assertNotIn("From Blocked", titles)
+        self.assertIn("From Control", titles)
+
+    def test_block_hides_the_viewers_own_entries_from_the_blocked_author_too(self) -> None:
+        """Both directions (#2996): the blocked account also loses the viewer's entries."""
+        Block.objects.create(
+            owner=self.viewer_player, blocked_player=self.blocked_player, account_level=True
+        )
+        viewer_entry = JournalEntryFactory(
+            author=self.viewer_tenure.roster_entry.character_sheet,
+            title="From Viewer",
+            is_public=True,
+        )
+        self.client.force_authenticate(user=self.blocked_player.account)
+        titles = self._titles()
+        self.assertNotIn(viewer_entry.title, titles)
+        self.assertIn("From Control", titles)
+
+    def test_mute_hides_only_from_the_muters_own_feed(self) -> None:
+        Mute.objects.create(
+            owner=self.viewer_player,
+            muted_persona=PersonaFactory(),
+            muted_player=self.muted_player,
+            account_level=True,
+        )
+        self.client.force_authenticate(user=self.viewer_player.account)
+        titles = self._titles()
+        self.assertNotIn("From Muted", titles)
+        self.assertIn("From Control", titles)
+
+        # The muted author's own feed (and any other viewer's) is unaffected -- one-way.
+        self.client.force_authenticate(user=self.muted_player.account)
+        other_titles = self._titles()
+        self.assertIn("From Muted", other_titles)
+
+    def test_anonymous_viewer_rejected_not_crashed(self) -> None:
+        response = self.client.get("/api/journals/entries/")
+        self.assertIn(
+            response.status_code,
+            (status.HTTP_401_UNAUTHORIZED, status.HTTP_403_FORBIDDEN),
+        )
 
 
 class JournalEntryMineTests(TestCase):

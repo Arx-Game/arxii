@@ -9,7 +9,7 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
-from django.core.exceptions import ObjectDoesNotExist
+from django.core.exceptions import ObjectDoesNotExist, ValidationError
 
 from commands.command import ArxCommand
 from commands.exceptions import CommandError
@@ -86,6 +86,8 @@ class CmdFriend(ArxCommand):
                 self.msg(f"You added {target} as a friend (from this character).")
         except CommandError as err:
             self.msg(str(err))
+        except ValidationError as err:
+            self.msg(err.messages[0])
 
 
 class CmdUnfriend(ArxCommand):

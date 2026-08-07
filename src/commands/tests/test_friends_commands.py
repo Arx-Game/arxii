@@ -7,7 +7,7 @@ from django.test import TestCase
 from commands.social.friends import CmdFriend, CmdFriends, CmdUnfriend
 from evennia_extensions.factories import AccountFactory, CharacterFactory
 from world.roster.factories import PlayerDataFactory, RosterEntryFactory, RosterTenureFactory
-from world.scenes.models import Friendship
+from world.scenes.models import Block, Friendship
 
 
 class FriendsCommandTests(TestCase):
@@ -64,3 +64,24 @@ class FriendsCommandTests(TestCase):
         self._run(CmdFriends, "")
         self.caller.msg.assert_called()
         self.assertIn("Bob", self.caller.msg.call_args[0][0])
+
+    def test_friend_rejects_a_blocked_target_with_a_neutral_failure(self) -> None:
+        """#2996 Decision 2 — a block prevents +friend, with no mention of blocking."""
+        Block.objects.create(
+            owner=self.account.player_data,
+            blocked_player=self.target.sheet_data.roster_entry.current_tenure.player_data,
+            account_level=True,
+        )
+        self._run(CmdFriend, "Bob")
+        self.assertFalse(Friendship.objects.exists())
+        message = self.caller.msg.call_args[0][0]
+        self.assertNotIn("block", message.lower())
+
+    def test_friend_all_rejects_a_blocked_target(self) -> None:
+        Block.objects.create(
+            owner=self.account.player_data,
+            blocked_player=self.target.sheet_data.roster_entry.current_tenure.player_data,
+            account_level=True,
+        )
+        self._run(CmdFriend, "Bob", switches=["all"])
+        self.assertFalse(Friendship.objects.exists())

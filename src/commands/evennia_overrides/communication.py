@@ -65,6 +65,31 @@ def _ooc_muted_by(*, receiver_account: object, sender_char: object) -> bool:
     return sender_persona.pk in muted_ids
 
 
+def _account_blocked_for_page(*, sender_char: object, receiver_account: object) -> bool:
+    """True if an active account-level Block sits between the sender and receiver (#2996).
+
+    Page delivery upgrade (Decision 2): a blocked pair's pages are now delivered-suppressed,
+    not merely flagged — this reuses the exact drop mechanism ``_ooc_muted_by`` already uses
+    (the caller skips only the recipient's ``character.msg`` call; the sender's own surface,
+    INCLUDING the existing ``_flag_page_contact`` staff signal below, stays byte-identical
+    write-then-filter, never skip-the-write).
+    """
+    try:
+        sender_player = sender_char.sheet_data.roster_entry.current_tenure.player_data
+    except (AttributeError, ObjectDoesNotExist):
+        return False
+    if sender_player is None:
+        return False
+    try:
+        receiver_player = receiver_account.player_data
+    except AttributeError:
+        return False
+
+    from world.scenes.block_services import account_block_active  # noqa: PLC0415
+
+    return account_block_active(player_a=sender_player, player_b=receiver_player)
+
+
 class CmdSay(ArxCommand):
     """Speak aloud to the room."""
 
@@ -196,20 +221,31 @@ class CmdPage(FrontendMetadataMixin, Command):  # ty: ignore[invalid-base]
             self.caller.msg(f"Character '{charname}' is not online.")
             return
 
-        # #2087 — OOC mute: if the receiving account has OOC-muted the sender's persona,
-        # silently drop the page (the muter chose not to see this persona's OOC content).
-        if sender_char is not None and _ooc_muted_by(
-            receiver_account=account, sender_char=sender_char
-        ):
-            self.caller.msg(f"You page {character.key}: {text}")
-            return
+        # #2996 Decision 2 — an account-level block upgrades page delivery from flag-only to
+        # delivered-suppressed: the recipient never receives it, but the sender's own surface
+        # (including the staff-flagging below) stays unchanged. Reuses the #2087 OOC-mute drop
+        # mechanism (skip only the recipient's character.msg call).
+        blocked = sender_char is not None and _account_blocked_for_page(
+            sender_char=sender_char, receiver_account=account
+        )
 
-        character.msg(f"{self.caller.key} pages: {text}")
-        self.caller.msg(f"You page {character.key}: {text}")
+        # #2087 — OOC mute: if the receiving account has OOC-muted the sender's persona,
+        # silently drop the page too (the muter chose not to see this persona's OOC content).
+        muted = sender_char is not None and _ooc_muted_by(
+            receiver_account=account, sender_char=sender_char
+        )
+
+        if blocked or muted:
+            self.caller.msg(f"You page {character.key}: {text}")
+        else:
+            character.msg(f"{self.caller.key} pages: {text}")
+            self.caller.msg(f"You page {character.key}: {text}")
 
         # #1278/#2088 — flag circumvention: a blocked player paging the blocker via
         # another identity. OOC (no scene); the service no-ops when no active block
-        # exists, and dedupes per (blocker, blocked, scene=None).
+        # exists, and dedupes per (blocker, blocked, scene=None). Fires regardless of the
+        # blocked/muted branch above — the sender's surface (including this staff signal)
+        # is never changed by suppression (#2996).
         _flag_page_contact(sender_char, character)
 
 

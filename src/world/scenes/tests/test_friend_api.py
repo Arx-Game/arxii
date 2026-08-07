@@ -5,7 +5,7 @@ from rest_framework.test import APITestCase
 
 from evennia_extensions.factories import AccountFactory
 from world.roster.factories import PlayerDataFactory, RosterTenureFactory
-from world.scenes.models import Friendship
+from world.scenes.models import Block, Friendship
 
 
 class FriendApiTests(APITestCase):
@@ -53,3 +53,35 @@ class FriendApiTests(APITestCase):
         other_friender = RosterTenureFactory(player_data=other_player)
         Friendship.objects.create(friender_tenure=other_friender, friend_tenure=self.target_tenure)
         self.assertEqual(self.client.get(reverse("friend-list")).data["results"], [])
+
+    def test_blocked_pair_rejected_with_a_neutral_failure(self) -> None:
+        """#2996 Decision 2 — a block prevents the add, both single and all_characters paths."""
+        target_player = self.target_tenure.player_data
+        Block.objects.create(owner=self.player, blocked_player=target_player, account_level=True)
+
+        res = self.client.post(
+            reverse("friend-list"),
+            {
+                "viewer": self.my_tenure.roster_entry.pk,
+                "friend": self.target_tenure.roster_entry.pk,
+            },
+            format="json",
+        )
+        self.assertEqual(res.status_code, 400)
+        self.assertFalse(Friendship.objects.exists())
+
+    def test_blocked_pair_rejected_on_the_all_characters_path(self) -> None:
+        target_player = self.target_tenure.player_data
+        Block.objects.create(owner=self.player, blocked_player=target_player, account_level=True)
+
+        res = self.client.post(
+            reverse("friend-list"),
+            {
+                "viewer": self.my_tenure.roster_entry.pk,
+                "friend": self.target_tenure.roster_entry.pk,
+                "all_characters": True,
+            },
+            format="json",
+        )
+        self.assertEqual(res.status_code, 400)
+        self.assertFalse(Friendship.objects.exists())

@@ -23,6 +23,7 @@ from world.journals.serializers import (
     JournalEntryListSerializer,
     JournalResponseCreateSerializer,
 )
+from world.journals.services import exclude_blocked_and_muted_authors
 
 
 class JournalEntryPagination(PageNumberPagination):
@@ -100,8 +101,12 @@ class JournalEntryViewSet(CharacterContextMixin, viewsets.GenericViewSet):
         Supports query params:
         - ?author=<character_id> — filter by author
         - ?tag=<tag_name> — filter by tag name
+
+        Blocked/muted authors' entries are excluded (#2996 Decision 2) — see
+        ``exclude_blocked_and_muted_authors``.
         """
         queryset = self.filter_queryset(self.get_queryset()).filter(is_public=True)
+        queryset = exclude_blocked_and_muted_authors(queryset, viewer_account=request.user)
 
         page = self.paginate_queryset(queryset)
         if page is not None:

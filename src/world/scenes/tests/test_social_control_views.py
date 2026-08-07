@@ -57,6 +57,21 @@ class SocialControlAPITests(APITestCase):
         assert resp.data["account_level"] is True
         assert Block.objects.get(pk=resp.data["id"]).account_level is True
 
+    def test_block_create_can_opt_out_to_persona_narrow(self) -> None:
+        """#2996: the advanced opt-out stays reachable via an explicit account_level: false."""
+        resp = self.client.post(
+            "/api/blocks/",
+            {
+                "blocker_persona": self.my_sheet.primary_persona.pk,
+                "blocked_persona": self.target_sheet.primary_persona.pk,
+                "reason": "They crossed a line.",
+                "account_level": False,
+            },
+            format="json",
+        )
+        assert resp.status_code == 201
+        assert Block.objects.get(pk=resp.data["id"]).account_level is False
+
     def test_cannot_block_as_a_persona_you_dont_own(self) -> None:
         resp = self.client.post(
             "/api/blocks/",
@@ -98,6 +113,26 @@ class SocialControlAPITests(APITestCase):
         assert len(self.client.get("/api/mutes/").data["results"]) == 1
         assert self.client.delete(f"/api/mutes/{mute_id}/").status_code == 204
         assert not Mute.objects.filter(pk=mute_id).exists()
+
+    def test_mute_create_defaults_to_account_level(self) -> None:
+        """#2996: the web mute control is account-first by default, mirroring Block."""
+        resp = self.client.post(
+            "/api/mutes/",
+            {"muted_persona": self.target_sheet.primary_persona.pk},
+            format="json",
+        )
+        assert resp.status_code == 201
+        assert resp.data["account_level"] is True
+        assert Mute.objects.get(pk=resp.data["id"]).account_level is True
+
+    def test_mute_create_can_opt_out_to_persona_narrow(self) -> None:
+        resp = self.client.post(
+            "/api/mutes/",
+            {"muted_persona": self.target_sheet.primary_persona.pk, "account_level": False},
+            format="json",
+        )
+        assert resp.status_code == 201
+        assert Mute.objects.get(pk=resp.data["id"]).account_level is False
 
     def test_only_my_blocks_are_listed(self) -> None:
         self._create_block()
