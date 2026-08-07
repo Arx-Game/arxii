@@ -148,7 +148,7 @@ from world.character_creation.services import (
     finalize_gm_character,        # GM path: full character + Available RosterEntry (GM_TABLE
                                   #   provenance + created_for_table) + Story/StoryParticipation
     get_accessible_starting_areas,# Filter areas by account access
-    can_create_character,         # Check eligibility (trust, limits)
+    can_create_character,         # Check eligibility (email verification, trust, limits)
     submit_draft_for_review,      # Create DraftApplication in SUBMITTED
     unsubmit_draft,               # Return to REVISIONS_REQUESTED
     resubmit_draft,               # Re-submit after revisions
@@ -161,6 +161,22 @@ from world.character_creation.services import (
     finalize_magic_data,          # Link the draft's chosen catalog Gift/Techniques to the character
 )
 ```
+
+**`can_create_character` eligibility gates (#3046):** staff bypass all three
+checks. (1) Email verification is real: it reuses
+`PlayerData.can_apply_for_characters()` (allauth `EmailAddress`, primary +
+verified), the same check that drives the frontend's `can_create_characters`
+field, rejecting with "Verify your email address to create a character." (2)
+Trust level defaults to 0 until the trust system lands. (3) `max_characters`
+is `settings.CG_MAX_CHARACTERS` (`CG_MAX_CHARACTERS` env var, default 3),
+counted against `account.character_drafts`.
+
+**`StartingArea.is_accessible_by` fails closed on `TRUST_REQUIRED`** (#3046):
+non-staff accounts have no `.trust` attribute yet (trust system unimplemented),
+so a `TRUST_REQUIRED` area is simply inaccessible to them rather than raising
+`NotImplementedError` — mirrors `Beginnings.is_accessible_by`'s existing
+fail-closed behavior. `get_accessible_starting_areas` therefore never 500s on
+a `TRUST_REQUIRED` area.
 
 `finalize_magic_data` also creates the CG-finalize Golden Hare Academy obligation
 row (#2428 Task 3, `_finalize_academy_entrance_obligation`): resolves the

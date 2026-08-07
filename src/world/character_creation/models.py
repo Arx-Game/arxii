@@ -207,12 +207,14 @@ class StartingArea(NaturalKeyMixin, CreditedContent, SharedMemoryModel):
             return False
 
         if self.access_level == self.AccessLevel.TRUST_REQUIRED:
-            # TODO: Implement trust system - this will raise AttributeError until then
+            # TODO: Implement trust system - fail closed until then. A single
+            # admin flipping an area to TRUST_REQUIRED must not 500 the origin
+            # stage for every non-staff account (#3046); mirrors
+            # Beginnings.is_accessible_by's own fail-closed AttributeError guard.
             try:
                 account_trust = account.trust
             except AttributeError:
-                msg = "Trust system not yet implemented on Account model"
-                raise NotImplementedError(msg) from None
+                return False
             return account_trust >= self.minimum_trust
 
         return True  # AccessLevel.ALL

@@ -370,6 +370,34 @@ class CharacterDraftStatsValidationTests(TestCase):
             assert final[name] == STAT_DEFAULT_VALUE
 
 
+class StartingAreaTrustRequiredAccessTests(TestCase):
+    """TRUST_REQUIRED areas must fail closed, not raise (#3046).
+
+    The trust system isn't implemented yet, so a non-staff account has no
+    ``.trust`` attribute. Before #3046 this raised ``NotImplementedError``
+    from ``is_accessible_by`` (a latent 500 the moment any area was flipped to
+    TRUST_REQUIRED); it must now simply be inaccessible.
+    """
+
+    def test_trust_required_area_denies_non_staff_without_raising(self):
+        """A non-staff account without .trust is denied, not a 500."""
+        area = StartingAreaFactory(
+            access_level=StartingArea.AccessLevel.TRUST_REQUIRED,
+            minimum_trust=5,
+        )
+        account = AccountFactory()
+        assert area.is_accessible_by(account) is False
+
+    def test_trust_required_area_allows_staff(self):
+        """Staff bypass the trust gate entirely, matching existing staff behavior."""
+        area = StartingAreaFactory(
+            access_level=StartingArea.AccessLevel.TRUST_REQUIRED,
+            minimum_trust=5,
+        )
+        account = AccountFactory(is_staff=True)
+        assert area.is_accessible_by(account) is True
+
+
 class BeginningsModelTests(TestCase):
     """Test Beginnings model."""
 
