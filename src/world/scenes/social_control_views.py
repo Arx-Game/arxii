@@ -70,6 +70,8 @@ class BlockViewSet(
                 blocker_persona=serializer.validated_data["blocker_persona"],
                 blocked_persona=serializer.validated_data["blocked_persona"],
                 reason=serializer.validated_data["reason"],
+                # #2996 Decision 1: the web control is account-first by default, same as +block.
+                account_level=True,
             )
         except DjangoValidationError as exc:
             raise serializers.ValidationError(exc.messages) from exc

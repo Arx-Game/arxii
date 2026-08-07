@@ -52,6 +52,15 @@ class BlockingCommandTests(TestCase):
             blocked_persona__character_sheet__character=self.target,
         ).exists()
 
+    def test_block_defaults_to_account_level(self) -> None:
+        """#2996 Decision 1: +block is account-first by default."""
+        self._run(CmdBlock, "Bob=They were cruel")
+        block = Block.objects.get(
+            owner__account=self.account,
+            blocked_persona__character_sheet__character=self.target,
+        )
+        assert block.account_level is True
+
     def test_mute_creates_an_ooc_only_mute(self) -> None:
         self._run(CmdMute, "Bob=ooc")
         mute = Mute.objects.get(owner__account=self.account)

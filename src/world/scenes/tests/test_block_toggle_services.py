@@ -42,6 +42,22 @@ class BlockToggleServiceTests(TestCase):
         assert block.reason == "They were cruel."
         assert block.account_level is False
 
+    def test_create_block_account_level_defaults_false(self) -> None:
+        """The function's own default stays narrow (#2996 Decision 1) — only the player-facing
+        entry points (CmdBlock, BlockViewSet.create) flip it to True explicitly."""
+        block = self._create()
+        assert block.account_level is False
+
+    def test_create_block_account_level_true_is_explicit_opt_in(self) -> None:
+        block = create_block(
+            blocker_account=self.blocker_acct,
+            blocker_persona=self.blocker_sheet.primary_persona,
+            blocked_persona=self.target_sheet.primary_persona,
+            reason="x",
+            account_level=True,
+        )
+        assert block.account_level is True
+
     def test_create_block_is_idempotent_per_pair(self) -> None:
         self._create()
         self._create(reason="again")

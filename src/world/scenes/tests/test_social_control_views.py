@@ -51,6 +51,12 @@ class SocialControlAPITests(APITestCase):
         listing = self.client.get("/api/blocks/")
         assert len(listing.data["results"]) == 1
 
+    def test_block_create_defaults_to_account_level(self) -> None:
+        """#2996 Decision 1: the web block control is account-first by default."""
+        resp = self._create_block()
+        assert resp.data["account_level"] is True
+        assert Block.objects.get(pk=resp.data["id"]).account_level is True
+
     def test_cannot_block_as_a_persona_you_dont_own(self) -> None:
         resp = self.client.post(
             "/api/blocks/",

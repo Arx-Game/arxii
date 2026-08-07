@@ -56,7 +56,9 @@ This file provides specific guidance for working with the roster system in Arx I
   current player of a character receives it regardless of who that is. Web-only surface
   (`/profile/mail` + in-scene quick-compose); no telnet mail command exists or is planned
   (ADR-0116).
-- **PlayerAllowList/PlayerBlockList**: Social lists for player communication
+- **PlayerAllowList**: Social contact allowlist. The old account-level `PlayerBlockList` was
+  removed (#1278) — block/mute now lives on `world.scenes.Block`/`Mute` (see
+  `world/scenes/CLAUDE.md`).
 
 ## Command Implementation Guidelines
 

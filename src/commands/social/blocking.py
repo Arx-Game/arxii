@@ -67,6 +67,10 @@ class CmdBlock(ArxCommand):
                     blocker_persona=blocker_persona,
                     blocked_persona=target_persona,
                     reason=reason,
+                    # #2996 Decision 1: +block is account-first by default. The persona-narrow
+                    # shape stays available to internal/advanced callers via create_block's own
+                    # default (account_level=False) — this command isn't one of them.
+                    account_level=True,
                 )
             except ValidationError as exc:
                 self.msg(exc.messages[0])

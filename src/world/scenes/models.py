@@ -755,10 +755,18 @@ class Rivalry(SharedMemoryModel):
 class Mute(SharedMemoryModel):
     """One player filtering a persona out of their own view (#1278) — the lighter sibling of Block.
 
-    Unlike Block, Mute is **one-way, persona-scoped, and purely cosmetic**: it only changes what the
-    muter sees, the muted player is never aware, and there is no interaction ban or sheet lockout.
-    The muter chooses whether it hides the persona's IC content, OOC content, or both. Fully
-    reversible. No anti-derivation concern — nothing about it is observable to the muted party.
+    Unlike Block, Mute is **one-way, persona-scoped by default, and purely cosmetic**: it only
+    changes what the muter sees, the muted player is never aware, and there is no interaction ban
+    or sheet lockout. The muter chooses whether it hides the persona's IC content, OOC content, or
+    both. Fully reversible. No anti-derivation concern — nothing about it is observable to the
+    muted party.
+
+    **Account-level (#2996):** ``muted_player`` is the blocked-player counterpart Block already
+    had — a nullable ``PlayerData`` FK, snapshotted at creation exactly like ``Block
+    .blocked_player`` (stable under re-rostering; never re-derived from ``muted_persona`` at query
+    time). ``account_level=True`` opts into filtering *every* character the snapshotted player
+    plays, not just the named persona. Nullable because there is no data migration — mutes created
+    before #2996 keep ``muted_player=None`` and stay persona-scoped, unaffected.
     """
 
     owner = models.ForeignKey(
@@ -772,6 +780,22 @@ class Mute(SharedMemoryModel):
         on_delete=models.CASCADE,
         related_name="muted_by",
         help_text="The face the muter no longer wants to see.",
+    )
+    muted_player = models.ForeignKey(
+        PLAYER_DATA_MODEL,
+        null=True,
+        blank=True,
+        on_delete=models.CASCADE,
+        related_name="mutes_received",
+        help_text=(
+            "The player behind muted_persona, snapshotted at creation (like "
+            "Block.blocked_player) — null for mutes created before #2996. Read by "
+            "account_muted() for the account_level path; never re-derived at query time."
+        ),
+    )
+    account_level = models.BooleanField(
+        default=False,
+        help_text="Opt-in: filter every character the muted player plays, not just this face.",
     )
     mute_ic = models.BooleanField(default=True, help_text="Hide this persona's IC content.")
     mute_ooc = models.BooleanField(default=True, help_text="Hide this persona's OOC content.")

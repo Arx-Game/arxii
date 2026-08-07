@@ -32,12 +32,25 @@ the unified Persona identity system, and non-combat scene rounds.
   Wired into the profile gate (404), the scene target picker, and feed visibility. The cron-clear
   (`finalize_expired_blocks`, wired into `game_clock` via `scenes.block_finalize`) is done.
   Supersedes the removed `evennia_extensions.PlayerBlockList`. Remaining: the awareness/"Character Has
-  You Blocked" surface (#2086).
-- **`Mute`** (#1278): the lighter, **one-way** sibling of Block — a player filters a persona out of
-  their own view (IC and/or OOC), reversible, no enforcement, the muted party never aware.
+  You Blocked" surface (#2086). **Account-first default (#2996 Decision 1):** `create_block`'s own
+  default stays persona-narrow (`account_level=False`, unchanged for internal/test callers), but
+  the player-facing entry points (`CmdBlock`, `BlockViewSet.create`) now pass `account_level=True`
+  explicitly — `+block`/the web control are account-first by default; the persona-narrow shape
+  remains reachable by passing `account_level=False` explicitly. `block_services.account_block_active`
+  (#2996) is the account-first query seam every OOC surface (mail, journal reactions, event invites,
+  kudos, friend adds, ...) is meant to call — true when an account-level `Block` exists in either
+  direction, persona-agnostic.
+- **`Mute`** (#1278, #2996): the lighter, **one-way** sibling of Block — a player filters a persona
+  out of their own view (IC and/or OOC), reversible, no enforcement, the muted party never aware.
   `mute_services.py` (`muted_persona_ids_for_viewer`, `set_mute`, `unmute`); the IC side is wired into
   the scene feed (muted personas skipped). The OOC channel, the "actions still show without text"
   refinement, the opt-in reveal, and the "N hidden" feed divider are follow-ups (#2087).
+  **Account-level (#2996):** `muted_player` — a nullable `PlayerData` FK, snapshotted at creation
+  exactly like `Block.blocked_player` (never re-derived from `muted_persona` at query time; null for
+  mutes created before #2996, no data migration) — plus `account_level` (bool). `set_mute` gained the
+  `account_level` opt-in (escalate-only on update, mirroring `share_block_account_wide`'s one-way
+  semantics — a plain IC/OOC scope toggle never downgrades an existing account-level mute).
+  `mute_services.account_muted` is the account-first query seam, mirroring `account_block_active`.
 - **`BlockContactFlag`** (#1278): the anti-derivation awareness layer. When a *blocked* player reaches the
   blocker via another identity (circumvention the coded block can't prevent without leaking the alt),
   `block_services.flag_blocked_contact_attempt` records it for staff (anchored on accounts + personas;

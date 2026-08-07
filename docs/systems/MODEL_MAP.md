@@ -176,6 +176,7 @@
   - blocks_made <- scenes.Block
   - blocks_received <- scenes.Block
   - mutes_made <- scenes.Mute
+  - mutes_received <- scenes.Mute
   - treasured_signoffs <- stories.TreasuredSignoff
 
 ### RoomProfile
@@ -7671,6 +7672,7 @@
 **Foreign Keys:**
   - owner -> evennia_extensions.PlayerData [FK]
   - muted_persona -> scenes.Persona [FK]
+  - muted_player -> evennia_extensions.PlayerData [FK] (nullable)
 
 ### PendingSuddenHarm
 **Foreign Keys:**
