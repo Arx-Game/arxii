@@ -16,6 +16,7 @@ import { useState } from 'react';
 
 import { OpportunitiesTab } from '../components/OpportunitiesTab';
 import { PendingInvitesSection } from '../components/PendingInvitesSection';
+import { ReportMissionDialog } from '../components/ReportMissionDialog';
 import { useJournal, usePendingInvites, useTellTale } from '../queries';
 import type { JournalEntry } from '../types';
 
@@ -23,7 +24,12 @@ export function JournalPage() {
   const { data, isLoading, isError } = useJournal();
   const entries = data?.results ?? [];
   const active = entries.filter((entry) => entry.status === 'active');
-  const past = entries.filter((entry) => entry.status !== 'active');
+  // RESOLVED (#1753/#3040): the run reached its terminal node but its
+  // reward hasn't paid out yet — it's waiting on a report, not concluded.
+  // Bucketing it with COMPLETE/ABANDONED under "Concluded" (as this page
+  // did before #3040) left no affordance to ever finish it.
+  const awaitingReport = entries.filter((entry) => entry.status === 'resolved');
+  const past = entries.filter((entry) => entry.status !== 'active' && entry.status !== 'resolved');
   // Dedicated endpoint (2026-07 audit): reading entries[0].pending_invites
   // meant a character with an empty journal (a brand-new PC invited to their
   // first mission) never saw the invite.
@@ -50,6 +56,16 @@ export function JournalPage() {
               active.map((entry) => <JournalEntryCard key={entry.instance_id} entry={entry} />)
             )}
           </section>
+          {awaitingReport.length > 0 ? (
+            <section className="space-y-3">
+              <h2 className="text-sm font-medium uppercase tracking-wide text-muted-foreground">
+                Awaiting report
+              </h2>
+              {awaitingReport.map((entry) => (
+                <JournalEntryCard key={entry.instance_id} entry={entry} />
+              ))}
+            </section>
+          ) : null}
           <section className="space-y-3">
             <h2 className="text-sm font-medium uppercase tracking-wide text-muted-foreground">
               Concluded
@@ -88,6 +104,17 @@ function JournalEntryCard({ entry }: { entry: JournalEntry }) {
             ) : null}
             <Compass entry={entry} />
           </>
+        ) : null}
+        {entry.status === 'resolved' ? (
+          <div className="flex items-center justify-between gap-2 rounded-md border border-dashed p-3">
+            <p className="text-sm text-muted-foreground">
+              This run is over. Report it to collect what you're owed.
+            </p>
+            <ReportMissionDialog
+              instanceId={entry.instance_id}
+              templateName={entry.template_name}
+            />
+          </div>
         ) : null}
         {entry.epilogue ? (
           <p className="whitespace-pre-wrap text-sm italic">{entry.epilogue}</p>

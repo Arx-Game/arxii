@@ -76,6 +76,7 @@ from world.missions.serializers import (
     MissionOptionRouteRewardSerializer,
     MissionOptionRouteSerializer,
     MissionOptionSerializer,
+    MissionReportRequestSerializer,
     MissionReportResultSerializer,
     MissionTemplateDetailSerializer,
     MissionTemplateSerializer,
@@ -586,6 +587,19 @@ class MissionJournalViewSet(viewsets.ViewSet):
             MissionAbandonResultSerializer({"id": instance.pk, "status": instance.status}).data
         )
 
+    @extend_schema(
+        request=MissionReportRequestSerializer,
+        responses={
+            200: MissionReportResultSerializer,
+            400: OpenApiResponse(
+                description=(
+                    "Unknown style / run not RESOLVED / no report-to role / "
+                    "no co-located Functionary of that role."
+                )
+            ),
+            404: OpenApiResponse(description="Not a participant / no such mission."),
+        },
+    )
     @action(detail=True, methods=("POST",))
     def report(self, request: Request, pk: str | None = None) -> Response:
         """#1753 — report a RESOLVED run's outcome to its report-to Functionary, by style."""
@@ -597,9 +611,12 @@ class MissionJournalViewSet(viewsets.ViewSet):
         )
 
         instance, character = self._instance_for(request, pk)
-        style = str(request.data.get("style", "")).strip().lower().replace("-", "_")
+        body = MissionReportRequestSerializer(data=request.data)
+        body.is_valid(raise_exception=True)
         try:
-            result = report_mission(instance=instance, style=style, reporter=character)
+            result = report_mission(
+                instance=instance, style=body.validated_data["style"], reporter=character
+            )
         except MissionReportError as exc:
             # Typed, user-safe message (CodeQL); non-participant already 404'd in _instance_for.
             raise ValidationError(exc.user_message) from exc

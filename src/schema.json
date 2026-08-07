@@ -20663,11 +20663,26 @@ paths:
         required: true
       tags:
       - missions
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/MissionReportRequestRequest'
+        required: true
       security:
       - cookieAuth: []
       responses:
         '200':
-          description: No response body
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MissionReportResult'
+          description: ''
+        '400':
+          description: Unknown style / run not RESOLVED / no report-to role / no co-located
+            Functionary of that role.
+        '404':
+          description: Not a participant / no such mission.
   /api/missions/journal/{id}/resolve/:
     post:
       operationId: missions_journal_resolve_create
@@ -50061,6 +50076,43 @@ components:
       description: |-
         * `authored` - Authored
         * `challenge` - Challenge
+    MissionReportRequestRequest:
+      type: object
+      description: 'POST body for the #1753 report endpoint (#3040 — was unvalidated
+        raw dict access).'
+      properties:
+        style:
+          $ref: '#/components/schemas/StyleEnum'
+      required:
+      - style
+    MissionReportResult:
+      type: object
+      description: 'Result of the #1753 report endpoint — run id/status, chosen style,
+        check outcomes.'
+      properties:
+        id:
+          type: integer
+          readOnly: true
+        status:
+          type: string
+          readOnly: true
+        style:
+          type: string
+          readOnly: true
+        embellish_success:
+          type: boolean
+          readOnly: true
+          nullable: true
+        dodge_success:
+          type: boolean
+          readOnly: true
+          nullable: true
+      required:
+      - dodge_success
+      - embellish_success
+      - id
+      - status
+      - style
     MissionTemplate:
       type: object
       description: |-
@@ -68119,6 +68171,18 @@ components:
       - outcome_name
       - quality_tier
       - success_level
+    StyleEnum:
+      enum:
+      - humble
+      - accurate
+      - mostly_accurate
+      - embellished
+      type: string
+      description: |-
+        * `humble` - Humble
+        * `accurate` - Accurate
+        * `mostly_accurate` - Mostly accurate
+        * `embellished` - Embellished
     StylePresentationEndorsement:
       type: object
       description: |-

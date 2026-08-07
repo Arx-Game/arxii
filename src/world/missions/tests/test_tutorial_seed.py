@@ -135,6 +135,10 @@ class SeedTutorialDevTests(TestCase):
         giver = MissionGiver.objects.get(giver_kind=GiverKind.ROOM_TRIGGER, templates=self.t1)
         room = ensure_canonical_fallback_room()
         self.assertEqual(giver.target_id, room.pk)
+        # #3040 — a ROOM_TRIGGER grant carries no source_offer for
+        # report_to_role_for to fall back to; without an explicit
+        # report_to_role the authored MONEY line is orphaned.
+        self.assertIsNotNone(self.t1.report_to_role_id)
 
     # -- T2 What the Walls Remember --------------------------------------
 
@@ -144,6 +148,8 @@ class SeedTutorialDevTests(TestCase):
         )
         self.assertIsNotNone(giver.target_id)
         self.assertEqual(self.t2.availability_rule, _gate_for(self.t1))
+        # #3040 — same gap as T1 (ENVIRONMENTAL_DETAIL carries no source_offer).
+        self.assertIsNotNone(self.t2.report_to_role_id)
 
     # -- Consent primer "Terms of Engagement" (#2170 item 3) ----------------
 
@@ -208,6 +214,9 @@ class SeedTutorialDevTests(TestCase):
         self.assertEqual(option.required_act, ExternalAct.THREAD_WOVEN)
         self.assertTrue(entry.is_entry)
         self.assertEqual(self.t5.availability_rule, _gate_for(self.t4))
+        # #3040 — robustness: a non-offer grant (e.g. staff_assign_mission)
+        # must still have a report target for its money to land.
+        self.assertIsNotNone(self.t5.report_to_role_id)
 
     # -- T6 Sworn Together ----------------------------------------------------
 
@@ -218,12 +227,16 @@ class SeedTutorialDevTests(TestCase):
         self.assertEqual(option.required_act, ExternalAct.COVENANT_SWORN)
         self.assertTrue(entry.is_entry)
         self.assertEqual(self.t6.availability_rule, _gate_for(self.t5))
+        # #3040 — same robustness rationale as T5.
+        self.assertIsNotNone(self.t6.report_to_role_id)
 
     # -- T7 The Long Dark -----------------------------------------------------
 
     def test_t7_legend_line_draw_priority_and_gate(self) -> None:
         self.assertEqual(self.t7.risk_tier, 4)
         self.assertEqual(self.t7.availability_rule, _gate_for(self.t6))
+        # #3040 — same robustness rationale as T5/T6.
+        self.assertIsNotNone(self.t7.report_to_role_id)
 
         entry = self.t7.nodes.get(is_entry=True)
         option = entry.options.get()

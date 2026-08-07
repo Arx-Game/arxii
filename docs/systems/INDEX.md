@@ -3131,8 +3131,23 @@ state is node position + snapshots + already-applied consequences, never a scrat
   award requires the parent template's `risk_tier ≥ LEGEND_RISK_FLOOR_TIER` (4); enforced at
   `clean()`. See also the Co-Presence (Solo-Darkness) Guard entry in the missions
   `AGENT_GLOSSARY.md` for the broader solo-legend stance.
+- **Report target required to pay out (#1753, #3040):** `report_to_role_for(instance)` —
+  `MissionTemplate.report_to_role`, else the accepting `NPCServiceOffer.role` — decides
+  whether a terminal run pauses at RESOLVED (awaiting a report) or jumps straight to COMPLETE
+  with no payout (`_finish_terminal`, `services/resolution.py`). A trigger/environmental/board
+  grant carries no `source_offer`, so its template must set `report_to_role` explicitly or its
+  authored MONEY/RESONANCE/etc. lines are silently orphaned — the starter board's 3
+  `MissionTemplate` rows (`world.seeds.game_content.missions`) and the Tutorial Chain's T1/T2
+  (`world.seeds.game_content.tutorial`) all set it to the "Threshold Warden" `NPCRole`
+  (co-located with both the board and the tutor Functionary in the canonical starting room);
+  T4-T7 set it too for robustness against a non-offer grant (e.g. `staff_assign_mission`).
 - **API:** `/api/missions/journal/` (+ `.../opportunities/`, `.../{id}/report/`,
   `.../{id}/tale/`, `.../{id}/invite/`, group-pick/vote/beat), `/api/missions/boards/<pk>/take/`.
+  `.../{id}/report/` request/response are typed (`MissionReportRequestSerializer`/
+  `MissionReportResultSerializer`, #3040 — was raw dict access). The web Journal
+  (`frontend/src/missions/pages/JournalPage.tsx`) surfaces a RESOLVED entry under its own
+  "Awaiting report" section with a `ReportMissionDialog` offering all four `ReportStyle`
+  choices; a co-location 400 renders inline verbatim rather than being pre-computed client-side.
 - **Telnet:** `CmdMission` (`commands/missions.py`) — thin face over `services.play`, no
   separate Action; `mission`/`mission beat`/`mission resolve`/`mission report`/`mission take`/
   `mission invite`/`mission pick`/`mission vote`.

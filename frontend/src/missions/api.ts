@@ -26,10 +26,12 @@ import type {
   MissionOptionRoute,
   MissionOptionRouteCandidate,
   MissionOptionRouteReward,
+  MissionReportResult,
   MissionTemplate,
   MissionTemplateDetail,
   MissionTemplateFilters,
   PaginatedResponse,
+  ReportStyle,
   ResolvedBeat,
 } from './types';
 
@@ -485,6 +487,34 @@ export async function tellTale(
     throw new ApiValidationError(await res.json());
   }
   if (!res.ok) throw new Error('Failed to save your tale');
+  return res.json();
+}
+
+// ---------------------------------------------------------------------------
+// #1753/#3040 mission after-action report surface.
+// ---------------------------------------------------------------------------
+
+/**
+ * Report a RESOLVED run's outcome to its report-to Functionary, by style
+ * (#1753). A 400 covers every gate the server enforces — the run isn't
+ * RESOLVED, the style isn't offerable (e.g. Embellished without Persuasion),
+ * or the reporter isn't co-located with a Functionary of the report-to role.
+ * The caller surfaces the server's own message rather than pre-computing
+ * reachability (#3040) — only the server knows who is standing where.
+ */
+export async function reportMission(
+  instanceId: number,
+  style: ReportStyle
+): Promise<MissionReportResult> {
+  const res = await apiFetch(`${BASE_URL}/journal/${instanceId}/report/`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ style }),
+  });
+  if (res.status === 400) {
+    throw new ApiValidationError(await res.json());
+  }
+  if (!res.ok) throw new Error('Failed to report this mission');
   return res.json();
 }
 

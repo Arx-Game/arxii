@@ -34,6 +34,10 @@ export type BeatOption = components['schemas']['BeatOption'];
 export type ResolvedBeat = components['schemas']['ResolvedBeat'];
 export type ArcScope = components['schemas']['ArcScopeEnum'];
 
+// #1753/#3040 mission after-action report surface.
+export type ReportStyle = components['schemas']['StyleEnum'];
+export type MissionReportResult = components['schemas']['MissionReportResult'];
+
 // #1036/#2049 group beat + invite surface.
 export type GroupBeatResult = components['schemas']['GroupBeatResult'];
 export type GroupBeatView = components['schemas']['GroupBeatView'];
