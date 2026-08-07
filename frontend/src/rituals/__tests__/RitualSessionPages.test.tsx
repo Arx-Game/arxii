@@ -116,6 +116,8 @@ const sampleSessionDetail: RitualSessionDetail = {
   initiator_name: 'Aldric the Bold',
   proposed_terms: 'A sacred bond between warriors.',
   session_kwargs: {},
+  anima_requirement: 0,
+  anima_pool_total: 0,
   expires_at: new Date(Date.now() + 3_600_000).toISOString(),
   created_at: new Date().toISOString(),
   participants: [
