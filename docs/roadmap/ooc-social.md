@@ -113,9 +113,13 @@ the create serializers). One query seam per primitive — `block_services.accoun
 / `blocked_player_ids_for` and `mute_services.account_muted` / `muted_player_ids_for` — is the
 only thing every OOC delivery surface calls; no per-surface reimplementation.
 
-**Per-surface policy** (write-then-filter throughout — the actor's own write path is always
+**Per-surface policy** (write-then-filter by default — the actor's own write path is
 byte-identical, suppression is query-time exclusion on the other party's read; IC channels stay
-flag-only by design, to avoid an RP leak):
+flag-only by design, to avoid an RP leak. Two seams reject before the write instead, each for a
+different reason a write-then-hide shape couldn't safely cover: journal reactions, since a
+rejection there can't leak but a created-then-hidden response row could still be inferred from
+render-vs-list discrepancies; friend adds, since creating the `Friendship` row would itself be
+the harm — see ADR-0204):
 
 | Surface | Block | Mute |
 |---|---|---|

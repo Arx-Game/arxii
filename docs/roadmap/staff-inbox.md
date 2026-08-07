@@ -149,7 +149,7 @@ For the first PR, everything is **staff-only**. Delegation tiers come later.
 The stub fields cover the data model, but the **full design of PlayerReport is a separate future design pass** because:
 - **Wording is safety-critical** — the form language must not alienate victims or encourage bad reports. This is extremely delicate UX work.
 - **Block/mute coupling** — `world.scenes.Block`/`Mute` are BUILT & WIRED (#1278, account-first
-  by default + eight OOC delivery seams as of #2996 — see `docs/roadmap/ooc-social.md`'s "Built
+  by default + seven OOC delivery seams as of #2996 — see `docs/roadmap/ooc-social.md`'s "Built
   — Account-First Block/Mute" section); what's still open is the report flow's integration —
   letting a reporter block/mute in one step from the (not-yet-built) submission form, and
   keeping `PlayerReport.blocked_or_muted` (BUILT, NOT WIRED) accurate when a block is created

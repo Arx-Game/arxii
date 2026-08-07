@@ -56,8 +56,9 @@ Per-character weekly XP tracking. Resets after 7 days.
   (`world.scenes.mute_services.muted_player_ids_for`). `services.create_journal_response` rejects
   a praise/retort with the neutral `JournalError.UNAVAILABLE` when an account-level `Block` sits
   between the responder and the parent entry's author (`world.scenes.block_services
-  .account_block_active`) — the one #2996 seam that rejects instead of write-then-filter, since
-  the rejection here can't leak a block by itself. A `Mute` never rejects a response — it persists
+  .account_block_active`) — one of #2996's two reject-before-write exceptions (the other is
+  `friend_services.add_friend`, see `world/scenes/CLAUDE.md`), since the rejection here can't
+  leak a block by itself. A `Mute` never rejects a response — it persists
   normally and is excluded only from the entry AUTHOR's own read of responses to their own entry
   (`JournalEntryViewSet.retrieve`, `world.scenes.mute_services.account_muted`); any other viewer
   sees the full list.
