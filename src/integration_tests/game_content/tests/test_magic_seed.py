@@ -69,7 +69,7 @@ class TestSeedMagicConfigCreation(TestCase):
 
         self.assertEqual(AnimaConfig.objects.count(), 1)
         cfg = AnimaConfig.objects.get(pk=1)
-        self.assertEqual(cfg.daily_regen_percent, 5)
+        self.assertEqual(cfg.daily_regen_amount, 1)
         self.assertEqual(cfg.daily_regen_blocking_property_key, "blocks_anima_regen")
         self.assertEqual(self.result.anima_config.pk, 1)
 
@@ -250,16 +250,16 @@ class TestSeedMagicConfigPreservesEdits(TestCase):
         seed_magic_config()
 
         # Simulate a staff edit via bulk update (bypasses identity map)
-        AnimaConfig.objects.filter(pk=1).update(daily_regen_percent=15)
+        AnimaConfig.objects.filter(pk=1).update(daily_regen_amount=15)
 
         # Re-run the seed — must not overwrite the staff edit
         seed_magic_config()
 
         # Use .values() to bypass SharedMemoryModel identity-map cache and
         # read directly from the DB.
-        db_value = AnimaConfig.objects.filter(pk=1).values("daily_regen_percent").get()
+        db_value = AnimaConfig.objects.filter(pk=1).values("daily_regen_amount").get()
         self.assertEqual(
-            db_value["daily_regen_percent"],
+            db_value["daily_regen_amount"],
             15,
             "seed_magic_config() must not overwrite existing rows (get_or_create semantics)",
         )

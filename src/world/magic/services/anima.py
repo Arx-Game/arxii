@@ -537,14 +537,12 @@ def anima_regen_tick() -> AnimaRegenTickSummary:
             continue
         if char_id in appetite_ids:
             continue
-        # #2853: floor at 1 when regen is enabled at all — integer percent of a
-        # standard 10-point pool floors to 0, which made daily regen silently
-        # inert for every standard character. "Extremely slow" means a real
-        # trickle, not never.
-        if config.daily_regen_percent <= 0:
+        # #3001: flat trickle, deliberately painful at scale — a level-20 pool of
+        # 2000 refills in years. Anima rituals, feeding, and blood sacrifice are
+        # the real recovery economy; this is the floor under all of them.
+        if config.daily_regen_amount <= 0:
             continue
-        regen = max(1, (row.maximum * config.daily_regen_percent) // 100)
-        row.current = min(row.current + regen, row.maximum)
+        row.current = min(row.current + config.daily_regen_amount, row.maximum)
         to_update.append(row)
         regenerated += 1
 

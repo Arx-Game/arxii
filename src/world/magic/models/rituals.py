@@ -74,6 +74,14 @@ class Ritual(NaturalKeyMixin, CreditedContent, SharedMemoryModel):
     name = models.CharField(max_length=120, unique=True)
     description = models.TextField()
     hedge_accessible = models.BooleanField(default=False)
+    # #3001: the price is the gate — no Gifted-check anywhere in the framework.
+    anima_requirement = models.PositiveIntegerField(
+        default=0,
+        help_text=(
+            "Anima the rite demands from its pool; 0 = folk rite. Underfilled pools "
+            "roll with a deficit penalty; 2x or more unlocks the spectacular tier."
+        ),
+    )
     glimpse_eligible = models.BooleanField(default=False)
     narrative_prose = models.TextField()
     input_schema = models.JSONField(
