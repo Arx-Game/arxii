@@ -710,8 +710,8 @@ _HALLOWED_REACTION_SPECS: list[dict[str, str]] = [
 ]
 
 
-def _seed_hallowed_reaction_conditions() -> dict[str, ConditionTemplate]:
-    """Seed the 5 reaction conditions for the Hallowed Threshold pipeline.
+def _resolve_hallowed_reaction_conditions() -> dict[str, ConditionTemplate]:
+    """Resolve the 5 reaction ConditionTemplates for the Hallowed Threshold pipeline.
 
     These conditions are applied on different check outcomes when an
     Abyssal-aligned caster uses a technique in a Celestial-aura room:
@@ -729,12 +729,13 @@ def _seed_hallowed_reaction_conditions() -> dict[str, ConditionTemplate]:
     for whichever of the 5 are actually present (authored, or sampled) — a
     name absent from the dict means it isn't there yet.
 
-    #2973: no longer called from ``seed_starter_magic_story()`` — the 5
-    conditions are lore-repo content, so the production seeder resolves them
-    itself via the same ``authored_or_sample``-by-name lookup, inline in
-    ``_seed_resonance_environment_consequence_pools()``. This function
-    survives as an importable test-fixture builder; suites that need the 5
-    conditions call it directly in their own setup.
+    #2973: SINGLE SOURCE OF TRUTH for the authored_or_sample-by-name
+    resolution of these 5 templates — both
+    ``_seed_hallowed_reaction_conditions()`` (the test-fixture builder) and
+    ``_seed_resonance_environment_consequence_pools()`` (the KEEP-side
+    production resolver) call this rather than each re-stating the
+    category/defaults dict, so the two can't silently drift apart on the
+    sample-content path.
     """
     from world.conditions.constants import DurationType  # noqa: PLC0415
     from world.conditions.models import ConditionCategory, ConditionTemplate  # noqa: PLC0415
@@ -772,6 +773,24 @@ def _seed_hallowed_reaction_conditions() -> dict[str, ConditionTemplate]:
         if template is not None:
             conditions[spec["name"]] = template
     return conditions
+
+
+def _seed_hallowed_reaction_conditions() -> dict[str, ConditionTemplate]:
+    """Seed the 5 reaction conditions for the Hallowed Threshold pipeline.
+
+    Thin wrapper over ``_resolve_hallowed_reaction_conditions()`` (the single
+    source of truth for the authored_or_sample-by-name resolution) — kept as
+    its own name/signature because it's the public test-fixture builder suites
+    import directly.
+
+    #2973: no longer called from ``seed_starter_magic_story()`` — the 5
+    conditions are lore-repo content, so the production seeder resolves them
+    itself via ``_resolve_hallowed_reaction_conditions()``, called from
+    ``_seed_resonance_environment_consequence_pools()``. This function
+    survives as an importable test-fixture builder; suites that need the 5
+    conditions call it directly in their own setup.
+    """
+    return _resolve_hallowed_reaction_conditions()
 
 
 # ---------------------------------------------------------------------------
@@ -929,11 +948,13 @@ def _seed_resonance_environment_consequence_pools() -> None:
       CheckOutcome rows via seed_check_resolution_tables)
 
     Resolves its own 5 reaction ``ConditionTemplate`` rows by name via
-    ``authored_or_sample`` (content-repo-owned, #2698) rather than depending
-    on ``_seed_hallowed_reaction_conditions()`` having run first — that
-    function is no longer part of the production seeder path (#2973); it
-    survives only as a test-fixture builder suites call directly. Any of the
-    5 may be absent (the lookup logs the miss rather than raising).
+    ``_resolve_hallowed_reaction_conditions()`` (content-repo-owned, #2698)
+    rather than depending on ``_seed_hallowed_reaction_conditions()`` having
+    run first — that function is no longer part of the production seeder
+    path (#2973); it survives only as a test-fixture builder suites call
+    directly (and itself now delegates to the same resolver, so the two
+    can't drift apart). Any of the 5 may be absent (the lookup logs the miss
+    rather than raising).
 
     Idempotent: get_or_create keyed on stable names at every layer.  Duplicate
     ConsequencePoolEntry rows are prevented by the (pool, consequence) unique
@@ -944,11 +965,8 @@ def _seed_resonance_environment_consequence_pools() -> None:
     (config) but skips the APPLY_CONDITION effect that would need the missing
     condition — the pool still seeds, just without teeth for that tier.
     """
-    from world.conditions.constants import DurationType  # noqa: PLC0415
-    from world.conditions.models import ConditionCategory, ConditionTemplate  # noqa: PLC0415
     from world.magic.models.affinity import Affinity  # noqa: PLC0415
     from world.magic.models.resonance_environment import AffinityInteraction  # noqa: PLC0415
-    from world.seeds.sample_content import authored_or_sample  # noqa: PLC0415
     from world.traits.models import CheckOutcome  # noqa: PLC0415
 
     # --- Fetch CheckOutcome tiers (seeded by the resolution spine via
@@ -958,43 +976,14 @@ def _seed_resonance_environment_consequence_pools() -> None:
         outcome_map[name] = CheckOutcome.objects.get(name=name)
 
     # --- Resolve the 5 reaction ConditionTemplates by name (content-repo-owned,
-    # #2698; #2973 — this used to read rows _seed_hallowed_reaction_conditions()
-    # authored earlier in the same orchestrator run; that step left the seeder,
-    # so this KEEP-side function now resolves each by name itself).
-    # authored_or_sample logs a warning and returns None when a name isn't
-    # authored and SEED_SAMPLE_CONTENT is off, or invents a sample row (from
-    # _HALLOWED_REACTION_SPECS, the single source of truth for these 5) when
-    # sampling is on. A name missing from this map is simply absent from it;
-    # callers below skip the APPLY_CONDITION effect wiring for it. ---
-    category = authored_or_sample(
-        ConditionCategory,
-        {
-            "description": "Magical conditions arising from spellcasting and aura interactions.",
-            "is_negative": True,
-            "display_order": 0,
-        },
-        name="Magical",
-    )
-    cond_map: dict[str, ConditionTemplate] = {}
-    for spec in _HALLOWED_REACTION_SPECS:
-        template = authored_or_sample(
-            ConditionTemplate,
-            {
-                "category": category,
-                "description": spec["description"],
-                "player_description": spec["player_description"],
-                "observer_description": spec["observer_description"],
-                "default_duration_type": DurationType.ROUNDS,
-                "default_duration_value": 3,
-                "is_stackable": False,
-                "max_stacks": 1,
-                "has_progression": False,
-                "can_be_dispelled": True,
-            },
-            name=spec["name"],
-        )
-        if template is not None:
-            cond_map[spec["name"]] = template
+    # #2698). _resolve_hallowed_reaction_conditions() is the single source of
+    # truth for this authored_or_sample-by-name lookup — it logs a warning and
+    # omits a name from the returned map when it isn't authored and
+    # SEED_SAMPLE_CONTENT is off, or invents a sample row (from
+    # _HALLOWED_REACTION_SPECS) when sampling is on. A name missing from the
+    # map is simply absent from it; callers below skip the APPLY_CONDITION
+    # effect wiring for it. ---
+    cond_map: dict[str, ConditionTemplate] = _resolve_hallowed_reaction_conditions()
 
     # --- Build both pools ---
     abyssal_celestial_pool = _build_hallowed_backfire_pool(
