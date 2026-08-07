@@ -308,3 +308,46 @@ class TrainTechniqueActionFailureTests(TrainTechniqueActionTestBase):
 
         self.assertFalse(result.success)
         self.assertTrue(result.message)
+
+
+class TrainTechniqueActionMissingCheckTypeTests(TestCase):
+    """#3043: a missing "Technique Training" CheckType surfaces as a clean failure.
+
+    Setup deliberately skips ``_seed_check_content`` -- mirrors a real deploy
+    where the content half of #3043 (ArxII-lore#72) hasn't shipped yet.
+    """
+
+    def setUp(self):
+        self.room = ObjectDBFactory(
+            db_key="TrainingRoom", db_typeclass_path="typeclasses.rooms.Room"
+        )
+        self.learner = CharacterSheetFactory()
+        self.learner.character.location = self.room
+        self.learner.character.save()
+
+        self.pool = ActionPointPool.get_or_create_for_character(self.learner.character)
+        self.pool.current = 500
+        self.pool.save()
+
+        self.technique = TechniqueFactory()
+        CharacterGift.objects.create(character=self.learner, gift=self.technique.gift)
+        Thread.objects.create(
+            owner=self.learner,
+            resonance=ResonanceFactory(),
+            target_kind=TargetKind.GIFT,
+            target_gift=self.technique.gift,
+            level=0,
+        )
+        self.progress = TechniqueProgress.objects.create(
+            character_sheet=self.learner,
+            technique=self.technique,
+            total_required=50,
+            source="gift_acquisition",
+        )
+
+    def test_missing_check_type_surfaces_as_clean_failure_result(self):
+        result = TrainTechniqueAction().run(
+            self.learner.character, technique_id=self.technique.pk, ap_to_invest=20
+        )
+        self.assertFalse(result.success)
+        self.assertEqual(result.message, "Technique training is not configured on this server yet.")

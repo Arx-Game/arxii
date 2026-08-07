@@ -252,3 +252,51 @@ class ResolveTrainingCheckTest(TestCase):
             resolve_training_check(self.sheet, self.progress, ap_to_invest=20)
 
         self.assertGreater(difficulties[1], difficulties[0])
+
+
+class ResolveTrainingCheckMissingCheckTypeTest(TestCase):
+    """#3043: no silent objects.first() fallback when "Technique Training" is unauthored.
+
+    The old fallback picked an arbitrary, unrelated CheckType on
+    ``DoesNotExist`` -- every training roll on a real deploy (where the
+    content half of #3043, ArxII-lore#72, hasn't shipped yet) silently rolled
+    the wrong check. This proves the fix fails loudly instead, even when
+    other CheckType rows exist to be picked by ``objects.first()``.
+    """
+
+    def setUp(self):
+        from world.checks.factories import CheckTypeFactory
+        from world.magic.constants import TargetKind
+        from world.magic.factories import ResonanceFactory
+        from world.magic.models import CharacterGift, Thread
+
+        self.sheet = CharacterSheetFactory()
+        self.technique = TechniqueFactory()
+        self.pool = ActionPointPool.get_or_create_for_character(self.sheet.character)
+        self.pool.current = 500
+        self.pool.save()
+
+        CharacterGift.objects.create(character=self.sheet, gift=self.technique.gift)
+        Thread.objects.create(
+            owner=self.sheet,
+            resonance=ResonanceFactory(),
+            target_kind=TargetKind.GIFT,
+            target_gift=self.technique.gift,
+            level=0,
+        )
+        self.progress = TechniqueProgress.objects.create(
+            character_sheet=self.sheet,
+            technique=self.technique,
+            total_required=50,
+            source="gift_acquisition",
+        )
+        # An unrelated CheckType exists (proves the old objects.first()
+        # fallback would have silently picked it up), but none named
+        # "Technique Training".
+        CheckTypeFactory(name="Unrelated Check")
+
+    def test_raises_technique_training_not_configured(self):
+        from world.magic.exceptions import TechniqueTrainingNotConfigured
+
+        with self.assertRaises(TechniqueTrainingNotConfigured):
+            resolve_training_check(self.sheet, self.progress, ap_to_invest=20)
