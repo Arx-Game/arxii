@@ -102,6 +102,26 @@ def account_block_active(*, player_a: PlayerData, player_b: PlayerData) -> bool:
     )
 
 
+def blocked_player_ids_for(player: PlayerData) -> set[int]:
+    """Account-level Block partner ids for this player, either direction (#2996).
+
+    The set-shaped sibling of ``account_block_active`` — the four write-then-filter delivery
+    seams (mail inbox, event invitation visibility, ...) need to exclude every row from a
+    blocked partner in one queryset filter rather than call ``account_block_active`` per
+    candidate row. Same active-block window and ``account_level=True`` policy as
+    ``account_block_active`` — no new semantics, just batched.
+    """
+    pairs = (
+        _active_blocks()
+        .filter(Q(owner=player, account_level=True) | Q(blocked_player=player, account_level=True))
+        .values_list("owner_id", "blocked_player_id")
+    )
+    ids: set[int] = set()
+    for owner_id, blocked_player_id in pairs:
+        ids.add(blocked_player_id if owner_id == player.pk else owner_id)
+    return ids
+
+
 def lift_block(block: Block, *, finalize_at: datetime) -> Block:
     """Begin lifting a block — it stays active until ``finalize_at`` (the next cron tick) (#1278).
 

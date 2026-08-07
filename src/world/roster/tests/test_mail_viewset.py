@@ -14,6 +14,8 @@ from world.roster.factories import (
     RosterTenureFactory,
 )
 from world.roster.models import PlayerMail
+from world.scenes.factories import PersonaFactory
+from world.scenes.models import Block, Mute
 
 
 class PlayerMailViewSetTestCase(TestCase):
@@ -237,3 +239,120 @@ class PlayerMailArrivalPushTestCase(TestCase):
 
         assert response.status_code == 201
         assert PlayerMail.objects.filter(subject="Offline Test").exists()
+
+
+class PlayerMailBlockMuteTestCase(TestCase):
+    """#2996 Decision 2 — account block/mute at the mail delivery seam.
+
+    Block: the write is untouched (the sender's own create response is unaffected); the
+    recipient's inbox queryset excludes the blocked sender's mail entirely. Mute: the write is
+    also untouched; the mail is instead auto-filed (read + archived) on the recipient's side.
+    """
+
+    def setUp(self):
+        self.client = APIClient()
+        self.recipient = PlayerDataFactory()
+        self.tenure = RosterTenureFactory(player_data=self.recipient)
+        self.blocked_sender = PlayerDataFactory()
+        self.blocked_tenure = RosterTenureFactory(player_data=self.blocked_sender)
+        self.control_sender = PlayerDataFactory()
+        self.control_tenure = RosterTenureFactory(player_data=self.control_sender)
+
+    def _send(self, sender_account, sender_tenure, subject):
+        self.client.force_authenticate(user=sender_account)
+        url = reverse("roster:mail-list")
+        payload = {
+            "recipient_tenure": self.tenure.id,
+            "sender_tenure": sender_tenure.id,
+            "subject": subject,
+            "message": "Hello.",
+        }
+        return self.client.post(url, payload, format="json")
+
+    def test_block_excludes_sender_mail_from_recipient_inbox(self):
+        Block.objects.create(
+            owner=self.recipient,
+            blocked_player=self.blocked_sender,
+            account_level=True,
+        )
+        PlayerMailFactory(
+            recipient_tenure=self.tenure,
+            sender_tenure=self.blocked_tenure,
+            subject="From Blocked",
+        )
+        PlayerMailFactory(
+            recipient_tenure=self.tenure,
+            sender_tenure=self.control_tenure,
+            subject="From Control",
+        )
+
+        self.client.force_authenticate(user=self.recipient.account)
+        response = self.client.get(reverse("roster:mail-list"))
+        assert response.status_code == 200
+        subjects = [item["subject"] for item in response.json()["results"]]
+        assert "From Blocked" not in subjects
+        assert "From Control" in subjects
+
+    def test_block_leaves_the_blocked_senders_own_write_untouched(self):
+        """Write-then-filter (#2996): the sender's own create response never reveals a block."""
+        Block.objects.create(
+            owner=self.recipient,
+            blocked_player=self.blocked_sender,
+            account_level=True,
+        )
+        blocked_response = self._send(
+            self.blocked_sender.account, self.blocked_tenure, "Blocked Sender Writes"
+        )
+        control_response = self._send(
+            self.control_sender.account, self.control_tenure, "Control Sender Writes"
+        )
+
+        assert blocked_response.status_code == control_response.status_code == 201
+        assert set(blocked_response.json().keys()) == set(control_response.json().keys())
+        assert PlayerMail.objects.filter(subject="Blocked Sender Writes").exists()
+
+    def test_mute_auto_files_but_does_not_exclude_from_inbox(self):
+        muted_persona = PersonaFactory()
+        Mute.objects.create(
+            owner=self.recipient,
+            muted_persona=muted_persona,
+            muted_player=self.blocked_sender,
+            account_level=True,
+        )
+
+        response = self._send(self.blocked_sender.account, self.blocked_tenure, "From Muted Sender")
+        assert response.status_code == 201
+
+        mail = PlayerMail.objects.get(subject="From Muted Sender")
+        assert mail.read_date is not None
+        assert mail.archived is True
+
+        self.client.force_authenticate(user=self.recipient.account)
+        list_response = self.client.get(reverse("roster:mail-list"))
+        subjects = [item["subject"] for item in list_response.json()["results"]]
+        assert "From Muted Sender" in subjects
+
+    def test_mute_leaves_the_muted_senders_own_write_untouched(self):
+        """Leak check: the muted sender's create response must not show the auto-filed state."""
+        muted_persona = PersonaFactory()
+        Mute.objects.create(
+            owner=self.recipient,
+            muted_persona=muted_persona,
+            muted_player=self.blocked_sender,
+            account_level=True,
+        )
+
+        muted_response = self._send(
+            self.blocked_sender.account, self.blocked_tenure, "Muted Sender Writes"
+        )
+        control_response = self._send(
+            self.control_sender.account, self.control_tenure, "Control Sender Writes 2"
+        )
+
+        assert muted_response.status_code == control_response.status_code == 201
+        assert set(muted_response.json().keys()) == set(control_response.json().keys())
+        # The response itself must not already show the auto-filed state -- it was frozen
+        # before the post-save mutation ran (#2996). ``archived`` isn't serialized at all
+        # (see PlayerMailSerializer.Meta.fields); ``read_date`` is the one exposed field the
+        # mutation touches.
+        assert muted_response.json()["read_date"] is None

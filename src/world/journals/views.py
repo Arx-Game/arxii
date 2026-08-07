@@ -162,6 +162,29 @@ class JournalEntryViewSet(CharacterContextMixin, viewsets.GenericViewSet):
                     {"detail": "Not found."},
                     status=status.HTTP_404_NOT_FOUND,
                 )
+        else:
+            sheet = self._get_character_sheet(request)
+
+        # #2996 Decision 2 — mute: a response persists normally (write-then-filter, never
+        # skip-the-write) but is excluded from the entry AUTHOR's own view of responses to
+        # THEIR entry when the author has muted the responder's account. Only applies when the
+        # requester IS the entry's author; any other viewer sees the full response list.
+        if sheet is not None and sheet.pk == entry.author_id and entry.cached_responses:
+            from world.journals.services import player_for_sheet  # noqa: PLC0415
+            from world.scenes.mute_services import account_muted  # noqa: PLC0415
+
+            author_player = player_for_sheet(sheet)
+            if author_player is not None:
+                entry.cached_responses = [
+                    response
+                    for response in entry.cached_responses
+                    if not (
+                        (responder_player := player_for_sheet(response.author)) is not None
+                        and account_muted(
+                            viewer_player=author_player, target_player=responder_player
+                        )
+                    )
+                ]
 
         serializer = JournalEntryDetailSerializer(entry)
         return Response(serializer.data)

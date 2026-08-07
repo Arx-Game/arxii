@@ -1,3 +1,5 @@
+from typing import TYPE_CHECKING
+
 from django.db.models import Prefetch, Q, QuerySet
 from django.shortcuts import get_object_or_404
 from django_filters.rest_framework import DjangoFilterBackend
@@ -50,9 +52,33 @@ from world.events.serializers import (
 from world.events.services import validate_location_gap
 from world.events.types import EventError
 from world.game_clock.constants import TimePhase
+from world.scenes.block_services import blocked_player_ids_for
 from world.scenes.models import Persona, Scene
+from world.scenes.mute_services import muted_player_ids_for
 from world.societies.models import Organization, Society
 from world.stories.pagination import StandardResultsSetPagination
+
+if TYPE_CHECKING:
+    from evennia_extensions.models import PlayerData
+
+
+def _persona_player(persona: Persona) -> "PlayerData | None":
+    """The PlayerData currently playing this persona's character, or None (#2996).
+
+    Mirrors ``world.scenes.block_services._persona_player`` — kept local (not imported) so
+    this module stays self-contained, matching the convention already used by
+    ``world.scenes.mute_services._persona_player``.
+    """
+    from django.core.exceptions import ObjectDoesNotExist  # noqa: PLC0415
+
+    try:
+        roster_entry = persona.character_sheet.roster_entry
+    except ObjectDoesNotExist:
+        return None
+    if roster_entry is None:
+        return None
+    current = roster_entry.current_tenure
+    return current.player_data if current is not None else None
 
 
 class _EventActorMixin:
@@ -155,6 +181,45 @@ class EventViewSet(_EventActorMixin, ModelViewSet):
     def get_queryset(self) -> QuerySet[Event]:
         return self._apply_visibility_filter(self._base_queryset().order_by("scheduled_real_time"))
 
+    def _invited_event_ids(self, persona_ids: list[int]) -> set[int]:
+        """Event ids visible via a direct persona invitation, filtered by block/mute (#2996).
+
+        Write path (``invite_persona``) is unmodified — the invitation row always persists,
+        so the host's own response never changes. Suppression is entirely on this read: an
+        event that's visible to the invitee ONLY because of the invitation drops out of their
+        list when the inviter is (a) account-blocked either way, or (b) muted by the viewer.
+        Resolved in Python against a small candidate set rather than composing a negated Q
+        into the OR'd visibility filter, since NOT-conditions on a multi-valued relation don't
+        compose safely with sibling OR branches in a single ``.filter()`` call.
+        """
+        invitations = EventInvitation.objects.filter(
+            target_type=InvitationTargetType.PERSONA,
+            target_persona_id__in=persona_ids,
+        ).select_related("invited_by__character_sheet__roster_entry")
+
+        try:
+            viewer_player = self.request.user.player_data
+        except AttributeError:
+            viewer_player = None
+
+        if viewer_player is None:
+            return {invitation.event_id for invitation in invitations}
+
+        excluded_player_ids = blocked_player_ids_for(viewer_player) | muted_player_ids_for(
+            viewer_player=viewer_player
+        )
+        if not excluded_player_ids:
+            return {invitation.event_id for invitation in invitations}
+
+        visible_ids: set[int] = set()
+        for invitation in invitations:
+            inviter = invitation.invited_by
+            inviter_player = _persona_player(inviter) if inviter is not None else None
+            if inviter_player is not None and inviter_player.pk in excluded_player_ids:
+                continue
+            visible_ids.add(invitation.event_id)
+        return visible_ids
+
     def _apply_visibility_filter(self, qs: QuerySet[Event]) -> QuerySet[Event]:
         """Filter queryset to only events visible to the requesting user."""
         # Staff sees everything
@@ -173,10 +238,8 @@ class EventViewSet(_EventActorMixin, ModelViewSet):
 
         public_q = Q(is_public=True)
         host_q = Q(hosts__persona_id__in=persona_ids)
-        invited_q = Q(
-            invitations__target_type=InvitationTargetType.PERSONA,
-            invitations__target_persona_id__in=persona_ids,
-        )
+        invited_event_ids = self._invited_event_ids(persona_ids)
+        invited_q = Q(pk__in=invited_event_ids)
         org_invited_q = Q(
             invitations__target_type=InvitationTargetType.ORGANIZATION,
             invitations__target_organization__memberships__persona_id__in=persona_ids,

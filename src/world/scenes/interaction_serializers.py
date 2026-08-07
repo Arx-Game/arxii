@@ -1,4 +1,5 @@
 import re as _re
+from typing import TYPE_CHECKING
 
 from django.core.exceptions import ValidationError as DjangoValidationError
 from rest_framework import serializers
@@ -16,6 +17,9 @@ from world.scenes.models import (
 )
 from world.scenes.place_models import InteractionReceiver
 from world.scenes.types import PersonaPayload, ReactionAggregation
+
+if TYPE_CHECKING:
+    from evennia_extensions.models import PlayerData
 
 _MAX_POSE_LENGTH = 10_000
 
@@ -223,6 +227,77 @@ class InteractionListSerializer(serializers.ModelSerializer):
             return False
         return any(f.roster_entry_id in roster_entry_ids for f in obj.cached_favorites)
 
+    def _account_player_for_persona(self, persona: Persona | None) -> "PlayerData | None":
+        """Resolve + memoize a persona's current player (#2996), cached per request.
+
+        Mirrors ``world.scenes.block_services._persona_player``'s walk. Memoized on the
+        serializer context (keyed by persona id) so a reactor who appears on several poses
+        in one page is only resolved once.
+        """
+        if persona is None:
+            return None
+        cache = self.context.setdefault("_account_player_cache", {})
+        if persona.pk in cache:
+            return cache[persona.pk]
+
+        from django.core.exceptions import ObjectDoesNotExist  # noqa: PLC0415
+
+        player = None
+        try:
+            roster_entry = persona.character_sheet.roster_entry
+        except ObjectDoesNotExist:
+            roster_entry = None
+        if roster_entry is not None:
+            current = roster_entry.current_tenure
+            player = current.player_data if current is not None else None
+        cache[persona.pk] = player
+        return player
+
+    def _viewer_player(self) -> "PlayerData | None":
+        """The requesting account's PlayerData, or None (#2996)."""
+        request = self.context.get("request")
+        user = request.user if request is not None else None
+        if user is None or not user.is_authenticated:
+            return None
+        try:
+            return user.player_data
+        except AttributeError:
+            return None
+
+    def _visible_reaction_rows(self, rows: list, *, target_persona: Persona | None) -> list:
+        """Drop reactor rows the viewer's block/mute hides (#2996 Decision 2).
+
+        Write path (``react_to_window``/``react_to_interaction``) is unmodified — a reactor's
+        own create response is always the normal success. This is the read-side filter only:
+        - **block**: symmetric, but only suppresses a reactor when the VIEWER is the pose's own
+          author (the "target" of the reaction) — anyone else's read is unaffected.
+        - **mute**: one-way, applies to every viewer's own read regardless of whose pose it is.
+        """
+        viewer_player = self._viewer_player()
+        if viewer_player is None:
+            return rows
+
+        from world.scenes.block_services import account_block_active  # noqa: PLC0415
+        from world.scenes.mute_services import account_muted  # noqa: PLC0415
+
+        target_player = self._account_player_for_persona(target_persona)
+        viewer_is_target = target_player is not None and viewer_player.pk == target_player.pk
+
+        visible = []
+        for row in rows:
+            reactor_player = self._account_player_for_persona(row.reactor_persona)
+            if reactor_player is None:
+                visible.append(row)
+                continue
+            if viewer_is_target and account_block_active(
+                player_a=viewer_player, player_b=reactor_player
+            ):
+                continue
+            if account_muted(viewer_player=viewer_player, target_player=reactor_player):
+                continue
+            visible.append(row)
+        return visible
+
     def get_reaction_windows(self, obj: Interaction) -> list[dict]:
         """Reaction windows on this event (#904): choices, reactions, my_reaction.
 
@@ -251,6 +326,7 @@ class InteractionListSerializer(serializers.ModelSerializer):
                 (r.choice for r in rows if r.reactor_persona_id in viewer_persona_ids),
                 None,
             )
+            rows = self._visible_reaction_rows(rows, target_persona=obj.persona)
             if config.public:
                 reactions = [
                     {

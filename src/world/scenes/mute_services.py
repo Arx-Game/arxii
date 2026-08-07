@@ -129,3 +129,17 @@ def account_muted(*, viewer_player: PlayerData, target_player: PlayerData) -> bo
     return Mute.objects.filter(
         owner=viewer_player, account_level=True, muted_player=target_player
     ).exists()
+
+
+def muted_player_ids_for(*, viewer_player: PlayerData) -> set[int]:
+    """Account-level Mute target ids for this viewer (#2996).
+
+    The set-shaped sibling of ``account_muted`` — lets a delivery-seam queryset exclude every
+    row from a muted target in one filter instead of an ``account_muted`` call per candidate
+    row. One-way, same policy as ``account_muted``.
+    """
+    return set(
+        Mute.objects.filter(owner=viewer_player, account_level=True).values_list(
+            "muted_player_id", flat=True
+        )
+    )

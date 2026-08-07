@@ -23,7 +23,29 @@ from world.journals.types import JournalError
 from world.progression.services.awards import award_xp
 
 if TYPE_CHECKING:
+    from evennia_extensions.models import PlayerData
     from world.character_sheets.models import CharacterSheet
+
+
+def player_for_sheet(sheet: CharacterSheet) -> PlayerData | None:
+    """The PlayerData currently playing this character sheet, or None (#2996).
+
+    Mirrors ``world.scenes.block_services._sheet_player``'s walk (this app's own copy — no
+    cross-app dependency on ``world.scenes`` for the resolution itself); reused by
+    ``world.journals.views`` for the mute-filtered author's-view read path, so this one stays
+    unprefixed rather than following the private-per-module convention the block/mute service
+    pair uses for their own persona-keyed sibling.
+    """
+    from django.core.exceptions import ObjectDoesNotExist
+
+    try:
+        roster_entry = sheet.roster_entry
+    except ObjectDoesNotExist:
+        return None
+    if roster_entry is None:
+        return None
+    current = roster_entry.current_tenure
+    return current.player_data if current is not None else None
 
 
 def _get_or_reset_weekly_tracker(
@@ -153,6 +175,21 @@ def create_journal_response(
 
     if parent.author_id == author.pk:
         raise JournalError(JournalError.SELF_RESPONSE)
+
+    # #2996 Decision 2 — an account-level block between the responder and the parent's author
+    # rejects the response with the shared neutral UNAVAILABLE message (never names blocking;
+    # "closed to you" already has many innocent causes here). Fail-open when either side has no
+    # current player (can't prove a block, so don't manufacture one).
+    from world.scenes.block_services import account_block_active
+
+    author_player = player_for_sheet(author)
+    parent_author_player = player_for_sheet(parent.author)
+    if (
+        author_player is not None
+        and parent_author_player is not None
+        and account_block_active(player_a=author_player, player_b=parent_author_player)
+    ):
+        raise JournalError(JournalError.UNAVAILABLE)
 
     with transaction.atomic():
         entry = JournalEntry.objects.create(

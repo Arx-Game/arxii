@@ -21,6 +21,9 @@ from world.journals.services import (
     edit_journal_entry,
 )
 from world.journals.types import JournalError
+from world.roster.factories import PlayerDataFactory, RosterTenureFactory
+from world.scenes.factories import PersonaFactory
+from world.scenes.models import Block, Mute
 
 
 @patch("world.journals.services.increment_stat")
@@ -420,6 +423,120 @@ class CreateJournalResponseTest(TestCase):
             body="Wrong.",
         )
         mock_increment.assert_called()
+
+
+@patch("world.journals.services.increment_stat")
+@patch("world.journals.services.award_xp")
+class JournalResponseBlockMuteTest(TestCase):
+    """#2996 Decision 2 — account block/mute at the journal-reaction seam.
+
+    Block is the documented exception to write-then-filter here: a rejection at
+    ``create_journal_response`` can't leak because "this entry isn't available to respond to"
+    already has many innocent causes (private, deleted, moderation, ...). Mute is the ordinary
+    write-then-filter shape — the response persists; the view layer excludes it from the
+    entry author's own read (covered separately in ``test_views.py``).
+    """
+
+    @classmethod
+    def setUpTestData(cls) -> None:
+        author_tenure = RosterTenureFactory(player_data=PlayerDataFactory())
+        cls.author = author_tenure.roster_entry.character_sheet
+        cls.author_player = author_tenure.player_data
+        responder_tenure = RosterTenureFactory(player_data=PlayerDataFactory())
+        cls.responder = responder_tenure.roster_entry.character_sheet
+        cls.responder_player = responder_tenure.player_data
+
+    def _make_public_entry(self) -> JournalEntry:
+        return JournalEntry.objects.create(
+            author=self.author,
+            title="Public Entry",
+            body="Body",
+            is_public=True,
+        )
+
+    def test_block_rejects_with_neutral_message_and_writes_nothing(
+        self,
+        mock_award,  # noqa: ARG002
+        mock_stat,  # noqa: ARG002
+    ) -> None:
+        Block.objects.create(
+            owner=self.author_player,
+            blocked_player=self.responder_player,
+            account_level=True,
+        )
+        parent = self._make_public_entry()
+
+        with self.assertRaises(JournalError) as ctx:
+            create_journal_response(
+                author=self.responder,
+                parent=parent,
+                response_type=ResponseType.PRAISE,
+                title="Well done!",
+                body="Body",
+            )
+
+        self.assertEqual(ctx.exception.user_message, JournalError.UNAVAILABLE)
+        self.assertNotIn("block", ctx.exception.user_message.lower())
+        self.assertFalse(JournalEntry.objects.filter(title="Well done!").exists())
+
+    def test_block_is_symmetric(
+        self,
+        mock_award,  # noqa: ARG002
+        mock_stat,  # noqa: ARG002
+    ) -> None:
+        """The block owner doesn't matter -- either direction rejects the response."""
+        Block.objects.create(
+            owner=self.responder_player,
+            blocked_player=self.author_player,
+            account_level=True,
+        )
+        parent = self._make_public_entry()
+
+        with self.assertRaises(JournalError):
+            create_journal_response(
+                author=self.responder,
+                parent=parent,
+                response_type=ResponseType.PRAISE,
+                title="Well done!",
+                body="Body",
+            )
+
+    def test_no_block_allows_response(
+        self,
+        mock_award,  # noqa: ARG002
+        mock_stat,  # noqa: ARG002
+    ) -> None:
+        parent = self._make_public_entry()
+        response = create_journal_response(
+            author=self.responder,
+            parent=parent,
+            response_type=ResponseType.PRAISE,
+            title="Well done!",
+            body="Body",
+        )
+        self.assertTrue(JournalEntry.objects.filter(pk=response.pk).exists())
+
+    def test_mute_does_not_block_the_write(
+        self,
+        mock_award,  # noqa: ARG002
+        mock_stat,  # noqa: ARG002
+    ) -> None:
+        """Mute is a read-side filter only -- the write always persists normally (#2996)."""
+        Mute.objects.create(
+            owner=self.author_player,
+            muted_persona=PersonaFactory(),
+            muted_player=self.responder_player,
+            account_level=True,
+        )
+        parent = self._make_public_entry()
+        response = create_journal_response(
+            author=self.responder,
+            parent=parent,
+            response_type=ResponseType.PRAISE,
+            title="Well done!",
+            body="Body",
+        )
+        self.assertTrue(JournalEntry.objects.filter(pk=response.pk).exists())
 
 
 class EditJournalEntryTests(TestCase):
