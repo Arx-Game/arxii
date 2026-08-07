@@ -37,14 +37,23 @@ IC writing by players — journals, praises, retorts, and weekly XP awards. Jour
   tab) plus a `JournalTab` quick-compose panel in the in-scene sidebar. The `/journal` route
   (previously a decoy pointing at the unrelated missions ledger) now belongs to this app; the
   missions ledger moved to `/missions/journal`.
+- **Account-level block/mute feed visibility + response gating (#2996)** — the public feed
+  (`GET /api/journals/entries/`) excludes an account-level-blocked account's entries **both
+  directions** (`journals.services.exclude_blocked_and_muted_authors`, called from
+  `JournalEntryViewSet.list`) and an account-level-muted account's entries from the **muter's
+  own feed only**; both reuse the batched `block_services.blocked_player_ids_for`/
+  `mute_services.muted_player_ids_for` helpers, one `.exclude()` per call. Praise/retort
+  responses: a block between responder and parent author rejects with the neutral shared
+  `JournalError.UNAVAILABLE` (write never happens — the only #2996 seam that rejects instead of
+  write-then-filter, since a rejection here can't leak); a mute persists the response normally
+  but excludes it from the entry AUTHOR's own read (`JournalEntryViewSet.retrieve`) — any other
+  viewer is unaffected.
 
 ## Deferred (depends on systems that don't exist yet)
 - **Relationship gating for retorts** — retorts should validate antagonistic relationship (needs relationships system)
 - **Fame signal emission from praises** — praises should emit fame signal (needs fame/reputation system)
 - **IC timestamp population** — `ic_timestamp` field exists but needs world clock system
 - **Read tracking / unread filtering** — track which entries a character has read
-- **Mute/follow preferences** — per-character subscription controls for journal feeds
-- **Account-level block integration** — respect account blocks in journal visibility
 - **Great Archive IC location gating** — IC access point for the journal archive (needs world building)
 - **GoalJournal removal** — remove old goal-specific journals once migrated (ThreadJournal already removed; see Thread linking above)
 

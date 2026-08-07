@@ -160,7 +160,13 @@ export function PersonaContextMenu({
       return;
     }
     createBlock.mutate(
-      { blocker_persona: blockerPersonaId, blocked_persona: personaId, reason: blockReason.trim() },
+      {
+        blocker_persona: blockerPersonaId,
+        blocked_persona: personaId,
+        reason: blockReason.trim(),
+        // #2996 Decision 1: account-first by default -- blocks the target's whole account.
+        account_level: true,
+      },
       {
         onSettled: () => {
           setBlockDialogOpen(false);
@@ -375,7 +381,13 @@ export function PersonaContextMenu({
                 disabled={createMute.isPending}
                 data-testid="mute-persona-item"
                 onClick={() =>
-                  createMute.mutate({ muted_persona: personaId, mute_ic: true, mute_ooc: true })
+                  createMute.mutate({
+                    muted_persona: personaId,
+                    mute_ic: true,
+                    mute_ooc: true,
+                    // #2996: account-first by default, mirroring Block's Decision 1.
+                    account_level: true,
+                  })
                 }
               >
                 <VolumeX className="mr-2 h-4 w-4" />
@@ -422,8 +434,9 @@ export function PersonaContextMenu({
           <DialogHeader>
             <DialogTitle>Block {personaName}?</DialogTitle>
             <DialogDescription>
-              You won't see or be targeted by them. Unblocking takes a full cron cycle to clear, so
-              this is deliberate: a reason is required and goes to staff.
+              This blocks their whole account — every character they play, not just this one. You
+              won't see or be targeted by them. Unblocking takes a full cron cycle to clear, so this
+              is deliberate: a reason is required and goes to staff.
             </DialogDescription>
           </DialogHeader>
           <Textarea

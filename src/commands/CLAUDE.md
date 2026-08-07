@@ -915,7 +915,11 @@ actions, backends, and service functions.
 
 ### Social Commands (`social/`)
 - **`blocking.py`**: `CmdBlock`/`CmdUnblock`/`CmdShareBlock`/`CmdMute`/`CmdUnmute`/`CmdBlockList`
-  (#1278) — telnet face of the persona block/mute menu; thin over `world.scenes.block_services`.
+  (#1278) — telnet face of the block/mute controls; thin over `world.scenes.block_services`/
+  `mute_services`. **Account-first by default (#2996):** `+block`/`+mute` cover the target's
+  whole account unless the caller passes the `/persona` switch, which opts into the narrower
+  advanced shape (only the exact face named) — see `world/scenes/CLAUDE.md`'s Block/Mute
+  entries and ADR-0204.
 - **`tidings.py`**: `CmdTidings` (`tidings`, #1450) — the pull/browse face of the public-reaction
   tidings feed; thin over `world.tidings.services.public_feed_for` (the same service the web
   `/api/tidings/feed/` endpoint calls). Lists recent deeds + scandals the active character's

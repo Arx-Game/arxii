@@ -56,7 +56,9 @@ This file provides specific guidance for working with the roster system in Arx I
   current player of a character receives it regardless of who that is. Web-only surface
   (`/profile/mail` + in-scene quick-compose); no telnet mail command exists or is planned
   (ADR-0116).
-- **PlayerAllowList/PlayerBlockList**: Social lists for player communication
+- **PlayerAllowList**: Social contact allowlist. The old account-level `PlayerBlockList` was
+  removed (#1278) — block/mute now lives on `world.scenes.Block`/`Mute` (see
+  `world/scenes/CLAUDE.md`).
 
 ## Command Implementation Guidelines
 
@@ -90,6 +92,13 @@ When implementing commands like `@ic`, `@characters`, `@apply`:
 - Maintains character context while preserving player anonymity
 - Recipient gets a `MAIL_ARRIVED` websocket push (tenure-display-only payload) plus an unread
   badge/count in the web header; `mark-read`/`unread-count` are `PlayerMailViewSet` actions
+- **Account block/mute (#2996 final review):** the write always succeeds (write-then-filter —
+  `PlayerMailViewSet.perform_create` never skips the save), but the `MAIL_ARRIVED` push is
+  suppressed outright when the recipient has an active account-level `Block` against the sender
+  (`block_services.account_block_active`) or an account-level `Mute` naming them
+  (`mute_services.account_muted`) — the live ping names the sender + subject directly, a
+  different leak surface than the inbox-row exclusion/auto-file, so it needs its own gate rather
+  than relying on the recipient never opening their mail list.
 
 ### Trust-Based Permissions
 - Approval permissions are tied to specific characters, stories, or domains

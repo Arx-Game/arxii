@@ -70,6 +70,10 @@ class BlockViewSet(
                 blocker_persona=serializer.validated_data["blocker_persona"],
                 blocked_persona=serializer.validated_data["blocked_persona"],
                 reason=serializer.validated_data["reason"],
+                # #2996 Decision 1: the web control is account-first by default, same as
+                # +block — BlockCreateSerializer.account_level defaults True; the advanced
+                # persona-narrow shape is reachable via an explicit account_level: false.
+                account_level=serializer.validated_data["account_level"],
             )
         except DjangoValidationError as exc:
             raise serializers.ValidationError(exc.messages) from exc
@@ -116,6 +120,10 @@ class MuteViewSet(
             muted_persona=serializer.validated_data["muted_persona"],
             ic=serializer.validated_data["mute_ic"],
             ooc=serializer.validated_data["mute_ooc"],
+            # #2996: account-first by default (MuteCreateSerializer.account_level defaults
+            # True), mirroring Block's Decision 1 — the advanced persona-narrow shape is
+            # reachable via an explicit account_level: false.
+            account_level=serializer.validated_data["account_level"],
         )
         return Response(MuteSerializer(mute).data, status=status.HTTP_201_CREATED)
 

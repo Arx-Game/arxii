@@ -10,6 +10,9 @@ from evennia_extensions.factories import AccountFactory, CharacterFactory
 from world.character_sheets.factories import CharacterSheetFactory
 from world.journals.constants import ResponseType
 from world.journals.factories import JournalEntryFactory, JournalTagFactory
+from world.roster.factories import PlayerDataFactory, RosterTenureFactory
+from world.scenes.factories import PersonaFactory
+from world.scenes.models import Block, Mute
 
 
 class JournalEntryListTests(TestCase):
@@ -95,6 +98,102 @@ class JournalEntryFilterTests(TestCase):
         titles = [e["title"] for e in response.data["results"]]
         self.assertIn("Entry A", titles)
         self.assertNotIn("Entry B", titles)
+
+
+class JournalEntryFeedBlockMuteTests(TestCase):
+    """#2996 Decision 2 — journal feed visibility: block hides both directions, mute one-way."""
+
+    @classmethod
+    def setUpTestData(cls) -> None:
+        cls.viewer_player = PlayerDataFactory()
+        cls.viewer_tenure = RosterTenureFactory(player_data=cls.viewer_player)
+
+        cls.blocked_player = PlayerDataFactory()
+        cls.blocked_tenure = RosterTenureFactory(player_data=cls.blocked_player)
+        cls.blocked_entry = JournalEntryFactory(
+            author=cls.blocked_tenure.roster_entry.character_sheet,
+            title="From Blocked",
+            is_public=True,
+        )
+
+        cls.muted_player = PlayerDataFactory()
+        cls.muted_tenure = RosterTenureFactory(player_data=cls.muted_player)
+        cls.muted_entry = JournalEntryFactory(
+            author=cls.muted_tenure.roster_entry.character_sheet,
+            title="From Muted",
+            is_public=True,
+        )
+
+        cls.control_player = PlayerDataFactory()
+        cls.control_tenure = RosterTenureFactory(player_data=cls.control_player)
+        cls.control_entry = JournalEntryFactory(
+            author=cls.control_tenure.roster_entry.character_sheet,
+            title="From Control",
+            is_public=True,
+        )
+
+    def setUp(self) -> None:
+        self.client = APIClient()
+
+    def _titles(self) -> list[str]:
+        response = self.client.get("/api/journals/entries/")
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        return [e["title"] for e in response.data["results"]]
+
+    def test_no_block_or_mute_shows_everything(self) -> None:
+        self.client.force_authenticate(user=self.viewer_player.account)
+        titles = self._titles()
+        self.assertIn("From Blocked", titles)
+        self.assertIn("From Muted", titles)
+        self.assertIn("From Control", titles)
+
+    def test_blocked_authors_entry_hidden_from_viewer(self) -> None:
+        Block.objects.create(
+            owner=self.viewer_player, blocked_player=self.blocked_player, account_level=True
+        )
+        self.client.force_authenticate(user=self.viewer_player.account)
+        titles = self._titles()
+        self.assertNotIn("From Blocked", titles)
+        self.assertIn("From Control", titles)
+
+    def test_block_hides_the_viewers_own_entries_from_the_blocked_author_too(self) -> None:
+        """Both directions (#2996): the blocked account also loses the viewer's entries."""
+        Block.objects.create(
+            owner=self.viewer_player, blocked_player=self.blocked_player, account_level=True
+        )
+        viewer_entry = JournalEntryFactory(
+            author=self.viewer_tenure.roster_entry.character_sheet,
+            title="From Viewer",
+            is_public=True,
+        )
+        self.client.force_authenticate(user=self.blocked_player.account)
+        titles = self._titles()
+        self.assertNotIn(viewer_entry.title, titles)
+        self.assertIn("From Control", titles)
+
+    def test_mute_hides_only_from_the_muters_own_feed(self) -> None:
+        Mute.objects.create(
+            owner=self.viewer_player,
+            muted_persona=PersonaFactory(),
+            muted_player=self.muted_player,
+            account_level=True,
+        )
+        self.client.force_authenticate(user=self.viewer_player.account)
+        titles = self._titles()
+        self.assertNotIn("From Muted", titles)
+        self.assertIn("From Control", titles)
+
+        # The muted author's own feed (and any other viewer's) is unaffected -- one-way.
+        self.client.force_authenticate(user=self.muted_player.account)
+        other_titles = self._titles()
+        self.assertIn("From Muted", other_titles)
+
+    def test_anonymous_viewer_rejected_not_crashed(self) -> None:
+        response = self.client.get("/api/journals/entries/")
+        self.assertIn(
+            response.status_code,
+            (status.HTTP_401_UNAUTHORIZED, status.HTTP_403_FORBIDDEN),
+        )
 
 
 class JournalEntryMineTests(TestCase):
@@ -412,3 +511,112 @@ class JournalResponseCreateTests(TestCase):
             format="json",
         )
         self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+
+
+class JournalResponseMuteViewTests(TestCase):
+    """#2996 Decision 2 — mute excludes a response from the entry AUTHOR's own read.
+
+    The response persists normally (write-then-filter, covered in
+    ``test_services.JournalResponseBlockMuteTest``); this covers the read-side exclusion at
+    ``JournalEntryViewSet.retrieve``, scoped to the entry's own author reading their own entry.
+    """
+
+    @classmethod
+    def setUpTestData(cls) -> None:
+        cls.author_account = AccountFactory()
+        cls.author_character = CharacterFactory()
+        cls.author_character.db_account = cls.author_account
+        cls.author_character.save()
+        cls.author_sheet = CharacterSheetFactory(character=cls.author_character)
+        cls.author_tenure = RosterTenureFactory(
+            roster_entry__character_sheet__character=cls.author_character,
+            player_data__account=cls.author_account,
+        )
+
+        cls.muted_account = AccountFactory()
+        cls.muted_character = CharacterFactory()
+        cls.muted_character.db_account = cls.muted_account
+        cls.muted_character.save()
+        cls.muted_sheet = CharacterSheetFactory(character=cls.muted_character)
+        cls.muted_tenure = RosterTenureFactory(
+            roster_entry__character_sheet__character=cls.muted_character,
+            player_data__account=cls.muted_account,
+        )
+
+        cls.control_account = AccountFactory()
+        cls.control_character = CharacterFactory()
+        cls.control_character.db_account = cls.control_account
+        cls.control_character.save()
+        cls.control_sheet = CharacterSheetFactory(character=cls.control_character)
+        cls.control_tenure = RosterTenureFactory(
+            roster_entry__character_sheet__character=cls.control_character,
+            player_data__account=cls.control_account,
+        )
+
+        cls.entry = JournalEntryFactory(author=cls.author_sheet, title="My Entry", is_public=True)
+        cls.muted_response = JournalEntryFactory(
+            author=cls.muted_sheet,
+            parent=cls.entry,
+            response_type=ResponseType.PRAISE,
+            title="From Muted",
+            is_public=True,
+        )
+        cls.control_response = JournalEntryFactory(
+            author=cls.control_sheet,
+            parent=cls.entry,
+            response_type=ResponseType.PRAISE,
+            title="From Control",
+            is_public=True,
+        )
+
+    def setUp(self) -> None:
+        self.client = APIClient()
+
+    @patch("world.journals.views.JournalEntryViewSet._get_character")
+    def test_author_view_excludes_muted_responder(self, mock_get_char: object) -> None:
+        Mute.objects.create(
+            owner=self.author_tenure.player_data,
+            muted_persona=PersonaFactory(),
+            muted_player=self.muted_tenure.player_data,
+            account_level=True,
+        )
+        self.client.force_authenticate(user=self.author_account)
+        mock_get_char.return_value = self.author_character
+
+        response = self.client.get(f"/api/journals/entries/{self.entry.pk}/")
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        titles = [r["title"] for r in response.data["responses"]]
+        self.assertNotIn("From Muted", titles)
+        self.assertIn("From Control", titles)
+
+    @patch("world.journals.views.JournalEntryViewSet._get_character")
+    def test_non_author_view_is_unaffected_by_authors_mute(self, mock_get_char: object) -> None:
+        """Only the entry AUTHOR's own read is filtered -- any other viewer sees everything."""
+        Mute.objects.create(
+            owner=self.author_tenure.player_data,
+            muted_persona=PersonaFactory(),
+            muted_player=self.muted_tenure.player_data,
+            account_level=True,
+        )
+        self.client.force_authenticate(user=self.control_account)
+        mock_get_char.return_value = self.control_character
+
+        response = self.client.get(f"/api/journals/entries/{self.entry.pk}/")
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        titles = [r["title"] for r in response.data["responses"]]
+        self.assertIn("From Muted", titles)
+        self.assertIn("From Control", titles)
+
+    @patch("world.journals.views.JournalEntryViewSet._get_character")
+    def test_no_mute_shows_all_responses(self, mock_get_char: object) -> None:
+        self.client.force_authenticate(user=self.author_account)
+        mock_get_char.return_value = self.author_character
+
+        response = self.client.get(f"/api/journals/entries/{self.entry.pk}/")
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        titles = [r["title"] for r in response.data["responses"]]
+        self.assertIn("From Muted", titles)
+        self.assertIn("From Control", titles)

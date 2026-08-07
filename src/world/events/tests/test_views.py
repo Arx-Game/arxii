@@ -11,7 +11,7 @@ from world.events.models import EventInvitation
 from world.events.services import start_event
 from world.roster.factories import RosterTenureFactory
 from world.scenes.factories import PersonaFactory, SceneParticipationFactory
-from world.scenes.models import Scene
+from world.scenes.models import Block, Mute, Scene
 
 
 class EventViewSetTestCase(APITestCase):
@@ -540,3 +540,230 @@ class AccountPersonaCacheInvalidationTestCase(APITestCase):
 
         # Cache invalidated; recompute reflects the now-ended tenure.
         self.assertEqual(account.cached_primary_persona_ids, [])
+
+
+class EventInviteBlockMuteVisibilityTestCase(APITestCase):
+    """#2996 Decision 2 — account block/mute at the event-invite delivery seam.
+
+    Write path (``invite_persona``) is unmodified — an invitation always persists regardless
+    of block/mute. Suppression is entirely a read-side filter on the invitee's own event
+    visibility: a PRIVATE event visible ONLY because of the invitation drops out of the list
+    when the inviter is blocked (either direction) or muted (the invitee's own mute only).
+    """
+
+    def setUp(self) -> None:
+        self.account = AccountFactory()
+        self.client.force_authenticate(user=self.account)
+
+        identity = CharacterSheetFactory()
+        self.invitee_tenure = RosterTenureFactory(
+            roster_entry__character_sheet__character=identity.character,
+            player_data__account=self.account,
+        )
+        self.invitee_persona = identity.primary_persona
+
+        self.inviter_account = AccountFactory()
+        inviter_identity = CharacterSheetFactory()
+        self.inviter_tenure = RosterTenureFactory(
+            roster_entry__character_sheet__character=inviter_identity.character,
+            player_data__account=self.inviter_account,
+        )
+        self.inviter_persona = inviter_identity.primary_persona
+
+        self.private_event = EventFactory(is_public=False)
+        EventHostFactory(event=self.private_event)
+        EventInvitationFactory(
+            event=self.private_event,
+            target_persona=self.invitee_persona,
+            invited_by=self.inviter_persona,
+        )
+
+    def test_invitation_makes_the_event_visible_with_no_block_or_mute(self) -> None:
+        response = self.client.get("/api/events/")
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        event_ids = [e["id"] for e in response.data["results"]]
+        self.assertIn(self.private_event.id, event_ids)
+
+    def test_block_excludes_the_event_from_the_invitees_list(self) -> None:
+        Block.objects.create(
+            owner=self.invitee_tenure.player_data,
+            blocked_player=self.inviter_tenure.player_data,
+            account_level=True,
+        )
+        response = self.client.get("/api/events/")
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        event_ids = [e["id"] for e in response.data["results"]]
+        self.assertNotIn(self.private_event.id, event_ids)
+
+    def test_block_is_symmetric(self) -> None:
+        """The block owner doesn't matter -- either direction excludes the invitation."""
+        Block.objects.create(
+            owner=self.inviter_tenure.player_data,
+            blocked_player=self.invitee_tenure.player_data,
+            account_level=True,
+        )
+        response = self.client.get("/api/events/")
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        event_ids = [e["id"] for e in response.data["results"]]
+        self.assertNotIn(self.private_event.id, event_ids)
+
+    def test_mute_excludes_the_event_from_the_muters_list_only(self) -> None:
+        Mute.objects.create(
+            owner=self.invitee_tenure.player_data,
+            muted_persona=PersonaFactory(),
+            muted_player=self.inviter_tenure.player_data,
+            account_level=True,
+        )
+        response = self.client.get("/api/events/")
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        event_ids = [e["id"] for e in response.data["results"]]
+        self.assertNotIn(self.private_event.id, event_ids)
+
+        # The write path is unmodified -- the invitation row itself always persists.
+        self.assertTrue(
+            EventInvitation.objects.filter(
+                event=self.private_event, target_persona=self.invitee_persona
+            ).exists()
+        )
+
+    def test_block_does_not_affect_the_inviters_own_create_response(self) -> None:
+        """Leak check (#2996): the write path (``invite_persona``) is deliberately untouched
+        by block/mute (write-then-filter) -- inviting a blocked account must return a response
+        byte-identical (field-for-field, ids/timestamps aside) to inviting an unblocked one.
+        """
+        Block.objects.create(
+            owner=self.invitee_tenure.player_data,
+            blocked_player=self.inviter_tenure.player_data,
+            account_level=True,
+        )
+        self.client.force_authenticate(user=self.inviter_account)
+        # Same target persona for both calls (on separate events) so every field the
+        # serializer exposes besides id/invited_at is expected to match exactly.
+        target = PersonaFactory()
+
+        blocked_event = EventFactory(is_public=False, status=EventStatus.DRAFT)
+        EventHostFactory(event=blocked_event, persona=self.inviter_persona)
+        blocked_response = self.client.post(
+            "/api/events/invitations/",
+            {"event": blocked_event.id, "target_type": "persona", "target_id": target.id},
+            format="json",
+        )
+
+        control_event = EventFactory(is_public=False, status=EventStatus.DRAFT)
+        EventHostFactory(event=control_event, persona=self.inviter_persona)
+        control_response = self.client.post(
+            "/api/events/invitations/",
+            {"event": control_event.id, "target_type": "persona", "target_id": target.id},
+            format="json",
+        )
+
+        self.assertEqual(blocked_response.status_code, status.HTTP_201_CREATED)
+        self.assertEqual(control_response.status_code, status.HTTP_201_CREATED)
+        blocked_data = blocked_response.data
+        control_data = control_response.data
+        self.assertEqual(set(blocked_data.keys()), set(control_data.keys()))
+        unique_fields = {"id", "invited_at"}
+        for field in set(blocked_data.keys()) - unique_fields:
+            self.assertEqual(blocked_data[field], control_data[field], field)
+
+
+class EventInvitationListVisibilityTestCase(APITestCase):
+    """Final review (#2996) — ``EventInvitationViewSet.list`` used to return every invitation
+    row in the game to any authenticated caller, bypassing both the block/mute exclusion the
+    event-visibility side already applies AND any notion of "is this your invitation to see"
+    at all. This locks down the scoping fix: only the invitee, the event's host(s), and staff
+    may list a given invitation row, and a blocked/muted inviter is excluded even for the
+    invitee they targeted.
+    """
+
+    def setUp(self) -> None:
+        self.account = AccountFactory()
+        identity = CharacterSheetFactory()
+        self.invitee_tenure = RosterTenureFactory(
+            roster_entry__character_sheet__character=identity.character,
+            player_data__account=self.account,
+        )
+        self.invitee_persona = identity.primary_persona
+
+        self.inviter_account = AccountFactory()
+        inviter_identity = CharacterSheetFactory()
+        self.inviter_tenure = RosterTenureFactory(
+            roster_entry__character_sheet__character=inviter_identity.character,
+            player_data__account=self.inviter_account,
+        )
+        self.inviter_persona = inviter_identity.primary_persona
+
+        self.event = EventFactory(is_public=False)
+        EventHostFactory(event=self.event, persona=self.inviter_persona)
+        self.invitation = EventInvitationFactory(
+            event=self.event,
+            target_persona=self.invitee_persona,
+            invited_by=self.inviter_persona,
+        )
+
+        self.list_url = f"/api/events/invitations/?event={self.event.id}"
+
+    def _invitation_ids(self, response) -> list[int]:
+        results = response.data.get("results", response.data)
+        return [row["id"] for row in results]
+
+    def test_anonymous_cannot_list(self) -> None:
+        response = self.client.get(self.list_url)
+        self.assertIn(
+            response.status_code, (status.HTTP_401_UNAUTHORIZED, status.HTTP_403_FORBIDDEN)
+        )
+
+    def test_invitee_sees_their_own_invitation(self) -> None:
+        self.client.force_authenticate(user=self.account)
+        response = self.client.get(self.list_url)
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertIn(self.invitation.id, self._invitation_ids(response))
+
+    def test_host_sees_the_invitation_they_sent(self) -> None:
+        self.client.force_authenticate(user=self.inviter_account)
+        response = self.client.get(self.list_url)
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertIn(self.invitation.id, self._invitation_ids(response))
+
+    def test_unrelated_third_party_does_not_see_the_invitation(self) -> None:
+        """The pre-fix bug: an unrelated authenticated caller could list ANY invitation."""
+        third_party = AccountFactory()
+        third_identity = CharacterSheetFactory()
+        RosterTenureFactory(
+            roster_entry__character_sheet__character=third_identity.character,
+            player_data__account=third_party,
+        )
+        self.client.force_authenticate(user=third_party)
+        response = self.client.get(self.list_url)
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertNotIn(self.invitation.id, self._invitation_ids(response))
+
+    def test_staff_sees_the_invitation(self) -> None:
+        staff = AccountFactory(is_staff=True)
+        self.client.force_authenticate(user=staff)
+        response = self.client.get(self.list_url)
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertIn(self.invitation.id, self._invitation_ids(response))
+
+    def test_block_excludes_the_invitation_from_the_invitees_list(self) -> None:
+        Block.objects.create(
+            owner=self.invitee_tenure.player_data,
+            blocked_player=self.inviter_tenure.player_data,
+            account_level=True,
+        )
+        self.client.force_authenticate(user=self.account)
+        response = self.client.get(self.list_url)
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertNotIn(self.invitation.id, self._invitation_ids(response))
+
+    def test_mute_excludes_the_invitation_from_the_muters_list(self) -> None:
+        Mute.objects.create(
+            owner=self.invitee_tenure.player_data,
+            muted_persona=PersonaFactory(),
+            muted_player=self.inviter_tenure.player_data,
+            account_level=True,
+        )
+        self.client.force_authenticate(user=self.account)
+        response = self.client.get(self.list_url)
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertNotIn(self.invitation.id, self._invitation_ids(response))

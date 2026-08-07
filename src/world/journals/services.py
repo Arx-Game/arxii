@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 from django.db import transaction
 from django.utils import timezone
@@ -23,7 +23,72 @@ from world.journals.types import JournalError
 from world.progression.services.awards import award_xp
 
 if TYPE_CHECKING:
+    from django.db.models import QuerySet
+
+    from evennia_extensions.models import PlayerData
     from world.character_sheets.models import CharacterSheet
+
+
+def player_for_sheet(sheet: CharacterSheet) -> PlayerData | None:
+    """The PlayerData currently playing this character sheet, or None (#2996).
+
+    Mirrors ``world.scenes.block_services._sheet_player``'s walk (this app's own copy — no
+    cross-app dependency on ``world.scenes`` for the resolution itself); reused by
+    ``world.journals.views`` for the mute-filtered author's-view read path, so this one stays
+    unprefixed rather than following the private-per-module convention the block/mute service
+    pair uses for their own persona-keyed sibling.
+    """
+    from django.core.exceptions import ObjectDoesNotExist
+
+    try:
+        roster_entry = sheet.roster_entry
+    except ObjectDoesNotExist:
+        return None
+    if roster_entry is None:
+        return None
+    current = roster_entry.current_tenure
+    return current.player_data if current is not None else None
+
+
+def exclude_blocked_and_muted_authors(
+    queryset: QuerySet[JournalEntry], *, viewer_account: Any
+) -> QuerySet[JournalEntry]:
+    """Exclude blocked/muted authors' entries from a journal feed queryset (#2996 Decision 2).
+
+    ``viewer_account`` is typed loosely (mirrors ``block_services.hidden_persona_ids_for_viewer``)
+    because DRF's ``request.user`` is ``AbstractBaseUser | AnonymousUser``, not this project's
+    ``AccountDB`` — the ``is_authenticated``/``player_data`` duck-typing below works for either.
+
+    An account-level Block hides journals **both directions** — mirrors
+    ``block_services.blocked_player_ids_for``'s symmetric contract (partner ids regardless of
+    who blocked whom), so calling this for either side of a block excludes the other's entries.
+    An account-level Mute is **one-way**: ``mute_services.muted_player_ids_for`` only returns
+    targets *this* viewer muted, so it only ever narrows the muter's own feed.
+
+    Batched (the Task 1/2 idiom), not per-row: one ``.exclude()`` against the author's *current*
+    player via the roster-tenure walk (mirrors ``block_services.hidden_persona_ids_for_viewer``'s
+    account-level branch). Fail-open — no filtering — for an anonymous viewer or one with no
+    ``PlayerData`` yet, matching every other #2996 seam's policy.
+    """
+    if viewer_account is None or not viewer_account.is_authenticated:
+        return queryset
+    try:
+        viewer_player = viewer_account.player_data
+    except AttributeError:
+        return queryset
+
+    from world.scenes.block_services import blocked_player_ids_for
+    from world.scenes.mute_services import muted_player_ids_for
+
+    excluded_ids = blocked_player_ids_for(viewer_player) | muted_player_ids_for(
+        viewer_player=viewer_player
+    )
+    if not excluded_ids:
+        return queryset
+    return queryset.exclude(
+        author__roster_entry__tenures__player_data_id__in=excluded_ids,
+        author__roster_entry__tenures__end_date__isnull=True,
+    )
 
 
 def _get_or_reset_weekly_tracker(
@@ -153,6 +218,21 @@ def create_journal_response(
 
     if parent.author_id == author.pk:
         raise JournalError(JournalError.SELF_RESPONSE)
+
+    # #2996 Decision 2 — an account-level block between the responder and the parent's author
+    # rejects the response with the shared neutral UNAVAILABLE message (never names blocking;
+    # "closed to you" already has many innocent causes here). Fail-open when either side has no
+    # current player (can't prove a block, so don't manufacture one).
+    from world.scenes.block_services import account_block_active
+
+    author_player = player_for_sheet(author)
+    parent_author_player = player_for_sheet(parent.author)
+    if (
+        author_player is not None
+        and parent_author_player is not None
+        and account_block_active(player_a=author_player, player_b=parent_author_player)
+    ):
+        raise JournalError(JournalError.UNAVAILABLE)
 
     with transaction.atomic():
         entry = JournalEntry.objects.create(

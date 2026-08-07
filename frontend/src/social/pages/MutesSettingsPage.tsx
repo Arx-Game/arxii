@@ -19,7 +19,12 @@ function MuteRow({ mute }: { mute: Mute }) {
       data-testid="mute-row"
     >
       <div className="space-y-0.5">
-        <p className="font-medium">{mute.muted_persona_name}</p>
+        <p className="font-medium">
+          {mute.muted_persona_name}
+          {mute.account_level && (
+            <span className="ml-2 text-xs text-muted-foreground">(all their characters)</span>
+          )}
+        </p>
         <p className="text-xs text-muted-foreground">Hidden: {scope || 'nothing'}</p>
       </div>
       <Button

@@ -103,6 +103,37 @@ gate. Three small, additive polish items (part of the #2112 launch-content-boots
 Details: `docs/systems/roster.md`'s "Telnet Surface (#2122)" section, `docs/systems
 /progression.md`'s Telnet Commands section, `commands/CLAUDE.md`.
 
+## Built — Account-First Block/Mute (#1278, #2996)
+
+The OOC safety floor: `world.scenes.Block`/`Mute`, extended from persona-scoped to
+**account-first by default** (#2996) — `+block`/`+mute` and the web control now block/mute
+every character the target's player currently plays unless the caller opts into the narrower
+advanced persona-only shape (`+block/persona`, `+mute/persona`, or `account_level: false` on
+the create serializers). One query seam per primitive — `block_services.account_block_active`
+/ `blocked_player_ids_for` and `mute_services.account_muted` / `muted_player_ids_for` — is the
+only thing every OOC delivery surface calls; no per-surface reimplementation.
+
+**Per-surface policy** (write-then-filter by default — the actor's own write path is
+byte-identical, suppression is query-time exclusion on the other party's read; IC channels stay
+flag-only by design, to avoid an RP leak. Two seams reject before the write instead, each for a
+different reason a write-then-hide shape couldn't safely cover: journal reactions, since a
+rejection there can't leak but a created-then-hidden response row could still be inferred from
+render-vs-list discrepancies; friend adds, since creating the `Friendship` row would itself be
+the harm — see ADR-0204):
+
+| Surface | Block | Mute |
+|---|---|---|
+| IC channels (say/pose/whisper) | flag-only (staff signal, unchanged) | cosmetic hide (unchanged) |
+| Pages/tells | delivered-suppressed (upgraded from flag-only, #2996) | silent drop (#2087) |
+| Player mail | excluded from recipient's inbox | auto-filed (read + archived) at create |
+| Journal reactions | rejected, neutral shared failure | excluded from author's own read |
+| Journal feed | hidden **both directions** | hidden from **muter's own feed only** |
+| Event invites | excluded from invitee's list | excluded from muter's own list |
+| Kudos/reaction windows | excluded from target's read | excluded from muter's own read |
+| Friend adds | both `add_friend`/`add_friend_all_characters` reject, neutral failure | no change |
+
+See `world/scenes/CLAUDE.md`'s Block/Mute entries, `docs/systems/INDEX.md`, and ADR-0204.
+
 ## Built — Web Registration → Application Funnel (#2162)
 
 The registration→application→first-login funnel was the least-polished surface in the
@@ -166,7 +197,8 @@ Details: `docs/systems/character_creation.md`'s "Email Notifications (#2162)" se
   inside #1035's scope), no dedicated web-side "you're new here" surfacing beyond the standard
   `JournalPage`/`BeatCard`. The web registration→application funnel polish — ✅ **shipped
   (#2162)**, see "Built — Web Registration → Application Funnel" above.
-- Anti-harassment tools — blocking, muting, reporting
+- Anti-harassment tools — blocking, muting — SHIPPED (#1278, #2996; see "Built —
+  Account-First Block/Mute" below); reporting remains open (Phase 5b, `staff-inbox.md`)
 - Scene discovery — finding active public scenes to join. ~~The discovery→presence
   bridge~~ — SHIPPED (#2163): `where` rows and the scene browser (`ScenesListPage`)
   both grew "Go there" buttons dispatching the `travel_to` REGISTRY action

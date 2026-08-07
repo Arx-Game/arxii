@@ -83,6 +83,45 @@ def coded_block_active(
     return False
 
 
+def account_block_active(*, player_a: PlayerData, player_b: PlayerData) -> bool:
+    """True if an active account-level Block sits between these two players, either way (#2996).
+
+    The account-first query seam: unlike ``coded_block_active`` this ignores persona entirely —
+    it's the "does either account block the other, account-wide" check every OOC seam (mail,
+    journal reactions, event invites, kudos, friend adds, ...) calls. Extends
+    ``coded_block_active``'s idmapper-friendly ``_active_blocks().filter(...).exists()`` idiom;
+    one indexed query.
+    """
+    return (
+        _active_blocks()
+        .filter(
+            Q(owner=player_a, blocked_player=player_b, account_level=True)
+            | Q(owner=player_b, blocked_player=player_a, account_level=True)
+        )
+        .exists()
+    )
+
+
+def blocked_player_ids_for(player: PlayerData) -> set[int]:
+    """Account-level Block partner ids for this player, either direction (#2996).
+
+    The set-shaped sibling of ``account_block_active`` — the four write-then-filter delivery
+    seams (mail inbox, event invitation visibility, ...) need to exclude every row from a
+    blocked partner in one queryset filter rather than call ``account_block_active`` per
+    candidate row. Same active-block window and ``account_level=True`` policy as
+    ``account_block_active`` — no new semantics, just batched.
+    """
+    pairs = (
+        _active_blocks()
+        .filter(Q(owner=player, account_level=True) | Q(blocked_player=player, account_level=True))
+        .values_list("owner_id", "blocked_player_id")
+    )
+    ids: set[int] = set()
+    for owner_id, blocked_player_id in pairs:
+        ids.add(blocked_player_id if owner_id == player.pk else owner_id)
+    return ids
+
+
 def lift_block(block: Block, *, finalize_at: datetime) -> Block:
     """Begin lifting a block — it stays active until ``finalize_at`` (the next cron tick) (#1278).
 
@@ -278,12 +317,18 @@ def create_block(
     blocker_persona: Persona,
     blocked_persona: Persona,
     reason: str,
+    account_level: bool = False,
 ) -> Block:
     """Block ``blocked_persona`` for the requesting account, persona→persona (#1278).
 
     ``reason`` is required (it's forwarded to staff). Idempotent per
     (owner, blocked_player, blocker_persona, blocked_persona) — re-blocking the same pair returns
     the existing row. Raises ValidationError if the target persona has no current player.
+
+    ``account_level`` defaults to False (the persona-narrow shape) so internal/test callers that
+    don't pass it explicitly are unaffected. Player-facing entry points (``CmdBlock``,
+    ``BlockViewSet.create``) pass ``account_level=True`` explicitly — that's the #2996 Decision 1
+    account-first default; this function's own default stays narrow.
     """
     from django.core.exceptions import ValidationError  # noqa: PLC0415
 
@@ -303,7 +348,7 @@ def create_block(
         blocked_player=blocked_player,
         blocker_persona=blocker_persona,
         blocked_persona=blocked_persona,
-        defaults={"reason": reason, "account_level": False, "pending_removal_at": None},
+        defaults={"reason": reason, "account_level": account_level, "pending_removal_at": None},
     )
     # ``defaults`` only apply on INSERT (the django_get_or_create gotcha). On a re-block (the row
     # already exists — the real path being a re-block within the unblock grace window) refresh the

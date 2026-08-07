@@ -32,11 +32,13 @@ class BlockingCommandTests(TestCase):
         self._played(self.target)
         self.caller.search = MagicMock(return_value=self.target)
 
-    def _run(self, cmd_class, args):
+    def _run(self, cmd_class, args, switches=None):
         cmd = cmd_class()
         cmd.caller = self.caller
         cmd.account = self.account
         cmd.args = args
+        if switches is not None:
+            cmd.switches = switches
         cmd.func()
         return cmd
 
@@ -52,11 +54,40 @@ class BlockingCommandTests(TestCase):
             blocked_persona__character_sheet__character=self.target,
         ).exists()
 
+    def test_block_defaults_to_account_level(self) -> None:
+        """#2996 Decision 1: +block is account-first by default."""
+        self._run(CmdBlock, "Bob=They were cruel")
+        block = Block.objects.get(
+            owner__account=self.account,
+            blocked_persona__character_sheet__character=self.target,
+        )
+        assert block.account_level is True
+
+    def test_block_persona_switch_stays_persona_narrow(self) -> None:
+        """#2996: /persona is the explicit advanced opt-out of the account-first default."""
+        self._run(CmdBlock, "Bob=They were cruel", switches=["persona"])
+        block = Block.objects.get(
+            owner__account=self.account,
+            blocked_persona__character_sheet__character=self.target,
+        )
+        assert block.account_level is False
+
     def test_mute_creates_an_ooc_only_mute(self) -> None:
         self._run(CmdMute, "Bob=ooc")
         mute = Mute.objects.get(owner__account=self.account)
         assert mute.mute_ooc is True
         assert mute.mute_ic is False
+
+    def test_mute_defaults_to_account_level(self) -> None:
+        """#2996: +mute is account-first by default, mirroring +block."""
+        self._run(CmdMute, "Bob")
+        mute = Mute.objects.get(owner__account=self.account)
+        assert mute.account_level is True
+
+    def test_mute_persona_switch_stays_persona_narrow(self) -> None:
+        self._run(CmdMute, "Bob", switches=["persona"])
+        mute = Mute.objects.get(owner__account=self.account)
+        assert mute.account_level is False
 
     def test_unmute_removes_the_mute(self) -> None:
         self._run(CmdMute, "Bob")

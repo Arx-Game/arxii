@@ -11,11 +11,17 @@ _NOT_YOUR_PERSONA = "You can only block as one of your own personas."
 
 
 class BlockCreateSerializer(serializers.Serializer):
-    """Create a block: the player's own face, the target face, and a required reason."""
+    """Create a block: the player's own face, the target face, and a required reason.
+
+    ``account_level`` defaults to ``True`` (#2996 Decision 1) — the web control is account-first
+    by default, same as ``+block``; the persona-narrow shape stays reachable as an explicit
+    advanced opt-out (``account_level: false``).
+    """
 
     blocker_persona = serializers.PrimaryKeyRelatedField(queryset=Persona.objects.all())
     blocked_persona = serializers.PrimaryKeyRelatedField(queryset=Persona.objects.all())
     reason = serializers.CharField(max_length=200, allow_blank=False, trim_whitespace=True)
+    account_level = serializers.BooleanField(default=True)
 
     def validate_blocker_persona(self, value: Persona) -> Persona:
         if value.pk not in set(get_account_personas(self.context["request"])):
@@ -44,11 +50,17 @@ class BlockSerializer(serializers.ModelSerializer):
 
 
 class MuteCreateSerializer(serializers.Serializer):
-    """Create/update a mute with IC/OOC scope."""
+    """Create/update a mute with IC/OOC scope.
+
+    ``account_level`` defaults to ``True`` (#2996) — account-first for symmetry with Block and
+    with ``+mute``'s new default; the persona-narrow shape stays reachable as an explicit
+    advanced opt-out (``account_level: false``).
+    """
 
     muted_persona = serializers.PrimaryKeyRelatedField(queryset=Persona.objects.all())
     mute_ic = serializers.BooleanField(default=True)
     mute_ooc = serializers.BooleanField(default=True)
+    account_level = serializers.BooleanField(default=True)
 
 
 class MuteSerializer(serializers.ModelSerializer):
@@ -58,5 +70,13 @@ class MuteSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = Mute
-        fields = ["id", "muted_persona", "muted_persona_name", "mute_ic", "mute_ooc", "created_at"]
+        fields = [
+            "id",
+            "muted_persona",
+            "muted_persona_name",
+            "mute_ic",
+            "mute_ooc",
+            "account_level",
+            "created_at",
+        ]
         read_only_fields = fields

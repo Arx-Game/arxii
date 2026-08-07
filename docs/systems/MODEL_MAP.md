@@ -176,6 +176,7 @@
   - blocks_made <- scenes.Block
   - blocks_received <- scenes.Block
   - mutes_made <- scenes.Mute
+  - mutes_received <- scenes.Mute
   - treasured_signoffs <- stories.TreasuredSignoff
 
 ### RoomProfile
@@ -4484,7 +4485,9 @@
 - `create_journal_entry(*, author: 'CharacterSheet', title: 'str', body: 'str', is_public: 'bool', tags: 'list[str] | None' = None) -> 'JournalEntry' - Create a journal entry and award weekly XP.`
 - `create_journal_response(*, author: 'CharacterSheet', parent: 'JournalEntry', response_type: 'ResponseType', title: 'str', body: 'str') -> 'JournalEntry' - Create a praise or retort response to a journal entry.`
 - `edit_journal_entry(*, entry: 'JournalEntry', title: 'str | None' = None, body: 'str | None' = None) -> 'JournalEntry' - Edit an existing journal entry. Sets edited_at timestamp.`
+- `exclude_blocked_and_muted_authors(queryset: 'QuerySet[JournalEntry]', *, viewer_account: 'Any') -> 'QuerySet[JournalEntry]' - Exclude blocked/muted authors' entries from a journal feed queryset (#2996 Decision 2).`
 - `increment_stat(character_sheet: 'CharacterSheet', stat: 'StatDefinition', amount: 'int' = 1) -> 'int' - Increment a stat tracker (create if needed) and check for achievements.`
+- `player_for_sheet(sheet: 'CharacterSheet') -> 'PlayerData | None' - The PlayerData currently playing this character sheet, or None (#2996).`
 
 
 ## world.justice
@@ -7671,6 +7674,7 @@
 **Foreign Keys:**
   - owner -> evennia_extensions.PlayerData [FK]
   - muted_persona -> scenes.Persona [FK]
+  - muted_player -> evennia_extensions.PlayerData [FK] (nullable)
 
 ### PendingSuddenHarm
 **Foreign Keys:**

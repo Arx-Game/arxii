@@ -3,15 +3,25 @@
 A mute only changes what the muter sees: ``muted_persona_ids_for_viewer`` lists the personas they
 have IC-muted, and ``set_mute`` / ``unmute`` toggle it. No mutuality, no enforcement, fully
 reversible.
+
+``account_muted``/the ``account_level`` opt-in on ``set_mute`` (#2996) are the account-first
+sibling of Block's — covered separately below.
 """
 
 from django.test import TestCase
+from django.utils import timezone
 
 from evennia_extensions.factories import AccountFactory
 from evennia_extensions.models import PlayerData
+from world.roster.factories import (
+    PlayerDataFactory,
+    RosterEntryFactory,
+    RosterTenureFactory,
+)
 from world.scenes.factories import PersonaFactory
 from world.scenes.models import Mute
 from world.scenes.mute_services import (
+    account_muted,
     muted_persona_ids_for_viewer,
     set_mute,
     unmute,
@@ -52,3 +62,82 @@ class MuteServiceTests(TestCase):
         unmute(owner=self.muter, muted_persona=self.persona)
         assert muted_persona_ids_for_viewer(viewer_account=self.muter_account) == set()
         assert not Mute.objects.filter(owner=self.muter).exists()
+
+
+class AccountLevelMuteTests(TestCase):
+    """``account_muted`` + the ``account_level``/``muted_player`` snapshot (#2996)."""
+
+    @classmethod
+    def setUpTestData(cls) -> None:
+        cls.muter_account = AccountFactory()
+        cls.muter = PlayerData.objects.get_or_create(account=cls.muter_account)[0]
+
+    def _played(self):
+        """A persona with a resolvable current player (unlike bare ``PersonaFactory``)."""
+        player_data = PlayerDataFactory()
+        entry = RosterEntryFactory()
+        tenure = RosterTenureFactory(player_data=player_data, roster_entry=entry)
+        return entry.character_sheet.primary_persona, player_data, tenure
+
+    def test_set_mute_defaults_to_persona_scoped_no_account_level(self) -> None:
+        persona, target_player, _ = self._played()
+        mute = set_mute(owner=self.muter, muted_persona=persona)
+        assert mute.account_level is False
+        assert account_muted(viewer_player=self.muter, target_player=target_player) is False
+
+    def test_account_level_mute_snapshots_muted_player(self) -> None:
+        persona, target_player, _ = self._played()
+        mute = set_mute(owner=self.muter, muted_persona=persona, account_level=True)
+        assert mute.account_level is True
+        assert mute.muted_player_id == target_player.pk
+        assert account_muted(viewer_player=self.muter, target_player=target_player) is True
+
+    def test_account_muted_is_one_way(self) -> None:
+        persona, target_player, _ = self._played()
+        set_mute(owner=self.muter, muted_persona=persona, account_level=True)
+        # The muted player never learns they were muted — no reverse signal.
+        assert account_muted(viewer_player=target_player, target_player=self.muter) is False
+
+    def test_muted_player_snapshot_survives_persona_reroster(self) -> None:
+        """The FK doesn't re-derive: a later toggle keeps the original snapshot pinned."""
+        persona, original_player, original_tenure = self._played()
+        mute = set_mute(owner=self.muter, muted_persona=persona, account_level=True)
+        assert mute.muted_player_id == original_player.pk
+
+        # Re-roster: end the original tenure, start a new one for a different player.
+        original_tenure.end_date = timezone.now()
+        original_tenure.save(update_fields=["end_date"])
+        new_player = PlayerDataFactory()
+        RosterTenureFactory(
+            player_data=new_player,
+            roster_entry=original_tenure.roster_entry,
+            player_number=2,
+        )
+
+        # A later scope toggle must NOT re-derive muted_player to the new current player.
+        mute = set_mute(owner=self.muter, muted_persona=persona, ic=False, ooc=True)
+        assert mute.muted_player_id == original_player.pk
+        # account_muted still resolves against the ORIGINAL player, per the snapshot contract.
+        assert account_muted(viewer_player=self.muter, target_player=original_player) is True
+        assert account_muted(viewer_player=self.muter, target_player=new_player) is False
+
+    def test_escalation_backfills_a_null_muted_player_snapshot(self) -> None:
+        """Final review (#2996): a mute created against a VACANT persona (no current player) has
+        nothing to snapshot at INSERT time -- ``muted_player`` stays null. If that persona later
+        gains a tenure and the owner re-issues the mute with ``account_level=True``, the
+        escalation must backfill the snapshot instead of silently no-op'ing forever (the update
+        branch only ever wrote ``mute_ic``/``mute_ooc``/``account_level`` before this fix).
+        """
+        persona = PersonaFactory()  # bare -- no RosterEntry, so no current player yet.
+        mute = set_mute(owner=self.muter, muted_persona=persona)
+        assert mute.muted_player_id is None
+
+        # The persona gains a tenure after the mute already exists.
+        roster_entry = RosterEntryFactory(character_sheet=persona.character_sheet)
+        player_data = PlayerDataFactory()
+        RosterTenureFactory(player_data=player_data, roster_entry=roster_entry)
+
+        mute = set_mute(owner=self.muter, muted_persona=persona, account_level=True)
+        assert mute.account_level is True
+        assert mute.muted_player_id == player_data.pk
+        assert account_muted(viewer_player=self.muter, target_player=player_data) is True

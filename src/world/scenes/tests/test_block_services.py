@@ -13,6 +13,7 @@ from django.utils import timezone
 from evennia_extensions.factories import AccountFactory
 from evennia_extensions.models import PlayerData
 from world.scenes.block_services import (
+    account_block_active,
     coded_block_active,
     finalize_expired_blocks,
     lift_block,
@@ -108,3 +109,77 @@ class BlockServiceTests(TestCase):
         assert self._active(self.blocker_face, self.target_face) is False
         assert finalize_expired_blocks(now=timezone.now()) == 1
         assert not Block.objects.filter(pk=block.pk).exists()
+
+
+class AccountBlockActiveTests(TestCase):
+    """``account_block_active`` (#2996) — the account-first query seam, persona-agnostic."""
+
+    @classmethod
+    def setUpTestData(cls) -> None:
+        cls.player_a = PlayerData.objects.get_or_create(account=AccountFactory())[0]
+        cls.player_b = PlayerData.objects.get_or_create(account=AccountFactory())[0]
+        cls.stranger = PlayerData.objects.get_or_create(account=AccountFactory())[0]
+        cls.a_face = PersonaFactory(name="A Face")
+        cls.b_face = PersonaFactory(name="B Face")
+
+    def test_no_block_is_inactive(self) -> None:
+        assert account_block_active(player_a=self.player_a, player_b=self.player_b) is False
+
+    def test_persona_scoped_block_does_not_count_as_account_level(self) -> None:
+        # account_level defaults False — a narrow persona-pair block must NOT trip the
+        # account-first check (it's a different, stricter thing).
+        Block.objects.create(
+            owner=self.player_a,
+            blocked_player=self.player_b,
+            blocker_persona=self.a_face,
+            blocked_persona=self.b_face,
+        )
+        assert account_block_active(player_a=self.player_a, player_b=self.player_b) is False
+
+    def test_account_level_block_is_active_from_the_blocker_side(self) -> None:
+        Block.objects.create(
+            owner=self.player_a,
+            blocked_player=self.player_b,
+            blocked_persona=self.b_face,
+            account_level=True,
+        )
+        assert account_block_active(player_a=self.player_a, player_b=self.player_b) is True
+
+    def test_account_level_block_is_active_in_either_direction(self) -> None:
+        Block.objects.create(
+            owner=self.player_a,
+            blocked_player=self.player_b,
+            blocked_persona=self.b_face,
+            account_level=True,
+        )
+        # Symmetric: order of the args (and who's the "owner" row) doesn't matter.
+        assert account_block_active(player_a=self.player_b, player_b=self.player_a) is True
+
+    def test_account_level_block_does_not_affect_a_third_player(self) -> None:
+        Block.objects.create(
+            owner=self.player_a,
+            blocked_player=self.player_b,
+            blocked_persona=self.b_face,
+            account_level=True,
+        )
+        assert account_block_active(player_a=self.player_a, player_b=self.stranger) is False
+
+    def test_lifted_account_level_block_still_within_grace_is_active(self) -> None:
+        block = Block.objects.create(
+            owner=self.player_a,
+            blocked_player=self.player_b,
+            blocked_persona=self.b_face,
+            account_level=True,
+        )
+        lift_block(block, finalize_at=timezone.now() + timedelta(hours=1))
+        assert account_block_active(player_a=self.player_a, player_b=self.player_b) is True
+
+    def test_finalized_account_level_block_is_inactive(self) -> None:
+        block = Block.objects.create(
+            owner=self.player_a,
+            blocked_player=self.player_b,
+            blocked_persona=self.b_face,
+            account_level=True,
+        )
+        lift_block(block, finalize_at=timezone.now() - timedelta(minutes=1))
+        assert account_block_active(player_a=self.player_a, player_b=self.player_b) is False

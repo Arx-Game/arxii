@@ -9,8 +9,10 @@ Extends Evennia's functionality with additional models and data handlers while p
 - **`Media`**: Media storage and gallery management
 - **`PageBackground`**: Maps a named page slot (homepage/roster/CG stage/game client) to a Media row
 - **`ObjectDisplayData`**: Custom display settings for objects
-- **`PlayerAllowList`**: Social allow lists for player communication
-- **`PlayerBlockList`**: Social block lists for player communication
+- **`PlayerAllowList`**: Social allow lists for player communication (contact allowlist; separate
+  from `world.scenes.Block`/`Mute`, which are the OOC block/mute primitives — see
+  `world/scenes/CLAUDE.md`. The old account-level `PlayerBlockList` was removed (#1278), superseded
+  by `world.scenes.Block`.)
 
 ### `data_handlers/`
 - **`base_data.py`**: `BaseItemDataHandler` - unified data access foundation
