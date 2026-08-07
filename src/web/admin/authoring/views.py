@@ -44,8 +44,8 @@ a page load shouldn't pay for unconditionally. Each row's links are built
 here, not carried on `RelatedEntry` itself: a workbench editor link only for
 neighbor models `credited_content_models()` covers (`entry.credited is not
 None` is the same signal), and an admin change-form link gated on the model
-actually having a registered `ModelAdmin` - three of the four builder-domain
-models (`NPCRole`, `BuildingKind`, `DecorationKind`) carry `CreditedContent`
+actually having a registered `ModelAdmin` - three credited models
+(`NPCRole`, `BuildingKind`, `DecorationKind`) carry `CreditedContent`
 but were never `@admin.register`ed, so an unconditional `reverse()` there
 would 500 the moment one of them turned up as a neighbor.
 
@@ -95,7 +95,7 @@ _FREEZE_SENTENCE = (
 )
 
 #: Rendered only inside the `content_exportable` branch (see
-#: `_editor_panel.html`) - a non-exportable credited model (the four
+#: `_editor_panel.html`) - a non-exportable credited model (the three
 #: builder-domain models) shows "This model stays in the database only..."
 #: instead, so this clause must never render alongside that one (#3019
 #: review: the two used to be one contradictory sentence).
@@ -444,7 +444,7 @@ def _workbench_url(entry: RelatedEntry) -> str | None:
 def _admin_change_url(entry: RelatedEntry) -> str | None:
     """Admin change-form link for `entry`, or `None` when it has no `ModelAdmin`.
 
-    Three of the four builder-domain models `credited_content_models()`
+    Three credited models `credited_content_models()`
     covers (`NPCRole`, `BuildingKind`, `DecorationKind`) have never been
     `@admin.register`ed - checking `admin.site._registry` first keeps an
     unregistered model from ever reaching `reverse()`; the `NoReverseMatch`

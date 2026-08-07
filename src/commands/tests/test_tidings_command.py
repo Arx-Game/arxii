@@ -2,7 +2,7 @@
 
 from unittest.mock import MagicMock
 
-from django.test import TestCase, tag
+from django.test import TestCase, override_settings, tag
 
 from commands.social.tidings import CmdTidings
 from world.roster.factories import RosterEntryFactory
@@ -98,6 +98,7 @@ class TidingsCommandTests(TestCase):
 
 
 @tag("postgres")  # Area.save() refreshes the areas_areaclosure materialized view
+@override_settings(SEED_SAMPLE_CONTENT=True)  # "Town Crier" NPCRole is content-repo-owned (#2698)
 class TidingsLocalCommandTests(TestCase):
     """``tidings local`` — the civic-hub scope, gated on a board/crier in the room."""
 

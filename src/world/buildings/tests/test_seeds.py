@@ -1,6 +1,6 @@
 """Tests for the buildings seed helpers."""
 
-from django.test import TestCase
+from django.test import TestCase, override_settings
 
 from world.buildings.models import BuildingKind
 from world.buildings.seeds import (
@@ -55,13 +55,16 @@ class Plan3SeedsTests(TestCase):
         self.assertTrue(ItemTemplate.objects.filter(name=BUILDING_PERMIT_TEMPLATE_NAME).exists())
         self.assertTrue(BuildingKind.objects.filter(name=HOUSE_KIND_NAME).exists())
 
+    @override_settings(SEED_SAMPLE_CONTENT=True)
     def test_defaults_unwired_permit_offers_to_house(self) -> None:
         from world.npc_services.constants import OfferKind
         from world.npc_services.factories import NPCRoleFactory
         from world.npc_services.models import NPCServiceOffer, PermitOfferDetails
         from world.npc_services.seeds import ensure_builders_guild_clerk_role
 
-        # Seed the clerk role (offers are explicitly wired to urban kinds)
+        # Seed the clerk role (offers are explicitly wired to urban kinds).
+        # NPCRole is content-repo-owned (#2698) — SEED_SAMPLE_CONTENT invents
+        # it here since this test asserts on the real seeded Cottage offer.
         ensure_builders_guild_clerk_role()
         # Then run Plan 3 seeds — ensure_default_kind_on_permit_offers
         # should NOT overwrite the clerk's explicitly-wired kinds, but

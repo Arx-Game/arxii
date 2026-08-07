@@ -120,8 +120,10 @@ def credited_content_models() -> list[type[models.Model]]:
     """Concrete models inheriting CreditedContent, sorted by (domain, name).
 
     The authoring workbench's iteration set (#3019): deliberately BROADER than
-    content_export.CONTENT_MODELS - the four builder-domain models carry
-    credit but sit outside the export registry, and coverage of the mixin is
+    content_export.CONTENT_MODELS - three builder-domain models (ItemTemplate,
+    BuildingKind, DecorationKind) carry credit but sit outside the export
+    registry (NPCRole was admitted to the catalog 2026-08-07: missions name it
+    by natural key), and coverage of the mixin is
     what test_prose_credits enforces. The CONTENT_MODELS label loops elsewhere
     are a different, export-owned set; do not consolidate them onto this.
     """

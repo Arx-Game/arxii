@@ -1,6 +1,6 @@
 """Civic-hub reader features (#1450): seeds, progression strategies, hub lookup."""
 
-from django.test import TestCase
+from django.test import TestCase, override_settings
 
 from evennia_extensions.factories import RoomProfileFactory
 from world.npc_services.models import Functionary
@@ -19,6 +19,7 @@ from world.room_features.services import (
 )
 
 
+@override_settings(SEED_SAMPLE_CONTENT=True)
 class CivicHubFeatureTests(TestCase):
     def setUp(self) -> None:
         self.board_kind = ensure_notice_board_kind()

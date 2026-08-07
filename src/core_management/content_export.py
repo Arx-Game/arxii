@@ -211,6 +211,13 @@ CONTENT_MODELS: frozenset[str] = frozenset(
         "mechanics.situationtemplate",
         "mechanics.situationchallengelink",
         "mechanics.situationtraplink",
+        # npc_services - builder-domain, but missions name NPCRole by natural
+        # key (MissionTemplate.report_to_role), so the role catalog must
+        # travel with the content that references it (ruled 2026-08-07;
+        # overturns the #3019-era builder-domain exclusion for this one
+        # model). Ordered before missions so report_to_role resolves in one
+        # load pass.
+        "npc_services.npcrole",
         # missions
         "missions.missioncategory",
         "missions.missiontemplate",
@@ -282,6 +289,32 @@ EXPORT_FILTERS: dict[str, dict[str, object]] = {
     "checks.checktype": {"owner_sheet__isnull": True},
     "checks.checktypetrait": {"check_type__owner_sheet__isnull": True},
 }
+
+#: Field-level export exclusions: columns on a content model that are
+#: installation config, not content. They reference rows the corpus does not
+#: carry (an Organization, an account), so exporting them would make the
+#: fixture load-order-dependent on a fresh database - content loads before
+#: seeders, and the referenced row would not exist yet. An excluded field
+#: never reaches the corpus; loads leave it untouched (an absent key is never
+#: assigned) and the owning seeder wires it onto the authored row after
+#: lookup (e.g. ``ensure_academy_generalist_trainer_role``'s
+#: ``faction_affiliation`` stamp). The no-content-slop overwrite guard
+#: ignores these fields for the same reason: they are seeder-owned.
+EXPORT_FIELD_EXCLUSIONS: dict[str, frozenset[str]] = {
+    "npc_services.npcrole": frozenset({"faction_affiliation"}),
+}
+
+
+def _strip_excluded_fields(model_label: str, data: str) -> str:
+    """Drop installation-config fields from serialized rows, if any apply."""
+    excluded = EXPORT_FIELD_EXCLUSIONS.get(model_label)
+    if not excluded:
+        return data
+    records = json.loads(data)
+    for record in records:
+        for name in excluded:
+            record["fields"].pop(name, None)
+    return json.dumps(records, indent=2)
 
 
 def _markdown_entry_path(root: Path, spec: dict, fields: dict) -> Path:
@@ -541,6 +574,7 @@ def _write_one_model(
     # and silently fall through to plain JSON export for every prose domain.
     model_name = model.__name__.lower()
     model_label = f"{domain_of(model)}.{model_name}"
+    data = _strip_excluded_fields(model_label, data)
     count = len(json.loads(data))
 
     spec = MARKDOWN_EXPORT_DOMAINS.get(model_label)
@@ -651,6 +685,8 @@ def export_single_row(instance, *, content_root: Path) -> RowExportResult:
         use_natural_primary_keys=True,
     )
     record = json.loads(data)[0]
+    for name in EXPORT_FIELD_EXCLUSIONS.get(model_label, frozenset()):
+        record["fields"].pop(name, None)
     key_fields = _natural_key_fields(model)
     key_display = ", ".join(
         str(v)

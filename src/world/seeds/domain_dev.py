@@ -97,12 +97,19 @@ def _ensure_income_streams(organization) -> None:
 
 
 def _ensure_steward_offers(organization) -> None:
+    """Look up (or, under SEED_SAMPLE_CONTENT, invent) the House Steward role + offers.
+
+    ``NPCRole`` is content-repo-owned (#2698) — looked up rather than invented
+    unless ``SEED_SAMPLE_CONTENT`` is on. Returns early, seeding no offers,
+    when the role isn't authored/sampled.
+    """
     from world.npc_services.constants import DrawMode, OfferKind  # noqa: PLC0415
     from world.npc_services.models import NPCRole, NPCServiceOffer  # noqa: PLC0415
+    from world.seeds.sample_content import authored_or_sample  # noqa: PLC0415
 
-    role, _ = NPCRole.objects.get_or_create(
-        name=STEWARD_ROLE_NAME,
-        defaults={
+    role = authored_or_sample(
+        NPCRole,
+        {
             "description": "PLACEHOLDER: keeps the house's books and directs its people.",
             "default_description_template": (
                 "PLACEHOLDER: The steward looks up from a ledger thick with tallies."
@@ -110,7 +117,15 @@ def _ensure_steward_offers(organization) -> None:
             "default_rapport_starting_value": 0,
             "faction_affiliation": organization,
         },
+        name=STEWARD_ROLE_NAME,
     )
+    if role is None:
+        return
+    # faction_affiliation is installation config, not content - an authored
+    # row arrives with it null (#3036).
+    if role.faction_affiliation_id != organization.pk:
+        role.faction_affiliation = organization
+        role.save()
     for label, kind in (
         ("Dispatch a collection", OfferKind.COLLECTION),
         ("Invest in the domain", OfferKind.IMPROVEMENT),

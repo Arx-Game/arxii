@@ -215,21 +215,30 @@ def ensure_town_crier_kind() -> RoomFeatureKind:
     return kind
 
 
-def ensure_town_crier_role() -> NPCRole:
-    """The crier's NPCRole (a class-1 Functionary anchor). PLACEHOLDER flavor."""
-    from world.npc_services.models import NPCRole  # noqa: PLC0415
+def ensure_town_crier_role() -> NPCRole | None:
+    """Look up (or, under SEED_SAMPLE_CONTENT, invent) the crier's NPCRole.
 
-    role, _ = NPCRole.objects.get_or_create(
-        name=TOWN_CRIER_ROLE_NAME,
-        defaults={
+    The crier is a class-1 Functionary anchor. PLACEHOLDER flavor. ``NPCRole``
+    is content-repo-owned (#2698) — looked up rather than invented unless
+    ``SEED_SAMPLE_CONTENT`` is on. Returns ``None`` when it isn't
+    authored/sampled — callers (the "civic_hubs" seeder, and
+    ``handle_town_crier_progression`` at install time) must skip placing the
+    crier Functionary in that case.
+    """
+    from world.npc_services.models import NPCRole  # noqa: PLC0415
+    from world.seeds.sample_content import authored_or_sample  # noqa: PLC0415
+
+    return authored_or_sample(
+        NPCRole,
+        {
             "description": "PLACEHOLDER: calls the news of the day in the square.",
             "default_description_template": (
                 "PLACEHOLDER: A crier stands on a worn crate, voice carrying over the crowd."
             ),
             "default_rapport_starting_value": 0,
         },
+        name=TOWN_CRIER_ROLE_NAME,
     )
-    return role
 
 
 # ---------------------------------------------------------------------------

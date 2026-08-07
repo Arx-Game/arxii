@@ -1,6 +1,6 @@
 """Tests for the Builders Guild Clerk seed function."""
 
-from django.test import TestCase
+from django.test import TestCase, override_settings
 
 from world.buildings.factories import BuildingKindFactory
 from world.npc_services.constants import DrawMode, OfferKind
@@ -13,6 +13,7 @@ from world.npc_services.seeds import (
 )
 
 
+@override_settings(SEED_SAMPLE_CONTENT=True)
 class EnsureBuildersGuildClerkRoleTests(TestCase):
     def test_creates_role_and_offers_with_permit_details(self) -> None:
         role = ensure_builders_guild_clerk_role()
@@ -67,6 +68,7 @@ class EnsureOfferBuildingKindTests(TestCase):
         self.assertIsNone(offer.permit_offer_details.building_kind_id)
 
 
+@override_settings(SEED_SAMPLE_CONTENT=True)
 class ClerkOfferWiringTests(TestCase):
     def setUp(self) -> None:
         from world.buildings.seeds import ensure_urban_building_kinds

@@ -480,6 +480,35 @@ def _build_starter_catalog_fixture_objects() -> list[dict]:
     return objects
 
 
+#: The nine seeder-referenced NPCRole rows the real lore repo authors (lore
+#: PR #71). Since NPCRole entered ``CONTENT_MODELS`` the seeders look these up
+#: instead of minting them (the no-content-slop invariant), so a seeded press
+#: against a content root that lacks them silently drops their service menus -
+#: which is exactly what ``test_playable_slice``'s training-loop guarantee
+#: exists to catch. The stub root mirrors the real corpus and carries all nine.
+_STUB_NPC_ROLES: tuple[str, ...] = (
+    "Threshold Warden",
+    "House Steward",
+    "Silver Shears Stylist",
+    "Great Archive Profile Scribe",
+    "Town Crier",
+    "Builders Guild Clerk",
+    "Great Archive Librarian",
+    "Academy Registrar",
+    "Academy Trainer",
+)
+
+
+def _build_npc_role_fixture_objects() -> list[dict]:
+    return [
+        {
+            "model": "npc_services.npcrole",
+            "fields": {"name": name, "description": f"Stub {name} role."},
+        }
+        for name in _STUB_NPC_ROLES
+    ]
+
+
 @contextmanager
 def stub_content_root() -> Iterator[Path]:
     """Build a tmp content root with valid fixtures; patch CONTENT_REPO_PATH.
@@ -490,12 +519,13 @@ def stub_content_root() -> Iterator[Path]:
     (``@stub_content_root()``) — each call/decoration gets its own fresh tmp
     dir, so it is safe to stack on multiple test methods in the same class.
 
-    Writes two things: the original stub skill (``skills/stub.md``, a
-    frontmatter-domain file — proves the content load actually ran) and the
+    Writes three things: the original stub skill (``skills/stub.md``, a
+    frontmatter-domain file — proves the content load actually ran), the
     starter Gift/Technique/PathGiftGrant/Tradition catalog (a raw fixture-JSON
     file under ``fixtures/``, since that catalog isn't one of the frontmatter
     domains ``core_management.content_fixtures.DOMAIN_BUILDERS`` knows about —
-    see the module docstring for why every consumer needs this.
+    see the module docstring for why every consumer needs this), and the nine
+    content-owned NPCRole rows (see ``_STUB_NPC_ROLES``).
     """
     with tempfile.TemporaryDirectory() as tmp:
         root = Path(tmp)
@@ -508,6 +538,13 @@ def stub_content_root() -> Iterator[Path]:
         catalog_path.write_text(
             json.dumps(_build_starter_catalog_fixture_objects(), indent=2, ensure_ascii=False)
             + "\n",
+            encoding="utf-8",
+        )
+
+        roles_path = root / "fixtures" / "npc_services" / "npcrole.json"
+        roles_path.parent.mkdir(parents=True, exist_ok=True)
+        roles_path.write_text(
+            json.dumps(_build_npc_role_fixture_objects(), indent=2, ensure_ascii=False) + "\n",
             encoding="utf-8",
         )
 
