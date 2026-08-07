@@ -22,7 +22,7 @@ from __future__ import annotations
 
 from django.test import TestCase, override_settings
 
-from integration_tests.game_content.magic import MagicConfigResult, seed_magic_config
+from world.seeds.game_content.magic import MagicConfigResult, seed_magic_config
 
 
 @override_settings(SEED_SAMPLE_CONTENT=True)  # SoulfrayContentFactory gates on #2698

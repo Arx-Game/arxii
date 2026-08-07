@@ -1416,8 +1416,11 @@ at two cast seams so unlocked variants shape every cast automatically: (1)
 variant `intensity`/`control` deltas reach the power ledger. (2) `_resolve_and_pose_cast`
 (`world/scenes/cast_services.py`) — the non-combat standalone-cast path; variant form drives
 cost, narration, and outcome. Both seams are gated on `unlock_thread_level`: below the
-threshold the parent technique is returned unchanged. The dev seed (`integration_tests/game_content/magic.py`) authors
-starter `TechniqueVariant` rows so a fresh dev environment has variants to exercise. The
+threshold the parent technique is returned unchanged. `MagicContent.create_all()`
+(`world/seeds/game_content/magic.py`) builds starter `TechniqueVariant` rows so a suite
+has variants to exercise, but it is a test-fixture builder only — it left the production
+`seed_magic_dev()` path in #2973, so a fresh dev environment has none until the lore repo
+authors them. The
 gift-thread confers the standard always-in-action thread bonus (passive `ThreadPullEffect`
 tier-0 rows; `_ALWAYS_IN_ACTION_KINDS` — already wired in #1580); cast-time variant
 resolution is the new addition in #1581.
@@ -2088,9 +2091,14 @@ otherwise a compact kind/anchor/room list with a "Travel" button that dispatches
 **Seed content** (`world/seeds/game_content/magic.py`,
 `ensure_portal_travel_content()`, called from `seed_magic_dev()`): starter Mirror
 `PortalAnchor` rows on the content-authored "Mirror" `PortalAnchorKind`, placed in the
-canonical fallback room plus the seeded magic-story cascade rooms ("The Hallowed Threshold
-(Low)", "The Resonant Sanctum (Aligned)") so the network has real nodes. Idempotent
-throughout (`get_or_create`); skips entirely when the anchor kind isn't authored.
+canonical fallback room plus, defensively, any room already present matching
+`_MIRROR_ANCHOR_ROOM_SPECS` ("The Hallowed Threshold (Low)", "The Resonant Sanctum
+(Aligned)") — a no-op skip when absent, not a lookup failure. Those two rooms are no
+longer seeded by `seed_magic_dev()` itself (#2973 stripped
+`_seed_resonance_environment_rooms()`, the cascade-room stand-in); they only exist when
+the lore repo's #2451 grid bundle authors rooms under the same `db_key`s, in which case
+the anchors attach to them. Idempotent throughout (`get_or_create`); skips entirely when
+the anchor kind isn't authored.
 
 It seeds **no gift, technique or resonance** (#2967). It used to invent a "Reflection"
 Resonance, a MINOR `Gift` "Mirrorwalking" carrying it, a "Mirrorwalk" `Technique` and an XP

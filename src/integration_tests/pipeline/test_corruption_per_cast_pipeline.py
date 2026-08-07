@@ -63,7 +63,7 @@ class TestCorruptionPerCastPipeline(TestCase):
 
     @classmethod
     def setUpTestData(cls) -> None:
-        from integration_tests.game_content.magic import seed_magic_config
+        from world.seeds.game_content.magic import seed_magic_config
 
         # seed_magic_config() creates all required singletons (including
         # SoulfrayConfig with Decimal("0.30") for soulfray_threshold_ratio)

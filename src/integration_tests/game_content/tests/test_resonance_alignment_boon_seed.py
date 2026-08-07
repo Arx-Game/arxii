@@ -22,12 +22,12 @@ from __future__ import annotations
 from django.core.exceptions import ValidationError
 from django.test import TestCase, override_settings
 
-from integration_tests.game_content.magic import (
+from world.magic.constants import AffinityInteractionKind, ResonanceValence
+from world.magic.tests._cache_isolation import ResonanceCacheIsolationMixin
+from world.seeds.game_content.magic import (
     _seed_resonance_alignment_boons,
     seed_starter_magic_story,
 )
-from world.magic.constants import AffinityInteractionKind, ResonanceValence
-from world.magic.tests._cache_isolation import ResonanceCacheIsolationMixin
 
 
 @override_settings(SEED_SAMPLE_CONTENT=True)  # ConditionTemplate/Category gate on #2698

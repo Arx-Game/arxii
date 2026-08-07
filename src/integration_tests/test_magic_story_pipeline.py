@@ -81,7 +81,6 @@ from django.test import override_settings
 from evennia.utils.test_resources import EvenniaTestCase
 from parameterized import parameterized
 
-from integration_tests.game_content.magic import seed_starter_magic_story
 from world.character_sheets.factories import CharacterSheetFactory
 from world.checks.test_helpers import force_check_outcome
 from world.conditions.models import ConditionInstance
@@ -98,6 +97,7 @@ from world.magic.services.resonance_environment import evaluate_resonance_enviro
 from world.magic.services.techniques import use_technique
 from world.magic.tests._cache_isolation import ResonanceCacheIsolationMixin
 from world.roster.factories import grant_test_tenure
+from world.seeds.game_content.magic import seed_starter_magic_story
 from world.traits.models import CheckOutcome
 
 
@@ -146,7 +146,7 @@ class MagicStoryPipelineTests(ResonanceCacheIsolationMixin, EvenniaTestCase):
         # story both need are already resolved above, by
         # seed_starter_magic_story() itself (via
         # _seed_resonance_environment_consequence_pools()).
-        from integration_tests.game_content.magic import (
+        from world.seeds.game_content.magic import (
             _seed_hallowed_achievement_bridge,
             _seed_hallowed_threshold_story,
             _seed_resonance_environment_rooms,

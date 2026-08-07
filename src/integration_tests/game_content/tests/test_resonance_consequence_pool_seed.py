@@ -20,14 +20,14 @@ from __future__ import annotations
 
 from django.test import TestCase, override_settings
 
-from integration_tests.game_content.magic import (
+from world.magic.tests._cache_isolation import ResonanceCacheIsolationMixin
+from world.seeds.game_content.magic import (
     _HALLOWED_REACTION_SPECS,
     CRIT_FAIL_CONDITION_NAMES,
     HALLOWED_REACTION_CONDITION_NAMES,
     _seed_resonance_environment_consequence_pools,
     seed_starter_magic_story,
 )
-from world.magic.tests._cache_isolation import ResonanceCacheIsolationMixin
 
 
 @override_settings(SEED_SAMPLE_CONTENT=True)  # ConditionTemplate gates on #2698

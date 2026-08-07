@@ -37,7 +37,6 @@ from commands.imbue import CmdImbue
 from commands.ritual import CmdRitual
 from commands.weave import CmdWeaveThread
 from evennia_extensions.factories import ObjectDBFactory
-from integration_tests.game_content.magic import seed_thread_pull_catalog
 from world.character_sheets.factories import CharacterSheetFactory
 from world.magic.constants import EffectKind, TargetKind
 from world.magic.factories import (
@@ -58,6 +57,7 @@ from world.magic.services.resonance import spend_resonance_for_pull
 from world.magic.types import PullActionContext
 from world.mechanics.factories import CharacterEngagementFactory
 from world.scenes.factories import PersonaFactory, SceneFactory
+from world.seeds.game_content.magic import seed_thread_pull_catalog
 from world.traits.factories import CharacterTraitValueFactory, CheckSystemSetupFactory, TraitFactory
 from world.vitals.models import CharacterVitals
 

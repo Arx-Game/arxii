@@ -16,7 +16,6 @@ from django.test import TestCase
 import pytest
 
 from integration_tests.game_content.characters import CharacterContent
-from integration_tests.game_content.magic import MagicContent
 from world.magic.constants import AlterationTier, PendingAlterationStatus
 from world.magic.factories import (
     AffinityFactory,
@@ -35,6 +34,7 @@ from world.magic.services import (
     use_technique,
 )
 from world.magic.types import AlterationGateError, AlterationResolutionResult
+from world.seeds.game_content.magic import MagicContent
 
 
 def _make_character_with_resonance(name: str) -> tuple:

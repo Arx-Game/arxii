@@ -4,6 +4,19 @@
 **Owner:** Tehom (magic + core infrastructure)
 **Scope:** Single proof-of-concept slice — backend only
 
+> **STALE (2026-08-07):** this doc predates #2967 (seeders stop inventing
+> `Resonance` rows), #2972 (found ten seeders authoring content-repo-owned rows), and
+> #2973 (moved every one of those to a lore fixture, the #2451 grid bundle, or a test
+> fixture). It also predates the deletion of the `RoomAuraProfile`/`RoomResonance`
+> models this design describes (superseded by `LocationValueModifier` resonance
+> tags) and the pre-#2967 practice of inventing demo `Resonance` rows. Do not treat
+> the phases below as current seed behavior. **Current truth lives in
+> `world/seeds/game_content/magic.py`'s docstrings** — `seed_magic_dev()` and
+> `seed_starter_magic_story()` — which enumerate exactly what the production seeder
+> authors today and what moved to test-fixture/lore-fixture status. This full
+> rewrite is out of scope for #2973; only the "Seed Orchestration" section below has
+> been corrected in place.
+
 ## Why this slice exists
 
 Demonstrate, end-to-end on a fresh clone, that magic-in-stories works: an Abyssal-aligned
@@ -623,6 +636,19 @@ check resolution.
 
 ## Seed Orchestration
 
+**STALE — superseded by #2973; kept for historical context only.** The plan below
+described the pipeline as originally built: every phase, including the demo rooms and
+the Story/Chapter/Episode content, ran as part of the production `seed_magic_dev()`
+call. That is no longer true. #2973 stripped the content-repo-owned phases (2, 4, 7,
+8, 9 below) out of the production seeder — they now live as a lore fixture (2, 4, the
+condition half of 7), the #2451 grid bundle (the rooms in 8), or a test fixture with no
+production destination (9, and the room-tagging half of 7/8, and phase 2's achievement
+bridge). The seeder-owned phases (1, 3, 5, 6) stay, resolving the moved content by name
+via `world.seeds.sample_content.authored_or_sample()` instead of authoring it. For the
+current, accurate call list see `seed_starter_magic_story()`'s docstring in
+`world/seeds/game_content/magic.py` — it documents exactly which of the phases below
+still run and which are test-fixture-only.
+
 Three seed helpers compose to populate the slice's content. The two new shared helpers
 (`seed_canonical_affinities`, `seed_canonical_resonances`) live in
 `src/integration_tests/game_content/magic.py` alongside the existing helpers; the
@@ -648,7 +674,7 @@ Three `get_or_create(name=..., defaults={"affinity": celestial})` calls. FKs to 
 (seeded above). Idempotent. Other future magic content can call this independently to
 ensure the Celestial resonances exist before authoring its own RoomResonances.
 
-### Order of operations within `seed_starter_magic_story()`
+### Order of operations within `seed_starter_magic_story()` (as originally planned)
 
 Per FK dependencies:
 
