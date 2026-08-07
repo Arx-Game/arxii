@@ -22,8 +22,9 @@ class PrivacyTierTests(APITestCase):
         sheet = roster_entry.character_sheet
         sheet.stats_visibility = stats_visibility
         sheet.save()
+        # value=50 stores as internal ×10 (ADR-0193); the sheet shows the display value (5).
         CharacterTraitValueFactory(
-            character=sheet, trait=StatTraitFactory(name="strength"), value=5
+            character=sheet, trait=StatTraitFactory(name="strength"), value=50
         )
         return sheet
 

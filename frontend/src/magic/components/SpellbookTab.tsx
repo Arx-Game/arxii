@@ -209,6 +209,29 @@ export function SpellbookTab({ characterId, isMyCharacter }: Props) {
         </div>
       )}
 
+      {magic && magic.resonances.length > 0 && (
+        <Card data-testid="spellbook-resonances">
+          <CardHeader>
+            <CardTitle className="text-base">Resonances</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <dl className="grid grid-cols-2 gap-x-4 gap-y-2 sm:grid-cols-3">
+              {magic.resonances.map((resonance) => (
+                <div key={resonance.name} data-testid="resonance-balance">
+                  <dt className="text-sm text-muted-foreground">{resonance.name}</dt>
+                  <dd className="flex items-baseline gap-2">
+                    <span className="text-lg font-semibold tabular-nums">{resonance.balance}</span>
+                    <span className="text-xs text-muted-foreground">
+                      {resonance.lifetime_earned} lifetime
+                    </span>
+                  </dd>
+                </div>
+              ))}
+            </dl>
+          </CardContent>
+        </Card>
+      )}
+
       {magic?.motif && (
         <Card data-testid="spellbook-motif">
           <CardHeader>

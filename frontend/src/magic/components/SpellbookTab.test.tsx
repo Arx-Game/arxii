@@ -11,7 +11,7 @@
  * mocked) live at the bottom of this file.
  */
 
-import { screen } from '@testing-library/react';
+import { screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { vi } from 'vitest';
 import { renderWithProviders } from '@/test/utils/renderWithProviders';
@@ -231,6 +231,7 @@ function makeMagic(overrides: Partial<CharacterSheetMagic> = {}): CharacterSheet
     },
     anima_ritual: null,
     aura: makeAura(),
+    resonances: [],
     ...overrides,
   };
 }
@@ -267,6 +268,31 @@ describe('SpellbookTab', () => {
     expect(screen.getByText('Sardonic')).toBeInTheDocument();
     // Aura is qualitative — no raw decimal percentages anywhere in the DOM.
     expect(screen.queryByText(/70/)).not.toBeInTheDocument();
+  });
+
+  it('renders resonance balances (#3042)', () => {
+    mockPayload(
+      makeMagic({
+        resonances: [
+          { name: 'Ember', balance: 4, lifetime_earned: 12 },
+          { name: 'Resolve', balance: 0, lifetime_earned: 3 },
+        ],
+      })
+    );
+    renderWithProviders(<SpellbookTab characterId={1} isMyCharacter={false} />);
+
+    const card = screen.getByTestId('spellbook-resonances');
+    const balances = within(card).getAllByTestId('resonance-balance');
+    expect(balances).toHaveLength(2);
+    expect(within(card).getByText('Ember')).toBeInTheDocument();
+    expect(within(card).getByText('4')).toBeInTheDocument();
+    expect(within(card).getByText('12 lifetime')).toBeInTheDocument();
+  });
+
+  it('omits the resonances card when there are no claimed resonances', () => {
+    mockPayload(makeMagic({ resonances: [] }));
+    renderWithProviders(<SpellbookTab characterId={1} isMyCharacter={false} />);
+    expect(screen.queryByTestId('spellbook-resonances')).not.toBeInTheDocument();
   });
 
   it('does not render workbench links for a foreign viewer', () => {
