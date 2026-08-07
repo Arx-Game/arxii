@@ -2571,6 +2571,10 @@ class MagicDevSeedResult:
     Composes all Phase 1 seed results into one dataclass.
     ``author_reference_corruption_content()`` returns None so it is not
     represented here; callers can query Wild Hunt / Web of Spiders rows directly.
+    ``MagicContent.create_all()`` (Social Arts Gift/Techniques/ActionEnhancements)
+    is no longer called from this orchestrator (#2973 — content-repo-owned), so
+    there is no ``magic_content`` field either; callers needing that shape build
+    it directly via ``MagicContent.create_all()`` as a test fixture.
     ``penetration`` holds the penetration CheckType, factor ladder, and
     check-scoped ModifierTarget seeded by seed_penetration_contest() (#767).
     ``flee`` holds the flee CheckType, ModifierTarget, and FleeConfig singleton
@@ -2598,7 +2602,6 @@ class MagicDevSeedResult:
     config: MagicConfigResult
     rituals: RitualSeedResult
     thread_pull_catalog: ThreadPullCatalogResult
-    magic_content: MagicContentResult
     facet_thread_unlock: FacetThreadUnlockResult
     penetration: PenetrationContestResult
     flee: FleeSeedResult
@@ -2745,33 +2748,31 @@ def seed_magic_dev() -> MagicDevSeedResult:
     4. ``author_reference_corruption_content()`` — Corruption ConditionTemplates
        + CORRUPTION_TWIST entries for the first authored Primal and Abyssal
        Resonance
-    5. ``MagicContent.create_all()`` — 6 social action Techniques + 6
-       ActionEnhancements
-    6. ``seed_facet_thread_unlock()`` — single global FACET ThreadWeavingUnlock
-    7. ``seed_starter_magic_story()`` — magic-story pipeline slice (Affinities,
+    5. ``seed_facet_thread_unlock()`` — single global FACET ThreadWeavingUnlock
+    6. ``seed_starter_magic_story()`` — magic-story pipeline slice (Affinities,
        AffinityInteractions, OPPOSED backfire pools resolving the 5 reaction
        conditions by name, ALIGNED boon tiers, Hallowed Threshold story;
        #2973 — the cascade rooms + "Hallowed Rejection" and the achievement
        bridge no longer seed here, they're lore-repo content)
-    8. ``seed_penetration_contest()`` — penetration CheckType + factor ladder +
+    7. ``seed_penetration_contest()`` — penetration CheckType + factor ladder +
        check-scoped ModifierTarget (#767)
-    9. ``seed_flee_check()`` — flee CheckType + ModifierTarget + FleeConfig
+    8. ``seed_flee_check()`` — flee CheckType + ModifierTarget + FleeConfig
        singleton + tier modifiers + starter consequence pool (#878)
-    10. ``seed_relationship_track_thread_unlock()`` — canonical "Devotion"
-        RelationshipTrack + its RELATIONSHIP_TRACK ThreadWeavingUnlock (#2027)
-    11. ``wire_soul_tether_content()`` — Soul Tether Rituals (accept_soul_tether,
+    9. ``seed_relationship_track_thread_unlock()`` — canonical "Devotion"
+       RelationshipTrack + its RELATIONSHIP_TRACK ThreadWeavingUnlock (#2027)
+    10. ``wire_soul_tether_content()`` — Soul Tether Rituals (accept_soul_tether,
         soul_tether_rescue), Tether Strain / Soul Tether Active ConditionTemplates,
         and the two reactive TriggerDefinitions (#2027). Previously created only
         in tests/factories — Soul Tether was unreachable in a live game.
-    12. ``wire_covenant_lifecycle_rituals()`` — Covenant/org lifecycle Rituals
+    11. ``wire_covenant_lifecycle_rituals()`` — Covenant/org lifecycle Rituals
         (Covenant Formation, Covenant Induction, Call the Banners, Mentor's Vow,
         Renew the Oath, Organization Induction) + the MentorBondConfig singleton
         (#2114). Previously created only in tests/factories — the fully-built
         covenant session machinery was unreachable in a live game.
-    13. ``ensure_dramatic_entrance_content()`` — "Grand Entrance" DramaticMomentType,
+    12. ``ensure_dramatic_entrance_content()`` — "Grand Entrance" DramaticMomentType,
         flagged ``suggest_on_technique_entrance=True`` (#2183). Without this, the
         technique-entrance suggestion bridge has nothing authored to surface.
-    14. ``ensure_portal_travel_content()`` — starter Mirror ``PortalAnchor`` rows
+    13. ``ensure_portal_travel_content()`` — starter Mirror ``PortalAnchor`` rows
         in seeded public rooms, on the content-authored "Mirror"
         ``PortalAnchorKind`` (#2222). The gift + technique it used to invent were
         removed in #2967; a real travel technique is lore-repo content.
@@ -2780,7 +2781,10 @@ def seed_magic_dev() -> MagicDevSeedResult:
     here at this point (Task 7, #2426) is retired (#2474) — real starter-catalog
     content is lore-repo content loaded via ``load_world_content()`` ahead of
     this orchestrator in the dev-seed flow (``seed_dev_database()``); this
-    function no longer authors a synthetic one.
+    function no longer authors a synthetic one. Nor does ``MagicContent.create_all()``
+    — its "Social Arts" Gift + 6 Techniques + 6 ActionEnhancements + variants left
+    the production seeder (#2973); ``MagicContent`` survives as a test-fixture
+    builder only.
 
     All writes are idempotent (get_or_create throughout). Re-running on a
     populated database is a no-op; staff edits to existing rows are preserved
@@ -2801,28 +2805,20 @@ def seed_magic_dev() -> MagicDevSeedResult:
         seed_flee_check,
         seed_penetration_contest,
     )
-    from world.seeds.sample_content import sample_content_enabled  # noqa: PLC0415
 
     config = seed_magic_config()
     rituals = seed_canonical_rituals()
     thread_pull_catalog = seed_thread_pull_catalog()
     seed_thread_survivability_tuning()
     author_reference_corruption_content()
-    # MagicContent.create_all() is also a test-fixture builder (called directly
-    # by several test suites), so it stays an unconditional, unchanged content
-    # factory — only THIS production call site is gated (#2698). Its 6 social
-    # techniques + Gift/Affinity/Resonance/TechniqueStyle/EffectType rows are
-    # content-repo-owned; a real deploy needs them authored there.
-    if sample_content_enabled():
-        magic_content = MagicContent.create_all()
-    else:
-        logger.warning(
-            "Social-action MagicContent (Gift 'Social Arts' and its 6 techniques) is "
-            "not in the content repo. Skipping. Author it there and re-press the Big "
-            "Button, or set ARXII_SEED_SAMPLE_CONTENT=1 to have the seeder invent a "
-            "sample one (see #2698)."
-        )
-        magic_content = None
+    # #2973: MagicContent.create_all() no longer runs here. Its Gift "Social
+    # Arts" + 6 Techniques + 6 ActionEnhancements + variants are content-repo
+    # rows the seeder shouldn't author (formerly gated behind
+    # sample_content_enabled(), #2698 — now removed outright, not merely
+    # ungated). MagicContent survives as a test-fixture builder: the two
+    # pipeline suites that need this content (test_social_magic_pipeline.py,
+    # test_challenge_pipeline.py) call create_all() directly in their own
+    # setUpTestData.
     facet_thread_unlock = seed_facet_thread_unlock()
     relationship_track_thread_unlock = seed_relationship_track_thread_unlock()
     seed_starter_magic_story()
@@ -2879,7 +2875,6 @@ def seed_magic_dev() -> MagicDevSeedResult:
         config=config,
         rituals=rituals,
         thread_pull_catalog=thread_pull_catalog,
-        magic_content=magic_content,
         facet_thread_unlock=facet_thread_unlock,
         penetration=penetration,
         flee=flee,

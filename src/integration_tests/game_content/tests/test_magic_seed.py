@@ -559,21 +559,27 @@ class TestSeedMagicDevCheckTypeConvergence(TestCase):
         )
 
 
-@override_settings(SEED_SAMPLE_CONTENT=True)
 class TestSeedMagicDevTechniqueIdempotency(TestCase):
     """TDD: guard for MagicContent.create_all() duplicate Technique bug.
 
     This test is written BEFORE the fix so it fails first, confirming the bug,
     then passes after MagicContent.create_all() switches to get_or_create.
+
+    #2973: seed_magic_dev() no longer calls MagicContent.create_all() at all
+    (the Social Arts Gift/Techniques/ActionEnhancements are content-repo rows
+    now) — this suite calls the factory directly, same as the two pipeline
+    suites (test_social_magic_pipeline.py, test_challenge_pipeline.py) that
+    keep it as a test fixture. No SEED_SAMPLE_CONTENT override needed:
+    create_all() was never gated on it.
     """
 
     @classmethod
     def setUpTestData(cls) -> None:
-        from integration_tests.game_content.magic import seed_magic_dev
+        from integration_tests.game_content.magic import MagicContent
 
         # Two calls — if create_all() is not idempotent, techniques double
-        seed_magic_dev()
-        seed_magic_dev()
+        MagicContent.create_all()
+        MagicContent.create_all()
 
     def test_social_techniques_exist_exactly_once(self) -> None:
         """Each of the 6 social action techniques must appear exactly once."""
@@ -586,7 +592,7 @@ class TestSeedMagicDevTechniqueIdempotency(TestCase):
                     Technique.objects.filter(name=technique_name).count(),
                     1,
                     f"Technique '{technique_name}' must exist exactly once after two "
-                    f"seed_magic_dev() calls (action_key={action_key!r})",
+                    f"MagicContent.create_all() calls (action_key={action_key!r})",
                 )
 
     def test_action_enhancements_exist_exactly_once(self) -> None:
@@ -600,7 +606,7 @@ class TestSeedMagicDevTechniqueIdempotency(TestCase):
                     ActionEnhancement.objects.filter(base_action_key=action_key).count(),
                     1,
                     f"ActionEnhancement for '{action_key}' must exist exactly once after two "
-                    f"seed_magic_dev() calls",
+                    f"MagicContent.create_all() calls",
                 )
 
 
@@ -633,7 +639,6 @@ class TestSeedMagicDev(TestCase):
             MishapPoolTier,
             Ritual,
             SoulfrayConfig,
-            Technique,
         )
         from world.magic.models.corruption_config import CorruptionConfig
         from world.magic.models.gain_config import ResonanceGainConfig
@@ -693,14 +698,11 @@ class TestSeedMagicDev(TestCase):
                 f"exactly one reference Corruption ConditionTemplate for {affinity_name}",
             )
 
-        # --- MagicContent.create_all(): 6 social techniques ---
-        from integration_tests.game_content.magic import ACTION_TECHNIQUE_MAP
-
-        for technique_name in ACTION_TECHNIQUE_MAP.values():
-            self.assertTrue(
-                Technique.objects.filter(name=technique_name).exists(),
-                f"Social technique '{technique_name}' must exist",
-            )
+        # Note: MagicContent.create_all()'s "Social Arts" Gift + 6 Techniques +
+        # 6 ActionEnhancements are no longer authored here either (#2973) —
+        # content-repo rows now; MagicContent survives as a test-fixture
+        # builder the two pipeline suites call directly. Nothing to assert on
+        # this orchestrator's own output for that family.
 
         # --- CheckType canonical row (convergence guard) ---
         self.assertEqual(CheckType.objects.filter(name="Magical Endurance").count(), 1)
@@ -769,20 +771,6 @@ class TestSeedMagicDev(TestCase):
             CheckCategory.objects.filter(name="Magic").count(),
             1,
         )
-
-    def test_technique_idempotency_via_magic_content(self) -> None:
-        """The 6 social techniques must exist exactly once after two orchestrator calls."""
-        from integration_tests.game_content.magic import ACTION_TECHNIQUE_MAP
-        from world.magic.models import Technique
-
-        for action_key, technique_name in ACTION_TECHNIQUE_MAP.items():
-            with self.subTest(technique=technique_name):
-                self.assertEqual(
-                    Technique.objects.filter(name=technique_name).count(),
-                    1,
-                    f"Technique '{technique_name}' (action_key={action_key!r}) must exist "
-                    f"exactly once after two seed_magic_dev() calls",
-                )
 
 
 # ---------------------------------------------------------------------------
@@ -1079,6 +1067,57 @@ class SeedStarterMagicStoryStripsStandInsTests(TestCase):
             ).exists(),
             "seed_starter_magic_story() must not author the cascade rooms "
             "without SEED_SAMPLE_CONTENT — they ride the #2451 grid bundle now (#2973)",
+        )
+
+
+class SeedMagicDevStripsStandInsTests(TestCase):
+    """#2973 items 3 + 6: MagicContent.create_all() and the touchstone/reagent
+    content left ``seed_magic_dev()`` — they're content-repo rows now (or, for
+    ``MagicContent``/``ensure_touchstone_content()``, test-fixture builders a
+    suite must call directly).
+
+    No ``@override_settings(SEED_SAMPLE_CONTENT=True)`` here deliberately:
+    this exercises the real default (off) production behavior, mirroring
+    ``TestSeedMagicDevCheckTypeConvergence`` and
+    ``SeedStarterMagicStoryStripsStandInsTests`` above — a bare
+    ``seed_magic_dev()`` call against an empty database must not author any
+    of the stripped clusters, even implicitly via a remaining phase.
+    """
+
+    def test_no_social_arts_gift_authored(self) -> None:
+        from world.magic.models import Gift
+
+        seed_magic_dev()
+        self.assertFalse(
+            Gift.objects.filter(name="Social Arts").exists(),
+            "seed_magic_dev() must not author the 'Social Arts' Gift without "
+            "SEED_SAMPLE_CONTENT — MagicContent.create_all() is a test-fixture "
+            "builder only now (#2973)",
+        )
+
+    def test_no_touchstone_or_reagent_templates_authored(self) -> None:
+        from world.items.models import ItemTemplate
+        from world.magic.seeds_touchstone_content import (
+            CANDLE_TEMPLATE_NAME,
+            INCENSE_TEMPLATE_NAME,
+            SALT_TEMPLATE_NAME,
+            TOUCHSTONE_TEMPLATE_NAME,
+        )
+
+        seed_magic_dev()
+        self.assertFalse(
+            ItemTemplate.objects.filter(
+                name__in=[
+                    TOUCHSTONE_TEMPLATE_NAME,
+                    CANDLE_TEMPLATE_NAME,
+                    SALT_TEMPLATE_NAME,
+                    INCENSE_TEMPLATE_NAME,
+                ],
+            ).exists(),
+            "seed_magic_dev() must not author the example touchstone or generic "
+            "reagent ItemTemplates without SEED_SAMPLE_CONTENT — "
+            "ensure_sanctification_requirements() resolves them via "
+            "authored_or_sample now (#2973)",
         )
 
 
@@ -1943,14 +1982,21 @@ class SeedMagicDevMagicChecksTests(TestCase):
         self.assertEqual(len(result.magic_checks.configs), 5)
 
 
-@override_settings(SEED_SAMPLE_CONTENT=True)
 class TestSeedMagicDevVariants(TestCase):
-    """seed_magic_dev authors starter gift-technique variants (#1581)."""
+    """MagicContent.create_all() authors gift-technique variants (#1581).
+
+    #2973: seed_magic_dev() no longer calls MagicContent.create_all() (the
+    Social Arts Gift/Techniques/variants are content-repo rows now) — this
+    suite calls the factory directly, same as the two pipeline suites that
+    keep it as a test fixture.
+    """
 
     @classmethod
     def setUpTestData(cls) -> None:
+        from integration_tests.game_content.magic import MagicContent
+
         cls.resonances = _author_stand_in_resonances()
-        cls.seed = seed_magic_dev()
+        cls.magic_content = MagicContent.create_all()
 
     def test_seed_authors_gift_technique_variants(self):
         from world.magic.specialization.models import TechniqueVariant

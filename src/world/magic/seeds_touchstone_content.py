@@ -21,6 +21,17 @@ _TIER_DEFAULTS = (
     ("Profound", 3, "Resonance dense enough to reshape a room."),
 )
 
+# Single source of truth for the 3 generic reagent templates, shared by
+# ensure_touchstone_content() (unconditional test-fixture builder) and
+# ensure_sanctification_requirements() (#2973 — resolves these by name via
+# authored_or_sample instead of calling the fixture builder) so the two never
+# drift on name/description/defaults.
+_REAGENT_SPECS = (
+    (CANDLE_TEMPLATE_NAME, "A plain tallow candle."),
+    (SALT_TEMPLATE_NAME, "Coarse salt, enough for a warding line."),
+    (INCENSE_TEMPLATE_NAME, "A bundle of dried, fragrant herbs."),
+)
+
 
 def ensure_resonance_tiers() -> list[ResonanceTier]:
     """Get-or-create the three framework-proving ResonanceTier rows."""
@@ -72,13 +83,8 @@ def ensure_touchstone_content() -> tuple[ItemTemplate | None, list[ItemTemplate]
             },
         )
 
-    reagent_names = (
-        (CANDLE_TEMPLATE_NAME, "A plain tallow candle."),
-        (SALT_TEMPLATE_NAME, "Coarse salt, enough for a warding line."),
-        (INCENSE_TEMPLATE_NAME, "A bundle of dried, fragrant herbs."),
-    )
     reagents = []
-    for name, description in reagent_names:
+    for name, description in _REAGENT_SPECS:
         template, _ = ItemTemplate.objects.get_or_create(
             name=name, defaults={"description": description, "weight": 0.1, "size": 1, "value": 0}
         )
@@ -88,16 +94,41 @@ def ensure_touchstone_content() -> tuple[ItemTemplate | None, list[ItemTemplate]
 
 
 def ensure_sanctification_requirements(ritual: Ritual) -> None:
-    """Attach 1x touchstone-mode + reagent requirements to a Sanctification Ritual."""
+    """Attach 1x touchstone-mode + reagent requirements to a Sanctification Ritual.
+
+    #2973: no longer calls ``ensure_touchstone_content()`` to obtain the 3
+    reagent templates — that unconditionally *minted* them, and this function
+    runs unconditionally from ``seeds_sanctum.ensure_sanctum_rituals()`` (a
+    real deploy path), so it must not author content-repo rows. Each reagent
+    is resolved by name via ``authored_or_sample`` instead (logs a miss and
+    returns ``None`` rather than inventing one, unless ``SEED_SAMPLE_CONTENT``
+    is on). ``ensure_touchstone_content()`` survives unchanged as a
+    test-fixture builder for suites that need the templates directly.
+
+    A reagent that doesn't resolve is explicitly skipped — ``continue``,
+    never passed through to ``get_or_create``.
+    ``RitualComponentRequirement.item_template`` is nullable (the
+    touchstone-mode row above is keyed on ``item_template=None``), so a naive
+    ``get_or_create(ritual=ritual, item_template=None, ...)`` for a missing
+    reagent would silently COLLIDE with that touchstone-mode row instead of
+    being skipped.
+    """
     from world.magic.models import RitualComponentRequirement  # noqa: PLC0415
+    from world.seeds.sample_content import authored_or_sample  # noqa: PLC0415
 
     tiers = {t.tier_level: t for t in ensure_resonance_tiers()}
-    _, reagents = ensure_touchstone_content()
 
     RitualComponentRequirement.objects.get_or_create(
         ritual=ritual, min_touchstone_tier=tiers[1], defaults={"item_template": None, "quantity": 1}
     )
-    for reagent in reagents:
+    for name, description in _REAGENT_SPECS:
+        reagent = authored_or_sample(
+            ItemTemplate,
+            {"description": description, "weight": 0.1, "size": 1, "value": 0},
+            name=name,
+        )
+        if reagent is None:
+            continue
         RitualComponentRequirement.objects.get_or_create(
             ritual=ritual,
             item_template=reagent,

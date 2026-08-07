@@ -1614,18 +1614,22 @@ them and checks each belongs to the requesting sheet's inventory (`ItemInstance
 .holder_character_sheet`, not the account — items are body-scoped per #684). The view forwards the
 resolved list as `components_provided=` to `SanctumInstallAction().run()`.
 
-**Seeded touchstone/reagent content** (`seeds_touchstone_content.py`, #707): small,
-framework-proving seed set — `ensure_resonance_tiers()` (Faint/Resonant/Profound, tier_level
-1/2/3), `ensure_touchstone_content()` (one example touchstone `ItemTemplate`, a Praedari paw,
-tier 1, plus 3 generic reagent templates: candle/salt/incense — self-contained, get-or-creates
-its own "Praedari" Resonance + "Primal" Affinity by name rather than assuming some other seed ran
-first, since no canonical Resonance/Affinity catalog exists yet in production seed code),
-`ensure_sanctification_requirements(ritual)` (attaches 1x touchstone-mode + the 3 reagent
-template-mode `RitualComponentRequirement` rows). `seeds_sanctum.ensure_sanctum_rituals()` calls
-`ensure_sanctification_requirements()` for both the Personal and Covenant Sanctification rituals —
-so every real "sanctum install" now requires a touchstone tied to the founding Resonance (tier ≥
-Faint, attuned to the founder) plus one each of the three reagents. A full per-resonance/per-tier
-content catalog is separate content-authoring work, not framework work.
+**Seeded touchstone/reagent content** (`seeds_touchstone_content.py`, #707, #2973):
+`ensure_resonance_tiers()` (Faint/Resonant/Profound, tier_level 1/2/3) is config and stays
+seeder-owned. `ensure_touchstone_content()` (one example touchstone `ItemTemplate` — "Paw of a
+Predatory Animal", tier 1, tied to whichever Resonance the row already carries or the first
+authored one, skipped entirely if none is authored — plus 3 generic reagent templates:
+candle/salt/incense) is a test-fixture builder only as of #2973; it no longer runs from the
+production seeder. `ensure_sanctification_requirements(ritual)` (called unconditionally from
+`seeds_sanctum.ensure_sanctum_rituals()`, a real deploy path) attaches the touchstone-mode
+`RitualComponentRequirement` (tier-based, no `ItemTemplate` lookup needed) plus one
+template-mode requirement per reagent it resolves via `authored_or_sample` by name — a reagent
+absent from the content repo (and `SEED_SAMPLE_CONTENT` off) is skipped (`continue`), not
+passed through as `item_template=None`, since that would collide with the touchstone-mode row.
+So a real "sanctum install" requires a touchstone tied to the founding Resonance (tier ≥ Faint,
+attuned to the founder) plus whichever of the three reagents are authored — content-repo work,
+not seeder work. A full per-resonance/per-tier catalog is separate content-authoring work, not
+framework work.
 
 **Dissolution soft-delete** (#1497): `perform_dissolution` sets `RoomFeatureInstance.dissolved_at`
 (nullable `DateTimeField`) rather than deleting the row. `RoomFeatureInstance.active()` queryset

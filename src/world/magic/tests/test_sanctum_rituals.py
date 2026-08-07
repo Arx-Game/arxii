@@ -751,3 +751,78 @@ class PurgingGradedCheckTests(TestCase):
             perform_purging_ritual(
                 sanctum, owner, new_resonance=new_resonance, resonance_sacrificed=100
             )
+
+
+# ---------------------------------------------------------------------------
+# #2973 item 6 — ensure_sanctification_requirements() resolves reagents via
+# authored_or_sample instead of ensure_touchstone_content() minting them.
+# ---------------------------------------------------------------------------
+
+
+class EnsureSanctificationRequirementsTests(TestCase):
+    """No SEED_SAMPLE_CONTENT here deliberately — proves the real default
+    (off) production behavior: with none of the 3 reagent ItemTemplates
+    authored, ``ensure_sanctification_requirements`` must attach only the
+    touchstone-mode requirement and neither invent a reagent template nor let
+    a missing reagent silently collide with that touchstone-mode row (the
+    spec-review finding — ``RitualComponentRequirement.item_template`` is
+    nullable, so a naive ``get_or_create(item_template=None)`` for a missing
+    reagent would match the touchstone-mode row instead of being skipped).
+    """
+
+    def test_no_reagents_authored_yields_touchstone_row_only(self) -> None:
+        from world.items.models import ItemTemplate
+        from world.magic.factories import RitualFactory
+        from world.magic.models import RitualComponentRequirement
+        from world.magic.seeds_touchstone_content import (
+            CANDLE_TEMPLATE_NAME,
+            INCENSE_TEMPLATE_NAME,
+            SALT_TEMPLATE_NAME,
+            ensure_sanctification_requirements,
+        )
+
+        ritual = RitualFactory()
+        ensure_sanctification_requirements(ritual)
+
+        requirements = RitualComponentRequirement.objects.filter(ritual=ritual)
+        self.assertEqual(
+            requirements.count(),
+            1,
+            "a missing reagent must be skipped, not create (or collide into) "
+            "an extra requirement row",
+        )
+        only_row = requirements.get()
+        self.assertIsNone(only_row.item_template)
+        self.assertIsNotNone(only_row.min_touchstone_tier)
+        self.assertFalse(
+            ItemTemplate.objects.filter(
+                name__in=[CANDLE_TEMPLATE_NAME, SALT_TEMPLATE_NAME, INCENSE_TEMPLATE_NAME],
+            ).exists(),
+            "ensure_sanctification_requirements() must not invent reagent "
+            "templates without SEED_SAMPLE_CONTENT (#2973)",
+        )
+
+    def test_authored_reagents_are_attached(self) -> None:
+        from world.items.factories import ItemTemplateFactory
+        from world.magic.factories import RitualFactory
+        from world.magic.models import RitualComponentRequirement
+        from world.magic.seeds_touchstone_content import (
+            CANDLE_TEMPLATE_NAME,
+            INCENSE_TEMPLATE_NAME,
+            SALT_TEMPLATE_NAME,
+            ensure_sanctification_requirements,
+        )
+
+        candle = ItemTemplateFactory(name=CANDLE_TEMPLATE_NAME)
+        salt = ItemTemplateFactory(name=SALT_TEMPLATE_NAME)
+        incense = ItemTemplateFactory(name=INCENSE_TEMPLATE_NAME)
+
+        ritual = RitualFactory()
+        ensure_sanctification_requirements(ritual)
+
+        requirements = RitualComponentRequirement.objects.filter(ritual=ritual)
+        self.assertEqual(requirements.count(), 4, "touchstone-mode row + 3 reagent rows")
+        reagent_item_templates = set(
+            requirements.exclude(item_template=None).values_list("item_template", flat=True)
+        )
+        self.assertEqual(reagent_item_templates, {candle.pk, salt.pk, incense.pk})
