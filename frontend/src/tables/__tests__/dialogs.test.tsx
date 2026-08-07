@@ -18,6 +18,7 @@ import { RemoveFromTableDialog } from '../components/RemoveFromTableDialog';
 import { LeaveTableDialog } from '../components/LeaveTableDialog';
 import { ArchiveTableDialog } from '../components/ArchiveTableDialog';
 import { InviteToTableDialog } from '../components/InviteToTableDialog';
+import { GMApplicationDialog } from '../components/GMApplicationDialog';
 import type { GMTable } from '../types';
 
 // ---------------------------------------------------------------------------
@@ -31,6 +32,7 @@ vi.mock('../queries', () => ({
   useLeaveTable: vi.fn(),
   useArchiveTable: vi.fn(),
   useInviteToTable: vi.fn(),
+  useCreateGMApplication: vi.fn(),
 }));
 
 vi.mock('@/events/queries', () => ({
@@ -352,5 +354,96 @@ describe('InviteToTableDialog', () => {
 
     const submit = screen.getByRole('button', { name: /^invite$/i });
     expect(submit).toBeDisabled();
+  });
+});
+
+// ---------------------------------------------------------------------------
+// GMApplicationDialog (#3041)
+// ---------------------------------------------------------------------------
+
+describe('GMApplicationDialog', () => {
+  beforeEach(() => {
+    vi.mocked(queries.useCreateGMApplication).mockReturnValue({
+      mutate: vi.fn(),
+      isPending: false,
+    } as unknown as ReturnType<typeof queries.useCreateGMApplication>);
+  });
+
+  it('opens dialog on trigger click', async () => {
+    const user = userEvent.setup();
+    render(
+      <GMApplicationDialog onSuccess={vi.fn()}>
+        <button type="button">Apply to be a GM</button>
+      </GMApplicationDialog>,
+      { wrapper: createWrapper() }
+    );
+
+    await user.click(screen.getByRole('button', { name: /apply to be a gm/i }));
+    expect(screen.getByRole('dialog')).toBeInTheDocument();
+    expect(screen.getByLabelText(/application/i)).toBeInTheDocument();
+  });
+
+  it('submit button disabled until 50 characters are entered', async () => {
+    const user = userEvent.setup();
+    render(
+      <GMApplicationDialog onSuccess={vi.fn()}>
+        <button type="button">Apply</button>
+      </GMApplicationDialog>,
+      { wrapper: createWrapper() }
+    );
+
+    await user.click(screen.getByRole('button', { name: /apply/i }));
+
+    const submit = screen.getByRole('button', { name: /submit application/i });
+    expect(submit).toBeDisabled();
+
+    await user.type(screen.getByLabelText(/application/i), 'too short');
+    expect(submit).toBeDisabled();
+  });
+
+  it('calls createGMApplication mutation and onSuccess on submit', async () => {
+    const mutateFn = vi.fn((_data, opts?: { onSuccess?: () => void }) => opts?.onSuccess?.());
+    vi.mocked(queries.useCreateGMApplication).mockReturnValue({
+      mutate: mutateFn,
+      isPending: false,
+    } as unknown as ReturnType<typeof queries.useCreateGMApplication>);
+
+    const onSuccess = vi.fn();
+    const longText = 'I want to run a mystery campaign for new players. '.repeat(2);
+    const user = userEvent.setup();
+    render(
+      <GMApplicationDialog onSuccess={onSuccess}>
+        <button type="button">Apply</button>
+      </GMApplicationDialog>,
+      { wrapper: createWrapper() }
+    );
+
+    await user.click(screen.getByRole('button', { name: /apply/i }));
+    await user.type(screen.getByLabelText(/application/i), longText);
+    await user.click(screen.getByRole('button', { name: /submit application/i }));
+
+    expect(mutateFn).toHaveBeenCalledWith(
+      { application_text: longText.trim() },
+      expect.any(Object)
+    );
+    expect(onSuccess).toHaveBeenCalled();
+  });
+
+  it('closes dialog on cancel', async () => {
+    const user = userEvent.setup();
+    render(
+      <GMApplicationDialog onSuccess={vi.fn()}>
+        <button type="button">Apply</button>
+      </GMApplicationDialog>,
+      { wrapper: createWrapper() }
+    );
+
+    await user.click(screen.getByRole('button', { name: /apply/i }));
+    expect(screen.getByRole('dialog')).toBeInTheDocument();
+
+    await user.click(screen.getByRole('button', { name: /cancel/i }));
+    await waitFor(() => {
+      expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+    });
   });
 });

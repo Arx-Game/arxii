@@ -58,13 +58,14 @@ export interface MockAccountOptions {
   trust?: MockTrust;
   isStaff?: boolean;
   canCreateCharacters?: boolean;
+  isGM?: boolean;
 }
 
 /**
  * Create a mock account with specified options
  */
 export function createMockAccount(options: MockAccountOptions = {}): AccountData {
-  const { trust = TRUST_NONE, isStaff = false, canCreateCharacters = true } = options;
+  const { trust = TRUST_NONE, isStaff = false, canCreateCharacters = true, isGM = false } = options;
 
   return {
     id: 1,
@@ -75,6 +76,7 @@ export function createMockAccount(options: MockAccountOptions = {}): AccountData
     email_verified: true,
     can_create_characters: canCreateCharacters,
     is_staff: isStaff || isStaffTrust(trust),
+    is_gm: isGM,
     available_characters: [],
     pending_applications: [],
   };

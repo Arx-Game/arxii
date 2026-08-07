@@ -18,6 +18,7 @@ import type {
   BulletinPostUpdateBody,
   BulletinReplyCreateBody,
   BulletinReplyUpdateBody,
+  GMApplicationCreateBody,
   GMTableCreateBody,
   GMTableMembershipCreateBody,
   GMTableTransferBody,
@@ -302,5 +303,20 @@ export function useDeleteBulletinReply() {
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: tablesKeys.bulletinPostsAll }).catch(() => {});
     },
+  });
+}
+
+// ---------------------------------------------------------------------------
+// GM application mutation (#3041)
+// ---------------------------------------------------------------------------
+
+/**
+ * No cache to invalidate here: approval happens on the staff review page and
+ * changes the account's `is_gm` flag on next account fetch, not anything the
+ * tables feature queries.
+ */
+export function useCreateGMApplication() {
+  return useMutation({
+    mutationFn: (data: GMApplicationCreateBody) => api.createGMApplication(data),
   });
 }

@@ -7,12 +7,12 @@
  *   - Tables I have stories at (viewer_role === 'guest')
  *   - Staff: all tables (if "Show all" toggle is active)
  *
- * GM users see a "+ Create Table" button. Non-GMs do not.
- *
- * Whether a user is a GM is determined by checking if any table returns
- * viewer_role === 'gm'. The account endpoint does not expose GMProfile
- * membership — see stores/auth and the Stories CLAUDE.md for the known gotcha.
- * A dedicated GMProfile check is deferred to Wave 11 when routing is wired.
+ * GM users see a "+ Create Table" button, gated on the account's `is_gm`
+ * flag (#2004, added to the frontend type + wired here in #3041). Non-GM
+ * users instead see an "Apply to be a GM" affordance. The "Tables I Run"
+ * section itself is still driven by viewer_role === 'gm' on the returned
+ * tables, independent of `is_gm` — a user who owns tables should never lose
+ * sight of them even if the account flag were somehow out of sync.
  */
 
 import { useState } from 'react';
@@ -24,6 +24,7 @@ import type { RootState } from '@/store/store';
 import { useTables } from '../queries';
 import { TableCard } from '../components/TableCard';
 import { TableFormDialog } from '../components/TableFormDialog';
+import { GMApplicationDialog } from '../components/GMApplicationDialog';
 import type { GMTable, GMTableViewerRole } from '../types';
 
 // ---------------------------------------------------------------------------
@@ -96,13 +97,15 @@ function TableSection({ title, tables, emptyMessage }: TableSectionProps) {
 
 function TablesListInner() {
   const [showAll, setShowAll] = useState(false);
+  const [gmApplicationSubmitted, setGmApplicationSubmitted] = useState(false);
 
   // Fetch all visible tables — backend already scopes to tables where the
   // viewer has a relationship (member, GM, participant, staff).
   const { data, isLoading } = useTables();
 
-  // Staff detection from Redux auth slice
+  // Staff/GM detection from Redux auth slice (#2004 is_gm flag, wired #3041).
   const isStaff = useSelector((state: RootState) => state.auth.account?.is_staff ?? false);
+  const isGM = useSelector((state: RootState) => state.auth.account?.is_gm ?? false);
 
   if (isLoading) return <LoadingSkeletons />;
 
@@ -116,9 +119,6 @@ function TablesListInner() {
   const memberTables = byRole('member');
   const guestTables = byRole('guest');
   const otherTables = byRole('none');
-
-  // A user is a GM if they own at least one table
-  const isGM = gmTables.length > 0;
 
   // The GM profile ID needed for table creation. Since we can only determine
   // this from the API (not the auth slice), we look it up from the first table
@@ -137,6 +137,16 @@ function TablesListInner() {
             <Button size="sm">+ Create Table</Button>
           </TableFormDialog>
         )}
+        {!isGM &&
+          (gmApplicationSubmitted ? (
+            <span className="text-sm text-muted-foreground">GM application submitted</span>
+          ) : (
+            <GMApplicationDialog onSuccess={() => setGmApplicationSubmitted(true)}>
+              <Button size="sm" variant="outline">
+                Apply to be a GM
+              </Button>
+            </GMApplicationDialog>
+          ))}
       </div>
 
       {/* Staff toggle */}

@@ -35,6 +35,8 @@ export interface AccountData {
   email_verified: boolean;
   can_create_characters: boolean;
   is_staff: boolean;
+  /** Whether this account has an approved GMProfile (#2004). */
+  is_gm: boolean;
   avatar_url?: string;
   available_characters: AvailableCharacter[];
   pending_applications: PendingApplication[];
