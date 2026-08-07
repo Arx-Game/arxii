@@ -84,6 +84,10 @@ class RitualComponentError(MagicError):
     user_message = "You do not have the required components for this ritual."
 
 
+class RitualPoolError(MagicError):
+    user_message = "You cannot contribute that to this ritual."
+
+
 class NoRitualConfigured(MagicError):
     user_message = "You don't have an anima ritual configured."
 
