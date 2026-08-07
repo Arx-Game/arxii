@@ -66,9 +66,15 @@ The Accents/quality/prestige arc (spec on #2878; ADR-0192):
   (#1884 stream), PLACEHOLDER seeds (cluster `market`).
 - Design tenets recorded: distributed RP hubs over one crowded square; the
   description belongs to the player (no generated prose, ever).
-- Honest gap: no item-minting crafting flow exists yet (crafting =
-  facet/style attachment) — ware stock comes from existing channels until a
-  minting journey ships.
+- **Item-minting shipped** (corrected 2026-08-07, #3006 final review; this
+  bullet was stale). `craft_create_item` (`world/items/services/crafting.py`)
+  delegates to `run_crafting_recipe` and backs a real action, wired through
+  telnet, web, and REST (#2211/#2881). The remaining gap is production data,
+  not plumbing: `ITEM_CREATE` recipes are lore-authored content
+  (ArxII-lore#64), with the kind-keyed Enchanting defaults for
+  FACET_ATTACH/STYLE_ATTACH/GEM_CUT seeded pre-content (#3006 Task 2, above).
+  Ware stock still comes from existing channels until the lore repo ships
+  ITEM_CREATE recipe fixtures.
 
 
 **Status:** in-progress
