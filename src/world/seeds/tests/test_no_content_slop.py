@@ -43,7 +43,7 @@ from django.db.models import DateField
 from django.test import TestCase
 
 from core.app_domains import resolve_model_by_name
-from core_management.content_export import CONTENT_MODELS
+from core_management.content_export import CONTENT_MODELS, EXPORT_FIELD_EXCLUSIONS
 from world.seeds.clusters import CLUSTER_SEEDERS
 from world.seeds.database import load_content_first
 from world.seeds.tests.content_stub import stub_content_root
@@ -177,11 +177,20 @@ class SeedersDoNotCreateContentTests(TestCase):
                 if pk not in after_rows:
                     deleted.append(f"  {label} pk={pk}")
                 elif after_rows[pk] != values:
+                    # Installation-config columns the corpus never carries
+                    # (EXPORT_FIELD_EXCLUSIONS) are seeder-owned by design -
+                    # the seeder stamping faction_affiliation onto an authored
+                    # NPCRole is wiring, not an overwrite. Snapshot columns use
+                    # concrete names (FKs end in _id), the registry uses field
+                    # names; strip the suffix to compare.
+                    ignored = EXPORT_FIELD_EXCLUSIONS.get(label, frozenset())
                     diff = {
                         field: (old, after_rows[pk][field])
                         for field, old in values.items()
-                        if after_rows[pk][field] != old
+                        if after_rows[pk][field] != old and field.removesuffix("_id") not in ignored
                     }
+                    if not diff:
+                        continue
                     changed.append(f"  {label} pk={pk}: {diff}")
 
         damage = deleted + changed
