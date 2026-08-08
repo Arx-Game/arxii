@@ -6952,6 +6952,44 @@ Player-to-staff contact surfaces plus the unified staff triage inbox.
 
 ---
 
+## Registration (#3054)
+
+Invitation-gated account registration — closed by default; staff issue per-email
+single-use invites or flip a DB-singleton toggle to open registration for early
+access, no deploy required.
+
+- **Models** (`world.registration.models`): `RegistrationConfig` (singleton pk=1,
+  `registration_open` bool, mirrors `world.scenes.SceneRoundDefaultsConfig`),
+  `AccountInvite` (`email`, unique `token` via `secrets.token_urlsafe(32)`,
+  `invited_by` PROTECT, `expires_at`, `redeemed_at`/`redeemed_by`, `revoked_at`,
+  `note`; derived `status` property — `InviteStatus` PENDING/REDEEMED/REVOKED/
+  EXPIRED, never stored).
+- **Services** (`world.registration.services`): `issue_invite` (active-invite
+  dedup), `revoke_invite`, `signup_allowed` (the neutral bool predicate — never
+  distinguishes *why* signup is refused), `redeem_invite` (stamps redemption from
+  the adapter's `save_user`).
+- **Adapter seam:** `evennia_extensions.adapters.ArxAccountAdapter
+  .is_open_for_signup` overrides the previously-unused allauth hook, re-parsing
+  the already-cached `request.body` JSON to read `email`/`invite_token` (the
+  headless `SignupView.post` calls this hook before the validated `SignupInput`
+  exists). Proven at the real endpoint by journey tests, not just unit tests.
+- **Endpoints:** `/api/registration/status/` (public GET, `{"open": bool}`, no
+  invite enumeration); `/api/staff/invites/` (staff `IsAdminUser` — issue/list/
+  retrieve + `revoke` action).
+- **Web:** `RegisterPage` (invite field auto-filled from `?invite=`, invite-only
+  notice when closed with no token); `StaffInvitesPage` (`/staff/invites`, linked
+  from the Staff Hub) — issue/list/filter/revoke/copy-link.
+- **Settings:** `NEW_ACCOUNT_REGISTRATION_ENABLED = False` closes telnet `create`;
+  connect-screen copy points telnet users at the website.
+- **Adjacent (already built, verified via anti-reinvention pass):** the staff
+  manual-verify fallback for a Resend misdelivery already exists —
+  `EmailAddressAdmin.mark_as_verified`/`mark_as_unverified` in
+  `evennia_extensions/admin.py`.
+- **Source:** `src/world/registration/`, `src/evennia_extensions/adapters.py`
+- **Details:** [registration.md](registration.md)
+
+---
+
 ## Frontend
 
 ### Character Creation UI

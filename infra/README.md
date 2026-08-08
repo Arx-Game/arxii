@@ -227,6 +227,13 @@ What the button **does not** do (deliberately, by-design):
 - It does not run `tofu destroy`, drop the database, reset the
   superuser, or restore from backup. Disaster recovery is the separate,
   `--i-understand-this-overwrites`-gated `scripts/restore.sh`.
+- **It does not open registration.** Alpha starts closed by default (#3054,
+  `world.registration.RegistrationConfig`, closed unless a row explicitly
+  flips it) — the box being reachable does not mean anyone can self-register.
+  Web signup requires a staff-issued per-email invite link
+  (`/staff/invites` in the app, once a superuser is logged in) until staff
+  flip the singleton toggle to open registration for early access, via the
+  Django admin's "Registration Config" entry — no deploy required.
 
 ## Ongoing safety nets (after stand-up)
 
