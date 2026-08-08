@@ -57,7 +57,7 @@ The seven-`MissionTemplate` new-player arc (`world.seeds.game_content.tutorial.s
 _Avoid_: quest chain, onboarding engine, tutorial system.
 
 **Notice Board**:
-A `MissionGiver` with `giver_kind=GiverKind.BOARD` (#2044) — an examinable object (physically placed in a room; the giver's `target` is the board object, not the room) that lists every eligible posting for the viewer at once (preview-then-take), rather than rolling or auto-granting a single offer. `mission take <n>` (telnet, `CmdMission._handle_take`) and `POST /api/missions/boards/<pk>/take/` re-run eligibility before granting.
+A `MissionGiver` with `giver_kind=GiverKind.BOARD` (#2044) — an examinable object (physically placed in a room; the giver's `target` is the board object, not the room) that lists every eligible posting for the viewer at once (preview-then-take), rather than rolling or auto-granting a single offer. `mission take <n>` (telnet, `CmdMission._handle_take`) and `POST /api/missions/boards/<pk>/take/` re-run eligibility before granting. On web (#3044), a room object flagged `is_mission_board` in the room-state payload opens `MissionBoardDialog` (`frontend/src/missions/components/MissionBoardDialog.tsx`) over the same take endpoint.
 _Avoid_: bulletin board, job board, quest board.
 
 **Directed Summons**:

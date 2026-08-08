@@ -3,6 +3,7 @@ import type {
   GameMessage,
   HubTidings,
   InteractionWsPayload,
+  NpcGiver,
   RoomStateObject,
   SceneSummary,
 } from '@/hooks/types';
@@ -21,6 +22,8 @@ interface RoomData {
   is_public: boolean;
   /** Civic-hub tidings block; null when no board/crier stands here (#1450). */
   hub: HubTidings | null;
+  /** Active NPC placements standing in this room (#3044); absent on older fixtures. */
+  npc_givers?: NpcGiver[];
 }
 
 /**

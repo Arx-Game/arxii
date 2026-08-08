@@ -8,7 +8,12 @@ room role (enables gameplay loops there: mission-giving, permit approval, missio
 services) and is a *placement* of an `NPCRole` in a room, so it carries its own `room` FK (there is no
 object from which to derive its location). One role has many Functionary placements (a Builders Guild
 Clerk in each hall). Rarely staff-pilotable (a beloved fixture puppeted for a scene); normally unpiloted.
-Promotion into a named, owned asset is the Asset/Companion system's job (#672).
+Promotion into a named, owned asset is the Asset/Companion system's job (#672). On web (#3044), every
+active Functionary in the current room surfaces via the room-state payload's `npc_givers` field
+(`role_id` + display name — a Functionary carries no `ObjectDB`, so it can never appear in the
+`characters`/`objects` room-occupant lists); `NpcGiversBlock`
+(`frontend/src/game/components/room-panel/NpcGiversBlock.tsx`) offers a "Talk" button per giver that
+mounts the existing `NPCInteractionDialog`.
 _Avoid_: room NPC, giver, class-1 NPC (for the surface term), nameless functionary.
 
 **Standing NPC**:
