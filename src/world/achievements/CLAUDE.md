@@ -72,6 +72,26 @@ First-time-earned record. OneToOne to Achievement.
   (#3055 ruling). Later earners of the same achievement get neither — they were not
   part of the first-discovery moment.
 
+**Display rule (#3063, ruled 2026-08-07):** shared iff `shared_with_tenures` is
+non-empty; the primary `discovered_by_tenure` FK is pure bookkeeping in the group case
+(it has to point somewhere) and must never be read as a display privilege — every
+participant of a group discovery displays symmetrically as "shared". Implemented as
+`DiscoverySerializer.shared` (`serializers.py`).
+
+**Group grants must be ONE `grant_achievement` call, never a per-sheet loop.** Calling
+`grant_achievement(achievement, [sheet])` (or the `execute_ceremony_beat` wrapper around
+it) once per participant lets the first iteration's call create the sole `Discovery` row
+before the rest ever run — every later participant earns a `CharacterAchievement` but
+never lands in `shared_with_tenures`, so a party discovery looks solo to everyone but the
+first sheet. Pass the whole eligible group to a single `grant_achievement(achievement,
+sheets)` call instead (`world/combat/combo_discovery.py::fire_combo_discovery` is the
+reference implementation — see its module docstring for why it bypasses
+`execute_ceremony_beat`'s per-sheet shape). Two other group-earning moments — combat
+encounter completion (`world/combat/services.py`) and relationship reciprocation
+(`world/relationships/services.py`) — currently reach `grant_achievement` only through the
+single-sheet `StatHandler.increment` → `_check_achievements` indirection and are NOT yet
+batched; fixing them needs a batch stat-check seam, tracked as a follow-up, not fixed here.
+
 ### CharacterAchievement
 Records when a character earned an achievement.
 - Required `earned_by_tenure` FK -> `roster.RosterTenure` (`on_delete=PROTECT`, #3055):

@@ -1,12 +1,28 @@
 """Discovery ceremony for combos — fired the first time a party triggers a combo in combat.
 
 Writes ``ComboLearning`` rows for each participant, fires the achievement
-ceremony (gamewide first-ever + personal thereafter) via
-``execute_ceremony_beat``, and grants a flat resonance reward via
-``grant_resonance``.
+ceremony (gamewide first-ever + personal thereafter), and grants a flat
+resonance reward via ``grant_resonance``.
 
 Modeled on ``fire_variant_discoveries`` (the specialization engine's
 discovery ceremony) but for combat combos rather than thread crossings.
+
+**Achievement grant is a single group call, never a per-sheet loop (#3063).**
+``world.magic.crossing.ceremony.execute_ceremony_beat`` is the shared
+single-sheet ceremony beat (grant + optional codex unlock + announce) used
+everywhere else in the codebase — every other caller fires one ``Thread``
+owned by one character, so "one sheet per beat" is the right shape there.
+Combo discovery is the one ceremony trigger that is inherently a *group*
+event (every combo contributor discovers it simultaneously), so it does NOT
+route through ``execute_ceremony_beat``: looping that per-sheet helper once
+per participant called ``grant_achievement(achievement, [sheet])`` once per
+sheet, and the FIRST call claimed the sole ``Discovery`` row before the
+others ever ran — co-discoverers got a ``CharacterAchievement`` but never
+landed in ``Discovery.shared_with_tenures``. Instead this module calls
+``grant_achievement`` and ``announce_achievement`` directly, once each, for
+the whole eligible participant group. ``execute_ceremony_beat``'s
+``codex_entry`` param is unused here (combos don't unlock codex entries), so
+skipping it costs nothing.
 """
 
 from __future__ import annotations
@@ -16,7 +32,6 @@ from typing import TYPE_CHECKING
 
 from world.combat.constants import COMBO_DISCOVERY_GRANT, ComboLearningMethod
 from world.magic.constants import GainSource
-from world.magic.crossing.ceremony import CeremonyNarrative, execute_ceremony_beat
 
 if TYPE_CHECKING:
     from world.character_sheets.models import CharacterSheet
@@ -38,8 +53,9 @@ def fire_combo_discovery(
     1. Writes ``ComboLearning(combo=combo, learned_via=COMBAT)`` for each
        participant (idempotent via ``get_or_create``).
     2. If ``combo.discovery_achievement`` is set and ceremony copy is authored,
-       calls ``execute_ceremony_beat`` for each participant — grants the
-       achievement and announces (gamewide on first-ever, personal otherwise).
+       grants the achievement to the whole group in ONE ``grant_achievement``
+       call and announces once (gamewide on first-ever, personal otherwise —
+       see the module docstring for why this is not a per-participant loop).
     3. Calls ``grant_resonance`` for each participant using the first slot's
        ``resonance_requirement`` that has one; skips the grant if no slot
        has a resonance requirement.
@@ -59,22 +75,35 @@ def fire_combo_discovery(
             defaults={"learned_via": ComboLearningMethod.COMBAT},
         )
 
-    # Step 2: Fire the achievement ceremony if configured.
+    # Step 2: Fire the achievement ceremony if configured -- ONE grant for the
+    # whole group (see the module docstring for why this doesn't route
+    # through execute_ceremony_beat's per-sheet loop, #3063).
     achievement = combo.discovery_achievement
     has_ceremony_copy = bool(combo.discovery_first_body or combo.discovery_personal_body)
     if achievement is not None and has_ceremony_copy:
+        from world.achievements.discovery import announce_achievement  # noqa: PLC0415
+        from world.achievements.models import CharacterAchievement  # noqa: PLC0415
+        from world.achievements.services import grant_achievement  # noqa: PLC0415
         from world.narrative.constants import NarrativeCategory  # noqa: PLC0415
 
-        narrative = CeremonyNarrative(
-            first_body=combo.discovery_first_body,
-            personal_body=combo.discovery_personal_body,
-            category=NarrativeCategory.ABILITY,
+        # Idempotency gate mirrors execute_ceremony_beat's per-sheet re-fire
+        # guard: a participant who already earned this achievement (a stale
+        # replay of an already-fired combo) sits out the ceremony entirely.
+        already_earned_ids = set(
+            CharacterAchievement.objects.filter(
+                character_sheet__in=participant_sheets, achievement=achievement
+            ).values_list("character_sheet_id", flat=True)
         )
-        for sheet in participant_sheets:
-            execute_ceremony_beat(
-                sheet=sheet,
-                narrative=narrative,
-                achievement=achievement,
+        unearned_sheets = [s for s in participant_sheets if s.pk not in already_earned_ids]
+        if unearned_sheets:
+            result = grant_achievement(achievement, unearned_sheets)
+            is_first = result.created_discovery is not None
+            announce_achievement(
+                unearned_sheets,
+                is_first=is_first,
+                first_body=combo.discovery_first_body,
+                personal_body=combo.discovery_personal_body,
+                category=NarrativeCategory.ABILITY,
             )
 
     # Step 3: Grant resonance to each participant.
