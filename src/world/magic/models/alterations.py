@@ -13,12 +13,13 @@ from django.db import models
 from django.db.models import Q
 from evennia.utils.idmapper.models import SharedMemoryModel
 
+from core.natural_keys import NaturalKeyManager, NaturalKeyMixin
 from world.magic.constants import AlterationKind, AlterationTier, PendingAlterationStatus
 from world.magic.models.affinity import Affinity, Resonance
 from world.magic.models.techniques import Technique
 
 
-class MagicalAlterationTemplate(SharedMemoryModel):
+class MagicalAlterationTemplate(NaturalKeyMixin, SharedMemoryModel):
     """Template for a Mage Scar (permanent magical alteration).
 
     Mage-specific metadata layered on top of a ConditionTemplate. A Mage
@@ -29,6 +30,17 @@ class MagicalAlterationTemplate(SharedMemoryModel):
 
     Note: the class and table names retain the "MagicalAlteration" prefix
     for database stability; the player-facing label is "Mage Scar".
+
+    Carries ``NaturalKeyMixin`` (#3034) so a library-entry Mage Scar / a
+    CORRUPTION_TWIST can be authored in the lore repo. ``condition_template``
+    is a ``OneToOneField`` — already DB-unique, so it needs no new
+    constraint — and it is the row's real identity anyway (a Mage Scar IS its
+    backing condition; this table only layers magic-specific metadata on
+    top). Player-authored rows (``authored_by`` set — the "author from
+    scratch" resolution path) are excluded from export via ``EXPORT_FILTERS``
+    (``authored_by__isnull=True``), mirroring ``magic.ritual``'s
+    ``author_account`` split — only staff/system-seed (``authored_by=None``)
+    rows are lore-repo content.
     """
 
     condition_template = models.OneToOneField(
@@ -122,6 +134,12 @@ class MagicalAlterationTemplate(SharedMemoryModel):
         blank=True,
         help_text="Required for CORRUPTION_TWIST; null for MAGE_SCAR. Range 1-5.",
     )
+
+    objects = NaturalKeyManager()
+
+    class NaturalKeyConfig:
+        fields = ["condition_template"]
+        dependencies = ["arxii.ConditionTemplate"]
 
     class Meta:
         verbose_name = "mage scar"

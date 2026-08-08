@@ -1342,7 +1342,7 @@ now say "Mage Scars."
 
 | Model | Purpose | Key Fields |
 |-------|---------|------------|
-| `MagicalAlterationTemplate` | OneToOne on ConditionTemplate; magic-specific alteration metadata | `tier`, `origin_affinity`, `origin_resonance`, `is_library`, `visibility_required` |
+| `MagicalAlterationTemplate` | OneToOne on ConditionTemplate; magic-specific alteration metadata. `NaturalKeyMixin`, `CONTENT_MODELS` (`magic.magicalalterationtemplate`, #3034) — NK `["condition_template"]` (already DB-unique). Only staff/system rows (`authored_by` NULL) export; a player's "author from scratch" row is filtered via `EXPORT_FILTERS` | `tier`, `origin_affinity`, `origin_resonance`, `is_library`, `visibility_required` |
 | `PendingAlteration` | Queued unresolved Mage Scar | `character` FK, `status` (OPEN/RESOLVED/STAFF_CLEARED), `scene` FK, triggering-state snapshot fields |
 | `MagicalAlterationEvent` | Immutable provenance audit log | `pending`, `event_type`, `data`, `created_at` |
 
@@ -1360,7 +1360,7 @@ resonance instantly re-specializes every affected technique with no regeneration
 | Model | Purpose | Key Fields |
 |-------|---------|------------|
 | `AbstractSpecializedVariant` | Shared abstract base (SharedMemoryModel) — the "one specialization engine" | `parent` discriminator contract, `matching_variant` selection predicate (highest `unlock_thread_level ≤ thread level` at the thread's resonance), `newly_crossed_variants` discovery query, `discovery_narrative(is_first)` ceremony contract |
-| `TechniqueVariant` | Concrete subclass — a resonance-specialized form of a parent `Technique` | `parent_technique` (self-FK, `related_name="variants"`), `resonance` FK, `unlock_thread_level` (≥3 = variant), `name_override`, `intensity_delta`, `control_delta`, `discovery_achievement` FK, `codex_entry` FK. Unique per `(parent_technique, resonance, unlock_thread_level)` |
+| `TechniqueVariant` | Concrete subclass — a resonance-specialized form of a parent `Technique`. `NaturalKeyMixin`, `CONTENT_MODELS` (`magic.techniquevariant`, #3034) — NK `(parent_technique, resonance, unlock_thread_level)`, the same triple the `UniqueConstraint` already enforces | `parent_technique` (self-FK, `related_name="variants"`), `resonance` FK, `unlock_thread_level` (≥3 = variant), `name_override`, `intensity_delta`, `control_delta`, `discovery_achievement` FK, `codex_entry` FK. Unique per `(parent_technique, resonance, unlock_thread_level)` |
 | `CovenantRole` | Refactored to inherit `AbstractSpecializedVariant` (schema no-op) | existing sub-role fields; `parent_role` (`related_name="sub_roles"`) is the variant parent |
 
 **Resolver — `resolve_specialized_variant(*, entity, character)`** (`world/magic/specialization/services.py`):
@@ -1461,7 +1461,9 @@ threshold the parent technique is returned unchanged. `MagicContent.create_all()
 (`world/seeds/game_content/magic.py`) builds starter `TechniqueVariant` rows so a suite
 has variants to exercise, but it is a test-fixture builder only — it left the production
 `seed_magic_dev()` path in #2973, so a fresh dev environment has none until the lore repo
-authors them. The
+authors them. `TechniqueVariant` joined `CONTENT_MODELS` in #3034 (NK `(parent_technique,
+resonance, unlock_thread_level)`), so that authoring path now exists — it did not before.
+The
 gift-thread confers the standard always-in-action thread bonus (passive `ThreadPullEffect`
 tier-0 rows; `_ALWAYS_IN_ACTION_KINDS` — already wired in #1580); cast-time variant
 resolution is the new addition in #1581.

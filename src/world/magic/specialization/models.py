@@ -22,6 +22,7 @@ from django.db.models import Q
 from django.utils.functional import cached_property
 from evennia.utils.idmapper.models import SharedMemoryModel
 
+from core.natural_keys import NaturalKeyManager, NaturalKeyMixin
 from world.magic.models.techniques import (
     AbstractAppliedCondition,
     AbstractCapabilityGrant,
@@ -182,7 +183,7 @@ class AbstractSpecializedVariant(SharedMemoryModel):
 # ---------------------------------------------------------------------------
 
 
-class TechniqueVariant(AbstractSpecializedVariant):
+class TechniqueVariant(NaturalKeyMixin, AbstractSpecializedVariant):
     """A resonance-specialized variant of a Technique.
 
     A parent ``Technique`` has variant rows keyed by ``(parent_technique,
@@ -194,6 +195,13 @@ class TechniqueVariant(AbstractSpecializedVariant):
 
     The base ``_variant_queryset`` default resolves via ``parent.variants``
     (the ``related_name`` below); no override is needed.
+
+    Carries ``NaturalKeyMixin`` (#3034) so a resonance-specialized form can be
+    authored in the lore repo — the natural key is exactly the fields the
+    existing ``technique_variant_unique_parent_resonance_level``
+    ``UniqueConstraint`` (below) already enforces, mirroring how
+    ``CovenantRole`` (the sibling ``AbstractSpecializedVariant`` subclass)
+    carries the mixin.
     """
 
     parent_technique = models.ForeignKey(
@@ -215,6 +223,12 @@ class TechniqueVariant(AbstractSpecializedVariant):
         default=0,
         help_text="Added to the parent technique's control when this variant resolves.",
     )
+
+    objects = NaturalKeyManager()
+
+    class NaturalKeyConfig:
+        fields = ["parent_technique", "resonance", "unlock_thread_level"]
+        dependencies = ["arxii.Technique", "arxii.Resonance"]
 
     class Meta:
         constraints = [

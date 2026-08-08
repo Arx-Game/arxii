@@ -401,10 +401,16 @@ non-test consumer):
   (`_seed_hallowed_threshold_story`) — test fixture only, no production destination.
 - The "Social Arts" `Gift` + 6 `Technique`s + 6 `ActionEnhancement`s + variants
   (`MagicContent.create_all()`) — lore fixture; `MagicContent` survives as a
-  test-fixture builder.
+  test-fixture builder. `actions.ActionEnhancement` and `magic.TechniqueVariant`
+  joined `CONTENT_MODELS` in #3034 — that lore-fixture destination was aspirational
+  until then (neither model carried a natural key or a registry entry, so the six
+  enhancements + their variants had no way to actually be authored); the lore repo
+  can now ship them (ArxII-lore#69).
 - 2 Corruption `ConditionTemplate`s + 12 `MagicalAlterationTemplate` twists
   (`author_reference_corruption_content()`) — lore fixture; the factory survives as
   a test-fixture builder for `test_reference_corruption_content.py`.
+  `magic.MagicalAlterationTemplate` joined `CONTENT_MODELS` in #3034 (NK
+  `["condition_template"]`; player-authored rows excluded via `EXPORT_FILTERS`).
 - 5 hallowed reaction `ConditionTemplate`s + the achievement bridge
   (`_seed_hallowed_reaction_conditions`/`_seed_hallowed_achievement_bridge`) —
   lore fixture; KEEP-side consequence pools resolve them by name via

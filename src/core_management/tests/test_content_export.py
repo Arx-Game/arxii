@@ -498,6 +498,7 @@ class ContentExportTests(TestCase):
         self.assertIn("checks.checktype", EXPORT_FILTERS)
         self.assertIn("checks.checktypetrait", EXPORT_FILTERS)
         self.assertIn("evennia_extensions.media", EXPORT_FILTERS)
+        self.assertIn("magic.magicalalterationtemplate", EXPORT_FILTERS)
 
 
 class MagicCatalogContentExportTests(TestCase):
@@ -1790,3 +1791,194 @@ class MissionOfferContentExportTests(TestCase):
         assert reloaded_details.role_id == reloaded.role_id  # save() re-derived mirror
         summons = DeedRewardSink.FOLLOW_ON_SUMMONS
         assert reloaded.pk == type(reward).objects.get(sink=summons).followon_offer_id
+
+
+class ActionEnhancementContentExportTests(TestCase):
+    """Round-trip coverage for ActionEnhancement (#3034).
+
+    ``actions.actionenhancement`` was added to ``CONTENT_MODELS`` with natural
+    key ``(base_action_key, variant_name)`` — the six social-magic
+    enhancements #2973 requires (Intimidate/Persuade/Deceive/Flirt/Perform/
+    Entrance) had no production seeder and no way to be authored;
+    ``MagicContent.create_all()`` (test-fixture only since #2973) was the only
+    place they were ever created.
+    """
+
+    def setUp(self) -> None:
+        self.tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(self.tmp.cleanup)
+        self.root = Path(self.tmp.name)
+
+    def test_action_enhancement_round_trips(self) -> None:
+        from actions.constants import EnhancementSourceType
+        from actions.models import ActionEnhancement
+        from world.magic.factories import TechniqueFactory
+
+        technique = TechniqueFactory(name="Round Trip Soul Crush", damage_profile=False)
+        enhancement = ActionEnhancement.objects.create(
+            base_action_key="intimidate",
+            variant_name="Magical Intimidate",
+            is_involuntary=False,
+            source_type=EnhancementSourceType.TECHNIQUE,
+            technique=technique,
+        )
+
+        result = export_to_content_repo(self.root)
+        assert result.errors == []
+
+        enh_path = self.root / "fixtures" / "actions" / "actionenhancement.json"
+        assert enh_path.exists()
+
+        records = json.loads(enh_path.read_text(encoding="utf-8"))
+        assert len(records) == 1
+        record = records[0]
+        assert "pk" not in record
+        assert record["fields"]["base_action_key"] == "intimidate"
+        assert record["fields"]["variant_name"] == "Magical Intimidate"
+        assert record["fields"]["technique"] == [technique.gift.name, "Round Trip Soul Crush"]
+
+        from core_management.content_fixtures import build_all, load_entries
+
+        created, _updated, _ = load_entries(build_all(self.root))
+        assert created == 0, f"Round-trip created {created} new records (expected 0)"
+
+        enhancement.refresh_from_db()
+        assert enhancement.technique_id == technique.pk
+
+        resolved = ActionEnhancement.objects.get_by_natural_key("intimidate", "Magical Intimidate")
+        assert resolved.pk == enhancement.pk
+
+
+class TechniqueVariantContentExportTests(TestCase):
+    """Round-trip coverage for TechniqueVariant (#3034).
+
+    ``magic.techniquevariant`` was added to ``CONTENT_MODELS`` with natural
+    key ``(parent_technique, resonance, unlock_thread_level)`` — exactly the
+    fields the existing ``technique_variant_unique_parent_resonance_level``
+    ``UniqueConstraint`` already enforces. Same test-fixture-only creation gap
+    as ``ActionEnhancement`` above: ``MagicContent.create_all()`` minted these
+    and nothing else did (#2973).
+    """
+
+    def setUp(self) -> None:
+        self.tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(self.tmp.cleanup)
+        self.root = Path(self.tmp.name)
+
+    def test_technique_variant_round_trips(self) -> None:
+        from world.magic.factories import (
+            ResonanceFactory,
+            TechniqueFactory,
+            TechniqueVariantFactory,
+        )
+        from world.magic.specialization.models import TechniqueVariant
+
+        technique = TechniqueFactory(name="Round Trip Heartstring Pull", damage_profile=False)
+        resonance = ResonanceFactory(name="Round Trip Devotion")
+        variant = TechniqueVariantFactory(
+            parent_technique=technique,
+            resonance=resonance,
+            unlock_thread_level=3,
+            name_override="Round Trip Ardent Pull",
+            intensity_delta=2,
+            control_delta=1,
+        )
+
+        result = export_to_content_repo(self.root)
+        assert result.errors == []
+
+        variant_path = self.root / "fixtures" / "magic" / "techniquevariant.json"
+        assert variant_path.exists()
+
+        records = json.loads(variant_path.read_text(encoding="utf-8"))
+        assert len(records) == 1
+        record = records[0]
+        assert "pk" not in record
+        assert record["fields"]["parent_technique"] == [technique.gift.name, technique.name]
+        assert record["fields"]["resonance"] == [resonance.name]
+        assert record["fields"]["unlock_thread_level"] == 3
+        assert record["fields"]["name_override"] == "Round Trip Ardent Pull"
+
+        from core_management.content_fixtures import build_all, load_entries
+
+        created, _updated, _ = load_entries(build_all(self.root))
+        assert created == 0, f"Round-trip created {created} new records (expected 0)"
+
+        variant.refresh_from_db()
+        assert variant.intensity_delta == 2
+
+        resolved = TechniqueVariant.objects.get_by_natural_key(
+            technique.gift.name, technique.name, resonance.name, 3
+        )
+        assert resolved.pk == variant.pk
+
+
+class MagicalAlterationTemplateContentExportTests(TestCase):
+    """Round-trip coverage for MagicalAlterationTemplate (#3034).
+
+    ``magic.magicalalterationtemplate`` was added to ``CONTENT_MODELS`` keyed
+    on ``condition_template`` — already DB-unique (a ``OneToOneField``), and
+    the row's real identity anyway. Only staff/system-seed rows
+    (``authored_by`` NULL) are content; a player's "author from scratch" Mage
+    Scar must never export (mirrors ``magic.ritual``'s ``author_account``
+    split).
+    """
+
+    def setUp(self) -> None:
+        self.tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(self.tmp.cleanup)
+        self.root = Path(self.tmp.name)
+
+    def test_staff_authored_alteration_round_trips(self) -> None:
+        from world.magic.factories import MagicalAlterationTemplateFactory
+        from world.magic.models import MagicalAlterationTemplate
+
+        alteration = MagicalAlterationTemplateFactory(
+            condition_template__name="Round Trip Scar",
+            authored_by=None,
+        )
+
+        result = export_to_content_repo(self.root)
+        assert result.errors == []
+
+        path = self.root / "fixtures" / "magic" / "magicalalterationtemplate.json"
+        assert path.exists()
+
+        records = json.loads(path.read_text(encoding="utf-8"))
+        assert len(records) == 1
+        record = records[0]
+        assert "pk" not in record
+        assert record["fields"]["condition_template"] == ["Round Trip Scar"]
+        assert record["fields"]["authored_by"] is None
+
+        from core_management.content_fixtures import build_all, load_entries
+
+        created, _updated, _ = load_entries(build_all(self.root))
+        assert created == 0, f"Round-trip created {created} new records (expected 0)"
+
+        alteration.refresh_from_db()
+
+        resolved = MagicalAlterationTemplate.objects.get_by_natural_key("Round Trip Scar")
+        assert resolved.pk == alteration.pk
+
+    def test_player_authored_alteration_is_not_exported(self) -> None:
+        """#3034: a player's "author from scratch" Mage Scar must not ship in the corpus."""
+        from evennia_extensions.factories import AccountFactory
+        from world.magic.factories import MagicalAlterationTemplateFactory
+
+        MagicalAlterationTemplateFactory(condition_template__name="Staff Scar", authored_by=None)
+        MagicalAlterationTemplateFactory(
+            condition_template__name="Player Scar", authored_by=AccountFactory()
+        )
+
+        result = export_to_content_repo(self.root)
+        assert result.errors == []
+
+        path = self.root / "fixtures" / "magic" / "magicalalterationtemplate.json"
+        assert path.exists()
+        names = {
+            r["fields"]["condition_template"][0]
+            for r in json.loads(path.read_text(encoding="utf-8"))
+        }
+        assert "Staff Scar" in names
+        assert "Player Scar" not in names
