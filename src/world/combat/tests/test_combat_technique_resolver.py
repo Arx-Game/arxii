@@ -100,19 +100,18 @@ class CombatTechniqueResolverRollCheckTests(TestCase):
             resolver._roll_check()
 
         kwargs = mock_perform.call_args.kwargs
-        # extra_modifiers contains pull bonus + effort modifier (MEDIUM = 0)
+        # extra_modifiers contains the pull bonus only — effort is threaded
+        # separately via the effort_level kwarg (#3066), not folded in here.
         self.assertGreaterEqual(kwargs["extra_modifiers"], 3)
 
-    def test_effort_routed_as_labeled_contribution(self) -> None:
-        """Effort must be expressed as an EFFORT ModifierContribution routed through
-        collect_check_modifiers, with the same magnitude as EFFORT_CHECK_MODIFIER,
-        and the breakdown total (plus pull bonus) reaches perform_check."""
+    def test_effort_threaded_via_effort_level_param(self) -> None:
+        """#3066: effort must reach perform_check via its own effort_level kwarg —
+        NOT as a caller-side EFFORT ModifierContribution/extra_modifiers fold, which
+        would double-count the roll bonus now that perform_check applies
+        EFFORT_CHECK_MODIFIER internally whenever effort_level is passed."""
         from world.checks.constants import ModifierSourceKind
-        from world.fatigue.constants import EFFORT_CHECK_MODIFIER
 
         resolver = _build_resolver(pull_flat_bonus=3, effort_level=EffortLevel.HIGH)
-        expected_effort = EFFORT_CHECK_MODIFIER[EffortLevel.HIGH]
-        self.assertEqual(expected_effort, 2)
 
         captured: dict = {}
         from world.checks import services as checks_services
@@ -133,14 +132,15 @@ class CombatTechniqueResolverRollCheckTests(TestCase):
             mock_perform.return_value = MagicMock(success_level=2)
             resolver._roll_check()
 
+        # No EFFORT-kind contribution is folded into collect_check_modifiers anymore.
         extras = captured["extra_contributions"]
         effort_contribs = [c for c in extras if c.source_kind == ModifierSourceKind.EFFORT]
-        self.assertEqual(len(effort_contribs), 1)
-        self.assertEqual(effort_contribs[0].value, expected_effort)
-        self.assertEqual(effort_contribs[0].source_label, "Effort")
+        self.assertEqual(len(effort_contribs), 0)
 
-        # Bare character: breakdown total == effort, plus pull_flat_bonus == 3.
-        self.assertEqual(mock_perform.call_args.kwargs["extra_modifiers"], expected_effort + 3)
+        # effort_level reaches perform_check directly instead.
+        self.assertEqual(mock_perform.call_args.kwargs["effort_level"], EffortLevel.HIGH)
+        # Bare character: breakdown total carries only the pull bonus == 3.
+        self.assertEqual(mock_perform.call_args.kwargs["extra_modifiers"], 3)
 
     def test_situation_ctx_threaded_with_live_round_context(self) -> None:
         """#2536 Task 5: _roll_check must thread a SituationContext into

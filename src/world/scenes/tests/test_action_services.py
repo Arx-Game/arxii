@@ -1072,8 +1072,8 @@ class TestEffortAndFatigueOnTargetedResolution(TestCase):
         _resolve_action_against_persona(request, self.target, difficulty_override=None)
 
         # The mock's call kwargs should include extra_modifiers with a negative
-        # fatigue penalty folded in. EFFORT_CHECK_MODIFIER[MEDIUM] = 0, so the
-        # only non-zero contribution to check_modifiers is the fatigue penalty.
+        # fatigue penalty folded in (#3066: effort itself threads separately via
+        # effort_level, not into extra_modifiers).
         call_kwargs = mock_resolve.call_args.kwargs
         extra_modifiers = call_kwargs.get("extra_modifiers", 0)
         # The fatigue penalty is negative (−2 for TIRED, −3 for OVEREXERTED, etc.).
@@ -1868,8 +1868,6 @@ class SocialModifierSeamTests(TestCase):
     def test_breakdown_total_folded_into_extra_modifiers(
         self, mock_resolve: MagicMock, mock_collect: MagicMock
     ) -> None:
-        from world.fatigue.constants import EFFORT_CHECK_MODIFIER
-
         mock_resolve.return_value = _make_pending_resolution(success=True)
         mock_collect.return_value = SimpleNamespace(total=7)
 
@@ -1886,8 +1884,13 @@ class SocialModifierSeamTests(TestCase):
             scene=request.scene,
             extra_contributions=[],
         )
-        expected = EFFORT_CHECK_MODIFIER.get(request.effort_level, 0) + 7
-        self.assertEqual(mock_resolve.call_args.kwargs["extra_modifiers"], expected)
+        # #3066: extra_modifiers carries only the breakdown total (no fatigue penalty,
+        # no pull bonus, on this fixture) — effort is threaded separately via
+        # effort_level, not folded in here (folding it in too would double-count
+        # EFFORT_CHECK_MODIFIER, since perform_check applies it internally whenever
+        # effort_level is passed).
+        self.assertEqual(mock_resolve.call_args.kwargs["extra_modifiers"], 7)
+        self.assertEqual(mock_resolve.call_args.kwargs["effort_level"], request.effort_level)
 
     @patch("world.checks.services.collect_check_modifiers")
     @patch("world.scenes.action_services.start_action_resolution")

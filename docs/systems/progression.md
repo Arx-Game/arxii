@@ -199,7 +199,8 @@ grant still succeeds). Refuses non-`TraitType.STAT` traits and an at-cap raise, 
 `ValueError`. Sole caller: `GMAwardAction`'s `award_type="stat"` branch (see the
 Adjudication Toolkit entry in `docs/systems/INDEX.md`).
 
-**Check-based accrual (#3039).** `world.progression.services.skill_development
+**Check-based accrual (#3039 chokepoint, #3066 caller threading).**
+`world.progression.services.skill_development
 .award_check_development(character_sheet, check_type, effort_level, path_level)`
 writes both `WeeklySkillUsage` (accumulator for the weekly audit/rust cron) and
 `DevelopmentPoints` (via `award_points`) for every trait the check used. Its sole
@@ -209,7 +210,17 @@ forced-outcome path) awards, whether or not it goes through the fatigue action
 pipeline. Effort-gated: `effort_level is None` (or an effort level with 0 base dp,
 e.g. very-low/low) is a no-op, so the hook self-scopes to effort-bearing checks. A
 character with no `CharacterSheet` (objects, ephemeral opponents) is skipped
-silently.
+silently. **#3039 wired the chokepoint but no production caller passed
+`effort_level` into `perform_check`** — every real caller computed
+`EFFORT_CHECK_MODIFIER` itself and folded it into `extra_modifiers`, always calling
+with `effort_level=None`, so dp never accrued outside unit tests that called
+`perform_check` directly. #3066 threaded the caller's already-in-hand
+`effort_level` straight into `perform_check`/`start_action_resolution` at every
+production site (combat's `CombatTechniqueResolver._roll_check`, the two scene
+`start_action_resolution` call sites, and — opt-in via
+`compute_resist_increment(award_development=True)` — the two resist-declaration
+call sites) and deleted the caller-side fold, so the roll math stayed
+byte-identical while dp accrual actually reaches players.
 
 ### KudosClaimCategory
 

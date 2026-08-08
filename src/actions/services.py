@@ -87,6 +87,7 @@ def start_action_resolution(  # noqa: PLR0913
     extra_modifiers: int = 0,
     *,
     check_type: CheckType | None = None,
+    effort_level: str | None = None,
 ) -> PendingActionResolution:
     """Start an action resolution pipeline and run it to completion or pause.
 
@@ -98,7 +99,15 @@ def start_action_resolution(  # noqa: PLR0913
     consequences.
 
     ``extra_modifiers`` is a roller-side point bonus applied to the main check
-    (e.g. effort level + a chosen specialization). Gates are unaffected.
+    (e.g. a chosen specialization). Gates are unaffected.
+
+    ``effort_level`` (#3066): the caller's EffortLevel string value, threaded
+    straight into the main check's own ``perform_check`` call rather than
+    pre-folded into ``extra_modifiers`` — callers must NOT also fold
+    ``EFFORT_CHECK_MODIFIER`` into ``extra_modifiers`` themselves, or the roll
+    bonus double-counts. ``None`` (the default) is byte-identical to before
+    #3066. Also drives ``perform_check``'s own check-based development-point
+    accrual (#3039). Gates are unaffected, matching ``extra_modifiers``.
     """
     pending = PendingActionResolution(
         template_id=template.pk,
@@ -112,6 +121,7 @@ def start_action_resolution(  # noqa: PLR0913
         },
         current_phase=ResolutionPhase.GATE_PENDING,
         extra_modifiers=extra_modifiers,
+        effort_level=effort_level,
     )
 
     if template.pipeline == Pipeline.GATED:
@@ -139,7 +149,13 @@ def start_action_resolution(  # noqa: PLR0913
     # Override applies to the immediate main step (SINGLE pipeline); GATED continuation
     # via advance_resolution keeps template.check_type — no cast uses GATED.
     main_result = _run_main_step(
-        character, template, target_difficulty, context, extra_modifiers, check_type=check_type
+        character,
+        template,
+        target_difficulty,
+        context,
+        extra_modifiers,
+        check_type=check_type,
+        effort_level=effort_level,
     )
     pending.main_result = main_result
     pending.current_phase = ResolutionPhase.MAIN_RESOLVED
@@ -200,7 +216,12 @@ def advance_resolution(
         if pending.main_result is None:
             pending.current_phase = ResolutionPhase.MAIN_PENDING
             main_result = _run_main_step(
-                character, template, pending.target_difficulty, context, pending.extra_modifiers
+                character,
+                template,
+                pending.target_difficulty,
+                context,
+                pending.extra_modifiers,
+                effort_level=pending.effort_level,
             )
             pending.main_result = main_result
             pending.current_phase = ResolutionPhase.MAIN_RESOLVED
@@ -256,10 +277,15 @@ def _run_main_step(  # noqa: PLR0913
     extra_modifiers: int = 0,
     *,
     check_type: CheckType | None = None,
+    effort_level: str | None = None,
 ) -> StepResult:
     """Run the main resolution step."""
     check_result = perform_check(
-        character, check_type or template.check_type, difficulty, extra_modifiers=extra_modifiers
+        character,
+        check_type or template.check_type,
+        difficulty,
+        extra_modifiers=extra_modifiers,
+        effort_level=effort_level,
     )
 
     if template.consequence_pool is None:

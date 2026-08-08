@@ -510,6 +510,9 @@ def _compute_difficulty_override_for_primary(
         increment = compute_resist_increment(
             action_request.target_persona.character_sheet.character,
             resist_effort,
+            # #3066: the defender declared this effort (fatigue is about to be
+            # charged for it below) — award them Composure dev points for it too.
+            award_development=True,
         )
         apply_fatigue(
             action_request.target_persona.character_sheet,
@@ -851,7 +854,6 @@ def _resolve_action_against_persona(
     """
     from actions.constants import ActionCategory  # noqa: PLC0415
     from world.checks.services import collect_check_modifiers  # noqa: PLC0415
-    from world.fatigue.constants import EFFORT_CHECK_MODIFIER  # noqa: PLC0415
     from world.fatigue.services import apply_fatigue, get_fatigue_penalty  # noqa: PLC0415
     from world.npc_services.social_disposition import (  # noqa: PLC0415
         apply_social_disposition_delta,
@@ -877,7 +879,12 @@ def _resolve_action_against_persona(
     # technique-enhanced and plain branches (#1293). It is orthogonal to the
     # technique's anima/intensity/fury levers, which scale cast power; the effort
     # cost axis is charged separately by apply_fatigue below.
-    check_modifiers = EFFORT_CHECK_MODIFIER.get(action_request.effort_level, 0)
+    # #3066: threaded straight into perform_check's own effort_level parameter
+    # (via start_action_resolution/_resolve_enhanced_action below) rather than
+    # pre-folded into a check_modifiers total — perform_check applies
+    # EFFORT_CHECK_MODIFIER internally exactly once, and effort_level is also
+    # perform_check's own signal for check-based development-point accrual (#3039).
+    effort_level = action_request.effort_level
     # Read the initiator's accumulated social fatigue penalty back into the check
     # roll (#2241). Combat already does this (combat/services.py:323-329); social
     # actions charged fatigue but never read it back, so repeated flirting had no
@@ -887,7 +894,6 @@ def _resolve_action_against_persona(
         action_request.initiator_persona.character_sheet,
         ActionCategory.SOCIAL,
     )
-    check_modifiers += fatigue_penalty
     if action_request.technique is not None:
         # Fold condition / rollmod / scene / equipment / fashion modifiers into
         # the technique branch's check roll through the shared seam — the plain
@@ -908,7 +914,8 @@ def _resolve_action_against_persona(
             action_key=action_request.action_key,
             difficulty=difficulty,
             context=context,
-            effort_modifier=check_modifiers + technique_check_modifiers,
+            effort_modifier=fatigue_penalty + technique_check_modifiers,
+            effort_level=effort_level,
             strain_commitment=action_request.strain_commitment,
             fury_commitment=action_request.fury_commitment,
             fury_anchor=action_request.fury_anchor,
@@ -950,7 +957,8 @@ def _resolve_action_against_persona(
             template=action_template,
             target_difficulty=difficulty,
             context=context,
-            extra_modifiers=check_modifiers + breakdown.total + pull_flat_bonus,
+            extra_modifiers=fatigue_penalty + breakdown.total + pull_flat_bonus,
+            effort_level=effort_level,
         )
         result = EnhancedSceneActionResult(
             action_resolution=action_resolution,
@@ -1095,6 +1103,9 @@ def _compute_target_difficulty_override(
         increment = compute_resist_increment(
             action_target.target_persona.character_sheet.character,
             resist_effort,
+            # #3066: the defender declared this effort (fatigue is about to be
+            # charged for it below) — award them Composure dev points for it too.
+            award_development=True,
         )
         apply_fatigue(
             action_target.target_persona.character_sheet,
@@ -1258,6 +1269,7 @@ def _resolve_enhanced_action(  # noqa: PLR0913
     difficulty: int,
     context: ResolutionContext,
     effort_modifier: int = 0,
+    effort_level: str | None = None,
     strain_commitment: int = 0,
     fury_commitment: FuryTier | None = None,
     fury_anchor: CharacterSheet | None = None,
@@ -1276,9 +1288,15 @@ def _resolve_enhanced_action(  # noqa: PLR0913
         action_key: The action key (e.g. "flirt").
         difficulty: The resolved numeric difficulty.
         context: Resolution context carrying character data.
-        effort_modifier: The EFFORT_CHECK_MODIFIER for the action's effort level,
-            applied as a check-roll modifier (extra_modifiers) on the inner
-            start_action_resolution — parity with the plain/area branches (#1293).
+        effort_modifier: Non-effort check-roll modifier (fatigue penalty +
+            technique-branch condition/rollmod/scene/equipment modifiers),
+            applied as extra_modifiers on the inner start_action_resolution —
+            parity with the plain/area branches (#1293). Effort itself is NOT
+            folded in here (#3066) — see effort_level.
+        effort_level: The caller's EffortLevel string value, threaded straight
+            into start_action_resolution's own effort_level parameter so
+            perform_check applies EFFORT_CHECK_MODIFIER exactly once and
+            awards check-based development points (#3039) for it.
         strain_commitment: Optional extra anima the caster commits beyond the
             technique's baseline cost. Forwarded to use_technique so the cost
             calculation accounts for the strain.
@@ -1310,6 +1328,7 @@ def _resolve_enhanced_action(  # noqa: PLR0913
             target_difficulty=difficulty,
             context=context,
             extra_modifiers=effort_modifier + extra_modifiers,
+            effort_level=effort_level,
         ),
         confirm_soulfray_risk=True,
         strain_commitment=strain_commitment,
@@ -1515,6 +1534,10 @@ def create_and_resolve_area_action(  # noqa: PLR0913
 
     Effort and ``extra_modifiers`` (a caller-supplied roller bonus, e.g. a chosen
     specialization) are applied as check modifiers, not difficulty deltas.
+    Effort is threaded via ``start_action_resolution``'s own ``effort_level``
+    parameter (#3066), not pre-folded here — perform_check applies
+    ``EFFORT_CHECK_MODIFIER`` internally exactly once and awards check-based
+    development points (#3039) for it.
 
     Raises:
         ValidationError: if the initiator lacks the template's action-point cost.
@@ -1523,7 +1546,6 @@ def create_and_resolve_area_action(  # noqa: PLR0913
 
     from actions.constants import ActionCategory  # noqa: PLC0415
     from world.action_points.models import ActionPointPool  # noqa: PLC0415
-    from world.fatigue.constants import EFFORT_CHECK_MODIFIER  # noqa: PLC0415
     from world.fatigue.services import apply_fatigue  # noqa: PLC0415
 
     character = initiator_persona.character_sheet.character
@@ -1531,7 +1553,6 @@ def create_and_resolve_area_action(  # noqa: PLR0913
     difficulty = DIFFICULTY_VALUES.get(
         difficulty_choice, DIFFICULTY_VALUES[DifficultyChoice.NORMAL]
     )
-    check_modifiers = EFFORT_CHECK_MODIFIER.get(effort_level, 0) + extra_modifiers
 
     with transaction.atomic():
         # AP spend lives INSIDE the atomic (as a savepoint) so a failed
@@ -1560,7 +1581,8 @@ def create_and_resolve_area_action(  # noqa: PLR0913
             template=action_template,
             target_difficulty=difficulty,
             context=context,
-            extra_modifiers=check_modifiers,
+            extra_modifiers=extra_modifiers,
+            effort_level=effort_level,
         )
         result = EnhancedSceneActionResult(
             action_resolution=action_resolution, action_key=action_key
