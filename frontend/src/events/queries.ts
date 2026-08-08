@@ -93,6 +93,29 @@ export async function removeInvitation(invitationId: number): Promise<void> {
   }
 }
 
+/**
+ * #3069 — the invitee's own RSVP (accept/decline) on `/respond/`.
+ *
+ * The endpoint's real response is `{success, message}` (see
+ * `EventInvitationViewSet.respond`, `world/events/views.py`) — NOT the
+ * `EventInvitation` shape the generated OpenAPI types claim (a pre-existing
+ * `@extend_schema` gap on that action, out of scope for this fix).
+ */
+export async function respondToInvitation(
+  invitationId: number,
+  response: 'accept' | 'decline'
+): Promise<{ success: boolean; message: string }> {
+  const res = await apiFetch(`/api/events/invitations/${invitationId}/respond/`, {
+    method: 'POST',
+    body: JSON.stringify({ response }),
+  });
+  const data = await res.json();
+  if (!res.ok) {
+    throw new Error(data.detail || 'Failed to send your RSVP');
+  }
+  return data;
+}
+
 export interface PersonaSearchResult {
   /** Persona pk. */
   id: number;

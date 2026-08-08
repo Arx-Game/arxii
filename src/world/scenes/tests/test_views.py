@@ -68,37 +68,98 @@ class SceneViewSetTestCase(APITestCase):
         assert "location" in scene_data
         assert "participants" in scene_data
 
+    def _give_account_a_room_and_character(self, room):
+        """Put ``self.account`` in control of a character standing in ``room``.
+
+        #3069 — ``SceneViewSet.create`` now dispatches ``StartSceneAction``,
+        which requires a real actor (an actively-tenured character), so scene
+        creation tests need a character in the target room, not a bare account.
+        """
+        char = CharacterFactory(location=room)
+        sheet = CharacterSheetFactory(character=char)
+        player_data, _ = PlayerDataFactory._meta.model.objects.get_or_create(
+            account=self.account,
+        )
+        roster_entry = RosterEntryFactory(character_sheet=sheet)
+        RosterTenureFactory(player_data=player_data, roster_entry=roster_entry)
+        return char
+
     @suppress_permission_errors
-    def test_scene_creation_unique_name_and_location(self):
-        """Starting scenes enforces unique names and one active per room."""
+    def test_scene_creation_derives_privacy_and_joins_if_already_active(self):
+        """#3069 — web create converges on StartSceneAction: derived privacy + idempotent join.
+
+        A private room's scene comes back PRIVATE (not the model's PUBLIC
+        default), and re-posting to an already-active room joins the actor
+        as a participant instead of erroring (matching telnet's ``scene``
+        command, which the web path now shares a seam with).
+        """
         room = ObjectDBFactory(
             db_key="hall",
             db_typeclass_path="typeclasses.rooms.Room",
         )
+        # Rooms are publicly listed by default (RoomProfile.is_public=True) —
+        # mark this one not publicly listed so privacy derivation has
+        # something non-default to prove.
+        RoomProfileFactory(objectdb=room, is_public=False)
+        self._give_account_a_room_and_character(room)
+
         url = reverse("scene-list")
         data = {"location_id": room.id}
         response = self.client.post(url, data, format="json")
-        assert response.status_code == status.HTTP_201_CREATED
-        name1 = response.data["name"]
-        # Starting another scene in same room while active should fail
-        response = self.client.post(url, data, format="json")
-        assert response.status_code == status.HTTP_400_BAD_REQUEST
-        # Finish first scene and start again to test name increment
-        scene = Scene.objects.get(name=name1)
-        scene.finish_scene()
+        assert response.status_code == status.HTTP_201_CREATED, response.data
+        assert response.data["privacy_mode"] == ScenePrivacyMode.PRIVATE, response.data
+        scene_id = response.data["id"]
+
+        # Re-posting while the scene is still active joins rather than erroring.
         response = self.client.post(url, data, format="json")
         assert response.status_code == status.HTTP_201_CREATED
-        name2 = response.data["name"]
-        assert name1 != name2
-        assert name2.endswith(" (2)")
+        assert response.data["id"] == scene_id
+
+        scene = Scene.objects.get(pk=scene_id)
+        assert scene.participations.filter(account=self.account).exists()
+
+    @suppress_permission_errors
+    def test_scene_creation_enrolls_other_present_pc_as_co_owner(self):
+        """#3069 — a second PC present in the room is also granted co-ownership.
+
+        Proves the web create path reaches ``add_present_as_co_owners`` (via
+        ``StartSceneAction``), not just a solo ``SceneParticipation`` row for
+        the requester — the enrollment the old bespoke ``Scene.objects.create``
+        skipped entirely. Mirrors
+        ``actions.tests.test_scene_actions.StartSceneActionTests.test_second_present_pc_also_becomes_co_owner``.
+        """
+        room = ObjectDBFactory(
+            db_key="tavern",
+            db_typeclass_path="typeclasses.rooms.Room",
+        )
+        self._give_account_a_room_and_character(room)
+
+        other_account = AccountFactory()
+        other_char = CharacterFactory(location=room)
+        other_sheet = CharacterSheetFactory(character=other_char)
+        other_player_data, _ = PlayerDataFactory._meta.model.objects.get_or_create(
+            account=other_account,
+        )
+        RosterTenureFactory(
+            player_data=other_player_data,
+            roster_entry=RosterEntryFactory(character_sheet=other_sheet),
+        )
+
+        url = reverse("scene-list")
+        response = self.client.post(url, {"location_id": room.id}, format="json")
+        assert response.status_code == status.HTTP_201_CREATED
+
+        scene = Scene.objects.get(pk=response.data["id"])
+        assert scene.participations.filter(account=other_account, is_owner=True).exists()
 
     @suppress_permission_errors
     def test_scene_creation_not_blocked_by_battle_only_scene(self):
         """A room holding ONLY a staged battle's backing Scene is not "occupied" (#2010 review).
 
-        The collision check (``perform_create``) must exclude battle-backed scenes the
-        same way ``get_active_scene`` does -- a GM's battle map must never prevent a
-        real RP scene from starting in that room.
+        The collision check (now ``StartSceneAction`` -> ``ensure_scene_for_location``, via
+        ``Scene.objects.active_for_room``) must exclude battle-backed scenes the same way
+        ``get_active_scene`` does -- a GM's battle map must never prevent a real RP scene
+        from starting in that room.
         """
         from world.battles.staging import stage_battle
 
@@ -106,11 +167,30 @@ class SceneViewSetTestCase(APITestCase):
             db_key="warfront",
             db_typeclass_path="typeclasses.rooms.Room",
         )
+        self._give_account_a_room_and_character(room)
         stage_battle(name="Siege of the Hall", location=room)
 
         url = reverse("scene-list")
         response = self.client.post(url, {"location_id": room.id}, format="json")
         assert response.status_code == status.HTTP_201_CREATED
+
+    @suppress_permission_errors
+    def test_scene_creation_without_active_character_400s(self):
+        """#3069 — an account with no actively-tenured character gets a clean 400.
+
+        ``StartSceneAction`` needs a real actor; a web-only account with no
+        played character can't supply one.
+        """
+        room = ObjectDBFactory(
+            db_key="empty-handed",
+            db_typeclass_path="typeclasses.rooms.Room",
+        )
+
+        url = reverse("scene-list")
+        response = self.client.post(url, {"location_id": room.id}, format="json")
+
+        assert response.status_code == status.HTTP_400_BAD_REQUEST
+        assert not Scene.objects.filter(location=room).exists()
 
     def test_scene_list_filtering(self):
         """Test scene filtering by is_active and privacy_mode"""

@@ -76,6 +76,12 @@ and from GM sessions (which are narrative-driven, handled by Stories/GM system).
 - Event create form with area drill-down location picker
 - Event edit form for DRAFT/SCHEDULED events (hosts/staff only)
 - Invitation management: persona search, invite, and remove from detail page
+- Invitee RSVP (#3069): Accept/Decline on a viewer's own pending persona invitation, rendered
+  inline in the same detail-page invitation list every viewer already sees
+  (`EventInvitations.tsx`, matched against the viewer's own persona ids via
+  `useMyRosterEntriesQuery`); already-responded rows show "You accepted"/"You declined" instead
+  of the buttons. Calls the same `respond_invitation` Action/`respond` endpoint telnet's `event
+  rsvp` uses
 - Sidebar panel for quick event access
 - Timezone-correct datetime inputs
 

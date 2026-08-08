@@ -590,6 +590,16 @@ any table-owning GM with a present member is auto-flagged `is_gm`. If an active 
 exists, the actor is recorded as a non-owner participant and `enroll_present_table_gms` runs
 again for the room. Ungated — any character may invoke it.
 
+**Web convergence (#3069):** `SceneViewSet.perform_create` (`src/world/scenes/views.py`) dispatches
+`StartSceneAction().run(actor=actor)` — the same seam `RoomPanel`'s "Start Scene" button and
+telnet's `scene start` both now go through, instead of a bespoke `Scene.objects.create` that
+always defaulted `privacy_mode` to PUBLIC and enrolled no one but the requester. The actor is
+resolved from the requesting account's active roster tenure (not a live Evennia puppet session,
+which a plain web request need not have), and a `location_id` the actor isn't standing in is
+rejected — the action only ever acts on `actor.location`. Reposting to an already-active room
+joins the actor as a participant (201, same scene id) rather than erroring, matching telnet's
+"already active" idempotence; an account with no active character gets a clean 400.
+
 **`FinishSceneAction`** (`key="finish_scene"`, `src/actions/definitions/scenes.py`)
 
 Finishes the active scene in the actor's room. Gated by `actor_can_administer_scene` — only
