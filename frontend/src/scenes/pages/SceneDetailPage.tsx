@@ -32,6 +32,7 @@ import { useCombatEncounter, useEncounterForScene } from '@/combat/queries';
 import { CombatRail } from '@/combat/components/CombatRail';
 import { GMEncounterControls } from '@/combat/sections/GMEncounterControls';
 import { LinkedStoriesPanel } from '@/crossover/components/LinkedStoriesPanel';
+import { GMAdjudicationPanel } from '../components/GMAdjudicationPanel';
 
 export function SceneDetailPage() {
   const { id = '' } = useParams();
@@ -225,6 +226,11 @@ export function SceneDetailPage() {
           />
         )}
         {scene && <LinkedStoriesPanel sceneId={id} />}
+        {scene?.viewer_can_gm && (
+          <div className="mt-2">
+            <GMAdjudicationPanel scene={scene} />
+          </div>
+        )}
       </div>
 
       {/* Combat rail fold-in (#2197): a two-column C-frame grid (mirroring the

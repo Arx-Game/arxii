@@ -737,6 +737,62 @@ nested field serialized by `SceneRoundSerializer` (read-only). Fields:
 The `is_danger` field remains a read-side hint: the dialog uses it only to show the
 informational note above, never to disable controls (#1476 cleared the old danger lock).
 
+### Web GM adjudication panel — GMAdjudicationPanel (#3070)
+
+Before this, the GM adjudication toolkit (`gm_invoke_check`/`gm_award_progression`/
+`gm_apply_condition`/`set_situation`/`place_challenge` — see "Adjudication toolkit" in
+`docs/systems/INDEX.md`'s GM section) had zero web callers: a GM had to type `gm ...`
+into the scene composer, which poses the text to the room as an IC line instead of
+running the action.
+
+`GMAdjudicationPanel` (`frontend/src/scenes/components/GMAdjudicationPanel.tsx`) closes
+that gap. **Gate:** rendered only when `scene.viewer_can_gm` (mirrors `HighlightReel`'s
+`canGm` prop and `RoundSettingsDialog`'s gate) — no client-side GM trust-*tier* probe
+exists; a below-tier dispatch (e.g. a JUNIOR GM attempting `gm_invoke_check`, which
+requires SENIOR) simply surfaces the backend's prerequisite-refusal message via a toast.
+
+**Dispatch seam:** all five actions carry no `ActionTemplate`, so none appear in the
+generic `get_player_actions` listing (see the "Registry exclusion note" in
+`actions/player_interface.py`). The panel builds its `ActionRef`s directly and fires
+them through the plain REGISTRY REST path (`useDispatchPlayerAction` ->
+`POST /api/actions/characters/{id}/dispatch/`), mirroring `PersonaContextMenu.tsx`'s
+pre-existing `challenge`/`identify` items rather than adding a
+`_gm_adjudication_actions`-style availability adapter.
+
+**Target resolution:** the REST dispatch path (`dispatch_player_action` ->
+`_dispatch_registry`) does no ObjectDB resolution of its own — `objectdb_target_kwargs`
+only helps the *websocket* inputfunc. `_resolve_gm_target`
+(`actions/definitions/gm_adjudication.py`) now resolves the `target` kwarg from either
+an already-resolved `ObjectDB` (telnet) or a plain int pk; the panel's participant
+picker reads `scene.personas[].character_sheet` (a `CharacterSheet`'s pk equals its
+owning `ObjectDB`'s pk) and sends that id directly as `target`.
+
+**Tabs:**
+- **Call Check** — searches `checks.CheckTypeViewSet` (new, `GET
+  /api/checks/check-types/`, `IsGMOrStaff`), picks a `DifficultyChoice` band, and an
+  optional mutually-exclusive edge/setback reason; dispatches `gm_invoke_check`.
+- **Award** — a kind picker (xp/development/favor_token/stat/technique) plus per-kind
+  fields; `trait_ref`/`org_ref`/`technique_ref` are plain text inputs resolved
+  server-side pk-or-name (mirroring telnet's own `gm award` grammar) rather than
+  catalog pickers — no general `Trait` list endpoint exists, and duplicating one for
+  three free-text fields was judged out of scope for this pass. Dispatches
+  `gm_award_progression`.
+- **Condition** — searches `conditions.ConditionTemplateViewSet`
+  (`/api/conditions/templates/`, pre-existing, reused as-is); dispatches
+  `gm_apply_condition` with the condition's exact name (`condition_ref` — resolved via
+  `ConditionTemplate.get_by_name`, not by pk).
+- **Situation** — a placement-kind toggle between a whole `SituationTemplate`
+  (`mechanics.SituationTemplateViewSet`, pre-existing) and a single
+  `ChallengeTemplate` against a GM-named target object
+  (`mechanics.ChallengeTemplateViewSet`, pre-existing), with the same edge/setback
+  shift as Call Check on the Challenge path. Dispatches `set_situation` or
+  `place_challenge`. Both act on the GM's own room (`target_type=SELF`), so this tab
+  has no participant picker.
+
+**Wire-point:** rendered by `SceneDetailPage.tsx`, gated a second time at the mount
+site (`{scene?.viewer_can_gm && <GMAdjudicationPanel scene={scene} />}`) alongside
+`HighlightReel`.
+
 ---
 
 ## UI Composition — `/game` One Play Surface (#2156)

@@ -8,9 +8,11 @@ from rest_framework.permissions import IsAuthenticated
 from rest_framework.viewsets import ReadOnlyModelViewSet
 
 from actions.models.consequence_pools import ConsequencePoolEntry
-from world.checks.filters import ConsequenceOutcomeFilter
+from world.checks.filters import CheckTypeFilter, ConsequenceOutcomeFilter
+from world.checks.models import CheckType, CheckTypeTrait
 from world.checks.outcome_models import ConsequenceOutcome, ConsequenceOutcomeModifier
-from world.checks.serializers import ConsequenceOutcomeSerializer
+from world.checks.serializers import CheckTypeSerializer, ConsequenceOutcomeSerializer
+from world.gm.permissions import IsGMOrStaff
 from world.mechanics.models import ApproachConsequence, ChallengeTemplateConsequence
 from world.stories.pagination import StandardResultsSetPagination
 
@@ -39,6 +41,41 @@ _TEMPLATE_CONSEQUENCES_PREFETCH = Prefetch(
     "challenge_record__challenge_instance__template__challenge_consequences",
     queryset=ChallengeTemplateConsequence.objects.select_related("consequence__outcome_tier"),
 )
+
+
+class CheckTypeViewSet(ReadOnlyModelViewSet):
+    """Read-only GM catalog browse for CheckType (#3070) — the web sibling of
+    telnet's ``gm check find``, feeding the web GM adjudication panel's Call
+    Check picker.
+
+    Scoped to staff/lore-authored, active rows only: ``owner_sheet__isnull``
+    excludes the per-character synthesized magic check
+    (``ensure_character_magic_check_type`` mints one row per ``CharacterSheet``;
+    a player's own signature check has no place in a general catalog browse,
+    mirroring the #2724 export-filter rationale on the model itself).
+    Permission mirrors ``InvokeCatalogCheckAction``'s own gate in spirit
+    (``IsGMOrStaff`` — the action's ``MinimumGMLevelPrerequisite(GMLevel.SENIOR)``
+    is the real enforcement at invocation time; this endpoint only needs to keep
+    the catalog out of non-GM hands, not re-derive the exact trust tier).
+    """
+
+    queryset = (
+        CheckType.objects.filter(is_active=True, owner_sheet__isnull=True)
+        .select_related("category")
+        .prefetch_related(
+            Prefetch(
+                "traits",
+                queryset=CheckTypeTrait.objects.select_related("trait").order_by("-weight"),
+                to_attr="cached_traits",
+            )
+        )
+        .order_by("category__display_order", "display_order", "name")
+    )
+    serializer_class = CheckTypeSerializer
+    permission_classes = [IsGMOrStaff]
+    filter_backends = [DjangoFilterBackend]
+    filterset_class = CheckTypeFilter
+    pagination_class = StandardResultsSetPagination
 
 
 class ConsequenceOutcomeViewSet(ReadOnlyModelViewSet):
