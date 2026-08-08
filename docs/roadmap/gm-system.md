@@ -150,7 +150,14 @@ unlocks, never grants" makes XP scarce, so this is the pull). Built:
   `GMAwardAction` gained a third `award_type="favor_token"` (#2428) — mints a Golden
   Hare from an authored `Organization` via `currency.mint_favor_token`, same JUNIOR
   fiat trust bar as `xp`/`development`; telnet `gm award <char> hare=<org>
-  reason=<text>`.
+  reason=<text>`. Two more kinds (#3055 slice 1c) write the acquisition-provenance
+  ledger, so a GM-fiat grant is distinguishable from organic advancement:
+  `award_type="stat"` raises an authored stat `Trait` by one display dot
+  (`progression.award_stat_raise`, `source=TraitChangeSource.GM_GRANT` on the written
+  `CharacterTraitChange`, `granting_tenure` set to the GM's own current tenure);
+  `award_type="technique"` mints a `Technique` via the shared `learn_technique` seam
+  with `origin=AcquisitionOrigin.GM_GRANT`. Telnet: `gm award <char> stat=<trait>` /
+  `gm award <char> technique=<name>`.
 
 ### Staff Character and Staff Tooling
 - Staff has commands to edit world state, manage GMs, override any system

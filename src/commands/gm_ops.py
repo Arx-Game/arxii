@@ -37,6 +37,8 @@ _USAGE_AWARD = (
     "Usage: gm award <character> xp=<amount> [reason=<text>]"
     " | gm award <character> dev=<trait> amount=<n> [reason=<text>]"
     " | gm award <character> hare=<organization> reason=<text>"
+    " | gm award <character> stat=<trait>"
+    " | gm award <character> technique=<name>"
 )
 _USAGE_CONDITION = (
     "Usage: gm condition <character> condition=<name> [severity=<n>] [duration=<n>] [note=<text>]"
@@ -55,6 +57,8 @@ _SUBVERB_DISARM = "disarm"
 _KEY_XP = "xp"
 _KEY_DEV = "dev"
 _KEY_HARE = "hare"
+_KEY_STAT = "stat"
+_KEY_TECHNIQUE = "technique"
 _KEY_SEVERITY = "severity"
 _KEY_DURATION = "duration"
 _KEY_NOTE = "note"
@@ -72,6 +76,8 @@ class CmdGMDashboard(ArxCommand):
       gm award <character> xp=<amount> [reason=<text>]
       gm award <character> dev=<trait> amount=<n> [reason=<text>]
       gm award <character> hare=<organization> reason=<text>
+      gm award <character> stat=<trait>
+      gm award <character> technique=<name>
       gm condition <character> condition=<name> [severity=<n>] [duration=<n>] [note=<text>]
       gm suggest <kind>=<text>
       gm trap list
@@ -177,7 +183,8 @@ class CmdGMDashboard(ArxCommand):
             self.msg(result.message)
 
     def _handle_award(self, rest: str) -> None:
-        """Dispatch GMAwardAction -- xp=<amount>, dev=<trait> amount=<n>, or hare=<org>."""
+        """Dispatch GMAwardAction -- xp=<amount>, dev=<trait> amount=<n>, hare=<org>,
+        stat=<trait>, or technique=<name>."""
         from actions.definitions.gm_adjudication import GMAwardAction  # noqa: PLC0415
 
         tokens = rest.split(maxsplit=1)
@@ -185,9 +192,13 @@ class CmdGMDashboard(ArxCommand):
             raise CommandError(_USAGE_AWARD)
         char_name = tokens[0]
         kv_rest = tokens[1] if len(tokens) > 1 else ""
+        # dev=/stat= trait refs are single-word only (mirrors the check-type-ref
+        # multiword limitation) -- a multi-word trait name must be referenced by
+        # pk. technique= names commonly ARE multi-word (e.g. "Ember Lance"), so
+        # it gets multiword consumption like reason=/hare=.
         kwargs, _flags = parse_kv_and_flags(
             kv_rest,
-            multiword_keys=frozenset({"reason", _KEY_HARE}),
+            multiword_keys=frozenset({"reason", _KEY_HARE, _KEY_TECHNIQUE}),
             known_flags=frozenset(),
         )
         reason = kwargs.pop("reason", "")
@@ -204,6 +215,12 @@ class CmdGMDashboard(ArxCommand):
         elif _KEY_HARE in kwargs:
             run_kwargs["award_type"] = "favor_token"
             run_kwargs["org_ref"] = kwargs[_KEY_HARE]
+        elif _KEY_STAT in kwargs:
+            run_kwargs["award_type"] = "stat"
+            run_kwargs["trait_ref"] = kwargs[_KEY_STAT]
+        elif _KEY_TECHNIQUE in kwargs:
+            run_kwargs["award_type"] = "technique"
+            run_kwargs["technique_ref"] = kwargs[_KEY_TECHNIQUE]
         else:
             raise CommandError(_USAGE_AWARD)
 

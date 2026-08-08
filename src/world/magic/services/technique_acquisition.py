@@ -19,6 +19,7 @@ from django.db import transaction
 
 from world.achievements.constants import AccessChangeSource
 from world.achievements.discovery import announce_access_change
+from world.magic.constants import AcquisitionOrigin
 from world.magic.exceptions import (
     GiftNotOwned,
     TechniqueCapExceeded,
@@ -69,6 +70,7 @@ def learn_technique(  # noqa: PLR0913
     ap_cost: int = 0,
     xp_cost: int = 0,
     location: object | None = None,
+    origin: AcquisitionOrigin = AcquisitionOrigin.TRAINED,
 ) -> CharacterTechnique | TechniqueProgress:
     """Learn a technique from an owned gift (non-teaching path).
 
@@ -91,6 +93,12 @@ def learn_technique(  # noqa: PLR0913
         location: Optional room object the learner is in. When provided,
             an active Training Room feature in that room discounts the AP
             cost (#675).
+        origin: The ``AcquisitionOrigin`` stamped on the minted
+            ``CharacterTechnique`` (defaults to ``TRAINED``, unchanged for
+            every existing caller). ``GMAwardAction`` (#3055 slice 1c) is the
+            first caller to pass ``AcquisitionOrigin.GM_GRANT`` here, marking
+            a technique granted by GM fiat rather than earned via
+            training/teaching investment.
 
     Returns:
         ``CharacterTechnique`` when ``ap_cost == 0`` (immediate mint),
@@ -139,14 +147,11 @@ def learn_technique(  # noqa: PLR0913
     _ = xp_cost
 
     # 6. Mint (ap_cost == 0 path — immediate). This is the shared mint seam for
-    # both a ritual TechniqueGrant dispatch and a completed TechniqueProgress
-    # meter (#3055) — both are the "acquired via training/teaching investment"
-    # family, regardless of the AccessChangeSource narrative label passed in.
-    from world.magic.constants import AcquisitionOrigin  # noqa: PLC0415
-
-    ct = CharacterTechnique.objects.create(
-        character=learner, technique=technique, origin=AcquisitionOrigin.TRAINED
-    )
+    # a ritual TechniqueGrant dispatch, a completed TechniqueProgress meter, and
+    # a GMAwardAction story grant (#3055 slice 1c) — origin defaults to TRAINED
+    # (the "acquired via training/teaching investment" family) but the GM-award
+    # caller passes AcquisitionOrigin.GM_GRANT to mark it as GM fiat instead.
+    ct = CharacterTechnique.objects.create(character=learner, technique=technique, origin=origin)
 
     # 7. Announce.
     announce_access_change(

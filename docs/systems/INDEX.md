@@ -2036,11 +2036,19 @@ GM at a given level may author (#2000, ADR-0097).
   `ProgressionReason.GM_AWARD`, gated additionally on `MinimumGMLevelPrerequisite(GMLevel
   .JUNIOR)`; `award_type="favor_token"` (#2428) mints a Golden Hare from an org via
   `currency.mint_favor_token`, resolving `org_ref` pk-or-name against `societies.Organization`
-  and requiring a non-empty `description` as the token's `provenance_note`),
+  and requiring a non-empty `description` as the token's `provenance_note`; two more kinds
+  (#3055 slice 1c) write the acquisition-provenance ledger: `award_type="stat"` raises an
+  authored `Trait` (must be `TraitType.STAT`) by one display dot via
+  `progression.award_stat_raise`, writing a `traits.CharacterTraitChange` with
+  `source=GM_GRANT` and `granting_tenure` set to the GM's own current tenure (`None` for a
+  staff-piloted GM); `award_type="technique"` mints a `Technique` via the shared
+  `magic.learn_technique` seam, passing `origin=AcquisitionOrigin.GM_GRANT` and
+  `source=AccessChangeSource.GM_AWARD` with `ap_cost=0` for an immediate mint),
   `GMApplyConditionAction` (key `gm_apply_condition` — `apply_condition` against an
   authored `ConditionTemplate` via `get_by_name`, same JUNIOR floor). Telnet: `gm check [find
   <term>]` / `gm check <char> <check-type>=<band> [edge=<reason>|setback=<reason>]`, `gm award
-  <char> xp=<amount>|dev=<trait> amount=<n>|hare=<organization> reason=<text>`, `gm condition <char>
+  <char> xp=<amount>|dev=<trait> amount=<n>|hare=<organization> reason=<text>|stat=<trait>|
+  technique=<name>`, `gm condition <char>
   condition=<name> [severity=<n>] [duration=<n>] [note=<text>]` (`commands/gm_ops.py`'s
   `CmdGMDashboard`).
 - **Scenario catalog (#2127, ADR-0110):** extends the same "discovery, never invention"

@@ -1685,7 +1685,7 @@ neither model is expected to use every value:
 | `ORGANIZATION_GRANT` | Weaving an `ORGANIZATION` thread (`services/threads.py`) | Technique-only. |
 | `ALTERNATE_SELF_GRANT` | An alt-self's ability-suite grant (`world/forms/services`) | Technique-only; tied to a `ModifierSource`, revoked on revert. |
 | `AUTHORED` | `author_technique` (technique-authoring budget builder) | Technique-only. |
-| `GM_GRANT` | Reserved — #3055 slice 1c (JUNIOR-gated GM story-reward surface, not yet built) | No writer today. |
+| `GM_GRANT` | `GMAwardAction`'s `award_type="technique"` branch (#3055 slice 1c) | Technique-only — passed as `learn_technique(..., origin=AcquisitionOrigin.GM_GRANT)`, `ap_cost=0` for an immediate mint. |
 
 `grant_gift_to_character` (the shared gift-acquisition primitive) takes an `origin=`
 kwarg (default `CHARACTER_CREATION`), stamped only on a freshly-minted `CharacterGift`
