@@ -27,6 +27,13 @@ with far more rows, and that the genuine config the Big Button must provide is
 never in ``CONTENT_MODELS`` at all. Hence: one registration, two consumers
 (export and this guard), no per-model judgement calls, and a target of zero.
 
+Since #3056, the registration is model-level but the count is row-level: this
+guard also honors ``EXPORT_FILTERS`` (ADR-0171), the same row-scoped predicate
+``export_to_content_repo`` applies, so a model split between content and
+seeder ownership by row (``npc_services.npcserviceoffer`` is content only
+where ``kind="mission"``) is measured against what the export would actually
+capture, not every row in the table.
+
 This test is the standing guard. It seeds against a stub content root and fails
 naming any ``CONTENT_MODELS`` entry outside the ratchet that gained rows — so a
 seeder that invents content fails CI instead of quietly polluting the corpus on
@@ -43,7 +50,7 @@ from django.db.models import DateField
 from django.test import TestCase
 
 from core.app_domains import resolve_model_by_name
-from core_management.content_export import CONTENT_MODELS, EXPORT_FIELD_EXCLUSIONS
+from core_management.content_export import CONTENT_MODELS, EXPORT_FIELD_EXCLUSIONS, EXPORT_FILTERS
 from world.seeds.clusters import CLUSTER_SEEDERS
 from world.seeds.database import load_content_first
 from world.seeds.tests.content_stub import stub_content_root
@@ -144,6 +151,24 @@ class SeedersDoNotCreateContentTests(TestCase):
                 continue
         return models
 
+    @staticmethod
+    def _export_visible_count(label: str, model: type) -> int:
+        """Rows the export would actually capture for *label*.
+
+        The content boundary is CONTENT_MODELS at the model level AND
+        EXPORT_FILTERS at the row level (ADR-0171): a row the export
+        predicate excludes can never land in the corpus, so the guard
+        counts exactly what export_to_content_repo would capture. #3056
+        made npc_services.npcserviceoffer the first seeded model with a
+        row-level line (MISSION-kind offers are content; the permit/train
+        offers the seeders own are excluded by the predicate).
+        """
+        queryset = model.objects.all()
+        filters = EXPORT_FILTERS.get(label)
+        if filters:
+            queryset = queryset.filter(**filters)
+        return queryset.count()
+
     @stub_content_root()
     def test_seeding_creates_no_content_model_rows(self) -> None:
         content_models = self._content_models()
@@ -153,10 +178,16 @@ class SeedersDoNotCreateContentTests(TestCase):
         # root's own rows as seeder growth — the loader is the content repo, so
         # its writes are the one thing this guard must not count.
         load_content_first()
-        before = {label: model.objects.count() for label, model in content_models.items()}
+        before = {
+            label: self._export_visible_count(label, model)
+            for label, model in content_models.items()
+        }
         for seeder in CLUSTER_SEEDERS.values():
             seeder()
-        after = {label: model.objects.count() for label, model in content_models.items()}
+        after = {
+            label: self._export_visible_count(label, model)
+            for label, model in content_models.items()
+        }
 
         grew = {
             label: (before[label], after[label])
