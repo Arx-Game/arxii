@@ -2,8 +2,10 @@
 
 from __future__ import annotations
 
+from django.db.models import Q, QuerySet
 import django_filters
 
+from world.checks.models import CheckType
 from world.checks.outcome_models import ConsequenceOutcome
 
 
@@ -35,3 +37,30 @@ class ConsequenceOutcomeFilter(django_filters.FilterSet):
     class Meta:
         model = ConsequenceOutcome
         fields = ["character", "pool", "created_after", "created_before", "encounter"]
+
+
+class CheckTypeFilter(django_filters.FilterSet):
+    """Filter for the CheckType catalog browse endpoint (#3070).
+
+    ``search`` mirrors ``InvokeCatalogCheckAction._search_catalog``'s
+    name/description/trait-name matching, so the web picker and telnet
+    ``gm check find`` surface the same rows for the same query.
+    """
+
+    search = django_filters.CharFilter(method="filter_search")
+    category = django_filters.CharFilter(field_name="category__name", lookup_expr="iexact")
+
+    def filter_search(self, queryset: QuerySet[CheckType], name: str, value: str) -> QuerySet:
+        del name
+        value = value.strip()
+        if not value:
+            return queryset
+        return queryset.filter(
+            Q(name__icontains=value)
+            | Q(description__icontains=value)
+            | Q(traits__trait__name__icontains=value)
+        ).distinct()
+
+    class Meta:
+        model = CheckType
+        fields = ["category"]

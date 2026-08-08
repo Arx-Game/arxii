@@ -5013,6 +5013,90 @@ paths:
       responses:
         '200':
           description: No response body
+  /api/checks/check-types/:
+    get:
+      operationId: checks_check_types_list
+      description: |-
+        Read-only GM catalog browse for CheckType (#3070) — the web sibling of
+        telnet's ``gm check find``, feeding the web GM adjudication panel's Call
+        Check picker.
+
+        Scoped to staff/lore-authored, active rows only: ``owner_sheet__isnull``
+        excludes the per-character synthesized magic check
+        (``ensure_character_magic_check_type`` mints one row per ``CharacterSheet``;
+        a player's own signature check has no place in a general catalog browse,
+        mirroring the #2724 export-filter rationale on the model itself).
+        Permission mirrors ``InvokeCatalogCheckAction``'s own gate in spirit
+        (``IsGMOrStaff`` — the action's ``MinimumGMLevelPrerequisite(GMLevel.SENIOR)``
+        is the real enforcement at invocation time; this endpoint only needs to keep
+        the catalog out of non-GM hands, not re-derive the exact trust tier).
+      parameters:
+      - in: query
+        name: category
+        schema:
+          type: string
+      - name: page
+        required: false
+        in: query
+        description: A page number within the paginated result set.
+        schema:
+          type: integer
+      - name: page_size
+        required: false
+        in: query
+        description: Number of results to return per page.
+        schema:
+          type: integer
+      - in: query
+        name: search
+        schema:
+          type: string
+      tags:
+      - checks
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaginatedCheckTypeList'
+          description: ''
+  /api/checks/check-types/{id}/:
+    get:
+      operationId: checks_check_types_retrieve
+      description: |-
+        Read-only GM catalog browse for CheckType (#3070) — the web sibling of
+        telnet's ``gm check find``, feeding the web GM adjudication panel's Call
+        Check picker.
+
+        Scoped to staff/lore-authored, active rows only: ``owner_sheet__isnull``
+        excludes the per-character synthesized magic check
+        (``ensure_character_magic_check_type`` mints one row per ``CharacterSheet``;
+        a player's own signature check has no place in a general catalog browse,
+        mirroring the #2724 export-filter rationale on the model itself).
+        Permission mirrors ``InvokeCatalogCheckAction``'s own gate in spirit
+        (``IsGMOrStaff`` — the action's ``MinimumGMLevelPrerequisite(GMLevel.SENIOR)``
+        is the real enforcement at invocation time; this endpoint only needs to keep
+        the catalog out of non-GM hands, not re-derive the exact trust tier).
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: A unique integer value identifying this check type.
+        required: true
+      tags:
+      - checks
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CheckType'
+          description: ''
   /api/checks/consequence-outcomes/:
     get:
       operationId: checks_consequence_outcomes_list
@@ -39278,6 +39362,41 @@ components:
         * `dying` - dying
         * `incapacitated` - incapacitated
         * `dead` - dead
+    CheckType:
+      type: object
+      description: |-
+        Read-only catalog listing for the web GM check-invocation picker (#3070).
+
+        Mirrors ``InvokeCatalogCheckAction``'s own catalog rendering
+        (``_check_type_summary``/``_format_catalog_row`` in
+        ``actions/definitions/gm_adjudication.py``) so the web picker shows the same
+        stat+skill trait pairing a GM sees via telnet ``gm check find``.
+      properties:
+        id:
+          type: integer
+          readOnly: true
+        name:
+          type: string
+          readOnly: true
+        category:
+          type: integer
+          readOnly: true
+        category_name:
+          type: string
+          readOnly: true
+        description:
+          type: string
+          readOnly: true
+        trait_summary:
+          type: string
+          readOnly: true
+      required:
+      - category
+      - category_name
+      - description
+      - id
+      - name
+      - trait_summary
     CheckTypeMinimal:
       type: object
       description: Minimal read-only representation of a CheckType model instance.
@@ -53197,6 +53316,29 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/CharacterRelationshipList'
+    PaginatedCheckTypeList:
+      type: object
+      required:
+      - count
+      - results
+      properties:
+        count:
+          type: integer
+          example: 123
+        next:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=4
+        previous:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=2
+        results:
+          type: array
+          items:
+            $ref: '#/components/schemas/CheckType'
     PaginatedCompanionList:
       type: object
       required:

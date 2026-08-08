@@ -48,6 +48,27 @@ _AWARD_TYPES = (
 )
 
 
+def _resolve_gm_target(kwargs: dict[str, Any]) -> ObjectDB | None:
+    """Resolve the ``target`` kwarg to an ``ObjectDB`` character (#3070).
+
+    Telnet always passes an already-resolved ``ObjectDB``. The web REST dispatch
+    path (``dispatch_player_action`` -> ``_dispatch_registry``) does no ObjectDB
+    resolution of its own -- ``objectdb_target_kwargs`` only helps the *websocket*
+    inputfunc, and only for wire keys ending in ``_id`` (see ``actions/CLAUDE.md``).
+    Resolve a plain int pk here too, mirroring ``identification._resolve_identify_target``.
+    Unlike that resolver, no persona indirection is needed: a ``CharacterSheet``'s pk
+    equals its ``ObjectDB``'s pk (shared-pk O2O), so the web GM panel sends the
+    target character's id directly -- the same id the scene payload's
+    ``personas[].character_sheet`` field already carries.
+    """
+    from evennia.objects.models import ObjectDB  # noqa: PLC0415
+
+    target = kwargs.get("target")
+    if target is None or isinstance(target, ObjectDB):
+        return target
+    return ObjectDB.objects.filter(pk=target).first()
+
+
 def _check_type_summary(check_type: CheckType) -> str:
     """Return the "stat+skill" trait pairing summary for a catalog listing row."""
     names = [
@@ -139,9 +160,11 @@ class InvokeCatalogCheckAction(Action):
         context: ActionContext | None = None,
         **kwargs: Any,
     ) -> ActionResult:
-        target = kwargs.get("target")
-        if target is None:
+        if kwargs.get("target") is None:
             return self._find(kwargs)
+        target = _resolve_gm_target(kwargs)
+        if target is None:
+            return ActionResult(success=False, message="No such target.")
         return self._invoke(target, kwargs)
 
     def _find(self, kwargs: dict[str, Any]) -> ActionResult:
@@ -258,7 +281,7 @@ class GMAwardAction(Action):
         context: ActionContext | None = None,
         **kwargs: Any,
     ) -> ActionResult:
-        target = kwargs.get("target")
+        target = _resolve_gm_target(kwargs)
         if target is None:
             return ActionResult(success=False, message="A target character is required.")
 
@@ -551,7 +574,7 @@ def _resolve_condition_target(kwargs: dict[str, Any]) -> tuple[Any, Any] | Actio
     """
     from world.conditions.models import ConditionTemplate  # noqa: PLC0415
 
-    target = kwargs.get("target")
+    target = _resolve_gm_target(kwargs)
     if target is None:
         return ActionResult(success=False, message="A target character is required.")
 

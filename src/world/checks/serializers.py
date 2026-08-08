@@ -8,11 +8,40 @@ from drf_spectacular.utils import extend_schema_field
 from rest_framework import serializers
 
 from world.checks.constants import ModifierSourceKind
+from world.checks.models import CheckType
 from world.checks.outcome_models import ConsequenceOutcome, ConsequenceOutcomeModifier
 from world.checks.outcome_utils import build_outcome_display
 
 # Provenance kinds scoped to staff reads.
 _STAFF_ONLY_SOURCE_KINDS = frozenset({ModifierSourceKind.ROLLMOD})
+
+
+class CheckTypeSerializer(serializers.ModelSerializer):
+    """Read-only catalog listing for the web GM check-invocation picker (#3070).
+
+    Mirrors ``InvokeCatalogCheckAction``'s own catalog rendering
+    (``_check_type_summary``/``_format_catalog_row`` in
+    ``actions/definitions/gm_adjudication.py``) so the web picker shows the same
+    stat+skill trait pairing a GM sees via telnet ``gm check find``.
+    """
+
+    category_name = serializers.CharField(source="category.name", read_only=True)
+    trait_summary = serializers.SerializerMethodField()
+
+    class Meta:
+        model = CheckType
+        fields = ["id", "name", "category", "category_name", "description", "trait_summary"]
+        read_only_fields = fields
+
+    def get_trait_summary(self, obj: CheckType) -> str:
+        # Reads the ViewSet's ``to_attr="cached_traits"`` Prefetch when present
+        # (list/retrieve via CheckTypeViewSet); falls back to a live query
+        # otherwise (e.g. a serializer used directly in a test).
+        traits = getattr(obj, "cached_traits", None)  # noqa: GETATTR_LITERAL - Prefetch(to_attr=...) sets this
+        if traits is None:
+            traits = obj.traits.select_related("trait").order_by("-weight")
+        names = [ctt.trait.name for ctt in traits]
+        return " + ".join(names) if names else ""
 
 
 class ConsequenceOutcomeModifierSerializer(serializers.ModelSerializer):

@@ -383,6 +383,59 @@ class InvokeCatalogCheckActionFindTests(GMAdjudicationActionsTestBase):
         self.assertFalse(result.success)
 
 
+class RESTTargetResolutionTests(GMAdjudicationActionsTestBase):
+    """The REST dispatch path (``dispatch_player_action`` -> ``_dispatch_registry``)
+    sends a plain int ``target`` -- no ObjectDB resolution happens before
+    ``execute()`` (#3070; see ``actions/CLAUDE.md``'s ``objectdb_target_kwargs``
+    note). Each action must resolve that int itself. A ``CharacterSheet``'s pk
+    equals its owning ``ObjectDB``'s pk, so the frontend sends the target
+    character's plain pk directly -- exactly what these tests pass.
+    """
+
+    def test_invoke_check_resolves_int_target(self) -> None:
+        result = InvokeCatalogCheckAction().run(
+            actor=self.gm_actor,
+            target=self.target.pk,
+            check_type_ref=self.check_type.name,
+            difficulty=DifficultyChoice.NORMAL,
+        )
+        self.assertTrue(result.success, result.message)
+        self.assertIn(self.target.key, result.message)
+
+    def test_invoke_check_int_target_that_does_not_resolve_fails_loud(self) -> None:
+        result = InvokeCatalogCheckAction().run(
+            actor=self.gm_actor,
+            target=999999999,
+            check_type_ref=self.check_type.name,
+            difficulty=DifficultyChoice.NORMAL,
+        )
+        self.assertFalse(result.success)
+
+    def test_award_xp_resolves_int_target(self) -> None:
+        result = GMAwardAction().run(
+            actor=self.gm_actor,
+            target=self.target.pk,
+            award_type="xp",
+            amount=10,
+        )
+        self.assertTrue(result.success, result.message)
+        xp_data = ExperiencePointsData.objects.get(account=self.target_account)
+        self.assertEqual(xp_data.total_earned, 10)
+
+    def test_apply_condition_resolves_int_target(self) -> None:
+        result = GMApplyConditionAction().run(
+            actor=self.gm_actor,
+            target=self.target.pk,
+            condition_ref=self.condition_template.name,
+        )
+        self.assertTrue(result.success, result.message)
+        self.assertTrue(
+            ConditionInstance.objects.filter(
+                target=self.target, condition=self.condition_template
+            ).exists()
+        )
+
+
 class GMAwardActionTests(GMAdjudicationActionsTestBase):
     def test_non_gm_is_refused(self) -> None:
         result = GMAwardAction().run(
