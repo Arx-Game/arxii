@@ -1683,3 +1683,110 @@ class GiftUnlockContentExportTests(TestCase):
 
         with self.assertRaises(IntegrityError), transaction.atomic():
             GiftUnlock.objects.create(gift=gift, xp_cost=99)
+
+
+class MissionOfferContentExportTests(TestCase):
+    """#3056: MISSION-kind offers are content; other kinds stay seeder-owned.
+
+    Covers: the kind="mission" row filter, natural-key FK references
+    (including MissionOptionRouteReward.followon_offer, the corpus row that
+    could previously only serialize as a raw pk), the source_beat /
+    target_project field exclusions, and the deleted-then-reloaded round-trip.
+    """
+
+    def setUp(self) -> None:
+        self.tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(self.tmp.cleanup)
+        self.root = Path(self.tmp.name)
+
+    def test_mission_offer_and_reward_round_trip(self) -> None:
+        from world.missions.constants import DeedRewardKind, DeedRewardSink
+        from world.missions.factories import MissionOptionRouteRewardFactory
+        from world.npc_services.constants import OfferKind
+        from world.npc_services.factories import (
+            MissionOfferDetailsFactory,
+            NPCServiceOfferFactory,
+        )
+        from world.npc_services.models import MissionOfferDetails, NPCServiceOffer
+
+        details = MissionOfferDetailsFactory(
+            offer__role__name="Thread Warden",
+            offer__label="A thread that wants weaving",
+        )
+        offer = details.offer
+        NPCServiceOfferFactory(  # PERMIT-kind: must NOT export
+            role=offer.role, kind=OfferKind.PERMIT, label="Apply for a permit"
+        )
+        reward = MissionOptionRouteRewardFactory(
+            kind=DeedRewardKind.IMMEDIATE,
+            sink=DeedRewardSink.FOLLOW_ON_SUMMONS,
+            amount=None,
+            followon_offer=offer,
+            followon_message="There is a thread that wants weaving.",
+            contract_holder_only=True,
+        )
+
+        result = export_to_content_repo(self.root)
+        assert result.errors == []
+
+        offer_path = self.root / "fixtures" / "npc_services" / "npcserviceoffer.json"
+        details_path = self.root / "fixtures" / "npc_services" / "missionofferdetails.json"
+        reward_path = self.root / "fixtures" / "missions" / "missionoptionroutereward.json"
+        assert offer_path.exists()
+        assert details_path.exists()
+
+        offer_rows = json.loads(offer_path.read_text(encoding="utf-8"))
+        # The PERMIT offer is filtered out: only the MISSION offer exports.
+        assert [r["fields"]["label"] for r in offer_rows] == ["A thread that wants weaving"]
+        assert offer_rows[0]["fields"]["role"] == ["Thread Warden"]
+        assert "pk" not in offer_rows[0]
+
+        details_rows = json.loads(details_path.read_text(encoding="utf-8"))
+        assert len(details_rows) == 1
+        assert details_rows[0]["fields"]["offer"] == [
+            "Thread Warden",
+            "A thread that wants weaving",
+        ]
+        assert "source_beat" not in details_rows[0]["fields"]
+        assert "target_project" not in details_rows[0]["fields"]
+
+        reward_rows = json.loads(reward_path.read_text(encoding="utf-8"))
+        summons_row = next(
+            r for r in reward_rows if r["fields"]["sink"] == DeedRewardSink.FOLLOW_ON_SUMMONS
+        )
+        assert summons_row["fields"]["followon_offer"] == [
+            "Thread Warden",
+            "A thread that wants weaving",
+        ]
+
+        # Deleted-then-reloaded: the exported corpus recreates all three rows
+        # (delete children first — followon_offer is PROTECT). Uses
+        # ``load_world_content`` rather than the bare ``build_all`` +
+        # ``load_entries`` pair (deviation from the brief): file processing
+        # order is plain alphabetical (see MagicCatalogContentExportTests'
+        # docstring above), and "missions/missionoptionroutereward.json" +
+        # "npc_services/missionofferdetails.json" both sort BEFORE
+        # "npc_services/npcserviceoffer.json" — so a one-pass load_entries
+        # skips both on a fresh load (their followon_offer/offer FK target
+        # doesn't exist yet at the moment their own file is processed).
+        # load_world_content's defer-then-retry-to-fixed-point pass closes
+        # this content-internal ordering gap, same as that class's rationale.
+        from core_management.content_fixtures import load_world_content
+
+        reward.delete()
+        details.delete()
+        offer.delete()
+        world_result = load_world_content(self.root)
+        assert world_result.skipped == []
+        assert world_result.created >= 3
+
+        reloaded = NPCServiceOffer.objects.get_by_natural_key(
+            "Thread Warden", "A thread that wants weaving"
+        )
+        assert reloaded.kind == OfferKind.MISSION
+        reloaded_details = MissionOfferDetails.objects.get_by_natural_key(
+            "Thread Warden", "A thread that wants weaving"
+        )
+        assert reloaded_details.role_id == reloaded.role_id  # save() re-derived mirror
+        summons = DeedRewardSink.FOLLOW_ON_SUMMONS
+        assert reloaded.pk == type(reward).objects.get(sink=summons).followon_offer_id
