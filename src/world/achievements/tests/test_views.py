@@ -163,3 +163,26 @@ class CharacterAchievementViewSetTests(TestCase):
             status.HTTP_401_UNAUTHORIZED,
             status.HTTP_403_FORBIDDEN,
         )
+
+    def test_discovery_shared_false_for_solo_discovery(self) -> None:
+        """DiscoverySerializer.shared is False when no co-discoverers (#3063)."""
+        DiscoveryFactory(
+            achievement=self.achievement1, discovered_by_tenure=self.ca1.earned_by_tenure
+        )
+
+        response = self.client.get(f"/api/achievements/character-achievements/{self.ca1.id}/")
+        assert response.status_code == status.HTTP_200_OK
+        assert response.data["achievement"]["discovery"]["shared"] is False
+
+    def test_discovery_shared_true_for_group_discovery(self) -> None:
+        """DiscoverySerializer.shared is True whenever shared_with_tenures is non-empty,
+        regardless of which tenure holds the primary discovered_by_tenure FK (#3063)."""
+        co_discoverer_tenure = RosterTenureFactory()
+        discovery = DiscoveryFactory(
+            achievement=self.achievement1, discovered_by_tenure=self.ca1.earned_by_tenure
+        )
+        discovery.shared_with_tenures.add(co_discoverer_tenure)
+
+        response = self.client.get(f"/api/achievements/character-achievements/{self.ca1.id}/")
+        assert response.status_code == status.HTTP_200_OK
+        assert response.data["achievement"]["discovery"]["shared"] is True

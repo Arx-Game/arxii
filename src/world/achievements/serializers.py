@@ -30,11 +30,23 @@ class DiscoverySerializer(serializers.ModelSerializer):
     """Serializer for discovery records."""
 
     discoverer_names = serializers.SerializerMethodField()
+    shared = serializers.SerializerMethodField()
 
     class Meta:
         model = Discovery
-        fields = ["discovered_at", "discoverer_names"]
+        fields = ["discovered_at", "discoverer_names", "shared"]
         read_only_fields = fields
+
+    def get_shared(self, obj: Discovery) -> bool:
+        """True iff this was a simultaneous group discovery (#3063).
+
+        ``shared_with_tenures`` non-empty is the whole rule -- the primary
+        ``discovered_by_tenure`` FK is bookkeeping in the group case (it had
+        to point somewhere), never a display privilege. Every group
+        participant must read identically as "shared"; do not special-case
+        ``discovered_by_tenure`` here.
+        """
+        return obj.shared_with_tenures.exists()
 
     def get_discoverer_names(self, obj: Discovery) -> list[str]:
         """Return display names of the tenures who discovered this achievement.

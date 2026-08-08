@@ -24403,6 +24403,16 @@ export interface components {
        *     ``CharacterAchievement.discovery`` FK to walk).
        */
       readonly discoverer_names: string[];
+      /**
+       * @description True iff this was a simultaneous group discovery (#3063).
+       *
+       *     ``shared_with_tenures`` non-empty is the whole rule -- the primary
+       *     ``discovered_by_tenure`` FK is bookkeeping in the group case (it had
+       *     to point somewhere), never a display privilege. Every group
+       *     participant must read identically as "shared"; do not special-case
+       *     ``discovered_by_tenure`` here.
+       */
+      readonly shared: boolean;
     };
     /**
      * @description * `obvious` - Obvious (visible if capability met)
