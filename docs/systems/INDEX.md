@@ -2830,6 +2830,9 @@ register as additional kinds.
   anchor for gameplay loops; see ADR-0070 for the Functionary/Standing NPC/Story NPC ontology),
   `NpcRegard` (#1717 — a notable NPC's signed opinion of a persona/Organization/Society;
   see the Regard bullet below and ADR-0085)
+- **Content pipeline (#3056):** MISSION-kind `NPCServiceOffer` rows (+ `MissionOfferDetails`) are
+  lore-repo content, natural key `(role, label)`; other offer kinds stay seeder-owned. See the
+  missions "Content pipeline (#2470)" bullet for the full export/import detail.
 - **NPC ontology (ADR-0070):** **Functionary** (class-1, abstracted, room-anchored via its own FK) /
   **Standing NPC** (class-2, named Persona + object) / **Story NPC** (class-3/4, object + sheet, piloted).
   Presence: `functionaries_in_room` / `functionary_in_location` (`world.npc_services.functionaries`);
@@ -3219,8 +3222,12 @@ state is node position + snapshots + already-applied consequences, never a scrat
   author a mission graph as a fixture and install it via the ordinary export/import pipeline, same
   as any other content model. `checks.CheckType`/`checks.CheckCategory` joined the allowlist in the
   same change (needed for `MissionOption.authored_check_type` to round-trip). `checks.Consequence`
-  and `npc_services.NPCServiceOffer` remain un-keyed (documented gap, not this issue's scope). The
-  seeded Tutorial Chain is unaffected — it predates this pipeline and stays imperatively seeded.
+  remains un-keyed (documented gap). `npc_services.NPCServiceOffer` gained a `(role, label)` natural
+  key in #3056: MISSION-kind offers (+ `MissionOfferDetails`, keyed on its O2O `offer`) are exported
+  content, filtered to `kind="mission"` via `EXPORT_FILTERS`, with `source_beat`/`target_project`
+  stripped via `EXPORT_FIELD_EXCLUSIONS`, so `MissionOptionRouteReward.followon_offer` round-trips
+  by natural key; other offer kinds stay seeder-owned. The seeded Tutorial Chain is unaffected -
+  it predates this pipeline and stays imperatively seeded.
 - **Source:** `src/world/missions/`. Roadmap: `docs/roadmap/missions.md`.
 
 ### Currency & Org Economy (#923–#932, #930 active collection)
