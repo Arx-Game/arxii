@@ -16471,6 +16471,23 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
+  '/api/registration/status/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /** @description Public GET — whether registration is currently open. No invite enumeration. */
+    get: operations['registration_status_retrieve'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   '/api/relationships/conditions/': {
     parameters: {
       query?: never;
@@ -18864,6 +18881,58 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
+  '/api/staff/invites/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /** @description Staff-only issue / list / revoke of per-email account invites. */
+    get: operations['staff_invites_list'];
+    put?: never;
+    /** @description Staff-only issue / list / revoke of per-email account invites. */
+    post: operations['staff_invites_create'];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/staff/invites/{id}/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /** @description Staff-only issue / list / revoke of per-email account invites. */
+    get: operations['staff_invites_retrieve'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/staff/invites/{id}/revoke/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /** @description Staff-only issue / list / revoke of per-email account invites. */
+    post: operations['staff_invites_revoke_create'];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   '/api/stake-activations/': {
     parameters: {
       query?: never;
@@ -21237,6 +21306,43 @@ export interface components {
       offer_id: number;
       character_technique_id: number;
       technique_id: number;
+    };
+    /** @description Read shape for the staff invite list/detail — never returned on failure paths. */
+    AccountInvite: {
+      readonly id: number;
+      /** Format: email */
+      email: string;
+      readonly token: string;
+      readonly status: string;
+      /** @description Why this person was invited (staff-only, never shown to the invitee). */
+      note?: string;
+      /** Format: date-time */
+      readonly created_at: string;
+      /**
+       * Format: date-time
+       * @description Invite cannot be redeemed after this time.
+       */
+      expires_at: string;
+      /** Format: date-time */
+      readonly redeemed_at: string | null;
+      /** Format: date-time */
+      readonly revoked_at: string | null;
+      readonly invited_by: number;
+      readonly invited_by_username: string;
+      readonly redeemed_by: number | null;
+      readonly redeemed_by_username: string;
+    };
+    /** @description Read shape for the staff invite list/detail — never returned on failure paths. */
+    AccountInviteRequest: {
+      /** Format: email */
+      email: string;
+      /** @description Why this person was invited (staff-only, never shown to the invitee). */
+      note?: string;
+      /**
+       * Format: date-time
+       * @description Invite cannot be redeemed after this time.
+       */
+      expires_at: string;
     };
     /** @description Full serializer for achievement detail view. */
     Achievement: {
@@ -27345,6 +27451,20 @@ export interface components {
      * @enum {string}
      */
     InterventionTriggerEnum: 'incapacitated' | 'near_death';
+    /** @description Input for issuing a new invite — write-only, not model-backed. */
+    IssueInvite: {
+      /** Format: email */
+      email: string;
+      /** @default  */
+      note: string;
+    };
+    /** @description Input for issuing a new invite — write-only, not model-backed. */
+    IssueInviteRequest: {
+      /** Format: email */
+      email: string;
+      /** @default  */
+      note: string;
+    };
     /** @description One worked-in Accent on a piece (#2886) — the removal UI's row shape. */
     ItemAccentRead: {
       readonly target: number;
@@ -29836,6 +29956,21 @@ export interface components {
      * @enum {string}
      */
     PaceModeEnum: 'timed' | 'ready' | 'manual';
+    PaginatedAccountInviteList: {
+      /** @example 123 */
+      count: number;
+      /**
+       * Format: uri
+       * @example http://api.example.org/accounts/?page=4
+       */
+      next?: string | null;
+      /**
+       * Format: uri
+       * @example http://api.example.org/accounts/?page=2
+       */
+      previous?: string | null;
+      results: components['schemas']['AccountInvite'][];
+    };
     PaginatedAggregateBeatContributionList: {
       /** @example 123 */
       count: number;
@@ -63350,6 +63485,24 @@ export interface operations {
       };
     };
   };
+  registration_status_retrieve: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description No response body */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+    };
+  };
   relationships_conditions_list: {
     parameters: {
       query?: never;
@@ -66591,6 +66744,109 @@ export interface operations {
           [name: string]: unknown;
         };
         content?: never;
+      };
+    };
+  };
+  staff_invites_list: {
+    parameters: {
+      query?: {
+        email?: string;
+        /** @description A page number within the paginated result set. */
+        page?: number;
+        /** @description Number of results to return per page. */
+        page_size?: number;
+        /**
+         * @description * `pending` - Pending
+         *     * `redeemed` - Redeemed
+         *     * `revoked` - Revoked
+         *     * `expired` - Expired
+         */
+        status?: 'expired' | 'pending' | 'redeemed' | 'revoked';
+      };
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['PaginatedAccountInviteList'];
+        };
+      };
+    };
+  };
+  staff_invites_create: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['IssueInviteRequest'];
+      };
+    };
+    responses: {
+      201: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['IssueInvite'];
+        };
+      };
+    };
+  };
+  staff_invites_retrieve: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        /** @description A unique integer value identifying this Account Invite. */
+        id: number;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['AccountInvite'];
+        };
+      };
+    };
+  };
+  staff_invites_revoke_create: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        /** @description A unique integer value identifying this Account Invite. */
+        id: number;
+      };
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['AccountInviteRequest'];
+      };
+    };
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['AccountInvite'];
+        };
       };
     };
   };

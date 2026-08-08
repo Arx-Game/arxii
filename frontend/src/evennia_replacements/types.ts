@@ -42,6 +42,11 @@ export interface AccountData {
   pending_applications: PendingApplication[];
 }
 
+/** Public GET /api/registration/status/ (#3054) — never enumerates invites. */
+export interface RegistrationStatus {
+  open: boolean;
+}
+
 export interface StatusData {
   online: number;
   accounts: number;

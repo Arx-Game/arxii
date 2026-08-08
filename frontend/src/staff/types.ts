@@ -153,6 +153,25 @@ export interface GMApplication {
 
 export type GMApplicationStatus = 'pending' | 'approved' | 'denied' | 'withdrawn';
 
+// Account invites (#3054) — from /api/staff/invites/
+export type AccountInviteStatus = 'pending' | 'redeemed' | 'revoked' | 'expired';
+
+export interface AccountInvite {
+  id: number;
+  email: string;
+  token: string;
+  status: AccountInviteStatus;
+  note: string;
+  created_at: string;
+  expires_at: string;
+  redeemed_at: string | null;
+  revoked_at: string | null;
+  invited_by: number;
+  invited_by_username: string;
+  redeemed_by: number | null;
+  redeemed_by_username: string | null;
+}
+
 // Submission status values
 export type SubmissionStatus = 'open' | 'reviewed' | 'dismissed';
 

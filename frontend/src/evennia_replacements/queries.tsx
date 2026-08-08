@@ -1,5 +1,12 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { fetchStatus, fetchAccount, postLogin, postLogout, postRegister } from './api';
+import {
+  fetchStatus,
+  fetchAccount,
+  fetchRegistrationStatus,
+  postLogin,
+  postLogout,
+  postRegister,
+} from './api';
 import { AccountData } from './types';
 import { useAppDispatch } from '@/store/hooks';
 import { setAccount } from '@/store/authSlice';
@@ -79,6 +86,20 @@ export function useLogin(onSuccess?: (data: AccountData) => void) {
       dispatch(setAccount(data));
       onSuccess?.(data);
     },
+  });
+}
+
+/**
+ * Whether registration is currently open (#3054). Public/unauthenticated.
+ * Callers should treat a still-loading or errored fetch as "don't know" —
+ * RegisterPage only shows the invite-only notice on an explicit `open: false`,
+ * never while this query is pending, so a slow/failed status check doesn't
+ * block the signup form from rendering.
+ */
+export function useRegistrationStatus() {
+  return useQuery({
+    queryKey: ['registrationStatus'],
+    queryFn: fetchRegistrationStatus,
   });
 }
 
