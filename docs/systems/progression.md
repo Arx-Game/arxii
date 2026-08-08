@@ -540,6 +540,55 @@ path = resolve_advanced_path_by_name(sheet, "Path of the Pale")  # -> Path | Non
   - Requires a played character (set by the Evennia session / test client)
 - `POST /api/progression/unlocks/purchase/` — Purchase an unlock with XP; body `{ unlock_type, class_level_unlock_id }`, `{ unlock_type, thread_id, boundary_level }`, or `{ unlock_type: "skill_breakthrough", skill_id }`; dispatches `PurchaseUnlockAction` (`registry_key="purchase_unlock"`) and returns the action result on success
 
+**Web surface (#3045):** the character-sheet "Advancement" tab's Breakthroughs and Class
+Unlocks cards (`frontend/src/progression/components/advancement/`) are thin readers/writers
+over this endpoint — no new backend surface was needed. Both cards render the server's
+`xp_cost` verbatim and show a "Cost unset (staff)" marker rather than "Free" when
+`xp_cost === 0` (the `ClassXPCost`/`TraitXPCost`-fallback sentinel — see "XP Cost System" and
+"Unlock Types" above) — the UI never invents a number for an unauthored cost chart.
+
+### Durance Readiness Hub (web, #3045)
+
+- `GET /api/progression/durance/status/` — the web face of telnet `durance status`
+  (`DuranceStatusView`, `world/progression/views.py`). Reuses the exact same selectors/services
+  `CmdDurance._status` calls (`primary_class_level`, `check_requirements_for_unlock`,
+  `eligible_advanced_paths_for`, `AudereMajoraThreshold`, `DuranceTrainingSite`) and returns
+  the same information — no wider read than the player's own telnet prompt already shows them.
+  Character resolved via the played character (`request.user.puppet`), like the Unlock Shop —
+  no `X-Character-ID` header. Response (`DuranceStatusSerializer`):
+  `{ level, target_level, is_tier_boundary, unlock_gate: { has_class_level,
+  advancement_authored, requirements_met, failed_requirements, purchased, xp_cost,
+  class_level_unlock_id, ready } | null, eligible_paths: [{ id, name }], intent: { path_id,
+  path_name } | null, site_present }`. `unlock_gate` is `null` only when `is_tier_boundary` is
+  true (that step belongs to Audere Majora, not the Durance).
+- `POST /api/progression/durance/convene/` — the web face of telnet `durance convene`
+  (`DuranceConveneView`). Calls `convene_durance_at_site` directly — a plain service call, not
+  a registered Action, so this is not a `dispatch_player_action` seam — mirroring
+  `CmdDurance._convene`. Returns `{ session_id }` on success; 400 with `{ detail }` (the
+  exception's `user_message`) on any `ClassLevelAdvancementError` subclass (no site, tier
+  boundary, unmet requirements, unpurchased unlock).
+
+**Join, and the REST auto-fire parity fix:** the inductee then joins the drafted session via
+the existing `POST /api/magic/rituals/sessions/{id}/accept/` (`RitualSessionViewSet.accept`,
+`world/magic/views.py`) — same endpoint any ritual session uses. Before #3045, `accept()` had
+no equivalent to telnet's `_maybe_auto_fire` (`commands/ritual.py`), so a site-convened Durance
+session (drafted with no live initiator to separately call `fire`) would strand PENDING
+forever when joined over REST. `accept()` now checks
+`get_adapter(session.ritual).should_auto_fire(session=session)` (the same
+`DuranceAdapter.should_auto_fire` check telnet's `ritual join` uses) and fires immediately when
+true, returning `{ detail, fired: true }` instead of a session-detail body once the session (and
+its row) is gone. Every other adapter's `should_auto_fire` returns `False`, so this is a no-op
+for ordinary sessions drafted via `ritual draft` — they still complete only on an explicit
+initiator `fire`.
+
+**Web surface (#3045):** the Advancement tab's Durance card (`DuranceCard.tsx`) drives this
+whole flow — status display, convene, and the testament + join step — plus intent
+declare/clear, which reuses the **existing** `PathIntent` seam (`usePathIntent`/
+`useDeclarePathIntent`/`useClearPathIntent`, #954) against this card's own `eligible_paths`
+list. It deliberately does NOT read `GET /api/progression/path-options/`
+(`useNextPathOptions`) for that list — `next_path_options` is unfiltered by stage, a
+materially different query from `eligible_advanced_paths_for` (see "Path Selectors" above).
+
 ### Account Progression Dashboard
 - `GET /api/progression/account/` - Current user's XP balance, kudos balance, recent transactions, and claim options
 
@@ -611,6 +660,14 @@ training remove id=<id>
 
 Dispatches `ManageTrainingAction` (`registry_key="manage_training"`) through the same
 `dispatch_player_action` seam the web API uses.
+
+**Web surface (#3045):** the Advancement tab's Training card
+(`frontend/src/progression/components/advancement/TrainingCard.tsx`) is a thin reader/writer
+over `TrainingAllocationViewSet` (`GET`/`POST`/`PATCH`/`DELETE
+/api/skills/training-allocations/`, `src/world/skills/views.py:161-287`) — no new backend
+surface was needed. The mentor picker is the same generic Persona search other invite/mentor
+pickers use (`usePersonaSearch`) — no eligible-mentor filtering exists or is invented here;
+this does not preempt the NPC-trainer check-composition design question (#2740/#2741).
 
 ### `progression` — Browse/purchase XP unlocks
 
@@ -685,6 +742,10 @@ durance selectpath <path name or id>  — one-time recovery: pick a path when yo
 then completes the rite via `ritual join <id> testament=<oration> [path=<name>]`. For a
 live-officiant ceremony the trainer drafts with `ritual draft`, the inductee joins, and
 the initiator fires with `ritual fire <id>`.
+
+**Web surface (#3045):** see "Durance Readiness Hub (web, #3045)" under API Endpoints above —
+the Advancement tab's Durance card reaches the identical readiness hub, convene, and (now
+auto-firing) join flow over REST.
 
 ### `pathintent` — Declare preferred next path for Audere Majora (#1348)
 

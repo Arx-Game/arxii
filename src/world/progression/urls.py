@@ -8,6 +8,8 @@ from rest_framework.routers import DefaultRouter
 from world.progression.views import (
     AccountProgressionView,
     ClaimKudosView,
+    DuranceConveneView,
+    DuranceStatusView,
     PathIntentViewSet,
     PathOptionsView,
     ProgressionUnlockViewSet,
@@ -42,5 +44,7 @@ urlpatterns = [
     path("path-options/", PathOptionsView.as_view(), name="path-options"),
     path("path-intent/", _path_intent_view, name="path-intent"),
     path("select-path/", _select_path_view, name="select-path"),
+    path("durance/status/", DuranceStatusView.as_view(), name="durance-status"),
+    path("durance/convene/", DuranceConveneView.as_view(), name="durance-convene"),
     path("", include(router.urls)),
 ]

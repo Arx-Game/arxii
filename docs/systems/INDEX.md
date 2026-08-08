@@ -1310,6 +1310,13 @@ Goal domain allocation and journal-based XP progression.
 - **Six Domains:** Standing, Wealth, Knowledge, Mastery, Bonds, Needs
 - **Write services:** `set_character_goals` (revision-gated replace) + `log_goal_progress` in `services.py`; `GoalError` user-safe exception in `types.py`
 - **Action-backed (#1350, ADR-0001):** `set_character_goals` / `log_goal_progress` Actions wrap the services; web `CharacterGoalViewSet`/`GoalJournalViewSet` + telnet `CmdGoal` converge on `action.run()`
+- **Web surface (#3045):** `GET /api/goals/my-goals/` and `POST /api/goals/journals/` had zero
+  frontend callers until now — `GoalsPanel` (`frontend/src/goals/components/`), mounted on
+  `XpKudosPage`, shows current goal allocations and a "Log Progress" dialog that awards the
+  weekly-capped XP. No "current goals" display existed to extend (only the one-time
+  character-creation allocator, `FinalTouchesStage`), so this is a small new component, not
+  an extension of pre-existing UI. Goal *allocation* (`CharacterGoalViewSet.update_all`) is
+  still telnet/CG-only — out of scope for #3045, which only closed the journal-log gap.
 - **Integrates with:** progression (XP rewards), mechanics (goal domains use ModifierTarget), actions (write paths Action-backed)
 - **Source:** `src/world/goals/`
 - **Details:** [goals.md](goals.md)
@@ -1681,8 +1688,19 @@ XP, kudos, development points, and unlock system. Contains the most explicit pre
   - `GET /api/progression/path-intent/` — declared `PathIntent` or `null` (character via `X-Character-ID` header)
   - `PUT /api/progression/path-intent/` — declare a path intent; body `{ path_id }` (character via `X-Character-ID` header)
   - `DELETE /api/progression/path-intent/` — clear declared intent (character via `X-Character-ID` header)
-  - `GET /api/progression/unlocks/` — purchasable unlocks for the played character; paginated, filterable by `unlock_type`
-  - `POST /api/progression/unlocks/purchase/` — buy a `class_level` or `thread_xp_lock` unlock with XP; dispatches `PurchaseUnlockAction`
+  - `GET /api/progression/unlocks/` — purchasable unlocks for the played character; paginated, filterable by `unlock_type` (`class_level` / `thread_xp_lock` / `skill_breakthrough`, #2115)
+  - `POST /api/progression/unlocks/purchase/` — buy a `class_level`, `thread_xp_lock`, or `skill_breakthrough` unlock with XP; dispatches `PurchaseUnlockAction`
+  - `GET /api/progression/durance/status/` — Durance readiness hub for the played character; mirrors telnet `durance status` exactly (#3045)
+  - `POST /api/progression/durance/convene/` — open a site-convened Durance session at the played character's room; calls `convene_durance_at_site` directly, not a dispatch seam (#3045)
+  - `GET`/`POST`/`PATCH`/`DELETE /api/skills/training-allocations/` — deliberate skill training allocations (`world.skills`, `TrainingAllocationViewSet`); dispatches `ManageTrainingAction`
+- **Web Advancement tab (#3045):** `frontend/src/progression/components/advancement/` —
+  `AdvancementTab` (mounted on `CharacterSheetPage`, own-sheet + active-puppet gated) hosts
+  `BreakthroughsCard` / `ClassUnlocksCard` (both over the Unlock Shop above) / `TrainingCard`
+  (over `TrainingAllocationViewSet`) / `DuranceCard` (over the Durance endpoints above, joining
+  via the existing `RitualSessionViewSet.accept`, now auto-firing a site-convened session to
+  match telnet's `ritual join` — see `docs/systems/progression.md`). Closed the "every SPEND
+  path was telnet-only" gap; `RandomScenePanel` (earn-path, previously built-but-orphaned) now
+  mounts on `XpKudosPage` instead.
 - **Actions:**
   - `PurchaseUnlockAction` (`registry_key="purchase_unlock"`) — shared unlock purchase path for web and telnet
   - `ClaimKudosAction` (`registry_key="claim_kudos"`) — kudos→XP conversion; shared by web and telnet (#1348)

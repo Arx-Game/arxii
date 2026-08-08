@@ -6,6 +6,8 @@ import { useState } from 'react';
 import { Link } from 'react-router-dom';
 import { useAccountProgressionQuery, useClaimKudosMutation } from './queries';
 import { VotesPanel } from './components/VotesPanel';
+import { RandomScenePanel } from './components/RandomScenePanel';
+import { GoalsPanel } from '@/goals/components/GoalsPanel';
 import { usePendingAlterations } from '@/magic/queries';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
@@ -339,7 +341,7 @@ export function XpKudosPage() {
 
       <AlterationGateAlert />
 
-      <div className="mb-6 grid gap-4 md:grid-cols-3">
+      <div className="mb-6 grid gap-4 md:grid-cols-2">
         <BalanceCard
           title="Experience Points"
           available={xp?.current_available || 0}
@@ -361,7 +363,16 @@ export function XpKudosPage() {
             )
           }
         />
+      </div>
+
+      {/* Random Scene Targets + Goals (#3045) — both earn surfaces existed with zero
+          frontend callers until now; they belong beside Votes as earn-path cards, not
+          on the spend-focused Advancement tab. GoalsPanel renders nothing until an
+          active character is puppeted. */}
+      <div className="mb-6 grid gap-4 md:grid-cols-3">
         <VotesPanel />
+        <RandomScenePanel />
+        <GoalsPanel />
       </div>
 
       <Card>
