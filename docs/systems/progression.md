@@ -187,6 +187,18 @@ level-up in the call, `source=DEVELOPMENT_LEVEL_UP`) — the durable record that
 no `CharacterTraitChange` row. See `docs/systems/INDEX.md`'s Traits entry for the full
 `CharacterTraitChange` shape and its other writers (CG finalize, maturation).
 
+**GM story-reward stat raise (#3055 slice 1c).** `world.progression.services.awards
+.award_stat_raise(sheet, trait, *, granting_tenure)` is the pure-fiat counterpart to
+`spend_level_stat_point` (`services/stat_points.py`): same cap enforcement
+(`stat_cap_for`, authored in display dots; storage is internal ×10 via
+`STAT_DISPLAY_DIVISOR`), same get-or-create-then-raise-by-one-dot shape, but no
+`LevelStatPointSpend` row is created — this is GM fiat, not an earned point. Writes a
+`CharacterTraitChange` with `source=TraitChangeSource.GM_GRANT` and `granting_tenure`
+set to the GM's own current tenure (`None` for a staff-piloted GM with no tenure — the
+grant still succeeds). Refuses non-`TraitType.STAT` traits and an at-cap raise, both as
+`ValueError`. Sole caller: `GMAwardAction`'s `award_type="stat"` branch (see the
+Adjudication Toolkit entry in `docs/systems/INDEX.md`).
+
 **Check-based accrual (#3039).** `world.progression.services.skill_development
 .award_check_development(character_sheet, check_type, effort_level, path_level)`
 writes both `WeeklySkillUsage` (accumulator for the weekly audit/rust cron) and

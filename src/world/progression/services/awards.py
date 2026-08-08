@@ -19,10 +19,19 @@ from world.progression.models import (
     ExperiencePointsData,
     XPTransaction,
 )
+from world.progression.services.maturation import stat_cap_for
 from world.progression.types import DevelopmentSource, ProgressionReason
-from world.traits.models import Trait
+from world.traits.constants import STAT_DISPLAY_DIVISOR
+from world.traits.models import (
+    CharacterTraitChange,
+    CharacterTraitValue,
+    Trait,
+    TraitChangeSource,
+    TraitType,
+)
 
 if TYPE_CHECKING:
+    from world.roster.models import RosterTenure
     from world.scenes.models import Scene
 
 
@@ -170,6 +179,53 @@ def award_development_points(  # noqa: PLR0913 - Service signature exposes optio
             scene=scene,
             gm=gm,
         )
+
+
+@transaction.atomic
+def award_stat_raise(
+    sheet: CharacterSheet,
+    trait: Trait,
+    *,
+    granting_tenure: RosterTenure | None,
+) -> CharacterTraitChange:
+    """Raise ``trait`` by exactly one display dot as a GM story reward (#3055 slice 1c).
+
+    Mirrors ``spend_level_stat_point`` (``world.progression.services.stat_points``) --
+    same cap enforcement (``stat_cap_for``, authored in display dots; storage is
+    internal x10 via ``STAT_DISPLAY_DIVISOR``) and the same
+    get_or_create-then-save-then-CharacterTraitChange shape -- but this is pure GM
+    fiat: no ``LevelStatPointSpend`` row is created or consumed, and the provenance
+    record carries ``source=GM_GRANT`` + the GM's own tenure (``granting_tenure``,
+    ``None`` for a staff-piloted GM with no tenure -- the grant still succeeds).
+
+    Raises:
+        ValueError: ``trait`` is not a STAT, or the trait is already at the
+            character's stage cap.
+    """
+    if trait.trait_type != TraitType.STAT:
+        msg = "Only stat traits can be raised by a GM story reward."
+        raise ValueError(msg)
+
+    trait_value, _created = CharacterTraitValue.objects.get_or_create(
+        character=sheet, trait=trait, defaults={"value": 0}
+    )
+    # Caps are authored in display dots; stat storage is internal x10 (#2894).
+    cap = stat_cap_for(sheet)
+    if cap is not None and trait_value.value >= cap * STAT_DISPLAY_DIVISOR:
+        msg = f"{trait.name} is already at the maximum {sheet.character.key}'s stage allows."
+        raise ValueError(msg)
+
+    old_value = trait_value.value
+    trait_value.value += STAT_DISPLAY_DIVISOR
+    trait_value.save()
+    return CharacterTraitChange.objects.create(
+        character_sheet=sheet,
+        trait=trait,
+        old_value=old_value,
+        new_value=trait_value.value,
+        source=TraitChangeSource.GM_GRANT,
+        granting_tenure=granting_tenure,
+    )
 
 
 def get_development_suggestions_for_character(character: ObjectDB) -> dict[str, list[str]]:

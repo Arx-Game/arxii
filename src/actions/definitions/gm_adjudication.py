@@ -37,6 +37,15 @@ _DESCRIPTION_SNIPPET_LEN = 80
 _AWARD_TYPE_XP = "xp"
 _AWARD_TYPE_DEVELOPMENT = "development"
 _AWARD_TYPE_FAVOR_TOKEN = "favor_token"  # noqa: S105 -- award-kind literal, not a secret
+_AWARD_TYPE_STAT = "stat"
+_AWARD_TYPE_TECHNIQUE = "technique"
+_AWARD_TYPES = (
+    _AWARD_TYPE_XP,
+    _AWARD_TYPE_DEVELOPMENT,
+    _AWARD_TYPE_FAVOR_TOKEN,
+    _AWARD_TYPE_STAT,
+    _AWARD_TYPE_TECHNIQUE,
+)
 
 
 def _check_type_summary(check_type: CheckType) -> str:
@@ -210,6 +219,27 @@ class GMAwardAction(Action):
     the module-level RATIFIED invariant). ``description`` is required and
     becomes the token's ``provenance_note`` -- the deed the Hare is redeemable
     against, never left to a generic default.
+
+    Two more kinds (#3055 slice 1c) write the acquisition-provenance ledger
+    introduced for GM story rewards, so a stat/technique that came from GM
+    fiat is distinguishable from one earned through organic advancement at
+    the beta reset:
+
+    - ``award_type="stat"`` raises an authored ``Trait`` (must be
+      ``TraitType.STAT``) by exactly one display dot via
+      ``world.progression.services.awards.award_stat_raise``, writing a
+      ``CharacterTraitChange`` with ``source=TraitChangeSource.GM_GRANT`` and
+      ``granting_tenure`` set to the GM's own current tenure (``None`` for a
+      staff-piloted GM with no tenure -- the grant still succeeds).
+    - ``award_type="technique"`` mints a ``Technique`` the target's owned
+      gift doesn't yet have, via the shared
+      ``world.magic.services.technique_acquisition.learn_technique`` seam,
+      passing ``origin=AcquisitionOrigin.GM_GRANT`` and
+      ``source=AccessChangeSource.GM_AWARD`` (the announce lead-in) with
+      ``ap_cost=0`` for an immediate mint.
+
+    Same JUNIOR trust bar as the other three kinds -- pure GM fiat, no check
+    against the GM's own standing in either system.
     """
 
     key: str = "gm_award_progression"
@@ -222,7 +252,7 @@ class GMAwardAction(Action):
     def get_prerequisites(self) -> list[Prerequisite]:
         return [IsSceneGMPrerequisite(), MinimumGMLevelPrerequisite(GMLevel.JUNIOR)]
 
-    def execute(
+    def execute(  # noqa: PLR0911 - one dispatch branch per award_type, deliberately flat
         self,
         actor: ObjectDB,
         context: ActionContext | None = None,
@@ -241,8 +271,13 @@ class GMAwardAction(Action):
             return self._award_development(actor, target, kwargs, description)
         if award_type == _AWARD_TYPE_FAVOR_TOKEN:
             return self._award_favor_token(target, kwargs, description)
+        if award_type == _AWARD_TYPE_STAT:
+            return self._award_stat(actor, target, kwargs)
+        if award_type == _AWARD_TYPE_TECHNIQUE:
+            return self._award_technique(target, kwargs)
         return ActionResult(
-            success=False, message="award_type must be 'xp', 'development', or 'favor_token'."
+            success=False,
+            message="award_type must be one of: " + ", ".join(_AWARD_TYPES) + ".",
         )
 
     def _award_xp(
@@ -380,6 +415,118 @@ class GMAwardAction(Action):
             success=True,
             message=f"Minted a Golden Hare from {org.name} for {target.key}.",
         )
+
+    def _award_stat(
+        self,
+        actor: ObjectDB,
+        target: ObjectDB,
+        kwargs: dict[str, Any],
+    ) -> ActionResult:
+        from world.progression.services.awards import award_stat_raise  # noqa: PLC0415
+        from world.traits.models import Trait, display_trait_value  # noqa: PLC0415
+
+        sheet = target.character_sheet
+        if sheet is None:
+            return ActionResult(success=False, message=f"{target.key} has no character sheet.")
+
+        trait_ref = str(kwargs.get("trait_ref") or "").strip()
+        if not trait_ref:
+            return ActionResult(success=False, message="A stat trait is required.")
+
+        try:
+            trait = resolve_model_by_pk_or_name(
+                Trait,
+                trait_ref,
+                not_found_msg=f"No trait named {trait_ref!r}.",
+            )
+        except CommandError as err:
+            return ActionResult(success=False, message=str(err))
+
+        granting_tenure = _resolve_granting_tenure(actor)
+
+        try:
+            change = award_stat_raise(sheet, trait, granting_tenure=granting_tenure)
+        except ValueError as exc:
+            return ActionResult(success=False, message=str(exc))
+
+        new_dots = display_trait_value(trait.trait_type, change.new_value)
+        return ActionResult(
+            success=True,
+            message=f"Raised {trait.name} to {new_dots} for {target.key}.",
+        )
+
+    def _award_technique(  # noqa: PLR0911 - one refusal message per gate, deliberately flat
+        self,
+        target: ObjectDB,
+        kwargs: dict[str, Any],
+    ) -> ActionResult:
+        from world.achievements.constants import AccessChangeSource  # noqa: PLC0415
+        from world.magic.constants import AcquisitionOrigin  # noqa: PLC0415
+        from world.magic.exceptions import GiftNotOwned, TechniqueCapExceeded  # noqa: PLC0415
+        from world.magic.models import Technique  # noqa: PLC0415
+        from world.magic.services.technique_acquisition import learn_technique  # noqa: PLC0415
+
+        sheet = target.character_sheet
+        if sheet is None:
+            return ActionResult(success=False, message=f"{target.key} has no character sheet.")
+
+        technique_ref = str(kwargs.get("technique_ref") or "").strip()
+        if not technique_ref:
+            return ActionResult(success=False, message="A technique is required.")
+
+        try:
+            technique = resolve_model_by_pk_or_name(
+                Technique,
+                technique_ref,
+                not_found_msg=f"No technique named {technique_ref!r}.",
+            )
+        except CommandError as err:
+            return ActionResult(success=False, message=str(err))
+
+        try:
+            learn_technique(
+                sheet,
+                technique,
+                source=AccessChangeSource.GM_AWARD,
+                ap_cost=0,
+                origin=AcquisitionOrigin.GM_GRANT,
+            )
+        except GiftNotOwned:
+            return ActionResult(
+                success=False,
+                message=f"{target.key} does not hold the {technique.gift.name} gift.",
+            )
+        except TechniqueCapExceeded as exc:
+            return ActionResult(success=False, message=exc.user_message)
+        except ValueError as exc:
+            return ActionResult(success=False, message=str(exc))
+
+        return ActionResult(
+            success=True,
+            message=f"Granted {technique.name} to {target.key}.",
+        )
+
+
+def _resolve_granting_tenure(actor: ObjectDB) -> Any:
+    """Return the acting GM's current ``RosterTenure``, or ``None`` (#3055 slice 1c).
+
+    A staff-piloted GM (no roster tenure at all) still gets to make the grant --
+    ``granting_tenure`` is nullable exactly for that case. None-safe at every hop:
+    ``character_sheet`` may be missing (non-Character actor), ``roster_entry_or_none``
+    may be ``None`` (no roster entry), and ``current_tenure`` may be ``None`` (the
+    entry exists but has no live tenure).
+    """
+    from typeclasses.characters import Character  # noqa: PLC0415
+
+    if not isinstance(actor, Character):
+        return None
+    sheet = actor.character_sheet
+    if sheet is None:
+        return None
+    entry = sheet.roster_entry_or_none
+    if entry is None:
+        return None
+    return entry.current_tenure
 
 
 def _coerce_positive_int(value: Any) -> int | None:

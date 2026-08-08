@@ -18,27 +18,36 @@ from actions.definitions.gm_adjudication import (
     InvokeCatalogCheckAction,
 )
 from evennia_extensions.factories import AccountFactory, CharacterFactory, ObjectDBFactory
+from world.achievements.constants import AccessChangeSource
 from world.character_sheets.factories import CharacterSheetFactory
 from world.checks.factories import CheckCategoryFactory, CheckTypeFactory, CheckTypeTraitFactory
+from world.classes.models import PathStage
 from world.conditions.factories import ConditionTemplateFactory
 from world.conditions.models import ConditionInstance
 from world.currency.models import FavorTokenDetails
 from world.gm.constants import GMLevel
 from world.gm.factories import GMProfileFactory
-from world.progression.models import DevelopmentPoints, ExperiencePointsData
+from world.magic.constants import AcquisitionOrigin, GiftKind, TargetKind
+from world.magic.factories import GiftFactory, ResonanceFactory, TechniqueFactory
+from world.magic.models import CharacterGift, CharacterTechnique, Thread
+from world.narrative.models import NarrativeMessage
+from world.progression.models import DevelopmentPoints, ExperiencePointsData, MaturationStatCap
 from world.progression.types import ProgressionReason
 from world.roster.factories import RosterEntryFactory, RosterTenureFactory
 from world.scenes.action_constants import DifficultyChoice
 from world.scenes.factories import SceneFactory, SceneParticipationFactory
 from world.societies.factories import OrganizationFactory
+from world.traits.constants import STAT_DISPLAY_DIVISOR
 from world.traits.factories import CheckSystemSetupFactory, TraitFactory
 from world.traits.models import (
+    CharacterTraitChange,
     CharacterTraitValue,
     CheckRank,
     PointConversionRange,
     ResultChart,
     Trait,
     TraitCategory,
+    TraitChangeSource,
     TraitType,
 )
 
@@ -540,6 +549,158 @@ class GMAwardActionTests(GMAdjudicationActionsTestBase):
         )
         self.assertFalse(result.success)
         self.assertFalse(FavorTokenDetails.objects.exists())
+
+
+class GMAwardActionStatTests(GMAdjudicationActionsTestBase):
+    """``award_type="stat"`` (#3055 slice 1c) -- GM-fiat stat raise + provenance."""
+
+    def setUp(self) -> None:
+        super().setUp()
+        self.stat_trait = TraitFactory(
+            name="adj_award_stat", trait_type=TraitType.STAT, category=TraitCategory.PHYSICAL
+        )
+
+    def test_award_stat_raises_by_one_display_dot_with_gm_grant_provenance(self) -> None:
+        result = GMAwardAction().run(
+            actor=self.gm_actor,
+            target=self.target,
+            award_type="stat",
+            trait_ref=self.stat_trait.name,
+        )
+        self.assertTrue(result.success, result.message)
+        value = CharacterTraitValue.objects.get(
+            character=self.target.sheet_data, trait=self.stat_trait
+        ).value
+        self.assertEqual(value, STAT_DISPLAY_DIVISOR)
+
+        change = CharacterTraitChange.objects.get(
+            character_sheet=self.target.sheet_data, trait=self.stat_trait
+        )
+        self.assertEqual(change.source, TraitChangeSource.GM_GRANT)
+        self.assertEqual(change.old_value, 0)
+        self.assertEqual(change.new_value, STAT_DISPLAY_DIVISOR)
+        gm_tenure = self.gm_actor.sheet_data.roster_entry.current_tenure
+        self.assertEqual(change.granting_tenure, gm_tenure)
+
+    def test_award_stat_rejects_non_stat_trait(self) -> None:
+        result = GMAwardAction().run(
+            actor=self.gm_actor,
+            target=self.target,
+            award_type="stat",
+            trait_ref=self.dev_trait.name,
+        )
+        self.assertFalse(result.success)
+        self.assertFalse(CharacterTraitChange.objects.filter(trait=self.dev_trait).exists())
+
+    def test_award_stat_refuses_at_cap(self) -> None:
+        # Character level defaults to 1 -> PathStage.PROSPECT; cap it at 3 dots.
+        MaturationStatCap.objects.create(path_stage=PathStage.PROSPECT, stat_cap=3)
+        CharacterTraitValue.objects.create(
+            character=self.target.sheet_data,
+            trait=self.stat_trait,
+            value=3 * STAT_DISPLAY_DIVISOR,
+        )
+        result = GMAwardAction().run(
+            actor=self.gm_actor,
+            target=self.target,
+            award_type="stat",
+            trait_ref=self.stat_trait.name,
+        )
+        self.assertFalse(result.success)
+        value = CharacterTraitValue.objects.get(
+            character=self.target.sheet_data, trait=self.stat_trait
+        ).value
+        self.assertEqual(value, 3 * STAT_DISPLAY_DIVISOR)
+
+    def test_award_stat_from_staff_gm_with_no_tenure_still_succeeds(self) -> None:
+        """A staff-piloted GM (no roster tenure) still records the grant -- with
+        granting_tenure=None."""
+        result = GMAwardAction().run(
+            actor=self.staff_actor,
+            target=self.target,
+            award_type="stat",
+            trait_ref=self.stat_trait.name,
+        )
+        self.assertTrue(result.success, result.message)
+        change = CharacterTraitChange.objects.get(
+            character_sheet=self.target.sheet_data, trait=self.stat_trait
+        )
+        self.assertIsNone(change.granting_tenure)
+
+    def test_award_stat_requires_trait_ref(self) -> None:
+        result = GMAwardAction().run(actor=self.gm_actor, target=self.target, award_type="stat")
+        self.assertFalse(result.success)
+
+
+class GMAwardActionTechniqueTests(GMAdjudicationActionsTestBase):
+    """``award_type="technique"`` (#3055 slice 1c) -- GM-fiat technique grant + provenance."""
+
+    def setUp(self) -> None:
+        super().setUp()
+        self.gift = GiftFactory(kind=GiftKind.MINOR)
+        self.resonance = ResonanceFactory()
+        self.gift.resonances.add(self.resonance)
+        self.technique = TechniqueFactory(gift=self.gift, name="Adjudication Award Technique")
+
+    def _give_gift(self) -> None:
+        CharacterGift.objects.create(character=self.target.sheet_data, gift=self.gift)
+        Thread.objects.create(
+            owner=self.target.sheet_data,
+            resonance=self.resonance,
+            target_kind=TargetKind.GIFT,
+            target_gift=self.gift,
+            level=0,
+        )
+
+    def test_award_technique_mints_with_gm_grant_origin_and_announces(self) -> None:
+        self._give_gift()
+        result = GMAwardAction().run(
+            actor=self.gm_actor,
+            target=self.target,
+            award_type="technique",
+            technique_ref=self.technique.name,
+        )
+        self.assertTrue(result.success, result.message)
+        ct = CharacterTechnique.objects.get(character=self.target.sheet_data)
+        self.assertEqual(ct.technique, self.technique)
+        self.assertEqual(ct.origin, AcquisitionOrigin.GM_GRANT)
+
+        msg = NarrativeMessage.objects.latest("id")
+        self.assertIn(AccessChangeSource.GM_AWARD.label, msg.body)
+
+    def test_award_technique_gift_not_owned_is_refused(self) -> None:
+        result = GMAwardAction().run(
+            actor=self.gm_actor,
+            target=self.target,
+            award_type="technique",
+            technique_ref=self.technique.name,
+        )
+        self.assertFalse(result.success)
+        self.assertIn(self.gift.name, result.message)
+        self.assertFalse(CharacterTechnique.objects.exists())
+
+    def test_award_technique_already_known_is_refused(self) -> None:
+        self._give_gift()
+        CharacterTechnique.objects.create(
+            character=self.target.sheet_data,
+            technique=self.technique,
+            origin=AcquisitionOrigin.TRAINED,
+        )
+        result = GMAwardAction().run(
+            actor=self.gm_actor,
+            target=self.target,
+            award_type="technique",
+            technique_ref=self.technique.name,
+        )
+        self.assertFalse(result.success)
+        known_count = CharacterTechnique.objects.filter(character=self.target.sheet_data).count()
+        self.assertEqual(known_count, 1)
+
+    def test_award_technique_requires_technique_ref(self) -> None:
+        result = GMAwardAction().run(
+            actor=self.gm_actor, target=self.target, award_type="technique"
+        )
+        self.assertFalse(result.success)
 
 
 class GMApplyConditionActionTests(GMAdjudicationActionsTestBase):

@@ -24,10 +24,14 @@ from world.conditions.models import ConditionInstance
 from world.currency.models import FavorTokenDetails
 from world.gm.constants import GMLevel
 from world.gm.factories import GMProfileFactory
+from world.magic.constants import GiftKind, TargetKind
+from world.magic.factories import GiftFactory, ResonanceFactory, TechniqueFactory
+from world.magic.models import CharacterGift, CharacterTechnique, Thread
 from world.progression.models import ExperiencePointsData
 from world.roster.factories import RosterEntryFactory, RosterTenureFactory
 from world.scenes.factories import SceneFactory, SceneParticipationFactory
 from world.societies.factories import OrganizationFactory
+from world.traits.constants import STAT_DISPLAY_DIVISOR
 from world.traits.factories import CheckSystemSetupFactory, TraitFactory
 from world.traits.models import (
     CharacterTraitValue,
@@ -113,6 +117,9 @@ class GMOpsAdjudicationTestBase(TestCase):
         )
 
         self.dev_trait = TraitFactory(name="gmops_dev_skill", trait_type=TraitType.SKILL)
+        self.stat_trait = TraitFactory(
+            name="gmops_award_stat", trait_type=TraitType.STAT, category=TraitCategory.PHYSICAL
+        )
         self.condition_template = ConditionTemplateFactory(name="GMOps Winded")
 
 
@@ -196,6 +203,54 @@ class CmdGMAwardTests(GMOpsAdjudicationTestBase):
         )
         self.assertTrue(len(messages) > 0)
         self.assertFalse(FavorTokenDetails.objects.exists())
+
+    def test_award_stat(self) -> None:
+        """``stat=<trait>`` (#3055 slice 1c) -- single-word trait name via kv."""
+        messages = _run_cmd(self.gm_actor, f"award {self.target.key} stat={self.stat_trait.name}")
+        self.assertTrue(any(self.stat_trait.name in m for m in messages))
+        value = CharacterTraitValue.objects.get(
+            character=self.target.sheet_data, trait=self.stat_trait
+        ).value
+        self.assertEqual(value, STAT_DISPLAY_DIVISOR)
+
+    def test_award_stat_non_gm_is_refused(self) -> None:
+        messages = _run_cmd(
+            self.player_actor, f"award {self.target.key} stat={self.stat_trait.name}"
+        )
+        self.assertTrue(len(messages) > 0)
+        self.assertFalse(CharacterTraitValue.objects.filter(trait=self.stat_trait).exists())
+
+    def test_award_technique(self) -> None:
+        """``technique=<name>`` (#3055 slice 1c) -- multiword technique names via kv."""
+        gift = GiftFactory(kind=GiftKind.MINOR)
+        resonance = ResonanceFactory()
+        gift.resonances.add(resonance)
+        technique = TechniqueFactory(gift=gift, name="GMOps Award Technique")
+        CharacterGift.objects.create(character=self.target.sheet_data, gift=gift)
+        Thread.objects.create(
+            owner=self.target.sheet_data,
+            resonance=resonance,
+            target_kind=TargetKind.GIFT,
+            target_gift=gift,
+            level=0,
+        )
+
+        messages = _run_cmd(self.gm_actor, f"award {self.target.key} technique={technique.name}")
+        self.assertTrue(any(technique.name in m for m in messages))
+        self.assertTrue(
+            CharacterTechnique.objects.filter(
+                character=self.target.sheet_data, technique=technique
+            ).exists()
+        )
+
+    def test_award_technique_non_gm_is_refused(self) -> None:
+        gift = GiftFactory(kind=GiftKind.MINOR)
+        technique = TechniqueFactory(gift=gift, name="GMOps Refused Technique")
+        messages = _run_cmd(
+            self.player_actor, f"award {self.target.key} technique={technique.name}"
+        )
+        self.assertTrue(len(messages) > 0)
+        self.assertFalse(CharacterTechnique.objects.exists())
 
 
 class CmdGMConditionTests(GMOpsAdjudicationTestBase):
