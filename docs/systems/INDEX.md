@@ -2050,7 +2050,26 @@ GM at a given level may author (#2000, ADR-0097).
   <char> xp=<amount>|dev=<trait> amount=<n>|hare=<organization> reason=<text>|stat=<trait>|
   technique=<name>`, `gm condition <char>
   condition=<name> [severity=<n>] [duration=<n>] [note=<text>]` (`commands/gm_ops.py`'s
-  `CmdGMDashboard`).
+  `CmdGMDashboard`). **Web (#3070):** `GMAdjudicationPanel`
+  (`frontend/src/scenes/components/`), gated on `scene.viewer_can_gm`, rendered on the
+  scene detail page. Dispatches `gm_invoke_check`/`gm_award_progression`/
+  `gm_apply_condition` (plus `set_situation`/`place_challenge`, below) directly over
+  the generic REGISTRY REST dispatch seam (`useDispatchPlayerAction` ->
+  `POST /api/actions/characters/{id}/dispatch/`) — mirroring
+  `PersonaContextMenu.tsx`'s `challenge`/`identify` items, since none of these five
+  actions carry an `ActionTemplate` and so are absent from `get_player_actions`. The
+  REST dispatch path does no ObjectDB resolution of its own (`objectdb_target_kwargs`
+  only helps the websocket inputfunc), so `_resolve_gm_target`
+  (`actions/definitions/gm_adjudication.py`) resolves the `target` kwarg from either
+  an already-resolved `ObjectDB` (telnet) or a plain int pk (the web panel sends the
+  target character's id — a `CharacterSheet`'s pk equals its owning `ObjectDB`'s pk).
+  Catalog pickers: `checks.CheckTypeViewSet` (new, `GET /api/checks/check-types/`,
+  `IsGMOrStaff`, `search`/`category` filters, excludes inactive and
+  per-character-synthesized rows) for Call Check; the pre-existing
+  `conditions.ConditionTemplateViewSet` (`/api/conditions/templates/`),
+  `mechanics.SituationTemplateViewSet`/`ChallengeTemplateViewSet`
+  (`/api/mechanics/situation-templates/`/`challenge-templates/`) for Condition and
+  Situation/Challenge placement, reused as-is.
 - **Scenario catalog (#2127, ADR-0110):** extends the same "discovery, never invention"
   shape from checks to situations. `FindSituationAction` (key `gm_find_situation`,
   read-only, gated `MinimumGMLevelPrerequisite(GMLevel.STARTING)` — lower than
@@ -2101,7 +2120,12 @@ GM at a given level may author (#2000, ADR-0097).
   `InvokeCatalogCheckAction` via `actions/definitions/gm_shift.py`.
   `FindSituationAction` also searches `ChallengeTemplate` now, so one browse surface
   covers both placement verbs. Telnet: `setsituation challenge
-  <template>=<target name> [edge=<why>|setback=<why>]`. Two fold-ins:
+  <template>=<target name> [edge=<why>|setback=<why>]`. **Web (#3070):**
+  `GMAdjudicationPanel`'s Situation tab dispatches `set_situation`
+  (`situation_template_id`) or `place_challenge` (`challenge_template_id` +
+  `target_object_name` + optional edge/setback) the same generic REST way as the
+  check/award/condition tabs above — both act on the GM's own room
+  (`target_type=SELF`), so this tab has no participant picker. Two fold-ins:
   `ChallengeTemplate.severity` is re-expressed in `DIFFICULTY_VALUES` points (default
   `1` → `45`; it feeds `perform_check`'s `target_difficulty` directly, so the old
   scale resolved every authored challenge at the bottom rank), and

@@ -158,6 +158,31 @@ unlocks, never grants" makes XP scarce, so this is the pull). Built:
   `award_type="technique"` mints a `Technique` via the shared `learn_technique` seam
   with `origin=AcquisitionOrigin.GM_GRANT`. Telnet: `gm award <char> stat=<trait>` /
   `gm award <char> technique=<name>`.
+- **GM adjudication toolkit — web ✅ (#3070)** — before this, the only web-reachable
+  path to a `gm ...` verb was typing it into the scene composer, which posed it to the
+  room as IC text instead of running the action; a GM could not run a session from the
+  browser at all. `GMAdjudicationPanel` (`frontend/src/scenes/components/`), gated on
+  `scene.viewer_can_gm`, adds four tabs (Call Check, Award, Condition,
+  Situation/Challenge placement) to the scene detail page, dispatching
+  `gm_invoke_check`/`gm_award_progression`/`gm_apply_condition`/`set_situation`/
+  `place_challenge` directly over the generic REGISTRY REST dispatch seam
+  (`useDispatchPlayerAction` -> `POST /api/actions/characters/{id}/dispatch/`),
+  mirroring `PersonaContextMenu.tsx`'s pre-existing `challenge`/`identify` items —
+  none of these five actions carry an `ActionTemplate`, so they never appear in the
+  generic `get_player_actions` listing. The REST dispatch path does no ObjectDB
+  resolution of its own (`objectdb_target_kwargs` only helps the websocket
+  inputfunc), so `_resolve_gm_target` (`actions/definitions/gm_adjudication.py`) now
+  resolves the `target` kwarg from either an already-resolved `ObjectDB` (telnet) or
+  a plain int pk (the web panel sends the target character's id directly — a
+  `CharacterSheet`'s pk equals its owning `ObjectDB`'s pk). New read-only catalog
+  endpoint: `checks.CheckTypeViewSet` (`GET /api/checks/check-types/`, `IsGMOrStaff`,
+  `search`/`category` filters, excludes inactive and per-character-synthesized rows)
+  feeds the Call Check picker — the only one of the four GM catalogs that didn't
+  already have a ViewSet; `ConditionTemplateViewSet`/`SituationTemplateViewSet`/
+  `ChallengeTemplateViewSet` were verified present and reused as-is. No client-side
+  GM trust-tier check exists or was added — a below-tier GM's dispatch simply
+  surfaces the backend's own prerequisite-refusal message via toast, the same as any
+  other rejected dispatch.
 
 ### Staff Character and Staff Tooling
 - Staff has commands to edit world state, manage GMs, override any system
