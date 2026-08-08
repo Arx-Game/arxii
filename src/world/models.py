@@ -71,6 +71,7 @@ import world.player_submissions.models
 import world.progression.models
 import world.projects.models
 import world.realms.models
+import world.registration.models
 import world.relationships.models
 import world.room_features.models
 import world.roster.models
