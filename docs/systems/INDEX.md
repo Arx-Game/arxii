@@ -2721,6 +2721,21 @@ gains a discoverable content item for the first time.
   `can_earn_achievements(character_sheet) -> bool` (current, non-staff `RosterTenure`; #3024,
   ADR-0202), `apply_achievement_rewards(sheet, achievement)`,
   `get_stat(sheet, stat_def) -> int`, `increment_stat(sheet, stat_def, n) -> int`
+- **Display rule (#3063):** `DiscoverySerializer.shared` (`world/achievements/serializers.py`)
+  is `True` iff `shared_with_tenures` is non-empty — the primary `discovered_by_tenure` FK is
+  pure bookkeeping in the group case (it has to point somewhere) and must never be read as a
+  display privilege; every co-discoverer displays symmetrically as "shared". **A group grant
+  must be ONE `grant_achievement(achievement, sheets)` call, never a per-sheet loop** — looping
+  `grant_achievement`/`execute_ceremony_beat` once per participant lets the first iteration's
+  call claim the sole `Discovery` row before the others run, so co-participants earn the
+  `CharacterAchievement` but never land in `shared_with_tenures`. `fire_combo_discovery`
+  (`world/combat/combo_discovery.py`) is the reference implementation: it grants the whole combo
+  participant group in one call rather than routing through the single-sheet
+  `execute_ceremony_beat` helper (see that module's docstring). Two other group-earning
+  moments — combat encounter completion and relationship reciprocation — currently reach
+  `grant_achievement` only through the single-sheet `StatHandler.increment` →
+  `_check_achievements` indirection and are NOT yet batched; a follow-up is needed before they
+  can claim shared credit.
 - **Access-change + discovery surface (`world/achievements/discovery.py` — ADR-0061):**
   - `announce_access_change(character_sheet, *, gained, lost, source)` — sends an ABILITY
     `NarrativeMessage` to the character listing what techniques/capabilities changed, then for

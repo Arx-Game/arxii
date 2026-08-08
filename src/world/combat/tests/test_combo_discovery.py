@@ -100,3 +100,52 @@ class FireComboDiscoveryTests(TestCase):
                 character_sheet=sheet,
             ).exists()
         )
+
+    def test_group_discovery_shares_credit_across_all_participants(self) -> None:
+        """A combo triggered by a party claims ONE shared Discovery (#3063).
+
+        Regression test for the bug where looping ``execute_ceremony_beat``
+        once per participant let the first sheet's call claim a sole
+        Discovery before the other participants' achievement grants ran.
+        With the fix, all three participants earn the achievement AND all
+        three are recorded as co-discoverers on the single Discovery row --
+        the triggering sheet as the primary FK, the other two shared.
+        """
+        from world.achievements.models import CharacterAchievement, Discovery
+
+        achievement = AchievementFactory()
+        combo = ComboDefinitionFactory(
+            discoverable_via_combat=True,
+            discovery_first_body="A new combo has been discovered!",
+            discovery_personal_body="You discovered a combo!",
+        )
+        combo.discovery_achievement = achievement
+        combo.save()
+        effect_type = EffectTypeFactory()
+        ComboSlotFactory(combo=combo, required_action_type=effect_type)
+
+        sheets = [CharacterSheetFactory() for _ in range(3)]
+        tenures = [grant_test_tenure(sheet) for sheet in sheets]
+        triggering_tenure, other_tenures = tenures[0], tenures[1:]
+
+        fire_combo_discovery(combo=combo, participant_sheets=sheets)
+
+        # Exactly one Discovery row for this achievement.
+        self.assertEqual(Discovery.objects.filter(achievement=achievement).count(), 1)
+        discovery = Discovery.objects.get(achievement=achievement)
+
+        # Primary FK is the triggering (first) sheet's tenure.
+        self.assertEqual(discovery.discovered_by_tenure_id, triggering_tenure.pk)
+
+        # The other two participants are shared co-discoverers.
+        shared_ids = set(discovery.shared_with_tenures.values_list("id", flat=True))
+        self.assertEqual(shared_ids, {t.pk for t in other_tenures})
+
+        # Every participant earned the achievement individually.
+        for sheet in sheets:
+            self.assertTrue(
+                CharacterAchievement.objects.filter(
+                    achievement=achievement,
+                    character_sheet=sheet,
+                ).exists()
+            )
