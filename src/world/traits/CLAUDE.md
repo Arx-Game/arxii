@@ -7,6 +7,12 @@ Character stats and dice rolling mechanics based on Arx I's successful system. U
 ### `models.py`
 - **`Trait`**: Trait definitions (name, category, description) - uses SharedMemoryModel
 - **`CharacterTraitValue`**: Character trait scores (1-100 internal, 1.0-10.0 display)
+- **`CharacterTraitChange`**: Acquisition-provenance ledger row (#3055) for every in-place
+  `CharacterTraitValue.value` mutation — `old_value`/`new_value`/`source`
+  (`TraitChangeSource`) + optional `granting_tenure` (reserved for a future GM story-reward
+  surface). Written by CG finalize's baseline stamp, `DevelopmentPoints.award_points`
+  (level-ups), and the maturation spend/reconciliation writers (`world/progression/`) — every
+  production writer of `CharacterTraitValue.value` records one in the same transaction.
 - **`PointConversionRange`**: Converts trait points to discrete ranks for dice rolling
 - **`CheckRank`**: Dice pool configuration for different rank levels
 - **`ResultChart`**: Success/failure tables for check resolution

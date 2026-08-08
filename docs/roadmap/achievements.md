@@ -17,7 +17,7 @@ A meta-engagement layer inspired by Everquest 2's discovery system and Steam ach
 - **Cross-cutting integration:** Every game system calls a simple service function to record stats and trigger achievement checks
 
 ## What Exists
-- **Models:** StatTracker (per-character counters), Achievement (SharedMemoryModel definitions), AchievementStatRequirement (stat threshold conditions), Discovery (first-to-achieve with co-discoverer support), CharacterAchievement (earned records), AchievementReward (titles/bonuses/cosmetics)
+- **Models:** StatTracker (per-character counters), Achievement (SharedMemoryModel definitions), AchievementStatRequirement (stat threshold conditions), Discovery (first-to-achieve with co-discoverer support), CharacterAchievement (earned records; required `earned_by_tenure` FK → `roster.RosterTenure`, `on_delete=PROTECT`, #3055 — stamped from the earning sheet's own current tenure inside `grant_achievement`, so every co-earner of a party grant has an individually durable (player, character) pairing, not just the primary Discovery slot's discoverer), AchievementReward (titles/bonuses/cosmetics)
 - **Services:** increment_stat (atomic increment + achievement check), grant_achievement (with discovery tracking and batch support), get_stat
 - **APIs:** AchievementViewSet (shows visible + earned hidden), CharacterAchievementViewSet (with filtering)
 - **Admin:** Full admin with inlines for requirements and rewards

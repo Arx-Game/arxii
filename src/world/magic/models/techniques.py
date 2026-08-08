@@ -24,7 +24,12 @@ from core.natural_keys import NaturalKeyManager, NaturalKeyMixin
 from world.achievements.models import DiscoverableContent
 from world.contributors.models import CreditedContent
 from world.covenants.constants import RoleArchetype
-from world.magic.constants import TechniqueCategory, TechniqueFunction, TechniqueReach
+from world.magic.constants import (
+    AcquisitionOrigin,
+    TechniqueCategory,
+    TechniqueFunction,
+    TechniqueReach,
+)
 from world.magic.models.gifts import Gift
 
 if TYPE_CHECKING:
@@ -1125,6 +1130,14 @@ class CharacterTechnique(SharedMemoryModel):
     acquired_at = models.DateTimeField(
         auto_now_add=True,
         help_text="When this technique was acquired.",
+    )
+    origin = models.CharField(
+        max_length=30,
+        choices=AcquisitionOrigin.choices,
+        default=AcquisitionOrigin.CHARACTER_CREATION,
+        help_text="How this technique was acquired (#3055). Default covers pre-existing rows "
+        "minted before this field existed, which were overwhelmingly CG catalog picks; every "
+        "creation site now sets this explicitly.",
     )
     source = models.ForeignKey(
         "arxii.ModifierSource",

@@ -111,8 +111,10 @@ The magic system for Arx II. Power flows from identity and connection.
   technique carries; `Technique.cached_function_tags` accessor. The shared vocabulary
   consumed by covenants' per-vow technique specialty (#2443) and situational perks
   (#2536) — see `docs/systems/magic.md`'s power-term section.
-- `CharacterGift` - Links characters to known Gifts
-- `CharacterTechnique` - Links characters to known Techniques
+- `CharacterGift` - Links characters to known Gifts. Carries `origin` (`AcquisitionOrigin`,
+  #3055 acquisition-provenance ledger — see "Acquisition provenance" in `docs/systems/magic.md`).
+- `CharacterTechnique` - Links characters to known Techniques. Also carries `origin`
+  (`AcquisitionOrigin`, #3055) — every creation site stamps it explicitly.
 - `AbstractCapabilityGrant` / `AbstractDamageProfile` / `AbstractAppliedCondition` — abstract bases
   (`models/techniques.py`) whose columns are shared by both the committed `Technique*` and the draft
   `TechniqueDraft*` payload rows; each concrete subclass adds only its owner FK.

@@ -20,7 +20,11 @@ Powers, affinities, auras, resonances, threads-as-currency, rituals, and Mage Sc
     material lives once in an umbrella gift; `Gift.lineage` / `lineage_ids` /
     `inherited_techniques`, `resolve_owned_gift`, `gift_threads_for`. Distinct axis from
     `species.SpeciesGiftGrant.inheritable`, which walks the *species* chain — both exist),
-    `CharacterGift`, `Technique`, `CharacterTechnique`,
+    `CharacterGift`, `Technique`, `CharacterTechnique` (both carry an `origin`
+    field, `AcquisitionOrigin` TextChoices — #3055 acquisition-provenance ledger;
+    every creation site stamps it — CG catalog pick, path/species grant, covenant
+    role auto-grant, org thread weave, alt-self ability suite, the training/teaching
+    mint seam, and player-authored techniques; see "Acquisition Provenance" below),
     `TechniqueStyle`, `EffectType`, `Restriction`, `IntensityTier`,
     `TechniqueCapabilityGrant`,
     `TechniqueFunctionTag` (#2443, NK `(technique, function)`, lore-repo content —
@@ -666,7 +670,20 @@ Character statistics and dice rolling mechanics.
   converted at the edge via `display_trait_value` / `STAT_DISPLAY_DIVISOR`.
   CG finalization converts stat dots ×10 and bridges CG skills into
   `CharacterTraitValue` rows.
-- **Models:** `Trait`, `CharacterTraitValue`, `PointConversionRange`, `CheckRank`, `ResultChart`, `ResultChartOutcome`
+- **Models:** `Trait`, `CharacterTraitValue`, `PointConversionRange`, `CheckRank`, `ResultChart`, `ResultChartOutcome`,
+  `CharacterTraitChange` (#3055 acquisition-provenance ledger — durable record of every
+  in-place `CharacterTraitValue.value` mutation: `character_sheet`, `trait`, `old_value`,
+  `new_value`, `source` (`TraitChangeSource`: `CHARACTER_CREATION` / `DEVELOPMENT_LEVEL_UP`
+  / `MATURATION` / `GM_GRANT`), optional `granting_tenure` FK (PROTECT, reserved for the
+  #3055 slice-1c GM story-reward surface). Lives here rather than `world/progression/`
+  despite `DevelopmentPoints.award_points` being its biggest writer — both `progression`
+  and `character_creation` already depend one-directionally on `traits`, and the record
+  answers a traits-domain question ("this value mutated") independent of which subsystem
+  drove it. Writers: CG finalize's stat/skill baseline stamp (`_create_stat_values` /
+  `_create_skill_values` / `_apply_post_cg_bonuses`, `world/character_creation/
+  services.py`), `DevelopmentPoints.award_points` (level-up), and
+  `world.progression.services.maturation.spend_maturation_point` /
+  `sync_maturation_spends`. No production writer exists yet for `GM_GRANT`.
 - **Handlers:** `TraitHandler` (via `character.traits`), `StatHandler` (via `character.stats`)
 - **Key Functions:**
   - `character.traits.get_trait_value(name)` — with modifiers applied
@@ -1635,9 +1652,9 @@ XP, kudos, development points, and unlock system. Contains the most explicit pre
 - **Models:** `ExperiencePointsData`, `XPTransaction`, `CharacterXP`, `DevelopmentPoints`, `DevelopmentTransaction`, `KudosPointsData`, `KudosTransaction`, `CharacterUnlock`, `XPCostChart`, `XPCostEntry`, `CharacterPathHistory`, `PathIntent` (player's declared next-path preference — one per character sheet; FK to `CharacterSheet` + `Path`), `KudosDifficultyWeight` (staff-tunable band→multiplier for good-sport kudos; one row per `DifficultyChoice`), `WeeklySocialEngagement` (per-account weekly pending-kudos accumulator; `pending_points`, `granted`, `game_week` FK; `distinct_initiators` is a derived property counting child rows), `WeeklyEngagementInitiator` (child row recording each unique initiator toward a ledger; `UniqueConstraint(ledger, initiator_account)`),
   **Class-Level Advancement (#1352):** `AbstractClassLevelAdvancement` (abstract base shared by `ClassLevelAdvancement` and `AudereMajoraCrossing`; carries `scene`, `declaration_interaction`, `level_before`, `level_after`, `created_at`), `ClassLevelAdvancement` (within-tier Durance receipt — `character_sheet`, `character_class`, `officiant`, `ritual`, `witnesses` M2M → `scenes.Persona`),
   **Training Site (#1700):** `DuranceTrainingSite` (room + trainer-of-record pair; enables site-convened sessions — `room_profile` FK → `RoomProfile`, `officiant` FK → `CharacterSheet`, `training_path` FK → `Path` (nullable), `is_active`; unique `(room_profile, officiant)`),
-  **Maturation Points (#2756, ADR-0172):** `MaturationStatCap` (authored per-`PathStage` stat cap, seeded 5/6/11/16/21/25 per the #3001 ruling — `seed_maturation_stat_caps` in `progression/seeds.py`, previously never authored) + `MaturationSpend` (sheet FK, trait FK, `milestone_year`, `is_active` — active iff `milestone_year <= sheet.matured_years`; unique per (sheet, milestone_year)). Services in `progression/services/maturation.py`: `milestone_count` / `available_points` / `spend_maturation_point` (+1 display dot = +10 internal, stage-capped; caps are authored in display dots and convert at the comparison — ADR-0193) / `sync_maturation_spends` (reversal deactivates, re-aging reactivates — every `matured_years` writer outside the birthday tick must call it)
+  **Maturation Points (#2756, ADR-0172):** `MaturationStatCap` (authored per-`PathStage` stat cap, seeded 5/6/11/16/21/25 per the #3001 ruling — `seed_maturation_stat_caps` in `progression/seeds.py`, previously never authored) + `MaturationSpend` (sheet FK, trait FK, `milestone_year`, `is_active` — active iff `milestone_year <= sheet.matured_years`; unique per (sheet, milestone_year)). Services in `progression/services/maturation.py`: `milestone_count` / `available_points` / `spend_maturation_point` (+1 display dot = +10 internal, stage-capped; caps are authored in display dots and convert at the comparison — ADR-0193) / `sync_maturation_spends` (reversal deactivates, re-aging reactivates — every `matured_years` writer outside the birthday tick must call it). Both writers also stamp a `traits.CharacterTraitChange` row (`source=MATURATION`, #3055) for each ±1 dot they apply
 
-  **Level Stat Points (#3001, ADR-0205):** `LevelStatPointSpend` (sheet FK, trait FK, `level_granted` 2..N, `is_active`; unique per (sheet, level_granted)) — one point per class level past the first, balance derived (`level − 1` minus active spends, no grant hook). Services in `progression/services/stat_points.py`: `stat_points_earned` / `available_stat_points` / `spend_level_stat_point` (same `MaturationStatCap` stage cap) / `sync_level_stat_point_spends` (called from `apply_class_level_advance` so reversals refund). API: `GET /api/character-sheets/{id}/stat-points/` + `POST .../spend-stat-point/`; frontend `StatPointPanel` beside `MaturationPanel`
+  **Level Stat Points (#3001, ADR-0205):** `LevelStatPointSpend` (sheet FK, trait FK, `level_granted` 2..N, `is_active`; unique per (sheet, level_granted)) — one point per class level past the first, balance derived (`level − 1` minus active spends, no grant hook). Services in `progression/services/stat_points.py`: `stat_points_earned` / `available_stat_points` / `spend_level_stat_point` (same `MaturationStatCap` stage cap) / `sync_level_stat_point_spends` (called from `apply_class_level_advance` so reversals refund). Both writers stamp `traits.CharacterTraitChange` rows (`source=LEVEL_STAT_POINT`, #3055). API: `GET /api/character-sheets/{id}/stat-points/` + `POST .../spend-stat-point/`; frontend `StatPointPanel` beside `MaturationPanel`
 - **Unlock Requirements** (all have `is_met_by_character(character) -> tuple[bool, str]`):
   - `TraitRequirement` — checks CharacterTraitValue
   - `LevelRequirement` — checks character_class_levels
@@ -2655,7 +2672,14 @@ gains a discoverable content item for the first time.
   `shared_with_tenures` M2M for simultaneous co-discoverers, anchoring the
   discovery to the (player-as-this-character) join object — a sheet with no player tenure is
   structurally incapable of claiming a first-ever slot, #3055),
-  `CharacterAchievement` (earned record; optional `discovery` FK when the earner was a co-discoverer),
+  `CharacterAchievement` (earned record; required `earned_by_tenure` FK →
+  `roster.RosterTenure` (`on_delete=PROTECT`, #3055) — stamped from the earning sheet's
+  current tenure inside `grant_achievement`, giving every co-earner of a party grant their
+  own individually durable (player, character) pairing, not just the primary `Discovery`
+  slot's discoverer. No `discovery` FK exists — removed #3055 as a redundant parallel
+  mechanism (credit died with the character, couldn't distinguish primary/shared);
+  `is_discoverer()` derives discoverer status by comparing `earned_by_tenure` against the
+  achievement's `Discovery.discovered_by_tenure`/`shared_with_tenures`),
   `RewardDefinition` (TITLE / BONUS / COSMETIC / PRESTIGE / DISTINCTION reward catalog;
   `distinction` nullable FK → `distinctions.Distinction`, mirrors `modifier_target`, #2037;
   natural key `key`; `CONTENT_MODELS` since #2832),
@@ -2675,12 +2699,17 @@ gains a discoverable content item for the first time.
 - **Handlers:** `character_sheet.stats` (`StatHandler`) — `get(stat_def) -> int`,
   `increment(stat_def, n) -> int` (atomic F() expression; checks requirement thresholds after increment)
 - **Key Services (`world/achievements/services.py`):** `grant_achievement(achievement,
-  sheets) -> list[CharacterAchievement]` (drops any sheet that fails
-  `can_earn_achievements`, returning `[]` and creating no Discovery if none remain; for a
-  first-ever grant, the Discovery's `discovered_by_tenure` is the *first* eligible sheet in
-  the list — the triggering sheet for party grants; the remaining eligible sheets' tenures
-  land in `Discovery.shared_with_tenures` as simultaneous shared credit; co-earners still
-  get `CharacterAchievement` rows but no second Discovery, #3055),
+  sheets) -> AchievementGrantResult` (`world/achievements/types.py` — frozen dataclass with
+  `character_achievements: list[CharacterAchievement]` and `created_discovery: Discovery |
+  None`, the latter non-None only when this call minted the achievement's Discovery row, the
+  "first-ever" ceremony signal `execute_ceremony_beat` reads). Drops any sheet that fails
+  `can_earn_achievements`, returning an empty result and creating no Discovery if none
+  remain; for a first-ever grant, the Discovery's `discovered_by_tenure` is the *first*
+  eligible sheet in the list — the triggering sheet for party grants; the remaining eligible
+  sheets' tenures land in `Discovery.shared_with_tenures` as simultaneous shared credit;
+  co-earners still get `CharacterAchievement` rows but no second Discovery, #3055; every
+  earner's own `CharacterAchievement.earned_by_tenure` is stamped from that sheet's own
+  current tenure, #3055),
   `can_earn_achievements(character_sheet) -> bool` (current, non-staff `RosterTenure`; #3024,
   ADR-0202), `apply_achievement_rewards(sheet, achievement)`,
   `get_stat(sheet, stat_def) -> int`, `increment_stat(sheet, stat_def, n) -> int`

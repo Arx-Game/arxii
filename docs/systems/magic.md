@@ -1667,6 +1667,32 @@ automatically via `world.magic.services.tradition_membership.join_tradition` and
 the `CharacterDistinction` row (`ModifierSource.character_distinction` is `on_delete=CASCADE`),
 so the surcharge disappears the moment the drawback is shed, no separate cleanup needed.
 
+### Acquisition provenance — `CharacterTechnique.origin` / `CharacterGift.origin` (#3055) [BUILT & WIRED]
+
+Both link models carry an `origin` field (`AcquisitionOrigin` TextChoices,
+`world/magic/constants.py`) recording how the row was acquired — the
+`distinctions.DistinctionOrigin` pattern generalized to the two magic-acquisition
+models that lacked any discriminator. One shared enum (not one per model), since
+neither model is expected to use every value:
+
+| Value | Set by | Notes |
+|---|---|---|
+| `CHARACTER_CREATION` | CG finalize (`_finalize_gift_and_techniques`) | Default value; covers pre-#3055 rows. |
+| `PATH_GRANT` | `grant_path_magic` | Path-crossing grant. |
+| `SPECIES_GRANT` | `provision_species_gifts` | Gift-only — no site grants a `CharacterTechnique` for a species today. |
+| `TRAINED` | `learn_technique`'s mint seam (ritual `TechniqueGrant` or a completed `TechniqueProgress` meter); `charge_and_learn`'s implicit first-gift acquisition | The "acquired via training/teaching investment" family for both models. |
+| `ROLE_GRANT` | `_grant_role_gifts_and_techniques` (`world/covenants/services.py`) | Auto-revoked on disengage (technique side, via `role_source`). |
+| `ORGANIZATION_GRANT` | Weaving an `ORGANIZATION` thread (`services/threads.py`) | Technique-only. |
+| `ALTERNATE_SELF_GRANT` | An alt-self's ability-suite grant (`world/forms/services`) | Technique-only; tied to a `ModifierSource`, revoked on revert. |
+| `AUTHORED` | `author_technique` (technique-authoring budget builder) | Technique-only. |
+| `GM_GRANT` | Reserved — #3055 slice 1c (JUNIOR-gated GM story-reward surface, not yet built) | No writer today. |
+
+`grant_gift_to_character` (the shared gift-acquisition primitive) takes an `origin=`
+kwarg (default `CHARACTER_CREATION`), stamped only on a freshly-minted `CharacterGift`
+— an already-owned gift keeps its original provenance on re-grant. See the sibling
+acquisition-provenance record for in-place trait/skill value mutation,
+`traits.CharacterTraitChange`, in `docs/systems/INDEX.md`'s Traits entry.
+
 ### Check-Based Training Session Trigger (#2739) [BUILT & WIRED]
 
 `resolve_training_check()` (`services/technique_training.py`, #2727) wraps

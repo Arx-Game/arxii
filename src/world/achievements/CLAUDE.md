@@ -74,7 +74,19 @@ First-time-earned record. OneToOne to Achievement.
 
 ### CharacterAchievement
 Records when a character earned an achievement.
-- FK to Discovery if they were a co-discoverer
+- Required `earned_by_tenure` FK -> `roster.RosterTenure` (`on_delete=PROTECT`, #3055):
+  stamped from the earning sheet's current tenure inside `grant_achievement` (the same
+  `can_earn_achievements` gate already guarantees one exists). Every co-earner of a party
+  grant gets their own individually durable (player, character) pairing, not just the
+  primary Discovery slot's discoverer — the acquisition-provenance ledger's achievement leg.
+- `is_discoverer()` — no `discovery` FK exists on this model (removed #3055: tenure records
+  are the single discovery-credit mechanism, replacing a redundant parallel FK whose credit
+  died with the character and couldn't distinguish primary/shared). Derives discoverer status
+  by comparing `earned_by_tenure` against the achievement's `Discovery.discovered_by_tenure`
+  (primary) and `shared_with_tenures` (shared). Callers iterating many rows should
+  `select_related("achievement__discovery")` and prefetch
+  `achievement__discovery__shared_with_tenures` (see `CharacterAchievementViewSet.get_queryset`)
+  to avoid N+1.
 - UniqueConstraint on character_sheet + achievement
 
 ## Reward application (#1522)
@@ -175,8 +187,10 @@ Called whenever any mechanism changes what techniques/capabilities a character c
 - Every `grant_achievement` caller (the stat-threshold path, worship favor, `execute_ceremony_beat`
   for crossing/combo/signature ceremony beats, and aura thresholds) now inherits the eligibility
   invariant at the chokepoint, not just the six `announce_access_change` callers listed below.
-  `execute_ceremony_beat`'s `is_first` derives from the `grant_achievement` results, so an
-  ineligible sheet can never trigger the gamewide first-ever announcement (#3024, ADR-0202). The
+  `execute_ceremony_beat`'s `is_first` derives from `grant_achievement`'s returned
+  `AchievementGrantResult.created_discovery` (non-None only when this call minted the
+  achievement's Discovery row), so an ineligible sheet can never trigger the gamewide
+  first-ever announcement (#3024, ADR-0202). The
   CG-catalog exclusion gate (2) above remains `announce_access_change`-local by design, since it is
   about content reachability, not earner eligibility.
 

@@ -145,10 +145,11 @@ class CharacterAchievementViewSetTests(TestCase):
         assert response.data["results"][0]["achievement"]["name"] == "First"
 
     def test_includes_discovery_info(self) -> None:
-        """Character achievement includes discovery information."""
-        discovery = DiscoveryFactory(achievement=self.achievement1)
-        self.ca1.discovery = discovery
-        self.ca1.save()
+        """Character achievement includes discovery information (#3055: derived from
+        the earning tenure matching the Discovery's primary tenure, not a discovery FK)."""
+        DiscoveryFactory(
+            achievement=self.achievement1, discovered_by_tenure=self.ca1.earned_by_tenure
+        )
 
         response = self.client.get(f"/api/achievements/character-achievements/{self.ca1.id}/")
         assert response.status_code == status.HTTP_200_OK

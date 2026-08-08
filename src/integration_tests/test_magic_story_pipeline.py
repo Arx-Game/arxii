@@ -1275,13 +1275,17 @@ class MagicStoryPipelineTests(ResonanceCacheIsolationMixin, EvenniaTestCase):
         is the discoverer; a subsequent earner gets CharacterAchievement but
         is NOT the discoverer.
 
-        Confirmed from world/achievements/services.py grant_achievement():
+        Confirmed from world/achievements/services.py grant_achievement() (#3055 --
+        credit derives from tenure records, not a discovery FK):
           - is_first_discovery = not CharacterAchievement.objects.filter(
                 achievement=achievement).exists()
-          - If first: Discovery.objects.create(achievement=achievement) →
-            CharacterAchievement.objects.get_or_create(..., defaults={"discovery": discovery})
-          - If second+: discovery=None → get_or_create defaults={"discovery": None}
-          - Result: second earner's CharacterAchievement.discovery is None.
+          - If first: Discovery.objects.create(achievement=achievement,
+            discovered_by_tenure=<first sheet's current tenure>)
+          - Every earner's own CharacterAchievement.earned_by_tenure is stamped from
+            their own current tenure regardless of discovery status.
+          - Result: CharacterAchievement.is_discoverer() is True only when
+            earned_by_tenure matches the Discovery's discovered_by_tenure (or is in
+            shared_with_tenures) -- the second earner's tenure matches neither.
 
         Story-routing simplification: the achievement is granted via the
         condition→stat bridge (ConditionStatRule increments
@@ -1328,15 +1332,15 @@ class MagicStoryPipelineTests(ResonanceCacheIsolationMixin, EvenniaTestCase):
             character_sheet=self.sheet,
             achievement=hallowed_hardened,
         )
-        self.assertIsNotNone(
-            first_ca.discovery,
-            "First earner's CharacterAchievement.discovery must point at the Discovery row",
-        )
         discovery = Discovery.objects.get(achievement=hallowed_hardened)
         self.assertEqual(
-            first_ca.discovery,
-            discovery,
-            "First earner's discovery FK must reference the one Discovery row",
+            discovery.discovered_by_tenure_id,
+            first_ca.earned_by_tenure_id,
+            "First earner's tenure must be the Discovery's discovered_by_tenure",
+        )
+        self.assertTrue(
+            first_ca.is_discoverer(),
+            "First earner must be flagged as a discoverer (primary tenure)",
         )
 
         # ------------------------------------------------------------------
@@ -1384,7 +1388,7 @@ class MagicStoryPipelineTests(ResonanceCacheIsolationMixin, EvenniaTestCase):
         )
 
         # Second earner is NOT the discoverer.
-        self.assertIsNone(
-            second_ca.discovery,
-            "Second earner's CharacterAchievement.discovery must be None (not a co-discoverer)",
+        self.assertFalse(
+            second_ca.is_discoverer(),
+            "Second earner must not be flagged as a discoverer (not a co-discoverer)",
         )

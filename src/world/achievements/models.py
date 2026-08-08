@@ -307,13 +307,26 @@ class Discovery(SharedMemoryModel):
     def __str__(self) -> str:
         return f"Discovery: {self.achievement.name}"
 
+    @cached_property
+    def cached_shared_tenures(self) -> list["RosterTenure"]:
+        """Co-discoverer tenures (excluding the primary discoverer).
+
+        This cached_property serves as the target for Prefetch(..., to_attr=). When
+        prefetched, Django populates this directly. When accessed without prefetch,
+        falls back to a fresh query. See Achievement.cached_rewards for the pattern.
+
+        To invalidate: del instance.cached_shared_tenures
+        """
+        return list(self.shared_with_tenures.all())
+
 
 class CharacterAchievement(SharedMemoryModel):
     """
     Records a character earning an achievement.
 
-    Links a character to an achievement with timestamp and optional
-    discovery credit.
+    Links a character to an achievement with timestamp and the earning tenure.
+    Discovery credit (see ``is_discoverer``) derives from comparing that tenure
+    against the achievement's Discovery record — not a stored FK (#3055).
     """
 
     character_sheet = models.ForeignKey(
@@ -332,13 +345,17 @@ class CharacterAchievement(SharedMemoryModel):
         auto_now_add=True,
         help_text="When this achievement was earned",
     )
-    discovery = models.ForeignKey(
-        Discovery,
-        on_delete=models.SET_NULL,
-        null=True,
-        blank=True,
-        related_name="discoverers",
-        help_text="The discovery record if this character was among the first to find it",
+    earned_by_tenure = models.ForeignKey(
+        RosterTenure,
+        on_delete=models.PROTECT,
+        related_name="earned_achievements",
+        help_text="The tenure (character piloted by a player) that earned this achievement "
+        "(#3055). Stamped from the sheet's current tenure inside grant_achievement — the "
+        "same eligibility gate (can_earn_achievements) that already guarantees one exists. "
+        "Required: an achievement is an acquisition-provenance record, and every co-earner "
+        "of a party grant gets their own individually durable (player, character) pairing, "
+        "not just the primary Discovery slot's discoverer. PROTECT: tenures are never "
+        "deleted post-release (mirrors Discovery.discovered_by_tenure, #3060).",
     )
 
     class Meta:
@@ -351,6 +368,27 @@ class CharacterAchievement(SharedMemoryModel):
 
     def __str__(self) -> str:
         return f"{self.character_sheet} - {self.achievement.name}"
+
+    def is_discoverer(self) -> bool:
+        """Whether this row's earning tenure was a primary or shared co-discoverer.
+
+        Derives entirely from tenure records (#3055) — the discovery FK this used to
+        read (`CharacterAchievement.discovery`) is gone; tenure records are the single
+        discovery-credit mechanism. Compares `earned_by_tenure` against the
+        achievement's `Discovery.discovered_by_tenure` (primary) and
+        `shared_with_tenures` (shared). Callers that need N+1 safety across many rows
+        should select_related `achievement__discovery` and prefetch
+        `achievement__discovery__shared_with_tenures` (see
+        `CharacterAchievementViewSet.get_queryset`).
+        """
+        try:
+            discovery = self.achievement.discovery
+        except Discovery.DoesNotExist:
+            return False
+        if discovery.discovered_by_tenure_id == self.earned_by_tenure_id:
+            return True
+        shared_ids = {tenure.id for tenure in discovery.cached_shared_tenures}
+        return self.earned_by_tenure_id in shared_ids
 
 
 class RewardDefinition(NaturalKeyMixin, CreditedContent, SharedMemoryModel):

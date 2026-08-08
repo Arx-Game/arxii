@@ -54,6 +54,20 @@ The central spine connecting every system in the game. Characters develop throug
   tab) making the loop visible — progress bar/fraction, teacher-or-self-study,
   weekly remaining, a Train button with an optional AP input. See
   `docs/systems/magic.md`'s "Check-Based Training Session Trigger" section.
+- **Acquisition-provenance ledger (#3055 slice 1b):** durable "I got this thing and here's
+  how" records for the surface that previously mutated in place with no receipt.
+  `traits.CharacterTraitChange` records every `CharacterTraitValue.value` mutation
+  (old_value/new_value/source) — written by the CG finalize baseline stamp, the
+  `DevelopmentPoints.award_points` level-up, and the maturation spend/reconciliation
+  writers; `magic.CharacterTechnique`/`magic.CharacterGift` gained an `origin` field
+  (`AcquisitionOrigin`) stamped at every creation site. Existing receipts
+  (`CharacterXPTransaction`, `ResonanceGrant`, `ClassLevelAdvancement`,
+  `distinctions.DistinctionOrigin`) were already adequate and untouched. This is the
+  substrate the beta reset (in progress, #3055) derives pristine state from — strip
+  play-time-provenance rows; CG/authoring provenance IS the baseline — and the future GM
+  story-reward surface (#3055 slice 1c, `GM_GRANT` origin values already reserved) will
+  write into. See `docs/systems/magic.md`'s "Acquisition provenance" section and
+  `docs/systems/INDEX.md`'s Traits entry.
 - **Tests:** Extensive tests for traits, skills, kudos, character XP, path history, legend
 
 ## What's Needed for MVP

@@ -13,6 +13,7 @@ from world.achievements.factories import (
     StatTrackerFactory,
 )
 from world.achievements.models import Achievement, RewardDefinition, StatDefinition, StatTracker
+from world.roster.factories import RosterTenureFactory
 
 
 class StatDefinitionModelTest(TestCase):
@@ -157,13 +158,33 @@ class CharacterAchievementModelTest(TestCase):
                 achievement=self.char_achievement.achievement,
             )
 
-    def test_discovery_link(self) -> None:
+    def test_is_discoverer_true_for_primary_tenure(self) -> None:
+        """#3055: is_discoverer() derives from earned_by_tenure, not a discovery FK."""
         discovery = DiscoveryFactory()
         char_achievement = CharacterAchievementFactory(
-            achievement=discovery.achievement, discovery=discovery
+            achievement=discovery.achievement,
+            earned_by_tenure=discovery.discovered_by_tenure,
         )
-        self.assertEqual(char_achievement.discovery, discovery)
-        self.assertIn(char_achievement, discovery.discoverers.all())
+        self.assertTrue(char_achievement.is_discoverer())
+
+    def test_is_discoverer_true_for_shared_tenure(self) -> None:
+        """#3055: a shared co-discoverer's tenure also counts."""
+        discovery = DiscoveryFactory()
+        shared_tenure = RosterTenureFactory()
+        discovery.shared_with_tenures.add(shared_tenure)
+        char_achievement = CharacterAchievementFactory(
+            achievement=discovery.achievement, earned_by_tenure=shared_tenure
+        )
+        self.assertTrue(char_achievement.is_discoverer())
+
+    def test_is_discoverer_false_for_unrelated_tenure(self) -> None:
+        discovery = DiscoveryFactory()
+        char_achievement = CharacterAchievementFactory(achievement=discovery.achievement)
+        self.assertFalse(char_achievement.is_discoverer())
+
+    def test_is_discoverer_false_when_no_discovery_exists(self) -> None:
+        char_achievement = CharacterAchievementFactory()
+        self.assertFalse(char_achievement.is_discoverer())
 
 
 class RewardDefinitionModelTest(TestCase):

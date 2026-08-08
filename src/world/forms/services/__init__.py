@@ -27,6 +27,7 @@ from world.forms.models import (
 )
 from world.forms.services.transformation import SCALE
 from world.forms.types import PresentedTrait
+from world.magic.constants import AcquisitionOrigin
 from world.magic.models import CharacterTechnique
 from world.mechanics.models import CharacterModifier, ModifierSource
 from world.species.models import Species
@@ -235,7 +236,7 @@ def _create_assumption_grants(
             _ct, created = CharacterTechnique.objects.get_or_create(
                 character=sheet,
                 technique=technique,
-                defaults={"source": source},
+                defaults={"source": source, "origin": AcquisitionOrigin.ALTERNATE_SELF_GRANT},
             )
             if created:
                 granted_any = True

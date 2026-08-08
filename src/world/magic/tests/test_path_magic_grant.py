@@ -7,7 +7,7 @@ from django.test import TestCase
 
 from world.character_sheets.factories import CharacterSheetFactory
 from world.classes.factories import PathFactory
-from world.magic.constants import TargetKind
+from world.magic.constants import AcquisitionOrigin, TargetKind
 from world.magic.factories import (
     GiftFactory,
     ResonanceFactory,
@@ -56,6 +56,16 @@ class GrantPathMagicTests(TestCase):
         self.assertEqual(
             {t.pk for t in result.granted_techniques}, {self.tech_a.pk, self.tech_b.pk}
         )
+
+    def test_grant_stamps_path_grant_origin(self):
+        """CharacterGift and CharacterTechnique rows both carry origin=PATH_GRANT (#3055)."""
+        sheet = CharacterSheetFactory()
+        grant_path_magic(sheet, self.path)
+
+        cg = CharacterGift.objects.get(character=sheet, gift=self.gift)
+        self.assertEqual(cg.origin, AcquisitionOrigin.PATH_GRANT)
+        for ct in CharacterTechnique.objects.filter(character=sheet):
+            self.assertEqual(ct.origin, AcquisitionOrigin.PATH_GRANT)
 
     def test_idempotent_second_call_grants_nothing(self):
         sheet = CharacterSheetFactory()

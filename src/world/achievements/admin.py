@@ -73,14 +73,21 @@ class StatTrackerAdmin(admin.ModelAdmin):
 class CharacterAchievementAdmin(admin.ModelAdmin):
     """Admin for CharacterAchievement model."""
 
-    list_display = ["character_sheet", "achievement", "earned_at", "is_discoverer"]
+    list_display = [
+        "character_sheet",
+        "achievement",
+        "earned_at",
+        "earned_by_tenure",
+        "is_discoverer",
+    ]
     list_filter = ["achievement"]
     raw_id_fields = ["character_sheet"]
+    autocomplete_fields = ["earned_by_tenure"]
 
     @admin.display(boolean=True)
     def is_discoverer(self, obj: CharacterAchievement) -> bool:
-        """Return True if the character was a discoverer of this achievement."""
-        return obj.discovery_id is not None
+        """Return True if the character's earning tenure was a discoverer (#3055)."""
+        return obj.is_discoverer()
 
 
 @admin.register(Discovery)
@@ -91,8 +98,8 @@ class DiscoveryAdmin(admin.ModelAdmin):
     autocomplete_fields = ["discovered_by_tenure", "shared_with_tenures"]
 
     def discoverer_count(self, obj: Discovery) -> int:
-        """Return the number of discoverers for this achievement."""
-        return obj.discoverers.count()
+        """Return the number of discoverers (primary + shared) for this achievement."""
+        return 1 + obj.shared_with_tenures.count()
 
 
 @admin.register(ConditionStatRule)

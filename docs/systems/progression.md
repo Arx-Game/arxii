@@ -179,6 +179,14 @@ dev = DevelopmentPoints.objects.get(character=character, trait=trait)
 dev.award_points(5)
 ```
 
+**Acquisition provenance (#3055).** When `award_points` crosses a level threshold, it
+also writes a `traits.CharacterTraitChange` row (`old_value`/`new_value` spanning every
+level-up in the call, `source=DEVELOPMENT_LEVEL_UP`) — the durable record that
+`CharacterTraitValue.value` changed and why, distinct from `DevelopmentTransaction`
+(which audits the dp award itself, not the resulting value mutation). No level-up means
+no `CharacterTraitChange` row. See `docs/systems/INDEX.md`'s Traits entry for the full
+`CharacterTraitChange` shape and its other writers (CG finalize, maturation).
+
 **Check-based accrual (#3039).** `world.progression.services.skill_development
 .award_check_development(character_sheet, check_type, effort_level, path_level)`
 writes both `WeeklySkillUsage` (accumulator for the weekly audit/rust cron) and

@@ -20,7 +20,7 @@ from world.progression.constants import (
     DP_COST_MULTIPLIER,
 )
 from world.progression.types import DevelopmentSource, ProgressionReason
-from world.traits.models import CharacterTraitValue
+from world.traits.models import CharacterTraitChange, CharacterTraitValue, TraitChangeSource
 
 
 def cumulative_dp_for_level(level: int) -> int:
@@ -208,7 +208,8 @@ class DevelopmentPoints(SharedMemoryModel):
         )
 
         level_ups: list[tuple[int, int]] = []
-        current_level: int = trait_value.value
+        starting_level: int = trait_value.value
+        current_level: int = starting_level
 
         while True:
             next_level = current_level + 1
@@ -222,6 +223,16 @@ class DevelopmentPoints(SharedMemoryModel):
         if level_ups:
             trait_value.value = current_level
             trait_value.save()
+            # Acquisition-provenance record (#3055): the value mutation itself,
+            # distinct from DevelopmentTransaction (which audits the dp award,
+            # not the resulting trait value change).
+            CharacterTraitChange.objects.create(
+                character_sheet=self.character_sheet,
+                trait=self.trait,
+                old_value=starting_level,
+                new_value=current_level,
+                source=TraitChangeSource.DEVELOPMENT_LEVEL_UP,
+            )
 
         return level_ups
 

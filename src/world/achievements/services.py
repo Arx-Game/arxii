@@ -23,6 +23,7 @@ from world.achievements.models import (
     StatDefinition,
     StatTracker,
 )
+from world.achievements.types import AchievementGrantResult
 
 if TYPE_CHECKING:
     from world.character_sheets.models import CharacterSheet
@@ -71,23 +72,24 @@ def can_earn_achievements(character_sheet: CharacterSheet) -> bool:
 
 def grant_achievement(
     achievement: Achievement, character_sheets: list[CharacterSheet]
-) -> list[CharacterAchievement]:
+) -> AchievementGrantResult:
     """
     Grant an achievement to one or more characters simultaneously.
 
     If no CharacterAchievement exists for this achievement yet, creates a
-    Discovery and links all characters as co-discoverers.
+    Discovery and links all characters as co-discoverers via their tenures
+    (``discovered_by_tenure`` primary + ``shared_with_tenures`` shared).
 
     After commit, notifies the stories reactivity service so any active
     stories with ACHIEVEMENT_HELD beats for this achievement are
     re-evaluated (and flip SUCCESS when the requirement is met).
 
     Ineligible sheets (see ``can_earn_achievements``) are dropped; if none
-    remain, returns ``[]`` and no Discovery is created.
+    remain, returns an empty result and no Discovery is created.
     """
     character_sheets = [s for s in character_sheets if can_earn_achievements(s)]
     if not character_sheets:
-        return []
+        return AchievementGrantResult(character_achievements=[], created_discovery=None)
 
     from world.stories.services.reactivity import on_achievement_earned  # noqa: PLC0415
 
@@ -117,10 +119,12 @@ def grant_achievement(
         results: list[CharacterAchievement] = []
         newly_earned: list[CharacterSheet] = []
         for sheet in character_sheets:
+            # can_earn_achievements already guarantees a current tenure exists.
+            earning_tenure = sheet.roster_entry_or_none.current_tenure
             char_achievement, created = CharacterAchievement.objects.get_or_create(
                 character_sheet=sheet,
                 achievement=achievement,
-                defaults={"discovery": discovery},
+                defaults={"earned_by_tenure": earning_tenure},
             )
             results.append(char_achievement)
             if created:
@@ -131,7 +135,7 @@ def grant_achievement(
         apply_achievement_rewards(sheet, achievement)
         on_achievement_earned(sheet, achievement)
 
-    return results
+    return AchievementGrantResult(character_achievements=results, created_discovery=discovery)
 
 
 def _check_achievements(character_sheet: CharacterSheet, stat: StatDefinition) -> None:

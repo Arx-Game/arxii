@@ -149,38 +149,48 @@ class GrantAchievementTest(TestCase):
         cls.tenure2 = grant_test_tenure(cls.sheet2)
 
     def test_single_grant_creates_discovery(self) -> None:
-        results = grant_achievement(self.achievement, [self.sheet1])
+        result = grant_achievement(self.achievement, [self.sheet1])
 
-        self.assertEqual(len(results), 1)
-        self.assertEqual(results[0].achievement, self.achievement)
-        self.assertIsNotNone(results[0].discovery)
+        self.assertEqual(len(result.character_achievements), 1)
+        self.assertEqual(result.character_achievements[0].achievement, self.achievement)
+        self.assertIsNotNone(result.created_discovery)
         self.assertTrue(Discovery.objects.filter(achievement=self.achievement).exists())
 
     def test_first_earner_discovery_carries_their_tenure(self) -> None:
         """#3055: the Discovery row anchors to the earning sheet's current tenure."""
-        results = grant_achievement(self.achievement, [self.sheet1])
+        result = grant_achievement(self.achievement, [self.sheet1])
 
-        discovery = results[0].discovery
+        discovery = result.created_discovery
         self.assertEqual(discovery.discovered_by_tenure_id, self.tenure1.pk)
 
     def test_batch_grant_shares_discovery(self) -> None:
-        results = grant_achievement(self.achievement, [self.sheet1, self.sheet2])
+        result = grant_achievement(self.achievement, [self.sheet1, self.sheet2])
 
-        self.assertEqual(len(results), 2)
+        self.assertEqual(len(result.character_achievements), 2)
         self.assertEqual(Discovery.objects.filter(achievement=self.achievement).count(), 1)
 
         discovery = Discovery.objects.get(achievement=self.achievement)
-        self.assertEqual(discovery.discoverers.count(), 2)
+        self.assertEqual(1 + discovery.shared_with_tenures.count(), 2)
+
+    def test_batch_grant_stamps_earned_by_tenure_per_co_earner(self) -> None:
+        """#3055: every co-earner's own CharacterAchievement carries its own
+        earned_by_tenure -- an individually durable (player, character) pairing,
+        not just the primary Discovery slot's discoverer."""
+        result = grant_achievement(self.achievement, [self.sheet1, self.sheet2])
+
+        by_sheet = {r.character_sheet_id: r for r in result.character_achievements}
+        self.assertEqual(by_sheet[self.sheet1.pk].earned_by_tenure_id, self.tenure1.pk)
+        self.assertEqual(by_sheet[self.sheet2.pk].earned_by_tenure_id, self.tenure2.pk)
 
     def test_party_grant_discovery_slot_goes_to_first_sheet_tenure(self) -> None:
         """#3055: for a party grant, the Discovery slot anchors to the FIRST sheet
         in the list (the triggering sheet) -- co-earners still get
         CharacterAchievement rows, but no second Discovery is created for them."""
-        results = grant_achievement(self.achievement, [self.sheet1, self.sheet2])
+        result = grant_achievement(self.achievement, [self.sheet1, self.sheet2])
 
         discovery = Discovery.objects.get(achievement=self.achievement)
         self.assertEqual(discovery.discovered_by_tenure_id, self.tenure1.pk)
-        self.assertEqual(len(results), 2)
+        self.assertEqual(len(result.character_achievements), 2)
         self.assertEqual(Discovery.objects.filter(achievement=self.achievement).count(), 1)
         # Simultaneous co-discoverers share the credit via the M2M (#3055 ruling).
         self.assertEqual(
@@ -197,12 +207,12 @@ class GrantAchievementTest(TestCase):
 
     def test_subsequent_grant_no_discovery(self) -> None:
         # First character gets discovery
-        first_results = grant_achievement(self.achievement, [self.sheet1])
-        self.assertIsNotNone(first_results[0].discovery)
+        first_result = grant_achievement(self.achievement, [self.sheet1])
+        self.assertIsNotNone(first_result.created_discovery)
 
         # Second character does not get a new discovery
-        second_results = grant_achievement(self.achievement, [self.sheet2])
-        self.assertIsNone(second_results[0].discovery)
+        second_result = grant_achievement(self.achievement, [self.sheet2])
+        self.assertIsNone(second_result.created_discovery)
         self.assertEqual(Discovery.objects.filter(achievement=self.achievement).count(), 1)
 
     def test_no_duplicate_grants(self) -> None:
@@ -342,17 +352,17 @@ class AchievementEligibilityGateTest(TestCase):
         eligible = CharacterSheetFactory()
         eligible_tenure = grant_test_tenure(eligible)
         ineligible = CharacterSheetFactory()
-        results = grant_achievement(self.achievement, [eligible, ineligible])
-        self.assertEqual(len(results), 1)
-        self.assertEqual(results[0].character_sheet, eligible)
-        self.assertIsNotNone(results[0].discovery_id)
-        self.assertEqual(results[0].discovery.discovered_by_tenure_id, eligible_tenure.pk)
+        result = grant_achievement(self.achievement, [eligible, ineligible])
+        self.assertEqual(len(result.character_achievements), 1)
+        self.assertEqual(result.character_achievements[0].character_sheet, eligible)
+        self.assertIsNotNone(result.created_discovery)
+        self.assertEqual(result.created_discovery.discovered_by_tenure_id, eligible_tenure.pk)
         self.assertFalse(CharacterAchievement.objects.filter(character_sheet=ineligible).exists())
 
     def test_all_ineligible_grant_is_a_noop(self) -> None:
         sheet = CharacterSheetFactory()
-        results = grant_achievement(self.achievement, [sheet])
-        self.assertEqual(results, [])
+        result = grant_achievement(self.achievement, [sheet])
+        self.assertEqual(result.character_achievements, [])
         self.assertFalse(Discovery.objects.filter(achievement=self.achievement).exists())
 
     def test_npc_then_tenured_earns_on_next_increment(self) -> None:

@@ -13,7 +13,7 @@ from typing import TYPE_CHECKING
 
 from django.db import transaction
 
-from world.magic.constants import TargetKind
+from world.magic.constants import AcquisitionOrigin, TargetKind
 
 if TYPE_CHECKING:
     from world.character_sheets.models import CharacterSheet
@@ -190,7 +190,11 @@ def _resolve_grant_resonance(
 
 
 def grant_gift_to_character(
-    sheet: CharacterSheet, gift: Gift, *, resonance: Resonance | None = None
+    sheet: CharacterSheet,
+    gift: Gift,
+    *,
+    resonance: Resonance | None = None,
+    origin: str = AcquisitionOrigin.CHARACTER_CREATION,
 ) -> tuple[CharacterGift, bool]:
     """Mint (idempotently) the CharacterGift link + the latent GIFT thread.
 
@@ -210,12 +214,20 @@ def grant_gift_to_character(
     no trace — a partially-granted gift (a ``CharacterGift`` with no thread) is the
     exact corrupted state #2971 eliminates, and minting first would just move it to
     the failure path. Raises ``GiftResonanceUnresolvable`` when nothing resolves.
+
+    ``origin`` (#3055) — the ``AcquisitionOrigin`` this call site represents; stamped
+    on a freshly-minted ``CharacterGift`` only (an already-owned gift keeps its
+    original origin — a re-grant is a no-op, not a re-provenance). Defaults to
+    ``CHARACTER_CREATION`` since that is this function's oldest/most common caller.
+
     Returns ``(character_gift, created)``.
     """
     from world.magic.models import CharacterGift  # noqa: PLC0415
 
     resolved = _resolve_grant_resonance(sheet, gift, preferred=resonance)
-    character_gift, created = CharacterGift.objects.get_or_create(character=sheet, gift=gift)
+    character_gift, created = CharacterGift.objects.get_or_create(
+        character=sheet, gift=gift, defaults={"origin": origin}
+    )
     provision_latent_gift_thread(sheet, gift, resonance=resolved)
     return character_gift, created
 

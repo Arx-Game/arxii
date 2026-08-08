@@ -321,7 +321,7 @@
 **Foreign Keys:**
   - character_sheet -> character_sheets.CharacterSheet [FK]
   - achievement -> achievements.Achievement [FK]
-  - discovery -> achievements.Discovery [FK] (nullable)
+  - earned_by_tenure -> roster.RosterTenure [FK]
 
 ### CharacterTitle
 **Foreign Keys:**
@@ -338,8 +338,6 @@
   - achievement -> achievements.Achievement [OneToOne]
   - discovered_by_tenure -> roster.RosterTenure [FK]
   - shared_with_tenures -> roster.RosterTenure [M2M]
-**Pointed to by:**
-  - discoverers <- achievements.CharacterAchievement
 
 ### RewardDefinition
 **Foreign Keys:**
@@ -369,7 +367,7 @@
 - `apply_achievement_rewards(character_sheet: 'CharacterSheet', achievement: 'Achievement') -> 'None' - Apply an achievement's rewards to a character — title / bonus / prestige / distinction`
 - `can_earn_achievements(character_sheet: 'CharacterSheet') -> 'bool' - Whether ``character_sheet`` may earn achievements at all (#3024).`
 - `get_stat(character_sheet: 'CharacterSheet', stat: 'StatDefinition') -> 'int' - Return current value of a stat tracker, 0 if it doesn't exist.`
-- `grant_achievement(achievement: 'Achievement', character_sheets: 'list[CharacterSheet]') -> 'list[CharacterAchievement]' - Grant an achievement to one or more characters simultaneously.`
+- `grant_achievement(achievement: 'Achievement', character_sheets: 'list[CharacterSheet]') -> 'AchievementGrantResult' - Grant an achievement to one or more characters simultaneously.`
 - `increment_stat(character_sheet: 'CharacterSheet', stat: 'StatDefinition', amount: 'int' = 1) -> 'int' - Increment a stat tracker (create if needed) and check for achievements.`
 
 
@@ -1354,6 +1352,7 @@
   - captivities <- captivity.Captivity
   - ceremony_honors <- ceremonies.CeremonyHonoree
   - trait_values <- traits.CharacterTraitValue
+  - trait_changes <- traits.CharacterTraitChange
   - character_class_levels <- classes.CharacterClassLevel
   - origin_slots <- character_creation.CharacterOriginSlot
   - audere_offers <- magic.PendingAudereOffer
@@ -7527,6 +7526,7 @@
   - media <- roster.TenureMedia
   - discoveries <- achievements.Discovery
   - shared_discoveries <- achievements.Discovery
+  - earned_achievements <- achievements.CharacterAchievement
   - consent_groups <- consent.ConsentGroup
   - consent_memberships <- consent.ConsentGroupMember
   - social_consent_preference <- consent.SocialConsentPreference
@@ -7539,6 +7539,7 @@
   - treasured_subjects <- boundaries.TreasuredSubject
   - treasuredsubject_visible <- boundaries.TreasuredSubject
   - treasuredsubject_excluded <- boundaries.TreasuredSubject
+  - granted_trait_changes <- traits.CharacterTraitChange
   - codex_taught <- codex.CharacterCodexKnowledge
   - codex_teaching_offers <- codex.CodexTeachingOffer
   - codexteachingoffer_visible <- codex.CodexTeachingOffer
@@ -9266,6 +9267,12 @@
 
 ## world.traits
 
+### CharacterTraitChange
+**Foreign Keys:**
+  - character_sheet -> character_sheets.CharacterSheet [FK]
+  - trait -> traits.Trait [FK]
+  - granting_tenure -> roster.RosterTenure [FK] (nullable)
+
 ### CharacterTraitValue
 **Foreign Keys:**
   - character -> character_sheets.CharacterSheet [FK]
@@ -9322,6 +9329,7 @@
   - capability_derivations <- mechanics.TraitCapabilityDerivation
   - rank_descriptions <- traits.TraitRankDescription
   - character_values <- traits.CharacterTraitValue
+  - character_changes <- traits.CharacterTraitChange
   - classes_requiring_trait <- classes.CharacterClass
   - maturation_spends <- progression.MaturationSpend
   - development_points <- progression.DevelopmentPoints

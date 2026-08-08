@@ -612,7 +612,8 @@ def test_hallowed_threshold(
     # T7: when expected_achievement is not None:
     #         assert CharacterAchievement exists for caster + expected_achievement;
     #         assert Discovery row exists;
-    #         when expected_discovery: assert CharacterAchievement.discovery FK populated
+    #         when expected_discovery: assert CharacterAchievement.is_discoverer() is True
+    #             (earned_by_tenure matches Discovery.discovered_by_tenure, #3055)
     #     when expected_achievement is None (FAILURE path):
     #         assert no CharacterAchievement rows for caster
 ```
@@ -620,7 +621,7 @@ def test_hallowed_threshold(
 Plus one dedicated method `test_critical_success_when_discovery_already_exists` that
 pre-populates a CharacterAchievement + Discovery for "Hallowed-Hardened" on a different
 character, then runs the CRITICAL_SUCCESS path on the low-intensity room, asserts the
-second character's CharacterAchievement.discovery is None.
+second character's CharacterAchievement.is_discoverer() is False.
 
 The capture.difficulty assertion is the key end-to-end demonstration that intensity
 matters: the same forced outcome on different-intensity rooms produces the same routing
