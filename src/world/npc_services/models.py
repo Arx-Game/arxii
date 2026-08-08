@@ -500,7 +500,7 @@ class StaffingProfileLine(SharedMemoryModel):
         return f"{self.profile.building_kind.name}: {self.role.name}"
 
 
-class NPCServiceOffer(SharedMemoryModel):
+class NPCServiceOffer(NaturalKeyMixin, SharedMemoryModel):
     """One offerable thing on an NPC role, of a specific kind.
 
     The unified offer model. Kind discriminator routes to a per-kind 1:1
@@ -512,6 +512,11 @@ class NPCServiceOffer(SharedMemoryModel):
     are the same concept. If the predicate fails, the offer doesn't appear.
     Progressive disclosure happens through how staff author predicates, not
     through a separate visibility layer.
+
+    Carries ``NaturalKeyMixin`` (#3056): ``(role, label)`` mirrors the
+    ``unique_offer_role_label`` constraint so MISSION-kind offers can travel
+    through the content export/load pipeline (they are referenced by
+    ``MissionOptionRouteReward.followon_offer`` and ``MissionOfferDetails``).
     """
 
     # Reverse-OneToOne safe accessor (#2386): missing row -> None.
@@ -612,6 +617,12 @@ class NPCServiceOffer(SharedMemoryModel):
         ),
     )
 
+    objects = NaturalKeyManager()
+
+    class NaturalKeyConfig:
+        fields = ["role", "label"]
+        dependencies = ["arxii.NPCRole"]
+
     class Meta:
         constraints = [
             models.UniqueConstraint(
@@ -704,7 +715,7 @@ class NPCRoleCooldown(SharedMemoryModel):
         )
 
 
-class MissionOfferDetails(SharedMemoryModel):
+class MissionOfferDetails(NaturalKeyMixin, SharedMemoryModel):
     """Per-kind details for `NPCServiceOffer` rows of kind=MISSION (#686).
 
     Captures the mission-specific knobs that don't fit on the unified
@@ -719,6 +730,10 @@ class MissionOfferDetails(SharedMemoryModel):
     gameplay one-shot.** One template fuels many ``MissionInstance`` rows
     over time; each acceptance spawns a fresh instance with auto-generated
     per-instance details.
+
+    Carries ``NaturalKeyMixin`` (#3056): the O2O ``offer`` is the identity, so
+    the row exports/loads alongside its offer; ``save()`` re-derives the
+    denormalized ``role`` mirror on load.
     """
 
     offer = models.OneToOneField(
@@ -807,6 +822,12 @@ class MissionOfferDetails(SharedMemoryModel):
             "ahead of the general pool. 0 = general pool."
         ),
     )
+
+    objects = NaturalKeyManager()
+
+    class NaturalKeyConfig:
+        fields = ["offer"]
+        dependencies = ["arxii.NPCServiceOffer"]
 
     class Meta:
         verbose_name_plural = "Mission offer details"
