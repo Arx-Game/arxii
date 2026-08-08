@@ -4,6 +4,7 @@ from django.urls import reverse
 from rest_framework import status
 from rest_framework.test import APITestCase
 
+from evennia_extensions.factories import ObjectDBFactory
 from world.magic.factories import ResonanceFactory, with_corruption_at_stage
 from world.roster.factories import RosterTenureFactory
 
@@ -34,10 +35,16 @@ class ProtagonismLockSceneInitiationTests(APITestCase):
         """Sanity check: non-locked accounts can create scenes normally."""
         tenure = RosterTenureFactory()
         account = tenure.player_data.account
+        # #3069 — creation now dispatches StartSceneAction against the actor's
+        # own room, so the tenured character needs to actually be standing
+        # somewhere.
+        room = ObjectDBFactory(db_typeclass_path="typeclasses.rooms.Room")
+        character = tenure.roster_entry.character_sheet.character
+        character.location = room
         self.client.force_authenticate(user=account)
 
         url = reverse("scene-list")
-        response = self.client.post(url, {"name": "Normal scene"}, format="json")
+        response = self.client.post(url, {"location_id": room.id}, format="json")
 
         # 201 Created is the success path
         self.assertEqual(response.status_code, status.HTTP_201_CREATED)

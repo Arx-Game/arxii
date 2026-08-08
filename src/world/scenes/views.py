@@ -27,7 +27,6 @@ from world.scenes.models import (
     InteractionReaction,
     Persona,
     Scene,
-    SceneParticipation,
     SceneSummaryRevision,
 )
 from world.scenes.pagination import (
@@ -147,53 +146,60 @@ class SceneViewSet(viewsets.ModelViewSet):
             return Response({"detail": exc.user_message}, status=status.HTTP_403_FORBIDDEN)
 
     def perform_create(self, serializer: BaseSerializer[Scene]) -> None:
+        """#3069 — converge web scene creation on ``StartSceneAction``.
+
+        The bespoke ``Scene.objects.create`` this replaced never set
+        ``privacy_mode`` (model default PUBLIC, so a private room's scene
+        leaked public) and enrolled no one but the requester — telnet's
+        ``scene`` command, via ``StartSceneAction.execute``, derives privacy
+        from the room (``ensure_scene_for_location``) and auto-enrolls every
+        present co-owner + table-owning GM. Dispatching the action here (the
+        same seam ``SetRoundModeAction`` uses from ``set_round_mode`` above)
+        gets the web path both for free instead of drifting a second copy.
+
+        The actor is resolved via roster tenure (not ``request.user.puppet``,
+        which requires a live Evennia session a plain web request need not
+        have — mirrors ``set_round_mode``'s resolution below). A location
+        the actor isn't standing in is rejected: the action only ever acts on
+        ``actor.location``, so an inconsistent ``location_id`` would silently
+        start (or join) the wrong room's scene.
+
+        If a scene is already active in the room, the action joins the actor
+        as a (non-owner) participant rather than erroring — the same
+        idempotent behavior telnet has always had for "already active."
+        """
+        from actions.definitions.scenes import StartSceneAction  # noqa: PLC0415
         from world.character_sheets.models import CharacterSheet  # noqa: PLC0415
         from world.magic.exceptions import ProtagonismLockedError  # noqa: PLC0415
 
-        # Raise if the requesting account's active character sheet is protagonism-locked.
-        try:
-            active_sheet = CharacterSheet.objects.get(
-                roster_entry__tenures__player_data__account=self.request.user,
-                roster_entry__tenures__end_date__isnull=True,
-            )
-            if active_sheet.is_protagonism_locked:
-                raise ProtagonismLockedError
-        except CharacterSheet.DoesNotExist:
-            pass  # No active sheet — allow the scene to proceed
-
-        location = serializer.validated_data.get("location")
-        name = serializer.validated_data.get("name")
-        if location and Scene.objects.active_for_room(location).exists():
+        active_sheet = CharacterSheet.objects.filter(
+            roster_entry__tenures__player_data__account=self.request.user,
+            roster_entry__tenures__end_date__isnull=True,
+        ).first()
+        if active_sheet is None:
             raise serializers.ValidationError(
-                {"location": "An active scene already exists in this location."},
+                {"detail": "You must be playing a character to start a scene."},
             )
+        if active_sheet.is_protagonism_locked:
+            raise ProtagonismLockedError
 
-        if not name:
-            location_name = "unknown"
-            if location is not None:
-                try:
-                    location_name = location.db_key
-                except AttributeError:
-                    location_name = "unknown"
-            base_name = (
-                f"{self.request.user.username} scene at {location_name} on {timezone.now().date()}"
+        actor = active_sheet.character
+        location = serializer.validated_data.get("location")
+        if location is not None and actor.db_location_id != location.pk:
+            raise serializers.ValidationError(
+                {"location": "You must be in that room to start a scene there."},
             )
-        else:
-            base_name = name
+        if actor.location is None:
+            raise serializers.ValidationError({"detail": "You are not in a room."})
 
-        unique_name = base_name
-        counter = 2
-        while Scene.objects.filter(name=unique_name).exists():
-            unique_name = f"{base_name} ({counter})"
-            counter += 1
+        result = StartSceneAction().run(actor=actor)
+        if not result.success:
+            raise serializers.ValidationError({"detail": result.message})
 
-        scene = serializer.save(name=unique_name)
-        SceneParticipation.objects.get_or_create(
-            scene=scene,
-            account=self.request.user,
-            defaults={"is_owner": True},
-        )
-        broadcast_scene_message(scene, SceneAction.START)
+        scene = Scene.objects.active_for_room(actor.location).first()
+        if scene is None:
+            raise serializers.ValidationError({"detail": "Scene could not be started."})
+        serializer.instance = scene
 
     def perform_update(self, serializer: BaseSerializer[Scene]) -> None:
         instance = self.get_object()

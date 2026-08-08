@@ -26,7 +26,13 @@ export interface ComposerMode {
   locked?: boolean;
 }
 
-const KNOWN_COMMANDS = ['pose', 'say', 'emit', 'emote', 'whisper', 'tt', 'tabletalk'];
+// #3069 — `page` is a real OOC telnet command (CmdPage,
+// commands/evennia_overrides/communication.py); it has no telnet alias
+// (no `tell`), so it's the only addition here. Without it, `page
+// <name>=<message>` typed while a composer mode is set (pose/say/etc.) gets
+// wrapped by buildFullCommand into IC prose instead of reaching CmdPage
+// verbatim as OOC.
+const KNOWN_COMMANDS = ['pose', 'say', 'emit', 'emote', 'whisper', 'tt', 'tabletalk', 'page'];
 
 /**
  * Builds the full command string for a trimmed input given the active composer

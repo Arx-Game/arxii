@@ -3,7 +3,7 @@ from rest_framework import status
 from rest_framework.test import APITestCase
 
 from core_management.test_utils import suppress_permission_errors
-from evennia_extensions.factories import AccountFactory
+from evennia_extensions.factories import AccountFactory, CharacterFactory, ObjectDBFactory
 from world.character_sheets.factories import CharacterSheetFactory
 from world.roster.factories import PlayerDataFactory, RosterEntryFactory, RosterTenureFactory
 from world.scenes.constants import ScenePrivacyMode
@@ -196,28 +196,45 @@ class PersonaPermissionsTestCase(APITestCase):
         )
 
 
+def _place_account_in_a_room(account):
+    """Give ``account`` an actively-tenured character standing in a fresh room.
+
+    #3069 — scene creation now dispatches ``StartSceneAction``, which needs a
+    real actor, so permission tests need a tenured character in a room, not
+    a bare account.
+    """
+    room = ObjectDBFactory(db_typeclass_path="typeclasses.rooms.Room")
+    char = CharacterFactory(location=room)
+    sheet = CharacterSheetFactory(character=char)
+    player_data, _ = PlayerDataFactory._meta.model.objects.get_or_create(account=account)
+    roster_entry = RosterEntryFactory(character_sheet=sheet)
+    RosterTenureFactory(player_data=player_data, roster_entry=roster_entry)
+    return room
+
+
 class SceneCreationPermissionsTestCase(APITestCase):
     @classmethod
     def setUpTestData(cls):
         cls.user = AccountFactory(username="user")
         cls.staff = AccountFactory(username="staff", is_staff=True)
+        cls.user_room = _place_account_in_a_room(cls.user)
+        cls.staff_room = _place_account_in_a_room(cls.staff)
 
     @suppress_permission_errors
     def test_scene_creation_authenticated_only(self):
         """Only authenticated users can create scenes"""
         url = reverse("scene-list")
-        data = {"name": "New Scene"}
 
         # Unauthenticated cannot create
-        response = self.client.post(url, data, format="json")
+        response = self.client.post(url, {"location_id": self.user_room.id}, format="json")
         assert response.status_code == status.HTTP_403_FORBIDDEN
 
         # Authenticated user can create
         self.client.force_authenticate(user=self.user)
-        response = self.client.post(url, data, format="json")
+        response = self.client.post(url, {"location_id": self.user_room.id}, format="json")
         assert response.status_code == status.HTTP_201_CREATED
 
         # Staff can create
         self.client.force_authenticate(user=self.staff)
-        response = self.client.post(url, data, format="json")
+        response = self.client.post(url, {"location_id": self.staff_room.id}, format="json")
         assert response.status_code == status.HTTP_201_CREATED
