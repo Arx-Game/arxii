@@ -37,6 +37,24 @@ export type DuelChallengeRole = 'incoming' | 'outgoing';
  */
 export type OutcomeDisplayRow = components['schemas']['OutcomeDisplayRow'];
 
+/** One row of the ThreatPool catalog (GET /api/combat/threat-pools/, #3067). */
+export type ThreatPool = components['schemas']['ThreatPool'];
+
+/**
+ * List authored ThreatPools (NPC move-sets), optionally name-filtered — the
+ * GM add-opponent picker's data source (#3067).
+ * GET /api/combat/threat-pools/[?search=<term>]
+ */
+export async function fetchThreatPools(search?: string): Promise<ThreatPool[]> {
+  const url = search
+    ? `/api/combat/threat-pools/?search=${encodeURIComponent(search)}`
+    : '/api/combat/threat-pools/';
+  const res = await apiFetch(url);
+  if (!res.ok) throw new Error('Failed to load threat pools');
+  const data = (await res.json()) as { results?: ThreatPool[]; count?: number };
+  return data.results ?? [];
+}
+
 // ---------------------------------------------------------------------------
 // Encounter
 // ---------------------------------------------------------------------------
@@ -65,6 +83,191 @@ export async function fetchEncountersForScene(sceneId: number): Promise<Encounte
   if (!res.ok) throw new Error('Failed to load encounters for scene');
   const data = (await res.json()) as { results?: EncounterListItem[]; count?: number };
   return data.results ?? [];
+}
+
+// ---------------------------------------------------------------------------
+// GM lifecycle (#3067) — encounter creation, NPC opponent spawn, manual round
+// control. All gated server-side by IsEncounterGMOrStaff (CombatEncounterViewSet).
+// ---------------------------------------------------------------------------
+
+export type PaceMode = components['schemas']['PaceModeEnum'];
+export type EncounterType = components['schemas']['EncounterTypeEnum'];
+export type OpponentTier = components['schemas']['Tier756Enum'];
+
+/**
+ * Create a combat encounter for a scene (GM only) — the "Start encounter"
+ * affordance (#3067). Only `scene` is required; the server defaults `room`
+ * from the scene's current location (`CombatEncounterViewSet.perform_create`)
+ * and `pace_mode`/`encounter_type`/etc. from their model defaults when
+ * omitted.
+ * POST /api/combat/
+ */
+export async function createEncounter(
+  sceneId: number,
+  options: { paceMode?: PaceMode; encounterType?: EncounterType } = {}
+): Promise<EncounterDetail> {
+  const res = await apiFetch('/api/combat/', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      scene: sceneId,
+      ...(options.paceMode !== undefined ? { pace_mode: options.paceMode } : {}),
+      ...(options.encounterType !== undefined ? { encounter_type: options.encounterType } : {}),
+    }),
+  });
+  if (!res.ok) await throwApiError(res, 'Failed to start encounter');
+  return res.json() as Promise<EncounterDetail>;
+}
+
+/** One row of the opponent-defaults scaling preview (GET .../opponent-defaults/). */
+export interface OpponentDefaults {
+  max_health: number;
+  soak_value: number;
+  probing_threshold: number | null;
+  swarm_count: number | null;
+  body_toughness: number | null;
+  bodies_per_attack: number | null;
+  barrier_strength: number | null;
+  phases: { phase_number: number; health_trigger_percentage: number | null }[];
+  stakes_ok: boolean;
+  stakes_message: string;
+}
+
+/**
+ * Preview the scaling formula's stat block for a tier, plus the stakes-gate
+ * advisory (never blocks the preview itself — only a real add_opponent call).
+ * GET /api/combat/{encounterId}/opponent-defaults/?tier=<tier>
+ */
+export async function fetchOpponentDefaults(
+  encounterId: number,
+  tier: OpponentTier
+): Promise<OpponentDefaults> {
+  const res = await apiFetch(
+    `/api/combat/${encounterId}/opponent-defaults/?tier=${encodeURIComponent(tier)}`
+  );
+  if (!res.ok) await throwApiError(res, 'Failed to load opponent defaults');
+  return res.json() as Promise<OpponentDefaults>;
+}
+
+/** Body for postAddOpponent — mirrors AddOpponentSerializer. */
+export interface AddOpponentPayload {
+  name: string;
+  tier: OpponentTier;
+  threatPoolId: number;
+  maxHealth?: number | null;
+  level?: number | null;
+  description?: string;
+  soakValue?: number;
+  probingThreshold?: number | null;
+  positionId?: number | null;
+}
+
+/**
+ * Add an NPC opponent to the encounter (GM only). Omitting `maxHealth` selects
+ * auto-scaling mode (the formula fills every stat field); `positionId` (#2005)
+ * spawns the opponent already placed, must name a Position in the encounter's
+ * own room.
+ * POST /api/combat/{encounterId}/add_opponent/
+ */
+export async function postAddOpponent(
+  encounterId: number,
+  payload: AddOpponentPayload
+): Promise<EncounterDetail> {
+  const res = await apiFetch(`/api/combat/${encounterId}/add_opponent/`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      name: payload.name,
+      tier: payload.tier,
+      threat_pool_id: payload.threatPoolId,
+      max_health: payload.maxHealth ?? undefined,
+      level: payload.level ?? undefined,
+      description: payload.description ?? '',
+      soak_value: payload.soakValue ?? 0,
+      probing_threshold: payload.probingThreshold ?? undefined,
+      position_id: payload.positionId ?? undefined,
+    }),
+  });
+  if (!res.ok) await throwApiError(res, 'Failed to add opponent');
+  return res.json() as Promise<EncounterDetail>;
+}
+
+/**
+ * Add a PC to the encounter (GM only) — unlike `postJoin`, names any
+ * character_sheet without an ownership requirement.
+ * POST /api/combat/{encounterId}/add_participant/
+ */
+export async function postAddParticipant(
+  encounterId: number,
+  characterSheetId: number,
+  covenantRoleId?: number | null
+): Promise<EncounterDetail> {
+  const res = await apiFetch(`/api/combat/${encounterId}/add_participant/`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      character_sheet_id: characterSheetId,
+      ...(covenantRoleId != null ? { covenant_role_id: covenantRoleId } : {}),
+    }),
+  });
+  if (!res.ok) await throwApiError(res, 'Failed to add participant');
+  return res.json() as Promise<EncounterDetail>;
+}
+
+/**
+ * Remove a PC from the encounter (GM only).
+ * POST /api/combat/{encounterId}/remove_participant/
+ */
+export async function postRemoveParticipant(
+  encounterId: number,
+  participantId: number
+): Promise<EncounterDetail> {
+  const res = await apiFetch(`/api/combat/${encounterId}/remove_participant/`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ participant_id: participantId }),
+  });
+  if (!res.ok) await throwApiError(res, 'Failed to remove participant');
+  return res.json() as Promise<EncounterDetail>;
+}
+
+/**
+ * Begin a new declaration phase (GM only) — manual round control.
+ * POST /api/combat/{encounterId}/begin_round/
+ */
+export async function postBeginRound(encounterId: number): Promise<EncounterDetail> {
+  const res = await apiFetch(`/api/combat/${encounterId}/begin_round/`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+  });
+  if (!res.ok) await throwApiError(res, 'Failed to begin round');
+  return res.json() as Promise<EncounterDetail>;
+}
+
+/**
+ * Resolve the current round (GM only) — manual round control.
+ * POST /api/combat/{encounterId}/resolve_round/
+ */
+export async function postResolveRound(encounterId: number): Promise<EncounterDetail> {
+  const res = await apiFetch(`/api/combat/${encounterId}/resolve_round/`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+  });
+  if (!res.ok) await throwApiError(res, 'Failed to resolve round');
+  return res.json() as Promise<EncounterDetail>;
+}
+
+/**
+ * Toggle pause on the encounter timer (GM only).
+ * POST /api/combat/{encounterId}/pause/
+ */
+export async function postPause(encounterId: number): Promise<EncounterDetail> {
+  const res = await apiFetch(`/api/combat/${encounterId}/pause/`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+  });
+  if (!res.ok) await throwApiError(res, 'Failed to toggle pause');
+  return res.json() as Promise<EncounterDetail>;
 }
 
 // ---------------------------------------------------------------------------

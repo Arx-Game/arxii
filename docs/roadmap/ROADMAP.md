@@ -78,7 +78,7 @@ limits, IC-vs-UI placement, etc. — see [`design-tenets.md`](design-tenets.md).
 | [Character Progression & XP](character-progression.md) | in-progress | XP, skills, path steps, Audere Majora, power tiers, the Durance |
 | [Magic System](magic.md) | in-progress | Affinities, resonances, gifts, techniques, threads, spells |
 | [Capabilities & Challenges](capabilities-and-challenges.md) | in-progress | Properties, capabilities, applications, action generation, challenges, situations |
-| [Combat](combat.md) | in-progress | Party combat (Phases 1–9 + clash + web UI + escalation/passives/aftermath complete; NPC-tier gap tracked), battle scenes, duels |
+| [Combat](combat.md) | in-progress | Party combat (Phases 1–9 + clash + web UI, now including the GM lifecycle panel [#3067: create/spawn NPC/manual round control/ready-toggle] + escalation/passives/aftermath complete; NPC-tier gap tracked), battle scenes, duels — champion-duel/battle staging still telnet-first |
 | [Missions & Living Grid](missions.md) | in-progress | Branching narrative quests, world consequences, co-op group beats, support moves |
 | [Crafting, Fashion & Economy](crafting-economy.md) | in-progress | Crafting expressiveness arc (#2881) + market/fence + fashion cachet economy (#2959) shipped; housing purchase, p2p trade (#2990), harvesting (#2998) remain |
 | [Items & Equipment](items-equipment.md) | in-progress | Worn items, body slots, layered coverage + Reveal (#2965) shipped; body markings (#2985) and visible-equipment web polish remain |

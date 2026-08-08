@@ -28,8 +28,9 @@ import { PendingActionAttachments } from '../components/PendingActionAttachments
 import { usePendingUnlinkedActions } from '../hooks/usePendingUnlinkedActions';
 import { useBattleForSceneQuery } from '@/battles/queries';
 import { RitualProposedChip } from '@/rituals/components/RitualProposedChip';
-import { useEncounterForScene } from '@/combat/queries';
+import { useCombatEncounter, useEncounterForScene } from '@/combat/queries';
 import { CombatRail } from '@/combat/components/CombatRail';
+import { GMEncounterControls } from '@/combat/sections/GMEncounterControls';
 import { LinkedStoriesPanel } from '@/crossover/components/LinkedStoriesPanel';
 
 export function SceneDetailPage() {
@@ -53,6 +54,10 @@ export function SceneDetailPage() {
   const { data: encounterListItem, isLoading: encounterLoading } = useEncounterForScene(sceneIdNum);
   const hasActiveEncounter = !encounterLoading && encounterListItem != null;
   const encounterId = encounterListItem?.id ?? 0;
+  // Full encounter detail (carries is_gm) for the GM controls panel (#3067) —
+  // shares the combatKeys.encounter(encounterId) cache with CombatTurnPanel's
+  // own useCombatEncounter call inside CombatRail, so this doesn't double-fetch.
+  const { data: gmEncounterDetail } = useCombatEncounter(encounterId);
 
   // Scroll the rail into view the moment an encounter first appears
   // (none -> active transition) so a player mid-pose notices combat starting.
@@ -210,6 +215,15 @@ export function SceneDetailPage() {
         {placesRoomId && <SpeakerQueueBar roomId={placesRoomId} />}
         <SceneTacticalMap sceneId={id} />
         <HighlightReel sceneId={id} canGm={scene?.viewer_can_gm} />
+        {/* GM "Start Encounter" affordance (#3067) — only while no encounter is
+            active; the active-encounter controls mount in the combat rail below. */}
+        {!encounterLoading && !hasActiveEncounter && (
+          <GMEncounterControls
+            sceneId={sceneIdNum}
+            encounter={null}
+            viewerCanGm={scene?.viewer_can_gm ?? false}
+          />
+        )}
         {scene && <LinkedStoriesPanel sceneId={id} />}
       </div>
 
@@ -278,9 +292,16 @@ export function SceneDetailPage() {
         {hasActiveEncounter && (
           <div
             ref={railRef}
-            className="min-h-0 overflow-y-auto"
+            className="min-h-0 space-y-3 overflow-y-auto"
             data-testid="scene-detail-combat-rail"
           >
+            {gmEncounterDetail?.is_gm && (
+              <GMEncounterControls
+                sceneId={sceneIdNum}
+                encounter={gmEncounterDetail}
+                viewerCanGm={scene?.viewer_can_gm ?? false}
+              />
+            )}
             <CombatRail sceneId={sceneIdNum} encounterId={encounterId} />
           </div>
         )}

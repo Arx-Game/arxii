@@ -1,8 +1,12 @@
 # Combat — Status
 
-**Status:** core party and duel combat ship end-to-end; the authored effect palette shipped (#1584,
-combat-wired for battlefield shaping by #2206); the frontier is embodied combat (companions, mounts,
-war) and *proving* the WIRED-UNPROVEN paths — not the round engine.
+**Status:** core party and duel combat ship end-to-end, on both telnet and web — the GM lifecycle
+(start an encounter, spawn an NPC opponent, add/remove a PC, manual round control) got its web
+surface in #3067, closing the last "server-only" gap in the party-combat REST API; the authored
+effect palette shipped (#1584, combat-wired for battlefield shaping by #2206); the frontier is
+embodied combat (companions, mounts, war) and *proving* the WIRED-UNPROVEN paths — not the round
+engine. Champion-duel challenge issuance and Battle staging (`CmdBattle`) remain telnet-first — no
+web GM surface for those two yet.
 
 This is the combat **status map**. Per-capability tiers, the MVP bar, and sequencing live in the
 [`player-capability-ledger.md`](player-capability-ledger.md) (the spine — read it first). The
@@ -161,7 +165,12 @@ outcome** (a closed issue or a "SHIPPED" line is not proof). See the ledger's go
   moment every ACTIVE participant is ready (`maybe_resolve_on_ready`, wired into
   `combat ready` / the web `ready` endpoint via `ReadyAction`); a lone ready participant
   provably does not trigger it (`world/combat/tests/test_pace_mode_ready.py`). TIMED keeps
-  the game-clock sweep; MANUAL keeps GM-only resolution.
+  the game-clock sweep; MANUAL keeps GM-only resolution. The REST `ready` endpoint existed
+  server-side from #2120, but the web client never called it — `YourTurn`'s "Submit
+  declarations" button only declared the round action (which resets `is_ready=False`) and
+  never dispatched `combat_ready` after, so READY-pace early resolution could not fire from
+  web. Closed by #3067: submit now dispatches `combat_ready` afterward, but only in READY
+  pace — TIMED/MANUAL behavior is unchanged.
 - **Tactical placement, end-to-end (#2005).** Voluntary `take_position` (entry onto the
   position graph), GM `gm_place_in_position` (unchecked staging teleport), and positioned
   opponent spawn (`add_opponent(..., position=...)`) close the last placement gaps —

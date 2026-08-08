@@ -15,6 +15,7 @@ from evennia.accounts.models import AccountDB
 from evennia.objects.models import ObjectDB
 from rest_framework import status
 from rest_framework.decorators import action
+from rest_framework.filters import SearchFilter
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.request import Request
 from rest_framework.response import Response
@@ -68,6 +69,7 @@ from world.combat.serializers import (
     OpponentTargetSerializer,
     RemoveParticipantSerializer,
     RoundActionSerializer,
+    ThreatPoolSerializer,
     UpgradeComboSerializer,
     UseItemSerializer,
 )
@@ -131,6 +133,25 @@ class DuelChallengeViewSet(ReadOnlyModelViewSet):
         )
 
 
+class ThreatPoolViewSet(ReadOnlyModelViewSet):
+    """Read-only catalog listing for the GM add-opponent picker (#3067).
+
+    ThreatPool is authored content (a named NPC move-set, e.g. "Goblin
+    Raiders") — not encounter- or scene-scoped — so this is a flat,
+    unfiltered-by-default listing. Any authenticated user may browse it: the
+    catalog itself carries nothing sensitive (no encounter state, no player
+    data); the sensitive step is spawning an opponent with it, which stays
+    gated by ``IsEncounterGMOrStaff`` on ``add_opponent``.
+    """
+
+    serializer_class = ThreatPoolSerializer
+    queryset = ThreatPool.objects.all().order_by("name")
+    pagination_class = StandardResultsSetPagination
+    filter_backends = [SearchFilter]
+    search_fields = ["name"]
+    permission_classes = [IsAuthenticated]
+
+
 class CombatEncounterViewSet(ModelViewSet):
     """ViewSet for combat encounter lifecycle and player actions."""
 
@@ -139,10 +160,46 @@ class CombatEncounterViewSet(ModelViewSet):
     pagination_class = StandardResultsSetPagination
 
     def perform_create(self, serializer: BaseSerializer[CombatEncounter]) -> None:
+        """Create the encounter, defaulting room from the scene's location.
+
+        The web GM-start-encounter flow (#3067) only supplies ``scene`` —
+        mirroring every other encounter-creation call site (duels,
+        cast_seed), which always thread an explicit room, this is the one
+        path where the caller doesn't have a room to hand yet. Default it to
+        the scene's current location so ephemeral opponent ObjectDBs
+        (``add_opponent`` -> ``create_object(..., location=encounter.room)``)
+        land somewhere instead of nowhere. An explicit ``room`` in the
+        request always wins.
+        """
         from world.combat.escalation import assign_default_escalation_curve  # noqa: PLC0415
 
         encounter = serializer.save()
+        if encounter.room_id is None and encounter.scene.location_id is not None:
+            encounter.room = encounter.scene.location
+            encounter.save(update_fields=["room"])
         assign_default_escalation_curve(encounter)
+
+    def create(self, request: Request, *args: object, **kwargs: object) -> Response:
+        """Create, then re-serialize through the prefetch-primed queryset (#3067).
+
+        ``EncounterDetailSerializer``'s nested fields (participants/opponents/
+        clashes/etc.) read ``*_cached`` attrs that only exist on instances
+        fetched through ``_base_queryset()``'s ``Prefetch(..., to_attr=...)``
+        calls. The bare instance ``perform_create`` leaves on ``serializer``
+        doesn't carry them, so DRF's default ``CreateModelMixin.create()``
+        (serializing that bare instance) raises ``AttributeError`` — this
+        endpoint had no caller before the web GM-start-encounter flow, so the
+        gap was never exercised.
+        """
+        serializer = self.get_serializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        self.perform_create(serializer)
+        encounter = self._base_queryset().get(pk=serializer.instance.pk)
+        response = self._serialize_encounter(request, encounter)
+        response.status_code = status.HTTP_201_CREATED
+        for key, value in self.get_success_headers(serializer.data).items():
+            response[key] = value
+        return response
 
     def get_permissions(self) -> list:
         if self.action in ("list", "retrieve"):

@@ -35,6 +35,7 @@ from world.combat.models import (
     DramaticSurgeRecord,
     DuelChallenge,
     EscalationCurve,
+    ThreatPool,
 )
 from world.conditions.serializers import ConditionInstanceSerializer
 from world.conditions.services import get_active_conditions
@@ -759,6 +760,21 @@ class DuelChallengeSerializer(serializers.ModelSerializer):
         read_only_fields = fields
 
 
+class ThreatPoolSerializer(serializers.ModelSerializer):
+    """Read serializer for the ThreatPool catalog (#3067).
+
+    ThreatPool is authored content (a named NPC move-set — e.g. "Goblin
+    Raiders"), never a per-encounter/per-scene row, so this is a flat
+    id/name/description listing for the GM's add-opponent picker — no
+    encounter-scoped fields to compute.
+    """
+
+    class Meta:
+        model = ThreatPool
+        fields = ["id", "name", "description"]
+        read_only_fields = fields
+
+
 # ---------------------------------------------------------------------------
 # List and detail serializers
 # ---------------------------------------------------------------------------
@@ -874,6 +890,7 @@ class EncounterDetailSerializer(serializers.ModelSerializer):
         fields = [
             "id",
             "scene",
+            "room",
             "encounter_type",
             "status",
             "outcome",

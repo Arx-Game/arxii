@@ -3867,7 +3867,18 @@ export interface paths {
     /** @description ViewSet for combat encounter lifecycle and player actions. */
     get: operations['combat_list'];
     put?: never;
-    /** @description ViewSet for combat encounter lifecycle and player actions. */
+    /**
+     * @description Create, then re-serialize through the prefetch-primed queryset (#3067).
+     *
+     *     ``EncounterDetailSerializer``'s nested fields (participants/opponents/
+     *     clashes/etc.) read ``*_cached`` attrs that only exist on instances
+     *     fetched through ``_base_queryset()``'s ``Prefetch(..., to_attr=...)``
+     *     calls. The bare instance ``perform_create`` leaves on ``serializer``
+     *     doesn't carry them, so DRF's default ``CreateModelMixin.create()``
+     *     (serializing that bare instance) raises ``AttributeError`` — this
+     *     endpoint had no caller before the web GM-start-encounter flow, so the
+     *     gap was never exercised.
+     */
     post: operations['combat_create'];
     delete?: never;
     options?: never;
@@ -4458,6 +4469,58 @@ export interface paths {
      *     played characters, so it never leaks other players' challenges.
      */
     get: operations['combat_duel_challenges_retrieve'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/combat/threat-pools/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /**
+     * @description Read-only catalog listing for the GM add-opponent picker (#3067).
+     *
+     *     ThreatPool is authored content (a named NPC move-set, e.g. "Goblin
+     *     Raiders") — not encounter- or scene-scoped — so this is a flat,
+     *     unfiltered-by-default listing. Any authenticated user may browse it: the
+     *     catalog itself carries nothing sensitive (no encounter state, no player
+     *     data); the sensitive step is spawning an opponent with it, which stays
+     *     gated by ``IsEncounterGMOrStaff`` on ``add_opponent``.
+     */
+    get: operations['combat_threat_pools_list'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/combat/threat-pools/{id}/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /**
+     * @description Read-only catalog listing for the GM add-opponent picker (#3067).
+     *
+     *     ThreatPool is authored content (a named NPC move-set, e.g. "Goblin
+     *     Raiders") — not encounter- or scene-scoped — so this is a flat,
+     *     unfiltered-by-default listing. Any authenticated user may browse it: the
+     *     catalog itself carries nothing sensitive (no encounter state, no player
+     *     data); the sensitive step is spawning an opponent with it, which stays
+     *     gated by ``IsEncounterGMOrStaff`` on ``add_opponent``.
+     */
+    get: operations['combat_threat_pools_retrieve'];
     put?: never;
     post?: never;
     delete?: never;
@@ -24897,6 +24960,8 @@ export interface components {
     EncounterDetail: {
       readonly id: number;
       scene: number;
+      /** @description Room where the encounter takes place. Ephemeral CombatNPC ObjectDBs are placed here at creation. */
+      room?: number | null;
       encounter_type?: components['schemas']['EncounterTypeEnum'];
       status?: components['schemas']['Status4e6Enum'];
       readonly outcome:
@@ -24989,6 +25054,8 @@ export interface components {
     /** @description Full encounter state with covenant-filtered action visibility. */
     EncounterDetailRequest: {
       scene: number;
+      /** @description Room where the encounter takes place. Ephemeral CombatNPC ObjectDBs are placed here at creation. */
+      room?: number | null;
       encounter_type?: components['schemas']['EncounterTypeEnum'];
       status?: components['schemas']['Status4e6Enum'];
       round_number?: number;
@@ -32321,6 +32388,21 @@ export interface components {
       previous?: string | null;
       results: components['schemas']['ThreadWeavingTeachingOffer'][];
     };
+    PaginatedThreatPoolList: {
+      /** @example 123 */
+      count: number;
+      /**
+       * Format: uri
+       * @example http://api.example.org/accounts/?page=4
+       */
+      next?: string | null;
+      /**
+       * Format: uri
+       * @example http://api.example.org/accounts/?page=2
+       */
+      previous?: string | null;
+      results: components['schemas']['ThreatPool'][];
+    };
     PaginatedTransitionList: {
       /** @example 123 */
       count: number;
@@ -32857,6 +32939,8 @@ export interface components {
     /** @description Full encounter state with covenant-filtered action visibility. */
     PatchedEncounterDetailRequest: {
       scene?: number;
+      /** @description Room where the encounter takes place. Ephemeral CombatNPC ObjectDBs are placed here at creation. */
+      room?: number | null;
       encounter_type?: components['schemas']['EncounterTypeEnum'];
       status?: components['schemas']['Status4e6Enum'];
       round_number?: number;
@@ -39164,6 +39248,19 @@ export interface components {
       readonly pitch: string;
       /** @description Gold price the teacher charges (XP cost stays on the unlock). */
       readonly gold_cost: number;
+    };
+    /**
+     * @description Read serializer for the ThreatPool catalog (#3067).
+     *
+     *     ThreatPool is authored content (a named NPC move-set — e.g. "Goblin
+     *     Raiders"), never a per-encounter/per-scene row, so this is a flat
+     *     id/name/description listing for the GM's add-opponent picker — no
+     *     encounter-scoped fields to compute.
+     */
+    ThreatPool: {
+      readonly id: number;
+      readonly name: string;
+      readonly description: string;
     };
     /**
      * @description * `crown` - Crown
@@ -45894,6 +45991,54 @@ export interface operations {
         };
         content: {
           'application/json': components['schemas']['DuelChallenge'];
+        };
+      };
+    };
+  };
+  combat_threat_pools_list: {
+    parameters: {
+      query?: {
+        /** @description A page number within the paginated result set. */
+        page?: number;
+        /** @description Number of results to return per page. */
+        page_size?: number;
+        /** @description A search term. */
+        search?: string;
+      };
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['PaginatedThreatPoolList'];
+        };
+      };
+    };
+  };
+  combat_threat_pools_retrieve: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        /** @description A unique integer value identifying this threat pool. */
+        id: number;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['ThreatPool'];
         };
       };
     };

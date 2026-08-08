@@ -911,6 +911,25 @@ export function YourTurn({
           return;
         }
       }
+      // PaceMode.READY early-resolution (#3067): `declare_action` resets
+      // `is_ready=False` on every declaration, so submitting alone never
+      // marks the participant ready — a READY-pace encounter would then
+      // wait out the TIMED-style sweep instead of resolving the instant
+      // everyone's in. Dispatch the same `combat_ready` registry action the
+      // REST `ready` endpoint / telnet `combat ready` use, mirroring
+      // `ReadyAction.execute` -> `maybe_resolve_on_ready`. Only meaningful in
+      // READY pace — TIMED resolves on its timer and MANUAL waits for the GM,
+      // so this is skipped for both to leave their behavior unchanged.
+      if (encounter?.pace_mode === 'ready') {
+        const readyResult = await dispatchAction({
+          ref: { backend: 'registry', registry_key: 'combat_ready' },
+          kwargs: {},
+        });
+        if (isDispatchFailure(readyResult)) {
+          setSubmitError(readyResult.message ?? 'Submit failed. Try again.');
+          return;
+        }
+      }
       setSubmitted(true);
       // Refresh the encounter (carries the server's is_ready) and the "Last
       // Outcome" panel now that every declared job succeeded (#2423).
@@ -1433,7 +1452,11 @@ export function YourTurn({
             : 'border-primary bg-primary text-primary-foreground hover:bg-primary/90'
         )}
       >
-        {dispatchPending ? 'Submitting…' : 'Submit declarations · mark ready'}
+        {dispatchPending
+          ? 'Submitting…'
+          : encounter?.pace_mode === 'ready'
+            ? 'Submit declarations · mark ready'
+            : 'Submit declarations'}
       </button>
 
       {/* Inline submit error — shown when a dispatch rejects */}
