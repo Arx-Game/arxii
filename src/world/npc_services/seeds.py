@@ -89,8 +89,12 @@ def ensure_builders_guild_clerk_role() -> NPCRole | None:
 
     # Idempotent cleanup: delete any offers on this role whose labels
     # are not in the current expected set (handles migration from old
-    # seed labels like "Apply for a small residential permit").
-    NPCServiceOffer.objects.filter(role=role).exclude(label__in=_CLERK_OFFER_LABELS).delete()
+    # seed labels like "Apply for a small residential permit"). MISSION
+    # offers are content-repo-owned since #3056 and never this seeder's
+    # to delete, so they're excluded alongside the label allowlist.
+    NPCServiceOffer.objects.filter(role=role).exclude(label__in=_CLERK_OFFER_LABELS).exclude(
+        kind=OfferKind.MISSION
+    ).delete()
 
     _ensure_offer(
         role=role,

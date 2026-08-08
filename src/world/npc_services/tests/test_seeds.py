@@ -4,7 +4,7 @@ from django.test import TestCase, override_settings
 
 from world.buildings.factories import BuildingKindFactory
 from world.npc_services.constants import DrawMode, OfferKind
-from world.npc_services.factories import NPCRoleFactory
+from world.npc_services.factories import NPCRoleFactory, NPCServiceOfferFactory
 from world.npc_services.models import NPCRole, NPCServiceOffer, PermitOfferDetails
 from world.npc_services.seeds import (
     BUILDERS_GUILD_CLERK_ROLE_NAME,
@@ -120,6 +120,24 @@ class ClerkOfferWiringTests(TestCase):
             NPCServiceOffer.objects.filter(
                 role=role, label="Apply for a small residential permit"
             ).exists()
+        )
+
+    def test_mission_offer_survives_stale_label_cleanup(self) -> None:
+        """A content-loaded MISSION offer is never swept by this seeder (#3056).
+
+        Unlike stale PERMIT-labeled offers, a MISSION offer is content-repo
+        owned and must survive the cleanup even though its label isn't in
+        the clerk's known label set.
+        """
+        role = ensure_builders_guild_clerk_role()
+        mission_offer = NPCServiceOfferFactory(
+            role=role, kind=OfferKind.MISSION, label="A thread that wants weaving"
+        )
+        # Re-seed — should NOT clean up the MISSION offer.
+        ensure_builders_guild_clerk_role()
+        self.assertTrue(
+            NPCServiceOffer.objects.filter(pk=mission_offer.pk).exists(),
+            "MISSION offer was deleted by the seeder's cleanup pass",
         )
 
     def test_non_permit_offers_preserved(self) -> None:
