@@ -1,13 +1,15 @@
-import { useDeferredValue, useState } from 'react';
+import { useDeferredValue, useMemo, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { Search, UserPlus, X } from 'lucide-react';
+import { Check, Search, UserPlus, X } from 'lucide-react';
 import { toast } from 'sonner';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { useMyRosterEntriesQuery } from '@/roster/queries';
 import {
   inviteToEvent,
   removeInvitation,
+  respondToInvitation,
   searchOrganizations,
   searchPersonas,
   searchSocieties,
@@ -67,6 +69,32 @@ export function EventInvitations({ event, canManage }: EventInvitationsProps) {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['event', String(event.id)] });
       toast.success('Invitation removed');
+    },
+    onError: (err: Error) => {
+      toast.error(err.message);
+    },
+  });
+
+  // #3069 — the invitee-side RSVP surface. `event.invitations` already lists
+  // every invite for the event to any viewer (unrelated to this fix), so we
+  // only need to recognize which rows are the viewer's own to offer
+  // Accept/Decline on them.
+  const { data: myRosterEntries } = useMyRosterEntriesQuery();
+  const myPersonaIds = useMemo(() => {
+    const ids = new Set<number>();
+    for (const entry of myRosterEntries ?? []) {
+      if (entry.active_persona_id != null) ids.add(entry.active_persona_id);
+      if (entry.primary_persona_id != null) ids.add(entry.primary_persona_id);
+    }
+    return ids;
+  }, [myRosterEntries]);
+
+  const respondMutation = useMutation({
+    mutationFn: ({ id, response }: { id: number; response: 'accept' | 'decline' }) =>
+      respondToInvitation(id, response),
+    onSuccess: (_data, { response }) => {
+      queryClient.invalidateQueries({ queryKey: ['event', String(event.id)] });
+      toast.success(response === 'accept' ? 'You accepted the invitation' : 'You declined');
     },
     onError: (err: Error) => {
       toast.error(err.message);
@@ -167,27 +195,65 @@ export function EventInvitations({ event, canManage }: EventInvitationsProps) {
 
         {event.invitations.length > 0 ? (
           <ul className="space-y-1">
-            {event.invitations.map((inv: EventInvitation) => (
-              <li key={inv.id} className="flex items-center justify-between text-sm">
-                <div className="flex items-center gap-2">
-                  <span className="rounded bg-muted px-1.5 py-0.5 text-xs capitalize">
-                    {inv.target_type}
-                  </span>
-                  <span>{inv.target_name || '(deleted)'}</span>
-                </div>
-                {canManage && (
-                  <button
-                    type="button"
-                    onClick={() => removeMutation.mutate(inv.id)}
-                    disabled={removeMutation.isPending}
-                    aria-label={`Remove invitation for ${inv.target_name || 'unknown'}`}
-                    className="rounded p-1 text-muted-foreground hover:bg-destructive/10 hover:text-destructive"
-                  >
-                    <X className="h-3.5 w-3.5" />
-                  </button>
-                )}
-              </li>
-            ))}
+            {event.invitations.map((inv: EventInvitation) => {
+              const isMine =
+                inv.target_type === 'persona' &&
+                inv.target_persona != null &&
+                myPersonaIds.has(inv.target_persona);
+              return (
+                <li key={inv.id} className="flex items-center justify-between text-sm">
+                  <div className="flex items-center gap-2">
+                    <span className="rounded bg-muted px-1.5 py-0.5 text-xs capitalize">
+                      {inv.target_type}
+                    </span>
+                    <span>{inv.target_name || '(deleted)'}</span>
+                  </div>
+                  <div className="flex items-center gap-1">
+                    {isMine && inv.response === 'pending' && (
+                      <>
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          className="h-6 px-2 text-xs"
+                          onClick={() => respondMutation.mutate({ id: inv.id, response: 'accept' })}
+                          disabled={respondMutation.isPending}
+                        >
+                          <Check className="mr-1 h-3 w-3" />
+                          Accept
+                        </Button>
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          className="h-6 px-2 text-xs"
+                          onClick={() =>
+                            respondMutation.mutate({ id: inv.id, response: 'decline' })
+                          }
+                          disabled={respondMutation.isPending}
+                        >
+                          Decline
+                        </Button>
+                      </>
+                    )}
+                    {isMine && inv.response !== 'pending' && (
+                      <span className="rounded bg-muted px-1.5 py-0.5 text-xs capitalize text-muted-foreground">
+                        You {inv.response}
+                      </span>
+                    )}
+                    {canManage && (
+                      <button
+                        type="button"
+                        onClick={() => removeMutation.mutate(inv.id)}
+                        disabled={removeMutation.isPending}
+                        aria-label={`Remove invitation for ${inv.target_name || 'unknown'}`}
+                        className="rounded p-1 text-muted-foreground hover:bg-destructive/10 hover:text-destructive"
+                      >
+                        <X className="h-3.5 w-3.5" />
+                      </button>
+                    )}
+                  </div>
+                </li>
+              );
+            })}
           </ul>
         ) : (
           !showSearch && (

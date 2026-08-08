@@ -31,6 +31,8 @@ export interface EventHost {
   added_at: string;
 }
 
+export type InvitationResponse = 'pending' | 'accepted' | 'declined';
+
 export interface EventInvitation {
   id: number;
   target_type: 'persona' | 'organization' | 'society';
@@ -39,6 +41,14 @@ export interface EventInvitation {
   target_society: number | null;
   target_name: string | null;
   can_bring_guests: boolean;
+  /**
+   * The invitee's RSVP (#3069). Only meaningful for `target_type: 'persona'` —
+   * organization/society (group) invitations have no per-member response row
+   * and always read PENDING server-side (see `InvitationResponse` on the
+   * backend, `world/events/constants.py`).
+   */
+  response: InvitationResponse;
+  responded_at: string | null;
   invited_at: string;
 }
 

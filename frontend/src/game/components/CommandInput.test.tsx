@@ -169,6 +169,17 @@ describe('CommandInput', () => {
     expect(sendMock).toHaveBeenCalledWith('Alice', 'say hello everyone');
   });
 
+  it('sends a typed page verbatim instead of wrapping it into pose/say IC text (#3069)', () => {
+    const mode: ComposerMode = { command: 'pose', targets: [], label: 'Pose → Room' };
+    render(<CommandInput character="Alice" composerMode={mode} />);
+    const textarea = screen.getByRole('textbox');
+
+    fireEvent.change(textarea, { target: { value: 'page Bob=meet me ooc for a sec' } });
+    fireEvent.keyDown(textarea, { key: 'Enter' });
+
+    expect(sendMock).toHaveBeenCalledWith('Alice', 'page Bob=meet me ooc for a sec');
+  });
+
   it('whisper mode uses target=text syntax', () => {
     const mode: ComposerMode = {
       command: 'whisper',

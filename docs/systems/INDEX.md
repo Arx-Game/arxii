@@ -2361,7 +2361,7 @@ action consent flow, and a three-mode non-combat round framework.
   `ensure_scene_for_location` derives the default. Shared helper: `room_is_publicly_listed(room)`
   in `evennia_extensions/models.py`. See [scenes.md](scenes.md) §"Scene Privacy ↔ Room-Publicness Invariant".
 - **Scene admin actions (#1445):**
-  - `StartSceneAction` (key `"start_scene"`, `actions/definitions/scenes.py`) — creates scene + grants co-ownership to all present PCs; records actor as non-owner participant if scene already exists.
+  - `StartSceneAction` (key `"start_scene"`, `actions/definitions/scenes.py`) — creates scene + grants co-ownership to all present PCs; records actor as non-owner participant if scene already exists. **Web convergence (#3069):** `SceneViewSet.perform_create` (`world/scenes/views.py`) dispatches this Action instead of a bespoke `Scene.objects.create`, so the web "Start Scene" button now gets the same privacy derivation + co-owner/GM enrollment telnet always had.
   - `FinishSceneAction` (key `"finish_scene"`, `actions/definitions/scenes.py`) — finishes active scene; gated by `actor_can_administer_scene`.
   - `SetRoundModeAction` (key `"set_round_mode"`, `actions/definitions/rounds.py`) — changes mode/knobs of active round; gated by `actor_can_administer_scene`; `costs_turn=False`.
 - **`CmdScene`** (`commands/scene.py`) — telnet face for `scene start [name]` / `scene finish` / `scene round [open|pose_order|strict] [quorum=<pct>] [cap=<n>] [lock=on/off]` / `scene status`. Thin over the three Actions above; no business logic.
