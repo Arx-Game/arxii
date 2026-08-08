@@ -20,7 +20,10 @@ function render(ui: ReactElement, options?: RenderOptions) {
 }
 
 const respondToInvitationMock = vi.fn(
-  (): Promise<{ success: boolean; message: string }> =>
+  (
+    _invitationId: number,
+    _response: 'accept' | 'decline'
+  ): Promise<{ success: boolean; message: string }> =>
     Promise.resolve({ success: true, message: 'ok' })
 );
 const toastSuccessMock = vi.fn();
