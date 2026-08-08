@@ -79,6 +79,7 @@ NON_PROSE_TEXT_FIELDS = frozenset(
     {
         "action_key",
         "admin_notes",
+        "base_action_key",
         "cloudinary_public_id",
         "cloudinary_url",
         "color_hex",
@@ -95,6 +96,7 @@ NON_PROSE_TEXT_FIELDS = frozenset(
         "label",
         "latin_name",
         "name",
+        "name_override",
         "notes",
         "ref",
         "reward_value",
@@ -103,6 +105,7 @@ NON_PROSE_TEXT_FIELDS = frozenset(
         "target_object_name",
         "title",
         "variable_name",
+        "variant_name",
     }
 )
 

@@ -70,6 +70,13 @@ CONTENT_MODELS: frozenset[str] = frozenset(
         "achievements.achievementreward",
         "achievements.rewarddefinition",
         "achievements.conditionstatrule",
+        # actions — #3034: the six social-magic ActionEnhancement rows #2973
+        # requires (Intimidate/Persuade/Deceive/Flirt/Perform/Entrance) had no
+        # production seeder and no CONTENT_MODELS entry, so "magical
+        # persuade/intimidate" had no path to becoming dispatchable on a real
+        # deploy. MagicContent.create_all() (test-fixture only since #2973)
+        # is the only place these six were ever created.
+        "actions.actionenhancement",
         # areas
         "areas.rampartelementprofile",
         "areas.rampartelementresistance",
@@ -179,6 +186,11 @@ CONTENT_MODELS: frozenset[str] = frozenset(
         "magic.glimpsetag",
         "magic.glimpsetagdistinctionsuggestion",
         "magic.intensitytier",
+        # #3034: the row-level "authored_by IS NULL" split lives in
+        # EXPORT_FILTERS below — a player's "author from scratch" Mage Scar
+        # must never ship in the corpus, mirroring magic.ritual's
+        # author_account split.
+        "magic.magicalalterationtemplate",
         "magic.pathgiftgrant",
         "magic.portalanchorkind",
         "magic.resonance",
@@ -195,6 +207,11 @@ CONTENT_MODELS: frozenset[str] = frozenset(
         "magic.techniqueoutcomemodifier",
         "magic.techniqueremovedcondition",
         "magic.techniquestyle",
+        # #3034: the resonance-specialized ("Social Arts" gift-technique) forms
+        # #2973 requires. Same test-fixture-only creation gap as
+        # actions.actionenhancement above — MagicContent.create_all() minted
+        # these, and nothing else did.
+        "magic.techniquevariant",
         "magic.threadweavingunlock",
         "magic.tradition",
         "magic.traditiongiftgrant",
@@ -292,6 +309,10 @@ CONTENT_MODELS: frozenset[str] = frozenset(
 EXPORT_FILTERS: dict[str, dict[str, object]] = {
     "evennia_extensions.media": {"slug__isnull": False},  # pre-existing behavior
     "magic.ritual": {"author_account__isnull": True},
+    # #3034: a player's "author from scratch" Mage Scar (authored_by set) is
+    # player data, not lore; only staff/system-seed rows (authored_by NULL,
+    # per the model's own docstring) are content.
+    "magic.magicalalterationtemplate": {"authored_by__isnull": True},
     "checks.checktype": {"owner_sheet__isnull": True},
     "checks.checktypetrait": {"check_type__owner_sheet__isnull": True},
     # #3056: only MISSION-kind offers are content; PERMIT/TRAIN/SETTLE etc.

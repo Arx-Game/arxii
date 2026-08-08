@@ -8,12 +8,13 @@ from django.db import models
 from evennia.utils.idmapper.models import SharedMemoryModel
 
 from actions.constants import EnhancementSourceType
+from core.natural_keys import NaturalKeyManager, NaturalKeyMixin
 
 if TYPE_CHECKING:
     from actions.types import ActionContext
 
 
-class ActionEnhancement(SharedMemoryModel):
+class ActionEnhancement(NaturalKeyMixin, SharedMemoryModel):
     """A relationship record: "this source modifies this base action in this way."
 
     The source (a technique, distinction, condition) gates *whether* the
@@ -21,6 +22,20 @@ class ActionEnhancement(SharedMemoryModel):
     owns *what* the enhancement does via effect config rows and ``apply()``.
 
     Exactly one source FK must be non-null, matching ``source_type``.
+
+    Carries ``NaturalKeyMixin`` (#3034) so an enhancement can be authored in
+    the lore repo — e.g. the six social-magic enhancements (Intimidate,
+    Persuade, Deceive, Flirt, Perform, Entrance) #2973 requires but which no
+    production seeder creates. ``(base_action_key, variant_name)`` is the
+    identity: it is already the de facto key every production call site
+    (``world.conditions.berserk_content.ensure_restore_to_sense_effect``,
+    ``MagicContent.create_all()``) uses in its own ``get_or_create`` lookup,
+    and it is the "this base action, in this way" pair the class docstring
+    above already names as the row's meaning. No DB ``UniqueConstraint``
+    backs it (mirrors ``conditions.ConditionCheckModifier`` — a natural key
+    does not require DB enforcement) since several tests create rows via
+    ``ActionEnhancement.objects.create(...)`` directly and a new constraint
+    would risk colliding with those.
     """
 
     base_action_key = models.CharField(max_length=100, db_index=True)
@@ -54,6 +69,11 @@ class ActionEnhancement(SharedMemoryModel):
         on_delete=models.CASCADE,
         related_name="action_enhancements",
     )
+
+    objects = NaturalKeyManager()
+
+    class NaturalKeyConfig:
+        fields = ["base_action_key", "variant_name"]
 
     class Meta:
         app_label = "arxii"
