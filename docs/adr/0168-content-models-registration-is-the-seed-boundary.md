@@ -106,5 +106,11 @@ registration is the actual line, and it is already written down.
 a separate migration — it costs writing seeders for ~600 rows of declarative JSON —
 and `SEED_SAMPLE_CONTENT` addresses the same need without it.
 
+**Update (#3056):** the guard (`test_no_content_slop`) now honors ADR-0171's
+row-level `EXPORT_FILTERS` too, not just model-level `CONTENT_MODELS`
+registration, so a model can be split row-wise between content and seeder
+ownership (`npc_services.npcserviceoffer` is content only where
+`kind="mission"`) without the guard flagging the seeder-owned rows as slop.
+
 Related: ADR-0142 (which this sharpens), ADR-0140 (the content pipeline), ADR-0013
 (no data migrations pre-production). Issue #2698.

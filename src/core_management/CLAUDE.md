@@ -129,17 +129,23 @@ naming a contributor authored in the same corpus update would otherwise lose
 its credit on a fresh database's single Big Button load and only recover it
 on the next one.
 
-**Known asymmetry:** `NPCRole`, `ItemTemplate`, `BuildingKind` and `DecorationKind`
-carry `CreditedContent` and are authored through `DOMAIN_BUILDERS` (`npc_roles/`,
-`items/`, `building_kinds/`, `decoration_kinds/`) same as every other domain, but
-none of the four is registered in `CONTENT_MODELS`. So a credit written into one of
-their files loads into the database fine (`build_all` -> `load_entries`), but
-`content_export` never writes it back out - `CONTENT_MODELS` is what
-`export_to_content_repo` walks. This is a one-way credit path, not a bug to paper
-over here; whether these four belong in `CONTENT_MODELS` is a separate decision
-than "does the model have the columns," and adding them pulls in the same
-additions-gate and round-trip questions ADR-0191 already settled for the domains
-that are registered.
+**Known asymmetry:** `ItemTemplate`, `BuildingKind` and `DecorationKind` carry
+`CreditedContent` and are authored through `DOMAIN_BUILDERS` (`items/`,
+`building_kinds/`, `decoration_kinds/`) same as every other domain, but none of the
+three is registered in `CONTENT_MODELS`. So a credit written into one of their files
+loads into the database fine (`build_all` -> `load_entries`), but `content_export`
+never writes it back out - `CONTENT_MODELS` is what `export_to_content_repo` walks.
+This is a one-way credit path, not a bug to paper over here; whether these three
+belong in `CONTENT_MODELS` is a separate decision than "does the model have the
+columns," and adding them pulls in the same additions-gate and round-trip questions
+ADR-0191 already settled for the domains that are registered.
+
+`NPCRole` used to be a fourth member of this list; #3036 admitted it to
+`CONTENT_MODELS`, so it round-trips like any other registered domain now. #3056
+additionally registered `npc_services.npcserviceoffer` (row-filtered to
+`kind="mission"` via `EXPORT_FILTERS`) and `npc_services.missionofferdetails` (with
+`source_beat`/`target_project` stripped via `EXPORT_FIELD_EXCLUSIONS`) - neither
+carries `CreditedContent`, so neither was ever part of this asymmetry.
 
 `core_management/prose_report.py` plus `tools/prose_report.py` (`just
 prose-report`) report the writer/reviewer backlog by scanning a content-repo

@@ -218,6 +218,12 @@ CONTENT_MODELS: frozenset[str] = frozenset(
         # model). Ordered before missions so report_to_role resolves in one
         # load pass.
         "npc_services.npcrole",
+        # #3056 extends that ruling to MISSION-kind offers: missions reference
+        # them too (MissionOptionRouteReward.followon_offer, MissionOfferDetails
+        # .mission_template), so they must travel as well. Non-MISSION kinds
+        # stay seeder-owned — see EXPORT_FILTERS.
+        "npc_services.npcserviceoffer",
+        "npc_services.missionofferdetails",
         # missions
         "missions.missioncategory",
         "missions.missiontemplate",
@@ -288,6 +294,9 @@ EXPORT_FILTERS: dict[str, dict[str, object]] = {
     "magic.ritual": {"author_account__isnull": True},
     "checks.checktype": {"owner_sheet__isnull": True},
     "checks.checktypetrait": {"check_type__owner_sheet__isnull": True},
+    # #3056: only MISSION-kind offers are content; PERMIT/TRAIN/SETTLE etc.
+    # are created by world/npc_services/seeds.py per installation.
+    "npc_services.npcserviceoffer": {"kind": "mission"},
 }
 
 #: Field-level export exclusions: columns on a content model that are
@@ -302,6 +311,9 @@ EXPORT_FILTERS: dict[str, dict[str, object]] = {
 #: ignores these fields for the same reason: they are seeder-owned.
 EXPORT_FIELD_EXCLUSIONS: dict[str, frozenset[str]] = {
     "npc_services.npcrole": frozenset({"faction_affiliation"}),
+    # #3056: live story/installation state, not content — same rationale as
+    # npcrole.faction_affiliation above.
+    "npc_services.missionofferdetails": frozenset({"source_beat", "target_project"}),
 }
 
 
