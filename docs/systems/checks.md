@@ -180,6 +180,21 @@ reachable through its `objectdb`'s class-level rows (an ephemeral NPC has none).
 the override, a boss's morale defense always floored at level 1 even though the same
 opponent's offense already opposed PC checks at its real level via `level_opposition`.
 
+**`award_development` (#3066).** `compute_resist_increment` never rolls (ADR-0019
+keeps the one dice roll inside `perform_check`/`resolve_challenge`), so it can't
+thread `effort_level` into a `perform_check` call the way combat/scene offense
+checks do. `award_development: bool = False` opts a call site into awarding the
+defender Composure development points directly via the same
+`_award_check_development` chokepoint `perform_check` uses internally — #3039's
+intent covers both sides of an opposed check. Only the two scene call sites that
+charge the defender real resist fatigue for a player-*declared* effort
+(`_compute_difficulty_override_for_primary` / `_compute_target_difficulty_override`
+in `world/scenes/action_services.py`) pass `True`. `_social_combat_difficulty`
+does not — its `effort_level="medium"` default is a hardcoded passive-resistance
+band standing in for an undeclared resistance, not a real choice, so awarding dp
+there would be phantom accrual for an opponent (sometimes a persona-backed PC
+mirror) who spent nothing.
+
 `resolve_target_difficulty` (`actions/effects/base.py`) also uses
 `compute_check_rating` directly to get a target's resistance rating for
 `target_difficulty` — replacing an earlier version that rolled a throwaway

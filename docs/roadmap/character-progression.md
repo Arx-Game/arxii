@@ -221,14 +221,26 @@ The central spine connecting every system in the game. Characters develop throug
   and use the fatigue pipeline, need action type definitions and resonance integration
 - **Action type definitions** — define base fatigue costs per action, which pool each draws from,
   and wire into the scene action request system
-- ~~**Development point hooks**~~ — DONE (#3039): dp awarded at the `perform_check`
-  chokepoint (`world.checks.services._award_check_development`), threshold-based
-  level-ups, WeeklySkillUsage accumulator, weekly rust + audit cron. Previously this
-  lived only in `world.fatigue.action_pipeline._execute_action_with_fatigue`, whose
-  public wrapper (`execute_action_with_fatigue`) had zero production callers — no
+- ~~**Development point hooks**~~ — DONE (#3039 chokepoint + #3066 caller threading):
+  dp awarded at the `perform_check` chokepoint (`world.checks.services
+  ._award_check_development`), threshold-based level-ups, WeeklySkillUsage
+  accumulator, weekly rust + audit cron. Previously this lived only in
+  `world.fatigue.action_pipeline._execute_action_with_fatigue`, whose public
+  wrapper (`execute_action_with_fatigue`) had zero production callers — no
   character ever accrued dp organically. The pipeline no longer awards; hooking on
   `perform_check` instead covers every check path (combat, scenes, the test-rig
-  forced-outcome path included) in one place.
+  forced-outcome path included) in one place. **#3039 built the chokepoint but no
+  production caller actually passed `effort_level` into `perform_check`** — combat's
+  `CombatTechniqueResolver._roll_check`, the two scene `start_action_resolution`
+  call sites, and the resist path all computed `EFFORT_CHECK_MODIFIER` themselves
+  and folded it into `extra_modifiers`, always calling with `effort_level=None`, so
+  dp never accrued in production despite the chokepoint being wired and unit-tested
+  in isolation. #3066 threaded the caller's already-in-hand `effort_level` straight
+  into `perform_check`/`start_action_resolution` at every one of those sites and
+  deleted the caller-side fold (so the roll math stayed byte-identical — see the
+  regression test in `world.checks.tests.test_services
+  .PerformCheckDevelopmentAwardTests.test_threading_effort_level_matches_pre_3066_manual_fold`),
+  closing the gap end to end.
 - **Integration test for fatigue → check pipeline** — end-to-end test with real CheckRank/ResultChart
   fixture data (currently mocked)
 - **Unified dice roll system** — fatigue checks use perform_check but the broader game needs a

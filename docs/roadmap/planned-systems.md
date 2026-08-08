@@ -65,8 +65,10 @@ PLANNED-UNBUILT tier here. Where a planned system *does* already have an issue/m
   is not a ruling that the feature is unwanted: `docs/roadmap/gm-system.md` still treats
   story-beat rewards as revivable, and `GMAwardAction` is explicitly *not* their
   replacement. What exists today is per-check development (`award_check_development`,
-  wired via `world/fatigue/action_pipeline.py`) and GM fiat (`GMAwardAction`); neither
-  awards from scene participation. Design is open.
+  hooked at the `perform_check` chokepoint via `world.checks.services
+  ._award_check_development`, #3039; threaded through every production caller —
+  combat, scene actions, and the resist path — by #3066) and GM fiat
+  (`GMAwardAction`); neither awards from scene participation. Design is open.
 
 ## Combat depth
 

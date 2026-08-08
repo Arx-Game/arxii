@@ -175,7 +175,7 @@ from world.combat.types import (
     RoundResolutionResult,
 )
 from world.conditions.constants import Allegiance
-from world.fatigue.constants import EFFORT_CHECK_MODIFIER, EffortLevel
+from world.fatigue.constants import EffortLevel
 from world.fatigue.services import apply_fatigue, get_fatigue_penalty
 from world.magic.constants import EffectKind
 from world.mechanics.types import ChallengeResolutionResult
@@ -414,23 +414,20 @@ class CombatTechniqueResolver:
             self.participant.character_sheet,
             self.fatigue_category,
         )
-        effort_mod = EFFORT_CHECK_MODIFIER.get(self.action.effort_level, 0)
 
-        # Route effort AND the combat-pull flat bonus through the shared modifier
-        # seam so the combat check honors condition + rollmod sources (the #851
+        # Route the combat-pull flat bonus through the shared modifier seam so
+        # the combat check honors condition + rollmod sources (the #851
         # individualization lever) and the recorded ModifierBreakdown is exhaustive:
         # every point that shifts the roll is a labeled contribution, so the
         # provenance UI can attribute it.  breakdown.total alone is the full roll
         # shift — no out-of-band additive the breakdown can't see.
+        # Effort is NOT folded in here (#3066) — it is threaded straight into
+        # check_fn's own effort_level parameter below, which applies the exact
+        # same EFFORT_CHECK_MODIFIER internally (perform_check._compute_check_breakdown)
+        # AND is perform_check's own signal for check-based development-point
+        # accrual (#3039). Folding it into extra_contributions here as well would
+        # double-count the roll bonus.
         extra_contributions: list[ModifierContribution] = []
-        if effort_mod:
-            extra_contributions.append(
-                ModifierContribution(
-                    source_kind=ModifierSourceKind.EFFORT,
-                    source_label="Effort",
-                    value=effort_mod,
-                )
-            )
         if self.pull_flat_bonus:
             extra_contributions.append(
                 ModifierContribution(
@@ -553,6 +550,7 @@ class CombatTechniqueResolver:
             self.offense_check_type,
             target_difficulty=target_difficulty,
             extra_modifiers=extra_modifiers,
+            effort_level=self.action.effort_level,
             fatigue_penalty=penalty,
             situation_ctx=situation_ctx,
             stat_override=stat_override,

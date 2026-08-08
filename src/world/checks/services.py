@@ -1145,6 +1145,7 @@ def compute_resist_increment(
     *,
     level_override: int | None = None,
     stat_override: str | int | None = None,
+    award_development: bool = False,
 ) -> int:
     """Compute how much a defender's active resistance raises difficulty.
 
@@ -1189,10 +1190,31 @@ def compute_resist_increment(
     level already equals the mirrored character's own. A future constructor that
     stamped something else would diverge here by design, not by accident.
 
+    ``award_development`` (#3066): when True, awards check-based development points
+    to *defender_character* for this Composure use via the same
+    ``_award_check_development`` chokepoint ``perform_check`` uses internally —
+    #3039's intent covers both sides of an opposed check, so a resister who commits
+    an effort level earns dev points for it exactly like the roller does. Defaults
+    ``False`` (byte-identical to before #3066): this function has no dice roll of
+    its own (ADR-0019 keeps the one roll inside ``perform_check``/``resolve_challenge``),
+    so nothing here doubles the roll bonus either way — the ``modifier`` fold above
+    remains the only place the effort bonus reaches this rating, since
+    ``compute_check_rating`` takes no ``effort_level`` of its own. Pass ``True`` only
+    from a call site that also charges the defender real resist fatigue for a
+    player-*declared* effort (the two scene call sites,
+    ``_compute_difficulty_override_for_primary`` /
+    ``_compute_target_difficulty_override``) — NOT combat's
+    ``_social_combat_difficulty``, whose ``effort_level="medium"`` default is a
+    hardcoded passive-resistance band, not a real choice; awarding DP there would be
+    phantom accrual for an opponent (sometimes a persona-backed PC mirror) who spent
+    nothing.
+
     Args:
         defender_character: The character resisting the social action.
         resist_effort_level: An EffortLevel string value (e.g. ``"high"``).
         level_override: When set, substitutes for the defender's resolved level.
+        award_development: When True, also awards the defender check-based
+            development points for this Composure use. See above.
 
     Returns:
         Non-negative integer representing the difficulty increment from resistance.
@@ -1211,6 +1233,8 @@ def compute_resist_increment(
         level_override=level_override,
         stat_override=stat_override,
     )
+    if award_development:
+        _award_check_development(defender_character, composure_check_type, resist_effort_level)
     return max(0, rating)
 
 

@@ -687,6 +687,46 @@ class ComputeResistIncrementTests(TestCase):
         result = compute_resist_increment(self.character, resist_effort_level="high")
         assert result == 0
 
+    def test_award_development_false_writes_nothing(self):
+        """award_development defaults False -- byte-identical to pre-#3066 behavior,
+        including for combat's _social_combat_difficulty call, which never opts in."""
+        CharacterTraitValue.objects.create(
+            character=self.character.sheet_data, trait=self.willpower_trait, value=20
+        )
+        compute_resist_increment(self.character, resist_effort_level="high")
+
+        assert not WeeklySkillUsage.objects.filter(
+            character_sheet=self.character.sheet_data, trait=self.willpower_trait
+        ).exists()
+        assert not DevelopmentPoints.objects.filter(
+            character_sheet=self.character.sheet_data, trait=self.willpower_trait
+        ).exists()
+
+    def test_award_development_true_awards_resister_dev_points(self):
+        """#3066: the two scene call sites that charge the defender real resist
+        fatigue for a player-declared effort pass award_development=True, so the
+        resister earns Composure development points too (#3039's intent covers
+        both sides of an opposed check)."""
+        CharacterTraitValue.objects.create(
+            character=self.character.sheet_data, trait=self.willpower_trait, value=20
+        )
+        compute_resist_increment(
+            self.character, resist_effort_level=EffortLevel.HIGH, award_development=True
+        )
+
+        expected_dp = calculate_check_dev_points(EffortLevel.HIGH, path_level=1)
+        assert expected_dp > 0
+        usage = WeeklySkillUsage.objects.get(
+            character_sheet=self.character.sheet_data, trait=self.willpower_trait
+        )
+        assert usage.check_count == 1
+        assert usage.points_earned == expected_dp
+
+        dev = DevelopmentPoints.objects.get(
+            character_sheet=self.character.sheet_data, trait=self.willpower_trait
+        )
+        assert dev.total_earned == expected_dp
+
 
 class PerformCheckDevelopmentAwardTests(TestCase):
     """#3039: perform_check is the sole chokepoint for check-based dp accrual.
@@ -831,3 +871,36 @@ class PerformCheckDevelopmentAwardTests(TestCase):
 
         dev = DevelopmentPoints.objects.get(character_sheet=self.sheet, trait=self.trait)
         assert dev.total_earned == expected_dp
+
+    def test_threading_effort_level_matches_pre_3066_manual_fold(self):
+        """Regression (#3066): production callers used to fold EFFORT_CHECK_MODIFIER
+        into extra_modifiers themselves and always pass effort_level=None. #3066
+        moved every one of those call sites to pass effort_level directly instead
+        (so DP actually accrues) and delete the manual fold. This pins that the two
+        calling conventions produce byte-identical total_points -- i.e. the roll
+        math is unchanged, only DP accrual differs."""
+        from world.fatigue.constants import EFFORT_CHECK_MODIFIER
+
+        pre_3066_style = perform_check(
+            self.character,
+            self.check_type,
+            target_difficulty=0,
+            extra_modifiers=EFFORT_CHECK_MODIFIER[EffortLevel.HIGH],
+            effort_level=None,
+        )
+        post_3066_style = perform_check(
+            self.character,
+            self.check_type,
+            target_difficulty=0,
+            extra_modifiers=0,
+            effort_level=EffortLevel.HIGH,
+        )
+
+        assert pre_3066_style.total_points == post_3066_style.total_points
+
+        # Only the post-#3066 style (effort_level threaded, not folded) awards DP --
+        # the pre-#3066 style passed effort_level=None so it wrote nothing.
+        usage = WeeklySkillUsage.objects.get(character_sheet=self.sheet, trait=self.trait)
+        assert usage.check_count == 1
+        expected_dp = calculate_check_dev_points(EffortLevel.HIGH, path_level=1)
+        assert usage.points_earned == expected_dp

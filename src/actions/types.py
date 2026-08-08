@@ -411,6 +411,12 @@ class PendingActionResolution:
     # Roller-side check bonus (effort + specialization etc.), carried so the
     # resume path can re-apply it after a confirmation pause.
     extra_modifiers: int = 0
+    # EffortLevel string value, or None for no-effort checks (#3066). Threaded
+    # straight into perform_check's own effort_level parameter rather than
+    # pre-folded into extra_modifiers, so it also drives perform_check's
+    # check-based development-point accrual (#3039). Carried the same way as
+    # extra_modifiers so a paused GATED pipeline's resume still applies it.
+    effort_level: str | None = None
 
 
 @dataclass(frozen=True)
