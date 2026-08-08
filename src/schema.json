@@ -5627,7 +5627,17 @@ paths:
           description: ''
     post:
       operationId: combat_create
-      description: ViewSet for combat encounter lifecycle and player actions.
+      description: |-
+        Create, then re-serialize through the prefetch-primed queryset (#3067).
+
+        ``EncounterDetailSerializer``'s nested fields (participants/opponents/
+        clashes/etc.) read ``*_cached`` attrs that only exist on instances
+        fetched through ``_base_queryset()``'s ``Prefetch(..., to_attr=...)``
+        calls. The bare instance ``perform_create`` leaves on ``serializer``
+        doesn't carry them, so DRF's default ``CreateModelMixin.create()``
+        (serializing that bare instance) raises ``AttributeError`` — this
+        endpoint had no caller before the web GM-start-encounter flow, so the
+        gap was never exercised.
       tags:
       - combat
       requestBody:
@@ -6570,6 +6580,78 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/DuelChallenge'
+          description: ''
+  /api/combat/threat-pools/:
+    get:
+      operationId: combat_threat_pools_list
+      description: |-
+        Read-only catalog listing for the GM add-opponent picker (#3067).
+
+        ThreatPool is authored content (a named NPC move-set, e.g. "Goblin
+        Raiders") — not encounter- or scene-scoped — so this is a flat,
+        unfiltered-by-default listing. Any authenticated user may browse it: the
+        catalog itself carries nothing sensitive (no encounter state, no player
+        data); the sensitive step is spawning an opponent with it, which stays
+        gated by ``IsEncounterGMOrStaff`` on ``add_opponent``.
+      parameters:
+      - name: page
+        required: false
+        in: query
+        description: A page number within the paginated result set.
+        schema:
+          type: integer
+      - name: page_size
+        required: false
+        in: query
+        description: Number of results to return per page.
+        schema:
+          type: integer
+      - name: search
+        required: false
+        in: query
+        description: A search term.
+        schema:
+          type: string
+      tags:
+      - combat
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaginatedThreatPoolList'
+          description: ''
+  /api/combat/threat-pools/{id}/:
+    get:
+      operationId: combat_threat_pools_retrieve
+      description: |-
+        Read-only catalog listing for the GM add-opponent picker (#3067).
+
+        ThreatPool is authored content (a named NPC move-set, e.g. "Goblin
+        Raiders") — not encounter- or scene-scoped — so this is a flat,
+        unfiltered-by-default listing. Any authenticated user may browse it: the
+        catalog itself carries nothing sensitive (no encounter state, no player
+        data); the sensitive step is spawning an opponent with it, which stays
+        gated by ``IsEncounterGMOrStaff`` on ``add_opponent``.
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: A unique integer value identifying this threat pool.
+        required: true
+      tags:
+      - combat
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ThreatPool'
           description: ''
   /api/companions/companion-archetypes/:
     get:
@@ -42925,6 +43007,11 @@ components:
           readOnly: true
         scene:
           type: integer
+        room:
+          type: integer
+          nullable: true
+          description: Room where the encounter takes place. Ephemeral CombatNPC ObjectDBs
+            are placed here at creation.
         encounter_type:
           $ref: '#/components/schemas/EncounterTypeEnum'
         status:
@@ -43123,6 +43210,11 @@ components:
       properties:
         scene:
           type: integer
+        room:
+          type: integer
+          nullable: true
+          description: Room where the encounter takes place. Ephemeral CombatNPC ObjectDBs
+            are placed here at creation.
         encounter_type:
           $ref: '#/components/schemas/EncounterTypeEnum'
         status:
@@ -56752,6 +56844,29 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/ThreadWeavingTeachingOffer'
+    PaginatedThreatPoolList:
+      type: object
+      required:
+      - count
+      - results
+      properties:
+        count:
+          type: integer
+          example: 123
+        next:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=4
+        previous:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=2
+        results:
+          type: array
+          items:
+            $ref: '#/components/schemas/ThreatPool'
     PaginatedTransitionList:
       type: object
       required:
@@ -57661,6 +57776,11 @@ components:
       properties:
         scene:
           type: integer
+        room:
+          type: integer
+          nullable: true
+          description: Room where the encounter takes place. Ephemeral CombatNPC ObjectDBs
+            are placed here at creation.
         encounter_type:
           $ref: '#/components/schemas/EncounterTypeEnum'
         status:
@@ -70166,6 +70286,29 @@ components:
       - unlock_display_name
       - unlock_target_kind
       - unlock_xp_cost
+    ThreatPool:
+      type: object
+      description: |-
+        Read serializer for the ThreatPool catalog (#3067).
+
+        ThreatPool is authored content (a named NPC move-set — e.g. "Goblin
+        Raiders"), never a per-encounter/per-scene row, so this is a flat
+        id/name/description listing for the GM's add-opponent picker — no
+        encounter-scoped fields to compute.
+      properties:
+        id:
+          type: integer
+          readOnly: true
+        name:
+          type: string
+          readOnly: true
+        description:
+          type: string
+          readOnly: true
+      required:
+      - description
+      - id
+      - name
     Tier34dEnum:
       enum:
       - crown

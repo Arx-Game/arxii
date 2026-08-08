@@ -151,14 +151,23 @@ const mockUseEncounterForScene = vi.fn(
   })
 );
 
+// GMEncounterControls' gate reads useCombatEncounter's full detail (is_gm) —
+// stub it too (default: no data) so it never falls through to the real
+// useQuery mock above, which eagerly calls any non-'scene' queryFn for real
+// (an uncaught /api/combat/<id>/ fetch that jsdom can't resolve, #3067).
+const mockUseCombatEncounter = vi.fn((): { data: { id: number; is_gm: boolean } | undefined } => ({
+  data: undefined,
+}));
+
 vi.mock('@/combat/queries', async (importOriginal) => {
   // SceneTacticalMap (rendered in the header) also pulls real hooks (e.g.
   // useDispatchPlayerAction) from this module — preserve everything else and
-  // only override useEncounterForScene.
+  // only override useEncounterForScene/useCombatEncounter.
   const actual = await importOriginal<typeof import('@/combat/queries')>();
   return {
     ...actual,
     useEncounterForScene: () => mockUseEncounterForScene(),
+    useCombatEncounter: () => mockUseCombatEncounter(),
   };
 });
 
@@ -166,6 +175,30 @@ vi.mock('@/combat/components/CombatRail', () => ({
   CombatRail: ({ sceneId, encounterId }: { sceneId: number; encounterId: number }) => (
     <div data-testid="combat-rail-stub" data-scene-id={sceneId} data-encounter-id={encounterId}>
       CombatRail [{encounterId}]
+    </div>
+  ),
+}));
+
+// GMEncounterControls (#3067) calls useCombatEncounter directly (real fetch) —
+// stub it out here the same way CombatRail is stubbed above, so this page
+// test doesn't need to mock @/combat/queries' useCombatEncounter too.
+vi.mock('@/combat/sections/GMEncounterControls', () => ({
+  GMEncounterControls: ({
+    sceneId,
+    encounter,
+    viewerCanGm,
+  }: {
+    sceneId: number;
+    encounter: { id: number } | null;
+    viewerCanGm: boolean;
+  }) => (
+    <div
+      data-testid="gm-encounter-controls-stub"
+      data-scene-id={sceneId}
+      data-encounter-id={encounter?.id ?? 'none'}
+      data-viewer-can-gm={String(viewerCanGm)}
+    >
+      GMEncounterControls
     </div>
   ),
 }));
@@ -330,6 +363,7 @@ describe('SceneDetailPage', () => {
       isLoading: false,
       isError: false,
     });
+    mockUseCombatEncounter.mockReturnValue({ data: undefined });
   });
 
   it('renders without crashing', () => {

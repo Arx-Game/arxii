@@ -21,7 +21,7 @@ from world.combat.factories import (
     ThreatPoolEntryFactory,
     ThreatPoolFactory,
 )
-from world.combat.models import CombatOpponentAction, CombatRoundAction
+from world.combat.models import CombatEncounter, CombatOpponentAction, CombatRoundAction
 from world.conditions.factories import DamageSuccessLevelMultiplierFactory
 from world.conditions.models import ConditionInstance
 from world.magic.factories import (
@@ -247,6 +247,95 @@ class GMLifecycleTest(CombatEncounterViewSetTestBase):
             ActionDispatchError.TECHNIQUE_NOT_COMBAT_READY
         ).user_message
         self.assertEqual(response.data["detail"], expected_message)
+
+
+class CreateEncounterTest(CombatEncounterViewSetTestBase):
+    """Tests for POST /api/combat/ — the web GM start-encounter flow (#3067)."""
+
+    def test_create_as_gm_defaults_room_from_scene_location(self) -> None:
+        """room is unset in the payload; perform_create fills it from scene.location."""
+        room = ObjectDBFactory()
+        scene = SceneFactory(location=room)
+        SceneParticipationFactory(scene=scene, account=self.gm_account, is_gm=True)
+        client = APIClient()
+        client.force_authenticate(user=self.gm_account)
+        response = client.post("/api/combat/", {"scene": scene.pk}, format="json")
+        self.assertEqual(response.status_code, http_status.HTTP_201_CREATED)
+        encounter = CombatEncounter.objects.get(pk=response.data["id"])
+        self.assertEqual(encounter.room_id, room.pk)
+
+    def test_create_as_gm_allowed(self) -> None:
+        client = APIClient()
+        client.force_authenticate(user=self.gm_account)
+        response = client.post("/api/combat/", {"scene": self.scene.pk}, format="json")
+        self.assertEqual(response.status_code, http_status.HTTP_201_CREATED)
+
+    def test_create_as_staff_allowed(self) -> None:
+        staff_account = AccountFactory(username="teststaff", is_staff=True)
+        client = APIClient()
+        client.force_authenticate(user=staff_account)
+        response = client.post("/api/combat/", {"scene": self.scene.pk}, format="json")
+        self.assertEqual(response.status_code, http_status.HTTP_201_CREATED)
+
+    def test_create_as_scene_owner_without_gm_flag_allowed(self) -> None:
+        """A scene owner not separately flagged is_gm can still start combat (#3067).
+
+        Matches Scene.get_viewer_can_gm / IsSceneGMOrOwnerOrStaff's
+        staff-or-GM-or-owner predicate — the frontend's "Start encounter"
+        button reads viewer_can_gm, so the create gate must agree with it.
+        """
+        owner_account = AccountFactory(username="testowner")
+        SceneParticipationFactory(
+            scene=self.scene, account=owner_account, is_owner=True, is_gm=False
+        )
+        client = APIClient()
+        client.force_authenticate(user=owner_account)
+        response = client.post("/api/combat/", {"scene": self.scene.pk}, format="json")
+        self.assertEqual(response.status_code, http_status.HTTP_201_CREATED)
+
+    def test_create_non_gm_denied(self) -> None:
+        """A non-GM player cannot POST an encounter into a scene they don't GM.
+
+        Regression guard for the request-level gap this issue closed: create
+        has no object yet, so has_object_permission alone never ran for it.
+        """
+        client = APIClient()
+        client.force_authenticate(user=self.player_account)
+        response = client.post("/api/combat/", {"scene": self.scene.pk}, format="json")
+        self.assertEqual(response.status_code, http_status.HTTP_403_FORBIDDEN)
+
+    def test_create_unauthenticated_denied(self) -> None:
+        client = APIClient()
+        response = client.post("/api/combat/", {"scene": self.scene.pk}, format="json")
+        self.assertEqual(response.status_code, http_status.HTTP_403_FORBIDDEN)
+
+
+class ThreatPoolViewSetTest(CombatEncounterViewSetTestBase):
+    """Tests for GET /api/combat/threat-pools/ — the GM add-opponent picker (#3067)."""
+
+    def test_list_requires_auth(self) -> None:
+        client = APIClient()
+        response = client.get("/api/combat/threat-pools/")
+        self.assertEqual(response.status_code, http_status.HTTP_403_FORBIDDEN)
+
+    def test_list_returns_catalog(self) -> None:
+        pool = ThreatPoolFactory(name="Goblin Raiders")
+        client = APIClient()
+        client.force_authenticate(user=self.player_account)
+        response = client.get("/api/combat/threat-pools/")
+        self.assertEqual(response.status_code, http_status.HTTP_200_OK)
+        names = [row["name"] for row in response.data["results"]]
+        self.assertIn(pool.name, names)
+
+    def test_search_filters_by_name(self) -> None:
+        ThreatPoolFactory(name="Goblin Raiders")
+        wolves = ThreatPoolFactory(name="Wolf Pack")
+        client = APIClient()
+        client.force_authenticate(user=self.player_account)
+        response = client.get("/api/combat/threat-pools/?search=Wolf")
+        self.assertEqual(response.status_code, http_status.HTTP_200_OK)
+        names = [row["name"] for row in response.data["results"]]
+        self.assertEqual(names, [wolves.name])
 
 
 class PlayerActionTest(CombatEncounterViewSetTestBase):

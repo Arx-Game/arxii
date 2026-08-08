@@ -811,6 +811,102 @@ describe('YourTurn — Task 7.3 submit declarations', () => {
 });
 
 // ---------------------------------------------------------------------------
+// PaceMode.READY early-resolution ready-toggle wiring (#3067)
+// ---------------------------------------------------------------------------
+
+describe('YourTurn — PaceMode.READY ready-toggle dispatch (#3067)', () => {
+  it('dispatches combat_ready after a successful submit in READY pace', async () => {
+    setupMocks();
+
+    render(<YourTurn {...defaultProps({ encounter: makeEncounter({ pace_mode: 'ready' }) })} />, {
+      wrapper: createWrapper(),
+    });
+
+    await userEvent.click(screen.getByTestId('submit-declarations-btn'));
+
+    await waitFor(() => {
+      expect(screen.getByTestId('ready-badge')).toBeInTheDocument();
+    });
+
+    expect(mockMutateAsync).toHaveBeenCalledWith({
+      ref: { backend: 'registry', registry_key: 'combat_ready' },
+      kwargs: {},
+    });
+  });
+
+  it('does not dispatch combat_ready in TIMED pace', async () => {
+    setupMocks();
+
+    render(<YourTurn {...defaultProps({ encounter: makeEncounter({ pace_mode: 'timed' }) })} />, {
+      wrapper: createWrapper(),
+    });
+
+    await userEvent.click(screen.getByTestId('submit-declarations-btn'));
+
+    await waitFor(() => {
+      expect(screen.getByTestId('ready-badge')).toBeInTheDocument();
+    });
+
+    expect(mockMutateAsync).not.toHaveBeenCalled();
+  });
+
+  it('does not dispatch combat_ready in MANUAL pace', async () => {
+    setupMocks();
+
+    render(<YourTurn {...defaultProps({ encounter: makeEncounter({ pace_mode: 'manual' }) })} />, {
+      wrapper: createWrapper(),
+    });
+
+    await userEvent.click(screen.getByTestId('submit-declarations-btn'));
+
+    await waitFor(() => {
+      expect(screen.getByTestId('ready-badge')).toBeInTheDocument();
+    });
+
+    expect(mockMutateAsync).not.toHaveBeenCalled();
+  });
+
+  it('surfaces an error and does not mark ready when the combat_ready dispatch fails', async () => {
+    setupMocks();
+    mockMutateAsync.mockResolvedValueOnce({
+      backend: 'REGISTRY',
+      deferred: false,
+      success: false,
+      message: 'Not in active round.',
+    });
+
+    render(<YourTurn {...defaultProps({ encounter: makeEncounter({ pace_mode: 'ready' }) })} />, {
+      wrapper: createWrapper(),
+    });
+
+    await userEvent.click(screen.getByTestId('submit-declarations-btn'));
+
+    const alert = await screen.findByRole('alert');
+    expect(alert).toHaveTextContent('Not in active round.');
+    expect(screen.queryByTestId('ready-badge')).not.toBeInTheDocument();
+  });
+
+  it('shows "mark ready" wording only in READY pace', () => {
+    setupMocks();
+
+    const { rerender } = render(
+      <YourTurn {...defaultProps({ encounter: makeEncounter({ pace_mode: 'ready' }) })} />,
+      { wrapper: createWrapper() }
+    );
+    expect(screen.getByTestId('submit-declarations-btn')).toHaveTextContent('mark ready');
+
+    rerender(
+      <QueryClientProvider
+        client={new QueryClient({ defaultOptions: { queries: { retry: false, gcTime: 0 } } })}
+      >
+        <YourTurn {...defaultProps({ encounter: makeEncounter({ pace_mode: 'timed' }) })} />
+      </QueryClientProvider>
+    );
+    expect(screen.getByTestId('submit-declarations-btn')).not.toHaveTextContent('mark ready');
+  });
+});
+
+// ---------------------------------------------------------------------------
 // Task 7.1 — readOnly prop locks the panel from the start
 // ---------------------------------------------------------------------------
 

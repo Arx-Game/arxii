@@ -7,7 +7,12 @@
 
 import { useMutation, useQuery, useQueryClient, type QueryClient } from '@tanstack/react-query';
 import * as api from './api';
-import type { DispatchActionRequest, DispatchResult, EncounterListItem } from './types';
+import type {
+  DispatchActionRequest,
+  DispatchResult,
+  EncounterDetail,
+  EncounterListItem,
+} from './types';
 import { availableActionsKeys, useAvailableActionsQuery } from '@/scenes/actionQueries';
 import type { PlayerAction } from '@/scenes/actionTypes';
 
@@ -34,6 +39,11 @@ export const combatKeys = {
 
   duelChallenges: (role?: api.DuelChallengeRole) =>
     [...combatKeys.duelChallengesAll(), role ?? 'all'] as const,
+
+  threatPools: (search?: string) => [...combatKeys.all, 'threat-pools', search ?? ''] as const,
+
+  opponentDefaults: (encounterId: number, tier: api.OpponentTier) =>
+    [...combatKeys.all, 'opponent-defaults', encounterId, tier] as const,
 };
 
 /**
@@ -405,4 +415,92 @@ export function useConsequenceOutcomes(params: api.ConsequenceOutcomesParams) {
     enabled: hasFilter,
     staleTime: 5_000,
   });
+}
+
+// ---------------------------------------------------------------------------
+// GM lifecycle hooks (#3067) — encounter creation, NPC opponent spawn,
+// manual round control. All gated server-side by IsEncounterGMOrStaff.
+// ---------------------------------------------------------------------------
+
+/**
+ * List the ThreatPool catalog for the add-opponent picker, optionally
+ * name-filtered. Not encounter-scoped — authored content, long staleTime.
+ */
+export function useThreatPools(search?: string) {
+  return useQuery({
+    queryKey: combatKeys.threatPools(search),
+    queryFn: () => api.fetchThreatPools(search),
+    staleTime: 60_000,
+  });
+}
+
+/**
+ * Preview the scaling formula's stat block + stakes-gate advisory for a tier.
+ * Disabled until a tier is chosen.
+ */
+export function useOpponentDefaults(encounterId: number, tier: api.OpponentTier | null) {
+  return useQuery({
+    queryKey: combatKeys.opponentDefaults(encounterId, tier ?? 'mook'),
+    queryFn: () => api.fetchOpponentDefaults(encounterId, tier as api.OpponentTier),
+    enabled: encounterId > 0 && tier !== null,
+  });
+}
+
+/**
+ * Create an encounter for a scene (GM only) — the "Start encounter"
+ * affordance. Invalidates the scene's encounter-list key on success so
+ * useEncounterForScene picks up the new encounter without a manual refetch.
+ */
+export function useCreateEncounter(sceneId: number) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (options: { paceMode?: api.PaceMode; encounterType?: api.EncounterType } = {}) =>
+      api.createEncounter(sceneId, options),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: combatKeys.encountersForScene(sceneId) }).catch(() => {});
+    },
+  });
+}
+
+/** Add an NPC opponent to the encounter (GM only). */
+export function useAddOpponent(encounterId: number) {
+  return useEncounterMutation<EncounterDetail, api.AddOpponentPayload>(encounterId, (payload) =>
+    api.postAddOpponent(encounterId, payload)
+  );
+}
+
+/** Add a PC to the encounter (GM only) — names any character_sheet, no ownership check. */
+export function useAddParticipant(encounterId: number) {
+  return useEncounterMutation<
+    EncounterDetail,
+    { characterSheetId: number; covenantRoleId?: number | null }
+  >(encounterId, ({ characterSheetId, covenantRoleId }) =>
+    api.postAddParticipant(encounterId, characterSheetId, covenantRoleId)
+  );
+}
+
+/** Remove a PC from the encounter (GM only). */
+export function useRemoveParticipant(encounterId: number) {
+  return useEncounterMutation<EncounterDetail, number>(encounterId, (participantId) =>
+    api.postRemoveParticipant(encounterId, participantId)
+  );
+}
+
+/** Begin a new declaration phase (GM only) — manual round control. */
+export function useBeginRound(encounterId: number) {
+  return useEncounterMutation<EncounterDetail, void>(encounterId, () =>
+    api.postBeginRound(encounterId)
+  );
+}
+
+/** Resolve the current round (GM only) — manual round control. */
+export function useResolveRound(encounterId: number) {
+  return useEncounterMutation<EncounterDetail, void>(encounterId, () =>
+    api.postResolveRound(encounterId)
+  );
+}
+
+/** Toggle pause on the encounter timer (GM only). */
+export function usePauseEncounter(encounterId: number) {
+  return useEncounterMutation<EncounterDetail, void>(encounterId, () => api.postPause(encounterId));
 }

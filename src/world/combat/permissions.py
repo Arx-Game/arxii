@@ -6,6 +6,8 @@ from rest_framework.views import APIView
 
 from world.combat.models import CombatEncounter
 
+_CREATE_ACTION = "create"
+
 
 def can_view_encounter_effects(user: object, encounter: CombatEncounter) -> bool:
     """Return True iff ``user`` may view an encounter's effect details.
@@ -55,6 +57,41 @@ class IsEncounterGMOrStaff(BasePermission):
     Uses Scene.is_gm() which reads from participations_cached — no query
     if the scene is already in the identity map.
     """
+
+    def has_permission(self, request: Request, view: APIView) -> bool:
+        """Gate ``create`` to the named scene's GM/owner (or staff) (#3067).
+
+        ``create`` has no object yet, so DRF never calls
+        ``has_object_permission`` for it — every other action here is
+        detail-routed (``get_object()`` runs first, then the object check
+        below). Without this override, any authenticated user could POST an
+        encounter into a scene they don't GM. Not a behavior change for any
+        other action: they still fall through to the unconditional ``True``.
+
+        Staff-or-GM-or-owner mirrors the established "can this user do
+        GM-ish things to this scene" predicate used elsewhere for scene
+        write actions (``Scene.get_viewer_can_gm``,
+        ``world.scenes.permissions.IsSceneGMOrOwnerOrStaff``) rather than
+        the narrower is_gm-only check ``has_object_permission`` below uses
+        for the existing round-control actions — the web "Start encounter"
+        button reads ``scene.viewer_can_gm`` to decide whether to render at
+        all, so the create gate must match that signal exactly or a scene
+        owner who isn't separately flagged ``is_gm`` would see a button the
+        server then 403s.
+        """
+        if view.action != _CREATE_ACTION:
+            return True
+        if request.user.is_staff:
+            return True
+        scene_id = request.data.get("scene")
+        if not scene_id:
+            return False
+        from world.scenes.models import Scene  # noqa: PLC0415
+
+        scene = Scene.objects.filter(pk=scene_id).first()
+        if scene is None:
+            return False
+        return scene.is_gm(request.user) or scene.is_owner(request.user)
 
     def has_object_permission(
         self,
