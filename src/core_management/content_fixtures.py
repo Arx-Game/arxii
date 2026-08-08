@@ -902,6 +902,9 @@ def _resolve_natural_key_fields(model, fields: dict, source_path: Path | None) -
     a normal ``ContentError`` naming the field (and the source file, when
     known) for a non-relational list value, matching every other validation
     failure's error style in this module.
+
+    Narrowed by #3056: a ``JSONField`` is exempt — its value can legitimately be a
+    list (e.g. ``DistinctionEffect.scaling_values``), so it passes through verbatim.
     """
     for field_name, value in list(fields.items()):
         if not isinstance(value, list):
@@ -909,6 +912,14 @@ def _resolve_natural_key_fields(model, fields: dict, source_path: Path | None) -
         field = model._meta.get_field(field_name)  # noqa: SLF001
         location = source_path if source_path is not None else model._meta.label  # noqa: SLF001
         if not field.is_relation:
+            from django.db.models import JSONField  # noqa: PLC0415
+
+            if isinstance(field, JSONField):
+                # A JSONField's value can legitimately BE a list (#3056:
+                # DistinctionEffect.scaling_values) — natural-key resolution
+                # only applies to relation fields, so pass it through and let
+                # _coerce_scalar_fields / the DB layer validate it.
+                continue
             msg = (
                 f"{location}: {field_name!r} on {model._meta.label} is a list-valued "  # noqa: SLF001
                 "field but not a relational one — natural-key resolution only "

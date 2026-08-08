@@ -367,17 +367,27 @@ class NewDomainContentLoadTests(TestCase):
 
 
 class ResolveNaturalKeyFieldsGuardTests(TestCase):
-    """#2266 review fix: ``_resolve_natural_key_fields`` must not crash on a
-    list-valued value for a NON-relational field — it should raise a clean
-    ContentError instead of a bare AttributeError from ``related_model``.
+    """#2266 guard, narrowed by #3056: a list value on a non-relational field
+    raises a clean ContentError ONLY when the field can't legitimately hold a
+    list. A ``JSONField`` list (e.g. ``DistinctionEffect.scaling_values``) is
+    real data and must pass through verbatim.
     """
 
-    def test_non_relational_list_field_raises_content_error(self) -> None:
+    def test_non_relational_scalar_list_field_raises_content_error(self) -> None:
         # NPCRole.description is a plain TextField (not a relation); a list
         # value there can only mean a future bug, not a legitimate FK-by-name.
         with self.assertRaises(ContentError) as ctx:
             _resolve_natural_key_fields(NPCRole, {"description": ["oops"]}, None)
         assert "description" in str(ctx.exception)
+
+    def test_json_field_list_passes_through_verbatim(self) -> None:
+        # DistinctionEffect.scaling_values is a JSONField whose value IS a
+        # list — the loader must not mistake it for a natural-key reference.
+        from world.distinctions.models import DistinctionEffect
+
+        fields = {"scaling_values": [100, 200, 300]}
+        _resolve_natural_key_fields(DistinctionEffect, fields, None)
+        assert fields["scaling_values"] == [100, 200, 300]
 
     def test_relational_list_field_still_resolves(self) -> None:
         # Sanity check the guard doesn't break the legitimate FK-by-name path.
@@ -699,6 +709,36 @@ class FixtureJsonLoadTests(TestCase):
         # Both load
         created, _updated, _ = load_entries(result)
         assert created >= 2  # 1 trait + 1 effect type
+
+    def test_json_list_field_round_trips_through_load(self) -> None:
+        """#3056: the corpus's scaling personality distinction must load."""
+        from world.distinctions.factories import DistinctionFactory
+        from world.distinctions.models import DistinctionEffect
+        from world.mechanics.factories import ModifierTargetFactory
+
+        distinction = DistinctionFactory()
+        target = ModifierTargetFactory()
+        _write(
+            self.root,
+            "fixtures/distinctions/effects.json",
+            json.dumps(
+                [
+                    {
+                        "model": "distinctions.distinctioneffect",
+                        "fields": {
+                            "distinction": list(distinction.natural_key()),
+                            "target": list(target.natural_key()),
+                            "scaling_values": [100, 200, 300],
+                            "description": "+100/200/300% per rank.",
+                        },
+                    },
+                ]
+            ),
+        )
+        created, updated, _ = load_entries(build_all(self.root))
+        assert created + updated == 1
+        effect = DistinctionEffect.objects.get(distinction=distinction, target=target)
+        assert effect.scaling_values == [100, 200, 300]
 
 
 class LoadEntriesM2MTest(TestCase):
