@@ -18,6 +18,7 @@ from world.areas.positioning.serializers import (
 )
 from world.combat.constants import (
     NO_ROLE_SPEED_RANK,
+    SIGNIFICANT_NPC_TIERS,
     ActionCategory,
     ClashActionSlot,
     ClashStatus,
@@ -741,9 +742,19 @@ class DuelChallengeSerializer(serializers.ModelSerializer):
 
     N+1-safe when the queryset uses ``select_related("challenger_sheet__character",
     "challenged_sheet__character")``.
+
+    ``is_lethal``/``opponent_name``/``opponent_tier`` (#3068): a GM-initiated
+    lethal challenge has no PC challenger — ``challenger`` renders ``null`` for
+    those rows (DRF's default None-attribute handling), so the frontend reads
+    ``opponent_name`` instead whenever ``is_lethal`` is true.
     """
 
-    challenger = _DuelParticipantIdentitySerializer(source="challenger_sheet", read_only=True)
+    # allow_null=True (#3068): challenger_sheet is null for a GM-initiated lethal
+    # challenge — declared so the OpenAPI schema (and generated TS type) is honest
+    # about the `| null` a lethal row actually renders, not just documented in prose.
+    challenger = _DuelParticipantIdentitySerializer(
+        source="challenger_sheet", read_only=True, allow_null=True
+    )
     challenged = _DuelParticipantIdentitySerializer(source="challenged_sheet", read_only=True)
 
     class Meta:
@@ -753,6 +764,9 @@ class DuelChallengeSerializer(serializers.ModelSerializer):
             "challenger",
             "challenged",
             "status",
+            "is_lethal",
+            "opponent_name",
+            "opponent_tier",
             "created_at",
             "resolved_at",
             "resulting_encounter",
@@ -1261,6 +1275,24 @@ class AddParticipantSerializer(serializers.Serializer):
         required=False,
         allow_null=True,
     )
+
+
+class ProposeLethalDuelSerializer(serializers.Serializer):
+    """Write serializer for a GM proposing a lethal duel (#3068).
+
+    ``scene`` is read by ``IsEncounterGMOrStaff.has_permission`` (the same
+    field name the ``CombatEncounter`` create gate reads) to authorize the
+    GM; the view resolves the room from the scene's location. ``tier`` is
+    restricted to the significant-NPC tiers ``create_lethal_duel_challenge``
+    accepts — validated here so a bad tier 400s with a clean message instead
+    of surfacing a raw exception.
+    """
+
+    scene = serializers.IntegerField(min_value=1)
+    challenged_sheet_id = serializers.IntegerField(min_value=1)
+    opponent_name = serializers.CharField(max_length=200)
+    tier = serializers.ChoiceField(choices=[(t, t) for t in SIGNIFICANT_NPC_TIERS])
+    threat_pool_id = serializers.IntegerField(min_value=1)
 
 
 class JoinEncounterSerializer(serializers.Serializer):

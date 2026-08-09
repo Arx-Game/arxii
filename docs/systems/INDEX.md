@@ -5923,6 +5923,45 @@ reactive maneuvers (COVER, INTERPOSE, DEFEND stance), and clash-of-wills.
   entry and a `conditions_applied` entry) in one call, mirroring
   `PlayableCombatScenarioFactory`'s style; use it instead of hand-rolling boss-fight
   fixtures. Driven end-to-end by `src/integration_tests/test_boss_fight_journey.py`.
+- **Duels — `DuelChallenge` + GM-initiated lethal duels (#568, #3068):** `DuelChallenge`
+  (`world/combat/models.py`) is the one challenge/accept/decline/withdraw handshake model
+  for BOTH shapes: PC-vs-PC (`challenger_sheet` set, accepting opens `create_pvp_duel`) and
+  GM-initiated lethal (`is_lethal=True`, `challenger_sheet` NULL — the challenger is a
+  significant NPC named by `opponent_name`/`opponent_tier`/`threat_pool`, accepting opens
+  `create_lethal_duel` instead). `world.combat.duels.create_lethal_duel_challenge` creates
+  the PENDING lethal row (validates `tier` against `constants.SIGNIFICANT_NPC_TIERS` — ELITE/
+  BOSS/HERO_KILLER); `accept_challenge` branches on `is_lethal` to pick which encounter
+  constructor to call. `world.combat.duels.SIGNIFICANT_NPC_TIERS` (promoted from a
+  `create_lethal_duel`-local constant, #3068) is the one significant-NPC-tier source of
+  truth both the service layer and `ProposeLethalDuelSerializer` validate against.
+  **Non-negotiable consent invariant:** a GM's proposal never creates a `CombatEncounter`
+  by itself — only the targeted PC's own `accept` (the same `AcceptChallengeAction`/`duel
+  accept` a PvP challenge uses) does; `decline` leaves no encounter. GM initiation surfaces:
+  web `POST /api/combat/duel-challenges/propose_lethal_duel/`
+  (`DuelChallengeViewSet.propose_lethal_duel`, gated by `IsEncounterGMOrStaff` — widened
+  #3068 from `{"create"}` to also cover this action, same staff-or-scene-GM-or-owner scene
+  gate `CombatEncounterViewSet.create` uses) via the `GMEncounterControls` "Start Lethal
+  Duel" dialog (`frontend/src/combat/sections/GMEncounterControls.tsx`); telnet `encounter
+  duel <character> <name> <tier> <pool>` (`ProposeLethalDuelAction`,
+  `actions/definitions/duels.py`, `src/commands/encounter.py`). The player's accept/decline
+  step rides the pre-existing `DuelChallengeNotifier` toast (site-wide, #2157) — extended to
+  read `opponent_name` when `challenger` is null and show a fight-to-the-death warning; no
+  new player-facing verb exists, only a new challenge *shape* the existing one carries. The
+  Battle system's champion-duel path (`world.battles.services.open_champion_duel`) is the
+  OTHER `create_lethal_duel` caller — player-initiated (the Champion chooses to fight), no
+  challenge handshake, preserved unchanged as a first-class consumer of the same service.
+  **Known frontend gap (#3068 audit finding, not a backend limitation):** the DB model puts
+  no constraint on how many `CombatEncounter` rows share one `Scene` (`scene` is a plain FK,
+  and `create_lethal_duel`/`create_pvp_duel` each open their own new encounter), so several
+  simultaneous duel confrontations in one wider scene ARE structurally supported and
+  DB-proven (two PENDING lethal challenges + two accepts → two independent
+  `CombatEncounter`s, same scene). But the scene-level web UI
+  (`useEncounterForScene`/`GamePage`/`SceneDetailPage`/`SceneHeader`) resolves and renders
+  only the single most-recent non-completed encounter per scene — a second simultaneous
+  duel's `CombatRail` does not surface automatically there. Reaching it needs its own
+  `encounterId` (e.g. a future multi-encounter picker); out of scope for #3068 (a GM-verb +
+  consent-flow issue, not a scene-UI-architecture one) — flagged here rather than hacked
+  around.
 - **Source:** `src/world/combat/`
 - **Details:** `docs/roadmap/combat.md` · architecture:
   `docs/architecture/combat-magic-integration.md`,

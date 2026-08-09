@@ -4539,6 +4539,32 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
+  '/api/combat/duel-challenges/propose_lethal_duel/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /**
+     * @description GM proposes a lethal duel against a named PC (#3068).
+     *
+     *     Creates a PENDING, ``is_lethal=True`` ``DuelChallenge`` — no
+     *     ``CombatEncounter`` exists yet. The targeted PC must accept via the
+     *     existing duel-challenge inbox (``accept``/``decline``, same as a
+     *     PvP challenge) before ``create_lethal_duel`` ever runs; a GM cannot
+     *     force this open. Gated to the named scene's GM/owner or staff
+     *     (``IsEncounterGMOrStaff``, widened #3068).
+     */
+    post: operations['combat_duel_challenges_propose_lethal_duel_create'];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   '/api/combat/threat-pools/': {
     parameters: {
       query?: never;
@@ -24941,13 +24967,32 @@ export interface components {
      *
      *     N+1-safe when the queryset uses ``select_related("challenger_sheet__character",
      *     "challenged_sheet__character")``.
+     *
+     *     ``is_lethal``/``opponent_name``/``opponent_tier`` (#3068): a GM-initiated
+     *     lethal challenge has no PC challenger — ``challenger`` renders ``null`` for
+     *     those rows (DRF's default None-attribute handling), so the frontend reads
+     *     ``opponent_name`` instead whenever ``is_lethal`` is true.
      */
     DuelChallenge: {
       readonly id: number;
-      readonly challenger: components['schemas']['_DuelParticipantIdentity'];
+      readonly challenger: components['schemas']['_DuelParticipantIdentity'] | null;
       readonly challenged: components['schemas']['_DuelParticipantIdentity'];
       /** @default pending */
       readonly status: components['schemas']['DuelChallengeStatusEnum'];
+      /** @description True iff this is a GM-initiated lethal duel proposal (#3068) — a climactic PC-vs-significant-NPC confrontation. Accepting routes through create_lethal_duel instead of create_pvp_duel. */
+      readonly is_lethal: boolean;
+      /** @description Name of the significant NPC antagonist. Set only when is_lethal. */
+      readonly opponent_name: string;
+      /**
+       * @description Opponent tier for the lethal duel; must be a significant-NPC tier (ELITE/BOSS/HERO_KILLER — enforced by create_lethal_duel_challenge). Set only when is_lethal.
+       *
+       *     * `swarm` - Swarm
+       *     * `mook` - Mook
+       *     * `elite` - Elite
+       *     * `boss` - Boss
+       *     * `hero_killer` - Hero Killer
+       */
+      readonly opponent_tier: components['schemas']['OpponentTierEnum'];
       /** Format: date-time */
       readonly created_at: string;
       /** Format: date-time */
@@ -29473,6 +29518,15 @@ export interface components {
      * @enum {string}
      */
     OpponentStatusEnum: 'active' | 'defeated' | 'fled';
+    /**
+     * @description * `swarm` - Swarm
+     *     * `mook` - Mook
+     *     * `elite` - Elite
+     *     * `boss` - Boss
+     *     * `hero_killer` - Hero Killer
+     * @enum {string}
+     */
+    OpponentTierEnum: 'swarm' | 'mook' | 'elite' | 'boss' | 'hero_killer';
     /** @description The three-group discovery view (here/nearby/your-organizations). */
     Opportunities: {
       readonly here: components['schemas']['OpportunityRow'][];
@@ -35405,6 +35459,30 @@ export interface components {
      * @enum {string}
      */
     ProposalKindEnum: 'new_situation' | 'check_fit' | 'difficulty_guide' | 'pool_guide' | 'other';
+    /**
+     * @description Write serializer for a GM proposing a lethal duel (#3068).
+     *
+     *     ``scene`` is read by ``IsEncounterGMOrStaff.has_permission`` (the same
+     *     field name the ``CombatEncounter`` create gate reads) to authorize the
+     *     GM; the view resolves the room from the scene's location. ``tier`` is
+     *     restricted to the significant-NPC tiers ``create_lethal_duel_challenge``
+     *     accepts — validated here so a bad tier 400s with a clean message instead
+     *     of surfacing a raw exception.
+     */
+    ProposeLethalDuelRequest: {
+      scene: number;
+      challenged_sheet_id: number;
+      opponent_name: string;
+      tier: components['schemas']['ProposeLethalDuelTierEnum'];
+      threat_pool_id: number;
+    };
+    /**
+     * @description * `elite` - elite
+     *     * `hero_killer` - hero_killer
+     *     * `boss` - boss
+     * @enum {string}
+     */
+    ProposeLethalDuelTierEnum: 'elite' | 'hero_killer' | 'boss';
     /** @description One feed row — a deed or a scandal. Read-only; serializes a ``PublicFeedItem`` dataclass. */
     PublicFeedItem: {
       kind: components['schemas']['PublicFeedItemKindEnum'];
@@ -46125,6 +46203,29 @@ export interface operations {
       cookie?: never;
     };
     requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['DuelChallenge'];
+        };
+      };
+    };
+  };
+  combat_duel_challenges_propose_lethal_duel_create: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['ProposeLethalDuelRequest'];
+      };
+    };
     responses: {
       200: {
         headers: {

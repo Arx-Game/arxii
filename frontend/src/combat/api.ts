@@ -290,6 +290,47 @@ export async function fetchDuelChallengeInbox(role?: DuelChallengeRole): Promise
 }
 
 // ---------------------------------------------------------------------------
+// GM-initiated lethal duel proposal (#3068)
+// ---------------------------------------------------------------------------
+
+/** Opponent tier valid for a lethal duel — significant NPCs only. */
+export type LethalDuelTier = components['schemas']['ProposeLethalDuelTierEnum'];
+
+/** Body for postProposeLethalDuel — mirrors ProposeLethalDuelSerializer. */
+export interface ProposeLethalDuelPayload {
+  sceneId: number;
+  challengedSheetId: number;
+  opponentName: string;
+  tier: LethalDuelTier;
+  threatPoolId: number;
+}
+
+/**
+ * GM proposes a lethal duel against a named PC (#3068). Creates a PENDING,
+ * ``is_lethal`` DuelChallenge — no CombatEncounter exists until the targeted
+ * PC accepts it via the normal duel-challenge inbox (accept/decline). GM
+ * only, gated server-side by IsEncounterGMOrStaff (scene GM/owner or staff).
+ * POST /api/combat/duel-challenges/propose_lethal_duel/
+ */
+export async function postProposeLethalDuel(
+  payload: ProposeLethalDuelPayload
+): Promise<DuelChallenge> {
+  const res = await apiFetch('/api/combat/duel-challenges/propose_lethal_duel/', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      scene: payload.sceneId,
+      challenged_sheet_id: payload.challengedSheetId,
+      opponent_name: payload.opponentName,
+      tier: payload.tier,
+      threat_pool_id: payload.threatPoolId,
+    }),
+  });
+  if (!res.ok) await throwApiError(res, 'Failed to propose the lethal duel');
+  return res.json() as Promise<DuelChallenge>;
+}
+
+// ---------------------------------------------------------------------------
 // Available combos
 //
 // The generated schema types the available_combos response as EncounterDetail,

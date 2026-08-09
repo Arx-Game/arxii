@@ -137,6 +137,7 @@ from actions.definitions.duels import (
     AcknowledgeRiskAction,
     ChallengeAction,
     DeclineChallengeAction,
+    ProposeLethalDuelAction,
     WithdrawChallengeAction,
     YieldAction,
 )
@@ -645,6 +646,7 @@ _ALL_ACTIONS: list[Action] = [
     WithdrawChallengeAction(),
     YieldAction(),
     AcknowledgeRiskAction(),
+    ProposeLethalDuelAction(),
     CastTechniqueAction(),
     StartSceneAction(),
     FinishSceneAction(),

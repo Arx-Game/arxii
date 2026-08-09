@@ -27,6 +27,7 @@ vi.mock('../queries', () => ({
   useResolveRound: vi.fn(),
   usePauseEncounter: vi.fn(),
   useRemoveParticipant: vi.fn(),
+  useProposeLethalDuel: vi.fn(),
 }));
 
 vi.mock('@/roster/usePersonaSearch', () => ({
@@ -90,6 +91,7 @@ const mockedUseBeginRound = combatQueries.useBeginRound as ReturnType<typeof vi.
 const mockedUseResolveRound = combatQueries.useResolveRound as ReturnType<typeof vi.fn>;
 const mockedUsePauseEncounter = combatQueries.usePauseEncounter as ReturnType<typeof vi.fn>;
 const mockedUseRemoveParticipant = combatQueries.useRemoveParticipant as ReturnType<typeof vi.fn>;
+const mockedUseProposeLethalDuel = combatQueries.useProposeLethalDuel as ReturnType<typeof vi.fn>;
 const mockedUsePersonaSearch = usePersonaSearch as unknown as ReturnType<typeof vi.fn>;
 
 interface MutateOpts {
@@ -113,6 +115,18 @@ const mockBeginRoundMutate = vi.fn((_vars: undefined, _opts?: MutateOpts) => {})
 const mockResolveRoundMutate = vi.fn((_vars: undefined, _opts?: MutateOpts) => {});
 const mockPauseMutate = vi.fn((_vars: undefined, _opts?: MutateOpts) => {});
 const mockRemoveParticipantMutate = vi.fn((_vars: number, _opts?: MutateOpts) => {});
+const mockProposeLethalDuelMutate = vi.fn(
+  (
+    _vars: {
+      sceneId: number;
+      challengedSheetId: number;
+      opponentName: string;
+      tier: string;
+      threatPoolId: number;
+    },
+    _opts?: MutateOpts
+  ) => {}
+);
 
 const defaultPools: ThreatPool[] = [
   { id: 7, name: 'Goblin Raiders', description: '' } as unknown as ThreatPool,
@@ -141,6 +155,12 @@ beforeEach(() => {
   mockedUseRemoveParticipant.mockReturnValue({
     mutate: mockRemoveParticipantMutate,
     isPending: false,
+  });
+  mockedUseProposeLethalDuel.mockReturnValue({
+    mutate: mockProposeLethalDuelMutate,
+    isPending: false,
+    error: null,
+    isError: false,
   });
   mockedUsePersonaSearch.mockReturnValue({ results: [], isFetching: false });
 });
@@ -364,6 +384,120 @@ describe('GMEncounterControls — add participant', () => {
     await user.click(screen.getByTestId('add-participant-trigger'));
 
     expect(screen.getByTestId('add-participant-submit')).toBeDisabled();
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Start lethal duel (#3068)
+// ---------------------------------------------------------------------------
+
+describe('GMEncounterControls — start lethal duel', () => {
+  it('shows the trigger when there is no encounter and the viewer can GM', () => {
+    render(<GMEncounterControls sceneId={5} encounter={null} viewerCanGm={true} />, {
+      wrapper: createWrapper(),
+    });
+
+    expect(screen.getByTestId('start-lethal-duel-trigger')).toBeInTheDocument();
+  });
+
+  it('hides the trigger when there is no encounter and the viewer cannot GM', () => {
+    render(<GMEncounterControls sceneId={5} encounter={null} viewerCanGm={false} />, {
+      wrapper: createWrapper(),
+    });
+
+    expect(screen.queryByTestId('start-lethal-duel-trigger')).not.toBeInTheDocument();
+  });
+
+  it('shows the trigger alongside an active encounter the viewer GMs', () => {
+    render(
+      <GMEncounterControls
+        sceneId={5}
+        encounter={makeEncounter({ is_gm: true })}
+        viewerCanGm={false}
+      />,
+      { wrapper: createWrapper() }
+    );
+
+    expect(screen.getByTestId('start-lethal-duel-trigger')).toBeInTheDocument();
+  });
+
+  it('hides the trigger when an active encounter exists and the viewer is not its GM', () => {
+    render(
+      <GMEncounterControls
+        sceneId={5}
+        encounter={makeEncounter({ is_gm: false })}
+        viewerCanGm={true}
+      />,
+      { wrapper: createWrapper() }
+    );
+
+    expect(screen.queryByTestId('start-lethal-duel-trigger')).not.toBeInTheDocument();
+  });
+
+  it('only offers significant-NPC tiers (elite/boss/hero_killer — no mook/swarm)', async () => {
+    const user = userEvent.setup({ pointerEventsCheck: 0 });
+    render(<GMEncounterControls sceneId={5} encounter={null} viewerCanGm={true} />, {
+      wrapper: createWrapper(),
+    });
+
+    await user.click(screen.getByTestId('start-lethal-duel-trigger'));
+    await user.click(screen.getByTestId('lethal-duel-tier-select'));
+
+    expect(await screen.findByRole('option', { name: 'Elite' })).toBeInTheDocument();
+    expect(screen.getByRole('option', { name: 'Boss' })).toBeInTheDocument();
+    expect(screen.getByRole('option', { name: 'Hero Killer' })).toBeInTheDocument();
+    expect(screen.queryByRole('option', { name: 'Mook' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('option', { name: 'Swarm' })).not.toBeInTheDocument();
+  });
+
+  it('keeps submit disabled until target, name, and threat pool are set', async () => {
+    const user = userEvent.setup({ pointerEventsCheck: 0 });
+    render(<GMEncounterControls sceneId={5} encounter={null} viewerCanGm={true} />, {
+      wrapper: createWrapper(),
+    });
+
+    await user.click(screen.getByTestId('start-lethal-duel-trigger'));
+
+    expect(screen.getByTestId('lethal-duel-submit')).toBeDisabled();
+  });
+
+  it('submits the right payload for the targeted PC', async () => {
+    mockedUsePersonaSearch.mockReturnValue({
+      results: [{ id: 21, name: 'Elenna', character_sheet: 88 }],
+      isFetching: false,
+    });
+    const user = userEvent.setup({ pointerEventsCheck: 0 });
+    render(<GMEncounterControls sceneId={5} encounter={null} viewerCanGm={true} />, {
+      wrapper: createWrapper(),
+    });
+
+    await user.click(screen.getByTestId('start-lethal-duel-trigger'));
+    await user.type(screen.getByTestId('lethal-duel-target-search'), 'Ele');
+    await user.click(screen.getByTestId('lethal-duel-target-option-21'));
+
+    await user.type(screen.getByTestId('lethal-duel-opponent-name'), 'The Widow Ashgrave');
+
+    await user.click(screen.getByTestId('lethal-duel-tier-select'));
+    await user.click(await screen.findByRole('option', { name: 'Boss' }));
+
+    await user.click(screen.getByTestId('lethal-duel-pool-select'));
+    await user.click(await screen.findByRole('option', { name: 'Goblin Raiders' }));
+
+    await user.click(screen.getByTestId('lethal-duel-submit'));
+
+    expect(mockProposeLethalDuelMutate).toHaveBeenCalledWith(
+      {
+        sceneId: 5,
+        challengedSheetId: 88,
+        opponentName: 'The Widow Ashgrave',
+        tier: 'boss',
+        threatPoolId: 7,
+      },
+      expect.objectContaining({
+        onSuccess: expect.any(Function),
+        onError: expect.any(Function),
+      })
+    );
   });
 });
 
