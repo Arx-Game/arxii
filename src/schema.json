@@ -18330,7 +18330,17 @@ paths:
   /api/magic/rituals/sessions/{id}/accept/:
     post:
       operationId: magic_rituals_sessions_accept_create
-      description: Accept invitation, supplying participant_kwargs + references.
+      description: |-
+        Accept invitation, supplying participant_kwargs + references.
+
+        Mirrors telnet's ``ritual join`` auto-fire behavior (#3045): a
+        site-convened session (e.g. a Durance opened via ``durance convene`` /
+        ``DuranceConveneView``) has no live initiator to issue a separate
+        ``fire`` call, so this checks the same
+        ``adapter.should_auto_fire(session=...)`` telnet's ``_maybe_auto_fire``
+        does and fires immediately when true. Every other adapter's
+        ``should_auto_fire`` returns False, so this is a no-op for ordinary
+        (non-Durance, non-site-convened) sessions.
       parameters:
       - in: path
         name: id
@@ -26183,6 +26193,36 @@ paths:
       responses:
         '200':
           description: No response body
+  /api/progression/durance/convene/:
+    post:
+      operationId: progression_durance_convene_create
+      description: Open a site-convened session at the puppet's current room.
+      tags:
+      - progression
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DuranceConveneResponse'
+          description: ''
+  /api/progression/durance/status/:
+    get:
+      operationId: progression_durance_status_retrieve
+      description: Build the readiness hub for the requester's puppeted character.
+      tags:
+      - progression
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DuranceStatus'
+          description: ''
   /api/progression/path-intent/:
     get:
       operationId: progression_path_intent_retrieve
@@ -43242,6 +43282,111 @@ components:
       required:
       - id
       - name
+    DuranceConveneResponse:
+      type: object
+      description: Response for a successful site-convened Durance session open.
+      properties:
+        session_id:
+          type: integer
+      required:
+      - session_id
+    DuranceEligiblePath:
+      type: object
+      description: One eligible next-stage Path the character could semi-cross into.
+      properties:
+        id:
+          type: integer
+        name:
+          type: string
+      required:
+      - id
+      - name
+    DuranceIntent:
+      type: object
+      description: The character's declared ``PathIntent``, when one exists.
+      properties:
+        path_id:
+          type: integer
+        path_name:
+          type: string
+      required:
+      - path_id
+      - path_name
+    DuranceStatus:
+      type: object
+      description: |-
+        Read-only Durance readiness hub — the web face of telnet ``durance status``.
+
+        ``unlock_gate`` is ``None`` only when ``is_tier_boundary`` is True (that step
+        belongs to Audere Majora, not the Durance — mirrors the telnet early-return).
+      properties:
+        level:
+          type: integer
+        target_level:
+          type: integer
+        is_tier_boundary:
+          type: boolean
+        unlock_gate:
+          allOf:
+          - $ref: '#/components/schemas/DuranceUnlockGate'
+          nullable: true
+        eligible_paths:
+          type: array
+          items:
+            $ref: '#/components/schemas/DuranceEligiblePath'
+        intent:
+          allOf:
+          - $ref: '#/components/schemas/DuranceIntent'
+          nullable: true
+        site_present:
+          type: boolean
+      required:
+      - eligible_paths
+      - intent
+      - is_tier_boundary
+      - level
+      - site_present
+      - target_level
+      - unlock_gate
+    DuranceUnlockGate:
+      type: object
+      description: |-
+        XP-unlock + authored-requirement gate readiness for the character's next level.
+
+        ``xp_cost`` is ``None`` only when the unlock is already purchased — an unpurchased,
+        authored unlock always carries a cost, honestly reporting 0 when
+        ``ClassXPCost``/``TraitXPCost`` is unauthored (the #3045 "cost unset" case is
+        surfaced on the unlock-shop cards, not here; this hub only says purchased or not).
+      properties:
+        has_class_level:
+          type: boolean
+        advancement_authored:
+          type: boolean
+        requirements_met:
+          type: boolean
+        failed_requirements:
+          type: array
+          items:
+            type: string
+        purchased:
+          type: boolean
+        xp_cost:
+          type: integer
+          nullable: true
+        class_level_unlock_id:
+          type: integer
+          nullable: true
+        ready:
+          type: boolean
+      required:
+      - advancement_authored
+      - class_level_unlock_id
+      - failed_requirements
+      - has_class_level
+      - purchased
+      - ready
+      - requirements_met
+      - xp_cost
     EffectRow:
       type: object
       properties:

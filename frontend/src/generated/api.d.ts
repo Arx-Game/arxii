@@ -11908,7 +11908,18 @@ export interface paths {
     };
     get?: never;
     put?: never;
-    /** @description Accept invitation, supplying participant_kwargs + references. */
+    /**
+     * @description Accept invitation, supplying participant_kwargs + references.
+     *
+     *     Mirrors telnet's ``ritual join`` auto-fire behavior (#3045): a
+     *     site-convened session (e.g. a Durance opened via ``durance convene`` /
+     *     ``DuranceConveneView``) has no live initiator to issue a separate
+     *     ``fire`` call, so this checks the same
+     *     ``adapter.should_auto_fire(session=...)`` telnet's ``_maybe_auto_fire``
+     *     does and fires immediately when true. Every other adapter's
+     *     ``should_auto_fire`` returns False, so this is a no-op for ordinary
+     *     (non-Durance, non-site-convened) sessions.
+     */
     post: operations['magic_rituals_sessions_accept_create'];
     delete?: never;
     options?: never;
@@ -16034,6 +16045,40 @@ export interface paths {
     put?: never;
     /** @description Claim kudos for XP conversion. */
     post: operations['progression_claim_kudos_create'];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/progression/durance/convene/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /** @description Open a site-convened session at the puppet's current room. */
+    post: operations['progression_durance_convene_create'];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/progression/durance/status/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /** @description Build the readiness hub for the requester's puppeted character. */
+    get: operations['progression_durance_status_retrieve'];
+    put?: never;
+    post?: never;
     delete?: never;
     options?: never;
     head?: never;
@@ -25091,6 +25136,53 @@ export interface components {
        *     plain column — no query.
        */
       readonly name: string;
+    };
+    /** @description Response for a successful site-convened Durance session open. */
+    DuranceConveneResponse: {
+      session_id: number;
+    };
+    /** @description One eligible next-stage Path the character could semi-cross into. */
+    DuranceEligiblePath: {
+      id: number;
+      name: string;
+    };
+    /** @description The character's declared ``PathIntent``, when one exists. */
+    DuranceIntent: {
+      path_id: number;
+      path_name: string;
+    };
+    /**
+     * @description Read-only Durance readiness hub — the web face of telnet ``durance status``.
+     *
+     *     ``unlock_gate`` is ``None`` only when ``is_tier_boundary`` is True (that step
+     *     belongs to Audere Majora, not the Durance — mirrors the telnet early-return).
+     */
+    DuranceStatus: {
+      level: number;
+      target_level: number;
+      is_tier_boundary: boolean;
+      unlock_gate: components['schemas']['DuranceUnlockGate'] | null;
+      eligible_paths: components['schemas']['DuranceEligiblePath'][];
+      intent: components['schemas']['DuranceIntent'] | null;
+      site_present: boolean;
+    };
+    /**
+     * @description XP-unlock + authored-requirement gate readiness for the character's next level.
+     *
+     *     ``xp_cost`` is ``None`` only when the unlock is already purchased — an unpurchased,
+     *     authored unlock always carries a cost, honestly reporting 0 when
+     *     ``ClassXPCost``/``TraitXPCost`` is unauthored (the #3045 "cost unset" case is
+     *     surfaced on the unlock-shop cards, not here; this hub only says purchased or not).
+     */
+    DuranceUnlockGate: {
+      has_class_level: boolean;
+      advancement_authored: boolean;
+      requirements_met: boolean;
+      failed_requirements: string[];
+      purchased: boolean;
+      xp_cost: number | null;
+      class_level_unlock_id: number | null;
+      ready: boolean;
     };
     EffectRow: {
       kind: string;
@@ -62910,6 +63002,44 @@ export interface operations {
           [name: string]: unknown;
         };
         content?: never;
+      };
+    };
+  };
+  progression_durance_convene_create: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['DuranceConveneResponse'];
+        };
+      };
+    };
+  };
+  progression_durance_status_retrieve: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['DuranceStatus'];
+        };
       };
     };
   };

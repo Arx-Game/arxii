@@ -22,7 +22,8 @@ The central spine connecting every system in the game. Characters develop throug
 - **Legend system:** LegendEntry, LegendSpread, LegendEvent (group deeds), LegendSourceType, LegendDeedStory (player narratives), SpreadingConfig. Materialized views for fast character/guise legend totals. Service functions for deed creation, spreading with cap enforcement. LegendRequirement for path leveling
 - **Unlock system:** XPCostChart, ClassLevelUnlock, requirement types (Trait, Level, ClassLevel, MultiClass, Achievement, Relationship, Legend, Tier), CharacterUnlock, spend_xp_on_unlock service
 - **APIs:** Full viewsets/serializers for traits, skills, progression, classes (paths, character classes, aspects)
-- **Frontend:** XP/Kudos page in progression section
+- **Frontend:** XP/Kudos page in progression section (now also hosts `RandomScenePanel`,
+  #3045 — see below); character sheet "Advancement" tab (#3045) for every SPEND/advance path
 - **Web character sheet mechanics (#3042):** the 12 stats and skill ratings (with
   specializations + `at_boundary` breakthrough-ready flag) render on the character sheet's
   Sheet tab, and claimed-resonance balances render on the Spellbook tab — the sheet API already
@@ -68,6 +69,29 @@ The central spine connecting every system in the game. Characters develop throug
   story-reward surface (#3055 slice 1c, `GM_GRANT` origin values already reserved) will
   write into. See `docs/systems/magic.md`'s "Acquisition provenance" section and
   `docs/systems/INDEX.md`'s Traits entry.
+- **Advancement on web (#3045) — BUILT.** Every SPEND/advance path a level-1 player used
+  had to be reached over telnet, while every EARN path (journals, kudos, votes,
+  endorsements, technique training meters) already had web UI — this closed that half. A
+  character-sheet "Advancement" tab (own-sheet + active-puppet gated, mirroring the
+  Locations tab's Ships-section precedent for the same puppet-vs-viewed-character
+  constraint) hosts four cards: **Breakthroughs** and **Class Unlocks** (both thin readers/
+  writers over the pre-existing Unlock Shop, `/api/progression/unlocks/`), **Training**
+  (thin reader/writer over the pre-existing `TrainingAllocationViewSet`,
+  `/api/skills/training-allocations/`), and **Durance** (new `DuranceStatusView`/
+  `DuranceConveneView` mirroring telnet `durance status`/`durance convene` exactly, joining
+  via the existing `RitualSessionViewSet.accept` — which now auto-fires a site-convened
+  session on join, closing a REST parity gap telnet's `ritual join` already had). The
+  0-cost `ClassXPCost`/`TraitXPCost` fallback (this issue's flagged tuning gap) renders as
+  an honest "Cost unset (staff)" marker rather than inventing a number — the real number
+  is still Tehom's call, deferred. `RandomScenePanel` (built-but-orphaned since inception,
+  zero frontend callers) now mounts on `XpKudosPage` alongside a new `GoalsPanel` — the
+  spec's "goal-log affordance rides the existing goals UI" premise did NOT hold on
+  inspection (no "current goals" display existed anywhere outside the one-time
+  character-creation allocator), so `GoalsPanel` is a small new component reading
+  `GET /api/goals/my-goals/` and writing `POST /api/goals/journals/` (both previously
+  uncalled from the frontend) rather than an extension of pre-existing UI. See
+  `docs/systems/progression.md`'s "Durance Readiness Hub (web, #3045)" and
+  `docs/systems/INDEX.md`'s progression entry.
 - **Guarded beta-reset wipe (#3055 PR 2, built):** `arx manage beta_reset` performs the
   pristine-world wipe the ledger above derives from — hardcoded-constant + one-way DB
   latch + typed confirmation + verified-fresh-backup guards, dry-run by default. PR 3
