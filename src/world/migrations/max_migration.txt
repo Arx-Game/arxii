@@ -1,1 +1,1 @@
-0124_accountinvite_registrationconfig
+0125_accountinvite_registrationconfig

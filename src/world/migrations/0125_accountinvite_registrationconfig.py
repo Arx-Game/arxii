@@ -7,7 +7,7 @@ import django.db.models.deletion
 
 class Migration(migrations.Migration):
     dependencies = [
-        ("arxii", "0123_alter_techniqueprogress_source"),
+        ("arxii", "0124_beta_reset_release_latch"),
         migrations.swappable_dependency(settings.AUTH_USER_MODEL),
     ]
 

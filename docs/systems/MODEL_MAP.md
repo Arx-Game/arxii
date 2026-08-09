@@ -843,6 +843,23 @@
 - `set_battle_side_posture(*, side: 'BattleSide', posture: 'str') -> 'BattleSide' - Set a battle side's tactical posture (#1711).`
 
 
+## world.beta_reset
+
+### ReleaseLatch
+**Foreign Keys:**
+  - released_by -> evennia.AccountDB [FK]
+
+### Service Functions
+- `check_backup_verified(backup_verified_at: 'datetime | None', *, now: 'datetime | None' = None) -> 'None' - Guard 4: the operator asserts a backup was verified recently.`
+- `check_beta_reset_enabled() -> 'None' - Guard 1: the hardcoded constant. Raises ``BetaResetDisabledError`` if flipped off.`
+- `check_confirmation_phrase(typed: 'str | None') -> 'None' - Guard 3: the typed confirmation phrase must match exactly.`
+- `check_release_latch() -> 'None' - Guard 2: the one-way DB latch. Raises ``ReleaseLatchedError`` if any row exists.`
+- `mark_released(*, released_by: 'AccountDB', note: 'str' = '') -> 'ReleaseLatch' - Write the one-way ``ReleaseLatch`` row. Refuses if one already exists.`
+- `preview_pristine_world_wipe() -> 'WipeReport' - Dry-run: count what ``wipe_pristine_world(execute=True)`` would delete.`
+- `refresh_legend_views() -> None - Refresh all legend materialized views concurrently.`
+- `wipe_pristine_world(*, execute: 'bool' = False, confirm: 'str | None' = None, backup_verified_at: 'datetime | None' = None) -> 'WipeReport' - Dry-run (default) or execute the guarded beta-reset wipe.`
+
+
 ## world.boundaries
 
 ### ContentTheme

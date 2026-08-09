@@ -100,6 +100,15 @@ export interface RoomStateObject {
   is_owner?: boolean;
   /** Whether the room is publicly listed (the editor's privacy toggle state). */
   is_public?: boolean;
+  /** Whether this object has an active BOARD-kind MissionGiver bound to it (#3044). */
+  is_mission_board?: boolean;
+}
+
+/** An active class-1+ NPC placement (Functionary) standing in this room (#3044). */
+export interface NpcGiver {
+  /** The NPCRole pk — the kwarg `startInteraction`/`NPCInteractionDialog` expect. */
+  role_id: number;
+  name: string;
 }
 
 /** One local tiding carried by a room's civic-hub feature (#1450). */
@@ -131,6 +140,8 @@ export interface RoomStatePayload {
   exits: RoomStateObject[];
   scene?: SceneSummary | null;
   hub?: HubTidings | null;
+  /** Active NPC placements in this room (#3044); absent/empty when none stand here. */
+  npc_givers?: NpcGiver[];
 }
 
 export interface SceneSummary {

@@ -16,6 +16,24 @@ if TYPE_CHECKING:
     from world.items.models import ItemInstance
 
 
+def _resolve_look_target(kwargs: dict[str, Any]) -> ObjectDB | None:
+    """Resolve the look target from either dispatch shape (#3044).
+
+    Telnet passes an already-resolved ``target`` ``ObjectDB`` directly. The
+    web room-objects panel's examine-on-click affordance sends a raw ``target``
+    kwarg holding the object's pk (an ``int``) — REST dispatch
+    (``dispatch_player_action`` -> ``_dispatch_registry``) does no ``ObjectDB``
+    resolution of its own; ``objectdb_target_kwargs`` only helps the *websocket*
+    inputfunc. Resolve defensively here so both dispatch shapes work, mirroring
+    ``_resolve_identify_target`` (``actions/definitions/identification.py``) and
+    ``_resolve_room`` (``actions/definitions/locations.py``).
+    """
+    target = kwargs.get("target")
+    if target is None or isinstance(target, ObjectDB):
+        return target
+    return ObjectDB.objects.filter(pk=target).first()
+
+
 @dataclass
 class LookAction(Action):
     """Look at a target entity to get its description."""
@@ -37,7 +55,7 @@ class LookAction(Action):
         context: ActionContext | None = None,
         **kwargs: Any,
     ) -> ActionResult:
-        target = kwargs.get("target")
+        target = _resolve_look_target(kwargs)
         if target is None:
             return ActionResult(success=False, message="Look at what?")
 
@@ -74,6 +92,27 @@ class LookAction(Action):
         target_state = sdm.initialize_state_for_object(target)
         looker_state = sdm.initialize_state_for_object(actor)
         description = target_state.return_appearance(mode="look", looker=looker_state)
+
+        # #3044 — the mission ENVIRONMENTAL_DETAIL/BOARD dispatch hook lives on
+        # ``ObjectParent.at_examined`` (`typeclasses/mixins.py`), which fires from
+        # the TYPECLASS's own ``return_appearance``. Nothing in the live look
+        # pipeline calls that: this Action (shared by telnet's ``CmdLook`` and the
+        # web dispatch) renders through the flows-layer ``BaseState.return_appearance``
+        # instead, which never touches the typeclass hook — so examine-triggered
+        # mission dispatch was unreachable from real play on either surface, only
+        # from tests that call the service directly. Dispatch it explicitly here,
+        # the one seam both telnet and web now share. ``run_safely`` (#1164): a
+        # failure is captured + the examiner told, never breaking the look.
+        from world.missions.services.trigger_dispatch import (  # noqa: PLC0415
+            maybe_dispatch_on_examine,
+        )
+        from world.player_submissions.services import run_safely  # noqa: PLC0415
+
+        run_safely(
+            "mission_dispatch_on_examine",
+            lambda: maybe_dispatch_on_examine(actor, target),
+            actor=actor,
+        )
 
         return ActionResult(
             success=True,

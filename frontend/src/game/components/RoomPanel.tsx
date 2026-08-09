@@ -5,7 +5,7 @@ import { toast } from 'sonner';
 import { startScene, finishScene } from '@/scenes/queries';
 import { useAppDispatch } from '@/store/hooks';
 import { setSessionScene } from '@/store/gameSlice';
-import type { HubTidings, RoomStateObject, SceneSummary } from '@/hooks/types';
+import type { HubTidings, NpcGiver, RoomStateObject, SceneSummary } from '@/hooks/types';
 import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { dispatchRoomBuilder } from '@/buildings/api';
@@ -18,6 +18,7 @@ import { CharactersList } from './room-panel/CharactersList';
 import { ExitsList } from './room-panel/ExitsList';
 import { PortalsBlock } from './room-panel/PortalsBlock';
 import { ObjectsList } from './room-panel/ObjectsList';
+import { NpcGiversBlock } from './room-panel/NpcGiversBlock';
 import { RoomEditorPanel } from './room-panel/RoomEditorPanel';
 import { HubTidingsPanel } from './room-panel/HubTidingsPanel';
 import { RoomAuraPicker } from './room-panel/RoomAuraPicker';
@@ -34,6 +35,8 @@ export interface RoomData {
   is_owner: boolean;
   is_public: boolean;
   hub: HubTidings | null;
+  /** Active NPC placements standing in this room (#3044); absent on older fixtures. */
+  npc_givers?: NpcGiver[];
 }
 
 interface RoomPanelProps {
@@ -211,9 +214,10 @@ export function RoomPanel({
       {scene && <SceneHighlightsPanel sceneId={scene.id} />}
 
       <CharactersList characters={room.characters} onCharacterClick={onCharacterClick} />
+      <NpcGiversBlock npcGivers={room.npc_givers ?? []} />
       <ExitsList exits={room.exits} onExit={handleExit} />
       <PortalsBlock characterId={characterId} />
-      <ObjectsList objects={room.objects} />
+      <ObjectsList objects={room.objects} characterId={characterId} />
     </div>
   );
 }
