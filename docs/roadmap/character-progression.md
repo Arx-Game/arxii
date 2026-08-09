@@ -68,6 +68,11 @@ The central spine connecting every system in the game. Characters develop throug
   story-reward surface (#3055 slice 1c, `GM_GRANT` origin values already reserved) will
   write into. See `docs/systems/magic.md`'s "Acquisition provenance" section and
   `docs/systems/INDEX.md`'s Traits entry.
+- **Guarded beta-reset wipe (#3055 PR 2, built):** `arx manage beta_reset` performs the
+  pristine-world wipe the ledger above derives from — hardcoded-constant + one-way DB
+  latch + typed confirmation + verified-fresh-backup guards, dry-run by default. PR 3
+  (roster characters progress-reset via this same ledger) is the remaining piece — see
+  `docs/systems/beta_reset.md` and ADR-0206/ADR-0207.
 - **Tests:** Extensive tests for traits, skills, kudos, character XP, path history, legend
 
 ## What's Needed for MVP

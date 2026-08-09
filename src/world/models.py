@@ -30,6 +30,7 @@ import world.agriculture.models
 import world.areas.models
 import world.assets.models
 import world.battles.models
+import world.beta_reset.models
 import world.boundaries.models
 import world.buildings.models
 import world.captivity.models
@@ -71,6 +72,7 @@ import world.player_submissions.models
 import world.progression.models
 import world.projects.models
 import world.realms.models
+import world.registration.models
 import world.relationships.models
 import world.room_features.models
 import world.roster.models

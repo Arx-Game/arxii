@@ -13,6 +13,8 @@ import {
 } from '@/character-creation/api';
 import type {
   AccountHistory,
+  AccountInvite,
+  AccountInviteStatus,
   BugReport,
   GMApplication,
   GMApplicationStatus,
@@ -44,6 +46,9 @@ import {
   getGMApplicationList,
   getGMApplicationDetail,
   updateGMApplication,
+  getAccountInviteList,
+  issueAccountInvite,
+  revokeAccountInvite,
 } from './api';
 
 interface FileIssueArgs {
@@ -76,6 +81,8 @@ export const staffKeys = {
   gmApplications: (status?: string, page?: number) =>
     [...staffKeys.all, 'gm-applications', status, page] as const,
   gmApplicationDetail: (id: number) => [...staffKeys.all, 'gm-application-detail', id] as const,
+  accountInvites: (status?: string, page?: number) =>
+    [...staffKeys.all, 'account-invites', status, page] as const,
 };
 
 export function useApplications(statusFilter?: string) {
@@ -347,6 +354,38 @@ export function useUpdateGMApplication() {
       id: number;
       data: { status?: GMApplicationStatus; staff_response?: string };
     }) => updateGMApplication(id, data),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: staffKeys.all });
+    },
+  });
+}
+
+// =============================================================================
+// Account Invite Hooks (#3054)
+// =============================================================================
+
+export function useAccountInviteList(status?: AccountInviteStatus, page?: number) {
+  return useQuery<PaginatedResponse<AccountInvite>>({
+    queryKey: staffKeys.accountInvites(status, page),
+    queryFn: () => getAccountInviteList(status, page),
+  });
+}
+
+export function useIssueAccountInvite() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({ email, note }: { email: string; note?: string }) =>
+      issueAccountInvite(email, note),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: staffKeys.all });
+    },
+  });
+}
+
+export function useRevokeAccountInvite() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (id: number) => revokeAccountInvite(id),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: staffKeys.all });
     },

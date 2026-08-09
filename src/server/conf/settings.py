@@ -240,6 +240,11 @@ AUTHENTICATION_BACKENDS = [
     "allauth.account.auth_backends.AuthenticationBackend",
 ]
 
+# Telnet-side account creation is closed alongside the web signup gate (#3054) —
+# `create` is the only other account-creation door besides the web signup form,
+# which the ArxAccountAdapter.is_open_for_signup override gates separately.
+NEW_ACCOUNT_REGISTRATION_ENABLED = False
+
 # Allauth settings
 ACCOUNT_ADAPTER = "evennia_extensions.adapters.ArxAccountAdapter"
 SOCIALACCOUNT_ADAPTER = "evennia_extensions.social_adapters.ArxSocialAccountAdapter"

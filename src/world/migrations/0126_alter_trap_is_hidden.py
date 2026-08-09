@@ -4,9 +4,7 @@ from django.db import migrations, models
 
 
 class Migration(migrations.Migration):
-    dependencies = [
-        ("arxii", "0123_alter_techniqueprogress_source"),
-    ]
+    dependencies = [("arxii", "0125_accountinvite_registrationconfig")]
 
     operations = [
         migrations.AlterField(
