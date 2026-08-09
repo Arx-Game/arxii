@@ -12,6 +12,7 @@ import { SpeakerQueueBar } from '../components/SpeakerQueueBar';
 import { SceneTacticalMap } from '../components/SceneTacticalMap';
 import { HighlightReel } from '../components/HighlightReel';
 import { ConsentPrompt } from '../components/ConsentPrompt';
+import { PrecapturePanel } from '../components/PrecapturePanel';
 import { SceneLinesAndVeilsCard } from '@/boundaries/components/SceneLinesAndVeilsCard';
 import { SineatingInbox } from '@/magic/components/SineatingInbox';
 import { SoulTetherRescuePrompt } from '@/magic/components/SoulTetherRescuePrompt';
@@ -207,6 +208,7 @@ export function SceneDetailPage() {
           </Link>
         )}
         {scene && <RitualProposedChip sceneId={scene.id} />}
+        {scene?.is_owner && <PrecapturePanel sceneId={id} />}
         {isActive && <ConsentPrompt sceneId={id} />}
         {isActive && <SineatingInbox />}
         {isActive && <SoulTetherRescuePrompt />}

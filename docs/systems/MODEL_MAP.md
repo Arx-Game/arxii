@@ -7897,6 +7897,11 @@
   - place -> scenes.Place [FK]
   - persona -> scenes.Persona [FK]
 
+### PrecaptureConsentRequest
+**Foreign Keys:**
+  - scene -> scenes.Scene [FK]
+  - account -> evennia.AccountDB [FK]
+
 ### ReactionEmoji
 
 ### ReactionWindow
@@ -7961,6 +7966,7 @@
   - scene_rounds <- scenes.SceneRound
   - decisive_markers <- scenes.DecisiveCheckMarker
   - action_requests <- scenes.SceneActionRequest
+  - precapture_consent_requests <- scenes.PrecaptureConsentRequest
   - reaction_windows <- scenes.ReactionWindow
   - speaker_queues <- scenes.SpeakerQueue
   - explaining_secrets <- secrets.Secret

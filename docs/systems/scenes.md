@@ -606,6 +606,73 @@ Finishes the active scene in the actor's room. Gated by `actor_can_administer_sc
 a GM character, staff account, or scene co-owner succeeds. Delegates to `finish_scene_full`
 for full orchestration.
 
+### Pre-scene RP capture (#3069 sub-item 4)
+
+`record_interaction` writes `scene=None` when no active scene exists at the room
+(`interaction_services.py`) — organic lead-in RP is common before anyone remembers to hit
+"Start Scene." Tehom's ruling (2026-08-08): on scene start, capture the prior unattached
+interactions of the people who are IN the new scene by default; anyone NOT in the new scene
+needs explicit consent first; the starter gets truncate/cutoff controls. All of it lives in
+`world/scenes/precapture_services.py`, wired into `StartSceneAction.execute()`'s new-scene
+branch (right after `enroll_present_table_gms` — see above) so telnet and web converge on the
+one call site (post-#3074).
+
+**Capture** — `capture_prescene_interactions(scene, room)`:
+
+- Candidates: `Interaction.objects.filter(scene__isnull=True, timestamp__gte=scene.date_started
+  - PRECAPTURE_WINDOW, timestamp__lt=scene.date_started)`. `PRECAPTURE_WINDOW` (24h) is an
+  implementation constant, not a tuning knob — it only keeps the candidate list sane; truncation
+  is the real cutoff mechanism.
+- **No `room` field exists on `Interaction`** (organic grid RP carries no place either), so "prior
+  interactions in this room" is approximated as "prior interactions by someone CURRENTLY present
+  in this room" — a deliberate approximation, not a precision guarantee. "Present" is resolved by
+  the candidate's pinned `writer_account` (#1219 party identity) matching an account controlling a
+  present, sheeted character (the same room walk `add_present_as_co_owners` does).
+- A present author's candidates attach immediately (`interaction.scene = scene`). Everyone else
+  gets one `PrecaptureConsentRequest` row per (scene, account) — never per interaction; nothing
+  attaches until they accept.
+- A candidate with no `writer_account` (pre-#1219 rows, or an account-less NPC-only persona) is
+  skipped outright — left unattached, never guessed into either bucket.
+
+**Consent** — `world/scenes/precapture_models.py`'s `PrecaptureConsentRequest` (`scene`, `account`,
+`status` reusing `ActionRequestStatus` PENDING/ACCEPTED/DENIED — the same three-state vocabulary
+`SceneActionRequest` already uses in this app). `respond_to_precapture_consent(request,
+accept=...)` re-derives the exact same candidate window from `request.scene.date_started` (no
+window needs to be stored on the row) and attaches on accept, or simply leaves everything
+unattached on decline — a declined or ignored (never responded) request reads identically as
+"stays unattached," so there is no timeout/expiry sweep to build.
+
+Telnet and web share ONE consent surface: `world/scenes/precapture_offer_handler.py`'s
+`PrecaptureConsentOfferHandler` registers with the generic `commands.offer_registry` (the same
+`accept <keyword>` / `decline <keyword>` routing `SoulfrayPendingHandler`/`OrgInviteHandler`
+already use — see `world/scenes/apps.py`), giving telnet `accept precapture` / `decline
+precapture` for free. The web surface is `PrecaptureConsentRequestViewSet`
+(`/api/precapture-consent-requests/`, list = the account's own pending requests with a
+`candidates` preview of exactly what would attach — **the requester's own content only**, per
+the privacy invariant below — plus `POST .../respond/`), backed by
+`frontend/src/scenes/components/PrecaptureConsentNotifier.tsx` (a site-wide toast, mirroring
+`DuelChallengeNotifier`; no character-session resolution needed since the ask is account-level,
+not persona-targeted).
+
+**Privacy invariants:** a non-member's interactions never appear in the scene log before they
+accept (`scene` stays `None` until then); the consent preview shows only the requester's own
+candidate interactions; declining reveals nothing to the scene or its participants.
+
+**Truncation** — the starter (or staff)'s cutoff control, gated by `actor_can_administer_scene`
+via the new `TruncatePrecaptureAction` (`key="truncate_precapture"`). "Pre-scene-captured" needs
+no separate flag: `list_precaptured(scene)` is simply `scene.interactions.filter(timestamp__lt=
+scene.date_started)` — a live in-scene pose is always recorded with `scene` already set at write
+time, so its timestamp is always `>= date_started` by construction; only capture ever backdates a
+pose's `scene` FK below that line, and it never rewrites the original timestamp. Truncating
+("start scene from here") detaches (`scene=None`, never deletes) every captured pose before the
+chosen one. Web: `POST /api/scenes/{id}/truncate-precapture/` (`{interaction_id}`) plus `GET
+/api/scenes/{id}/precapture/` for the listing, both `IsSceneOwnerOrStaff`-gated, surfaced by
+`frontend/src/scenes/components/PrecapturePanel.tsx` on `SceneDetailPage` (owner-only). Telnet:
+`scene capture` lists (1-indexed), `scene capture <n>` truncates before the nth pose
+(`commands/scene.py`) — `TruncatePrecaptureAction` resolves an explicit `scene_id` kwarg first
+(the web path, since the starter may have long since walked away from the room) and falls back to
+the actor's current room's active scene otherwise (the telnet path).
+
 ### Round-mode service — active_round_for_room
 
 ```python

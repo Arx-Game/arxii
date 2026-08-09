@@ -10,6 +10,7 @@ from world.scenes.interaction_views import (
     ReactionEmojiViewSet,
 )
 from world.scenes.place_views import PlaceViewSet
+from world.scenes.precapture_views import PrecaptureConsentRequestViewSet
 from world.scenes.reaction_views import ReactionWindowViewSet
 from world.scenes.social_control_views import BlockViewSet, MuteViewSet
 from world.scenes.speaker_queue_views import SpeakerQueueViewSet
@@ -59,6 +60,11 @@ router.register(
     r"reaction-windows",
     ReactionWindowViewSet,
     basename="reactionwindow",
+)
+router.register(
+    r"precapture-consent-requests",
+    PrecaptureConsentRequestViewSet,
+    basename="precaptureconsentrequest",
 )
 router.register(r"blocks", BlockViewSet, basename="block")
 router.register(r"mutes", MuteViewSet, basename="mute")

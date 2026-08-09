@@ -58,3 +58,15 @@ _Avoid_: reactive block, ambush guard, trap interpose (the model name is `Pendin
 **ReactionEmoji** (reaction-emoji catalog, #1699):
 The staff-editable catalog of emoji the scene footer offers on poses, each carrying a relationship valence (+1 / 0 / −1). Valence-0 entries are cosmetic — the pre-#1699 behavior, exactly. Nonzero-valence entries additionally fire an ambient relationship Bump (see `world/relationships/AGENT_GLOSSARY.md`) at the pose's author. Whether emoji survive playtesting is a data edit here (deactivate the row), never a deploy.
 _Avoid_: emoji whitelist, emote catalog, sticker set.
+
+**Pre-scene capture** (#3069 sub-item 4):
+Folding a room's prior unattached (`scene=None`) poses into a scene at the moment it starts (`capture_prescene_interactions`), so lead-in RP that happened before anyone remembered to hit "Start Scene" isn't lost from the persisted log. A present pose's author attaches immediately; an absent author's poses stay unattached pending a `PrecaptureConsentRequest`.
+_Avoid_: retroactive attach, backfill (this is a one-time scene-start sweep, not a data migration or periodic job)
+
+**Precapture consent** (#3069 sub-item 4):
+The explicit opt-in a non-member author must give before their prior poses join a scene they weren't part of at start — one `PrecaptureConsentRequest` per (scene, account), reusing `SceneActionRequest`'s `ActionRequestStatus` vocabulary. Rides the generic telnet offer registry (`accept precapture` / `decline precapture`) and a dedicated web inbox; never exposes the candidate poses to anyone but the requester.
+_Avoid_: retroactive consent, backfill approval
+
+**Precapture truncation**:
+The scene starter's (or staff's) "start scene from here" cutoff control — detaches (`scene=None`, never deletes) every pre-scene-captured pose before a chosen one. Distinguishes captured poses from live ones purely by `timestamp < scene.date_started`; no separate flag exists, and a live in-scene pose can never be truncated.
+_Avoid_: trim, prune, delete (truncation only detaches; the interaction row survives)

@@ -26200,6 +26200,70 @@ paths:
               schema:
                 $ref: '#/components/schemas/PlayerTrust'
           description: ''
+  /api/precapture-consent-requests/:
+    get:
+      operationId: precapture_consent_requests_list
+      description: The requesting account's own precapture consent requests.
+      tags:
+      - precapture-consent-requests
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/PrecaptureConsentRequest'
+          description: ''
+  /api/precapture-consent-requests/{id}/:
+    get:
+      operationId: precapture_consent_requests_retrieve
+      description: The requesting account's own precapture consent requests.
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: string
+        required: true
+      tags:
+      - precapture-consent-requests
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PrecaptureConsentRequest'
+          description: ''
+  /api/precapture-consent-requests/{id}/respond/:
+    post:
+      operationId: precapture_consent_requests_respond_create
+      description: |-
+        Accept or decline this consent request.
+
+        Looks up by (pk, account) directly rather than through ``get_queryset`` (which
+        is PENDING-only) so a double-submit lands on the "already resolved" 400 below
+        instead of a bare 404 — the row still belongs to this account either way.
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: string
+        required: true
+      tags:
+      - precapture-consent-requests
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PrecaptureConsentRequest'
+          description: ''
   /api/progression/account/:
     get:
       operationId: progression_account_retrieve
@@ -28999,6 +29063,33 @@ paths:
               schema:
                 $ref: '#/components/schemas/HighlightReel'
           description: ''
+  /api/scenes/{id}/precapture/:
+    get:
+      operationId: scenes_precapture_retrieve
+      description: |-
+        #3069 — the scene's pre-scene-captured poses, oldest first.
+
+        Purpose-built for the starter's truncate control (not a general content view —
+        the normal interaction feed already shows these once captured); gated the same
+        as ``truncate_precapture``.
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: A unique integer value identifying this scene.
+        required: true
+      tags:
+      - scenes
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SceneDetail'
+          description: ''
   /api/scenes/{id}/set-round-mode/:
     post:
       operationId: scenes_set_round_mode_create
@@ -29023,6 +29114,40 @@ paths:
           application/json:
             schema:
               $ref: '#/components/schemas/SetRoundModeRequestRequest'
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SceneDetail'
+          description: ''
+  /api/scenes/{id}/truncate-precapture/:
+    post:
+      operationId: scenes_truncate_precapture_create
+      description: |-
+        #3069 — drop pre-scene-captured poses before the given one ("start from here").
+
+        Coarse-gated by ``IsSceneOwnerOrStaff``; authoritative permission check lives
+        in ``TruncatePrecaptureAction`` (``actor_can_administer_scene``). Passes an
+        explicit ``scene_id`` — unlike ``set_round_mode``, the starter is not assumed to
+        still be standing in the scene's room (see the action's docstring).
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: A unique integer value identifying this scene.
+        required: true
+      tags:
+      - scenes
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/TruncatePrecaptureRequestRequest'
+        required: true
       security:
       - cookieAuth: []
       responses:
@@ -62449,6 +62574,48 @@ components:
       - running_total
       - source_label
       - stage
+    PrecaptureConsentRequest:
+      type: object
+      properties:
+        id:
+          type: integer
+          readOnly: true
+        scene:
+          type: integer
+          readOnly: true
+          description: The scene asking to capture this account's prior unattached
+            poses.
+        scene_name:
+          type: string
+          readOnly: true
+        room_name:
+          type: string
+          nullable: true
+          readOnly: true
+        status:
+          allOf:
+          - $ref: '#/components/schemas/Status307Enum'
+          readOnly: true
+        requested_at:
+          type: string
+          format: date-time
+          readOnly: true
+        responded_at:
+          type: string
+          format: date-time
+          readOnly: true
+          nullable: true
+        candidates:
+          readOnly: true
+      required:
+      - candidates
+      - id
+      - requested_at
+      - responded_at
+      - room_name
+      - scene
+      - scene_name
+      - status
     PredicateTypeEnum:
       enum:
       - gm_marked
@@ -71903,6 +72070,18 @@ components:
         * `primary` - Primary condition severity
         * `aftermath` - Aftermath child condition severity
         * `pending_alteration` - Pending alteration tier
+    TruncatePrecaptureRequestRequest:
+      type: object
+      description: |-
+        POST body for the #3069 truncate-precapture endpoint.
+
+        ``interaction_id`` is the row the starter clicked "start from here" on — every
+        pre-scene-captured pose before it (oldest-first) gets detached.
+      properties:
+        interaction_id:
+          type: integer
+      required:
+      - interaction_id
     TrustCategory:
       type: object
       description: Serializer for trust categories
