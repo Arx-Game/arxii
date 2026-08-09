@@ -137,6 +137,13 @@ actions, backends, and service functions.
   `_actor_may_gm_encounter` (staff or `encounter.scene.is_gm(account)`) in the Action layer —
   reads the same `SceneParticipation.is_gm` flag `enroll_present_table_gms`/
   `GrantSceneGMAction`/`_enroll_lead_gm_on_scene` write (#2113). No business logic in the command.
+  `encounter duel <character> <name> <tier> <pool>` (#3068) is the odd one out — it dispatches
+  `ProposeLethalDuelAction` (`actions/definitions/duels.py`), gated on the current *scene's*
+  GM/owner-or-staff standing (not "an active encounter here" — a lethal duel is its own
+  standalone DUEL encounter, opened only once the targeted PC accepts via `duel accept`
+  (`duels.py`'s `CmdDuel`), never forced). `<character>` must be present in the GM's room;
+  `<name>` is the significant NPC's display name (single token, no spaces — same limitation
+  `add`'s NPC name already has); `<tier>` must be `elite`/`boss`/`hero_killer`.
 - **`consent.py`**: `ConsentRequestCommand` (base), `CmdIntimidate`, `CmdPersuade`, `CmdDeceive`, `CmdFlirt`, `CmdSeduce`, `CmdPerform`, `CmdEntrance`, `CmdRestoreSense` — telnet shells for social consent-flow actions (#1337/#1338/#1695); `CmdAccept` (extended to check offer registry first; consent
   fall-through unchanged), `CmdDeny` — target responses. All call `create_action_request` / `respond_to_action_request` — the same service the web viewset calls.
 - **`social/grievance.py`**: `CmdGrievance` (`+grievance`, #1429) — the telnet face of the secret-victim grievance prompt; thin over `world.secrets.services.register_secret_grievance` (the same service the web `/api/secrets/grievance/` endpoint calls). A wronged character picks a `GrievanceOption` for a secret they've learned; it applies a one-sided relationship swing toward the perpetrator.
@@ -366,6 +373,11 @@ actions, backends, and service functions.
   subverb routing. `yield` (concede an active duel) stays on `combat yield` (#1453); the hub points to
   it. The optional `[id]` selects a specific pending challenge (the #1180 threaded-inbox path); without
   it the action falls back to the actor's single pending challenge. No business logic in the command.
+  `accept`/`decline` are also the consent step for a GM-initiated lethal duel (#3068,
+  `encounter duel` — see `encounter.py`): `AcceptChallengeAction` reuses the exact same
+  code path — `world.combat.duels.accept_challenge` branches on `DuelChallenge.is_lethal` to
+  call `create_lethal_duel` instead of `create_pvp_duel` — so no new player-facing verb exists
+  for the lethal case, only a new challenge *shape* the existing one already carries.
 - **`consent_preferences.py`**: `CmdConsent` (`consent`, #1487) — the social-consent preference
   namespace. Routes a leading subverb (`consent on|off`, `consent category <key>=<mode>`,
   `consent whitelist add <name> to <category>`, `consent whitelist remove <name> from <category>`,

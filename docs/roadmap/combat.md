@@ -6,7 +6,15 @@ surface in #3067, closing the last "server-only" gap in the party-combat REST AP
 effect palette shipped (#1584, combat-wired for battlefield shaping by #2206); the frontier is
 embodied combat (companions, mounts, war) and *proving* the WIRED-UNPROVEN paths — not the round
 engine. Champion-duel challenge issuance and Battle staging (`CmdBattle`) remain telnet-first — no
-web GM surface for those two yet.
+web GM surface for those two yet. **Lethal NPC duels are reachable (#3068):**
+`world.combat.duels.create_lethal_duel` — previously a zero-caller service, flagged unreachable by
+the 2026-08-08 combat audit — now has a real GM-initiated caller: a GM proposes a climactic
+PC-vs-significant-NPC duel (web `GMEncounterControls` "Start Lethal Duel" dialog / telnet `encounter
+duel`), and the targeted player's own accept (never the GM) is what opens the encounter, reusing the
+existing PC-vs-PC `DuelChallenge`/`DuelChallengeNotifier` consent machinery. The Battle
+champion-duel path remains the other, player-initiated caller, preserved unchanged. See
+`docs/systems/INDEX.md`'s Combat section ("Duels") for the full contract, including the known
+frontend one-encounter-per-scene visibility gap for simultaneous duels (not a backend limitation).
 
 This is the combat **status map**. Per-capability tiers, the MVP bar, and sequencing live in the
 [`player-capability-ledger.md`](player-capability-ledger.md) (the spine — read it first). The

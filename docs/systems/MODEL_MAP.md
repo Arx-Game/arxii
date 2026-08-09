@@ -2205,9 +2205,10 @@
 
 ### DuelChallenge
 **Foreign Keys:**
-  - challenger_sheet -> character_sheets.CharacterSheet [FK]
+  - challenger_sheet -> character_sheets.CharacterSheet [FK] (nullable)
   - challenged_sheet -> character_sheets.CharacterSheet [FK]
   - room -> evennia.ObjectDB [FK] (nullable)
+  - threat_pool -> combat.ThreatPool [FK] (nullable)
   - resulting_encounter -> combat.CombatEncounter [FK] (nullable)
 
 ### EncounterAftermathRule
@@ -2304,6 +2305,7 @@
   - bossphase_set <- combat.BossPhase
   - creature_templates <- combat.CreatureTemplate
   - creaturephasetemplate_set <- combat.CreaturePhaseTemplate
+  - lethal_duel_challenges <- combat.DuelChallenge
 
 ### ThreatPoolEntry
 **Foreign Keys:**

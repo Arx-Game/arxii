@@ -7,6 +7,13 @@ from rest_framework.views import APIView
 from world.combat.models import CombatEncounter
 
 _CREATE_ACTION = "create"
+# Actions with no CombatEncounter object yet, gated by the *named scene's*
+# GM/owner-or-staff standing rather than has_object_permission (#3068 widens
+# this from {"create"} — DuelChallengeViewSet.propose_lethal_duel reuses this
+# same class/gate for the same reason CombatEncounterViewSet.create does: a
+# GM proposing a lethal duel has no encounter to check permissions against
+# yet either).
+_SCENE_GATED_ACTIONS = frozenset({_CREATE_ACTION, "propose_lethal_duel"})
 
 
 def can_view_encounter_effects(user: object, encounter: CombatEncounter) -> bool:
@@ -59,14 +66,16 @@ class IsEncounterGMOrStaff(BasePermission):
     """
 
     def has_permission(self, request: Request, view: APIView) -> bool:
-        """Gate ``create`` to the named scene's GM/owner (or staff) (#3067).
+        """Gate ``create``/``propose_lethal_duel`` to the scene's GM/owner (or staff).
 
-        ``create`` has no object yet, so DRF never calls
-        ``has_object_permission`` for it — every other action here is
+        Both actions have no object yet (a new CombatEncounter, or a new
+        DuelChallenge with no encounter at all), so DRF never calls
+        ``has_object_permission`` for them — every other action here is
         detail-routed (``get_object()`` runs first, then the object check
         below). Without this override, any authenticated user could POST an
-        encounter into a scene they don't GM. Not a behavior change for any
-        other action: they still fall through to the unconditional ``True``.
+        encounter — or a lethal-duel proposal — into a scene they don't GM.
+        Not a behavior change for any other action: they still fall through
+        to the unconditional ``True``.
 
         Staff-or-GM-or-owner mirrors the established "can this user do
         GM-ish things to this scene" predicate used elsewhere for scene
@@ -79,7 +88,7 @@ class IsEncounterGMOrStaff(BasePermission):
         owner who isn't separately flagged ``is_gm`` would see a button the
         server then 403s.
         """
-        if view.action != _CREATE_ACTION:
+        if view.action not in _SCENE_GATED_ACTIONS:
             return True
         if request.user.is_staff:
             return True

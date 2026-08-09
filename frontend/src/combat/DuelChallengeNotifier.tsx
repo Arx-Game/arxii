@@ -32,6 +32,13 @@
  * not that character has a live session/tab open.
  *
  * Renders nothing itself — `null` always, purely a side-effect component.
+ *
+ * Lethal duels (#3068): a GM-initiated lethal-duel proposal is a DuelChallenge
+ * with `is_lethal: true` and `challenger: null` (there is no PC challenger —
+ * the challenger is a significant NPC, named by `opponent_name` instead).
+ * Accept/Decline dispatch through the exact same `accept`/`decline` actions —
+ * `world.combat.duels.accept_challenge` branches on `is_lethal` server-side —
+ * so only the toast's display text and framing differ here.
  */
 
 import { useEffect, useRef, useState } from 'react';
@@ -78,15 +85,32 @@ function DuelChallengeToastBody({
     }
   }
 
+  // challenge.challenger is null exactly when is_lethal is true (no PC challenger) —
+  // the two fields aren't a TS discriminated union, so narrow via `?? ` instead of
+  // trusting is_lethal to prove non-null.
+  const challengerName = challenge.challenger?.name ?? challenge.opponent_name;
+
   return (
     <div
-      className="rounded-md border border-amber-500/50 bg-amber-500/10 p-3 shadow-sm"
+      className={
+        challenge.is_lethal
+          ? 'rounded-md border border-destructive/60 bg-destructive/10 p-3 shadow-sm'
+          : 'rounded-md border border-amber-500/50 bg-amber-500/10 p-3 shadow-sm'
+      }
       data-testid="duel-challenge-toast"
     >
       <p className="text-sm text-foreground">
-        <span className="font-semibold">{challenge.challenger.name}</span> has challenged{' '}
+        <span className="font-semibold">{challengerName}</span> has challenged{' '}
         <span className="font-semibold">{characterName}</span> to a duel.
       </p>
+      {challenge.is_lethal && (
+        <p
+          className="mt-1 text-xs font-semibold text-destructive"
+          data-testid="duel-toast-lethal-warning"
+        >
+          This is a fight to the death.
+        </p>
+      )}
       <p className="mt-1 text-xs text-muted-foreground">
         Responding as <span className="font-semibold">{characterName}</span>.
       </p>

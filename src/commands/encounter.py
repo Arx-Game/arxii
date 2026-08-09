@@ -19,17 +19,21 @@ _USAGE = (
     "  encounter addpc <character>             - add a PC to the encounter\n"
     "  encounter removepc <participant>        - remove a PC from the encounter\n"
     "  encounter pause                         - pause/resume the encounter\n"
-    "  encounter end                           - force-end the encounter"
+    "  encounter end                           - force-end the encounter\n"
+    "  encounter duel <character> <name> <tier> <pool>\n"
+    "                                           - propose a lethal duel (#3068)"
 )
 
 _ADD_USAGE = "Usage: encounter add <name> <tier> [pool]"
 _DEFAULT_USAGE = "Usage: encounter default <tier>"
 _ADDPC_USAGE = "Usage: encounter addpc <character>"
 _REMOVEPC_USAGE = "Usage: encounter removepc <participant>"
+_DUEL_USAGE = "Usage: encounter duel <character> <name> <tier> <pool>"
 
 # Token-count thresholds for argument parsing.
 _MIN_ADD_TOKENS = 2
 _ADD_POOL_INDEX = 2
+_DUEL_TOKENS = 4
 
 _SUBVERB_HANDLERS: dict[str, str] = {
     "begin": "_handle_begin",
@@ -40,6 +44,7 @@ _SUBVERB_HANDLERS: dict[str, str] = {
     "removepc": "_handle_removepc",
     "pause": "_handle_pause",
     "end": "_handle_end",
+    "duel": "_handle_duel",
 }
 
 
@@ -126,3 +131,26 @@ class CmdEncounter(ArxNamespaceCommand):
         from actions.definitions.gm_combat import EndEncounterAction  # noqa: PLC0415
 
         self._run_action(EndEncounterAction)
+
+    def _handle_duel(self, rest: str) -> None:
+        """Parse ``duel <character> <name> <tier> <pool>`` and propose a lethal duel (#3068).
+
+        Creates a PENDING lethal DuelChallenge against the named PC — no
+        encounter exists until they accept it via ``duel accept`` (#1492).
+        """
+        from actions.definitions.duels import ProposeLethalDuelAction  # noqa: PLC0415
+
+        tokens = rest.split()
+        if len(tokens) < _DUEL_TOKENS:
+            msg = _DUEL_USAGE
+            raise CommandError(msg)
+
+        character_sheet_id, opponent_name, tier, threat_pool_id = tokens[:_DUEL_TOKENS]
+
+        self._run_action(
+            ProposeLethalDuelAction,
+            character_sheet_id=character_sheet_id,
+            opponent_name=opponent_name,
+            tier=tier,
+            threat_pool_id=threat_pool_id,
+        )
