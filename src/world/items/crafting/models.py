@@ -348,12 +348,12 @@ class CraftingRecipeConsequence(NaturalKeyMixin, SharedMemoryModel):
     this consequence fires.
 
     Carries `NaturalKeyMixin` (#3006): the key is the existing
-    ``(recipe, consequence)`` UniqueConstraint below. Caveat: ``checks.Consequence``
-    itself carries no natural key (no live caller needs one today — the same gap
-    ``mechanics.ChallengeTemplateConsequence`` already lives with unregistered), so
-    a fixture-authored row here resolves its ``consequence`` component by raw pk,
-    not a portable key. Fine for round-tripping within one database; giving
-    ``Consequence`` a natural key is a separate, broader change out of scope here.
+    ``(recipe, consequence)`` UniqueConstraint below. ``checks.Consequence`` gained
+    its own natural key, ``(outcome_tier, label)``, under #3071 — the
+    ``mechanics.ChallengeTemplateConsequence`` gap this docstring used to note is
+    now specific to that one model, not ``Consequence`` itself. A fixture-authored
+    row here resolves its ``consequence`` component by that natural key like any
+    other cross-model FK.
     """
 
     recipe = models.ForeignKey(
@@ -382,7 +382,7 @@ class CraftingRecipeConsequence(NaturalKeyMixin, SharedMemoryModel):
 
     class NaturalKeyConfig:
         fields = ["recipe", "consequence"]
-        dependencies = [_CRAFTING_RECIPE_DEP]
+        dependencies = [_CRAFTING_RECIPE_DEP, _CONSEQUENCE_FK]
 
     class Meta:
         app_label = "arxii"

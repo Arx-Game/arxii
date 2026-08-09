@@ -99,16 +99,19 @@ class CraftingNaturalKeyRoundTripTests(TestCase):
     def test_crafting_recipe_consequence_round_trips_on_recipe_and_consequence(self) -> None:
         """CraftingRecipeConsequence's natural key is (recipe, consequence).
 
-        `checks.Consequence` has no natural key of its own (#3006 caveat — same
-        gap `ChallengeTemplateConsequence` already lives with), so the
-        `consequence` component resolves by raw pk. That still round-trips
-        within one database, which is what this test proves.
+        `checks.Consequence` gained its own natural key, `(outcome_tier, label)`,
+        under #3071 — so the `consequence` component of this row's key now
+        resolves the same way every other natural-keyed FK does (Django's
+        `use_natural_foreign_keys=True` serializes it as the `[outcome_tier_name,
+        label]` pair, not a raw pk). This still round-trips within one database,
+        which is what this test proves.
         """
         from world.items.factories import CraftingRecipeConsequenceFactory, CraftingRecipeFactory
 
         recipe = CraftingRecipeFactory(name="Consequence Recipe")
         row = CraftingRecipeConsequenceFactory(recipe=recipe)
         consequence_pk = row.consequence_id
+        consequence_natural_key = [row.consequence.outcome_tier.name, row.consequence.label]
 
         self._round_trip()
 
@@ -119,7 +122,7 @@ class CraftingNaturalKeyRoundTripTests(TestCase):
         record = records[0]
         assert "pk" not in record
         assert record["fields"]["recipe"] == ["Consequence Recipe"]
-        assert record["fields"]["consequence"] == consequence_pk
+        assert record["fields"]["consequence"] == consequence_natural_key
 
         row.refresh_from_db()
         assert row.recipe_id == recipe.pk
