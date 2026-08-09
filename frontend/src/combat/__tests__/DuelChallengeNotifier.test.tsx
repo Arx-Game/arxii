@@ -36,6 +36,25 @@ function challenge(id: number, challengerName = 'Rivalis') {
     challenger: { id: 900 + id, name: challengerName },
     challenged: { id: 42, name: 'TestChar' },
     status: 'pending' as const,
+    is_lethal: false,
+    opponent_name: '',
+    opponent_tier: '',
+    created_at: '2026-07-11T00:00:00Z',
+    resolved_at: null,
+    resulting_encounter: null,
+  };
+}
+
+/** A GM-initiated lethal duel challenge (#3068) — challenger is null server-side. */
+function lethalChallenge(id: number, opponentName = 'The Widow Ashgrave') {
+  return {
+    id,
+    challenger: null,
+    challenged: { id: 42, name: 'TestChar' },
+    status: 'pending' as const,
+    is_lethal: true,
+    opponent_name: opponentName,
+    opponent_tier: 'elite',
     created_at: '2026-07-11T00:00:00Z',
     resolved_at: null,
     resulting_encounter: null,
@@ -190,5 +209,89 @@ describe('DuelChallengeNotifier', () => {
       expect(getByTestId('duel-toast-error')).toHaveTextContent('Challenge already expired.');
     });
     expect(toastDismissMock).not.toHaveBeenCalled();
+  });
+
+  describe('GM-initiated lethal duel (#3068)', () => {
+    it('shows the significant NPC name (not a crash on a null challenger)', () => {
+      mockUseDuelChallengeInbox.mockReturnValue({
+        data: [lethalChallenge(9)],
+        isLoading: false,
+      });
+      render(<DuelChallengeNotifier />);
+
+      const renderFn = toastCustomMock.mock.calls[0][0] as (id: string | number) => JSX.Element;
+      const { getByText } = render(renderFn('toast-1'));
+
+      expect(getByText(/The Widow Ashgrave/)).toBeInTheDocument();
+    });
+
+    it('shows the fight-to-the-death warning for a lethal challenge', () => {
+      mockUseDuelChallengeInbox.mockReturnValue({
+        data: [lethalChallenge(9)],
+        isLoading: false,
+      });
+      render(<DuelChallengeNotifier />);
+
+      const renderFn = toastCustomMock.mock.calls[0][0] as (id: string | number) => JSX.Element;
+      const { getByTestId } = render(renderFn('toast-1'));
+
+      expect(getByTestId('duel-toast-lethal-warning')).toBeInTheDocument();
+    });
+
+    it('does not show the lethal warning for an ordinary PvP challenge', () => {
+      mockUseDuelChallengeInbox.mockReturnValue({ data: [challenge(5)], isLoading: false });
+      render(<DuelChallengeNotifier />);
+
+      const renderFn = toastCustomMock.mock.calls[0][0] as (id: string | number) => JSX.Element;
+      const { queryByTestId } = render(renderFn('toast-1'));
+
+      expect(queryByTestId('duel-toast-lethal-warning')).not.toBeInTheDocument();
+    });
+
+    it('Accept dispatches the SAME accept registry action as a PvP challenge', async () => {
+      mockUseDuelChallengeInbox.mockReturnValue({
+        data: [lethalChallenge(9)],
+        isLoading: false,
+      });
+      mockMutateAsync.mockResolvedValue({});
+      render(<DuelChallengeNotifier />);
+
+      const renderFn = toastCustomMock.mock.calls[0][0] as (id: string | number) => JSX.Element;
+      const { getByTestId } = render(renderFn('toast-1'));
+      fireEvent.click(getByTestId('duel-toast-accept-btn'));
+
+      await waitFor(() => {
+        expect(mockMutateAsync).toHaveBeenCalledWith({
+          ref: { backend: 'registry', registry_key: 'accept' },
+          kwargs: { challenge_id: 9 },
+        });
+      });
+      await waitFor(() => {
+        expect(toastDismissMock).toHaveBeenCalledWith('toast-1');
+      });
+    });
+
+    it('Decline dispatches the SAME decline registry action as a PvP challenge', async () => {
+      mockUseDuelChallengeInbox.mockReturnValue({
+        data: [lethalChallenge(9)],
+        isLoading: false,
+      });
+      mockMutateAsync.mockResolvedValue({});
+      render(<DuelChallengeNotifier />);
+
+      const renderFn = toastCustomMock.mock.calls[0][0] as (id: string | number) => JSX.Element;
+      const { getByTestId } = render(renderFn('toast-1'));
+      fireEvent.click(getByTestId('duel-toast-decline-btn'));
+
+      await waitFor(() => {
+        expect(mockMutateAsync).toHaveBeenCalledWith({
+          ref: { backend: 'registry', registry_key: 'decline' },
+          kwargs: { challenge_id: 9 },
+        });
+      });
+      await waitFor(() => {
+        expect(toastDismissMock).toHaveBeenCalledWith('toast-1');
+      });
+    });
   });
 });

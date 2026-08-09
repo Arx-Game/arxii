@@ -137,6 +137,7 @@ from actions.definitions.duels import (
     AcknowledgeRiskAction,
     ChallengeAction,
     DeclineChallengeAction,
+    ProposeLethalDuelAction,
     WithdrawChallengeAction,
     YieldAction,
 )
@@ -378,6 +379,7 @@ from actions.definitions.scenes import (
     GrantSceneGMAction,
     MarkDecisiveCheckAction,
     StartSceneAction,
+    TruncatePrecaptureAction,
 )
 from actions.definitions.ships import (
     CommissionShipAction,
@@ -647,11 +649,13 @@ _ALL_ACTIONS: list[Action] = [
     WithdrawChallengeAction(),
     YieldAction(),
     AcknowledgeRiskAction(),
+    ProposeLethalDuelAction(),
     CastTechniqueAction(),
     StartSceneAction(),
     FinishSceneAction(),
     GrantSceneGMAction(),
     MarkDecisiveCheckAction(),
+    TruncatePrecaptureAction(),
     BeginEncounterRoundAction(),
     ResolveEncounterRoundAction(),
     AddOpponentAction(),

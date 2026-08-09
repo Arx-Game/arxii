@@ -107,6 +107,7 @@ treat those names as hints to confirm, not gospel.
 - [0142 — The Big Button loads all real content from arx2-lore; arxii seeds keep only non-lore config/lookup tables](0142-content-vs-config-boundary-in-the-dev-seed.md) (extends ADR-0140's content pipeline; #2474)
 - [0168 — CONTENT_MODELS registration *is* the seed/content boundary; seeders look content up and invent only under SEED_SAMPLE_CONTENT](0168-content-models-registration-is-the-seed-boundary.md) (sharpens ADR-0142; #2698)
 - [0171 — CONTENT_MODELS stays the model-level line; code-required rows get a declared per-row config carve-out, and per-player rows export by owner column, never name pattern](0171-code-required-content-rows-are-declared-config.md) (amends ADR-0168; #2724)
+- [0208 — Registration gates on per-email invites, not codes or an allowlist, behind a DB-singleton open/closed toggle](0208-invite-gated-registration-db-singleton-toggle.md) (#3054)
 
 ### Game-design tenets
 - [0023 — PvP is structurally non-lethal](0023-pvp-is-structurally-non-lethal.md)

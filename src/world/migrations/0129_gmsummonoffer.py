@@ -5,9 +5,7 @@ import django.db.models.deletion
 
 
 class Migration(migrations.Migration):
-    dependencies = [
-        ("arxii", "0125_consequence_reviewed_by_consequence_reviewed_on_and_more"),
-    ]
+    dependencies = [("arxii", "0128_precapture_consent_request")]
 
     operations = [
         migrations.CreateModel(

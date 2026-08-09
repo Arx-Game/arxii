@@ -67,6 +67,7 @@ from world.combat.serializers import (
     OpponentDefaultsResponseSerializer,
     OpponentStatBlockSerializer,
     OpponentTargetSerializer,
+    ProposeLethalDuelSerializer,
     RemoveParticipantSerializer,
     RoundActionSerializer,
     ThreatPoolSerializer,
@@ -120,6 +121,11 @@ class DuelChallengeViewSet(ReadOnlyModelViewSet):
     filterset_class = DuelChallengeFilter
     permission_classes = [IsAuthenticated]
 
+    def get_permissions(self) -> list:
+        if self.action == "propose_lethal_duel":
+            return [IsAuthenticated(), IsEncounterGMOrStaff()]
+        return [IsAuthenticated()]
+
     def get_queryset(self) -> QuerySet[DuelChallenge]:
         user = self.request.user
         played_ids = user.played_character_sheet_ids
@@ -131,6 +137,52 @@ class DuelChallengeViewSet(ReadOnlyModelViewSet):
             .select_related("challenger_sheet__character", "challenged_sheet__character")
             .order_by("-created_at")
         )
+
+    @extend_schema(request=ProposeLethalDuelSerializer, responses=DuelChallengeSerializer)
+    @action(detail=False, methods=[HTTPMethod.POST])
+    def propose_lethal_duel(self, request: Request, *args: object, **kwargs: object) -> Response:
+        """GM proposes a lethal duel against a named PC (#3068).
+
+        Creates a PENDING, ``is_lethal=True`` ``DuelChallenge`` — no
+        ``CombatEncounter`` exists yet. The targeted PC must accept via the
+        existing duel-challenge inbox (``accept``/``decline``, same as a
+        PvP challenge) before ``create_lethal_duel`` ever runs; a GM cannot
+        force this open. Gated to the named scene's GM/owner or staff
+        (``IsEncounterGMOrStaff``, widened #3068).
+        """
+        from world.combat.duels import create_lethal_duel_challenge  # noqa: PLC0415
+
+        serializer = ProposeLethalDuelSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        data = serializer.validated_data
+
+        scene = get_object_or_404(Scene, pk=data["scene"])
+        challenged_sheet = get_object_or_404(CharacterSheet, pk=data["challenged_sheet_id"])
+        pool = get_object_or_404(ThreatPool, pk=data["threat_pool_id"])
+
+        room = scene.location or challenged_sheet.character.db_location
+        if room is None:
+            return Response(
+                {"detail": "No room resolvable for this duel."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        try:
+            challenge = create_lethal_duel_challenge(
+                challenged_sheet,
+                room,
+                opponent_name=data["opponent_name"],
+                tier=data["tier"],
+                threat_pool=pool,
+            )
+        except ValueError:
+            return Response(
+                {"detail": "Could not propose the lethal duel; check the opponent tier."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        response_serializer = DuelChallengeSerializer(challenge)
+        return Response(response_serializer.data, status=status.HTTP_201_CREATED)
 
 
 class ThreatPoolViewSet(ReadOnlyModelViewSet):

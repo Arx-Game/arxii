@@ -5,6 +5,7 @@ from evennia import create_object
 
 from world.character_sheets.factories import CharacterSheetFactory
 from world.combat.constants import (
+    DuelChallengeStatus,
     EncounterOutcome,
     EncounterType,
     OpponentStatus,
@@ -12,8 +13,11 @@ from world.combat.constants import (
     RiskLevel,
 )
 from world.combat.duels import (
+    accept_challenge,
     create_lethal_duel,
+    create_lethal_duel_challenge,
     create_pvp_duel,
+    decline_challenge,
     resolve_duel_end,
     yield_duel,
 )
@@ -382,4 +386,143 @@ class YieldManeuverNonDuelGuardTests(TestCase):
             enc.status,
             RoundStatus.COMPLETED,
             "YIELD maneuver in a non-DUEL encounter must not complete the encounter",
+        )
+
+
+class CreateLethalDuelChallengeTests(TestCase):
+    """Tests for create_lethal_duel_challenge (#3068)."""
+
+    @classmethod
+    def setUpTestData(cls):
+        cls.pc_sheet = CharacterSheetFactory()
+        cls.threat_pool = ThreatPoolFactory()
+
+    def setUp(self):
+        self.room = create_object("typeclasses.rooms.Room", key="Lethal Proposal Room", nohome=True)
+
+    def test_creates_pending_lethal_challenge_with_null_challenger(self):
+        challenge = create_lethal_duel_challenge(
+            self.pc_sheet,
+            self.room,
+            opponent_name="The Widow Ashgrave",
+            tier=OpponentTier.ELITE,
+            threat_pool=self.threat_pool,
+        )
+        self.assertIsNone(challenge.challenger_sheet_id)
+        self.assertEqual(challenge.challenged_sheet_id, self.pc_sheet.pk)
+        self.assertTrue(challenge.is_lethal)
+        self.assertEqual(challenge.status, DuelChallengeStatus.PENDING)
+        self.assertEqual(challenge.opponent_name, "The Widow Ashgrave")
+        self.assertEqual(challenge.opponent_tier, OpponentTier.ELITE)
+        self.assertEqual(challenge.threat_pool_id, self.threat_pool.pk)
+
+    def test_mook_tier_raises_value_error(self):
+        with self.assertRaises(ValueError):
+            create_lethal_duel_challenge(
+                self.pc_sheet,
+                self.room,
+                opponent_name="A Nobody",
+                tier=OpponentTier.MOOK,
+                threat_pool=self.threat_pool,
+            )
+        self.assertFalse(self.pc_sheet.duel_challenges_received.filter(is_lethal=True).exists())
+
+    def test_boss_and_hero_killer_tiers_valid(self):
+        for tier in (OpponentTier.BOSS, OpponentTier.HERO_KILLER):
+            challenge = create_lethal_duel_challenge(
+                self.pc_sheet,
+                self.room,
+                opponent_name="Significant Foe",
+                tier=tier,
+                threat_pool=self.threat_pool,
+            )
+            self.assertEqual(challenge.opponent_tier, tier)
+
+    def test_multiple_pending_lethal_challenges_across_pcs_coexist(self):
+        """Two lethal proposals targeting different PCs — both stay PENDING."""
+        other_pc = CharacterSheetFactory()
+        challenge_a = create_lethal_duel_challenge(
+            self.pc_sheet,
+            self.room,
+            opponent_name="The Widow Ashgrave",
+            tier=OpponentTier.ELITE,
+            threat_pool=self.threat_pool,
+        )
+        challenge_b = create_lethal_duel_challenge(
+            other_pc,
+            self.room,
+            opponent_name="The Gravel King",
+            tier=OpponentTier.BOSS,
+            threat_pool=self.threat_pool,
+        )
+        self.assertEqual(challenge_a.status, DuelChallengeStatus.PENDING)
+        self.assertEqual(challenge_b.status, DuelChallengeStatus.PENDING)
+        self.assertNotEqual(challenge_a.pk, challenge_b.pk)
+
+
+class AcceptLethalDuelChallengeTests(TestCase):
+    """Tests for accept_challenge's is_lethal branch (#3068).
+
+    GM initiates → player consent prompt (the PENDING challenge) → accept
+    creates the lethal encounter; decline creates nothing.
+    """
+
+    @classmethod
+    def setUpTestData(cls):
+        cls.pc_sheet = CharacterSheetFactory()
+        cls.threat_pool = ThreatPoolFactory()
+
+    def setUp(self):
+        from world.combat.factories import OpponentTierTemplateFactory
+
+        # accept_challenge's opponent_kwargs carries no max_health — auto-scale
+        # mode — which needs an authored OpponentTierTemplate row for ELITE.
+        OpponentTierTemplateFactory(tier=OpponentTier.ELITE)
+
+        self.room = create_object("typeclasses.rooms.Room", key="Lethal Accept Room", nohome=True)
+        self.challenge = create_lethal_duel_challenge(
+            self.pc_sheet,
+            self.room,
+            opponent_name="The Widow Ashgrave",
+            tier=OpponentTier.ELITE,
+            threat_pool=self.threat_pool,
+        )
+
+    def test_accept_creates_lethal_encounter_via_create_lethal_duel(self):
+        encounter = accept_challenge(self.challenge)
+
+        self.assertEqual(encounter.encounter_type, EncounterType.DUEL)
+        self.assertTrue(encounter.is_lethal)
+        self.assertEqual(encounter.participants.count(), 1)
+        self.assertEqual(encounter.participants.get().character_sheet_id, self.pc_sheet.pk)
+        opponent = encounter.opponents.get()
+        self.assertIsNone(opponent.mirrors_participant_id)
+        self.assertEqual(opponent.name, "The Widow Ashgrave")
+        self.assertEqual(opponent.tier, OpponentTier.ELITE)
+
+        self.challenge.refresh_from_db()
+        self.assertEqual(self.challenge.status, DuelChallengeStatus.ACCEPTED)
+        self.assertEqual(self.challenge.resulting_encounter_id, encounter.pk)
+        self.assertIsNotNone(self.challenge.resolved_at)
+
+    def test_decline_creates_no_encounter(self):
+        from world.combat.models import CombatEncounter
+
+        decline_challenge(self.challenge)
+
+        self.challenge.refresh_from_db()
+        self.assertEqual(self.challenge.status, DuelChallengeStatus.DECLINED)
+        self.assertIsNone(self.challenge.resulting_encounter_id)
+        self.assertEqual(CombatEncounter.objects.count(), 0)
+
+    def test_pc_is_not_auto_acknowledged_after_lethal_accept(self):
+        """Accepting a GM-proposed lethal duel does not bypass the #777 risk-ack gate."""
+        from world.combat.models import EncounterRiskAcknowledgement
+
+        encounter = accept_challenge(self.challenge)
+
+        self.assertFalse(
+            EncounterRiskAcknowledgement.objects.filter(
+                encounter=encounter, character_sheet=self.pc_sheet
+            ).exists()
         )

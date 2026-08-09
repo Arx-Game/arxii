@@ -17,6 +17,7 @@ import { RoomDescription } from './room-panel/RoomDescription';
 import { CharactersList } from './room-panel/CharactersList';
 import { ExitsList } from './room-panel/ExitsList';
 import { PortalsBlock } from './room-panel/PortalsBlock';
+import { TrapsBlock } from './room-panel/TrapsBlock';
 import { ObjectsList } from './room-panel/ObjectsList';
 import { NpcGiversBlock } from './room-panel/NpcGiversBlock';
 import { RoomEditorPanel } from './room-panel/RoomEditorPanel';
@@ -217,6 +218,7 @@ export function RoomPanel({
       <NpcGiversBlock npcGivers={room.npc_givers ?? []} />
       <ExitsList exits={room.exits} onExit={handleExit} />
       <PortalsBlock characterId={characterId} />
+      <TrapsBlock characterId={characterId} />
       <ObjectsList objects={room.objects} characterId={characterId} />
     </div>
   );

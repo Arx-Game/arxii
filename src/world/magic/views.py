@@ -2416,14 +2416,26 @@ class RitualSessionViewSet(viewsets.ModelViewSet):
 
     @action(detail=True, methods=["post"])
     def accept(self, request: Request, pk: int | None = None) -> Response:
-        """Accept invitation, supplying participant_kwargs + references."""
-        from world.magic.exceptions import RitualSessionError  # noqa: PLC0415
+        """Accept invitation, supplying participant_kwargs + references.
+
+        Mirrors telnet's ``ritual join`` auto-fire behavior (#3045): a
+        site-convened session (e.g. a Durance opened via ``durance convene`` /
+        ``DuranceConveneView``) has no live initiator to issue a separate
+        ``fire`` call, so this checks the same
+        ``adapter.should_auto_fire(session=...)`` telnet's ``_maybe_auto_fire``
+        does and fires immediately when true. Every other adapter's
+        ``should_auto_fire`` returns False, so this is a no-op for ordinary
+        (non-Durance, non-site-convened) sessions.
+        """
+        from commands.ritual_adapters import get_adapter  # noqa: PLC0415
+        from world.magic.exceptions import RitualSessionError, ThresholdNotMetError  # noqa: PLC0415
         from world.magic.models.sessions import RitualSessionParticipant  # noqa: PLC0415
         from world.magic.serializers import (  # noqa: PLC0415
             RitualSessionAcceptSerializer,
             RitualSessionDetailSerializer,
         )
-        from world.magic.services.sessions import accept_session  # noqa: PLC0415
+        from world.magic.services.sessions import accept_session, fire_session  # noqa: PLC0415
+        from world.progression.exceptions import ClassLevelAdvancementError  # noqa: PLC0415
 
         session = self.get_object()
         user = request.user
@@ -2448,6 +2460,24 @@ class RitualSessionViewSet(viewsets.ModelViewSet):
             )
         except RitualSessionError as exc:
             return Response({"detail": exc.user_message}, status=status.HTTP_400_BAD_REQUEST)
+
+        if get_adapter(session.ritual).should_auto_fire(session=session):
+            try:
+                fire_session(session=session)
+            except ThresholdNotMetError:
+                # Still waiting on other participants — session survives; fall through
+                # to the normal accepted-state response below.
+                pass
+            except ClassLevelAdvancementError as exc:
+                return Response({"detail": exc.user_message}, status=status.HTTP_400_BAD_REQUEST)
+            else:
+                # fire_session deletes the session row on success — nothing left to
+                # refresh/serialize (mirrors telnet's "the rite is complete" message).
+                return Response(
+                    {"detail": "The rite is complete.", "fired": True},
+                    status=status.HTTP_200_OK,
+                )
+
         session.refresh_from_db()
         out = RitualSessionDetailSerializer(session, context={"request": request})
         return Response(out.data, status=status.HTTP_200_OK)

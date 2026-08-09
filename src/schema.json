@@ -6665,6 +6665,35 @@ paths:
               schema:
                 $ref: '#/components/schemas/DuelChallenge'
           description: ''
+  /api/combat/duel-challenges/propose_lethal_duel/:
+    post:
+      operationId: combat_duel_challenges_propose_lethal_duel_create
+      description: |-
+        GM proposes a lethal duel against a named PC (#3068).
+
+        Creates a PENDING, ``is_lethal=True`` ``DuelChallenge`` — no
+        ``CombatEncounter`` exists yet. The targeted PC must accept via the
+        existing duel-challenge inbox (``accept``/``decline``, same as a
+        PvP challenge) before ``create_lethal_duel`` ever runs; a GM cannot
+        force this open. Gated to the named scene's GM/owner or staff
+        (``IsEncounterGMOrStaff``, widened #3068).
+      tags:
+      - combat
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ProposeLethalDuelRequest'
+        required: true
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DuelChallenge'
+          description: ''
   /api/combat/threat-pools/:
     get:
       operationId: combat_threat_pools_list
@@ -18375,7 +18404,17 @@ paths:
   /api/magic/rituals/sessions/{id}/accept/:
     post:
       operationId: magic_rituals_sessions_accept_create
-      description: Accept invitation, supplying participant_kwargs + references.
+      description: |-
+        Accept invitation, supplying participant_kwargs + references.
+
+        Mirrors telnet's ``ritual join`` auto-fire behavior (#3045): a
+        site-convened session (e.g. a Durance opened via ``durance convene`` /
+        ``DuranceConveneView``) has no live initiator to issue a separate
+        ``fire`` call, so this checks the same
+        ``adapter.should_auto_fire(session=...)`` telnet's ``_maybe_auto_fire``
+        does and fires immediately when true. Every other adapter's
+        ``should_auto_fire`` returns False, so this is a no-op for ordinary
+        (non-Durance, non-site-convened) sessions.
       parameters:
       - in: path
         name: id
@@ -26206,6 +26245,70 @@ paths:
               schema:
                 $ref: '#/components/schemas/PlayerTrust'
           description: ''
+  /api/precapture-consent-requests/:
+    get:
+      operationId: precapture_consent_requests_list
+      description: The requesting account's own precapture consent requests.
+      tags:
+      - precapture-consent-requests
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/PrecaptureConsentRequest'
+          description: ''
+  /api/precapture-consent-requests/{id}/:
+    get:
+      operationId: precapture_consent_requests_retrieve
+      description: The requesting account's own precapture consent requests.
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: string
+        required: true
+      tags:
+      - precapture-consent-requests
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PrecaptureConsentRequest'
+          description: ''
+  /api/precapture-consent-requests/{id}/respond/:
+    post:
+      operationId: precapture_consent_requests_respond_create
+      description: |-
+        Accept or decline this consent request.
+
+        Looks up by (pk, account) directly rather than through ``get_queryset`` (which
+        is PENDING-only) so a double-submit lands on the "already resolved" 400 below
+        instead of a bare 404 — the row still belongs to this account either way.
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: string
+        required: true
+      tags:
+      - precapture-consent-requests
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PrecaptureConsentRequest'
+          description: ''
   /api/progression/account/:
     get:
       operationId: progression_account_retrieve
@@ -26228,6 +26331,36 @@ paths:
       responses:
         '200':
           description: No response body
+  /api/progression/durance/convene/:
+    post:
+      operationId: progression_durance_convene_create
+      description: Open a site-convened session at the puppet's current room.
+      tags:
+      - progression
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DuranceConveneResponse'
+          description: ''
+  /api/progression/durance/status/:
+    get:
+      operationId: progression_durance_status_retrieve
+      description: Build the readiness hub for the requester's puppeted character.
+      tags:
+      - progression
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DuranceStatus'
+          description: ''
   /api/progression/path-intent/:
     get:
       operationId: progression_path_intent_retrieve
@@ -26861,6 +26994,19 @@ paths:
       description: Return availability of requested credentials.
       tags:
       - register
+      security:
+      - cookieAuth: []
+      - {}
+      responses:
+        '200':
+          description: No response body
+  /api/registration/status/:
+    get:
+      operationId: registration_status_retrieve
+      description: Public GET — whether registration is currently open. No invite
+        enumeration.
+      tags:
+      - registration
       security:
       - cookieAuth: []
       - {}
@@ -27743,6 +27889,32 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/RoomWardDetails'
+          description: ''
+  /api/room-features/traps/:
+    get:
+      operationId: room_features_traps_list
+      description: GET /?character_id=<id> — armed traps that character can currently
+        see.
+      parameters:
+      - in: query
+        name: character_id
+        schema:
+          type: integer
+        description: ObjectDB id of the character to read visible room traps for (must
+          be your own).
+        required: true
+      tags:
+      - room-features
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Trap'
           description: ''
   /api/roster/entries/:
     get:
@@ -28936,6 +29108,33 @@ paths:
               schema:
                 $ref: '#/components/schemas/HighlightReel'
           description: ''
+  /api/scenes/{id}/precapture/:
+    get:
+      operationId: scenes_precapture_retrieve
+      description: |-
+        #3069 — the scene's pre-scene-captured poses, oldest first.
+
+        Purpose-built for the starter's truncate control (not a general content view —
+        the normal interaction feed already shows these once captured); gated the same
+        as ``truncate_precapture``.
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: A unique integer value identifying this scene.
+        required: true
+      tags:
+      - scenes
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SceneDetail'
+          description: ''
   /api/scenes/{id}/set-round-mode/:
     post:
       operationId: scenes_set_round_mode_create
@@ -28960,6 +29159,40 @@ paths:
           application/json:
             schema:
               $ref: '#/components/schemas/SetRoundModeRequestRequest'
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SceneDetail'
+          description: ''
+  /api/scenes/{id}/truncate-precapture/:
+    post:
+      operationId: scenes_truncate_precapture_create
+      description: |-
+        #3069 — drop pre-scene-captured poses before the given one ("start from here").
+
+        Coarse-gated by ``IsSceneOwnerOrStaff``; authoritative permission check lives
+        in ``TruncatePrecaptureAction`` (``actor_can_administer_scene``). Passes an
+        explicit ``scene_id`` — unlike ``set_round_mode``, the starter is not assumed to
+        still be standing in the scene's room (see the action's docstring).
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: A unique integer value identifying this scene.
+        required: true
+      tags:
+      - scenes
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/TruncatePrecaptureRequestRequest'
+        required: true
       security:
       - cookieAuth: []
       responses:
@@ -30458,6 +30691,122 @@ paths:
       responses:
         '200':
           description: No response body
+  /api/staff/invites/:
+    get:
+      operationId: staff_invites_list
+      description: Staff-only issue / list / revoke of per-email account invites.
+      parameters:
+      - in: query
+        name: email
+        schema:
+          type: string
+      - name: page
+        required: false
+        in: query
+        description: A page number within the paginated result set.
+        schema:
+          type: integer
+      - name: page_size
+        required: false
+        in: query
+        description: Number of results to return per page.
+        schema:
+          type: integer
+      - in: query
+        name: status
+        schema:
+          type: string
+          enum:
+          - expired
+          - pending
+          - redeemed
+          - revoked
+        description: |-
+          * `pending` - Pending
+          * `redeemed` - Redeemed
+          * `revoked` - Revoked
+          * `expired` - Expired
+      tags:
+      - staff
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaginatedAccountInviteList'
+          description: ''
+    post:
+      operationId: staff_invites_create
+      description: Staff-only issue / list / revoke of per-email account invites.
+      tags:
+      - staff
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/IssueInviteRequest'
+        required: true
+      security:
+      - cookieAuth: []
+      responses:
+        '201':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/IssueInvite'
+          description: ''
+  /api/staff/invites/{id}/:
+    get:
+      operationId: staff_invites_retrieve
+      description: Staff-only issue / list / revoke of per-email account invites.
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: A unique integer value identifying this Account Invite.
+        required: true
+      tags:
+      - staff
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AccountInvite'
+          description: ''
+  /api/staff/invites/{id}/revoke/:
+    post:
+      operationId: staff_invites_revoke_create
+      description: Staff-only issue / list / revoke of per-email account invites.
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: A unique integer value identifying this Account Invite.
+        required: true
+      tags:
+      - staff
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AccountInviteRequest'
+        required: true
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AccountInvite'
+          description: ''
   /api/stake-activations/:
     get:
       operationId: stake_activations_list
@@ -34897,6 +35246,95 @@ components:
       - character_technique_id
       - offer_id
       - technique_id
+    AccountInvite:
+      type: object
+      description: Read shape for the staff invite list/detail — never returned on
+        failure paths.
+      properties:
+        id:
+          type: integer
+          readOnly: true
+        email:
+          type: string
+          format: email
+          maxLength: 254
+        token:
+          type: string
+          readOnly: true
+        status:
+          type: string
+          readOnly: true
+        note:
+          type: string
+          description: Why this person was invited (staff-only, never shown to the
+            invitee).
+          maxLength: 255
+        created_at:
+          type: string
+          format: date-time
+          readOnly: true
+        expires_at:
+          type: string
+          format: date-time
+          description: Invite cannot be redeemed after this time.
+        redeemed_at:
+          type: string
+          format: date-time
+          readOnly: true
+          nullable: true
+        revoked_at:
+          type: string
+          format: date-time
+          readOnly: true
+          nullable: true
+        invited_by:
+          type: integer
+          readOnly: true
+        invited_by_username:
+          type: string
+          readOnly: true
+        redeemed_by:
+          type: integer
+          readOnly: true
+          nullable: true
+        redeemed_by_username:
+          type: string
+          readOnly: true
+      required:
+      - created_at
+      - email
+      - expires_at
+      - id
+      - invited_by
+      - invited_by_username
+      - redeemed_at
+      - redeemed_by
+      - redeemed_by_username
+      - revoked_at
+      - status
+      - token
+    AccountInviteRequest:
+      type: object
+      description: Read shape for the staff invite list/detail — never returned on
+        failure paths.
+      properties:
+        email:
+          type: string
+          format: email
+          minLength: 1
+          maxLength: 254
+        note:
+          type: string
+          description: Why this person was invited (staff-only, never shown to the
+            invitee).
+          maxLength: 255
+        expires_at:
+          type: string
+          format: date-time
+          description: Invite cannot be redeemed after this time.
+      required:
+      - email
+      - expires_at
     Achievement:
       type: object
       description: Full serializer for achievement detail view.
@@ -42988,6 +43426,11 @@ components:
 
         N+1-safe when the queryset uses ``select_related("challenger_sheet__character",
         "challenged_sheet__character")``.
+
+        ``is_lethal``/``opponent_name``/``opponent_tier`` (#3068): a GM-initiated
+        lethal challenge has no PC challenger — ``challenger`` renders ``null`` for
+        those rows (DRF's default None-attribute handling), so the frontend reads
+        ``opponent_name`` instead whenever ``is_lethal`` is true.
       properties:
         id:
           type: integer
@@ -42996,6 +43439,7 @@ components:
           allOf:
           - $ref: '#/components/schemas/_DuelParticipantIdentity'
           readOnly: true
+          nullable: true
         challenged:
           allOf:
           - $ref: '#/components/schemas/_DuelParticipantIdentity'
@@ -43005,6 +43449,28 @@ components:
           - $ref: '#/components/schemas/DuelChallengeStatusEnum'
           readOnly: true
           default: pending
+        is_lethal:
+          type: boolean
+          readOnly: true
+          description: True iff this is a GM-initiated lethal duel proposal (#3068)
+            — a climactic PC-vs-significant-NPC confrontation. Accepting routes through
+            create_lethal_duel instead of create_pvp_duel.
+        opponent_name:
+          type: string
+          readOnly: true
+          description: Name of the significant NPC antagonist. Set only when is_lethal.
+        opponent_tier:
+          allOf:
+          - $ref: '#/components/schemas/OpponentTierEnum'
+          readOnly: true
+          description: |-
+            Opponent tier for the lethal duel; must be a significant-NPC tier (ELITE/BOSS/HERO_KILLER — enforced by create_lethal_duel_challenge). Set only when is_lethal.
+
+            * `swarm` - Swarm
+            * `mook` - Mook
+            * `elite` - Elite
+            * `boss` - Boss
+            * `hero_killer` - Hero Killer
         created_at:
           type: string
           format: date-time
@@ -43024,6 +43490,9 @@ components:
       - challenger
       - created_at
       - id
+      - is_lethal
+      - opponent_name
+      - opponent_tier
       - resolved_at
       - resulting_encounter
       - status
@@ -43069,6 +43538,111 @@ components:
       required:
       - id
       - name
+    DuranceConveneResponse:
+      type: object
+      description: Response for a successful site-convened Durance session open.
+      properties:
+        session_id:
+          type: integer
+      required:
+      - session_id
+    DuranceEligiblePath:
+      type: object
+      description: One eligible next-stage Path the character could semi-cross into.
+      properties:
+        id:
+          type: integer
+        name:
+          type: string
+      required:
+      - id
+      - name
+    DuranceIntent:
+      type: object
+      description: The character's declared ``PathIntent``, when one exists.
+      properties:
+        path_id:
+          type: integer
+        path_name:
+          type: string
+      required:
+      - path_id
+      - path_name
+    DuranceStatus:
+      type: object
+      description: |-
+        Read-only Durance readiness hub — the web face of telnet ``durance status``.
+
+        ``unlock_gate`` is ``None`` only when ``is_tier_boundary`` is True (that step
+        belongs to Audere Majora, not the Durance — mirrors the telnet early-return).
+      properties:
+        level:
+          type: integer
+        target_level:
+          type: integer
+        is_tier_boundary:
+          type: boolean
+        unlock_gate:
+          allOf:
+          - $ref: '#/components/schemas/DuranceUnlockGate'
+          nullable: true
+        eligible_paths:
+          type: array
+          items:
+            $ref: '#/components/schemas/DuranceEligiblePath'
+        intent:
+          allOf:
+          - $ref: '#/components/schemas/DuranceIntent'
+          nullable: true
+        site_present:
+          type: boolean
+      required:
+      - eligible_paths
+      - intent
+      - is_tier_boundary
+      - level
+      - site_present
+      - target_level
+      - unlock_gate
+    DuranceUnlockGate:
+      type: object
+      description: |-
+        XP-unlock + authored-requirement gate readiness for the character's next level.
+
+        ``xp_cost`` is ``None`` only when the unlock is already purchased — an unpurchased,
+        authored unlock always carries a cost, honestly reporting 0 when
+        ``ClassXPCost``/``TraitXPCost`` is unauthored (the #3045 "cost unset" case is
+        surfaced on the unlock-shop cards, not here; this hub only says purchased or not).
+      properties:
+        has_class_level:
+          type: boolean
+        advancement_authored:
+          type: boolean
+        requirements_met:
+          type: boolean
+        failed_requirements:
+          type: array
+          items:
+            type: string
+        purchased:
+          type: boolean
+        xp_cost:
+          type: integer
+          nullable: true
+        class_level_unlock_id:
+          type: integer
+          nullable: true
+        ready:
+          type: boolean
+      required:
+      - advancement_authored
+      - class_level_unlock_id
+      - failed_requirements
+      - has_class_level
+      - purchased
+      - ready
+      - requirements_met
+      - xp_cost
     EffectRow:
       type: object
       properties:
@@ -48020,6 +48594,31 @@ components:
       description: |-
         * `incapacitated` - Character Incapacitated
         * `near_death` - Character Near Death
+    IssueInvite:
+      type: object
+      description: Input for issuing a new invite — write-only, not model-backed.
+      properties:
+        email:
+          type: string
+          format: email
+        note:
+          type: string
+          default: ''
+      required:
+      - email
+    IssueInviteRequest:
+      type: object
+      description: Input for issuing a new invite — write-only, not model-backed.
+      properties:
+        email:
+          type: string
+          format: email
+          minLength: 1
+        note:
+          type: string
+          default: ''
+      required:
+      - email
     ItemAccentRead:
       type: object
       description: One worked-in Accent on a piece (#2886) — the removal UI's row
@@ -52180,6 +52779,20 @@ components:
         * `active` - Active
         * `defeated` - Defeated
         * `fled` - Fled
+    OpponentTierEnum:
+      enum:
+      - swarm
+      - mook
+      - elite
+      - boss
+      - hero_killer
+      type: string
+      description: |-
+        * `swarm` - Swarm
+        * `mook` - Mook
+        * `elite` - Elite
+        * `boss` - Boss
+        * `hero_killer` - Hero Killer
     Opportunities:
       type: object
       description: The three-group discovery view (here/nearby/your-organizations).
@@ -52957,6 +53570,29 @@ components:
         * `timed` - Timed
         * `ready` - Ready
         * `manual` - Manual
+    PaginatedAccountInviteList:
+      type: object
+      required:
+      - count
+      - results
+      properties:
+        count:
+          type: integer
+          example: 123
+        next:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=4
+        previous:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=2
+        results:
+          type: array
+          items:
+            $ref: '#/components/schemas/AccountInvite'
     PaginatedAggregateBeatContributionList:
       type: object
       required:
@@ -62016,6 +62652,48 @@ components:
       - running_total
       - source_label
       - stage
+    PrecaptureConsentRequest:
+      type: object
+      properties:
+        id:
+          type: integer
+          readOnly: true
+        scene:
+          type: integer
+          readOnly: true
+          description: The scene asking to capture this account's prior unattached
+            poses.
+        scene_name:
+          type: string
+          readOnly: true
+        room_name:
+          type: string
+          nullable: true
+          readOnly: true
+        status:
+          allOf:
+          - $ref: '#/components/schemas/Status307Enum'
+          readOnly: true
+        requested_at:
+          type: string
+          format: date-time
+          readOnly: true
+        responded_at:
+          type: string
+          format: date-time
+          readOnly: true
+          nullable: true
+        candidates:
+          readOnly: true
+      required:
+      - candidates
+      - id
+      - requested_at
+      - responded_at
+      - room_name
+      - scene
+      - scene_name
+      - status
     PredicateTypeEnum:
       enum:
       - gm_marked
@@ -62413,6 +63091,49 @@ components:
         * `difficulty_guide` - Difficulty Guide
         * `pool_guide` - Pool Guide
         * `other` - Other
+    ProposeLethalDuelRequest:
+      type: object
+      description: |-
+        Write serializer for a GM proposing a lethal duel (#3068).
+
+        ``scene`` is read by ``IsEncounterGMOrStaff.has_permission`` (the same
+        field name the ``CombatEncounter`` create gate reads) to authorize the
+        GM; the view resolves the room from the scene's location. ``tier`` is
+        restricted to the significant-NPC tiers ``create_lethal_duel_challenge``
+        accepts — validated here so a bad tier 400s with a clean message instead
+        of surfacing a raw exception.
+      properties:
+        scene:
+          type: integer
+          minimum: 1
+        challenged_sheet_id:
+          type: integer
+          minimum: 1
+        opponent_name:
+          type: string
+          minLength: 1
+          maxLength: 200
+        tier:
+          $ref: '#/components/schemas/ProposeLethalDuelTierEnum'
+        threat_pool_id:
+          type: integer
+          minimum: 1
+      required:
+      - challenged_sheet_id
+      - opponent_name
+      - scene
+      - threat_pool_id
+      - tier
+    ProposeLethalDuelTierEnum:
+      enum:
+      - elite
+      - boss
+      - hero_killer
+      type: string
+      description: |-
+        * `elite` - elite
+        * `boss` - boss
+        * `hero_killer` - hero_killer
     PublicFeedItem:
       type: object
       description: One feed row — a deed or a scandal. Read-only; serializes a ``PublicFeedItem``
@@ -71006,6 +71727,35 @@ components:
       required:
       - beat
       - transition
+    Trap:
+      type: object
+      description: |-
+        One trap visible to the requesting character (#3011).
+
+        Visibility is entirely the caller's job (``RoomTrapViewSet.list`` —
+        armed, plus ``is_hidden=False`` or already in the viewer's own
+        ``detected_by``) — this serializer trusts the queryset and exposes only
+        the fields a player is allowed to know about a trap they can see:
+        identity (for the disarm dispatch's ``trap_id``) and armed state.
+        ``Trap`` carries no ``description`` field (unlike the leak table's
+        aspirational field list) — only ``name`` identifies it to a player today;
+        adding authored flavor text is a separate content-model change, out of
+        scope here.
+      properties:
+        id:
+          type: integer
+          readOnly: true
+        name:
+          type: string
+          readOnly: true
+        is_armed:
+          type: boolean
+          readOnly: true
+          description: A disarmed trap never triggers and cannot be disarmed again.
+      required:
+      - id
+      - is_armed
+      - name
     TravelHub:
       type: object
       description: Serializer for TravelHub — public infrastructure.
@@ -71398,6 +72148,18 @@ components:
         * `primary` - Primary condition severity
         * `aftermath` - Aftermath child condition severity
         * `pending_alteration` - Pending alteration tier
+    TruncatePrecaptureRequestRequest:
+      type: object
+      description: |-
+        POST body for the #3069 truncate-precapture endpoint.
+
+        ``interaction_id`` is the row the starter clicked "start from here" on — every
+        pre-scene-captured pose before it (oldest-first) gets detached.
+      properties:
+        interaction_id:
+          type: integer
+      required:
+      - interaction_id
     TrustCategory:
       type: object
       description: Serializer for trust categories

@@ -24,6 +24,7 @@ from rest_framework import status
 from rest_framework.test import APIClient
 
 from evennia_extensions.models import PlayerData
+from world.registration.models import get_registration_config
 
 User = get_user_model()
 
@@ -41,6 +42,12 @@ class FullRegistrationVerificationLoginFlowTest(TestCase):
         self.email = "integration@test.com"
         self.password = "TestPass123!"  # noqa: S105
         mail.outbox = []
+        # This test is about the verify → login journey, not the invite gate
+        # (#3054 covers that separately in world.registration.tests) — open
+        # registration so signup itself isn't blocked here.
+        config = get_registration_config()
+        config.registration_open = True
+        config.save(update_fields=["registration_open"])
 
     def _signup(self):
         """Register a new account via the allauth headless signup endpoint.

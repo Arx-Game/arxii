@@ -99,6 +99,7 @@ const StoryRoomsPage = lazy(() =>
 );
 import { StaffInboxPage } from './staff/pages/StaffInboxPage';
 import { StaffApplicationsPage } from './staff/pages/StaffApplicationsPage';
+import { StaffInvitesPage } from './staff/pages/StaffInvitesPage';
 import { StaffApplicationDetailPage } from './staff/pages/StaffApplicationDetailPage';
 import { StaffFeedbackPage } from './staff/pages/StaffFeedbackPage';
 import { StaffFeedbackDetailPage } from './staff/pages/StaffFeedbackDetailPage';
@@ -118,6 +119,7 @@ import { DuelChallengeNotifier } from './combat/DuelChallengeNotifier';
 import { HazardPromptNotifier } from './game/components/HazardPromptNotifier';
 import { SummonPromptNotifier } from './gm-adjudication/SummonPromptNotifier';
 import { ConsentAttentionNotifier } from './scenes/components/ConsentAttentionNotifier';
+import { PrecaptureConsentNotifier } from './scenes/components/PrecaptureConsentNotifier';
 
 // ---------------------------------------------------------------------------
 // Lazy-loaded stories pages (React.lazy for route-level code splitting)
@@ -631,6 +633,14 @@ function App() {
             }
           />
           <Route
+            path="/staff/invites"
+            element={
+              <StaffRoute>
+                <StaffInvitesPage />
+              </StaffRoute>
+            }
+          />
+          <Route
             path="/staff/feedback"
             element={
               <StaffRoute>
@@ -1124,6 +1134,7 @@ function App() {
       <HazardPromptNotifier />
       <ConsentAttentionNotifier />
       <SummonPromptNotifier />
+      <PrecaptureConsentNotifier />
     </Layout>
   );
 }

@@ -3475,19 +3475,36 @@ class DramaticSurgeRecord(SharedMemoryModel):
 
 
 class DuelChallenge(SharedMemoryModel):
-    """A PC-vs-PC duel challenge handshake record.
+    """A duel challenge handshake record — PC-vs-PC, or GM-initiated lethal (#3068).
 
     Created when a challenger issues a duel request. Tracks the lifecycle
     from PENDING (awaiting response) through ACCEPTED/DECLINED/WITHDRAWN/EXPIRED.
     The partial unique constraint ensures at most one PENDING challenge exists
     per (challenger_sheet, challenged_sheet) pair at any time.
+
+    Two shapes share this one row:
+
+    - PC-vs-PC (``is_lethal=False``): ``challenger_sheet`` is set; accepting
+      opens a ``create_pvp_duel`` encounter between the two PCs.
+    - GM-initiated lethal (``is_lethal=True``, #3068): ``challenger_sheet`` is
+      null — the challenger is a significant NPC, not a PC — and
+      ``opponent_name``/``opponent_tier``/``threat_pool`` describe it.
+      Accepting opens a ``create_lethal_duel`` encounter for the challenged
+      PC against that NPC. The GM proposes; only the targeted player's own
+      accept ever creates the encounter — a GM can never force this open.
     """
 
     challenger_sheet = models.ForeignKey(
         CHARACTER_SHEET_MODEL,
         on_delete=models.CASCADE,
         related_name="duel_challenges_issued",
-        help_text="The PC who issued the challenge.",
+        null=True,
+        blank=True,
+        help_text=(
+            "The PC who issued the challenge. Null for a GM-initiated lethal "
+            "challenge (is_lethal=True) — the challenger is a significant NPC, "
+            "described by opponent_name/opponent_tier/threat_pool instead."
+        ),
     )
     challenged_sheet = models.ForeignKey(
         CHARACTER_SHEET_MODEL,
@@ -3507,6 +3524,39 @@ class DuelChallenge(SharedMemoryModel):
         max_length=20,
         choices=DuelChallengeStatus.choices,
         default=DuelChallengeStatus.PENDING,
+    )
+    is_lethal = models.BooleanField(
+        default=False,
+        help_text=(
+            "True iff this is a GM-initiated lethal duel proposal (#3068) — a "
+            "climactic PC-vs-significant-NPC confrontation. Accepting routes "
+            "through create_lethal_duel instead of create_pvp_duel."
+        ),
+    )
+    opponent_name = models.CharField(
+        max_length=200,
+        blank=True,
+        default="",
+        help_text="Name of the significant NPC antagonist. Set only when is_lethal.",
+    )
+    opponent_tier = models.CharField(
+        max_length=20,
+        choices=OpponentTier.choices,
+        blank=True,
+        default="",
+        help_text=(
+            "Opponent tier for the lethal duel; must be a significant-NPC tier "
+            "(ELITE/BOSS/HERO_KILLER — enforced by create_lethal_duel_challenge). "
+            "Set only when is_lethal."
+        ),
+    )
+    threat_pool = models.ForeignKey(
+        "arxii.ThreatPool",
+        on_delete=models.PROTECT,
+        null=True,
+        blank=True,
+        related_name="lethal_duel_challenges",
+        help_text="The NPC's move-set. Set only when is_lethal.",
     )
     created_at = models.DateTimeField(default=timezone.now)
     resolved_at = models.DateTimeField(null=True, blank=True)
@@ -3530,10 +3580,8 @@ class DuelChallenge(SharedMemoryModel):
         ]
 
     def __str__(self) -> str:
-        return (
-            f"DuelChallenge({self.challenger_sheet_id} → {self.challenged_sheet_id} "
-            f"[{self.status}])"
-        )
+        challenger_label = self.opponent_name if self.is_lethal else str(self.challenger_sheet_id)
+        return f"DuelChallenge({challenger_label} → {self.challenged_sheet_id} [{self.status}])"
 
 
 class ThreatRecord(SharedMemoryModel):

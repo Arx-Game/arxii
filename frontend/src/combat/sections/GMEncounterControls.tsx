@@ -16,6 +16,18 @@
  * End Encounter (#876) stays on RoundFlow — not duplicated here; this panel
  * is the home for the lifecycle affordances #3067 newly wires (create,
  * add_opponent, add/remove_participant, begin_round, resolve_round, pause).
+ *
+ * Lethal duel proposal (#3068): "Start Lethal Duel" is a THIRD, independent
+ * affordance shown whenever the viewer has GM standing — regardless of
+ * whether a wider party encounter exists — because a climactic one-on-one
+ * duel is its own standalone CombatEncounter (`create_lethal_duel`), never a
+ * spawn into the current one. Several players can each have their own
+ * simultaneous confrontation in the same scene (the ruling's requirement),
+ * so this dialog can be opened repeatedly. Submitting it does NOT create an
+ * encounter — it creates a PENDING lethal DuelChallenge; the targeted PC's
+ * own accept (via the existing duel-challenge inbox / toast,
+ * `DuelChallengeNotifier`) is what actually opens the fight. A GM can never
+ * force this open.
  */
 
 import { useState } from 'react';
@@ -40,7 +52,7 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import { usePersonaSearch } from '@/roster/usePersonaSearch';
-import type { OpponentTier, PaceMode } from '../api';
+import type { LethalDuelTier, OpponentTier, PaceMode } from '../api';
 import {
   useAddOpponent,
   useAddParticipant,
@@ -48,6 +60,7 @@ import {
   useCreateEncounter,
   useOpponentDefaults,
   usePauseEncounter,
+  useProposeLethalDuel,
   useRemoveParticipant,
   useResolveRound,
   useThreatPools,
@@ -85,17 +98,31 @@ const PACE_OPTIONS: { value: PaceMode; label: string }[] = [
   { value: 'manual', label: 'Manual — GM controls each round' },
 ];
 
+// Significant-NPC tiers only — mirrors world.combat.constants.SIGNIFICANT_NPC_TIERS,
+// the set create_lethal_duel_challenge validates against.
+const LETHAL_TIER_OPTIONS: { value: LethalDuelTier; label: string }[] = [
+  { value: 'elite', label: 'Elite' },
+  { value: 'boss', label: 'Boss' },
+  { value: 'hero_killer', label: 'Hero Killer' },
+];
+
 // ---------------------------------------------------------------------------
 // Root
 // ---------------------------------------------------------------------------
 
 export function GMEncounterControls({ sceneId, encounter, viewerCanGm }: GMEncounterControlsProps) {
-  if (!encounter) {
-    if (!viewerCanGm) return null;
-    return <StartEncounterCard sceneId={sceneId} />;
-  }
-  if (!encounter.is_gm) return null;
-  return <ActiveGMControls encounter={encounter} />;
+  // Mirrors the file docstring: no-encounter uses the scene-level signal,
+  // an active encounter uses the narrower per-encounter GM check — same
+  // split the two existing branches already use.
+  const canProposeLethalDuel = encounter ? encounter.is_gm : viewerCanGm;
+
+  return (
+    <>
+      {!encounter && viewerCanGm && <StartEncounterCard sceneId={sceneId} />}
+      {encounter && encounter.is_gm && <ActiveGMControls encounter={encounter} />}
+      {canProposeLethalDuel && <StartLethalDuelDialog sceneId={sceneId} />}
+    </>
+  );
 }
 
 // ---------------------------------------------------------------------------
@@ -543,6 +570,190 @@ function AddParticipantDialog({ encounterId }: { encounterId: number }) {
               data-testid="add-participant-submit"
             >
               {isPending ? 'Adding…' : 'Add'}
+            </Button>
+          </DialogFooter>
+        </form>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Start lethal duel dialog (#3068)
+// ---------------------------------------------------------------------------
+
+function StartLethalDuelDialog({ sceneId }: { sceneId: number }) {
+  const [open, setOpen] = useState(false);
+  const [query, setQuery] = useState('');
+  const [selected, setSelected] = useState<{ characterSheetId: number; name: string } | null>(null);
+  const [opponentName, setOpponentName] = useState('');
+  const [tier, setTier] = useState<LethalDuelTier>('elite');
+  const [threatPoolId, setThreatPoolId] = useState<number | null>(null);
+
+  const { results } = usePersonaSearch(query);
+  const { data: pools = [] } = useThreatPools();
+  const { mutate, isPending, error, isError } = useProposeLethalDuel();
+
+  function reset() {
+    setQuery('');
+    setSelected(null);
+    setOpponentName('');
+    setTier('elite');
+    setThreatPoolId(null);
+  }
+
+  function handleOpenChange(next: boolean) {
+    setOpen(next);
+    if (!next) reset();
+  }
+
+  function handleSubmit(e: React.FormEvent) {
+    e.preventDefault();
+    if (selected === null || !opponentName.trim() || threatPoolId === null) return;
+    mutate(
+      {
+        sceneId,
+        challengedSheetId: selected.characterSheetId,
+        opponentName: opponentName.trim(),
+        tier,
+        threatPoolId,
+      },
+      {
+        onSuccess: () => {
+          toast.success(`Lethal duel proposed — awaiting ${selected.name}'s response.`);
+          handleOpenChange(false);
+        },
+        onError: () => {
+          /* surfaced inline below via isError */
+        },
+      }
+    );
+  }
+
+  const showResults = results.length > 0 && (selected === null || selected.name !== query);
+
+  return (
+    <Dialog open={open} onOpenChange={handleOpenChange}>
+      <DialogTrigger asChild>
+        <Button size="sm" variant="destructive" data-testid="start-lethal-duel-trigger">
+          Start Lethal Duel
+        </Button>
+      </DialogTrigger>
+      <DialogContent data-testid="start-lethal-duel-dialog">
+        <DialogHeader>
+          <DialogTitle>Start Lethal Duel</DialogTitle>
+        </DialogHeader>
+        <p className="text-xs text-muted-foreground">
+          Proposes a climactic one-on-one fight to the death against a significant named antagonist.
+          The targeted player must accept before the duel begins — this does not force the fight
+          open.
+        </p>
+        <form onSubmit={handleSubmit} className="space-y-3">
+          <div className="space-y-1.5">
+            <Label htmlFor="lethal-duel-target-search">Target PC</Label>
+            <Input
+              id="lethal-duel-target-search"
+              value={query}
+              onChange={(e) => {
+                setQuery(e.target.value);
+                setSelected(null);
+              }}
+              placeholder="Search for a character…"
+              data-testid="lethal-duel-target-search"
+            />
+            {showResults && (
+              <ul className="rounded border border-border" data-testid="lethal-duel-target-results">
+                {results.map((p) => (
+                  <li key={p.id}>
+                    <button
+                      type="button"
+                      className="w-full px-2 py-1 text-left text-xs hover:bg-muted disabled:opacity-50"
+                      disabled={p.character_sheet === null}
+                      onClick={() => {
+                        if (p.character_sheet === null) return;
+                        setSelected({ characterSheetId: p.character_sheet, name: p.name });
+                        setQuery(p.name);
+                      }}
+                      data-testid={`lethal-duel-target-option-${p.id}`}
+                    >
+                      {p.name}
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </div>
+
+          <div className="space-y-1.5">
+            <Label htmlFor="lethal-duel-opponent-name">Antagonist name</Label>
+            <Input
+              id="lethal-duel-opponent-name"
+              value={opponentName}
+              onChange={(e) => setOpponentName(e.target.value)}
+              placeholder="The Widow Ashgrave"
+              data-testid="lethal-duel-opponent-name"
+            />
+          </div>
+
+          <div className="space-y-1.5">
+            <Label>Tier</Label>
+            <Select value={tier} onValueChange={(v) => setTier(v as LethalDuelTier)}>
+              <SelectTrigger data-testid="lethal-duel-tier-select">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {LETHAL_TIER_OPTIONS.map((opt) => (
+                  <SelectItem key={opt.value} value={opt.value}>
+                    {opt.label}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+
+          <div className="space-y-1.5">
+            <Label>Threat Pool</Label>
+            <Select
+              value={threatPoolId !== null ? String(threatPoolId) : ''}
+              onValueChange={(v) => setThreatPoolId(Number(v))}
+            >
+              <SelectTrigger data-testid="lethal-duel-pool-select">
+                <SelectValue placeholder="Select a threat pool…" />
+              </SelectTrigger>
+              <SelectContent>
+                {pools.map((p) => (
+                  <SelectItem key={p.id} value={String(p.id)}>
+                    {p.name}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+
+          {isError && (
+            <p role="alert" className="text-sm text-destructive" data-testid="lethal-duel-error">
+              {error instanceof Error ? error.message : 'Failed to propose the lethal duel.'}
+            </p>
+          )}
+
+          <DialogFooter>
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => handleOpenChange(false)}
+              disabled={isPending}
+            >
+              Cancel
+            </Button>
+            <Button
+              type="submit"
+              variant="destructive"
+              disabled={
+                isPending || selected === null || !opponentName.trim() || threatPoolId === null
+              }
+              data-testid="lethal-duel-submit"
+            >
+              {isPending ? 'Proposing…' : 'Propose Duel'}
             </Button>
           </DialogFooter>
         </form>

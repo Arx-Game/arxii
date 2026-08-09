@@ -7,6 +7,9 @@ Thin telnet face of scene-lifecycle Actions:
     ``scene round <mode> [knobs]``       — SetRoundModeAction
     ``scene succor <ally>``              — SuccorSceneAction (#1744)
     ``scene interpose <ally>``           — InterposeSceneAction (#1316)
+    ``scene capture [<n>]``              — TruncatePrecaptureAction (#3069): bare lists
+                                            the captured pre-scene poses, ``<n>`` drops
+                                            everything before the nth one
     ``scene`` / ``scene status``         — one-line status read-out (no action)
     ``scene <unknown>``                  — usage message
 
@@ -34,6 +37,8 @@ _USAGE = (
     "  scene round [open|pose_order|strict] [quorum=<pct>] [cap=<n>] [lock=on/off]\n"
     "  scene succor <ally>               - shelter an ally from a hazard this round\n"
     "  scene interpose <ally>            - guard an ally from sudden non-combat harm this round\n"
+    "  scene capture [<n>]               - list captured pre-scene poses, or drop\n"
+    "                                       everything before the nth one\n"
     "  scene decisive <beat-id>          - mark the next check as decisive for a beat\n"
     "  scene decisive cancel             - cancel the pending decisive marker\n"
     "  scene decisive status             - show pending decisive marker\n"
@@ -114,6 +119,8 @@ class CmdScene(ArxCommand):
             self._handle_succor(rest)
         elif first == "interpose":  # noqa: STRING_LITERAL
             self._handle_interpose(rest)
+        elif first == "capture":  # noqa: STRING_LITERAL
+            self._handle_capture(rest)
         elif first == "decisive":  # noqa: STRING_LITERAL
             self._handle_decisive(rest)
         else:
@@ -189,6 +196,22 @@ class CmdScene(ArxCommand):
             self.msg("Usage: scene interpose <ally>.")
             return
         result = InterposeSceneAction().run(actor=self.caller, ally_name=ally_name)
+        if result.message:
+            self.msg(result.message)
+
+    def _handle_capture(self, rest: str) -> None:
+        """Dispatch TruncatePrecaptureAction (#3069): bare lists, ``<n>`` truncates."""
+        from actions.definitions.scenes import TruncatePrecaptureAction  # noqa: PLC0415
+
+        rest = rest.strip()
+        kwargs = {}
+        if rest:
+            try:
+                kwargs["position"] = int(rest)
+            except ValueError:
+                self.msg("Usage: scene capture [<n>] — <n> is a number from the listing.")
+                return
+        result = TruncatePrecaptureAction().run(actor=self.caller, **kwargs)
         if result.message:
             self.msg(result.message)
 

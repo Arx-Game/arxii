@@ -5,9 +5,7 @@ import django.db.models.deletion
 
 
 class Migration(migrations.Migration):
-    dependencies = [
-        ("arxii", "0124_beta_reset_release_latch"),
-    ]
+    dependencies = [("arxii", "0129_gmsummonoffer")]
 
     operations = [
         migrations.AddField(

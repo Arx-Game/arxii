@@ -164,6 +164,21 @@ export function useDuelChallengeInbox(
   });
 }
 
+/**
+ * GM proposes a lethal duel against a named PC (#3068). Invalidates the
+ * duel-challenge inbox key so the targeted player's poll (DuelChallengeNotifier)
+ * picks up the new PENDING challenge without waiting for its own 15s cycle.
+ */
+export function useProposeLethalDuel() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (payload: api.ProposeLethalDuelPayload) => api.postProposeLethalDuel(payload),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: combatKeys.duelChallengesAll() }).catch(() => {});
+    },
+  });
+}
+
 // ---------------------------------------------------------------------------
 // Available combos hook
 // ---------------------------------------------------------------------------

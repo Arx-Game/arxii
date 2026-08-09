@@ -1310,6 +1310,13 @@ Goal domain allocation and journal-based XP progression.
 - **Six Domains:** Standing, Wealth, Knowledge, Mastery, Bonds, Needs
 - **Write services:** `set_character_goals` (revision-gated replace) + `log_goal_progress` in `services.py`; `GoalError` user-safe exception in `types.py`
 - **Action-backed (#1350, ADR-0001):** `set_character_goals` / `log_goal_progress` Actions wrap the services; web `CharacterGoalViewSet`/`GoalJournalViewSet` + telnet `CmdGoal` converge on `action.run()`
+- **Web surface (#3045):** `GET /api/goals/my-goals/` and `POST /api/goals/journals/` had zero
+  frontend callers until now — `GoalsPanel` (`frontend/src/goals/components/`), mounted on
+  `XpKudosPage`, shows current goal allocations and a "Log Progress" dialog that awards the
+  weekly-capped XP. No "current goals" display existed to extend (only the one-time
+  character-creation allocator, `FinalTouchesStage`), so this is a small new component, not
+  an extension of pre-existing UI. Goal *allocation* (`CharacterGoalViewSet.update_all`) is
+  still telnet/CG-only — out of scope for #3045, which only closed the journal-log gap.
 - **Integrates with:** progression (XP rewards), mechanics (goal domains use ModifierTarget), actions (write paths Action-backed)
 - **Source:** `src/world/goals/`
 - **Details:** [goals.md](goals.md)
@@ -1681,8 +1688,19 @@ XP, kudos, development points, and unlock system. Contains the most explicit pre
   - `GET /api/progression/path-intent/` — declared `PathIntent` or `null` (character via `X-Character-ID` header)
   - `PUT /api/progression/path-intent/` — declare a path intent; body `{ path_id }` (character via `X-Character-ID` header)
   - `DELETE /api/progression/path-intent/` — clear declared intent (character via `X-Character-ID` header)
-  - `GET /api/progression/unlocks/` — purchasable unlocks for the played character; paginated, filterable by `unlock_type`
-  - `POST /api/progression/unlocks/purchase/` — buy a `class_level` or `thread_xp_lock` unlock with XP; dispatches `PurchaseUnlockAction`
+  - `GET /api/progression/unlocks/` — purchasable unlocks for the played character; paginated, filterable by `unlock_type` (`class_level` / `thread_xp_lock` / `skill_breakthrough`, #2115)
+  - `POST /api/progression/unlocks/purchase/` — buy a `class_level`, `thread_xp_lock`, or `skill_breakthrough` unlock with XP; dispatches `PurchaseUnlockAction`
+  - `GET /api/progression/durance/status/` — Durance readiness hub for the played character; mirrors telnet `durance status` exactly (#3045)
+  - `POST /api/progression/durance/convene/` — open a site-convened Durance session at the played character's room; calls `convene_durance_at_site` directly, not a dispatch seam (#3045)
+  - `GET`/`POST`/`PATCH`/`DELETE /api/skills/training-allocations/` — deliberate skill training allocations (`world.skills`, `TrainingAllocationViewSet`); dispatches `ManageTrainingAction`
+- **Web Advancement tab (#3045):** `frontend/src/progression/components/advancement/` —
+  `AdvancementTab` (mounted on `CharacterSheetPage`, own-sheet + active-puppet gated) hosts
+  `BreakthroughsCard` / `ClassUnlocksCard` (both over the Unlock Shop above) / `TrainingCard`
+  (over `TrainingAllocationViewSet`) / `DuranceCard` (over the Durance endpoints above, joining
+  via the existing `RitualSessionViewSet.accept`, now auto-firing a site-convened session to
+  match telnet's `ritual join` — see `docs/systems/progression.md`). Closed the "every SPEND
+  path was telnet-only" gap; `RandomScenePanel` (earn-path, previously built-but-orphaned) now
+  mounts on `XpKudosPage` instead.
 - **Actions:**
   - `PurchaseUnlockAction` (`registry_key="purchase_unlock"`) — shared unlock purchase path for web and telnet
   - `ClaimKudosAction` (`registry_key="claim_kudos"`) — kudos→XP conversion; shared by web and telnet (#1348)
@@ -2453,7 +2471,9 @@ action consent flow, and a three-mode non-combat round framework.
   - `StartSceneAction` (key `"start_scene"`, `actions/definitions/scenes.py`) — creates scene + grants co-ownership to all present PCs; records actor as non-owner participant if scene already exists. **Web convergence (#3069):** `SceneViewSet.perform_create` (`world/scenes/views.py`) dispatches this Action instead of a bespoke `Scene.objects.create`, so the web "Start Scene" button now gets the same privacy derivation + co-owner/GM enrollment telnet always had.
   - `FinishSceneAction` (key `"finish_scene"`, `actions/definitions/scenes.py`) — finishes active scene; gated by `actor_can_administer_scene`.
   - `SetRoundModeAction` (key `"set_round_mode"`, `actions/definitions/rounds.py`) — changes mode/knobs of active round; gated by `actor_can_administer_scene`; `costs_turn=False`.
-- **`CmdScene`** (`commands/scene.py`) — telnet face for `scene start [name]` / `scene finish` / `scene round [open|pose_order|strict] [quorum=<pct>] [cap=<n>] [lock=on/off]` / `scene status`. Thin over the three Actions above; no business logic.
+  - `TruncatePrecaptureAction` (key `"truncate_precapture"`, `actions/definitions/scenes.py`, #3069 sub-item 4) — lists/truncates pre-scene-captured poses; gated by `actor_can_administer_scene`. See [scenes.md](scenes.md) §"Pre-scene RP capture".
+- **Pre-scene RP capture (#3069 sub-item 4):** `StartSceneAction`'s new-scene branch now folds prior unattached (`scene=None`) poses into the scene via `world/scenes/precapture_services.py`'s `capture_prescene_interactions` — present authors attach immediately, absent authors get a `PrecaptureConsentRequest` (`precapture_models.py`) needing explicit accept (`world/scenes/precapture_offer_handler.py`'s telnet `accept precapture`/`decline precapture` + web `PrecaptureConsentRequestViewSet`). See [scenes.md](scenes.md) §"Pre-scene RP capture" for the full design (candidate window, privacy invariants, truncation).
+- **`CmdScene`** (`commands/scene.py`) — telnet face for `scene start [name]` / `scene finish` / `scene round [open|pose_order|strict] [quorum=<pct>] [cap=<n>] [lock=on/off]` / `scene capture [<n>]` (#3069) / `scene status`. Thin over the Actions above; no business logic.
 - **`is_story_runner`** character property (`typeclasses/characters.py`) — `False` on base `Character`; `True` on `GMCharacter` and `StaffCharacter` (`typeclasses/gm_characters.py`); used by `actor_can_administer_scene` as the GM/Staff fast-path.
 - **API endpoint:** `POST /api/scenes/{id}/set-round-mode/` — coarse-gated `IsSceneGMOrOwnerOrStaff`; dispatches `SetRoundModeAction`; returns updated scene detail.
 - **`active_round` read field on `SceneDetailSerializer`** (#1467): nullable nested field serialized by
@@ -4042,11 +4062,29 @@ registering a service strategy + per-kind details model.
     armed permanently. That teardown saves per instance rather than bulk-updating,
     because a bulk `.update()` sends no `post_save` and leaves SharedMemoryModel's
     identity map serving a stale `is_armed`.
-  - **The player half is NOT wired.** `disarm_trap` is registered but unreachable: it
-    needs a `trap_id`, and no serializer, ViewSet, URL, telnet command or frontend surface
-    exposes a `Trap` to a player. `search_room` (`world/clues/services.py`) finds clues and
-    concealed characters only and never touches traps. `Trap.is_hidden` is written by
-    `instantiate_situation` and read by nothing; it is the field waiting on that surface.
+  - **Player half** (#3011): detect in `search`, see what you detected, disarm it.
+    `search_room_traps` (`trap_services.py`) is a sibling of `world.clues.services
+    .search_room` — traps carry their own per-trap `detect_check_type`/`detect_difficulty`
+    (clues share one Search `CheckType`), so it does not slot into the clue roll for free;
+    `SearchAction` (`actions/definitions/investigation.py`) calls both and folds detected
+    traps into the same result message. `Trap.is_hidden` gets its first readers here:
+    `is_hidden=False` skips the roll entirely on both detection paths (entry via
+    `resolve_trap_on_character`, and `search_room_traps`) — an authored obvious hazard is
+    just visible, no chance to fail spotting it. A hidden trap still rolls on entry
+    (`check_room_traps_on_entry`/`check_traps_at_position`), which now also messages the
+    detector directly (spotted vs triggered) since entry carries no `ActionResult` of its
+    own. Read surface: `RoomTrapViewSet` (`views_traps.py`, `GET
+    /api/room-features/traps/?character_id=`) — personal like `ComfortViewSet`/
+    `PortalDestinationsViewSet` (owned-character tenure gate doubles as "present in the
+    room"); lists armed traps that are `is_hidden=False` OR already in the viewer's own
+    `detected_by` (never another character's detection, never an unarmed trap); serializer
+    exposes only `id`/`name`/`is_armed` (no consequence pool, no difficulties). Frontend:
+    `TrapsBlock` (`frontend/src/game/components/room-panel/TrapsBlock.tsx`) in `RoomPanel`,
+    reading `useRoomTrapsQuery` (`frontend/src/room_features/`) and dispatching
+    `disarm_trap` via the standard registry-action seam; a failed disarm's consequence
+    message surfaces through the same toast as a success. Telnet: `disarm <trap name>`
+    (`commands/traps.py`, `CmdDisarm`) resolves by name among the traps visible to the
+    caller (same leak rule as the ViewSet) and dispatches `DisarmTrapAction` directly.
 - **`PreparedGround`** (`world.room_features.models`, #2646): a room a character has
   prepared as their battleground ahead of time — "the fight was won yesterday." Plain FK
   to `RoomProfile` (a room may hold several characters' prepared grounds) but `prepared_by`
@@ -6046,6 +6084,45 @@ reactive maneuvers (COVER, INTERPOSE, DEFEND stance), and clash-of-wills.
   entry and a `conditions_applied` entry) in one call, mirroring
   `PlayableCombatScenarioFactory`'s style; use it instead of hand-rolling boss-fight
   fixtures. Driven end-to-end by `src/integration_tests/test_boss_fight_journey.py`.
+- **Duels — `DuelChallenge` + GM-initiated lethal duels (#568, #3068):** `DuelChallenge`
+  (`world/combat/models.py`) is the one challenge/accept/decline/withdraw handshake model
+  for BOTH shapes: PC-vs-PC (`challenger_sheet` set, accepting opens `create_pvp_duel`) and
+  GM-initiated lethal (`is_lethal=True`, `challenger_sheet` NULL — the challenger is a
+  significant NPC named by `opponent_name`/`opponent_tier`/`threat_pool`, accepting opens
+  `create_lethal_duel` instead). `world.combat.duels.create_lethal_duel_challenge` creates
+  the PENDING lethal row (validates `tier` against `constants.SIGNIFICANT_NPC_TIERS` — ELITE/
+  BOSS/HERO_KILLER); `accept_challenge` branches on `is_lethal` to pick which encounter
+  constructor to call. `world.combat.duels.SIGNIFICANT_NPC_TIERS` (promoted from a
+  `create_lethal_duel`-local constant, #3068) is the one significant-NPC-tier source of
+  truth both the service layer and `ProposeLethalDuelSerializer` validate against.
+  **Non-negotiable consent invariant:** a GM's proposal never creates a `CombatEncounter`
+  by itself — only the targeted PC's own `accept` (the same `AcceptChallengeAction`/`duel
+  accept` a PvP challenge uses) does; `decline` leaves no encounter. GM initiation surfaces:
+  web `POST /api/combat/duel-challenges/propose_lethal_duel/`
+  (`DuelChallengeViewSet.propose_lethal_duel`, gated by `IsEncounterGMOrStaff` — widened
+  #3068 from `{"create"}` to also cover this action, same staff-or-scene-GM-or-owner scene
+  gate `CombatEncounterViewSet.create` uses) via the `GMEncounterControls` "Start Lethal
+  Duel" dialog (`frontend/src/combat/sections/GMEncounterControls.tsx`); telnet `encounter
+  duel <character> <name> <tier> <pool>` (`ProposeLethalDuelAction`,
+  `actions/definitions/duels.py`, `src/commands/encounter.py`). The player's accept/decline
+  step rides the pre-existing `DuelChallengeNotifier` toast (site-wide, #2157) — extended to
+  read `opponent_name` when `challenger` is null and show a fight-to-the-death warning; no
+  new player-facing verb exists, only a new challenge *shape* the existing one carries. The
+  Battle system's champion-duel path (`world.battles.services.open_champion_duel`) is the
+  OTHER `create_lethal_duel` caller — player-initiated (the Champion chooses to fight), no
+  challenge handshake, preserved unchanged as a first-class consumer of the same service.
+  **Known frontend gap (#3068 audit finding, not a backend limitation):** the DB model puts
+  no constraint on how many `CombatEncounter` rows share one `Scene` (`scene` is a plain FK,
+  and `create_lethal_duel`/`create_pvp_duel` each open their own new encounter), so several
+  simultaneous duel confrontations in one wider scene ARE structurally supported and
+  DB-proven (two PENDING lethal challenges + two accepts → two independent
+  `CombatEncounter`s, same scene). But the scene-level web UI
+  (`useEncounterForScene`/`GamePage`/`SceneDetailPage`/`SceneHeader`) resolves and renders
+  only the single most-recent non-completed encounter per scene — a second simultaneous
+  duel's `CombatRail` does not surface automatically there. Reaching it needs its own
+  `encounterId` (e.g. a future multi-encounter picker); out of scope for #3068 (a GM-verb +
+  consent-flow issue, not a scene-UI-architecture one) — flagged here rather than hacked
+  around.
 - **Source:** `src/world/combat/`
 - **Details:** `docs/roadmap/combat.md` · architecture:
   `docs/architecture/combat-magic-integration.md`,
@@ -7072,6 +7149,44 @@ Player-to-staff contact surfaces plus the unified staff triage inbox.
   `include_ignored=True`), `get_account_submission_history` for per-account drill-down.
   Endpoint `/api/staff-inbox/` (`IsAdminUser`).
 - **Source:** `src/world/player_submissions/`, `src/world/staff_inbox/`
+
+---
+
+## Registration (#3054)
+
+Invitation-gated account registration — closed by default; staff issue per-email
+single-use invites or flip a DB-singleton toggle to open registration for early
+access, no deploy required.
+
+- **Models** (`world.registration.models`): `RegistrationConfig` (singleton pk=1,
+  `registration_open` bool, mirrors `world.scenes.SceneRoundDefaultsConfig`),
+  `AccountInvite` (`email`, unique `token` via `secrets.token_urlsafe(32)`,
+  `invited_by` PROTECT, `expires_at`, `redeemed_at`/`redeemed_by`, `revoked_at`,
+  `note`; derived `status` property — `InviteStatus` PENDING/REDEEMED/REVOKED/
+  EXPIRED, never stored).
+- **Services** (`world.registration.services`): `issue_invite` (active-invite
+  dedup), `revoke_invite`, `signup_allowed` (the neutral bool predicate — never
+  distinguishes *why* signup is refused), `redeem_invite` (stamps redemption from
+  the adapter's `save_user`).
+- **Adapter seam:** `evennia_extensions.adapters.ArxAccountAdapter
+  .is_open_for_signup` overrides the previously-unused allauth hook, re-parsing
+  the already-cached `request.body` JSON to read `email`/`invite_token` (the
+  headless `SignupView.post` calls this hook before the validated `SignupInput`
+  exists). Proven at the real endpoint by journey tests, not just unit tests.
+- **Endpoints:** `/api/registration/status/` (public GET, `{"open": bool}`, no
+  invite enumeration); `/api/staff/invites/` (staff `IsAdminUser` — issue/list/
+  retrieve + `revoke` action).
+- **Web:** `RegisterPage` (invite field auto-filled from `?invite=`, invite-only
+  notice when closed with no token); `StaffInvitesPage` (`/staff/invites`, linked
+  from the Staff Hub) — issue/list/filter/revoke/copy-link.
+- **Settings:** `NEW_ACCOUNT_REGISTRATION_ENABLED = False` closes telnet `create`;
+  connect-screen copy points telnet users at the website.
+- **Adjacent (already built, verified via anti-reinvention pass):** the staff
+  manual-verify fallback for a Resend misdelivery already exists —
+  `EmailAddressAdmin.mark_as_verified`/`mark_as_unverified` in
+  `evennia_extensions/admin.py`.
+- **Source:** `src/world/registration/`, `src/evennia_extensions/adapters.py`
+- **Details:** [registration.md](registration.md)
 
 ---
 

@@ -2214,9 +2214,10 @@
 
 ### DuelChallenge
 **Foreign Keys:**
-  - challenger_sheet -> character_sheets.CharacterSheet [FK]
+  - challenger_sheet -> character_sheets.CharacterSheet [FK] (nullable)
   - challenged_sheet -> character_sheets.CharacterSheet [FK]
   - room -> evennia.ObjectDB [FK] (nullable)
+  - threat_pool -> combat.ThreatPool [FK] (nullable)
   - resulting_encounter -> combat.CombatEncounter [FK] (nullable)
 
 ### EncounterAftermathRule
@@ -2313,6 +2314,7 @@
   - bossphase_set <- combat.BossPhase
   - creature_templates <- combat.CreatureTemplate
   - creaturephasetemplate_set <- combat.CreaturePhaseTemplate
+  - lethal_duel_challenges <- combat.DuelChallenge
 
 ### ThreatPoolEntry
 **Foreign Keys:**
@@ -7145,6 +7147,24 @@
   - market_squares <- items.MarketSquare
 
 
+## world.registration
+
+### AccountInvite
+**Foreign Keys:**
+  - invited_by -> evennia.AccountDB [FK]
+  - redeemed_by -> evennia.AccountDB [FK] (nullable)
+
+### RegistrationConfig
+**Foreign Keys:**
+  - updated_by -> evennia.AccountDB [FK] (nullable)
+
+### Service Functions
+- `issue_invite(email: str, invited_by: evennia.accounts.models.AccountDB, note: str = '') -> world.registration.models.AccountInvite - Issue an invite for ``email``.`
+- `redeem_invite(token: str, email: str, account: evennia.accounts.models.AccountDB) -> world.registration.models.AccountInvite | None - Validate + stamp redemption for the invite backing this signup.`
+- `revoke_invite(invite: world.registration.models.AccountInvite, by: evennia.accounts.models.AccountDB) -> world.registration.models.AccountInvite - Revoke an un-redeemed invite. ``by`` is accepted for future audit-log use.`
+- `signup_allowed(email: str, token: str) -> bool - True when ``token`` is a currently-redeemable invite bound to ``email``.`
+
+
 ## world.relationships
 
 ### AffectionShift
@@ -7896,6 +7916,11 @@
   - place -> scenes.Place [FK]
   - persona -> scenes.Persona [FK]
 
+### PrecaptureConsentRequest
+**Foreign Keys:**
+  - scene -> scenes.Scene [FK]
+  - account -> evennia.AccountDB [FK]
+
 ### ReactionEmoji
 
 ### ReactionWindow
@@ -7961,6 +7986,7 @@
   - scene_rounds <- scenes.SceneRound
   - decisive_markers <- scenes.DecisiveCheckMarker
   - action_requests <- scenes.SceneActionRequest
+  - precapture_consent_requests <- scenes.PrecaptureConsentRequest
   - reaction_windows <- scenes.ReactionWindow
   - speaker_queues <- scenes.SpeakerQueue
   - explaining_secrets <- secrets.Secret
