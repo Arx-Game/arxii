@@ -135,6 +135,27 @@ export interface InteractionPersona {
   thumbnail_url?: string;
 }
 
+/** #3069 — one candidate pose in a precapture consent preview (the requester's own content). */
+export interface PrecapturePreviewInteraction {
+  id: number;
+  persona_name: string;
+  content: string;
+  mode: string;
+  timestamp: string;
+}
+
+/** #3069 — a pending "may we fold your recent poses into this scene" ask. */
+export interface PrecaptureConsentRequest {
+  id: number;
+  scene: number;
+  scene_name: string;
+  room_name: string | null;
+  status: 'pending' | 'accepted' | 'denied' | 'resolved' | 'expired';
+  requested_at: string;
+  responded_at: string | null;
+  candidates: PrecapturePreviewInteraction[];
+}
+
 export interface EndorserBadge {
   persona_id: number;
   persona_name: string;

@@ -64,10 +64,24 @@ class StartSceneAction(Action):
 
         scene = _active_scene_for_room(room)
         if scene is None:
+            from world.scenes.precapture_services import (  # noqa: PLC0415
+                capture_prescene_interactions,
+            )
+
             scene = ensure_scene_for_location(room)
             add_present_as_co_owners(scene, room)
             enroll_present_table_gms(scene, room)
-            return ActionResult(success=True, message="A scene begins.")
+            # #3069 sub-item 4: fold prior unattached RP into the scene right as it
+            # starts — the single seam both telnet and web reach for scene creation.
+            capture = capture_prescene_interactions(scene, room)
+            message = "A scene begins."
+            if capture.pending_consent_count:
+                plural = "s" if capture.pending_consent_count != 1 else ""
+                message += (
+                    f" ({capture.pending_consent_count} other{plural} asked to include "
+                    "their earlier poses.)"
+                )
+            return ActionResult(success=True, message=message)
 
         # Scene already exists — join the actor as a non-owner participant.
         account = resolve_actor_account(actor)
@@ -328,3 +342,101 @@ class MarkDecisiveCheckAction(Action):
                 f"will resolve it."
             ),
         )
+
+
+@dataclass
+class TruncatePrecaptureAction(Action):
+    """List or drop leading pre-scene-captured poses (#3069 sub-item 4).
+
+    Gated: the actor must administer the scene (``actor_can_administer_scene`` —
+    owner, staff, or story-runner; matches the ruling's "starter/owner (or staff)").
+    Called with no cutoff kwarg, lists the captured poses (oldest first, 1-indexed) so
+    the caller can pick a cutoff; called with ``interaction_id`` or ``position``, drops
+    everything captured before that pose. Shared by telnet ``scene capture [<n>]`` and
+    the web ``SceneViewSet.truncate_precapture`` endpoint.
+
+    Scene resolution mirrors ``locations.py``'s ``_resolve_room`` convention: an
+    explicit ``scene_id`` kwarg (the web path — the starter may be truncating from the
+    scene detail page well after having walked away, which is the whole premise of
+    late-capture RP) resolves that scene directly; otherwise falls back to the actor's
+    current room's active scene (the telnet path, where the actor is presumed to still
+    be standing there).
+    """
+
+    key: str = "truncate_precapture"
+    name: str = "Truncate Pre-Scene Capture"
+    icon: str = "scissors"
+    category: str = "scenes"
+    target_type: TargetType = TargetType.AREA
+
+    def execute(
+        self,
+        actor: ObjectDB,
+        context: ActionContext | None = None,
+        **kwargs: Any,
+    ) -> ActionResult:
+        from world.scenes.precapture_services import (  # noqa: PLC0415
+            list_precaptured,
+            truncate_precaptured,
+        )
+        from world.scenes.scene_admin_services import actor_can_administer_scene  # noqa: PLC0415
+
+        resolved = self._resolve_scene(actor, kwargs)
+        if isinstance(resolved, ActionResult):
+            return resolved
+        scene = resolved
+
+        if not actor_can_administer_scene(actor, scene):
+            return ActionResult(
+                success=False,
+                message="Only the scene's owner or staff can truncate its captured poses.",
+            )
+
+        interaction_id = kwargs.get("interaction_id")
+        position = kwargs.get("position")
+        if interaction_id is None and position is None:
+            captured = list(list_precaptured(scene))
+            if not captured:
+                return ActionResult(success=True, message="No pre-scene poses were captured.")
+            lines = [
+                f"{i}. {ia.persona.name}: {ia.content[:60]}"
+                for i, ia in enumerate(captured, start=1)
+            ]
+            return ActionResult(
+                success=True,
+                message="\n".join(["Pre-scene captured poses:", *lines]),
+            )
+
+        try:
+            count = truncate_precaptured(
+                scene,
+                interaction_id=interaction_id,
+                position=position,
+            )
+        except ValueError as exc:
+            return ActionResult(success=False, message=str(exc))
+
+        return ActionResult(
+            success=True,
+            message=f"Dropped {count} pre-scene pose(s); the scene now starts later.",
+        )
+
+    @staticmethod
+    def _resolve_scene(actor: ObjectDB, kwargs: dict[str, Any]) -> Scene | ActionResult:
+        """Explicit ``scene_id`` kwarg first (web), else the actor's room (telnet)."""
+        from world.scenes.models import Scene as SceneModel  # noqa: PLC0415
+
+        scene_id = kwargs.get("scene_id")
+        if scene_id is not None:
+            scene = SceneModel.objects.filter(pk=scene_id).first()
+            if scene is None:
+                return ActionResult(success=False, message="No such scene.")
+            return scene
+
+        room = actor.location
+        if room is None:
+            return ActionResult(success=False, message=NOT_IN_A_ROOM_MESSAGE)
+        scene = _active_scene_for_room(room)
+        if scene is None:
+            return ActionResult(success=False, message=_NO_ACTIVE_SCENE_MSG)
+        return scene

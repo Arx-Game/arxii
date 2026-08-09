@@ -1701,5 +1701,6 @@ class DecisiveCheckMarker(SharedMemoryModel):
 from world.scenes.action_models import SceneActionRequest  # noqa: E402, F401
 from world.scenes.boon_models import Boon  # noqa: E402, F401
 from world.scenes.place_models import InteractionReceiver, Place, PlacePresence  # noqa: E402, F401
+from world.scenes.precapture_models import PrecaptureConsentRequest  # noqa: E402, F401
 from world.scenes.reaction_models import ReactionWindow, WindowReaction  # noqa: E402, F401
 from world.scenes.speaker_queue_models import SpeakerQueue, SpeakerQueueEntry  # noqa: E402, F401

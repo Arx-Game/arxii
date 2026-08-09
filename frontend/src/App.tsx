@@ -117,6 +117,7 @@ import { Toaster } from './components/ui/sonner';
 import { DuelChallengeNotifier } from './combat/DuelChallengeNotifier';
 import { HazardPromptNotifier } from './game/components/HazardPromptNotifier';
 import { ConsentAttentionNotifier } from './scenes/components/ConsentAttentionNotifier';
+import { PrecaptureConsentNotifier } from './scenes/components/PrecaptureConsentNotifier';
 
 // ---------------------------------------------------------------------------
 // Lazy-loaded stories pages (React.lazy for route-level code splitting)
@@ -1122,6 +1123,7 @@ function App() {
       <DuelChallengeNotifier />
       <HazardPromptNotifier />
       <ConsentAttentionNotifier />
+      <PrecaptureConsentNotifier />
     </Layout>
   );
 }

@@ -200,6 +200,34 @@ parity, #1328). `is_danger` now only drives a non-blocking informational note.
 
 **Details:** [scenes.md](../systems/scenes.md) §"Scene Administration (#1445)"
 
+### Pre-scene RP Capture — DONE (#3069 sub-item 4)
+
+Closes the "lead-in RP vanishes" gap the #3069 audit found: `record_interaction` writes
+`scene=None` when no scene is active, and until now nothing ever attached those rows once a
+scene finally started. Tehom's 2026-08-08 ruling: capture the prior unattached interactions of
+the people IN the new scene by default; anyone NOT in the new scene needs explicit consent;
+the starter gets truncate/cutoff controls.
+
+**What shipped:**
+
+- **Capture:** `capture_prescene_interactions(scene, room)` (`world/scenes/precapture_services.py`),
+  called from `StartSceneAction.execute()`'s new-scene branch (the one seam telnet + web share).
+  A present author's unattached poses (bounded to a 24h `PRECAPTURE_WINDOW` implementation
+  constant) attach immediately; everyone else gets a `PrecaptureConsentRequest`.
+- **Consent:** `PrecaptureConsentRequest` (`precapture_models.py`) reuses `SceneActionRequest`'s
+  `ActionRequestStatus` vocabulary. Telnet rides the existing generic offer registry
+  (`accept precapture` / `decline precapture`, `precapture_offer_handler.py`) for free; web is
+  `PrecaptureConsentRequestViewSet` (`/api/precapture-consent-requests/`) + a site-wide toast
+  notifier (`PrecaptureConsentNotifier.tsx`).
+- **Truncation:** `TruncatePrecaptureAction` (key `"truncate_precapture"`) — starter/owner-or-staff
+  only, "start scene from here" semantics. Telnet: `scene capture [<n>]`. Web: `GET
+  /api/scenes/{id}/precapture/` + `POST .../truncate-precapture/`, surfaced by
+  `PrecapturePanel.tsx` on `SceneDetailPage` (owner-only).
+- **Privacy:** a non-member's poses never appear in the scene log before they accept; the consent
+  preview shows only the requester's own candidate content; declining is silent to the scene.
+
+**Details:** [scenes.md](../systems/scenes.md) §"Pre-scene RP capture (#3069 sub-item 4)"
+
 ### Persona Telnet Switch + Shared set-active Path — DONE (#1347)
 
 Web/telnet parity for active-persona management. Before this, `PersonaViewSet.set_active`

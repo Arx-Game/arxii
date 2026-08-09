@@ -16006,6 +16006,63 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
+  '/api/precapture-consent-requests/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /** @description The requesting account's own precapture consent requests. */
+    get: operations['precapture_consent_requests_list'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/precapture-consent-requests/{id}/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /** @description The requesting account's own precapture consent requests. */
+    get: operations['precapture_consent_requests_retrieve'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/precapture-consent-requests/{id}/respond/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /**
+     * @description Accept or decline this consent request.
+     *
+     *     Looks up by (pk, account) directly rather than through ``get_queryset`` (which
+     *     is PENDING-only) so a double-submit lands on the "already resolved" 400 below
+     *     instead of a bare 404 — the row still belongs to this account either way.
+     */
+    post: operations['precapture_consent_requests_respond_create'];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   '/api/progression/account/': {
     parameters: {
       query?: never;
@@ -17755,6 +17812,29 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
+  '/api/scenes/{id}/precapture/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /**
+     * @description #3069 — the scene's pre-scene-captured poses, oldest first.
+     *
+     *     Purpose-built for the starter's truncate control (not a general content view —
+     *     the normal interaction feed already shows these once captured); gated the same
+     *     as ``truncate_precapture``.
+     */
+    get: operations['scenes_precapture_retrieve'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   '/api/scenes/{id}/set-round-mode/': {
     parameters: {
       query?: never;
@@ -17773,6 +17853,30 @@ export interface paths {
      *     telnet and web converge on the same ``action.run()`` seam.
      */
     post: operations['scenes_set_round_mode_create'];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/scenes/{id}/truncate-precapture/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /**
+     * @description #3069 — drop pre-scene-captured poses before the given one ("start from here").
+     *
+     *     Coarse-gated by ``IsSceneOwnerOrStaff``; authoritative permission check lives
+     *     in ``TruncatePrecaptureAction`` (``actor_can_administer_scene``). Passes an
+     *     explicit ``scene_id`` — unlike ``set_round_mode``, the starter is not assumed to
+     *     still be standing in the scene's room (see the action's docstring).
+     */
+    post: operations['scenes_truncate_precapture_create'];
     delete?: never;
     options?: never;
     head?: never;
@@ -35212,6 +35316,19 @@ export interface components {
       amount: number;
       running_total: number;
     };
+    PrecaptureConsentRequest: {
+      readonly id: number;
+      /** @description The scene asking to capture this account's prior unattached poses. */
+      readonly scene: number;
+      readonly scene_name: string;
+      readonly room_name: string | null;
+      readonly status: components['schemas']['Status307Enum'];
+      /** Format: date-time */
+      readonly requested_at: string;
+      /** Format: date-time */
+      readonly responded_at: string | null;
+      readonly candidates: unknown;
+    };
     /**
      * @description * `gm_marked` - GM-marked
      *     * `character_level_at_least` - Character level at least
@@ -39872,6 +39989,15 @@ export interface components {
      * @enum {string}
      */
     TreatmentTemplateTargetKindEnum: 'primary' | 'aftermath' | 'pending_alteration';
+    /**
+     * @description POST body for the #3069 truncate-precapture endpoint.
+     *
+     *     ``interaction_id`` is the row the starter clicked "start from here" on — every
+     *     pre-scene-captured pose before it (oldest-first) gets detached.
+     */
+    TruncatePrecaptureRequestRequest: {
+      interaction_id: number;
+    };
     /** @description Serializer for trust categories */
     TrustCategory: {
       readonly id: number;
@@ -62742,6 +62868,67 @@ export interface operations {
       };
     };
   };
+  precapture_consent_requests_list: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['PrecaptureConsentRequest'][];
+        };
+      };
+    };
+  };
+  precapture_consent_requests_retrieve: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        id: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['PrecaptureConsentRequest'];
+        };
+      };
+    };
+  };
+  precapture_consent_requests_respond_create: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        id: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['PrecaptureConsentRequest'];
+        };
+      };
+    };
+  };
   progression_account_retrieve: {
     parameters: {
       query?: never;
@@ -65289,6 +65476,28 @@ export interface operations {
       };
     };
   };
+  scenes_precapture_retrieve: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        /** @description A unique integer value identifying this scene. */
+        id: number;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['SceneDetail'];
+        };
+      };
+    };
+  };
   scenes_set_round_mode_create: {
     parameters: {
       query?: never;
@@ -65302,6 +65511,32 @@ export interface operations {
     requestBody?: {
       content: {
         'application/json': components['schemas']['SetRoundModeRequestRequest'];
+      };
+    };
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['SceneDetail'];
+        };
+      };
+    };
+  };
+  scenes_truncate_precapture_create: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        /** @description A unique integer value identifying this scene. */
+        id: number;
+      };
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['TruncatePrecaptureRequestRequest'];
       };
     };
     responses: {

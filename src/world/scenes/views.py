@@ -53,6 +53,7 @@ from world.scenes.serializers import (
     SetActivePersonaRequestSerializer,
     SetPersonaProfileRequestSerializer,
     SetRoundModeRequestSerializer,
+    TruncatePrecaptureRequestSerializer,
 )
 from world.scenes.services import broadcast_scene_message
 from world.societies.renown_serializers import (
@@ -221,8 +222,16 @@ class SceneViewSet(viewsets.ModelViewSet):
         if self.action in ["finish", "set_round_mode"]:
             # Only scene owners/GMs or staff can finish scenes or set round mode
             permission_classes = [IsSceneGMOrOwnerOrStaff]
-        elif self.action in ["update", "partial_update", "destroy"]:
-            # Only scene owners or staff can modify/delete scenes
+        elif self.action in [
+            "update",
+            "partial_update",
+            "destroy",
+            "precapture",
+            "truncate_precapture",
+        ]:
+            # Only scene owners or staff can modify/delete scenes, view the truncate-cutoff
+            # listing, or truncate pre-scene-captured poses (#3069 ruling: "starter/owner
+            # (or staff)").
             permission_classes = [IsSceneOwnerOrStaff]
         elif self.action in ["retrieve", "activity", "highlight_reel"]:
             # Retrieving a scene, its activity band, or its highlight reel must respect
@@ -314,6 +323,64 @@ class SceneViewSet(viewsets.ModelViewSet):
 
         actor = active_sheet.character
         result = SetRoundModeAction().run(actor=actor, **serializer.validated_data)
+        if not result.success:
+            return Response({"detail": result.message}, status=status.HTTP_400_BAD_REQUEST)
+
+        response_serializer = self.get_serializer(scene)
+        return Response(response_serializer.data)
+
+    @extend_schema(tags=["scenes"])
+    @action(detail=True, methods=[HTTPMethod.GET])
+    def precapture(self, request: Request, pk: int | None = None) -> Response:
+        """#3069 — the scene's pre-scene-captured poses, oldest first.
+
+        Purpose-built for the starter's truncate control (not a general content view —
+        the normal interaction feed already shows these once captured); gated the same
+        as ``truncate_precapture``.
+        """
+        from world.scenes.precapture_services import list_precaptured  # noqa: PLC0415
+        from world.scenes.precapture_views import (  # noqa: PLC0415
+            PrecapturePreviewInteractionSerializer,
+        )
+
+        scene = self.get_object()
+        serializer = PrecapturePreviewInteractionSerializer(list_precaptured(scene), many=True)
+        return Response(serializer.data)
+
+    @extend_schema(
+        request=TruncatePrecaptureRequestSerializer,
+        responses=SceneDetailSerializer,
+        tags=["scenes"],
+    )
+    @action(detail=True, methods=[HTTPMethod.POST], url_path="truncate-precapture")
+    def truncate_precapture(self, request: Request, pk: int | None = None) -> Response:
+        """#3069 — drop pre-scene-captured poses before the given one ("start from here").
+
+        Coarse-gated by ``IsSceneOwnerOrStaff``; authoritative permission check lives
+        in ``TruncatePrecaptureAction`` (``actor_can_administer_scene``). Passes an
+        explicit ``scene_id`` — unlike ``set_round_mode``, the starter is not assumed to
+        still be standing in the scene's room (see the action's docstring).
+        """
+        from actions.definitions.scenes import TruncatePrecaptureAction  # noqa: PLC0415
+        from world.character_sheets.models import CharacterSheet  # noqa: PLC0415
+
+        scene = self.get_object()
+        serializer = TruncatePrecaptureRequestSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+
+        active_sheet = CharacterSheet.objects.filter(
+            roster_entry__tenures__player_data__account=request.user,
+            roster_entry__tenures__end_date__isnull=True,
+        ).first()
+        if active_sheet is None:
+            return Response({"detail": "No active character."}, status=status.HTTP_400_BAD_REQUEST)
+
+        actor = active_sheet.character
+        result = TruncatePrecaptureAction().run(
+            actor=actor,
+            scene_id=scene.pk,
+            interaction_id=serializer.validated_data["interaction_id"],
+        )
         if not result.success:
             return Response({"detail": result.message}, status=status.HTTP_400_BAD_REQUEST)
 

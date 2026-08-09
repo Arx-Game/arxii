@@ -376,6 +376,7 @@ from actions.definitions.scenes import (
     GrantSceneGMAction,
     MarkDecisiveCheckAction,
     StartSceneAction,
+    TruncatePrecaptureAction,
 )
 from actions.definitions.ships import (
     CommissionShipAction,
@@ -650,6 +651,7 @@ _ALL_ACTIONS: list[Action] = [
     FinishSceneAction(),
     GrantSceneGMAction(),
     MarkDecisiveCheckAction(),
+    TruncatePrecaptureAction(),
     BeginEncounterRoundAction(),
     ResolveEncounterRoundAction(),
     AddOpponentAction(),

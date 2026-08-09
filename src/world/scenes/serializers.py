@@ -559,3 +559,13 @@ class SetRoundModeRequestSerializer(serializers.Serializer):
     advance_quorum_pct = serializers.IntegerField(min_value=0, max_value=100, required=False)
     max_actions_per_round = serializers.IntegerField(min_value=0, required=False)
     per_target_repeat_lock = serializers.BooleanField(required=False)
+
+
+class TruncatePrecaptureRequestSerializer(serializers.Serializer):
+    """POST body for the #3069 truncate-precapture endpoint.
+
+    ``interaction_id`` is the row the starter clicked "start from here" on — every
+    pre-scene-captured pose before it (oldest-first) gets detached.
+    """
+
+    interaction_id = serializers.IntegerField()
