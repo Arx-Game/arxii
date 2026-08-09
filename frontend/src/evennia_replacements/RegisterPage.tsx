@@ -1,6 +1,6 @@
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
-import { useRegister } from './queries';
+import { useRegister, useRegistrationStatus } from './queries';
 import { SITE_NAME } from '@/config';
 import { Input } from '@/components/ui/input';
 import { SubmitButton } from '@/components/SubmitButton';
@@ -14,15 +14,24 @@ type FormValues = {
   email: string;
   password1: string;
   password2: string;
+  invite_token: string;
 };
 
 export function RegisterPage() {
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
+  const inviteFromLink = searchParams.get('invite') ?? '';
+
   const {
     register,
     handleSubmit,
     formState: { errors, isValid },
-  } = useForm<FormValues>({ mode: 'onBlur' });
+  } = useForm<FormValues>({ mode: 'onBlur', defaultValues: { invite_token: inviteFromLink } });
+
+  // Registration is closed by default (#3054) — the notice below only shows on an
+  // explicit `open: false` with no invite link, never while this is still loading.
+  const { data: registrationStatus } = useRegistrationStatus();
+  const registrationClosedWithNoInvite = registrationStatus?.open === false && !inviteFromLink;
 
   // Fetch available social auth providers
   const { data: providers = [] } = useQuery({
@@ -45,13 +54,33 @@ export function RegisterPage() {
   });
   const onSubmit = handleSubmit((data) => {
     // Transform form data to API format
-    const apiData = {
+    const apiData: {
+      username: string;
+      email: string;
+      password: string;
+      inviteToken?: string;
+    } = {
       username: data.username,
       email: data.email,
       password: data.password1, // Send single password field
     };
+    if (data.invite_token) {
+      apiData.inviteToken = data.invite_token;
+    }
     mutation.mutate(apiData);
   });
+
+  if (registrationClosedWithNoInvite) {
+    return (
+      <div className="mx-auto max-w-sm">
+        <h1 className="mb-6 text-2xl font-bold">Register for {SITE_NAME}</h1>
+        <p className="text-muted-foreground">
+          Registration is invite-only right now. If a staff member sent you a link, use it to sign
+          up — otherwise, check back later.
+        </p>
+      </div>
+    );
+  }
 
   return (
     <div className="mx-auto max-w-sm">
@@ -81,6 +110,10 @@ export function RegisterPage() {
             })}
           />
           {errors.email && <p className="text-sm text-red-600">{errors.email.message}</p>}
+        </div>
+        <div className="space-y-1">
+          <Label htmlFor="invite_token">Invite Code</Label>
+          <Input id="invite_token" placeholder="Invite Code" {...register('invite_token')} />
         </div>
         <div className="space-y-1">
           <Label htmlFor="password1">Password</Label>

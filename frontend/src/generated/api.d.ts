@@ -4539,6 +4539,32 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
+  '/api/combat/duel-challenges/propose_lethal_duel/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /**
+     * @description GM proposes a lethal duel against a named PC (#3068).
+     *
+     *     Creates a PENDING, ``is_lethal=True`` ``DuelChallenge`` — no
+     *     ``CombatEncounter`` exists yet. The targeted PC must accept via the
+     *     existing duel-challenge inbox (``accept``/``decline``, same as a
+     *     PvP challenge) before ``create_lethal_duel`` ever runs; a GM cannot
+     *     force this open. Gated to the named scene's GM/owner or staff
+     *     (``IsEncounterGMOrStaff``, widened #3068).
+     */
+    post: operations['combat_duel_challenges_propose_lethal_duel_create'];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   '/api/combat/threat-pools/': {
     parameters: {
       query?: never;
@@ -11908,7 +11934,18 @@ export interface paths {
     };
     get?: never;
     put?: never;
-    /** @description Accept invitation, supplying participant_kwargs + references. */
+    /**
+     * @description Accept invitation, supplying participant_kwargs + references.
+     *
+     *     Mirrors telnet's ``ritual join`` auto-fire behavior (#3045): a
+     *     site-convened session (e.g. a Durance opened via ``durance convene`` /
+     *     ``DuranceConveneView``) has no live initiator to issue a separate
+     *     ``fire`` call, so this checks the same
+     *     ``adapter.should_auto_fire(session=...)`` telnet's ``_maybe_auto_fire``
+     *     does and fires immediately when true. Every other adapter's
+     *     ``should_auto_fire`` returns False, so this is a no-op for ordinary
+     *     (non-Durance, non-site-convened) sessions.
+     */
     post: operations['magic_rituals_sessions_accept_create'];
     delete?: never;
     options?: never;
@@ -16097,6 +16134,40 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
+  '/api/progression/durance/convene/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /** @description Open a site-convened session at the puppet's current room. */
+    post: operations['progression_durance_convene_create'];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/progression/durance/status/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /** @description Build the readiness hub for the requester's puppeted character. */
+    get: operations['progression_durance_status_retrieve'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   '/api/progression/path-intent/': {
     parameters: {
       query?: never;
@@ -16520,6 +16591,23 @@ export interface paths {
     };
     /** @description Return availability of requested credentials. */
     get: operations['register_availability_retrieve'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/registration/status/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /** @description Public GET — whether registration is currently open. No invite enumeration. */
+    get: operations['registration_status_retrieve'];
     put?: never;
     post?: never;
     delete?: never;
@@ -17123,6 +17211,23 @@ export interface paths {
     };
     /** @description Status endpoint for installed room wards. See ``ExitBarsViewSet`` docstring. */
     get: operations['room_features_room_wards_retrieve'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/room-features/traps/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /** @description GET /?character_id=<id> — armed traps that character can currently see. */
+    get: operations['room_features_traps_list'];
     put?: never;
     post?: never;
     delete?: never;
@@ -18962,6 +19067,58 @@ export interface paths {
     get: operations['staff_inbox_accounts_history_retrieve'];
     put?: never;
     post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/staff/invites/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /** @description Staff-only issue / list / revoke of per-email account invites. */
+    get: operations['staff_invites_list'];
+    put?: never;
+    /** @description Staff-only issue / list / revoke of per-email account invites. */
+    post: operations['staff_invites_create'];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/staff/invites/{id}/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /** @description Staff-only issue / list / revoke of per-email account invites. */
+    get: operations['staff_invites_retrieve'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/staff/invites/{id}/revoke/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /** @description Staff-only issue / list / revoke of per-email account invites. */
+    post: operations['staff_invites_revoke_create'];
     delete?: never;
     options?: never;
     head?: never;
@@ -21341,6 +21498,43 @@ export interface components {
       offer_id: number;
       character_technique_id: number;
       technique_id: number;
+    };
+    /** @description Read shape for the staff invite list/detail — never returned on failure paths. */
+    AccountInvite: {
+      readonly id: number;
+      /** Format: email */
+      email: string;
+      readonly token: string;
+      readonly status: string;
+      /** @description Why this person was invited (staff-only, never shown to the invitee). */
+      note?: string;
+      /** Format: date-time */
+      readonly created_at: string;
+      /**
+       * Format: date-time
+       * @description Invite cannot be redeemed after this time.
+       */
+      expires_at: string;
+      /** Format: date-time */
+      readonly redeemed_at: string | null;
+      /** Format: date-time */
+      readonly revoked_at: string | null;
+      readonly invited_by: number;
+      readonly invited_by_username: string;
+      readonly redeemed_by: number | null;
+      readonly redeemed_by_username: string;
+    };
+    /** @description Read shape for the staff invite list/detail — never returned on failure paths. */
+    AccountInviteRequest: {
+      /** Format: email */
+      email: string;
+      /** @description Why this person was invited (staff-only, never shown to the invitee). */
+      note?: string;
+      /**
+       * Format: date-time
+       * @description Invite cannot be redeemed after this time.
+       */
+      expires_at: string;
     };
     /** @description Full serializer for achievement detail view. */
     Achievement: {
@@ -25045,13 +25239,32 @@ export interface components {
      *
      *     N+1-safe when the queryset uses ``select_related("challenger_sheet__character",
      *     "challenged_sheet__character")``.
+     *
+     *     ``is_lethal``/``opponent_name``/``opponent_tier`` (#3068): a GM-initiated
+     *     lethal challenge has no PC challenger — ``challenger`` renders ``null`` for
+     *     those rows (DRF's default None-attribute handling), so the frontend reads
+     *     ``opponent_name`` instead whenever ``is_lethal`` is true.
      */
     DuelChallenge: {
       readonly id: number;
-      readonly challenger: components['schemas']['_DuelParticipantIdentity'];
+      readonly challenger: components['schemas']['_DuelParticipantIdentity'] | null;
       readonly challenged: components['schemas']['_DuelParticipantIdentity'];
       /** @default pending */
       readonly status: components['schemas']['DuelChallengeStatusEnum'];
+      /** @description True iff this is a GM-initiated lethal duel proposal (#3068) — a climactic PC-vs-significant-NPC confrontation. Accepting routes through create_lethal_duel instead of create_pvp_duel. */
+      readonly is_lethal: boolean;
+      /** @description Name of the significant NPC antagonist. Set only when is_lethal. */
+      readonly opponent_name: string;
+      /**
+       * @description Opponent tier for the lethal duel; must be a significant-NPC tier (ELITE/BOSS/HERO_KILLER — enforced by create_lethal_duel_challenge). Set only when is_lethal.
+       *
+       *     * `swarm` - Swarm
+       *     * `mook` - Mook
+       *     * `elite` - Elite
+       *     * `boss` - Boss
+       *     * `hero_killer` - Hero Killer
+       */
+      readonly opponent_tier: components['schemas']['OpponentTierEnum'];
       /** Format: date-time */
       readonly created_at: string;
       /** Format: date-time */
@@ -25089,6 +25302,53 @@ export interface components {
        *     plain column — no query.
        */
       readonly name: string;
+    };
+    /** @description Response for a successful site-convened Durance session open. */
+    DuranceConveneResponse: {
+      session_id: number;
+    };
+    /** @description One eligible next-stage Path the character could semi-cross into. */
+    DuranceEligiblePath: {
+      id: number;
+      name: string;
+    };
+    /** @description The character's declared ``PathIntent``, when one exists. */
+    DuranceIntent: {
+      path_id: number;
+      path_name: string;
+    };
+    /**
+     * @description Read-only Durance readiness hub — the web face of telnet ``durance status``.
+     *
+     *     ``unlock_gate`` is ``None`` only when ``is_tier_boundary`` is True (that step
+     *     belongs to Audere Majora, not the Durance — mirrors the telnet early-return).
+     */
+    DuranceStatus: {
+      level: number;
+      target_level: number;
+      is_tier_boundary: boolean;
+      unlock_gate: components['schemas']['DuranceUnlockGate'] | null;
+      eligible_paths: components['schemas']['DuranceEligiblePath'][];
+      intent: components['schemas']['DuranceIntent'] | null;
+      site_present: boolean;
+    };
+    /**
+     * @description XP-unlock + authored-requirement gate readiness for the character's next level.
+     *
+     *     ``xp_cost`` is ``None`` only when the unlock is already purchased — an unpurchased,
+     *     authored unlock always carries a cost, honestly reporting 0 when
+     *     ``ClassXPCost``/``TraitXPCost`` is unauthored (the #3045 "cost unset" case is
+     *     surfaced on the unlock-shop cards, not here; this hub only says purchased or not).
+     */
+    DuranceUnlockGate: {
+      has_class_level: boolean;
+      advancement_authored: boolean;
+      requirements_met: boolean;
+      failed_requirements: string[];
+      purchased: boolean;
+      xp_cost: number | null;
+      class_level_unlock_id: number | null;
+      ready: boolean;
     };
     EffectRow: {
       kind: string;
@@ -27449,6 +27709,20 @@ export interface components {
      * @enum {string}
      */
     InterventionTriggerEnum: 'incapacitated' | 'near_death';
+    /** @description Input for issuing a new invite — write-only, not model-backed. */
+    IssueInvite: {
+      /** Format: email */
+      email: string;
+      /** @default  */
+      note: string;
+    };
+    /** @description Input for issuing a new invite — write-only, not model-backed. */
+    IssueInviteRequest: {
+      /** Format: email */
+      email: string;
+      /** @default  */
+      note: string;
+    };
     /** @description One worked-in Accent on a piece (#2886) — the removal UI's row shape. */
     ItemAccentRead: {
       readonly target: number;
@@ -29577,6 +29851,15 @@ export interface components {
      * @enum {string}
      */
     OpponentStatusEnum: 'active' | 'defeated' | 'fled';
+    /**
+     * @description * `swarm` - Swarm
+     *     * `mook` - Mook
+     *     * `elite` - Elite
+     *     * `boss` - Boss
+     *     * `hero_killer` - Hero Killer
+     * @enum {string}
+     */
+    OpponentTierEnum: 'swarm' | 'mook' | 'elite' | 'boss' | 'hero_killer';
     /** @description The three-group discovery view (here/nearby/your-organizations). */
     Opportunities: {
       readonly here: components['schemas']['OpportunityRow'][];
@@ -29940,6 +30223,21 @@ export interface components {
      * @enum {string}
      */
     PaceModeEnum: 'timed' | 'ready' | 'manual';
+    PaginatedAccountInviteList: {
+      /** @example 123 */
+      count: number;
+      /**
+       * Format: uri
+       * @example http://api.example.org/accounts/?page=4
+       */
+      next?: string | null;
+      /**
+       * Format: uri
+       * @example http://api.example.org/accounts/?page=2
+       */
+      previous?: string | null;
+      results: components['schemas']['AccountInvite'][];
+    };
     PaginatedAggregateBeatContributionList: {
       /** @example 123 */
       count: number;
@@ -35522,6 +35820,30 @@ export interface components {
      * @enum {string}
      */
     ProposalKindEnum: 'new_situation' | 'check_fit' | 'difficulty_guide' | 'pool_guide' | 'other';
+    /**
+     * @description Write serializer for a GM proposing a lethal duel (#3068).
+     *
+     *     ``scene`` is read by ``IsEncounterGMOrStaff.has_permission`` (the same
+     *     field name the ``CombatEncounter`` create gate reads) to authorize the
+     *     GM; the view resolves the room from the scene's location. ``tier`` is
+     *     restricted to the significant-NPC tiers ``create_lethal_duel_challenge``
+     *     accepts — validated here so a bad tier 400s with a clean message instead
+     *     of surfacing a raw exception.
+     */
+    ProposeLethalDuelRequest: {
+      scene: number;
+      challenged_sheet_id: number;
+      opponent_name: string;
+      tier: components['schemas']['ProposeLethalDuelTierEnum'];
+      threat_pool_id: number;
+    };
+    /**
+     * @description * `elite` - elite
+     *     * `boss` - boss
+     *     * `hero_killer` - hero_killer
+     * @enum {string}
+     */
+    ProposeLethalDuelTierEnum: 'elite' | 'boss' | 'hero_killer';
     /** @description One feed row — a deed or a scandal. Read-only; serializes a ``PublicFeedItem`` dataclass. */
     PublicFeedItem: {
       kind: components['schemas']['PublicFeedItemKindEnum'];
@@ -39779,6 +40101,25 @@ export interface components {
       required_stake_column?:
         | components['schemas']['RequiredStakeColumnEnum']
         | components['schemas']['BlankEnum'];
+    };
+    /**
+     * @description One trap visible to the requesting character (#3011).
+     *
+     *     Visibility is entirely the caller's job (``RoomTrapViewSet.list`` —
+     *     armed, plus ``is_hidden=False`` or already in the viewer's own
+     *     ``detected_by``) — this serializer trusts the queryset and exposes only
+     *     the fields a player is allowed to know about a trap they can see:
+     *     identity (for the disarm dispatch's ``trap_id``) and armed state.
+     *     ``Trap`` carries no ``description`` field (unlike the leak table's
+     *     aspirational field list) — only ``name`` identifies it to a player today;
+     *     adding authored flavor text is a separate content-model change, out of
+     *     scope here.
+     */
+    Trap: {
+      readonly id: number;
+      readonly name: string;
+      /** @description A disarmed trap never triggers and cannot be disarmed again. */
+      readonly is_armed: boolean;
     };
     /** @description Serializer for TravelHub — public infrastructure. */
     TravelHub: {
@@ -46251,6 +46592,29 @@ export interface operations {
       cookie?: never;
     };
     requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['DuelChallenge'];
+        };
+      };
+    };
+  };
+  combat_duel_challenges_propose_lethal_duel_create: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['ProposeLethalDuelRequest'];
+      };
+    };
     responses: {
       200: {
         headers: {
@@ -62965,6 +63329,44 @@ export interface operations {
       };
     };
   };
+  progression_durance_convene_create: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['DuranceConveneResponse'];
+        };
+      };
+    };
+  };
+  progression_durance_status_retrieve: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['DuranceStatus'];
+        };
+      };
+    };
+  };
   progression_path_intent_retrieve: {
     parameters: {
       query?: never;
@@ -63520,6 +63922,24 @@ export interface operations {
     };
   };
   register_availability_retrieve: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description No response body */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+    };
+  };
+  registration_status_retrieve: {
     parameters: {
       query?: never;
       header?: never;
@@ -64332,6 +64752,28 @@ export interface operations {
         };
         content: {
           'application/json': components['schemas']['RoomWardDetails'];
+        };
+      };
+    };
+  };
+  room_features_traps_list: {
+    parameters: {
+      query: {
+        /** @description ObjectDB id of the character to read visible room traps for (must be your own). */
+        character_id: number;
+      };
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['Trap'][];
         };
       };
     };
@@ -66826,6 +67268,109 @@ export interface operations {
           [name: string]: unknown;
         };
         content?: never;
+      };
+    };
+  };
+  staff_invites_list: {
+    parameters: {
+      query?: {
+        email?: string;
+        /** @description A page number within the paginated result set. */
+        page?: number;
+        /** @description Number of results to return per page. */
+        page_size?: number;
+        /**
+         * @description * `pending` - Pending
+         *     * `redeemed` - Redeemed
+         *     * `revoked` - Revoked
+         *     * `expired` - Expired
+         */
+        status?: 'expired' | 'pending' | 'redeemed' | 'revoked';
+      };
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['PaginatedAccountInviteList'];
+        };
+      };
+    };
+  };
+  staff_invites_create: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['IssueInviteRequest'];
+      };
+    };
+    responses: {
+      201: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['IssueInvite'];
+        };
+      };
+    };
+  };
+  staff_invites_retrieve: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        /** @description A unique integer value identifying this Account Invite. */
+        id: number;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['AccountInvite'];
+        };
+      };
+    };
+  };
+  staff_invites_revoke_create: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        /** @description A unique integer value identifying this Account Invite. */
+        id: number;
+      };
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['AccountInviteRequest'];
+      };
+    };
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['AccountInvite'];
+        };
       };
     };
   };

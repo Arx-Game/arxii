@@ -7,7 +7,7 @@ import django.db.models.deletion
 
 class Migration(migrations.Migration):
     dependencies = [
-        ("arxii", "0123_alter_techniqueprogress_source"),
+        ("arxii", "0127_duelchallenge_is_lethal_duelchallenge_opponent_name_and_more"),
         migrations.swappable_dependency(settings.AUTH_USER_MODEL),
     ]
 

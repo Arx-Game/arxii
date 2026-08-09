@@ -76,6 +76,7 @@ describe('handleRoomStatePayload', () => {
           is_owner: false,
           is_public: false,
           hub: null,
+          npc_givers: [],
         },
       });
       expect(mockDispatch).toHaveBeenCalledTimes(2);
@@ -108,6 +109,42 @@ describe('handleRoomStatePayload', () => {
       expect(setSessionRoom).toHaveBeenCalledWith(
         expect.objectContaining({
           room: expect.objectContaining({ hub }),
+        })
+      );
+    });
+
+    it('threads npc_givers through to the room, defaulting to empty (#3044)', () => {
+      const npcGivers = [{ role_id: 12, name: 'Old Marta' }];
+      const payload: RoomStatePayload = {
+        room: createRoomStateObject('#100', 'Market Square'),
+        characters: [],
+        objects: [],
+        exits: [],
+        npc_givers: npcGivers,
+      };
+
+      handleRoomStatePayload('Character', payload, mockDispatch);
+
+      expect(setSessionRoom).toHaveBeenCalledWith(
+        expect.objectContaining({
+          room: expect.objectContaining({ npc_givers: npcGivers }),
+        })
+      );
+    });
+
+    it('defaults npc_givers to an empty array when the payload omits it', () => {
+      const payload: RoomStatePayload = {
+        room: createRoomStateObject('#100', 'Market Square'),
+        characters: [],
+        objects: [],
+        exits: [],
+      };
+
+      handleRoomStatePayload('Character', payload, mockDispatch);
+
+      expect(setSessionRoom).toHaveBeenCalledWith(
+        expect.objectContaining({
+          room: expect.objectContaining({ npc_givers: [] }),
         })
       );
     });
@@ -432,6 +469,7 @@ describe('handleRoomStatePayload', () => {
           is_owner: false,
           is_public: false,
           hub: null,
+          npc_givers: [],
         },
       });
     });
@@ -526,6 +564,7 @@ describe('handleRoomStatePayload', () => {
           is_owner: false,
           is_public: false,
           hub: null,
+          npc_givers: [],
         },
       });
     });
@@ -613,6 +652,7 @@ describe('handleRoomStatePayload', () => {
           is_owner: false,
           is_public: false,
           hub: null,
+          npc_givers: [],
         },
       });
 

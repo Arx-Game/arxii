@@ -21,6 +21,7 @@ from world.combat.beat_wiring import activate_stakes_for_scene
 from world.combat.cast_seed import _opponent_kwargs_from_sheet
 from world.combat.chosen_ground import compute_on_chosen_ground
 from world.combat.constants import (
+    SIGNIFICANT_NPC_TIERS,
     DuelChallengeStatus,
     EncounterOutcome,
     EncounterType,
@@ -42,7 +43,7 @@ if TYPE_CHECKING:
     from evennia.objects.models import ObjectDB
 
     from world.character_sheets.models import CharacterSheet
-    from world.combat.models import DuelChallenge
+    from world.combat.models import DuelChallenge, ThreatPool
     from world.scenes.models import Scene
 
 
@@ -155,12 +156,6 @@ def create_pvp_duel(
     return enc
 
 
-# Tiers that represent significant NPCs and are valid for a lethal duel.
-_SIGNIFICANT_NPC_TIERS: frozenset[str] = frozenset(
-    {OpponentTier.ELITE, OpponentTier.BOSS, OpponentTier.HERO_KILLER}
-)
-
-
 @transaction.atomic
 def create_lethal_duel(
     pc_sheet: CharacterSheet,
@@ -195,7 +190,7 @@ def create_lethal_duel(
         ValueError: If ``tier`` is not a significant-NPC tier
             (ELITE / BOSS / HERO_KILLER).
     """
-    if tier not in _SIGNIFICANT_NPC_TIERS:
+    if tier not in SIGNIFICANT_NPC_TIERS:
         msg = (
             f"create_lethal_duel requires a significant NPC tier (significant NPC only);"
             f" got {tier!r}."
@@ -226,6 +221,61 @@ def create_lethal_duel(
     activate_stakes_for_scene(enc.scene, [pc_sheet])
 
     return enc
+
+
+def create_lethal_duel_challenge(
+    challenged_sheet: CharacterSheet,
+    room: ObjectDB,
+    *,
+    opponent_name: str,
+    tier: str,
+    threat_pool: ThreatPool,
+) -> DuelChallenge:
+    """Create a PENDING GM-initiated lethal duel challenge (#3068).
+
+    A GM proposes a climactic one-on-one against a significant named
+    antagonist; the targeted PC must explicitly accept before any
+    ``CombatEncounter`` exists — a GM can never force a lethal fight onto a
+    player's character. Reuses the same accept/decline/inbox machinery as a
+    PC-vs-PC ``ChallengeAction`` (``DuelChallenge`` + ``accept_challenge`` /
+    ``decline_challenge``), with ``challenger_sheet`` left null (the
+    challenger is an NPC, not a PC) and ``is_lethal=True`` so
+    ``accept_challenge`` routes to ``create_lethal_duel`` instead of
+    ``create_pvp_duel``.
+
+    Args:
+        challenged_sheet: The PC being challenged.
+        room: The ObjectDB room where the duel would take place.
+        opponent_name: Display name of the significant NPC antagonist.
+        tier: Opponent tier; must be a significant-NPC tier (ELITE, BOSS, or
+            HERO_KILLER) — validated here so a bad tier never reaches an
+            un-decline-able PENDING row.
+        threat_pool: The NPC's ThreatPool (move-set).
+
+    Returns:
+        The newly created PENDING DuelChallenge.
+
+    Raises:
+        ValueError: If ``tier`` is not a significant-NPC tier.
+    """
+    if tier not in SIGNIFICANT_NPC_TIERS:
+        msg = (
+            f"create_lethal_duel_challenge requires a significant NPC tier"
+            f" (significant NPC only); got {tier!r}."
+        )
+        raise ValueError(msg)
+
+    from world.combat.models import DuelChallenge  # noqa: PLC0415
+
+    return DuelChallenge.objects.create(
+        challenger_sheet=None,
+        challenged_sheet=challenged_sheet,
+        room=room,
+        is_lethal=True,
+        opponent_name=opponent_name,
+        opponent_tier=tier,
+        threat_pool=threat_pool,
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -355,8 +405,18 @@ def yield_duel(participant: CombatParticipant) -> CombatEncounter:
 def accept_challenge(challenge: DuelChallenge) -> CombatEncounter:
     """Accept a PENDING duel challenge.
 
-    Creates a PvP duel encounter (via ``create_pvp_duel``), links it to the
-    challenge, transitions status to ACCEPTED, and stamps ``resolved_at``.
+    Non-lethal (``is_lethal=False``): creates a PvP duel encounter (via
+    ``create_pvp_duel``) between the two PCs.
+
+    Lethal (``is_lethal=True``, #3068): the challenger is a GM-proposed
+    significant NPC, not a PC — creates a lethal PC-vs-NPC duel encounter
+    (via ``create_lethal_duel``) for the challenged PC, using the challenge's
+    stored ``opponent_name``/``opponent_tier``/``threat_pool``. This is the
+    ONLY point a GM's lethal-duel proposal becomes a real encounter — it only
+    fires when the targeted player accepts.
+
+    Either way, the resulting encounter is linked to the challenge, status
+    transitions to ACCEPTED, and ``resolved_at`` is stamped.
 
     Args:
         challenge: A DuelChallenge in PENDING status.
@@ -371,11 +431,19 @@ def accept_challenge(challenge: DuelChallenge) -> CombatEncounter:
         msg = f"Cannot accept a challenge in status {challenge.status!r}; must be PENDING."
         raise ValueError(msg)
 
-    encounter = create_pvp_duel(
-        challenge.challenger_sheet,
-        challenge.challenged_sheet,
-        challenge.room,
-    )
+    if challenge.is_lethal:
+        encounter = create_lethal_duel(
+            challenge.challenged_sheet,
+            {"name": challenge.opponent_name, "threat_pool": challenge.threat_pool},
+            challenge.room,
+            tier=challenge.opponent_tier,
+        )
+    else:
+        encounter = create_pvp_duel(
+            challenge.challenger_sheet,
+            challenge.challenged_sheet,
+            challenge.room,
+        )
 
     challenge.status = DuelChallengeStatus.ACCEPTED
     challenge.resolved_at = timezone.now()

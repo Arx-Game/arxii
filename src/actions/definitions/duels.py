@@ -1,10 +1,13 @@
-"""Duel actions — PC-vs-PC challenge dispatch (#568).
+"""Duel actions — PC-vs-PC challenge dispatch (#568) + GM-initiated lethal (#3068).
 
 Exposes:
 - ``ChallengeAction``: issues a duel challenge to another character in the same room.
 - ``AcceptChallengeAction``: challenged PC accepts a PENDING challenge.
 - ``DeclineChallengeAction``: challenged PC declines a PENDING challenge.
 - ``WithdrawChallengeAction``: challenger rescinds a PENDING challenge.
+- ``ProposeLethalDuelAction``: GM proposes a lethal duel against a named PC (#3068)
+  — accept/decline reuse the same three actions above; ``accept_challenge``
+  (world.combat.duels) branches on ``DuelChallenge.is_lethal``.
 """
 
 from __future__ import annotations
@@ -532,3 +535,118 @@ class AcknowledgeRiskAction(Action):
 # Module-level singletons — registered in actions/registry.py
 yield_action = YieldAction()
 acknowledge_risk = AcknowledgeRiskAction()
+
+
+# ---------------------------------------------------------------------------
+# GM-initiated lethal duel proposal (#3068)
+# ---------------------------------------------------------------------------
+
+
+def _actor_may_gm_scene(actor: ObjectDB, scene: object) -> bool:
+    """True when *actor* is staff or the GM/owner of *scene* (mirrors the web create-gate)."""
+    from commands.utils.gm_resolution import resolve_account_or_none  # noqa: PLC0415
+
+    account = resolve_account_or_none(actor)
+    if account is None:
+        return False
+    if account.is_staff:
+        return True
+    return scene.is_gm(account) or scene.is_owner(account)
+
+
+@dataclass
+class ProposeLethalDuelAction(Action):
+    """GM proposes a climactic lethal duel against a named PC (#3068).
+
+    Creates a PENDING, ``is_lethal=True`` DuelChallenge targeting a PC present
+    in the actor's (the GM's) room — no CombatEncounter exists yet. The
+    targeted PC must accept via the normal duel-challenge inbox (``accept``/
+    ``decline``, the same machinery a PvP challenge uses) before
+    ``create_lethal_duel`` ever runs. A GM can never force this open.
+
+    Gated to the current scene's GM/owner or staff — mirrors the web
+    ``propose_lethal_duel`` endpoint's ``IsEncounterGMOrStaff`` gate.
+    """
+
+    key: str = "propose_lethal_duel"
+    name: str = "Propose Lethal Duel"
+    icon: str = "skull"
+    category: str = "combat"
+    target_type: TargetType = TargetType.AREA
+    costs_turn: bool = False
+
+    def execute(  # noqa: PLR0911, PLR0913 - distinct guard failures + GM-verb kwarg shape
+        self,
+        actor: ObjectDB,
+        context: ActionContext | None = None,
+        *,
+        character_sheet_id: str | None = None,
+        opponent_name: str | None = None,
+        tier: str | None = None,
+        threat_pool_id: str | None = None,
+        **kwargs: Any,
+    ) -> ActionResult:
+        from commands.exceptions import CommandError  # noqa: PLC0415
+        from commands.utils.gm_resolution import (  # noqa: PLC0415
+            resolve_character_sheet_in_room,
+            resolve_model_by_pk_or_name,
+        )
+        from world.combat.duels import create_lethal_duel_challenge  # noqa: PLC0415
+        from world.combat.models import ThreatPool  # noqa: PLC0415
+        from world.scenes.place_services import ensure_scene_for_location  # noqa: PLC0415
+
+        room = actor.location
+        if room is None:
+            return ActionResult(success=False, message="You have no location.")
+
+        scene = ensure_scene_for_location(room)
+        if not _actor_may_gm_scene(actor, scene):
+            return ActionResult(success=False, message="Only the scene's GM or staff can do that.")
+
+        if not character_sheet_id or not opponent_name or not tier or not threat_pool_id:
+            return ActionResult(
+                success=False,
+                message="A target, opponent name, tier, and threat pool are required.",
+            )
+
+        try:
+            challenged_sheet = resolve_character_sheet_in_room(
+                actor, str(character_sheet_id), room=room
+            )
+        except CommandError as err:
+            return ActionResult(success=False, message=str(err))
+
+        try:
+            pool = resolve_model_by_pk_or_name(
+                ThreatPool,
+                str(threat_pool_id),
+                not_found_msg=f"No threat pool named {threat_pool_id!r} found.",
+            )
+        except CommandError as err:
+            return ActionResult(success=False, message=str(err))
+
+        try:
+            create_lethal_duel_challenge(
+                challenged_sheet,
+                room,
+                opponent_name=opponent_name,
+                tier=tier,
+                threat_pool=pool,
+            )
+        except ValueError:
+            return ActionResult(
+                success=False,
+                message="Could not propose the lethal duel; check the opponent tier.",
+            )
+
+        return ActionResult(
+            success=True,
+            message=(
+                f"You propose a lethal duel: {opponent_name} vs "
+                f"{challenged_sheet.character.db_key}. Awaiting their response."
+            ),
+        )
+
+
+# Module-level singleton — registered in actions/registry.py
+propose_lethal_duel = ProposeLethalDuelAction()

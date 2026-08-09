@@ -259,6 +259,7 @@ class ActionRegistryTests(TestCase):
             "withdraw",
             "yield",
             "acknowledge_risk",
+            "propose_lethal_duel",
             "restore_sense",
             "resolve_entry_flourish",
             "resolve_crossing_offer",

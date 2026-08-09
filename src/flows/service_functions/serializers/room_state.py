@@ -14,6 +14,7 @@ class ObjectStateSerializer(serializers.Serializer):
     name = serializers.CharField()
     thumbnail_url = serializers.URLField(allow_null=True)
     commands = serializers.ListField(child=serializers.CharField())
+    is_mission_board = serializers.BooleanField()
 
     def to_representation(self, instance):
         """Convert BaseState instance to dict representation."""
@@ -30,11 +31,19 @@ class ObjectStateSerializer(serializers.Serializer):
         except AttributeError:
             dispatcher_tags = []
 
+        board_target_ids = (self.context or {}).get("board_target_ids") or frozenset()
+
         return {
             "dbref": instance.obj.dbref,
             "name": instance.get_display_name(looker=looker),
             "thumbnail_url": self._resolve_thumbnail_for_viewer(instance, looker),
             "commands": [key for key in command_keys if key in dispatcher_tags],
+            # #3044 — lets the web room-objects panel offer a "View Board"
+            # affordance without string-matching object names. A board is a
+            # plain examinable Object with an active BOARD-kind MissionGiver
+            # pointed at it (no dedicated typeclass — see MissionGiver's
+            # docstring), so this can't be derived from typeclass alone.
+            "is_mission_board": instance.obj.pk in board_target_ids,
         }
 
     def _resolve_thumbnail_for_viewer(
@@ -175,12 +184,26 @@ class RoomStatePayloadSerializer(serializers.Serializer):
         list[SerializedObjectState],
     ]:
         from world.conditions.services import can_perceive  # noqa: PLC0415
+        from world.missions.constants import GiverKind  # noqa: PLC0415
+        from world.missions.models import MissionGiver  # noqa: PLC0415
 
         characters = []
         objects = []
         exits = []
 
-        for obj in room.contents:
+        content_states = list(room.contents)
+        # #3044 — one batched query for the whole room rather than a
+        # MissionGiver lookup per object (no-queries-in-loops).
+        content_ids = [state.obj.pk for state in content_states]
+        board_target_ids = frozenset(
+            MissionGiver.objects.filter(
+                giver_kind=GiverKind.BOARD,
+                is_active=True,
+                target_id__in=content_ids,
+            ).values_list("target_id", flat=True)
+        )
+
+        for obj in content_states:
             if obj is caller:
                 continue
 
@@ -190,7 +213,10 @@ class RoomStatePayloadSerializer(serializers.Serializer):
                 # this caller — omit entirely rather than merely masking the name.
                 continue
 
-            obj_serializer = ObjectStateSerializer(obj, context={"looker": caller})
+            obj_serializer = ObjectStateSerializer(
+                obj,
+                context={"looker": caller, "board_target_ids": board_target_ids},
+            )
             serialized = obj_serializer.data
 
             if isinstance(obj, ExitState):
@@ -309,6 +335,7 @@ class RoomStatePayloadSerializer(serializers.Serializer):
             "scene": scene_data,
             "heat": self._get_heat(caller, room),
             "hub": self._get_hub(room),
+            "npc_givers": self._get_npc_givers(room),
         }
 
     def _get_heat(self, caller: BaseState, room: BaseState) -> dict[str, str] | None:
@@ -349,6 +376,34 @@ class RoomStatePayloadSerializer(serializers.Serializer):
                 for item in hub_feed_for_room(room.obj, limit=10)
             ],
         }
+
+    def _get_npc_givers(self, room: BaseState) -> list[dict[str, object]]:
+        """#3044 — active class-1+ NPC placements (Functionary) standing here.
+
+        A ``Functionary`` is the "talk to this NPC" front door
+        (``world.npc_services.models.Functionary``): it carries NO ObjectDB of
+        its own (a class-1 NPC is a faceless room placement, not a physical
+        object), so it can never appear in ``characters``/``objects`` above —
+        this is a separate, room-anchored lookup, not a per-occupant flag.
+        ``role_id`` is exactly the kwarg the existing
+        ``NPCInteractionDialog``/``start_interaction`` seam expects.
+        """
+        from world.areas.services import get_room_profile  # noqa: PLC0415
+        from world.npc_services.models import Functionary  # noqa: PLC0415
+
+        try:
+            profile = get_room_profile(room.obj)
+        except (AttributeError, TypeError):
+            return []
+        return [
+            {
+                "role_id": functionary.role_id,
+                "name": functionary.name_override or functionary.role.name,
+            }
+            for functionary in Functionary.objects.filter(
+                room=profile, is_active=True
+            ).select_related("role")
+        ]
 
 
 def build_room_state_payload(caller: BaseState, room: BaseState) -> dict[str, object]:

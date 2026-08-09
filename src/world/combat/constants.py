@@ -192,6 +192,23 @@ class OpponentTier(models.TextChoices):
     HERO_KILLER = "hero_killer", "Hero Killer"
 
 
+# Tiers that represent significant NPCs and are valid for a lethal duel
+# (world.combat.duels.create_lethal_duel / create_lethal_duel_challenge, #3068)
+# — the single source of truth both the service layer and the
+# GM-proposal API contract (serializers.ProposeLethalDuelSerializer) validate
+# against.
+# An ordered tuple, NOT a set: the serializer iterates this into ChoiceField
+# choices, which drf-spectacular serializes into the OpenAPI enum — set
+# iteration order varies per process (hash seed), which made the generated
+# api.d.ts enum order unstable and permanently flaked the api-types-drift CI
+# check. Escalating-threat order.
+SIGNIFICANT_NPC_TIERS: tuple[str, ...] = (
+    OpponentTier.ELITE,
+    OpponentTier.BOSS,
+    OpponentTier.HERO_KILLER,
+)
+
+
 class SelectionType(models.TextChoices):
     """Type of deferred player selection (#2665).
 

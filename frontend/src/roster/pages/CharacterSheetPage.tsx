@@ -33,6 +33,7 @@ import { SpellbookTab } from '@/magic/components/SpellbookTab';
 import { LocationsTab } from '@/locations/components/LocationsTab';
 import { AgreementsPanel } from '@/estates/components/AgreementsPanel';
 import { KinshipPanel } from '@/kinship/components/KinshipPanel';
+import { AdvancementTab } from '@/progression/components/advancement/AdvancementTab';
 
 export function CharacterSheetPage() {
   const { id } = useParams();
@@ -130,6 +131,7 @@ export function CharacterSheetPage() {
           <TabsTrigger value="distinctions">Distinctions</TabsTrigger>
           <TabsTrigger value="kinship">Kinship</TabsTrigger>
           {isMyCharacter && <TabsTrigger value="updates">Updates</TabsTrigger>}
+          {isMyCharacter && <TabsTrigger value="advancement">Advancement</TabsTrigger>}
           <TabsTrigger value="magic">Magic</TabsTrigger>
           <TabsTrigger value="secrets">Secrets</TabsTrigger>
           {isMyCharacter && <TabsTrigger value="clues">Clues</TabsTrigger>}
@@ -228,6 +230,20 @@ export function CharacterSheetPage() {
               character.id is the CharacterSheet pk. */}
           <UpdatesTab characterId={entry.character.id} isMyCharacter={isMyCharacter} />
         </TabsContent>
+
+        {isMyCharacter && (
+          <TabsContent value="advancement" className="space-y-4">
+            {/* Own-only (#3045): every spend/advance path (breakthroughs, class unlocks,
+                training, Durance) that previously required telnet. Also gated on
+                isActiveCharacter inside the tab — the backend views resolve the acting
+                character via the account's puppeted character, not this page's id, the
+                same constraint the Locations tab's Ships section already handles. */}
+            <AdvancementTab
+              characterId={entry.character.id}
+              isActiveCharacter={isActiveCharacter}
+            />
+          </TabsContent>
+        )}
 
         <TabsContent value="magic" className="space-y-4">
           {/* Ungated (#1446): the server already gates payload.magic to null for foreign

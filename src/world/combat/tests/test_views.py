@@ -13,7 +13,12 @@ from evennia_extensions.factories import AccountFactory, CharacterFactory, Objec
 from world.character_sheets.factories import CharacterSheetFactory
 from world.checks.factories import CheckTypeFactory
 from world.checks.test_helpers import force_check_outcome
-from world.combat.constants import EncounterType, ParticipantStatus
+from world.combat.constants import (
+    DuelChallengeStatus,
+    EncounterType,
+    OpponentTier,
+    ParticipantStatus,
+)
 from world.combat.factories import (
     CombatEncounterFactory,
     CombatOpponentFactory,
@@ -21,7 +26,12 @@ from world.combat.factories import (
     ThreatPoolEntryFactory,
     ThreatPoolFactory,
 )
-from world.combat.models import CombatEncounter, CombatOpponentAction, CombatRoundAction
+from world.combat.models import (
+    CombatEncounter,
+    CombatOpponentAction,
+    CombatRoundAction,
+    DuelChallenge,
+)
 from world.conditions.factories import DamageSuccessLevelMultiplierFactory
 from world.conditions.models import ConditionInstance
 from world.magic.factories import (
@@ -308,6 +318,118 @@ class CreateEncounterTest(CombatEncounterViewSetTestBase):
         client = APIClient()
         response = client.post("/api/combat/", {"scene": self.scene.pk}, format="json")
         self.assertEqual(response.status_code, http_status.HTTP_403_FORBIDDEN)
+
+
+class ProposeLethalDuelTest(CombatEncounterViewSetTestBase):
+    """Tests for POST /api/combat/duel-challenges/propose_lethal_duel/ (#3068).
+
+    Mirrors CreateEncounterTest's GM-gate coverage (same IsEncounterGMOrStaff
+    class, widened to this action) plus the lethal-duel-specific contract: no
+    CombatEncounter exists until the targeted PC accepts.
+    """
+
+    def _payload(self, **overrides: object) -> dict:
+        payload = {
+            "scene": self.lethal_scene.pk,
+            "challenged_sheet_id": self.player_sheet.pk,
+            "opponent_name": "The Widow Ashgrave",
+            "tier": OpponentTier.ELITE,
+            "threat_pool_id": self.threat_pool.pk,
+        }
+        payload.update(overrides)
+        return payload
+
+    def setUp(self) -> None:
+        super().setUp()
+        # Fresh scene/room per test — ObjectDB is not deepcopy-safe, so this stays
+        # out of setUpTestData; mirrors CreateEncounterTest's own-scene pattern
+        # rather than mutating the shared class-level self.scene.
+        room = ObjectDBFactory()
+        self.lethal_scene = SceneFactory(location=room)
+        SceneParticipationFactory(scene=self.lethal_scene, account=self.gm_account, is_gm=True)
+        self.threat_pool = ThreatPoolFactory()
+
+    def test_gm_proposes_creates_pending_lethal_challenge_no_encounter(self) -> None:
+        client = APIClient()
+        client.force_authenticate(user=self.gm_account)
+        response = client.post(
+            "/api/combat/duel-challenges/propose_lethal_duel/", self._payload(), format="json"
+        )
+        self.assertEqual(response.status_code, http_status.HTTP_201_CREATED, response.data)
+        challenge = DuelChallenge.objects.get(pk=response.data["id"])
+        self.assertTrue(challenge.is_lethal)
+        self.assertIsNone(challenge.challenger_sheet_id)
+        self.assertEqual(challenge.challenged_sheet_id, self.player_sheet.pk)
+        self.assertEqual(challenge.status, DuelChallengeStatus.PENDING)
+        self.assertIsNone(challenge.resulting_encounter_id)
+        # No CombatEncounter was created — only the pre-existing fixture encounter exists.
+        self.assertEqual(CombatEncounter.objects.filter(pk=self.encounter.pk).count(), 1)
+        self.assertEqual(CombatEncounter.objects.count(), 1)
+
+    def test_staff_allowed(self) -> None:
+        staff_account = AccountFactory(username="proposestaff", is_staff=True)
+        client = APIClient()
+        client.force_authenticate(user=staff_account)
+        response = client.post(
+            "/api/combat/duel-challenges/propose_lethal_duel/", self._payload(), format="json"
+        )
+        self.assertEqual(response.status_code, http_status.HTTP_201_CREATED)
+
+    def test_non_gm_denied(self) -> None:
+        other_account = AccountFactory(username="proposeoutsider")
+        client = APIClient()
+        client.force_authenticate(user=other_account)
+        response = client.post(
+            "/api/combat/duel-challenges/propose_lethal_duel/", self._payload(), format="json"
+        )
+        self.assertEqual(response.status_code, http_status.HTTP_403_FORBIDDEN)
+        self.assertFalse(DuelChallenge.objects.filter(is_lethal=True).exists())
+
+    def test_unauthenticated_denied(self) -> None:
+        client = APIClient()
+        response = client.post(
+            "/api/combat/duel-challenges/propose_lethal_duel/", self._payload(), format="json"
+        )
+        self.assertEqual(response.status_code, http_status.HTTP_403_FORBIDDEN)
+
+    def test_non_significant_tier_rejected(self) -> None:
+        client = APIClient()
+        client.force_authenticate(user=self.gm_account)
+        response = client.post(
+            "/api/combat/duel-challenges/propose_lethal_duel/",
+            self._payload(tier=OpponentTier.MOOK),
+            format="json",
+        )
+        self.assertEqual(response.status_code, http_status.HTTP_400_BAD_REQUEST)
+        self.assertFalse(DuelChallenge.objects.filter(is_lethal=True).exists())
+
+    def test_multiple_simultaneous_lethal_challenges_in_one_scene_coexist(self) -> None:
+        """Two players, two separate lethal-duel proposals in the same scene."""
+        second_character = CharacterFactory(db_key="secondplayerchar")
+        second_sheet = CharacterSheetFactory(character=second_character)
+        RosterTenureFactory(
+            roster_entry__character_sheet__character=second_character,
+        )
+        client = APIClient()
+        client.force_authenticate(user=self.gm_account)
+
+        first = client.post(
+            "/api/combat/duel-challenges/propose_lethal_duel/", self._payload(), format="json"
+        )
+        second = client.post(
+            "/api/combat/duel-challenges/propose_lethal_duel/",
+            self._payload(
+                challenged_sheet_id=second_sheet.pk,
+                opponent_name="The Gravel King",
+            ),
+            format="json",
+        )
+        self.assertEqual(first.status_code, http_status.HTTP_201_CREATED)
+        self.assertEqual(second.status_code, http_status.HTTP_201_CREATED)
+        pending_lethal = DuelChallenge.objects.filter(
+            is_lethal=True, status=DuelChallengeStatus.PENDING
+        )
+        self.assertEqual(pending_lethal.count(), 2)
 
 
 class ThreatPoolViewSetTest(CombatEncounterViewSetTestBase):

@@ -40,7 +40,11 @@ from world.mechanics.factories import SituationTemplateFactory, SituationTrapLin
 from world.mechanics.situation_services import instantiate_situation
 from world.room_features.factories import TrapFactory
 from world.room_features.models import Trap
-from world.room_features.trap_services import check_room_traps_on_entry, check_traps_at_position
+from world.room_features.trap_services import (
+    check_room_traps_on_entry,
+    check_traps_at_position,
+    search_room_traps,
+)
 from world.traits.factories import CheckOutcomeFactory
 from world.vitals.factories import CharacterVitalsFactory
 
@@ -465,3 +469,135 @@ class GMTrapManagementLifecycleTest(TestCase):
         authored_trap.refresh_from_db()
         assert trap.is_armed is False
         assert authored_trap.is_armed is True
+
+
+class NotHiddenTrapBypassTest(_TrapSceneMixin, TestCase):
+    """``is_hidden=False`` (#3011) skips the roll entirely, on every detection path."""
+
+    def setUp(self) -> None:
+        super().setUp()
+        self.trap.is_hidden = False
+        self.trap.save(update_fields=["is_hidden"])
+
+    def test_entry_skips_the_roll_and_avoids_damage(self) -> None:
+        with patch("world.checks.consequence_resolution.perform_check") as mock_perform_check:
+            check_room_traps_on_entry(self.character, self.room)
+
+        mock_perform_check.assert_not_called()
+        assert self._health() == 100
+        assert self.sheet in self.trap.detected_by.all()
+
+    def test_position_scoped_entry_also_skips_the_roll(self) -> None:
+        self.character.location = self.room
+        self.character.save()
+        position = PositionFactory(room=self.room, name="obvious-spike-pit")
+        self.trap.position = position
+        self.trap.save(update_fields=["position"])
+        place_in_position(self.character, position)
+
+        with patch("world.checks.consequence_resolution.perform_check") as mock_perform_check:
+            check_traps_at_position(self.character, position)
+
+        mock_perform_check.assert_not_called()
+        assert self._health() == 100
+        assert self.sheet in self.trap.detected_by.all()
+
+
+class TrapEntryMessagingTest(_TrapSceneMixin, TestCase):
+    """The detector-only entry message (#3011) names what happened."""
+
+    def test_spotting_the_trap_messages_the_detector(self) -> None:
+        with (
+            force_check_outcome(self.success_outcome),
+            patch.object(self.character, "msg") as mock_msg,
+        ):
+            check_room_traps_on_entry(self.character, self.room)
+
+        mock_msg.assert_called_once()
+        (message,) = mock_msg.call_args.args
+        assert self.trap.name in message
+        assert "spot" in message.lower()
+
+    def test_triggering_the_trap_messages_the_detector(self) -> None:
+        with (
+            force_check_outcome(self.failure_outcome),
+            patch.object(self.character, "msg") as mock_msg,
+        ):
+            check_room_traps_on_entry(self.character, self.room)
+
+        mock_msg.assert_called_once()
+        (message,) = mock_msg.call_args.args
+        assert self.trap.name in message
+        assert "trigger" in message.lower()
+
+    def test_not_hidden_trap_sends_no_entry_message(self) -> None:
+        self.trap.is_hidden = False
+        self.trap.save(update_fields=["is_hidden"])
+        with patch.object(self.character, "msg") as mock_msg:
+            check_room_traps_on_entry(self.character, self.room)
+
+        mock_msg.assert_not_called()
+
+
+class SearchRoomTrapsServiceTest(_TrapSceneMixin, TestCase):
+    """``search_room_traps`` (#3011) — the deliberate-search sibling of entry detection."""
+
+    def test_hidden_armed_trap_detected_on_success(self) -> None:
+        with force_check_outcome(self.success_outcome):
+            found = search_room_traps(self.character, self.room_profile)
+
+        assert found == [self.trap]
+        assert self.sheet in self.trap.detected_by.all()
+
+    def test_hidden_armed_trap_not_detected_on_failure(self) -> None:
+        # A dedicated miss tier, not the mixin's entry-focused failure_outcome:
+        # search_room_traps reads a plain (non-pool) detection check, whose
+        # success/failure is the generic success_level-sign convention
+        # (matching SearchAction._detect_concealed_characters and clue search)
+        # -- unlike entry/disarm, which key off whether the pool has a matching
+        # consequence row for the rolled tier, regardless of its sign.
+        miss = CheckOutcomeFactory(name="Trap-Search-Miss", success_level=-1)
+        with force_check_outcome(miss):
+            found = search_room_traps(self.character, self.room_profile)
+
+        assert found == []
+        assert self.sheet not in self.trap.detected_by.all()
+        # A failed SEARCH never fires the trap's consequence — only physically
+        # entering (or a failed disarm) can trigger it.
+        assert self._health() == 100
+
+    def test_not_hidden_trap_is_not_a_search_candidate(self) -> None:
+        self.trap.is_hidden = False
+        self.trap.save(update_fields=["is_hidden"])
+
+        with patch("world.checks.services.perform_check_with_modifiers") as mock_perform_check:
+            found = search_room_traps(self.character, self.room_profile)
+
+        mock_perform_check.assert_not_called()
+        assert found == []
+
+    def test_already_detected_trap_is_not_a_search_candidate(self) -> None:
+        self.trap.detected_by.add(self.sheet)
+
+        with patch("world.checks.services.perform_check_with_modifiers") as mock_perform_check:
+            found = search_room_traps(self.character, self.room_profile)
+
+        mock_perform_check.assert_not_called()
+        assert found == []
+
+    def test_disarmed_trap_is_not_a_search_candidate(self) -> None:
+        self.trap.is_armed = False
+        self.trap.save(update_fields=["is_armed"])
+
+        with patch("world.checks.services.perform_check_with_modifiers") as mock_perform_check:
+            found = search_room_traps(self.character, self.room_profile)
+
+        mock_perform_check.assert_not_called()
+        assert found == []
+
+    def test_sheet_less_searcher_returns_empty(self) -> None:
+        bare_character = CharacterFactory(db_key="no-sheet")
+
+        found = search_room_traps(bare_character, self.room_profile)
+
+        assert found == []

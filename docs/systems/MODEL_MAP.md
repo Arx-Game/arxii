@@ -843,6 +843,23 @@
 - `set_battle_side_posture(*, side: 'BattleSide', posture: 'str') -> 'BattleSide' - Set a battle side's tactical posture (#1711).`
 
 
+## world.beta_reset
+
+### ReleaseLatch
+**Foreign Keys:**
+  - released_by -> evennia.AccountDB [FK]
+
+### Service Functions
+- `check_backup_verified(backup_verified_at: 'datetime | None', *, now: 'datetime | None' = None) -> 'None' - Guard 4: the operator asserts a backup was verified recently.`
+- `check_beta_reset_enabled() -> 'None' - Guard 1: the hardcoded constant. Raises ``BetaResetDisabledError`` if flipped off.`
+- `check_confirmation_phrase(typed: 'str | None') -> 'None' - Guard 3: the typed confirmation phrase must match exactly.`
+- `check_release_latch() -> 'None' - Guard 2: the one-way DB latch. Raises ``ReleaseLatchedError`` if any row exists.`
+- `mark_released(*, released_by: 'AccountDB', note: 'str' = '') -> 'ReleaseLatch' - Write the one-way ``ReleaseLatch`` row. Refuses if one already exists.`
+- `preview_pristine_world_wipe() -> 'WipeReport' - Dry-run: count what ``wipe_pristine_world(execute=True)`` would delete.`
+- `refresh_legend_views() -> None - Refresh all legend materialized views concurrently.`
+- `wipe_pristine_world(*, execute: 'bool' = False, confirm: 'str | None' = None, backup_verified_at: 'datetime | None' = None) -> 'WipeReport' - Dry-run (default) or execute the guarded beta-reset wipe.`
+
+
 ## world.boundaries
 
 ### ContentTheme
@@ -2188,9 +2205,10 @@
 
 ### DuelChallenge
 **Foreign Keys:**
-  - challenger_sheet -> character_sheets.CharacterSheet [FK]
+  - challenger_sheet -> character_sheets.CharacterSheet [FK] (nullable)
   - challenged_sheet -> character_sheets.CharacterSheet [FK]
   - room -> evennia.ObjectDB [FK] (nullable)
+  - threat_pool -> combat.ThreatPool [FK] (nullable)
   - resulting_encounter -> combat.CombatEncounter [FK] (nullable)
 
 ### EncounterAftermathRule
@@ -2287,6 +2305,7 @@
   - bossphase_set <- combat.BossPhase
   - creature_templates <- combat.CreatureTemplate
   - creaturephasetemplate_set <- combat.CreaturePhaseTemplate
+  - lethal_duel_challenges <- combat.DuelChallenge
 
 ### ThreatPoolEntry
 **Foreign Keys:**
@@ -7107,6 +7126,24 @@
   - titles <- societies.Title
   - house_templates <- societies.HouseTemplate
   - market_squares <- items.MarketSquare
+
+
+## world.registration
+
+### AccountInvite
+**Foreign Keys:**
+  - invited_by -> evennia.AccountDB [FK]
+  - redeemed_by -> evennia.AccountDB [FK] (nullable)
+
+### RegistrationConfig
+**Foreign Keys:**
+  - updated_by -> evennia.AccountDB [FK] (nullable)
+
+### Service Functions
+- `issue_invite(email: str, invited_by: evennia.accounts.models.AccountDB, note: str = '') -> world.registration.models.AccountInvite - Issue an invite for ``email``.`
+- `redeem_invite(token: str, email: str, account: evennia.accounts.models.AccountDB) -> world.registration.models.AccountInvite | None - Validate + stamp redemption for the invite backing this signup.`
+- `revoke_invite(invite: world.registration.models.AccountInvite, by: evennia.accounts.models.AccountDB) -> world.registration.models.AccountInvite - Revoke an un-redeemed invite. ``by`` is accepted for future audit-log use.`
+- `signup_allowed(email: str, token: str) -> bool - True when ``token`` is a currently-redeemable invite bound to ``email``.`
 
 
 ## world.relationships

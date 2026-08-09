@@ -6,6 +6,8 @@ import { apiFetch } from '@/evennia_replacements/api';
 import type { PaginatedResponse } from '@/shared/types';
 import type {
   AccountHistory,
+  AccountInvite,
+  AccountInviteStatus,
   BugReport,
   GMApplication,
   GMApplicationStatus,
@@ -21,6 +23,7 @@ import type {
 const INBOX_URL = '/api/staff-inbox';
 const SUBMISSIONS_URL = '/api/player-submissions';
 const GM_URL = '/api/gm/applications';
+const INVITES_URL = '/api/staff/invites';
 
 // =============================================================================
 // Staff Inbox
@@ -286,5 +289,44 @@ export async function updateGMApplication(
     body: JSON.stringify(data),
   });
   if (!res.ok) throw new Error('Failed to update GM application');
+  return res.json();
+}
+
+// =============================================================================
+// Account Invites (#3054)
+// =============================================================================
+
+export async function getAccountInviteList(
+  status?: AccountInviteStatus,
+  page?: number
+): Promise<PaginatedResponse<AccountInvite>> {
+  const params = new URLSearchParams();
+  if (status) {
+    params.append('status', status);
+  }
+  if (page != null) {
+    params.append('page', page.toString());
+  }
+  const qs = params.toString();
+  const res = await apiFetch(`${INVITES_URL}/${qs ? `?${qs}` : ''}`);
+  if (!res.ok) throw new Error('Failed to load invite list');
+  return res.json();
+}
+
+export async function issueAccountInvite(email: string, note?: string): Promise<AccountInvite> {
+  const res = await apiFetch(`${INVITES_URL}/`, {
+    method: 'POST',
+    body: JSON.stringify({ email, note: note ?? '' }),
+  });
+  if (!res.ok) {
+    const data = await res.json().catch(() => null);
+    throw new Error(data?.email?.[0] ?? data?.detail ?? 'Failed to issue invite');
+  }
+  return res.json();
+}
+
+export async function revokeAccountInvite(id: number): Promise<AccountInvite> {
+  const res = await apiFetch(`${INVITES_URL}/${id}/revoke/`, { method: 'POST' });
+  if (!res.ok) throw new Error('Failed to revoke invite');
   return res.json();
 }
