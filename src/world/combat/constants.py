@@ -197,8 +197,15 @@ class OpponentTier(models.TextChoices):
 # — the single source of truth both the service layer and the
 # GM-proposal API contract (serializers.ProposeLethalDuelSerializer) validate
 # against.
-SIGNIFICANT_NPC_TIERS: frozenset[str] = frozenset(
-    {OpponentTier.ELITE, OpponentTier.BOSS, OpponentTier.HERO_KILLER}
+# An ordered tuple, NOT a set: the serializer iterates this into ChoiceField
+# choices, which drf-spectacular serializes into the OpenAPI enum — set
+# iteration order varies per process (hash seed), which made the generated
+# api.d.ts enum order unstable and permanently flaked the api-types-drift CI
+# check. Escalating-threat order.
+SIGNIFICANT_NPC_TIERS: tuple[str, ...] = (
+    OpponentTier.ELITE,
+    OpponentTier.BOSS,
+    OpponentTier.HERO_KILLER,
 )
 
 

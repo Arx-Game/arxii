@@ -62881,14 +62881,14 @@ components:
       - tier
     ProposeLethalDuelTierEnum:
       enum:
-      - hero_killer
       - elite
       - boss
+      - hero_killer
       type: string
       description: |-
-        * `hero_killer` - hero_killer
         * `elite` - elite
         * `boss` - boss
+        * `hero_killer` - hero_killer
     PublicFeedItem:
       type: object
       description: One feed row — a deed or a scandal. Read-only; serializes a ``PublicFeedItem``

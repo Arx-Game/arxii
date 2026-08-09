@@ -35721,12 +35721,12 @@ export interface components {
       threat_pool_id: number;
     };
     /**
-     * @description * `hero_killer` - hero_killer
-     *     * `elite` - elite
+     * @description * `elite` - elite
      *     * `boss` - boss
+     *     * `hero_killer` - hero_killer
      * @enum {string}
      */
-    ProposeLethalDuelTierEnum: 'hero_killer' | 'elite' | 'boss';
+    ProposeLethalDuelTierEnum: 'elite' | 'boss' | 'hero_killer';
     /** @description One feed row — a deed or a scandal. Read-only; serializes a ``PublicFeedItem`` dataclass. */
     PublicFeedItem: {
       kind: components['schemas']['PublicFeedItemKindEnum'];
