@@ -2229,6 +2229,23 @@ GM at a given level may author (#2000, ADR-0097).
   [../adr/0097-gm-trust-is-gmprofile-level.md](../adr/0097-gm-trust-is-gmprofile-level.md),
   [../adr/0141-story-room-access-is-player-side-join.md](../adr/0141-story-room-access-is-player-side-join.md)
 
+### Beta Reset (#3055 PR 2)
+Guarded management command that wipes every play-provenance row back to a pristine
+CG/authoring-only baseline at the alpha→beta cutover, filtering on the acquisition-
+provenance ledger (ADR-0206). Never an admin surface; four independent guards (hardcoded
+constant, one-way DB latch, typed confirmation phrase, verified-fresh-backup precheck)
+must all pass before `--execute` touches a row; defaults to a dry-run.
+
+- **Models:** `ReleaseLatch` (`released_at`, `released_by` PROTECT AccountDB, `note`)
+- **Services:** `world.beta_reset.services.wipe_pristine_world` /
+  `preview_pristine_world_wipe` / `mark_released`; `SCOPE_TABLE` is the introspectable
+  per-model delete/filter list (wholesale vs provenance-filtered)
+- **Commands:** `arx manage beta_reset [--execute --confirm "..." --backup-verified-at ...]`,
+  `arx manage mark_beta_release --released-by <username>`
+- **Source:** `src/world/beta_reset/`, `src/world/management/commands/beta_reset.py`,
+  `src/world/management/commands/mark_beta_release.py`
+- **Details:** [beta_reset.md](beta_reset.md) · ADR-0206 · ADR-0207
+
 ### Scenes
 Roleplay session recording with participant tracking, interaction logging, persona-based identity, social
 action consent flow, and a three-mode non-combat round framework.
