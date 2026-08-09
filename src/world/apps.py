@@ -55,6 +55,7 @@ class ArxiiConfig(AppConfig):
         import world.captivity.apps as captivity_apps  # noqa: PLC0415
         import world.clues.apps as clues_apps  # noqa: PLC0415
         import world.companions.apps as companions_apps  # noqa: PLC0415
+        import world.gm.apps as gm_apps  # noqa: PLC0415
         import world.items.apps as items_apps  # noqa: PLC0415
         import world.justice.apps as justice_apps  # noqa: PLC0415
         import world.magic.apps as magic_apps  # noqa: PLC0415
@@ -90,3 +91,5 @@ class ArxiiConfig(AppConfig):
         buildings_apps.ready()
         ships_apps.ready()
         room_features_apps.ready()
+        # #3071 — new registration, no ordering dependency on the handshakes above.
+        gm_apps.ready()

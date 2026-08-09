@@ -48,6 +48,10 @@ _USAGE_SUGGEST = (
     " (kind: new_situation|check_fit|difficulty_guide|pool_guide|other)"
 )
 _USAGE_TRAP = "Usage: gm trap list | gm trap arm <id> | gm trap disarm <id>"
+_USAGE_SUMMON = (
+    "Usage: gm summon <character>"
+    " (consent-prompted -- the character must `accept summon`/`decline summon`)"
+)
 _SUBVERB_LIST = "list"
 _SUBVERB_ARM = "arm"
 _SUBVERB_DISARM = "disarm"
@@ -83,6 +87,7 @@ class CmdGMDashboard(ArxCommand):
       gm trap list
       gm trap arm <id>
       gm trap disarm <id>
+      gm summon <character>
     """
 
     key = "gm"
@@ -110,6 +115,8 @@ class CmdGMDashboard(ArxCommand):
                 self._handle_suggest(rest)
             elif first == "trap":  # noqa: STRING_LITERAL
                 self._handle_trap(rest)
+            elif first == "summon":  # noqa: STRING_LITERAL
+                self._handle_summon(rest)
             else:
                 self._render()
         except CommandError as err:
@@ -309,6 +316,26 @@ class CmdGMDashboard(ArxCommand):
         action = ArmTrapAction() if subverb == _SUBVERB_ARM else GmDisarmTrapAction()
         result = action.run(actor=self.caller, trap_id=int(argument))
         self.msg(result.message)
+
+    def _handle_summon(self, rest: str) -> None:
+        """``gm summon <character>`` -- consent-prompted GM summon (#3071).
+
+        The target need not be co-located (the whole point of a summon), so this
+        resolves globally rather than via the room-scoped ``_resolve_target``
+        every other subverb here uses.
+        """
+        from actions.definitions.gm_adjudication import SummonPlayerAction  # noqa: PLC0415
+
+        name = rest.strip()
+        if not name:
+            raise CommandError(_USAGE_SUMMON)
+        target = self.caller.search(name, global_search=True)
+        if not target:
+            return
+
+        result = SummonPlayerAction().run(actor=self.caller, target=target)
+        if result.message:
+            self.msg(result.message)
 
     def _render(self) -> None:
         raw = (self.args or "").strip().lower()

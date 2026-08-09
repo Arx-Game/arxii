@@ -451,6 +451,15 @@ See `docs/systems/INDEX.md`'s GM section ("Story areas & story rooms") for the f
 model/service/action/API rundown, and ADR-0141 for why access is a consent-first
 player-side join rather than a GM summon.
 
+**Not superseded by #3071's GM summon.** #3071 built a *separate*, narrower
+mechanic (`SummonPlayerAction` / `GMSummonOffer`, see INDEX.md's "GM summon"
+entry) — an already-in-play character's mid-session relocation into a live
+scene the GM runs, still gated on the target's own accept/decline. It does not
+touch story-room access, which stays the ADR-0141 self-service grant-and-join
+shape above; both surfaces independently land on the same consent-first
+principle, just for different questions ("can I move you" vs "can you enter
+my story area").
+
 ## Cross-System Dependencies
 
 - **Stories app** — needs GM role relations and permission checks added as it grows

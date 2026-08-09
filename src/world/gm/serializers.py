@@ -23,6 +23,7 @@ from world.gm.models import (
     GMLevelChange,
     GMProfile,
     GMRosterInvite,
+    GMSummonOffer,
     GMTable,
     GMTableMembership,
     ProfileTextRequestDetails,
@@ -820,3 +821,22 @@ class TableUpdateRequestSignoffSerializer(serializers.Serializer):
 
     approve = serializers.BooleanField()
     notes = serializers.CharField(required=False, allow_blank=True, default="")
+
+
+class GMSummonOfferSerializer(serializers.Serializer):
+    """Read-only payload for a pending GM summon offer (#3071).
+
+    Leak analysis (spec-approved): the GM's display name + scene title only —
+    never room contents or other occupants. Accept/decline dispatch through the
+    generic REGISTRY action-dispatch endpoint (``accept_gm_summon``/
+    ``decline_gm_summon``), mirroring ``DuelChallenge``'s read-only inbox shape.
+    """
+
+    id = serializers.IntegerField(read_only=True)
+    target_character_id = serializers.IntegerField(source="target_sheet_id", read_only=True)
+    gm_display_name = serializers.CharField(read_only=True)
+    scene_title = serializers.SerializerMethodField()
+    created_at = serializers.DateTimeField(read_only=True)
+
+    def get_scene_title(self, obj: GMSummonOffer) -> str | None:
+        return obj.scene.name if obj.scene_id else None

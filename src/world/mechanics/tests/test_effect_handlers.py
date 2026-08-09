@@ -28,8 +28,11 @@ from world.missions.factories import (
 )
 from world.missions.models import MissionInstance
 from world.missions.services.run import grant_rescue_mission
+from world.roster.factories import RosterEntryFactory
 from world.scenes.factories import SceneFactory
 from world.scenes.models import PendingSuddenHarm
+from world.secrets.factories import SecretFactory, SecretKnowledgeFactory
+from world.secrets.models import SecretKnowledge
 from world.societies.factories import OrganizationFactory
 from world.vitals.factories import CharacterVitalsFactory
 from world.vitals.models import CharacterVitals
@@ -636,6 +639,72 @@ class GrantDistinctionHandlerTests(TestCase):
         assert not CharacterDistinction.objects.filter(
             character=character.sheet_data, distinction=beta
         ).exists()
+
+
+class GrantSecretHandlerTests(TestCase):
+    """Tests for the GRANT_SECRET effect handler (#3071).
+
+    Mirrors the GRANT_CODEX/GRANT_DISTINCTION handler shape: proves the dispatch
+    seam, the "lead not the answer" default-layer grant, and the no-roster-entry
+    skip path — full knowledge-layer mechanics live in
+    world.secrets.tests.test_services.
+    """
+
+    def test_grant_secret_creates_knowledge_at_default_layers(self) -> None:
+        character = CharacterFactory(db_key="grant_secret_target")
+        sheet = CharacterSheetFactory(character=character)
+        roster_entry = RosterEntryFactory(character_sheet=sheet)
+        secret = SecretFactory()
+        effect = ConsequenceEffectFactory(
+            consequence=ConsequenceFactory(),
+            effect_type=EffectType.GRANT_SECRET,
+            secret=secret,
+        )
+        context = ResolutionContext(character=character)
+
+        result = apply_effect(effect, context)
+
+        assert result.applied is True
+        knowledge = SecretKnowledge.objects.get(roster_entry=roster_entry, secret=secret)
+        # The "lead, not the answer" default (#3071): the fact is known, the
+        # deeper layers are not — mirrors GRANT_CODEX's UNCOVERED semantics.
+        assert knowledge.knows_category is False
+        assert knowledge.knows_consequences is False
+
+    def test_grant_secret_is_idempotent(self) -> None:
+        character = CharacterFactory(db_key="grant_secret_repeat")
+        sheet = CharacterSheetFactory(character=character)
+        roster_entry = RosterEntryFactory(character_sheet=sheet)
+        secret = SecretFactory()
+        SecretKnowledgeFactory(roster_entry=roster_entry, secret=secret)
+        effect = ConsequenceEffectFactory(
+            consequence=ConsequenceFactory(),
+            effect_type=EffectType.GRANT_SECRET,
+            secret=secret,
+        )
+        context = ResolutionContext(character=character)
+
+        result = apply_effect(effect, context)
+
+        assert result.applied is True
+        assert SecretKnowledge.objects.filter(roster_entry=roster_entry, secret=secret).count() == 1
+
+    def test_grant_secret_skips_without_roster_entry(self) -> None:
+        character = CharacterFactory(db_key="grant_secret_no_roster")
+        CharacterSheetFactory(character=character)
+        secret = SecretFactory()
+        effect = ConsequenceEffectFactory(
+            consequence=ConsequenceFactory(),
+            effect_type=EffectType.GRANT_SECRET,
+            secret=secret,
+        )
+        context = ResolutionContext(character=character)
+
+        result = apply_effect(effect, context)
+
+        assert result.applied is False
+        assert result.skip_reason
+        assert not SecretKnowledge.objects.filter(secret=secret).exists()
 
 
 class EscapeCaptivityHandlerTests(TestCase):

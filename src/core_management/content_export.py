@@ -70,6 +70,23 @@ CONTENT_MODELS: frozenset[str] = frozenset(
         "achievements.achievementreward",
         "achievements.rewarddefinition",
         "achievements.conditionstatrule",
+        # actions — #3071: the effect layer that actually fires a reward when an
+        # authored outcome lands (challenges/traps/story-beats all converge on
+        # ConsequenceEffect via apply_all_effects) was seeder/admin-only; this is
+        # what makes it lore-authorable. ConsequencePool already carried
+        # NaturalKeyMixin since #1871 but was never registered.
+        #
+        # The row-level "written_by IS NOT NULL" split lives in EXPORT_FILTERS
+        # below (CI fix, 2026-08-09) — nearly every gameplay cluster
+        # (challenges, clash, social actions, magic mishaps, spy tasks, crafting)
+        # mints its own ConsequencePool/Consequence/ConsequenceEffect rows as
+        # mechanical bootstrap (the "what happens on a mixed success" spine every
+        # check-driven system needs to function), so this table is mixed
+        # ownership like ``items.itemtemplate`` — most rows are seeder-owned
+        # config, and only the ones a content author actually wrote (credited
+        # via ``written_by``, added in this same branch) are lore.
+        "actions.consequencepool",
+        "actions.consequencepoolentry",
         # actions — #3034: the six social-magic ActionEnhancement rows #2973
         # requires (Intimidate/Persuade/Deceive/Flirt/Perform/Entrance) had no
         # production seeder and no CONTENT_MODELS entry, so "magical
@@ -94,6 +111,14 @@ CONTENT_MODELS: frozenset[str] = frozenset(
         "checks.checktype",
         "checks.checktypecapabilitymodifier",
         "checks.checktypetrait",
+        # #3071: the effect layer itself — see the actions.consequencepool* comment
+        # above. Every production creation site is a seeder/factory (no
+        # player-facing mutation path exists), and the seeders create these by
+        # the dozen as mechanical bootstrap — see EXPORT_FILTERS' "written_by IS
+        # NOT NULL" split below (CI fix, 2026-08-09; supersedes the original
+        # "no split needed" call, which the seeder guard proved wrong).
+        "checks.consequence",
+        "checks.consequenceeffect",
         # classes
         "classes.aspect",
         "classes.path",
@@ -318,6 +343,22 @@ EXPORT_FILTERS: dict[str, dict[str, object]] = {
     # #3056: only MISSION-kind offers are content; PERMIT/TRAIN/SETTLE etc.
     # are created by world/npc_services/seeds.py per installation.
     "npc_services.npcserviceoffer": {"kind": "mission"},
+    # CI fix 2026-08-09 (#3071 follow-up): the consequence/effect layer is mixed
+    # ownership like items.itemtemplate — nearly every gameplay cluster (challenges,
+    # clash, social actions, magic mishaps, spy tasks, crafting) mints its own
+    # ConsequencePool/Consequence/ConsequenceEffect rows as mechanical bootstrap (the
+    # "what happens on a mixed success" spine every check-driven system needs to
+    # function). Unlike the NULL-means-content predicates above, this one is
+    # POSITIVE — written_by (CreditedContent, added this same branch) is set only when
+    # a content author actually wrote the row, so "IS NOT NULL" is the content side.
+    # ConsequencePoolEntry carries no CreditedContent of its own (it is a pure
+    # pool<->consequence join row), so it rides its consequence's credit instead —
+    # an entry exists to wire an authored consequence into a pool, whether or not
+    # that pool itself is credited.
+    "checks.consequence": {"written_by__isnull": False},
+    "checks.consequenceeffect": {"written_by__isnull": False},
+    "actions.consequencepool": {"written_by__isnull": False},
+    "actions.consequencepoolentry": {"consequence__written_by__isnull": False},
 }
 
 #: Field-level export exclusions: columns on a content model that are

@@ -24,6 +24,7 @@ from world.gm.models import (
     GMProfile,
     GMRewardConfig,
     GMRosterInvite,
+    GMSummonOffer,
     GMTable,
     GMTableMembership,
     GMWeeklyRewardTracker,
@@ -37,13 +38,14 @@ if TYPE_CHECKING:
     from django.db.models import QuerySet
     from evennia.accounts.models import AccountDB
 
-    from evennia_extensions.models import PlayerData
+    from evennia_extensions.models import PlayerData, RoomProfile
     from world.character_sheets.models import CharacterSheet
     from world.distinctions.models import CharacterDistinction, Distinction
     from world.gm.models import TableUpdateRequest
     from world.progression.models import XPTransaction
     from world.roster.models import RosterEntry
     from world.roster.models.applications import RosterApplication
+    from world.scenes.models import Scene
     from world.stories.models import Story
 
 DEFAULT_INVITE_DURATION_DAYS = 30
@@ -532,6 +534,46 @@ def submit_catalog_suggestion(
         proposal_kind=proposal_kind,
         proposal_text=proposal_text,
     )
+
+
+def offer_gm_summon(
+    gm_profile: GMProfile | None,
+    target_sheet: CharacterSheet,
+    *,
+    room: RoomProfile,
+    scene: Scene | None = None,
+    gm_display_name: str = "",
+) -> GMSummonOffer:
+    """Create or replace a pending GM summon offer for ``target_sheet`` (#3071).
+
+    Re-summoning the same target simply replaces their existing pending offer
+    (``update_or_create``) — a summon does not stack, it just refreshes the invite.
+    ``gm_display_name`` is a snapshot, not a live FK walk (#3071 leak analysis: the
+    consent prompt names the GM's character, never the account username).
+    """
+    offer, _created = GMSummonOffer.objects.update_or_create(
+        target_sheet=target_sheet,
+        defaults={
+            "invited_by": gm_profile,
+            "room": room,
+            "scene": scene,
+            "gm_display_name": gm_display_name,
+        },
+    )
+    return offer
+
+
+def resolve_gm_summon_offer(offer: GMSummonOffer, *, accept: bool) -> None:
+    """Resolve a pending summon offer: move the target on accept, always clear it (#3071).
+
+    Deletes ``offer`` either way — row existence IS pending status (see the model
+    docstring), so there is nothing left to mark resolved once this returns.
+    """
+    if accept:
+        target = offer.target_sheet.character
+        destination = offer.room.objectdb
+        target.move_to(destination, quiet=False)
+    offer.delete()
 
 
 def _get_or_reset_weekly_reward_tracker(gm_profile: GMProfile) -> GMWeeklyRewardTracker:

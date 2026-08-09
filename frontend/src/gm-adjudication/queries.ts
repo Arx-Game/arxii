@@ -11,6 +11,7 @@ export const gmAdjudicationKeys = {
   conditionTemplates: () => [...gmAdjudicationKeys.all, 'condition-templates'] as const,
   situationTemplates: () => [...gmAdjudicationKeys.all, 'situation-templates'] as const,
   challengeTemplates: () => [...gmAdjudicationKeys.all, 'challenge-templates'] as const,
+  summonOffers: () => [...gmAdjudicationKeys.all, 'summon-offers'] as const,
 };
 
 /** Enabled only while the picker is open — `enabled` lets the panel defer the
@@ -48,5 +49,22 @@ export function useChallengeTemplateCatalog(enabled: boolean) {
     queryFn: () => api.getChallengeTemplateCatalog(),
     enabled,
     staleTime: 60_000,
+  });
+}
+
+/**
+ * Poll the requesting player's pending GM summon offer(s) (#3071).
+ *
+ * Mirrors `useDuelChallengeInbox` (`@/combat/queries`) — 15s poll so an
+ * incoming summon appears without a manual refresh.
+ */
+export function useSummonOfferInbox(options: { enabled?: boolean } = {}) {
+  const { enabled = true } = options;
+  return useQuery({
+    queryKey: gmAdjudicationKeys.summonOffers(),
+    queryFn: () => api.fetchSummonOfferInbox(),
+    enabled,
+    refetchInterval: 15_000,
+    staleTime: 10_000,
   });
 }

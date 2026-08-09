@@ -555,6 +555,47 @@ def _grant_codex(
     )
 
 
+def _grant_secret(
+    effect: "ConsequenceEffect",
+    context: "ResolutionContext",
+) -> AppliedEffect:
+    """Grant secret knowledge to the character via their RosterEntry (#3071).
+
+    Mirrors ``_grant_codex`` above, but with an important difference in HOW it
+    mirrors it. ``SecretKnowledge`` has no UNCOVERED-style status field for
+    ``_grant_codex`` to deliberately stay below — holding the row at all already
+    means the **fact** layer is known; ``knows_category``/``knows_consequences``
+    are two independently-unlockable boolean layers on top (see
+    ``world.secrets.models.SecretKnowledge``). So this handler calls the
+    canonical ``grant_secret_knowledge`` service directly (unlike ``_grant_codex``,
+    which bypasses ``grant_codex_entry`` on purpose) — with both layer flags left
+    at their defaults (``False``). That default IS the "a scene hands you a lead,
+    not the answer" grant: the character learns the secret exists but not its
+    deeper category/consequences layers, the same shape codex's UNCOVERED status
+    is meant to capture, just expressed as unset booleans instead of a status enum.
+    """
+    character = context.character
+    try:
+        roster_entry = character.sheet_data.roster_entry
+    except RosterEntry.DoesNotExist:
+        return AppliedEffect(
+            effect_type=EffectType.GRANT_SECRET,
+            description="Character has no roster entry",
+            applied=False,
+            skip_reason="Character has no roster entry",
+        )
+
+    from world.secrets.services import grant_secret_knowledge  # noqa: PLC0415
+
+    knowledge = grant_secret_knowledge(roster_entry=roster_entry, secret=effect.secret)
+    description = f"Granted secret knowledge: level {knowledge.secret.get_level_display()}"
+    return AppliedEffect(
+        effect_type=EffectType.GRANT_SECRET,
+        description=description,
+        applied=True,
+    )
+
+
 def _tier_multiplier(success_level: int) -> float:
     """Clamped multiplier from a CheckOutcome's success_level.
 
@@ -1519,6 +1560,7 @@ _HANDLER_REGISTRY: dict[str, type[None] | object] = {
     EffectType.LAUNCH_ATTACK: _launch_attack,
     EffectType.LAUNCH_FLOW: _launch_flow,
     EffectType.GRANT_CODEX: _grant_codex,
+    EffectType.GRANT_SECRET: _grant_secret,
     EffectType.MAGICAL_SCARS: _apply_magical_scars,
     EffectType.LEGEND_AWARD: _legend_award,
     EffectType.CAPTURE: _apply_capture,

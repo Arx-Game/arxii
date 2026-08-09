@@ -117,6 +117,7 @@ import { RouletteModal } from './components/roulette/RouletteModal';
 import { Toaster } from './components/ui/sonner';
 import { DuelChallengeNotifier } from './combat/DuelChallengeNotifier';
 import { HazardPromptNotifier } from './game/components/HazardPromptNotifier';
+import { SummonPromptNotifier } from './gm-adjudication/SummonPromptNotifier';
 import { ConsentAttentionNotifier } from './scenes/components/ConsentAttentionNotifier';
 import { PrecaptureConsentNotifier } from './scenes/components/PrecaptureConsentNotifier';
 
@@ -1132,6 +1133,7 @@ function App() {
       <DuelChallengeNotifier />
       <HazardPromptNotifier />
       <ConsentAttentionNotifier />
+      <SummonPromptNotifier />
       <PrecaptureConsentNotifier />
     </Layout>
   );

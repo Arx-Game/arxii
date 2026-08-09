@@ -36,6 +36,7 @@ class EffectType(models.TextChoices):
     LAUNCH_ATTACK = "launch_attack", "Launch Attack"
     LAUNCH_FLOW = "launch_flow", "Launch Flow"
     GRANT_CODEX = "grant_codex", "Grant Codex Entry"
+    GRANT_SECRET = "grant_secret", "Grant Secret Knowledge"
     MAGICAL_SCARS = "magical_scars", "Mage Scars"
     LEGEND_AWARD = "legend_award", "Award Legend"
     CAPTURE = "capture", "Capture"

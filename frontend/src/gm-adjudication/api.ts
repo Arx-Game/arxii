@@ -13,6 +13,7 @@ import type {
   ChallengeTemplateCatalogEntry,
   CheckTypeCatalogEntry,
   ConditionTemplateCatalogEntry,
+  GMSummonOfferEntry,
   SituationTemplateCatalogEntry,
 } from './types';
 
@@ -49,4 +50,14 @@ export async function getChallengeTemplateCatalog(): Promise<ChallengeTemplateCa
   await throwOnBadResponse(res, 'Failed to load challenge catalog');
   const data = (await res.json()) as { results?: ChallengeTemplateCatalogEntry[] };
   return data.results ?? [];
+}
+
+/**
+ * The requesting player's pending GM summon offer(s) (#3071).
+ * GET /api/gm/summon-offers/ — bare array, `pagination_class = None`.
+ */
+export async function fetchSummonOfferInbox(): Promise<GMSummonOfferEntry[]> {
+  const res = await apiFetch('/api/gm/summon-offers/');
+  await throwOnBadResponse(res, 'Failed to load pending summons');
+  return (await res.json()) as GMSummonOfferEntry[];
 }
