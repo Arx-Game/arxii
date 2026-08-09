@@ -92,6 +92,11 @@ The central spine connecting every system in the game. Characters develop throug
   uncalled from the frontend) rather than an extension of pre-existing UI. See
   `docs/systems/progression.md`'s "Durance Readiness Hub (web, #3045)" and
   `docs/systems/INDEX.md`'s progression entry.
+- **Guarded beta-reset wipe (#3055 PR 2, built):** `arx manage beta_reset` performs the
+  pristine-world wipe the ledger above derives from — hardcoded-constant + one-way DB
+  latch + typed confirmation + verified-fresh-backup guards, dry-run by default. PR 3
+  (roster characters progress-reset via this same ledger) is the remaining piece — see
+  `docs/systems/beta_reset.md` and ADR-0206/ADR-0207.
 - **Tests:** Extensive tests for traits, skills, kudos, character XP, path history, legend
 
 ## What's Needed for MVP

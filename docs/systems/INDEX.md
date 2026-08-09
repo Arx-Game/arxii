@@ -2247,6 +2247,23 @@ GM at a given level may author (#2000, ADR-0097).
   [../adr/0097-gm-trust-is-gmprofile-level.md](../adr/0097-gm-trust-is-gmprofile-level.md),
   [../adr/0141-story-room-access-is-player-side-join.md](../adr/0141-story-room-access-is-player-side-join.md)
 
+### Beta Reset (#3055 PR 2)
+Guarded management command that wipes every play-provenance row back to a pristine
+CG/authoring-only baseline at the alpha→beta cutover, filtering on the acquisition-
+provenance ledger (ADR-0206). Never an admin surface; four independent guards (hardcoded
+constant, one-way DB latch, typed confirmation phrase, verified-fresh-backup precheck)
+must all pass before `--execute` touches a row; defaults to a dry-run.
+
+- **Models:** `ReleaseLatch` (`released_at`, `released_by` PROTECT AccountDB, `note`)
+- **Services:** `world.beta_reset.services.wipe_pristine_world` /
+  `preview_pristine_world_wipe` / `mark_released`; `SCOPE_TABLE` is the introspectable
+  per-model delete/filter list (wholesale vs provenance-filtered)
+- **Commands:** `arx manage beta_reset [--execute --confirm "..." --backup-verified-at ...]`,
+  `arx manage mark_beta_release --released-by <username>`
+- **Source:** `src/world/beta_reset/`, `src/world/management/commands/beta_reset.py`,
+  `src/world/management/commands/mark_beta_release.py`
+- **Details:** [beta_reset.md](beta_reset.md) · ADR-0206 · ADR-0207
+
 ### Scenes
 Roleplay session recording with participant tracking, interaction logging, persona-based identity, social
 action consent flow, and a three-mode non-combat round framework.
@@ -3271,6 +3288,38 @@ state is node position + snapshots + already-applied consequences, never a scrat
   (`frontend/src/missions/pages/JournalPage.tsx`) surfaces a RESOLVED entry under its own
   "Awaiting report" section with a `ReportMissionDialog` offering all four `ReportStyle`
   choices; a co-location 400 renders inline verbatim rather than being pre-computed client-side.
+- **Web front doors (#3044):** the three authored discovery surfaces are mouse-reachable in
+  the room view, not just typed telnet commands. **Board:** `ObjectsList`
+  (`frontend/src/game/components/room-panel/ObjectsList.tsx`) flags a row `is_mission_board`
+  (a batched `MissionGiver.objects.filter(giver_kind=BOARD, is_active=True, target_id__in=...)`
+  lookup added to `ObjectStateSerializer`/`RoomStatePayloadSerializer`,
+  `flows/service_functions/serializers/room_state.py` — a board has no dedicated typeclass, so
+  this can't be derived from the payload's existing fields) and offers "View Board", opening
+  `MissionBoardDialog` (`frontend/src/missions/components/MissionBoardDialog.tsx`) over the
+  pre-existing `GET .../boards/<pk>/postings/` + `POST .../take/` client (`getBoardPostings`/
+  `takeBoardPosting`, previously dead code with zero consumers). **Examine:** `ObjectsList` rows
+  expand on click and dispatch the `look` REGISTRY action (`{ref: {backend: 'registry',
+  registry_key: 'look'}, kwargs: {target: <objectdb pk>}}`) through the same
+  `dispatch_player_action` seam telnet's `CmdLook` uses, rendering the returned description
+  inline. This closes a real gap found while wiring it: `LookAction.execute()`
+  (`actions/definitions/perception.py`) renders through the flows-layer
+  `BaseState.return_appearance`, which never touched the mission
+  ENVIRONMENTAL_DETAIL/BOARD-rendering hook on `ObjectParent.at_examined`
+  (`typeclasses/mixins.py`) — that hook only fires from the typeclass's OWN
+  `return_appearance`, which nothing in the live look pipeline (telnet included) actually
+  called. `LookAction.execute()` now calls `maybe_dispatch_on_examine` explicitly (`run_safely`,
+  matching the mixin's own pattern) so examine-triggered mission dispatch works from real play on
+  BOTH surfaces for the first time, not just from tests that called the service directly. Also
+  added the precedented `_resolve_look_target` int-pk fallback (mirroring `_resolve_room`/
+  `_resolve_identify_target`) since REST dispatch sends a raw int, never a pre-resolved
+  `ObjectDB`. **NPC talk:** `Functionary` placements (class-1+ NPC givers — carry no `ObjectDB`
+  of their own, so they can never appear in the room's `characters`/`objects` lists) surface as a
+  new `npc_givers` room-state field (`role_id` + display name, room-scoped via
+  `RoomProfile`/`get_room_profile`); `NpcGiversBlock`
+  (`frontend/src/game/components/room-panel/NpcGiversBlock.tsx`) renders a "Talk" button per
+  giver that mounts the pre-existing `NPCInteractionDialog` (previously only reachable from
+  `OrgBooksPage`) — same dialog, no fork. The Opportunities tab is deliberately untouched
+  (ADR-0094: it stays the map, never a door).
 - **Telnet:** `CmdMission` (`commands/missions.py`) — thin face over `services.play`, no
   separate Action; `mission`/`mission beat`/`mission resolve`/`mission report`/`mission take`/
   `mission invite`/`mission pick`/`mission vote`.

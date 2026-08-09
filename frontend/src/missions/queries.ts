@@ -11,6 +11,7 @@ import { useMutation, useQuery, useQueryClient, type UseQueryResult } from '@tan
 import {
   assignMission,
   getBeat,
+  getBoardPostings,
   getGroupBeat,
   getOpportunities,
   inviteToMission,
@@ -41,6 +42,7 @@ import {
   patchGiver,
   patchMissionNode,
   patchMissionTemplate,
+  takeBoardPosting,
   tellTale,
 } from './api';
 import type { PredicateLeaf, PredicateLeafParam, PredicateParamType } from './api';
@@ -97,6 +99,8 @@ export const missionKeys = {
   groupBeat: (instanceId: number, roomKey: string) =>
     [...missionKeys.all, 'group-beat', instanceId, roomKey] as const,
   giversFor: (filters: object) => [...missionKeys.givers(), filters] as const,
+  boardPostings: (boardObjectId: number) =>
+    [...missionKeys.all, 'board-postings', boardObjectId] as const,
 };
 
 const FIVE_MINUTES = 5 * 60 * 1000;
@@ -416,6 +420,30 @@ export function useReportMission() {
     mutationFn: ({ instanceId, style }: { instanceId: number; style: ReportStyle }) =>
       reportMission(instanceId, style),
     onSuccess: () => qc.invalidateQueries({ queryKey: missionKeys.journal() }).catch(() => {}),
+  });
+}
+
+/**
+ * Postings on a notice-board room object (#2044/#3044). Disabled until a board
+ * dialog is actually open — `boardObjectId` is only meaningful then.
+ */
+export function useBoardPostings(boardObjectId: number | null) {
+  return useQuery({
+    queryKey: missionKeys.boardPostings(boardObjectId ?? 0),
+    queryFn: () => getBoardPostings(boardObjectId as number),
+    enabled: boardObjectId != null,
+  });
+}
+
+/** Take a posting off a notice board — re-runs eligibility server-side (#2044/#3044). */
+export function useTakeBoardPosting(boardObjectId: number) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (templateId: number) => takeBoardPosting(boardObjectId, templateId),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: missionKeys.boardPostings(boardObjectId) }).catch(() => {});
+      qc.invalidateQueries({ queryKey: missionKeys.journal() }).catch(() => {});
+    },
   });
 }
 

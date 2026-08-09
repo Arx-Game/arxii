@@ -152,7 +152,8 @@ class RoomStateSerializerCharacterSplitTests(TestCase):
         assert "north" not in obj_names
 
     def test_payload_has_all_expected_keys(self):
-        """Payload keys: room/characters/objects/exits/scene + heat (#1765) + hub (#1450)."""
+        """Payload keys: room/characters/objects/exits/scene + heat (#1765) + hub (#1450)
+        + npc_givers (#3044)."""
         payload = build_room_state_payload(self.caller_state, self.room_state)
         assert set(payload.keys()) == {
             "room",
@@ -162,11 +163,88 @@ class RoomStateSerializerCharacterSplitTests(TestCase):
             "scene",
             "heat",
             "hub",
+            "npc_givers",
         }
         # Cold persona → the self-only heat field is None (never another player's data).
         assert payload["heat"] is None
         # No Notice Board / Town Crier feature here → the hub block is None.
         assert payload["hub"] is None
+        # No Functionary placed here → no NPC givers.
+        assert payload["npc_givers"] == []
+
+    def test_objects_carry_is_mission_board_false_by_default(self):
+        """A plain object with no MissionGiver is never a board (#3044)."""
+        payload = build_room_state_payload(self.caller_state, self.room_state)
+        sword = next(o for o in payload["objects"] if o["name"] == "sword")
+        assert sword["is_mission_board"] is False
+
+
+class RoomStateSerializerMissionDiscoveryTests(TestCase):
+    """#3044 — the board discriminator and NPC-giver room block."""
+
+    def setUp(self):
+        self.room = ObjectDBFactory(
+            db_key="market square",
+            db_typeclass_path="typeclasses.rooms.Room",
+        )
+        self.caller = ObjectDBFactory(
+            db_key="hero",
+            db_typeclass_path="typeclasses.characters.Character",
+            location=self.room,
+        )
+        self.board_obj = ObjectDBFactory(db_key="notice board", location=self.room)
+        self.plain_obj = ObjectDBFactory(db_key="barrel", location=self.room)
+
+        for obj in (self.room, self.caller, self.board_obj, self.plain_obj):
+            media = MediaFactory()
+            ObjectDisplayData.objects.create(object=obj, thumbnail=media)
+
+        self.context = SceneDataManagerFactory()
+        self.room_state = self.context.initialize_state_for_object(self.room)
+        self.caller_state = self.context.initialize_state_for_object(self.caller)
+
+    def test_board_object_carries_is_mission_board_true(self):
+        from world.missions.constants import GiverKind
+        from world.missions.factories import MissionGiverFactory
+
+        MissionGiverFactory(giver_kind=GiverKind.BOARD, target=self.board_obj)
+
+        payload = build_room_state_payload(self.caller_state, self.room_state)
+        board_row = next(o for o in payload["objects"] if o["name"] == "notice board")
+        plain_row = next(o for o in payload["objects"] if o["name"] == "barrel")
+        assert board_row["is_mission_board"] is True
+        assert plain_row["is_mission_board"] is False
+
+    def test_inactive_board_giver_does_not_flag_object(self):
+        from world.missions.constants import GiverKind
+        from world.missions.factories import MissionGiverFactory
+
+        MissionGiverFactory(giver_kind=GiverKind.BOARD, target=self.board_obj, is_active=False)
+
+        payload = build_room_state_payload(self.caller_state, self.room_state)
+        board_row = next(o for o in payload["objects"] if o["name"] == "notice board")
+        assert board_row["is_mission_board"] is False
+
+    def test_npc_givers_lists_active_functionary_placements(self):
+        from evennia_extensions.factories import RoomProfileFactory
+        from world.npc_services.factories import FunctionaryFactory, NPCRoleFactory
+
+        profile = RoomProfileFactory(objectdb=self.room)
+        role = NPCRoleFactory(name="market-crier")
+        FunctionaryFactory(room=profile, role=role, name_override="Old Marta")
+
+        payload = build_room_state_payload(self.caller_state, self.room_state)
+        assert payload["npc_givers"] == [{"role_id": role.pk, "name": "Old Marta"}]
+
+    def test_npc_givers_excludes_retired_placements(self):
+        from evennia_extensions.factories import RoomProfileFactory
+        from world.npc_services.factories import FunctionaryFactory
+
+        profile = RoomProfileFactory(objectdb=self.room)
+        FunctionaryFactory(room=profile, is_active=False)
+
+        payload = build_room_state_payload(self.caller_state, self.room_state)
+        assert payload["npc_givers"] == []
 
 
 class RoomStateSerializerConcealmentTests(TestCase):
