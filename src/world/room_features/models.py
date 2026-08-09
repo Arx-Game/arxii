@@ -324,8 +324,16 @@ class Trap(SharedMemoryModel):
     so this is a plain FK (not the one-per-room OneToOne RoomFeatureInstance
     uses).
 
-    ``is_hidden`` is NOT WIRED as of #3002: no code reads it. See the comment
-    on the field itself for what it is waiting on.
+    ``is_hidden`` (#3011) gates whether a detection roll happens at all, on
+    both detection paths: ``resolve_trap_on_character``
+    (``world.room_features.trap_services``, entry/knockback) and
+    ``search_room_traps`` (same module, a deliberate ``search``). A not-hidden
+    armed trap skips the roll on both — it is authored as an obvious hazard,
+    visible to every character in the room via
+    ``world.room_features.views_traps.RoomTrapViewSet`` with no
+    ``detected_by`` gate. A hidden trap rolls as before; the player-facing
+    disarm affordance (``DisarmTrapAction``, `actions/definitions/traps.py`)
+    is reachable once a trap becomes visible either way.
     """
 
     room_profile = models.ForeignKey(
@@ -385,15 +393,17 @@ class Trap(SharedMemoryModel):
         default=True,
         help_text="A disarmed trap never triggers and cannot be disarmed again.",
     )
-    # NOT WIRED as of #3002: no code reads is_hidden. It waits on the
-    # player-facing trap reveal surface - no serializer, command or view exposes
-    # a Trap today, which is also why DisarmTrapAction is unreachable. Do not
-    # design against this field as though it gated visibility, and do not delete
-    # it: it is authored on SituationTrapLink, a CONTENT_MODELS row, so removing
-    # it would drop authored content meaning.
+    # #3011: wired. See the class docstring above for the readers
+    # (resolve_trap_on_character / search_room_traps / RoomTrapViewSet).
     is_hidden = models.BooleanField(
         default=True,
-        help_text="Whether the trap is concealed until a character resolves it.",
+        help_text=(
+            "Whether the trap needs a detection roll at all. False means an "
+            "authored, obvious hazard: visible to everyone in the room's trap "
+            "list with no roll on entry or search. True (default) means it "
+            "must be spotted (on entry, on a deliberate search, or by taking "
+            "the hit) before it becomes known to that character."
+        ),
     )
     detected_by = models.ManyToManyField(
         CHARACTER_SHEET_MODEL,

@@ -54,6 +54,7 @@ class SearchAction(Action):
         from evennia_extensions.models import RoomProfile  # noqa: PLC0415
         from world.checks.models import CheckType  # noqa: PLC0415
         from world.clues.services import search_room  # noqa: PLC0415
+        from world.room_features.trap_services import search_room_traps  # noqa: PLC0415
 
         room = actor.location
         if room is None:
@@ -73,10 +74,20 @@ class SearchAction(Action):
 
         self._detect_concealed_characters(actor, search_check)
 
-        if not found:
+        # #3011: traps carry their own per-trap check type/difficulty, so this
+        # is a sibling roll alongside the shared Search check above, not folded
+        # into search_room itself — see search_room_traps' docstring.
+        found_traps = search_room_traps(actor, room_profile)
+
+        if not found and not found_traps:
             return ActionResult(success=True, message="PLACEHOLDER You search but turn up nothing.")
-        lines = ["PLACEHOLDER You uncover something:"]
-        lines += [f"  {clue.name} — {clue.description}" for clue in found]
+        lines = []
+        if found:
+            lines.append("PLACEHOLDER You uncover something:")
+            lines += [f"  {clue.name} - {clue.description}" for clue in found]
+        if found_traps:
+            lines.append("PLACEHOLDER You spot a trap:")
+            lines += [f"  {trap.name}" for trap in found_traps]
         return ActionResult(success=True, message="\n".join(lines))
 
     def _detect_concealed_characters(self, actor: ObjectDB, search_check: CheckType) -> None:

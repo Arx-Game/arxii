@@ -3945,11 +3945,29 @@ registering a service strategy + per-kind details model.
     armed permanently. That teardown saves per instance rather than bulk-updating,
     because a bulk `.update()` sends no `post_save` and leaves SharedMemoryModel's
     identity map serving a stale `is_armed`.
-  - **The player half is NOT wired.** `disarm_trap` is registered but unreachable: it
-    needs a `trap_id`, and no serializer, ViewSet, URL, telnet command or frontend surface
-    exposes a `Trap` to a player. `search_room` (`world/clues/services.py`) finds clues and
-    concealed characters only and never touches traps. `Trap.is_hidden` is written by
-    `instantiate_situation` and read by nothing; it is the field waiting on that surface.
+  - **Player half** (#3011): detect in `search`, see what you detected, disarm it.
+    `search_room_traps` (`trap_services.py`) is a sibling of `world.clues.services
+    .search_room` — traps carry their own per-trap `detect_check_type`/`detect_difficulty`
+    (clues share one Search `CheckType`), so it does not slot into the clue roll for free;
+    `SearchAction` (`actions/definitions/investigation.py`) calls both and folds detected
+    traps into the same result message. `Trap.is_hidden` gets its first readers here:
+    `is_hidden=False` skips the roll entirely on both detection paths (entry via
+    `resolve_trap_on_character`, and `search_room_traps`) — an authored obvious hazard is
+    just visible, no chance to fail spotting it. A hidden trap still rolls on entry
+    (`check_room_traps_on_entry`/`check_traps_at_position`), which now also messages the
+    detector directly (spotted vs triggered) since entry carries no `ActionResult` of its
+    own. Read surface: `RoomTrapViewSet` (`views_traps.py`, `GET
+    /api/room-features/traps/?character_id=`) — personal like `ComfortViewSet`/
+    `PortalDestinationsViewSet` (owned-character tenure gate doubles as "present in the
+    room"); lists armed traps that are `is_hidden=False` OR already in the viewer's own
+    `detected_by` (never another character's detection, never an unarmed trap); serializer
+    exposes only `id`/`name`/`is_armed` (no consequence pool, no difficulties). Frontend:
+    `TrapsBlock` (`frontend/src/game/components/room-panel/TrapsBlock.tsx`) in `RoomPanel`,
+    reading `useRoomTrapsQuery` (`frontend/src/room_features/`) and dispatching
+    `disarm_trap` via the standard registry-action seam; a failed disarm's consequence
+    message surfaces through the same toast as a success. Telnet: `disarm <trap name>`
+    (`commands/traps.py`, `CmdDisarm`) resolves by name among the traps visible to the
+    caller (same leak rule as the ViewSet) and dispatches `DisarmTrapAction` directly.
 - **`PreparedGround`** (`world.room_features.models`, #2646): a room a character has
   prepared as their battleground ahead of time — "the fight was won yesterday." Plain FK
   to `RoomProfile` (a room may hold several characters' prepared grounds) but `prepared_by`

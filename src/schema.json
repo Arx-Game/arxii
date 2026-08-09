@@ -27699,6 +27699,32 @@ paths:
               schema:
                 $ref: '#/components/schemas/RoomWardDetails'
           description: ''
+  /api/room-features/traps/:
+    get:
+      operationId: room_features_traps_list
+      description: GET /?character_id=<id> — armed traps that character can currently
+        see.
+      parameters:
+      - in: query
+        name: character_id
+        schema:
+          type: integer
+        description: ObjectDB id of the character to read visible room traps for (must
+          be your own).
+        required: true
+      tags:
+      - room-features
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Trap'
+          description: ''
   /api/roster/entries/:
     get:
       operationId: roster_entries_list
@@ -70928,6 +70954,35 @@ components:
       required:
       - beat
       - transition
+    Trap:
+      type: object
+      description: |-
+        One trap visible to the requesting character (#3011).
+
+        Visibility is entirely the caller's job (``RoomTrapViewSet.list`` —
+        armed, plus ``is_hidden=False`` or already in the viewer's own
+        ``detected_by``) — this serializer trusts the queryset and exposes only
+        the fields a player is allowed to know about a trap they can see:
+        identity (for the disarm dispatch's ``trap_id``) and armed state.
+        ``Trap`` carries no ``description`` field (unlike the leak table's
+        aspirational field list) — only ``name`` identifies it to a player today;
+        adding authored flavor text is a separate content-model change, out of
+        scope here.
+      properties:
+        id:
+          type: integer
+          readOnly: true
+        name:
+          type: string
+          readOnly: true
+        is_armed:
+          type: boolean
+          readOnly: true
+          description: A disarmed trap never triggers and cannot be disarmed again.
+      required:
+      - id
+      - is_armed
+      - name
     TravelHub:
       type: object
       description: Serializer for TravelHub — public infrastructure.

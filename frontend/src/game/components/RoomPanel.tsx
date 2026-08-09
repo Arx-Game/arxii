@@ -17,6 +17,7 @@ import { RoomDescription } from './room-panel/RoomDescription';
 import { CharactersList } from './room-panel/CharactersList';
 import { ExitsList } from './room-panel/ExitsList';
 import { PortalsBlock } from './room-panel/PortalsBlock';
+import { TrapsBlock } from './room-panel/TrapsBlock';
 import { ObjectsList } from './room-panel/ObjectsList';
 import { RoomEditorPanel } from './room-panel/RoomEditorPanel';
 import { HubTidingsPanel } from './room-panel/HubTidingsPanel';
@@ -213,6 +214,7 @@ export function RoomPanel({
       <CharactersList characters={room.characters} onCharacterClick={onCharacterClick} />
       <ExitsList exits={room.exits} onExit={handleExit} />
       <PortalsBlock characterId={characterId} />
+      <TrapsBlock characterId={characterId} />
       <ObjectsList objects={room.objects} />
     </div>
   );
