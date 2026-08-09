@@ -26822,6 +26822,19 @@ paths:
       responses:
         '200':
           description: No response body
+  /api/registration/status/:
+    get:
+      operationId: registration_status_retrieve
+      description: Public GET — whether registration is currently open. No invite
+        enumeration.
+      tags:
+      - registration
+      security:
+      - cookieAuth: []
+      - {}
+      responses:
+        '200':
+          description: No response body
   /api/relationships/conditions/:
     get:
       operationId: relationships_conditions_list
@@ -30413,6 +30426,122 @@ paths:
       responses:
         '200':
           description: No response body
+  /api/staff/invites/:
+    get:
+      operationId: staff_invites_list
+      description: Staff-only issue / list / revoke of per-email account invites.
+      parameters:
+      - in: query
+        name: email
+        schema:
+          type: string
+      - name: page
+        required: false
+        in: query
+        description: A page number within the paginated result set.
+        schema:
+          type: integer
+      - name: page_size
+        required: false
+        in: query
+        description: Number of results to return per page.
+        schema:
+          type: integer
+      - in: query
+        name: status
+        schema:
+          type: string
+          enum:
+          - expired
+          - pending
+          - redeemed
+          - revoked
+        description: |-
+          * `pending` - Pending
+          * `redeemed` - Redeemed
+          * `revoked` - Revoked
+          * `expired` - Expired
+      tags:
+      - staff
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaginatedAccountInviteList'
+          description: ''
+    post:
+      operationId: staff_invites_create
+      description: Staff-only issue / list / revoke of per-email account invites.
+      tags:
+      - staff
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/IssueInviteRequest'
+        required: true
+      security:
+      - cookieAuth: []
+      responses:
+        '201':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/IssueInvite'
+          description: ''
+  /api/staff/invites/{id}/:
+    get:
+      operationId: staff_invites_retrieve
+      description: Staff-only issue / list / revoke of per-email account invites.
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: A unique integer value identifying this Account Invite.
+        required: true
+      tags:
+      - staff
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AccountInvite'
+          description: ''
+  /api/staff/invites/{id}/revoke/:
+    post:
+      operationId: staff_invites_revoke_create
+      description: Staff-only issue / list / revoke of per-email account invites.
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: A unique integer value identifying this Account Invite.
+        required: true
+      tags:
+      - staff
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AccountInviteRequest'
+        required: true
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AccountInvite'
+          description: ''
   /api/stake-activations/:
     get:
       operationId: stake_activations_list
@@ -34852,6 +34981,95 @@ components:
       - character_technique_id
       - offer_id
       - technique_id
+    AccountInvite:
+      type: object
+      description: Read shape for the staff invite list/detail — never returned on
+        failure paths.
+      properties:
+        id:
+          type: integer
+          readOnly: true
+        email:
+          type: string
+          format: email
+          maxLength: 254
+        token:
+          type: string
+          readOnly: true
+        status:
+          type: string
+          readOnly: true
+        note:
+          type: string
+          description: Why this person was invited (staff-only, never shown to the
+            invitee).
+          maxLength: 255
+        created_at:
+          type: string
+          format: date-time
+          readOnly: true
+        expires_at:
+          type: string
+          format: date-time
+          description: Invite cannot be redeemed after this time.
+        redeemed_at:
+          type: string
+          format: date-time
+          readOnly: true
+          nullable: true
+        revoked_at:
+          type: string
+          format: date-time
+          readOnly: true
+          nullable: true
+        invited_by:
+          type: integer
+          readOnly: true
+        invited_by_username:
+          type: string
+          readOnly: true
+        redeemed_by:
+          type: integer
+          readOnly: true
+          nullable: true
+        redeemed_by_username:
+          type: string
+          readOnly: true
+      required:
+      - created_at
+      - email
+      - expires_at
+      - id
+      - invited_by
+      - invited_by_username
+      - redeemed_at
+      - redeemed_by
+      - redeemed_by_username
+      - revoked_at
+      - status
+      - token
+    AccountInviteRequest:
+      type: object
+      description: Read shape for the staff invite list/detail — never returned on
+        failure paths.
+      properties:
+        email:
+          type: string
+          format: email
+          minLength: 1
+          maxLength: 254
+        note:
+          type: string
+          description: Why this person was invited (staff-only, never shown to the
+            invitee).
+          maxLength: 255
+        expires_at:
+          type: string
+          format: date-time
+          description: Invite cannot be redeemed after this time.
+      required:
+      - email
+      - expires_at
     Achievement:
       type: object
       description: Full serializer for achievement detail view.
@@ -47942,6 +48160,31 @@ components:
       description: |-
         * `incapacitated` - Character Incapacitated
         * `near_death` - Character Near Death
+    IssueInvite:
+      type: object
+      description: Input for issuing a new invite — write-only, not model-backed.
+      properties:
+        email:
+          type: string
+          format: email
+        note:
+          type: string
+          default: ''
+      required:
+      - email
+    IssueInviteRequest:
+      type: object
+      description: Input for issuing a new invite — write-only, not model-backed.
+      properties:
+        email:
+          type: string
+          format: email
+          minLength: 1
+        note:
+          type: string
+          default: ''
+      required:
+      - email
     ItemAccentRead:
       type: object
       description: One worked-in Accent on a piece (#2886) — the removal UI's row
@@ -52879,6 +53122,29 @@ components:
         * `timed` - Timed
         * `ready` - Ready
         * `manual` - Manual
+    PaginatedAccountInviteList:
+      type: object
+      required:
+      - count
+      - results
+      properties:
+        count:
+          type: integer
+          example: 123
+        next:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=4
+        previous:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=2
+        results:
+          type: array
+          items:
+            $ref: '#/components/schemas/AccountInvite'
     PaginatedAggregateBeatContributionList:
       type: object
       required:

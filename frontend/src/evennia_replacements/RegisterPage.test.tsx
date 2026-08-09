@@ -137,4 +137,65 @@ describe('RegisterPage', () => {
       resolve({ success: true, emailVerificationRequired: false });
     });
   });
+
+  it('auto-fills the invite code from the ?invite= query param', async () => {
+    vi.mocked(api.fetchRegistrationStatus).mockResolvedValue({ open: false });
+    renderWithProviders(<RegisterPage />, { initialEntries: ['/register?invite=abc123'] });
+
+    expect(await screen.findByLabelText('Invite Code')).toHaveValue('abc123');
+  });
+
+  it('shows the invite-only notice when registration is closed and no invite is present', async () => {
+    vi.mocked(api.fetchRegistrationStatus).mockResolvedValue({ open: false });
+    renderWithProviders(<RegisterPage />);
+
+    expect(await screen.findByText(/invite-only/i)).toBeInTheDocument();
+    expect(screen.queryByLabelText('Username')).not.toBeInTheDocument();
+  });
+
+  it('shows the signup form when registration is closed but an invite link is present', async () => {
+    vi.mocked(api.fetchRegistrationStatus).mockResolvedValue({ open: false });
+    renderWithProviders(<RegisterPage />, { initialEntries: ['/register?invite=abc123'] });
+
+    expect(await screen.findByLabelText('Username')).toBeInTheDocument();
+    expect(screen.queryByText(/invite-only/i)).not.toBeInTheDocument();
+  });
+
+  it('shows the signup form when registration is open', async () => {
+    vi.mocked(api.fetchRegistrationStatus).mockResolvedValue({ open: true });
+    renderWithProviders(<RegisterPage />);
+
+    expect(await screen.findByLabelText('Username')).toBeInTheDocument();
+  });
+
+  it('sends the invite token to postRegister when the invite field is filled', async () => {
+    vi.mocked(api.checkUsername).mockResolvedValue(true);
+    vi.mocked(api.checkEmail).mockResolvedValue(true);
+    vi.mocked(api.fetchRegistrationStatus).mockResolvedValue({ open: false });
+    vi.mocked(api.postRegister).mockResolvedValue({
+      success: true,
+      emailVerificationRequired: false,
+    });
+    renderWithProviders(<RegisterPage />, { initialEntries: ['/register?invite=abc123'] });
+
+    await screen.findByLabelText('Username');
+    await userEvent.type(screen.getByLabelText('Username'), 'tester');
+    await userEvent.tab();
+    await userEvent.type(screen.getByLabelText('Email'), 'test@test.com');
+    await userEvent.tab();
+    await userEvent.type(screen.getByLabelText('Password'), 'secret');
+    await userEvent.tab();
+    await userEvent.type(screen.getByLabelText('Confirm Password'), 'secret');
+    await userEvent.tab();
+    await userEvent.click(screen.getByRole('button', { name: /register/i }));
+
+    await waitFor(() => {
+      expect(api.postRegister).toHaveBeenCalledWith({
+        username: 'tester',
+        email: 'test@test.com',
+        password: 'secret',
+        inviteToken: 'abc123',
+      });
+    });
+  });
 });

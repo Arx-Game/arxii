@@ -1,6 +1,7 @@
 import {
   AccountData,
   ConnectedSocialAccount,
+  RegistrationStatus,
   SignupResponse,
   SocialProvider,
   StatusData,
@@ -112,10 +113,20 @@ export async function postRegister(data: {
   username: string;
   password: string;
   email: string;
+  /** Invite-only registration (#3054) — omitted from the request body when unset. */
+  inviteToken?: string;
 }): Promise<{ success: true; emailVerificationRequired: boolean }> {
+  const body: { username: string; email: string; password: string; invite_token?: string } = {
+    username: data.username,
+    email: data.email,
+    password: data.password,
+  };
+  if (data.inviteToken) {
+    body.invite_token = data.inviteToken;
+  }
   const res = await apiFetch('/api/auth/browser/v1/auth/signup', {
     method: 'POST',
-    body: JSON.stringify(data),
+    body: JSON.stringify(body),
   });
 
   if (res.status === 401) {
@@ -162,6 +173,16 @@ export async function postRegister(data: {
 
   // Registration completed without email verification required
   return { success: true, emailVerificationRequired: false };
+}
+
+/** Public, unauthenticated (#3054) — used by RegisterPage to decide whether to show
+ * the invite-only notice instead of the signup form. Never enumerates invites. */
+export async function fetchRegistrationStatus(): Promise<RegistrationStatus> {
+  const res = await apiFetch('/api/registration/status/');
+  if (!res.ok) {
+    throw new Error('Failed to load registration status');
+  }
+  return res.json();
 }
 
 export async function checkUsername(username: string): Promise<boolean> {

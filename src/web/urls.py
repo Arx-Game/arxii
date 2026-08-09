@@ -53,6 +53,8 @@ urlpatterns = [
     path("api/travel/", include("world.travel.urls")),
     path("api/companions/", include("world.companions.urls")),
     path("api/assets/", include("world.assets.urls")),
+    path("api/registration/", include("world.registration.urls")),
+    path("api/staff/", include("world.registration.staff_urls")),
     path("", include("world.scenes.urls")),
     path("", include("world.stories.urls")),
     path("webclient/", include("web.webclient.urls")),

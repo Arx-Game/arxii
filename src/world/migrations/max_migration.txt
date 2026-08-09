@@ -1,1 +1,1 @@
-0124_beta_reset_release_latch
+0125_accountinvite_registrationconfig

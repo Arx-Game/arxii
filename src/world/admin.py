@@ -71,6 +71,7 @@ import world.player_submissions.admin
 import world.progression.admin
 import world.projects.admin
 import world.realms.admin
+import world.registration.admin
 import world.relationships.admin
 import world.room_features.admin
 import world.roster.admin

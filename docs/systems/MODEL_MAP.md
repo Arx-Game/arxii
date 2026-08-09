@@ -7126,6 +7126,24 @@
   - market_squares <- items.MarketSquare
 
 
+## world.registration
+
+### AccountInvite
+**Foreign Keys:**
+  - invited_by -> evennia.AccountDB [FK]
+  - redeemed_by -> evennia.AccountDB [FK] (nullable)
+
+### RegistrationConfig
+**Foreign Keys:**
+  - updated_by -> evennia.AccountDB [FK] (nullable)
+
+### Service Functions
+- `issue_invite(email: str, invited_by: evennia.accounts.models.AccountDB, note: str = '') -> world.registration.models.AccountInvite - Issue an invite for ``email``.`
+- `redeem_invite(token: str, email: str, account: evennia.accounts.models.AccountDB) -> world.registration.models.AccountInvite | None - Validate + stamp redemption for the invite backing this signup.`
+- `revoke_invite(invite: world.registration.models.AccountInvite, by: evennia.accounts.models.AccountDB) -> world.registration.models.AccountInvite - Revoke an un-redeemed invite. ``by`` is accepted for future audit-log use.`
+- `signup_allowed(email: str, token: str) -> bool - True when ``token`` is a currently-redeemable invite bound to ``email``.`
+
+
 ## world.relationships
 
 ### AffectionShift

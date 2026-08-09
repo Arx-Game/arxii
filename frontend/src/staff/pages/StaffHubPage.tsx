@@ -104,6 +104,18 @@ export function StaffHubPage() {
             </CardContent>
           </Card>
         </Link>
+        <Link to="/staff/invites">
+          <Card className="cursor-pointer transition-colors hover:bg-muted/50">
+            <CardHeader>
+              <CardTitle>Account Invites</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <p className="text-sm text-muted-foreground">
+                Issue, track, and revoke invite-only registration links.
+              </p>
+            </CardContent>
+          </Card>
+        </Link>
         <Link to="/staff/missions">
           <Card className="cursor-pointer transition-colors hover:bg-muted/50">
             <CardHeader>
