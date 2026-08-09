@@ -455,6 +455,70 @@ class StoryRoomGrant(SharedMemoryModel):
         return f"StoryRoomGrant({self.character}, room={self.room_id})"
 
 
+class GMSummonOffer(SharedMemoryModel):
+    """A pending consent prompt: a GM has invited a player to their scene room (#3071).
+
+    Row existence IS pending status — mirrors ``PendingCast``/``PendingAudereOffer``/
+    ``PendingEntryFlourishOffer``'s "one row = one open offer" shape rather than
+    ``DuelChallenge``'s status-enum approach (this is a simpler one-shot GM→player
+    prompt, not a threaded challenger/challenged handshake). Resolving (accept or
+    decline) always deletes the row — ``resolve_gm_summon_offer`` in
+    ``world.gm.services`` is the single mutator.
+
+    Not story-significant data: a GM re-summoning the same target simply replaces
+    the pending offer (``unique_pending_gm_summon_offer``), it does not stack.
+    """
+
+    target_sheet = models.ForeignKey(
+        "arxii.CharacterSheet",
+        on_delete=models.CASCADE,
+        related_name="summon_offers",
+        help_text="The character being invited.",
+    )
+    invited_by = models.ForeignKey(
+        "arxii.GMProfile",
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="summon_offers_issued",
+        help_text="The GM who issued the summon. Null for a staff account with no GMProfile.",
+    )
+    gm_display_name = models.CharField(
+        max_length=80,
+        blank=True,
+        default="",
+        help_text=(
+            "Snapshot of the summoning character's display name at offer time — the consent "
+            "prompt names the GM this way (never the account username, never room contents)."
+        ),
+    )
+    room = models.ForeignKey(
+        "arxii.RoomProfile",
+        on_delete=models.CASCADE,
+        related_name="summon_offers",
+        help_text="The GM's scene room — destination on accept.",
+    )
+    scene = models.ForeignKey(
+        "arxii.Scene",
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="summon_offers",
+        help_text="The GM's active scene at the time of the summon, for display only.",
+    )
+    created_at = models.DateTimeField(auto_now_add=True, db_index=True)
+
+    class Meta:
+        verbose_name = "GM Summon Offer"
+        verbose_name_plural = "GM Summon Offers"
+        constraints = [
+            UniqueConstraint(fields=["target_sheet"], name="unique_pending_gm_summon_offer"),
+        ]
+
+    def __str__(self) -> str:
+        return f"GMSummonOffer(target={self.target_sheet_id}, room={self.room_id})"
+
+
 # --- GM scenario catalog (#2127, ADR-0110) ---------------------------------
 #
 # "Discovery, never invention", extended past ad-hoc checks (#2118) to the rest

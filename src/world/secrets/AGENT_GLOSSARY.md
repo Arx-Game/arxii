@@ -31,3 +31,7 @@ _Avoid_: disproof (nullification is the proof), counter-accusation (that's denou
 **Compensating reversal**:
 `reverse_secret_exposure` — re-deriving what `expose_secret` applied (diffuse archetype deltas + relational org-victim severities) and bumping the negation, fraction-scaled. Not idempotent; callers own the once-only guard. `societies_exposed` is never un-set: the secret *was* exposed, the world just stops believing it.
 _Avoid_: un-expose, reputation rollback.
+
+**GRANT_SECRET effect** (#3071):
+The `checks.EffectType` value letting an authored `ConsequenceEffect` hand a character `SecretKnowledge` when an outcome lands — the same `apply_all_effects` chokepoint `GRANT_CODEX` fires from. Its handler (`world.mechanics.effect_handlers._grant_secret`) calls `grant_secret_knowledge` with `knows_category`/`knows_consequences` left at their `False` defaults — the fact is known, the deeper layers are not, mirroring `GRANT_CODEX`'s "a scene hands you a lead, not the answer" UNCOVERED semantics without needing a parallel bypass (`SecretKnowledge` has no UNCOVERED-equivalent status field to bypass in the first place).
+_Avoid_: secret reward, secret drop (not a loot mechanic — see the mechanics app's structured-consequences invariant).

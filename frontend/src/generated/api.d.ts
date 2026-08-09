@@ -8246,6 +8246,54 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
+  '/api/gm/summon-offers/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /**
+     * @description Read-only inbox of the requesting player's pending GM summon offer(s) (#3071).
+     *
+     *     Mirrors ``DuelChallengeViewSet``'s shape: accept/decline are NOT DRF actions
+     *     here — they dispatch through the generic REGISTRY action-dispatch endpoint
+     *     (``accept_gm_summon``/``decline_gm_summon``), the same seam telnet's
+     *     ``accept summon``/``decline summon`` reaches via ``GMSummonPendingHandler``.
+     */
+    get: operations['gm_summon_offers_list'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/gm/summon-offers/{id}/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /**
+     * @description Read-only inbox of the requesting player's pending GM summon offer(s) (#3071).
+     *
+     *     Mirrors ``DuelChallengeViewSet``'s shape: accept/decline are NOT DRF actions
+     *     here — they dispatch through the generic REGISTRY action-dispatch endpoint
+     *     (``accept_gm_summon``/``decline_gm_summon``), the same seam telnet's
+     *     ``accept summon``/``decline summon`` reaches via ``GMSummonPendingHandler``.
+     */
+    get: operations['gm_summon_offers_retrieve'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   '/api/gm/table-memberships/': {
     parameters: {
       query?: never;
@@ -26144,6 +26192,22 @@ export interface components {
       is_public?: boolean;
       /** Format: email */
       invited_email?: string;
+    };
+    /**
+     * @description Read-only payload for a pending GM summon offer (#3071).
+     *
+     *     Leak analysis (spec-approved): the GM's display name + scene title only —
+     *     never room contents or other occupants. Accept/decline dispatch through the
+     *     generic REGISTRY action-dispatch endpoint (``accept_gm_summon``/
+     *     ``decline_gm_summon``), mirroring ``DuelChallenge``'s read-only inbox shape.
+     */
+    GMSummonOffer: {
+      readonly id: number;
+      readonly target_character_id: number;
+      readonly gm_display_name: string;
+      readonly scene_title: string | null;
+      /** Format: date-time */
+      readonly created_at: string;
     };
     /**
      * @description Serializer for GM tables.
@@ -51430,6 +51494,47 @@ export interface operations {
       };
     };
   };
+  gm_summon_offers_list: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['GMSummonOffer'][];
+        };
+      };
+    };
+  };
+  gm_summon_offers_retrieve: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        /** @description A unique integer value identifying this GM Summon Offer. */
+        id: number;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['GMSummonOffer'];
+        };
+      };
+    };
+  };
   gm_table_memberships_list: {
     parameters: {
       query?: {
@@ -54887,9 +54992,7 @@ export interface operations {
   };
   magic_consequence_pool_catalog_list: {
     parameters: {
-      query?: {
-        action_category?: string;
-      };
+      query?: never;
       header?: never;
       path?: never;
       cookie?: never;
@@ -54911,8 +55014,7 @@ export interface operations {
       query?: never;
       header?: never;
       path: {
-        /** @description A unique integer value identifying this Consequence Pool. */
-        id: number;
+        id: string;
       };
       cookie?: never;
     };

@@ -48,6 +48,28 @@ _AWARD_TYPES = (
 )
 
 
+def _resolve_gm_profile(actor: ObjectDB) -> Any | None:
+    """Return the acting GM's ``GMProfile``, or ``None`` (staff with no profile, #3071).
+
+    Mirrors ``_resolve_granting_tenure``'s none-safety shape — a staff account may
+    reach a JUNIOR-gated GM action via the staff bypass on ``MinimumGMLevelPrerequisite``
+    with no ``GMProfile`` of their own at all; callers that want to stamp provenance
+    treat ``None`` as "no attributable GM profile," not a refusal.
+    """
+    from typeclasses.characters import Character  # noqa: PLC0415
+    from world.gm.models import GMProfile  # noqa: PLC0415
+
+    if not isinstance(actor, Character):
+        return None
+    account = actor.active_account
+    if account is None:
+        return None
+    try:
+        return account.gm_profile
+    except GMProfile.DoesNotExist:
+        return None
+
+
 def _resolve_gm_target(kwargs: dict[str, Any]) -> ObjectDB | None:
     """Resolve the ``target`` kwarg to an ``ObjectDB`` character (#3070).
 
@@ -679,3 +701,69 @@ class GMApplyConditionAction(Action):
             )
 
         return ActionResult(success=True, message=f"{target.key} is now {template.name}.")
+
+
+@dataclass
+class SummonPlayerAction(Action):
+    """Consent-prompted GM summon: invite a player to the GM's scene room (#3071).
+
+    Ruled (2026-08-08, #3071): a GM may move a party mid-session, but only WITH
+    consent, and only into a scene the GM actually runs — this action does not
+    move anyone by itself. It creates (or replaces) a ``GMSummonOffer`` naming
+    the invoking GM and their current room; the *target* must separately accept
+    via ``AcceptGMSummonAction``/``DeclineGMSummonAction``
+    (``actions/definitions/gm_summon_offers.py``) before anyone moves.
+
+    Gated the same way ``GMAwardAction``/``GMApplyConditionAction`` are —
+    ``IsSceneGMPrerequisite`` (the actor must be running an active scene at their
+    own location; the "for tracking" shape the ruling asked for — a summon is
+    always anchored to a live scene, never a bare room) + JUNIOR GM trust, staff
+    bypass preserved.
+
+    Leak analysis (per the approved spec): the consent prompt names the GM
+    (``actor.key``) and the scene title only — never room contents/other
+    occupants — so a decline reveals nothing further.
+    """
+
+    key: str = "summon_player"
+    name: str = "Summon Player"
+    icon: str = "compass"
+    category: str = "gm"
+    target_type: TargetType = TargetType.SINGLE
+    objectdb_target_kwargs: ClassVar[frozenset[str]] = frozenset({"target"})
+
+    def get_prerequisites(self) -> list[Prerequisite]:
+        return [IsSceneGMPrerequisite(), MinimumGMLevelPrerequisite(GMLevel.JUNIOR)]
+
+    def execute(
+        self,
+        actor: ObjectDB,
+        context: ActionContext | None = None,
+        **kwargs: Any,
+    ) -> ActionResult:
+        from world.areas.services import get_room_profile  # noqa: PLC0415
+        from world.gm.services import offer_gm_summon  # noqa: PLC0415
+        from world.scenes.interaction_services import get_active_scene  # noqa: PLC0415
+
+        target = _resolve_gm_target(kwargs)
+        if target is None:
+            return ActionResult(success=False, message="A target character is required.")
+        target_sheet = target.character_sheet
+        if target_sheet is None:
+            return ActionResult(success=False, message=f"{target.key} has no character sheet.")
+        if target_sheet.pk == actor.pk:
+            return ActionResult(success=False, message="You cannot summon yourself.")
+
+        if actor.location is None:
+            return ActionResult(success=False, message="You are not in a room.")
+
+        gm_profile = _resolve_gm_profile(actor)
+        room = get_room_profile(actor.location)
+        scene = get_active_scene(actor.location)
+
+        offer_gm_summon(gm_profile, target_sheet, room=room, scene=scene, gm_display_name=actor.key)
+
+        return ActionResult(
+            success=True,
+            message=f"You invite {target.key} to your scene. They must accept to be moved.",
+        )

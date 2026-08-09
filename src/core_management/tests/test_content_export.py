@@ -1913,6 +1913,133 @@ class TechniqueVariantContentExportTests(TestCase):
         assert resolved.pk == variant.pk
 
 
+class ConsequenceLayerContentExportTests(TestCase):
+    """Round-trip coverage for the effect layer admitted to CONTENT_MODELS (#3071).
+
+    ``checks.consequence``, ``checks.consequenceeffect``, ``actions.consequencepool``,
+    and ``actions.consequencepoolentry`` are the load-bearing gap the anti-reinvention
+    ledger flagged: the template/link layer was already lore-authorable, but the layer
+    that actually FIRES a reward (``ConsequenceEffect``, via ``apply_all_effects``) was
+    seeder/admin-only. ``ConsequencePool`` already carried ``NaturalKeyMixin`` (#1871)
+    but was never registered.
+    """
+
+    def setUp(self) -> None:
+        self.tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(self.tmp.cleanup)
+        self.root = Path(self.tmp.name)
+
+    def test_consequence_round_trips(self) -> None:
+        from world.checks.models import Consequence
+        from world.traits.factories import CheckOutcomeFactory
+
+        outcome = CheckOutcomeFactory(name="Round Trip Success")
+        consequence = Consequence.objects.create(
+            outcome_tier=outcome,
+            label="Round Trip Consequence",
+            mechanical_description="A round-trip consequence.",
+            weight=3,
+            character_loss=False,
+        )
+
+        result = export_to_content_repo(self.root)
+        assert result.errors == []
+
+        path = self.root / "fixtures" / "checks" / "consequence.json"
+        assert path.exists()
+        records = json.loads(path.read_text(encoding="utf-8"))
+        assert len(records) == 1
+        record = records[0]
+        assert "pk" not in record
+        assert record["fields"]["outcome_tier"] == [outcome.name]
+        assert record["fields"]["label"] == "Round Trip Consequence"
+
+        from core_management.content_fixtures import build_all, load_entries
+
+        created, _updated, _ = load_entries(build_all(self.root))
+        assert created == 0, f"Round-trip created {created} new records (expected 0)"
+
+        resolved = Consequence.objects.get_by_natural_key(outcome.name, "Round Trip Consequence")
+        assert resolved.pk == consequence.pk
+
+    def test_consequence_effect_round_trips(self) -> None:
+        from world.checks.constants import EffectType
+        from world.checks.factories import ConsequenceFactory
+        from world.checks.models import ConsequenceEffect
+        from world.codex.factories import CodexEntryFactory
+
+        consequence = ConsequenceFactory(label="Round Trip Parent Consequence")
+        codex_entry = CodexEntryFactory(name="Round Trip Codex Entry")
+        effect = ConsequenceEffect.objects.create(
+            consequence=consequence,
+            effect_type=EffectType.GRANT_CODEX,
+            execution_order=0,
+            codex_entry=codex_entry,
+        )
+
+        result = export_to_content_repo(self.root)
+        assert result.errors == []
+
+        path = self.root / "fixtures" / "checks" / "consequenceeffect.json"
+        assert path.exists()
+        records = json.loads(path.read_text(encoding="utf-8"))
+        assert len(records) == 1
+        record = records[0]
+        assert "pk" not in record
+        assert record["fields"]["execution_order"] == 0
+        assert record["fields"]["effect_type"] == EffectType.GRANT_CODEX
+
+        from core_management.content_fixtures import build_all, load_entries
+
+        created, _updated, _ = load_entries(build_all(self.root))
+        assert created == 0, f"Round-trip created {created} new records (expected 0)"
+
+        resolved = ConsequenceEffect.objects.get_by_natural_key(
+            consequence.outcome_tier.name, consequence.label, 0
+        )
+        assert resolved.pk == effect.pk
+
+    def test_consequence_pool_and_entry_round_trip(self) -> None:
+        from actions.models import ConsequencePool, ConsequencePoolEntry
+        from world.checks.factories import ConsequenceFactory
+
+        pool = ConsequencePool.objects.create(name="Round Trip Pool", description="A pool.")
+        consequence = ConsequenceFactory(label="Round Trip Pool Consequence")
+        entry = ConsequencePoolEntry.objects.create(
+            pool=pool,
+            consequence=consequence,
+            weight_override=5,
+        )
+
+        result = export_to_content_repo(self.root)
+        assert result.errors == []
+
+        pool_path = self.root / "fixtures" / "actions" / "consequencepool.json"
+        entry_path = self.root / "fixtures" / "actions" / "consequencepoolentry.json"
+        assert pool_path.exists()
+        assert entry_path.exists()
+
+        pool_records = json.loads(pool_path.read_text(encoding="utf-8"))
+        assert len(pool_records) == 1
+        assert pool_records[0]["fields"]["name"] == "Round Trip Pool"
+
+        entry_records = json.loads(entry_path.read_text(encoding="utf-8"))
+        assert len(entry_records) == 1
+        assert entry_records[0]["fields"]["weight_override"] == 5
+
+        from core_management.content_fixtures import build_all, load_entries
+
+        created, _updated, _ = load_entries(build_all(self.root))
+        assert created == 0, f"Round-trip created {created} new records (expected 0)"
+
+        resolved_pool = ConsequencePool.objects.get_by_natural_key("Round Trip Pool")
+        assert resolved_pool.pk == pool.pk
+        resolved_entry = ConsequencePoolEntry.objects.get_by_natural_key(
+            "Round Trip Pool", consequence.outcome_tier.name, consequence.label
+        )
+        assert resolved_entry.pk == entry.pk
+
+
 class MagicalAlterationTemplateContentExportTests(TestCase):
     """Round-trip coverage for MagicalAlterationTemplate (#3034).
 

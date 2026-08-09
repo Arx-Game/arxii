@@ -46,6 +46,8 @@
 
 ### ConsequencePool
 **Foreign Keys:**
+  - written_by -> contributors.ContentContributor [FK] (nullable)
+  - reviewed_by -> contributors.ContentContributor [FK] (nullable)
   - parent -> actions.ConsequencePool [FK] (nullable)
 **Pointed to by:**
   - children <- actions.ConsequencePool
@@ -205,6 +207,7 @@
   - descent_source <- dreams.DreamReflection
   - events <- events.Event
   - story_grants <- gm.StoryRoomGrant
+  - summon_offers <- gm.GMSummonOffer
   - instance_data <- instances.InstancedRoom
   - placed_items <- items.RoomItem
   - feature_instance <- room_features.RoomFeatureInstance
@@ -1476,6 +1479,7 @@
   - temporary_form_changes <- forms.TemporaryFormChange
   - known_styles <- forms.CharacterKnownStyle
   - story_room_grants <- gm.StoryRoomGrant
+  - summon_offers <- gm.GMSummonOffer
   - goals <- goals.CharacterGoal
   - goal_journals <- goals.GoalJournal
   - goal_revision <- goals.GoalRevision
@@ -1660,6 +1664,8 @@
 
 ### Consequence
 **Foreign Keys:**
+  - written_by -> contributors.ContentContributor [FK] (nullable)
+  - reviewed_by -> contributors.ContentContributor [FK] (nullable)
   - outcome_tier -> traits.CheckOutcome [FK]
 **Pointed to by:**
   - pool_entries <- actions.ConsequencePoolEntry
@@ -1672,6 +1678,8 @@
 
 ### ConsequenceEffect
 **Foreign Keys:**
+  - written_by -> contributors.ContentContributor [FK] (nullable)
+  - reviewed_by -> contributors.ContentContributor [FK] (nullable)
   - consequence -> checks.Consequence [FK]
   - condition_template -> conditions.ConditionTemplate [FK] (nullable)
   - relationship_condition -> relationships.RelationshipCondition [FK] (nullable)
@@ -1680,6 +1688,7 @@
   - damage_type -> conditions.DamageType [FK] (nullable)
   - flow_definition -> flows.FlowDefinition [FK] (nullable)
   - codex_entry -> codex.CodexEntry [FK] (nullable)
+  - secret -> secrets.Secret [FK] (nullable)
   - legend_source_type -> societies.LegendSourceType [FK] (nullable)
   - capture_captor_organization -> societies.Organization [FK] (nullable)
   - capture_captive_template -> missions.MissionTemplate [FK] (nullable)
@@ -3788,6 +3797,7 @@
   - level_changes <- gm.GMLevelChange
   - story_areas <- gm.StoryArea
   - story_grants_issued <- gm.StoryRoomGrant
+  - summon_offers_issued <- gm.GMSummonOffer
   - weekly_reward_tracker <- gm.GMWeeklyRewardTracker
   - resolved_update_requests <- gm.TableUpdateRequest
   - owned_instances <- instances.InstancedRoom
@@ -3813,6 +3823,13 @@
   - roster_entry -> roster.RosterEntry [FK]
   - created_by -> gm.GMProfile [FK]
   - claimed_by -> evennia.AccountDB [FK] (nullable)
+
+### GMSummonOffer
+**Foreign Keys:**
+  - target_sheet -> character_sheets.CharacterSheet [FK]
+  - invited_by -> gm.GMProfile [FK] (nullable)
+  - room -> evennia_extensions.RoomProfile [FK]
+  - scene -> scenes.Scene [FK] (nullable)
 
 ### GMTable
 **Foreign Keys:**
@@ -3896,7 +3913,9 @@
 - `idle_tables(threshold_days: 'int' = 14) -> 'QuerySet[GMTable]' - ACTIVE tables whose GM's ``last_active_at`` is older than the threshold (#2004).`
 - `join_table(table: 'GMTable', persona: 'Persona') -> 'GMTableMembership' - Add a persona to a table. Idempotent — returns existing active`
 - `leave_table(membership: 'GMTableMembership') -> 'None' - Soft-leave a membership. No-op if already left.`
+- `offer_gm_summon(gm_profile: 'GMProfile | None', target_sheet: 'CharacterSheet', *, room: 'RoomProfile', scene: 'Scene | None' = None, gm_display_name: 'str' = '') -> 'GMSummonOffer' - Create or replace a pending GM summon offer for ``target_sheet`` (#3071).`
 - `promote_gm(profile: 'GMProfile', new_level: 'str', *, changed_by: 'AccountDB', reason: 'str') -> 'GMLevelChange' - Set profile.level (promotion OR demotion), writing the audit row.`
+- `resolve_gm_summon_offer(offer: 'GMSummonOffer', *, accept: 'bool') -> 'None' - Resolve a pending summon offer: move the target on accept, always clear it (#3071).`
 - `revoke_invite(invite: 'GMRosterInvite') -> 'None' - Revoke an invite by setting expires_at to now.`
 - `set_looking_for_table(player_data: 'PlayerData', looking: 'bool') -> 'None' - Set or clear the looking-for-table flag on a player's profile (#2431).`
 - `signoff_table_update_request(request: 'TableUpdateRequest', gm_profile: 'GMProfile', *, approve: 'bool', notes: 'str' = '') -> 'TableUpdateRequest' - Approve or reject a PENDING request — the GM's yes/no judgment call (#2631).`
@@ -7926,6 +7945,7 @@
   - sineatings <- magic.Sineating
   - rescues <- magic.SoulTetherRescue
   - combat_encounters <- combat.CombatEncounter
+  - summon_offers <- gm.GMSummonOffer
   - fashion_showings <- items.FashionShowing
   - npc_regard_events <- npc_services.NpcRegardEvent
   - petitions <- player_submissions.Petition
@@ -8099,6 +8119,7 @@
   - archetypes -> societies.PhilosophicalArchetype [M2M]
   - societies_exposed -> societies.Society [M2M]
 **Pointed to by:**
+  - consequence_effects <- checks.ConsequenceEffect
   - clues <- clues.Clue
   - distinction <- distinctions.CharacterDistinction
   - accusation_crime_claim <- justice.AccusationCrimeClaim

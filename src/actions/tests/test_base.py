@@ -441,6 +441,10 @@ class ActionRegistryTests(TestCase):
             "gm_invoke_check",
             "gm_award_progression",
             "gm_apply_condition",
+            # #3071 — consent-prompted GM summon: invite + target-side accept/decline.
+            "summon_player",
+            "accept_gm_summon",
+            "decline_gm_summon",
             # #2127 — GM scenario catalog: situation find/browse + suggestion inbox.
             "gm_find_situation",
             "gm_submit_catalog_suggestion",

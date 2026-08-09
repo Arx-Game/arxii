@@ -70,6 +70,13 @@ CONTENT_MODELS: frozenset[str] = frozenset(
         "achievements.achievementreward",
         "achievements.rewarddefinition",
         "achievements.conditionstatrule",
+        # actions — #3071: the effect layer that actually fires a reward when an
+        # authored outcome lands (challenges/traps/story-beats all converge on
+        # ConsequenceEffect via apply_all_effects) was seeder/admin-only; this is
+        # what makes it lore-authorable. ConsequencePool already carried
+        # NaturalKeyMixin since #1871 but was never registered.
+        "actions.consequencepool",
+        "actions.consequencepoolentry",
         # actions — #3034: the six social-magic ActionEnhancement rows #2973
         # requires (Intimidate/Persuade/Deceive/Flirt/Perform/Entrance) had no
         # production seeder and no CONTENT_MODELS entry, so "magical
@@ -94,6 +101,12 @@ CONTENT_MODELS: frozenset[str] = frozenset(
         "checks.checktype",
         "checks.checktypecapabilitymodifier",
         "checks.checktypetrait",
+        # #3071: the effect layer itself — see the actions.consequencepool* comment
+        # above. Consequence/ConsequenceEffect rows are authored-only (every
+        # production creation site is a seeder/factory; no player-facing mutation
+        # path exists), so no EXPORT_FILTERS row-level split is needed.
+        "checks.consequence",
+        "checks.consequenceeffect",
         # classes
         "classes.aspect",
         "classes.path",

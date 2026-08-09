@@ -12962,6 +12962,57 @@ paths:
                 items:
                   $ref: '#/components/schemas/StoryInstance'
           description: ''
+  /api/gm/summon-offers/:
+    get:
+      operationId: gm_summon_offers_list
+      description: |-
+        Read-only inbox of the requesting player's pending GM summon offer(s) (#3071).
+
+        Mirrors ``DuelChallengeViewSet``'s shape: accept/decline are NOT DRF actions
+        here — they dispatch through the generic REGISTRY action-dispatch endpoint
+        (``accept_gm_summon``/``decline_gm_summon``), the same seam telnet's
+        ``accept summon``/``decline summon`` reaches via ``GMSummonPendingHandler``.
+      tags:
+      - gm
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/GMSummonOffer'
+          description: ''
+  /api/gm/summon-offers/{id}/:
+    get:
+      operationId: gm_summon_offers_retrieve
+      description: |-
+        Read-only inbox of the requesting player's pending GM summon offer(s) (#3071).
+
+        Mirrors ``DuelChallengeViewSet``'s shape: accept/decline are NOT DRF actions
+        here — they dispatch through the generic REGISTRY action-dispatch endpoint
+        (``accept_gm_summon``/``decline_gm_summon``), the same seam telnet's
+        ``accept summon``/``decline summon`` reaches via ``GMSummonPendingHandler``.
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: A unique integer value identifying this GM Summon Offer.
+        required: true
+      tags:
+      - gm
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/GMSummonOffer'
+          description: ''
   /api/gm/table-memberships/:
     get:
       operationId: gm_table_memberships_list
@@ -16938,11 +16989,6 @@ paths:
         resolve_cast_action_template enforces the same split at submit/finalize
         time. The technique builder's category-agnostic picker keeps the flat
         union by passing no param.
-      parameters:
-      - in: query
-        name: action_category
-        schema:
-          type: string
       tags:
       - magic
       security:
@@ -16974,8 +17020,7 @@ paths:
       - in: path
         name: id
         schema:
-          type: integer
-        description: A unique integer value identifying this Consequence Pool.
+          type: string
         required: true
       tags:
       - magic
@@ -45468,6 +45513,39 @@ components:
           format: email
       required:
       - roster_entry
+    GMSummonOffer:
+      type: object
+      description: |-
+        Read-only payload for a pending GM summon offer (#3071).
+
+        Leak analysis (spec-approved): the GM's display name + scene title only —
+        never room contents or other occupants. Accept/decline dispatch through the
+        generic REGISTRY action-dispatch endpoint (``accept_gm_summon``/
+        ``decline_gm_summon``), mirroring ``DuelChallenge``'s read-only inbox shape.
+      properties:
+        id:
+          type: integer
+          readOnly: true
+        target_character_id:
+          type: integer
+          readOnly: true
+        gm_display_name:
+          type: string
+          readOnly: true
+        scene_title:
+          type: string
+          nullable: true
+          readOnly: true
+        created_at:
+          type: string
+          format: date-time
+          readOnly: true
+      required:
+      - created_at
+      - gm_display_name
+      - id
+      - scene_title
+      - target_character_id
     GMTable:
       type: object
       description: |-

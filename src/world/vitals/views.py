@@ -33,6 +33,15 @@ class CharacterVitalsView(APIView):
     permission_classes = [IsAuthenticated]
 
     def _can_view(self, request: Request, character_id: int) -> bool:
+        """Staff-or-own-tenure only. DELIBERATE (Tehom ruling 2026-08-08, #3071).
+
+        The #3071 GM-tooling ruling considered and rejected a `viewer_can_gm`
+        carve-out here: a scene's GM narrates off public wound text (badges,
+        pose descriptions), not raw vitals numbers. This is least-privilege by
+        design, not a gap — do not add a GM/scene-participant exception without
+        a fresh ruling. See `docs/systems/INDEX.md`'s GM section, "Pool opacity"
+        subsection.
+        """
         if request.user.is_staff:
             return True
         user = cast(AccountDB, request.user)

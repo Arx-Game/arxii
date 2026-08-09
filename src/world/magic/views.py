@@ -716,7 +716,16 @@ class CharacterAnimaViewSet(viewsets.ModelViewSet):
     filterset_class = CharacterAnimaFilter
 
     def get_queryset(self):
-        """Filter to characters the current user plays (or all if staff)."""
+        """Filter to characters the current user plays (or all if staff).
+
+        Staff-or-own-tenure only. DELIBERATE (Tehom ruling 2026-08-08, #3071) —
+        anima is closer to private character state than a public wound badge, so
+        no `viewer_can_gm` carve-out exists here either (mirrors
+        `world.vitals.views.CharacterVitalsView._can_view`). A scene's GM narrates
+        off what the character shows, not a raw resource number. Do not add a
+        GM/scene-participant exception without a fresh ruling — see
+        `docs/systems/INDEX.md`'s GM section, "Pool opacity" subsection.
+        """
         user = self.request.user
         if user.is_staff:
             return CharacterAnima.objects.all()

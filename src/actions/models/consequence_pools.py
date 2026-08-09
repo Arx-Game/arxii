@@ -9,14 +9,19 @@ from evennia.utils.idmapper.models import SharedMemoryModel
 
 from actions.types import WeightedConsequence, _entry_to_weighted
 from core.natural_keys import NaturalKeyManager, NaturalKeyMixin
+from world.contributors.models import CreditedContent
 
 
 class ConsequencePoolManager(NaturalKeyManager):
     """Manager for ConsequencePool with natural key support, plus cached_all() (#1871)."""
 
 
-class ConsequencePool(NaturalKeyMixin, SharedMemoryModel):
-    """Named, reusable collection of consequences with single-depth inheritance."""
+class ConsequencePool(NaturalKeyMixin, CreditedContent, SharedMemoryModel):
+    """Named, reusable collection of consequences with single-depth inheritance.
+
+    Lore-authorable (#3071) — carried ``NaturalKeyMixin`` since #1871 but was never
+    registered in ``CONTENT_MODELS`` until now.
+    """
 
     objects = ConsequencePoolManager()
 
@@ -98,8 +103,20 @@ class ConsequencePool(NaturalKeyMixin, SharedMemoryModel):
             )
 
 
-class ConsequencePoolEntry(SharedMemoryModel):
-    """Links a Consequence to a Pool with optional weight override or exclusion."""
+class ConsequencePoolEntry(NaturalKeyMixin, SharedMemoryModel):
+    """Links a Consequence to a Pool with optional weight override or exclusion.
+
+    Lore-authorable (#3071) — natural key ``(pool, consequence)`` is exactly what
+    the existing ``unique_pool_consequence`` UniqueConstraint below already
+    enforces (mirrors ``TechniqueVariant``, #3034: the natural key reuses a
+    pre-existing DB constraint rather than inventing a new one).
+    """
+
+    objects = NaturalKeyManager()
+
+    class NaturalKeyConfig:
+        fields = ["pool", "consequence"]
+        dependencies = ["arxii.ConsequencePool", "arxii.Consequence"]
 
     pool = models.ForeignKey(
         ConsequencePool,

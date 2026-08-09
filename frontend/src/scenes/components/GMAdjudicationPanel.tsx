@@ -4,11 +4,12 @@
  * Before this panel, the only way to call a check, hand out an award, apply a
  * condition, or place a situation/challenge from the browser was to type
  * `gm ...` into the scene composer — which poses it to the room as IC text
- * instead of running the action. This panel dispatches the SAME five
+ * instead of running the action. This panel dispatches the SAME
  * prerequisite-gated REGISTRY actions telnet's `gm`/`setsituation` commands
  * already use (`gm_invoke_check`, `gm_award_progression`, `gm_apply_condition`,
- * `set_situation`, `place_challenge`) directly over the generic REST dispatch
- * seam (`useDispatchPlayerAction` -> `POST /api/actions/characters/{id}/dispatch/`),
+ * `set_situation`, `place_challenge`, `summon_player` — #3071) directly over the
+ * generic REST dispatch seam
+ * (`useDispatchPlayerAction` -> `POST /api/actions/characters/{id}/dispatch/`),
  * mirroring `PersonaContextMenu.tsx`'s `challenge`/`identify` items — these
  * actions carry no `ActionTemplate`, so they never appear in the generic
  * `get_player_actions` listing.
@@ -24,10 +25,13 @@
  * Targets are the scene's own participants (`scene.personas`), keyed by
  * `character_sheet` — a `CharacterSheet`'s pk equals its owning `ObjectDB`'s
  * pk (shared-pk O2O), so that id is exactly what `gm_invoke_check`/
- * `gm_award_progression`/`gm_apply_condition`'s `target` kwarg expects
- * (resolved server-side by `_resolve_gm_target`, `actions/definitions/
+ * `gm_award_progression`/`gm_apply_condition`/`summon_player`'s `target` kwarg
+ * expects (resolved server-side by `_resolve_gm_target`, `actions/definitions/
  * gm_adjudication.py`). `set_situation`/`place_challenge` act on the GM's own
- * room instead (`target_type=SELF`) and so have no target picker.
+ * room instead (`target_type=SELF`) and so have no target picker. Summon can
+ * only reach a scene participant from this picker today (#3071) — an
+ * arbitrary off-scene target needs a global character-search affordance this
+ * panel doesn't have yet; telnet's `gm summon <character>` has no such limit.
  */
 
 import { useMemo, useState } from 'react';
@@ -532,6 +536,38 @@ function SituationTab({ characterId }: { characterId: number }) {
 }
 
 // ---------------------------------------------------------------------------
+// Summon tab (#3071)
+// ---------------------------------------------------------------------------
+
+function SummonTab({ characterId, targetCharacterId }: TabProps) {
+  const dispatch = useDispatchPlayerAction(characterId);
+  const canSubmit = targetCharacterId !== null && !dispatch.isPending;
+
+  function handleSubmit() {
+    if (!canSubmit) return;
+    dispatch
+      .mutateAsync({
+        ref: { backend: 'registry', registry_key: 'summon_player' },
+        kwargs: { target: targetCharacterId },
+      })
+      .then((result) => reportResult(result, 'Invitation sent — they must accept to be moved.'))
+      .catch(() => toast.error('Could not summon that character.'));
+  }
+
+  return (
+    <div className="space-y-3" data-testid="gm-adjudication-summon-tab">
+      <p className="text-xs text-muted-foreground">
+        Invites the selected participant to your current scene room. They must accept
+        (consent-prompted) before they are moved.
+      </p>
+      <Button disabled={!canSubmit} onClick={handleSubmit} data-testid="gm-summon-submit">
+        {dispatch.isPending ? 'Sending…' : 'Summon'}
+      </Button>
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
 // Panel shell
 // ---------------------------------------------------------------------------
 
@@ -579,6 +615,9 @@ export function GMAdjudicationPanel({ scene }: GMAdjudicationPanelProps) {
             <TabsTrigger value="situation" data-testid="gm-tab-situation">
               Situation
             </TabsTrigger>
+            <TabsTrigger value="summon" data-testid="gm-tab-summon">
+              Summon
+            </TabsTrigger>
           </TabsList>
           <TabsContent value="check">
             <CallCheckTab characterId={characterId} targetCharacterId={targetCharacterId} />
@@ -591,6 +630,9 @@ export function GMAdjudicationPanel({ scene }: GMAdjudicationPanelProps) {
           </TabsContent>
           <TabsContent value="situation">
             <SituationTab characterId={characterId} />
+          </TabsContent>
+          <TabsContent value="summon">
+            <SummonTab characterId={characterId} targetCharacterId={targetCharacterId} />
           </TabsContent>
         </Tabs>
       </CardContent>

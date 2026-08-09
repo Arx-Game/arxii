@@ -181,6 +181,7 @@ from actions.definitions.gm_adjudication import (
     GMApplyConditionAction,
     GMAwardAction,
     InvokeCatalogCheckAction,
+    SummonPlayerAction,
 )
 from actions.definitions.gm_catalog import FindSituationAction, SubmitCatalogSuggestionAction
 from actions.definitions.gm_combat import (
@@ -204,6 +205,7 @@ from actions.definitions.gm_stories import (
     ResolveEpisodeAction,
     WithdrawGroupStoryRequestAction,
 )
+from actions.definitions.gm_summon_offers import AcceptGMSummonAction, DeclineGMSummonAction
 from actions.definitions.goals import LogGoalProgressAction, SetCharacterGoalsAction
 from actions.definitions.hazards import HazardEndureAction, HazardRetreatAction
 from actions.definitions.identification import IdentifyAction
@@ -809,6 +811,10 @@ _ALL_ACTIONS: list[Action] = [
     InvokeCatalogCheckAction(),
     GMAwardAction(),
     GMApplyConditionAction(),
+    # #3071 — consent-prompted GM summon: invite + target-side accept/decline.
+    SummonPlayerAction(),
+    AcceptGMSummonAction(),
+    DeclineGMSummonAction(),
     # #2127 — GM scenario catalog: situation find/browse + suggestion inbox.
     FindSituationAction(),
     SubmitCatalogSuggestionAction(),

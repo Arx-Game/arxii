@@ -251,6 +251,16 @@ An `ALLY` `CombatOpponent` conjured during combat by a technique
 `bond_expires_round`). It attacks `ENEMY` opponents via
 `CombatOpponentAction.opponent_targets`. The per-app glossary (combat) has
 the full entry. _Avoid_: familiar, pet, companion (for the in-combat row).
+DISTINCT from **GM Summon** below — the two are unrelated mechanics sharing an
+English word only.
+
+**GM Summon** (#3071):
+A consent-prompted GM invitation moving a player to the GM's scene room —
+`SummonPlayerAction` creates a `gm.GMSummonOffer`; the target accepts
+(`AcceptGMSummonAction`, moves them) or declines (`DeclineGMSummonAction`,
+no-op) — never a unilateral GM move. DISTINCT from in-combat **Summon** above
+(that's a conjured `CombatOpponent`, not a player relocation). _Avoid_:
+teleport, GM-fiat move (implies no consent gate).
 
 **Intangibility** (conditions gate):
 The untargetable-in-combat status conferred by a `ConditionInstance` whose

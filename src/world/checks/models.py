@@ -250,7 +250,7 @@ class CheckTypeSpecialization(NaturalKeyMixin, SharedMemoryModel):
 # ---------------------------------------------------------------------------
 
 
-class Consequence(SharedMemoryModel):
+class Consequence(NaturalKeyMixin, CreditedContent, SharedMemoryModel):
     """
     A possible outcome tied to a CheckOutcome tier.
 
@@ -258,7 +258,26 @@ class Consequence(SharedMemoryModel):
     outcomes: challenges, combat, magic, social scenes, etc. Domain-specific
     systems reference Consequence via through models that add context
     (e.g., ChallengeTemplateConsequence adds resolution_type).
+
+    **Lore-authorable (#3071):** the effect layer is the load-bearing gap the
+    template/link layer (``ChallengeTemplate``, mission routes) already crossed —
+    a `ConsequenceEffect` is what actually fires a reward when an outcome lands,
+    and until #3071 it was seeder/admin-only. Natural key is
+    ``(outcome_tier, label)`` — there is no DB-enforced uniqueness backing it
+    (mirrors ``ActionEnhancement``, #3034: several production seeders create rows
+    via ``.objects.get_or_create()``/``.objects.create()`` directly, and adding a
+    constraint now risks colliding with those). ``outcome_tier`` (``CheckOutcome``)
+    itself is not corpus content (it's core mechanical scaffolding, not lore), but
+    it carries its own natural key (``name``), so a `Consequence` fixture row
+    resolves it by name against whatever `CheckOutcome` rows already exist on the
+    target database.
     """
+
+    objects = NaturalKeyManager()
+
+    class NaturalKeyConfig:
+        fields = ["outcome_tier", "label"]
+        dependencies = ["arxii.CheckOutcome"]
 
     outcome_tier = models.ForeignKey(
         "arxii.CheckOutcome",
@@ -282,14 +301,26 @@ class Consequence(SharedMemoryModel):
         return self.label
 
 
-class ConsequenceEffect(SharedMemoryModel):
+class ConsequenceEffect(NaturalKeyMixin, CreditedContent, SharedMemoryModel):
     """
     A structured mechanical effect applied when a consequence is selected.
 
     Each consequence can have zero or more effects, executed in order.
     The effect_type determines which fields are relevant; clean() validates
     that the correct fields are populated.
+
+    **Lore-authorable (#3071):** natural key is ``(consequence, execution_order)``
+    — no DB-enforced uniqueness (mirrors ``Consequence`` above and
+    ``ActionEnhancement``, #3034), since execution order is already how authors
+    and code alike distinguish one effect row from a sibling on the same
+    consequence.
     """
+
+    objects = NaturalKeyManager()
+
+    class NaturalKeyConfig:
+        fields = ["consequence", "execution_order"]
+        dependencies = ["arxii.Consequence"]
 
     consequence = models.ForeignKey(
         Consequence,
@@ -400,6 +431,17 @@ class ConsequenceEffect(SharedMemoryModel):
     # Codex effects
     codex_entry = models.ForeignKey(
         "arxii.CodexEntry",
+        on_delete=models.CASCADE,
+        null=True,
+        blank=True,
+        related_name="consequence_effects",
+    )
+
+    # Secret-grant effects (#3071) — mirrors codex_entry above. FK direction is
+    # specific->general per ADR-0010: this consumer points at the reusable
+    # secrets.Secret primitive, so secrets stays dependency-free.
+    secret = models.ForeignKey(
+        "arxii.Secret",
         on_delete=models.CASCADE,
         null=True,
         blank=True,
@@ -534,6 +576,7 @@ class ConsequenceEffect(SharedMemoryModel):
         EffectType.LAUNCH_ATTACK: [("damage_type", "damage_type_id")],
         EffectType.LAUNCH_FLOW: [("flow_definition", "flow_definition_id")],
         EffectType.GRANT_CODEX: [("codex_entry", "codex_entry_id")],
+        EffectType.GRANT_SECRET: [("secret", "secret_id")],
         EffectType.MAGICAL_SCARS: [("condition_template", "condition_template_id")],
         EffectType.CREATE_POSITION: [("position_name", "position_name")],
         EffectType.SEVER_EDGE: [

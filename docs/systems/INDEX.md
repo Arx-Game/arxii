@@ -1959,7 +1959,14 @@ GM at a given level may author (#2000, ADR-0097).
   select/write a live `consequence_pool` FK, Decision 7), `CatalogSuggestion`
   (`submitted_by: accounts.AccountDB`, `situation_kind` nullable, `proposal_kind`,
   `proposal_text`, `status: player_submissions.SubmissionStatus` — reused directly,
-  Decision 8 — `reviewer`, `review_notes`, `resolved_at`)
+  Decision 8 — `reviewer`, `review_notes`, `resolved_at`).
+  **`GMSummonOffer`** (#3071 — consent-prompted GM summon: `target_sheet`, `invited_by`
+  (`GMProfile`, nullable — `None` for a staff account with no profile),
+  `gm_display_name` (snapshot, not a live FK walk), `room` (`RoomProfile`, destination),
+  `scene` (nullable, display only), `created_at`; `unique_pending_gm_summon_offer` on
+  `target_sheet` — row existence IS pending status, deleted by
+  `resolve_gm_summon_offer` on accept or decline, mirroring `PendingCast`/
+  `PendingAudereOffer` rather than `DuelChallenge`'s status-enum shape)
 - **Enums (`constants.py`):** `GMLevel` (STARTING/JUNIOR/GM/EXPERIENCED/SENIOR),
   `GM_LEVEL_ORDER` + `gm_level_index(level)` (position on the ladder, 0–4),
   `GMApplicationStatus`, `GMTableStatus`, `CatalogSuggestionProposalKind`
@@ -2016,7 +2023,8 @@ GM at a given level may author (#2000, ADR-0097).
   players tables where an active persona holds membership; `archive`/`transfer_ownership`
   staff-only actions), `GMTableMembershipViewSet`, `GMRosterInviteViewSet`,
   `GMApplicationQueueView`/`GMApplicationActionView` (a GM's own pending-application
-  queue), `GMInviteClaimView`, `DemandRansomView`
+  queue), `GMInviteClaimView`, `DemandRansomView`, `GMSummonOfferViewSet`
+  (`/api/gm/summon-offers/`, read-only, #3071 — see "GM summon" below)
 - **Telnet:** `CmdGMTable` (`gmtable`) — table admin parity. `CmdGMTrust` (`gmtrust`,
   #2000) — `gmtrust show [account]` (self-service; naming another is staff-only),
   `gmtrust evidence <account>` (staff-only), `gmtrust promote <account>=<level>
@@ -2070,6 +2078,46 @@ GM at a given level may author (#2000, ADR-0097).
   `mechanics.SituationTemplateViewSet`/`ChallengeTemplateViewSet`
   (`/api/mechanics/situation-templates/`/`challenge-templates/`) for Condition and
   Situation/Challenge placement, reused as-is.
+- **GM summon (#3071):** ruled 2026-08-08 — a GM may move a party mid-session, but only
+  WITH consent, and only into a scene they actually run. `SummonPlayerAction` (key
+  `summon_player`, `actions/definitions/gm_adjudication.py`) is gated the same as
+  `GMAwardAction`/`GMApplyConditionAction` (`IsSceneGMPrerequisite` +
+  `MinimumGMLevelPrerequisite(GMLevel.JUNIOR)`) and creates/replaces a `gm.GMSummonOffer`
+  row naming the target, the GM's current room, and their active scene (a summon does not
+  stack — re-summoning the same target just refreshes the invite). It does NOT move anyone
+  itself. The target responds via `AcceptGMSummonAction`/`DeclineGMSummonAction` (keys
+  `accept_gm_summon`/`decline_gm_summon`, `actions/definitions/gm_summon_offers.py`,
+  `target_type=SELF`, no GM gating — a player always decides their own consent); accept calls
+  `world.gm.services.resolve_gm_summon_offer(offer, accept=True)`, which moves the target's
+  ObjectDB via `move_to()` to the offer's room and deletes the row either way (row existence
+  IS pending status, mirroring `PendingCast`/`PendingAudereOffer` rather than
+  `DuelChallenge`'s status-enum shape). Leak analysis: the consent prompt names the GM
+  (`gm_display_name`, a snapshot taken at offer time — never a live account-username walk)
+  and the scene title only, never room contents or other occupants.
+  **Telnet:** `gm summon <character>` (`commands/gm_ops.py`'s `CmdGMDashboard`) resolves the
+  target GLOBALLY (`caller.search(name, global_search=True)`, unlike every other `gm`
+  subverb's room-scoped `_resolve_target` — the target need not be co-located, that's the
+  point of a summon); `accept summon` / `decline summon` route through
+  `GMSummonPendingHandler` (`world/gm/offer_handlers.py`, registered in `world/gm/apps.py`'s
+  `ready()`), the offer-registry pattern the soulfray/crossing/surge handlers use
+  (`commands/offer_registry.py`).
+  **Web:** `GET /api/gm/summon-offers/` (`GMSummonOfferViewSet`, read-only, mirrors
+  `DuelChallengeViewSet`'s account-scoped-inbox shape — `pagination_class = None`, at most
+  one pending offer per played character) backs `SummonPromptNotifier`
+  (`frontend/src/gm-adjudication/SummonPromptNotifier.tsx`, mounted once at the app root
+  alongside `DuelChallengeNotifier`/`HazardPromptNotifier`/`ConsentAttentionNotifier`) — a
+  15s-polled toast with inline Accept/Decline dispatching `accept_gm_summon`/
+  `decline_gm_summon` over the generic REGISTRY REST seam. `GMAdjudicationPanel` also gained
+  a Summon tab reusing the existing `ParticipantPicker` (scene participants only — an
+  arbitrary off-scene target needs a global character-search affordance the panel doesn't
+  have yet; telnet's `gm summon <character>` has no such limit).
+- **Pool opacity is documented as deliberate (#3071):** `CharacterVitalsView._can_view`
+  (`world/vitals/views.py`) and `CharacterAnimaViewSet.get_queryset`
+  (`world/magic/views.py`) are staff-or-own-tenure only — no `viewer_can_gm` carve-out.
+  Ruled 2026-08-08 (Tehom): a scene's GM narrates off public wound text (badges, pose
+  descriptions) and what a character chooses to show, not raw vitals/anima numbers. This
+  is least-privilege BY DESIGN, not a gap that got missed — both view methods carry a
+  docstring pointing back here so a future agent doesn't "fix" it without a fresh ruling.
 - **Scenario catalog (#2127, ADR-0110):** extends the same "discovery, never invention"
   shape from checks to situations. `FindSituationAction` (key `gm_find_situation`,
   read-only, gated `MinimumGMLevelPrerequisite(GMLevel.STARTING)` — lower than
@@ -4380,8 +4428,34 @@ Unified modifier system — categories, types, sources, and per-character modifi
     with `origin=DistinctionOrigin.CONSEQUENCE_POOL`; a `DistinctionExclusionError` is caught
     and turned into a skipped `AppliedEffect` (mirrors `_apply_capture`'s
     `AlreadyCapturedError` skip pattern) — never crashes the surrounding resolution.
+  - Added in #3071: `GRANT_SECRET` — mirrors `GRANT_CODEX`'s shape (`ConsequenceEffect.secret`
+    FK, CASCADE, nullable) but not its bypass: `_grant_codex` deliberately hand-rolls
+    `get_or_create(status=UNCOVERED)` to stay below `grant_codex_entry`'s full-KNOWN grant,
+    while `_grant_secret` calls the canonical `world.secrets.services.grant_secret_knowledge`
+    directly — `SecretKnowledge` has no UNCOVERED-equivalent status field to bypass; holding
+    the row at all already means the fact is known, and `knows_category`/`knows_consequences`
+    are two independently-unlockable boolean layers on top. Left at their defaults (`False`),
+    that call already IS the "a scene hands you a lead, not the answer" grant. Skips gracefully
+    (mirrors `_grant_codex`) when the character has no `RosterEntry`.
 - **Integrates with:** distinctions (modifier sources), conditions (modifier sources), traits (stat modifiers),
   action_points (AP modifiers), goals (goal domains), positioning (reshape handlers in effect_handlers.py)
+- **The effect layer is lore-authorable (#3071):** `checks.consequence`,
+  `checks.consequenceeffect`, `actions.consequencepool`, `actions.consequencepoolentry` are
+  registered in `CONTENT_MODELS` (`core_management/content_export.py`) — the load-bearing gap
+  the anti-reinvention ledger flagged: the template/link layer (`ChallengeTemplate`, mission
+  routes) was already lore-authorable, but the layer that actually FIRES a reward
+  (`ConsequenceEffect`, via `apply_all_effects`) was seeder/admin-only. `ConsequencePool`
+  already carried `NaturalKeyMixin` (#1871, keyed `name`) but was never registered.
+  `Consequence` is keyed `(outcome_tier, label)`, `ConsequenceEffect` is keyed `(consequence,
+  execution_order)` — neither is DB-enforced (mirrors `ActionEnhancement`, #3034: several
+  production seeders write these tables via `.objects.get_or_create()`/`.objects.create()`
+  directly). `ConsequencePoolEntry` is keyed `(pool, consequence)`, backed by the pre-existing
+  `unique_pool_consequence` constraint (mirrors `TechniqueVariant`, #3034). All four now carry
+  `CreditedContent` (their prose fields — `Consequence.mechanical_description`,
+  `ConsequencePool.description`, and several `ConsequenceEffect` narrative-payload fields —
+  are classified in `core_management/prose_fields.py`). Rows are authored-only (every
+  production creation site is a seeder/factory, no player-facing mutation path), so no
+  `EXPORT_FILTERS` row-level split was needed.
 - **Source:** `src/world/mechanics/`
 - **Details:** [mechanics.md](mechanics.md)
 

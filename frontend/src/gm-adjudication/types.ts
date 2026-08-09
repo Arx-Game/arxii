@@ -48,3 +48,11 @@ export const AWARD_KINDS = [
 ] as const;
 
 export type AwardKind = (typeof AWARD_KINDS)[number]['value'];
+
+/**
+ * A pending GM summon offer (#3071), GET /api/gm/summon-offers/.
+ *
+ * Leak analysis (spec-approved): only `gm_display_name` + `scene_title` are
+ * exposed — never room contents or other occupants.
+ */
+export type GMSummonOfferEntry = components['schemas']['GMSummonOffer'];

@@ -31,6 +31,7 @@ from world.gm.models import (
     GMApplication,
     GMProfile,
     GMRosterInvite,
+    GMSummonOffer,
     GMTable,
     GMTableMembership,
     TableUpdateRequest,
@@ -48,6 +49,7 @@ from world.gm.serializers import (
     GMInviteRevokeSerializer,
     GMProfileSerializer,
     GMRosterInviteSerializer,
+    GMSummonOfferSerializer,
     GMTableMembershipSerializer,
     GMTableSerializer,
     PromoteGMInputSerializer,
@@ -841,3 +843,29 @@ class TableUpdateRequestViewSet(
             raise serializers.ValidationError(exc.user_message) from exc
 
         return Response(TableUpdateRequestSerializer(update_request).data)
+
+
+class GMSummonOfferViewSet(viewsets.ReadOnlyModelViewSet):
+    """Read-only inbox of the requesting player's pending GM summon offer(s) (#3071).
+
+    Mirrors ``DuelChallengeViewSet``'s shape: accept/decline are NOT DRF actions
+    here — they dispatch through the generic REGISTRY action-dispatch endpoint
+    (``accept_gm_summon``/``decline_gm_summon``), the same seam telnet's
+    ``accept summon``/``decline summon`` reaches via ``GMSummonPendingHandler``.
+    """
+
+    serializer_class = GMSummonOfferSerializer
+    queryset = GMSummonOffer.objects.none()
+    permission_classes = [IsAuthenticated]
+    pagination_class = None  # At most one pending offer per played character.
+
+    def get_queryset(self) -> QuerySet[GMSummonOffer]:
+        user = self.request.user
+        played_ids = user.played_character_sheet_ids
+        if not played_ids:
+            return GMSummonOffer.objects.none()
+        return (
+            GMSummonOffer.objects.filter(target_sheet_id__in=played_ids)
+            .select_related("scene")
+            .order_by("-created_at")
+        )
