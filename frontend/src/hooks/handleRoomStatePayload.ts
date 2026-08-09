@@ -23,6 +23,7 @@ export function handleRoomStatePayload(
         is_owner: payload.room.is_owner ?? false,
         is_public: payload.room.is_public ?? false,
         hub: payload.hub ?? null,
+        npc_givers: payload.npc_givers ?? [],
       },
     })
   );

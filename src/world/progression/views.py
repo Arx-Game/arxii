@@ -66,6 +66,10 @@ from world.progression.serializers import (
     VoteBudgetSerializer,
     WeeklyVoteSerializer,
 )
+from world.progression.serializers.durance import (
+    DuranceConveneResponseSerializer,
+    DuranceStatusSerializer,
+)
 from world.progression.serializers.unlocks import (
     ProgressionUnlockItemSerializer,
     PurchaseUnlockResponseSerializer,
@@ -713,3 +717,149 @@ class ProgressionUnlockViewSet(viewsets.GenericViewSet):
             raise serializers.ValidationError(detail.message)
 
         return Response(detail.data)
+
+
+class DuranceStatusView(APIView):
+    """GET /api/progression/durance/status/ — the Durance readiness hub (#3045).
+
+    The web face of telnet ``durance status`` (``CmdDurance._status``) — reuses the
+    exact same selectors/services and returns the exact same shape of information;
+    no wider serializer than what the player already sees at the telnet prompt
+    (per the #3045 spec's "Verified leak analysis").
+    """
+
+    permission_classes = [IsAuthenticated]
+
+    @extend_schema(responses={200: DuranceStatusSerializer})
+    def get(self, request: Request) -> Response:
+        """Build the readiness hub for the requester's puppeted character."""
+        from world.areas.services import get_room_profile  # noqa: PLC0415
+        from world.magic.audere_majora import AudereMajoraThreshold  # noqa: PLC0415
+        from world.progression.models import (  # noqa: PLC0415
+            CharacterUnlock,
+            ClassLevelUnlock,
+            DuranceTrainingSite,
+        )
+        from world.progression.selectors import eligible_advanced_paths_for  # noqa: PLC0415
+        from world.progression.services.advancement import primary_class_level  # noqa: PLC0415
+        from world.progression.services.spends import (  # noqa: PLC0415
+            check_requirements_for_unlock,
+        )
+
+        puppet, sheet = _resolve_puppet_sheet(request)
+        level = sheet.current_level
+        target = level + 1
+        is_tier_boundary = AudereMajoraThreshold.objects.filter(boundary_level=level).exists()
+
+        unlock_gate: dict[str, Any] | None = None
+        if not is_tier_boundary:
+            cl = primary_class_level(sheet.character)
+            if cl is None:
+                unlock_gate = {
+                    "has_class_level": False,
+                    "advancement_authored": False,
+                    "requirements_met": False,
+                    "failed_requirements": [],
+                    "purchased": False,
+                    "xp_cost": None,
+                    "class_level_unlock_id": None,
+                    "ready": False,
+                }
+            else:
+                unlock = ClassLevelUnlock.objects.filter(
+                    character_class=cl.character_class,
+                    target_level=target,
+                ).first()
+                if unlock is None:
+                    unlock_gate = {
+                        "has_class_level": True,
+                        "advancement_authored": False,
+                        "requirements_met": False,
+                        "failed_requirements": [],
+                        "purchased": False,
+                        "xp_cost": None,
+                        "class_level_unlock_id": None,
+                        "ready": False,
+                    }
+                else:
+                    met, failed = check_requirements_for_unlock(sheet.character, unlock)
+                    purchased = CharacterUnlock.objects.filter(
+                        character=sheet,
+                        character_class=unlock.character_class,
+                        target_level=unlock.target_level,
+                    ).exists()
+                    cost = None if purchased else unlock.get_xp_cost_for_character(sheet.character)
+                    unlock_gate = {
+                        "has_class_level": True,
+                        "advancement_authored": True,
+                        "requirements_met": met,
+                        "failed_requirements": failed,
+                        "purchased": purchased,
+                        "xp_cost": cost,
+                        "class_level_unlock_id": unlock.pk,
+                        "ready": met and purchased,
+                    }
+
+        eligible_paths = [
+            {"id": path.pk, "name": path.name} for path in eligible_advanced_paths_for(sheet)
+        ]
+
+        intent_row = (
+            PathIntent.objects.filter(character_sheet=sheet).select_related("intended_path").first()
+        )
+        intent = (
+            {"path_id": intent_row.intended_path.pk, "path_name": intent_row.intended_path.name}
+            if intent_row is not None
+            else None
+        )
+
+        site_present = False
+        if puppet.location is not None:
+            profile = get_room_profile(puppet.location)
+            site_present = DuranceTrainingSite.objects.filter(
+                room_profile=profile,
+                is_active=True,
+            ).exists()
+
+        data = {
+            "level": level,
+            "target_level": target,
+            "is_tier_boundary": is_tier_boundary,
+            "unlock_gate": unlock_gate,
+            "eligible_paths": eligible_paths,
+            "intent": intent,
+            "site_present": site_present,
+        }
+        serializer = DuranceStatusSerializer(data)
+        return Response(serializer.data)
+
+
+class DuranceConveneView(APIView):
+    """POST /api/progression/durance/convene/ — open a site-convened Durance session (#3045).
+
+    The web face of telnet ``durance convene``. ``convene_durance_at_site`` is a plain
+    service call (not a registered Action), so this calls it directly — mirroring
+    ``CmdDurance._convene`` — rather than routing through the generic dispatch seam.
+    """
+
+    permission_classes = [IsAuthenticated]
+
+    @extend_schema(responses={200: DuranceConveneResponseSerializer})
+    def post(self, request: Request) -> Response:
+        """Open a site-convened session at the puppet's current room."""
+        from world.progression.exceptions import ClassLevelAdvancementError  # noqa: PLC0415
+        from world.progression.services.advancement import convene_durance_at_site  # noqa: PLC0415
+
+        puppet, sheet = _resolve_puppet_sheet(request)
+        if puppet.location is None:
+            return Response(
+                {"detail": "You are not in a room."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        try:
+            session = convene_durance_at_site(inductee_sheet=sheet, room=puppet.location)
+        except ClassLevelAdvancementError as exc:
+            return Response({"detail": exc.user_message}, status=status.HTTP_400_BAD_REQUEST)
+
+        response_serializer = DuranceConveneResponseSerializer({"session_id": session.pk})
+        return Response(response_serializer.data)

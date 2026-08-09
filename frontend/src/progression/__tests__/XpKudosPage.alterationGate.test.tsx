@@ -14,6 +14,7 @@ import { Provider } from 'react-redux';
 import { configureStore } from '@reduxjs/toolkit';
 import { MemoryRouter } from 'react-router-dom';
 import { authSlice } from '@/store/authSlice';
+import { gameSlice } from '@/store/gameSlice';
 import { XpKudosPage } from '../XpKudosPage';
 import type { PaginatedPendingAlterationList } from '@/magic/types';
 import type { AccountProgressionData } from '../types';
@@ -41,6 +42,14 @@ vi.mock('@/magic/api', () => ({
 vi.mock('../queries', () => ({
   useAccountProgressionQuery: vi.fn(),
   useClaimKudosMutation: vi.fn(),
+}));
+
+// GoalsPanel (#3045, mounted on this page via RandomScenePanel's sibling row) resolves
+// the active character through this hook — `throwOnError: true` on the real hook means
+// an unmocked network call here would crash the render tree, not just degrade gracefully
+// like RandomScenePanel/VotesPanel's own unmocked queries do.
+vi.mock('@/roster/queries', () => ({
+  useMyRosterEntriesQuery: vi.fn(() => ({ data: [] })),
 }));
 
 import * as magicApi from '@/magic/api';
@@ -112,7 +121,10 @@ const MINIMAL_PROGRESSION: AccountProgressionData = {
 
 function createAuthStore() {
   const store = configureStore({
-    reducer: { auth: authSlice.reducer },
+    // `game` is required — GoalsPanel (#3045, mounted on this page) reads
+    // `state.game.active` to resolve the puppeted character; the real app
+    // store always carries this slice, so this test store must too.
+    reducer: { auth: authSlice.reducer, game: gameSlice.reducer },
   });
   store.dispatch(
     authSlice.actions.setAccount({

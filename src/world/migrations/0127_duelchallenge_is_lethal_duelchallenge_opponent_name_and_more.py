@@ -5,9 +5,7 @@ import django.db.models.deletion
 
 
 class Migration(migrations.Migration):
-    dependencies = [
-        ("arxii", "0123_alter_techniqueprogress_source"),
-    ]
+    dependencies = [("arxii", "0126_alter_trap_is_hidden")]
 
     operations = [
         migrations.AddField(

@@ -400,9 +400,16 @@ Delivered:
   `.update()`, matching its two peers. A bulk update sends no `post_save`, so the identity
   map kept serving a stale `is_armed` and the GM's own listing would have lied.
 
-Still open: the **player half**. `disarm_trap` is registered but unreachable (no surface
-gives a player a `trap_id`), and `search_room` never looks at traps. `Trap.is_hidden` is
-documented as unwired in place, waiting on that surface. Filed separately.
+Player half ✅ (#3011): `search` now rolls each hidden armed trap's own
+`detect_check_type` (a sibling of `world.clues.services.search_room`, since traps carry
+their own check type/difficulty and don't slot into the shared Search roll), giving a
+player their first `trap_id` and closing the loop into the pre-existing `disarm_trap`.
+`RoomTrapViewSet` (`GET /api/room-features/traps/?character_id=`) is the read surface —
+personal like `ComfortViewSet`, armed traps that are `is_hidden=False` or already
+detected by the viewer, `id`/`name`/`is_armed` only. `Trap.is_hidden=False` now means
+"no roll needed" on both detection paths (entry and search) — its first readers. Web:
+`TrapsBlock` in the room panel. Telnet: `disarm <trap name>`. See
+`docs/systems/INDEX.md`'s Traps entry for the full wiring.
 
 ### Phase 7 — Story Areas & Story Rooms ✅ (#2450, epic #2436 slice 3, ADR-0141)
 A GM's own build-and-run space, layered on the #2436/#2449 staff world-builder grid

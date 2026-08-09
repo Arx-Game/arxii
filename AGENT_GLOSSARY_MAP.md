@@ -41,6 +41,7 @@ term is chosen and the rest are listed under `_Avoid_`.
 - [tasking](src/world/tasking/AGENT_GLOSSARY.md)
 - [tarot](src/world/tarot/AGENT_GLOSSARY.md)
 - [currency](src/world/currency/AGENT_GLOSSARY.md)
+- [beta_reset](src/world/beta_reset/AGENT_GLOSSARY.md)
 - [achievements](src/world/achievements/AGENT_GLOSSARY.md)
 - [goals](src/world/goals/AGENT_GLOSSARY.md)
 - [items](src/world/items/AGENT_GLOSSARY.md)

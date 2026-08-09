@@ -15,3 +15,10 @@ class ConnectionScreenWebPointerTests(TestCase):
         from server.conf.connection_screens import CONNECTION_SCREEN
 
         self.assertIn(settings.FRONTEND_URL, CONNECTION_SCREEN)
+
+    def test_connection_screen_signposts_web_signup_and_email_verification(self):
+        """#3054 — telnet `create` is closed; players must know where to go instead."""
+        from server.conf.connection_screens import CONNECTION_SCREEN
+
+        self.assertIn("account email", CONNECTION_SCREEN)
+        self.assertIn("website", CONNECTION_SCREEN)

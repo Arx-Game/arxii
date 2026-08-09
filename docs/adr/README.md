@@ -87,6 +87,7 @@ treat those names as hints to confirm, not gospel.
 - [0200 - Schema-construction paths are held equivalent by a nightly diff, names excluded](0200-schema-paths-are-diff-gated.md) (#2982; related ADR-0083, ADR-0195, ADR-0018)
 - [0201 - Credited rows are frozen against loads; sample content only seeds an empty universe](0201-credited-rows-are-frozen-against-loads.md) (#3017; extends ADR-0196; related ADR-0168, ADR-0171, ADR-0191, ADR-0142)
 - [0206 - Acquisition provenance is a first-class record, not a snapshot](0206-acquisition-provenance-is-first-class-not-a-snapshot.md) (#3055 slice 1b; related #3060)
+- [0207 - The beta-reset wipe is guarded by a hardcoded constant AND a one-way latch](0207-beta-reset-guarded-by-hardcoded-constant-and-one-way-latch.md) (#3055 PR 2; related ADR-0206)
 
 ### Resolution
 - [0019 — Unified resolution: one roll path, data-sourced difficulty, graded outcomes](0019-unified-resolution-one-roll-path.md)
@@ -106,6 +107,7 @@ treat those names as hints to confirm, not gospel.
 - [0142 — The Big Button loads all real content from arx2-lore; arxii seeds keep only non-lore config/lookup tables](0142-content-vs-config-boundary-in-the-dev-seed.md) (extends ADR-0140's content pipeline; #2474)
 - [0168 — CONTENT_MODELS registration *is* the seed/content boundary; seeders look content up and invent only under SEED_SAMPLE_CONTENT](0168-content-models-registration-is-the-seed-boundary.md) (sharpens ADR-0142; #2698)
 - [0171 — CONTENT_MODELS stays the model-level line; code-required rows get a declared per-row config carve-out, and per-player rows export by owner column, never name pattern](0171-code-required-content-rows-are-declared-config.md) (amends ADR-0168; #2724)
+- [0208 — Registration gates on per-email invites, not codes or an allowlist, behind a DB-singleton open/closed toggle](0208-invite-gated-registration-db-singleton-toggle.md) (#3054)
 
 ### Game-design tenets
 - [0023 — PvP is structurally non-lethal](0023-pvp-is-structurally-non-lethal.md)
