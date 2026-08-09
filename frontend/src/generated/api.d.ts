@@ -17136,6 +17136,23 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
+  '/api/room-features/traps/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /** @description GET /?character_id=<id> — armed traps that character can currently see. */
+    get: operations['room_features_traps_list'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   '/api/roster/entries/': {
     parameters: {
       query?: never;
@@ -39889,6 +39906,25 @@ export interface components {
       required_stake_column?:
         | components['schemas']['RequiredStakeColumnEnum']
         | components['schemas']['BlankEnum'];
+    };
+    /**
+     * @description One trap visible to the requesting character (#3011).
+     *
+     *     Visibility is entirely the caller's job (``RoomTrapViewSet.list`` —
+     *     armed, plus ``is_hidden=False`` or already in the viewer's own
+     *     ``detected_by``) — this serializer trusts the queryset and exposes only
+     *     the fields a player is allowed to know about a trap they can see:
+     *     identity (for the disarm dispatch's ``trap_id``) and armed state.
+     *     ``Trap`` carries no ``description`` field (unlike the leak table's
+     *     aspirational field list) — only ``name`` identifies it to a player today;
+     *     adding authored flavor text is a separate content-model change, out of
+     *     scope here.
+     */
+    Trap: {
+      readonly id: number;
+      readonly name: string;
+      /** @description A disarmed trap never triggers and cannot be disarmed again. */
+      readonly is_armed: boolean;
     };
     /** @description Serializer for TravelHub — public infrastructure. */
     TravelHub: {
@@ -64428,6 +64464,28 @@ export interface operations {
         };
         content: {
           'application/json': components['schemas']['RoomWardDetails'];
+        };
+      };
+    };
+  };
+  room_features_traps_list: {
+    parameters: {
+      query: {
+        /** @description ObjectDB id of the character to read visible room traps for (must be your own). */
+        character_id: number;
+      };
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['Trap'][];
         };
       };
     };

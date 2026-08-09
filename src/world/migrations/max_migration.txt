@@ -1,1 +1,1 @@
-0125_accountinvite_registrationconfig
+0126_alter_trap_is_hidden

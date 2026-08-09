@@ -167,6 +167,7 @@ from commands.story_rooms import CmdJoinRoom, CmdLeaveRoom, CmdSceneRoom  # #245
 from commands.technique import CmdTechnique
 from commands.threads import CmdThreads
 from commands.training import CmdTrain  # #2739
+from commands.traps import CmdDisarm  # #3011
 from commands.travel import CmdTravel  # #2163
 from commands.turf import CmdTurf  # #2862 gap close
 from commands.vault import CmdVault
@@ -356,6 +357,8 @@ class CharacterCmdSet(default_cmds.CharacterCmdSet):
             CmdHarvest,
             # #1866 — telnet face of SearchAction; search for clues in a room.
             CmdSearch,
+            # #3011 — telnet face of DisarmTrapAction; disarm a visible trap.
+            CmdDisarm,
             # #1107 slice 5 — telnet face of IdentifyAction; see through a mask/disguise.
             CmdIdentify,
             # #1450 — the staff push face: hand-authored gemits scoped by reach.
