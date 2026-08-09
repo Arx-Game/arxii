@@ -65,6 +65,34 @@ class LookActionTests(TestCase):
         assert result.success is False
 
 
+class LookActionRestDispatchTests(TestCase):
+    """#3044 — the web room-objects panel's examine-on-click affordance dispatches
+    `look` exactly as `dispatch_player_action` / `_dispatch_registry` would: raw
+    kwargs straight to `execute()`, so `target` arrives as a plain int, not a
+    pre-resolved ObjectDB (see `test_travel_resolves_int_target_like_a_rest_dispatch_would`
+    for the same regression shape on `TravelAction`)."""
+
+    def test_run_resolves_int_target_like_a_rest_dispatch_would(self):
+        action = LookAction()
+        actor = ObjectDBFactory(db_key="Alice")
+        target = ObjectDBFactory(db_key="Sword")
+        target.db.desc = "A shiny sword"
+
+        result = action.run(actor, target=target.pk)
+
+        assert result.success is True
+        assert result.message is not None
+        assert "Sword" in result.message
+
+    def test_run_with_unknown_int_target_fails_cleanly(self):
+        action = LookAction()
+        actor = ObjectDBFactory(db_key="Alice")
+
+        result = action.run(actor, target=999999)
+
+        assert result.success is False
+
+
 class LookActionConcealmentTests(TestCase):
     """Telnet parity for #1225 — ``get_display_characters`` gates on ``can_perceive``.
 

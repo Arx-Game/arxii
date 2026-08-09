@@ -127,6 +127,40 @@ class TriggerDispatchTests(TestCase):
         self.assertEqual(instance.accepted_as_persona_id, sheet.primary_persona.pk)
 
 
+class WebExamineDispatchParityTests(TestCase):
+    """#3044 — the web room-objects panel's examine-on-click affordance dispatches
+    `look` through the same `action.run()` seam telnet uses, with `target` arriving
+    as a raw int pk exactly like a real `dispatch_player_action` REST call (REST
+    dispatch does no ObjectDB resolution of its own — see `LookAction`'s
+    `_resolve_look_target`). This proves that seam fires `maybe_dispatch_on_examine`
+    identically to the telnet path (`at_examined` -> `return_appearance`)."""
+
+    def test_web_look_dispatch_grants_environmental_detail_mission(self) -> None:
+        from actions.definitions.perception import LookAction
+
+        sheet = CharacterSheetFactory()
+        character = sheet.character
+        room = ObjectDBFactory(db_typeclass_path="typeclasses.rooms.Room")
+        character.move_to(room, quiet=True)
+        detail = ObjectDBFactory(db_key="strange-door", location=room)  # plain Object typeclass
+
+        giver = MissionGiverFactory(
+            name="web-strange-door",
+            giver_kind=GiverKind.ENVIRONMENTAL_DETAIL,
+            target=detail,
+        )
+        giver.templates.add(_template_with_entry("web-examine-mission"))
+
+        result = LookAction().run(character, target=detail.pk)
+
+        self.assertTrue(result.success)
+        self.assertTrue(
+            MissionInstance.objects.filter(
+                participants__character_id=character.pk, status=MissionStatus.ACTIVE
+            ).exists()
+        )
+
+
 class ChainGateOpensAfterFixedGrantTests(TestCase):
     """Regression for the review finding: a trigger-dispatched grant must
     thread the presenting persona so a chained ``has_completed_mission`` gate
