@@ -230,6 +230,11 @@ STATURE_LEGEND_WEIGHT = 2.0
 # Renown value per authored Kinsperson.gifted_rating point (sheetless kin).
 GIFTED_RATING_RENOWN = 2_000
 
+# Succession's MOST_POWERFUL_GIFTED rater compares sheeted kin (max class
+# level, 1-30) against sheetless kin (gifted_rating 0-5) on one scale:
+# rating x this equivalent (rating 5 ~ level 20).
+GIFTED_RATING_LEVEL_EQUIV = 4
+
 # MilitaryUnit strength scales by quality when summed into stature.
 UNIT_QUALITY_STATURE_MULTIPLIERS: dict[str, float] = {
     "militia": 0.5,

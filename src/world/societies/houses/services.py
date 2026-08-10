@@ -492,6 +492,10 @@ def sign_marriage_pact(
             obligation=obligation,
             notes=spec.notes,
         )
+    # #3091 — both houses reprice immediately: the alliance is news.
+    from world.societies.houses.stature_services import apply_pact_shift  # noqa: PLC0415
+
+    apply_pact_shift(pact, signed=True)
     return pact
 
 
@@ -507,6 +511,10 @@ def dissolve_pact(pact: MarriagePact, *, reason: str) -> MarriagePact:
         if commitment.obligation is not None and commitment.obligation.active:
             commitment.obligation.active = False
             commitment.obligation.save(update_fields=["active"])
+    # #3091 — the hole in the wall opens the moment the pact dies.
+    from world.societies.houses.stature_services import apply_pact_shift  # noqa: PLC0415
+
+    apply_pact_shift(pact, signed=False)
     return pact
 
 
@@ -537,6 +545,17 @@ def breach_commitment(commitment: PactCommitment) -> PactCommitment:
     if commitment.obligation is not None and commitment.obligation.active:
         commitment.obligation.active = False
         commitment.obligation.save(update_fields=["active"])
+    # #3091 — a broken word costs standing permanently: the breaching house
+    # takes a flat prestige penalty, which then bites again through the
+    # negative prestige-rank bands. Personal-channel penalties fire with the
+    # marriage-formation flow (phase 3).
+    from world.societies.houses.constants import SCANDAL_PRESTIGE_PENALTY  # noqa: PLC0415
+
+    breacher = (
+        commitment.pact.senior_house if commitment.owed_by_senior else commitment.pact.junior_house
+    )
+    breacher.accumulated_prestige -= SCANDAL_PRESTIGE_PENALTY
+    breacher.save(update_fields=["accumulated_prestige"])
     return commitment
 
 
