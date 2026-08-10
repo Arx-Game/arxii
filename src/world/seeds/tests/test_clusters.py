@@ -60,6 +60,7 @@ class TestClusterRegistry(TestCase):
                 "houses",
                 "stature",
                 "predators",
+                "pacts",
                 "propaganda",
                 "skills",
                 "project_resonance",

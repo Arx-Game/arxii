@@ -18760,6 +18760,31 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
+  '/api/societies/organizations/{id}/dossier/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /**
+     * @description GET /api/societies/organizations/{id}/dossier/ (#2999).
+     *
+     *     The match-review dossier — deliberately readable by ANY authenticated
+     *     player (weighing a match means reviewing RIVAL houses, so this action
+     *     looks the org up directly rather than through the members-only
+     *     queryset). Public facts + covert crises the viewer's org has paid
+     *     spycraft (CrisisIntel) to know.
+     */
+    get: operations['societies_organizations_dossier_retrieve'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   '/api/societies/organizations/{id}/feed/': {
     parameters: {
       query?: never;
@@ -25039,6 +25064,32 @@ export interface components {
      * @enum {string}
      */
     DomainEnum: 'BEAST' | 'UNDEAD' | 'ELEMENTAL' | 'CONSTRUCT' | 'SPIRIT';
+    DossierConsort: {
+      holder: string;
+      consorts: number;
+      cap: number | null;
+    };
+    DossierCrisis: {
+      domain_name: string;
+      severity: string;
+      type_name: string;
+      known_covertly: boolean;
+    };
+    /** @description One standing instrument on the dossier: paper pact or marriage. */
+    DossierPact: {
+      kind: string;
+      counterpart: string;
+      /** Format: date-time */
+      since: string | null;
+      commitments: string[];
+    };
+    DossierShift: {
+      cause: string;
+      delta_perceived: number;
+      subject: string;
+      /** Format: date-time */
+      occurred_at: string;
+    };
     /** @description Serializer for draft applications (list view). */
     DraftApplication: {
       readonly id: number;
@@ -29981,6 +30032,33 @@ export interface components {
       obligations: components['schemas']['ObligationRow'][];
       contributions: components['schemas']['ContributionRow'][];
       ledger: components['schemas']['LedgerRow'][];
+    };
+    /**
+     * @description The match-review dossier (#2999): what a candidate house truly brings.
+     *
+     *     Deliberately viewable by ANY authenticated player (the org page itself
+     *     stays members-only): weighing a match requires seeing rival houses.
+     *     Public facts only — band, perceived stature, ranks, standing instruments,
+     *     surfaced crises — enriched with covert crises the VIEWER'S org has paid
+     *     spycraft to know (CrisisIntel). True component detail stays members-only
+     *     on the org page.
+     */
+    OrgDossier: {
+      name: string;
+      org_type_name: string;
+      family_name: string;
+      band_name: string;
+      headline: string;
+      trend: string;
+      perceived_total: number | null;
+      prestige_rank: number | null;
+      realm_rank: number | null;
+      realm_cohort_size: number | null;
+      pacts: components['schemas']['DossierPact'][];
+      betrothals: string[];
+      open_crises: components['schemas']['DossierCrisis'][];
+      recent_shifts: components['schemas']['DossierShift'][];
+      consorts: components['schemas']['DossierConsort'][];
     };
     /** @description Board row: a live task with its template summary and fulfillment. */
     OrgTask: {
@@ -43322,8 +43400,9 @@ export interface operations {
          *     * `blessing` - Blessing
          *     * `sermon` - Sermon
          *     * `seance` - Seance
+         *     * `wedding` - Wedding
          */
-        ceremony_type__key?: 'blessing' | 'funeral' | 'seance' | 'sermon';
+        ceremony_type__key?: 'blessing' | 'funeral' | 'seance' | 'sermon' | 'wedding';
         location?: number;
         location__objectdb?: number;
         /** @description A page number within the paginated result set. */
@@ -66962,6 +67041,28 @@ export interface operations {
         };
         content: {
           'application/json': components['schemas']['Organization'];
+        };
+      };
+    };
+  };
+  societies_organizations_dossier_retrieve: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        /** @description A unique integer value identifying this organization. */
+        id: number;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['OrgDossier'];
         };
       };
     };

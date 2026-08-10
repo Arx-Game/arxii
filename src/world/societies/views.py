@@ -32,6 +32,7 @@ from world.societies.serializers import (
     OrganizationRankSerializer,
     OrganizationReputationSerializer,
     OrganizationSerializer,
+    OrgDossierSerializer,
 )
 from world.tidings.serializers import PublicFeedItemSerializer
 
@@ -130,6 +131,35 @@ class OrganizationViewSet(viewsets.ReadOnlyModelViewSet):
         except CrisisServiceError as exc:
             return Response({"detail": exc.user_message}, status=400)
         return Response({"open_crises": _house_open_crises(organization)})
+
+    @extend_schema(responses=OrgDossierSerializer)
+    @action(detail=True, methods=[HTTPMethod.GET])
+    def dossier(self, request, pk=None):
+        """GET /api/societies/organizations/{id}/dossier/ (#2999).
+
+        The match-review dossier — deliberately readable by ANY authenticated
+        player (weighing a match means reviewing RIVAL houses, so this action
+        looks the org up directly rather than through the members-only
+        queryset). Public facts + covert crises the viewer's org has paid
+        spycraft (CrisisIntel) to know.
+        """
+        from django.shortcuts import get_object_or_404  # noqa: PLC0415
+
+        from world.scenes.interaction_permissions import get_account_personas  # noqa: PLC0415
+        from world.scenes.models import Persona  # noqa: PLC0415
+        from world.societies.dossier_services import build_dossier  # noqa: PLC0415
+        from world.societies.serializers import OrgDossierSerializer  # noqa: PLC0415
+
+        organization = get_object_or_404(
+            Organization.objects.select_related(
+                "family", "org_type", "stature__band", "stature__previous_band"
+            ),
+            pk=pk,
+            covenant__isnull=True,
+        )
+        viewer = Persona.objects.filter(pk__in=get_account_personas(request)).first()
+        payload = build_dossier(organization, viewer=viewer)
+        return Response(OrgDossierSerializer(payload).data)
 
     @extend_schema(responses=PublicFeedItemSerializer(many=True))
     @action(detail=True, methods=[HTTPMethod.GET])

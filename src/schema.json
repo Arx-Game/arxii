@@ -2750,11 +2750,13 @@ paths:
           - funeral
           - seance
           - sermon
+          - wedding
         description: |-
           * `funeral` - Funeral
           * `blessing` - Blessing
           * `sermon` - Sermon
           * `seance` - Seance
+          * `wedding` - Wedding
       - in: query
         name: location
         schema:
@@ -30192,6 +30194,35 @@ paths:
               schema:
                 $ref: '#/components/schemas/Organization'
           description: ''
+  /api/societies/organizations/{id}/dossier/:
+    get:
+      operationId: societies_organizations_dossier_retrieve
+      description: |-
+        GET /api/societies/organizations/{id}/dossier/ (#2999).
+
+        The match-review dossier — deliberately readable by ANY authenticated
+        player (weighing a match means reviewing RIVAL houses, so this action
+        looks the org up directly rather than through the members-only
+        queryset). Public facts + covert crises the viewer's org has paid
+        spycraft (CrisisIntel) to know.
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: A unique integer value identifying this organization.
+        required: true
+      tags:
+      - societies
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OrgDossier'
+          description: ''
   /api/societies/organizations/{id}/feed/:
     get:
       operationId: societies_organizations_feed_list
@@ -42857,6 +42888,74 @@ components:
         * `ELEMENTAL` - Elemental
         * `CONSTRUCT` - Construct
         * `SPIRIT` - Spirit
+    DossierConsort:
+      type: object
+      properties:
+        holder:
+          type: string
+        consorts:
+          type: integer
+        cap:
+          type: integer
+          nullable: true
+      required:
+      - cap
+      - consorts
+      - holder
+    DossierCrisis:
+      type: object
+      properties:
+        domain_name:
+          type: string
+        severity:
+          type: string
+        type_name:
+          type: string
+        known_covertly:
+          type: boolean
+      required:
+      - domain_name
+      - known_covertly
+      - severity
+      - type_name
+    DossierPact:
+      type: object
+      description: 'One standing instrument on the dossier: paper pact or marriage.'
+      properties:
+        kind:
+          type: string
+        counterpart:
+          type: string
+        since:
+          type: string
+          format: date-time
+          nullable: true
+        commitments:
+          type: array
+          items:
+            type: string
+      required:
+      - commitments
+      - counterpart
+      - kind
+      - since
+    DossierShift:
+      type: object
+      properties:
+        cause:
+          type: string
+        delta_perceived:
+          type: integer
+        subject:
+          type: string
+        occurred_at:
+          type: string
+          format: date-time
+      required:
+      - cause
+      - delta_perceived
+      - occurred_at
+      - subject
     DraftApplication:
       type: object
       description: Serializer for draft applications (list view).
@@ -52962,6 +53061,78 @@ components:
       - spend_rank_max
       - steward_role_id
       - uncollected_total
+    OrgDossier:
+      type: object
+      description: |-
+        The match-review dossier (#2999): what a candidate house truly brings.
+
+        Deliberately viewable by ANY authenticated player (the org page itself
+        stays members-only): weighing a match requires seeing rival houses.
+        Public facts only — band, perceived stature, ranks, standing instruments,
+        surfaced crises — enriched with covert crises the VIEWER'S org has paid
+        spycraft to know (CrisisIntel). True component detail stays members-only
+        on the org page.
+      properties:
+        name:
+          type: string
+        org_type_name:
+          type: string
+        family_name:
+          type: string
+        band_name:
+          type: string
+        headline:
+          type: string
+        trend:
+          type: string
+        perceived_total:
+          type: integer
+          nullable: true
+        prestige_rank:
+          type: integer
+          nullable: true
+        realm_rank:
+          type: integer
+          nullable: true
+        realm_cohort_size:
+          type: integer
+          nullable: true
+        pacts:
+          type: array
+          items:
+            $ref: '#/components/schemas/DossierPact'
+        betrothals:
+          type: array
+          items:
+            type: string
+        open_crises:
+          type: array
+          items:
+            $ref: '#/components/schemas/DossierCrisis'
+        recent_shifts:
+          type: array
+          items:
+            $ref: '#/components/schemas/DossierShift'
+        consorts:
+          type: array
+          items:
+            $ref: '#/components/schemas/DossierConsort'
+      required:
+      - band_name
+      - betrothals
+      - consorts
+      - family_name
+      - headline
+      - name
+      - open_crises
+      - org_type_name
+      - pacts
+      - perceived_total
+      - prestige_rank
+      - realm_cohort_size
+      - realm_rank
+      - recent_shifts
+      - trend
     OrgTask:
       type: object
       description: 'Board row: a live task with its template summary and fulfillment.'

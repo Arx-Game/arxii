@@ -14,6 +14,7 @@ import type { components } from '@/generated/api';
 export type Organization = components['schemas']['Organization'];
 export type HouseDetail = components['schemas']['HouseDetail'];
 export type HouseStature = components['schemas']['HouseStature'];
+export type OrgDossier = components['schemas']['OrgDossier'];
 export type PublicFeedItem = components['schemas']['PublicFeedItem'];
 
 interface PaginatedOrganizations {
@@ -43,6 +44,18 @@ export async function fetchOrganizationById(id: number): Promise<Organization> {
   const res = await apiFetch(`/api/societies/organizations/${id}/`);
   if (!res.ok) throw new Error('Failed to load organization');
   return (await res.json()) as Organization;
+}
+
+/**
+ * Fetch the match-review dossier (#2999): what a candidate house truly brings.
+ * GET /api/societies/organizations/{id}/dossier/
+ *
+ * Readable by any authenticated player — reviewing RIVAL houses is the point.
+ */
+export async function fetchOrgDossier(id: number): Promise<OrgDossier> {
+  const res = await apiFetch(`/api/societies/organizations/${id}/dossier/`);
+  if (!res.ok) throw new Error('Failed to load dossier');
+  return (await res.json()) as OrgDossier;
 }
 
 /**

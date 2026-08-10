@@ -296,6 +296,9 @@ def finish_ceremony(*, ceremony: Ceremony) -> Ceremony:
         for honoree in honorees:
             execute_will(honoree.honoree_sheet)
 
+    if ceremony.ceremony_type.key == CeremonyTypeKey.WEDDING:
+        _solemnize_wedding_honorees(honorees)
+
     ceremony.quality_level = quality_level
     ceremony.status = CeremonyStatus.COMPLETED
     ceremony.finished_at = timezone.now()
@@ -344,6 +347,39 @@ def revoke_seance_manifestations(ceremony: Ceremony) -> None:
                 account.unpuppet_object(session)
             except Exception:
                 logger.exception("unpuppet on seance close failed for sheet %s", sheet.pk)
+
+
+def _solemnize_wedding_honorees(honorees) -> None:
+    """WEDDING rite (#2999, #2358): find the honorees' active betrothal and land it.
+
+    The two honorees' kinsperson nodes must share an active Betrothal; the
+    rite then solemnizes in one stroke — union, marriage pact with the
+    negotiated commitments, and the marrying-up prestige award. Honorees
+    with no betrothal between them are honored (renown fired above) but
+    nothing legal happens: the rite needs the promise first.
+    """
+    from django.db.models import Q  # noqa: PLC0415
+
+    from world.roster.models import Kinsperson  # noqa: PLC0415
+    from world.societies.houses.models import Betrothal  # noqa: PLC0415
+    from world.societies.houses.pact_services import solemnize_wedding  # noqa: PLC0415
+
+    sheet_ids = [h.honoree_sheet_id for h in honorees]
+    kin_ids = set(Kinsperson.objects.filter(sheet_id__in=sheet_ids).values_list("pk", flat=True))
+    if len(kin_ids) < 2:  # noqa: PLR2004 — a wedding takes two
+        return
+    betrothal = (
+        Betrothal.objects.filter(
+            Q(kinsperson_a__in=kin_ids) & Q(kinsperson_b__in=kin_ids),
+            broken_at__isnull=True,
+            wed_at__isnull=True,
+        )
+        .order_by("created_at")
+        .first()
+    )
+    if betrothal is None or not betrothal.is_active:
+        return
+    solemnize_wedding(betrothal)
 
 
 def execute_will(character_sheet: "CharacterSheet") -> None:

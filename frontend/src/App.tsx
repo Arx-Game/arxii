@@ -211,6 +211,11 @@ const CovenantDetailPage = lazy(() =>
 // Lazy-loaded org stub page (#1446, seeds #1884)
 // ---------------------------------------------------------------------------
 
+const DossierPage = lazy(() =>
+  import('@/orgs/pages/DossierPage').then((m) => ({
+    default: m.DossierPage,
+  }))
+);
 const OrgPage = lazy(() =>
   import('@/orgs/pages/OrgPage').then((m) => ({
     default: m.OrgPage,
@@ -1000,6 +1005,17 @@ function App() {
               <Suspense fallback={<PageLoadingFallback />}>
                 <ProtectedRoute>
                   <OrgPage />
+                </ProtectedRoute>
+              </Suspense>
+            }
+          />
+          {/* Match-review dossier (#2999) — any authenticated player. */}
+          <Route
+            path="/orgs/:id/dossier"
+            element={
+              <Suspense fallback={<PageLoadingFallback />}>
+                <ProtectedRoute>
+                  <DossierPage />
                 </ProtectedRoute>
               </Suspense>
             }
