@@ -106,7 +106,36 @@ def full_display_name(person: Kinsperson) -> str:
         if row is not None:
             particle = row.particle
     pieces = [first, particle, family.name] if particle else [first, family.name]
+    # Married-in spouse form (#3091): the realm's spouse particle renders the
+    # BIRTH family after the married style, keeping the alliance the marriage
+    # embodies legible in the name.
+    if realm is not None:
+        birth_suffix = _spouse_birth_suffix(person, family, realm)
+        if birth_suffix:
+            pieces.extend(birth_suffix)
     return " ".join(pieces)
+
+
+def _spouse_birth_suffix(person: Kinsperson, family, realm) -> list[str]:
+    """``[spouse_particle, birth_family_name]`` for married-in members, else []."""
+    memberships = list(person.family_memberships.filter(ended_at__isnull=True))
+    current = next(
+        (
+            m
+            for m in memberships
+            if m.family_id == family.pk and m.basis == MembershipBasis.MARRIED_IN
+        ),
+        None,
+    )
+    if current is None:
+        return []
+    birth = next((m for m in memberships if m.basis == MembershipBasis.BORN), None)
+    if birth is None or birth.family_id == family.pk:
+        return []
+    row = NobiliaryParticle.objects.filter(realm=realm, family_type=family.family_type).first()
+    if row is None or not row.spouse_particle:
+        return []
+    return [row.spouse_particle, birth.family.name]
 
 
 # ---------------------------------------------------------------------------

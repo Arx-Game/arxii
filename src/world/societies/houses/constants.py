@@ -81,10 +81,20 @@ class CrisisResolution(models.TextChoices):
 
 class TitleTier(models.TextChoices):
     """Rank of a landed/dynastic title. Realm-specific display labels are
-    authorable on the Title row itself; this is the mechanical ladder."""
+    authorable on the Title row itself; this is the mechanical ladder (#3091:
+    six consistent-noun steps — Apostate's ruling).
 
-    CROWN = "crown", "Crown"
+    EMPIRE is a genuinely separate title, not a styling of KINGDOM: Umbros's
+    Emperor holds a kingdom-level title in addition to the imperial one, and
+    an empress could be selected while holding no lower title. MARCH marks
+    militarily vital counties or multi-county holdings short of ducal (held
+    by a marquis/marquessa).
+    """
+
+    EMPIRE = "empire", "Empire"
+    KINGDOM = "kingdom", "Kingdom"
     DUCHY = "duchy", "Duchy"
+    MARCH = "march", "March"
     COUNTY = "county", "County"
     BARONY = "barony", "Barony"
 
@@ -188,3 +198,86 @@ class HouseClaimStatus(models.TextChoices):
     PENDING = "pending", "Pending Review"
     APPROVED = "approved", "Approved"
     REJECTED = "rejected", "Rejected"
+
+
+# --- House Stature (#3091) — PLACEHOLDER magnitudes, inventoried for the ---
+# --- tuning pass. All relative/rank-based reads happen at consume time.  ---
+
+# Component weights: renown-heavy by ruling — the Gifted who stand with a
+# house matter as much as (possibly more than) its armies.
+STATURE_RENOWN_WEIGHT = 1.5
+STATURE_MILITARY_WEIGHT = 1.0
+STATURE_ECONOMIC_WEIGHT = 0.5
+
+# A standing pact contributes the counterpart's NET own-strength at this
+# factor. One hop only, both directions (strength and crisis drag alike).
+STATURE_ALLY_FACTOR = 0.5
+
+# Weekly perceived→true convergence share (word travels slowly).
+STATURE_CONVERGENCE_RATE = 0.25
+
+# Share of a dead contributor's weight that hits perceived stature instantly
+# (a public death is news; the rest arrives via weekly convergence).
+STATURE_DEATH_SHOCK_SHARE = 0.6
+
+# Whisper campaigns can displace perceived at most this fraction below true.
+STATURE_WHISPER_MAX_DISPLACEMENT = 0.25
+
+# Persona renown score terms (prestige counts at 1.0 implicitly).
+STATURE_FAME_WEIGHT = 1.0
+STATURE_LEGEND_WEIGHT = 2.0
+
+# Renown value per authored Kinsperson.gifted_rating point (sheetless kin).
+GIFTED_RATING_RENOWN = 2_000
+
+# MilitaryUnit strength scales by quality when summed into stature.
+UNIT_QUALITY_STATURE_MULTIPLIERS: dict[str, float] = {
+    "militia": 0.5,
+    "levy": 0.75,
+    "trained": 1.0,
+    "veteran": 1.5,
+    "elite": 2.0,
+}
+
+# An open threat deducts this fraction of the org's own gross strength
+# (blood in the water) until resolved.
+CRISIS_STATURE_PENALTIES: dict[str, float] = {
+    "trouble": 0.05,
+    "crisis": 0.12,
+    "catastrophe": 0.25,
+}
+
+# Economic component: coppers of treasury per stature point, and the weight
+# on summed weekly stream gross.
+TREASURY_STATURE_DIVISOR = 10_000
+INCOME_GROSS_STATURE_WEIGHT = 0.1
+
+# Prestige→prosperity drift (ruled: benefit routes through bounded prosperity;
+# ~3x base income cap emerges from prosperity 100 vs baseline 50 plus band
+# bonuses — never a raw accrual factor). Bonus applies only with zero open
+# threats; capped per week.
+PRESTIGE_PROSPERITY_DRIFT_MAX = 5
+
+# Band cohort continent key until a continent model exists (#3091 ruling:
+# continental bands + realm rank; only Catenys is defined today).
+CONTINENT_CATENYS = "catenys"
+
+# Flat permanent prestige (fires at marriage formation in phase 3; callable
+# from seeds now). Award per tier-gap step for marrying up; scandal penalty
+# for pact breach.
+MARRIAGE_TIER_PRESTIGE_AWARD_STEP = 5_000
+SCANDAL_PRESTIGE_PENALTY = 10_000
+
+
+class StatureShiftCause(models.TextChoices):
+    """Why a house's stature moved (#3091) — the 'why it moved' ledger."""
+
+    DEATH = "death", "A Death"
+    PACT_SIGNED = "pact_signed", "Pact Signed"
+    PACT_DISSOLVED = "pact_dissolved", "Pact Dissolved"
+    CRISIS_OPENED = "crisis_opened", "Crisis Opened"
+    CRISIS_SURFACED = "crisis_surfaced", "Crisis Surfaced"
+    CRISIS_RESOLVED = "crisis_resolved", "Crisis Resolved"
+    WHISPERS = "whispers", "Whisper Campaign"
+    CONVERGENCE = "convergence", "Word Spreads"
+    RECOMPUTE = "recompute", "Weekly Recompute"

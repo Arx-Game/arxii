@@ -28,6 +28,7 @@ from world.societies.houses.constants import (
     PactCommitmentKind,
     PactDissolutionReason,
     RecognitionRuleKind,
+    StatureShiftCause,
     SuccessionDerivation,
     SuccessionOrdering,
     TitleTier,
@@ -58,6 +59,16 @@ class NobiliaryParticle(SharedMemoryModel):
     particle = models.CharField(
         max_length=20,
         help_text='The particle between first and house name (e.g. "du"). PLACEHOLDER.',
+    )
+    spouse_particle = models.CharField(
+        max_length=20,
+        blank=True,
+        help_text=(
+            "Married-in spouse form (#3091): a courtesy-titled spouse renders "
+            "this particle with their BIRTH family name after the married "
+            "style, keeping the alliance legible in the name. PLACEHOLDER; "
+            "blank = no spouse form for this realm/family type."
+        ),
     )
 
     class Meta:
@@ -1140,3 +1151,213 @@ class OrganizationFeature(SharedMemoryModel):
 
     def __str__(self) -> str:
         return f"{self.organization}: {self.feature}"
+
+
+# ---------------------------------------------------------------------------
+# House Stature (#3091) — perceived-vs-true deterrence spine
+# ---------------------------------------------------------------------------
+
+
+class StatureBand(NaturalKeyMixin, SharedMemoryModel):
+    """Authored qualitative stature tier (#3091): Unassailable ... Imperiled.
+
+    Assigned by percentile within a (continent x org-category) cohort of
+    landed orgs. Supplies the org page's qualitative headline and the
+    predation multiplier ambient crisis generation reads. PLACEHOLDER prose
+    on seeds; admin-editable at content time.
+    """
+
+    name = models.CharField(max_length=40, unique=True)
+    rank = models.PositiveSmallIntegerField(
+        help_text="1 = highest band; bands are ordered, not overlapping.",
+    )
+    min_percentile = models.PositiveSmallIntegerField(
+        help_text="Lowest cohort percentile (0-100) that earns this band.",
+    )
+    threat_multiplier = models.DecimalField(
+        max_digits=4,
+        decimal_places=2,
+        default=1,
+        help_text=(
+            "Ambient threat chance is scaled by this for orgs in this band — "
+            "weak-looking houses get probed harder (#3091 predation)."
+        ),
+    )
+    headline_template = models.TextField(
+        blank=True,
+        help_text=(
+            "Qualitative headline for the org page; '{org}' interpolates the "
+            "org name. PLACEHOLDER prose pending the tuning pass."
+        ),
+    )
+
+    objects = NaturalKeyManager()
+
+    class NaturalKeyConfig:
+        fields = ["name"]
+
+    class Meta:
+        ordering = ["rank"]
+
+    def __str__(self) -> str:
+        return f"{self.name} (band {self.rank})"
+
+
+class HouseStature(SharedMemoryModel):
+    """A landed org's true vs perceived strength (#3091).
+
+    True side recomputes weekly (renown + military + economic + allied -
+    crisis penalty, per-component weights in constants). Perceived converges
+    toward true with lag; shocks (deaths, pact changes, surfaced crises,
+    whisper campaigns) move it immediately. Bands are cohort percentiles.
+    """
+
+    organization = models.OneToOneField(
+        _ORG_FK,
+        on_delete=models.CASCADE,
+        related_name="stature",
+    )
+    renown_strength = models.IntegerField(default=0)
+    military_strength = models.IntegerField(default=0)
+    economic_strength = models.IntegerField(default=0)
+    allied_strength = models.IntegerField(default=0)
+    crisis_penalty = models.IntegerField(
+        default=0,
+        help_text="Deduction from open threats (blood in the water); cleared on resolve.",
+    )
+    true_total = models.IntegerField(default=0)
+    perceived_total = models.IntegerField(
+        default=0,
+        help_text="What the world believes; converges toward true_total weekly.",
+    )
+    band = models.ForeignKey(
+        StatureBand,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="current_orgs",
+    )
+    previous_band = models.ForeignKey(
+        StatureBand,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="+",
+        help_text="Band before the last assignment — drives the trend display.",
+    )
+    prestige_rank = models.PositiveIntegerField(
+        null=True,
+        blank=True,
+        help_text="1-based rank among ALL orgs by prestige standing (#3091, rank-relative).",
+    )
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ["-perceived_total"]
+
+    def __str__(self) -> str:
+        return f"{self.organization}: {self.perceived_total} perceived / {self.true_total} true"
+
+
+class StatureShift(SharedMemoryModel):
+    """Why a house's stature moved (#3091) — display history + tidings source."""
+
+    organization = models.ForeignKey(
+        _ORG_FK,
+        on_delete=models.CASCADE,
+        related_name="stature_shifts",
+    )
+    cause = models.CharField(max_length=20, choices=StatureShiftCause.choices)
+    delta_true = models.IntegerField(default=0)
+    delta_perceived = models.IntegerField(default=0)
+    subject_kinsperson = models.ForeignKey(
+        _KINSPERSON_FK,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="+",
+        help_text="The person whose death/marriage moved the number, when one did.",
+    )
+    subject_persona = models.ForeignKey(
+        "arxii.Persona",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="+",
+    )
+    created_at = models.DateTimeField(auto_now_add=True, db_index=True)
+
+    class Meta:
+        ordering = ["-created_at"]
+
+    def __str__(self) -> str:
+        return f"{self.organization} {self.cause}: {self.delta_perceived:+d} perceived"
+
+
+class PrestigeRankBand(NaturalKeyMixin, SharedMemoryModel):
+    """Authored rank-relative prestige benefit tier (#3091).
+
+    Benefits key on RANK, never raw prestige (being #1 matters identically at
+    twenty thousand or a billion). Shape per ruling: declining scale across
+    the top 100, minimal 101-1000, penalties for negative prestige scaled by
+    how negative (negative_only rows).
+    """
+
+    class Scope(models.TextChoices):
+        ORG = "org", "Organization"
+        PERSONA = "persona", "Persona"
+
+    name = models.CharField(max_length=60, unique=True)
+    scope = models.CharField(max_length=10, choices=Scope.choices, default=Scope.ORG)
+    min_rank = models.PositiveIntegerField(
+        help_text="Best (lowest) 1-based rank this band covers.",
+    )
+    max_rank = models.PositiveIntegerField(
+        null=True,
+        blank=True,
+        help_text="Worst rank covered; null = everything below min_rank.",
+    )
+    negative_only = models.BooleanField(
+        default=False,
+        help_text="Applies only to holders of NEGATIVE prestige (rank is ignored).",
+    )
+    prosperity_bonus = models.SmallIntegerField(
+        default=0,
+        help_text=(
+            "Weekly prosperity drift for landed orgs in this band with zero "
+            "open threats (#3091: prestige pays through bounded prosperity)."
+        ),
+    )
+
+    objects = NaturalKeyManager()
+
+    class NaturalKeyConfig:
+        fields = ["name"]
+
+    class Meta:
+        ordering = ["negative_only", "min_rank"]
+
+    def __str__(self) -> str:
+        return self.name
+
+
+class OrgPrestigeRank(SharedMemoryModel):
+    """Prestige rank storage for orgs that carry no HouseStature (#3091).
+
+    Crime syndicates and other unlanded orgs rank on the same contextual
+    ladder without the stature spine; landed orgs store rank on HouseStature.
+    """
+
+    organization = models.OneToOneField(
+        _ORG_FK,
+        on_delete=models.CASCADE,
+        related_name="prestige_rank_row",
+    )
+    prestige_rank = models.PositiveIntegerField()
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ["prestige_rank"]
+
+    def __str__(self) -> str:
+        return f"{self.organization}: prestige rank {self.prestige_rank}"
