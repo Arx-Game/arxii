@@ -733,6 +733,7 @@ def seeded_models_by_cluster() -> dict[str, list[type[Model]]]:
     from world.skills.models import Specialization  # noqa: PLC0415
     from world.societies.houses.models import (  # noqa: PLC0415
         DomainCrisisType,
+        StatureBand,
         Title,
     )
     from world.societies.models import (  # noqa: PLC0415
@@ -894,6 +895,8 @@ def seeded_models_by_cluster() -> dict[str, list[type[Model]]]:
         "kinship": [Kinsperson],
         # Houses: the landed demo house; represented by Title (#1884).
         "houses": [Title],
+        # House Stature: band + rank-band catalogs (#3091).
+        "stature": [StatureBand],
         # Propaganda: the PLACEHOLDER campaign-tier catalog (#1621).
         "propaganda": [PropagandaCampaignTier],
         # Skill breakthroughs: default TraitRatingUnlock catalog at every skill's
