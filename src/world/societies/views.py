@@ -52,7 +52,9 @@ class OrganizationViewSet(viewsets.ReadOnlyModelViewSet):
     # ~6 queries per org with a family (~300 on a 50-org page). select_related
     # the family + prefetch the rest so the payload reads from cache.
     queryset = (
-        Organization.objects.select_related("family", "society", "org_type")
+        Organization.objects.select_related(
+            "family", "society", "org_type", "stature__band", "stature__previous_band"
+        )
         .prefetch_related(
             "ranks",  # noqa: PREFETCH_STRING
             "titles__holder",  # noqa: PREFETCH_STRING

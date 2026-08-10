@@ -23719,7 +23719,7 @@ export interface components {
     ClaimableTitle: {
       readonly id: number;
       name: string;
-      tier: components['schemas']['Tier34dEnum'];
+      tier: components['schemas']['TierE4cEnum'];
       readonly realm_name: string;
       /** @default  */
       readonly seat_domain_name: string;
@@ -27238,6 +27238,7 @@ export interface components {
       aspects: components['schemas']['HouseAspectFacet'][];
       features: components['schemas']['HouseFeatureFacet'][];
       open_crises: components['schemas']['HouseCrisis'][];
+      stature: components['schemas']['HouseStature'] | null;
     };
     HouseDomain: {
       name: string;
@@ -27262,6 +27263,28 @@ export interface components {
       name: string;
       slug: string;
       description: string;
+    };
+    /**
+     * @description The house's stature panel (#3091): qualitative headline, numbers below.
+     *
+     *     Members-only by construction — the org queryset already gates non-staff
+     *     viewers to their own orgs, so this is the house's own view of itself.
+     *     All values are stored weekly (plus event shocks); zero extra queries.
+     */
+    HouseStature: {
+      headline: string;
+      band_name: string;
+      trend: string;
+      perceived_total: number;
+      true_total: number;
+      renown_strength: number;
+      military_strength: number;
+      economic_strength: number;
+      allied_strength: number;
+      crisis_penalty: number;
+      prestige_rank: number | null;
+      realm_rank: number | null;
+      realm_cohort_size: number | null;
     };
     /** @description A realm template a CG house claim may build from. */
     HouseTemplateOption: {
@@ -27290,7 +27313,7 @@ export interface components {
     HouseTitle: {
       readonly id: number;
       name: string;
-      tier: components['schemas']['Tier34dEnum'];
+      tier: components['schemas']['TierE4cEnum'];
       readonly holder_name: string;
       /** @description Vacant slot set aside for the Phase D house creator. */
       is_claimable?: boolean;
@@ -35924,9 +35947,17 @@ export interface components {
      *     * `crisis` - Crisis
      *     * `proclamation` - Proclamation
      *     * `birthday` - Birthday
+     *     * `stature` - Stature
      * @enum {string}
      */
-    PublicFeedItemKindEnum: 'deed' | 'scandal' | 'pardon' | 'crisis' | 'proclamation' | 'birthday';
+    PublicFeedItemKindEnum:
+      | 'deed'
+      | 'scandal'
+      | 'pardon'
+      | 'crisis'
+      | 'proclamation'
+      | 'birthday'
+      | 'stature';
     /**
      * @description Wire shape for the optional ``action_context`` block in a pull preview.
      *
@@ -39859,14 +39890,6 @@ export interface components {
       readonly description: string;
     };
     /**
-     * @description * `crown` - Crown
-     *     * `duchy` - Duchy
-     *     * `county` - County
-     *     * `barony` - Barony
-     * @enum {string}
-     */
-    Tier34dEnum: 'crown' | 'duchy' | 'county' | 'barony';
-    /**
      * @description * `1` - Cosmetic Touch
      *     * `2` - Marked
      *     * `3` - Touched
@@ -39891,6 +39914,16 @@ export interface components {
      * @enum {string}
      */
     TierAbfEnum: 'table' | 'regional' | 'world';
+    /**
+     * @description * `empire` - Empire
+     *     * `kingdom` - Kingdom
+     *     * `duchy` - Duchy
+     *     * `march` - March
+     *     * `county` - County
+     *     * `barony` - Barony
+     * @enum {string}
+     */
+    TierE4cEnum: 'empire' | 'kingdom' | 'duchy' | 'march' | 'county' | 'barony';
     /**
      * @description * `dawn` - Dawn
      *     * `day` - Day

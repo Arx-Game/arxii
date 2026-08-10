@@ -448,3 +448,39 @@ class ThreatLoopPayoutTests(SpyPayoutTestBase):
         TaskOutcomeRouteFactory(template=template, outcome_tier=self.win, crisis_severity_delta=1)
         with self.assertRaises(TargetConsentError):
             create_task(template, self.org, self.handler, target_crisis=crisis)
+
+
+class StaturePayoutTests(SpyPayoutTestBase):
+    """#3091 — true-vs-believed stature reads + whisper campaigns."""
+
+    def _mark_org(self, true_total=10_000, perceived_total=10_000):
+        from world.societies.houses.models import HouseStature
+
+        target = OrganizationFactory(name="House Mark")
+        HouseStature.objects.create(
+            organization=target, true_total=true_total, perceived_total=perceived_total
+        )
+        return target
+
+    def test_org_report_reads_true_vs_believed(self):
+        target = self._mark_org(true_total=12_000, perceived_total=8_000)
+        template = TaskTemplateFactory(duration=timedelta(days=1), target_kind=TaskTargetKind.ORG)
+        TaskOutcomeRouteFactory(template=template, outcome_tier=self.win, organization_report=True)
+        _, fulfillment = self._resolve(template, target_org=target)
+        self.assertIn("True stature 12000 against a repute of 8000", fulfillment.report)
+        self.assertIn("stronger than the world believes", fulfillment.report)
+
+    def test_whisper_campaign_erodes_perceived_within_bounds(self):
+        from world.societies.houses.constants import STATURE_WHISPER_MAX_DISPLACEMENT
+        from world.societies.houses.models import HouseStature
+
+        target = self._mark_org()
+        template = TaskTemplateFactory(duration=timedelta(days=1), target_kind=TaskTargetKind.ORG)
+        TaskOutcomeRouteFactory(
+            template=template, outcome_tier=self.win, whisper_stature_delta=50_000
+        )
+        _, fulfillment = self._resolve(template, target_org=target)
+        stature = HouseStature.objects.get(organization=target)
+        floor = round(10_000 * (1 - STATURE_WHISPER_MAX_DISPLACEMENT))
+        self.assertEqual(stature.perceived_total, floor)
+        self.assertIn("repute erodes", fulfillment.report)

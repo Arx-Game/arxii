@@ -595,8 +595,38 @@ def assign_bands() -> int:
             row.previous_band = row.band
             row.band = band
             row.save(update_fields=["band", "previous_band", "updated_at"])
+            # A band change is public news — the tidings feeds read this row.
+            record_shift(row.organization, cause=StatureShiftCause.BAND_CHANGE)
             changed += 1
     return changed
+
+
+def assign_realm_ranks() -> int:
+    """Store each landed org's perceived-stature rank among its realm's polities.
+
+    Stored weekly so the org page reads ranking with zero extra queries
+    ("3rd of 11 polities of Inferna" — the ruling's display ask).
+    """
+    realms: dict[int | None, list[HouseStature]] = {}
+    rows = HouseStature.objects.filter(organization__in=landed_orgs()).select_related(
+        "organization__society"
+    )
+    for row in rows:
+        society = row.organization.society
+        realm_id = society.realm_id if society is not None else None
+        realms.setdefault(realm_id, []).append(row)
+    updated = 0
+    for members in realms.values():
+        members.sort(key=lambda r: (-r.perceived_total, r.organization_id))
+        size = len(members)
+        for index, row in enumerate(members, start=1):
+            if row.realm_rank == index and row.realm_cohort_size == size:
+                continue
+            row.realm_rank = index
+            row.realm_cohort_size = size
+            row.save(update_fields=["realm_rank", "realm_cohort_size", "updated_at"])
+            updated += 1
+    return updated
 
 
 def recompute_org_prestige_ranks() -> int:
@@ -690,12 +720,14 @@ def weekly_stature_tick(
     for stature in HouseStature.objects.filter(organization__in=landed_orgs()):
         converged += 1 if converge_perceived(stature) else 0
     banded = assign_bands()
+    realm_ranked = assign_realm_ranks()
     return {
         "recomputed": recomputed,
         "ranked": ranked,
         "prosperity_touched": drifted,
         "converged": converged,
         "bands_changed": banded,
+        "realm_ranked": realm_ranked,
     }
 
 

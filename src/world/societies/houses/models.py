@@ -1250,6 +1250,16 @@ class HouseStature(SharedMemoryModel):
         blank=True,
         help_text="1-based rank among ALL orgs by prestige standing (#3091, rank-relative).",
     )
+    realm_rank = models.PositiveIntegerField(
+        null=True,
+        blank=True,
+        help_text="1-based perceived-stature rank among the realm's landed polities.",
+    )
+    realm_cohort_size = models.PositiveIntegerField(
+        null=True,
+        blank=True,
+        help_text="How many landed polities the realm rank compares against.",
+    )
     updated_at = models.DateTimeField(auto_now=True)
 
     class Meta:

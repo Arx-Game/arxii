@@ -286,3 +286,4 @@ class StatureShiftCause(models.TextChoices):
     WHISPERS = "whispers", "Whisper Campaign"
     CONVERGENCE = "convergence", "Word Spreads"
     RECOMPUTE = "recompute", "Weekly Recompute"
+    BAND_CHANGE = "band_change", "Standing Repriced"
