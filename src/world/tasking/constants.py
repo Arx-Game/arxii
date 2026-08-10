@@ -42,6 +42,7 @@ class TaskTargetKind(models.TextChoices):
     DOMAIN = "domain", "Domain"
     PERSONA = "persona", "Persona"
     CRISIS = "crisis", "Crisis"
+    PREDATOR = "predator", "Predator Band"
 
 
 # Points of check modifier the agent's resolution roll gains (or loses) per

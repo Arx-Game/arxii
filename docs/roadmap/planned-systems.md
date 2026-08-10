@@ -161,9 +161,11 @@ Designed as a connected set (ADRs 0050–0057); most of it has now landed. See
   (#3091, ADR-0209/0210): perceived-vs-true deterrence spine (renown/military/economic/allied −
   crisis drag), cohort bands scaling ambient predation, rank-relative prestige → prosperity,
   spy reads + whisper campaigns, consort/paramour union vocabulary, six-step `TitleTier`,
-  first live `MOST_POWERFUL_GIFTED` rater. Phase 2 (predator ecology) and phase 3 (**#2999**
-  general pacts + marriage-in-play feeding the allied component) build on this spine — the
-  only formal inter-org pact remains `MarriagePact` until #2999.
+  first live `MOST_POWERFUL_GIFTED` rater. ✅ **Predator ecology** — DONE (#3093, ADR-0211): predator bands on the slow
+  menace ladder (~10 crons rumor→raid), deterrence-blind Afflictions with SIGNS +
+  capped spread, scout/sabotage spycraft, grand-display upward bluff. Phase 3 (**#2999**
+  general pacts + marriage-in-play feeding the allied component) remains — the
+  only formal inter-org pact is still `MarriagePact` until #2999.
 - ✅ **Battle / army / warfare system** — DONE (`world/military`: `MilitaryUnit`/`Army` + services;
   `world/battles`: staging, resolution, fortifications, vehicles, war funding, city defense). War
   covenants now have somewhere to resolve into.

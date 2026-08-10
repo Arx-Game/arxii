@@ -29996,7 +29996,7 @@ export interface components {
        * @description Resolution moment; set at assignment (now + template.duration).
        */
       deadline?: string | null;
-      target_kind?: components['schemas']['TargetKind7e5Enum'];
+      target_kind?: components['schemas']['TargetKindDdaEnum'];
       readonly target_label: string;
       /** Format: date-time */
       readonly created_at: string;
@@ -30016,7 +30016,7 @@ export interface components {
        * @description Resolution moment; set at assignment (now + template.duration).
        */
       deadline?: string | null;
-      target_kind?: components['schemas']['TargetKind7e5Enum'];
+      target_kind?: components['schemas']['TargetKindDdaEnum'];
       /** Format: date-time */
       resolved_at?: string | null;
     };
@@ -34538,8 +34538,9 @@ export interface components {
        *     * `domain` - Domain
        *     * `persona` - Persona
        *     * `crisis` - Crisis
+       *     * `predator` - Predator Band
        */
-      target_kind?: components['schemas']['TargetKind7e5Enum'];
+      target_kind?: components['schemas']['TargetKindDdaEnum'];
       /** @description Predicate tree gating who may issue/fulfill (NPCServiceOffer convention). */
       eligibility_rule?: unknown;
       /** @description Set = PCs may fulfill this as a mission (phase 5). Unset = NPC-only. */
@@ -35948,6 +35949,7 @@ export interface components {
      *     * `proclamation` - Proclamation
      *     * `birthday` - Birthday
      *     * `stature` - Stature
+     *     * `menace` - Menace
      * @enum {string}
      */
     PublicFeedItemKindEnum:
@@ -35957,7 +35959,8 @@ export interface components {
       | 'crisis'
       | 'proclamation'
       | 'birthday'
-      | 'stature';
+      | 'stature'
+      | 'menace';
     /**
      * @description Wire shape for the optional ``action_context`` block in a pull preview.
      *
@@ -39180,9 +39183,10 @@ export interface components {
      *     * `domain` - Domain
      *     * `persona` - Persona
      *     * `crisis` - Crisis
+     *     * `predator` - Predator Band
      * @enum {string}
      */
-    TargetKind7e5Enum: 'none' | 'room' | 'org' | 'domain' | 'persona' | 'crisis';
+    TargetKindDdaEnum: 'none' | 'room' | 'org' | 'domain' | 'persona' | 'crisis' | 'predator';
     /** @description Read-only serializer for TargetSpec — entity kind + cardinality + filters. */
     TargetSpec: {
       readonly kind: string;
@@ -39348,8 +39352,9 @@ export interface components {
        *     * `domain` - Domain
        *     * `persona` - Persona
        *     * `crisis` - Crisis
+       *     * `predator` - Predator Band
        */
-      target_kind?: components['schemas']['TargetKind7e5Enum'];
+      target_kind?: components['schemas']['TargetKindDdaEnum'];
       /** @description Predicate tree gating who may issue/fulfill (NPCServiceOffer convention). */
       eligibility_rule?: unknown;
       /** @description Set = PCs may fulfill this as a mission (phase 5). Unset = NPC-only. */
@@ -39378,8 +39383,9 @@ export interface components {
        *     * `domain` - Domain
        *     * `persona` - Persona
        *     * `crisis` - Crisis
+       *     * `predator` - Predator Band
        */
-      target_kind?: components['schemas']['TargetKind7e5Enum'];
+      target_kind?: components['schemas']['TargetKindDdaEnum'];
       /** @description Predicate tree gating who may issue/fulfill (NPCServiceOffer convention). */
       eligibility_rule?: unknown;
       /** @description Set = PCs may fulfill this as a mission (phase 5). Unset = NPC-only. */
@@ -39405,8 +39411,9 @@ export interface components {
        *     * `domain` - Domain
        *     * `persona` - Persona
        *     * `crisis` - Crisis
+       *     * `predator` - Predator Band
        */
-      target_kind?: components['schemas']['TargetKind7e5Enum'];
+      target_kind?: components['schemas']['TargetKindDdaEnum'];
     };
     /** @description Read-only template summary embedded in board rows. */
     TaskTemplateSummaryRequest: {
@@ -39424,8 +39431,9 @@ export interface components {
        *     * `domain` - Domain
        *     * `persona` - Persona
        *     * `crisis` - Crisis
+       *     * `predator` - Predator Band
        */
-      target_kind?: components['schemas']['TargetKind7e5Enum'];
+      target_kind?: components['schemas']['TargetKindDdaEnum'];
     };
     /** @description Serializer for Technique records with intensity and control stats. */
     Technique: {

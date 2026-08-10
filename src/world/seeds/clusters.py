@@ -262,6 +262,12 @@ def _seed_stature() -> None:
     ensure_stature_catalog()
 
 
+def _seed_predators() -> None:
+    from world.seeds.predators import ensure_predator_catalog  # noqa: PLC0415
+
+    ensure_predator_catalog()
+
+
 def _seed_proclamations() -> None:
     from world.seeds.proclamations import ensure_edict_kinds  # noqa: PLC0415
 
@@ -617,6 +623,8 @@ CLUSTER_SEEDERS: dict[str, Callable[[], None]] = {
     # realm-cultural consort/paramour union kinds. After "houses" so realm
     # lookups for consort kinds resolve.
     "stature": _seed_stature,
+    # Predator ecology (#3093): predator kinds + Affliction crisis vocabulary.
+    "predators": _seed_predators,
     # GM trust ladder: the 5 default GMLevelCap rows (max_beat_risk,
     # allow_custom_stakes, allow_global_scope_authoring per GMLevel), so a fresh
     # deploy's staff-review gates aren't silently maximally-restrictive (#2000).
@@ -717,6 +725,7 @@ def seeded_models_by_cluster() -> dict[str, list[type[Model]]]:
     from world.mechanics.models import ChallengeTemplate  # noqa: PLC0415
     from world.missions.models import MissionGiver, MissionTemplate  # noqa: PLC0415
     from world.npc_services.models import NPCRole  # noqa: PLC0415
+    from world.predators.models import PredatorKind  # noqa: PLC0415
     from world.progression.models import (  # noqa: PLC0415
         DuranceTrainingSite,
         KudosSourceCategory,
@@ -897,6 +906,8 @@ def seeded_models_by_cluster() -> dict[str, list[type[Model]]]:
         "houses": [Title],
         # House Stature: band + rank-band catalogs (#3091).
         "stature": [StatureBand],
+        # Predator ecology: the antagonist vocabulary (#3093).
+        "predators": [PredatorKind],
         # Propaganda: the PLACEHOLDER campaign-tier catalog (#1621).
         "propaganda": [PropagandaCampaignTier],
         # Skill breakthroughs: default TraitRatingUnlock catalog at every skill's

@@ -128,14 +128,53 @@ def public_feed_for_societies(
     )
     pardons = _pardon_items(society_ids, limit=limit)
     repricings = _band_change_items(limit=limit)
+    menaces = _menace_items(limit=limit)
     items = (
         [_deed_item(entry) for entry in deeds]
         + [_scandal_item(secret) for secret in scandals]
         + pardons
         + repricings
+        + menaces
     )
     items.sort(key=lambda item: item.occurred_at, reverse=True)
     return items[:limit]
+
+
+def _menace_items(*, limit: int) -> list[PublicFeedItem]:
+    """Predator ladder steps + Affliction signs (#3093) — the region's dread.
+
+    The whole point of the slow ladder is that everyone SEES it: every stage
+    transition and every week of looming signs is public news.
+    """
+    from world.predators.models import AfflictionSign, MenaceEvent  # noqa: PLC0415
+
+    events = MenaceEvent.objects.select_related("band").order_by("-created_at")[:limit]
+    items = [
+        PublicFeedItem(
+            kind=FeedItemKind.MENACE,
+            headline=event.headline,
+            subject=event.band.name,
+            occurred_at=event.created_at,
+            category=event.stage,
+        )
+        for event in events
+    ]
+    signs = AfflictionSign.objects.filter(converted_at__isnull=True).select_related(
+        "domain", "crisis_type"
+    )[:limit]
+    items.extend(
+        PublicFeedItem(
+            kind=FeedItemKind.MENACE,
+            headline=(
+                f"PLACEHOLDER Ill omens in {sign.domain.name}: signs of {sign.crisis_type.name}."
+            ),
+            subject=sign.domain.name,
+            occurred_at=sign.created_at,
+            category="affliction_sign",
+        )
+        for sign in signs
+    )
+    return items
 
 
 def _band_change_items(*, limit: int) -> list[PublicFeedItem]:

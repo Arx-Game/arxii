@@ -517,6 +517,20 @@ class DomainCrisisType(SharedMemoryModel):
         default=CrisisAudience.DOMAIN,
         help_text="What this type spawns against; criminal flavor is content, not code (#2837).",
     )
+    ignores_stature = models.BooleanField(
+        default=False,
+        help_text=(
+            "Affliction-class types (#3093): spawn odds NEVER scale by the "
+            "target's stature band — deterrence means nothing to the dead."
+        ),
+    )
+    affliction_spreads = models.BooleanField(
+        default=False,
+        help_text=(
+            "While unresolved, weekly chance to open a sibling outbreak one "
+            "domain over (same realm), capped per root (#3093)."
+        ),
+    )
 
     class Meta:
         ordering = ["name"]
@@ -659,6 +673,18 @@ class DomainCrisis(SharedMemoryModel):
             "Generated crises stay covert until this moment; null = public from"
             " the start. Spy sweeps mint CrisisIntel to see through the window (#2837)."
         ),
+    )
+    aggressor_band = models.ForeignKey(
+        "arxii.PredatorBand",
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="authored_crises",
+        help_text="The predator band behind this crisis, when one is (#3093).",
+    )
+    spread_count = models.PositiveSmallIntegerField(
+        default=0,
+        help_text="Sibling outbreaks already spawned from THIS root (Affliction spread cap).",
     )
 
     class Meta:

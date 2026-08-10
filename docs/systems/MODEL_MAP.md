@@ -464,6 +464,7 @@
   - ambient_emote_lines <- narrative.AmbientEmoteLine
   - name_cultures <- npc_services.NameCulture
   - default_permits_offered <- npc_services.PermitOfferDetails
+  - predator_bands <- predators.PredatorBand
   - gossip_heat <- secrets.SecretGossip
 
 ### AreaClosure
@@ -6753,6 +6754,40 @@
 - `submit_petition(account: 'AccountDB', *, category: 'str', description: 'str', scene: 'Scene | None' = None, subject_character: 'ObjectDB | None' = None) -> 'Petition' - File the one open petition an account may hold — emergency-only.`
 
 
+## world.predators
+
+### AfflictionSign
+**Foreign Keys:**
+  - domain -> societies.Domain [FK]
+  - crisis_type -> societies.DomainCrisisType [FK]
+
+### MenaceEvent
+**Foreign Keys:**
+  - band -> predators.PredatorBand [FK]
+
+### PredatorBand
+**Foreign Keys:**
+  - kind -> predators.PredatorKind [FK]
+  - home_region -> areas.Area [FK]
+  - prey -> societies.Organization [FK] (nullable)
+**Pointed to by:**
+  - authored_crises <- societies.DomainCrisis
+  - events <- predators.MenaceEvent
+  - org_tasks_targeting <- tasking.OrgTask
+
+### PredatorKind
+**Pointed to by:**
+  - bands <- predators.PredatorBand
+
+### Service Functions
+- `has_regional_peace(org: 'Organization', band: 'PredatorBand') -> 'bool' - Consort-derived regional peace (#3091 ruling): a house whose family holds`
+- `sabotage_band(band: 'PredatorBand') -> 'PredatorBand' - The spy payout's knife in the dark — smaller burn, same ladder knockdown.`
+- `select_prey(band: 'PredatorBand') -> 'Organization | None' - The weakest-PERCEIVED landed org in reach, honoring regional peace.`
+- `strike_band(band: 'PredatorBand', *, strength_burn: 'int' = 25, stages: 'int' = 1) -> 'PredatorBand' - Counterplay landed: burn strength, knock the ladder down, maybe break them.`
+- `weekly_affliction_tick(*, rng: 'random.Random | None' = None) -> 'dict[str, int]'`
+- `weekly_menace_tick(*, rng: 'random.Random | None' = None) -> 'dict[str, int]' - The weekly heartbeat: spawn, stalk, pressure, and (slowly) escalate.`
+
+
 
 ## world.progression
 
@@ -8358,6 +8393,7 @@
   - improvement_details <- societies.DomainImprovementDetails
   - edicts <- societies.DomainEdict
   - crises <- societies.DomainCrisis
+  - affliction_signs <- predators.AfflictionSign
 
 ### DomainCrisis
 **Foreign Keys:**
@@ -8366,6 +8402,7 @@
   - crisis_type -> societies.DomainCrisisType [FK] (nullable)
   - chosen_option -> societies.DomainCrisisTypeOption [FK] (nullable)
   - minted_mission -> missions.MissionInstance [FK] (nullable)
+  - aggressor_band -> predators.PredatorBand [FK] (nullable)
 **Pointed to by:**
   - intel <- societies.CrisisIntel
   - org_tasks_targeting <- tasking.OrgTask
@@ -8374,6 +8411,7 @@
 **Pointed to by:**
   - options <- societies.DomainCrisisTypeOption
   - crises <- societies.DomainCrisis
+  - signs <- predators.AfflictionSign
 
 ### DomainCrisisTypeOption
 **Foreign Keys:**
@@ -8635,6 +8673,7 @@
   - npc_roles <- npc_services.NPCRole
   - loan_offers <- npc_services.LoanOfferDetails
   - regards_as_target <- npc_services.NpcRegard
+  - stalking_predators <- predators.PredatorBand
   - secret_victimhoods <- secrets.SecretVictim
   - org_tasks <- tasking.OrgTask
   - org_tasks_targeting <- tasking.OrgTask
@@ -9306,6 +9345,7 @@
   - target_domain -> societies.Domain [FK] (nullable)
   - target_persona -> scenes.Persona [FK] (nullable)
   - target_crisis -> societies.DomainCrisis [FK] (nullable)
+  - target_band -> predators.PredatorBand [FK] (nullable)
 **Pointed to by:**
   - fulfillments <- tasking.TaskFulfillment
 

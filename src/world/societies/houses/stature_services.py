@@ -776,3 +776,33 @@ def award_marriage_tier_prestige(
         award_deed_prestige(persona, amount)
         awarded += amount
     return awarded
+
+
+def apply_grand_display(org: Organization, quality_score: int) -> int:
+    """A grand display (#3093): hosting done lavishly inflates perceived stature.
+
+    The upward half of the bluffing game (whispers are the downward half).
+    An event whose catering PROVISION score clears the bar pushes the host
+    org's perceived total up, bounded above true by the bluff elevation cap
+    — a house can look somewhat stronger than it is, never absurdly so.
+    """
+    from world.societies.houses.constants import (  # noqa: PLC0415
+        GRAND_DISPLAY_ELEVATION_PER_POINT,
+        GRAND_DISPLAY_MIN_QUALITY,
+        STATURE_BLUFF_MAX_ELEVATION,
+    )
+
+    if quality_score < GRAND_DISPLAY_MIN_QUALITY:
+        return 0
+    stature = HouseStature.objects.filter(organization=org).first()
+    if stature is None:
+        return 0
+    ceiling = round(stature.true_total * (1 + STATURE_BLUFF_MAX_ELEVATION))
+    room = ceiling - stature.perceived_total
+    if room <= 0:
+        return 0
+    applied = min(room, quality_score * GRAND_DISPLAY_ELEVATION_PER_POINT)
+    stature.perceived_total += applied
+    stature.save(update_fields=["perceived_total", "updated_at"])
+    record_shift(org, cause=StatureShiftCause.GRAND_DISPLAY, delta_perceived=applied)
+    return applied

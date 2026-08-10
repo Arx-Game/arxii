@@ -58,6 +58,8 @@ class CrisisOrigin(models.TextChoices):
     UNREST = "unrest", "Unrest Boil-over"
     STAFF = "staff", "Staff/GM Crafted"
     AMBIENT = "ambient", "Ambient Generation"
+    PREDATOR = "predator", "Predator Raid"
+    AFFLICTION = "affliction", "Affliction Outbreak"
 
 
 class CrisisResolutionKind(models.TextChoices):
@@ -287,3 +289,12 @@ class StatureShiftCause(models.TextChoices):
     CONVERGENCE = "convergence", "Word Spreads"
     RECOMPUTE = "recompute", "Weekly Recompute"
     BAND_CHANGE = "band_change", "Standing Repriced"
+    GRAND_DISPLAY = "grand_display", "Grand Display"
+
+
+# --- Grand displays (#3093) — the upward half of the bluffing game ---
+# An event whose catering PROVISION score clears the bar pushes the host
+# org's perceived stature up, capped this fraction above true. PLACEHOLDER.
+GRAND_DISPLAY_MIN_QUALITY = 6
+GRAND_DISPLAY_ELEVATION_PER_POINT = 150
+STATURE_BLUFF_MAX_ELEVATION = 0.15

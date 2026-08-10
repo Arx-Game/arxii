@@ -107,6 +107,8 @@ def weekly_rollover_task() -> None:
         ("weekly economy", _run_weekly_economy),
         ("domain food consumption", _run_domain_food_consumption),
         ("house stature recompute", _run_stature_tick),
+        ("predator menace", _run_predator_menace),
+        ("affliction outbreaks", _run_affliction_tick),
         ("domain crisis wait rolls", _run_crisis_wait_tick),
         ("crisis generation", _run_crisis_generation_tick),
         ("domain edict upkeep", _run_edict_weekly_tick),
@@ -158,6 +160,24 @@ def _run_stature_tick() -> None:
     from world.societies.houses.stature_services import weekly_stature_tick
 
     weekly_stature_tick()
+
+
+def _run_predator_menace() -> None:
+    """Weekly predator ladder tick (#3093): spawn, stalk, pressure, escalate.
+
+    After stature (prey selection reads fresh perceived totals), before the
+    crisis wait/generation ticks (raid crises join the same weekly cadence).
+    """
+    from world.predators.services import weekly_menace_tick
+
+    weekly_menace_tick()
+
+
+def _run_affliction_tick() -> None:
+    """Weekly Affliction pass (#3093): convert signs, mint new dread, spread."""
+    from world.predators.services import weekly_affliction_tick
+
+    weekly_affliction_tick()
 
 
 def _run_crisis_generation_tick() -> None:
