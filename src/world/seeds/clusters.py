@@ -268,6 +268,12 @@ def _seed_predators() -> None:
     ensure_predator_catalog()
 
 
+def _seed_pacts() -> None:
+    from world.seeds.pacts import ensure_pact_catalog  # noqa: PLC0415
+
+    ensure_pact_catalog()
+
+
 def _seed_proclamations() -> None:
     from world.seeds.proclamations import ensure_edict_kinds  # noqa: PLC0415
 
@@ -625,6 +631,8 @@ CLUSTER_SEEDERS: dict[str, Callable[[], None]] = {
     "stature": _seed_stature,
     # Predator ecology (#3093): predator kinds + Affliction crisis vocabulary.
     "predators": _seed_predators,
+    # Org pact lever catalog (#2999).
+    "pacts": _seed_pacts,
     # GM trust ladder: the 5 default GMLevelCap rows (max_beat_risk,
     # allow_custom_stakes, allow_global_scope_authoring per GMLevel), so a fresh
     # deploy's staff-review gates aren't silently maximally-restrictive (#2000).
@@ -742,6 +750,7 @@ def seeded_models_by_cluster() -> dict[str, list[type[Model]]]:
     from world.skills.models import Specialization  # noqa: PLC0415
     from world.societies.houses.models import (  # noqa: PLC0415
         DomainCrisisType,
+        PactKind,
         StatureBand,
         Title,
     )
@@ -908,6 +917,8 @@ def seeded_models_by_cluster() -> dict[str, list[type[Model]]]:
         "stature": [StatureBand],
         # Predator ecology: the antagonist vocabulary (#3093).
         "predators": [PredatorKind],
+        # Org pacts: the diplomacy lever catalog (#2999).
+        "pacts": [PactKind],
         # Propaganda: the PLACEHOLDER campaign-tier catalog (#1621).
         "propaganda": [PropagandaCampaignTier],
         # Skill breakthroughs: default TraitRatingUnlock catalog at every skill's

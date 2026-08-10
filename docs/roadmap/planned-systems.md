@@ -163,9 +163,11 @@ Designed as a connected set (ADRs 0050–0057); most of it has now landed. See
   spy reads + whisper campaigns, consort/paramour union vocabulary, six-step `TitleTier`,
   first live `MOST_POWERFUL_GIFTED` rater. ✅ **Predator ecology** — DONE (#3093, ADR-0211): predator bands on the slow
   menace ladder (~10 crons rumor→raid), deterrence-blind Afflictions with SIGNS +
-  capped spread, scout/sabotage spycraft, grand-display upward bluff. Phase 3 (**#2999**
-  general pacts + marriage-in-play feeding the allied component) remains — the
-  only formal inter-org pact is still `MarriagePact` until #2999.
+  capped spread, scout/sabotage spycraft, grand-display upward bluff. ✅ **Org pacts + marriage-in-play** — DONE
+  (#2999, ADR-0212): OrgPact/PactKind lever instrument with ratification + stamped
+  betrayal, betrothal → WEDDING rite solemnization, and the any-viewer match dossier.
+  The deterrence arc (#3091 → #3093 → #2999) is complete; remaining follow-ons are
+  content passes and #2358's divorce/coronation remainder.
 - ✅ **Battle / army / warfare system** — DONE (`world/military`: `MilitaryUnit`/`Army` + services;
   `world/battles`: staging, resolution, fortifications, vehicles, war funding, city defense). War
   covenants now have somewhere to resolve into.

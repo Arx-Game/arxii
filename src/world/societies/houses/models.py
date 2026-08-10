@@ -25,6 +25,7 @@ from world.societies.houses.constants import (
     CrisisValence,
     DomainCrisisSeverity,
     HouseClaimStatus,
+    OrgPactDissolutionReason,
     PactCommitmentKind,
     PactDissolutionReason,
     RecognitionRuleKind,
@@ -1397,3 +1398,215 @@ class OrgPrestigeRank(SharedMemoryModel):
 
     def __str__(self) -> str:
         return f"{self.organization}: prestige rank {self.prestige_rank}"
+
+
+# ---------------------------------------------------------------------------
+# Org pacts & betrothal (#2999) — diplomacy beyond marriage
+# ---------------------------------------------------------------------------
+
+
+class PactKind(NaturalKeyMixin, SharedMemoryModel):
+    """Authored pact vocabulary (#2999): terms are LEVERS, never prose.
+
+    Per the ADR-0178 payload rule, every effect a pact has is a typed column
+    read mechanically — allied stature share, income tithe, non-aggression.
+    Rows: Defensive Compact, Trade Agreement, Non-Aggression Pact.
+    """
+
+    name = models.CharField(max_length=60, unique=True)
+    description = models.TextField(
+        blank=True,
+        help_text="PLACEHOLDER display prose pending the content pass.",
+    )
+    allied_share_pct = models.PositiveSmallIntegerField(
+        default=0,
+        help_text=(
+            "Percent of the counterpart's NET strength that flows into each "
+            "party's allied stature component while the pact stands."
+        ),
+    )
+    income_share_pct = models.PositiveSmallIntegerField(
+        default=0,
+        help_text=(
+            "Percent-of-income tithe from party_a to party_b, minted as a "
+            "currency.OrgObligation at ratification. Zero = no tithe."
+        ),
+    )
+    non_aggression = models.BooleanField(
+        default=False,
+        help_text=(
+            "Parties are pledged not to move against each other; hostile acts "
+            "stamp BETRAYAL. Future war declarations read this."
+        ),
+    )
+    mutual_defense = models.BooleanField(
+        default=False,
+        help_text=(
+            "The counterpart's raids/crises are yours to answer — content "
+            "hooks auto-invite the ally's members (wiring lands with the "
+            "crisis-response content pass)."
+        ),
+    )
+
+    objects = NaturalKeyManager()
+
+    class NaturalKeyConfig:
+        fields = ["name"]
+
+    class Meta:
+        ordering = ["name"]
+
+    def __str__(self) -> str:
+        return self.name
+
+
+class OrgPact(SharedMemoryModel):
+    """A non-embodied diplomatic instrument between two orgs (#2999).
+
+    Sibling of MarriagePact, never a replacement: marriage stays the
+    embodied instrument (union-bound, dies with the person); OrgPact is the
+    signed-paper kind — proposed by one leadership, ratified by the other,
+    dissolved by agreement or stamped BETRAYAL as a world event.
+    """
+
+    kind = models.ForeignKey(
+        PactKind,
+        on_delete=models.PROTECT,
+        related_name="pacts",
+    )
+    party_a = models.ForeignKey(
+        _ORG_FK,
+        on_delete=models.CASCADE,
+        related_name="pacts_as_party_a",
+        help_text="The proposing org (owes any income tithe).",
+    )
+    party_b = models.ForeignKey(
+        _ORG_FK,
+        on_delete=models.CASCADE,
+        related_name="pacts_as_party_b",
+    )
+    proposed_by = models.ForeignKey(
+        "arxii.Persona",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="+",
+    )
+    obligation = models.OneToOneField(
+        "arxii.OrgObligation",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="pact",
+        help_text="The tithe minted at ratification when the kind carries one.",
+    )
+    proposed_at = models.DateTimeField(auto_now_add=True)
+    ratified_at = models.DateTimeField(null=True, blank=True)
+    dissolved_at = models.DateTimeField(null=True, blank=True)
+    dissolution_reason = models.CharField(
+        max_length=20,
+        choices=OrgPactDissolutionReason.choices,
+        blank=True,
+    )
+
+    class Meta:
+        ordering = ["-proposed_at"]
+
+    def __str__(self) -> str:
+        if self.dissolved_at:
+            state = self.get_dissolution_reason_display()
+        elif self.ratified_at:
+            state = "standing"
+        else:
+            state = "proposed"
+        return f"{self.kind.name}: {self.party_a} & {self.party_b} ({state})"
+
+    @property
+    def is_standing(self) -> bool:
+        return self.ratified_at is not None and self.dissolved_at is None
+
+
+class Betrothal(SharedMemoryModel):
+    """A promised union (#2999): negotiated terms held in draft until the wedding.
+
+    Carries a fraction of the eventual alliance's stature weight (the world
+    treats the match as likely); breaking it is a scandal. The WEDDING
+    ceremony solemnizes it: union + marriage pact + tier prestige in one rite.
+    """
+
+    kinsperson_a = models.ForeignKey(
+        _KINSPERSON_FK,
+        on_delete=models.CASCADE,
+        related_name="betrothals_as_a",
+    )
+    kinsperson_b = models.ForeignKey(
+        _KINSPERSON_FK,
+        on_delete=models.CASCADE,
+        related_name="betrothals_as_b",
+    )
+    senior_house = models.ForeignKey(
+        _ORG_FK,
+        on_delete=models.CASCADE,
+        related_name="betrothals_as_senior",
+    )
+    junior_house = models.ForeignKey(
+        _ORG_FK,
+        on_delete=models.CASCADE,
+        related_name="betrothals_as_junior",
+    )
+    expires_at = models.DateTimeField(
+        null=True,
+        blank=True,
+        help_text="An unfulfilled promise lapses quietly after this; null = open-ended.",
+    )
+    broken_at = models.DateTimeField(null=True, blank=True)
+    wed_at = models.DateTimeField(null=True, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["-created_at"]
+        verbose_name_plural = "Betrothals"
+
+    def __str__(self) -> str:
+        state = "wed" if self.wed_at else "broken" if self.broken_at else "promised"
+        return f"{self.kinsperson_a} & {self.kinsperson_b} ({state})"
+
+    @property
+    def is_active(self) -> bool:
+        from django.utils import timezone  # noqa: PLC0415
+
+        if self.broken_at is not None or self.wed_at is not None:
+            return False
+        return self.expires_at is None or self.expires_at > timezone.now()
+
+
+class BetrothalTerm(SharedMemoryModel):
+    """One negotiated commitment held in draft on a betrothal (#2999).
+
+    Mirrors CommitmentSpec; becomes a real PactCommitment when the wedding
+    signs the marriage pact.
+    """
+
+    betrothal = models.ForeignKey(
+        Betrothal,
+        on_delete=models.CASCADE,
+        related_name="terms",
+    )
+    kind = models.CharField(max_length=20, choices=PactCommitmentKind.choices)
+    owed_by_senior = models.BooleanField(default=True)
+    committed_person = models.ForeignKey(
+        _KINSPERSON_FK,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="+",
+    )
+    amount = models.PositiveBigIntegerField(default=0)
+    percent = models.PositiveSmallIntegerField(default=0)
+    notes = models.TextField(blank=True)
+
+    class Meta:
+        ordering = ["betrothal", "pk"]
+
+    def __str__(self) -> str:
+        return f"{self.betrothal}: {self.get_kind_display()}"

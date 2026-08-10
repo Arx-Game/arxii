@@ -438,3 +438,65 @@ class CrisisOptionInputSerializer(serializers.Serializer):
         attrs["crisis"] = crisis
         attrs["option"] = option
         return attrs
+
+
+# ---------------------------------------------------------------------------
+# Match dossier (#2999) — full-information review of a candidate house
+# ---------------------------------------------------------------------------
+
+
+class DossierPactSerializer(serializers.Serializer):
+    """One standing instrument on the dossier: paper pact or marriage."""
+
+    kind = serializers.CharField()
+    counterpart = serializers.CharField()
+    since = serializers.DateTimeField(allow_null=True)
+    commitments = serializers.ListField(child=serializers.CharField())
+
+
+class DossierCrisisSerializer(serializers.Serializer):
+    domain_name = serializers.CharField(allow_blank=True)
+    severity = serializers.CharField()
+    type_name = serializers.CharField(allow_blank=True)
+    known_covertly = serializers.BooleanField()
+
+
+class DossierShiftSerializer(serializers.Serializer):
+    cause = serializers.CharField()
+    delta_perceived = serializers.IntegerField()
+    subject = serializers.CharField(allow_blank=True)
+    occurred_at = serializers.DateTimeField()
+
+
+class DossierConsortSerializer(serializers.Serializer):
+    holder = serializers.CharField()
+    consorts = serializers.IntegerField()
+    cap = serializers.IntegerField(allow_null=True)
+
+
+class OrgDossierSerializer(serializers.Serializer):
+    """The match-review dossier (#2999): what a candidate house truly brings.
+
+    Deliberately viewable by ANY authenticated player (the org page itself
+    stays members-only): weighing a match requires seeing rival houses.
+    Public facts only — band, perceived stature, ranks, standing instruments,
+    surfaced crises — enriched with covert crises the VIEWER'S org has paid
+    spycraft to know (CrisisIntel). True component detail stays members-only
+    on the org page.
+    """
+
+    name = serializers.CharField()
+    org_type_name = serializers.CharField(allow_blank=True)
+    family_name = serializers.CharField(allow_blank=True)
+    band_name = serializers.CharField(allow_blank=True)
+    headline = serializers.CharField(allow_blank=True)
+    trend = serializers.CharField()
+    perceived_total = serializers.IntegerField(allow_null=True)
+    prestige_rank = serializers.IntegerField(allow_null=True)
+    realm_rank = serializers.IntegerField(allow_null=True)
+    realm_cohort_size = serializers.IntegerField(allow_null=True)
+    pacts = DossierPactSerializer(many=True)
+    betrothals = serializers.ListField(child=serializers.CharField())
+    open_crises = DossierCrisisSerializer(many=True)
+    recent_shifts = DossierShiftSerializer(many=True)
+    consorts = DossierConsortSerializer(many=True)

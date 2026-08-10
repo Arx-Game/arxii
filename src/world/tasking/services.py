@@ -265,7 +265,29 @@ def _apply_route_payouts(
             drawn = draw_clue_from_pool(route.clue_pool, roster_entry)
             if drawn is not None:
                 acquire_clue(roster_entry, drawn)
-    return apply_spy_payouts(route, task, fulfillment)
+    lines = apply_spy_payouts(route, task, fulfillment)
+    lines.extend(_flag_pact_betrayal(task))
+    return lines
+
+
+def _flag_pact_betrayal(task: OrgTask) -> list[str]:
+    """A hostile job against a pact partner stamps BETRAYAL (#2999).
+
+    Runs after the payouts land so the knife is real before the world hears
+    of it. Only offensive templates against an org target qualify.
+    """
+    from world.societies.houses.pact_services import flag_betrayal_between  # noqa: PLC0415
+    from world.tasking.spy_payouts import template_is_offensive  # noqa: PLC0415
+
+    if task.target_org_id is None or not template_is_offensive(task.template):
+        return []
+    betrayed = flag_betrayal_between(task.org, task.target_org)
+    if betrayed == 0:
+        return []
+    return [
+        f"Word will spread: {task.org.name} moved against a sworn partner. "
+        f"{betrayed} pact(s) lie broken."
+    ]
 
 
 def _apply_risk_pool(

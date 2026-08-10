@@ -206,3 +206,29 @@ feed + public tidings (`FeedItemKind.STATURE`), spy payouts
 Seeds: `world/seeds/stature.py` (bands, rank bands, consort/paramour union
 kinds — Luxen's non-recognition is the absence of a row). `TitleTier` is the
 six-step noun ladder empire/kingdom/duchy/march/county/barony.
+
+
+## Org pacts, betrothal & the dossier (#2999, ADR-0212)
+
+`PactKind` (authored levers: `allied_share_pct`, `income_share_pct`,
+`non_aggression`, `mutual_defense`) + `OrgPact` (party_a/b, proposed_by,
+ratified/dissolved, `BETRAYAL` reason) — the signed-paper sibling of
+`MarriagePact` (which stays the embodied instrument). Services
+(`pact_services.py`): `propose_org_pact`/`ratify_org_pact` (leadership-gated;
+tithe mints an `OrgObligation`), `dissolve_org_pact` (betrayal = permanent
+prestige penalty), `flag_betrayal_between` (called from offensive spy-task
+resolution), `standing_org_pacts` (stature's allied slot reads these at
+their authored share alongside marriage pacts). `Betrothal` + `BetrothalTerm`
+(negotiated CommitmentSpec drafts; 25% stature preview both ways;
+`break_betrothal` costs standing) and `solemnize_wedding` — the WEDDING
+`CeremonyTypeKey` resolves the honorees' active betrothal at
+`finish_ceremony` and lands union + marriage pact + tier prestige in one
+rite (first in-play caller of `record_union`). The **match dossier**
+(`societies/dossier_services.py` + `GET /api/societies/organizations/{id}/dossier/`
++ `/orgs/:id/dossier`) is readable by ANY authenticated player: band/
+perceived/ranks, standing instruments, betrothals, known troubles (covert
+crises only via the viewer org's `CrisisIntel`), recent shifts, consort
+capacity. Telnet: `CmdPact` (`pact propose/ratify/dissolve/betroth/breakvow`).
+Seeds: cluster `pacts`. Union membership in stature reads the m2m THROUGH
+table — never `prefetch_related("members")` (idmapper corrupts prefetch
+grouping; see `_union_membership`).

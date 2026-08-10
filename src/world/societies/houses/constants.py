@@ -298,3 +298,20 @@ class StatureShiftCause(models.TextChoices):
 GRAND_DISPLAY_MIN_QUALITY = 6
 GRAND_DISPLAY_ELEVATION_PER_POINT = 150
 STATURE_BLUFF_MAX_ELEVATION = 0.15
+
+
+# --- Org pacts & betrothal (#2999) — PLACEHOLDER magnitudes ---
+# A betrothal previews the eventual alliance at a fraction of full weight:
+# the world already treats the match as likely, but the wedding is the payoff.
+BETROTHAL_STATURE_SHARE_PCT = 25
+# Breaking a betrothal is a scandal: flat permanent prestige penalty on the
+# breaking side's house (same channel as pact breach).
+BETROTHAL_BREAK_PRESTIGE_PENALTY = 5_000
+
+
+class OrgPactDissolutionReason(models.TextChoices):
+    """How an OrgPact ended (#2999). BETRAYAL is a world event, not prose."""
+
+    DISSOLVED = "dissolved", "Dissolved by Agreement"
+    BETRAYAL = "betrayal", "Betrayed"
+    FULFILLED = "fulfilled", "Fulfilled"

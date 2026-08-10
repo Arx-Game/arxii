@@ -407,6 +407,12 @@ rank-relative `PrestigeRankBand` benefits (ADR-0210) ride it — see
 `src/world/societies/AGENT_GLOSSARY.md` and `src/world/roster/AGENT_GLOSSARY.md`.
 _Avoid_: standing, deterrence score, power rating.
 
+**OrgPact / Betrothal / Match Dossier**:
+The #2999 diplomacy layer riding Stature: OrgPact (lever-based paper pacts, sibling of
+MarriagePact — ADR-0212), Betrothal (promised unions the WEDDING rite solemnizes), and
+the any-viewer Match Dossier. See `src/world/societies/AGENT_GLOSSARY.md`.
+_Avoid_: treaty, engagement, org report.
+
 **XP / Kudos / Development Points**:
 Out-of-character advancement currencies for creating content and developing a character;
 XP is never a combat reward (combat merits Legend, not XP). _Avoid_: using XP for in-combat awards.

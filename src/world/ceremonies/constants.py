@@ -22,6 +22,7 @@ class CeremonyTypeKey(models.TextChoices):
     BLESSING = "blessing", "Blessing"
     SERMON = "sermon", "Sermon"
     SEANCE = "seance", "Seance"
+    WEDDING = "wedding", "Wedding"
 
 
 class SeanceOfferStatus(models.TextChoices):

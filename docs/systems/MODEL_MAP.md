@@ -3208,6 +3208,7 @@
   - to_organization -> societies.Organization [FK]
 **Pointed to by:**
   - pact_commitment <- societies.PactCommitment
+  - pact <- societies.OrgPact
 
 ### OrganizationTreasury
 **Foreign Keys:**
@@ -7550,6 +7551,8 @@
   - drafts <- character_creation.CharacterDraft
   - titles_held <- societies.Title
   - pact_commitments <- societies.PactCommitment
+  - betrothals_as_a <- societies.Betrothal
+  - betrothals_as_b <- societies.Betrothal
 
 ### KinspersonTraitValue
 **Foreign Keys:**
@@ -8362,6 +8365,20 @@
 
 ## world.societies
 
+### Betrothal
+**Foreign Keys:**
+  - kinsperson_a -> roster.Kinsperson [FK]
+  - kinsperson_b -> roster.Kinsperson [FK]
+  - senior_house -> societies.Organization [FK]
+  - junior_house -> societies.Organization [FK]
+**Pointed to by:**
+  - terms <- societies.BetrothalTerm
+
+### BetrothalTerm
+**Foreign Keys:**
+  - betrothal -> societies.Betrothal [FK]
+  - committed_person -> roster.Kinsperson [FK] (nullable)
+
 ### CharacterLegendSummary
 **Foreign Keys:**
   - character -> character_sheets.CharacterSheet [OneToOne]
@@ -8602,6 +8619,14 @@
 **Foreign Keys:**
   - realm -> realms.Realm [FK]
 
+### OrgPact
+**Foreign Keys:**
+  - kind -> societies.PactKind [FK]
+  - party_a -> societies.Organization [FK]
+  - party_b -> societies.Organization [FK]
+  - proposed_by -> scenes.Persona [FK] (nullable)
+  - obligation -> currency.OrgObligation [OneToOne] (nullable)
+
 ### OrgPrestigeRank
 **Foreign Keys:**
   - organization -> societies.Organization [OneToOne]
@@ -8643,6 +8668,10 @@
   - stature <- societies.HouseStature
   - stature_shifts <- societies.StatureShift
   - prestige_rank_row <- societies.OrgPrestigeRank
+  - pacts_as_party_a <- societies.OrgPact
+  - pacts_as_party_b <- societies.OrgPact
+  - betrothals_as_senior <- societies.Betrothal
+  - betrothals_as_junior <- societies.Betrothal
   - durance_cohorts <- progression.DuranceCohort
   - covenant <- covenants.Covenant
   - ritualsessionreference_set <- magic.RitualSessionReference
@@ -8747,6 +8776,10 @@
   - pact -> societies.MarriagePact [FK]
   - committed_person -> roster.Kinsperson [FK] (nullable)
   - obligation -> currency.OrgObligation [OneToOne] (nullable)
+
+### PactKind
+**Pointed to by:**
+  - pacts <- societies.OrgPact
 
 ### PersonaDeedKnowledge
 **Foreign Keys:**

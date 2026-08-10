@@ -63,6 +63,21 @@ if TYPE_CHECKING:
 LegendReader = Callable[[Persona], int]
 
 
+def resilient_legend_reader(persona: Persona) -> int:
+    """Legend total, degrading to 0 where the matview is absent.
+
+    The Postgres matview backs this in CI/production; the SQLite fast tier
+    has no matview table, and seam callers (death, pacts, crises) must not
+    explode there. Tests that care about legend inject their own reader.
+    """
+    from django.db import OperationalError, ProgrammingError  # noqa: PLC0415
+
+    try:
+        return get_persona_legend_total(persona)
+    except (OperationalError, ProgrammingError):
+        return 0
+
+
 @dataclass(frozen=True)
 class StatureComponents:
     """One org's computed strength, raw per component (#3091)."""
@@ -88,7 +103,7 @@ class StatureComponents:
 
 
 def persona_renown_score(
-    persona: Persona, *, legend_reader: LegendReader = get_persona_legend_total
+    persona: Persona, *, legend_reader: LegendReader = resilient_legend_reader
 ) -> int:
     """Prestige + weighted fame + weighted legend for one persona."""
     return round(
@@ -99,7 +114,7 @@ def persona_renown_score(
 
 
 def kinsperson_renown_score(
-    kin: Kinsperson, *, legend_reader: LegendReader = get_persona_legend_total
+    kin: Kinsperson, *, legend_reader: LegendReader = resilient_legend_reader
 ) -> int:
     """Sheet-bound kin rate from their active persona; sheetless from gifted_rating."""
     if kin.sheet_id is not None:
@@ -159,6 +174,30 @@ def _holds_landed_title(kin: Kinsperson) -> bool:
     return Title.objects.filter(holder=kin, seat_domain__isnull=False).exists()
 
 
+def _union_membership(
+    unions: list[Union], house_ids: set[int], house_kin: list[Kinsperson]
+) -> tuple[dict[int, list[int]], dict[int, Kinsperson]]:
+    """Union membership via the through table, NEVER prefetch_related("members").
+
+    Kinsperson rows are identity-mapped SharedMemoryModel instances, and
+    Django's prefetch grouping stamps the m2m join value ON the instance — a
+    person in two unions keeps only the LAST join value, corrupting both
+    unions' member lists (found the hard way, #2999).
+    """
+    pairs = Union.members.through.objects.filter(union__in=unions).values_list(
+        "union_id", "kinsperson_id"
+    )
+    members_by_union: dict[int, list[int]] = {}
+    for union_id, kin_id in pairs:
+        members_by_union.setdefault(union_id, []).append(kin_id)
+    kin_by_id = {
+        k.pk: k
+        for k in Kinsperson.objects.filter(pk__in={kin_id for _, kin_id in pairs} - house_ids)
+    }
+    kin_by_id.update({k.pk: k for k in house_kin})
+    return members_by_union, kin_by_id
+
+
 def _union_partner_scores(
     house_kin: list[Kinsperson],
     seen_kin_ids: set[int],
@@ -174,23 +213,20 @@ def _union_partner_scores(
     (earliest unions first), and never flow back to the origin house.
     """
     house_ids = {k.pk for k in house_kin}
-    unions = (
+    unions = list(
         Union.objects.filter(
             members__pk__in=house_ids, ended_at__isnull=True, kind__stature_share_pct__gt=0
         )
         .select_related("kind")
-        # Bare string on purpose: Union is a SharedMemoryModel parent, and a
-        # Prefetch(to_attr=...) would pin request-scoped lists onto cached
-        # instances (leak); the plain relation cache is the safe form here.
-        .prefetch_related("members")  # noqa: PREFETCH_STRING
         .distinct()
     )
+    members_by_union, kin_by_id = _union_membership(unions, house_ids, house_kin)
     total = 0
     consorts_per_senior: dict[int, list[Union]] = {}
     for union in unions:
-        members = list(union.members.all())
-        inside = [m for m in members if m.pk in house_ids]
-        outside = [m for m in members if m.pk not in house_ids]
+        member_ids = members_by_union.get(union.pk, [])
+        inside = [kin_by_id[m] for m in member_ids if m in house_ids and m in kin_by_id]
+        outside = [kin_by_id[m] for m in member_ids if m not in house_ids and m in kin_by_id]
         if not inside or not outside:
             continue
         kind = union.kind
@@ -209,11 +245,11 @@ def _union_partner_scores(
             unions_for_senior, key=lambda u: (u.started_at is None, u.started_at, u.pk)
         )
         for union in _capped(ordered):
-            for partner in union.members.all():
-                if partner.pk in house_ids:
+            for kin_id in members_by_union.get(union.pk, []):
+                if kin_id in house_ids or kin_id not in kin_by_id:
                     continue
                 total += _partner_contribution(
-                    partner,
+                    kin_by_id[kin_id],
                     union.kind.stature_share_pct,
                     seen_kin_ids,
                     seen_sheet_ids,
@@ -288,6 +324,40 @@ def _renown_component(org: Organization, *, legend_reader: LegendReader) -> int:
     total += _union_partner_scores(
         house_kin, seen_kin_ids, seen_sheet_ids, legend_reader=legend_reader
     )
+    total += _betrothal_scores(org, seen_kin_ids, seen_sheet_ids, legend_reader=legend_reader)
+    return total
+
+
+def _betrothal_scores(
+    org: Organization,
+    seen_kin_ids: set[int],
+    seen_sheet_ids: set[int],
+    *,
+    legend_reader: LegendReader,
+) -> int:
+    """A promised match previews the alliance at a fraction (#2999).
+
+    Both houses count the OTHER side's betrothed at the betrothal share —
+    the world already treats the wedding as likely.
+    """
+    from django.utils import timezone as _tz  # noqa: PLC0415
+
+    from world.societies.houses.constants import BETROTHAL_STATURE_SHARE_PCT  # noqa: PLC0415
+    from world.societies.houses.models import Betrothal  # noqa: PLC0415
+
+    now = _tz.now()
+    rows = Betrothal.objects.filter(
+        models.Q(senior_house=org) | models.Q(junior_house=org),
+        broken_at__isnull=True,
+        wed_at__isnull=True,
+    ).filter(models.Q(expires_at__isnull=True) | models.Q(expires_at__gt=now))
+    total = 0
+    for betrothal in rows.select_related("kinsperson_a", "kinsperson_b"):
+        ours_is_senior = betrothal.senior_house_id == org.pk
+        partner = betrothal.kinsperson_b if ours_is_senior else betrothal.kinsperson_a
+        total += _partner_contribution(
+            partner, BETROTHAL_STATURE_SHARE_PCT, seen_kin_ids, seen_sheet_ids, legend_reader
+        )
     return total
 
 
@@ -347,16 +417,32 @@ def _own_net_strength(org: Organization, *, legend_reader: LegendReader) -> int:
 
 
 def _allied_component(org: Organization, *, legend_reader: LegendReader) -> int:
-    """Counterpart NET strength x ally factor: strength and woe both propagate."""
+    """Counterpart NET strength x share: strength and woe both propagate.
+
+    Marriage pacts contribute at the ally factor; ratified OrgPacts (#2999)
+    contribute at their authored ``allied_share_pct``. One hop, no chains.
+    """
     total = 0
     for pact in _standing_pacts(org):
         other = pact.junior_house if pact.senior_house_id == org.pk else pact.senior_house
         total += round(_own_net_strength(other, legend_reader=legend_reader) * STATURE_ALLY_FACTOR)
+    from world.societies.houses.models import OrgPact  # noqa: PLC0415
+
+    org_pacts = OrgPact.objects.filter(
+        models.Q(party_a=org) | models.Q(party_b=org),
+        ratified_at__isnull=False,
+        dissolved_at__isnull=True,
+        kind__allied_share_pct__gt=0,
+    ).select_related("kind", "party_a", "party_b")
+    for pact in org_pacts:
+        other = pact.party_b if pact.party_a_id == org.pk else pact.party_a
+        share = pact.kind.allied_share_pct / 100
+        total += round(_own_net_strength(other, legend_reader=legend_reader) * share)
     return total
 
 
 def compute_components(
-    org: Organization, *, legend_reader: LegendReader = get_persona_legend_total
+    org: Organization, *, legend_reader: LegendReader = resilient_legend_reader
 ) -> StatureComponents:
     """All five component values for one org (raw, unweighted per component)."""
     renown = _renown_component(org, legend_reader=legend_reader)
@@ -377,7 +463,7 @@ def compute_components(
 
 
 def recompute_stature(
-    org: Organization, *, legend_reader: LegendReader = get_persona_legend_total
+    org: Organization, *, legend_reader: LegendReader = resilient_legend_reader
 ) -> HouseStature:
     """Upsert the true side of an org's stature row (perceived untouched)."""
     parts = compute_components(org, legend_reader=legend_reader)
@@ -462,7 +548,7 @@ def _shift_perceived(
 
 
 def apply_death_shock(
-    kin: Kinsperson, *, legend_reader: LegendReader = get_persona_legend_total
+    kin: Kinsperson, *, legend_reader: LegendReader = resilient_legend_reader
 ) -> None:
     """A contributor died: their houses' perceived stature drops NOW (#3091).
 
@@ -487,7 +573,7 @@ def apply_pact_shift(
     pact: MarriagePact,
     *,
     signed: bool,
-    legend_reader: LegendReader = get_persona_legend_total,
+    legend_reader: LegendReader = resilient_legend_reader,
 ) -> None:
     """A pact formed or dissolved: both houses reprice immediately (#3091)."""
     cause = StatureShiftCause.PACT_SIGNED if signed else StatureShiftCause.PACT_DISSOLVED
@@ -518,7 +604,7 @@ def crisis_stature_shift(
     crisis: DomainCrisis,
     *,
     cause: str,
-    legend_reader: LegendReader = get_persona_legend_total,
+    legend_reader: LegendReader = resilient_legend_reader,
 ) -> None:
     """Reprice the target org when a threat opens or resolves (#3091).
 
@@ -706,9 +792,7 @@ def apply_prestige_prosperity_drift() -> int:
     return touched
 
 
-def weekly_stature_tick(
-    *, legend_reader: LegendReader = get_persona_legend_total
-) -> dict[str, int]:
+def weekly_stature_tick(*, legend_reader: LegendReader = resilient_legend_reader) -> dict[str, int]:
     """The weekly orchestration: recompute -> ranks -> drift -> converge -> bands."""
     recomputed = 0
     for org in landed_orgs():

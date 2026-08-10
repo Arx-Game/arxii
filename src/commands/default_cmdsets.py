@@ -119,6 +119,7 @@ from commands.network import CmdNetwork  # #2820
 from commands.offer_response import CmdDecline
 from commands.organizations import CmdOrg
 from commands.outfit import CmdOutfit  # #1866
+from commands.pacts import CmdPact
 from commands.persona import CmdPersona
 from commands.places import CmdPlaces  # #1866
 from commands.portals import CmdPortalAnchor  # #2222
@@ -460,6 +461,8 @@ class CharacterCmdSet(default_cmds.CharacterCmdSet):
             CmdCovenant,
             # #2239 — in-play domain management + office delegation.
             CmdDomain,
+            # #2999 — org pacts + betrothal telnet namespace.
+            CmdPact,
             # #1592 — battle system: GM lifecycle + player declare namespace.
             CmdBattle,
             # #1866 — facet/style attach/detach telnet namespace.
