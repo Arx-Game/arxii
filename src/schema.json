@@ -52987,7 +52987,7 @@ components:
           nullable: true
           description: Resolution moment; set at assignment (now + template.duration).
         target_kind:
-          $ref: '#/components/schemas/TargetKind7e5Enum'
+          $ref: '#/components/schemas/TargetKindDdaEnum'
         target_label:
           type: string
           readOnly: true
@@ -53030,7 +53030,7 @@ components:
           nullable: true
           description: Resolution moment; set at assignment (now + template.duration).
         target_kind:
-          $ref: '#/components/schemas/TargetKind7e5Enum'
+          $ref: '#/components/schemas/TargetKindDdaEnum'
         resolved_at:
           type: string
           format: date-time
@@ -60404,7 +60404,7 @@ components:
           description: Real time from assignment to resolution by the game clock.
         target_kind:
           allOf:
-          - $ref: '#/components/schemas/TargetKind7e5Enum'
+          - $ref: '#/components/schemas/TargetKindDdaEnum'
           description: |-
             What kind of target instances of this template point at.
 
@@ -60414,6 +60414,7 @@ components:
             * `domain` - Domain
             * `persona` - Persona
             * `crisis` - Crisis
+            * `predator` - Predator Band
         eligibility_rule:
           description: Predicate tree gating who may issue/fulfill (NPCServiceOffer
             convention).
@@ -63228,6 +63229,7 @@ components:
       - proclamation
       - birthday
       - stature
+      - menace
       type: string
       description: |-
         * `deed` - Deed
@@ -63237,6 +63239,7 @@ components:
         * `proclamation` - Proclamation
         * `birthday` - Birthday
         * `stature` - Stature
+        * `menace` - Menace
     PullActionContextRequest:
       type: object
       description: |-
@@ -69894,7 +69897,7 @@ components:
       - exclude_self
       - in_same_scene
       - must_be_conscious
-    TargetKind7e5Enum:
+    TargetKindDdaEnum:
       enum:
       - none
       - room
@@ -69902,6 +69905,7 @@ components:
       - domain
       - persona
       - crisis
+      - predator
       type: string
       description: |-
         * `none` - None
@@ -69910,6 +69914,7 @@ components:
         * `domain` - Domain
         * `persona` - Persona
         * `crisis` - Crisis
+        * `predator` - Predator Band
     TargetSpec:
       type: object
       description: Read-only serializer for TargetSpec — entity kind + cardinality
@@ -70250,7 +70255,7 @@ components:
           description: Real time from assignment to resolution by the game clock.
         target_kind:
           allOf:
-          - $ref: '#/components/schemas/TargetKind7e5Enum'
+          - $ref: '#/components/schemas/TargetKindDdaEnum'
           description: |-
             What kind of target instances of this template point at.
 
@@ -70260,6 +70265,7 @@ components:
             * `domain` - Domain
             * `persona` - Persona
             * `crisis` - Crisis
+            * `predator` - Predator Band
         eligibility_rule:
           description: Predicate tree gating who may issue/fulfill (NPCServiceOffer
             convention).
@@ -70306,7 +70312,7 @@ components:
           description: Real time from assignment to resolution by the game clock.
         target_kind:
           allOf:
-          - $ref: '#/components/schemas/TargetKind7e5Enum'
+          - $ref: '#/components/schemas/TargetKindDdaEnum'
           description: |-
             What kind of target instances of this template point at.
 
@@ -70316,6 +70322,7 @@ components:
             * `domain` - Domain
             * `persona` - Persona
             * `crisis` - Crisis
+            * `predator` - Predator Band
         eligibility_rule:
           description: Predicate tree gating who may issue/fulfill (NPCServiceOffer
             convention).
@@ -70354,7 +70361,7 @@ components:
           description: Real time from assignment to resolution by the game clock.
         target_kind:
           allOf:
-          - $ref: '#/components/schemas/TargetKind7e5Enum'
+          - $ref: '#/components/schemas/TargetKindDdaEnum'
           description: |-
             What kind of target instances of this template point at.
 
@@ -70364,6 +70371,7 @@ components:
             * `domain` - Domain
             * `persona` - Persona
             * `crisis` - Crisis
+            * `predator` - Predator Band
       required:
       - duration
       - id
@@ -70385,7 +70393,7 @@ components:
           description: Real time from assignment to resolution by the game clock.
         target_kind:
           allOf:
-          - $ref: '#/components/schemas/TargetKind7e5Enum'
+          - $ref: '#/components/schemas/TargetKindDdaEnum'
           description: |-
             What kind of target instances of this template point at.
 
@@ -70395,6 +70403,7 @@ components:
             * `domain` - Domain
             * `persona` - Persona
             * `crisis` - Crisis
+            * `predator` - Predator Band
       required:
       - duration
       - name

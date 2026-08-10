@@ -139,3 +139,15 @@ _Avoid_: stature log, history entry.
 **PrestigeRankBand**:
 Authored rank-relative benefit tier (#3091, ADR-0210): benefits key on 1-based contextual RANK (declining over the top 100, minimal 101–1000, penalties for negative standing), never raw prestige, and pay through bounded domain prosperity.
 _Avoid_: prestige threshold, wealth tier.
+
+**PredatorBand / MenaceStage**:
+A named NPC antagonist (#3093, ADR-0211) on the SLOW menace ladder (rumors, lawlessness, robbery, raids, terror — roughly ten weekly crons rumor to raid), advancing only while unanswered; counterplay knocks it down and burns strength. Deliberately a thin dedicated model in `world/predators/`, never an Organization (orgs are the player-holding construct).
+_Avoid_: predator org, threat group, mob.
+
+**Affliction**:
+A deterrence-blind crisis class (#3093): `DomainCrisisType.ignores_stature` rows whose outbreaks are announced by a week of SIGNS and spread slowly (capped) while unresolved. Stature means nothing to the dead.
+_Avoid_: plague event, zombie crisis (content names live in the catalog).
+
+**Grand Display**:
+The upward half of the bluffing game (#3093): an event whose catering PROVISION score clears the bar elevates the host org's PERCEIVED stature, bounded above true by the bluff cap. Whispers push down; displays push up.
+_Avoid_: propaganda event, fame party.
