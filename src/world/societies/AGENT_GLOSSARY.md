@@ -151,3 +151,15 @@ _Avoid_: plague event, zombie crisis (content names live in the catalog).
 **Grand Display**:
 The upward half of the bluffing game (#3093): an event whose catering PROVISION score clears the bar elevates the host org's PERCEIVED stature, bounded above true by the bluff cap. Whispers push down; displays push up.
 _Avoid_: propaganda event, fame party.
+
+**OrgPact / PactKind**:
+The signed-paper diplomacy instrument (#2999, ADR-0212) — a sibling of MarriagePact, never a generalization. PactKind rows are LEVERS (allied stature share, income tithe, non-aggression, mutual defense; ADR-0178 payload rule). Proposed by one org's leadership, ratified by the other's; BETRAYAL is a stamped dissolution reason with a permanent prestige cost, auto-flagged by hostile acts between partners.
+_Avoid_: treaty model, alliance row, generalized pact.
+
+**Betrothal**:
+A promised union (#2999): negotiated CommitmentSpec terms held in draft, a 25% stature preview both ways, broken at a standing cost, and solemnized by the WEDDING ceremony (union + marriage pact + marrying-up prestige in one rite).
+_Avoid_: engagement record, pre-marriage.
+
+**Match Dossier**:
+The full-information review of a candidate house (#2999 hard requirement): band/perceived/ranks, standing instruments, betrothals, known troubles (covert ones only through the VIEWER org's CrisisIntel), shifts, consort capacity. Readable by any authenticated player — reviewing rivals is the point.
+_Avoid_: org report, house profile.

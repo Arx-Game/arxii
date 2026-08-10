@@ -680,6 +680,13 @@ actions, backends, and service functions.
   `_parse_kwargs` supports free-text values (a `key=` value runs to the next
   `key=` token). No business logic in the command; authorization is re-checked in
   the Action layer.
+- **`pacts.py`**: `CmdPact` (`pact`, #2999) — the org-diplomacy + betrothal namespace.
+  One `ArxCommand` routes a leading subverb (`list` / `propose <my-org> to <their-org>
+  kind=<pact kind>` / `ratify <id>` / `dissolve <id>` / `betroth a=<kin> b=<kin>
+  senior=<org> junior=<org>` / `breakvow <id> house=<org>`) as thin calls into
+  `world.societies.houses.pact_services` (leadership authorization re-checked there).
+  The WEDDING ceremony (`ceremony` command, WEDDING type) solemnizes an active
+  betrothal — no separate wedding verb. No business logic in the command.
 - **`defenses.py`**: `CmdDefense` (`defense`, #2177) — the exit/room defense
   (bars/ward/alarm) namespace. One `DispatchCommand` routes a leading subverb
   (`defense install <bars|ward|alarm> [level=<n>]` / `defense upgrade

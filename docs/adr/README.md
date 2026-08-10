@@ -218,6 +218,7 @@ treat those names as hints to confirm, not gospel.
 - [0209 — Stature is perceived-vs-true, embodied in people, one hop wide](0209-stature-is-perceived-vs-true-and-embodied.md) (#3091; related ADR-0177, ADR-0178)
 - [0210 — Prestige benefits are rank-relative and pay through prosperity](0210-prestige-benefits-are-rank-relative-and-pay-through-prosperity.md) (#3091; related ADR-0007, ADR-0081)
 - [0211 — Predators are a thin dedicated model on a slow menace ladder](0211-predators-are-a-thin-dedicated-model-on-a-slow-ladder.md) (#3093; related ADR-0177, ADR-0209)
+- [0212 — OrgPact is a sibling of MarriagePact, not a generalization](0212-orgpact-is-a-sibling-of-marriagepact-not-a-generalization.md) (#2999; related ADR-0178, ADR-0209)
 
 ### Gift & resonance economy
 - [0050 — Gifts are Major or Minor; species abilities are a species-granted Minor Gift](0050-gifts-are-major-or-minor-species-abilities-are-minor-gifts.md)
