@@ -157,9 +157,13 @@ Designed as a connected set (ADRs 0050–0057); most of it has now landed. See
 - ✅ **Org-level ritual-leadership permissions** — DONE (#708).
 - **Society politics** — mostly built since last recorded: territory (gang turf + crime cascade),
   warfare (see below), leadership succession (houses `SuccessionLaw`/`Title`/`FealtyEdge` + heredity),
-  world-event influence (proclamations/propaganda/obligations). Still unbuilt: a **general
-  alliance/treaty/betrayal instrument between orgs** — the only formal inter-org pact is
-  `MarriagePact`. **#2999**.
+  world-event influence (proclamations/propaganda/obligations). ✅ **House Stature** — DONE
+  (#3091, ADR-0209/0210): perceived-vs-true deterrence spine (renown/military/economic/allied −
+  crisis drag), cohort bands scaling ambient predation, rank-relative prestige → prosperity,
+  spy reads + whisper campaigns, consort/paramour union vocabulary, six-step `TitleTier`,
+  first live `MOST_POWERFUL_GIFTED` rater. Phase 2 (predator ecology) and phase 3 (**#2999**
+  general pacts + marriage-in-play feeding the allied component) build on this spine — the
+  only formal inter-org pact remains `MarriagePact` until #2999.
 - ✅ **Battle / army / warfare system** — DONE (`world/military`: `MilitaryUnit`/`Army` + services;
   `world/battles`: staging, resolution, fortifications, vehicles, war funding, city defense). War
   covenants now have somewhere to resolve into.

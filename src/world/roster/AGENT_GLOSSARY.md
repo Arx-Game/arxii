@@ -88,3 +88,15 @@ kinship graph). Root terms live in `AGENT_GLOSSARY_MAP.md`.
   deliberately no telnet mail command. _Avoid:_ "mail Ariel" as a telnet
   verb (retired aspiration, never built); messenger/courier (a distinct,
   not-yet-built in-fiction delivery layer — see ADR-0116).
+
+**Consort**:
+A realm-recognized OFFICIAL secondary partner (#3091) — a realm-scoped `UnionKind` row carrying the stature vocabulary fields (`stature_share_pct=50`, `contributes_to_origin_house=False`, `requires_landed_title=True`, `max_concurrent` = the realm cap: Inferna 3, Umbros/Ariwn/Aythirmok 1). A consort's renown weighs half toward the senior party's house, only while the senior holds a landed `Title`, and never flows back to the consort's origin house. Luxen recognizes no consorts — expressed as the ABSENCE of a Luxen consort row, never a flag. Realm rows carry realm display names; "consort" is the mechanical term in code/docs only (Arx 1 used "consort" for a title holder's spouse — that sense is styled by courtesy titles here, not this word).
+_Avoid_: concubine, secondary spouse, mistress.
+
+**Paramour**:
+An unofficial lover — a `UnionKind` with `stature_share_pct=0`; socially real, mechanically weightless for house stature.
+_Avoid_: consort (that is the official institution), affair record.
+
+**gifted_rating (Kinsperson)**:
+Staff-authored 0–5 Gifted weight for kin WITHOUT sheets (#3091). Sparse by design: only PCs and staff-defined significant figures are Gifted; the wider population stays 0. Sheet-bound kin rate from their sheet (best class level). Feeds house stature renown and the `MOST_POWERFUL_GIFTED` succession rater; a PC adopted from a kin stub enters at level 1.
+_Avoid_: power level, magic score.

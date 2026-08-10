@@ -97,6 +97,7 @@ describe('OrgPageInner', () => {
         titles: [],
         domains: [],
         open_crises: [],
+        stature: null,
         aspects: [
           {
             definition: 'Patron Deity',
@@ -140,6 +141,7 @@ describe('OrgPageInner', () => {
         domains: [],
         aspects: [],
         features: [],
+        stature: null,
         open_crises: [
           {
             id: 7,
@@ -183,5 +185,51 @@ describe('OrgPageInner', () => {
     expect(screen.getByText(/Bandit Trouble in Westrock Vale/)).toBeInTheDocument();
     expect(screen.getByRole('button', { name: /Pay it off \(2000c\)/ })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: /Ride it out/ })).toBeInTheDocument();
+  });
+
+  it('renders the stature panel: headline, components, ranks (#3091)', () => {
+    const staturedOrg: Organization = {
+      ...ORG,
+      name: 'House Maldrave',
+      house: {
+        family_name: 'Maldrave',
+        liege_name: '',
+        vassal_names: [],
+        titles: [],
+        domains: [],
+        aspects: [],
+        features: [],
+        open_crises: [],
+        stature: {
+          headline: 'None dare test House Maldrave.',
+          band_name: 'Formidable',
+          trend: 'rising',
+          perceived_total: 12400,
+          true_total: 13000,
+          renown_strength: 6000,
+          military_strength: 2500,
+          economic_strength: 900,
+          allied_strength: 3600,
+          crisis_penalty: 800,
+          prestige_rank: 3,
+          realm_rank: 2,
+          realm_cohort_size: 11,
+        },
+      },
+    };
+    mockedUseOrganizationQuery.mockReturnValue({
+      data: staturedOrg,
+      isLoading: false,
+      isError: false,
+    } as ReturnType<typeof useOrganizationQuery>);
+
+    render(<OrgPageInner orgId={7} />);
+    expect(screen.getByText(/None dare test House Maldrave/)).toBeInTheDocument();
+    expect(screen.getByText(/Formidable/)).toBeInTheDocument();
+    expect(screen.getByText('12400')).toBeInTheDocument();
+    expect(screen.getByText('6000')).toBeInTheDocument();
+    expect(screen.getByText('-800')).toBeInTheDocument();
+    expect(screen.getByText(/2nd of 11 polities/)).toBeInTheDocument();
+    expect(screen.getByText(/prestige rank 3/)).toBeInTheDocument();
   });
 });

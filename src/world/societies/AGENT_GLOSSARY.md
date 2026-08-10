@@ -123,3 +123,19 @@ _Avoid_: debt (ambiguous with `currency.DebtInstrument`, money debt), fee, IOU.
 **Neighborhood Turf** (`NeighborhoodTurf` + `turf_services`, #2862):
 Who holds a crime neighborhood and how hard — one row per NEIGHBORHOOD-level `Area`: `controlling_org` + `grip` (0-100). `apply_turf_push` owns the arithmetic (own pushes deepen, rival pushes erode, breaking grip flips control to a shallow `FLIP_START_GRIP` hold). Control is consequential: the area's `StatKey.CRIME` cascade modifier tracks grip (guard-encounter pressure scales off it), the area's `CRIME_KICKUP` income streams re-target to the controller, and a push against held ground opens a Gang Retaliation crisis (CRIMINAL_ORG audience) against the pusher. Fed by the gang-turf project machinery (`complete_gang_turf` tier completions × `TURF_PUSH_FACTOR`) and by turf-mission PROJECT reward lines. Gangs are plain `Organization`s of the `gang` `OrganizationType`; an "NPC gang" is one with no player members, not a separate model.
 _Avoid_: territory model, gang model, faction control (it is org + area + grip, nothing more).
+
+**Stature (HouseStature)**:
+A landed org's deterrence (#3091): TRUE strength (renown of the people who stand with the house + military + economic + one-hop allied net − open-threat drag, recomputed weekly) versus PERCEIVED strength (converges toward truth with lag; jumps on public deaths/pact changes/surfaced crises; spycraft manipulates the gap). Predation targets perceived weakness. Named "Stature" precisely because "standing" is Reputation's avoid-word.
+_Avoid_: standing, power level, might score.
+
+**StatureBand**:
+Authored qualitative tier (Unassailable … Imperiled) assigned by percentile within a (continent × org-category) cohort; supplies the org page's headline template and the ambient-threat multiplier predation reads.
+_Avoid_: stature tier, threat level.
+
+**StatureShift**:
+One row of the "why it moved" ledger (death, pact signed/dissolved, crisis opened/resolved, whispers, convergence, band change); the tidings feeds read it.
+_Avoid_: stature log, history entry.
+
+**PrestigeRankBand**:
+Authored rank-relative benefit tier (#3091, ADR-0210): benefits key on 1-based contextual RANK (declining over the top 100, minimal 101–1000, penalties for negative standing), never raw prestige, and pay through bounded domain prosperity.
+_Avoid_: prestige threshold, wealth tier.

@@ -60,3 +60,46 @@ class CmdDomainTests(TestCase):
         caller = CharacterSheetFactory().character
         _run(caller, "")
         self.assertIn("don't run any domains", _capture(caller))
+
+
+class CmdDomainStatureTests(TestCase):
+    def setUp(self) -> None:
+        from world.societies.houses.models import HouseStature, StatureBand
+
+        self.org = OrganizationFactory(name="House Westrock")
+        self.domain = create_domain(area=AreaFactory(), name="Westrock Vale", owner_org=self.org)
+        self.leader_sheet = CharacterSheetFactory()
+        OrganizationMembershipFactory(
+            organization=self.org, persona=self.leader_sheet.primary_persona, rank=1
+        )
+        band = StatureBand.objects.create(
+            name="Formidable",
+            rank=2,
+            min_percentile=75,
+            headline_template="PLACEHOLDER Few would move against {org}.",
+        )
+        HouseStature.objects.create(
+            organization=self.org,
+            perceived_total=9_000,
+            true_total=10_000,
+            renown_strength=5_000,
+            military_strength=2_000,
+            economic_strength=500,
+            allied_strength=1_500,
+            crisis_penalty=250,
+            band=band,
+            realm_rank=2,
+            realm_cohort_size=7,
+        )
+
+    def test_stature_subverb_renders_panel(self) -> None:
+        caller = self.leader_sheet.character
+        _run(caller, "stature")
+        output = _capture(caller)
+        self.assertIn("Few would move against House Westrock", output)
+        self.assertIn("Held Formidable", output)
+        self.assertIn("reckons them at 9000", output)
+        self.assertIn("in truth 10000", output)
+        self.assertIn("Renown 5000", output)
+        self.assertIn("drag them by 250", output)
+        self.assertIn("Ranked 2 of 7", output)

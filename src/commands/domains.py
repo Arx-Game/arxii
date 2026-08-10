@@ -54,9 +54,11 @@ class CmdDomain(ArxCommand):
         domain appoint <domain> <char> [title=<text>] [check=<trait>]
         domain vacate <domain>
         domain transfer <source-domain> <target-domain> amount=<n>
+        domain stature [<domain>]
 
     ``holding``/``improve``/``transfer`` require house leadership OR the
-    domain-steward office; ``appoint``/``vacate`` require leadership. Omit
+    domain-steward office; ``appoint``/``vacate`` require leadership;
+    ``stature`` is read-only for anyone who runs the domain. Omit
     ``<domain>`` when you run exactly one.
     """
 
@@ -88,10 +90,11 @@ class CmdDomain(ArxCommand):
             "appoint": self._appoint,
             "vacate": self._vacate,
             "transfer": self._transfer,
+            "stature": self._stature,
         }
         handler = handlers.get(first)
         if handler is None:
-            msg = "Usage: domain [list|offices|holding|improve|appoint|vacate|transfer] ..."
+            msg = "Usage: domain [list|offices|holding|improve|appoint|vacate|transfer|stature] ..."
             raise CommandError(msg)
         handler(rest)
 
@@ -288,3 +291,43 @@ class CmdDomain(ArxCommand):
             amount=int(kwargs["amount"]),
         )
         self._send(result)
+
+    def _stature(self, rest: list[str]) -> None:
+        """Read-only stature panel (#3091): the same data the org page shows."""
+        from django.core.exceptions import ObjectDoesNotExist  # noqa: PLC0415
+
+        domain = self._resolve_domain(" ".join(rest).strip() or None)
+        org = domain.owner_org
+        try:
+            stature = org.stature
+        except ObjectDoesNotExist:
+            self.msg(f"{org.name} has no reckoned stature yet.")
+            return
+        band = stature.band
+        lines = [f"Stature of {org.name}:"]
+        if band is not None and band.headline_template:
+            lines.append(f"  {band.headline_template.replace('{org}', org.name)}")
+        if band is not None:
+            trend = ""
+            previous = stature.previous_band
+            if previous is not None and previous.rank != band.rank:
+                trend = " (rising)" if band.rank < previous.rank else " (falling)"
+            lines.append(f"  Held {band.name}{trend}.")
+        lines.append(
+            f"  The world reckons them at {stature.perceived_total} "
+            f"(in truth {stature.true_total})."
+        )
+        lines.append(
+            f"  Renown {stature.renown_strength} / military {stature.military_strength} / "
+            f"economy {stature.economic_strength} / allies {stature.allied_strength}"
+        )
+        if stature.crisis_penalty:
+            lines.append(f"  Open troubles drag them by {stature.crisis_penalty}.")
+        if stature.realm_rank is not None and stature.realm_cohort_size is not None:
+            lines.append(
+                f"  Ranked {stature.realm_rank} of {stature.realm_cohort_size} "
+                "polities of the realm."
+            )
+        if stature.prestige_rank is not None:
+            lines.append(f"  Prestige rank {stature.prestige_rank} among all companies.")
+        self.msg("\n".join(lines))

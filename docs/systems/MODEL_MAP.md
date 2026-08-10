@@ -8476,6 +8476,12 @@
 **Foreign Keys:**
   - realm -> realms.Realm [FK]
 
+### HouseStature
+**Foreign Keys:**
+  - organization -> societies.Organization [OneToOne]
+  - band -> societies.StatureBand [FK] (nullable)
+  - previous_band -> societies.StatureBand [FK] (nullable)
+
 ### HouseTemplate
 **Foreign Keys:**
   - realm -> realms.Realm [FK]
@@ -8558,6 +8564,10 @@
 **Foreign Keys:**
   - realm -> realms.Realm [FK]
 
+### OrgPrestigeRank
+**Foreign Keys:**
+  - organization -> societies.Organization [OneToOne]
+
 ### Organization
 **Foreign Keys:**
   - family -> roster.Family [FK] (nullable)
@@ -8592,6 +8602,9 @@
   - house_templates <- societies.HouseTemplate
   - aspects <- societies.OrganizationAspect
   - features <- societies.OrganizationFeature
+  - stature <- societies.HouseStature
+  - stature_shifts <- societies.StatureShift
+  - prestige_rank_row <- societies.OrgPrestigeRank
   - durance_cohorts <- progression.DuranceCohort
   - covenant <- covenants.Covenant
   - ritualsessionreference_set <- magic.RitualSessionReference
@@ -8715,6 +8728,8 @@
   - mission_awards <- missions.MissionRenownAward
   - secrets <- secrets.Secret
 
+### PrestigeRankBand
+
 ### Proclamation
 **Foreign Keys:**
   - issuer -> scenes.Persona [FK]
@@ -8788,6 +8803,16 @@
 **Pointed to by:**
   - proclamations <- societies.Proclamation
   - edict_kinds <- societies.EdictKind
+
+### StatureBand
+**Pointed to by:**
+  - current_orgs <- societies.HouseStature
+
+### StatureShift
+**Foreign Keys:**
+  - organization -> societies.Organization [FK]
+  - subject_kinsperson -> roster.Kinsperson [FK] (nullable)
+  - subject_persona -> scenes.Persona [FK] (nullable)
 
 ### SuccessionLaw
 **Foreign Keys:**
