@@ -51,3 +51,10 @@ def ready() -> None:
 
     register_kind_handler(ProjectKind.PROPAGANDA, resolve_propaganda_project)
     register_instant_completion_kind(ProjectKind.PROPAGANDA)
+
+    # #3091 — register the first live MOST_POWERFUL_GIFTED succession rater
+    # (sheeted kin: best class level; sheetless kin: authored gifted_rating).
+    from world.societies.houses.services import register_gifted_power_rater  # noqa: PLC0415
+    from world.societies.houses.stature_services import gifted_power_rating  # noqa: PLC0415
+
+    register_gifted_power_rater(gifted_power_rating)

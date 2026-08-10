@@ -51,6 +51,7 @@ def apply_spy_payouts(
         (route.domain_unrest_delta, lambda: _domain_unrest(task, route.domain_unrest_delta)),
         (route.organization_report, lambda: _organization_report(task)),
         (route.military_report, lambda: _military_report(task)),
+        (route.whisper_stature_delta, lambda: _whisper_stature(task, route.whisper_stature_delta)),
         (route.reveal_schemes, lambda: _reveal_schemes(task)),
         (
             route.crisis_severity_delta,
@@ -141,6 +142,31 @@ def _organization_report(task: OrgTask) -> list[str]:
     wings = org.child_orgs.count()
     if wings:
         lines.append(f"They operate {wings} wing(s) of their own.")
+    lines.extend(_stature_lines(org))
+    return lines
+
+
+def _stature_lines(org) -> list[str]:
+    """True-vs-believed stature intelligence (#3091) — the bluff-piercing read."""
+    from world.societies.houses.models import HouseStature  # noqa: PLC0415
+
+    stature = HouseStature.objects.filter(organization=org).select_related("band").first()
+    if stature is None:
+        return []
+    gap = stature.true_total - stature.perceived_total
+    if gap > 0:
+        verdict = "they are stronger than the world believes"
+    elif gap < 0:
+        verdict = "their repute outruns their real strength"
+    else:
+        verdict = "their repute is honest"
+    band_note = f" ({stature.band.name})" if stature.band is not None else ""
+    lines = [
+        f"True stature {stature.true_total} against a repute of "
+        f"{stature.perceived_total}{band_note} — {verdict}."
+    ]
+    if stature.crisis_penalty:
+        lines.append(f"Open troubles drag them by {stature.crisis_penalty}.")
     return lines
 
 
@@ -183,7 +209,21 @@ def _military_report(task: OrgTask) -> list[str]:
     lines = [f"{org.name} fields {unit_count} unit(s): {sample}."]
     if army_count:
         lines.append(f"{army_count} armied formation(s) stand active.")
+    lines.extend(_stature_lines(org))
     return lines
+
+
+def _whisper_stature(task: OrgTask, magnitude: int) -> list[str]:
+    """Whisper campaign (#3091): erode the target's perceived stature."""
+    from world.societies.houses.stature_services import apply_whisper  # noqa: PLC0415
+
+    org = task.target_org
+    if org is None:
+        return ["No name to blacken."]
+    applied = apply_whisper(org, magnitude)
+    if applied == 0:
+        return [f"The word on {org.name} is already as poor as it can credibly be."]
+    return [f"Whispers spread: {org.name}'s repute erodes by {-applied}."]
 
 
 def _reveal_schemes(task: OrgTask) -> list[str]:

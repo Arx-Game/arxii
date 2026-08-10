@@ -166,3 +166,43 @@ houses a unique creation experience (ADR-0101):
   traditions) arrive from later per-region brainstorms — targets: 2 aspects
   per region (3 only if genuinely fun), ≥1 advantageous RP-usable feature.
   Seeds ship one PLACEHOLDER exemplar of each on the Arx demo template.
+
+## House Stature (#3091, ADR-0209/0210)
+
+Perceived-vs-true deterrence for landed orgs. Models
+(`world/societies/houses/models.py`): `StatureBand` (authored percentile
+tiers; `threat_multiplier` scales ambient predation; `headline_template` is
+the org page's qualitative headline), `HouseStature` (per-org components:
+renown/military/economic/allied, `crisis_penalty`, `true_total`,
+`perceived_total`, band + previous band, `prestige_rank`, stored
+`realm_rank`/`realm_cohort_size`), `StatureShift` (the "why it moved" ledger;
+feeds tidings), `PrestigeRankBand` (rank-relative benefits; prosperity bonus),
+`OrgPrestigeRank` (rank storage for unlanded orgs).
+
+Services (`stature_services.py`): `compute_components` /
+`recompute_stature` (channels: active members, the head's COURT covenant
+members, living family kin — sheetless kin weigh `Kinsperson.gifted_rating` —
+and union partners: marriage counts both spouses fully to both houses;
+consort kinds count half to the senior's house only, gated on a landed Title,
+capped per `UnionKind.max_concurrent`; paramour kinds weigh zero),
+`converge_perceived`, `apply_death_shock` (vitals death seam),
+`apply_pact_shift` (sign/dissolve seams), `crisis_stature_shift`
+(open/resolve seams; covert threats hit perceived only after surfacing),
+`apply_whisper` (spy campaigns, bounded below true), `assign_bands`
+(percentile within org-category cohorts), `assign_realm_ranks`,
+`recompute_org_prestige_ranks` (ALL orgs, one contextual ladder),
+`apply_prestige_prosperity_drift` (high band + zero open threats → weekly
+prosperity bonus; the ~3x income ceiling emerges from prosperity's 0-100
+clamp), `weekly_stature_tick` (game_clock processor, before crisis
+generation so predation reads fresh bands), `gifted_power_rating` (the first
+live `register_gifted_power_rater` — `MOST_POWERFUL_GIFTED` succession now
+orders by best class level / gifted_rating), `award_marriage_tier_prestige`
+(flat permanent prestige by house tier gap; fires at formation in phase 3).
+
+Surfaces: org API house block `stature` panel (headline/band/trend/components/
+ranks; prefetched, zero extra queries), `domain stature` telnet subverb, house
+feed + public tidings (`FeedItemKind.STATURE`), spy payouts
+(`_stature_lines` on org/military reports; `whisper_stature_delta` route).
+Seeds: `world/seeds/stature.py` (bands, rank bands, consort/paramour union
+kinds — Luxen's non-recognition is the absence of a row). `TitleTier` is the
+six-step noun ladder empire/kingdom/duchy/march/county/barony.

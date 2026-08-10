@@ -174,6 +174,15 @@ class Kinsperson(SharedMemoryModel):
         ),
     )
     is_deceased = models.BooleanField(default=False)
+    gifted_rating = models.PositiveSmallIntegerField(
+        default=0,
+        help_text=(
+            "Staff-rated Gifted weight 0-5 for kin WITHOUT sheets (#3091). "
+            "Sparse by design: only significant figures are Gifted; the wider "
+            "population stays 0. Sheet-bound kin rate from their sheet instead. "
+            "Feeds house stature and the MOST_POWERFUL_GIFTED succession rater."
+        ),
+    )
 
     # --- Heredity stub fields (#2815 Parent Dominance) -----------------------
     species = models.ForeignKey(
@@ -366,6 +375,37 @@ class UnionKind(NaturalKeyMixin, SharedMemoryModel):
     confers_wedlock = models.BooleanField(
         default=True,
         help_text="Whether births within this union count as in-wedlock for law.",
+    )
+    # --- Stature weight vocabulary (#3091). Marriage: 100, both ways, no
+    # gate. Consort (a legal position the realm officially recognizes): 50,
+    # senior's house only, gated on the senior holding a landed Title. A
+    # paramour (unofficial lover) is a kind with stature_share_pct=0. Luxen
+    # not recognizing consorts = no Luxen consort row exists.
+    stature_share_pct = models.PositiveSmallIntegerField(
+        default=100,
+        help_text="Percent of a partner's renown this union contributes to house stature.",
+    )
+    contributes_to_origin_house = models.BooleanField(
+        default=True,
+        help_text=(
+            "Marriage counts both spouses to BOTH houses (additive, #3091 "
+            "ruling); consort kinds contribute nothing back to the origin house."
+        ),
+    )
+    requires_landed_title = models.BooleanField(
+        default=False,
+        help_text=(
+            "Stature weight only flows while the senior party holds a Title "
+            "with a seat (the ruling Grand Princess, not her courtesy-styled spouse)."
+        ),
+    )
+    max_concurrent = models.PositiveSmallIntegerField(
+        null=True,
+        blank=True,
+        help_text=(
+            "Realm cap on concurrent unions of this kind per senior party "
+            "(Inferna consorts: 3; Umbros/Ariwn/Aythirmok: 1). Null = uncapped."
+        ),
     )
 
     objects = NaturalKeyManager()

@@ -18,7 +18,7 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { useOrganizationQuery, useHouseFeedQuery, useChooseCrisisOption } from '@/orgs/queries';
 import { OperationsSection } from '@/tasking/components/OperationsSection';
-import type { HouseCrisis, HouseDetail } from '@/orgs/api';
+import type { HouseCrisis, HouseDetail, HouseStature } from '@/orgs/api';
 
 // ---------------------------------------------------------------------------
 // Loading skeleton
@@ -111,11 +111,88 @@ function CrisisCard({ orgId, crisis }: { orgId: number; crisis: HouseCrisis }) {
   );
 }
 
+const TREND_ARROW: Record<string, string> = {
+  rising: '↑',
+  falling: '↓',
+  steady: '→',
+};
+
+const STATURE_ROWS: Array<{ key: keyof HouseStature; label: string; hint: string }> = [
+  { key: 'renown_strength', label: 'Renown', hint: 'The Gifted who stand with the house' },
+  { key: 'military_strength', label: 'Military', hint: 'Banners and soldiery' },
+  { key: 'economic_strength', label: 'Economy', hint: 'Coffers and income' },
+  { key: 'allied_strength', label: 'Allies', hint: 'Strength sworn to your defense' },
+];
+
+/** The house's standing in the world (#3091): headline first, numbers below. */
+function StatureCard({ stature }: { stature: HouseStature }) {
+  return (
+    <Card data-testid="stature-card">
+      <CardHeader className="pb-3">
+        <div className="flex items-center gap-3">
+          <CardTitle className="text-lg">Stature</CardTitle>
+          {stature.band_name && (
+            <Badge variant={stature.trend === 'falling' ? 'destructive' : 'secondary'}>
+              {stature.band_name} {TREND_ARROW[stature.trend] ?? ''}
+            </Badge>
+          )}
+        </div>
+      </CardHeader>
+      <CardContent className="space-y-3 text-sm">
+        {stature.headline && <p className="text-base italic">{stature.headline}</p>}
+        <div className="flex items-baseline gap-2">
+          <span className="text-3xl font-semibold">{stature.perceived_total}</span>
+          <span className="text-muted-foreground">as the world reckons it</span>
+        </div>
+        <ul className="space-y-1">
+          {STATURE_ROWS.map(({ key, label, hint }) => (
+            <li key={key} className="flex items-baseline justify-between">
+              <span>
+                {label} <span className="text-xs text-muted-foreground">{hint}</span>
+              </span>
+              <span className="font-mono">{stature[key] as number}</span>
+            </li>
+          ))}
+          {stature.crisis_penalty > 0 && (
+            <li className="flex items-baseline justify-between">
+              <span>
+                Threat drag{' '}
+                <span className="text-xs text-muted-foreground">Open troubles weigh on you</span>
+              </span>
+              <span className="font-mono text-destructive">-{stature.crisis_penalty}</span>
+            </li>
+          )}
+        </ul>
+        <p className="text-muted-foreground">
+          {stature.realm_rank != null && stature.realm_cohort_size != null && (
+            <>
+              {ordinal(stature.realm_rank)} of {stature.realm_cohort_size} polities of the realm
+            </>
+          )}
+          {stature.prestige_rank != null && (
+            <> · prestige rank {stature.prestige_rank} among all companies and houses</>
+          )}
+        </p>
+      </CardContent>
+    </Card>
+  );
+}
+
+function ordinal(n: number): string {
+  const rem10 = n % 10;
+  const rem100 = n % 100;
+  if (rem10 === 1 && rem100 !== 11) return `${n}st`;
+  if (rem10 === 2 && rem100 !== 12) return `${n}nd`;
+  if (rem10 === 3 && rem100 !== 13) return `${n}rd`;
+  return `${n}th`;
+}
+
 function HouseSection({ orgId, house }: { orgId: number; house: HouseDetail }) {
   const { data: feed = [] } = useHouseFeedQuery(orgId, true);
 
   return (
     <div className="space-y-4">
+      {house.stature && <StatureCard stature={house.stature} />}
       <Card>
         <CardHeader className="pb-3">
           <CardTitle className="text-lg">House of {house.family_name}</CardTitle>

@@ -39993,7 +39993,7 @@ components:
           type: string
           maxLength: 120
         tier:
-          $ref: '#/components/schemas/Tier34dEnum'
+          $ref: '#/components/schemas/TierE4cEnum'
         realm_name:
           type: string
           readOnly: true
@@ -47553,6 +47553,10 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/HouseCrisis'
+        stature:
+          allOf:
+          - $ref: '#/components/schemas/HouseStature'
+          nullable: true
       required:
       - aspects
       - domains
@@ -47560,6 +47564,7 @@ components:
       - features
       - liege_name
       - open_crises
+      - stature
       - titles
       - vassal_names
     HouseDomain:
@@ -47627,6 +47632,58 @@ components:
       - description
       - name
       - slug
+    HouseStature:
+      type: object
+      description: |-
+        The house's stature panel (#3091): qualitative headline, numbers below.
+
+        Members-only by construction — the org queryset already gates non-staff
+        viewers to their own orgs, so this is the house's own view of itself.
+        All values are stored weekly (plus event shocks); zero extra queries.
+      properties:
+        headline:
+          type: string
+        band_name:
+          type: string
+        trend:
+          type: string
+        perceived_total:
+          type: integer
+        true_total:
+          type: integer
+        renown_strength:
+          type: integer
+        military_strength:
+          type: integer
+        economic_strength:
+          type: integer
+        allied_strength:
+          type: integer
+        crisis_penalty:
+          type: integer
+        prestige_rank:
+          type: integer
+          nullable: true
+        realm_rank:
+          type: integer
+          nullable: true
+        realm_cohort_size:
+          type: integer
+          nullable: true
+      required:
+      - allied_strength
+      - band_name
+      - crisis_penalty
+      - economic_strength
+      - headline
+      - military_strength
+      - perceived_total
+      - prestige_rank
+      - realm_cohort_size
+      - realm_rank
+      - renown_strength
+      - trend
+      - true_total
     HouseTemplateOption:
       type: object
       description: A realm template a CG house claim may build from.
@@ -47722,7 +47779,7 @@ components:
           type: string
           maxLength: 120
         tier:
-          $ref: '#/components/schemas/Tier34dEnum'
+          $ref: '#/components/schemas/TierE4cEnum'
         holder_name:
           type: string
           readOnly: true
@@ -63170,6 +63227,7 @@ components:
       - crisis
       - proclamation
       - birthday
+      - stature
       type: string
       description: |-
         * `deed` - Deed
@@ -63178,6 +63236,7 @@ components:
         * `crisis` - Crisis
         * `proclamation` - Proclamation
         * `birthday` - Birthday
+        * `stature` - Stature
     PullActionContextRequest:
       type: object
       description: |-
@@ -71268,18 +71327,6 @@ components:
       - description
       - id
       - name
-    Tier34dEnum:
-      enum:
-      - crown
-      - duchy
-      - county
-      - barony
-      type: string
-      description: |-
-        * `crown` - Crown
-        * `duchy` - Duchy
-        * `county` - County
-        * `barony` - Barony
     Tier3f5Enum:
       enum:
       - 1
@@ -71318,6 +71365,22 @@ components:
         * `table` - Table
         * `regional` - Regional
         * `world` - World
+    TierE4cEnum:
+      enum:
+      - empire
+      - kingdom
+      - duchy
+      - march
+      - county
+      - barony
+      type: string
+      description: |-
+        * `empire` - Empire
+        * `kingdom` - Kingdom
+        * `duchy` - Duchy
+        * `march` - March
+        * `county` - County
+        * `barony` - Barony
     TimePhaseEnum:
       enum:
       - dawn

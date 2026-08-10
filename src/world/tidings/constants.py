@@ -15,3 +15,4 @@ class FeedItemKind(models.TextChoices):
     CRISIS = "crisis", "Crisis"
     PROCLAMATION = "proclamation", "Proclamation"
     BIRTHDAY = "birthday", "Birthday"
+    STATURE = "stature", "Stature"

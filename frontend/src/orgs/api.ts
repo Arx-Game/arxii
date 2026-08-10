@@ -13,6 +13,7 @@ import type { components } from '@/generated/api';
 
 export type Organization = components['schemas']['Organization'];
 export type HouseDetail = components['schemas']['HouseDetail'];
+export type HouseStature = components['schemas']['HouseStature'];
 export type PublicFeedItem = components['schemas']['PublicFeedItem'];
 
 interface PaginatedOrganizations {

@@ -106,7 +106,36 @@ def full_display_name(person: Kinsperson) -> str:
         if row is not None:
             particle = row.particle
     pieces = [first, particle, family.name] if particle else [first, family.name]
+    # Married-in spouse form (#3091): the realm's spouse particle renders the
+    # BIRTH family after the married style, keeping the alliance the marriage
+    # embodies legible in the name.
+    if realm is not None:
+        birth_suffix = _spouse_birth_suffix(person, family, realm)
+        if birth_suffix:
+            pieces.extend(birth_suffix)
     return " ".join(pieces)
+
+
+def _spouse_birth_suffix(person: Kinsperson, family, realm) -> list[str]:
+    """``[spouse_particle, birth_family_name]`` for married-in members, else []."""
+    memberships = list(person.family_memberships.filter(ended_at__isnull=True))
+    current = next(
+        (
+            m
+            for m in memberships
+            if m.family_id == family.pk and m.basis == MembershipBasis.MARRIED_IN
+        ),
+        None,
+    )
+    if current is None:
+        return []
+    birth = next((m for m in memberships if m.basis == MembershipBasis.BORN), None)
+    if birth is None or birth.family_id == family.pk:
+        return []
+    row = NobiliaryParticle.objects.filter(realm=realm, family_type=family.family_type).first()
+    if row is None or not row.spouse_particle:
+        return []
+    return [row.spouse_particle, birth.family.name]
 
 
 # ---------------------------------------------------------------------------
@@ -463,6 +492,10 @@ def sign_marriage_pact(
             obligation=obligation,
             notes=spec.notes,
         )
+    # #3091 — both houses reprice immediately: the alliance is news.
+    from world.societies.houses.stature_services import apply_pact_shift  # noqa: PLC0415
+
+    apply_pact_shift(pact, signed=True)
     return pact
 
 
@@ -478,6 +511,10 @@ def dissolve_pact(pact: MarriagePact, *, reason: str) -> MarriagePact:
         if commitment.obligation is not None and commitment.obligation.active:
             commitment.obligation.active = False
             commitment.obligation.save(update_fields=["active"])
+    # #3091 — the hole in the wall opens the moment the pact dies.
+    from world.societies.houses.stature_services import apply_pact_shift  # noqa: PLC0415
+
+    apply_pact_shift(pact, signed=False)
     return pact
 
 
@@ -508,6 +545,17 @@ def breach_commitment(commitment: PactCommitment) -> PactCommitment:
     if commitment.obligation is not None and commitment.obligation.active:
         commitment.obligation.active = False
         commitment.obligation.save(update_fields=["active"])
+    # #3091 — a broken word costs standing permanently: the breaching house
+    # takes a flat prestige penalty, which then bites again through the
+    # negative prestige-rank bands. Personal-channel penalties fire with the
+    # marriage-formation flow (phase 3).
+    from world.societies.houses.constants import SCANDAL_PRESTIGE_PENALTY  # noqa: PLC0415
+
+    breacher = (
+        commitment.pact.senior_house if commitment.owed_by_senior else commitment.pact.junior_house
+    )
+    breacher.accumulated_prestige -= SCANDAL_PRESTIGE_PENALTY
+    breacher.save(update_fields=["accumulated_prestige"])
     return commitment
 
 

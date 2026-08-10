@@ -398,6 +398,15 @@ both reuse `RenownRisk`/`RISK_LEGEND_AWARDS` for the risk axis. _Avoid_:
 blanket-avoiding "renown"; fame, reputation; assuming `fire_renown_award` is the only
 Legend-award path.
 
+**Stature**:
+A landed org's perceived-vs-true deterrence (#3091, ADR-0209): true strength recomputes
+weekly from embodied renown + military + economic + one-hop allied net − open-threat
+drag; perceived strength lags truth and is what predation targets. Deliberately NOT
+called "standing" (Reputation's avoid-word). Consort/paramour union vocabulary and
+rank-relative `PrestigeRankBand` benefits (ADR-0210) ride it — see
+`src/world/societies/AGENT_GLOSSARY.md` and `src/world/roster/AGENT_GLOSSARY.md`.
+_Avoid_: standing, deterrence score, power rating.
+
 **XP / Kudos / Development Points**:
 Out-of-character advancement currencies for creating content and developing a character;
 XP is never a combat reward (combat merits Legend, not XP). _Avoid_: using XP for in-combat awards.

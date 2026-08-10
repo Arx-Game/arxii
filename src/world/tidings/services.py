@@ -27,6 +27,8 @@ from dataclasses import dataclass
 from datetime import datetime
 from typing import TYPE_CHECKING
 
+from django.core.exceptions import ObjectDoesNotExist
+
 from world.secrets.models import Secret
 from world.societies.models import LegendEntry, OrganizationMembership, SocietyReputation
 from world.tidings.constants import FeedItemKind
@@ -125,13 +127,44 @@ def public_feed_for_societies(
         .distinct()[:limit]
     )
     pardons = _pardon_items(society_ids, limit=limit)
+    repricings = _band_change_items(limit=limit)
     items = (
         [_deed_item(entry) for entry in deeds]
         + [_scandal_item(secret) for secret in scandals]
         + pardons
+        + repricings
     )
     items.sort(key=lambda item: item.occurred_at, reverse=True)
     return items[:limit]
+
+
+def _band_change_items(*, limit: int) -> list[PublicFeedItem]:
+    """Band repricings are realm news (#3091): every society hears who rose or fell."""
+    from world.societies.houses.constants import StatureShiftCause  # noqa: PLC0415
+    from world.societies.houses.models import StatureShift  # noqa: PLC0415
+
+    rows = (
+        StatureShift.objects.filter(cause=StatureShiftCause.BAND_CHANGE)
+        .select_related("organization__stature__band")
+        .order_by("-created_at")[:limit]
+    )
+    items = []
+    for row in rows:
+        try:
+            band = row.organization.stature.band
+        except ObjectDoesNotExist:
+            band = None
+        band_note = f" — now held {band.name}" if band is not None else ""
+        items.append(
+            PublicFeedItem(
+                kind=FeedItemKind.STATURE,
+                headline=f"The standing of {row.organization.name} is repriced{band_note}",
+                subject=row.organization.name,
+                occurred_at=row.created_at,
+                category=StatureShiftCause.BAND_CHANGE,
+            )
+        )
+    return items
 
 
 def _pardon_items(society_ids: set[int], *, limit: int) -> list[PublicFeedItem]:
@@ -274,14 +307,53 @@ def house_feed_for(organization, *, limit: int = _DEFAULT_LIMIT) -> list[PublicF
     )
     crises = _open_crisis_items(organization, limit=limit)
     proclamations = _proclamation_items(organization, limit=limit)
+    stature_shifts = _stature_shift_items(organization, limit=limit)
     items = (
         [_deed_item(entry) for entry in deeds]
         + [_scandal_item(secret) for secret in scandals]
         + crises
         + proclamations
+        + stature_shifts
     )
     items.sort(key=lambda item: item.occurred_at, reverse=True)
     return items[:limit]
+
+
+def _stature_shift_items(organization, *, limit: int) -> list[PublicFeedItem]:
+    """Recent stature movements the household would talk about (#3091).
+
+    Weekly bookkeeping causes (convergence/recompute) stay off the feed;
+    deaths, pacts, whispers, crises and band changes are news.
+    """
+    from world.societies.houses.constants import StatureShiftCause  # noqa: PLC0415
+    from world.societies.houses.models import StatureShift  # noqa: PLC0415
+
+    quiet = (StatureShiftCause.CONVERGENCE, StatureShiftCause.RECOMPUTE)
+    rows = (
+        StatureShift.objects.filter(organization=organization)
+        .exclude(cause__in=quiet)
+        .select_related("subject_kinsperson", "subject_persona")
+        .order_by("-created_at")[:limit]
+    )
+    items = []
+    for row in rows:
+        subject = ""
+        if row.subject_kinsperson is not None:
+            subject = row.subject_kinsperson.display_name
+        elif row.subject_persona is not None:
+            subject = row.subject_persona.name
+        delta = row.delta_perceived or row.delta_true
+        direction = "rises" if delta > 0 else "falls" if delta < 0 else "holds"
+        items.append(
+            PublicFeedItem(
+                kind=FeedItemKind.STATURE,
+                headline=f"{organization.name}'s standing {direction}: {row.get_cause_display()}",
+                subject=subject or organization.name,
+                occurred_at=row.created_at,
+                category=row.cause,
+            )
+        )
+    return items
 
 
 def _proclamation_items(organization, *, limit: int) -> list[PublicFeedItem]:

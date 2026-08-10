@@ -1018,6 +1018,12 @@ def _mark_dead(character_sheet: CharacterSheet) -> None:
             kinsperson.save(update_fields=["is_deceased"])
         handle_death_for_pacts(kinsperson)
 
+        # #3091 — a contributor's death is news: the houses that leaned on
+        # their renown look weaker NOW; the weekly recompute settles the rest.
+        from world.societies.houses.stature_services import apply_death_shock  # noqa: PLC0415
+
+        apply_death_shock(kinsperson)
+
 
 def _active_scene_at_body(character_sheet: CharacterSheet) -> Scene | None:
     """The active scene at the body's location, if any (#2287).

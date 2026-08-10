@@ -99,6 +99,29 @@ class HouseCrisisSerializer(serializers.Serializer):
     options = HouseCrisisOptionSerializer(many=True)
 
 
+class HouseStatureSerializer(serializers.Serializer):
+    """The house's stature panel (#3091): qualitative headline, numbers below.
+
+    Members-only by construction — the org queryset already gates non-staff
+    viewers to their own orgs, so this is the house's own view of itself.
+    All values are stored weekly (plus event shocks); zero extra queries.
+    """
+
+    headline = serializers.CharField(allow_blank=True)
+    band_name = serializers.CharField(allow_blank=True)
+    trend = serializers.CharField()
+    perceived_total = serializers.IntegerField()
+    true_total = serializers.IntegerField()
+    renown_strength = serializers.IntegerField()
+    military_strength = serializers.IntegerField()
+    economic_strength = serializers.IntegerField()
+    allied_strength = serializers.IntegerField()
+    crisis_penalty = serializers.IntegerField()
+    prestige_rank = serializers.IntegerField(allow_null=True)
+    realm_rank = serializers.IntegerField(allow_null=True)
+    realm_cohort_size = serializers.IntegerField(allow_null=True)
+
+
 class HouseDetailSerializer(serializers.Serializer):
     """The house block of an org payload (#1884) — null for non-family orgs."""
 
@@ -110,6 +133,7 @@ class HouseDetailSerializer(serializers.Serializer):
     aspects = HouseAspectFacetSerializer(many=True)
     features = HouseFeatureFacetSerializer(many=True)
     open_crises = HouseCrisisSerializer(many=True)
+    stature = HouseStatureSerializer(allow_null=True)
 
 
 class OrganizationSerializer(serializers.ModelSerializer):
@@ -171,6 +195,7 @@ class OrganizationSerializer(serializers.ModelSerializer):
                 for stamped in obj.features.all()
             ],
             "open_crises": _house_open_crises(obj),
+            "stature": _house_stature_payload(obj),
         }
         return HouseDetailSerializer(payload).data
 
@@ -245,6 +270,42 @@ class OrganizationMembershipOfferSerializer(serializers.ModelSerializer):
 
     def get_to_persona_name(self, obj: OrganizationMembershipOffer) -> str:
         return obj.to_persona.name if obj.to_persona else ""
+
+
+def _house_stature_payload(organization) -> dict | None:
+    """The stature panel dict (#3091) — reads the prefetched ``stature`` row.
+
+    Headline renders the band's authored template with the org name; trend
+    compares band ranks (rank 1 is highest, so a lower rank is a rise).
+    """
+    try:
+        stature = organization.stature  # reverse OneToOne, prefetched
+    except ObjectDoesNotExist:
+        return None
+    band = stature.band
+    previous = stature.previous_band
+    if band is None or previous is None or band.rank == previous.rank:
+        trend = "steady"
+    else:
+        trend = "rising" if band.rank < previous.rank else "falling"
+    headline = ""
+    if band is not None and band.headline_template:
+        headline = band.headline_template.replace("{org}", organization.name)
+    return {
+        "headline": headline,
+        "band_name": band.name if band is not None else "",
+        "trend": trend,
+        "perceived_total": stature.perceived_total,
+        "true_total": stature.true_total,
+        "renown_strength": stature.renown_strength,
+        "military_strength": stature.military_strength,
+        "economic_strength": stature.economic_strength,
+        "allied_strength": stature.allied_strength,
+        "crisis_penalty": stature.crisis_penalty,
+        "prestige_rank": stature.prestige_rank,
+        "realm_rank": stature.realm_rank,
+        "realm_cohort_size": stature.realm_cohort_size,
+    }
 
 
 def _house_open_crises(organization) -> list[dict]:

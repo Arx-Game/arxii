@@ -215,6 +215,8 @@ treat those names as hints to confirm, not gospel.
 - [0199 — Concealment defaults on; exposure is cut, material, or performed](0199-concealment-defaults-on-exposure-is-cut-material-or-performed.md) (#2985; refines ADR-0194)
 - [0204 — Account-first block/mute extends #1278; IC stays flag-only; OOC is write-then-filter](0204-account-first-block-mute-extends-1278.md) (#2996; related ADR-0009, ADR-0007)
 - [0205 — Ritual anima pools replace a spell system; anima is a level-scaled, blood-payable economy](0205-ritual-anima-pools-replace-a-spell-system.md) (#3001)
+- [0209 — Stature is perceived-vs-true, embodied in people, one hop wide](0209-stature-is-perceived-vs-true-and-embodied.md) (#3091; related ADR-0177, ADR-0178)
+- [0210 — Prestige benefits are rank-relative and pay through prosperity](0210-prestige-benefits-are-rank-relative-and-pay-through-prosperity.md) (#3091; related ADR-0007, ADR-0081)
 
 ### Gift & resonance economy
 - [0050 — Gifts are Major or Minor; species abilities are a species-granted Minor Gift](0050-gifts-are-major-or-minor-species-abilities-are-minor-gifts.md)

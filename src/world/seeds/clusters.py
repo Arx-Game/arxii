@@ -256,6 +256,12 @@ def _seed_crisis_types() -> None:
     ensure_crisis_catalog()
 
 
+def _seed_stature() -> None:
+    from world.seeds.stature import ensure_stature_catalog  # noqa: PLC0415
+
+    ensure_stature_catalog()
+
+
 def _seed_proclamations() -> None:
     from world.seeds.proclamations import ensure_edict_kinds  # noqa: PLC0415
 
@@ -607,6 +613,10 @@ CLUSTER_SEEDERS: dict[str, Callable[[], None]] = {
     # rules + succession law + fealty + ducal title + domain/holding (#1884).
     # Rides "kinship" (calls its seed first).
     "houses": _seed_houses,
+    # House Stature (#3091): band vocabulary, prestige rank bands, and the
+    # realm-cultural consort/paramour union kinds. After "houses" so realm
+    # lookups for consort kinds resolve.
+    "stature": _seed_stature,
     # GM trust ladder: the 5 default GMLevelCap rows (max_beat_risk,
     # allow_custom_stakes, allow_global_scope_authoring per GMLevel), so a fresh
     # deploy's staff-review gates aren't silently maximally-restrictive (#2000).
@@ -723,6 +733,7 @@ def seeded_models_by_cluster() -> dict[str, list[type[Model]]]:
     from world.skills.models import Specialization  # noqa: PLC0415
     from world.societies.houses.models import (  # noqa: PLC0415
         DomainCrisisType,
+        StatureBand,
         Title,
     )
     from world.societies.models import (  # noqa: PLC0415
@@ -884,6 +895,8 @@ def seeded_models_by_cluster() -> dict[str, list[type[Model]]]:
         "kinship": [Kinsperson],
         # Houses: the landed demo house; represented by Title (#1884).
         "houses": [Title],
+        # House Stature: band + rank-band catalogs (#3091).
+        "stature": [StatureBand],
         # Propaganda: the PLACEHOLDER campaign-tier catalog (#1621).
         "propaganda": [PropagandaCampaignTier],
         # Skill breakthroughs: default TraitRatingUnlock catalog at every skill's

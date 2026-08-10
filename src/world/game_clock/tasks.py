@@ -106,6 +106,7 @@ def weekly_rollover_task() -> None:
         ("AP weekly regen", batch_ap_weekly_regen),
         ("weekly economy", _run_weekly_economy),
         ("domain food consumption", _run_domain_food_consumption),
+        ("house stature recompute", _run_stature_tick),
         ("domain crisis wait rolls", _run_crisis_wait_tick),
         ("crisis generation", _run_crisis_generation_tick),
         ("domain edict upkeep", _run_edict_weekly_tick),
@@ -146,6 +147,17 @@ def _run_crisis_wait_tick() -> None:
     from world.societies.houses.crisis_services import crisis_wait_tick
 
     crisis_wait_tick()
+
+
+def _run_stature_tick() -> None:
+    """Weekly House Stature pass (#3091): recompute, rank, drift, converge, band.
+
+    Runs after the economy (fresh treasuries/streams) and before crisis
+    generation, so predation reads this week's bands.
+    """
+    from world.societies.houses.stature_services import weekly_stature_tick
+
+    weekly_stature_tick()
 
 
 def _run_crisis_generation_tick() -> None:

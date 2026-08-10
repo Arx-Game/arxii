@@ -32,6 +32,7 @@ from world.societies.houses.constants import (
     CrisisResolutionKind,
     CrisisValence,
     DomainCrisisSeverity,
+    StatureShiftCause,
 )
 from world.societies.houses.models import (
     CrisisIntel,
@@ -146,6 +147,12 @@ def open_crisis(  # noqa: PLR0913 — one target pair + the existing authoring k
         surfaces_at=surfaces_at,
     )
     _maybe_auto_mint_mission(crisis, origin, crisis_type)
+    if crisis.valence == CrisisValence.THREAT:
+        # #3091 — blood in the water: an open threat drags the target's true
+        # stature now (perceived only once it is public; covert window holds).
+        from world.societies.houses.stature_services import crisis_stature_shift  # noqa: PLC0415
+
+        crisis_stature_shift(crisis, cause=StatureShiftCause.CRISIS_OPENED)
     return crisis
 
 
@@ -308,6 +315,11 @@ def resolve_crisis(crisis: DomainCrisis, *, resolution: str) -> DomainCrisis:
     crisis.resolution = resolution
     crisis.resolved_at = timezone.now()
     crisis.save(update_fields=["resolution", "resolved_at"])
+    if crisis.valence == CrisisValence.THREAT:
+        # #3091 — the drag lifts the moment the threat is dealt with.
+        from world.societies.houses.stature_services import crisis_stature_shift  # noqa: PLC0415
+
+        crisis_stature_shift(crisis, cause=StatureShiftCause.CRISIS_RESOLVED)
     return crisis
 
 
@@ -376,7 +388,8 @@ def crisis_generation_tick(*, rng: random.Random | None = None) -> int:
     rng = rng or random
     opened = 0
     for domain in Domain.objects.select_related("owner_org"):
-        if rng.random() * 100 < AMBIENT_DOMAIN_THREAT_PCT:
+        threat_pct = AMBIENT_DOMAIN_THREAT_PCT * _threat_multiplier(domain.owner_org)
+        if rng.random() * 100 < threat_pct:
             opened += open_crisis(domain, origin=CrisisOrigin.AMBIENT, rng=rng) is not None
         if rng.random() * 100 < AMBIENT_DOMAIN_OPPORTUNITY_PCT:
             opened += (
@@ -390,13 +403,29 @@ def crisis_generation_tick(*, rng: random.Random | None = None) -> int:
         models.Q(pk__in=stream_org_ids) | models.Q(org_type__is_covert=True)
     ).distinct()
     for org in orgs:
-        if rng.random() * 100 < AMBIENT_ORG_THREAT_PCT:
+        if rng.random() * 100 < AMBIENT_ORG_THREAT_PCT * _threat_multiplier(org):
             opened += _open_generated(org=org, valence=CrisisValence.THREAT, rng=rng) is not None
         if rng.random() * 100 < AMBIENT_ORG_OPPORTUNITY_PCT:
             opened += (
                 _open_generated(org=org, valence=CrisisValence.OPPORTUNITY, rng=rng) is not None
             )
     return opened
+
+
+def _threat_multiplier(org) -> float:
+    """Predators probe the weak (#3091): the target's band scales threat odds.
+
+    No stature row or band yet means neutral 1.0 — the loop degrades to the
+    flat ambient chances for unbanded orgs.
+    """
+    from world.societies.houses.models import HouseStature  # noqa: PLC0415
+
+    if org is None:
+        return 1.0
+    stature = HouseStature.objects.filter(organization=org).select_related("band").first()
+    if stature is None or stature.band is None:
+        return 1.0
+    return float(stature.band.threat_multiplier)
 
 
 def _open_generated(

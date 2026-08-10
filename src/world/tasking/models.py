@@ -219,6 +219,14 @@ class TaskOutcomeRoute(SharedMemoryModel):
             "for the issuing org) and, on your own org, active hostile tasks (#2837)."
         ),
     )
+    whisper_stature_delta = models.PositiveIntegerField(
+        default=0,
+        help_text=(
+            "ORG target: whisper campaign (#3091) — push the target's PERCEIVED "
+            "stature down by up to this much, bounded below their true stature "
+            "by the displacement cap. Zero = payout disabled."
+        ),
+    )
     crisis_severity_delta = models.SmallIntegerField(
         default=0,
         help_text=(
