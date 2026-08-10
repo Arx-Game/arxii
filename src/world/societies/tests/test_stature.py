@@ -366,3 +366,42 @@ class WeeklyTickTests(TestCase):
         stature = HouseStature.objects.get(organization=org)
         self.assertGreater(stature.true_total, 0)
         self.assertIsNotNone(stature.band)
+
+
+class GrandDisplayTests(TestCase):
+    """#3093 — the upward half of the bluffing game."""
+
+    @classmethod
+    def setUpTestData(cls):
+        cls.family, cls.org = _make_house("Lavish")
+        cls.stature = HouseStature.objects.create(
+            organization=cls.org, true_total=10_000, perceived_total=10_000
+        )
+
+    def test_below_quality_bar_does_nothing(self):
+        from world.societies.houses.constants import GRAND_DISPLAY_MIN_QUALITY
+        from world.societies.houses.stature_services import apply_grand_display
+
+        applied = apply_grand_display(self.org, GRAND_DISPLAY_MIN_QUALITY - 1)
+        self.assertEqual(applied, 0)
+
+    def test_display_elevates_perceived_bounded_above_true(self):
+        from world.societies.houses.constants import (
+            GRAND_DISPLAY_MIN_QUALITY,
+            STATURE_BLUFF_MAX_ELEVATION,
+            StatureShiftCause,
+        )
+        from world.societies.houses.stature_services import apply_grand_display
+
+        ceiling = round(10_000 * (1 + STATURE_BLUFF_MAX_ELEVATION))
+        total = 0
+        for _ in range(20):
+            total += apply_grand_display(self.org, GRAND_DISPLAY_MIN_QUALITY + 10)
+        self.stature.refresh_from_db()
+        self.assertEqual(self.stature.perceived_total, ceiling)
+        self.assertEqual(total, ceiling - 10_000)
+        self.assertTrue(
+            StatureShift.objects.filter(
+                organization=self.org, cause=StatureShiftCause.GRAND_DISPLAY
+            ).exists()
+        )

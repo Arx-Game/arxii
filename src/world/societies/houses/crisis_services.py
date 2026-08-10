@@ -57,6 +57,13 @@ _SPAWN_POOLS: dict[str, tuple[str, ...]] = {
     CrisisOrigin.IMPROVEMENT: (DomainCrisisSeverity.TROUBLE, DomainCrisisSeverity.CRISIS),
     CrisisOrigin.UNREST: (DomainCrisisSeverity.TROUBLE, DomainCrisisSeverity.CRISIS),
     CrisisOrigin.AMBIENT: (DomainCrisisSeverity.TROUBLE, DomainCrisisSeverity.CRISIS),
+    # Predator raids draw the whole ladder — the band's stage sets the final
+    # severity after open (#3093).
+    CrisisOrigin.PREDATOR: (
+        DomainCrisisSeverity.TROUBLE,
+        DomainCrisisSeverity.CRISIS,
+        DomainCrisisSeverity.CATASTROPHE,
+    ),
 }
 
 _SEVERITY_ORDER: tuple[str, ...] = (
@@ -320,6 +327,16 @@ def resolve_crisis(crisis: DomainCrisis, *, resolution: str) -> DomainCrisis:
         from world.societies.houses.stature_services import crisis_stature_shift  # noqa: PLC0415
 
         crisis_stature_shift(crisis, cause=StatureShiftCause.CRISIS_RESOLVED)
+    if crisis.aggressor_band_id is not None and resolution in (
+        CrisisResolution.MISSION_COMPLETED,
+        CrisisResolution.TASK_COMPLETED,
+        CrisisResolution.PAID,
+    ):
+        # #3093 — answering a raid answers the BAND: strength burns, the
+        # menace ladder falls back. (Waiting it out answers nothing.)
+        from world.predators.services import strike_band  # noqa: PLC0415
+
+        strike_band(crisis.aggressor_band)
     return crisis
 
 

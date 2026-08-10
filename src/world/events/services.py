@@ -367,6 +367,30 @@ def _award_catering_prestige(event: Event) -> None:
         score * CATERING_DEED_BASE_PER_POINT,
         description="PLACEHOLDER: a spread remembered longer than the speeches.",
     )
+    _apply_grand_display(host.persona, score)
+
+
+def _apply_grand_display(persona, score: int) -> None:
+    """A lavish enough spread is a grand display (#3093): the host's house
+    looks stronger than the ledgers say. Bounded upward bluff — the mirror
+    of whisper campaigns."""
+    from world.societies.houses.stature_services import apply_grand_display  # noqa: PLC0415
+    from world.societies.models import OrganizationMembership  # noqa: PLC0415
+
+    membership = (
+        OrganizationMembership.objects.filter(
+            persona=persona,
+            left_at__isnull=True,
+            exiled_at__isnull=True,
+            organization__family__isnull=False,
+        )
+        .select_related("organization", "rank")
+        .order_by("rank__tier")
+        .first()
+    )
+    if membership is None:
+        return
+    apply_grand_display(membership.organization, score)
 
 
 def cancel_event(event: Event) -> Event:

@@ -227,6 +227,20 @@ class TaskOutcomeRoute(SharedMemoryModel):
             "by the displacement cap. Zero = payout disabled."
         ),
     )
+    scout_predator = models.BooleanField(
+        default=False,
+        help_text=(
+            "PREDATOR target: scout the band (#3093) — stage, strength, home "
+            "region, and current prey."
+        ),
+    )
+    sabotage_predator = models.BooleanField(
+        default=False,
+        help_text=(
+            "PREDATOR target: the knife in the dark (#3093) — burn band "
+            "strength and knock its menace ladder down a stage."
+        ),
+    )
     crisis_severity_delta = models.SmallIntegerField(
         default=0,
         help_text=(
@@ -329,6 +343,14 @@ class OrgTask(SharedMemoryModel, DiscriminatorMixin):
         related_name="org_tasks_targeting",
         help_text="A generated threat/opportunity being countered, inflamed, or seized (#2837).",
     )
+    target_band = models.ForeignKey(
+        "arxii.PredatorBand",
+        on_delete=models.CASCADE,
+        null=True,
+        blank=True,
+        related_name="org_tasks_targeting",
+        help_text="A predator band being scouted or sabotaged (#3093).",
+    )
     created_at = models.DateTimeField(auto_now_add=True)
     resolved_at = models.DateTimeField(null=True, blank=True)
 
@@ -339,6 +361,7 @@ class OrgTask(SharedMemoryModel, DiscriminatorMixin):
         TaskTargetKind.DOMAIN: "target_domain",
         TaskTargetKind.PERSONA: "target_persona",
         TaskTargetKind.CRISIS: "target_crisis",
+        TaskTargetKind.PREDATOR: "target_band",
     }
     _TARGET_FIELDS = (
         "target_room",
@@ -346,6 +369,7 @@ class OrgTask(SharedMemoryModel, DiscriminatorMixin):
         "target_domain",
         "target_persona",
         "target_crisis",
+        "target_band",
     )
 
     def clean(self) -> None:

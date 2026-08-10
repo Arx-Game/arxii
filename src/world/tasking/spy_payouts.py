@@ -52,6 +52,8 @@ def apply_spy_payouts(
         (route.organization_report, lambda: _organization_report(task)),
         (route.military_report, lambda: _military_report(task)),
         (route.whisper_stature_delta, lambda: _whisper_stature(task, route.whisper_stature_delta)),
+        (route.scout_predator, lambda: _scout_predator(task)),
+        (route.sabotage_predator, lambda: _sabotage_predator(task)),
         (route.reveal_schemes, lambda: _reveal_schemes(task)),
         (
             route.crisis_severity_delta,
@@ -211,6 +213,38 @@ def _military_report(task: OrgTask) -> list[str]:
         lines.append(f"{army_count} armied formation(s) stand active.")
     lines.extend(_stature_lines(org))
     return lines
+
+
+def _scout_predator(task: OrgTask) -> list[str]:
+    """Scout a predator band (#3093): stage, strength, lair, and prey."""
+    band = task.target_band
+    if band is None:
+        return ["No band to scout."]
+    lines = [
+        f"{band.name}: {band.get_stage_display()} — strength {band.strength}, "
+        f"laired near {band.home_region.name}."
+    ]
+    if band.prey is not None:
+        lines.append(f"They stalk {band.prey.name}.")
+    if band.loot_stash:
+        lines.append(f"Their stash runs perhaps {band.loot_stash} coppers.")
+    return lines
+
+
+def _sabotage_predator(task: OrgTask) -> list[str]:
+    """The knife in the dark (#3093): burn strength, knock the ladder down."""
+    from world.predators.services import sabotage_band  # noqa: PLC0415
+
+    band = task.target_band
+    if band is None:
+        return ["No band to strike."]
+    sabotage_band(band)
+    band.refresh_from_db()
+    if band.disbanded_at is not None:
+        return [f"{band.name} is broken and scattered."]
+    return [
+        f"{band.name} reels: strength {band.strength}, fallen back to {band.get_stage_display()}."
+    ]
 
 
 def _whisper_stature(task: OrgTask, magnitude: int) -> list[str]:

@@ -484,3 +484,37 @@ class StaturePayoutTests(SpyPayoutTestBase):
         floor = round(10_000 * (1 - STATURE_WHISPER_MAX_DISPLACEMENT))
         self.assertEqual(stature.perceived_total, floor)
         self.assertIn("repute erodes", fulfillment.report)
+
+
+class PredatorPayoutTests(SpyPayoutTestBase):
+    """#3093 — scouting and sabotaging predator bands."""
+
+    def _band(self, **kwargs):
+        from world.predators.factories import PredatorBandFactory
+
+        return PredatorBandFactory(**kwargs)
+
+    def test_scout_reads_stage_and_strength(self):
+        band = self._band(strength=80)
+        template = TaskTemplateFactory(
+            duration=timedelta(days=1), target_kind=TaskTargetKind.PREDATOR
+        )
+        TaskOutcomeRouteFactory(template=template, outcome_tier=self.win, scout_predator=True)
+        _, fulfillment = self._resolve(template, target_band=band)
+        self.assertIn("strength 80", fulfillment.report)
+        self.assertIn("Rumors", fulfillment.report)
+
+    def test_sabotage_burns_strength_and_knocks_down(self):
+        from world.predators.constants import MenaceStage
+        from world.predators.models import PredatorBand
+
+        band = self._band(strength=100, stage=MenaceStage.RAIDS)
+        template = TaskTemplateFactory(
+            duration=timedelta(days=1), target_kind=TaskTargetKind.PREDATOR
+        )
+        TaskOutcomeRouteFactory(template=template, outcome_tier=self.win, sabotage_predator=True)
+        _, fulfillment = self._resolve(template, target_band=band)
+        refreshed = PredatorBand.objects.get(pk=band.pk)
+        self.assertLess(refreshed.strength, 100)
+        self.assertEqual(refreshed.stage, MenaceStage.ROBBERY)
+        self.assertIn("reels", fulfillment.report)
