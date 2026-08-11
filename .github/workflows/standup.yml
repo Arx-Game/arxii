@@ -90,6 +90,11 @@ jobs:
           # SENTRY_DSN is non-empty); not in standup.sh's REQUIRED_ARXII.
           ARXII_SENTRY_DSN: ${{ secrets.ARXII_SENTRY_DSN }}
           ARXII_CADDY_CF_DNS_TOKEN: ${{ secrets.ARXII_CADDY_CF_DNS_TOKEN }}
+          # #3153: ansible-step-only, deliberately never in secrets_map (see
+          # secrets.env.example) — the content_repo role's clone task reads
+          # this directly via lookup('env', ...), no_log:true.
+          ARXII_CONTENT_REPO_TOKEN: ${{ secrets.ARXII_CONTENT_REPO_TOKEN }}
+          ARXII_CONTENT_REPO: ${{ vars.ARXII_CONTENT_REPO }}
           # First-run Django superuser: password is a Secret (long-lived,
           # rotate on suspicion); username + email are Variables (non-secret
           # operator choices). Username/email default to arxii_admin /
