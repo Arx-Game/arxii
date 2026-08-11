@@ -278,3 +278,30 @@ export function useWithdrawGroupStoryRequest(covenantId: number, actorCharacterI
     },
   });
 }
+
+// ---------------------------------------------------------------------------
+// Treasury mutations (#2992) — dispatch through the generic action-dispatch
+// endpoint (Decision 8), same seam as the GroupStoryRequest mutations above.
+// ---------------------------------------------------------------------------
+
+/** Deposit coppers from the actor's purse into the covenant treasury. */
+export function useDepositCovenantFunds(covenantId: number, actorCharacterId: number) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (amount: number) => api.depositCovenantFunds(actorCharacterId, covenantId, amount),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: covenantKeys.detail(covenantId) }).catch(() => {});
+    },
+  });
+}
+
+/** Withdraw coppers from the covenant treasury into the actor's purse (rank-gated). */
+export function useWithdrawCovenantFunds(covenantId: number, actorCharacterId: number) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (amount: number) => api.withdrawCovenantFunds(actorCharacterId, covenantId, amount),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: covenantKeys.detail(covenantId) }).catch(() => {});
+    },
+  });
+}

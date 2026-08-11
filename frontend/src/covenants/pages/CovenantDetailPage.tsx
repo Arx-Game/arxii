@@ -50,6 +50,7 @@ import { RitesPanel } from '@/covenants/components/RitesPanel';
 import { RolePowersPanel } from '@/covenants/components/RolePowersPanel';
 import { PromoteRoleDialog } from '@/covenants/components/PromoteRoleDialog';
 import { RankManagementPanel } from '@/covenants/components/RankManagementPanel';
+import { TreasuryPanel } from '@/covenants/components/TreasuryPanel';
 import type { CharacterCovenantRole, CovenantRank, ViewerCapabilities } from '@/covenants/api';
 import type { RitualWithSchema, RitualInputSchema } from '@/rituals/types';
 
@@ -265,6 +266,11 @@ function MemberRow({
           <Badge variant="outline" className="text-xs">
             {role.name}
           </Badge>
+          {membership.standing === 'minor' && (
+            <Badge variant="outline" className="text-xs" title="Minor Member">
+              Minor
+            </Badge>
+          )}
           <Badge variant="outline" className="text-xs">
             {blendSummaryForMembership(membership)}
           </Badge>
@@ -553,6 +559,15 @@ export function CovenantDetailInner({ covenantId }: { covenantId: number }) {
         <GroupStoryRequestPanel
           covenantId={covenantId}
           viewerCapabilities={viewerCapabilities}
+          actorCharacterId={characterSheetId}
+        />
+      </section>
+
+      {/* Covenant treasury (#2992) — hidden entirely for non-members */}
+      <section>
+        <TreasuryPanel
+          covenantId={covenantId}
+          treasuryBalance={covenant.treasury_balance}
           actorCharacterId={characterSheetId}
         />
       </section>

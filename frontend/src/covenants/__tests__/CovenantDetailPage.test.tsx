@@ -95,6 +95,14 @@ vi.mock('@/covenants/components/GroupStoryRequestPanel', () => ({
   ),
 }));
 
+vi.mock('@/covenants/components/TreasuryPanel', () => ({
+  TreasuryPanel: (props: { covenantId: number; treasuryBalance: number | null }) => (
+    <div data-testid="treasury-panel">
+      treasury:{props.covenantId}:{String(props.treasuryBalance)}
+    </div>
+  ),
+}));
+
 // ---------------------------------------------------------------------------
 // Mock Redux auth — provide a puppeted character for characterSheetId
 // ---------------------------------------------------------------------------
@@ -163,6 +171,7 @@ const makeCovenant = (overrides: Partial<CovenantWithBattleState> = {}): Covenan
     is_dormant: true,
     battle_binding: 'standing',
     battle_binding_display: 'Standing',
+    treasury_balance: null,
     ...overrides,
   }) as CovenantWithBattleState;
 
@@ -189,6 +198,7 @@ const makeMembership = (overrides: Partial<CharacterCovenantRole> = {}): Charact
       parent_role: null,
     },
     rank: { id: 1, name: 'Founder', tier: 1 },
+    standing: 'core',
     viewer_capabilities: {
       can_invite: false,
       can_kick: false,
@@ -275,9 +285,30 @@ describe('CovenantDetailPage (CovenantDetailInner)', () => {
     expect(screen.getByTestId('rites-panel')).toHaveTextContent(`rites:${COVENANT_ID}`);
     expect(screen.getByTestId('role-powers-panel')).toHaveTextContent(`powers:${COVENANT_ID}`);
     expect(screen.getByTestId('rank-management-panel')).toHaveTextContent(`ranks:${COVENANT_ID}`);
+    expect(screen.getByTestId('treasury-panel')).toHaveTextContent(`treasury:${COVENANT_ID}`);
     // The viewer is an active member, so membership-aware panels know it.
     expect(screen.getByTestId('battle-state-banner')).toHaveAttribute('data-active', 'true');
     expect(screen.getByTestId('rites-panel')).toHaveAttribute('data-active', 'true');
+  });
+
+  it("shows a 'Minor' badge on a minor-standing member's row", () => {
+    mockDetail(makeCovenant());
+    mockMembers([makeMembership({ standing: 'minor' })]);
+
+    render(<CovenantDetailInner covenantId={COVENANT_ID} />, { wrapper: createWrapper() });
+
+    const badge = screen.getByText('Minor');
+    expect(badge).toBeInTheDocument();
+    expect(badge).toHaveAttribute('title', 'Minor Member');
+  });
+
+  it("does not show a 'Minor' badge for a core-standing member", () => {
+    mockDetail(makeCovenant());
+    mockMembers([makeMembership({ standing: 'core' })]);
+
+    render(<CovenantDetailInner covenantId={COVENANT_ID} />, { wrapper: createWrapper() });
+
+    expect(screen.queryByText('Minor')).not.toBeInTheDocument();
   });
 
   it("shows a Promote button on the viewer's own active membership row only", () => {

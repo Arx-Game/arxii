@@ -516,3 +516,58 @@ export async function withdrawGroupStoryRequest(
   if (!res.ok) throw new Error(detail ?? 'Failed to withdraw the GM request.');
   return detail ?? 'GM request withdrawn.';
 }
+
+// ---------------------------------------------------------------------------
+// Covenant treasury (#2992) — dispatch through the generic action-dispatch
+// endpoint, same seam as the GroupStoryRequest actions above. The action
+// resolves the actor's OWN active membership in ``covenant_id`` server-side
+// (actions/definitions/covenants.py::_resolve_actor_membership) — the wire
+// never carries a membership id, so there is no way to act on someone else's
+// membership from here.
+// ---------------------------------------------------------------------------
+
+/**
+ * Dispatch DepositCovenantFundsAction as the actor's own character.
+ * Moves ``amount`` coppers from the actor's purse into the covenant treasury.
+ */
+export async function depositCovenantFunds(
+  actorCharacterId: number,
+  covenantId: number,
+  amount: number
+): Promise<string> {
+  const res = await apiFetch(`/api/actions/characters/${actorCharacterId}/dispatch/`, {
+    method: 'POST',
+    headers: jsonHeaders(),
+    body: JSON.stringify({
+      ref: { backend: 'registry', registry_key: 'deposit_covenant_funds' },
+      kwargs: { covenant_id: covenantId, amount },
+    }),
+  });
+  const detail = await dispatchDetail(res);
+  if (!res.ok) throw new Error(detail ?? 'Failed to deposit covenant funds.');
+  return detail ?? 'Funds deposited.';
+}
+
+/**
+ * Dispatch WithdrawCovenantFundsAction as the actor's own character.
+ * Moves ``amount`` coppers from the covenant treasury into the actor's purse.
+ * Rank-gated server-side (``treasury.spend_rank_max``) — a rejection surfaces
+ * the curated ``user_message`` via the thrown Error.
+ */
+export async function withdrawCovenantFunds(
+  actorCharacterId: number,
+  covenantId: number,
+  amount: number
+): Promise<string> {
+  const res = await apiFetch(`/api/actions/characters/${actorCharacterId}/dispatch/`, {
+    method: 'POST',
+    headers: jsonHeaders(),
+    body: JSON.stringify({
+      ref: { backend: 'registry', registry_key: 'withdraw_covenant_funds' },
+      kwargs: { covenant_id: covenantId, amount },
+    }),
+  });
+  const detail = await dispatchDetail(res);
+  if (!res.ok) throw new Error(detail ?? 'Failed to withdraw covenant funds.');
+  return detail ?? 'Funds withdrawn.';
+}
