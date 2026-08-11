@@ -18,6 +18,7 @@ from world.covenants.constants import BattleBinding, CovenantType
 from world.covenants.exceptions import (
     CannotKickEqualOrHigherRankError,
     CovenantEngagementPrerequisiteNotMetError,
+    NotAnActiveCovenantMemberError,
     NotAuthorizedToSpendCovenantTreasuryError,
 )
 from world.covenants.factories import (
@@ -99,3 +100,49 @@ class CovenantActionTests(TestCase):
         )
         self.assertFalse(result.success)
         self.assertEqual(result.message, NotAuthorizedToSpendCovenantTreasuryError.user_message)
+
+    def test_deposit_action_resolves_membership_from_covenant_id(self):
+        """Web dispatch path (#2992): no ``membership`` kwarg, only ``covenant_id`` —
+        the action resolves the ACTOR'S OWN active membership, never a client-supplied
+        membership pk. Mirrors ``DispatchActionView`` -> ``dispatch_player_action``,
+        which only ever carries JSON-safe ids (see actions/player_interface.py
+        ``_dispatch_registry``)."""
+        purse = get_or_create_purse(self.officer.character_sheet)
+        purse.balance = 100
+        purse.save(update_fields=["balance"])
+
+        result = DepositCovenantFundsAction().run(
+            actor=self.officer.character_sheet.character,
+            covenant_id=self.covenant.pk,
+            amount=40,
+        )
+        self.assertTrue(result.success)
+        treasury = covenant_treasury(self.covenant)
+        self.assertEqual(treasury.balance, 40)
+
+    def test_deposit_action_covenant_id_with_no_active_membership_fails(self):
+        """Actor has no active membership in the given covenant_id: curated failure,
+        never an AttributeError from treating an id as an instance."""
+        outsider = CharacterCovenantRoleFactory()  # different covenant entirely
+
+        result = DepositCovenantFundsAction().run(
+            actor=outsider.character_sheet.character,
+            covenant_id=self.covenant.pk,
+            amount=10,
+        )
+        self.assertFalse(result.success)
+        self.assertEqual(result.message, NotAnActiveCovenantMemberError.user_message)
+
+    def test_withdraw_action_resolves_membership_from_covenant_id(self):
+        treasury = covenant_treasury(self.covenant)
+        treasury.balance = 500
+        treasury.save(update_fields=["balance"])
+
+        result = WithdrawCovenantFundsAction().run(
+            actor=self.officer.character_sheet.character,
+            covenant_id=self.covenant.pk,
+            amount=25,
+        )
+        self.assertTrue(result.success)
+        treasury.refresh_from_db()
+        self.assertEqual(treasury.balance, 475)

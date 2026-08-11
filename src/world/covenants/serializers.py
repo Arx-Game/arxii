@@ -1,5 +1,7 @@
 """DRF serializers for covenants API."""
 
+from typing import Any
+
 from django.core.exceptions import ObjectDoesNotExist
 from drf_spectacular.utils import extend_schema_field
 from rest_framework import serializers
@@ -142,6 +144,36 @@ class ViewerCapabilitiesSerializer(serializers.Serializer):
     can_request_gm = serializers.BooleanField()
 
 
+def _resolve_viewer_membership(
+    context: dict[str, Any], covenant_id: int
+) -> CharacterCovenantRole | None:
+    """The requesting user's own active membership in ``covenant_id``, or None.
+
+    Shared by ``CharacterCovenantRoleSerializer.get_viewer_capabilities`` and
+    ``CovenantSerializer.get_treasury_balance`` (#2992) so the tenure-join filter
+    lives in exactly one place. Memoized per covenant_id in the serializer
+    ``context`` dict so a list response of N rows from the same covenant issues
+    only one query rather than one per row/field.
+    """
+    request = context.get("request")
+    if request is None or not request.user.is_authenticated:
+        return None
+
+    cache_key = f"_viewer_membership_{covenant_id}"
+    if cache_key not in context:
+        context[cache_key] = (
+            CharacterCovenantRole.objects.filter(
+                covenant_id=covenant_id,
+                left_at__isnull=True,
+                character_sheet__roster_entry__tenures__end_date__isnull=True,
+                character_sheet__roster_entry__tenures__player_data__account=request.user,
+            )
+            .select_related("rank")
+            .first()
+        )
+    return context[cache_key]  # type: ignore[no-any-return]
+
+
 class CharacterCovenantRoleSerializer(serializers.ModelSerializer):
     """Read-only serializer for a character's covenant role assignment.
 
@@ -173,6 +205,7 @@ class CharacterCovenantRoleSerializer(serializers.ModelSerializer):
             "covenant_role",
             "anchor_role",
             "rank",
+            "standing",
             "engaged",
             "joined_at",
             "left_at",
@@ -224,43 +257,20 @@ class CharacterCovenantRoleSerializer(serializers.ModelSerializer):
         response of N memberships from the same covenant issues only one query
         rather than one per row.
         """
-        request = self.context.get("request")
-        if request is None or not request.user.is_authenticated:
+        viewer_membership = _resolve_viewer_membership(self.context, obj.covenant_id)
+        if viewer_membership is None:
             return {
                 "can_invite": False,
                 "can_kick": False,
                 "can_manage_ranks": False,
                 "can_request_gm": False,
             }
-
-        # Memoize per-covenant in the serializer context dict.
-        cache_key = f"_viewer_caps_{obj.covenant_id}"
-        if cache_key not in self.context:
-            viewer_membership = (
-                CharacterCovenantRole.objects.filter(
-                    covenant_id=obj.covenant_id,
-                    left_at__isnull=True,
-                    character_sheet__roster_entry__tenures__end_date__isnull=True,
-                    character_sheet__roster_entry__tenures__player_data__account=request.user,
-                )
-                .select_related("rank")
-                .first()
-            )
-            if viewer_membership is None:
-                self.context[cache_key] = {
-                    "can_invite": False,
-                    "can_kick": False,
-                    "can_manage_ranks": False,
-                    "can_request_gm": False,
-                }
-            else:
-                self.context[cache_key] = {
-                    "can_invite": viewer_membership.rank.can_invite,
-                    "can_kick": viewer_membership.rank.can_kick,
-                    "can_manage_ranks": viewer_membership.rank.can_manage_ranks,
-                    "can_request_gm": viewer_membership.rank.can_request_gm,
-                }
-        return self.context[cache_key]  # type: ignore[return-value]
+        return {
+            "can_invite": viewer_membership.rank.can_invite,
+            "can_kick": viewer_membership.rank.can_kick,
+            "can_manage_ranks": viewer_membership.rank.can_manage_ranks,
+            "can_request_gm": viewer_membership.rank.can_request_gm,
+        }
 
     def get_display_name(self, obj: CharacterCovenantRole) -> str:
         """The member's display name, or a generic placeholder if they blocked the viewer (#2086).
@@ -294,6 +304,9 @@ class CovenantSerializer(serializers.ModelSerializer):
     is_active = serializers.SerializerMethodField()
     legend_total = serializers.SerializerMethodField()
     storylines = serializers.PrimaryKeyRelatedField(many=True, read_only=True)
+    treasury_balance = serializers.SerializerMethodField(
+        help_text="Coppers in the covenant treasury; null unless the viewer is an active member."
+    )
 
     class Meta:
         model = Covenant
@@ -313,6 +326,7 @@ class CovenantSerializer(serializers.ModelSerializer):
             "member_count",
             "legend_total",
             "storylines",
+            "treasury_balance",
         ]
         read_only_fields = fields
 
@@ -334,6 +348,19 @@ class CovenantSerializer(serializers.ModelSerializer):
         from world.societies.services import get_covenant_legend_total  # noqa: PLC0415
 
         return get_covenant_legend_total(obj)
+
+    def get_treasury_balance(self, obj: Covenant) -> int | None:
+        """Covenant treasury balance for an active member viewer, else None (#2992).
+
+        Non-members never see the treasury balance — the field is entirely absent
+        from their perspective (serialized as null).
+        """
+        viewer_membership = _resolve_viewer_membership(self.context, obj.pk)
+        if viewer_membership is None:
+            return None
+        from world.covenants.treasury import covenant_treasury  # noqa: PLC0415
+
+        return covenant_treasury(obj).balance
 
 
 class CovenantLevelThresholdSerializer(serializers.ModelSerializer):
