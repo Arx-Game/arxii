@@ -6,6 +6,39 @@
 # content repo" button, a deliberate human gate (ADR-0201 credited-row
 # freeze). It only gets the checkout + env var onto the box.
 
+# Fail-closed, mirroring roles/secrets_vault/tasks/main.yml's own two-step
+# pattern (collect missing NAMES ONLY under no_log, then assert without
+# no_log so the failure message actually names which var is missing):
+# ARXII_CONTENT_REPO_TOKEN/ARXII_CONTENT_REPO are read directly via
+# lookup('env', ...) below, same convention as every other ARXII_* secret
+# in this codebase (see the Interfaces note in this role's own brief). An
+# empty/unset value here would otherwise silently produce a malformed clone
+# URL (`https://x-access-token:@github.com/.git`) — and because the clone
+# task below carries no_log: true, git's own error output would be
+# suppressed too, leaving the operator with an opaque failure and no
+# diagnostic. Plausible before Task 2 wires these into standup.sh, or if a
+# rotated/typo'd token ever goes missing in prod.
+- name: Collect names of missing content-repo env vars (values never logged)
+  ansible.builtin.set_fact:
+    content_repo_missing_env: >-
+      {{ (content_repo_missing_env | default([])) +
+         ([item] if (lookup('env', item) | length == 0) else []) }}
+  loop:
+    - ARXII_CONTENT_REPO_TOKEN
+    - ARXII_CONTENT_REPO
+  no_log: true
+
+- name: Fail-closed — ARXII_CONTENT_REPO_TOKEN/ARXII_CONTENT_REPO must be present & non-empty
+  ansible.builtin.assert:
+    that:
+      - (content_repo_missing_env | default([])) | length == 0
+    fail_msg: >-
+      Required content-repo env var(s) missing/empty: {{
+      content_repo_missing_env | default([]) | join(', ') }} (set from the
+      gated GitHub Environment / password manager; wired by Task 2's
+      standup.yml/standup.sh).
+    quiet: true
+
 - name: "Ensure the content-repo parent dir exists (owner: app service user)"
   ansible.builtin.file:
     path: "{{ content_repo_path | dirname }}"
