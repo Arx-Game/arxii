@@ -151,6 +151,17 @@ chkno "ARXII_SENTRY_DSN never appears inside the fail-closed secrets_map block" 
 chkno "ARXII_SENTRY_DSN is not in standup.sh's REQUIRED_ARXII (optional secret)" \
   "sed -n '/REQUIRED_ARXII=(/,/)/p' infra/scripts/standup.sh | grep -q ARXII_SENTRY_DSN"
 
+# (a3) #3153: ARXII_CONTENT_REPO_TOKEN must be the inverse of the Sentry
+# case above — REQUIRED (fail-closed) but structurally EXCLUDED from
+# secrets_map (it's ansible-step-only, never written to the box's
+# EnvironmentFile; see secrets.env.example's new category comment).
+chkno "ARXII_CONTENT_REPO_TOKEN never appears inside the fail-closed secrets_map block (ansible-step-only, never on-box)" \
+  "sed -n '/^secrets_map:/,/^[^ ]/p' infra/ansible/roles/secrets_vault/defaults/main.yml | grep -q ARXII_CONTENT_REPO_TOKEN"
+chk "ARXII_CONTENT_REPO_TOKEN is a standup.sh preflight-required secret" \
+  "sed -n '/REQUIRED_ARXII=(/,/)/p' infra/scripts/standup.sh | grep -q ARXII_CONTENT_REPO_TOKEN"
+chk "ARXII_CONTENT_REPO is a standup.sh preflight-required var" \
+  "sed -n '/REQUIRED_ARXII=(/,/)/p' infra/scripts/standup.sh | grep -q ARXII_CONTENT_REPO"
+
 # (b) standup.sh must unset the provisioning tokens BEFORE invoking
 # ansible-playbook (order-sensitive — defense-in-depth so LINODE_TOKEN /
 # CLOUDFLARE_API_TOKEN can never reach the box even by accident).
