@@ -14,7 +14,12 @@ from actions.factories import (
 )
 from evennia_extensions.factories import AccountFactory, CharacterFactory, ObjectDBFactory
 from flows.constants import EventName
-from world.achievements.models import StatDefinition
+from world.achievements.factories import (
+    AchievementFactory,
+    AchievementStatRequirementFactory,
+    StatDefinitionFactory,
+)
+from world.achievements.models import CharacterAchievement, Discovery, StatDefinition
 from world.character_sheets.factories import CharacterSheetFactory
 from world.checks.factories import CheckTypeFactory, ConsequenceFactory
 from world.checks.outcome_models import ConsequenceOutcome
@@ -52,7 +57,7 @@ from world.magic.factories import (
     TechniqueFactory,
 )
 from world.mechanics.factories import CharacterEngagementFactory
-from world.roster.factories import RosterTenureFactory
+from world.roster.factories import RosterTenureFactory, grant_test_tenure
 from world.scenes.constants import InteractionMode, RoundStatus
 from world.scenes.factories import SceneFactory, SceneParticipationFactory
 from world.scenes.models import Interaction
@@ -429,6 +434,55 @@ class CompleteEncounterTests(_CompletionSeamTestBase):
             complete_encounter(encounter, outcome=EncounterOutcome.VICTORY)
 
         mock_emit.assert_not_called()
+
+
+class CompletionCounterGroupAchievementTests(_CompletionSeamTestBase):
+    """#3075: completion counters batch the achievement grant per outcome bucket.
+
+    A party win is a genuinely simultaneous moment for everyone who stayed and
+    won -- a first-ever threshold achievement should share one Discovery
+    across the whole winning bucket, not go solely to whichever participant
+    ``_increment_completion_counters`` happened to process first. A party
+    member who fled instead is a different bucket entirely and must not be
+    swept into the winners' Discovery.
+    """
+
+    def test_mixed_won_fled_party_shares_discovery_among_winners_only(self) -> None:
+        won_stat = StatDefinitionFactory(key=STAT_KEY_ENCOUNTERS_WON, name="Encounters Won")
+        achievement = AchievementFactory(name="First Victory", slug="first-victory")
+        AchievementStatRequirementFactory(achievement=achievement, stat=won_stat, threshold=1)
+
+        encounter = self._make_encounter()
+        winner_one = self._add_pc(encounter)
+        winner_two = self._add_pc(encounter)
+        fled = self._add_pc(encounter, status=ParticipantStatus.FLED)
+        tenure_one = grant_test_tenure(winner_one.character_sheet)
+        tenure_two = grant_test_tenure(winner_two.character_sheet)
+        grant_test_tenure(fled.character_sheet)
+
+        complete_encounter(encounter, outcome=EncounterOutcome.VICTORY)
+
+        discovery = Discovery.objects.get(achievement=achievement)
+        self.assertEqual(discovery.discovered_by_tenure_id, tenure_one.pk)
+        self.assertEqual(
+            list(discovery.shared_with_tenures.values_list("pk", flat=True)),
+            [tenure_two.pk],
+        )
+        self.assertTrue(
+            CharacterAchievement.objects.filter(
+                character_sheet=winner_one.character_sheet, achievement=achievement
+            ).exists()
+        )
+        self.assertTrue(
+            CharacterAchievement.objects.filter(
+                character_sheet=winner_two.character_sheet, achievement=achievement
+            ).exists()
+        )
+        self.assertFalse(
+            CharacterAchievement.objects.filter(
+                character_sheet=fled.character_sheet, achievement=achievement
+            ).exists()
+        )
 
 
 class ResolveRoundCompletionTests(TestCase):

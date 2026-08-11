@@ -12,7 +12,7 @@ from django.db.models import Q
 from django.utils import timezone
 
 from world.achievements.models import StatDefinition
-from world.achievements.services import increment_stat
+from world.achievements.services import increment_stat_for_group
 from world.progression.constants import FIRST_IMPRESSION_AUTHOR_XP, FIRST_IMPRESSION_TARGET_XP
 from world.progression.models import KudosSourceCategory
 from world.progression.services.awards import award_xp
@@ -151,8 +151,7 @@ def create_first_impression(  # noqa: PLR0913
                 relationship.save(update_fields=["is_pending"])
 
                 stat_def = StatDefinition.objects.get(key="relationships.total_established")
-                increment_stat(source, stat_def)
-                increment_stat(target, stat_def)
+                increment_stat_for_group([source, target], stat_def)
         except CharacterRelationship.DoesNotExist:
             pass
 

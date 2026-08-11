@@ -2817,7 +2817,9 @@ gains a discoverable content item for the first time.
   COVENANT_ROLE_ENGAGED / COVENANT_ROLE_DISENGAGED / CHARACTER_CREATION / PATH_ADVANCEMENT /
   GIFT_ACQUISITION / TECHNIQUE_GRANT / ACADEMY_TRAINING / CODEX_LEARNING)
 - **Handlers:** `character_sheet.stats` (`StatHandler`) — `get(stat_def) -> int`,
-  `increment(stat_def, n) -> int` (atomic F() expression; checks requirement thresholds after increment)
+  `increment(stat_def, n, *, check_achievements=True) -> int` (atomic F() expression; checks
+  requirement thresholds after increment unless `check_achievements=False`, used by the batch
+  seam below, #3075)
 - **Key Services (`world/achievements/services.py`):** `grant_achievement(achievement,
   sheets) -> AchievementGrantResult` (`world/achievements/types.py` — frozen dataclass with
   `character_achievements: list[CharacterAchievement]` and `created_discovery: Discovery |
@@ -2832,7 +2834,8 @@ gains a discoverable content item for the first time.
   current tenure, #3055),
   `can_earn_achievements(character_sheet) -> bool` (current, non-staff `RosterTenure`; #3024,
   ADR-0202), `apply_achievement_rewards(sheet, achievement)`,
-  `get_stat(sheet, stat_def) -> int`, `increment_stat(sheet, stat_def, n) -> int`
+  `get_stat(sheet, stat_def) -> int`, `increment_stat(sheet, stat_def, n) -> int`,
+  `increment_stat_for_group(sheets, stat_def, n=1) -> None` (#3075, batch stat-check seam below)
 - **Display rule (#3063):** `DiscoverySerializer.shared` (`world/achievements/serializers.py`)
   is `True` iff `shared_with_tenures` is non-empty — the primary `discovered_by_tenure` FK is
   pure bookkeeping in the group case (it has to point somewhere) and must never be read as a
@@ -2843,11 +2846,19 @@ gains a discoverable content item for the first time.
   `CharacterAchievement` but never land in `shared_with_tenures`. `fire_combo_discovery`
   (`world/combat/combo_discovery.py`) is the reference implementation: it grants the whole combo
   participant group in one call rather than routing through the single-sheet
-  `execute_ceremony_beat` helper (see that module's docstring). Two other group-earning
-  moments — combat encounter completion and relationship reciprocation — currently reach
-  `grant_achievement` only through the single-sheet `StatHandler.increment` →
-  `_check_achievements` indirection and are NOT yet batched; a follow-up is needed before they
-  can claim shared credit.
+  `execute_ceremony_beat` helper (see that module's docstring).
+- **Batch stat-check seam (#3075):** `increment_stat_for_group(sheets, stat, amount=1)`
+  increments every sheet's tracker with the per-sheet achievement check deferred
+  (`StatHandler.increment(..., check_achievements=False)`), then runs ONE group evaluation
+  (`_check_achievements_for_group`, the same evaluator `_check_achievements` delegates into for
+  the single-sheet case) — per candidate achievement, the crossing set is every sheet (caller
+  order) that meets the requirements now and doesn't already hold it, and `grant_achievement` is
+  called once per achievement with that set, so the first crossing sheet takes the primary
+  Discovery slot and the rest share it. A sheet that doesn't cross this increment earns the
+  achievement solo, non-shared, later. Wired callers: combat encounter completion
+  (`world/combat/services.py::_increment_completion_counters`, bucketed by outcome via
+  `world/combat/achievement_counters.py::increment_combat_counter_for_group`) and relationship
+  reciprocation (`world/relationships/services.py::create_first_impression`).
 - **Access-change + discovery surface (`world/achievements/discovery.py` — ADR-0061):**
   - `announce_access_change(character_sheet, *, gained, lost, source)` — sends an ABILITY
     `NarrativeMessage` to the character listing what techniques/capabilities changed, then for

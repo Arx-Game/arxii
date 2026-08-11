@@ -116,3 +116,26 @@ def increment_combat_counter(
         return character_sheet.stats.get(_get_or_create_stat_def(key))
     stat_def = _get_or_create_stat_def(key)
     return character_sheet.stats.increment(stat_def, amount)
+
+
+def increment_combat_counter_for_group(
+    character_sheets: list[CharacterSheet],
+    key: str,
+    amount: int = 1,
+) -> None:
+    """Increment a combat counter for several sheets as one simultaneous moment.
+
+    Keeps the lazy ``StatDefinition`` get_or_create in this one place (mirrors
+    ``increment_combat_counter``) but batches the achievement check via
+    ``increment_stat_for_group`` so a moment shared by a whole bucket of
+    participants (everyone who won, everyone who fled) grants a
+    threshold-crossing achievement to every sheet that crosses on this
+    increment in ONE ``grant_achievement`` call. Skips amount<=0 like the
+    single-sheet version (no tracker mutation, no achievement check).
+    """
+    if amount <= 0 or not character_sheets:
+        return
+    from world.achievements.services import increment_stat_for_group  # noqa: PLC0415
+
+    stat_def = _get_or_create_stat_def(key)
+    increment_stat_for_group(character_sheets, stat_def, amount)

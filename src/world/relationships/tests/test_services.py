@@ -3,8 +3,12 @@
 from django.core.exceptions import ValidationError
 from django.test import TestCase
 
-from world.achievements.factories import StatDefinitionFactory
-from world.achievements.models import StatTracker
+from world.achievements.factories import (
+    AchievementFactory,
+    AchievementStatRequirementFactory,
+    StatDefinitionFactory,
+)
+from world.achievements.models import CharacterAchievement, Discovery, StatTracker
 from world.character_sheets.factories import CharacterSheetFactory
 from world.progression.models import ExperiencePointsData
 from world.relationships.constants import (
@@ -31,7 +35,7 @@ from world.relationships.services import (
     create_first_impression,
     redistribute_points,
 )
-from world.roster.factories import RosterTenureFactory
+from world.roster.factories import RosterTenureFactory, grant_test_tenure
 
 
 class CreateFirstImpressionTest(TestCase):
@@ -135,6 +139,67 @@ class CreateFirstImpressionTest(TestCase):
         target_xp = ExperiencePointsData.objects.get(account=target_account)
         self.assertEqual(source_xp.total_earned, 3)
         self.assertEqual(target_xp.total_earned, 5)
+
+
+class ReciprocationAchievementSharingTest(TestCase):
+    """#3075: reciprocation's stat increment is batched, so a first-ever
+    threshold achievement shares its Discovery between both parties instead
+    of going solely to whichever of source/target the old per-sheet loop
+    processed first."""
+
+    @classmethod
+    def setUpTestData(cls):
+        cls.source = CharacterSheetFactory()
+        cls.source_tenure = grant_test_tenure(cls.source)
+        cls.target = CharacterSheetFactory()
+        cls.target_tenure = grant_test_tenure(cls.target)
+        cls.rel_stat = StatDefinitionFactory(
+            key="relationships.total_established", name="Relationships Established"
+        )
+        cls.achievement = AchievementFactory(name="Bonded", slug="bonded")
+        AchievementStatRequirementFactory(
+            achievement=cls.achievement, stat=cls.rel_stat, threshold=1
+        )
+
+    def _first_impression(self, *, source, target, track):
+        return create_first_impression(
+            source=source,
+            target=target,
+            title="A Meeting",
+            writeup="We crossed paths.",
+            track=track,
+            points=5,
+            coloring=FirstImpressionColoring.POSITIVE,
+            visibility=UpdateVisibility.SHARED,
+        )
+
+    def test_reciprocation_shares_discovery_between_both_parties(self):
+        track_ab = RelationshipTrackFactory(name="Kinship", sign=TrackSign.POSITIVE)
+        self._first_impression(source=self.source, target=self.target, track=track_ab)
+
+        track_ba = RelationshipTrackFactory(name="Loyalty", sign=TrackSign.POSITIVE)
+        # This second call is the one whose reciprocation branch fires the
+        # group increment; its own (source, target) params -- self.target,
+        # self.source -- are the caller order passed to
+        # increment_stat_for_group, so self.target's tenure is primary.
+        self._first_impression(source=self.target, target=self.source, track=track_ba)
+
+        discovery = Discovery.objects.get(achievement=self.achievement)
+        self.assertEqual(discovery.discovered_by_tenure_id, self.target_tenure.pk)
+        self.assertEqual(
+            list(discovery.shared_with_tenures.values_list("pk", flat=True)),
+            [self.source_tenure.pk],
+        )
+        self.assertTrue(
+            CharacterAchievement.objects.filter(
+                character_sheet=self.source, achievement=self.achievement
+            ).exists()
+        )
+        self.assertTrue(
+            CharacterAchievement.objects.filter(
+                character_sheet=self.target, achievement=self.achievement
+            ).exists()
+        )
 
 
 class RedistributePointsTest(TestCase):

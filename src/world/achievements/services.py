@@ -49,6 +49,29 @@ def increment_stat(character_sheet: CharacterSheet, stat: StatDefinition, amount
     return character_sheet.stats.increment(stat, amount)
 
 
+def increment_stat_for_group(
+    character_sheets: list[CharacterSheet], stat: StatDefinition, amount: int = 1
+) -> None:
+    """
+    Increment a stat for several sheets as one simultaneous group moment.
+
+    A party winning an encounter or both halves of a reciprocated
+    relationship are genuinely simultaneous: each sheet's tracker updates
+    atomically (mirrors ``increment_stat``'s F() + cache update), with the
+    per-sheet achievement check deferred, then ONE group evaluation runs for
+    ``(character_sheets, stat)``. Any achievement that multiple sheets cross
+    on this increment grants with all crossing sheets in a single
+    ``grant_achievement`` call, so a first-ever Discovery is shared instead
+    of going solely to whichever sheet a per-sheet loop happened to process
+    first. A sheet that does not cross this increment (e.g. one party member
+    one win short of the threshold) is simply not in the crossing set --
+    it earns the achievement solo, non-shared, on a later increment.
+    """
+    for sheet in character_sheets:
+        sheet.stats.increment(stat, amount, check_achievements=False)
+    _check_achievements_for_group(character_sheets, stat)
+
+
 def can_earn_achievements(character_sheet: CharacterSheet) -> bool:
     """Whether ``character_sheet`` may earn achievements at all (#3024).
 
@@ -141,67 +164,150 @@ def grant_achievement(
 def _check_achievements(character_sheet: CharacterSheet, stat: StatDefinition) -> None:
     """
     Find active, unearned achievements with requirements on the given stat
-    and grant any whose requirements are fully met.
+    and grant any whose requirements are fully met for this one sheet.
+
+    Thin wrapper into the group evaluator (see ``_check_achievements_for_group``)
+    with a one-element sheet list -- there is only one evaluator, no parallel
+    single-sheet copy of the requirement/prerequisite/convergence logic.
     """
-    if not can_earn_achievements(character_sheet):
+    _check_achievements_for_group([character_sheet], stat)
+
+
+def _check_achievements_for_group(
+    character_sheets: list[CharacterSheet], stat: StatDefinition
+) -> None:
+    """
+    Group achievement evaluator for a stat increment shared by one or more sheets.
+
+    Filters to sheets that pass ``can_earn_achievements``, then batch-fetches
+    every eligible sheet's earned-achievement id set and stat-value dict with
+    two ``character_sheet__in`` queries (no per-sheet queries in a loop).
+    Candidates are active achievements with a requirement on ``stat``. For
+    each candidate, the crossing set is every sheet (in caller order) whose
+    requirements are met now AND who does not already hold the achievement;
+    ``grant_achievement`` is called ONCE per achievement with that crossing
+    set, so the first eligible crossing sheet takes the primary Discovery
+    slot exactly as ``grant_achievement`` documents.
+
+    A convergence loop re-passes for prerequisite chains: if tier2's
+    prerequisite is tier1 and a sheet crosses tier1 on this pass, the
+    in-memory earned set updates so tier2's prerequisite check sees tier1 as
+    earned on the next pass -- regardless of the candidate queryset's
+    iteration order.
+    """
+    eligible_sheets = [s for s in character_sheets if can_earn_achievements(s)]
+    if not eligible_sheets:
         return
 
-    earned_ids = CharacterAchievement.objects.filter(character_sheet=character_sheet).values_list(
-        "achievement_id", flat=True
+    candidates = list(
+        Achievement.objects.filter(is_active=True, requirements__stat=stat).distinct()
     )
-
-    candidates = (
-        Achievement.objects.filter(
-            is_active=True,
-            requirements__stat=stat,
-        )
-        .exclude(id__in=earned_ids)
-        .distinct()
-    )
-
     if not candidates:
         return
 
-    # Batch-fetch all stat values for this character, keyed by stat_id
-    stats_dict: dict[int, int] = dict(
-        StatTracker.objects.filter(character_sheet=character_sheet).values_list("stat_id", "value")
-    )
+    earned_by_sheet = _batch_fetch_earned_ids(eligible_sheets)
+    stats_by_sheet = _batch_fetch_stat_values(eligible_sheets)
+    requirements_by_achievement = _batch_fetch_requirements(candidates)
 
     # Iterate until no more grants happen. A single pass is order-dependent for
     # chained achievements: if tier2 (prerequisite=tier1) is iterated before
     # tier1 in the same call, tier2's prereq check sees no tier1 yet and skips.
     # The convergence loop guarantees the full chain grants regardless of the
-    # queryset's iteration order.
-    pending = list(candidates)
+    # queryset's iteration order, updating earned_by_sheet in memory between
+    # passes so a sheet that crosses tier1 this pass can cross tier2 next pass.
+    pending = candidates
     while pending:
         granted_this_pass = []
         for achievement in pending:
-            if _achievement_requirements_met(achievement, stats_dict, character_sheet):
-                grant_achievement(achievement, [character_sheet])
+            crossing_sheets = _crossing_sheets(
+                achievement,
+                eligible_sheets,
+                earned_by_sheet,
+                stats_by_sheet,
+                requirements_by_achievement[achievement.pk],
+            )
+            if crossing_sheets:
+                grant_achievement(achievement, crossing_sheets)
                 granted_this_pass.append(achievement)
+                for sheet in crossing_sheets:
+                    earned_by_sheet[sheet.pk].add(achievement.pk)
         if not granted_this_pass:
             break
         pending = [a for a in pending if a not in granted_this_pass]
 
 
+def _batch_fetch_earned_ids(sheets: list[CharacterSheet]) -> dict[int, set[int]]:
+    """Per-sheet earned-achievement id sets for ``sheets``, one query, no loop."""
+    earned_by_sheet: dict[int, set[int]] = {s.pk: set() for s in sheets}
+    for sheet_id, achievement_id in CharacterAchievement.objects.filter(
+        character_sheet__in=sheets
+    ).values_list("character_sheet_id", "achievement_id"):
+        earned_by_sheet[sheet_id].add(achievement_id)
+    return earned_by_sheet
+
+
+def _batch_fetch_stat_values(sheets: list[CharacterSheet]) -> dict[int, dict[int, int]]:
+    """Per-sheet stat-value dicts (sheet_id -> {stat_id: value}) for ``sheets``, one query."""
+    stats_by_sheet: dict[int, dict[int, int]] = {s.pk: {} for s in sheets}
+    for sheet_id, stat_id, value in StatTracker.objects.filter(
+        character_sheet__in=sheets
+    ).values_list("character_sheet_id", "stat_id", "value"):
+        stats_by_sheet[sheet_id][stat_id] = value
+    return stats_by_sheet
+
+
+def _batch_fetch_requirements(
+    achievements: list[Achievement],
+) -> dict[int, list[AchievementStatRequirement]]:
+    """Per-achievement requirement rows for ``achievements``, one query, no loop."""
+    requirements_by_achievement: dict[int, list[AchievementStatRequirement]] = {
+        a.pk: [] for a in achievements
+    }
+    for req in AchievementStatRequirement.objects.filter(achievement__in=achievements):
+        requirements_by_achievement[req.achievement_id].append(req)
+    return requirements_by_achievement
+
+
+def _crossing_sheets(
+    achievement: Achievement,
+    eligible_sheets: list[CharacterSheet],
+    earned_by_sheet: dict[int, set[int]],
+    stats_by_sheet: dict[int, dict[int, int]],
+    requirements: list[AchievementStatRequirement],
+) -> list[CharacterSheet]:
+    """Sheets (in caller order) that cross ``achievement`` on this evaluation.
+
+    A sheet crosses when it does not already hold the achievement and its
+    requirements are met against its own stat values.
+    """
+    return [
+        sheet
+        for sheet in eligible_sheets
+        if achievement.pk not in earned_by_sheet[sheet.pk]
+        and _achievement_requirements_met(
+            achievement, stats_by_sheet[sheet.pk], earned_by_sheet[sheet.pk], requirements
+        )
+    ]
+
+
 def _achievement_requirements_met(
-    achievement: Achievement, stats_dict: dict[int, int], character_sheet: CharacterSheet
+    achievement: Achievement,
+    stats_dict: dict[int, int],
+    earned_ids: set[int],
+    requirements: list[AchievementStatRequirement],
 ) -> bool:
     """
-    Check prerequisite chain and all requirements against stats dict.
+    Check prerequisite chain and all requirements against a stat dict.
 
-    stats_dict is keyed by stat_id (int) to value (int).
+    ``stats_dict`` is keyed by stat_id (int) to value (int); ``earned_ids`` is
+    the sheet's already-earned achievement id set, used for the prerequisite
+    chain check instead of issuing a query here; ``requirements`` is the
+    achievement's prefetched AchievementStatRequirement rows.
     Returns False if no requirements exist (never auto-grant empty achievements).
     """
     # Check prerequisite chain
-    if achievement.prerequisite_id is not None:
-        if not CharacterAchievement.objects.filter(
-            character_sheet=character_sheet,
-            achievement_id=achievement.prerequisite_id,
-        ).exists():
-            return False
-
-    requirements = list(AchievementStatRequirement.objects.filter(achievement=achievement))
+    if achievement.prerequisite_id is not None and achievement.prerequisite_id not in earned_ids:
+        return False
 
     if not requirements:
         return False

@@ -9,7 +9,12 @@ from world.achievements.factories import (
     StatTrackerFactory,
 )
 from world.achievements.models import CharacterAchievement, Discovery, StatTracker
-from world.achievements.services import get_stat, grant_achievement, increment_stat
+from world.achievements.services import (
+    get_stat,
+    grant_achievement,
+    increment_stat,
+    increment_stat_for_group,
+)
 from world.character_sheets.factories import CharacterSheetFactory
 from world.roster.factories import grant_test_tenure
 
@@ -137,6 +142,130 @@ class IncrementStatTest(TestCase):
                 character_sheet=self.sheet, achievement=achievement
             ).exists()
         )
+
+
+class IncrementStatForGroupTest(TestCase):
+    """#3075: the batch stat-check seam shares a Discovery across the crossing set."""
+
+    @classmethod
+    def setUpTestData(cls) -> None:
+        cls.stat = StatDefinitionFactory(key="group_stat", name="Group Stat")
+        cls.sheet1 = CharacterSheetFactory()
+        cls.tenure1 = grant_test_tenure(cls.sheet1)
+        cls.sheet2 = CharacterSheetFactory()
+        cls.tenure2 = grant_test_tenure(cls.sheet2)
+        cls.sheet3 = CharacterSheetFactory()
+        cls.tenure3 = grant_test_tenure(cls.sheet3)
+
+    def test_increments_every_sheet_tracker(self) -> None:
+        increment_stat_for_group([self.sheet1, self.sheet2], self.stat, amount=3)
+
+        self.assertEqual(get_stat(self.sheet1, self.stat), 3)
+        self.assertEqual(get_stat(self.sheet2, self.stat), 3)
+
+    def test_group_crossing_shares_one_discovery(self) -> None:
+        """Every sheet that crosses on the same increment lands in one Discovery:
+        the first crossing sheet primary, the rest shared_with_tenures."""
+        achievement = AchievementFactory(name="Group First", slug="group-first")
+        AchievementStatRequirementFactory(achievement=achievement, stat=self.stat, threshold=1)
+
+        increment_stat_for_group([self.sheet1, self.sheet2], self.stat, amount=1)
+
+        self.assertEqual(Discovery.objects.filter(achievement=achievement).count(), 1)
+        discovery = Discovery.objects.get(achievement=achievement)
+        self.assertEqual(discovery.discovered_by_tenure_id, self.tenure1.pk)
+        self.assertEqual(
+            list(discovery.shared_with_tenures.values_list("pk", flat=True)),
+            [self.tenure2.pk],
+        )
+        self.assertTrue(
+            CharacterAchievement.objects.filter(
+                character_sheet=self.sheet1, achievement=achievement
+            ).exists()
+        )
+        self.assertTrue(
+            CharacterAchievement.objects.filter(
+                character_sheet=self.sheet2, achievement=achievement
+            ).exists()
+        )
+
+    def test_partial_crossing_excludes_sheet_below_threshold(self) -> None:
+        """A sheet one short of the threshold is not swept into the group's
+        Discovery -- it earns the achievement solo, non-shared, later."""
+        achievement = AchievementFactory(name="Partial Cross", slug="partial-cross")
+        AchievementStatRequirementFactory(achievement=achievement, stat=self.stat, threshold=10)
+
+        StatTrackerFactory(character_sheet=self.sheet1, stat=self.stat, value=9)
+        StatTrackerFactory(character_sheet=self.sheet2, stat=self.stat, value=8)
+
+        # Both sheets increment by 1 in the same group moment: sheet1 crosses
+        # (9 -> 10), sheet2 does not (8 -> 9).
+        increment_stat_for_group([self.sheet1, self.sheet2], self.stat, amount=1)
+
+        discovery = Discovery.objects.get(achievement=achievement)
+        self.assertEqual(discovery.discovered_by_tenure_id, self.tenure1.pk)
+        self.assertEqual(discovery.shared_with_tenures.count(), 0)
+        self.assertTrue(
+            CharacterAchievement.objects.filter(
+                character_sheet=self.sheet1, achievement=achievement
+            ).exists()
+        )
+        self.assertFalse(
+            CharacterAchievement.objects.filter(
+                character_sheet=self.sheet2, achievement=achievement
+            ).exists()
+        )
+
+        # sheet2 later crosses the threshold solo -- earns it non-shared.
+        increment_stat_for_group([self.sheet2], self.stat, amount=1)
+        self.assertTrue(
+            CharacterAchievement.objects.filter(
+                character_sheet=self.sheet2, achievement=achievement
+            ).exists()
+        )
+        discovery.refresh_from_db()
+        self.assertEqual(discovery.shared_with_tenures.count(), 0)
+
+    def test_chained_prerequisite_convergence_in_group_shape(self) -> None:
+        """A group increment that crosses a whole prerequisite chain grants
+        both tiers to the crossing sheets in the same call (convergence loop)."""
+        tier1 = AchievementFactory(slug="group-tier1")
+        AchievementStatRequirementFactory(achievement=tier1, stat=self.stat, threshold=10)
+
+        tier2 = AchievementFactory(slug="group-tier2", prerequisite=tier1)
+        AchievementStatRequirementFactory(achievement=tier2, stat=self.stat, threshold=10)
+
+        StatTrackerFactory(character_sheet=self.sheet1, stat=self.stat, value=9)
+        StatTrackerFactory(character_sheet=self.sheet2, stat=self.stat, value=9)
+
+        increment_stat_for_group([self.sheet1, self.sheet2], self.stat, amount=1)
+
+        for sheet in (self.sheet1, self.sheet2):
+            self.assertTrue(
+                CharacterAchievement.objects.filter(
+                    character_sheet=sheet, achievement=tier1
+                ).exists()
+            )
+            self.assertTrue(
+                CharacterAchievement.objects.filter(
+                    character_sheet=sheet, achievement=tier2
+                ).exists()
+            )
+        tier1_discovery = Discovery.objects.get(achievement=tier1)
+        tier2_discovery = Discovery.objects.get(achievement=tier2)
+        self.assertEqual(tier1_discovery.shared_with_tenures.count(), 1)
+        self.assertEqual(tier2_discovery.shared_with_tenures.count(), 1)
+
+    def test_single_sheet_call_unaffected(self) -> None:
+        """A one-element group call behaves like the existing single-sheet path."""
+        achievement = AchievementFactory(name="Solo via Group", slug="solo-via-group")
+        AchievementStatRequirementFactory(achievement=achievement, stat=self.stat, threshold=1)
+
+        increment_stat_for_group([self.sheet1], self.stat, amount=1)
+
+        discovery = Discovery.objects.get(achievement=achievement)
+        self.assertEqual(discovery.discovered_by_tenure_id, self.tenure1.pk)
+        self.assertEqual(discovery.shared_with_tenures.count(), 0)
 
 
 class GrantAchievementTest(TestCase):
