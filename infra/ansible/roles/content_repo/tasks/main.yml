@@ -1,0 +1,39 @@
+---
+# Provisions the private lore-repo checkout the app's own content pipeline
+# (src/core_management/content_repo.py) already knows how to consume via
+# CONTENT_REPO_PATH — see docs/systems/content-authoring.md. This role does
+# NOT load content into the database; that stays the admin "Load private
+# content repo" button, a deliberate human gate (ADR-0201 credited-row
+# freeze). It only gets the checkout + env var onto the box.
+
+- name: "Ensure the content-repo parent dir exists (owner: app service user)"
+  ansible.builtin.file:
+    path: "{{ content_repo_path | dirname }}"
+    state: directory
+    owner: "{{ app_user }}"
+    group: "{{ app_group }}"
+    mode: "0750"
+
+# HTTPS + embedded PAT (not an SSH deploy key) — matches app_deploy's own
+# checkout task's mechanism (ansible.builtin.git, no new module/dependency),
+# just swapping the public clone URL for a private one with credentials
+# baked into the URL. ARXII_CONTENT_REPO (owner/repo slug, non-secret
+# Variable) keeps the lore repo's identity out of committed code (see
+# content_repo.py's module docstring: "the content repo is never named in
+# this codebase"); ARXII_CONTENT_REPO_TOKEN (Secret, fine-grained PAT,
+# Contents:Read-only) is what actually grants access. no_log: true because
+# the rendered `repo:` value embeds the token — it must never appear in
+# Ansible's stdout/log (same protection pattern as the superuser-create task
+# in roles/app_deploy/tasks/main.yml). Runs every converge (idempotent via
+# ansible.builtin.git's own change detection): standup.yml is also the
+# button used for ordinary redeploys, not just first boot, so a merged lore
+# PR reaches the box automatically by the next deploy.
+- name: Clone/update the private lore-repo checkout (read-only PAT)
+  ansible.builtin.git:
+    repo: "https://x-access-token:{{ lookup('env', 'ARXII_CONTENT_REPO_TOKEN') }}@github.com/{{ lookup('env', 'ARXII_CONTENT_REPO') }}.git"
+    dest: "{{ content_repo_path }}"
+    version: main
+  become: true
+  become_user: "{{ app_user }}"
+  no_log: true
+  register: content_repo_checkout

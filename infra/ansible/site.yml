@@ -20,6 +20,11 @@
     - tls_telnet_cert
     - django_hardening
     - app_deploy
+    # #2236 Phase 4 / #3153: skipped entirely in rehearsal
+    # (content_repo_enabled: false — the GitHub PAT is prod-adjacent; see
+    # roles/content_repo's own defaults for why). standup.sh never sets
+    # content_repo_enabled, so prod always runs this role.
+    - { role: content_repo, when: content_repo_enabled }
     - backups
     # #2236 Phase 3 P1: skipped entirely in rehearsal (offsite_enabled: false
     # — the R2 credential is prod-adjacent; see roles/offsite_replication's

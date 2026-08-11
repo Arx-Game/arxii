@@ -1,0 +1,11 @@
+---
+galaxy_info:
+  role_name: content_repo
+  author: Arx II
+  description: Clone/refresh the private lore-repo checkout onto the box (read-only) so the admin "Load private content repo" button is reachable.
+  license: proprietary
+  min_ansible_version: "2.15"
+  platforms:
+    - name: Ubuntu
+      versions: [noble]
+dependencies: []

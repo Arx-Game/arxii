@@ -1,0 +1,20 @@
+---
+# Sibling of app_releases_dir/app_current (roles/app_deploy/defaults/main.yml)
+# — same /opt/arxii root, own subdirectory. Fixed/static (not operator-
+# supplied): the app resolves it via CONTENT_REPO_PATH, which this role's
+# clone task's dest and secrets_vault's arxii.env.j2 template both derive
+# from this single var (see roles/secrets_vault/templates/arxii.env.j2).
+content_repo_path: /opt/arxii/content
+
+# #2236 Phase 3 P1 (dress rehearsal): the ARXII_CONTENT_REPO_TOKEN credential
+# is prod-adjacent (real GitHub PAT with real private-repo read access) —
+# same reasoning offsite_replication's offsite_enabled documents for the R2
+# credential. rehearse.sh's generated group_vars sets this false; standup.sh
+# (prod) never sets it, so prod always runs this role. Gated in site.yml via
+# `when: content_repo_enabled` (see roles/offsite_replication for the
+# identical idiom).
+content_repo_enabled: true
+
+# owner/repo slug — see tasks/main.yml. Read directly via lookup('env', ...)
+# at task time, same as content_repo_token; not a role default because it
+# has no sane default value (there is no public fallback repo to clone).
