@@ -96,8 +96,9 @@ deeds accept `crime_kinds=` on `create_solo_deed` / `create_legend_event`.
 
 ## Surfaces (all self-only — leak table on #1765)
 
-- Room desc line (`Room.return_appearance`) + `heat` field on the web room-state
-  payload — tier only, nothing rendered when SAFE.
+- Room desc line (`actions.definitions.examine_extras.gather_examine_extras`, the
+  `LookAction` seam — ADR-0213) + `heat` field on the web room-state payload — tier
+  only, nothing rendered when SAFE.
 - Safe-now relief line on movement (`Character.at_post_move`) when dropping from
   ≥ HEAT_IS_ON to SAFE.
 - `sheet/crime` telnet section + web **Crime** tab (own sheet only) over

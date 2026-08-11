@@ -74,7 +74,7 @@ def _dispatch_for_target(
         return None
     if giver.giver_kind == GiverKind.BOARD:
         # Boards don't auto-grant on examine — postings render via
-        # _maybe_render_board_postings in the typeclass mixin (#2044).
+        # _maybe_render_board_postings in actions.definitions.examine_extras (#2044).
         return None
     return _dispatch_from_giver(giver, character)
 

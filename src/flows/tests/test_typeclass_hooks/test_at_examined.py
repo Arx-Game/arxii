@@ -1,13 +1,22 @@
-"""Tests for the at_examined hook on ObjectParent and return_appearance wiring.
+"""Tests for the EXAMINE_PRE/EXAMINED reactive event pair at the LookAction seam.
 
-Unified dispatch: ``at_examined`` emits EXAMINE_PRE (with cancellation support)
-then EXAMINED, both via ``emit_event(name, payload, location=...)``. Self-
-targeting is expressed via ``SELF_FILTER`` rather than a scope kwarg.
+Unified dispatch: ``gather_examine_extras`` (``actions.definitions.examine_extras``)
+emits EXAMINE_PRE (with cancellation support) then EXAMINED, both via
+``emit_event(name, payload, location=...)``. Self-targeting is expressed via
+``SELF_FILTER`` rather than a scope kwarg.
+
+This event pair used to be reachable only through the dead
+``ObjectParent.at_examined``/``return_appearance`` typeclass hook (a path with zero
+live callers). It is now driven exclusively through the live ``LookAction`` seam
+(#3084, ADR-0213) — every test here calls ``LookAction().run(observer,
+target=...)``, exactly as telnet's ``CmdLook`` and the web examine-on-click
+affordance do.
 """
 
 from django.test import TestCase
 from evennia.objects.models import ObjectDB
 
+from actions.definitions.perception import LookAction
 from evennia_extensions.factories import CharacterFactory, ObjectDBFactory
 from flows.constants import EventName
 from flows.consts import FlowActionChoices
@@ -54,23 +63,30 @@ def _make_cancel_flow() -> object:
     return flow
 
 
+def _look(observer: ObjectDB, target: ObjectDB):
+    """Drive the live seam: ``LookAction().run(observer, target=target)``."""
+    return LookAction().run(observer, target=target)
+
+
 # ---------------------------------------------------------------------------
 # Basic emission tests
 # ---------------------------------------------------------------------------
 
 
-class AtExaminedEmitsEventsTests(TestCase):
-    """at_examined emits EXAMINE_PRE then EXAMINED."""
+class ExamineEventsEmitOnLookTests(TestCase):
+    """Looking at an object emits EXAMINE_PRE then EXAMINED."""
 
-    def test_returns_true_with_no_triggers(self) -> None:
-        """at_examined returns True when no reactive triggers are attached."""
+    def test_returns_success_with_no_triggers(self) -> None:
+        """A look succeeds (non-cancelled) when no reactive triggers are attached."""
         room = _create_room()
         obj = _create_object(location=room)
         observer = CharacterFactory()
+        observer.location = room
 
-        result = obj.at_examined(observer)
+        result = _look(observer, obj)
 
-        self.assertTrue(result)
+        self.assertTrue(result.success)
+        self.assertNotEqual(result.message, "")
 
     def test_emits_examine_pre_payload(self) -> None:
         """EXAMINE_PRE is emitted with observer and target set correctly."""
@@ -79,6 +95,7 @@ class AtExaminedEmitsEventsTests(TestCase):
         room = _create_room()
         obj = _create_object(location=room)
         observer = CharacterFactory()
+        observer.location = room
 
         import flows.emit as emit_mod
 
@@ -91,7 +108,7 @@ class AtExaminedEmitsEventsTests(TestCase):
 
         emit_mod.emit_event = capturing_emit
         try:
-            obj.at_examined(observer)
+            _look(observer, obj)
         finally:
             emit_mod.emit_event = original
 
@@ -107,6 +124,7 @@ class AtExaminedEmitsEventsTests(TestCase):
         room = _create_room()
         obj = _create_object(location=room)
         observer = CharacterFactory()
+        observer.location = room
 
         import flows.emit as emit_mod
 
@@ -119,7 +137,7 @@ class AtExaminedEmitsEventsTests(TestCase):
 
         emit_mod.emit_event = capturing_emit
         try:
-            obj.at_examined(observer)
+            _look(observer, obj)
         finally:
             emit_mod.emit_event = original
 
@@ -135,6 +153,7 @@ class AtExaminedEmitsEventsTests(TestCase):
         room = _create_room()
         obj = _create_object(location=room)
         observer = CharacterFactory()
+        observer.location = room
 
         import flows.emit as emit_mod
 
@@ -146,7 +165,7 @@ class AtExaminedEmitsEventsTests(TestCase):
 
         emit_mod.emit_event = capturing_emit
         try:
-            obj.at_examined(observer)
+            _look(observer, obj)
         finally:
             emit_mod.emit_event = original
 
@@ -155,10 +174,11 @@ class AtExaminedEmitsEventsTests(TestCase):
         self.assertLess(order.index(EventName.EXAMINE_PRE), order.index(EventName.EXAMINED))
 
     def test_self_targeted_trigger_fires_on_examine_pre(self) -> None:
-        """A trigger on the examined object fires when at_examined is called."""
+        """A trigger on the examined object fires when it is looked at."""
         room = _create_room()
         obj = _create_object(location=room)
         observer = CharacterFactory()
+        observer.location = room
 
         cancel_flow = _make_cancel_flow()
         ReactiveConditionFactory(
@@ -168,15 +188,16 @@ class AtExaminedEmitsEventsTests(TestCase):
             target=obj,
         )
 
-        # Returns False because the cancel flow fired
-        result = obj.at_examined(observer)
-        self.assertFalse(result)
+        # Empty message because the cancel flow fired (prior contract).
+        result = _look(observer, obj)
+        self.assertEqual(result.message, "")
 
     def test_room_trigger_fires_on_examine_pre(self) -> None:
-        """A trigger on the room fires when at_examined is called."""
+        """A trigger on the room fires when an object inside it is looked at."""
         room = _create_room()
         obj = _create_object(location=room)
         observer = CharacterFactory()
+        observer.location = room
 
         cancel_flow = _make_cancel_flow()
         ReactiveConditionFactory(
@@ -185,8 +206,20 @@ class AtExaminedEmitsEventsTests(TestCase):
             target=room,
         )
 
-        result = obj.at_examined(observer)
-        self.assertFalse(result)
+        result = _look(observer, obj)
+        self.assertEqual(result.message, "")
+
+    def test_look_at_character_target_also_emits(self) -> None:
+        """The event pair fires identically for a Character target (via ObjectParent MRO)."""
+        room = _create_room()
+        target = CharacterFactory()
+        target.location = room
+        observer = CharacterFactory()
+        observer.location = room
+
+        result = _look(observer, target)
+
+        self.assertTrue(result.success)
 
 
 # ---------------------------------------------------------------------------
@@ -194,14 +227,15 @@ class AtExaminedEmitsEventsTests(TestCase):
 # ---------------------------------------------------------------------------
 
 
-class AtExaminedCancellationTests(TestCase):
-    """CANCEL_EVENT on EXAMINE_PRE stops EXAMINED from firing."""
+class ExamineCancellationTests(TestCase):
+    """CANCEL_EVENT on EXAMINE_PRE stops EXAMINED from firing and yields empty output."""
 
-    def test_cancel_returns_false(self) -> None:
-        """at_examined returns False when a trigger cancels EXAMINE_PRE."""
+    def test_cancel_yields_success_with_empty_message(self) -> None:
+        """A cancelled look is the prior contract: success, but the command shows nothing."""
         room = _create_room()
         obj = _create_object(location=room)
         observer = CharacterFactory()
+        observer.location = room
 
         cancel_flow = _make_cancel_flow()
         ReactiveConditionFactory(
@@ -211,9 +245,10 @@ class AtExaminedCancellationTests(TestCase):
             target=obj,
         )
 
-        result = obj.at_examined(observer)
+        result = _look(observer, obj)
 
-        self.assertFalse(result)
+        self.assertTrue(result.success)
+        self.assertEqual(result.message, "")
 
     def test_cancel_suppresses_examined_event(self) -> None:
         """When EXAMINE_PRE is cancelled, EXAMINED must not fire."""
@@ -222,6 +257,7 @@ class AtExaminedCancellationTests(TestCase):
         room = _create_room()
         obj = _create_object(location=room)
         observer = CharacterFactory()
+        observer.location = room
 
         cancel_flow = _make_cancel_flow()
         ReactiveConditionFactory(
@@ -242,19 +278,20 @@ class AtExaminedCancellationTests(TestCase):
 
         emit_mod.emit_event = capturing_emit
         try:
-            obj.at_examined(observer)
+            _look(observer, obj)
         finally:
             emit_mod.emit_event = original
 
         self.assertEqual(examined_fired, [], "EXAMINED fired after cancellation")
 
-    def test_no_cancel_examined_fires(self) -> None:
-        """Without cancellation, EXAMINED fires exactly once."""
+    def test_no_cancel_examined_fires_exactly_once(self) -> None:
+        """Without cancellation, EXAMINED fires exactly once per look."""
         examined_count: list[int] = [0]
 
         room = _create_room()
         obj = _create_object(location=room)
         observer = CharacterFactory()
+        observer.location = room
 
         import flows.emit as emit_mod
 
@@ -267,69 +304,9 @@ class AtExaminedCancellationTests(TestCase):
 
         emit_mod.emit_event = counting_emit
         try:
-            result = obj.at_examined(observer)
+            result = _look(observer, obj)
         finally:
             emit_mod.emit_event = original
 
-        self.assertTrue(result)
+        self.assertTrue(result.success)
         self.assertEqual(examined_count[0], 1)
-
-
-# ---------------------------------------------------------------------------
-# return_appearance wiring tests
-# ---------------------------------------------------------------------------
-
-
-class ReturnAppearanceCancellationTests(TestCase):
-    """return_appearance returns '' when at_examined returns False."""
-
-    def test_return_appearance_suppressed_on_cancel(self) -> None:
-        """return_appearance returns empty string when examine is cancelled."""
-        room = _create_room()
-        obj = _create_object(location=room)
-        observer = CharacterFactory()
-
-        cancel_flow = _make_cancel_flow()
-        ReactiveConditionFactory(
-            event_name=EventName.EXAMINE_PRE,
-            filter_condition=SELF_FILTER,
-            flow_definition=cancel_flow,
-            target=obj,
-        )
-
-        result = obj.return_appearance(observer)
-
-        self.assertEqual(result, "")
-
-    def test_return_appearance_normal_when_not_cancelled(self) -> None:
-        """return_appearance delegates to super() when examine is not cancelled."""
-        room = _create_room()
-        obj = _create_object(location=room)
-        observer = CharacterFactory()
-
-        # No triggers attached; should return a non-empty description
-        result = obj.return_appearance(observer)
-
-        # Evennia's default return_appearance returns something non-empty for a named object
-        self.assertIsInstance(result, str)
-
-    def test_return_appearance_none_looker_skips_hook(self) -> None:
-        """return_appearance with looker=None skips at_examined and delegates normally."""
-        room = _create_room()
-        obj = _create_object(location=room)
-
-        # Should not raise; looker=None skips the hook
-        result = obj.return_appearance(None)
-
-        self.assertIsInstance(result, str)
-
-    def test_character_inherits_at_examined(self) -> None:
-        """Character (via ObjectParent MRO) also has at_examined."""
-        room = _create_room()
-        char = CharacterFactory()
-        char.location = room
-        observer = CharacterFactory()
-
-        result = char.at_examined(observer)
-
-        self.assertTrue(result)

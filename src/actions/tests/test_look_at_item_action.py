@@ -121,6 +121,23 @@ class LookAtItemActionTests(TestCase):
         result = action.run(self.actor, item_name="hat")
         self.assertFalse(result.success)
 
+    def test_drilled_worn_look_shows_crafted_provenance(self) -> None:
+        """New coverage (#3084): the item-scoped provenance subset (moved from
+        the dead typeclass path onto ``LookAtItemAction._render_item``) shows
+        up on a drilled worn look (``look hat on bob``)."""
+        from world.items.factories import QualityTierFactory
+
+        quality = QualityTierFactory(name="Fine", numeric_min=40, numeric_max=59, sort_order=4)
+        item = self._equip(self.target, "Hat", BodyRegion.HEAD, EquipmentLayer.OUTER)
+        item.quality_tier = quality
+        item.save(update_fields=["quality_tier"])
+
+        action = LookAtItemAction()
+        result = action.run(self.actor, owner_id=self.target.pk, item_name="hat")
+
+        self.assertTrue(result.success)
+        self.assertIn("Of fine quality", result.message or "")
+
 
 class LookAtItemActionContainerTests(TestCase):
     def setUp(self) -> None:

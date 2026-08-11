@@ -35,6 +35,12 @@ Core game objects (characters, rooms, exits, etc.) with Arx II customizations ex
 ### `mixins.py`
 - Shared functionality across multiple typeclass types
 - Common patterns for DRY implementation
+- **Not here:** examine-time display extras (reactive scars, ranking displays,
+  captivity status, board postings, catering history, crafted provenance, room
+  functionaries/notice-board hint/heat) live at the `LookAction` action-layer
+  seam (`actions.definitions.examine_extras.gather_examine_extras`), not on a
+  typeclass hook — see ADR-0213. `ObjectParent` carries no `at_examined`/
+  `return_appearance` override.
 
 ## Key Classes
 

@@ -93,26 +93,19 @@ class LookAction(Action):
         looker_state = sdm.initialize_state_for_object(actor)
         description = target_state.return_appearance(mode="look", looker=looker_state)
 
-        # #3044 — the mission ENVIRONMENTAL_DETAIL/BOARD dispatch hook lives on
-        # ``ObjectParent.at_examined`` (`typeclasses/mixins.py`), which fires from
-        # the TYPECLASS's own ``return_appearance``. Nothing in the live look
-        # pipeline calls that: this Action (shared by telnet's ``CmdLook`` and the
-        # web dispatch) renders through the flows-layer ``BaseState.return_appearance``
-        # instead, which never touches the typeclass hook — so examine-triggered
-        # mission dispatch was unreachable from real play on either surface, only
-        # from tests that call the service directly. Dispatch it explicitly here,
-        # the one seam both telnet and web now share. ``run_safely`` (#1164): a
-        # failure is captured + the examiner told, never breaking the look.
-        from world.missions.services.trigger_dispatch import (  # noqa: PLC0415
-            maybe_dispatch_on_examine,
-        )
-        from world.player_submissions.services import run_safely  # noqa: PLC0415
+        # #3084 — every other examine-time display extra (reactive scars, ranking
+        # displays, captivity status, board postings, catering history, crafted
+        # provenance, room functionaries/notice-board hint/heat, and the mission
+        # dispatch #3044 wired here first) lives at this one aggregation seam —
+        # see ADR-0213 and ``actions.definitions.examine_extras``.
+        from actions.definitions.examine_extras import gather_examine_extras  # noqa: PLC0415
 
-        run_safely(
-            "mission_dispatch_on_examine",
-            lambda: maybe_dispatch_on_examine(actor, target),
-            actor=actor,
-        )
+        extras = gather_examine_extras(actor, target)
+        if extras.cancelled:
+            # Prior contract: a cancelled examine shows nothing.
+            return ActionResult(success=True, message="")
+        if extras.sections:
+            description = f"{description}\n" + "\n".join(extras.sections)
 
         return ActionResult(
             success=True,
@@ -253,8 +246,28 @@ class LookAtItemAction(Action):
 
     @staticmethod
     def _render_item(item: ItemInstance) -> str:
-        """Format the item appearance for the look output."""
-        return f"{item.display_name}\n{item.display_description}"
+        """Format the item appearance for the look output.
+
+        Appends the item-scoped provenance/catering subset (#3084) so a drilled
+        worn/container look (``look hat on bob``, ``look coin in pouch``) shows the
+        same sections a direct ``look`` at the item would include.
+        """
+        text = f"{item.display_name}\n{item.display_description}"
+
+        from actions.definitions.examine_extras import (  # noqa: PLC0415
+            _maybe_render_catering_history,
+            _maybe_render_crafted_provenance,
+        )
+
+        game_object = item.game_object
+        if game_object is not None:
+            provenance = _maybe_render_crafted_provenance(game_object)
+            if provenance is not None:
+                text = f"{text}\n{provenance}"
+            catering = _maybe_render_catering_history(game_object)
+            if catering is not None:
+                text = f"{text}\n{catering}"
+        return text
 
 
 @dataclass

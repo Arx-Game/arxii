@@ -173,7 +173,8 @@ class BoardExamineTests(TestCase):
     @classmethod
     def setUpTestData(cls) -> None:
         cls.character = CharacterSheetFactory().character
-        cls.board_obj = ObjectDBFactory()  # plain Object typeclass
+        cls.room = ObjectDBFactory(db_typeclass_path="typeclasses.rooms.Room")
+        cls.board_obj = ObjectDBFactory(location=cls.room)  # plain Object typeclass
         cls.template_open = _template_with_entry("board-examine-open")
 
     def test_examine_does_not_auto_grant_for_board(self) -> None:
@@ -187,7 +188,9 @@ class BoardExamineTests(TestCase):
         )
 
     def test_examine_renders_postings_section(self) -> None:
-        from typeclasses.mixins import _maybe_render_board_postings
+        # Moved from ``typeclasses.mixins`` (#3084) — see
+        # ``actions.definitions.examine_extras``.
+        from actions.definitions.examine_extras import _maybe_render_board_postings
 
         giver = MissionGiverFactory(giver_kind=GiverKind.BOARD, target=self.board_obj)
         giver.templates.add(self.template_open)
@@ -196,15 +199,29 @@ class BoardExamineTests(TestCase):
         self.assertIn(self.template_open.name, section)
 
     def test_examine_no_section_for_non_board(self) -> None:
-        from typeclasses.mixins import _maybe_render_board_postings
+        from actions.definitions.examine_extras import _maybe_render_board_postings
 
         section = _maybe_render_board_postings(self.board_obj, self.character)
         self.assertIsNone(section)
 
     def test_examine_no_section_when_no_eligible_postings(self) -> None:
-        from typeclasses.mixins import _maybe_render_board_postings
+        from actions.definitions.examine_extras import _maybe_render_board_postings
 
         # A board with no templates — no postings to render
         MissionGiverFactory(giver_kind=GiverKind.BOARD, target=self.board_obj)
         section = _maybe_render_board_postings(self.board_obj, self.character)
         self.assertIsNone(section)
+
+    def test_look_at_board_renders_postings_section(self) -> None:
+        """New coverage (#3084): the postings section reaches real play via the
+        live ``LookAction`` seam, not just the unreachable typeclass path."""
+        from actions.definitions.perception import LookAction
+
+        self.character.move_to(self.room, quiet=True)
+        giver = MissionGiverFactory(giver_kind=GiverKind.BOARD, target=self.board_obj)
+        giver.templates.add(self.template_open)
+
+        result = LookAction().run(self.character, target=self.board_obj)
+
+        self.assertTrue(result.success)
+        self.assertIn(self.template_open.name, result.message)

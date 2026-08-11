@@ -2973,7 +2973,8 @@ register as additional kinds.
   Presence: `functionaries_in_room` / `functionary_in_location` (`world.npc_services.functionaries`);
   `hire <name>` prefers a co-located Functionary, falling back to a global role lookup; staff place
   them with the `functionary place/remove` command (`commands/functionary.py`); they surface on
-  `look` (`Room.return_appearance`).
+  `look` (`actions.definitions.examine_extras.gather_examine_extras`, the `LookAction` seam —
+  ADR-0213).
 - **Reaction lines (#2632):** `NPCReactionLine` — banded, data-authored NPC reactions
   ("Alphonso sees to <name>…"): per-role defaults + per-functionary override sets;
   `metric` (`ReactionMetric`, ALLURE first — resolves via `reactions.METRIC_RESOLVERS`,
@@ -3360,9 +3361,12 @@ state is node position + snapshots + already-applied consequences, never a scrat
   ENVIRONMENTAL_DETAIL/BOARD-rendering hook on `ObjectParent.at_examined`
   (`typeclasses/mixins.py`) — that hook only fires from the typeclass's OWN
   `return_appearance`, which nothing in the live look pipeline (telnet included) actually
-  called. `LookAction.execute()` now calls `maybe_dispatch_on_examine` explicitly (`run_safely`,
-  matching the mixin's own pattern) so examine-triggered mission dispatch works from real play on
-  BOTH surfaces for the first time, not just from tests that called the service directly. Also
+  called. `LookAction.execute()` called `maybe_dispatch_on_examine` explicitly (`run_safely`,
+  matching the mixin's own pattern) so examine-triggered mission dispatch worked from real play on
+  BOTH surfaces for the first time, not just from tests that called the service directly — #3084
+  later generalized this into `actions.definitions.examine_extras.gather_examine_extras`, the one
+  aggregation seam for every examine-time display extra (see ADR-0213), and deleted the dead
+  typeclass path entirely. Also
   added the precedented `_resolve_look_target` int-pk fallback (mirroring `_resolve_room`/
   `_resolve_identify_target`) since REST dispatch sends a raw int, never a pre-resolved
   `ObjectDB`. **NPC talk:** `Functionary` placements (class-1+ NPC givers — carry no `ObjectDB`
@@ -3589,7 +3593,7 @@ captor org, freed by escape, rescue, ransom, or release. #1500 reframes ransom a
   `resolve_captivity`, `rescue_captive`, `escape_captivity`
 - **Integrates with:** projects (RANSOM kind + instant-completion), missions
   (escape/rescue loops), clues (rescue-clue planting), instances (the cell),
-  typeclasses (`return_appearance` captive banner)
+  the `LookAction` examine-extras seam (captive banner — ADR-0213)
 - **Source:** `src/world/captivity/`
 
 ### Buildings (Permits + Construction + Materials)
@@ -4563,7 +4567,7 @@ Items, equipment, inventory, and currency. Spec D PR1 shipped facets, equip/uneq
   Hospitality deed via `create_solo_deed` (`_award_catering_prestige` — the one
   event-completion reward hook). Items carry their catering history on examine
   ("This amphora was used for catering at ..."), rendered through the
-  `return_appearance` sections pattern. Telnet: `event cater <container>`.
+  `LookAction` examine-extras seam (ADR-0213). Telnet: `event cater <container>`.
 services, and equipment-modifier integration. Spec D PR2 (#1031) added the generic
 crafting framework and check-driven facet/style attachment. #2211 added the ITEM_CREATE
 mint pipeline; #2240 made it playable web-first: `ItemCreateCraftViewSet` serves
@@ -6833,7 +6837,7 @@ Database-driven game logic engine for complex branching sequences, plus the reac
   - `register_pending_prompt`, `resolve_pending_prompt`, `timeout_pending_prompt` (`flows/execution/prompts.py`) — Twisted Deferred-backed player prompts (no DB rows)
   - `classify_source(obj) -> DamageSource` (`world/combat/damage_source.py`) — discriminated union for damage attribution
 - **New Flow Action Steps:** `CANCEL_EVENT`, `MODIFY_PAYLOAD`, `PROMPT_PLAYER`, `EMIT_FLOW_EVENT` (routes through `emit_event()`), `EMIT_FLOW_EVENT_FOR_EACH` (in `FlowActionChoices`). `DEAL_DAMAGE` / `REMOVE_CONDITION` steps are deferred — emit a flow event that calls the relevant service function instead.
-- **Typeclass Hooks:** `Character.at_attacked`, `Character/Room/Object.at_pre_move`/`at_post_move`, `Object.at_examined` — wired in `typeclasses/` to call `emit_event`. The `trigger_handler` cached property is installed via `ObjectParent` mixin.
+- **Typeclass Hooks:** `Character.at_attacked`, `Character/Room/Object.at_pre_move`/`at_post_move` — wired in `typeclasses/` to call `emit_event`. The `trigger_handler` cached property is installed via `ObjectParent` mixin. EXAMINE_PRE/EXAMINED are the one exception — they emit from the action layer (`actions.definitions.examine_extras.gather_examine_extras`, the `LookAction` seam), not a typeclass hook; see ADR-0213.
 - **Object States:** `BaseState`, `CharacterState`, `RoomState`, `ExitState` — ephemeral wrappers with permission methods (`can_move`, `can_traverse`) and appearance rendering
 - **Service Functions:** `send_message`, `message_location`, `send_room_state`, `move_object`, `check_exit_traversal`, `traverse_exit`, `get_formatted_description`, `show_inventory` — accept `BaseState` directly (no `FlowExecution` dependency)
 - **Where events are emitted:** `world/combat/services.py` (damage/attack/incap/death), `world/conditions/services.py` (apply/stage-change/remove), `world/magic/services.py` (technique pre-cast/cast/affected), and the typeclass move/examine hooks

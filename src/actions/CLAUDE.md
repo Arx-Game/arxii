@@ -395,6 +395,24 @@ They do not use the command system, dispatchers, or handlers.
   enforcement now lives in the service layer (excluding dissolved rows). Re-sanctifying the
   same room after dissolution is a deferred follow-up.
 
+  `perception.py` — `LookAction` (key `"look"`) and `LookAtItemAction` (key
+  `"look_at_item"`) are the shared examine seam for telnet `CmdLook` and the web
+  examine-on-click dispatch. After `target_state.return_appearance(...)` (the
+  flows-layer base description, post concealment gate, post dreamside swap),
+  `LookAction.execute()` makes one call to
+  `actions.definitions.examine_extras.gather_examine_extras(actor, target)` —
+  the single aggregation seam for every examine-time display extra: the
+  EXAMINE_PRE/EXAMINED reactive event pair (cancellable — a cancelled examine
+  returns an empty message), reactive-scar sections, ranking displays,
+  captivity status, board postings, catering history, crafted provenance, and
+  (for a room target) the functionaries line, notice-board hint, and the
+  looker's own pursuit-heat line. `LookAtItemAction._render_item()` appends
+  the item-scoped provenance/catering subset for drilled worn/container looks.
+  See ADR-0213 — this replaced a typeclass-hook path
+  (`ObjectParent.at_examined`/`return_appearance` in `typeclasses/mixins.py`,
+  and `Room.return_appearance` in `typeclasses/rooms.py`) that had zero live
+  callers, since real play always rendered through this action layer instead.
+
 ## SCENE_ADAPTIVE Backend (#1351)
 
 `ActionBackend.SCENE_ADAPTIVE` is a fourth dispatch backend (alongside CHALLENGE, COMBAT, REGISTRY)

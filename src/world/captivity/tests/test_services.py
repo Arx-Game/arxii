@@ -392,7 +392,7 @@ class BrigHoldingRoomCaptureTests(TestCase):
 
     def test_brig_room_shows_captive_status_banner(self) -> None:
         """A Brig room with a HELD captive renders the OOC captive line."""
-        from typeclasses.mixins import _maybe_render_captivity_status
+        from actions.definitions.examine_extras import _maybe_render_captivity_status
 
         captive = CharacterSheetFactory()
         capture_character(
@@ -406,7 +406,7 @@ class BrigHoldingRoomCaptureTests(TestCase):
 
     def test_empty_brig_room_shows_no_banner(self) -> None:
         """A Brig room with no captives renders nothing."""
-        from typeclasses.mixins import _maybe_render_captivity_status
+        from actions.definitions.examine_extras import _maybe_render_captivity_status
 
         result = _maybe_render_captivity_status(self.brig_room.objectdb)
         assert result is None

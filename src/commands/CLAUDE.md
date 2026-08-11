@@ -715,7 +715,8 @@ actions, backends, and service functions.
   staff-only (`check_permstring("Builder")`). Thin over `world.npc_services.functionaries`
   (`place_functionary`/`remove_functionary`/`functionaries_in_room`); the room the caller stands
   in is resolved via `areas.services.get_room_profile`. Functionaries also surface on `look`
-  (`Room.return_appearance` appends them, since they are object-less and never in `contents`).
+  (`actions.definitions.examine_extras.gather_examine_extras` appends them for a room target,
+  since they are object-less and never in `contents` — see ADR-0213).
 - **`story.py`**: `CmdStory` (`story`, #1495/#1853) — GM lifecycle actions + player self-service
   under one namespace (mirrors `CmdGMTable`'s precedent of mixed permission tiers in one command).
   GM subverbs (`complete <story-id>` / `resolve <episode-id> ...` / `promote <episode-id> ...` /
@@ -997,7 +998,6 @@ actions, backends, and service functions.
 ### Other
 - **`default_cmdsets.py`**: Command set registration
 - **`exceptions.py`**: `CommandError` — raised for invalid input
-- **`payloads.py`**: Look/examine payload builders
 - **`descriptors.py`**: Serializable command/dispatcher descriptors
 
 ## Adding a New Command
