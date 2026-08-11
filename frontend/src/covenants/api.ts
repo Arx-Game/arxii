@@ -527,6 +527,30 @@ export async function withdrawGroupStoryRequest(
 // ---------------------------------------------------------------------------
 
 /**
+ * Parsed dispatch-endpoint body for the treasury calls. ``DispatchActionView``
+ * returns HTTP 200 even for a business-rule rejection (e.g. rank-unauthorized
+ * withdrawal) — ``success`` (from ``DispatchResultSerializer``) is the wire
+ * signal that distinguishes an honest failure from a real success, and
+ * ``res.ok`` alone is NOT enough. Scoped to the treasury calls below — the
+ * other dispatch callers in this module (``requestGMForCovenant`` etc.) are
+ * unchanged by this fix.
+ */
+async function dispatchTreasuryResult(
+  res: Response
+): Promise<{ success: boolean | null; message: string | undefined }> {
+  try {
+    const data = (await res.json()) as {
+      detail?: string;
+      message?: string | null;
+      success?: boolean | null;
+    };
+    return { success: data.success ?? null, message: data.detail ?? data.message ?? undefined };
+  } catch {
+    return { success: null, message: undefined };
+  }
+}
+
+/**
  * Dispatch DepositCovenantFundsAction as the actor's own character.
  * Moves ``amount`` coppers from the actor's purse into the covenant treasury.
  */
@@ -543,16 +567,16 @@ export async function depositCovenantFunds(
       kwargs: { covenant_id: covenantId, amount },
     }),
   });
-  const detail = await dispatchDetail(res);
-  if (!res.ok) throw new Error(detail ?? 'Failed to deposit covenant funds.');
-  return detail ?? 'Funds deposited.';
+  const { success, message } = await dispatchTreasuryResult(res);
+  if (!res.ok || success === false) throw new Error(message ?? 'Failed to deposit covenant funds.');
+  return message ?? 'Funds deposited.';
 }
 
 /**
  * Dispatch WithdrawCovenantFundsAction as the actor's own character.
  * Moves ``amount`` coppers from the covenant treasury into the actor's purse.
- * Rank-gated server-side (``treasury.spend_rank_max``) — a rejection surfaces
- * the curated ``user_message`` via the thrown Error.
+ * Rank-gated server-side (``treasury.spend_rank_max``) — a rejection (HTTP 200,
+ * ``success: false``) surfaces the curated ``user_message`` via the thrown Error.
  */
 export async function withdrawCovenantFunds(
   actorCharacterId: number,
@@ -567,7 +591,8 @@ export async function withdrawCovenantFunds(
       kwargs: { covenant_id: covenantId, amount },
     }),
   });
-  const detail = await dispatchDetail(res);
-  if (!res.ok) throw new Error(detail ?? 'Failed to withdraw covenant funds.');
-  return detail ?? 'Funds withdrawn.';
+  const { success, message } = await dispatchTreasuryResult(res);
+  if (!res.ok || success === false)
+    throw new Error(message ?? 'Failed to withdraw covenant funds.');
+  return message ?? 'Funds withdrawn.';
 }

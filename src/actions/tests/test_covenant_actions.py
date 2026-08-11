@@ -146,3 +146,30 @@ class CovenantActionTests(TestCase):
         self.assertTrue(result.success)
         treasury.refresh_from_db()
         self.assertEqual(treasury.balance, 475)
+
+    def test_deposit_action_raw_int_membership_kwarg_does_not_500(self):
+        """A malformed/forged web POST — ``{"kwargs": {"membership": 5, ...}}`` — is a
+        real reachable shape: the REST dispatch path passes raw JSON kwargs straight
+        through with no ObjectDB/model resolution (``objectdb_target_kwargs`` only
+        auto-resolves on the telnet websocket inputfunc path — see
+        ``src/actions/CLAUDE.md``). A bare int must NOT be trusted as a resolved
+        ``CharacterCovenantRole`` (that would raise ``AttributeError`` deep inside the
+        treasury service on ``membership.left_at``); it must fail through the typed
+        ``NotAnActiveCovenantMemberError`` path instead, exactly like an absent
+        membership."""
+        result = DepositCovenantFundsAction().run(
+            actor=self.officer.character_sheet.character,
+            membership=self.officer.pk,  # a raw pk int, never a real caller shape
+            amount=10,
+        )
+        self.assertFalse(result.success)
+        self.assertEqual(result.message, NotAnActiveCovenantMemberError.user_message)
+
+    def test_withdraw_action_raw_int_membership_kwarg_does_not_500(self):
+        result = WithdrawCovenantFundsAction().run(
+            actor=self.officer.character_sheet.character,
+            membership=self.officer.pk,
+            amount=10,
+        )
+        self.assertFalse(result.success)
+        self.assertEqual(result.message, NotAnActiveCovenantMemberError.user_message)

@@ -40,21 +40,26 @@ def _resolve_actor_membership(
     """Resolve the membership a treasury Action operates on: (membership, error).
 
     Telnet callers (``commands/covenant.py``) resolve the caller's own membership
-    themselves and pass it directly as ``kwargs["membership"]`` — used as-is.
-    The web dispatch path (``DispatchActionView`` -> ``dispatch_player_action``)
-    only ever carries JSON-safe ids, so it instead sends ``covenant_id`` and this
-    resolves the ACTOR'S OWN active membership in that covenant — never a
+    themselves and pass it directly as ``kwargs["membership"]`` — used as-is when
+    it's genuinely a ``CharacterCovenantRole`` instance. The web dispatch path
+    (``DispatchActionView`` -> ``dispatch_player_action``) only ever carries
+    JSON-safe primitives (a raw ``{"membership": 5}`` int can reach here — see
+    ``src/actions/CLAUDE.md``'s "objectdb_target_kwargs does NOT auto-resolve on
+    the REST dispatch path" note), so a non-instance value is NOT trusted as a
+    resolved membership; it falls through to the ``covenant_id`` path below,
+    which resolves the ACTOR'S OWN active membership in that covenant — never a
     client-supplied membership id, so there is no way to act on someone else's
     membership from the wire (#2992).
     """
-    membership = kwargs.get("membership")
-    if membership is not None:
-        return membership, None
-
     from world.covenants.exceptions import NotAnActiveCovenantMemberError  # noqa: PLC0415
     from world.covenants.models import CharacterCovenantRole  # noqa: PLC0415
 
+    membership = kwargs.get("membership")
+    if isinstance(membership, CharacterCovenantRole):
+        return membership, None
+
     covenant_id = kwargs.get("covenant_id")
+    membership = None
     if covenant_id is not None:
         membership = (
             CharacterCovenantRole.objects.filter(
