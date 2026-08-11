@@ -12,7 +12,7 @@ from django.db import IntegrityError, transaction
 from django.utils import timezone
 
 from world.character_sheets.models import CharacterSheet
-from world.covenants.constants import CommandTier
+from world.covenants.constants import CommandTier, MembershipStanding
 from world.covenants.exceptions import (
     CannotKickEqualOrHigherRankError,
     CannotKickSelfError,
@@ -26,6 +26,7 @@ from world.covenants.exceptions import (
     IncompleteRankReorderError,
     InsufficientFoundersError,
     LastManagerRankError,
+    MinorStandingRequiresSecondaryEngageError,
     NoActiveBattleError,
     NotAuthorizedToInviteError,
     NotAuthorizedToKickError,
@@ -622,13 +623,16 @@ def validate_secondary_engage_rules(membership: CharacterCovenantRole) -> None:
     A no-op unless ``membership.is_secondary``. Requires an engaged PRIMARY
     membership of the SAME covenant type for the SAME character
     (``SecondaryVowRequiresEngagedPrimaryError`` otherwise — a secondary is
-    never available solo), forbids the secondary sharing its ANCHOR role with
-    that primary (``SecondaryVowSameAnchorError`` — "no same-vow secondary":
-    doubling down on one vow is allocation, not a second vow), and caps the
-    secondary's COVENANT_ROLE thread level at the primary's
-    (``SecondaryVowThreadExceedsPrimaryError`` — a missing thread on either
-    side counts as level 0). Called by both ``CharacterCovenantRole.clean()``
-    and ``set_engaged_membership`` — one rule, one place.
+    never available solo), except for a MINOR-standing row (#2992), whose
+    secondary vow may stand alone with no engaged primary — a guest never
+    holds the primary lane to begin with. Forbids the secondary sharing its
+    ANCHOR role with that primary (``SecondaryVowSameAnchorError`` — "no
+    same-vow secondary": doubling down on one vow is allocation, not a second
+    vow), and caps the secondary's COVENANT_ROLE thread level at the
+    primary's (``SecondaryVowThreadExceedsPrimaryError`` — a missing thread
+    on either side counts as level 0). Called by both
+    ``CharacterCovenantRole.clean()`` and ``set_engaged_membership`` — one
+    rule, one place.
     """
     if not membership.is_secondary:
         return
@@ -646,6 +650,8 @@ def validate_secondary_engage_rules(membership: CharacterCovenantRole) -> None:
         .first()
     )
     if primary is None:
+        if membership.standing == MembershipStanding.MINOR:
+            return  # A guest's minor vow may be their only lit vow (#2992).
         raise SecondaryVowRequiresEngagedPrimaryError
 
     if _anchor_role_id(membership.covenant_role) == _anchor_role_id(primary.covenant_role):
@@ -698,7 +704,13 @@ def set_engaged_membership(
     validation, then — when True — runs ``validate_secondary_engage_rules``
     (requires an engaged primary of the same type, forbids a shared anchor
     role, caps the secondary's thread level at the primary's).
+
+    A MINOR-standing membership (#2992) may never engage the primary lane —
+    raises ``MinorStandingRequiresSecondaryEngageError`` up front when
+    ``as_secondary`` is False, before any other engage-time work runs.
     """
+    if membership.standing == MembershipStanding.MINOR and not as_secondary:
+        raise MinorStandingRequiresSecondaryEngageError
     membership.is_secondary = as_secondary
     if as_secondary:
         validate_secondary_engage_rules(membership)

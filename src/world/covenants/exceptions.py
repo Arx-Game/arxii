@@ -400,6 +400,28 @@ class SecondaryVowThreadExceedsPrimaryError(CovenantError):
     )
 
 
+class MinorStandingRequiresSecondaryEngageError(CovenantError):
+    """A MINOR-standing membership may only engage the secondary lane (#2992)."""
+
+    user_message = "A minor member's vow only ever burns in the secondary lane."
+    SAFE_MESSAGES: ClassVar[frozenset[str]] = frozenset(
+        {
+            "A minor member's vow only ever burns in the secondary lane.",
+        }
+    )
+
+
+class MinorStandingDuranceOnlyError(CovenantError):
+    """MINOR standing is only valid on a Covenant of the Durance (#2992)."""
+
+    user_message = "Minor membership is only possible in a Covenant of the Durance."
+    SAFE_MESSAGES: ClassVar[frozenset[str]] = frozenset(
+        {
+            "Minor membership is only possible in a Covenant of the Durance.",
+        }
+    )
+
+
 class CourtPactExistsError(CovenantError):
     """Raised when swearing a Court pact that already exists (active pact for the same pair)."""
 
