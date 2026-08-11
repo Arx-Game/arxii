@@ -36,39 +36,6 @@ class Room(ObjectParent, DefaultRoom):
         super().at_object_creation()
         RoomProfile.objects.get_or_create(objectdb=self)
 
-    def return_appearance(self, looker, **kwargs):
-        """Standard room appearance plus the Functionaries standing here (#1766).
-
-        Functionaries are abstracted (object-less) NPCs, so they never appear in
-        ``self.contents`` — surface them explicitly so a placed room-feature NPC is
-        actually visible (and hint that you can ``hire`` them).
-        """
-        text = super().return_appearance(looker, **kwargs) or ""
-        from world.areas.services import get_room_profile
-        from world.npc_services.functionaries import functionaries_in_room
-
-        names = [f.display_name for f in functionaries_in_room(get_room_profile(self))]
-        if names:
-            text = f"{text}\n|wHere you can speak with:|n {', '.join(names)}"
-        # #1450 — a Notice Board is a feature, not an object, so hint it on look
-        # (a Town Crier already surfaces via the functionaries line above).
-        from world.room_features.constants import RoomFeatureServiceStrategy
-        from world.room_features.services import active_hub_feature
-
-        hub = active_hub_feature(get_room_profile(self))
-        if hub is not None and (
-            hub.feature_kind.service_strategy == RoomFeatureServiceStrategy.NOTICE_BOARD
-        ):
-            # PLACEHOLDER flavor line (Apostate rewrite pass; keep dash-free).
-            text = f"{text}\n|wA notice board stands here; try |ctidings local|w.|n"
-        # #1765 — the looker's own pursuit heat here (self-only; None when SAFE).
-        from world.justice.display import room_heat_line
-
-        heat_line = room_heat_line(looker, self)
-        if heat_line:
-            text = f"{text}\n{heat_line}"
-        return text
-
     @cached_property
     def item_data(self):
         """Room-specific item data handler."""

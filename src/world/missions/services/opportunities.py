@@ -78,7 +78,8 @@ def _here_postings(character: ObjectDB, room: ObjectDB | None) -> list[Opportuni
     Object typeclass; ``clean()`` forbids Room), never the room — a board is
     physically located IN a room via ``target.db_location``, not equal to it
     (#2121; matches the ``target=obj`` lookup ``_maybe_render_board_postings``
-    uses when a player examines the board directly).
+    (``actions.definitions.examine_extras``) uses when a player examines the
+    board directly).
     """
     if room is None:
         return []

@@ -5,9 +5,9 @@ Read-side queries and rendering for the in-world ranking displays
 
 * ``get_society_prestige_top_n`` / ``get_academy_legend_top_n`` — runtime
   queries that return the top-N rows for the herald to read aloud.
-* ``render_ranking_display`` — the typeclass ``return_appearance`` hook
-  uses this. Gates ``SOCIETY_PRESTIGE`` rankings against the viewer's
-  society membership.
+* ``render_ranking_display`` — the ``LookAction`` examine-extras seam
+  (``actions.definitions.examine_extras``, ADR-0213) uses this. Gates
+  ``SOCIETY_PRESTIGE`` rankings against the viewer's society membership.
 
 Author-visible IC prose is tagged ``PLACEHOLDER`` so the user can grep
 and rewrite it in their own voice.

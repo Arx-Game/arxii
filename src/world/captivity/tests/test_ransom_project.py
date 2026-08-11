@@ -15,9 +15,9 @@ from django.test import TestCase
 from django.urls import reverse
 from rest_framework.test import APIClient
 
+from actions.definitions.examine_extras import _maybe_render_captivity_status
 from commands.captivity import CmdDemandRansom
 from evennia_extensions.factories import AccountFactory
-from typeclasses.mixins import _maybe_render_captivity_status
 from world.captivity.constants import CaptivityStatus
 from world.captivity.exceptions import AlreadyDemandedError, NotHeldError
 from world.captivity.ransom import _RANSOM_FLOOR_COPPERS
@@ -177,6 +177,24 @@ class CaptiveStatusInCellDescTests(TestCase):
     def test_a_room_with_no_captive_renders_nothing(self) -> None:
         empty_room = InstancedRoomFactory().room.objectdb
         assert _maybe_render_captivity_status(empty_room) is None
+
+    def test_look_at_cell_shows_ransom_banner(self) -> None:
+        """New coverage (#3084): the banner reaches real play via the live
+        ``LookAction`` seam, not just the unreachable typeclass path."""
+        from actions.definitions.perception import LookAction
+        from evennia_extensions.factories import CharacterFactory
+
+        captivity = _held_captivity()
+        project = demand_ransom_project(captivity, amount=10_000)
+        room = captivity.cell.room.objectdb
+        observer = CharacterFactory()
+        observer.location = room
+
+        result = LookAction().run(observer, target=room)
+
+        assert result.success
+        assert "held captive here" in result.message
+        assert f"project/donate {project.pk}" in result.message
 
 
 class CmdDemandRansomTests(TestCase):

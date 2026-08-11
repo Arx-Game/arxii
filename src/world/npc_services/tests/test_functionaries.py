@@ -116,6 +116,7 @@ class RoomLookFunctionaryTests(django.test.TestCase):
     def test_room_appearance_lists_functionaries(self) -> None:
         from evennia.objects.models import ObjectDB
 
+        from actions.definitions.perception import LookAction
         from evennia_extensions.factories import ObjectDBFactory
 
         profile = RoomProfileFactory()
@@ -126,8 +127,14 @@ class RoomLookFunctionaryTests(django.test.TestCase):
         looker = ObjectDB.objects.get(
             pk=ObjectDBFactory(db_typeclass_path="typeclasses.characters.Character").pk
         )
-        text = room.return_appearance(looker=looker, mode="look")
-        self.assertIn("Old Marta", text)
+        looker.location = room
+
+        # Moved off ``Room.return_appearance`` onto the ``LookAction`` seam (#3084,
+        # ADR-0213) — a bare look at one's own room.
+        result = LookAction().run(looker, target=room)
+
+        self.assertTrue(result.success)
+        self.assertIn("Old Marta", result.message)
 
 
 class RandomActiveFunctionaryTests(django.test.TestCase):

@@ -16,6 +16,7 @@ from types import SimpleNamespace
 from django.test import TestCase
 from evennia.objects.models import ObjectDB
 
+from actions.definitions.perception import LookAction
 from evennia_extensions.factories import CharacterFactory, ObjectDBFactory
 from flows.constants import EventName
 from flows.consts import FlowActionChoices
@@ -71,13 +72,13 @@ def _source_technique_with_resonance(resonance_name: str):
 
 
 class MageSightScarTest(TestCase):
-    """ "Mage Sight" scar appends scar description to return_appearance output
+    """ "Mage Sight" scar appends scar description to the live ``LookAction`` output
     ONLY for targets whose primary persona carries the 'abyssal' Property tag.
 
     The scar is modelled as an EXAMINE_PRE handler: the flow appends to the
-    mutable ``sections`` list on ``ExaminePrePayload``.  After emit_event
-    returns, ``return_appearance`` concatenates those sections onto the base
-    appearance string.
+    mutable ``sections`` list on ``ExaminePrePayload``. After emit_event
+    returns, ``gather_examine_extras`` (the ``LookAction`` seam, #3084,
+    ADR-0213) concatenates those sections onto the base appearance string.
     """
 
     def setUp(self) -> None:
@@ -127,23 +128,23 @@ class MageSightScarTest(TestCase):
 
     def test_mage_sight_appends_to_abyssal_target(self) -> None:
         """Examining an abyssal-tagged target appends the scar section to the output."""
-        result = self.abyssal_target.return_appearance(self.observer)
-        self.assertIn("mage sight burns", result)
+        result = LookAction().run(self.observer, target=self.abyssal_target)
+        self.assertIn("mage sight burns", result.message)
 
     def test_near_miss_non_abyssal_target_unchanged(self) -> None:
         """Examining a non-abyssal target does not trigger the scar — output unchanged."""
-        result = self.plain_target.return_appearance(self.observer)
-        self.assertNotIn("mage sight burns", result)
+        result = LookAction().run(self.observer, target=self.plain_target)
+        self.assertNotIn("mage sight burns", result.message)
 
 
 class SoulSightScarTest(TestCase):
-    """ "Soul Sight" scar appends a revealing line to return_appearance output
+    """ "Soul Sight" scar appends a revealing line to the live ``LookAction`` output
     ONLY for targets whose primary persona carries the 'masked-identity' Property tag.
 
     The scar is modelled as an EXAMINE_PRE handler: the flow appends to the
-    mutable ``sections`` list on ``ExaminePrePayload``.  After emit_event
-    returns, ``return_appearance`` concatenates those sections onto the base
-    appearance string.
+    mutable ``sections`` list on ``ExaminePrePayload``. After emit_event
+    returns, ``gather_examine_extras`` (the ``LookAction`` seam, #3084,
+    ADR-0213) concatenates those sections onto the base appearance string.
     """
 
     def setUp(self) -> None:
@@ -197,13 +198,68 @@ class SoulSightScarTest(TestCase):
 
     def test_soul_sight_reveals_masked_identity(self) -> None:
         """Examining a masked-identity target appends the scar section to the output."""
-        result = self.masked_target.return_appearance(self.observer)
-        self.assertIn("Soul sight pierces", result)
+        result = LookAction().run(self.observer, target=self.masked_target)
+        self.assertIn("Soul sight pierces", result.message)
 
     def test_near_miss_unmasked_target_unchanged(self) -> None:
         """Examining an unmasked target does not trigger the scar — output unchanged."""
-        result = self.plain_target.return_appearance(self.observer)
-        self.assertNotIn("Soul sight pierces", result)
+        result = LookAction().run(self.observer, target=self.plain_target)
+        self.assertNotIn("Soul sight pierces", result.message)
+
+
+class ExaminePreCancellationYieldsEmptyLookTests(TestCase):
+    """A cancelling EXAMINE_PRE trigger yields an empty ``LookAction`` message and
+    suppresses EXAMINED — the prior contract, now proven at the live seam (#3084)."""
+
+    def setUp(self) -> None:
+        from world.character_sheets.factories import CharacterSheetFactory
+
+        self.room = _create_room("CancelScarRoom")
+
+        observer_sheet = CharacterSheetFactory()
+        target_sheet = CharacterSheetFactory()
+        self.observer = observer_sheet.character
+        self.target = target_sheet.character
+        for c in (self.observer, self.target):
+            c.location = self.room
+
+        cancel_flow = FlowDefinitionFactory()
+        FlowStepDefinitionFactory(
+            flow=cancel_flow,
+            parent_id=None,
+            action=FlowActionChoices.CANCEL_EVENT,
+            parameters={},
+        )
+        ReactiveConditionFactory(
+            event_name=EventName.EXAMINE_PRE,
+            filter_condition={"path": "target", "op": "==", "value": "self"},
+            flow_definition=cancel_flow,
+            target=self.target,
+        )
+
+    def test_cancelled_examine_yields_empty_message(self) -> None:
+        result = LookAction().run(self.observer, target=self.target)
+        self.assertTrue(result.success)
+        self.assertEqual(result.message, "")
+
+    def test_cancelled_examine_suppresses_examined(self) -> None:
+        examined_fired: list[bool] = []
+        original = emit_event
+
+        def capturing_emit(event_name, payload, **kwargs):
+            if event_name == EventName.EXAMINED:
+                examined_fired.append(True)
+            return original(event_name, payload, **kwargs)
+
+        import flows.emit as emit_mod
+
+        emit_mod.emit_event = capturing_emit
+        try:
+            LookAction().run(self.observer, target=self.target)
+        finally:
+            emit_mod.emit_event = original
+
+        self.assertEqual(examined_fired, [])
 
 
 # ---------------------------------------------------------------------------

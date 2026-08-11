@@ -131,7 +131,9 @@ Every `Trigger` row still FKs a `ConditionInstance`. Room-owned triggers need a 
 - `source_condition` / `source_stage` fields.
 - SharedMemoryModel identity map reliance.
 - Recursion cap on `FlowStack` (single stack per emission still has a cap).
-- Hooks on typeclass methods (`at_attacked`, `at_pre_move`, `at_examined`); their emit calls just collapse to one.
+- Hooks on typeclass methods (`at_attacked`, `at_pre_move`); their emit calls just collapse to one.
+  (EXAMINE_PRE/EXAMINED later moved off the typeclass entirely, onto the `LookAction` action-layer
+  seam — see ADR-0213.)
 - Existing Evennia integration patterns.
 
 ---

@@ -133,7 +133,8 @@ class WebExamineDispatchParityTests(TestCase):
     as a raw int pk exactly like a real `dispatch_player_action` REST call (REST
     dispatch does no ObjectDB resolution of its own — see `LookAction`'s
     `_resolve_look_target`). This proves that seam fires `maybe_dispatch_on_examine`
-    identically to the telnet path (`at_examined` -> `return_appearance`)."""
+    identically to the telnet path — both converge on
+    `actions.definitions.examine_extras.gather_examine_extras` (#3084, ADR-0213)."""
 
     def test_web_look_dispatch_grants_environmental_detail_mission(self) -> None:
         from actions.definitions.perception import LookAction

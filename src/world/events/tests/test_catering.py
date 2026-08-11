@@ -183,7 +183,9 @@ class CateringSouvenirTest(TestCase):
         self.assertEqual(names, {"Big Bob's Nameday", "The Harvest Ball"})
 
     def test_examine_renders_the_souvenir_line(self):
-        from typeclasses.mixins import _maybe_render_catering_history
+        # Moved from ``typeclasses.mixins`` (#3084) — see
+        # ``actions.definitions.examine_extras``.
+        from actions.definitions.examine_extras import _maybe_render_catering_history
         from world.events.factories import EventFactory
 
         sheet = CharacterSheetFactory()
@@ -195,8 +197,29 @@ class CateringSouvenirTest(TestCase):
         self.assertIn("used for catering at Big Bob's Example Event", line)
 
     def test_untouched_items_render_nothing(self):
-        from typeclasses.mixins import _maybe_render_catering_history
+        from actions.definitions.examine_extras import _maybe_render_catering_history
 
         sheet = CharacterSheetFactory()
         plain = _instance(sheet, key="rock")
         self.assertIsNone(_maybe_render_catering_history(plain.game_object))
+
+    def test_look_at_vessel_shows_the_souvenir_line(self):
+        """New coverage (#3084): the souvenir line reaches real play via the
+        live ``LookAction`` seam, not just the unreachable typeclass path."""
+        from actions.definitions.perception import LookAction
+        from evennia_extensions.factories import ObjectDBFactory
+        from world.events.factories import EventFactory
+
+        sheet = CharacterSheetFactory()
+        observer = sheet.character
+        room = ObjectDBFactory(db_typeclass_path="typeclasses.rooms.Room")
+        observer.location = room
+        amphora = _instance(sheet, key="amphora", container=True)
+        amphora.game_object.location = room
+        event = EventFactory(status=EventStatus.ACTIVE, name="Big Bob's Look Event")
+        designate_catering_container(event, observer, amphora)
+
+        result = LookAction().run(observer, target=amphora.game_object)
+
+        self.assertTrue(result.success)
+        self.assertIn("used for catering at Big Bob's Look Event", result.message)

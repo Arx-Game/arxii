@@ -64,7 +64,7 @@ BOARD giver's ``target`` is the examinable board OBJECT located in the room,
 never the room itself (see ``MissionGiver.clean()``, and the already-correct
 ``target__db_location=room`` convention in
 ``opportunities.py::_here_postings`` and
-``typeclasses/mixins.py::_maybe_render_board_postings``). Fixed to match.
+``actions/definitions/examine_extras.py::_maybe_render_board_postings``). Fixed to match.
 """
 
 from __future__ import annotations

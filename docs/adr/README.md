@@ -59,6 +59,7 @@ treat those names as hints to confirm, not gospel.
 - [0128 — Scene decisive-check is pre-declared, not post-hoc](0128-scene-decisive-check-is-pre-declared.md)
 - [0167 — Technique style is a property of the caster's Path, not of the Technique](0167-technique-style-is-a-property-of-the-casters-path.md) (#2700; relates to ADR-0136, ADR-0010)
 - [0199 — A Minor Gift may set its own casting style, overriding the caster's Path](0199-minor-gift-style-overrides-caster-path.md) (#2905; narrows ADR-0167)
+- [0213 — Examine-time display extras render at the LookAction seam, not a typeclass hook](0213-examine-time-extras-render-at-the-lookaction-seam.md) (#3084)
 
 ### Database & modeling
 - [0007 — No JSON fields; every setting is a typed, queryable column](0007-no-json-fields-typed-queryable-columns.md)
