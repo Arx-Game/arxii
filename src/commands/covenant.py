@@ -1,7 +1,8 @@
 """Telnet covenant lifecycle namespace command (#1346).
 
-One ``covenant`` command routes a leading subverb to the seven covenant
-lifecycle Actions — engage/disengage/leave/kick/rank/transfer/standdown.
+One ``covenant`` command routes a leading subverb to the covenant lifecycle
+Actions — engage/disengage/leave/kick/rank/transfer/standdown/deposit/
+withdraw (deposit/withdraw added #2992, the covenant treasury).
 Bare ``covenant`` or ``covenant list`` renders the caller's memberships.
 No business logic lives here: parse, resolve model instances, call Action.
 """
@@ -32,6 +33,8 @@ class CmdCovenant(ArxCommand):
         covenant rank <char> <rank> [in <covenant>]
         covenant transfer <char> [in <covenant>]
         covenant standdown [<covenant>]
+        covenant deposit <amount> [in <covenant>]
+        covenant withdraw <amount> [in <covenant>]
         covenant request-gm <message> [in <covenant>]
         covenant withdraw-gm-request [in <covenant>]
 
@@ -73,6 +76,8 @@ class CmdCovenant(ArxCommand):
             "rank": self._rank,
             "transfer": self._transfer,
             "standdown": self._standdown,
+            "deposit": self._deposit,
+            "withdraw": self._withdraw,
             "request-gm": self._request_gm,
             "withdraw-gm-request": self._withdraw_gm_request,
         }
@@ -80,7 +85,7 @@ class CmdCovenant(ArxCommand):
         if handler is None:
             msg = (
                 "Usage: covenant [list|engage|disengage|leave|kick|rank|transfer|standdown|"
-                "request-gm|withdraw-gm-request] ..."
+                "deposit|withdraw|request-gm|withdraw-gm-request] ..."
             )
             raise CommandError(msg)
         handler(rest)
@@ -167,6 +172,16 @@ class CmdCovenant(ArxCommand):
 
     def _send(self, result: Any) -> None:
         self.msg(result.message)
+
+    @staticmethod
+    def _parse_amount(token: str | None, usage: str) -> int:
+        """A positive integer coppers amount, or a ``CommandError`` with *usage*."""
+        if token is None or not token.lstrip("-").isdigit():
+            raise CommandError(usage)
+        amount = int(token)
+        if amount <= 0:
+            raise CommandError(usage)
+        return amount
 
     # ------------------------------------------------------------------
     # Subverb handlers
@@ -301,6 +316,30 @@ class CmdCovenant(ArxCommand):
         membership = self._resolve_covenant(name)
         result = StandDownBattleCovenantAction().run(
             actor=self.caller, covenant=membership.covenant
+        )
+        self._send(result)
+
+    def _deposit(self, rest: list[str]) -> None:
+        from actions.definitions.covenants import DepositCovenantFundsAction  # noqa: PLC0415
+
+        rest, covenant_name = self._parse_in_covenant(rest)
+        usage = "Usage: covenant deposit <amount> [in <covenant>]"
+        amount = self._parse_amount(rest[0] if rest else None, usage)
+        membership = self._resolve_covenant(covenant_name)
+        result = DepositCovenantFundsAction().run(
+            actor=self.caller, membership=membership, amount=amount
+        )
+        self._send(result)
+
+    def _withdraw(self, rest: list[str]) -> None:
+        from actions.definitions.covenants import WithdrawCovenantFundsAction  # noqa: PLC0415
+
+        rest, covenant_name = self._parse_in_covenant(rest)
+        usage = "Usage: covenant withdraw <amount> [in <covenant>]"
+        amount = self._parse_amount(rest[0] if rest else None, usage)
+        membership = self._resolve_covenant(covenant_name)
+        result = WithdrawCovenantFundsAction().run(
+            actor=self.caller, membership=membership, amount=amount
         )
         self._send(result)
 

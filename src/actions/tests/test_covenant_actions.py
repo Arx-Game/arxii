@@ -9,13 +9,16 @@ dormant covenant, and kicking a member of equal or higher rank.
 from django.test import TestCase
 
 from actions.definitions.covenants import (
+    DepositCovenantFundsAction,
     EngageCovenantMembershipAction,
     KickCovenantMemberAction,
+    WithdrawCovenantFundsAction,
 )
 from world.covenants.constants import BattleBinding, CovenantType
 from world.covenants.exceptions import (
     CannotKickEqualOrHigherRankError,
     CovenantEngagementPrerequisiteNotMetError,
+    NotAuthorizedToSpendCovenantTreasuryError,
 )
 from world.covenants.factories import (
     CharacterCovenantRoleFactory,
@@ -23,6 +26,8 @@ from world.covenants.factories import (
     CovenantRankFactory,
     CovenantRoleFactory,
 )
+from world.covenants.treasury import covenant_treasury
+from world.currency.services import get_or_create_purse
 
 
 class CovenantActionTests(TestCase):
@@ -68,3 +73,29 @@ class CovenantActionTests(TestCase):
         )
         self.assertFalse(result.success)
         self.assertEqual(result.message, CannotKickEqualOrHigherRankError().user_message)
+
+    def test_deposit_action_moves_purse_to_treasury(self):
+        purse = get_or_create_purse(self.officer.character_sheet)
+        purse.balance = 100
+        purse.save(update_fields=["balance"])
+
+        result = DepositCovenantFundsAction().run(
+            actor=self.officer.character_sheet.character,
+            membership=self.officer,
+            amount=40,
+        )
+        self.assertTrue(result.success)
+        treasury = covenant_treasury(self.covenant)
+        self.assertEqual(treasury.balance, 40)
+
+    def test_withdraw_action_surfaces_rank_error(self):
+        base_rank = CovenantRankFactory(covenant=self.covenant, tier=2)
+        base_member = CharacterCovenantRoleFactory(covenant=self.covenant, rank=base_rank)
+
+        result = WithdrawCovenantFundsAction().run(
+            actor=base_member.character_sheet.character,
+            membership=base_member,
+            amount=10,
+        )
+        self.assertFalse(result.success)
+        self.assertEqual(result.message, NotAuthorizedToSpendCovenantTreasuryError.user_message)

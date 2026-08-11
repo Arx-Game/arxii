@@ -141,7 +141,7 @@ They do not use the command system, dispatchers, or handlers.
   services these Actions wrap; `ReactionWindowViewSet` already called the window services directly
   and is unchanged — `ReactToWindowAction` wraps them so telnet reaches the same seam (web does not
   call it). Shared with telnet `CmdReact`.
-  `covenants.py` (#1346) — seven REGISTRY actions, all `target_type=SELF`, thin wrappers over
+  `covenants.py` (#1346) — nine REGISTRY actions, all `target_type=SELF`, thin wrappers over
   `world.covenants.services`; `CovenantError` → failure `ActionResult(exc.user_message)`:
   `EngageCovenantMembershipAction` (key `"engage_covenant_membership"`),
   `DisengageCovenantMembershipAction` (`"disengage_covenant_membership"`),
@@ -154,7 +154,12 @@ They do not use the command system, dispatchers, or handlers.
   through the `RitualSession` seam (`CmdRitual` + the adapter registry in
   `commands/ritual_adapters.py`) rather than direct Actions — the adapters translate telnet tokens
   into the typed `DraftParse`/`JoinParse` structures and the existing session services handle
-  the rest.
+  the rest. `DepositCovenantFundsAction` (`"deposit_covenant_funds"`) /
+  `WithdrawCovenantFundsAction` (`"withdraw_covenant_funds"`, #2992) round out the file — thin
+  wrappers over `world.covenants.treasury.deposit_covenant_funds`/`withdraw_covenant_funds`
+  instead of `world.covenants.services` (the treasury lives in its own module): deposit is open
+  to any active member (core or minor), withdrawal is gated by `membership.rank.tier <=
+  treasury.spend_rank_max`. Shared by telnet `CmdCovenant`'s `deposit`/`withdraw` subverbs.
   `events.py` (#1499) — the event lifecycle + invitee RSVP verbs, all REGISTRY backend,
   `target_type=SELF`: `CreateEventAction` (key `"event_create"`, acts as the caller's active persona),
   `ScheduleEventAction` / `StartEventAction` / `CompleteEventAction` / `CancelEventAction`

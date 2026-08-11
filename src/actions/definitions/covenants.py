@@ -192,6 +192,58 @@ class TransferTopRankAction(Action):
 
 
 @dataclass
+class DepositCovenantFundsAction(Action):
+    """Deposit coppers from your purse into the covenant treasury."""
+
+    key: str = "deposit_covenant_funds"
+    name: str = "Deposit Covenant Funds"
+    icon: str = "piggy-bank"
+    category: str = "covenant"
+    target_type: TargetType = TargetType.SELF
+
+    def execute(
+        self,
+        actor: ObjectDB,
+        context: ActionContext | None = None,
+        **kwargs: Any,
+    ) -> ActionResult:
+        from world.covenants.treasury import deposit_covenant_funds  # noqa: PLC0415
+
+        return _run_service(
+            lambda: deposit_covenant_funds(
+                membership=kwargs["membership"], amount=kwargs["amount"]
+            ),
+            "You add your coin to the covenant's coffers.",
+        )
+
+
+@dataclass
+class WithdrawCovenantFundsAction(Action):
+    """Withdraw coppers from the covenant treasury into your purse (rank-gated)."""
+
+    key: str = "withdraw_covenant_funds"
+    name: str = "Withdraw Covenant Funds"
+    icon: str = "hand-coins"
+    category: str = "covenant"
+    target_type: TargetType = TargetType.SELF
+
+    def execute(
+        self,
+        actor: ObjectDB,
+        context: ActionContext | None = None,
+        **kwargs: Any,
+    ) -> ActionResult:
+        from world.covenants.treasury import withdraw_covenant_funds  # noqa: PLC0415
+
+        return _run_service(
+            lambda: withdraw_covenant_funds(
+                membership=kwargs["membership"], amount=kwargs["amount"]
+            ),
+            "You draw coin from the covenant's coffers.",
+        )
+
+
+@dataclass
 class StandDownBattleCovenantAction(Action):
     """Stand down a battle covenant, ending its active status."""
 

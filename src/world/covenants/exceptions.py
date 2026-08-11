@@ -463,3 +463,47 @@ class CourtGrantNotMonotonicError(CovenantError):
             "A Court master's word cannot be taken back — the grant can only rise.",
         }
     )
+
+
+class CovenantTreasuryError(CovenantError):
+    """Base for covenant treasury failures (#2992)."""
+
+    user_message = "The covenant treasury cannot do that right now."
+    SAFE_MESSAGES: ClassVar[frozenset[str]] = frozenset(
+        {
+            "The covenant treasury cannot do that right now.",
+        }
+    )
+
+
+class NotAnActiveCovenantMemberError(CovenantTreasuryError):
+    """Raised when a departed membership row is used for a treasury operation."""
+
+    user_message = "Only an active covenant member may use the covenant treasury."
+    SAFE_MESSAGES: ClassVar[frozenset[str]] = frozenset(
+        {
+            "Only an active covenant member may use the covenant treasury.",
+        }
+    )
+
+
+class NotAuthorizedToSpendCovenantTreasuryError(CovenantTreasuryError):
+    """Raised when the member's rank tier is above the treasury's spend_rank_max."""
+
+    user_message = "Your rank does not carry the authority to spend from the covenant treasury."
+    SAFE_MESSAGES: ClassVar[frozenset[str]] = frozenset(
+        {
+            "Your rank does not carry the authority to spend from the covenant treasury.",
+        }
+    )
+
+
+class CovenantTreasuryTransferError(CovenantTreasuryError):
+    """Raised when the underlying currency transfer is rejected (e.g. insufficient funds)."""
+
+    user_message = "The covenant treasury transfer could not be completed."
+    SAFE_MESSAGES: ClassVar[frozenset[str]] = frozenset(
+        {
+            "The covenant treasury transfer could not be completed.",
+        }
+    )
