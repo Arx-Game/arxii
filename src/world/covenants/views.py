@@ -349,6 +349,13 @@ class CovenantViewSet(viewsets.ReadOnlyModelViewSet):
     # fresh viewset instance per request, so this never leaks across requests.
     _page_aggregates: dict[int, dict[str, int]] | None = None
 
+    # Page treasury balances (covenant pk -> balance, #2992 review fix) that
+    # ``list`` precomputes for ``get_serializer_context``; None on non-list
+    # actions so the serializer falls back to its per-object ``covenant_treasury``
+    # (get_or_create) path — lazy-create on first deposit stays legitimate for a
+    # single detail fetch, just not for every row of a list response.
+    _page_treasury_balances: dict[int, int] | None = None
+
     def get_queryset(self) -> QuerySet[Covenant]:
         # prefetch storylines (2026-07 audit): CovenantSerializer.storylines is a
         # many-relation that otherwise fires one query per covenant on the list.
@@ -391,11 +398,42 @@ class CovenantViewSet(viewsets.ReadOnlyModelViewSet):
             for pk in covenant_ids
         }
 
+    @staticmethod
+    def _covenant_treasury_balances(covenants: list[Covenant]) -> dict[int, int]:
+        """Bulk treasury balance for a page of covenants, keyed by covenant pk (#2992
+        review fix). ``CovenantSerializer.get_treasury_balance`` used to call
+        ``covenant_treasury()`` (an ``OrganizationTreasury.objects.get_or_create``) per
+        row — one query, and a stray row-creating write, per covenant in a list response.
+
+        This runs a single bulk read of pre-existing ``OrganizationTreasury`` rows for
+        the page's backing organizations. A covenant with no treasury row yet (no
+        deposit has ever been made) is simply absent from the result — the caller
+        treats that as balance 0 and must NOT create the row here; a treasury is
+        legitimately lazy-created on first deposit, never during serialization.
+        """
+        from world.currency.models import OrganizationTreasury  # noqa: PLC0415
+
+        if not covenants:
+            return {}
+        org_id_to_covenant_pk = {c.organization_id: c.pk for c in covenants}
+        balances = dict(
+            OrganizationTreasury.objects.filter(
+                organization_id__in=org_id_to_covenant_pk.keys()
+            ).values_list("organization_id", "balance")
+        )
+        return {
+            covenant_pk: balances.get(org_id, 0)
+            for org_id, covenant_pk in org_id_to_covenant_pk.items()
+        }
+
     def get_serializer_context(self) -> dict:
         context = super().get_serializer_context()
         aggregates = self._page_aggregates
         if aggregates is not None:
             context["covenant_aggregates"] = aggregates
+        balances = self._page_treasury_balances
+        if balances is not None:
+            context["covenant_treasury_balances"] = balances
         return context
 
     def list(self, request: Request, *args: object, **kwargs: object) -> Response:
@@ -403,11 +441,12 @@ class CovenantViewSet(viewsets.ReadOnlyModelViewSet):
         # the list endpoint's description, replacing the class docstring. Mirrors
         # DRF's default list() but stashes the page's aggregates first so
         # get_serializer_context can hand them to the serializer, avoiding the
-        # per-row member_count/legend_total queries.
+        # per-row member_count/legend_total/treasury_balance queries.
         queryset = self.filter_queryset(self.get_queryset())
         page = self.paginate_queryset(queryset)
         covenants = page if page is not None else list(queryset)
         self._page_aggregates = self._covenant_aggregates([c.pk for c in covenants])
+        self._page_treasury_balances = self._covenant_treasury_balances(covenants)
         serializer = self.get_serializer(covenants, many=True)
         if page is not None:
             return self.get_paginated_response(serializer.data)

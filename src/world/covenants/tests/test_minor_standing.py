@@ -289,6 +289,67 @@ class MinorInductionAndSwearCoreTests(TestCase):
             1,
         )
 
+    def test_induct_existing_minor_member_reselecting_minor_is_noop(self) -> None:
+        """Re-inducting an existing MINOR row with standing="minor" must honor the
+        pick, not force-promote to CORE (#2992 review finding). Uses an
+        out-of-band candidate with MentorBondConfig seeded (setUp) to prove the
+        no-op path never re-runs swear_core's level-band gate — a spurious
+        VowGateError would mean the old force-promote bug regressed. Also proves
+        no COVENANT_SWORN act fires (same wiring seam as
+        test_induct_minor_standing_fires_no_external_act)."""
+        from world.covenants.models import CharacterCovenantRole
+        from world.missions.constants import ExternalAct, OptionKind, OptionSource
+        from world.missions.factories import (
+            MissionInstanceFactory,
+            MissionNodeFactory,
+            MissionOptionFactory,
+            MissionParticipantFactory,
+            MissionTemplateFactory,
+        )
+
+        candidate = CharacterSheetFactory()
+        _set_primary_level(candidate, 1)  # out of band [2,6] — swear_core would raise here
+        existing_membership = CharacterCovenantRoleFactory(
+            character_sheet=candidate,
+            covenant=self.covenant,
+            covenant_role=self.role,
+            standing=MembershipStanding.MINOR,
+        )
+
+        session = self._build_induction_session(candidate=candidate, standing="minor")
+
+        template = MissionTemplateFactory(name="minor-reinduct-noop-wiring-tmpl")
+        entry = MissionNodeFactory(template=template, key="entry", is_entry=True)
+        target = MissionNodeFactory(template=template, key="target")
+        instance = MissionInstanceFactory(template=template, current_node=entry)
+        MissionParticipantFactory(
+            instance=instance,
+            character=candidate,
+            is_contract_holder=True,
+        )
+        MissionOptionFactory(
+            node=entry,
+            order=0,
+            option_kind=OptionKind.EXTERNAL_ACT,
+            source_kind=OptionSource.AUTHORED,
+            required_act=ExternalAct.COVENANT_SWORN,
+            branch_target=target,
+        )
+
+        membership = induct_member_via_session(session=session)
+
+        self.assertEqual(membership.pk, existing_membership.pk)
+        membership.refresh_from_db()
+        self.assertEqual(membership.standing, MembershipStanding.MINOR)
+        self.assertEqual(
+            CharacterCovenantRole.objects.filter(
+                character_sheet=candidate, covenant=self.covenant, left_at__isnull=True
+            ).count(),
+            1,
+        )
+        instance.refresh_from_db()
+        self.assertEqual(instance.current_node, entry)
+
     def test_induct_minor_standing_requires_durance_covenant(self) -> None:
         """MINOR induction into a COURT covenant is rejected before add/upgrade runs."""
         court_covenant = CovenantFactory(covenant_type=CovenantType.COURT)

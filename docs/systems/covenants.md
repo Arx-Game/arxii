@@ -436,7 +436,10 @@ ADR-0213 for the rationale.
   engagement-driven, not standing-gated).
 - **Induction + API** — the induction session gains a `standing` select field
   (defaults CORE); `CharacterCovenantRoleSerializer` exposes `standing` on the
-  membership payload.
+  membership payload. Re-inducting an existing MINOR row upgrades to CORE via
+  `swear_core` only when the session's `standing` pick is CORE; picking MINOR
+  again is a no-op — the existing row is returned unchanged, with no
+  level-band re-check and no `COVENANT_SWORN` act.
 - **Typed exceptions** (`world.covenants.exceptions`) —
   `MinorStandingRequiresSecondaryEngageError`, `MinorStandingDuranceOnlyError`.
 

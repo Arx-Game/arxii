@@ -354,10 +354,21 @@ class CovenantSerializer(serializers.ModelSerializer):
 
         Non-members never see the treasury balance — the field is entirely absent
         from their perspective (serialized as null).
+
+        Prefers the page-level ``covenant_treasury_balances`` map the viewset
+        precomputes in one bulk query for list responses (2026-08 review fix —
+        mirrors the ``covenant_aggregates`` pattern); a covenant absent from that
+        map has no treasury row yet and reads as 0, never lazily created here.
+        Falls back to the per-object ``covenant_treasury()`` (get_or_create) path
+        for callers outside ``CovenantViewSet.list`` (e.g. the detail view), where
+        lazy-creating the row for a single fetch is legitimate.
         """
         viewer_membership = _resolve_viewer_membership(self.context, obj.pk)
         if viewer_membership is None:
             return None
+        balances = self.context.get("covenant_treasury_balances")
+        if balances is not None:
+            return balances.get(obj.pk, 0)
         from world.covenants.treasury import covenant_treasury  # noqa: PLC0415
 
         return covenant_treasury(obj).balance

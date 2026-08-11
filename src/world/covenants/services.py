@@ -1905,6 +1905,12 @@ def induct_member_via_session(*, session: RitualSession) -> CharacterCovenantRol
     COVENANT_ROLE reference. Existing-member participants have no role
     reference; they're just vouching.
 
+    Re-inducting an existing MINOR row upgrades it to CORE via ``swear_core``
+    only when the session's ``standing`` selection is CORE; selecting MINOR
+    again against an already-MINOR row is a no-op that returns the existing
+    row unchanged (#2992 — the initiator's standing pick is authoritative,
+    never force-promoted).
+
     Per spec §4.6: the .filter() on `session.references` / `participant.references`
     (related managers) is in-mutator iteration on tightly-scoped per-row sets,
     not a cached handler lookup — acceptable exception to spec §3.9.
@@ -1942,14 +1948,19 @@ def induct_member_via_session(*, session: RitualSession) -> CharacterCovenantRol
 
     # An existing MINOR row for this candidate/covenant upgrades in place via
     # swear_core rather than creating a second row (which would trip the
-    # active-uniqueness constraint).
+    # active-uniqueness constraint) — but ONLY when the session actually
+    # requested CORE. Re-inducting with standing="minor" while already MINOR
+    # must honor that pick as a no-op: it must not force-promote to CORE and
+    # must not re-run swear_core's level-band gate (a spurious VowGateError
+    # for a guest who never asked to be fully sworn in).
     existing = CharacterCovenantRole.objects.filter(
         character_sheet=candidate_participant.character_sheet,
         covenant=target_covenant,
         left_at__isnull=True,
     ).first()
     if existing is not None and existing.standing == MembershipStanding.MINOR:
-        swear_core(membership=existing)
+        if standing == MembershipStanding.CORE:
+            swear_core(membership=existing)
         membership = existing
     else:
         membership = add_member(
