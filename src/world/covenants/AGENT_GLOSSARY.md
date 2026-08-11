@@ -8,6 +8,22 @@ _Avoid_: guild, faction, party.
 The `CovenantType.DURANCE` covenant — the default, life-journey kind of oath, distinct from a battle covenant. "Covenant of the Durance" is the display label of that type.
 _Avoid_: a Durance, durance covenant.
 
+**Naming rule: the structure is "Covenant" / "Covenant of the Durance"**:
+The group structure is always called "Covenant" or, when the type needs stating, "Covenant of the Durance." Bare "the Durance" never names the structure — it names a character's own lifelong adventure (the personal journey the covenant supports), a distinct sense from the covenant itself. This applies to every user-facing surface (labels, action names, telnet output, API docs) as well as this glossary and the systems docs.
+_Avoid_: "Durance" standing alone for the covenant/group; "the Durance" as a synonym for "Covenant of the Durance."
+
+**Membership Standing** (`MembershipStanding`, #2992):
+The durable membership tier on `CharacterCovenantRole.standing` — CORE or MINOR. Orthogonal to both Covenant Role (combat power) and Covenant Rank (administrative authority); a third membership axis answering "how fully is this character sworn in," not "what do they do" or "what can they administer."
+_Avoid_: membership tier, membership level (ambiguous with character level).
+
+**Core Member**:
+`MembershipStanding.CORE` — the default, durable full membership standing (today's pre-#2992 behavior unchanged): sworn in through the level-band gate, may engage either the primary or secondary lane, and is the only standing `swear_core` upgrades a member to.
+_Avoid_: full member (descriptive only, not the field's display label), sworn member.
+
+**Minor Member**:
+`MembershipStanding.MINOR` — guest standing (#2992): rides the secondary-vow lane (#2641, ADR-0159) exclusively, at `SecondaryVowConfig` potency, and may engage that lane without an engaged primary of their own (the one waiver `validate_secondary_engage_rules` grants a MINOR row — a guest's minor vow may be their only lit vow). Bypasses `add_member`'s level-band join gate (`assert_membership_level_allowed`). DURANCE-only — `CharacterCovenantRole.clean()` rejects MINOR standing on any other `CovenantType` (`MinorStandingDuranceOnlyError`), and rejects engaging the primary lane (`MinorStandingRequiresSecondaryEngageError`, raised up front by `set_engaged_membership`). A core member may voluntarily `step_back_to_minor`; a minor member may be sworn up via `swear_core` (re-runs the level-band gate). Counts for co-presence like any active member — a lone core member with an engaged minor guest is no longer dark for auto-engage purposes.
+_Avoid_: guest, associate, hanger-on (none are this codebase's field vocabulary — the display label is "Minor Member").
+
 **War Covenant / Covenant of Battle**:
 The `CovenantType.BATTLE` covenant — an oath sworn to a martial cause. A STANDING one can stand down into dormancy and *rise again* through a "call the banners" rise ritual; a CAMPAIGN one dissolves when its defining story concludes.
 _Avoid_: setting active=true / "activating" a covenant (a dormant covenant rises via ritual, it is not flipped on).
@@ -432,6 +448,10 @@ crossing.py`, domain-specific not generic combat-scoped).
 **Covenant Rank**:
 The administrative-authority axis of membership: a per-covenant tier on the rank ladder (lower tier number = higher authority) whose capability flags gate invite / kick / manage / lead-rituals / request-gm. Orthogonal to Role. `can_lead_rituals` gates who may perform Covenant Sanctification and future covenant-led group rites (#708).
 _Avoid_: role, level.
+
+**Covenant Treasury**:
+The `OrganizationTreasury` (`world.currency`) lazily created on a Covenant's backing `Organization` (`covenant_treasury(covenant)`, `world.covenants.treasury`, #2992). Any active member (core or minor) may `deposit_covenant_funds`; `withdraw_covenant_funds` is rank-gated (`membership.rank.tier <= treasury.spend_rank_max`, default 1 = Founder tier). Covenant treasury authority derives from `CharacterCovenantRole`, not `OrganizationMembership` — the societies-side generic-org membership services still refuse covenant orgs.
+_Avoid_: covenant bank, covenant vault (this codebase's term is Covenant Treasury / `OrganizationTreasury`).
 
 **GM Request (rank capability)**:
 `CovenantRank.can_request_gm` (#2119) — the authority to post an open, broadcast

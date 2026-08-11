@@ -3067,7 +3067,7 @@
 
 ### Service Functions
 - `active_court_pact_for(*, covenant: 'Covenant', servant_sheet: 'CharacterSheet') -> 'CourtPact | None' - Return the single active CourtPact for (covenant, servant_sheet), or None.`
-- `add_member(*, covenant: 'Covenant', character_sheet: 'CharacterSheet', role: 'CovenantRole') -> 'CharacterCovenantRole' - Create a new active membership row. Atomic.`
+- `add_member(*, covenant: 'Covenant', character_sheet: 'CharacterSheet', role: 'CovenantRole', standing: 'str' = MembershipStanding.CORE) -> 'CharacterCovenantRole' - Create a new active membership row. Atomic.`
 - `assert_initiator_can_induct(*, session: 'RitualSession') -> 'None' - Draft-time gate for INDUCTION rituals: the initiator must hold a can_invite`
 - `assign_covenant_role(*, character_sheet: 'CharacterSheet', covenant: 'Covenant', covenant_role: 'CovenantRole', rank: 'CovenantRank | None' = None) -> 'CharacterCovenantRole' - Create a new active CharacterCovenantRole row. Atomic.`
 - `assign_rank(*, membership: 'CharacterCovenantRole', actor: 'CharacterCovenantRole', rank: 'CovenantRank') -> 'CharacterCovenantRole' - Assign a new rank to a member. Requires can_manage_ranks.`
@@ -3093,8 +3093,8 @@
 - `get_mentor_bond_config() -> 'MentorBondConfig' - Return the seeded MentorBondConfig singleton (#1165).`
 - `induct_member_via_session(*, session: 'RitualSession') -> 'CharacterCovenantRole' - Dispatched on INDUCTION fire. Unpacks the session into add_member args.`
 - `is_gear_compatible(role: 'CovenantRole', archetype: 'str') -> 'bool' - Return True if a row exists in GearArchetypeCompatibility for this pair.`
-- `kick_member(*, target: 'CharacterCovenantRole', actor: 'CharacterCovenantRole') -> 'None' - Remove a member by rank authority. Soft-ends the target, then`
-- `leave_covenant(*, membership: 'CharacterCovenantRole') -> 'None' - A member voluntarily leaves a covenant. Soft-ends the membership, then`
+- `kick_member(*, target: 'CharacterCovenantRole', actor: 'CharacterCovenantRole') -> 'None' - Remove a member by rank authority. Soft-ends the target. Covenants never`
+- `leave_covenant(*, membership: 'CharacterCovenantRole') -> 'None' - A member voluntarily leaves a covenant. Soft-ends the membership. Covenants`
 - `perform_covenant_rite(*, session: 'RitualSession') -> 'CovenantRiteInstance' - Dispatched on fire of a RitualSession whose Ritual has a CovenantRite sidecar.`
 - `precedence_role_for_combat(character_sheet: 'CharacterSheet') -> 'CovenantRole | None' - Pick the single covenant role that governs combat for a character.`
 - `recompute_covenant_level(*, covenant: 'Covenant') -> 'int | None' - Look up the covenant's current legend total, find the max satisfied`
@@ -3108,6 +3108,8 @@
 - `set_engaged_membership(*, membership: 'CharacterCovenantRole', as_secondary: 'bool' = False) -> 'None' - Engage this membership; un-engage other same-type-and-standing rows (#2641).`
 - `set_rank_capabilities(*, rank: 'CovenantRank', actor: 'CharacterCovenantRole', can_invite: 'bool | None' = None, can_kick: 'bool | None' = None, can_manage_ranks: 'bool | None' = None, can_lead_rituals: 'bool | None' = None) -> 'CovenantRank' - Update capability flags on a rank. Requires can_manage_ranks.`
 - `stand_down_battle_covenant(*, covenant: 'Covenant') -> 'None' - Stand a STANDING battle covenant down to dormant; clear engagement.`
+- `step_back_to_minor(*, membership: 'CharacterCovenantRole') -> 'None' - A core member unilaterally steps back to MINOR standing (#2992).`
+- `swear_core(*, membership: 'CharacterCovenantRole') -> 'None' - Upgrade a MINOR membership to CORE (#2992). Runs the level-band gate`
 - `swear_court_pact(*, covenant: 'Covenant', servant_sheet: 'CharacterSheet', granted_pull_cap: 'int') -> 'CourtPact' - Create an active CourtPact binding servant_sheet to covenant.`
 - `transfer_top(*, covenant: 'Covenant', actor: 'CharacterCovenantRole', new_top_membership: 'CharacterCovenantRole') -> 'None' - Transfer the top rank (tier=1) from the actor to ``new_top_membership``.`
 - `validate_secondary_engage_rules(membership: 'CharacterCovenantRole') -> 'None' - Secondary-vow engage-time validation (#2641).`

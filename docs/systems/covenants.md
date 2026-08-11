@@ -14,7 +14,8 @@ weights, speed_rank, Thread pulls). `CovenantRank` = administrative authority
 - **`CharacterCovenantRole`** — per-character membership row; `left_at IS NULL` =
   currently active. Fields include `covenant` FK, `covenant_role` FK, `engaged`
   boolean, `rank` FK → `CovenantRank`, `is_secondary` boolean (#2641 — see "Secondary
-  vows" below).
+  vows" below), `standing` (`MembershipStanding.CORE`/`MINOR`, #2992 — see "Minor
+  covenant membership" below).
 - **`GearArchetypeCompatibility`** — existence-only join: which `CovenantRole`s are
   compatible with which `GearArchetype` values (read-only authored content).
   Lore-repo content as of #2533 (`NaturalKeyMixin` NK `["covenant_role",
@@ -393,6 +394,52 @@ never a replacement for a real specialist (the specialist-supremacy invariant).
   `SecondaryVowRequiresEngagedPrimaryError`, `SecondaryVowSameAnchorError`,
   `SecondaryVowThreadExceedsPrimaryError`.
 
+### Minor covenant membership (#2992, ADR-0213)
+
+`CharacterCovenantRole.standing` (`MembershipStanding.CORE`/`MINOR`) is a third,
+orthogonal membership axis — alongside `CovenantRole` (power) and `CovenantRank`
+(authority) — answering "how fully is this character sworn in." CORE is today's
+full member (default). MINOR is a guest standing that reuses the secondary-vow
+machinery (#2641, ADR-0159) rather than adding a parallel guest tier — see
+ADR-0213 for the rationale.
+
+- **DURANCE-only** — `CharacterCovenantRole.clean()` raises
+  `MinorStandingDuranceOnlyError` if a MINOR row's covenant is not
+  `CovenantType.DURANCE`.
+- **Secondary lane only** — `set_engaged_membership` raises
+  `MinorStandingRequiresSecondaryEngageError` up front when a MINOR-standing
+  membership tries to engage with `as_secondary=False`, before any other
+  engage-time work runs. `clean()` mirrors this at the model layer.
+- **Solo-secondary waiver** — `validate_secondary_engage_rules` normally requires
+  an engaged PRIMARY of the same covenant type before a secondary may engage
+  (`SecondaryVowRequiresEngagedPrimaryError`). A MINOR-standing row is the one
+  exception: when no primary is engaged, a MINOR row's secondary vow may stand
+  alone — "a guest's minor vow may be their only lit vow." Every other secondary
+  rule (anchor-role exclusivity, thread-level cap) still applies once a primary
+  exists.
+- **Level-band bypass** — `add_member(..., standing=MembershipStanding.MINOR)`
+  skips `assert_membership_level_allowed` entirely (the Vow gate protects the
+  full swearing a guest never took). `swear_core` re-runs the gate when
+  upgrading a MINOR row to CORE.
+- **Standing transitions** — `swear_core(*, membership)` upgrades MINOR → CORE
+  (no-op on an already-CORE row); `step_back_to_minor(*, membership)` steps a
+  CORE member down to MINOR, first un-engaging a primary-lane engagement (a
+  MINOR row may only hold the secondary lane) — rank is untouched by either.
+- **Two-pass auto-engage** (`_auto_engage_durance`) — co-presence auto-engage now
+  fills two independent lanes: the PRIMARY slot from CORE-standing memberships
+  (existing behavior), then — independently — a vacant SECONDARY slot from
+  MINOR-standing memberships. Manual engagement sticks per lane; a fill no-ops
+  when that lane already has an engaged row for the Durance type.
+- **Co-presence counts a minor guest** — a lone core member with an engaged
+  minor guest is no longer "dark" for co-presence purposes; a Minor Member
+  credits legend fully while engaged (no code needed — legend credit is already
+  engagement-driven, not standing-gated).
+- **Induction + API** — the induction session gains a `standing` select field
+  (defaults CORE); `CharacterCovenantRoleSerializer` exposes `standing` on the
+  membership payload.
+- **Typed exceptions** (`world.covenants.exceptions`) —
+  `MinorStandingRequiresSecondaryEngageError`, `MinorStandingDuranceOnlyError`.
+
 ## Handlers
 
 - `character.covenant_roles` (`CharacterCovenantRoleHandler`):
@@ -444,11 +491,23 @@ never a replacement for a real specialist (the specialist-supremacy invariant).
 
 ### Core covenant services
 
+- `add_member(*, covenant, character_sheet, role, standing=MembershipStanding.CORE) ->
+  CharacterCovenantRole` — creates the active membership row; MINOR standing bypasses
+  the level-band gate (see "Minor covenant membership" above).
 - `assign_covenant_role(sheet, role) -> CharacterCovenantRole`
 - `end_covenant_role(role_assignment) -> None`
+- `swear_core(*, membership) -> None` — upgrades MINOR to CORE (re-runs the level-band
+  gate); no-op for CORE rows (#2992).
+- `step_back_to_minor(*, membership) -> None` — steps CORE down to MINOR, un-engaging
+  a primary-lane engagement first; no-op for MINOR rows (#2992).
+- `leave_covenant(*, membership) -> None` — soft-ends the membership. Covenants never
+  dissolve from attrition (#2992, ADR-0042 amendment) — the covenant persists at any
+  active-member count, including zero. Idempotent; raises `LastManagerRankError` if the
+  member holds the last `can_manage_ranks` rank and ≥1 other active member would remain.
 - `kick_member(*, target, actor) -> None` — actor's rank must have `can_kick=True`
   and `actor.rank.tier < target.rank.tier` (lower tier = higher authority); raises
-  `CannotKickEqualOrHigherRankError`, `NotAuthorizedToKickError`, `CannotKickSelfError`
+  `CannotKickEqualOrHigherRankError`, `NotAuthorizedToKickError`, `CannotKickSelfError`.
+  Same no-attrition-dissolve rule as `leave_covenant` (#2992, ADR-0042 amendment).
 - `is_gear_compatible(role, archetype) -> bool` — existence-only join lookup
 - `role_base_bonus_for_target(role, target, char_level) -> int` (in
   `world.mechanics.services`) — reads `CovenantRoleBonus`; returns
@@ -559,11 +618,14 @@ covenant Action via `action.run()`, sharing the same service layer as the web vi
 | `covenant rank <char> <rank> [in <covenant>]` | `assign_covenant_rank` | Promote/demote a member |
 | `covenant transfer <char> [in <covenant>]` | `transfer_covenant_top_rank` | Transfer the top rank |
 | `covenant standdown [<covenant>]` | `stand_down_battle_covenant` | Return a risen STANDING Battle covenant to dormancy |
+| `covenant deposit <amount> [in <covenant>]` | `deposit_covenant_funds` | Move coppers purse → covenant treasury (any active member, #2992) |
+| `covenant withdraw <amount> [in <covenant>]` | `withdraw_covenant_funds` | Move coppers treasury → purse (rank-gated, #2992) |
 
 Supply the covenant name when the character belongs to more than one. `standdown` is STANDING
 Battle covenants only; `engage`/`disengage` are gated by the same `can_engage_membership` logic
-the web uses. `CovenantError` subclasses surface as `ActionResult(success=False)` with a
-`user_message`.
+the web uses. `deposit`/`withdraw` resolve the caller's own membership and pass it directly via
+the `membership` kwarg — see "Covenant Treasury" below. `CovenantError` subclasses surface as
+`ActionResult(success=False)` with a `user_message`.
 
 ### Induction and Banner-Call Rise via CmdRitual
 
@@ -799,13 +861,72 @@ from `participant_kwargs` and emits a servant-spotlight narration alongside the 
 ### Test coverage
 
 `src/world/covenants/tests/integration/test_court_e2e.py` — full E2E journey: create Court,
-induct servant (gulf enforced), swear pact, mission-driven engage, pull-cap bounded, dissolve
-(last servant leaves → Court auto-dissolves).
+induct servant (gulf enforced), swear pact, mission-driven engage, pull-cap bounded, and
+attrition persistence (last servant leaves → the Court persists, `dissolved_at` stays unset —
+#2992, ADR-0042 amendment removed the attrition auto-dissolve; only formation still enforces
+the two-founder floor).
+
+## Covenant Treasury (#2992)
+
+`src/world/covenants/treasury.py` — minimal wiring of the `OrganizationTreasury`
+(`world.currency`) that every Covenant's auto-created `Organization` already carries.
+Covenant treasury authority derives from `CharacterCovenantRole`, not
+`OrganizationMembership` — the societies-side generic-org membership services still
+refuse covenant orgs.
+
+### Services
+
+- **`covenant_treasury(covenant) -> OrganizationTreasury`** — the covenant's shared
+  purse; lazy-created on its backing `Organization` via
+  `world.currency.services.get_or_create_treasury`.
+- **`deposit_covenant_funds(*, membership, amount, reason="") -> CurrencyTransfer`** —
+  any ACTIVE member (core or minor) moves coppers from their purse into the covenant
+  treasury. Raises `NotAnActiveCovenantMemberError` for a departed membership,
+  `CovenantTreasuryTransferError` if the underlying `transfer()` rejects it (e.g.
+  insufficient funds).
+- **`withdraw_covenant_funds(*, membership, amount, reason="") -> CurrencyTransfer`** —
+  a spend-ranked active member draws coppers from the treasury into their purse.
+  Authority: `membership.rank.tier <= treasury.spend_rank_max` (rank 1 is top; default
+  `spend_rank_max=1` = the Founder tier only) — raises
+  `NotAuthorizedToSpendCovenantTreasuryError` otherwise. Piloted-only by construction
+  (action-driven, never automated).
+
+### Actions and dispatch
+
+`DepositCovenantFundsAction` (key `deposit_covenant_funds`) / `WithdrawCovenantFundsAction`
+(key `withdraw_covenant_funds`) — REGISTRY Actions in `actions/definitions/covenants.py`,
+thin wrappers over the treasury services above (not `world.covenants.services` — the
+treasury lives in its own module). Both actions share a `_resolve_actor_membership(actor,
+kwargs)` helper handling two call shapes: telnet passes a genuine `CharacterCovenantRole`
+instance under the `membership` kwarg (`isinstance()`-gated, so a bare id under that key
+from a malformed/forged web POST is never trusted as a resolved instance); the web dispatch
+path instead resolves the ACTOR'S OWN active membership from `kwargs["covenant_id"]` — a
+client can never name someone else's membership from the wire. Shared by telnet
+`CmdCovenant`'s `deposit`/`withdraw` subverbs (see "Telnet Surface" above) and the web
+`TreasuryPanel` (`frontend/src/covenants/components/TreasuryPanel.tsx`).
+
+### API and frontend
+
+`CharacterCovenantRoleSerializer` exposes `standing` on the membership payload;
+`CovenantSerializer.get_treasury_balance` exposes a member-gated `treasury_balance` field
+(non-members see `null`) via the shared `_resolve_viewer_membership` helper. The frontend
+renders a Minor Member badge and the `TreasuryPanel` deposit/withdraw controls; a rejected
+dispatch (e.g. a rank-unauthorized withdrawal) surfaces through `dispatchTreasuryResult`,
+which throws on `success === false` so the mutation's `onError` fires instead of silently
+clearing the input on a business-rule rejection.
+
+### Exceptions
+
+`CovenantTreasuryError` (base) → `NotAnActiveCovenantMemberError`,
+`NotAuthorizedToSpendCovenantTreasuryError`, `CovenantTreasuryTransferError` — see
+"Exceptions" below.
 
 ## Enums / Constants
 
 - **`MentorBondAdjusted`** (`TextChoices` in `world.covenants.constants`) —
   `MENTOR` / `SIDEKICK`: which party the encounter-scaling adjustment is applied to.
+- **`MembershipStanding`** (`TextChoices` in `world.covenants.constants`, #2992) —
+  `CORE` / `MINOR`: the durable membership tier. See "Minor covenant membership" above.
 
 ## Combat Seams
 
@@ -907,6 +1028,11 @@ Graduation: when the adjusted party's real primary level re-enters the band,
   `IncompleteRankReorderError`, `CannotTransferToDepartedMemberError` (rank management)
 - `MentorBondError` (bond creation / cap enforcement)
 - `VowGateError` (membership level gate: `add_member` refused)
+- `MinorStandingRequiresSecondaryEngageError`, `MinorStandingDuranceOnlyError` (minor
+  covenant membership, #2992 — see "Minor covenant membership" above)
+- `CovenantTreasuryError` (base) → `NotAnActiveCovenantMemberError`,
+  `NotAuthorizedToSpendCovenantTreasuryError`, `CovenantTreasuryTransferError`
+  (covenant treasury, #2992 — see "Covenant Treasury" above)
 
 ## API Endpoints
 
@@ -1030,9 +1156,13 @@ Graduation: when the adjusted party's real primary level re-enters the band,
 - `court_missions.py` — `has_active_court_mission` (mission-driven engagement predicate)
 - `power_tier.py` — `power_tier_for_level` (gulf enforcement helper)
 - `factories.py` — `seed_resonance_subrole_slice`, `SubroleCovenantRoleFactory`
+- `treasury.py` — `covenant_treasury`, `deposit_covenant_funds`,
+  `withdraw_covenant_funds` (#2992)
 - `exceptions.py` — all exceptions
 
-`src/actions/definitions/covenants.py` — seven covenant lifecycle REGISTRY Actions
+`src/actions/definitions/covenants.py` — nine covenant lifecycle REGISTRY Actions (seven
+membership/rank lifecycle actions + `DepositCovenantFundsAction`/`WithdrawCovenantFundsAction`,
+#2992)
 
 `src/commands/covenant.py` — `CmdCovenant` telnet namespace
 

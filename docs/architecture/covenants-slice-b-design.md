@@ -118,7 +118,7 @@ Rejected alternatives:
 - **`INDUCTION`**: simple majority of respondents — `accepts > declines AND accepts ≥ 2` (initiator + at least one other). Non-respondents do not block; the initiator can fire when threshold is met. This is deliberately **respondent-based**, not membership-based, because many founders may be inactive (per §3.1) and unanimity-of-all-members is unworkable.
 - **`BILATERAL`**: exactly 2 participants, both must accept. Used by Soul Tether (sineater + sinner). Smaller-scope variant of FORMATION with a fixed participant count of 2 — distinct from FORMATION because the participant count is constrained at the model layer, and the per-participant choice is a binary role (one end of the relationship vs the other).
 
-A future "core / guest" tier or per-member admin/invite-privilege flags will likely refine the INDUCTION rule. Out of scope for B.
+A future "core / guest" tier or per-member admin/invite-privilege flags will likely refine the INDUCTION rule. Out of scope for B. **Built by #2992** (ADR-0213): `MembershipStanding.CORE`/`MINOR` on `CharacterCovenantRole`, riding the secondary-vow lane rather than a parallel model — see `docs/systems/covenants.md`'s "Minor covenant membership" section. This did not change the INDUCTION threshold rule itself (respondent-based majority, unchanged); the induction session gained a `standing` select field instead.
 
 ### 3.5 Engagement is a contextual state with a shared prerequisite
 
@@ -659,7 +659,7 @@ Per §3.12. Concrete deliverables:
 - **Soul Tether `BILATERAL` retrofit IS in scope** (§3.12, §4.15) — moved from out-of-scope. `soul_tether_rescue` stays `SINGLE_ACTOR` (rescue inherently doesn't allow consent).
 - **Other multi-character rituals** beyond Soul Tether are still out of scope. Future rituals (group magical workings, group sworn oaths, etc.) get their own design when authored. The `RitualSession` primitive supports them.
 - **Sworn-objective structuring** — stays free-text `TextField` in Slice B; Slice C structures it.
-- **Per-member admin / invite-privilege flags ("core / guest" tier)** — future enhancement when activity churn becomes a real problem.
+- **Per-member admin / invite-privilege flags ("core / guest" tier)** — **built by #2992** (ADR-0213): `MembershipStanding.CORE`/`MINOR`, guest standing riding the secondary-vow lane (#2641, ADR-0159) rather than a parallel guest model. Admin/invite privilege stayed on `CovenantRank` (unchanged) — standing is a third, orthogonal axis answering "how fully sworn in," not an authority flag. See `docs/systems/covenants.md`'s "Minor covenant membership" section.
 - **Use-based weave gates and use-based anchor cap** — Slice G.
 - **Ritual cost / components** for formation + induction — both rituals ship with no `RitualComponentRequirement` rows; cost tuning is content authoring, not Slice B infrastructure.
 - **Real-time updates via websockets** for ritual session state — defer pending a broader architectural conversation about extending the existing game-connection websocket to more pages. Slice B uses polling; this is acknowledged tech debt.

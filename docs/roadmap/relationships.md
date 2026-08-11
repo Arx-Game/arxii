@@ -166,7 +166,12 @@ Relationships are the heart of the game. A track-based system lets characters de
   `minimum_tier`, optionally narrowed to one `required_track_kind`, gated on `minimum_count`.
 - **Gossip system** — Gossip-visible updates should be discoverable by other players. No gossip system exists yet
 - **Scene linking** — linked_scene FK exists on updates/developments/capstones but no UI to link scenes during creation
-- **Adventuring party model** — Group formation, shared legend, coordination bonuses. No models exist
+- ✅ **Adventuring party model** — the Covenant IS the party primitive (Covenant of the
+  Durance); no separate Party model exists or is planned. Group formation (#519/Slice B),
+  shared legend (`CovenantLegendCredit` → covenant level), and coordination bonuses
+  (teamwork/coordination-bonus scope = encounter participants + engaged covenants) all ride
+  the covenant substrate. Minor (guest) membership + covenant treasury shipped in #2992
+  (ADR-0213) — see `docs/systems/covenants.md`.
 - **NPC reputation model** — Simpler -1000 to 1000 reputation for system NPCs (shopkeepers, faction contacts). No models exist
 
 ## Notes
