@@ -71,6 +71,35 @@ class CovenantLegendFanoutTests(TestCase):
         self.assertIn(cov_durance.pk, credited_covenants)
         self.assertIn(cov_battle.pk, credited_covenants)
 
+    def test_minor_engaged_membership_credited_for_guest_covenant(self) -> None:
+        """A MINOR-standing, secondary-engaged membership is credited too (#2992).
+
+        credit_engaged_covenants filters on ``engaged=True`` only — it doesn't
+        distinguish standing or lane, so a minor guest's secondary-engaged vow
+        credits the guest covenant exactly like a core primary vow does.
+        """
+        from world.covenants.constants import MembershipStanding
+        from world.covenants.services import set_engaged_membership
+
+        persona = PersonaFactory()
+        sheet = persona.character_sheet
+        covenant = CovenantFactory(covenant_type=CovenantType.DURANCE)
+        role = CovenantRoleFactory(covenant_type=CovenantType.DURANCE)
+        membership = CharacterCovenantRoleFactory(
+            character_sheet=sheet,
+            covenant=covenant,
+            covenant_role=role,
+            standing=MembershipStanding.MINOR,
+        )
+        set_engaged_membership(membership=membership, as_secondary=True)
+        entry = LegendEntryFactory(persona=persona)
+
+        result = credit_engaged_covenants(entry=entry)
+
+        self.assertEqual(len(result), 1)
+        self.assertEqual(CovenantLegendCredit.objects.filter(entry=entry).count(), 1)
+        self.assertEqual(CovenantLegendCredit.objects.get(entry=entry).covenant_id, covenant.pk)
+
     def test_no_engaged_covenants_creates_zero_credits(self) -> None:
         """Persona not engaged with any covenant → zero credit rows."""
         persona = PersonaFactory()

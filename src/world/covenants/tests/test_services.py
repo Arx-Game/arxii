@@ -12,6 +12,7 @@ from world.covenants.constants import (
     DEFAULT_MEMBER_RANK_NAME,
     CommandTier,
     CovenantType,
+    MembershipStanding,
 )
 from world.covenants.exceptions import (
     CannotKickEqualOrHigherRankError,
@@ -1128,6 +1129,124 @@ class EvaluateSceneEngagementTests(TestCase):
             self.mem_a1.engaged = False
             self.mem_a1.save(update_fields=["engaged"])
             mem_a1_in_b.delete()
+
+
+class MinorGuestAutoEngageTests(TestCase):
+    """Auto-engage fills the secondary lane from MINOR-standing memberships (#2992).
+
+    Setup mirrors EvaluateSceneEngagementTests — same room/scene/membership idioms
+    (ObjectDBFactory for rooms, SceneFactory for active scenes), built per-test in
+    setUp (not setUpTestData) since Evennia's ObjectDB isn't deepcopy-safe.
+    """
+
+    def _make_room(self, key: str = "guest-room"):
+        from evennia_extensions.factories import ObjectDBFactory
+
+        return ObjectDBFactory(
+            db_key=key,
+            db_typeclass_path="typeclasses.rooms.Room",
+        )
+
+    def _place_chars_in_room(self, room, sheets):
+        for sheet in sheets:
+            sheet.character.location = room
+
+    def _build_room_with_scene_and_chars(self, sheets):
+        from world.scenes.factories import SceneFactory
+
+        room = self._make_room()
+        if hasattr(room, "_active_scene_cache"):
+            del room._active_scene_cache
+        SceneFactory(location=room, is_active=True)
+        self._place_chars_in_room(room, sheets)
+        return room
+
+    def _cleanup_chars(self, sheets):
+        for sheet in sheets:
+            del sheet.character.location
+
+    def setUp(self) -> None:
+        self.role_x = CovenantRoleFactory(covenant_type=CovenantType.DURANCE)
+        self.cov_x = CovenantFactory(name="GuestCovX", covenant_type=CovenantType.DURANCE)
+        self.sheet_a = CharacterSheetFactory()
+        self.sheet_b = CharacterSheetFactory()
+        self.mem_a = CharacterCovenantRoleFactory(
+            character_sheet=self.sheet_a,
+            covenant=self.cov_x,
+            covenant_role=self.role_x,
+        )
+        self.mem_b = CharacterCovenantRoleFactory(
+            character_sheet=self.sheet_b,
+            covenant=self.cov_x,
+            covenant_role=self.role_x,
+            standing=MembershipStanding.MINOR,
+        )
+
+    def test_core_member_plus_minor_guest_lights_core_vow(self) -> None:
+        """A (CORE) auto-engages the primary lane when co-present with minor guest B."""
+        from world.covenants.services import evaluate_scene_engagement
+
+        room = self._build_room_with_scene_and_chars([self.sheet_a, self.sheet_b])
+        try:
+            evaluate_scene_engagement(character_sheet=self.sheet_a, room=room)
+            self.mem_a.refresh_from_db()
+            self.assertTrue(self.mem_a.engaged)
+            self.assertFalse(self.mem_a.is_secondary)
+        finally:
+            self._cleanup_chars([self.sheet_a, self.sheet_b])
+
+    def test_minor_guest_auto_engages_secondary_lane(self) -> None:
+        """B (MINOR) auto-engages the secondary lane when co-present with core member A."""
+        from world.covenants.services import evaluate_scene_engagement
+
+        room = self._build_room_with_scene_and_chars([self.sheet_a, self.sheet_b])
+        try:
+            evaluate_scene_engagement(character_sheet=self.sheet_b, room=room)
+            self.mem_b.refresh_from_db()
+            self.assertTrue(self.mem_b.engaged)
+            self.assertTrue(self.mem_b.is_secondary)
+        finally:
+            self._cleanup_chars([self.sheet_a, self.sheet_b])
+
+    def test_minor_row_never_fills_primary_slot(self) -> None:
+        """A MINOR-only character never ends up with an engaged primary-lane row."""
+        from world.covenants.services import evaluate_scene_engagement
+
+        room = self._build_room_with_scene_and_chars([self.sheet_a, self.sheet_b])
+        try:
+            evaluate_scene_engagement(character_sheet=self.sheet_b, room=room)
+            active = self.sheet_b.character.covenant_roles.active_memberships_for_type(
+                CovenantType.DURANCE
+            )
+            self.assertFalse(any(m.engaged and not m.is_secondary for m in active))
+        finally:
+            self._cleanup_chars([self.sheet_a, self.sheet_b])
+
+    def test_manual_secondary_engagement_sticks(self) -> None:
+        """B's manual secondary engagement in Y is untouched by arriving co-present with X."""
+        cov_y = CovenantFactory(name="GuestCovY", covenant_type=CovenantType.DURANCE)
+        role_y = CovenantRoleFactory(covenant_type=CovenantType.DURANCE)
+        mem_b_y = CharacterCovenantRoleFactory(
+            character_sheet=self.sheet_b,
+            covenant=cov_y,
+            covenant_role=role_y,
+            standing=MembershipStanding.MINOR,
+        )
+        set_engaged_membership(membership=mem_b_y, as_secondary=True)
+        mem_b_y.refresh_from_db()
+        self.assertTrue(mem_b_y.engaged)
+
+        from world.covenants.services import evaluate_scene_engagement
+
+        room = self._build_room_with_scene_and_chars([self.sheet_a, self.sheet_b])
+        try:
+            evaluate_scene_engagement(character_sheet=self.sheet_b, room=room)
+            mem_b_y.refresh_from_db()
+            self.assertTrue(mem_b_y.engaged)
+            self.mem_b.refresh_from_db()
+            self.assertFalse(self.mem_b.engaged)
+        finally:
+            self._cleanup_chars([self.sheet_a, self.sheet_b])
 
 
 class LeaveCovenantTests(TestCase):

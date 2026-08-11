@@ -1597,38 +1597,57 @@ def _emit_vow_dim_notice(membership: CharacterCovenantRole) -> None:
     character.msg("Your vow dims — the covenant is not with you.")
 
 
-def _auto_engage_durance(
+def _auto_engage_durance(  # noqa: C901
     *,
     character_sheet: CharacterSheet,
     room: ObjectDB,
 ) -> None:
-    """Auto-engage a Durance covenant if co-presence prerequisites met.
+    """Auto-engage Durance covenants if co-presence prerequisites are met.
 
-    Manual engagement sticks — this no-ops if the character is already
-    engaged for the Durance type. See Slice B spec §3.6, §4.10.
+    Two independent lane fills (#2992): the PRIMARY slot fills from CORE-standing
+    memberships (existing behavior), then a vacant SECONDARY slot fills from
+    MINOR-standing memberships. Manual engagement sticks per lane — a fill
+    no-ops when that lane already has an engaged row for the Durance type.
+    See Slice B spec §3.6, §4.10.
     """
-    from world.covenants.constants import CovenantType  # noqa: PLC0415
+    from world.covenants.constants import CovenantType, MembershipStanding  # noqa: PLC0415
     from world.covenants.handlers import can_engage_membership  # noqa: PLC0415
 
-    if (
-        character_sheet.character.covenant_roles.currently_engaged_for_type(CovenantType.DURANCE)
-        is not None
-    ):
-        return  # manual sticks; auto never overrides
-    candidates: list[tuple[_CharacterCovenantRole, int]] = []
-    for membership in character_sheet.character.covenant_roles.active_memberships_for_type(
-        CovenantType.DURANCE
-    ):
-        if not can_engage_membership(membership):
-            continue
-        co_present = _co_present_member_count(membership, room)
-        if co_present > 0:
-            candidates.append((membership, co_present))
-    if not candidates:
-        return
-    # Sort by most co-present (desc) then by covenant_id (asc) for deterministic ties:
-    candidates.sort(key=lambda c: (-c[1], c[0].covenant_id))
-    set_engaged_membership(membership=candidates[0][0])
+    active = list(
+        character_sheet.character.covenant_roles.active_memberships_for_type(CovenantType.DURANCE)
+    )
+
+    def lane_engaged(*, secondary: bool) -> bool:
+        return any(m.engaged and m.left_at is None and m.is_secondary is secondary for m in active)
+
+    def best_candidate(rows: list[_CharacterCovenantRole]) -> _CharacterCovenantRole | None:
+        candidates: list[tuple[_CharacterCovenantRole, int]] = []
+        for membership in rows:
+            if not can_engage_membership(membership):
+                continue
+            co_present = _co_present_member_count(membership, room)
+            if co_present > 0:
+                candidates.append((membership, co_present))
+        if not candidates:
+            return None
+        candidates.sort(key=lambda c: (-c[1], c[0].covenant_id))
+        return candidates[0][0]
+
+    if not lane_engaged(secondary=False):
+        core_rows = [m for m in active if m.standing == MembershipStanding.CORE]
+        chosen = best_candidate(core_rows)
+        if chosen is not None:
+            set_engaged_membership(membership=chosen)
+            active = list(
+                character_sheet.character.covenant_roles.active_memberships_for_type(
+                    CovenantType.DURANCE
+                )
+            )
+    if not lane_engaged(secondary=True):
+        minor_rows = [m for m in active if m.standing == MembershipStanding.MINOR]
+        chosen = best_candidate(minor_rows)
+        if chosen is not None:
+            set_engaged_membership(membership=chosen, as_secondary=True)
 
 
 def _auto_engage_court(
