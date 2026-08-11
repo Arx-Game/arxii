@@ -26,6 +26,7 @@ from world.covenants.exceptions import (
     IncompleteRankReorderError,
     InsufficientFoundersError,
     LastManagerRankError,
+    MinorStandingDuranceOnlyError,
     MinorStandingRequiresSecondaryEngageError,
     NoActiveBattleError,
     NotAuthorizedToInviteError,
@@ -299,6 +300,7 @@ def add_member(
     covenant: Covenant,
     character_sheet: CharacterSheet,
     role: CovenantRole,
+    standing: str = MembershipStanding.CORE,
 ) -> CharacterCovenantRole:
     """Create a new active membership row. Atomic.
 
@@ -308,14 +310,13 @@ def add_member(
     IntegrityError on conflict is the contract.
 
     Raises VowGateError when the character's level is outside the covenant band
-    and they hold no active Mentor's Vow bond in this covenant.
+    and they hold no active Mentor's Vow bond in this covenant — except for a
+    MINOR-standing join (#2992), which bypasses the level band entirely: a
+    guest never took the full vow the band protects.
     """
-    from world.covenants.mentorship import assert_membership_level_allowed  # noqa: PLC0415
-
-    assert_membership_level_allowed(covenant=covenant, character_sheet=character_sheet)
-
     # #1278 — you can't join a covenant that holds a member who has blocked you (or whom you
     # blocked). Generic to the joiner: they're told a member blocked them, never which one.
+    # Applies to every standing — the block check runs unconditionally, above the branch below.
     from world.covenants.exceptions import CovenantMemberBlockError  # noqa: PLC0415
     from world.scenes.block_services import org_join_blocked  # noqa: PLC0415
 
@@ -328,12 +329,18 @@ def add_member(
     if org_join_blocked(joining_sheet=character_sheet, member_sheets=member_sheets):
         raise CovenantMemberBlockError
 
+    if standing != MembershipStanding.MINOR:
+        from world.covenants.mentorship import assert_membership_level_allowed  # noqa: PLC0415
+
+        assert_membership_level_allowed(covenant=covenant, character_sheet=character_sheet)
+
     rank = _ensure_base_rank(covenant)
     row = CharacterCovenantRole.objects.create(
         character_sheet=character_sheet,
         covenant=covenant,
         covenant_role=role,
         rank=rank,
+        standing=standing,
     )
     character_sheet.character.covenant_roles.invalidate()
     covenant.member_roster.invalidate()
@@ -423,6 +430,47 @@ def change_role(
 
     recompute_max_health_with_threads(membership.character_sheet)
     return new_row
+
+
+@transaction.atomic
+def swear_core(*, membership: CharacterCovenantRole) -> None:
+    """Upgrade a MINOR membership to CORE (#2992). Runs the level-band gate
+    (VowGateError — full swearing is what the band protects), flips standing,
+    and fires the COVENANT_SWORN external act. No-op for CORE rows. The
+    member keeps their role and rank; a role change is `change_role`."""
+    from world.covenants.mentorship import assert_membership_level_allowed  # noqa: PLC0415
+
+    if membership.standing == MembershipStanding.CORE:
+        return
+    assert_membership_level_allowed(
+        covenant=membership.covenant, character_sheet=membership.character_sheet
+    )
+    membership.standing = MembershipStanding.CORE
+    membership.save(update_fields=["standing"])
+    membership.character_sheet.character.covenant_roles.invalidate()
+    membership.covenant.member_roster.invalidate()
+
+    from world.missions.constants import ExternalAct  # noqa: PLC0415
+    from world.missions.services.external_acts import notify_external_act  # noqa: PLC0415
+
+    notify_external_act(membership.character_sheet, ExternalAct.COVENANT_SWORN)
+
+
+@transaction.atomic
+def step_back_to_minor(*, membership: CharacterCovenantRole) -> None:
+    """A core member unilaterally steps back to MINOR standing (#2992).
+
+    Un-engages a primary-lane engagement first (a MINOR row may only hold the
+    secondary lane); rank is orthogonal to standing and is untouched. No-op
+    for MINOR rows."""
+    if membership.standing == MembershipStanding.MINOR:
+        return
+    if membership.engaged and not membership.is_secondary:
+        clear_engaged_membership(membership=membership)
+    membership.standing = MembershipStanding.MINOR
+    membership.save(update_fields=["standing"])
+    membership.character_sheet.character.covenant_roles.invalidate()
+    membership.covenant.member_roster.invalidate()
 
 
 @transaction.atomic
@@ -1880,18 +1928,41 @@ def induct_member_via_session(*, session: RitualSession) -> CharacterCovenantRol
             break
     if candidate_participant is None or chosen_role is None:
         raise RequiredReferenceMissingError
-    membership = add_member(
-        covenant=target_covenant,
+
+    # #2992 — session-level standing pick (session_kwargs values are plain strings;
+    # MembershipStanding compares equal to its str values). MINOR is DURANCE-only —
+    # guarded right here, before any add/upgrade logic runs.
+    standing = session.session_kwargs.get("standing", MembershipStanding.CORE)
+
+    from world.covenants.constants import CovenantType  # noqa: PLC0415
+
+    not_durance = target_covenant.covenant_type != CovenantType.DURANCE
+    if standing == MembershipStanding.MINOR and not_durance:
+        raise MinorStandingDuranceOnlyError
+
+    # An existing MINOR row for this candidate/covenant upgrades in place via
+    # swear_core rather than creating a second row (which would trip the
+    # active-uniqueness constraint).
+    existing = CharacterCovenantRole.objects.filter(
         character_sheet=candidate_participant.character_sheet,
-        role=chosen_role,
-    )
+        covenant=target_covenant,
+        left_at__isnull=True,
+    ).first()
+    if existing is not None and existing.standing == MembershipStanding.MINOR:
+        swear_core(membership=existing)
+        membership = existing
+    else:
+        membership = add_member(
+            covenant=target_covenant,
+            character_sheet=candidate_participant.character_sheet,
+            role=chosen_role,
+            standing=standing,
+        )
 
     # COURT post-step (#1589): swearing into a Court is a fealty ceremony — the
     # induction also binds a CourtPact whose pull-cap the master grants (read
     # from the candidate participant's kwargs, mirroring mentorship's role read),
     # then a servant-centred fealty narration is emitted.
-    from world.covenants.constants import CovenantType  # noqa: PLC0415
-
     if target_covenant.covenant_type == CovenantType.COURT:
         servant_sheet = candidate_participant.character_sheet
         granted_pull_cap = candidate_participant.participant_kwargs.get("granted_pull_cap", 0)
@@ -1904,11 +1975,14 @@ def induct_member_via_session(*, session: RitualSession) -> CharacterCovenantRol
 
     # #1035 external-act beat: cheap-guarded, failure-isolated via notify_external_act
     # (ADR-0112) — isolation from induct_member_via_session's own @transaction.atomic
-    # block now lives in that shared wrapper.
-    from world.missions.constants import ExternalAct  # noqa: PLC0415
-    from world.missions.services.external_acts import notify_external_act  # noqa: PLC0415
+    # block now lives in that shared wrapper. Fires only for a newly-created CORE
+    # membership (#2992) — the upgrade path's act already fired from swear_core
+    # itself, and a MINOR join is not a full swearing.
+    if existing is None and membership.standing == MembershipStanding.CORE:
+        from world.missions.constants import ExternalAct  # noqa: PLC0415
+        from world.missions.services.external_acts import notify_external_act  # noqa: PLC0415
 
-    notify_external_act(candidate_participant.character_sheet, ExternalAct.COVENANT_SWORN)
+        notify_external_act(candidate_participant.character_sheet, ExternalAct.COVENANT_SWORN)
 
     return membership
 
