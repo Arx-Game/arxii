@@ -30,6 +30,8 @@ if TYPE_CHECKING:
     from world.game_clock.models import GameWeek
 
 _SITUATION_KIND_MODEL = "arxii.SituationKind"
+GM_PROFILE_MODEL = "arxii.GMProfile"
+ROOM_PROFILE_MODEL = "arxii.RoomProfile"
 
 
 class GMProfile(SharedMemoryModel):
@@ -135,7 +137,7 @@ class GMTable(SharedMemoryModel):
     """A GM's working group — players engaging with a set of stories."""
 
     gm = models.ForeignKey(
-        "arxii.GMProfile",
+        GM_PROFILE_MODEL,
         on_delete=models.PROTECT,
         related_name="tables",
     )
@@ -237,7 +239,7 @@ class GMRosterInvite(SharedMemoryModel):
     )
     code = models.CharField(max_length=64, unique=True, db_index=True)
     created_by = models.ForeignKey(
-        "arxii.GMProfile",
+        GM_PROFILE_MODEL,
         on_delete=models.PROTECT,
         related_name="invites_created",
     )
@@ -346,7 +348,7 @@ class GMLevelChange(SharedMemoryModel):
     """
 
     profile = models.ForeignKey(
-        "arxii.GMProfile",
+        GM_PROFILE_MODEL,
         on_delete=models.CASCADE,
         related_name="level_changes",
     )
@@ -380,7 +382,7 @@ class StoryArea(SharedMemoryModel):
     """
 
     gm = models.ForeignKey(
-        "arxii.GMProfile",
+        GM_PROFILE_MODEL,
         on_delete=models.PROTECT,
         related_name="story_areas",
     )
@@ -410,7 +412,7 @@ class StoryRoomGrant(SharedMemoryModel):
     """
 
     room = models.ForeignKey(
-        "arxii.RoomProfile",
+        ROOM_PROFILE_MODEL,
         on_delete=models.CASCADE,
         related_name="story_grants",
     )
@@ -420,12 +422,12 @@ class StoryRoomGrant(SharedMemoryModel):
         related_name="story_room_grants",
     )
     granted_by = models.ForeignKey(
-        "arxii.GMProfile",
+        GM_PROFILE_MODEL,
         on_delete=models.PROTECT,
         related_name="story_grants_issued",
     )
     return_location = models.ForeignKey(
-        "arxii.RoomProfile",
+        ROOM_PROFILE_MODEL,
         null=True,
         blank=True,
         on_delete=models.SET_NULL,
@@ -476,7 +478,7 @@ class GMSummonOffer(SharedMemoryModel):
         help_text="The character being invited.",
     )
     invited_by = models.ForeignKey(
-        "arxii.GMProfile",
+        GM_PROFILE_MODEL,
         null=True,
         blank=True,
         on_delete=models.SET_NULL,
@@ -493,7 +495,7 @@ class GMSummonOffer(SharedMemoryModel):
         ),
     )
     room = models.ForeignKey(
-        "arxii.RoomProfile",
+        ROOM_PROFILE_MODEL,
         on_delete=models.CASCADE,
         related_name="summon_offers",
         help_text="The GM's scene room — destination on accept.",
@@ -843,7 +845,7 @@ class GMWeeklyRewardTracker(SharedMemoryModel):
     """
 
     gm_profile = models.OneToOneField(
-        "arxii.GMProfile",
+        GM_PROFILE_MODEL,
         on_delete=models.CASCADE,
         related_name="weekly_reward_tracker",
     )
@@ -911,7 +913,7 @@ class TableUpdateRequest(SharedMemoryModel):
         help_text="The GM's sign-off/rejection notes.",
     )
     resolved_by = models.ForeignKey(
-        "arxii.GMProfile",
+        GM_PROFILE_MODEL,
         null=True,
         blank=True,
         on_delete=models.SET_NULL,

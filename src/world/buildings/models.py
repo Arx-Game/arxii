@@ -44,6 +44,7 @@ _PERSONA_FK = "arxii.Persona"
 _CODEX_SUBJECT_FK = "arxii.CodexSubject"
 _ARCHITECTURAL_STYLE_FK = "arxii.ArchitecturalStyle"
 _ROOM_PROFILE_FK = "arxii.RoomProfile"
+_AREA_FK = "arxii.Area"
 
 
 class BuildingKind(NaturalKeyMixin, CreditedContent, SharedMemoryModel):
@@ -112,7 +113,7 @@ class PropertyGrantProfile(NaturalKeyMixin, SharedMemoryModel):
         related_name="property_grant_profiles",
     )
     ward_area = models.ForeignKey(
-        "arxii.Area",
+        _AREA_FK,
         on_delete=models.SET_NULL,
         null=True,
         blank=True,
@@ -246,7 +247,7 @@ class Building(SharedMemoryModel):
     """
 
     area = models.OneToOneField(
-        "arxii.Area",
+        _AREA_FK,
         on_delete=models.CASCADE,
         related_name="building_profile",
         primary_key=True,
@@ -375,7 +376,7 @@ class Building(SharedMemoryModel):
         ),
     )
     entry_room = models.ForeignKey(
-        "arxii.RoomProfile",
+        _ROOM_PROFILE_FK,
         null=True,
         blank=True,
         on_delete=models.PROTECT,
@@ -584,7 +585,7 @@ class BuildingPermitDetails(SharedMemoryModel):
         related_name="permits",
     )
     approved_wards = models.ManyToManyField(
-        "arxii.Area",
+        _AREA_FK,
         related_name="building_permits_valid_in",
         blank=True,
         help_text=(
@@ -967,7 +968,7 @@ class BuildingConstructionDetails(SharedMemoryModel):
         help_text="The (consumed) permit that authorized this construction.",
     )
     ward = models.ForeignKey(
-        "arxii.Area",
+        _AREA_FK,
         on_delete=models.PROTECT,
         related_name="construction_projects",
         help_text="The ward this building will rise in.",
@@ -1109,7 +1110,7 @@ class RoomPolish(SharedMemoryModel):
     """
 
     room = models.ForeignKey(
-        "arxii.RoomProfile",
+        _ROOM_PROFILE_FK,
         on_delete=models.CASCADE,
         related_name="polish_by_category",
     )

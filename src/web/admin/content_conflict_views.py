@@ -27,6 +27,13 @@ from django.shortcuts import render
 from django.urls import reverse
 from django.views.decorators.http import require_GET, require_POST
 
+# Repeated bail-out message across every view below — extracted to satisfy
+# the duplicated-literal SonarCloud smell (python:S1192).
+MSG_CONTENT_REPO_PATH_NOT_SET = (
+    "CONTENT_REPO_PATH is not set. Add it to src/.env pointing at your "
+    "local checkout of the private content repository."
+)
+
 
 def _detail_url(model_label: str, key: str) -> str:
     """Build the conflict-detail URL for one ``(model_label, key)`` pair."""
@@ -197,8 +204,7 @@ def content_conflicts(request: HttpRequest) -> HttpResponse:
     if content_root is None:
         messages.error(
             request,
-            "CONTENT_REPO_PATH is not set. Add it to src/.env pointing at your "
-            "local checkout of the private content repository.",
+            MSG_CONTENT_REPO_PATH_NOT_SET,
         )
         return HttpResponseRedirect(reverse("admin_game_setup"))
 
@@ -232,8 +238,7 @@ def content_conflict_detail(request: HttpRequest) -> HttpResponse:
     if content_root is None:
         messages.error(
             request,
-            "CONTENT_REPO_PATH is not set. Add it to src/.env pointing at your "
-            "local checkout of the private content repository.",
+            MSG_CONTENT_REPO_PATH_NOT_SET,
         )
         return HttpResponseRedirect(reverse("admin_game_setup"))
 
@@ -280,8 +285,7 @@ def content_conflict_resolve(request: HttpRequest) -> HttpResponse:
     if content_root is None:
         messages.error(
             request,
-            "CONTENT_REPO_PATH is not set. Add it to src/.env pointing at your "
-            "local checkout of the private content repository.",
+            MSG_CONTENT_REPO_PATH_NOT_SET,
         )
         return HttpResponseRedirect(reverse("admin_game_setup"))
 

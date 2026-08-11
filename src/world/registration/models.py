@@ -15,6 +15,9 @@ from evennia.utils.idmapper.models import SharedMemoryModel
 from core.managers import ArxSharedMemoryManager
 from world.registration.constants import InviteStatus
 
+# Lazy model reference (Django app_label.ModelName), extracted to satisfy S1192.
+ACCOUNT_DB_MODEL = "accounts.AccountDB"
+
 
 class RegistrationConfig(SharedMemoryModel):
     """Singleton (pk=1) staff-tunable toggle for open account registration."""
@@ -27,7 +30,7 @@ class RegistrationConfig(SharedMemoryModel):
     )
     updated_at = models.DateTimeField(auto_now=True)
     updated_by = models.ForeignKey(
-        "accounts.AccountDB",
+        ACCOUNT_DB_MODEL,
         null=True,
         blank=True,
         on_delete=models.SET_NULL,
@@ -63,7 +66,7 @@ class AccountInvite(SharedMemoryModel):
     email = models.EmailField(db_index=True)
     token = models.CharField(max_length=64, unique=True, db_index=True)
     invited_by = models.ForeignKey(
-        "accounts.AccountDB",
+        ACCOUNT_DB_MODEL,
         on_delete=models.PROTECT,
         related_name="issued_account_invites",
     )
@@ -71,7 +74,7 @@ class AccountInvite(SharedMemoryModel):
     expires_at = models.DateTimeField(help_text="Invite cannot be redeemed after this time.")
     redeemed_at = models.DateTimeField(null=True, blank=True)
     redeemed_by = models.ForeignKey(
-        "accounts.AccountDB",
+        ACCOUNT_DB_MODEL,
         null=True,
         blank=True,
         on_delete=models.SET_NULL,

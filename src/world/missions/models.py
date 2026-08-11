@@ -64,6 +64,9 @@ _CONSEQUENCE_FK = "arxii.Consequence"
 OBJECT_DB_MODEL = "objects.ObjectDB"
 ROOM_PROFILE_MODEL = "arxii.RoomProfile"
 CHARACTER_SHEET_MODEL = "arxii.CharacterSheet"
+CHECK_TYPE_MODEL = "arxii.CheckType"
+CHECK_OUTCOME_MODEL = "arxii.CheckOutcome"
+NPC_SERVICE_OFFER_MODEL = "arxii.NPCServiceOffer"
 
 # #1035 — the durable (non-transient) ExternalAct members. Mirrors
 # ``world.missions.services.external_acts._DURABLE_ACTS`` — duplicated here
@@ -527,7 +530,7 @@ class MissionOption(NaturalKeyMixin, CreditedContent, SharedMemoryModel):
         help_text="Phase 0 predicate tree gating this option's visibility.",
     )
     authored_check_type = models.ForeignKey(
-        "arxii.CheckType",
+        CHECK_TYPE_MODEL,
         null=True,
         blank=True,
         on_delete=models.PROTECT,
@@ -780,7 +783,7 @@ class MissionOptionRoute(NaturalKeyMixin, CreditedContent, SharedMemoryModel):
         related_name="routes",
     )
     outcome_tier = models.ForeignKey(
-        "arxii.CheckOutcome",
+        CHECK_OUTCOME_MODEL,
         null=True,
         blank=True,
         on_delete=models.PROTECT,
@@ -1015,7 +1018,7 @@ class MissionOptionRouteReward(NaturalKeyMixin, CreditedContent, SharedMemoryMod
         help_text="Required when sink=ITEM: which ItemTemplate this reward grants.",
     )
     followon_offer = models.ForeignKey(
-        "arxii.NPCServiceOffer",
+        NPC_SERVICE_OFFER_MODEL,
         null=True,
         blank=True,
         on_delete=models.PROTECT,
@@ -1438,7 +1441,7 @@ class MissionInstance(SharedMemoryModel):
     # Used to scope the CharacterSheet.max_active_npc_missions cap to
     # NPC-mediated runs only.
     source_offer = models.ForeignKey(
-        "arxii.NPCServiceOffer",
+        NPC_SERVICE_OFFER_MODEL,
         null=True,
         blank=True,
         on_delete=models.SET_NULL,
@@ -1726,7 +1729,7 @@ class MissionDeedRecord(SharedMemoryModel):
         related_name="+",
     )
     outcome = models.ForeignKey(
-        "arxii.CheckOutcome",
+        CHECK_OUTCOME_MODEL,
         null=True,
         blank=True,
         on_delete=models.PROTECT,
@@ -1800,7 +1803,7 @@ class MissionAssistPattern(SharedMemoryModel):
         ),
     )
     check_types = models.ManyToManyField(
-        "arxii.CheckType",
+        CHECK_TYPE_MODEL,
         blank=True,
         related_name="assist_patterns",
         help_text="Context axis: match when the node has a CHECK option using any of these.",
@@ -1814,7 +1817,7 @@ class MissionAssistPattern(SharedMemoryModel):
         ),
     )
     support_check_type = models.ForeignKey(
-        "arxii.CheckType",
+        CHECK_TYPE_MODEL,
         on_delete=models.PROTECT,
         related_name="+",
         help_text="The CheckType rolled when a helper declares this support move.",
@@ -1828,7 +1831,7 @@ class MissionAssistPattern(SharedMemoryModel):
         help_text="Bonus added to the resolving check on success (retunable, can be negative).",
     )
     complication_consequence = models.ForeignKey(
-        "arxii.Consequence",
+        _CONSEQUENCE_FK,
         on_delete=models.SET_NULL,
         null=True,
         blank=True,
@@ -1890,7 +1893,7 @@ class MissionNodeSupportOption(SharedMemoryModel):
         help_text="Predicate-tree leg. Empty dict = no predicate gate.",
     )
     support_check_type = models.ForeignKey(
-        "arxii.CheckType",
+        CHECK_TYPE_MODEL,
         on_delete=models.PROTECT,
         related_name="+",
         help_text="The CheckType rolled when a helper declares this support move.",
@@ -1898,7 +1901,7 @@ class MissionNodeSupportOption(SharedMemoryModel):
     difficulty = models.PositiveSmallIntegerField(default=5)
     easing = models.IntegerField(default=2)
     complication_consequence = models.ForeignKey(
-        "arxii.Consequence",
+        _CONSEQUENCE_FK,
         on_delete=models.SET_NULL,
         null=True,
         blank=True,
@@ -1967,7 +1970,7 @@ class MissionSupportDeclaration(SharedMemoryModel):
         related_name="+",
     )
     outcome = models.ForeignKey(
-        "arxii.CheckOutcome",
+        CHECK_OUTCOME_MODEL,
         null=True,
         blank=True,
         on_delete=models.PROTECT,
@@ -2228,7 +2231,7 @@ class MissionDeedRewardLine(SharedMemoryModel):
         help_text="Required when sink=ITEM: which ItemTemplate this reward grants.",
     )
     followon_offer = models.ForeignKey(
-        "arxii.NPCServiceOffer",
+        NPC_SERVICE_OFFER_MODEL,
         null=True,
         blank=True,
         on_delete=models.PROTECT,
@@ -2348,7 +2351,7 @@ class MissionRiskAcknowledgement(SharedMemoryModel):
     """
 
     offer = models.ForeignKey(
-        "arxii.NPCServiceOffer",
+        NPC_SERVICE_OFFER_MODEL,
         on_delete=models.CASCADE,
         related_name="mission_risk_acknowledgements",
     )

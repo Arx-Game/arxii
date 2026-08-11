@@ -47,6 +47,11 @@ _AWARD_TYPES = (
     _AWARD_TYPE_TECHNIQUE,
 )
 
+# Failure message repeated across every action here that requires a resolved
+# target character — extracted to satisfy the duplicated-literal SonarCloud
+# smell (python:S1192).
+MSG_TARGET_REQUIRED = "A target character is required."
+
 
 def _resolve_gm_profile(actor: ObjectDB) -> Any | None:
     """Return the acting GM's ``GMProfile``, or ``None`` (staff with no profile, #3071).
@@ -305,7 +310,7 @@ class GMAwardAction(Action):
     ) -> ActionResult:
         target = _resolve_gm_target(kwargs)
         if target is None:
-            return ActionResult(success=False, message="A target character is required.")
+            return ActionResult(success=False, message=MSG_TARGET_REQUIRED)
 
         award_type = str(kwargs.get("award_type") or "").strip().lower()
         description = str(kwargs.get("description") or "").strip()
@@ -598,7 +603,7 @@ def _resolve_condition_target(kwargs: dict[str, Any]) -> tuple[Any, Any] | Actio
 
     target = _resolve_gm_target(kwargs)
     if target is None:
-        return ActionResult(success=False, message="A target character is required.")
+        return ActionResult(success=False, message=MSG_TARGET_REQUIRED)
 
     condition_ref = str(kwargs.get("condition_ref") or "").strip()
     if not condition_ref:
@@ -747,7 +752,7 @@ class SummonPlayerAction(Action):
 
         target = _resolve_gm_target(kwargs)
         if target is None:
-            return ActionResult(success=False, message="A target character is required.")
+            return ActionResult(success=False, message=MSG_TARGET_REQUIRED)
         target_sheet = target.character_sheet
         if target_sheet is None:
             return ActionResult(success=False, message=f"{target.key} has no character sheet.")

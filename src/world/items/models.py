@@ -48,6 +48,9 @@ SOCIETY_MODEL = "arxii.Society"
 CHECK_TYPE_MODEL = "arxii.CheckType"
 FACET_MODEL = "arxii.Facet"
 RESONANCE_MODEL = "arxii.Resonance"
+SILHOUETTE_MODEL = "arxii.Silhouette"
+STYLE_MODEL = "arxii.Style"
+OUTFIT_MODEL = "arxii.Outfit"
 
 
 class QualityTier(NaturalKeyMixin, SharedMemoryModel):
@@ -478,7 +481,7 @@ class ItemTemplate(NaturalKeyMixin, CreditedContent, SharedMemoryModel):
         ),
     )
     silhouette = models.ForeignKey(
-        "arxii.Silhouette",
+        SILHOUETTE_MODEL,
         on_delete=models.SET_NULL,
         null=True,
         blank=True,
@@ -818,7 +821,7 @@ class ItemInstance(SharedMemoryModel):
         related_name="item_instances",
     )
     silhouette = models.ForeignKey(
-        "arxii.Silhouette",
+        SILHOUETTE_MODEL,
         on_delete=models.SET_NULL,
         null=True,
         blank=True,
@@ -1432,7 +1435,7 @@ class RecycleRequest(SharedMemoryModel):
     """
 
     item_instance = models.ForeignKey(
-        "arxii.ItemInstance",
+        _ITEM_INSTANCE_FK,
         on_delete=models.CASCADE,
         related_name="recycle_requests",
     )
@@ -1550,7 +1553,7 @@ class ItemStyle(ItemAttachment):
         related_name="item_styles",
     )
     style = models.ForeignKey(
-        "arxii.Style",
+        STYLE_MODEL,
         on_delete=models.PROTECT,
         related_name="item_attachments",
     )
@@ -1686,7 +1689,7 @@ class FashionPresentation(SharedMemoryModel):
         related_name="fashion_presentations",
     )
     outfit = models.ForeignKey(
-        "arxii.Outfit",
+        OUTFIT_MODEL,
         on_delete=models.SET_NULL,
         null=True,
         blank=True,
@@ -1809,7 +1812,7 @@ class FashionStyle(NaturalKeyMixin, SharedMemoryModel):
         help_text="Facets that are currently fashionable in this style.",
     )
     in_vogue_styles = models.ManyToManyField(
-        "arxii.Style",
+        STYLE_MODEL,
         related_name="vogue_in",
         blank=True,
         help_text="Aesthetic styles (vocabulary words) that are currently fashionable.",
@@ -1865,14 +1868,14 @@ class ShowcaseState(SharedMemoryModel):
     is_active = models.BooleanField(default=False)
     mode = models.CharField(max_length=20, choices=ShowcaseMode.choices)
     outfit = models.ForeignKey(
-        "arxii.Outfit",
+        OUTFIT_MODEL,
         on_delete=models.SET_NULL,
         null=True,
         blank=True,
         related_name="showcases",
     )
     item = models.ForeignKey(
-        "arxii.ItemInstance",
+        _ITEM_INSTANCE_FK,
         on_delete=models.SET_NULL,
         null=True,
         blank=True,
@@ -1914,28 +1917,28 @@ class FashionShowing(SharedMemoryModel):
     )
     mode = models.CharField(max_length=20, choices=ShowcaseMode.choices)
     statement_item = models.ForeignKey(
-        "arxii.ItemInstance",
+        _ITEM_INSTANCE_FK,
         on_delete=models.SET_NULL,
         null=True,
         blank=True,
         related_name="statement_showings",
     )
     statement_outfit = models.ForeignKey(
-        "arxii.Outfit",
+        OUTFIT_MODEL,
         on_delete=models.SET_NULL,
         null=True,
         blank=True,
         related_name="statement_showings",
     )
     statement_style = models.ForeignKey(
-        "arxii.Style",
+        STYLE_MODEL,
         on_delete=models.SET_NULL,
         null=True,
         blank=True,
         related_name="statement_showings",
     )
     statement_silhouette = models.ForeignKey(
-        "arxii.Silhouette",
+        SILHOUETTE_MODEL,
         on_delete=models.SET_NULL,
         null=True,
         blank=True,
@@ -1968,7 +1971,7 @@ class SilhouetteVogueMomentum(SharedMemoryModel):
     """
 
     silhouette = models.OneToOneField(
-        "arxii.Silhouette",
+        SILHOUETTE_MODEL,
         on_delete=models.CASCADE,
         primary_key=True,
         related_name="vogue_momentum",
@@ -1987,7 +1990,7 @@ class StyleVogueMomentum(SharedMemoryModel):
     """Accumulating vogue heat for a cultural style register (#2907; global v1)."""
 
     style = models.OneToOneField(
-        "arxii.Style",
+        STYLE_MODEL,
         on_delete=models.CASCADE,
         primary_key=True,
         related_name="vogue_momentum_row",

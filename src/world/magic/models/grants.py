@@ -24,6 +24,7 @@ _DISTINCTION_MODEL = "arxii.Distinction"
 _PATH_MODEL = "arxii.Path"
 _GIFT_MODEL = "arxii.Gift"
 _TRADITION_MODEL = "arxii.Tradition"
+_RITUAL_MODEL = "arxii.Ritual"
 
 
 class BeginningsRitualGrant(SharedMemoryModel):
@@ -35,7 +36,7 @@ class BeginningsRitualGrant(SharedMemoryModel):
         related_name="ritual_grants",
     )
     ritual = models.ForeignKey(
-        "arxii.Ritual",
+        _RITUAL_MODEL,
         on_delete=models.CASCADE,
         related_name="+",
     )
@@ -65,7 +66,7 @@ class PathRitualGrant(models.Model):  # noqa: SHARED_MEMORY
         related_name="ritual_grants",
     )
     ritual = models.ForeignKey(
-        "arxii.Ritual",
+        _RITUAL_MODEL,
         on_delete=models.CASCADE,
         related_name="+",
     )
@@ -222,7 +223,7 @@ class DistinctionRitualGrant(SharedMemoryModel):
         related_name="ritual_grants",
     )
     ritual = models.ForeignKey(
-        "arxii.Ritual",
+        _RITUAL_MODEL,
         on_delete=models.CASCADE,
         related_name="+",
     )
@@ -352,7 +353,7 @@ class TraditionRitualGrant(SharedMemoryModel):
         related_name="ritual_grants",
     )
     ritual = models.ForeignKey(
-        "arxii.Ritual",
+        _RITUAL_MODEL,
         on_delete=models.CASCADE,
         related_name="+",
     )
@@ -384,7 +385,7 @@ class CodexEntryRitualGrant(SharedMemoryModel):
         related_name="ritual_grants",
     )
     ritual = models.ForeignKey(
-        "arxii.Ritual",
+        _RITUAL_MODEL,
         on_delete=models.CASCADE,
         related_name="+",
     )

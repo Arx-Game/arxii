@@ -18,6 +18,9 @@ from world.consent.models import VisibilityMixin
 from world.contributors.models import CreditedContent
 from world.roster.models import RosterEntry, RosterTenure
 
+# Lazy model reference (Django app_label.ModelName), extracted to satisfy S1192.
+CODEX_ENTRY_MODEL = "arxii.CodexEntry"
+
 
 class CodexCategory(NaturalKeyMixin, CreditedContent, SharedMemoryModel):
     """
@@ -546,7 +549,7 @@ class BeginningsCodexGrant(NaturalKeyMixin, SharedMemoryModel):
 
     class NaturalKeyConfig:
         fields = ["beginnings", "entry"]
-        dependencies = ["arxii.Beginnings", "arxii.CodexEntry"]
+        dependencies = ["arxii.Beginnings", CODEX_ENTRY_MODEL]
 
     class Meta:
         unique_together = ["beginnings", "entry"]
@@ -576,7 +579,7 @@ class PathCodexGrant(NaturalKeyMixin, models.Model):  # noqa: SHARED_MEMORY
 
     class NaturalKeyConfig:
         fields = ["path", "entry"]
-        dependencies = ["arxii.Path", "arxii.CodexEntry"]
+        dependencies = ["arxii.Path", CODEX_ENTRY_MODEL]
 
     class Meta:
         unique_together = ["path", "entry"]
@@ -605,7 +608,7 @@ class DistinctionCodexGrant(NaturalKeyMixin, SharedMemoryModel):
 
     class NaturalKeyConfig:
         fields = ["distinction", "entry"]
-        dependencies = ["arxii.Distinction", "arxii.CodexEntry"]
+        dependencies = ["arxii.Distinction", CODEX_ENTRY_MODEL]
 
     class Meta:
         unique_together = ["distinction", "entry"]
@@ -634,7 +637,7 @@ class TraditionCodexGrant(NaturalKeyMixin, SharedMemoryModel):
 
     class NaturalKeyConfig:
         fields = ["tradition", "entry"]
-        dependencies = ["arxii.Tradition", "arxii.CodexEntry"]
+        dependencies = ["arxii.Tradition", CODEX_ENTRY_MODEL]
 
     class Meta:
         unique_together = ["tradition", "entry"]
