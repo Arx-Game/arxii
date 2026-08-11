@@ -41,9 +41,15 @@ fail() { printf '[standup] REFUSING: %s\n' "$*" >&2; exit 1; }
 # wait_for_tcp() below; depends on log()/fail() above being defined first.
 . "${SCRIPT_DIR}/lib.sh"
 
-# Runtime app secrets that MUST be pre-supplied (operator env / gated GitHub
-# Environment). Mirrors the secrets_vault map. The backup-writer keys are NOT
-# here — they are produced by tofu and exported post-apply.
+# Runtime app secrets/vars that MUST be pre-supplied (operator env / gated
+# GitHub Environment). This is NOT a 1:1 mirror of secrets_vault's
+# secrets_map: the backup-writer keys are excluded here because they are
+# produced by tofu and exported post-apply, and ARXII_CONTENT_REPO_TOKEN/
+# ARXII_CONTENT_REPO are required here but deliberately EXCLUDED from
+# secrets_map by design — they're ansible-step-only, never written to the
+# box's own EnvironmentFile (see group_vars/secrets.env.example's
+# "ANSIBLE-STEP-ONLY, NEVER ON-BOX" section for the actual current
+# contract shape; don't "fix" this by adding them to secrets_map).
 readonly REQUIRED_ARXII=(
   ARXII_PG_PASSWORD ARXII_DJANGO_SECRET_KEY
   ARXII_CLOUDINARY_CLOUD_NAME ARXII_CLOUDINARY_API_KEY ARXII_CLOUDINARY_API_SECRET

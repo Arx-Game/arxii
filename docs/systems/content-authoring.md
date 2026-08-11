@@ -43,6 +43,12 @@ credited-row-freeze protections apply. Nothing loads automatically on
 deploy — see #2236 Phase 4 for why (protects in-progress prod-admin edits
 from being silently clobbered by an unattended load).
 
+Uncommitted export output sitting in the prod checkout (from prod-admin
+content authoring) blocks the next deploy's content-repo refresh until it's
+committed or cleaned up — the `content_repo` role's clone/pull task refuses
+to run over local modifications, and its failure message names this as the
+first likely cause.
+
 ## Loading content into a database
 
 Admin header, then **Game Setup**, then **Load private content repo**. The

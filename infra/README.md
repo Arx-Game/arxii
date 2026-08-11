@@ -157,16 +157,21 @@ disables the feature, never refuses the converge — `secrets_vault`'s
   `SENTRY_RELEASE` (the deployed commit SHA, stamped by `app_deploy` after
   checkout) are derived on-box, not operator-supplied.
 
-**Pre-stored by the operator — ansible-step-only, never reaches the box
-(#3153; a third category alongside "on-box runtime" above and "tofu-step-only"
-below — the running Django/Evennia process never needs this, only the one
-Ansible task that clones the checkout does):**
+**Pre-stored by the operator — ansible-step-only, never written to the app's
+own EnvironmentFile (#3153; a third category alongside "on-box runtime"
+above and "tofu-step-only" below — the running Django/Evennia process never
+needs this, only the one Ansible task that clones the checkout does):**
 - `ARXII_CONTENT_REPO_TOKEN` — a GitHub **fine-grained PAT**, scoped to
   *only* the private lore repo, **Contents: Read-only** permission. Consumed
   once per converge by the `content_repo` role via `lookup('env', ...)`
   (`no_log: true`) and deliberately never written to the box's own
-  `/etc/arxii/arxii.env` — see "Content-repo checkout credential" below for
-  how to mint it.
+  `/etc/arxii/arxii.env` (what the running app process reads) — see
+  "Content-repo checkout credential" below for how to mint it. The token IS
+  transiently written to disk during each converge (embedded in the
+  checkout's `.git/config` by the clone task) but is scrubbed by a
+  follow-up task that resets `remote.origin.url` to a clean, credential-free
+  URL immediately after the clone/pull completes — it does not persist
+  between converges.
 
 **NOT pre-stored — produced by the tofu step at run time and piped into the
 ansible step's env in-memory (masked, never to disk/log):**
@@ -192,8 +197,10 @@ for prod.
 - `ARXII_CONTENT_REPO` — the private lore repo's `owner/repo` slug. Pairs
   with `ARXII_CONTENT_REPO_TOKEN` above; knowing the slug alone grants no
   access without the token, which is what keeps this a Variable rather than
-  a Secret. Keeps the repo's identity out of committed code, per
-  `content_repo.py`'s own module docstring.
+  a Secret. Keeps the slug out of infra config, resolved only via this
+  gated Environment Variable — see `docs/systems/content-authoring.md`'s
+  "One-time setup" section for the same discipline applied to the
+  session-PR push flow.
 
 ## What the button actually does to game state (first run vs. re-run)
 
@@ -385,7 +392,7 @@ whether it passed or failed. Equivalent local fallback:
 ### What it deliberately CANNOT prove (first-prod-run-only residual risks)
 
 Rehearsal mode keeps the ephemeral-stage root's isolation absolute: **no
-prod refs, no prod-adjacent credential, ever.** That means three real things
+prod refs, no prod-adjacent credential, ever.** That means four real things
 are structurally untested here and remain **residual risk on the actual
 first prod run**:
 
@@ -403,8 +410,14 @@ first prod run**:
   (`offsite_enabled: false`) — the R2 credential pair is a real Cloudflare
   account/bucket, prod-adjacent, and the isolated ephemeral-stage root has
   no such credential to give it.
+- **The `content_repo` role (#3153).** Skipped entirely in rehearsal
+  (`content_repo_enabled: false`) — same isolation-doctrine reasoning as R2
+  offsite replication above: `ARXII_CONTENT_REPO_TOKEN` is a real GitHub PAT
+  with real private-repo read access, prod-adjacent, and the isolated
+  ephemeral-stage root has no such credential to give it. Its very first
+  execution is against real prod.
 
-These three should be watched closely on the actual first `standup.sh` /
+These four should be watched closely on the actual first `standup.sh` /
 "Stand up infra" run — they are the only parts of the stack this rehearsal
 does not exercise.
 
