@@ -42,6 +42,8 @@ _CONDITION_TEMPLATE_FK = "arxii.ConditionTemplate"
 _CONDITION_STAGE_FK = "arxii.ConditionStage"
 CHARACTER_SHEET_MODEL = "arxii.CharacterSheet"
 _POSITION_FK = "arxii.Position"
+_CHECK_TYPE_FK = "arxii.CheckType"
+_DAMAGE_TYPE_FK = "arxii.DamageType"
 
 # =============================================================================
 # Lookup Tables (SharedMemoryModel - cached, rarely change)
@@ -294,7 +296,7 @@ class ConditionTemplate(NaturalKeyMixin, CreditedContent, SharedMemoryModel):
         help_text="Can magical dispel effects remove this?",
     )
     cure_check_type = models.ForeignKey(
-        "arxii.CheckType",
+        _CHECK_TYPE_FK,
         on_delete=models.SET_NULL,
         null=True,
         blank=True,
@@ -306,7 +308,7 @@ class ConditionTemplate(NaturalKeyMixin, CreditedContent, SharedMemoryModel):
         help_text="Base difficulty to cure via check",
     )
     resist_check_type = models.ForeignKey(
-        "arxii.CheckType",
+        _CHECK_TYPE_FK,
         on_delete=models.SET_NULL,
         null=True,
         blank=True,
@@ -331,7 +333,7 @@ class ConditionTemplate(NaturalKeyMixin, CreditedContent, SharedMemoryModel):
         ),
     )
     break_free_check_type = models.ForeignKey(
-        "arxii.CheckType",
+        _CHECK_TYPE_FK,
         on_delete=models.SET_NULL,
         null=True,
         blank=True,
@@ -559,7 +561,7 @@ class ConditionStage(NaturalKeyMixin, CreditedContent, SharedMemoryModel):
 
     # Can a check prevent progression?
     resist_check_type = models.ForeignKey(
-        "arxii.CheckType",
+        _CHECK_TYPE_FK,
         on_delete=models.SET_NULL,
         null=True,
         blank=True,
@@ -861,7 +863,7 @@ class ConditionCheckModifier(NaturalKeyMixin, ConditionOrStageEffect):
     """
 
     check_type = models.ForeignKey(
-        "arxii.CheckType",
+        _CHECK_TYPE_FK,
         on_delete=models.CASCADE,
         null=True,
         blank=True,
@@ -890,7 +892,7 @@ class ConditionCheckModifier(NaturalKeyMixin, ConditionOrStageEffect):
         dependencies = [
             _CONDITION_TEMPLATE_FK,
             _CONDITION_STAGE_FK,
-            "arxii.CheckType",
+            _CHECK_TYPE_FK,
             "arxii.CheckCategory",
         ]
 
@@ -987,7 +989,7 @@ class ConditionResistanceModifier(NaturalKeyMixin, ConditionOrStageEffect):
         dependencies = [
             _CONDITION_TEMPLATE_FK,
             _CONDITION_STAGE_FK,
-            "arxii.DamageType",
+            _DAMAGE_TYPE_FK,
         ]
 
     class Meta(ConditionOrStageEffect.Meta):
@@ -1069,7 +1071,7 @@ class ConditionDamageOverTime(NaturalKeyMixin, ConditionOrStageEffect):
         dependencies = [
             _CONDITION_TEMPLATE_FK,
             _CONDITION_STAGE_FK,
-            "arxii.DamageType",
+            _DAMAGE_TYPE_FK,
         ]
 
     class Meta(ConditionOrStageEffect.Meta):
@@ -1160,7 +1162,7 @@ class ConditionDamageInteraction(NaturalKeyMixin, CreditedContent, SharedMemoryM
         fields = ["condition", "damage_type"]
         dependencies = [
             _CONDITION_TEMPLATE_FK,
-            "arxii.DamageType",
+            _DAMAGE_TYPE_FK,
         ]
 
     class Meta:
@@ -1509,7 +1511,7 @@ class TreatmentTemplate(SharedMemoryModel):
         choices=TreatmentTargetKind.choices,
     )
 
-    check_type = models.ForeignKey("arxii.CheckType", on_delete=models.PROTECT)
+    check_type = models.ForeignKey(_CHECK_TYPE_FK, on_delete=models.PROTECT)
     target_difficulty = models.PositiveIntegerField(default=0)
     requires_bond = models.BooleanField(default=False)
 

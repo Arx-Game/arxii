@@ -15,6 +15,10 @@ from evennia.utils.idmapper.models import SharedMemoryModel
 from core.mixins import DiscriminatorMixin
 from world.locations.constants import HolderType, KeyType, LocationParentType, StatKey
 
+# Lazy model references (Django app_label.ModelName), extracted to satisfy S1192.
+AREA_MODEL = "arxii.Area"
+ROOM_PROFILE_MODEL = "arxii.RoomProfile"
+
 
 class LocationValueOverride(DiscriminatorMixin, SharedMemoryModel):
     """An absolute claim about a stat or resonance at a specific area or room.
@@ -51,14 +55,14 @@ class LocationValueOverride(DiscriminatorMixin, SharedMemoryModel):
         help_text="Selects which FK (area or room_profile) is active.",
     )
     area = models.ForeignKey(
-        "arxii.Area",
+        AREA_MODEL,
         null=True,
         blank=True,
         on_delete=models.CASCADE,
         related_name="stat_overrides",
     )
     room_profile = models.ForeignKey(
-        "arxii.RoomProfile",
+        ROOM_PROFILE_MODEL,
         null=True,
         blank=True,
         on_delete=models.CASCADE,
@@ -194,14 +198,14 @@ class LocationValueModifier(DiscriminatorMixin, SharedMemoryModel):
         help_text="Selects which FK (area or room_profile) is active.",
     )
     area = models.ForeignKey(
-        "arxii.Area",
+        AREA_MODEL,
         null=True,
         blank=True,
         on_delete=models.CASCADE,
         related_name="stat_modifiers",
     )
     room_profile = models.ForeignKey(
-        "arxii.RoomProfile",
+        ROOM_PROFILE_MODEL,
         null=True,
         blank=True,
         on_delete=models.CASCADE,
@@ -347,14 +351,14 @@ class LocationOwnership(DiscriminatorMixin, SharedMemoryModel):
         help_text="Selects which parent FK (area or room_profile) is active.",
     )
     area = models.ForeignKey(
-        "arxii.Area",
+        AREA_MODEL,
         null=True,
         blank=True,
         on_delete=models.CASCADE,
         related_name="ownership_records",
     )
     room_profile = models.ForeignKey(
-        "arxii.RoomProfile",
+        ROOM_PROFILE_MODEL,
         null=True,
         blank=True,
         on_delete=models.CASCADE,
@@ -466,14 +470,14 @@ class LocationTenancy(DiscriminatorMixin, SharedMemoryModel):
         help_text="Selects which parent FK (area or room_profile) is active.",
     )
     area = models.ForeignKey(
-        "arxii.Area",
+        AREA_MODEL,
         null=True,
         blank=True,
         on_delete=models.CASCADE,
         related_name="tenancy_records",
     )
     room_profile = models.ForeignKey(
-        "arxii.RoomProfile",
+        ROOM_PROFILE_MODEL,
         null=True,
         blank=True,
         on_delete=models.CASCADE,

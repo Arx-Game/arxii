@@ -13,6 +13,10 @@ from world.checks.constants import EffectTarget, EffectType, PositionDestination
 from world.checks.outcome_models import ConsequenceOutcome, ConsequenceOutcomeModifier  # noqa: F401
 from world.contributors.models import CreditedContent
 
+# Lazy model references (Django app_label.ModelName), extracted to satisfy S1192.
+CHECK_TYPE_MODEL = "arxii.CheckType"
+CHECK_OUTCOME_MODEL = "arxii.CheckOutcome"
+
 
 class OutcomeTierAward(SharedMemoryModel):
     """Shared base: one authored scalar per graded CheckOutcome tier.
@@ -27,7 +31,7 @@ class OutcomeTierAward(SharedMemoryModel):
     """
 
     outcome_tier = models.OneToOneField(
-        "arxii.CheckOutcome",
+        CHECK_OUTCOME_MODEL,
         on_delete=models.PROTECT,
         related_name="%(app_label)s_%(class)s",
     )
@@ -125,7 +129,7 @@ class CheckTypeTrait(NaturalKeyMixin, SharedMemoryModel):
 
     class NaturalKeyConfig:
         fields = ["check_type", "trait"]
-        dependencies = ["arxii.CheckType", "arxii.Trait"]
+        dependencies = [CHECK_TYPE_MODEL, "arxii.Trait"]
 
     class Meta:
         unique_together = ["check_type", "trait"]
@@ -162,7 +166,7 @@ class CheckTypeCapabilityModifier(NaturalKeyMixin, SharedMemoryModel):
 
     class NaturalKeyConfig:
         fields = ["check_type", "capability"]
-        dependencies = ["arxii.CheckType", "arxii.CapabilityType"]
+        dependencies = [CHECK_TYPE_MODEL, "arxii.CapabilityType"]
 
     class Meta:
         unique_together = ["check_type", "capability"]
@@ -195,7 +199,7 @@ class CheckTypeAspect(NaturalKeyMixin, SharedMemoryModel):
 
     class NaturalKeyConfig:
         fields = ["check_type", "aspect"]
-        dependencies = ["arxii.CheckType", "arxii.Aspect"]
+        dependencies = [CHECK_TYPE_MODEL, "arxii.Aspect"]
 
     class Meta:
         unique_together = ["check_type", "aspect"]
@@ -236,7 +240,7 @@ class CheckTypeSpecialization(NaturalKeyMixin, SharedMemoryModel):
 
     class NaturalKeyConfig:
         fields = ["check_type", "specialization"]
-        dependencies = ["arxii.CheckType", "arxii.Specialization"]
+        dependencies = [CHECK_TYPE_MODEL, "arxii.Specialization"]
 
     class Meta:
         unique_together = ["check_type", "specialization"]
@@ -277,10 +281,10 @@ class Consequence(NaturalKeyMixin, CreditedContent, SharedMemoryModel):
 
     class NaturalKeyConfig:
         fields = ["outcome_tier", "label"]
-        dependencies = ["arxii.CheckOutcome"]
+        dependencies = [CHECK_OUTCOME_MODEL]
 
     outcome_tier = models.ForeignKey(
-        "arxii.CheckOutcome",
+        CHECK_OUTCOME_MODEL,
         on_delete=models.CASCADE,
         related_name="consequences",
     )

@@ -48,6 +48,7 @@ from world.items.constants import BodyRegion
 logger = logging.getLogger(__name__)
 
 _SPECIES_MODEL = "arxii.Species"
+_TRADITION_MODEL = "arxii.Tradition"
 
 
 class CGPointBudget(NaturalKeyMixin, SharedMemoryModel):
@@ -296,7 +297,7 @@ class Beginnings(NaturalKeyMixin, CreditedContent, SharedMemoryModel):
         help_text="Societies characters gain awareness/membership in during character creation",
     )
     traditions = models.ManyToManyField(
-        "arxii.Tradition",
+        _TRADITION_MODEL,
         through="BeginningTradition",
         blank=True,
         related_name="available_beginnings",
@@ -498,7 +499,7 @@ class BeginningTradition(NaturalKeyMixin, SharedMemoryModel):
         related_name="beginning_traditions",
     )
     tradition = models.ForeignKey(
-        "arxii.Tradition",
+        _TRADITION_MODEL,
         on_delete=models.CASCADE,
         related_name="beginning_traditions",
     )
@@ -828,7 +829,7 @@ class CharacterDraft(SharedMemoryModel):
         help_text="Selected starting path (Prospect stage only)",
     )
     selected_tradition = models.ForeignKey(
-        "arxii.Tradition",
+        _TRADITION_MODEL,
         on_delete=models.SET_NULL,
         null=True,
         blank=True,

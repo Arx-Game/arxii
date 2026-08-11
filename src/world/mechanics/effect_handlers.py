@@ -40,6 +40,7 @@ _ROLE_NAMED_B = "named_b"
 # Skip-reason descriptions repeated across relationship/affection/regard handlers.
 _NO_SHEET_MSG = "Actor or target has no character sheet; skipped."
 _SAME_CHAR_MSG = "Actor and target are the same character; skipped."
+_NO_ROSTER_ENTRY_MSG = "Character has no roster entry"
 
 
 def apply_effect(
@@ -533,9 +534,9 @@ def _grant_codex(
     except RosterEntry.DoesNotExist:
         return AppliedEffect(
             effect_type=EffectType.GRANT_CODEX,
-            description="Character has no roster entry",
+            description=_NO_ROSTER_ENTRY_MSG,
             applied=False,
-            skip_reason="Character has no roster entry",
+            skip_reason=_NO_ROSTER_ENTRY_MSG,
         )
 
     _, created = CharacterCodexKnowledge.objects.get_or_create(
@@ -580,9 +581,9 @@ def _grant_secret(
     except RosterEntry.DoesNotExist:
         return AppliedEffect(
             effect_type=EffectType.GRANT_SECRET,
-            description="Character has no roster entry",
+            description=_NO_ROSTER_ENTRY_MSG,
             applied=False,
-            skip_reason="Character has no roster entry",
+            skip_reason=_NO_ROSTER_ENTRY_MSG,
         )
 
     from world.secrets.services import grant_secret_knowledge  # noqa: PLC0415

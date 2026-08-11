@@ -22,6 +22,10 @@ _SUBVERB_OFF = "off"
 _SUBVERB_OUTFIT = "outfit"
 _SUBVERB_STATUS = "status"
 
+# Lock string shared by every command in this module — extracted to satisfy
+# the duplicated-literal SonarCloud smell (python:S1192).
+LOCK_ALL = "cmd:all()"
+
 
 class CmdShowcase(ArxCommand):
     """Choose what you are showcasing to the fashionable world.
@@ -38,7 +42,7 @@ class CmdShowcase(ArxCommand):
     """
 
     key = "showcase"
-    locks = "cmd:all()"
+    locks = LOCK_ALL
 
     def func(self) -> None:
         from actions.definitions.fashion import ShowcaseAction  # noqa: PLC0415
@@ -136,7 +140,7 @@ class CmdReveal(ArxCommand):
 
     key = "reveal"
     aliases = ["show"]
-    locks = "cmd:all()"
+    locks = LOCK_ALL
 
     def func(self) -> None:
         from actions.definitions.fashion import RevealAction  # noqa: PLC0415
@@ -168,7 +172,7 @@ class CmdCover(ArxCommand):
 
     key = "cover"
     aliases = ["conceal"]
-    locks = "cmd:all()"
+    locks = LOCK_ALL
 
     def func(self) -> None:
         from actions.definitions.fashion import CoverUpAction  # noqa: PLC0415

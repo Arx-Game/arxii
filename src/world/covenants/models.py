@@ -63,6 +63,7 @@ CHARACTER_SHEET_MODEL = "arxii.CharacterSheet"
 CONDITION_TEMPLATE_MODEL = "arxii.ConditionTemplate"
 GIFT_MODEL = "arxii.Gift"
 VOW_SITUATIONAL_PERK_MODEL = "arxii.VowSituationalPerk"
+MODIFIER_TARGET_MODEL = "arxii.ModifierTarget"
 
 
 class Covenant(SharedMemoryModel):
@@ -919,7 +920,7 @@ class CovenantLevelBonus(SharedMemoryModel):
     """
 
     modifier_target = models.ForeignKey(
-        "arxii.ModifierTarget",
+        MODIFIER_TARGET_MODEL,
         on_delete=models.CASCADE,
         related_name="covenant_level_bonuses",
     )
@@ -970,7 +971,7 @@ class VowStatScaling(NaturalKeyMixin, SharedMemoryModel):
         related_name="vow_stat_scalings",
     )
     modifier_target = models.ForeignKey(
-        "arxii.ModifierTarget",
+        MODIFIER_TARGET_MODEL,
         on_delete=models.CASCADE,
         related_name="vow_stat_scalings",
     )
@@ -994,7 +995,7 @@ class VowStatScaling(NaturalKeyMixin, SharedMemoryModel):
 
     class NaturalKeyConfig:
         fields = ["covenant_role", "modifier_target"]
-        dependencies = [COVENANT_ROLE_MODEL, "arxii.ModifierTarget"]
+        dependencies = [COVENANT_ROLE_MODEL, MODIFIER_TARGET_MODEL]
 
     def __str__(self) -> str:
         return (
@@ -1235,7 +1236,7 @@ class CovenantRoleBonus(NaturalKeyMixin, SharedMemoryModel):
         related_name="role_bonuses",
     )
     modifier_target = models.ForeignKey(
-        "arxii.ModifierTarget",
+        MODIFIER_TARGET_MODEL,
         on_delete=models.CASCADE,
         related_name="covenant_role_bonuses",
     )
@@ -1259,7 +1260,7 @@ class CovenantRoleBonus(NaturalKeyMixin, SharedMemoryModel):
 
     class NaturalKeyConfig:
         fields = ["covenant_role", "modifier_target"]
-        dependencies = [COVENANT_ROLE_MODEL, "arxii.ModifierTarget"]
+        dependencies = [COVENANT_ROLE_MODEL, MODIFIER_TARGET_MODEL]
 
     def __str__(self) -> str:
         return (

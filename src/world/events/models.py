@@ -7,6 +7,9 @@ from core.mixins import DiscriminatorMixin
 from world.events.constants import EventStatus, InvitationResponse, InvitationTargetType
 from world.game_clock.constants import TimePhase
 
+# Lazy model reference (Django app_label.ModelName), extracted to satisfy S1192.
+PERSONA_MODEL = "arxii.Persona"
+
 
 class Event(SharedMemoryModel):
     """A scheduled RP gathering — ball, meeting, ritual, training session.
@@ -123,7 +126,7 @@ class EventHost(SharedMemoryModel):
         related_name="hosts",
     )
     persona = models.ForeignKey(
-        "arxii.Persona",
+        PERSONA_MODEL,
         null=True,
         on_delete=models.SET_NULL,
         related_name="hosted_events",
@@ -168,7 +171,7 @@ class EventInvitation(DiscriminatorMixin, SharedMemoryModel):
         choices=InvitationTargetType.choices,
     )
     target_persona = models.ForeignKey(
-        "arxii.Persona",
+        PERSONA_MODEL,
         null=True,
         blank=True,
         on_delete=models.SET_NULL,
@@ -191,7 +194,7 @@ class EventInvitation(DiscriminatorMixin, SharedMemoryModel):
     can_bring_guests = models.BooleanField(default=False)
     invited_at = models.DateTimeField(auto_now_add=True)
     invited_by = models.ForeignKey(
-        "arxii.Persona",
+        PERSONA_MODEL,
         null=True,
         blank=True,
         on_delete=models.SET_NULL,
@@ -290,7 +293,7 @@ class EventCatering(SharedMemoryModel):
         help_text="CONTAINER (a flagged vessel) or PROVISION (a consumable set out in one).",
     )
     contributed_by = models.ForeignKey(
-        "arxii.Persona",
+        PERSONA_MODEL,
         on_delete=models.PROTECT,
         null=True,
         blank=True,
