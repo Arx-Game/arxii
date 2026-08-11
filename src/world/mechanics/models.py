@@ -44,6 +44,10 @@ from world.scenes.action_constants import (
 _DAMAGE_TYPE_MODEL_PATH = "arxii.DamageType"
 _CONSEQUENCE_POOL_MODEL = "arxii.ConsequencePool"
 _CHALLENGE_TEMPLATE_MODEL = "arxii.ChallengeTemplate"
+_TRAIT_MODEL = "arxii.Trait"
+_CAPABILITY_TYPE_MODEL = "arxii.CapabilityType"
+_CHECK_TYPE_MODEL = "arxii.CheckType"
+_CONSEQUENCE_MODEL = "arxii.Consequence"
 
 
 class ModifierCategoryManager(NaturalKeyManager):
@@ -139,7 +143,7 @@ class ModifierTarget(NaturalKeyMixin, CreditedContent, SharedMemoryModel):
         ),
     )
     target_trait = models.ForeignKey(
-        "arxii.Trait",
+        _TRAIT_MODEL,
         on_delete=models.SET_NULL,
         null=True,
         blank=True,
@@ -165,7 +169,7 @@ class ModifierTarget(NaturalKeyMixin, CreditedContent, SharedMemoryModel):
         help_text="The resonance this target represents (resonance category only).",
     )
     target_capability = models.OneToOneField(
-        "arxii.CapabilityType",
+        _CAPABILITY_TYPE_MODEL,
         on_delete=models.SET_NULL,
         null=True,
         blank=True,
@@ -173,7 +177,7 @@ class ModifierTarget(NaturalKeyMixin, CreditedContent, SharedMemoryModel):
         help_text="The capability this target represents (capability category only).",
     )
     target_check_type = models.OneToOneField(
-        "arxii.CheckType",
+        _CHECK_TYPE_MODEL,
         on_delete=models.SET_NULL,
         null=True,
         blank=True,
@@ -744,7 +748,7 @@ class Application(NaturalKeyMixin, CreditedContent, SharedMemoryModel):
 
     name = models.CharField(max_length=100)
     capability = models.ForeignKey(
-        "arxii.CapabilityType",
+        _CAPABILITY_TYPE_MODEL,
         on_delete=models.CASCADE,
         related_name="applications",
     )
@@ -807,12 +811,12 @@ class TraitCapabilityDerivation(NaturalKeyMixin, SharedMemoryModel):
     """
 
     trait = models.ForeignKey(
-        "arxii.Trait",
+        _TRAIT_MODEL,
         on_delete=models.CASCADE,
         related_name="capability_derivations",
     )
     capability = models.ForeignKey(
-        "arxii.CapabilityType",
+        _CAPABILITY_TYPE_MODEL,
         on_delete=models.CASCADE,
         related_name="trait_derivations",
     )
@@ -835,7 +839,7 @@ class TraitCapabilityDerivation(NaturalKeyMixin, SharedMemoryModel):
 
     class NaturalKeyConfig:
         fields = ["trait", "capability"]
-        dependencies = ["arxii.Trait", "arxii.CapabilityType"]
+        dependencies = [_TRAIT_MODEL, _CAPABILITY_TYPE_MODEL]
 
     def __str__(self) -> str:
         return f"{self.trait.name} → {self.capability.name}"
@@ -909,7 +913,7 @@ class ChallengeTemplate(NaturalKeyMixin, CreditedContent, SharedMemoryModel):
         default=ChallengeType.INHIBITOR,
     )
     blocked_capability = models.ForeignKey(
-        "arxii.CapabilityType",
+        _CAPABILITY_TYPE_MODEL,
         on_delete=models.SET_NULL,
         null=True,
         blank=True,
@@ -921,7 +925,7 @@ class ChallengeTemplate(NaturalKeyMixin, CreditedContent, SharedMemoryModel):
         default=DiscoveryType.OBVIOUS,
     )
     consequences = models.ManyToManyField(
-        "arxii.Consequence",
+        _CONSEQUENCE_MODEL,
         through="ChallengeTemplateConsequence",
         related_name="challenge_templates",
         blank=True,
@@ -973,7 +977,7 @@ class ChallengeTemplateConsequence(SharedMemoryModel):
         related_name="challenge_consequences",
     )
     consequence = models.ForeignKey(
-        "arxii.Consequence",
+        _CONSEQUENCE_MODEL,
         on_delete=models.CASCADE,
         related_name="challenge_template_consequences",
     )
@@ -1023,7 +1027,7 @@ class ChallengeApproach(NaturalKeyMixin, CreditedContent, SharedMemoryModel):
         related_name="challenge_approaches",
     )
     check_type = models.ForeignKey(
-        "arxii.CheckType",
+        _CHECK_TYPE_MODEL,
         on_delete=models.CASCADE,
         related_name="challenge_approaches",
     )
@@ -1092,7 +1096,7 @@ class ApproachConsequence(SharedMemoryModel):
         related_name="consequences",
     )
     consequence = models.ForeignKey(
-        "arxii.Consequence",
+        _CONSEQUENCE_MODEL,
         on_delete=models.CASCADE,
         related_name="approach_consequences",
     )
@@ -1237,12 +1241,12 @@ class SituationTrapLink(NaturalKeyMixin, SharedMemoryModel):
         related_name="situation_trap_links",
     )
     detect_check_type = models.ForeignKey(
-        "arxii.CheckType",
+        _CHECK_TYPE_MODEL,
         on_delete=models.PROTECT,
         related_name="detect_situation_traps",
     )
     disarm_check_type = models.ForeignKey(
-        "arxii.CheckType",
+        _CHECK_TYPE_MODEL,
         on_delete=models.PROTECT,
         related_name="disarm_situation_traps",
     )
@@ -1415,7 +1419,7 @@ class CharacterChallengeRecord(SharedMemoryModel):
         related_name="challenge_records",
     )
     consequence = models.ForeignKey(
-        "arxii.Consequence",
+        _CONSEQUENCE_MODEL,
         on_delete=models.SET_NULL,
         null=True,
         blank=True,
@@ -1455,7 +1459,7 @@ class ContextConsequencePool(SharedMemoryModel):
         related_name="context_attachments",
     )
     check_type = models.ForeignKey(
-        "arxii.CheckType",
+        _CHECK_TYPE_MODEL,
         on_delete=models.PROTECT,
         null=True,
         blank=True,
