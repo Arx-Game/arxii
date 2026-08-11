@@ -79,6 +79,7 @@ from world.magic.factories import TechniqueFactory
 # SonarCloud smell (python:S1192).
 _CHARACTER_SHEET_FACTORY = "world.character_sheets.factories.CharacterSheetFactory"
 _ROOM_TYPECLASS = "typeclasses.rooms.Room"
+_TRIGGER_DEFINITION_MODEL = "arxii.TriggerDefinition"
 
 
 class CombatEncounterFactory(factory_django.DjangoModelFactory):
@@ -1663,7 +1664,7 @@ class EscalationSpikeOnIncapacitatedTriggerDefinitionFactory(factory_django.Djan
     """
 
     class Meta:
-        model = "arxii.TriggerDefinition"
+        model = _TRIGGER_DEFINITION_MODEL
         django_get_or_create = ("name",)
 
     name = "escalation_spike_on_incapacitated"
@@ -1677,7 +1678,7 @@ class EscalationSpikeOnKilledTriggerDefinitionFactory(factory_django.DjangoModel
     """TriggerDefinition for the CHARACTER_KILLED escalation spike (#872)."""
 
     class Meta:
-        model = "arxii.TriggerDefinition"
+        model = _TRIGGER_DEFINITION_MODEL
         django_get_or_create = ("name",)
 
     name = "escalation_spike_on_killed"
@@ -1724,7 +1725,7 @@ class EscalationSpikeOnMortalPerilTriggerDefinitionFactory(factory_django.Django
     """
 
     class Meta:
-        model = "arxii.TriggerDefinition"
+        model = _TRIGGER_DEFINITION_MODEL
         django_get_or_create = ("name",)
 
     name = "escalation_spike_on_mortal_peril"
@@ -1775,7 +1776,7 @@ class EncounterBeatTriggerDefinitionFactory(factory_django.DjangoModelFactory):
     """
 
     class Meta:
-        model = "arxii.TriggerDefinition"
+        model = _TRIGGER_DEFINITION_MODEL
         django_get_or_create = ("name",)
 
     name = "encounter_completed_beat_wiring"

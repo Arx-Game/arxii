@@ -5,6 +5,11 @@ from __future__ import annotations
 from django.db import models
 from evennia.utils.idmapper.models import SharedMemoryModel
 
+_CHARACTER_SHEET_MODEL = "arxii.CharacterSheet"
+_CHARACTER_RELATIONSHIP_MODEL = "arxii.CharacterRelationship"
+_SCENE_MODEL = "arxii.Scene"
+_RESONANCE_MODEL = "arxii.Resonance"
+
 
 class SineatingPendingOffer(SharedMemoryModel):
     """Pending Sineating offer awaiting Sineater response (Task 1.6).
@@ -25,27 +30,27 @@ class SineatingPendingOffer(SharedMemoryModel):
     """
 
     sinner_sheet = models.ForeignKey(
-        "arxii.CharacterSheet",
+        _CHARACTER_SHEET_MODEL,
         on_delete=models.CASCADE,
         related_name="sineating_offers_sent",
     )
     sineater_sheet = models.ForeignKey(
-        "arxii.CharacterSheet",
+        _CHARACTER_SHEET_MODEL,
         on_delete=models.CASCADE,
         related_name="sineating_offers_received",
     )
     relationship = models.ForeignKey(
-        "arxii.CharacterRelationship",
+        _CHARACTER_RELATIONSHIP_MODEL,
         on_delete=models.CASCADE,
         related_name="sineating_pending_offers",
     )
     scene = models.ForeignKey(
-        "arxii.Scene",
+        _SCENE_MODEL,
         on_delete=models.CASCADE,
         related_name="sineating_pending_offers",
     )
     resonance = models.ForeignKey(
-        "arxii.Resonance",
+        _RESONANCE_MODEL,
         on_delete=models.PROTECT,
         related_name="sineating_pending_offers",
     )
@@ -92,28 +97,28 @@ class PendingStageAdvanceOffer(SharedMemoryModel):
     """
 
     sinner_sheet = models.ForeignKey(
-        "arxii.CharacterSheet",
+        _CHARACTER_SHEET_MODEL,
         on_delete=models.CASCADE,
         related_name="stage_advance_offers_sent",
     )
     sineater_sheet = models.ForeignKey(
-        "arxii.CharacterSheet",
+        _CHARACTER_SHEET_MODEL,
         on_delete=models.CASCADE,
         related_name="stage_advance_offers_received",
     )
     relationship = models.ForeignKey(
-        "arxii.CharacterRelationship",
+        _CHARACTER_RELATIONSHIP_MODEL,
         on_delete=models.CASCADE,
         related_name="pending_stage_advance_offers",
     )
     scene = models.ForeignKey(
-        "arxii.Scene",
+        _SCENE_MODEL,
         on_delete=models.CASCADE,
         related_name="pending_stage_advance_offers",
         help_text="Active scene at prompt time. Row is only written when a shared scene is found.",
     )
     resonance = models.ForeignKey(
-        "arxii.Resonance",
+        _RESONANCE_MODEL,
         on_delete=models.PROTECT,
         related_name="pending_stage_advance_offers",
     )
@@ -154,29 +159,29 @@ class Sineating(SharedMemoryModel):
     """
 
     sinner_sheet = models.ForeignKey(
-        "arxii.CharacterSheet",
+        _CHARACTER_SHEET_MODEL,
         on_delete=models.CASCADE,
         related_name="sineatings_as_sinner",
     )
     sineater_sheet = models.ForeignKey(
-        "arxii.CharacterSheet",
+        _CHARACTER_SHEET_MODEL,
         on_delete=models.CASCADE,
         related_name="sineatings_as_sineater",
     )
     relationship = models.ForeignKey(
-        "arxii.CharacterRelationship",
+        _CHARACTER_RELATIONSHIP_MODEL,
         on_delete=models.PROTECT,
         related_name="sineatings",
     )
     scene = models.ForeignKey(
-        "arxii.Scene",
+        _SCENE_MODEL,
         on_delete=models.SET_NULL,
         null=True,
         blank=True,
         related_name="sineatings",
     )
     resonance = models.ForeignKey(
-        "arxii.Resonance",
+        _RESONANCE_MODEL,
         on_delete=models.PROTECT,
         related_name="sineatings",
     )
@@ -206,29 +211,29 @@ class SoulTetherRescue(SharedMemoryModel):
     """Audit row for a stage-3+ rescue ritual (Spec B §9, §14.1)."""
 
     sinner_sheet = models.ForeignKey(
-        "arxii.CharacterSheet",
+        _CHARACTER_SHEET_MODEL,
         on_delete=models.CASCADE,
         related_name="rescues_as_sinner",
     )
     sineater_sheet = models.ForeignKey(
-        "arxii.CharacterSheet",
+        _CHARACTER_SHEET_MODEL,
         on_delete=models.CASCADE,
         related_name="rescues_as_sineater",
     )
     relationship = models.ForeignKey(
-        "arxii.CharacterRelationship",
+        _CHARACTER_RELATIONSHIP_MODEL,
         on_delete=models.PROTECT,
         related_name="rescues",
     )
     scene = models.ForeignKey(
-        "arxii.Scene",
+        _SCENE_MODEL,
         on_delete=models.SET_NULL,
         null=True,
         blank=True,
         related_name="rescues",
     )
     resonance = models.ForeignKey(
-        "arxii.Resonance",
+        _RESONANCE_MODEL,
         on_delete=models.PROTECT,
         related_name="rescues",
     )

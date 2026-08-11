@@ -126,6 +126,8 @@ _PAYLOAD_PARAM = "@payload"
 _MAGIC_PROGRESSION_PATH = "/magic/progression"
 # SubFactory import paths, extracted to satisfy S1192.
 _DISTINCTION_FACTORY = "world.distinctions.factories.DistinctionFactory"
+_CONDITION_TEMPLATE_MODEL = "arxii.ConditionTemplate"
+_RITUAL_MODEL = "arxii.Ritual"
 
 logger = logging.getLogger(__name__)
 
@@ -2110,7 +2112,7 @@ class CorruptionConditionTemplateFactory(factory.django.DjangoModelFactory):
     """
 
     class Meta:
-        model = "arxii.ConditionTemplate"
+        model = _CONDITION_TEMPLATE_MODEL
         django_get_or_create = ("corruption_resonance",)
 
     name = factory.LazyAttribute(lambda o: f"Corrupted by {o.corruption_resonance.name}")
@@ -2275,7 +2277,7 @@ class TetherStrainTemplateFactory(factory.django.DjangoModelFactory):
     """
 
     class Meta:
-        model = "arxii.ConditionTemplate"
+        model = _CONDITION_TEMPLATE_MODEL
         django_get_or_create = ("name",)
 
     name = "Tether Strain"
@@ -2334,7 +2336,7 @@ class SoulTetherActiveTemplateFactory(factory.django.DjangoModelFactory):
     """
 
     class Meta:
-        model = "arxii.ConditionTemplate"
+        model = _CONDITION_TEMPLATE_MODEL
         django_get_or_create = ("name",)
 
     name = "Soul Tether Active"
@@ -2364,7 +2366,7 @@ class AcceptSoulTetherRitualFactory(factory.django.DjangoModelFactory):
     """
 
     class Meta:
-        model = "arxii.Ritual"
+        model = _RITUAL_MODEL
         django_get_or_create = ("name",)
 
     name = "accept_soul_tether"
@@ -2427,7 +2429,7 @@ class SoulTetherRescueRitualFactory(factory.django.DjangoModelFactory):
     """
 
     class Meta:
-        model = "arxii.Ritual"
+        model = _RITUAL_MODEL
         django_get_or_create = ("name",)
 
     name = "soul_tether_rescue"
@@ -3532,7 +3534,7 @@ class CovenantFormationRitualFactory(factory.django.DjangoModelFactory):
     """
 
     class Meta:
-        model = "arxii.Ritual"
+        model = _RITUAL_MODEL
         django_get_or_create = ("name",)
 
     name = "Covenant Formation"
@@ -3586,7 +3588,7 @@ class CovenantInductionRitualFactory(factory.django.DjangoModelFactory):
     """Factory for the covenant induction ritual."""
 
     class Meta:
-        model = "arxii.Ritual"
+        model = _RITUAL_MODEL
         django_get_or_create = ("name",)
 
     name = "Covenant Induction"
@@ -3637,7 +3639,7 @@ class OrganizationInductionRitualFactory(factory.django.DjangoModelFactory):
     """
 
     class Meta:
-        model = "arxii.Ritual"
+        model = _RITUAL_MODEL
         django_get_or_create = ("name",)
 
     name = "Organization Induction"
@@ -3666,7 +3668,7 @@ class RenewTheOathRitualFactory(factory.django.DjangoModelFactory):
     """
 
     class Meta:
-        model = "arxii.Ritual"
+        model = _RITUAL_MODEL
         django_get_or_create = ("name",)
 
     name = "Renew the Oath"
@@ -3692,7 +3694,7 @@ class BattleCovenantRiseRitualFactory(factory.django.DjangoModelFactory):
     """Factory for the 'call the banners' battle-covenant rise ritual (Slice E)."""
 
     class Meta:
-        model = "arxii.Ritual"
+        model = _RITUAL_MODEL
         django_get_or_create = ("name",)
 
     name = "Call the Banners"
@@ -3737,7 +3739,7 @@ class MentorsVowRitualFactory(factory.django.DjangoModelFactory):
     """
 
     class Meta:
-        model = "arxii.Ritual"
+        model = _RITUAL_MODEL
         django_get_or_create = ("name",)
 
     name = "Mentor's Vow"
@@ -4331,7 +4333,7 @@ class RitualOfTheDuranceFactory(factory.django.DjangoModelFactory):
     """
 
     class Meta:
-        model = "arxii.Ritual"
+        model = _RITUAL_MODEL
         django_get_or_create = ("name",)
 
     name = "Ritual of the Durance"

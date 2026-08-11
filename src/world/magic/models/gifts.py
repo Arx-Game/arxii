@@ -13,6 +13,8 @@ from world.contributors.models import CreditedContent
 from world.magic.constants import AcquisitionOrigin, GiftKind
 from world.magic.models.affinity import Resonance
 
+_CHARACTER_SHEET_MODEL = "arxii.CharacterSheet"
+
 
 class GiftManager(NaturalKeyManager):
     """Manager for Gift with natural key support."""
@@ -73,7 +75,7 @@ class Gift(NaturalKeyMixin, CreditedContent, SharedMemoryModel):
         help_text="Resonances associated with this gift.",
     )
     creator = models.ForeignKey(
-        "arxii.CharacterSheet",
+        _CHARACTER_SHEET_MODEL,
         on_delete=models.SET_NULL,
         null=True,
         blank=True,
@@ -195,7 +197,7 @@ class CharacterGift(SharedMemoryModel):
     """
 
     character = models.ForeignKey(
-        "arxii.CharacterSheet",
+        _CHARACTER_SHEET_MODEL,
         on_delete=models.CASCADE,
         related_name="character_gifts",
         help_text="The character who knows this gift.",
@@ -300,7 +302,7 @@ class CharacterTradition(SharedMemoryModel):
     """
 
     character = models.ForeignKey(
-        "arxii.CharacterSheet",
+        _CHARACTER_SHEET_MODEL,
         on_delete=models.CASCADE,
         related_name="character_traditions",
         help_text="The character who belongs to this tradition.",
