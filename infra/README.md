@@ -157,6 +157,17 @@ disables the feature, never refuses the converge — `secrets_vault`'s
   `SENTRY_RELEASE` (the deployed commit SHA, stamped by `app_deploy` after
   checkout) are derived on-box, not operator-supplied.
 
+**Pre-stored by the operator — ansible-step-only, never reaches the box
+(#3153; a third category alongside "on-box runtime" above and "tofu-step-only"
+below — the running Django/Evennia process never needs this, only the one
+Ansible task that clones the checkout does):**
+- `ARXII_CONTENT_REPO_TOKEN` — a GitHub **fine-grained PAT**, scoped to
+  *only* the private lore repo, **Contents: Read-only** permission. Consumed
+  once per converge by the `content_repo` role via `lookup('env', ...)`
+  (`no_log: true`) and deliberately never written to the box's own
+  `/etc/arxii/arxii.env` — see "Content-repo checkout credential" below for
+  how to mint it.
+
 **NOT pre-stored — produced by the tofu step at run time and piped into the
 ansible step's env in-memory (masked, never to disk/log):**
 - `ARXII_BACKUP_WRITER_ACCESS_KEY`, `ARXII_BACKUP_WRITER_SECRET_KEY` — the
@@ -165,10 +176,11 @@ ansible step's env in-memory (masked, never to disk/log):**
 
 **Non-secret config** (domain, bucket labels, `cloudflare_account_id`,
 public `authorized_keys`, `dmarc_rua`, `resend_records`, `ssh_admin_cidrs`,
-`ARXII_DJANGO_SUPERUSER_USERNAME`, `ARXII_DJANGO_SUPERUSER_EMAIL`) goes in
-repo/Environment **Variables**, not Secrets. The superuser username/email
-default to `arxii_admin` / `admin@example.invalid` if you leave the
-Variables unset — fine for a private playtest box, override for prod.
+`ARXII_DJANGO_SUPERUSER_USERNAME`, `ARXII_DJANGO_SUPERUSER_EMAIL`,
+`ARXII_CONTENT_REPO`) goes in repo/Environment **Variables**, not Secrets.
+The superuser username/email default to `arxii_admin` / `admin@example.invalid`
+if you leave the Variables unset — fine for a private playtest box, override
+for prod.
 
 - `ARXII_SSH_ADMIN_CIDRS` — **required**, maps to `TF_VAR_ssh_admin_cidrs`. A
   JSON array of operator CIDRs, e.g. `["203.0.113.10/32"]`. `standup.sh`'s
@@ -177,6 +189,11 @@ Variables unset — fine for a private playtest box, override for prod.
   default to leave unmade.
 - `ARXII_ACME_EMAIL` — optional; Caddy's ACME account email. Defaults to
   `admin@<domain>` if unset.
+- `ARXII_CONTENT_REPO` — the private lore repo's `owner/repo` slug. Pairs
+  with `ARXII_CONTENT_REPO_TOKEN` above; knowing the slug alone grants no
+  access without the token, which is what keeps this a Variable rather than
+  a Secret. Keeps the repo's identity out of committed code, per
+  `content_repo.py`'s own module docstring.
 
 ## What the button actually does to game state (first run vs. re-run)
 
@@ -308,6 +325,28 @@ Two things that catch people out:
   the runner can't reach the host for any reason, that file is your only
   emergency way back in short of re-provisioning the box from a fresh
   Terraform apply.
+
+## Content-repo checkout credential (one-time)
+
+**#3153.** The `content_repo` Ansible role clones/refreshes the private
+lore repo onto the box on every deploy, using a scoped GitHub credential —
+never a full-access token. To provision:
+
+1. GitHub → Settings → Developer settings → **Fine-grained personal access
+   tokens** → Generate new token.
+2. **Repository access:** "Only select repositories" → the private lore
+   repo only.
+3. **Permissions:** Repository permissions → Contents → **Read-only**.
+   Nothing else.
+4. Set an expiration; calendar a reminder to rotate before it lapses (no
+   auto-rotation exists yet).
+5. Add to the gated `prod` Environment:
+   - `ARXII_CONTENT_REPO_TOKEN` (Secret) — the token from step 4.
+   - `ARXII_CONTENT_REPO` (Variable) — the repo's `owner/repo` slug.
+
+This credential is deliberately never written to the box's own
+`/etc/arxii/arxii.env` — see `group_vars/secrets.env.example`'s
+"ANSIBLE-STEP-ONLY, NEVER ON-BOX" section for why.
 
 ## Dress rehearsal (run this before the first prod button press)
 
@@ -548,7 +587,7 @@ above.
 - `terraform/ephemeral-stage/` — separate state + credential scope (blast-radius isolation);
   now also provisions a throwaway backups bucket (`object_storage_ephemeral`) for the dress
   rehearsal's backup+restore step.
-- `ansible/` — `site.yml` and 16 roles. **No committed secret material**: the `secrets_vault`
+- `ansible/` — `site.yml` and 17 roles. **No committed secret material**: the `secrets_vault`
   role reads `ARXII_*` env vars (set on the ansible step by `standup.yml`/`rehearse.sh` from the
   gated Environment) and renders a `0600` on-box `EnvironmentFile` in one `no_log` task.
   `group_vars/secrets.env.example` is the names-only contract. `roles/caddy` carries TWO

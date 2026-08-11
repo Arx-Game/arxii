@@ -28,6 +28,21 @@ First time in the Authoring Workbench, it will ask you to link your account
 to a contributor identity (pick an existing unlinked one or type a name).
 Credit stamps come from that link.
 
+## Prod
+
+The checkout is provisioned automatically — `standup.yml`'s `content_repo`
+role clones/refreshes the private lore repo onto the box on every deploy
+(the same button used for ordinary app redeploys, not just first boot), and
+`CONTENT_REPO_PATH` is set for the app process. See `infra/README.md`'s
+"Content-repo checkout credential" section for the one-time credential
+setup.
+
+**Loading content into the database stays a manual step** (unchanged from
+local dev): Admin → Game Setup → **Load private content repo**, same
+credited-row-freeze protections apply. Nothing loads automatically on
+deploy — see #2236 Phase 4 for why (protects in-progress prod-admin edits
+from being silently clobbered by an unattended load).
+
 ## Loading content into a database
 
 Admin header, then **Game Setup**, then **Load private content repo**. The
