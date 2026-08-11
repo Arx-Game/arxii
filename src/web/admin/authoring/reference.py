@@ -162,18 +162,24 @@ def _iter_text_files(root: Path, deadline: float):
         for name in names:
             if time.monotonic() > deadline:
                 return
-            candidate = Path(base) / name
-            if candidate.suffix not in _TEXT_SUFFIXES:
-                continue
-            try:
-                if candidate.stat().st_size > _MAX_FILE_BYTES:
-                    continue
-            except OSError:
-                continue
-            resolved = candidate.resolve()
-            if not resolved.is_relative_to(root):
-                continue
-            yield resolved
+            resolved = _eligible_file(Path(base) / name, root)
+            if resolved is not None:
+                yield resolved
+
+
+def _eligible_file(candidate: Path, root: Path) -> Path | None:
+    """Resolve one walk candidate; None when filtered by suffix, size, or escape."""
+    if candidate.suffix not in _TEXT_SUFFIXES:
+        return None
+    try:
+        if candidate.stat().st_size > _MAX_FILE_BYTES:
+            return None
+    except OSError:
+        return None
+    resolved = candidate.resolve()
+    if not resolved.is_relative_to(root):
+        return None
+    return resolved
 
 
 def file_search(
@@ -208,30 +214,43 @@ def file_search(
     deadline = time.monotonic() + budget_seconds
     for raw_root in roots:
         root = raw_root.resolve()
-        root_label = root.name
         for path in _iter_text_files(root, deadline):
             if len(hits) >= cap or time.monotonic() > deadline:
                 return hits
-            try:
-                text = path.read_text(encoding="utf-8", errors="replace")
-            except OSError:
-                continue
-            for line_no, line in enumerate(text.splitlines(), start=1):
-                if time.monotonic() > deadline:
-                    return hits
-                if needle not in line.casefold():
-                    continue
-                hits.append(
-                    FileSearchHit(
-                        root_label=root_label,
-                        path=str(path.relative_to(root)),
-                        line=line_no,
-                        text=line.strip()[:200],
-                    )
-                )
-                if len(hits) >= cap:
-                    return hits
+            file_hits, budget_ok = _scan_file_lines(
+                path, root, needle, limit=cap - len(hits), deadline=deadline
+            )
+            hits.extend(file_hits)
+            if not budget_ok:
+                return hits
     return hits
+
+
+def _scan_file_lines(
+    path: Path, root: Path, needle: str, *, limit: int, deadline: float
+) -> tuple[list[FileSearchHit], bool]:
+    """One file's matching lines, at most *limit*; False when the budget halted mid-file."""
+    file_hits: list[FileSearchHit] = []
+    try:
+        text = path.read_text(encoding="utf-8", errors="replace")
+    except OSError:
+        return file_hits, True
+    for line_no, line in enumerate(text.splitlines(), start=1):
+        if time.monotonic() > deadline:
+            return file_hits, False
+        if needle not in line.casefold():
+            continue
+        file_hits.append(
+            FileSearchHit(
+                root_label=root.name,
+                path=str(path.relative_to(root)),
+                line=line_no,
+                text=line.strip()[:200],
+            )
+        )
+        if len(file_hits) >= limit:
+            return file_hits, True
+    return file_hits, True
 
 
 def reference_roots(*, staff_docs: bool, arx1: bool) -> list[Path]:
