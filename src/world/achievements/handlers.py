@@ -48,12 +48,21 @@ class StatHandler:
         self._load()
         return self._cache.get(stat.pk, 0)  # type: ignore[union-attr]
 
-    def increment(self, stat: StatDefinition, amount: int = 1) -> int:
+    def increment(
+        self, stat: StatDefinition, amount: int = 1, *, check_achievements: bool = True
+    ) -> int:
         """
         Increment a stat (create if needed) and check for achievements.
 
         Uses F() for atomic DB increment, then updates the local cache.
         Returns the new value.
+
+        ``check_achievements=False`` skips the achievement-requirement check
+        after the increment -- used by batch callers (see
+        ``services.increment_stat_for_group``) that increment several sheets
+        for the same simultaneous moment and want ONE group evaluation
+        afterward instead of N single-sheet checks. The default path (True)
+        is byte-for-byte the same behavior as before this flag existed.
         """
         model = _get_stat_tracker_model()
 
@@ -71,9 +80,10 @@ class StatHandler:
         self._load()
         self._cache[stat.pk] = tracker.value  # type: ignore[index]
 
-        # Check for newly met achievement requirements
-        from world.achievements.services import _check_achievements  # noqa: PLC0415
+        if check_achievements:
+            # Check for newly met achievement requirements
+            from world.achievements.services import _check_achievements  # noqa: PLC0415
 
-        _check_achievements(self._character_sheet, stat)
+            _check_achievements(self._character_sheet, stat)
 
         return tracker.value

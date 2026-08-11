@@ -86,11 +86,29 @@ never lands in `shared_with_tenures`, so a party discovery looks solo to everyon
 first sheet. Pass the whole eligible group to a single `grant_achievement(achievement,
 sheets)` call instead (`world/combat/combo_discovery.py::fire_combo_discovery` is the
 reference implementation — see its module docstring for why it bypasses
-`execute_ceremony_beat`'s per-sheet shape). Two other group-earning moments — combat
-encounter completion (`world/combat/services.py`) and relationship reciprocation
-(`world/relationships/services.py`) — currently reach `grant_achievement` only through the
-single-sheet `StatHandler.increment` → `_check_achievements` indirection and are NOT yet
-batched; fixing them needs a batch stat-check seam, tracked as a follow-up, not fixed here.
+`execute_ceremony_beat`'s per-sheet shape).
+
+**Batch stat-check seam (#3075).** A stat-driven achievement has the same group-Discovery
+problem when several sheets cross a threshold on a genuinely simultaneous increment (a
+party winning an encounter, both halves of a reciprocated relationship): the single-sheet
+`StatHandler.increment` → `_check_achievements` path grants per sheet, one at a time.
+`services.increment_stat_for_group(character_sheets, stat, amount=1)` is the batch entry
+point — it increments every sheet's tracker (with the per-sheet achievement check deferred
+via `StatHandler.increment(stat, amount, check_achievements=False)`), then runs ONE group
+evaluation (`_check_achievements_for_group`) for the whole set. The evaluator computes, per
+candidate achievement, the crossing set of sheets (in caller order) that meet the
+requirements now and don't already hold the achievement, and calls `grant_achievement` once
+per achievement with that crossing set — so the first eligible crossing sheet takes the
+primary Discovery slot and the rest land in `shared_with_tenures`, while a sheet that
+doesn't cross this increment (e.g. one party member one win short) simply isn't in the set
+and earns the achievement solo later. `_check_achievements` (single-sheet) is now a thin
+wrapper into this same evaluator with a one-element list — there is only one evaluator, no
+parallel single-sheet copy of the requirement/prerequisite/convergence logic. Wired callers:
+combat encounter completion (`world/combat/services.py::_increment_completion_counters`,
+bucketed by outcome — won / lost / fled, or winner / loser / fled for a DUEL — via
+`world/combat/achievement_counters.py::increment_combat_counter_for_group`) and relationship
+reciprocation (`world/relationships/services.py::create_first_impression`'s reciprocation
+block, `increment_stat_for_group([source, target], stat_def)`).
 
 ### CharacterAchievement
 Records when a character earned an achievement.
