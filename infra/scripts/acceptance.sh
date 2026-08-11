@@ -160,7 +160,7 @@ chkno "ARXII_CONTENT_REPO_TOKEN never appears inside the fail-closed secrets_map
 chk "ARXII_CONTENT_REPO_TOKEN is a standup.sh preflight-required secret" \
   "sed -n '/REQUIRED_ARXII=(/,/)/p' infra/scripts/standup.sh | grep -q ARXII_CONTENT_REPO_TOKEN"
 chk "ARXII_CONTENT_REPO is a standup.sh preflight-required var" \
-  "sed -n '/REQUIRED_ARXII=(/,/)/p' infra/scripts/standup.sh | grep -q ARXII_CONTENT_REPO"
+  "sed -n '/REQUIRED_ARXII=(/,/)/p' infra/scripts/standup.sh | grep -qE '(^|[[:space:]])ARXII_CONTENT_REPO([[:space:]]|\\)|$)'"
 
 # (b) standup.sh must unset the provisioning tokens BEFORE invoking
 # ansible-playbook (order-sensitive — defense-in-depth so LINODE_TOKEN /
