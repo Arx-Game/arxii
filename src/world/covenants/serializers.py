@@ -144,6 +144,34 @@ class ViewerCapabilitiesSerializer(serializers.Serializer):
     can_request_gm = serializers.BooleanField()
 
 
+def _viewer_membership_cache_key(covenant_id: int) -> str:
+    """The ``_resolve_viewer_membership`` per-covenant memoization key.
+
+    Factored out so a page-level bulk prefetch (``seed_viewer_membership_cache``,
+    used by ``CovenantViewSet.list``, 2026-08 review fix) can pre-populate the same
+    cache slots ``_resolve_viewer_membership`` reads, instead of duplicating the
+    format string across modules.
+    """
+    return f"_viewer_membership_{covenant_id}"
+
+
+def seed_viewer_membership_cache(
+    context: dict[str, Any], memberships_by_covenant_id: dict[int, CharacterCovenantRole | None]
+) -> None:
+    """Pre-populate ``_resolve_viewer_membership``'s memoization cache from a
+    page-wide bulk fetch (2026-08 review fix on #2992).
+
+    Without this, a Covenant list response still cost one membership query per
+    *distinct covenant id* on the page (memoized only within a single row/field,
+    not across the whole page) even after ``get_treasury_balance``'s own treasury
+    read was batched — every new covenant on the page reintroduced a query. Called
+    from ``CovenantViewSet.get_serializer_context`` with the result of one bulk
+    query for the whole page.
+    """
+    for covenant_id, membership in memberships_by_covenant_id.items():
+        context[_viewer_membership_cache_key(covenant_id)] = membership
+
+
 def _resolve_viewer_membership(
     context: dict[str, Any], covenant_id: int
 ) -> CharacterCovenantRole | None:
@@ -153,13 +181,15 @@ def _resolve_viewer_membership(
     ``CovenantSerializer.get_treasury_balance`` (#2992) so the tenure-join filter
     lives in exactly one place. Memoized per covenant_id in the serializer
     ``context`` dict so a list response of N rows from the same covenant issues
-    only one query rather than one per row/field.
+    only one query rather than one per row/field — and a caller can pre-seed the
+    cache page-wide via ``seed_viewer_membership_cache`` to avoid even the
+    one-query-per-distinct-covenant cost.
     """
     request = context.get("request")
     if request is None or not request.user.is_authenticated:
         return None
 
-    cache_key = f"_viewer_membership_{covenant_id}"
+    cache_key = _viewer_membership_cache_key(covenant_id)
     if cache_key not in context:
         context[cache_key] = (
             CharacterCovenantRole.objects.filter(
