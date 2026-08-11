@@ -157,7 +157,57 @@ class CmdPage(FrontendMetadataMixin, Command):  # ty: ignore[invalid-base]
     locks = "cmd:all()"
     help_category = "Account"
 
-    def func(self) -> None:  # noqa: PLR0911 — sequential guard clauses for a dispatcher
+    def _resolve_target(self, charname: str) -> Any | None:
+        """Resolve *charname* to a rostered character, messaging the caller on any miss."""
+        characters = search.object_search(charname, exact=True)
+        if not characters:
+            self.caller.msg(f"Could not find character '{charname}'.")
+            return None
+        if len(characters) > 1:
+            self.caller.msg(f"Multiple characters found matching '{charname}'.")
+            return None
+        character = characters[0]
+        try:
+            _ = character.sheet_data.roster_entry
+        except ObjectDoesNotExist:
+            self.caller.msg(f"Character '{charname}' is not on the roster.")
+            return None
+        return character
+
+    def _quiet_mode_refusal(
+        self, sender_char: object | None, character: Any, account: Any, charname: str
+    ) -> str | None:
+        """Quiet-mode (#1463) reach gating, both directions, keyed off the account↔account
+        allowlist. CmdPage is an AccountCmdSet command, so self.caller is the sender's
+        account; the per-character hidden flag is read on the sender's session puppet and
+        on the resolved target.
+        """
+        from world.scenes.presence import (  # noqa: PLC0415
+            account_on_allowlist,
+            character_appears_offline,
+        )
+
+        # (a) A hidden character can only page people on their own allowlist — so they never
+        #     strand a non-whitelisted friend who then can't reply (the friend would just see
+        #     "offline"). Self-explaining refusal, since the sender may have forgotten.
+        if (
+            sender_char is not None
+            and character_appears_offline(sender_char)
+            and not account_on_allowlist(owner_account=self.caller, viewer_account=account)
+        ):
+            return (
+                "You're hidden (appearing offline), so you can only page people on your "
+                "allowlist. Use 'unhide' to come back online first."
+            )
+        # (b) A hidden target is unreachable to anyone off their allowlist — the SAME message
+        #     as if they were simply offline, so quiet mode never leaks.
+        if character_appears_offline(character) and not account_on_allowlist(
+            owner_account=account, viewer_account=self.caller
+        ):
+            return f"Character '{charname}' is not online."
+        return None
+
+    def func(self) -> None:
         """Execute the page command."""
         if not self.args or "=" not in self.args:
             self.caller.msg("Usage: page <character>=<message>")
@@ -168,19 +218,8 @@ class CmdPage(FrontendMetadataMixin, Command):  # ty: ignore[invalid-base]
             self.caller.msg("Usage: page <character>=<message>")
             return
 
-        characters = search.object_search(charname, exact=True)
-        if not characters:
-            self.caller.msg(f"Could not find character '{charname}'.")
-            return
-        if len(characters) > 1:
-            self.caller.msg(f"Multiple characters found matching '{charname}'.")
-            return
-
-        character = characters[0]
-        try:
-            _ = character.sheet_data.roster_entry
-        except ObjectDoesNotExist:
-            self.caller.msg(f"Character '{charname}' is not on the roster.")
+        character = self._resolve_target(charname)
+        if character is None:
             return
 
         account = character.active_account
@@ -188,37 +227,12 @@ class CmdPage(FrontendMetadataMixin, Command):  # ty: ignore[invalid-base]
             self.caller.msg(f"Character '{charname}' has no active player.")
             return
 
-        # Quiet-mode (#1463) reach gating, both directions, keyed off the account↔account
-        # allowlist. CmdPage is an AccountCmdSet command, so self.caller is the sender's
-        # account; the per-character hidden flag is read on the sender's session puppet and
-        # on the resolved target.
-        from world.scenes.presence import (  # noqa: PLC0415
-            account_on_allowlist,
-            character_appears_offline,
-        )
-
         # Suppression justified: Evennia cmdhandler sets .session at runtime.
         session = getattr(self, "session", None)  # noqa: GETATTR_LITERAL
         sender_char = session.puppet if session is not None else None
-        # (a) A hidden character can only page people on their own allowlist — so they never
-        #     strand a non-whitelisted friend who then can't reply (the friend would just see
-        #     "offline"). Self-explaining refusal, since the sender may have forgotten.
-        if (
-            sender_char is not None
-            and character_appears_offline(sender_char)
-            and not account_on_allowlist(owner_account=self.caller, viewer_account=account)
-        ):
-            self.caller.msg(
-                "You're hidden (appearing offline), so you can only page people on your "
-                "allowlist. Use 'unhide' to come back online first."
-            )
-            return
-        # (b) A hidden target is unreachable to anyone off their allowlist — the SAME message
-        #     as if they were simply offline, so quiet mode never leaks.
-        if character_appears_offline(character) and not account_on_allowlist(
-            owner_account=account, viewer_account=self.caller
-        ):
-            self.caller.msg(f"Character '{charname}' is not online.")
+        refusal = self._quiet_mode_refusal(sender_char, character, account, charname)
+        if refusal is not None:
+            self.caller.msg(refusal)
             return
 
         # #2996 Decision 2 — an account-level block upgrades page delivery from flag-only to

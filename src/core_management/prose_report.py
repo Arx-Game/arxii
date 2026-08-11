@@ -107,6 +107,15 @@ def _count(report: ProseReport, domain: str, fields: dict, extra_words: int = 0)
         row.reviewed += 1
 
 
+def _fixture_records(path: Path) -> list:
+    """One fixture file's record list; [] when unreadable or not a list."""
+    try:
+        records = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return []
+    return records if isinstance(records, list) else []
+
+
 def _scan_fixture_json(content_root: Path, report: ProseReport) -> None:
     """Count prose rows in ``fixtures/<domain>/<model>.json``."""
     fixtures_dir = content_root / "fixtures"
@@ -116,17 +125,32 @@ def _scan_fixture_json(content_root: Path, report: ProseReport) -> None:
     for path in sorted(fixtures_dir.rglob("*.json")):
         if path.is_relative_to(grid_dir):
             continue
-        try:
-            records = json.loads(path.read_text(encoding="utf-8"))
-        except (OSError, ValueError):
-            continue
-        if not isinstance(records, list):
-            continue
         domain = path.relative_to(fixtures_dir).parts[0]
-        for record in records:
+        for record in _fixture_records(path):
             fields = record.get("fields") if isinstance(record, dict) else None
             if isinstance(fields, dict):
                 _count(report, domain, fields)
+
+
+def _parse_markdown_entry(path: Path) -> tuple[dict, int] | None:
+    """One entry's frontmatter dict + body word count; None when malformed."""
+    lines = path.read_text(encoding="utf-8").splitlines()
+    if not lines or lines[0].strip() != FRONTMATTER_DELIMITER:
+        return None
+    end = next(
+        (i for i in range(1, len(lines)) if lines[i].strip() == FRONTMATTER_DELIMITER),
+        None,
+    )
+    if end is None:
+        return None
+    try:
+        meta = yaml.safe_load("\n".join(lines[1:end])) or {}
+    except yaml.YAMLError:
+        return None
+    if not isinstance(meta, dict):
+        return None
+    body = "\n".join(lines[end + 1 :]).strip()
+    return meta, len(body.split())
 
 
 def _scan_markdown(content_root: Path, report: ProseReport) -> None:
@@ -136,23 +160,11 @@ def _scan_markdown(content_root: Path, report: ProseReport) -> None:
         if not domain_dir.is_dir():
             continue
         for path in sorted(domain_dir.rglob("*.md")):
-            lines = path.read_text(encoding="utf-8").splitlines()
-            if not lines or lines[0].strip() != FRONTMATTER_DELIMITER:
+            parsed = _parse_markdown_entry(path)
+            if parsed is None:
                 continue
-            end = next(
-                (i for i in range(1, len(lines)) if lines[i].strip() == FRONTMATTER_DELIMITER),
-                None,
-            )
-            if end is None:
-                continue
-            try:
-                meta = yaml.safe_load("\n".join(lines[1:end])) or {}
-            except yaml.YAMLError:
-                continue
-            if not isinstance(meta, dict):
-                continue
-            body = "\n".join(lines[end + 1 :]).strip()
-            _count(report, domain, meta, extra_words=len(body.split()))
+            meta, body_words = parsed
+            _count(report, domain, meta, extra_words=body_words)
 
 
 def scan_corpus(content_root: Path) -> ProseReport:

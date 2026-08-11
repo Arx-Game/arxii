@@ -504,6 +504,46 @@ function ClashContributionRow({
   );
 }
 
+/**
+ * Resolve the ally name attached to a declared maneuver (cover/interpose), or
+ * null when a different maneuver is declared or no ally target is set (a null
+ * focused_ally_target on interpose means "guard whoever is hit", #2207).
+ */
+function maneuverAllyName(
+  expectedManeuver: string,
+  declaredManeuver: string | null,
+  ownRoundAction: RoundActionTyped | null,
+  participants: Participant[]
+): string | null {
+  if (declaredManeuver !== expectedManeuver || ownRoundAction?.focused_ally_target == null) {
+    return null;
+  }
+  const ally = participants.find((p) => p.id === ownRoundAction.focused_ally_target);
+  return ally?.character_name ?? `participant #${ownRoundAction.focused_ally_target}`;
+}
+
+/**
+ * The reason the submit button must refuse, or null when clear to dispatch —
+ * mirrors the required-declaration gating (#1543/#2206).
+ */
+function submitBlockReason(args: {
+  soulfrayWarning: SoulfrayWarningData | null;
+  soulfrayAccepted: boolean;
+  furyOverCap: boolean;
+  positionRequirementMet: boolean;
+}): string | null {
+  if (args.soulfrayWarning !== null && !args.soulfrayAccepted) {
+    return 'Accept the Soulfray risk to proceed.';
+  }
+  if (args.furyOverCap) {
+    return 'Chosen fury tier exceeds your bond with the anchor.';
+  }
+  if (!args.positionRequirementMet) {
+    return 'Select a position target for this technique.';
+  }
+  return null;
+}
+
 // ---------------------------------------------------------------------------
 // YourTurn
 // ---------------------------------------------------------------------------
@@ -742,25 +782,22 @@ export function YourTurn({
     })),
   ];
 
+  // The selected focused technique's action descriptor — one lookup shared by
+  // the reach constraint (#532), the position-targeting shape (#2206), and the
+  // soulfray/fury descriptor (#1543) below.
+  const focusedCastDescriptor =
+    focusedContext.techniqueId === undefined
+      ? null
+      : (availableActions.find((a) => a.ref.technique_id === focusedContext.techniqueId) ?? null);
+
   // Reach constraint for the currently selected focused technique (#532).
-  const focusedTechniqueReach: string | null = (() => {
-    if (focusedContext.techniqueId === undefined) return null;
-    const selected = availableActions.find(
-      (a) => a.ref.technique_id === focusedContext.techniqueId
-    );
-    return selected?.reach ?? null;
-  })();
+  const focusedTechniqueReach: string | null = focusedCastDescriptor?.reach ?? null;
 
   // Cast-time position-targeting shape for the currently selected focused
   // technique (#2206). Positions/edges data is the same source
   // CombatTacticalMap uses — EncounterDetail.position_nodes.
-  const focusedTechniquePositionShape: PositionTargetShape = (() => {
-    if (focusedContext.techniqueId === undefined) return 'none';
-    const selected = availableActions.find(
-      (a) => a.ref.technique_id === focusedContext.techniqueId
-    );
-    return selected?.position_target_shape ?? 'none';
-  })();
+  const focusedTechniquePositionShape: PositionTargetShape =
+    focusedCastDescriptor?.position_target_shape ?? 'none';
   const focusedPositions: PositionNode[] = encounter?.position_nodes ?? [];
 
   // Report the current shape to the caller (#2206) — lets the tactical-map tab
@@ -781,10 +818,6 @@ export function YourTurn({
       castPosition.pairB !== undefined);
 
   // Soulfray + fury descriptor for the currently selected focused cast (#1543).
-  const focusedCastDescriptor = (() => {
-    if (focusedContext.techniqueId === undefined) return null;
-    return availableActions.find((a) => a.ref.technique_id === focusedContext.techniqueId) ?? null;
-  })();
   const soulfrayWarning = focusedCastDescriptor?.soulfray_warning ?? null;
   const furyTiers = focusedCastDescriptor?.available_fury_tiers ?? [];
   const furyAnchors = focusedCastDescriptor?.eligible_fury_anchors ?? [];
@@ -798,21 +831,16 @@ export function YourTurn({
   const declaredManeuver = ownRoundAction?.maneuver ?? null;
 
   // Resolve covered ally's name from participants list.
-  const coveredAllyName = (() => {
-    if (declaredManeuver !== 'cover' || ownRoundAction?.focused_ally_target == null) return null;
-    const ally = participants.find((p) => p.id === ownRoundAction.focused_ally_target);
-    return ally?.character_name ?? `participant #${ownRoundAction.focused_ally_target}`;
-  })();
+  const coveredAllyName = maneuverAllyName('cover', declaredManeuver, ownRoundAction, participants);
 
   // Resolve guarded ally's name from participants list (#2207). null
   // focused_ally_target on an interpose maneuver means "guard whoever is hit."
-  const guardedAllyName = (() => {
-    if (declaredManeuver !== 'interpose' || ownRoundAction?.focused_ally_target == null) {
-      return null;
-    }
-    const ally = participants.find((p) => p.id === ownRoundAction.focused_ally_target);
-    return ally?.character_name ?? `participant #${ownRoundAction.focused_ally_target}`;
-  })();
+  const guardedAllyName = maneuverAllyName(
+    'interpose',
+    declaredManeuver,
+    ownRoundAction,
+    participants
+  );
 
   // Techniques offered as a Guard's optional protective technique (#2207): any
   // available combat-cast technique whose protective_flavor classifier resolved.
@@ -845,16 +873,14 @@ export function YourTurn({
 
     setSubmitError(null);
 
-    if (soulfrayWarning !== null && !soulfrayAccepted) {
-      setSubmitError('Accept the Soulfray risk to proceed.');
-      return;
-    }
-    if (furyOverCap) {
-      setSubmitError('Chosen fury tier exceeds your bond with the anchor.');
-      return;
-    }
-    if (!positionRequirementMet) {
-      setSubmitError('Select a position target for this technique.');
+    const blockReason = submitBlockReason({
+      soulfrayWarning,
+      soulfrayAccepted,
+      furyOverCap,
+      positionRequirementMet,
+    });
+    if (blockReason !== null) {
+      setSubmitError(blockReason);
       return;
     }
 

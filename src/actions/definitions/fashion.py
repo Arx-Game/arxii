@@ -440,22 +440,30 @@ def _equipped_rows(sheet: Any) -> list:
 def _blockers_above(rows: list, mine: list, *, opened_only: bool = False) -> list:
     """Rows above any of ``mine``'s slots that block (or, for conceal, are open)."""
     from world.items.services.appearance import LAYER_RANK  # noqa: PLC0415
-    from world.items.services.visibility import is_see_through  # noqa: PLC0415
 
     blockers = []
     for target_row in mine:
         rank = LAYER_RANK.get(target_row.equipment_layer, 99)
         for row in rows:
-            if row.body_region != target_row.body_region or row.pk == target_row.pk:
-                continue
-            if LAYER_RANK.get(row.equipment_layer, 99) <= rank:
-                continue
-            if opened_only:
-                if row.opened_at is not None and row not in blockers:
-                    blockers.append(row)
-            elif not is_see_through(row) and row not in blockers:
+            if _blocks_target(row, target_row, rank, opened_only=opened_only) and (
+                row not in blockers
+            ):
                 blockers.append(row)
     return blockers
+
+
+def _blocks_target(row: Any, target_row: Any, rank: int, *, opened_only: bool) -> bool:
+    """Whether ``row`` sits above ``target_row``'s layer and blocks (or, for conceal, is open)."""
+    from world.items.services.appearance import LAYER_RANK  # noqa: PLC0415
+    from world.items.services.visibility import is_see_through  # noqa: PLC0415
+
+    if row.body_region != target_row.body_region or row.pk == target_row.pk:
+        return False
+    if LAYER_RANK.get(row.equipment_layer, 99) <= rank:
+        return False
+    if opened_only:
+        return row.opened_at is not None
+    return not is_see_through(row)
 
 
 def _open_rows(rows: list) -> None:

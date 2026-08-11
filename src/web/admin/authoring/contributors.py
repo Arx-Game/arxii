@@ -87,32 +87,9 @@ def link_contributor(
             player_data, _created = PlayerData.objects.get_or_create(account=user)
 
             if existing_pk is not None:
-                try:
-                    contributor = ContentContributor.objects.get(pk=existing_pk)
-                except (
-                    ContentContributor.DoesNotExist,
-                    ValueError,
-                    OverflowError,
-                    DataError,
-                ) as exc:
-                    msg = "That contributor no longer exists."
-                    raise ValueError(msg) from exc
-                _refuse_if_linked_elsewhere(contributor, player_data)
+                contributor = _pick_existing(existing_pk, player_data)
             else:
-                stripped_name = name.strip()
-                if not stripped_name:
-                    msg = "Enter a name to write under."
-                    raise ValueError(msg)
-                if any(char in stripped_name for char in _DASH_CHARACTERS):
-                    raise ValueError(_DASH_NAME_MESSAGE)
-                if len(stripped_name) > _MAX_NAME_LENGTH:
-                    raise ValueError(_LONG_NAME_MESSAGE)
-
-                contributor = ContentContributor.objects.filter(name=stripped_name).first()
-                if contributor is not None:
-                    _refuse_if_linked_elsewhere(contributor, player_data)
-                else:
-                    contributor = ContentContributor.objects.create(name=stripped_name)
+                contributor = _create_or_pick_by_name(name, player_data)
 
             player_data.contributor = contributor
             player_data.save()
@@ -122,3 +99,38 @@ def link_contributor(
         if raced_contributor is not None:
             return raced_contributor
         raise ValueError(_RACE_MESSAGE) from exc
+
+
+def _pick_existing(existing_pk: int, player_data: PlayerData) -> ContentContributor:
+    """The pick-from-the-list path: an existing, not-otherwise-linked contributor."""
+    try:
+        contributor = ContentContributor.objects.get(pk=existing_pk)
+    except (
+        ContentContributor.DoesNotExist,
+        ValueError,
+        OverflowError,
+        DataError,
+    ) as exc:
+        msg = "That contributor no longer exists."
+        raise ValueError(msg) from exc
+    _refuse_if_linked_elsewhere(contributor, player_data)
+    return contributor
+
+
+def _create_or_pick_by_name(name: str, player_data: PlayerData) -> ContentContributor:
+    """The typed-name path: validate, then pick an unlinked exact match or create."""
+    stripped_name = name.strip()
+    if not stripped_name:
+        msg = "Enter a name to write under."
+        raise ValueError(msg)
+    if any(char in stripped_name for char in _DASH_CHARACTERS):
+        raise ValueError(_DASH_NAME_MESSAGE)
+    if len(stripped_name) > _MAX_NAME_LENGTH:
+        raise ValueError(_LONG_NAME_MESSAGE)
+
+    contributor = ContentContributor.objects.filter(name=stripped_name).first()
+    if contributor is not None:
+        _refuse_if_linked_elsewhere(contributor, player_data)
+    else:
+        contributor = ContentContributor.objects.create(name=stripped_name)
+    return contributor

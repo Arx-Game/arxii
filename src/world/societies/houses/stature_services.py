@@ -198,6 +198,27 @@ def _union_membership(
     return members_by_union, kin_by_id
 
 
+@dataclass(frozen=True)
+class _UnionRoster:
+    """Union membership context: who belongs to which union, and who is house-side."""
+
+    members_by_union: dict[int, list[int]]
+    kin_by_id: dict[int, Kinsperson]
+    house_ids: set[int]
+
+    def insiders(self, union: Union) -> list[Kinsperson]:
+        member_ids = self.members_by_union.get(union.pk, [])
+        return [
+            self.kin_by_id[m] for m in member_ids if m in self.house_ids and m in self.kin_by_id
+        ]
+
+    def outsiders(self, union: Union) -> list[Kinsperson]:
+        member_ids = self.members_by_union.get(union.pk, [])
+        return [
+            self.kin_by_id[m] for m in member_ids if m not in self.house_ids and m in self.kin_by_id
+        ]
+
+
 def _union_partner_scores(
     house_kin: list[Kinsperson],
     seen_kin_ids: set[int],
@@ -221,12 +242,12 @@ def _union_partner_scores(
         .distinct()
     )
     members_by_union, kin_by_id = _union_membership(unions, house_ids, house_kin)
+    roster = _UnionRoster(members_by_union, kin_by_id, house_ids)
     total = 0
     consorts_per_senior: dict[int, list[Union]] = {}
     for union in unions:
-        member_ids = members_by_union.get(union.pk, [])
-        inside = [kin_by_id[m] for m in member_ids if m in house_ids and m in kin_by_id]
-        outside = [kin_by_id[m] for m in member_ids if m not in house_ids and m in kin_by_id]
+        inside = roster.insiders(union)
+        outside = roster.outsiders(union)
         if not inside or not outside:
             continue
         kind = union.kind
@@ -241,20 +262,31 @@ def _union_partner_scores(
                 partner, kind.stature_share_pct, seen_kin_ids, seen_sheet_ids, legend_reader
             )
     for unions_for_senior in consorts_per_senior.values():
-        ordered = sorted(
-            unions_for_senior, key=lambda u: (u.started_at is None, u.started_at, u.pk)
+        total += _consort_scores(
+            unions_for_senior, roster, seen_kin_ids, seen_sheet_ids, legend_reader
         )
-        for union in _capped(ordered):
-            for kin_id in members_by_union.get(union.pk, []):
-                if kin_id in house_ids or kin_id not in kin_by_id:
-                    continue
-                total += _partner_contribution(
-                    kin_by_id[kin_id],
-                    union.kind.stature_share_pct,
-                    seen_kin_ids,
-                    seen_sheet_ids,
-                    legend_reader,
-                )
+    return total
+
+
+def _consort_scores(
+    unions_for_senior: list[Union],
+    roster: _UnionRoster,
+    seen_kin_ids: set[int],
+    seen_sheet_ids: set[int],
+    legend_reader: LegendReader,
+) -> int:
+    """One senior's consort-class unions: earliest first, capped at max_concurrent."""
+    ordered = sorted(unions_for_senior, key=lambda u: (u.started_at is None, u.started_at, u.pk))
+    total = 0
+    for union in _capped(ordered):
+        for partner in roster.outsiders(union):
+            total += _partner_contribution(
+                partner,
+                union.kind.stature_share_pct,
+                seen_kin_ids,
+                seen_sheet_ids,
+                legend_reader,
+            )
     return total
 
 
