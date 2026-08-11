@@ -19,8 +19,9 @@ systems (no mocking the system under test):
      ._roll_check``) WITH the committed pull vs WITHOUT it yields a strictly higher
      resolved ``CheckResult.total_points`` (the graded roll target) — the outcome, not
      just the input.
-  4. **Auto-dissolve** — when the last servant leaves and only the master remains, the
-     Court auto-dissolves (``dissolved_at`` set; ADR-0042 two-member floor).
+  4. **Attrition persistence** — when the last servant leaves and only the master remains,
+     the Court persists (``dissolved_at`` stays unset; #2992, ADR-0042 amendment removed
+     the attrition auto-dissolve — only formation still enforces the two-founder floor).
 
 Wiring notes (documented per the task brief):
 - The seed (``make_court_with_mission``) seats the founding servant through
@@ -419,10 +420,10 @@ class CourtJourneyEndToEndTests(TestCase):
         )
 
         # ==============================================================
-        # STEP 4 — Auto-dissolve when only the master remains.
+        # STEP 4 — Attrition never dissolves the Court (#2992, ADR-0042 amendment).
         # ==============================================================
-        # Two servants now (founder + inducted newcomer); removing both leaves only
-        # the master → the Court dissolves (ADR-0042 two-member floor).
+        # Two servants now (founder + inducted newcomer); both leaving no longer
+        # dissolves the Court once only the master remains — the covenant persists.
         newcomer_membership = CharacterCovenantRole.objects.get(
             character_sheet=newcomer,
             covenant=self.covenant,
@@ -437,7 +438,15 @@ class CourtJourneyEndToEndTests(TestCase):
 
         leave_covenant(membership=newcomer_membership)
         self.covenant.refresh_from_db()
-        self.assertIsNotNone(
+        self.assertIsNone(
             self.covenant.dissolved_at,
-            "The Court must auto-dissolve once only the master remains.",
+            "The Court must persist even when only the master remains (#2992).",
+        )
+        self.assertTrue(
+            CharacterCovenantRole.objects.filter(
+                character_sheet=self.master,
+                covenant=self.covenant,
+                left_at__isnull=True,
+            ).exists(),
+            "The master's own membership must remain active and untouched.",
         )

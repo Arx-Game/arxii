@@ -503,34 +503,36 @@ def end_covenant_role(*, assignment: CharacterCovenantRole) -> None:
 
 @transaction.atomic
 def leave_covenant(*, membership: CharacterCovenantRole) -> None:
-    """A member voluntarily leaves a covenant. Soft-ends the membership, then
-    auto-dissolves the covenant if active membership falls below the minimum.
+    """A member voluntarily leaves a covenant. Soft-ends the membership. Covenants
+    never dissolve from attrition (#2992, ADR-0042 amendment) — the covenant
+    persists at any active-member count, including zero.
     Idempotent: leaving an already-ended membership is a no-op.
 
     Raises LastManagerRankError if the member holds the last can_manage_ranks rank
-    and the covenant would survive the departure (i.e. enough members remain).
+    and at least one other active member would remain (that member must not be
+    locked out of rank management).
     """
     if membership.left_at is not None:
         return
     covenant = membership.covenant
     departed_sheet = membership.character_sheet
-    # Check dissolution: if the covenant will survive this departure, guard against
-    # removing the last manager.  Count remaining members excluding this one.
+    # If any other active member would remain, guard against removing the last
+    # manager.  Count remaining members excluding this one.
     active_count_after = (
         covenant.memberships.filter(left_at__isnull=True).exclude(pk=membership.pk).count()
     )
-    if active_count_after >= MINIMUM_FOUNDERS and membership.rank.can_manage_ranks:
+    if active_count_after >= 1 and membership.rank.can_manage_ranks:
         _assert_keeps_a_manager_excluding_membership(covenant, membership.pk)
     end_covenant_role(assignment=membership)
     _release_court_pact_on_departure(covenant=covenant, servant_sheet=departed_sheet)
-    if not _maybe_dissolve(covenant=covenant):
-        _emit_departure_message(covenant, departed_sheet, kicked=False)
+    _emit_departure_message(covenant, departed_sheet, kicked=False)
 
 
 @transaction.atomic
 def kick_member(*, target: CharacterCovenantRole, actor: CharacterCovenantRole) -> None:
-    """Remove a member by rank authority. Soft-ends the target, then
-    auto-dissolves if active membership falls below the minimum.
+    """Remove a member by rank authority. Soft-ends the target. Covenants never
+    dissolve from attrition (#2992, ADR-0042 amendment) — the covenant persists
+    at any active-member count, including zero.
     Idempotent: kicking an already-departed member is a no-op.
 
     Authorization rules:
@@ -554,28 +556,16 @@ def kick_member(*, target: CharacterCovenantRole, actor: CharacterCovenantRole) 
         return
     covenant = target.covenant
     departed_sheet = target.character_sheet
-    # Guard against management lock-out when the covenant will survive the kick.
+    # Guard against management lock-out when at least one other active member
+    # would remain.
     active_count_after = (
         covenant.memberships.filter(left_at__isnull=True).exclude(pk=target.pk).count()
     )
-    if active_count_after >= MINIMUM_FOUNDERS and target.rank.can_manage_ranks:
+    if active_count_after >= 1 and target.rank.can_manage_ranks:
         _assert_keeps_a_manager_excluding_membership(covenant, target.pk)
     end_covenant_role(assignment=target)
     _release_court_pact_on_departure(covenant=covenant, servant_sheet=departed_sheet)
-    if not _maybe_dissolve(covenant=covenant):
-        _emit_departure_message(covenant, departed_sheet, kicked=True)
-
-
-def _maybe_dissolve(*, covenant: Covenant) -> bool:
-    """Dissolve the covenant if fewer than MINIMUM_FOUNDERS active members remain.
-    Returns True if it dissolved. Idempotent via dissolve_covenant's guard."""
-    remaining = covenant.member_roster.active_character_sheets
-    if len(remaining) >= MINIMUM_FOUNDERS:
-        return False
-    recipients = list(remaining)  # capture before dissolve ends them
-    dissolve_covenant(covenant=covenant)
-    _emit_dissolution_message(covenant, recipients)
-    return True
+    _emit_departure_message(covenant, departed_sheet, kicked=True)
 
 
 def _emit_departure_message(covenant: Covenant, departed: CharacterSheet, *, kicked: bool) -> None:
@@ -589,22 +579,6 @@ def _emit_departure_message(covenant: Covenant, departed: CharacterSheet, *, kic
     send_narrative_message(
         recipients=sheets,
         body=f"{departed.character.db_key} {verb} the covenant '{covenant.name}'.",
-        category=NarrativeCategory.COVENANT,
-    )
-
-
-def _emit_dissolution_message(covenant: Covenant, recipients: list[CharacterSheet]) -> None:
-    from world.narrative.constants import NarrativeCategory  # noqa: PLC0415
-    from world.narrative.services import send_narrative_message  # noqa: PLC0415
-
-    if not recipients:
-        return
-    send_narrative_message(
-        recipients=recipients,
-        body=(
-            f"The covenant '{covenant.name}' dissolves — too few remain to "
-            "uphold the oath. Its bonds fall silent, but its memory endures."
-        ),
         category=NarrativeCategory.COVENANT,
     )
 

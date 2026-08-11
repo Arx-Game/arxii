@@ -135,7 +135,7 @@ treat those names as hints to confirm, not gospel.
 ### Domain architecture
 - [0040 — Incapacitation & dying decoupled from a single vitals enum](0040-incapacitation-and-dying-decoupled-from-vitals.md)
 - [0041 — Resonance is earned from being perceived, not from casting](0041-resonance-is-earned-from-being-perceived.md)
-- [0042 — Covenants are group-only (min 2 members)](0042-covenants-are-group-only.md)
+- [0042 — Covenants are group-only at formation (min 2 founders)](0042-covenants-are-group-only.md)
 - [0043 — CovenantRole and CovenantRank are orthogonal axes](0043-covenant-role-and-rank-are-orthogonal.md)
 - [0044 — Covenant sworn objective is recorded as free text](0044-covenant-sworn-objective-is-free-text.md)
 - [0045 — Multi-target casts validate a target list with per-target consent](0045-multi-target-casts-with-per-target-consent.md)
