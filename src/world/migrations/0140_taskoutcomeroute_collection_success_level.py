@@ -4,9 +4,7 @@ from django.db import migrations, models
 
 
 class Migration(migrations.Migration):
-    dependencies = [
-        ("arxii", "0138_alter_ceremonytype_key"),
-    ]
+    dependencies = [("arxii", "0139_charactercovenantrole_standing")]
 
     operations = [
         migrations.AddField(
