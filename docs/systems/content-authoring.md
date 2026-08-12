@@ -36,9 +36,10 @@ carries `site.yml`'s special `never` tag); to actually clone/refresh the
 private lore repo onto the box, trigger `standup.yml` (Actions → "Stand up
 infra" → Run workflow) with the **"Also refresh the private lore-repo
 checkout"** `workflow_dispatch` input checked — this appends
-`--tags content_repo` to the converge and touches only this role, nothing
-else about the deploy. `CONTENT_REPO_PATH` is set for the app process once
-the checkout exists. Expect to use this once during alpha bootstrap and
+`--tags all,content_repo` to the converge, running the ordinary deploy as
+usual plus this role. `CONTENT_REPO_PATH` is always set for the app process
+(a fixed path); the checkout itself only exists after the on-demand refresh
+has been run at least once. Expect to use this once during alpha bootstrap and
 maybe again after a full alpha rebuild — not as part of routine ongoing
 operation. See `infra/README.md`'s "Content-repo checkout credential"
 section for the one-time credential setup.
@@ -50,7 +51,7 @@ deploy — see #2236 Phase 4 for why (protects in-progress prod-admin edits
 from being silently clobbered by an unattended load).
 
 Uncommitted export output sitting in the prod checkout (from prod-admin
-content authoring) blocks the next deploy's content-repo refresh until it's
+content authoring) blocks the next content-repo refresh until it's
 committed or cleaned up — the `content_repo` role's clone/pull task refuses
 to run over local modifications, and its failure message names this as the
 first likely cause.

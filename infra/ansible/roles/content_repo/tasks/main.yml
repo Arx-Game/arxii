@@ -111,7 +111,7 @@
           content_repo checkout failed. Likely causes: (1) local
           modifications exist in {{ content_repo_path }} from prod-admin
           content authoring (uncommitted export output blocks the next
-          deploy's refresh) — commit or discard them before the next
-          deploy; (2) ARXII_CONTENT_REPO_TOKEN is expired, revoked, or
+          refresh) — commit or discard them before the next
+          refresh; (2) ARXII_CONTENT_REPO_TOKEN is expired, revoked, or
           lacks Contents:Read on the repo; (3) ARXII_CONTENT_REPO does not
           name the correct owner/repo slug.

@@ -342,10 +342,11 @@ token. It is **on-demand, not every-deploy**: the role carries `site.yml`'s
 special `never` tag, so it's dormant on every ordinary "Stand up infra" run.
 To actually run it, trigger `standup.yml` (Actions → "Stand up infra" → Run
 workflow) with the **"Also refresh the private lore-repo checkout"**
-`workflow_dispatch` input checked — that flag alone appends
-`--tags content_repo` to the converge, touching only this role and nothing
-else about the deploy. Expect to use this once during alpha bootstrap and
-maybe again if alpha is ever torn down and rebuilt — not as a routine,
+`workflow_dispatch` input checked — that flag appends `--tags
+all,content_repo` to the converge, so the ordinary deploy still runs in
+full and this role additionally runs alongside it. Expect to use this once
+during alpha bootstrap and maybe again if alpha is ever torn down and
+rebuilt — not as a routine,
 ongoing action. To provision the credential itself:
 
 1. GitHub → Settings → Developer settings → **Fine-grained personal access

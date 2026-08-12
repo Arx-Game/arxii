@@ -29,7 +29,9 @@
     # A `never`-tagged role/task is skipped on every run UNLESS the operator
     # explicitly passes `--tags content_repo` (or `--tags never`) to that
     # specific ansible-playbook invocation — standup.yml's workflow_dispatch
-    # `run_content_load` input does exactly that, via standup.sh. No
+    # `run_content_refresh` input does exactly that, as `--tags
+    # all,content_repo` (the leading `all` keeps the ordinary converge
+    # running too — see standup.sh), via standup.sh. No
     # `--skip-tags` is needed anywhere else in this playbook for it: a
     # `never`-tagged role simply doesn't run unless asked for, so ordinary
     # deploys (and every other role above/below) are completely unaffected.
