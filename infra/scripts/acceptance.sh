@@ -151,6 +151,26 @@ chkno "ARXII_SENTRY_DSN never appears inside the fail-closed secrets_map block" 
 chkno "ARXII_SENTRY_DSN is not in standup.sh's REQUIRED_ARXII (optional secret)" \
   "sed -n '/REQUIRED_ARXII=(/,/)/p' infra/scripts/standup.sh | grep -q ARXII_SENTRY_DSN"
 
+# (a3) #3153: ARXII_CONTENT_REPO_TOKEN stays structurally EXCLUDED from
+# secrets_map (it's ansible-step-only, never written to the box's
+# EnvironmentFile; see secrets.env.example's new category comment) — that
+# half is unchanged. But per the on-demand redesign, it and ARXII_CONTENT_REPO
+# are now deliberately ABSENT from standup.sh's fail-closed REQUIRED_ARXII
+# preflight too: the content_repo role no longer runs on every deploy (see
+# the `never`-tag check below), so requiring a valid PAT on every ordinary
+# redeploy would be wrong. The role's own internal fail-closed assert (see
+# roles/content_repo/tasks/main.yml) still validates these WHEN the role
+# actually runs — that's unchanged and still correct, just no longer
+# duplicated at the standup.sh preflight layer.
+chkno "ARXII_CONTENT_REPO_TOKEN never appears inside the fail-closed secrets_map block (ansible-step-only, never on-box)" \
+  "sed -n '/^secrets_map:/,/^[^ ]/p' infra/ansible/roles/secrets_vault/defaults/main.yml | grep -q ARXII_CONTENT_REPO_TOKEN"
+chkno "ARXII_CONTENT_REPO_TOKEN is NOT a standup.sh preflight-required secret (on-demand role, not every-deploy)" \
+  "sed -n '/REQUIRED_ARXII=(/,/)/p' infra/scripts/standup.sh | grep -q ARXII_CONTENT_REPO_TOKEN"
+chkno "ARXII_CONTENT_REPO is NOT a standup.sh preflight-required var (on-demand role, not every-deploy)" \
+  "sed -n '/REQUIRED_ARXII=(/,/)/p' infra/scripts/standup.sh | grep -qE '(^|[[:space:]])ARXII_CONTENT_REPO([[:space:]]|\\)|$)'"
+chk "content_repo role in site.yml carries the 'never' tag (on-demand only, not every-deploy)" \
+  "grep -q 'role: content_repo.*tags:.*never' infra/ansible/site.yml"
+
 # (b) standup.sh must unset the provisioning tokens BEFORE invoking
 # ansible-playbook (order-sensitive — defense-in-depth so LINODE_TOKEN /
 # CLOUDFLARE_API_TOKEN can never reach the box even by accident).

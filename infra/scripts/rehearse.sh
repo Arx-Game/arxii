@@ -301,6 +301,12 @@ backups_region: "${stage_bucket_region}"
 # entirely (see site.yml's \`when: offsite_enabled\`).
 offsite_enabled: false
 
+# content_repo (roles/content_repo/defaults/main.yml) — the GitHub PAT is
+# prod-adjacent (real credential with real private-repo read access); the
+# isolated ephemeral-stage root has no such credential to give it. Role
+# skipped entirely (see site.yml's \`when: content_repo_enabled\`).
+content_repo_enabled: false
+
 # secrets_vault (roles/secrets_vault/defaults/main.yml) — the
 # not-applicable-in-rehearsal secret set (see that role's own defaults for
 # the full per-name rationale). ARXII_BACKUP_WRITER_* is deliberately

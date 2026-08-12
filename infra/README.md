@@ -157,6 +157,23 @@ disables the feature, never refuses the converge — `secrets_vault`'s
   `SENTRY_RELEASE` (the deployed commit SHA, stamped by `app_deploy` after
   checkout) are derived on-box, not operator-supplied.
 
+**Pre-stored by the operator — ansible-step-only, never written to the app's
+own EnvironmentFile (#3153; a third category alongside "on-box runtime"
+above and "tofu-step-only" below — the running Django/Evennia process never
+needs this, only the one Ansible task that clones the checkout does):**
+- `ARXII_CONTENT_REPO_TOKEN` — a GitHub **fine-grained PAT**, scoped to
+  *only* the private lore repo, **Contents: Read-only** permission. Consumed
+  once per converge by the `content_repo` role via `lookup('env', ...)`
+  (`no_log: true`) and deliberately never written to the box's own
+  `/etc/arxii/arxii.env` (what the running app process reads) — see
+  "Content-repo checkout credential" below for how to mint it. The token is
+  injected into `git` via its environment-variable config mechanism
+  (`GIT_CONFIG_COUNT`/`GIT_CONFIG_KEY_n`/`GIT_CONFIG_VALUE_n`, set through
+  Ansible's `environment:` task keyword) as an HTTP `Authorization: basic`
+  header, for the duration of that one clone/pull subprocess only — it is
+  never written to any file, not the app's EnvironmentFile, not the
+  checkout's `.git/config`, not anywhere, so no scrubbing step is needed.
+
 **NOT pre-stored — produced by the tofu step at run time and piped into the
 ansible step's env in-memory (masked, never to disk/log):**
 - `ARXII_BACKUP_WRITER_ACCESS_KEY`, `ARXII_BACKUP_WRITER_SECRET_KEY` — the
@@ -165,10 +182,11 @@ ansible step's env in-memory (masked, never to disk/log):**
 
 **Non-secret config** (domain, bucket labels, `cloudflare_account_id`,
 public `authorized_keys`, `dmarc_rua`, `resend_records`, `ssh_admin_cidrs`,
-`ARXII_DJANGO_SUPERUSER_USERNAME`, `ARXII_DJANGO_SUPERUSER_EMAIL`) goes in
-repo/Environment **Variables**, not Secrets. The superuser username/email
-default to `arxii_admin` / `admin@example.invalid` if you leave the
-Variables unset — fine for a private playtest box, override for prod.
+`ARXII_DJANGO_SUPERUSER_USERNAME`, `ARXII_DJANGO_SUPERUSER_EMAIL`,
+`ARXII_CONTENT_REPO`) goes in repo/Environment **Variables**, not Secrets.
+The superuser username/email default to `arxii_admin` / `admin@example.invalid`
+if you leave the Variables unset — fine for a private playtest box, override
+for prod.
 
 - `ARXII_SSH_ADMIN_CIDRS` — **required**, maps to `TF_VAR_ssh_admin_cidrs`. A
   JSON array of operator CIDRs, e.g. `["203.0.113.10/32"]`. `standup.sh`'s
@@ -177,6 +195,13 @@ Variables unset — fine for a private playtest box, override for prod.
   default to leave unmade.
 - `ARXII_ACME_EMAIL` — optional; Caddy's ACME account email. Defaults to
   `admin@<domain>` if unset.
+- `ARXII_CONTENT_REPO` — the private lore repo's `owner/repo` slug. Pairs
+  with `ARXII_CONTENT_REPO_TOKEN` above; knowing the slug alone grants no
+  access without the token, which is what keeps this a Variable rather than
+  a Secret. Keeps the slug out of infra config, resolved only via this
+  gated Environment Variable — see `docs/systems/content-authoring.md`'s
+  "One-time setup" section for the same discipline applied to the
+  session-PR push flow.
 
 ## What the button actually does to game state (first run vs. re-run)
 
@@ -309,6 +334,40 @@ Two things that catch people out:
   emergency way back in short of re-provisioning the box from a fresh
   Terraform apply.
 
+## Content-repo checkout credential (one-time)
+
+**#3153.** The `content_repo` Ansible role clones/refreshes the private lore
+repo onto the box, using a scoped GitHub credential — never a full-access
+token. It is **on-demand, not every-deploy**: the role carries `site.yml`'s
+special `never` tag, so it's dormant on every ordinary "Stand up infra" run.
+To actually run it, trigger `standup.yml` (Actions → "Stand up infra" → Run
+workflow) with the **"Also refresh the private lore-repo checkout"**
+`workflow_dispatch` input checked — that flag appends `--tags
+all,content_repo` to the converge, so the ordinary deploy still runs in
+full and this role additionally runs alongside it. Expect to use this once
+during alpha bootstrap and maybe again if alpha is ever torn down and
+rebuilt — not as a routine,
+ongoing action. To provision the credential itself:
+
+1. GitHub → Settings → Developer settings → **Fine-grained personal access
+   tokens** → Generate new token.
+2. **Repository access:** "Only select repositories" → the private lore
+   repo only.
+3. **Permissions:** Repository permissions → Contents → **Read-only**.
+   Nothing else.
+4. Set an expiration; calendar a reminder to rotate before it lapses (no
+   auto-rotation exists yet).
+5. Add to the gated `prod` Environment:
+   - `ARXII_CONTENT_REPO_TOKEN` (Secret) — the token from step 4.
+   - `ARXII_CONTENT_REPO` (Variable) — the repo's `owner/repo` slug.
+
+This credential is deliberately never written to any file on disk at
+all — not the box's own `/etc/arxii/arxii.env`, not the checkout's
+`.git/config`, nowhere. It's injected into `git` via environment-variable
+config for the duration of the clone/pull subprocess only; see
+`group_vars/secrets.env.example`'s "ANSIBLE-STEP-ONLY, NEVER ON-BOX"
+section for why.
+
 ## Dress rehearsal (run this before the first prod button press)
 
 **#2236 Phase 3 P1.** Before the very first real "Stand up infra" run, run the
@@ -346,7 +405,7 @@ whether it passed or failed. Equivalent local fallback:
 ### What it deliberately CANNOT prove (first-prod-run-only residual risks)
 
 Rehearsal mode keeps the ephemeral-stage root's isolation absolute: **no
-prod refs, no prod-adjacent credential, ever.** That means three real things
+prod refs, no prod-adjacent credential, ever.** That means four real things
 are structurally untested here and remain **residual risk on the actual
 first prod run**:
 
@@ -364,8 +423,14 @@ first prod run**:
   (`offsite_enabled: false`) — the R2 credential pair is a real Cloudflare
   account/bucket, prod-adjacent, and the isolated ephemeral-stage root has
   no such credential to give it.
+- **The `content_repo` role (#3153).** Skipped entirely in rehearsal
+  (`content_repo_enabled: false`) — same isolation-doctrine reasoning as R2
+  offsite replication above: `ARXII_CONTENT_REPO_TOKEN` is a real GitHub PAT
+  with real private-repo read access, prod-adjacent, and the isolated
+  ephemeral-stage root has no such credential to give it. Its very first
+  execution is against real prod.
 
-These three should be watched closely on the actual first `standup.sh` /
+These four should be watched closely on the actual first `standup.sh` /
 "Stand up infra" run — they are the only parts of the stack this rehearsal
 does not exercise.
 
@@ -548,7 +613,7 @@ above.
 - `terraform/ephemeral-stage/` — separate state + credential scope (blast-radius isolation);
   now also provisions a throwaway backups bucket (`object_storage_ephemeral`) for the dress
   rehearsal's backup+restore step.
-- `ansible/` — `site.yml` and 16 roles. **No committed secret material**: the `secrets_vault`
+- `ansible/` — `site.yml` and 17 roles. **No committed secret material**: the `secrets_vault`
   role reads `ARXII_*` env vars (set on the ansible step by `standup.yml`/`rehearse.sh` from the
   gated Environment) and renders a `0600` on-box `EnvironmentFile` in one `no_log` task.
   `group_vars/secrets.env.example` is the names-only contract. `roles/caddy` carries TWO

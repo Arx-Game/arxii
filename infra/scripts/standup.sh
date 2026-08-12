@@ -41,9 +41,22 @@ fail() { printf '[standup] REFUSING: %s\n' "$*" >&2; exit 1; }
 # wait_for_tcp() below; depends on log()/fail() above being defined first.
 . "${SCRIPT_DIR}/lib.sh"
 
-# Runtime app secrets that MUST be pre-supplied (operator env / gated GitHub
-# Environment). Mirrors the secrets_vault map. The backup-writer keys are NOT
-# here — they are produced by tofu and exported post-apply.
+# Runtime app secrets/vars that MUST be pre-supplied (operator env / gated
+# GitHub Environment). This is NOT a 1:1 mirror of secrets_vault's
+# secrets_map: the backup-writer keys are excluded here because they are
+# produced by tofu and exported post-apply.
+#
+# #3153 (on-demand redesign): ARXII_CONTENT_REPO_TOKEN/ARXII_CONTENT_REPO are
+# deliberately NOT in this list, even though the content_repo role still
+# needs them when it runs. The role is on-demand now (site.yml's `never` tag
+# — only runs when an operator explicitly passes `--tags content_repo`, via
+# standup.yml's `run_content_refresh` input), so requiring a valid, non-expired
+# PAT on EVERY ordinary deploy would be wrong: it would force every operator
+# to keep that credential fresh just to do a routine app redeploy that never
+# touches content_repo at all. The vars are still validated — fail-closed,
+# with a diagnosable message — but only inside the role itself, at the
+# moment it actually runs (see roles/content_repo/tasks/main.yml's own
+# "Collect names of missing content-repo env vars" / "Fail-closed" tasks).
 readonly REQUIRED_ARXII=(
   ARXII_PG_PASSWORD ARXII_DJANGO_SECRET_KEY
   ARXII_CLOUDINARY_CLOUD_NAME ARXII_CLOUDINARY_API_KEY ARXII_CLOUDINARY_API_SECRET
@@ -108,6 +121,24 @@ preflight() {
   for v in "${REQUIRED_BACKEND[@]}" "${REQUIRED_ARXII[@]}"; do
     [[ -n "${!v:-}" ]] || fail "required env '${v}' is missing/empty"
   done
+  # #3153: ARXII_CONTENT_REPO_TOKEN/ARXII_CONTENT_REPO are deliberately NOT in
+  # REQUIRED_ARXII (see that array's own comment) — they're only needed when
+  # the operator opts into the content_repo refresh. But when they opt in,
+  # check here too, not just inside the role itself: the role's own assert
+  # only fires after a full `tofu apply`, so surfacing a never-configured
+  # credential at preflight instead saves an operator a wasted apply.
+  if [[ "${ARXII_RUN_CONTENT_REFRESH:-false}" == "true" ]]; then
+    [[ -n "${ARXII_CONTENT_REPO_TOKEN:-}" ]] \
+        || fail "ARXII_RUN_CONTENT_REFRESH=true but ARXII_CONTENT_REPO_TOKEN is" \
+                "missing/empty — set it as a gated Environment secret before" \
+                "requesting a content-repo refresh, see infra/README.md" \
+                "'Content-repo checkout credential'"
+    [[ -n "${ARXII_CONTENT_REPO:-}" ]] \
+        || fail "ARXII_RUN_CONTENT_REFRESH=true but ARXII_CONTENT_REPO is" \
+                "missing/empty — set it as a gated Environment variable before" \
+                "requesting a content-repo refresh, see infra/README.md" \
+                "'Content-repo checkout credential'"
+  fi
 }
 
 # jqr/jqc/TF_OUTPUT_JSON/tf_read_outputs/select_ssh_user/gen_inventory/
@@ -274,11 +305,35 @@ EOF
   unset LINODE_TOKEN CLOUDFLARE_API_TOKEN TF_STATE_S3_ACCESS_KEY TF_STATE_S3_SECRET_KEY
 
   log "Converging host (idempotent)…"
+  # #3153: on-demand content-repo refresh. The content_repo role carries
+  # site.yml's `never` tag, so it's skipped by default on every run; only
+  # append `--tags all,content_repo` when the operator explicitly opted in
+  # via standup.yml's "Also refresh the private lore-repo checkout" input
+  # (GitHub Actions booleans arrive here as the literal string "true"). This
+  # is expected to be rare — alpha bootstrap, or after a full alpha rebuild
+  # — not a routine part of every deploy.
+  #
+  # `--tags content_repo` ALONE would be wrong here: passing any `--tags`
+  # restricts the whole playbook run to tasks carrying one of the given
+  # tags, so `content_repo` by itself would skip all 118 ordinary converge
+  # tasks (they don't carry that tag) and deploy no app code at all — a
+  # silent no-op deploy an operator would have no reason to expect from a
+  # checkbox framed as "also refresh the checkout". Ansible's built-in `all`
+  # tag means "every task that isn't tag-gated" (i.e. the normal converge);
+  # adding `content_repo` alongside it additionally activates this
+  # specific `never`-tagged role. So `--tags all,content_repo` runs the
+  # full ordinary converge PLUS the content-repo refresh, correctly
+  # positioned in the play order (see site.yml).
+  local ansible_extra_args=()
+  if [[ "${ARXII_RUN_CONTENT_REFRESH:-false}" == "true" ]]; then
+    ansible_extra_args+=(--tags "all,content_repo")
+  fi
+
   # Backup-writer keys are handed to ansible via env in-memory — never
   # written to disk/log, never --extra-vars.
   ARXII_BACKUP_WRITER_ACCESS_KEY="${backup_writer_access_key}" \
   ARXII_BACKUP_WRITER_SECRET_KEY="${backup_writer_secret_key}" \
-  ansible-playbook -i "${INVENTORY}" "${ANSIBLE_DIR}/site.yml"
+  ansible-playbook -i "${INVENTORY}" "${ANSIBLE_DIR}/site.yml" "${ansible_extra_args[@]}"
 
   log "Stand-up complete. (Reminder: revoke the provisioning tokens at the provider — see README.)"
 }

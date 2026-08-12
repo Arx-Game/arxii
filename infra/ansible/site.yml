@@ -20,6 +20,22 @@
     - tls_telnet_cert
     - django_hardening
     - app_deploy
+    # #2236 Phase 4 / #3153: skipped entirely in rehearsal
+    # (content_repo_enabled: false — the GitHub PAT is prod-adjacent; see
+    # roles/content_repo's own defaults for why), AND skipped by default in
+    # prod too, via Ansible's special `never` tag — this role is on-demand,
+    # not every-deploy: expected once for alpha bootstrap, maybe again after
+    # a full alpha rebuild, essentially never in routine ongoing operation.
+    # A `never`-tagged role/task is skipped on every run UNLESS the operator
+    # explicitly passes `--tags content_repo` (or `--tags never`) to that
+    # specific ansible-playbook invocation — standup.yml's workflow_dispatch
+    # `run_content_refresh` input does exactly that, as `--tags
+    # all,content_repo` (the leading `all` keeps the ordinary converge
+    # running too — see standup.sh), via standup.sh. No
+    # `--skip-tags` is needed anywhere else in this playbook for it: a
+    # `never`-tagged role simply doesn't run unless asked for, so ordinary
+    # deploys (and every other role above/below) are completely unaffected.
+    - { role: content_repo, when: content_repo_enabled, tags: [content_repo, never] }
     - backups
     # #2236 Phase 3 P1: skipped entirely in rehearsal (offsite_enabled: false
     # — the R2 credential is prod-adjacent; see roles/offsite_replication's
