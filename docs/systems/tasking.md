@@ -23,8 +23,11 @@ Deliberately NOT here: standing "stay here until recalled" postings — those ar
   nullable `consequence_pool` FK (ADR-0092 risk surface), `is_active`.
 - **`TaskOutcomeRoute`** — per (template, `outcome_tier` FK → `traits.CheckOutcome`)
   payout row: `money_reward`, nullable `clue_pool` FK, `report_template`
-  (`{task}`/`{target}`/`{agent}` format kwargs), plus the Spy Job Kit payout
-  fields (below). No route for a tier ⇒ nothing happens (fail closed).
+  (`{task}`/`{target}`/`{agent}` format kwargs), nullable `collection_success_level`
+  (set ⇒ this route lands the issuing org's `currency.collect_org_income` graded at
+  that level, handler as collector; null ⇒ no collection — #696 item 2, see
+  "Domain collection" below), plus the Spy Job Kit payout fields (below). No route
+  for a tier ⇒ nothing happens (fail closed).
 - **`OrgTask`** — live instance: `template`, `org`, `issued_by` persona, `status`
   (`TaskStatus`: OPEN→ASSIGNED→RESOLVING→COMPLETED/FAILED/EXPIRED), `deadline`
   (set at assignment), target via `DiscriminatorMixin` (`target_kind` selects
@@ -215,3 +218,31 @@ primitive). Missions' `_finish_terminal` calls `resolve_task_for_mission`
 the SAME `TaskOutcomeRoute` table — one authored payout surface, two
 execution engines. No risk pool on the PC path. Abandoned/expired missions
 fail their task via the hourly sweep.
+
+## Domain collection (#696)
+
+`TaskOutcomeRoute.collection_success_level` grades a task's issuing org
+`currency.collect_org_income` dispatch: `_land_route_collection` calls
+`collect_org_income(organization=task.org, character=handler_sheet.character,
+success_level_override=route.collection_success_level)`, so the mission's
+authored terminal outcome — not a second dice roll — decides how much of the
+org's gathered pool lands (`currency.COLLECTION_BAND_PCTS`' own floors; below
+the lowest floor is catastrophe, the pool is lost with the collector). A
+`ValidationError` from an empty pool degrades to a report line, never a hard
+task-resolution failure.
+
+**Worked example** (`world/seeds/domain_tasks.py`, `domain_tasks` seed
+cluster): "Collect the Levies" — a DOMAIN-target `TaskTemplate`
+(`check_type=Tax Collection`, `check_difficulty` a static PLACEHOLDER pending
+issue #696 item 8's unbuilt "steward's check sets difficulty" mechanic)
+linked to a single-node CHECK `MissionTemplate` of the same name (RESTRICTED
+visibility, no `availability_rule` — reachable ONLY via `accept_task`'s
+`staff_assign_mission` call, never an open board). Each of the mission's
+terminal `CheckOutcome` routes carries no mission-side MONEY reward (the
+collector's cut lives on the linked `TaskOutcomeRoute` — one payout surface)
+and grades `collection_success_level` straight off `COLLECTION_BAND_PCTS`'
+own floors: Critical Success → 2 (110%), Success → 1 (100%), Partial Success
+→ 0 (85%), Failure → -1 (35%, the smallest authored non-catastrophe band),
+Critical Failure → -2 (below every floor ⇒ catastrophe). All prose and
+tuning numbers are PLACEHOLDER pending Apostate's pass. End-to-end coverage:
+`world/tasking/tests/test_collection_mission_e2e.py`.

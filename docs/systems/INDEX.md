@@ -2903,8 +2903,11 @@ consumers, not systems.
 
 - **Models:** `TaskTemplate` (check + duration + `target_kind` + nullable
   `mission_template`/`consequence_pool`), `TaskOutcomeRoute` (per
-  `traits.CheckOutcome` tier: money, clue-pool draw, report template; fail closed),
-  `OrgTask` (status lifecycle, `DiscriminatorMixin` target), `TaskFulfillment`
+  `traits.CheckOutcome` tier: money, clue-pool draw, report template; fail closed;
+  nullable `collection_success_level` — set = this route lands the issuing org's
+  `currency.collect_org_income` graded at that level via `success_level_override`,
+  with the handler as collector; null = no collection, #696 item 2), `OrgTask`
+  (status lifecycle, `DiscriminatorMixin` target), `TaskFulfillment`
   (`npc_asset` XOR `mission_instance`, stored dispatch check, report),
   `ListenerPost` (buzz meter on a LISTENER `NPCAssignment` + hidden counterplay
   state), `ListenerHarvest` (caught Secret XOR planted red herring)
@@ -2930,6 +2933,16 @@ consumers, not systems.
   unrest ± (foment/soothe), organization report (treasury banded),
   military strength assay; issue-time espionage consent gate covers PCs
   AND PC-led orgs/domains; sample templates in `world/seeds/spy_tasks.py`
+- **Domain collection worked example (#696 item 3):** "Collect the Levies" —
+  a DOMAIN-target `TaskTemplate` (`category=DOMAIN`, `check_type=Tax
+  Collection`) linked to a single-node CHECK `MissionTemplate` of the same
+  name, so a member can `accept_task` it as a mission; each terminal
+  `CheckOutcome` tier's route grades `collection_success_level` straight off
+  `currency.COLLECTION_BAND_PCTS`' own floors (2/1/0/-1; Critical Failure
+  below -1 = catastrophe) — one payout surface, no mission-side MONEY reward.
+  PLACEHOLDER prose/tuning throughout; seeded by
+  `world.seeds.domain_tasks.seed_domain_collection_task` (the `domain_tasks`
+  cluster, after `governance` + `missions`/`checks`).
 - **Actions + telnet:** 11 REGISTRY actions (`actions/definitions/tasking.py`)
   are the ADR-0001 seam — viewsets dispatch through them; telnet `network`
   family (`commands/network.py`: board/issue/assign/accept/post/collect/
@@ -3454,6 +3467,16 @@ an idle org reaches stasis in both directions (loan interest still accrues — o
   independently atomic; the rest stays in the treasury. Returns `DistributionResult`)
 - **Checks (#930):** Tax Collection / Household Command (presence + Leadership + Stewardship) and Domain
   Investment (intellect + Scholarship + Economics), seeded by the `governance` cluster
+- **Collection difficulty (#696 item 1):** `_collection_target_difficulty` derives the Tax
+  Collection check's target difficulty from local order/crime — worst-stop wins: for each
+  stream with an authored `area`, net pressure = area CRIME total − area ORDER total
+  (`world.locations.services.area_stat_total`), and the MAX pressure across an org's streams
+  shifts the base NORMAL difficulty point-for-point (clamped to TRIVIAL..HARROWING).
+  PLACEHOLDER tuning — point-for-point shift and worst-stop-wins are first guesses pending
+  real turf-war stat magnitudes. `collect_org_income`'s `success_level_override` lets a
+  caller that already resolved the run's outcome elsewhere (a mission's terminal grade, via
+  `tasking.TaskOutcomeRoute.collection_success_level`) skip the check and band on that grade
+  instead (#696 item 2) — see Tasking's `resolve_task_for_mission`.
 - **Books surface:** `GET /api/currency/org-books/{org}/` (`OrgBooksViewSet`) — treasury,
   graft, income streams w/ pools + `uncollected_total`, debts, obligations, contributions,
   ledger; per-line summon affordances drive the npc_services interaction dialog

@@ -204,7 +204,16 @@ Designed as a connected set (ADRs 0050–0057); most of it has now landed. See
   - **Servant daily-life behaviors** — fetch shipped (#2276); meal/bath prep, message-carrying,
     announcing visitors, guard/doorman duty, and `assign_servant`/`unassign_servant` remain.
     **#2989**.
-  - **Building→neighborhood→domain progression** — #696 (open).
+  - **Building→neighborhood→domain progression** — #696: `partial`. Items 1-2
+    shipped: collection difficulty from local order/crime (worst-stop
+    `_collection_target_difficulty`) + the "Collect the Levies" PLACEHOLDER
+    worked-example tax-collection mission/task (`world/seeds/domain_tasks.py`).
+    Items 3-8 remain open: Area promotion rules (player-declared vs organic
+    threshold), aggregate area→area ownership resolution, a domain defenses
+    stat, domain gem/material output feeding crafting/construction,
+    domain-anchored temp rooms / mini-grid, and "steward's check sets
+    difficulty" (`TaskTemplate.check_difficulty` is still a static authored
+    integer).
   - ✅ **Room-feature systems** — DONE far beyond Sanctum: Library, Training Room, Lab, Command
     Center, Granary, Siege Deck, Bank, Notice Board, Town Crier, Social Hub, Vault, Brig, Stables,
     Workshop of Iniquity — all registered, seeded, with live effects. (#675/#673 closed.)
