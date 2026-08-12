@@ -33,6 +33,7 @@ from world.tasking.models import OrgTask, TaskFulfillment
 
 if TYPE_CHECKING:
     from world.assets.models import NPCAsset
+    from world.character_sheets.models import CharacterSheet
     from world.checks.types import CheckResult
     from world.scenes.models import Persona
     from world.societies.models import Organization
@@ -266,8 +267,36 @@ def _apply_route_payouts(
             if drawn is not None:
                 acquire_clue(roster_entry, drawn)
     lines = apply_spy_payouts(route, task, fulfillment)
+    if route.collection_success_level is not None:
+        lines.append(_land_route_collection(route, task, handler_sheet))
     lines.extend(_flag_pact_betrayal(task))
     return lines
+
+
+def _land_route_collection(
+    route: TaskOutcomeRoute, task: OrgTask, handler_sheet: CharacterSheet
+) -> str:
+    """Lands the issuing org's income collection at the route's authored grade (#696 item 2).
+
+    Catastrophe (a very negative authored level mapping through
+    ``_collection_band_pct`` to None) is the authored Critical Failure route: the
+    pools are lost and ``collect_org_income`` raises ``ValidationError`` when
+    there was nothing to gather in the first place — either way this stays a
+    report line, never a hard failure of the task resolution itself.
+    """
+    from django.core.exceptions import ValidationError  # noqa: PLC0415
+
+    from world.currency.services import collect_org_income  # noqa: PLC0415
+
+    try:
+        collection = collect_org_income(
+            organization=task.org,
+            character=handler_sheet.character,
+            success_level_override=route.collection_success_level,
+        )
+    except ValidationError:
+        return "PLACEHOLDER: The coffers held nothing worth collecting."
+    return f"PLACEHOLDER: The levy run brought {collection.landed} coppers home."
 
 
 def _flag_pact_betrayal(task: OrgTask) -> list[str]:
