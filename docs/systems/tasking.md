@@ -229,7 +229,12 @@ authored terminal outcome — not a second dice roll — decides how much of the
 org's gathered pool lands (`currency.COLLECTION_BAND_PCTS`' own floors; below
 the lowest floor is catastrophe, the pool is lost with the collector). A
 `ValidationError` from an empty pool degrades to a report line, never a hard
-task-resolution failure.
+task-resolution failure. Note the task-status split: `resolve_task_for_mission`
+marks the task COMPLETED only for `success_level > 0` terminal tiers, so a
+Partial Success (level 0) or Failure (level -1) route still lands its authored
+band of coin (85% / 35% under the PLACEHOLDER seeds) while the task itself
+reads FAILED — pre-existing tasking semantics this worked example surfaces;
+revisit with the prose pass.
 
 **Worked example** (`world/seeds/domain_tasks.py`, `domain_tasks` seed
 cluster): "Collect the Levies" — a DOMAIN-target `TaskTemplate`
