@@ -23368,6 +23368,13 @@ export interface components {
       readonly covenant_role: components['schemas']['CovenantRole'];
       readonly anchor_role: components['schemas']['CovenantRole'];
       readonly rank: components['schemas']['CovenantRankNested'];
+      /**
+       * @description Durable membership tier (#2992). CORE = sworn full member. MINOR = guest standing: engages only the secondary lane (is_secondary=True) at SecondaryVowConfig potency; bypasses the level-band join gate; DURANCE-only. Distinct from is_secondary, which is the per-scene engagement-lane flag.
+       *
+       *     * `core` - Core Member
+       *     * `minor` - Minor Member
+       */
+      readonly standing: components['schemas']['StandingEnum'];
       /** @description True when the character is currently 'fulfilling' this role for this covenant. At most one engaged active row per (character_sheet, covenant.covenant_type) — service-enforced + clean()-enforced. Drives role bonuses (modifier pipeline) and COVENANT_ROLE Thread pull eligibility. See spec 2026-05-09 §3.6. */
       readonly engaged: boolean;
       /** Format: date-time */
@@ -24293,6 +24300,8 @@ export interface components {
       readonly member_count: number;
       readonly legend_total: number;
       readonly storylines: number[];
+      /** @description Coppers in the covenant treasury; null unless the viewer is an active member. */
+      readonly treasury_balance: number | null;
     };
     /** @description Read-only serializer for CovenantLevelThreshold lookup rows. */
     CovenantLevelThreshold: {
@@ -38487,6 +38496,12 @@ export interface components {
       readonly is_ready: boolean;
       readonly stakes: components['schemas']['StakeSummary'][];
     };
+    /**
+     * @description * `core` - Core Member
+     *     * `minor` - Minor Member
+     * @enum {string}
+     */
+    StandingEnum: 'core' | 'minor';
     /** @description Serializer for starting areas with accessibility check. */
     StartingArea: {
       readonly id: number;

@@ -39143,6 +39143,15 @@ components:
           allOf:
           - $ref: '#/components/schemas/CovenantRankNested'
           readOnly: true
+        standing:
+          allOf:
+          - $ref: '#/components/schemas/StandingEnum'
+          readOnly: true
+          description: |-
+            Durable membership tier (#2992). CORE = sworn full member. MINOR = guest standing: engages only the secondary lane (is_secondary=True) at SecondaryVowConfig potency; bypasses the level-band join gate; DURANCE-only. Distinct from is_secondary, which is the per-scene engagement-lane flag.
+
+            * `core` - Core Member
+            * `minor` - Minor Member
         engaged:
           type: boolean
           readOnly: true
@@ -39196,6 +39205,7 @@ components:
       - joined_at
       - left_at
       - rank
+      - standing
       - viewer_capabilities
     CharacterDraft:
       type: object
@@ -41294,6 +41304,12 @@ components:
           items:
             type: integer
           readOnly: true
+        treasury_balance:
+          type: integer
+          nullable: true
+          description: Coppers in the covenant treasury; null unless the viewer is
+            an active member.
+          readOnly: true
       required:
       - battle_binding
       - battle_binding_display
@@ -41310,6 +41326,7 @@ components:
       - name
       - storylines
       - sworn_objective
+      - treasury_balance
     CovenantLevelThreshold:
       type: object
       description: Read-only serializer for CovenantLevelThreshold lookup rows.
@@ -68498,6 +68515,14 @@ components:
       - effective_risk
       - is_ready
       - stakes
+    StandingEnum:
+      enum:
+      - core
+      - minor
+      type: string
+      description: |-
+        * `core` - Core Member
+        * `minor` - Minor Member
     StartingArea:
       type: object
       description: Serializer for starting areas with accessibility check.

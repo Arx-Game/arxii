@@ -2992,6 +2992,12 @@ def wire_covenant_lifecycle_rituals() -> object:
                         "multi": False,
                         "required": True,
                     },
+                    {
+                        "name": "standing",
+                        "type": "select",
+                        "options": ["core", "minor"],
+                        "required": False,
+                    },
                 ],
                 "participant_fields": [
                     {

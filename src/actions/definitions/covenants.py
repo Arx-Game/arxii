@@ -17,6 +17,7 @@ if TYPE_CHECKING:
     from evennia.objects.models import ObjectDB
 
     from actions.types import ActionContext
+    from world.covenants.models import CharacterCovenantRole
 
 
 def _run_service(mutation: Callable[[], None], success_message: str) -> ActionResult:
@@ -31,6 +32,49 @@ def _run_service(mutation: Callable[[], None], success_message: str) -> ActionRe
     except CovenantError as exc:
         return ActionResult(success=False, message=exc.user_message)
     return ActionResult(success=True, message=success_message)
+
+
+def _resolve_actor_membership(
+    actor: ObjectDB, kwargs: dict[str, Any]
+) -> tuple[CharacterCovenantRole | None, ActionResult | None]:
+    """Resolve the membership a treasury Action operates on: (membership, error).
+
+    Telnet callers (``commands/covenant.py``) resolve the caller's own membership
+    themselves and pass it directly as ``kwargs["membership"]`` — used as-is when
+    it's genuinely a ``CharacterCovenantRole`` instance. The web dispatch path
+    (``DispatchActionView`` -> ``dispatch_player_action``) only ever carries
+    JSON-safe primitives (a raw ``{"membership": 5}`` int can reach here — see
+    ``src/actions/CLAUDE.md``'s "objectdb_target_kwargs does NOT auto-resolve on
+    the REST dispatch path" note), so a non-instance value is NOT trusted as a
+    resolved membership; it falls through to the ``covenant_id`` path below,
+    which resolves the ACTOR'S OWN active membership in that covenant — never a
+    client-supplied membership id, so there is no way to act on someone else's
+    membership from the wire (#2992).
+    """
+    from world.covenants.exceptions import NotAnActiveCovenantMemberError  # noqa: PLC0415
+    from world.covenants.models import CharacterCovenantRole  # noqa: PLC0415
+
+    membership = kwargs.get("membership")
+    if isinstance(membership, CharacterCovenantRole):
+        return membership, None
+
+    covenant_id = kwargs.get("covenant_id")
+    membership = None
+    if covenant_id is not None:
+        membership = (
+            CharacterCovenantRole.objects.filter(
+                covenant_id=covenant_id,
+                character_sheet_id=actor.pk,
+                left_at__isnull=True,
+            )
+            .select_related("rank", "covenant")
+            .first()
+        )
+    if membership is None:
+        return None, ActionResult(
+            success=False, message=NotAnActiveCovenantMemberError.user_message
+        )
+    return membership, None
 
 
 @dataclass
@@ -188,6 +232,60 @@ class TransferTopRankAction(Action):
                 new_top_membership=kwargs["new_top_membership"],
             ),
             "The top rank passes to them.",
+        )
+
+
+@dataclass
+class DepositCovenantFundsAction(Action):
+    """Deposit coppers from your purse into the covenant treasury."""
+
+    key: str = "deposit_covenant_funds"
+    name: str = "Deposit Covenant Funds"
+    icon: str = "piggy-bank"
+    category: str = "covenant"
+    target_type: TargetType = TargetType.SELF
+
+    def execute(
+        self,
+        actor: ObjectDB,
+        context: ActionContext | None = None,
+        **kwargs: Any,
+    ) -> ActionResult:
+        from world.covenants.treasury import deposit_covenant_funds  # noqa: PLC0415
+
+        membership, error = _resolve_actor_membership(actor, kwargs)
+        if error:
+            return error
+        return _run_service(
+            lambda: deposit_covenant_funds(membership=membership, amount=kwargs["amount"]),
+            "You add your coin to the covenant's coffers.",
+        )
+
+
+@dataclass
+class WithdrawCovenantFundsAction(Action):
+    """Withdraw coppers from the covenant treasury into your purse (rank-gated)."""
+
+    key: str = "withdraw_covenant_funds"
+    name: str = "Withdraw Covenant Funds"
+    icon: str = "hand-coins"
+    category: str = "covenant"
+    target_type: TargetType = TargetType.SELF
+
+    def execute(
+        self,
+        actor: ObjectDB,
+        context: ActionContext | None = None,
+        **kwargs: Any,
+    ) -> ActionResult:
+        from world.covenants.treasury import withdraw_covenant_funds  # noqa: PLC0415
+
+        membership, error = _resolve_actor_membership(actor, kwargs)
+        if error:
+            return error
+        return _run_service(
+            lambda: withdraw_covenant_funds(membership=membership, amount=kwargs["amount"]),
+            "You draw coin from the covenant's coffers.",
         )
 
 

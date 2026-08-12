@@ -190,7 +190,7 @@ class CourtPactLifecycleReleaseTests(TestCase):
     def test_leave_releases_servant_pact_and_allows_reswear(self):
         covenant = CovenantFactory(covenant_type=CovenantType.COURT)
         servant, membership = self._court_member(covenant)
-        # Two more members so leaving does NOT auto-dissolve the Court.
+        # Two more members (covenants never dissolve from attrition regardless — #2992).
         self._court_member(covenant)
         self._court_member(covenant)
         swear_court_pact(covenant=covenant, servant_sheet=servant, granted_pull_cap=3)

@@ -64,7 +64,7 @@ class LeaveActionTests(TestCase):
         self.sheet = _setup_user_with_sheet(self.owner)
         self.other_sheet = _setup_user_with_sheet(self.other)
 
-        # Three-member covenant so a single leave does not auto-dissolve it,
+        # Three-member covenant (covenants never dissolve from attrition — #2992),
         # keeping the soft-end visible without dissolution side effects.
         self.cov = CovenantFactory(covenant_type=CovenantType.DURANCE)
         role = CovenantRoleFactory(covenant_type=CovenantType.DURANCE)

@@ -16,6 +16,19 @@ class CovenantType(models.TextChoices):
     COURT = "court", "Covenant of the Court"
 
 
+class MembershipStanding(models.TextChoices):
+    """Durable membership tier (#2992).
+
+    CORE is the sworn, full member — today's behavior. MINOR is a guest
+    standing: the member rides the secondary-vow lane (#2641) only, at
+    SecondaryVowConfig potency, and never occupies the primary engagement
+    slot. DURANCE-only for now (CharacterCovenantRole.clean()).
+    """
+
+    CORE = "core", "Core Member"
+    MINOR = "minor", "Minor Member"
+
+
 class RoleArchetype(models.TextChoices):
     """Foundational combat archetype for covenant roles.
 

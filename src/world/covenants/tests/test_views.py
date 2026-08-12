@@ -1003,7 +1003,7 @@ class CovenantRankViewSetTests(CovenantsViewTestCase):
             covenant=cov2,
             rank=mgr_rank2,
         )
-        # Add a second member so covenant doesn't dissolve.
+        # Second member for realism (covenants never dissolve from attrition — #2992).
         CharacterCovenantRoleFactory(
             character_sheet=self.non_mgr_sheet,
             covenant=cov2,

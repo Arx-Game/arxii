@@ -349,6 +349,20 @@ class CovenantViewSet(viewsets.ReadOnlyModelViewSet):
     # fresh viewset instance per request, so this never leaks across requests.
     _page_aggregates: dict[int, dict[str, int]] | None = None
 
+    # Page treasury balances (covenant pk -> balance, #2992 review fix) that
+    # ``list`` precomputes for ``get_serializer_context``; None on non-list
+    # actions so the serializer falls back to its per-object ``covenant_treasury``
+    # (get_or_create) path — lazy-create on first deposit stays legitimate for a
+    # single detail fetch, just not for every row of a list response.
+    _page_treasury_balances: dict[int, int] | None = None
+
+    # Page viewer-memberships (covenant pk -> the requester's own active
+    # CharacterCovenantRole in that covenant, or None; 2026-08 review fix) that
+    # ``list`` precomputes to seed ``_resolve_viewer_membership``'s per-covenant
+    # memoization cache page-wide — without this, get_treasury_balance's
+    # membership check still cost one query per distinct covenant id on the page.
+    _page_viewer_memberships: dict[int, CharacterCovenantRole | None] | None = None
+
     def get_queryset(self) -> QuerySet[Covenant]:
         # prefetch storylines (2026-07 audit): CovenantSerializer.storylines is a
         # many-relation that otherwise fires one query per covenant on the list.
@@ -391,11 +405,83 @@ class CovenantViewSet(viewsets.ReadOnlyModelViewSet):
             for pk in covenant_ids
         }
 
+    @staticmethod
+    def _covenant_treasury_balances(covenants: list[Covenant]) -> dict[int, int]:
+        """Bulk treasury balance for a page of covenants, keyed by covenant pk (#2992
+        review fix). ``CovenantSerializer.get_treasury_balance`` used to call
+        ``covenant_treasury()`` (an ``OrganizationTreasury.objects.get_or_create``) per
+        row — one query, and a stray row-creating write, per covenant in a list response.
+
+        This runs a single bulk read of pre-existing ``OrganizationTreasury`` rows for
+        the page's backing organizations. A covenant with no treasury row yet (no
+        deposit has ever been made) is simply absent from the result — the caller
+        treats that as balance 0 and must NOT create the row here; a treasury is
+        legitimately lazy-created on first deposit, never during serialization.
+        """
+        from world.currency.models import OrganizationTreasury  # noqa: PLC0415
+
+        if not covenants:
+            return {}
+        org_id_to_covenant_pk = {c.organization_id: c.pk for c in covenants}
+        balances = dict(
+            OrganizationTreasury.objects.filter(
+                organization_id__in=org_id_to_covenant_pk.keys()
+            ).values_list("organization_id", "balance")
+        )
+        return {
+            covenant_pk: balances.get(org_id, 0)
+            for org_id, covenant_pk in org_id_to_covenant_pk.items()
+        }
+
+    @staticmethod
+    def _covenant_viewer_memberships(
+        covenants: list[Covenant], request: Request
+    ) -> dict[int, CharacterCovenantRole | None]:
+        """Bulk viewer-membership prefetch for a page of covenants, keyed by
+        covenant pk (2026-08 review fix). Feeds ``seed_viewer_membership_cache``
+        so ``CovenantSerializer.get_treasury_balance``'s underlying
+        ``_resolve_viewer_membership`` check costs one query for the whole page
+        instead of one per distinct covenant id — the gap left by the treasury
+        balance batching above, which only bulked the treasury read itself.
+
+        ``.order_by("pk")`` + first-wins ``setdefault`` mirrors the semantics of
+        the original per-covenant ``.first()`` call for the (rare) case of an
+        account with two active characters both holding active memberships in
+        the same covenant.
+        """
+        if not covenants:
+            return {}
+        if not request.user.is_authenticated:
+            return dict.fromkeys(c.pk for c in covenants)
+        covenant_ids = [c.pk for c in covenants]
+        rows = (
+            CharacterCovenantRole.objects.filter(
+                covenant_id__in=covenant_ids,
+                left_at__isnull=True,
+                character_sheet__roster_entry__tenures__end_date__isnull=True,
+                character_sheet__roster_entry__tenures__player_data__account=request.user,
+            )
+            .select_related("rank")
+            .order_by("pk")
+        )
+        by_covenant_id: dict[int, CharacterCovenantRole | None] = {}
+        for row in rows:
+            by_covenant_id.setdefault(row.covenant_id, row)
+        return {covenant_id: by_covenant_id.get(covenant_id) for covenant_id in covenant_ids}
+
     def get_serializer_context(self) -> dict:
         context = super().get_serializer_context()
         aggregates = self._page_aggregates
         if aggregates is not None:
             context["covenant_aggregates"] = aggregates
+        balances = self._page_treasury_balances
+        if balances is not None:
+            context["covenant_treasury_balances"] = balances
+        memberships = self._page_viewer_memberships
+        if memberships is not None:
+            from world.covenants.serializers import seed_viewer_membership_cache  # noqa: PLC0415
+
+            seed_viewer_membership_cache(context, memberships)
         return context
 
     def list(self, request: Request, *args: object, **kwargs: object) -> Response:
@@ -403,11 +489,13 @@ class CovenantViewSet(viewsets.ReadOnlyModelViewSet):
         # the list endpoint's description, replacing the class docstring. Mirrors
         # DRF's default list() but stashes the page's aggregates first so
         # get_serializer_context can hand them to the serializer, avoiding the
-        # per-row member_count/legend_total queries.
+        # per-row member_count/legend_total/treasury_balance queries.
         queryset = self.filter_queryset(self.get_queryset())
         page = self.paginate_queryset(queryset)
         covenants = page if page is not None else list(queryset)
         self._page_aggregates = self._covenant_aggregates([c.pk for c in covenants])
+        self._page_treasury_balances = self._covenant_treasury_balances(covenants)
+        self._page_viewer_memberships = self._covenant_viewer_memberships(covenants, request)
         serializer = self.get_serializer(covenants, many=True)
         if page is not None:
             return self.get_paginated_response(serializer.data)

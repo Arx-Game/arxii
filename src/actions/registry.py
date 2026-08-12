@@ -92,12 +92,14 @@ from actions.definitions.consent_preferences import (
 )
 from actions.definitions.covenants import (
     AssignCovenantRankAction,
+    DepositCovenantFundsAction,
     DisengageCovenantMembershipAction,
     EngageCovenantMembershipAction,
     KickCovenantMemberAction,
     LeaveCovenantAction,
     StandDownBattleCovenantAction,
     TransferTopRankAction,
+    WithdrawCovenantFundsAction,
 )
 from actions.definitions.crafting import (
     AttachFacetAction,
@@ -698,6 +700,8 @@ _ALL_ACTIONS: list[Action] = [
     AssignCovenantRankAction(),
     TransferTopRankAction(),
     StandDownBattleCovenantAction(),
+    DepositCovenantFundsAction(),
+    WithdrawCovenantFundsAction(),
     CreateEventAction(),
     ScheduleEventAction(),
     StartEventAction(),

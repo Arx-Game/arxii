@@ -141,7 +141,7 @@ They do not use the command system, dispatchers, or handlers.
   services these Actions wrap; `ReactionWindowViewSet` already called the window services directly
   and is unchanged — `ReactToWindowAction` wraps them so telnet reaches the same seam (web does not
   call it). Shared with telnet `CmdReact`.
-  `covenants.py` (#1346) — seven REGISTRY actions, all `target_type=SELF`, thin wrappers over
+  `covenants.py` (#1346) — nine REGISTRY actions, all `target_type=SELF`, thin wrappers over
   `world.covenants.services`; `CovenantError` → failure `ActionResult(exc.user_message)`:
   `EngageCovenantMembershipAction` (key `"engage_covenant_membership"`),
   `DisengageCovenantMembershipAction` (`"disengage_covenant_membership"`),
@@ -154,7 +154,23 @@ They do not use the command system, dispatchers, or handlers.
   through the `RitualSession` seam (`CmdRitual` + the adapter registry in
   `commands/ritual_adapters.py`) rather than direct Actions — the adapters translate telnet tokens
   into the typed `DraftParse`/`JoinParse` structures and the existing session services handle
-  the rest.
+  the rest. `DepositCovenantFundsAction` (`"deposit_covenant_funds"`) /
+  `WithdrawCovenantFundsAction` (`"withdraw_covenant_funds"`, #2992) round out the file — thin
+  wrappers over `world.covenants.treasury.deposit_covenant_funds`/`withdraw_covenant_funds`
+  instead of `world.covenants.services` (the treasury lives in its own module): deposit is open
+  to any active member (core or minor), withdrawal is gated by `membership.rank.tier <=
+  treasury.spend_rank_max`. Shared by telnet `CmdCovenant`'s `deposit`/`withdraw` subverbs
+  (which resolve the caller's own membership and pass the instance directly via the
+  `membership` kwarg) and the web `TreasuryPanel` (`frontend/src/covenants/components/
+  TreasuryPanel.tsx`), which dispatches through the generic action-dispatch endpoint with
+  only `covenant_id`/`amount` (no membership id on the wire — REST kwargs are JSON-only,
+  see the `objectdb_target_kwargs`/REST-dispatch note above). Both actions' shared
+  `_resolve_actor_membership(actor, kwargs)` helper handles this dual shape: a genuine
+  `CharacterCovenantRole` instance under `kwargs["membership"]` (telnet) is used as-is —
+  gated by `isinstance()`, so a bare id under that same key (a malformed/forged web POST)
+  is never trusted as a resolved instance — and otherwise falls back to resolving the
+  ACTOR'S OWN active membership from `kwargs["covenant_id"]`; a client can never name
+  someone else's membership from the wire.
   `events.py` (#1499) — the event lifecycle + invitee RSVP verbs, all REGISTRY backend,
   `target_type=SELF`: `CreateEventAction` (key `"event_create"`, acts as the caller's active persona),
   `ScheduleEventAction` / `StartEventAction` / `CompleteEventAction` / `CancelEventAction`

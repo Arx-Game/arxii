@@ -371,6 +371,8 @@ class ActionRegistryTests(TestCase):
             "assign_covenant_rank",
             "transfer_covenant_top_rank",
             "stand_down_battle_covenant",
+            "deposit_covenant_funds",
+            "withdraw_covenant_funds",
             "event_create",
             "event_schedule",
             "event_start",

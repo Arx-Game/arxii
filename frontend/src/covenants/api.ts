@@ -516,3 +516,83 @@ export async function withdrawGroupStoryRequest(
   if (!res.ok) throw new Error(detail ?? 'Failed to withdraw the GM request.');
   return detail ?? 'GM request withdrawn.';
 }
+
+// ---------------------------------------------------------------------------
+// Covenant treasury (#2992) — dispatch through the generic action-dispatch
+// endpoint, same seam as the GroupStoryRequest actions above. The action
+// resolves the actor's OWN active membership in ``covenant_id`` server-side
+// (actions/definitions/covenants.py::_resolve_actor_membership) — the wire
+// never carries a membership id, so there is no way to act on someone else's
+// membership from here.
+// ---------------------------------------------------------------------------
+
+/**
+ * Parsed dispatch-endpoint body for the treasury calls. ``DispatchActionView``
+ * returns HTTP 200 even for a business-rule rejection (e.g. rank-unauthorized
+ * withdrawal) — ``success`` (from ``DispatchResultSerializer``) is the wire
+ * signal that distinguishes an honest failure from a real success, and
+ * ``res.ok`` alone is NOT enough. Scoped to the treasury calls below — the
+ * other dispatch callers in this module (``requestGMForCovenant`` etc.) are
+ * unchanged by this fix.
+ */
+async function dispatchTreasuryResult(
+  res: Response
+): Promise<{ success: boolean | null; message: string | undefined }> {
+  try {
+    const data = (await res.json()) as {
+      detail?: string;
+      message?: string | null;
+      success?: boolean | null;
+    };
+    return { success: data.success ?? null, message: data.detail ?? data.message ?? undefined };
+  } catch {
+    return { success: null, message: undefined };
+  }
+}
+
+/**
+ * Dispatch DepositCovenantFundsAction as the actor's own character.
+ * Moves ``amount`` coppers from the actor's purse into the covenant treasury.
+ */
+export async function depositCovenantFunds(
+  actorCharacterId: number,
+  covenantId: number,
+  amount: number
+): Promise<string> {
+  const res = await apiFetch(`/api/actions/characters/${actorCharacterId}/dispatch/`, {
+    method: 'POST',
+    headers: jsonHeaders(),
+    body: JSON.stringify({
+      ref: { backend: 'registry', registry_key: 'deposit_covenant_funds' },
+      kwargs: { covenant_id: covenantId, amount },
+    }),
+  });
+  const { success, message } = await dispatchTreasuryResult(res);
+  if (!res.ok || success === false) throw new Error(message ?? 'Failed to deposit covenant funds.');
+  return message ?? 'Funds deposited.';
+}
+
+/**
+ * Dispatch WithdrawCovenantFundsAction as the actor's own character.
+ * Moves ``amount`` coppers from the covenant treasury into the actor's purse.
+ * Rank-gated server-side (``treasury.spend_rank_max``) — a rejection (HTTP 200,
+ * ``success: false``) surfaces the curated ``user_message`` via the thrown Error.
+ */
+export async function withdrawCovenantFunds(
+  actorCharacterId: number,
+  covenantId: number,
+  amount: number
+): Promise<string> {
+  const res = await apiFetch(`/api/actions/characters/${actorCharacterId}/dispatch/`, {
+    method: 'POST',
+    headers: jsonHeaders(),
+    body: JSON.stringify({
+      ref: { backend: 'registry', registry_key: 'withdraw_covenant_funds' },
+      kwargs: { covenant_id: covenantId, amount },
+    }),
+  });
+  const { success, message } = await dispatchTreasuryResult(res);
+  if (!res.ok || success === false)
+    throw new Error(message ?? 'Failed to withdraw covenant funds.');
+  return message ?? 'Funds withdrawn.';
+}

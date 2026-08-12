@@ -12,7 +12,7 @@ from django.db import IntegrityError, transaction
 from django.utils import timezone
 
 from world.character_sheets.models import CharacterSheet
-from world.covenants.constants import CommandTier
+from world.covenants.constants import CommandTier, MembershipStanding
 from world.covenants.exceptions import (
     CannotKickEqualOrHigherRankError,
     CannotKickSelfError,
@@ -26,6 +26,8 @@ from world.covenants.exceptions import (
     IncompleteRankReorderError,
     InsufficientFoundersError,
     LastManagerRankError,
+    MinorStandingDuranceOnlyError,
+    MinorStandingRequiresSecondaryEngageError,
     NoActiveBattleError,
     NotAuthorizedToInviteError,
     NotAuthorizedToKickError,
@@ -298,6 +300,7 @@ def add_member(
     covenant: Covenant,
     character_sheet: CharacterSheet,
     role: CovenantRole,
+    standing: str = MembershipStanding.CORE,
 ) -> CharacterCovenantRole:
     """Create a new active membership row. Atomic.
 
@@ -307,14 +310,13 @@ def add_member(
     IntegrityError on conflict is the contract.
 
     Raises VowGateError when the character's level is outside the covenant band
-    and they hold no active Mentor's Vow bond in this covenant.
+    and they hold no active Mentor's Vow bond in this covenant — except for a
+    MINOR-standing join (#2992), which bypasses the level band entirely: a
+    guest never took the full vow the band protects.
     """
-    from world.covenants.mentorship import assert_membership_level_allowed  # noqa: PLC0415
-
-    assert_membership_level_allowed(covenant=covenant, character_sheet=character_sheet)
-
     # #1278 — you can't join a covenant that holds a member who has blocked you (or whom you
     # blocked). Generic to the joiner: they're told a member blocked them, never which one.
+    # Applies to every standing — the block check runs unconditionally, above the branch below.
     from world.covenants.exceptions import CovenantMemberBlockError  # noqa: PLC0415
     from world.scenes.block_services import org_join_blocked  # noqa: PLC0415
 
@@ -327,12 +329,18 @@ def add_member(
     if org_join_blocked(joining_sheet=character_sheet, member_sheets=member_sheets):
         raise CovenantMemberBlockError
 
+    if standing != MembershipStanding.MINOR:
+        from world.covenants.mentorship import assert_membership_level_allowed  # noqa: PLC0415
+
+        assert_membership_level_allowed(covenant=covenant, character_sheet=character_sheet)
+
     rank = _ensure_base_rank(covenant)
     row = CharacterCovenantRole.objects.create(
         character_sheet=character_sheet,
         covenant=covenant,
         covenant_role=role,
         rank=rank,
+        standing=standing,
     )
     character_sheet.character.covenant_roles.invalidate()
     covenant.member_roster.invalidate()
@@ -425,6 +433,47 @@ def change_role(
 
 
 @transaction.atomic
+def swear_core(*, membership: CharacterCovenantRole) -> None:
+    """Upgrade a MINOR membership to CORE (#2992). Runs the level-band gate
+    (VowGateError — full swearing is what the band protects), flips standing,
+    and fires the COVENANT_SWORN external act. No-op for CORE rows. The
+    member keeps their role and rank; a role change is `change_role`."""
+    from world.covenants.mentorship import assert_membership_level_allowed  # noqa: PLC0415
+
+    if membership.standing == MembershipStanding.CORE:
+        return
+    assert_membership_level_allowed(
+        covenant=membership.covenant, character_sheet=membership.character_sheet
+    )
+    membership.standing = MembershipStanding.CORE
+    membership.save(update_fields=["standing"])
+    membership.character_sheet.character.covenant_roles.invalidate()
+    membership.covenant.member_roster.invalidate()
+
+    from world.missions.constants import ExternalAct  # noqa: PLC0415
+    from world.missions.services.external_acts import notify_external_act  # noqa: PLC0415
+
+    notify_external_act(membership.character_sheet, ExternalAct.COVENANT_SWORN)
+
+
+@transaction.atomic
+def step_back_to_minor(*, membership: CharacterCovenantRole) -> None:
+    """A core member unilaterally steps back to MINOR standing (#2992).
+
+    Un-engages a primary-lane engagement first (a MINOR row may only hold the
+    secondary lane); rank is orthogonal to standing and is untouched. No-op
+    for MINOR rows."""
+    if membership.standing == MembershipStanding.MINOR:
+        return
+    if membership.engaged and not membership.is_secondary:
+        clear_engaged_membership(membership=membership)
+    membership.standing = MembershipStanding.MINOR
+    membership.save(update_fields=["standing"])
+    membership.character_sheet.character.covenant_roles.invalidate()
+    membership.covenant.member_roster.invalidate()
+
+
+@transaction.atomic
 def dissolve_covenant(*, covenant: Covenant) -> None:
     """End all active memberships of the covenant; mark covenant dissolved.
 
@@ -502,34 +551,36 @@ def end_covenant_role(*, assignment: CharacterCovenantRole) -> None:
 
 @transaction.atomic
 def leave_covenant(*, membership: CharacterCovenantRole) -> None:
-    """A member voluntarily leaves a covenant. Soft-ends the membership, then
-    auto-dissolves the covenant if active membership falls below the minimum.
+    """A member voluntarily leaves a covenant. Soft-ends the membership. Covenants
+    never dissolve from attrition (#2992, ADR-0042 amendment) — the covenant
+    persists at any active-member count, including zero.
     Idempotent: leaving an already-ended membership is a no-op.
 
     Raises LastManagerRankError if the member holds the last can_manage_ranks rank
-    and the covenant would survive the departure (i.e. enough members remain).
+    and at least one other active member would remain (that member must not be
+    locked out of rank management).
     """
     if membership.left_at is not None:
         return
     covenant = membership.covenant
     departed_sheet = membership.character_sheet
-    # Check dissolution: if the covenant will survive this departure, guard against
-    # removing the last manager.  Count remaining members excluding this one.
+    # If any other active member would remain, guard against removing the last
+    # manager.  Count remaining members excluding this one.
     active_count_after = (
         covenant.memberships.filter(left_at__isnull=True).exclude(pk=membership.pk).count()
     )
-    if active_count_after >= MINIMUM_FOUNDERS and membership.rank.can_manage_ranks:
+    if active_count_after >= 1 and membership.rank.can_manage_ranks:
         _assert_keeps_a_manager_excluding_membership(covenant, membership.pk)
     end_covenant_role(assignment=membership)
     _release_court_pact_on_departure(covenant=covenant, servant_sheet=departed_sheet)
-    if not _maybe_dissolve(covenant=covenant):
-        _emit_departure_message(covenant, departed_sheet, kicked=False)
+    _emit_departure_message(covenant, departed_sheet, kicked=False)
 
 
 @transaction.atomic
 def kick_member(*, target: CharacterCovenantRole, actor: CharacterCovenantRole) -> None:
-    """Remove a member by rank authority. Soft-ends the target, then
-    auto-dissolves if active membership falls below the minimum.
+    """Remove a member by rank authority. Soft-ends the target. Covenants never
+    dissolve from attrition (#2992, ADR-0042 amendment) — the covenant persists
+    at any active-member count, including zero.
     Idempotent: kicking an already-departed member is a no-op.
 
     Authorization rules:
@@ -553,28 +604,16 @@ def kick_member(*, target: CharacterCovenantRole, actor: CharacterCovenantRole) 
         return
     covenant = target.covenant
     departed_sheet = target.character_sheet
-    # Guard against management lock-out when the covenant will survive the kick.
+    # Guard against management lock-out when at least one other active member
+    # would remain.
     active_count_after = (
         covenant.memberships.filter(left_at__isnull=True).exclude(pk=target.pk).count()
     )
-    if active_count_after >= MINIMUM_FOUNDERS and target.rank.can_manage_ranks:
+    if active_count_after >= 1 and target.rank.can_manage_ranks:
         _assert_keeps_a_manager_excluding_membership(covenant, target.pk)
     end_covenant_role(assignment=target)
     _release_court_pact_on_departure(covenant=covenant, servant_sheet=departed_sheet)
-    if not _maybe_dissolve(covenant=covenant):
-        _emit_departure_message(covenant, departed_sheet, kicked=True)
-
-
-def _maybe_dissolve(*, covenant: Covenant) -> bool:
-    """Dissolve the covenant if fewer than MINIMUM_FOUNDERS active members remain.
-    Returns True if it dissolved. Idempotent via dissolve_covenant's guard."""
-    remaining = covenant.member_roster.active_character_sheets
-    if len(remaining) >= MINIMUM_FOUNDERS:
-        return False
-    recipients = list(remaining)  # capture before dissolve ends them
-    dissolve_covenant(covenant=covenant)
-    _emit_dissolution_message(covenant, recipients)
-    return True
+    _emit_departure_message(covenant, departed_sheet, kicked=True)
 
 
 def _emit_departure_message(covenant: Covenant, departed: CharacterSheet, *, kicked: bool) -> None:
@@ -588,22 +627,6 @@ def _emit_departure_message(covenant: Covenant, departed: CharacterSheet, *, kic
     send_narrative_message(
         recipients=sheets,
         body=f"{departed.character.db_key} {verb} the covenant '{covenant.name}'.",
-        category=NarrativeCategory.COVENANT,
-    )
-
-
-def _emit_dissolution_message(covenant: Covenant, recipients: list[CharacterSheet]) -> None:
-    from world.narrative.constants import NarrativeCategory  # noqa: PLC0415
-    from world.narrative.services import send_narrative_message  # noqa: PLC0415
-
-    if not recipients:
-        return
-    send_narrative_message(
-        recipients=recipients,
-        body=(
-            f"The covenant '{covenant.name}' dissolves — too few remain to "
-            "uphold the oath. Its bonds fall silent, but its memory endures."
-        ),
         category=NarrativeCategory.COVENANT,
     )
 
@@ -622,13 +645,16 @@ def validate_secondary_engage_rules(membership: CharacterCovenantRole) -> None:
     A no-op unless ``membership.is_secondary``. Requires an engaged PRIMARY
     membership of the SAME covenant type for the SAME character
     (``SecondaryVowRequiresEngagedPrimaryError`` otherwise — a secondary is
-    never available solo), forbids the secondary sharing its ANCHOR role with
-    that primary (``SecondaryVowSameAnchorError`` — "no same-vow secondary":
-    doubling down on one vow is allocation, not a second vow), and caps the
-    secondary's COVENANT_ROLE thread level at the primary's
-    (``SecondaryVowThreadExceedsPrimaryError`` — a missing thread on either
-    side counts as level 0). Called by both ``CharacterCovenantRole.clean()``
-    and ``set_engaged_membership`` — one rule, one place.
+    never available solo), except for a MINOR-standing row (#2992), whose
+    secondary vow may stand alone with no engaged primary — a guest never
+    holds the primary lane to begin with. Forbids the secondary sharing its
+    ANCHOR role with that primary (``SecondaryVowSameAnchorError`` — "no
+    same-vow secondary": doubling down on one vow is allocation, not a second
+    vow), and caps the secondary's COVENANT_ROLE thread level at the
+    primary's (``SecondaryVowThreadExceedsPrimaryError`` — a missing thread
+    on either side counts as level 0). Called by both
+    ``CharacterCovenantRole.clean()`` and ``set_engaged_membership`` — one
+    rule, one place.
     """
     if not membership.is_secondary:
         return
@@ -646,6 +672,8 @@ def validate_secondary_engage_rules(membership: CharacterCovenantRole) -> None:
         .first()
     )
     if primary is None:
+        if membership.standing == MembershipStanding.MINOR:
+            return  # A guest's minor vow may be their only lit vow (#2992).
         raise SecondaryVowRequiresEngagedPrimaryError
 
     if _anchor_role_id(membership.covenant_role) == _anchor_role_id(primary.covenant_role):
@@ -698,7 +726,13 @@ def set_engaged_membership(
     validation, then — when True — runs ``validate_secondary_engage_rules``
     (requires an engaged primary of the same type, forbids a shared anchor
     role, caps the secondary's thread level at the primary's).
+
+    A MINOR-standing membership (#2992) may never engage the primary lane —
+    raises ``MinorStandingRequiresSecondaryEngageError`` up front when
+    ``as_secondary`` is False, before any other engage-time work runs.
     """
+    if membership.standing == MembershipStanding.MINOR and not as_secondary:
+        raise MinorStandingRequiresSecondaryEngageError
     membership.is_secondary = as_secondary
     if as_secondary:
         validate_secondary_engage_rules(membership)
@@ -1585,38 +1619,57 @@ def _emit_vow_dim_notice(membership: CharacterCovenantRole) -> None:
     character.msg("Your vow dims — the covenant is not with you.")
 
 
-def _auto_engage_durance(
+def _auto_engage_durance(  # noqa: C901
     *,
     character_sheet: CharacterSheet,
     room: ObjectDB,
 ) -> None:
-    """Auto-engage a Durance covenant if co-presence prerequisites met.
+    """Auto-engage Durance covenants if co-presence prerequisites are met.
 
-    Manual engagement sticks — this no-ops if the character is already
-    engaged for the Durance type. See Slice B spec §3.6, §4.10.
+    Two independent lane fills (#2992): the PRIMARY slot fills from CORE-standing
+    memberships (existing behavior), then a vacant SECONDARY slot fills from
+    MINOR-standing memberships. Manual engagement sticks per lane — a fill
+    no-ops when that lane already has an engaged row for the Durance type.
+    See Slice B spec §3.6, §4.10.
     """
-    from world.covenants.constants import CovenantType  # noqa: PLC0415
+    from world.covenants.constants import CovenantType, MembershipStanding  # noqa: PLC0415
     from world.covenants.handlers import can_engage_membership  # noqa: PLC0415
 
-    if (
-        character_sheet.character.covenant_roles.currently_engaged_for_type(CovenantType.DURANCE)
-        is not None
-    ):
-        return  # manual sticks; auto never overrides
-    candidates: list[tuple[_CharacterCovenantRole, int]] = []
-    for membership in character_sheet.character.covenant_roles.active_memberships_for_type(
-        CovenantType.DURANCE
-    ):
-        if not can_engage_membership(membership):
-            continue
-        co_present = _co_present_member_count(membership, room)
-        if co_present > 0:
-            candidates.append((membership, co_present))
-    if not candidates:
-        return
-    # Sort by most co-present (desc) then by covenant_id (asc) for deterministic ties:
-    candidates.sort(key=lambda c: (-c[1], c[0].covenant_id))
-    set_engaged_membership(membership=candidates[0][0])
+    active = list(
+        character_sheet.character.covenant_roles.active_memberships_for_type(CovenantType.DURANCE)
+    )
+
+    def lane_engaged(*, secondary: bool) -> bool:
+        return any(m.engaged and m.left_at is None and m.is_secondary is secondary for m in active)
+
+    def best_candidate(rows: list[_CharacterCovenantRole]) -> _CharacterCovenantRole | None:
+        candidates: list[tuple[_CharacterCovenantRole, int]] = []
+        for membership in rows:
+            if not can_engage_membership(membership):
+                continue
+            co_present = _co_present_member_count(membership, room)
+            if co_present > 0:
+                candidates.append((membership, co_present))
+        if not candidates:
+            return None
+        candidates.sort(key=lambda c: (-c[1], c[0].covenant_id))
+        return candidates[0][0]
+
+    if not lane_engaged(secondary=False):
+        core_rows = [m for m in active if m.standing == MembershipStanding.CORE]
+        chosen = best_candidate(core_rows)
+        if chosen is not None:
+            set_engaged_membership(membership=chosen)
+            active = list(
+                character_sheet.character.covenant_roles.active_memberships_for_type(
+                    CovenantType.DURANCE
+                )
+            )
+    if not lane_engaged(secondary=True):
+        minor_rows = [m for m in active if m.standing == MembershipStanding.MINOR]
+        chosen = best_candidate(minor_rows)
+        if chosen is not None:
+            set_engaged_membership(membership=chosen, as_secondary=True)
 
 
 def _auto_engage_court(
@@ -1852,6 +1905,12 @@ def induct_member_via_session(*, session: RitualSession) -> CharacterCovenantRol
     COVENANT_ROLE reference. Existing-member participants have no role
     reference; they're just vouching.
 
+    Re-inducting an existing MINOR row upgrades it to CORE via ``swear_core``
+    only when the session's ``standing`` selection is CORE; selecting MINOR
+    again against an already-MINOR row is a no-op that returns the existing
+    row unchanged (#2992 — the initiator's standing pick is authoritative,
+    never force-promoted).
+
     Per spec §4.6: the .filter() on `session.references` / `participant.references`
     (related managers) is in-mutator iteration on tightly-scoped per-row sets,
     not a cached handler lookup — acceptable exception to spec §3.9.
@@ -1875,18 +1934,46 @@ def induct_member_via_session(*, session: RitualSession) -> CharacterCovenantRol
             break
     if candidate_participant is None or chosen_role is None:
         raise RequiredReferenceMissingError
-    membership = add_member(
-        covenant=target_covenant,
+
+    # #2992 — session-level standing pick (session_kwargs values are plain strings;
+    # MembershipStanding compares equal to its str values). MINOR is DURANCE-only —
+    # guarded right here, before any add/upgrade logic runs.
+    standing = session.session_kwargs.get("standing", MembershipStanding.CORE)
+
+    from world.covenants.constants import CovenantType  # noqa: PLC0415
+
+    not_durance = target_covenant.covenant_type != CovenantType.DURANCE
+    if standing == MembershipStanding.MINOR and not_durance:
+        raise MinorStandingDuranceOnlyError
+
+    # An existing MINOR row for this candidate/covenant upgrades in place via
+    # swear_core rather than creating a second row (which would trip the
+    # active-uniqueness constraint) — but ONLY when the session actually
+    # requested CORE. Re-inducting with standing="minor" while already MINOR
+    # must honor that pick as a no-op: it must not force-promote to CORE and
+    # must not re-run swear_core's level-band gate (a spurious VowGateError
+    # for a guest who never asked to be fully sworn in).
+    existing = CharacterCovenantRole.objects.filter(
         character_sheet=candidate_participant.character_sheet,
-        role=chosen_role,
-    )
+        covenant=target_covenant,
+        left_at__isnull=True,
+    ).first()
+    if existing is not None and existing.standing == MembershipStanding.MINOR:
+        if standing == MembershipStanding.CORE:
+            swear_core(membership=existing)
+        membership = existing
+    else:
+        membership = add_member(
+            covenant=target_covenant,
+            character_sheet=candidate_participant.character_sheet,
+            role=chosen_role,
+            standing=standing,
+        )
 
     # COURT post-step (#1589): swearing into a Court is a fealty ceremony — the
     # induction also binds a CourtPact whose pull-cap the master grants (read
     # from the candidate participant's kwargs, mirroring mentorship's role read),
     # then a servant-centred fealty narration is emitted.
-    from world.covenants.constants import CovenantType  # noqa: PLC0415
-
     if target_covenant.covenant_type == CovenantType.COURT:
         servant_sheet = candidate_participant.character_sheet
         granted_pull_cap = candidate_participant.participant_kwargs.get("granted_pull_cap", 0)
@@ -1899,11 +1986,14 @@ def induct_member_via_session(*, session: RitualSession) -> CharacterCovenantRol
 
     # #1035 external-act beat: cheap-guarded, failure-isolated via notify_external_act
     # (ADR-0112) — isolation from induct_member_via_session's own @transaction.atomic
-    # block now lives in that shared wrapper.
-    from world.missions.constants import ExternalAct  # noqa: PLC0415
-    from world.missions.services.external_acts import notify_external_act  # noqa: PLC0415
+    # block now lives in that shared wrapper. Fires only for a newly-created CORE
+    # membership (#2992) — the upgrade path's act already fired from swear_core
+    # itself, and a MINOR join is not a full swearing.
+    if existing is None and membership.standing == MembershipStanding.CORE:
+        from world.missions.constants import ExternalAct  # noqa: PLC0415
+        from world.missions.services.external_acts import notify_external_act  # noqa: PLC0415
 
-    notify_external_act(candidate_participant.character_sheet, ExternalAct.COVENANT_SWORN)
+        notify_external_act(candidate_participant.character_sheet, ExternalAct.COVENANT_SWORN)
 
     return membership
 

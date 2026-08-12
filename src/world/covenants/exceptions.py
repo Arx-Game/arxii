@@ -400,6 +400,28 @@ class SecondaryVowThreadExceedsPrimaryError(CovenantError):
     )
 
 
+class MinorStandingRequiresSecondaryEngageError(CovenantError):
+    """A MINOR-standing membership may only engage the secondary lane (#2992)."""
+
+    user_message = "A minor member's vow only ever burns in the secondary lane."
+    SAFE_MESSAGES: ClassVar[frozenset[str]] = frozenset(
+        {
+            "A minor member's vow only ever burns in the secondary lane.",
+        }
+    )
+
+
+class MinorStandingDuranceOnlyError(CovenantError):
+    """MINOR standing is only valid on a Covenant of the Durance (#2992)."""
+
+    user_message = "Minor membership is only possible in a Covenant of the Durance."
+    SAFE_MESSAGES: ClassVar[frozenset[str]] = frozenset(
+        {
+            "Minor membership is only possible in a Covenant of the Durance.",
+        }
+    )
+
+
 class CourtPactExistsError(CovenantError):
     """Raised when swearing a Court pact that already exists (active pact for the same pair)."""
 
@@ -439,5 +461,49 @@ class CourtGrantNotMonotonicError(CovenantError):
     SAFE_MESSAGES: ClassVar[frozenset[str]] = frozenset(
         {
             "A Court master's word cannot be taken back — the grant can only rise.",
+        }
+    )
+
+
+class CovenantTreasuryError(CovenantError):
+    """Base for covenant treasury failures (#2992)."""
+
+    user_message = "The covenant treasury cannot do that right now."
+    SAFE_MESSAGES: ClassVar[frozenset[str]] = frozenset(
+        {
+            "The covenant treasury cannot do that right now.",
+        }
+    )
+
+
+class NotAnActiveCovenantMemberError(CovenantTreasuryError):
+    """Raised when a departed membership row is used for a treasury operation."""
+
+    user_message = "Only an active covenant member may use the covenant treasury."
+    SAFE_MESSAGES: ClassVar[frozenset[str]] = frozenset(
+        {
+            "Only an active covenant member may use the covenant treasury.",
+        }
+    )
+
+
+class NotAuthorizedToSpendCovenantTreasuryError(CovenantTreasuryError):
+    """Raised when the member's rank tier is above the treasury's spend_rank_max."""
+
+    user_message = "Your rank does not carry the authority to spend from the covenant treasury."
+    SAFE_MESSAGES: ClassVar[frozenset[str]] = frozenset(
+        {
+            "Your rank does not carry the authority to spend from the covenant treasury.",
+        }
+    )
+
+
+class CovenantTreasuryTransferError(CovenantTreasuryError):
+    """Raised when the underlying currency transfer is rejected (e.g. insufficient funds)."""
+
+    user_message = "The covenant treasury transfer could not be completed."
+    SAFE_MESSAGES: ClassVar[frozenset[str]] = frozenset(
+        {
+            "The covenant treasury transfer could not be completed.",
         }
     )

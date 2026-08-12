@@ -853,7 +853,12 @@ actions, backends, and service functions.
   Subverbs: `covenant [list]` (membership hub), `covenant engage [<covenant>]`,
   `covenant disengage [<covenant>]`, `covenant leave [<covenant>]`,
   `covenant kick <char> [in <covenant>]`, `covenant rank <char> <rank> [in <covenant>]`,
-  `covenant transfer <char> [in <covenant>]`, `covenant standdown [<covenant>]`.
+  `covenant transfer <char> [in <covenant>]`, `covenant standdown [<covenant>]`,
+  `covenant deposit <amount> [in <covenant>]` / `covenant withdraw <amount> [in <covenant>]`
+  (#2992 — the covenant treasury; deposit is open to any active member, withdrawal is rank-gated,
+  both dispatch `DepositCovenantFundsAction`/`WithdrawCovenantFundsAction` the same way every
+  other subverb dispatches its Action; `<amount>` is a positive integer coppers count, a
+  non-numeric or missing amount raises a `Usage: ...` `CommandError`).
   Supply the covenant name when the character belongs to more than one. Namespaced — not bare
   top-level keys — to avoid exit/channel/alias collisions; mirrors `CmdCombat`/`CmdDuel`.
   No business logic in the command. Covenant induction and banner-call rise are session-driven via

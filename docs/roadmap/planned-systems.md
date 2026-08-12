@@ -146,11 +146,17 @@ Designed as a connected set (ADRs 0050–0057); most of it has now landed. See
 - **Relationship mechanics** — `partial`, and much further along than previously recorded: the
   mechanical payoffs ARE consumed (`bond_combat_bonus`/`bond_bonus`/`relationship_gated_contributions`
   read by combat clash/services and scene action services), and decay is computed-on-read over
-  `DECAY_DAYS` (no cron needed). Still unbuilt: teamwork/coordination gating (needs a group scope —
-  see adventuring party), the consent/deceit safety layer, and the content passes listed in
+  `DECAY_DAYS` (no cron needed). Still unbuilt: teamwork/coordination gating (scope = encounter
+  participants + engaged covenants — the Covenant IS the group scope, not a future Party model, see
+  below), the consent/deceit safety layer, and the content passes listed in
   [relationships.md](relationships.md).
-- **Adventuring-party model** — group formation, shared legend, coordination. Missions/voyages/consent
-  each carry their own membership slice; no party primitive. `intent` — **#2992**.
+- ✅ **Adventuring-party model** — DONE: the Covenant IS the party primitive (Covenant of the
+  Durance) — group formation (#519/Slice B), shared legend (`CovenantLegendCredit`), and
+  coordination all ride the existing covenant substrate; no separate Party model exists or is
+  planned. Missions/voyages/consent still carry their own membership slices for their own
+  purposes — that's unchanged and orthogonal. Minor (guest) covenant membership + a covenant
+  treasury shipped in **#2992** (ADR-0213) — see [covenants.md](covenants.md) and
+  `docs/systems/covenants.md`.
 - ✅ **NPC reputation model** — DONE (`NpcRegard` −1000..1000 + `NpcRegardEvent` + config, with
   society/organization twins). Gap: **shops never read it** — no standing-based pricing or access.
   **#2995**.

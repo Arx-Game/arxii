@@ -12,6 +12,7 @@ from world.covenants.constants import (
     DEFAULT_MEMBER_RANK_NAME,
     CommandTier,
     CovenantType,
+    MembershipStanding,
 )
 from world.covenants.exceptions import (
     CannotKickEqualOrHigherRankError,
@@ -1130,6 +1131,124 @@ class EvaluateSceneEngagementTests(TestCase):
             mem_a1_in_b.delete()
 
 
+class MinorGuestAutoEngageTests(TestCase):
+    """Auto-engage fills the secondary lane from MINOR-standing memberships (#2992).
+
+    Setup mirrors EvaluateSceneEngagementTests — same room/scene/membership idioms
+    (ObjectDBFactory for rooms, SceneFactory for active scenes), built per-test in
+    setUp (not setUpTestData) since Evennia's ObjectDB isn't deepcopy-safe.
+    """
+
+    def _make_room(self, key: str = "guest-room"):
+        from evennia_extensions.factories import ObjectDBFactory
+
+        return ObjectDBFactory(
+            db_key=key,
+            db_typeclass_path="typeclasses.rooms.Room",
+        )
+
+    def _place_chars_in_room(self, room, sheets):
+        for sheet in sheets:
+            sheet.character.location = room
+
+    def _build_room_with_scene_and_chars(self, sheets):
+        from world.scenes.factories import SceneFactory
+
+        room = self._make_room()
+        if hasattr(room, "_active_scene_cache"):
+            del room._active_scene_cache
+        SceneFactory(location=room, is_active=True)
+        self._place_chars_in_room(room, sheets)
+        return room
+
+    def _cleanup_chars(self, sheets):
+        for sheet in sheets:
+            del sheet.character.location
+
+    def setUp(self) -> None:
+        self.role_x = CovenantRoleFactory(covenant_type=CovenantType.DURANCE)
+        self.cov_x = CovenantFactory(name="GuestCovX", covenant_type=CovenantType.DURANCE)
+        self.sheet_a = CharacterSheetFactory()
+        self.sheet_b = CharacterSheetFactory()
+        self.mem_a = CharacterCovenantRoleFactory(
+            character_sheet=self.sheet_a,
+            covenant=self.cov_x,
+            covenant_role=self.role_x,
+        )
+        self.mem_b = CharacterCovenantRoleFactory(
+            character_sheet=self.sheet_b,
+            covenant=self.cov_x,
+            covenant_role=self.role_x,
+            standing=MembershipStanding.MINOR,
+        )
+
+    def test_core_member_plus_minor_guest_lights_core_vow(self) -> None:
+        """A (CORE) auto-engages the primary lane when co-present with minor guest B."""
+        from world.covenants.services import evaluate_scene_engagement
+
+        room = self._build_room_with_scene_and_chars([self.sheet_a, self.sheet_b])
+        try:
+            evaluate_scene_engagement(character_sheet=self.sheet_a, room=room)
+            self.mem_a.refresh_from_db()
+            self.assertTrue(self.mem_a.engaged)
+            self.assertFalse(self.mem_a.is_secondary)
+        finally:
+            self._cleanup_chars([self.sheet_a, self.sheet_b])
+
+    def test_minor_guest_auto_engages_secondary_lane(self) -> None:
+        """B (MINOR) auto-engages the secondary lane when co-present with core member A."""
+        from world.covenants.services import evaluate_scene_engagement
+
+        room = self._build_room_with_scene_and_chars([self.sheet_a, self.sheet_b])
+        try:
+            evaluate_scene_engagement(character_sheet=self.sheet_b, room=room)
+            self.mem_b.refresh_from_db()
+            self.assertTrue(self.mem_b.engaged)
+            self.assertTrue(self.mem_b.is_secondary)
+        finally:
+            self._cleanup_chars([self.sheet_a, self.sheet_b])
+
+    def test_minor_row_never_fills_primary_slot(self) -> None:
+        """A MINOR-only character never ends up with an engaged primary-lane row."""
+        from world.covenants.services import evaluate_scene_engagement
+
+        room = self._build_room_with_scene_and_chars([self.sheet_a, self.sheet_b])
+        try:
+            evaluate_scene_engagement(character_sheet=self.sheet_b, room=room)
+            active = self.sheet_b.character.covenant_roles.active_memberships_for_type(
+                CovenantType.DURANCE
+            )
+            self.assertFalse(any(m.engaged and not m.is_secondary for m in active))
+        finally:
+            self._cleanup_chars([self.sheet_a, self.sheet_b])
+
+    def test_manual_secondary_engagement_sticks(self) -> None:
+        """B's manual secondary engagement in Y is untouched by arriving co-present with X."""
+        cov_y = CovenantFactory(name="GuestCovY", covenant_type=CovenantType.DURANCE)
+        role_y = CovenantRoleFactory(covenant_type=CovenantType.DURANCE)
+        mem_b_y = CharacterCovenantRoleFactory(
+            character_sheet=self.sheet_b,
+            covenant=cov_y,
+            covenant_role=role_y,
+            standing=MembershipStanding.MINOR,
+        )
+        set_engaged_membership(membership=mem_b_y, as_secondary=True)
+        mem_b_y.refresh_from_db()
+        self.assertTrue(mem_b_y.engaged)
+
+        from world.covenants.services import evaluate_scene_engagement
+
+        room = self._build_room_with_scene_and_chars([self.sheet_a, self.sheet_b])
+        try:
+            evaluate_scene_engagement(character_sheet=self.sheet_b, room=room)
+            mem_b_y.refresh_from_db()
+            self.assertTrue(mem_b_y.engaged)
+            self.mem_b.refresh_from_db()
+            self.assertFalse(self.mem_b.engaged)
+        finally:
+            self._cleanup_chars([self.sheet_a, self.sheet_b])
+
+
 class LeaveCovenantTests(TestCase):
     def _member(self, cov, role=None):
         sheet = CharacterSheetFactory()
@@ -1137,7 +1256,7 @@ class LeaveCovenantTests(TestCase):
         return CharacterCovenantRoleFactory(character_sheet=sheet, covenant=cov, covenant_role=role)
 
     def test_leave_covenant_soft_ends_membership(self) -> None:
-        # 3-member covenant so 2 remain after one leaves → no dissolve.
+        # 3-member covenant; covenant persists regardless (#2992 — no auto-dissolve).
         cov = CovenantFactory()
         m1 = self._member(cov)
         self._member(cov)
@@ -1151,7 +1270,8 @@ class LeaveCovenantTests(TestCase):
         cov.refresh_from_db()
         self.assertIsNone(cov.dissolved_at)
 
-    def test_leave_dropping_below_two_auto_dissolves(self) -> None:
+    def test_leave_to_one_member_does_not_dissolve(self) -> None:
+        """Covenants never dissolve from attrition (#2992, ADR-0042 amendment)."""
         cov = CovenantFactory()
         m1 = self._member(cov)
         m2 = self._member(cov)
@@ -1159,11 +1279,52 @@ class LeaveCovenantTests(TestCase):
         leave_covenant(membership=m1)
 
         cov.refresh_from_db()
-        self.assertIsNotNone(cov.dissolved_at)
+        self.assertIsNone(cov.dissolved_at)
         m1.refresh_from_db()
         m2.refresh_from_db()
         self.assertIsNotNone(m1.left_at)
+        self.assertIsNone(m2.left_at)
+        self.assertTrue(
+            cov.memberships.filter(left_at__isnull=True, pk=m2.pk).exists(),
+            "The remaining member's membership must still be active.",
+        )
+
+    def test_last_member_may_leave_covenant_persists(self) -> None:
+        """A 1-member covenant reached by a prior leave: the last member may also
+        leave; the covenant persists at zero active members (#2992)."""
+        cov = CovenantFactory()
+        m1 = self._member(cov)
+        m2 = self._member(cov)
+        leave_covenant(membership=m1)
+
+        leave_covenant(membership=m2)
+
+        cov.refresh_from_db()
+        self.assertIsNone(cov.dissolved_at)
+        m2.refresh_from_db()
         self.assertIsNotNone(m2.left_at)
+        self.assertEqual(cov.memberships.filter(left_at__isnull=True).count(), 0)
+
+    def _member_with_rank(self, cov, rank):
+        role = CovenantRoleFactory(covenant_type=cov.covenant_type)
+        return CharacterCovenantRoleFactory(
+            character_sheet=CharacterSheetFactory(), covenant=cov, covenant_role=role, rank=rank
+        )
+
+    def test_leave_last_manager_blocked_while_any_member_remains(self) -> None:
+        """A 2-member covenant where only the departing member can_manage_ranks
+        raises LastManagerRankError — the guard fires whenever any other active
+        member would remain, regardless of the old two-member dissolution floor."""
+        cov = CovenantFactory()
+        manager_rank = CovenantManagerRankFactory(covenant=cov, tier=1)
+        non_manager_rank = CovenantRankFactory(
+            covenant=cov, tier=2, can_kick=False, can_invite=False, can_manage_ranks=False
+        )
+        sole_manager = self._member_with_rank(cov, manager_rank)
+        self._member_with_rank(cov, non_manager_rank)
+
+        with self.assertRaises(LastManagerRankError):
+            leave_covenant(membership=sole_manager)
 
     def test_leave_is_idempotent(self) -> None:
         cov = CovenantFactory()
@@ -1303,7 +1464,8 @@ class KickMemberTests(TestCase):
         target.refresh_from_db()
         self.assertIsNone(target.left_at)
 
-    def test_kick_dropping_below_two_auto_dissolves(self) -> None:
+    def test_kick_to_one_member_does_not_dissolve(self) -> None:
+        """Covenants never dissolve from attrition (#2992, ADR-0042 amendment)."""
         cov, top_rank, _mid, base_rank = self._setup_cov_with_ranks()
         actor = self._row(cov, top_rank)
         target = self._row(cov, base_rank)
@@ -1311,11 +1473,11 @@ class KickMemberTests(TestCase):
         kick_member(target=target, actor=actor)
 
         cov.refresh_from_db()
-        self.assertIsNotNone(cov.dissolved_at)
+        self.assertIsNone(cov.dissolved_at)
         target.refresh_from_db()
         actor.refresh_from_db()
         self.assertIsNotNone(target.left_at)
-        self.assertIsNotNone(actor.left_at)
+        self.assertIsNone(actor.left_at)
 
 
 class RankManagementTests(TestCase):
@@ -1596,8 +1758,9 @@ class RankManagementTests(TestCase):
 
 
 class LockOutInvariantTests(TestCase):
-    """Ensure leave_covenant and kick_member block management lock-out when the covenant
-    survives, but allow dissolution to proceed even if the last manager exits."""
+    """Ensure leave_covenant and kick_member block management lock-out whenever any
+    other active member would remain (#2992: covenants never dissolve from
+    attrition, so the guard is no longer bypassed by a dissolution path)."""
 
     def _make_member(self, cov, rank):
         role = CovenantRoleFactory(covenant_type=cov.covenant_type)
@@ -1642,9 +1805,11 @@ class LockOutInvariantTests(TestCase):
         with self.assertRaises(LastManagerRankError):
             leave_covenant(membership=sole_manager)
 
-    def test_kick_that_triggers_dissolution_allowed_even_if_last_manager(self) -> None:
-        """Kicking the sole manager when only MINIMUM_FOUNDERS members exist dissolves the
-        covenant without raising LastManagerRankError — dissolution takes priority."""
+    def test_kick_last_manager_blocked_even_at_two_members(self) -> None:
+        """Kicking the sole manager out of a 2-member covenant now raises
+        LastManagerRankError (#2992: this used to dissolve instead — the guard
+        now fires whenever any other active member would remain, with no
+        dissolution escape hatch)."""
         cov = CovenantFactory()
         # actor: tier=1 (higher authority), can_kick but not manager
         actor_rank = CovenantRankFactory(
@@ -1656,17 +1821,20 @@ class LockOutInvariantTests(TestCase):
         )
         actor = self._make_member(cov, actor_rank)
         sole_manager = self._make_member(cov, manager_rank)
-        # Only 2 members total (= MINIMUM_FOUNDERS) → kicking one drops to 1 → dissolution.
+        # Only 2 members total: kicking the manager would leave the actor (a
+        # non-manager) as the sole survivor → guard fires.
 
-        # Should not raise — dissolution is allowed.
-        kick_member(target=sole_manager, actor=actor)
+        with self.assertRaises(LastManagerRankError):
+            kick_member(target=sole_manager, actor=actor)
 
         cov.refresh_from_db()
-        self.assertIsNotNone(cov.dissolved_at)
+        self.assertIsNone(cov.dissolved_at)
+        sole_manager.refresh_from_db()
+        self.assertIsNone(sole_manager.left_at)
 
-    def test_leave_that_triggers_dissolution_allowed_even_if_last_manager(self) -> None:
-        """A sole manager leaving when only MINIMUM_FOUNDERS members exist dissolves the
-        covenant without raising LastManagerRankError."""
+    def test_leave_last_manager_blocked_even_at_two_members(self) -> None:
+        """A sole manager leaving a 2-member covenant now raises
+        LastManagerRankError (#2992: this used to dissolve instead)."""
         cov = CovenantFactory()
         manager_rank = CovenantManagerRankFactory(covenant=cov, tier=1)
         non_manager_rank = CovenantRankFactory(
@@ -1674,13 +1842,16 @@ class LockOutInvariantTests(TestCase):
         )
         sole_manager = self._make_member(cov, manager_rank)
         self._make_member(cov, non_manager_rank)
-        # Only 2 members total (= MINIMUM_FOUNDERS) → leaving drops to 1 → dissolution.
+        # Only 2 members total: leaving would leave the other member (a
+        # non-manager) as the sole survivor → guard fires.
 
-        # Should not raise.
-        leave_covenant(membership=sole_manager)
+        with self.assertRaises(LastManagerRankError):
+            leave_covenant(membership=sole_manager)
 
         cov.refresh_from_db()
-        self.assertIsNotNone(cov.dissolved_at)
+        self.assertIsNone(cov.dissolved_at)
+        sole_manager.refresh_from_db()
+        self.assertIsNone(sole_manager.left_at)
 
 
 class CanInviteToCovenantPredicateTests(TestCase):

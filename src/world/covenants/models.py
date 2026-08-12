@@ -31,6 +31,7 @@ from world.covenants.constants import (
     CovenantType,
     DefenseStyle,
     InsightTargetKind,
+    MembershipStanding,
     MentorBondAdjusted,
     RoleArchetype,
 )
@@ -763,6 +764,18 @@ class CharacterCovenantRole(SharedMemoryModel):
             "glossary's 'Secondary Vow' entry)."
         ),
     )
+    standing = models.CharField(
+        max_length=10,
+        choices=MembershipStanding.choices,
+        default=MembershipStanding.CORE,
+        help_text=(
+            "Durable membership tier (#2992). CORE = sworn full member. MINOR = "
+            "guest standing: engages only the secondary lane (is_secondary=True) "
+            "at SecondaryVowConfig potency; bypasses the level-band join gate; "
+            "DURANCE-only. Distinct from is_secondary, which is the per-scene "
+            "engagement-lane flag."
+        ),
+    )
     rank = models.ForeignKey(
         "arxii.CovenantRank",
         on_delete=models.PROTECT,
@@ -792,6 +805,15 @@ class CharacterCovenantRole(SharedMemoryModel):
             self._validate_engaged_exclusivity()
             if self.is_secondary:
                 self._validate_secondary_engage_rules()
+        if self.standing == MembershipStanding.MINOR:
+            if self.covenant.covenant_type != CovenantType.DURANCE:
+                raise ValidationError(
+                    {"standing": "Minor standing is only valid on a Covenant of the Durance."}
+                )
+            if self.engaged and not self.is_secondary:
+                raise ValidationError(
+                    {"standing": "A minor member may only engage the secondary lane."}
+                )
 
     def _validate_engaged_exclusivity(self) -> None:
         """At most one engaged active role per covenant type + per special role.

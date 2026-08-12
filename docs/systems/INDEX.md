@@ -4985,7 +4985,11 @@ weights, speed_rank, Thread pulls). `CovenantRank` = administrative authority
     SECONDARY per (character_sheet, covenant type); chassis layers 1/3 never read
     secondary memberships, Layers 2/4 scale a secondary's contribution by
     `SecondaryVowConfig.potency_tenths`; see `docs/systems/covenants.md`'s
-    "Secondary vows" section for the full split).
+    "Secondary vows" section for the full split), `standing`
+    (`MembershipStanding.CORE`/`MINOR`, #2992, ADR-0213 — MINOR is DURANCE-only,
+    engages the secondary lane only, may engage it without an engaged primary
+    (a waiver on the #2641 rule), and bypasses `add_member`'s level-band gate;
+    see `docs/systems/covenants.md`'s "Minor covenant membership" section).
   - `SecondaryVowConfig` (#2641) — singleton (pk=1) potency dial,
     `potency_tenths` (default 6 = ×0.6), lazy-created via
     `secondary_vow_config()` (`world.covenants.services`).
@@ -5159,9 +5163,16 @@ weights, speed_rank, Thread pulls). `CovenantRank` = administrative authority
   - `active_player_character_sheets() -> list[CharacterSheet]` (`world.roster.selectors`) —
     returns all active player character sheets (current RosterTenure with `end_date=None`);
     used by `fire_subrole_discoveries` for gamewide first-ever recipient selection.
+  - `add_member(*, covenant, character_sheet, role, standing=CORE) -> CharacterCovenantRole`
+    (#2992) — MINOR standing bypasses the level-band gate.
   - `assign_covenant_role(sheet, role) -> CharacterCovenantRole`
   - `end_covenant_role(role_assignment) -> None`
-  - `kick_member(*, target, actor) -> None` — raises
+  - `swear_core(*, membership) -> None` / `step_back_to_minor(*, membership) -> None`
+    (#2992) — MINOR↔CORE standing transitions; `swear_core` re-runs the level-band
+    gate, `step_back_to_minor` un-engages a primary-lane engagement first.
+  - `leave_covenant(*, membership) -> None` / `kick_member(*, target, actor) -> None` —
+    Covenants never dissolve from attrition (#2992, ADR-0042 amendment — the covenant
+    persists at any active-member count, including zero); `kick_member` raises
     `CannotKickEqualOrHigherRankError`, `NotAuthorizedToKickError`, `CannotKickSelfError`
   - `is_gear_compatible(role, archetype) -> bool`
   - `role_base_bonus_for_target(role, target, char_level) -> int` (in
@@ -5272,7 +5283,17 @@ weights, speed_rank, Thread pulls). `CovenantRank` = administrative authority
   `compute_party_profile` calls `effective_combat_level` per ACTIVE participant before
   averaging — outlier distortion is absorbed in the bond math; graduated bonds dissolve
   at `begin_declaration_phase`.
-- **Enums:** `MentorBondAdjusted` (`MENTOR`/`SIDEKICK` — which party is adjusted)
+- **Covenant Treasury (#2992):** `world.covenants.treasury` —
+  `covenant_treasury(covenant) -> OrganizationTreasury` (lazy-created on the
+  covenant's backing `Organization`); `deposit_covenant_funds(*, membership, amount,
+  reason="") -> CurrencyTransfer` (any active member, core or minor);
+  `withdraw_covenant_funds(*, membership, amount, reason="") -> CurrencyTransfer`
+  (rank-gated: `membership.rank.tier <= treasury.spend_rank_max`, default 1 =
+  Founder tier). Covenant treasury authority derives from `CharacterCovenantRole`,
+  not `OrganizationMembership`. See `docs/systems/covenants.md`'s "Covenant
+  Treasury" section.
+- **Enums:** `MentorBondAdjusted` (`MENTOR`/`SIDEKICK` — which party is adjusted);
+  `MembershipStanding` (`CORE`/`MINOR`, #2992)
 - **Exceptions:** `world.covenants.exceptions` —
   `CovenantRoleNeverHeldError`, `CannotKickEqualOrHigherRankError`,
   `NotAuthorizedToKickError`, `CannotKickSelfError`,
@@ -5283,13 +5304,20 @@ weights, speed_rank, Thread pulls). `CovenantRank` = administrative authority
   `MentorBondError` (bond creation/cap), `VowGateError` (membership level gate),
   `CourtGulfViolationError` (servant tier not below leader's, #1589),
   `CourtPactExistsError` (duplicate active pact for pair, #1589),
-  `CourtGrantNotMonotonicError` (grant raise would lower the cap, #1718)
+  `CourtGrantNotMonotonicError` (grant raise would lower the cap, #1718),
+  `MinorStandingRequiresSecondaryEngageError`, `MinorStandingDuranceOnlyError`
+  (minor covenant membership, #2992), `CovenantTreasuryError` (base) →
+  `NotAnActiveCovenantMemberError`, `NotAuthorizedToSpendCovenantTreasuryError`,
+  `CovenantTreasuryTransferError` (covenant treasury, #2992)
 - **Action Keys:** `engage_covenant_membership`, `disengage_covenant_membership`,
   `leave_covenant`, `kick_covenant_member`, `assign_covenant_rank`,
-  `transfer_covenant_top_rank`, `stand_down_battle_covenant`
+  `transfer_covenant_top_rank`, `stand_down_battle_covenant`,
+  `deposit_covenant_funds`, `withdraw_covenant_funds` (#2992)
   (`actions/definitions/covenants.py`, #1346)
 - **Telnet:** `covenant <subverb>` command (`commands/covenant.py`, #1346) for
-  engage/disengage/leave/kick/rank/transfer/standdown; `covenant request-gm
+  engage/disengage/leave/kick/rank/transfer/standdown/deposit/withdraw
+  (deposit/withdraw added #2992: `covenant deposit <amount> [in <covenant>]` /
+  `covenant withdraw <amount> [in <covenant>]`); `covenant request-gm
   <message> [in <covenant>]` / `covenant withdraw-gm-request [in <covenant>]`
   (#2119) dispatch `RequestGMForCovenantAction`/`WithdrawGroupStoryRequestAction`;
   covenant induction via
@@ -5351,7 +5379,9 @@ weights, speed_rank, Thread pulls). `CovenantRank` = administrative authority
   in `derive_base_max_health`; recompute triggers fire on role engagement/membership change),
   achievements (`discovery_achievement` FK; `grant_achievement` on threshold crossing),
   codex (`codex_entry` FK; `CharacterCodexKnowledge(KNOWN)` on crossing),
-  narrative (`send_narrative_message` for discovery announcements)
+  narrative (`send_narrative_message` for discovery announcements),
+  currency (`world.currency.services.get_or_create_treasury`/`get_or_create_purse`/
+  `transfer` back the Covenant Treasury, #2992)
 - **Source:** `src/world/covenants/`
 - **Details:** [covenants.md](covenants.md)
 
