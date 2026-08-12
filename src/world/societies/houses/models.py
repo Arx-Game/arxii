@@ -233,7 +233,8 @@ class Title(SharedMemoryModel):
 
 
 class Domain(SharedMemoryModel):
-    """An org-owned landholding decorating a DOMAIN-level Area (#1884, #930 ruling).
+    """An org-owned landholding decorating an Area (seeds use ``AreaLevel.REGION``;
+    no DOMAIN level exists) (#1884, #930 ruling).
 
     Abstract for now — civ stats + holdings feeding the org books; visitable
     room grids are a flagged later phase. Stats are PLACEHOLDER magnitudes.

@@ -23,9 +23,9 @@ streams→treasury spine, and marriage pacts fire coded commitments. Lives in
   `Title.succession_law` (Imperial Tanistry).
 - **`Title`** — first-class: name, tier (crown/duchy/county/barony), realm,
   house, holder (→ `Kinsperson`), seat domain, `is_claimable` (Phase D slots).
-- **`Domain`** — decorates a DOMAIN-level `Area` (OneToOne PK): owner org +
-  PLACEHOLDER civ stats (population/prosperity/unrest). Abstract — no room
-  grids yet.
+- **`Domain`** — decorates an `Area` (seeds use `AreaLevel.REGION`; no DOMAIN
+  level exists) (OneToOne PK): owner org + PLACEHOLDER civ stats
+  (population/prosperity/unrest). Abstract — no room grids yet.
 - **`HoldingKind`** / **`DomainHolding`** — authored holding vocabulary; each
   holding materializes an `OrgIncomeStream` (OneToOne) so collection, graft,
   and settlement reuse the audited currency pipeline unchanged.

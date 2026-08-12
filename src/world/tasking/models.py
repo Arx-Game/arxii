@@ -133,6 +133,16 @@ class TaskOutcomeRoute(SharedMemoryModel):
         related_name="+",
         help_text="Weighted clue draw granted to the handler on this tier.",
     )
+    collection_success_level = models.SmallIntegerField(
+        null=True,
+        blank=True,
+        help_text=(
+            "Set = this route lands the issuing org's income collection "
+            "(collect_org_income) graded at this success level, with the "
+            "handler as collector (#696 item 2). Null = no collection. "
+            "PLACEHOLDER: per-tier grades are authored guesses."
+        ),
+    )
     report_template = models.TextField(
         blank=True,
         default="",

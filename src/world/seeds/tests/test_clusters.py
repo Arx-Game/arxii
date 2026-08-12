@@ -44,6 +44,7 @@ class TestClusterRegistry(TestCase):
                 "governance",
                 "scandal",
                 "domain_dev",
+                "domain_tasks",
                 "stealth",
                 "security",
                 "perception",

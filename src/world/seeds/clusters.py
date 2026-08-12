@@ -304,6 +304,12 @@ def _seed_domain_dev() -> None:
     ensure_dev_domain()
 
 
+def _seed_domain_tasks() -> None:
+    from world.seeds.domain_tasks import seed_domain_collection_task  # noqa: PLC0415
+
+    seed_domain_collection_task()
+
+
 def _seed_stealth() -> None:
     from world.seeds.stealth_checks import seed_stealth_check_content  # noqa: PLC0415
 
@@ -571,6 +577,11 @@ CLUSTER_SEEDERS: dict[str, Callable[[], None]] = {
     # (#1464/#1806 — Apostate, 2026-07-03). Authoritative on vectors.
     "scandal": _seed_scandal_archetypes,
     "domain_dev": _seed_domain_dev,
+    # PLACEHOLDER example tax-collection mission + task, worked end to end
+    # (#696): "Collect the Levies". After "governance" (its Tax Collection
+    # CheckType) and "missions"/"checks" (MissionTemplate infra + the
+    # CheckOutcome catalog its terminal routes key on).
+    "domain_tasks": _seed_domain_tasks,
     # Stealth: the act-time concealment skill + check (#1464). After "checks".
     "stealth": _seed_stealth,
     # Security: Skulduggery(né Larceny)/Athletics skills + lockpick/break/escape/guard-detection
@@ -874,6 +885,9 @@ def seeded_models_by_cluster() -> dict[str, list[type[Model]]]:
         # Scandal vocabulary: the authored archetype categories (#1464/#1806).
         "scandal": [],
         "domain_dev": [],
+        # PLACEHOLDER example tax-collection mission + task (#696): "Collect
+        # the Levies". Represented by TaskTemplate.
+        "domain_tasks": [TaskTemplate],
         # Stealth seeds skill/check rows counted under "checks" (#1464).
         "stealth": [],
         # Security seeds skill/check rows counted under "checks" (#2180).

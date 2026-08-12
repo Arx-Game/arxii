@@ -11,9 +11,10 @@ title alone). Marriage pacts bind to a `Union` and die instantly when a spouse
 dies (the CK2 rule) — commitments are coded rows (DOWRY moves treasury coin at
 signing, SUBSIDY materializes an `OrgObligation`, RESIDENCY marries the junior
 spouse into the senior family) so alliances fire mechanically, not by GM memory.
-Domains are decorations on DOMAIN-level Areas whose holdings materialize
-`OrgIncomeStream` rows — the existing collection/graft/settlement pipeline is
-reused untouched. **Rejected:** a standalone `House` model (would duplicate
+Domains are decorations on DOMAIN-level Areas (historical phrasing: no
+`AreaLevel.DOMAIN` exists; domains decorate REGION-level Areas in seeds) whose
+holdings materialize `OrgIncomeStream` rows — the existing collection/graft/
+settlement pipeline is reused untouched. **Rejected:** a standalone `House` model (would duplicate
 membership, ranks, reputation, treasury, and channels that Organizations already
 own); person-level pact binding (leaves pacts dangling after remarriage);
 bespoke house income models (parallel-economy sprawl). The automation here is
