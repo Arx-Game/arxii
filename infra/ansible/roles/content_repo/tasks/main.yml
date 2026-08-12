@@ -12,12 +12,13 @@
 # ARXII_CONTENT_REPO_TOKEN/ARXII_CONTENT_REPO are read directly via
 # lookup('env', ...) below, same convention as every other ARXII_* secret
 # in this codebase (see the Interfaces note in this role's own brief). An
-# empty/unset value here would otherwise silently produce a malformed clone
-# URL (`https://x-access-token:@github.com/.git`) — and because the clone
-# task below carries no_log: true, git's own error output would be
-# suppressed too, leaving the operator with an opaque failure and no
-# diagnostic. Plausible before Task 2 wires these into standup.sh, or if a
-# rotated/typo'd token ever goes missing in prod.
+# empty/unset value here would otherwise silently produce either a
+# malformed clone URL (`https://github.com/.git`, ARXII_CONTENT_REPO empty)
+# or a malformed Authorization header (ARXII_CONTENT_REPO_TOKEN empty) —
+# and because the clone task below carries no_log: true, git's own error
+# output would be suppressed too, leaving the operator with an opaque
+# failure and no diagnostic. Plausible before Task 2 wires these into
+# standup.sh, or if a rotated/typo'd token ever goes missing in prod.
 - name: Collect names of missing content-repo env vars (values never logged)
   ansible.builtin.set_fact:
     content_repo_missing_env: >-
@@ -45,22 +46,31 @@
 # (0750 arxii:arxii); this role would otherwise silently duplicate that
 # ownership with a second, drift-prone source of truth for the same path.
 
-# HTTPS + embedded PAT (not an SSH deploy key) — matches app_deploy's own
-# checkout task's mechanism (ansible.builtin.git, no new module/dependency),
-# just swapping the public clone URL for a private one with credentials
-# baked into the URL. ARXII_CONTENT_REPO (owner/repo slug, non-secret
-# Variable) keeps the slug out of infra config, resolved only via the gated
-# Environment Variable (see docs/systems/content-authoring.md's "One-time
-# setup" section — that principle is about the session-PR push flow parsing
-# `origin`, not this role, but the same discipline applies here);
-# ARXII_CONTENT_REPO_TOKEN (Secret, fine-grained PAT, Contents:Read-only) is
-# what actually grants access. no_log: true because the rendered `repo:`
-# value embeds the token — it must never appear in Ansible's stdout/log
-# (same protection pattern as the superuser-create task in
-# roles/app_deploy/tasks/main.yml). Runs every converge (idempotent via
-# ansible.builtin.git's own change detection): standup.yml is also the
-# button used for ordinary redeploys, not just first boot, so a merged lore
-# PR reaches the box automatically by the next deploy.
+# HTTPS + a credential passed via git's own environment-variable config
+# mechanism (GIT_CONFIG_COUNT/GIT_CONFIG_KEY_n/GIT_CONFIG_VALUE_n, git
+# >=2.31 — this box targets Ubuntu 24.04 "noble", which ships far newer) —
+# not an SSH deploy key, and not a credential embedded in the `repo:` URL.
+# Ansible's environment: task keyword sets these for the task's subprocess
+# only; ansible.builtin.git shells out to the real git binary, so it
+# inherits them. This is the same header-injection technique GitHub's own
+# docs recommend for token auth without touching .git/config or the remote
+# URL — the token is never written to any file, not even transiently: it
+# lives only in that one subprocess's environment for the duration of the
+# clone/pull. Because `repo:` is therefore always the same clean URL, this
+# task's no_log: true is defense in depth, not strictly load-bearing (the
+# credential really is only in the header value below); ARXII_CONTENT_REPO
+# (owner/repo slug, non-secret Variable) keeps the slug out of infra
+# config, resolved only via the gated Environment Variable (see
+# docs/systems/content-authoring.md's "One-time setup" section — that
+# principle is about the session-PR push flow parsing `origin`, not this
+# role, but the same discipline applies here); ARXII_CONTENT_REPO_TOKEN
+# (Secret, fine-grained PAT, Contents:Read-only) is what actually grants
+# access. Runs every converge (idempotent via ansible.builtin.git's own
+# change detection, comparing `git remote get-url origin` against the
+# always-clean `repo:` value — no separate scrub step needed, and no
+# permanent `changed=1` drift): standup.yml is also the button used for
+# ordinary redeploys, not just first boot, so a merged lore PR reaches the
+# box automatically by the next deploy.
 #
 # Wrapped in block/rescue because an unhandled failure here is an opaque,
 # no_log-censored MODULE FAILURE with no diagnostic. Three real causes: (1)
@@ -74,16 +84,21 @@
 # set an expiration with a manual rotation reminder (see infra/README.md),
 # so this will happen eventually; (3) a wrong ARXII_CONTENT_REPO slug or a
 # token missing Contents:Read permission.
-- name: Clone/update the private lore-repo checkout (read-only PAT)
+- name: Clone/update the private lore-repo checkout (credential via env, never the URL or disk)
   block:
-    - name: Clone/update the private lore-repo checkout (read-only PAT)
+    - name: Clone/update the private lore-repo checkout (credential via env, never the URL or disk)
       ansible.builtin.git:
-        repo: "https://x-access-token:{{ lookup('env', 'ARXII_CONTENT_REPO_TOKEN') }}@github.com/{{ lookup('env', 'ARXII_CONTENT_REPO') }}.git"
+        repo: "https://github.com/{{ lookup('env', 'ARXII_CONTENT_REPO') }}.git"
         dest: "{{ content_repo_path }}"
         version: main
       become: true
       become_user: "{{ app_user }}"
+      environment:
+        GIT_CONFIG_COUNT: "1"
+        GIT_CONFIG_KEY_0: "http.https://github.com/.extraheader"
+        GIT_CONFIG_VALUE_0: "AUTHORIZATION: basic {{ ('x-access-token:' + lookup('env', 'ARXII_CONTENT_REPO_TOKEN')) | b64encode }}"
       no_log: true
+      register: content_repo_checkout
   rescue:
     - name: Fail with a diagnosable message (the block above is no_log; this is not)
       ansible.builtin.fail:
@@ -95,26 +110,3 @@
           deploy; (2) ARXII_CONTENT_REPO_TOKEN is expired, revoked, or
           lacks Contents:Read on the repo; (3) ARXII_CONTENT_REPO does not
           name the correct owner/repo slug.
-
-# Strips the embedded PAT from the checkout's own .git/config so the token
-# doesn't persist on disk after the converge completes — ansible.builtin.git
-# writes the full `repo:` URL (credential included) as remote.origin.url,
-# readable by app_user, the same user the Django/Evennia app process runs
-# as. The token is still written to disk transiently DURING each converge
-# (between the clone task above and this task) — that is unavoidable with
-# this credential shape and is fine; the goal is "not left behind after the
-# converge completes," not "never touches disk for a moment."
-# changed_when: false because this command is idempotent in effect (always
-# re-sets the same clean URL) even though ansible.builtin.command can't
-# natively detect that — acceptance.sh's dress-rehearsal doctrine wants
-# changed=0 on a second converge. no_log: true kept for consistency with
-# the surrounding tasks and as defense in depth, even though this task's
-# own args don't currently contain the secret.
-- name: Strip the embedded credential from the checkout's origin URL
-  ansible.builtin.command:
-    cmd: "git remote set-url origin https://github.com/{{ lookup('env', 'ARXII_CONTENT_REPO') }}.git"
-    chdir: "{{ content_repo_path }}"
-  become: true
-  become_user: "{{ app_user }}"
-  changed_when: false
-  no_log: true

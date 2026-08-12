@@ -166,12 +166,13 @@ needs this, only the one Ansible task that clones the checkout does):**
   once per converge by the `content_repo` role via `lookup('env', ...)`
   (`no_log: true`) and deliberately never written to the box's own
   `/etc/arxii/arxii.env` (what the running app process reads) — see
-  "Content-repo checkout credential" below for how to mint it. The token IS
-  transiently written to disk during each converge (embedded in the
-  checkout's `.git/config` by the clone task) but is scrubbed by a
-  follow-up task that resets `remote.origin.url` to a clean, credential-free
-  URL immediately after the clone/pull completes — it does not persist
-  between converges.
+  "Content-repo checkout credential" below for how to mint it. The token is
+  injected into `git` via its environment-variable config mechanism
+  (`GIT_CONFIG_COUNT`/`GIT_CONFIG_KEY_n`/`GIT_CONFIG_VALUE_n`, set through
+  Ansible's `environment:` task keyword) as an HTTP `Authorization: basic`
+  header, for the duration of that one clone/pull subprocess only — it is
+  never written to any file, not the app's EnvironmentFile, not the
+  checkout's `.git/config`, not anywhere, so no scrubbing step is needed.
 
 **NOT pre-stored — produced by the tofu step at run time and piped into the
 ansible step's env in-memory (masked, never to disk/log):**
@@ -351,9 +352,12 @@ never a full-access token. To provision:
    - `ARXII_CONTENT_REPO_TOKEN` (Secret) — the token from step 4.
    - `ARXII_CONTENT_REPO` (Variable) — the repo's `owner/repo` slug.
 
-This credential is deliberately never written to the box's own
-`/etc/arxii/arxii.env` — see `group_vars/secrets.env.example`'s
-"ANSIBLE-STEP-ONLY, NEVER ON-BOX" section for why.
+This credential is deliberately never written to any file on disk at
+all — not the box's own `/etc/arxii/arxii.env`, not the checkout's
+`.git/config`, nowhere. It's injected into `git` via environment-variable
+config for the duration of the clone/pull subprocess only; see
+`group_vars/secrets.env.example`'s "ANSIBLE-STEP-ONLY, NEVER ON-BOX"
+section for why.
 
 ## Dress rehearsal (run this before the first prod button press)
 
