@@ -530,8 +530,37 @@ def _collection_band_pct(success_level: int) -> int | None:
     return None
 
 
+def _collection_target_difficulty(streams: list[OrgIncomeStream]) -> int:
+    """Difficulty of the collection run from local order/crime (#696 item 1).
+
+    The run is as hard as its worst stop: for each stream with an authored
+    ``area``, net pressure = area CRIME total - area ORDER total
+    (``area_stat_total`` — the bare-area read that closed the old "cascade
+    reads rooms" blocker); the max across streams shifts the base NORMAL
+    difficulty point-for-point, clamped to the authored band range.
+    PLACEHOLDER tuning: point-for-point shift and worst-stop-wins are first
+    guesses — revisit with real turf-war stat magnitudes.
+    """
+    from world.locations.constants import StatKey  # noqa: PLC0415
+    from world.locations.services import area_stat_total  # noqa: PLC0415
+    from world.scenes.action_constants import DIFFICULTY_VALUES, DifficultyChoice  # noqa: PLC0415
+
+    base = DIFFICULTY_VALUES[DifficultyChoice.NORMAL]
+    pressures = [
+        area_stat_total(stream.area, StatKey.CRIME) - area_stat_total(stream.area, StatKey.ORDER)
+        for stream in streams
+        if stream.area_id is not None
+    ]
+    worst = max(pressures, default=0)
+    low = DIFFICULTY_VALUES[DifficultyChoice.TRIVIAL]
+    high = DIFFICULTY_VALUES[DifficultyChoice.HARROWING]
+    return max(low, min(high, base + worst))
+
+
 @transaction.atomic
-def collect_org_income(*, organization: Organization, character) -> CollectionResult:
+def collect_org_income(
+    *, organization: Organization, character, success_level_override: int | None = None
+) -> CollectionResult:
     """One active collection dispatch across every pooled stream of ``organization`` (#930).
 
     The collector gathers the org's whole uncollected aggregate (pools zero
@@ -542,15 +571,16 @@ def collect_org_income(*, organization: Organization, character) -> CollectionRe
     declarations) proportionally to each stream's share. Catastrophe lands
     nothing — the pool is simply gone, and the collector-incident encounter is
     a combat-domain follow-up seam. Collector competence is a flat PLACEHOLDER
-    input until improvable agent stats (#672) exist; the streams' ``area`` FK
-    is authored data for a future local order/crime difficulty modifier (the
-    locations cascade reads rooms, not bare areas — deliberately not rebuilt
-    here).
+    input until improvable agent stats (#672) exist. The check's target
+    difficulty reads local order/crime off the streams' authored ``area`` FK
+    (see ``_collection_target_difficulty``, #696). ``success_level_override``
+    lets a caller that already resolved the run's outcome elsewhere (a
+    mission's terminal grade) skip the check entirely and band on that grade
+    instead (#696 item 2).
     """
     from world.checks.models import CheckType  # noqa: PLC0415
     from world.checks.services import perform_check_with_modifiers  # noqa: PLC0415
     from world.currency.constants import TAX_COLLECTION_CHECK_NAME  # noqa: PLC0415
-    from world.scenes.action_constants import DIFFICULTY_VALUES, DifficultyChoice  # noqa: PLC0415
 
     streams = list(
         OrgIncomeStream.objects.filter(
@@ -587,11 +617,15 @@ def collect_org_income(*, organization: Organization, character) -> CollectionRe
 
     check_type = CheckType.objects.filter(name__iexact=TAX_COLLECTION_CHECK_NAME).first()
     success_level = 0  # unseeded world: every collection is an unremarkable partial
-    if check_type is not None:
+    if success_level_override is not None:
+        # Mission-graded collection (#696 item 2): the run already happened as
+        # authored mission content; its terminal outcome supplies the grade.
+        success_level = success_level_override
+    elif check_type is not None:
         result = perform_check_with_modifiers(
             character,
             check_type,
-            target_difficulty=DIFFICULTY_VALUES[DifficultyChoice.NORMAL],
+            target_difficulty=_collection_target_difficulty(streams),
         )
         success_level = result.success_level
 

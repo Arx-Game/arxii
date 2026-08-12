@@ -565,7 +565,9 @@ def breach_commitment(commitment: PactCommitment) -> PactCommitment:
 
 
 def create_domain(*, area: Area, name: str, owner_org: Organization) -> Domain:
-    """Decorate a DOMAIN-level area as a landholding of ``owner_org``."""
+    """Decorate an area (seeds use ``AreaLevel.REGION``; no DOMAIN level exists)
+    as a landholding of ``owner_org``.
+    """
     if Domain.objects.filter(area=area).exists():
         msg = f"area {area.pk} is already a domain"
         raise HousesServiceError(msg, user_message="That land is already held.")
