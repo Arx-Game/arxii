@@ -326,7 +326,7 @@ EOF
   # positioned in the play order (see site.yml).
   local ansible_extra_args=()
   if [[ "${ARXII_RUN_CONTENT_REFRESH:-false}" == "true" ]]; then
-    ansible_extra_args+=(--tags all,content_repo)
+    ansible_extra_args+=(--tags "all,content_repo")
   fi
 
   # Backup-writer keys are handed to ansible via env in-memory — never
