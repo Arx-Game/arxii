@@ -65,12 +65,17 @@
 # principle is about the session-PR push flow parsing `origin`, not this
 # role, but the same discipline applies here); ARXII_CONTENT_REPO_TOKEN
 # (Secret, fine-grained PAT, Contents:Read-only) is what actually grants
-# access. Runs every converge (idempotent via ansible.builtin.git's own
-# change detection, comparing `git remote get-url origin` against the
-# always-clean `repo:` value — no separate scrub step needed, and no
-# permanent `changed=1` drift): standup.yml is also the button used for
-# ordinary redeploys, not just first boot, so a merged lore PR reaches the
-# box automatically by the next deploy.
+# access. Idempotent via ansible.builtin.git's own change detection
+# (comparing `git remote get-url origin` against the always-clean `repo:`
+# value — no separate scrub step needed, and no permanent `changed=1`
+# drift), but #3153's on-demand redesign means that idempotency mostly
+# doesn't matter in practice: this role carries site.yml's `never` tag, so
+# it's dormant by default and only runs when an operator explicitly passes
+# `--tags content_repo` (standup.yml's "Also refresh the private lore-repo
+# checkout" input) — expected once for alpha bootstrap, maybe again after a
+# full alpha rebuild, essentially never on a routine redeploy. A merged lore
+# PR does NOT reach the box automatically on the next ordinary deploy; an
+# operator has to explicitly ask for it.
 #
 # Wrapped in block/rescue because an unhandled failure here is an opaque,
 # no_log-censored MODULE FAILURE with no diagnostic. Three real causes: (1)

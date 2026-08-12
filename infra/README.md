@@ -336,9 +336,17 @@ Two things that catch people out:
 
 ## Content-repo checkout credential (one-time)
 
-**#3153.** The `content_repo` Ansible role clones/refreshes the private
-lore repo onto the box on every deploy, using a scoped GitHub credential —
-never a full-access token. To provision:
+**#3153.** The `content_repo` Ansible role clones/refreshes the private lore
+repo onto the box, using a scoped GitHub credential — never a full-access
+token. It is **on-demand, not every-deploy**: the role carries `site.yml`'s
+special `never` tag, so it's dormant on every ordinary "Stand up infra" run.
+To actually run it, trigger `standup.yml` (Actions → "Stand up infra" → Run
+workflow) with the **"Also refresh the private lore-repo checkout"**
+`workflow_dispatch` input checked — that flag alone appends
+`--tags content_repo` to the converge, touching only this role and nothing
+else about the deploy. Expect to use this once during alpha bootstrap and
+maybe again if alpha is ever torn down and rebuilt — not as a routine,
+ongoing action. To provision the credential itself:
 
 1. GitHub → Settings → Developer settings → **Fine-grained personal access
    tokens** → Generate new token.

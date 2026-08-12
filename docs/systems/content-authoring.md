@@ -30,12 +30,18 @@ Credit stamps come from that link.
 
 ## Prod
 
-The checkout is provisioned automatically — `standup.yml`'s `content_repo`
-role clones/refreshes the private lore repo onto the box on every deploy
-(the same button used for ordinary app redeploys, not just first boot), and
-`CONTENT_REPO_PATH` is set for the app process. See `infra/README.md`'s
-"Content-repo checkout credential" section for the one-time credential
-setup.
+The checkout is provisioned **on demand, not automatically on every
+deploy**. `standup.yml`'s `content_repo` role is dormant by default (it
+carries `site.yml`'s special `never` tag); to actually clone/refresh the
+private lore repo onto the box, trigger `standup.yml` (Actions → "Stand up
+infra" → Run workflow) with the **"Also refresh the private lore-repo
+checkout"** `workflow_dispatch` input checked — this appends
+`--tags content_repo` to the converge and touches only this role, nothing
+else about the deploy. `CONTENT_REPO_PATH` is set for the app process once
+the checkout exists. Expect to use this once during alpha bootstrap and
+maybe again after a full alpha rebuild — not as part of routine ongoing
+operation. See `infra/README.md`'s "Content-repo checkout credential"
+section for the one-time credential setup.
 
 **Loading content into the database stays a manual step** (unchanged from
 local dev): Admin → Game Setup → **Load private content repo**, same

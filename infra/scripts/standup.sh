@@ -44,19 +44,25 @@ fail() { printf '[standup] REFUSING: %s\n' "$*" >&2; exit 1; }
 # Runtime app secrets/vars that MUST be pre-supplied (operator env / gated
 # GitHub Environment). This is NOT a 1:1 mirror of secrets_vault's
 # secrets_map: the backup-writer keys are excluded here because they are
-# produced by tofu and exported post-apply, and ARXII_CONTENT_REPO_TOKEN/
-# ARXII_CONTENT_REPO are required here but deliberately EXCLUDED from
-# secrets_map by design — they're ansible-step-only, never written to the
-# box's own EnvironmentFile (see group_vars/secrets.env.example's
-# "ANSIBLE-STEP-ONLY, NEVER ON-BOX" section for the actual current
-# contract shape; don't "fix" this by adding them to secrets_map).
+# produced by tofu and exported post-apply.
+#
+# #3153 (on-demand redesign): ARXII_CONTENT_REPO_TOKEN/ARXII_CONTENT_REPO are
+# deliberately NOT in this list, even though the content_repo role still
+# needs them when it runs. The role is on-demand now (site.yml's `never` tag
+# — only runs when an operator explicitly passes `--tags content_repo`, via
+# standup.yml's `run_content_load` input), so requiring a valid, non-expired
+# PAT on EVERY ordinary deploy would be wrong: it would force every operator
+# to keep that credential fresh just to do a routine app redeploy that never
+# touches content_repo at all. The vars are still validated — fail-closed,
+# with a diagnosable message — but only inside the role itself, at the
+# moment it actually runs (see roles/content_repo/tasks/main.yml's own
+# "Collect names of missing content-repo env vars" / "Fail-closed" tasks).
 readonly REQUIRED_ARXII=(
   ARXII_PG_PASSWORD ARXII_DJANGO_SECRET_KEY
   ARXII_CLOUDINARY_CLOUD_NAME ARXII_CLOUDINARY_API_KEY ARXII_CLOUDINARY_API_SECRET
   ARXII_RESEND_API_KEY ARXII_R2_ACCESS_KEY_ID ARXII_R2_SECRET_ACCESS_KEY
   ARXII_OFFBOX_ALERT_TOKEN ARXII_CADDY_CF_DNS_TOKEN
   ARXII_DJANGO_SUPERUSER_PASSWORD
-  ARXII_CONTENT_REPO_TOKEN ARXII_CONTENT_REPO
 )
 # ARXII_SENTRY_DSN (#2236 Phase 5) is deliberately NOT in REQUIRED_ARXII —
 # it lives in secrets_vault's secrets_map_optional, not secrets_map, so it
@@ -281,11 +287,23 @@ EOF
   unset LINODE_TOKEN CLOUDFLARE_API_TOKEN TF_STATE_S3_ACCESS_KEY TF_STATE_S3_SECRET_KEY
 
   log "Converging host (idempotent)…"
+  # #3153: on-demand content-repo refresh. The content_repo role carries
+  # site.yml's `never` tag, so it's skipped by default on every run; only
+  # append `--tags content_repo` when the operator explicitly opted in via
+  # standup.yml's "Also refresh the private lore-repo checkout" input
+  # (GitHub Actions booleans arrive here as the literal string "true"). This
+  # is expected to be rare — alpha bootstrap, or after a full alpha rebuild
+  # — not a routine part of every deploy.
+  local ansible_extra_args=()
+  if [[ "${ARXII_RUN_CONTENT_LOAD:-false}" == "true" ]]; then
+    ansible_extra_args+=(--tags content_repo)
+  fi
+
   # Backup-writer keys are handed to ansible via env in-memory — never
   # written to disk/log, never --extra-vars.
   ARXII_BACKUP_WRITER_ACCESS_KEY="${backup_writer_access_key}" \
   ARXII_BACKUP_WRITER_SECRET_KEY="${backup_writer_secret_key}" \
-  ansible-playbook -i "${INVENTORY}" "${ANSIBLE_DIR}/site.yml"
+  ansible-playbook -i "${INVENTORY}" "${ANSIBLE_DIR}/site.yml" "${ansible_extra_args[@]}"
 
   log "Stand-up complete. (Reminder: revoke the provisioning tokens at the provider — see README.)"
 }

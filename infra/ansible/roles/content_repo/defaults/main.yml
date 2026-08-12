@@ -10,9 +10,15 @@ content_repo_path: /opt/arxii/content
 # is prod-adjacent (real GitHub PAT with real private-repo read access) —
 # same reasoning offsite_replication's offsite_enabled documents for the R2
 # credential. rehearse.sh's generated group_vars sets this false; standup.sh
-# (prod) never sets it, so prod always runs this role. Gated in site.yml via
+# (prod) never sets it, so this stays true for prod. Gated in site.yml via
 # `when: content_repo_enabled` (see roles/offsite_replication for the
-# identical idiom).
+# identical idiom) — but per #3153's on-demand redesign, this alone no
+# longer decides whether the role runs on a given invocation: site.yml also
+# tags the role `never`, so on prod it's dormant by default and only runs
+# when an operator explicitly passes `--tags content_repo` (standup.yml's
+# "Also refresh the private lore-repo checkout" input). This var still
+# matters — it keeps the role impossible to trigger in rehearsal even if
+# `--tags content_repo` were ever passed there by mistake.
 content_repo_enabled: true
 
 # owner/repo slug — see tasks/main.yml. Read directly via lookup('env', ...)
