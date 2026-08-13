@@ -64,17 +64,15 @@ variable "dmarc_policy" {
   default = "none"
 }
 variable "dmarc_rua" {
-  type = string
-}
-variable "resend_spf_include" {
   type    = string
-  default = "_spf.resend.com"
+  default = ""
 }
 variable "resend_records" {
   type = list(object({
-    type  = string
-    name  = string
-    value = string
+    type     = string
+    name     = string
+    value    = string
+    priority = optional(number)
   }))
   default = []
 }

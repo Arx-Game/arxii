@@ -72,8 +72,15 @@ file parses as YAML before handing it to Ansible — already a transitive depend
       internet, behind key-only auth + fail2ban). Consciously decide whether to restrict it to a
       known admin CIDR. This is a real decision, not a default to ignore.
 - [ ] Domain nameservers delegated to Cloudflare.
-- [ ] Resend sending domain will be verified automatically via the DNS records this IaC creates
-      (SPF/DKIM/DMARC + Resend verification) once nameservers are delegated.
+- [ ] **Resend sending domain added, and its records copied into `resend_records`.** On the
+      domain's DNS page choose **Manual setup**, not the Cloudflare auto-configure button —
+      auto-configure writes the records into the zone itself and collides with the
+      `cloudflare_dns` module (and grants Resend standing write access to the zone that also
+      points at the game server). Paste every row verbatim, including the return-path SPF TXT
+      and the bounce-feedback MX; only the MX takes `priority`. Do not hand-add them in
+      Cloudflare either. The domain stays **unverified** until the first `tofu apply` publishes
+      them, which cannot happen before the compute instance exists (the module takes the origin
+      IPs from `module.compute`) — that pending state is expected, not a fault.
 - [ ] One-time Terraform remote-state bootstrap run (`terraform/bootstrap/`, see its README).
 
 ## After a successful stand-up — credential hygiene (do this every time)
