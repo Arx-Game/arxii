@@ -33,7 +33,7 @@ variable "origin_ipv6" {
 variable "dmarc_policy" {
   type        = string
   default     = "none"
-  description = "Initial DMARC policy for a FRESH sending domain. Start 'none' (or 'quarantine') with rua reporting, then tighten. NEVER 'reject' initially (blackholes legit mail before traffic is observed)."
+  description = "Initial DMARC policy for a FRESH sending domain. Start 'none' (or 'quarantine'), then tighten. NEVER 'reject' initially (blackholes legit mail before traffic is observed)."
   validation {
     condition     = contains(["none", "quarantine"], var.dmarc_policy)
     error_message = "dmarc_policy must start at 'none' or 'quarantine' — not 'reject' on a fresh domain (tighten later, deliberately)."
@@ -42,21 +42,17 @@ variable "dmarc_policy" {
 
 variable "dmarc_rua" {
   type        = string
-  description = "DMARC aggregate-report mailbox, e.g. mailto:dmarc@arxii.example."
-}
-
-variable "resend_spf_include" {
-  type        = string
-  default     = "_spf.resend.com"
-  description = "SPF include host for Resend. CONFIRM the exact value against Resend's domain-setup page for this sending domain (do not assume)."
+  default     = ""
+  description = "DMARC aggregate-report mailbox, e.g. mailto:dmarc@arxii.example. Empty omits rua entirely. Cross-domain reporting requires the RECEIVING domain to publish a <this-domain>._report._dmarc authorisation record, so a plain third-party inbox (gmail.com and friends) does not work — use an address on this domain or a reporting service that publishes its own authorisation."
 }
 
 variable "resend_records" {
   type = list(object({
-    type  = string
-    name  = string
-    value = string
+    type     = string
+    name     = string
+    value    = string
+    priority = optional(number)
   }))
   default     = []
-  description = "Resend domain-verification + DKIM records EXACTLY as Resend's dashboard shows them for this sending domain (DKIM here is the PUBLIC record only; the private key is Resend-managed). Operator pastes these; kept generic so the provider/account specifics aren't guessed."
+  description = "EVERY DNS row Resend's dashboard shows for this sending domain, verbatim — verification/DKIM TXT, the return-path SPF TXT, and the bounce-feedback MX (priority set only on the MX). DKIM here is the PUBLIC record only; the private key is Resend-managed. Operator pastes these from the dashboard's MANUAL SETUP view; do not use Cloudflare auto-configure, which writes records this module then collides with."
 }

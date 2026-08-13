@@ -5,6 +5,17 @@ domain                = "arxii.example"
 authorized_keys       = ["ssh-ed25519 AAAA... you@host"]
 state_bucket_label    = "arxii-backups-REPLACE-unique"
 r2_bucket_name        = "arxii-offsite-REPLACE-unique"
-dmarc_rua             = "mailto:dmarc@arxii.example"
 # ssh_admin_cidrs    = ["203.0.113.10/32"]  # OPERATOR DECISION — narrow this
-# resend_records     = [{ type="TXT", name="...", value="..." }]  # from Resend dashboard
+# dmarc_rua          = "mailto:dmarc@arxii.example"  # optional; omit to publish no rua
+
+# Every row from the Resend domain page's MANUAL SETUP view, verbatim — do NOT
+# use its Cloudflare auto-configure button (it writes these records itself and
+# collides with this module). Names are zone-relative, as Cloudflare's API wants.
+# Shape below is Resend-over-SES: DKIM on resend._domainkey, and SPF + bounce
+# feedback on the send.* return-path subdomain. Re-viewable in the dashboard
+# any time, so nothing here needs archiving.
+# resend_records = [
+#   { type = "TXT", name = "resend._domainkey", value = "p=MIGfMA0GCSq..." },
+#   { type = "TXT", name = "send", value = "v=spf1 include:amazonses.com ~all" },
+#   { type = "MX", name = "send", value = "feedback-smtp.us-east-1.amazonses.com", priority = 10 },
+# ]

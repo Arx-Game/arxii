@@ -2,7 +2,7 @@
 # the TLS-telnet record is DNS-ONLY (grey) so telnet reaches origin directly
 # (Cloudflare free tier does not proxy arbitrary TCP). Resolves the Resend
 # "could only email myself until the domain is verified" chicken-and-egg by
-# authoring the verification + SPF/DKIM/DMARC records as code.
+# authoring the verification + SPF/DKIM records as code.
 #
 # Provider-schema caveat (v4 idiom; CI is the authority — see versions.tf).
 
@@ -42,11 +42,18 @@ resource "cloudflare_record" "telnet_a" {
 }
 
 # --- Email auth -------------------------------------------------------------
-resource "cloudflare_record" "spf" {
-  zone_id = cloudflare_zone.this.id
-  name    = "@"
-  type    = "TXT"
-  content = "v=spf1 include:${var.resend_spf_include} ~all"
+# SPF is NOT declared here. Resend fronts Amazon SES and puts both the SPF TXT
+# and the bounce-feedback MX on a return-path subdomain (send.<domain>), not on
+# the apex — and the include host is SES's, not Resend's own. An apex SPF
+# hardcoded here would sit where nothing checks it while the record that
+# verification actually requires went missing. Every Resend-authored row,
+# SPF included, therefore flows through var.resend_records verbatim.
+
+locals {
+  # rua is optional: aggregate reports need a mailbox whose domain authorises
+  # this one to report to it, which a plain third-party inbox does not. Omit
+  # rather than publish an address whose reports get refused.
+  dmarc_reporting = var.dmarc_rua == "" ? "" : " rua=${var.dmarc_rua}; fo=1;"
 }
 
 resource "cloudflare_record" "dmarc" {
@@ -54,16 +61,18 @@ resource "cloudflare_record" "dmarc" {
   name    = "_dmarc"
   type    = "TXT"
   # p starts none/quarantine (validated in variables.tf) — tighten later.
-  content = "v=DMARC1; p=${var.dmarc_policy}; rua=${var.dmarc_rua}; fo=1"
+  content = "v=DMARC1; p=${var.dmarc_policy};${local.dmarc_reporting}"
 }
 
-# Resend domain-verification + DKIM (PUBLIC record only; key is Resend-managed)
-# — exactly as Resend's dashboard provides them for this sending domain.
+# Resend domain-verification, DKIM and SPF (DKIM here is the PUBLIC record
+# only; the private key is Resend-managed) — exactly as Resend's dashboard
+# provides them for this sending domain. priority is null except on the MX.
 resource "cloudflare_record" "resend" {
   for_each = { for r in var.resend_records : "${r.type}:${r.name}" => r }
 
-  zone_id = cloudflare_zone.this.id
-  name    = each.value.name
-  type    = each.value.type
-  content = each.value.value
+  zone_id  = cloudflare_zone.this.id
+  name     = each.value.name
+  type     = each.value.type
+  content  = each.value.value
+  priority = each.value.priority
 }
