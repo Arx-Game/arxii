@@ -468,8 +468,11 @@ mockups in a browser. By default `server.cjs` picks a random port from the IANA
 dynamic range (49152–65535) and binds to `127.0.0.1`. Neither is reachable from
 the Windows host out of the box.
 
-The compose file pins `BRAINSTORM_PORT=49200` and forwards exactly that port to
-the Windows host. The skill's launcher script still defaults to binding the
+The compose file pins `BRAINSTORM_PORT=39200` and forwards exactly that port to
+the Windows host. The port is deliberately below 49152: Windows' dynamic port
+range starts there, and Hyper-V/WinNAT reserves whole blocks inside it after
+reboots (`netsh interface ipv4 show excludedportrange protocol=tcp`), which
+makes the host-side bind fail and the whole devcontainer refuse to start. The skill's launcher script still defaults to binding the
 loopback interface and emitting a `127.0.0.1` URL, so when invoking it inside
 the container pass `--host` and `--url-host` explicitly:
 
@@ -481,7 +484,7 @@ bash ~/.claude/plugins/.../skills/brainstorming/scripts/start-server.sh \
 `--host 0.0.0.0` makes the server listen on the interface Docker forwards;
 `--url-host localhost` ensures the URL printed in the result is something the
 Windows browser can open. Once it's running, open the printed
-`http://localhost:49200/...` URL in your Windows browser.
+`http://localhost:39200/...` URL in your Windows browser.
 
 To change the port (e.g. it collides with something else on Windows), edit
 `BRAINSTORM_PORT` and the `ports:` mapping in `.devcontainer/docker-compose.yml`
