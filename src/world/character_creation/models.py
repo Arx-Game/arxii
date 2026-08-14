@@ -475,6 +475,13 @@ class Beginnings(NaturalKeyMixin, CreditedContent, SharedMemoryModel):
         """
         Get starting languages for a character with this Beginnings and species.
 
+        When ``grants_species_languages`` is set, the species' own starting
+        languages AND every ancestor species' starting languages are included
+        (e.g. a Cani character inherits Khati's parent tongue as well as any
+        Cani-specific rows) via ``Species.lineage`` (species + ancestors,
+        nearest first, cycle-safe). ``grants_species_languages=False`` skips
+        ALL species-derived languages, inherited or not.
+
         Args:
             species: The selected Species
 
@@ -485,7 +492,11 @@ class Beginnings(NaturalKeyMixin, CreditedContent, SharedMemoryModel):
 
         language_ids = set(self.starting_languages.values_list("id", flat=True))
         if self.grants_species_languages:
-            language_ids.update(species.starting_languages.values_list("id", flat=True))
+            language_ids.update(
+                Language.objects.filter(native_species__in=species.lineage).values_list(
+                    "id", flat=True
+                )
+            )
         return Language.objects.filter(id__in=language_ids)
 
 

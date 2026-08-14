@@ -105,6 +105,10 @@ if TYPE_CHECKING:
 PLACEHOLDER_MARK = "PLACEHOLDER"
 FRONTMATTER_DELIMITER = "---"
 
+# Corpus rename directive (#3162): <content_root>/fixtures/RENAMES.json, same
+# resolution shape as content_health.KNOWN_DRIFT_FILENAME.
+RENAMES_FILENAME = "RENAMES.json"
+
 # Mirrors world.traits.models.TraitType / TraitCategory values without
 # importing Django models (import-safety). Validated against the real
 # enums in core_management.tests.test_content_fixtures. TRAIT_TYPES is the
@@ -1551,6 +1555,9 @@ class WorldLoadResult:
     set) whose incoming values differ was left untouched (#3017) - not a
     corpus-health failure, just a row waiting on the admin delete-then-reload
     flow to take the repo's version.
+    ``renames_applied`` (#3162) lists every corpus rename ``apply_content_renames``
+    applied THIS run, ``"Model: Old -> New"`` per entry - empty on a run where
+    every directive was already applied or there was no ``RENAMES.json``.
     """
 
     created: int
@@ -1559,6 +1566,7 @@ class WorldLoadResult:
     skipped: list[str]
     deferred_resolved: int
     conflicts: list[str]
+    renames_applied: list[str] = field(default_factory=list)
 
 
 def _retry_deferred(
@@ -1627,8 +1635,76 @@ def _retry_deferred(
     return created, updated, deferred_resolved
 
 
+def apply_content_renames(content_root: Path) -> list[str]:
+    """Apply corpus rename directives from ``<content_root>/fixtures/RENAMES.json``.
+
+    A no-cruft rename mechanism: renaming a content row (e.g. a Language) in the
+    lore repo would otherwise leave the OLD name orphaned in anyone's dev database
+    until a fresh load happens to re-key it - and ``load_entries``' upsert never
+    renames a row on its own (it only creates or updates by natural key). This
+    directive closes that gap by applying the rename directly.
+
+    Shape: ``{"<app_label.model>": {"Old Name": "New Name", ...}}``. Model
+    resolution goes through ``resolve_fixture_model`` (label-agnostic, same as
+    ``load_entries``). For each entry: a row whose single-field natural key
+    matches ``Old`` is renamed to ``New`` UNLESS a row already named ``New``
+    exists (idempotent - a second run over an already-applied rename, or one
+    where the operator already hand-renamed the target, is a no-op) or no row
+    named ``Old`` exists (nothing to rename). Only single-field ``"name"``
+    natural keys are supported (``NaturalKeyConfig.fields == ["name"]``); a
+    directive naming a composite-natural-key model raises ``ContentError`` -
+    fail loud rather than silently skip, since a composite-key rename would
+    need more than a bare string pair to identify the row anyway.
+
+    Absent ``RENAMES.json`` returns an empty list. A malformed JSON file also
+    raises ``ContentError``. Requires Django to be configured (delegates to
+    ``resolve_fixture_model``); import deferred so this module stays
+    import-safe for pure validation callers that never load.
+    """
+    renames_path = content_root / "fixtures" / RENAMES_FILENAME
+    if not renames_path.is_file():
+        return []
+
+    try:
+        directives = json.loads(renames_path.read_text(encoding="utf-8"))
+    except json.JSONDecodeError as exc:
+        msg = f"{renames_path}: malformed RENAMES.json: {exc}"
+        raise ContentError(msg) from exc
+
+    from core.natural_keys import NaturalKeyMixin  # noqa: PLC0415
+
+    applied: list[str] = []
+    for model_key, mapping in directives.items():
+        try:
+            model = resolve_fixture_model(model_key)
+        except LookupError as exc:
+            msg = f"{renames_path}: {exc}"
+            raise ContentError(msg) from exc
+
+        field_names = model.identity_fields() if issubclass(model, NaturalKeyMixin) else None
+        if field_names != ["name"]:
+            msg = (
+                f"{renames_path}: {model.__name__} has a composite or non-'name' "
+                f"natural key ({field_names!r}) - RENAMES.json only supports "
+                "single-field 'name' natural keys."
+            )
+            raise ContentError(msg)
+
+        for old_name, new_name in mapping.items():
+            if model.objects.filter(name__iexact=new_name).exists():
+                continue
+            try:
+                instance = model.objects.get(name__iexact=old_name)
+            except model.DoesNotExist:
+                continue
+            instance.name = new_name
+            instance.save()
+            applied.append(f"{model.__name__}: {old_name} -> {new_name}")
+    return applied
+
+
 def load_world_content(content_root: Path) -> WorldLoadResult:
-    """Sequence content fixtures -> grid bundles -> deferred natural-key retry (#2448).
+    """Sequence renames -> content fixtures -> grid -> deferred retry (#2448, #3162).
 
     Closes the circular dependency between content fixtures and the grid:
     e.g. a ``StartingArea`` fixture's ``default_starting_room`` names a room
@@ -1638,6 +1714,9 @@ def load_world_content(content_root: Path) -> WorldLoadResult:
     Neither can safely load first if the other's target might not exist yet,
     so this driver:
 
+    0. Applies ``apply_content_renames`` FIRST, before anything else loads —
+       a rename must land before the fixtures below try to create/update rows
+       under either the old or new name, or the two would race for identity.
     1. Builds + loads the content fixtures with ``defer_unresolved=True`` —
        an unresolved natural-key FK target (only that failure mode) is queued
        instead of skipped.
@@ -1664,6 +1743,8 @@ def load_world_content(content_root: Path) -> WorldLoadResult:
     """
     from core_management.grid_import import load_grid_bundles  # noqa: PLC0415
 
+    renames_applied = apply_content_renames(content_root)
+
     result = build_all(content_root)
     created, updated, deferred = load_entries(result, defer_unresolved=True)
     grid = load_grid_bundles(content_root)
@@ -1679,6 +1760,7 @@ def load_world_content(content_root: Path) -> WorldLoadResult:
         skipped=result.skipped,
         deferred_resolved=deferred_resolved,
         conflicts=result.conflicts,
+        renames_applied=renames_applied,
     )
 
 

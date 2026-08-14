@@ -137,12 +137,28 @@ def _load_world(content_root: Path) -> WorldLoadResult:
         raise _ExitEarly(2) from exc
 
 
+def _print_renames_applied(world_result: WorldLoadResult) -> None:
+    """Print the renames-applied section (#3162), factored out of ``_print_load_report``.
+
+    Split out purely to keep that function under the complexity gate — every
+    corpus rename ``apply_content_renames`` actually applied this run
+    (already-applied directives are silently idempotent and print nothing).
+    """
+    if world_result.renames_applied:
+        print(f"renames applied ({len(world_result.renames_applied)}):")
+        for line in world_result.renames_applied:
+            print(f"  {line}")
+
+
 def _print_load_report(world_result: WorldLoadResult, content_root: Path) -> bool:
     """Print the ``--load`` summary + health report; return the health verdict.
 
     Summary covers content counts, grid counts, deferred, and skips (as
-    before), plus a conflicts section (#3017): credited rows (written_by
-    set) whose incoming values differed and were left untouched. Conflicts
+    before), plus a renames-applied section (#3162): every corpus rename
+    ``RENAMES.json`` directive actually applied this run (already-applied
+    directives are silently idempotent and print nothing), and a conflicts
+    section (#3017): credited rows (written_by set) whose incoming values
+    differed and were left untouched. Conflicts
     are deliberate freezes, not corpus drift - they are reported for
     operator visibility only and never fed into the health report below.
     The health report (#2501) always follows: it groups
@@ -152,6 +168,7 @@ def _print_load_report(world_result: WorldLoadResult, content_root: Path) -> boo
     ``_run`` uses it to decide the ``--strict`` exit code.
     """
     print(f"loaded: {world_result.created} created, {world_result.updated} updated.")
+    _print_renames_applied(world_result)
     if world_result.deferred_resolved:
         print(
             f"deferred-resolved: {world_result.deferred_resolved} object(s) "

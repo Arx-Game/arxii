@@ -7153,6 +7153,18 @@ Admin-hosted, superuser-only HTMX dashboards for difficulty tuning/simulation an
   `mechanics.propertycategory` — the loader was already dynamic (any `NaturalKeyMixin`
   model can be fixture-loaded); this only widens the **export** allowlist to cover the
   Capabilities & Challenges catalog.
+- **No-cruft corpus renames (#3162):** the upsert discipline above only creates/updates
+  by natural key, so renaming a content row in the lore repo and reloading orphans the
+  old-named row rather than renaming it. `core_management.content_fixtures.
+  apply_content_renames(content_root)` reads `<content_root>/fixtures/RENAMES.json`
+  (shape `{"<app_label.model>": {"Old Name": "New Name", ...}}`, absent file → `[]`)
+  and `load_world_content` applies it FIRST, before the content fixtures load. Each
+  directive renames a row whose single-field `"name"` natural key matches `Old` to
+  `New`, unless a row already named `New` exists (idempotent) or no row named `Old`
+  exists (nothing to do); a directive naming a composite-natural-key model raises
+  `ContentError` rather than silently skipping. `WorldLoadResult.renames_applied`
+  carries every rename actually applied this run; both `tools/build_content_fixtures.py
+  --load` and the admin Load view print/flash it.
 - **Row-level export filters (#2724, ADR-0171):** `CONTENT_MODELS` is a model-level
   allowlist — some registered models mix staff/lore-authored rows with per-player rows a
   service function synthesizes (a personal anima `magic.Ritual`, the per-character

@@ -14,6 +14,7 @@ from core_management.content_fixtures import (
     BuildResult,
     ContentError,
     _resolve_natural_key_fields,
+    apply_content_renames,
     build_all,
     load_entries,
     load_world_content,
@@ -22,9 +23,11 @@ from core_management.content_fixtures import (
 )
 from world.buildings.models import BuildingKind, DecorationKind
 from world.buildings.seeds import ensure_decoration_kinds
+from world.character_creation.factories import BeginningsFactory, StartingAreaFactory
 from world.items.models import ItemTemplate
 from world.npc_services.models import NPCRole
 from world.societies.factories import OrganizationFactory
+from world.species.factories import LanguageFactory
 from world.traits.models import Trait, TraitCategory, TraitType
 
 
@@ -1520,3 +1523,171 @@ class CreditEndToEndLoadTests(TestCase):
         trait = Trait.objects.get(name="Performance")
         assert trait.written_by is not None
         assert trait.written_by.name == "Tehom"
+
+
+class ApplyContentRenamesTests(TestCase):
+    """apply_content_renames (#3162): the no-cruft RENAMES.json directive."""
+
+    def setUp(self) -> None:
+        self.tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(self.tmp.cleanup)
+        self.root = Path(self.tmp.name)
+
+    def _write_renames(self, directives: dict) -> None:
+        _write(self.root, "fixtures/RENAMES.json", json.dumps(directives))
+
+    def test_absent_renames_file_returns_empty_list(self) -> None:
+        """No RENAMES.json at all is not an error - just nothing to do."""
+        assert apply_content_renames(self.root) == []
+
+    def test_applies_rename_once(self) -> None:
+        """A row named Old is renamed to New, and the rename is reported."""
+        from world.species.models import Language
+
+        LanguageFactory(name="Ari")
+        self._write_renames({"species.language": {"Ari": "Sanguinen"}})
+
+        applied = apply_content_renames(self.root)
+
+        assert applied == ["Language: Ari -> Sanguinen"]
+        assert Language.objects.filter(name="Sanguinen").exists()
+        assert not Language.objects.filter(name="Ari").exists()
+
+    def test_second_run_is_a_noop(self) -> None:
+        """Once applied, re-running the same directive finds no Old row left."""
+        LanguageFactory(name="Ari")
+        self._write_renames({"species.language": {"Ari": "Sanguinen"}})
+
+        first = apply_content_renames(self.root)
+        second = apply_content_renames(self.root)
+
+        assert first == ["Language: Ari -> Sanguinen"]
+        assert second == []
+
+    def test_noop_when_target_name_already_exists(self) -> None:
+        """A directive is never applied if the New name is already taken -
+        the operator may have already hand-renamed it."""
+        from world.species.models import Language
+
+        LanguageFactory(name="Ari")
+        LanguageFactory(name="Sanguinen")
+        self._write_renames({"species.language": {"Ari": "Sanguinen"}})
+
+        applied = apply_content_renames(self.root)
+
+        assert applied == []
+        assert Language.objects.filter(name="Ari").exists()
+        assert Language.objects.filter(name="Sanguinen").exists()
+
+    def test_raises_on_composite_natural_key_model(self) -> None:
+        """A model whose NaturalKeyConfig isn't a single 'name' field fails loud."""
+        area = StartingAreaFactory()
+        BeginningsFactory(starting_area=area, name="Old Beginning")
+        self._write_renames({"character_creation.beginnings": {"Old Beginning": "New Beginning"}})
+
+        with self.assertRaises(ContentError):
+            apply_content_renames(self.root)
+
+    def test_malformed_json_raises_content_error(self) -> None:
+        """A RENAMES.json that isn't valid JSON fails loud, not silently skipped."""
+        _write(self.root, "fixtures/RENAMES.json", "{not valid json")
+
+        with self.assertRaises(ContentError):
+            apply_content_renames(self.root)
+
+
+class BeginningsRawFixtureRoundTripTests(TestCase):
+    """character_creation.beginnings round-trips via raw fixture JSON (#3162).
+
+    ``starting_languages``/``grants_species_languages`` are "admin-owned"
+    columns MARKDOWN_EXPORT_DOMAINS deliberately drops from the ``content/
+    beginnings/*.md`` markdown export (see that dict's module comment) - a
+    hand-authored raw ``fixtures/character_creation/beginnings.json`` (any
+    file under ``<content_root>/fixtures/``, per ``build_fixture_json``) is
+    the actual round-trip path for those two fields, same as the lore repo's
+    #3162 ``character_creation/beginnings.json``.
+    """
+
+    def setUp(self) -> None:
+        self.tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(self.tmp.cleanup)
+        self.root = Path(self.tmp.name)
+        self.area = StartingAreaFactory(name="Round Trip Area")
+
+    def test_starting_languages_and_grants_flag_load_then_reload_as_noop(self) -> None:
+        """A full row with starting_languages + grants_species_languages loads,
+        then reloading the identical fixture is a pure update (no duplicate row)."""
+        LanguageFactory(name="Round Trip Tongue")
+        _write(
+            self.root,
+            "fixtures/character_creation/beginnings.json",
+            json.dumps(
+                [
+                    {
+                        "model": "character_creation.beginnings",
+                        "fields": {
+                            "starting_area": [self.area.name],
+                            "name": "Round Trip Beginning",
+                            "starting_languages": [["Round Trip Tongue"]],
+                            "grants_species_languages": False,
+                        },
+                    },
+                ]
+            ),
+        )
+
+        created, updated, _ = load_entries(build_all(self.root))
+        assert (created, updated) == (1, 0)
+
+        from world.character_creation.models import Beginnings
+
+        beginning = Beginnings.objects.get(starting_area=self.area, name="Round Trip Beginning")
+        assert beginning.grants_species_languages is False
+        assert [lang.name for lang in beginning.starting_languages.all()] == ["Round Trip Tongue"]
+
+        # Reload the identical fixture: no new row, existing row unchanged.
+        created, updated, _ = load_entries(build_all(self.root))
+        assert (created, updated) == (0, 1)
+        assert (
+            Beginnings.objects.filter(starting_area=self.area, name="Round Trip Beginning").count()
+            == 1
+        )
+
+    def test_partial_row_upserts_without_touching_other_fields(self) -> None:
+        """A partial fixture row (natural key + starting_languages only) must
+        not reset description/cg_point_cost/family_known on an existing row."""
+        existing = BeginningsFactory(
+            starting_area=self.area,
+            name="Partial Update Beginning",
+            description="Hand-authored description.",
+            cg_point_cost=7,
+            family_known=False,
+        )
+        LanguageFactory(name="Partial Update Tongue")
+        _write(
+            self.root,
+            "fixtures/character_creation/beginnings.json",
+            json.dumps(
+                [
+                    {
+                        "model": "character_creation.beginnings",
+                        "fields": {
+                            "starting_area": [self.area.name],
+                            "name": "Partial Update Beginning",
+                            "starting_languages": [["Partial Update Tongue"]],
+                        },
+                    },
+                ]
+            ),
+        )
+
+        created, updated, _ = load_entries(build_all(self.root))
+        assert (created, updated) == (0, 1)
+
+        existing.refresh_from_db()
+        assert existing.description == "Hand-authored description."
+        assert existing.cg_point_cost == 7
+        assert existing.family_known is False
+        assert [lang.name for lang in existing.starting_languages.all()] == [
+            "Partial Update Tongue"
+        ]

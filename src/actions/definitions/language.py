@@ -170,6 +170,18 @@ class TrainLanguageAction(Action):
             )
 
         teacher = _co_present_fluent_teacher(actor, language, teacher_id)
+
+        from world.species.language_services import fluency_value  # noqa: PLC0415
+
+        if language.restricted and fluency_value(sheet, language) < 1 and teacher is None:
+            return ActionResult(
+                success=False,
+                message=(
+                    f"No one can teach you {language.name}, and it is not a tongue "
+                    "you can puzzle out alone."
+                ),
+            )
+
         if teacher is not None:
             amount = TEACHER_DP_PER_SESSION
             source = DevelopmentSource.TRAINING

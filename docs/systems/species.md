@@ -101,8 +101,12 @@ instead of snapshotting per ADR-0170's pattern).
 - **CG provisioning** — `provision_starting_languages(sheet, *, beginnings)`
   (`world/species/services.py`, called from `character_creation.services.finalize_magic_data`)
   grants the union of every `is_universal` `Language` and `Beginnings.get_starting_languages(species)`
-  (which itself folds in the species' `starting_languages` M2M when
-  `Beginnings.grants_species_languages` is set) as `FLUENT_GRANT_VALUE` `CharacterTraitValue` rows,
+  (which itself folds in the species' own `starting_languages` M2M AND every ancestor
+  species' `starting_languages` when `Beginnings.grants_species_languages` is set — via
+  `Species.lineage` (species + ancestors, nearest first, cycle-safe), #3162 — e.g. a
+  Cani character inherits Khati's parent-tongue row as well as any Cani-specific one;
+  `grants_species_languages=False` skips ALL species-derived languages, inherited or not)
+  as `FLUENT_GRANT_VALUE` `CharacterTraitValue` rows,
   with `CharacterTraitChange` provenance. Idempotent — re-finalize and post-CG growth never clobber
   an existing fluency value.
 - **Actions & commands** (`actions/definitions/language.py`, `src/commands/language.py`) —
@@ -126,6 +130,41 @@ instead of snapshotting per ADR-0170's pattern).
   `world/species/views.py`) — the caller's active character's known languages (fluency + band),
   self-scoped only, no `character` query param. Frontend: the composer's `LanguageSelector` and the
   character sheet's `LanguagesSection`.
+
+### Starting-language authoring (#3162)
+
+Languages are content, authored in the private content repo's fixtures and loaded through the
+round-trip (`tools/build_content_fixtures.py --load` / the admin load button). The authored grant
+graph (Apostate's regional table, 2026-08-14):
+
+- **Universal** — Arvani Common (`is_universal=True`): every character, every beginning.
+- **Regional, via `Beginnings.starting_languages`** — Tenebrum/Umbros beginnings → Umbral;
+  Salvation/Luxen and Inferna beginnings → Luxeri; Ariwn beginnings → Sanguinen; Aythirmok
+  beginnings → Aythiren; City-of-Arx beginnings → nothing beyond the universal.
+- **Species, via `Species.starting_languages`** (ancestor-inherited through `Species.lineage`) —
+  Khati (parent row; all khati subspecies inherit) → Khati; Sireni → Sireni; Cinderi → Cinderi;
+  Nox'alfar → Nox'alfar.
+- **No starting grants** — Ancient Chimeran (the tongue Khati derives from) exists as a
+  language + trait only; reaching it is a future distinction gate.
+- **Restricted tongues** (`Language.restricted`, #3162) — a gameplay-gated flag for tongues
+  that must not be reachable by grinding alone. `TrainLanguageAction` blocks self-study from
+  zero fluency when `restricted=True` and no co-present FLUENT teacher is resolved (`"No one
+  can teach you {name}, and it is not a tongue you can puzzle out alone."`); a co-present
+  FLUENT teacher can still teach it from zero at the normal `TEACHER_DP_PER_SESSION` rate, and
+  once a character reaches fluency ≥ 1 by any path, ordinary self-study opens up for them.
+  Entry points are therefore: a GM grant, a `Distinction`, or a story hook that seeds the
+  first fluent speaker(s) — from there the tongue spreads person-to-person through the
+  teacher-training path. The flag never touches CG or content-attachment grants — species
+  `starting_languages`, `Beginnings.starting_languages`, and `is_universal` all bypass it
+  entirely, so e.g. Nox'alfar characters still start fluent in Nox'alfar even though it is
+  restricted for everyone who didn't get it at CG.
+
+Every `Language` row pairs with a same-named `LANGUAGE`-type `Trait` row (both in the fixture
+corpus); a `Language` without its trait grants nothing (CG provisioning skips it silently).
+Content renames go in the corpus root's `RENAMES.json`
+(`{"species.language": {"Old": "New"}}`), applied idempotently by the load before any upsert —
+never rename by hand in admin and never hand-edit a name in a fixture without a matching
+rename entry, or the name-keyed upsert creates a duplicate row.
 
 ## Sunlight Bane & Allergy (#2846, ADR-0179; extends ADR-0073)
 

@@ -26,7 +26,7 @@ from world.forms.factories import BuildFactory, HeightBandFactory
 from world.magic.factories import TraditionFactory
 from world.mechanics.factories import ModifierCategoryFactory, ModifierTargetFactory
 from world.realms.models import Realm
-from world.species.factories import SpeciesFactory
+from world.species.factories import LanguageFactory, SpeciesFactory, SubspeciesFactory
 from world.traits.models import Trait, TraitType
 
 
@@ -484,6 +484,52 @@ class BeginningsModelTests(TestCase):
             starting_area=self.area,
         )
         assert str(beginnings) == "Noble Birth (Test Area)"
+
+
+class BeginningsGetStartingLanguagesTests(TestCase):
+    """Beginnings.get_starting_languages ancestor walk (#3162).
+
+    A child species' starting languages must union with EVERY ancestor's
+    starting languages when grants_species_languages is set, via
+    Species.lineage - not just the immediately selected species' own M2M.
+    """
+
+    @classmethod
+    def setUpTestData(cls):
+        cls.area = StartingAreaFactory(name="Ancestor Walk Area")
+        cls.parent_species = SpeciesFactory(name="Khati")
+        cls.child_species = SubspeciesFactory(name="Cani", parent=cls.parent_species)
+        cls.parent_language = LanguageFactory(name="Khati Tongue")
+        cls.child_language = LanguageFactory(name="Cani Yips")
+        cls.parent_species.starting_languages.add(cls.parent_language)
+        cls.child_species.starting_languages.add(cls.child_language)
+
+    def test_child_species_inherits_parent_tongue_plus_own_rows(self):
+        """A child species gets its own languages AND its ancestor's."""
+        beginnings = BeginningsFactory(starting_area=self.area, grants_species_languages=True)
+        languages = set(beginnings.get_starting_languages(self.child_species))
+        assert languages == {self.parent_language, self.child_language}
+
+    def test_grants_species_languages_false_skips_all_including_inherited(self):
+        """grants_species_languages=False (Misbegotten) skips every species row,
+        inherited or not - not just the child's own."""
+        beginnings = BeginningsFactory(starting_area=self.area, grants_species_languages=False)
+        languages = set(beginnings.get_starting_languages(self.child_species))
+        assert languages == set()
+
+    def test_species_with_no_parent_unchanged(self):
+        """A parentless species' behavior is unchanged: just its own rows."""
+        beginnings = BeginningsFactory(starting_area=self.area, grants_species_languages=True)
+        languages = set(beginnings.get_starting_languages(self.parent_species))
+        assert languages == {self.parent_language}
+
+    def test_beginnings_own_starting_languages_always_included(self):
+        """Beginnings.starting_languages rides along regardless of the species flag."""
+        beginnings = BeginningsFactory(starting_area=self.area, grants_species_languages=False)
+        own_language = LanguageFactory(name="Universal Argot")
+        beginnings.starting_languages.add(own_language)
+        languages = set(beginnings.get_starting_languages(self.child_species))
+        assert languages == {own_language}
 
 
 class BeginningsPreludeMissionTests(TestCase):
