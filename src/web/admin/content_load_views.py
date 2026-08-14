@@ -6,9 +6,10 @@ environment variable, already loaded into the process env by the ``arx``
 CLI's dotenv handling — this module reads it via ``os.environ``, it does
 not re-parse ``.env``. Drives ``core_management.content_fixtures.
 load_world_content`` (#2448) the same way ``tools/build_content_fixtures.py
---load`` does — content fixtures, then grid bundles, then a retry of any
-fixture whose natural-key FK target (e.g. a ``StartingArea``'s
-``default_starting_room``) only existed once the grid loaded.
+--load`` does — RENAMES.json renames first (#3162), then content fixtures,
+then grid bundles, then a retry of any fixture whose natural-key FK target
+(e.g. a ``StartingArea``'s ``default_starting_room``) only existed once the
+grid loaded.
 """
 
 from __future__ import annotations
@@ -82,7 +83,8 @@ def content_load_run(request: HttpRequest) -> HttpResponse:
     purely to read ``placeholder_counts`` for the flash message — cheap,
     side-effect-free parsing (not a second load); ``load_world_content`` does
     the actual content-fixtures -> grid-bundles -> deferred-retry sequence
-    (#2448) and owns every create/update/skip/conflict/grid count reported
+    (#2448) — with the corpus's RENAMES.json applied first (#3162) — and owns
+    every create/update/skip/conflict/grid count reported
     below. A conflict (#3017) is a credited row a re-run's incoming values
     differ from - left untouched, not a skip, flashed as its own warning.
     """

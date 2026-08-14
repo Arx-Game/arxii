@@ -131,6 +131,29 @@ instead of snapshotting per ADR-0170's pattern).
   self-scoped only, no `character` query param. Frontend: the composer's `LanguageSelector` and the
   character sheet's `LanguagesSection`.
 
+### Starting-language authoring (#3162)
+
+Languages are content, authored in the private content repo's fixtures and loaded through the
+round-trip (`tools/build_content_fixtures.py --load` / the admin load button). The authored grant
+graph (Apostate's regional table, 2026-08-14):
+
+- **Universal** — Arvani Common (`is_universal=True`): every character, every beginning.
+- **Regional, via `Beginnings.starting_languages`** — Tenebrum/Umbros beginnings → Umbral;
+  Salvation/Luxen and Inferna beginnings → Luxeri; Ariwn beginnings → Sanguinen; Aythirmok
+  beginnings → Aythiren; City-of-Arx beginnings → nothing beyond the universal.
+- **Species, via `Species.starting_languages`** (ancestor-inherited through `Species.lineage`) —
+  Khati (parent row; all khati subspecies inherit) → Khati; Sireni → Sireni; Cinderi → Cinderi;
+  Nox'alfar → Nox'alfar.
+- **No starting grants** — Ancient Chimeran (the tongue Khati derives from) exists as a
+  language + trait only; reaching it is a future distinction gate.
+
+Every `Language` row pairs with a same-named `LANGUAGE`-type `Trait` row (both in the fixture
+corpus); a `Language` without its trait grants nothing (CG provisioning skips it silently).
+Content renames go in the corpus root's `RENAMES.json`
+(`{"species.language": {"Old": "New"}}`), applied idempotently by the load before any upsert —
+never rename by hand in admin and never hand-edit a name in a fixture without a matching
+rename entry, or the name-keyed upsert creates a duplicate row.
+
 ## Sunlight Bane & Allergy (#2846, ADR-0179; extends ADR-0073)
 
 Sun vulnerability is a graded continuum, not a boolean:
