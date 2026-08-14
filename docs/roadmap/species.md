@@ -60,8 +60,11 @@ Acquisition rides the XP-unlock contract (ADR-0053). See the gift/resonance econ
   `test_sunlight_exposure_e2e.py`). Pending: seed hazards beyond sunlight. **Cover against a hazard**
   (an ally sheltering a target, or a room granting shelter) is the companion mitigation layer →
   **#1744** (ADR-0069): Succor maneuver + the location `DAMAGE_TYPE` cascade axis.
-- **Racial languages** — `Language` model + a `grants_species_languages` flag exist, but nothing grants
-  or stores them (no `CharacterLanguage`). 🟡 SUBSTRATE.
+- **Racial languages** — [BUILT & WIRED] (#2993, ADR-0214): `Language.trait` links a
+  `TraitType.LANGUAGE` Trait, so fluency is an ordinary 1-100 `CharacterTraitValue`;
+  `provision_starting_languages` grants CG starting/universal languages at `finalize_magic_data`,
+  `TrainLanguageAction`/`speak`/`say (tongue)` cover post-CG training and speech, and comprehension
+  garbles live per viewer (telnet, WS, scene-log reads) rather than persisting a snapshot.
 
 ## Deeper detail
 

@@ -853,9 +853,12 @@ Persistent states that modify capabilities, checks, and resistances with stage p
 - **Source:** `src/world/conditions/`
 - **Details:** [conditions.md](conditions.md)
 ### Species
-Species/race definitions with stat bonuses, language assignments, and species-gift provisioning.
+Species/race definitions with stat bonuses, trait-backed language fluency/comprehension (#2993,
+ADR-0214), and species-gift provisioning.
 
-- **Models:** `Species`, `SpeciesStatBonus`, `Language`,
+- **Models:** `Species`, `SpeciesStatBonus`, `Language` (`trait` O2O to a `TraitType.LANGUAGE`
+  `Trait` — per-character fluency is the ordinary `CharacterTraitValue`; `is_universal` grants at CG
+  regardless of species/Beginnings), `CharacterSheet.current_language` / `Interaction.language` FKs,
   `SpeciesGiftGrant` (through-model: species → MINOR `Gift` + optional `drawback_condition`/
   `benefit_condition` FKs to `conditions.ConditionTemplate`, optional `drawback_distinction`
   FK to `distinctions.Distinction`, and `cg_point_cost` (PositiveInteger, default 0);
@@ -894,12 +897,23 @@ Species/race definitions with stat bonuses, language assignments, and species-gi
   removal effect in `world/conditions/berserk_content.py`; compulsion in
   `world/combat/berserk_compulsion.py` (auto-attack fallback, disengage refusal,
   out-of-combat rampage); PLACEHOLDER constants in `moon_constants.py`.
+  Language mechanics (#2993, ADR-0214): `language_constants.py` (`Fluency` bands
+  broken/conversational/fluent, `BAND_KEEP_RATIO`, `FLUENT_GRANT_VALUE=70`),
+  `language_services.py` (`garble_text`, `speech_seed`, `fluency_value`, `effective_band`,
+  `render_speech` — deterministic per-viewer comprehension, live-recomputed on every render, never
+  snapshotted), `provision_starting_languages(sheet, *, beginnings)` (universal + Beginnings/species
+  grant at CG, called from `finalize_magic_data`); actions `set_language`/`train_language`
+  (`actions/definitions/language.py`) + telnet `speak`/`train_language`
+  (`src/commands/language.py`); `say`/`whisper`/`mutter` resolve a per-utterance language
+  (`_resolve_spoken_language`, `actions/definitions/communication.py`); `GET
+  /api/species/my-languages/` (`MyLanguagesViewSet`). See species.md's Language Mechanics section.
 - **Key Methods:** `Species.get_stat_bonuses_dict()`, `Species.is_subspecies`
 - **Integrates with:** character_creation (Beginnings.allowed_species, CG points
-  breakdown), forms (physical traits — per-species palettes + `is_required`
-  identity markers on `SpeciesFormTrait`), roster heredity (Parent Dominance
+  breakdown, `provision_starting_languages` at CG finalize), forms (physical traits — per-species
+  palettes + `is_required` identity markers on `SpeciesFormTrait`), roster heredity (Parent Dominance
   species inheritance, #2815 / ADR-0173), magic (GIFT thread via
-  `provision_latent_gift_thread`), conditions (drawback/benefit condition application),
+  `provision_latent_gift_thread`), scenes (`Interaction.language` + per-viewer comprehension in
+  interaction serializers, #2993), conditions (drawback/benefit condition application),
   distinctions (forced drawback distinction grant)
 - **Source:** `src/world/species/`
 - **Details:** [species.md](species.md)

@@ -1,4 +1,7 @@
-"""Species-gift provisioning (#1580, ADR-0050). Called from CG finalize."""
+"""Species-gift + starting-language provisioning (#1580 ADR-0050; #2993 ADR-0214).
+
+Called from CG finalize (`character_creation.services.finalize_magic_data`).
+"""
 
 from __future__ import annotations
 

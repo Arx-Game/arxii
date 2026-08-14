@@ -25,6 +25,10 @@ _Avoid_: turn, tick, combat round (for the general case)
 A single IC contribution recorded within a scene — the atomic unit of RP (pose, say, whisper, emit), modelled by `Interaction`. It carries its own privacy tier and target personas for thread derivation.
 _Avoid_: message, post, line, Interaction (at player surfaces)
 
+**Spoken language** (#2993, ADR-0214):
+`Interaction.language` (nullable FK to `species.Language`) records which tongue a say/whisper/mutter pose was spoken in — null means untagged/universal (poses, emits, pre-#2993 rows). It never changes what got written; it changes how each reader sees it — read-time comprehension (garbled per the reader's fluency, `species.language_services.render_speech`) is recomputed live on every serializer read, not snapshotted, so learning the language later un-garbles old logs. `CharacterSheet.current_language` is the separate sticky default a bare `say` speaks in; a `(tongue) text` prefix on `say` overrides it for one line only. See `species` AGENT_GLOSSARY's Language/Fluency/Garble entries for the trait-backed mechanics.
+_Avoid_: persisting the garbled text on the Interaction (comprehension is always derived, never stored).
+
 **Perceived Only** (#2710, ADR-0170):
 An `InteractionVisibility` tier restricting an interaction to its writer and the personas recorded as `InteractionReceiver` rows — the characters who actually perceived the event — while still admitting staff and the scene's GM, so a scene stays runnable. The GM exception is a scene-log read guarantee only (`InteractionQuerySet.visible_to`'s `gm_visible` branch); a non-staff GM is denied on the REST object-access permission (`CanViewInteraction`) and the reaction-witness gate (`can_view_interaction`), both staff-only. Introduced for concealed casts (magic AGENT_GLOSSARY: "Cast Audience"), but the tier itself is a general scenes primitive, not magic-specific. Distinct from `VERY_PRIVATE`, which admits no exception, staff included — the two are not interchangeable.
 _Avoid_: private (ambiguous with `VERY_PRIVATE`), hidden pose.

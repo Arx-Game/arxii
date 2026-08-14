@@ -233,13 +233,23 @@ Designed as a connected set (ADRs 0050–0057); most of it has now landed. See
 
 - **Species/racial framework** — the substrate AND seeded ability content shipped (`SpeciesGiftGrant`
   + provisioning #1580, sun-sensitive species, moon content #2845, appetite/shade content;
-  environmental vulnerability via #1740). Content authoring continues on #2764. Still unbuilt, the
-  two *mechanics* halves — **#2993**:
-  - **Language mechanics** — `Language` + `grants_species_languages` exist and #2463 authored
-    content, but nothing grants languages to characters: no per-character storage, no CG/heredity
-    grant path, no speech integration.
-  - **Racial progression** — "growing stronger at racial abilities"; no species-scoped advancement
-    track exists in `world/progression`.
+  environmental vulnerability via #1740). Content authoring continues on #2764. Of #2993's two
+  *mechanics* halves:
+  - **Language mechanics** — [BUILT & WIRED] (#2993, ADR-0214): `Language.trait` links a
+    `TraitType.LANGUAGE` Trait so per-character fluency is an ordinary `CharacterTraitValue`;
+    `provision_starting_languages` grants CG starting + `is_universal` languages at
+    `finalize_magic_data`; `SetLanguageAction`/`TrainLanguageAction` (+ telnet `speak`/
+    `train_language`) cover sticky-default switching and weekly DP-gated training;
+    `say`/`whisper`/`mutter` resolve a per-utterance language and render it per-listener via
+    deterministic live comprehension (`garble_text`, never a persisted snapshot — see ADR-0214);
+    `GET /api/species/my-languages/` + the composer's `LanguageSelector` and sheet
+    `LanguagesSection` are the web face. See [species.md](../systems/species.md)'s Language
+    Mechanics section.
+  - **Racial progression** — "growing stronger at racial abilities" — still `intent`, no
+    species-scoped advancement track exists in `world/progression`. Deliberately left as a
+    needs-design open question rather than built alongside language mechanics: flagged in a
+    2026-08-14 comment on #2993 pending TehomCD's ruling on shape (a Minor-Gift-thread pattern per
+    ADR-0050/0051, a dedicated per-species track, or something else).
 
 ## GM tooling, missions, knowledge
 
