@@ -1,8 +1,9 @@
-"""Tests for Task 4 (#2993): Interaction.language + CharacterSheet.current_language
+"""Tests for #2993 language mechanics: model/service persistence (Task 4) and
 
-model/service persistence. Real per-recipient WS-render assertions live in Task 5's
-action tests, where rooms/audiences exist end-to-end — this module stays scoped to
-the model fields and the record/create plumbing.
+read-time comprehension in the scene-log serializers (Task 7). Real per-recipient
+WS-render assertions live in Task 5's action tests, where rooms/audiences exist
+end-to-end — this module covers the model fields, the record/create plumbing, and
+the list/detail API's per-viewer comprehension gating.
 """
 
 from unittest.mock import patch
@@ -13,11 +14,13 @@ from rest_framework import status
 from rest_framework.test import APITestCase
 
 from evennia_extensions.factories import AccountFactory, CharacterFactory, ObjectDBFactory
+from evennia_extensions.models import PlayerData
 from world.character_sheets.factories import CharacterSheetFactory
 from world.roster.factories import PlayerDataFactory, RosterEntryFactory, RosterTenureFactory
 from world.scenes.constants import InteractionMode
 from world.scenes.factories import InteractionFactory
 from world.scenes.interaction_services import create_interaction, record_interaction
+from world.scenes.mute_services import set_mute
 from world.species.factories import LanguageFactory
 from world.traits.factories import CharacterTraitValueFactory
 from world.traits.models import Trait, TraitCategory, TraitType
@@ -117,7 +120,9 @@ class TestInteractionListComprehensionAPI(APITestCase):
     """Task 7 (#2993): per-viewer read-time comprehension in the scene-log API.
 
     Bypass order under test: writer's own sheets full, staff full, fluent
-    listener full, zero-fluency listener garbled and deterministic.
+    listener full, zero-fluency listener garbled and deterministic (list
+    endpoint) and garbled-not-blank on a muted interaction (detail endpoint —
+    the mute reveal is not a comprehension bypass).
     """
 
     CONTENT = "the caravan leaves at dawn through the salt gate"
@@ -186,3 +191,23 @@ class TestInteractionListComprehensionAPI(APITestCase):
     def test_staff_sees_full_content(self) -> None:
         row = self._get_row(self.staff_account)
         self.assertEqual(row["content"], self.CONTENT)
+
+    def test_detail_endpoint_garbles_muted_language_interaction(self) -> None:
+        """Mute-reveal (detail endpoint, #2087) is NOT a comprehension bypass (#2993).
+
+        Mirrors ``test_mute_refinements.py::test_detail_endpoint_returns_full_content``'s
+        idiom, but the interaction is language-tagged AND the viewer has muted the
+        writer's persona. The detail endpoint must still un-blank the mute (so the
+        response is not ``""``) while continuing to garble for a zero-fluency listener
+        (so the response is not the raw ``CONTENT`` either) — proving the click-to-expand
+        reveal only bypasses the mute blank, never per-viewer language comprehension.
+        """
+        zero_pd, _ = PlayerData.objects.get_or_create(account=self.zero_account)
+        set_mute(owner=zero_pd, muted_persona=self.writer_persona, ic=True, ooc=False)
+
+        self.client.force_authenticate(user=self.zero_account)
+        url = reverse("interaction-detail", args=[self.interaction.pk])
+        response = self.client.get(url)
+        assert response.status_code == status.HTTP_200_OK
+        self.assertNotEqual(response.data["content"], "")
+        self.assertNotEqual(response.data["content"], self.CONTENT)
