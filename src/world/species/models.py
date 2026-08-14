@@ -305,6 +305,26 @@ class Language(NaturalKeyMixin, CreditedContent, SharedMemoryModel):
         blank=True,
         help_text="Description of this language",
     )
+    trait = models.OneToOneField(
+        "arxii.Trait",
+        on_delete=models.PROTECT,
+        null=True,
+        blank=True,
+        limit_choices_to={"trait_type": "language"},
+        related_name="language",
+        help_text=(
+            "The LANGUAGE-type trait whose CharacterTraitValue rows store per-character "
+            "fluency (1-100). Nullable only for pre-#2993 rows (ADR-0013: no backfill); "
+            "required for new rows via clean()."
+        ),
+    )
+    is_universal = models.BooleanField(
+        default=False,
+        help_text=(
+            "Granted to every character at CG finalize regardless of species/beginnings "
+            "(Arvani Common). Content flag - no hardcoded name lookups in code."
+        ),
+    )
 
     objects = NaturalKeyManager()
 
@@ -317,3 +337,8 @@ class Language(NaturalKeyMixin, CreditedContent, SharedMemoryModel):
 
     def __str__(self):
         return self.name
+
+    def clean(self) -> None:
+        super().clean()
+        if self.pk is None and self.trait_id is None:
+            raise ValidationError({"trait": "New languages must link a LANGUAGE-type trait."})
