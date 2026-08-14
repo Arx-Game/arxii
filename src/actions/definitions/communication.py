@@ -227,7 +227,7 @@ class SayAction(Action):
             speaker_band = fluency_band(fluency_value(actor.sheet_data, language))
             location = actor.location
             if location is not None:
-                # #2287 parity (C1 final-review fix): the per-recipient loop below
+                # #2287 parity (C2 final-review fix): the per-recipient loop below
                 # hand-rolls room delivery instead of going through
                 # message_location()/msg_contents, so it must apply the same
                 # dreamside-occupant exclusion by hand or a dreamside-perceiving
