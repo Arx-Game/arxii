@@ -891,8 +891,14 @@ def record_whisper_interaction(
     character: ObjectDB,
     target: ObjectDB,
     content: str,
+    language: Language | None = None,
 ) -> Interaction | None:
-    """Record a whisper interaction with only the target as receiver."""
+    """Record a whisper interaction with only the target as receiver.
+
+    ``language`` (#2993) stamps the spoken language on the persisted row; the
+    whisper text itself always stays full for its receiver-scoped audience
+    (never garbled -- the speaker chose this listener).
+    """
     try:
         persona = character.sheet_data.primary_persona
         target_persona = target.sheet_data.primary_persona
@@ -919,6 +925,7 @@ def record_whisper_interaction(
         receivers=[target_persona],
         scene=scene,
         target_personas=[target_persona],
+        language=language,
     )
     push_interaction(
         interaction,
@@ -945,6 +952,7 @@ def record_mutter_interaction(
     character: ObjectDB,
     receivers: list[ObjectDB],
     content: str,
+    language: Language | None = None,
 ) -> tuple[Interaction | None, Interaction | None]:
     """Record a mutter as TWO interactions (#905): full + fragment.
 
@@ -953,6 +961,10 @@ def record_mutter_interaction(
     heard, and the log never shows more than the room heard (#900/#903).
     Returns (full, fragment); ephemeral scenes push without persisting and
     return (None, None) exactly like the other recorders.
+
+    ``language`` (#2993) stamps only the full-text interaction -- the
+    fragment is already garbled by the mutter mechanic itself, so it stays
+    untagged.
     """
     receiver_personas: list[Persona] = []
     for receiver in receivers:
@@ -969,6 +981,7 @@ def record_mutter_interaction(
         mode=InteractionMode.MUTTER,
         receivers=receiver_personas,
         target_personas=receiver_personas or None,
+        language=language,
     )
     fragment = record_interaction(
         character=character,
