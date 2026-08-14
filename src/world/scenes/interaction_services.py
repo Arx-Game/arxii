@@ -3,7 +3,7 @@ from __future__ import annotations
 import contextlib
 from datetime import timedelta
 import itertools
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, cast
 
 from django.core.exceptions import ObjectDoesNotExist
 from django.utils import timezone
@@ -30,6 +30,7 @@ if TYPE_CHECKING:
 
     from world.magic.models import FuryTier
     from world.scenes.models import SceneRound
+    from world.species.models import Language
 
 DELETION_WINDOW_DAYS = 30
 _ephemeral_counter = itertools.count()
@@ -118,6 +119,7 @@ def create_interaction(  # noqa: PLR0913 - atomic creation requires all interact
     fury_committed: FuryTier | None = None,
     pose_kind: str = PoseKind.STANDARD,
     visibility: str = InteractionVisibility.DEFAULT,
+    language: Language | None = None,
 ) -> Interaction:
     """Create an atomic RP interaction with optional receiver records.
 
@@ -146,6 +148,8 @@ def create_interaction(  # noqa: PLR0913 - atomic creation requires all interact
             (#2710) restricts the interaction to its explicit ``receivers`` plus staff
             and the scene GM. Escalate only — never pass a weaker tier than the scene
             or mode already implies.
+        language: Spoken language (#2993); null = universal/untagged (poses, emits,
+            pre-#2993 rows). Drives per-recipient comprehension rendering at push time.
 
     Returns:
         The created Interaction.
@@ -163,6 +167,7 @@ def create_interaction(  # noqa: PLR0913 - atomic creation requires all interact
         fury_committed=fury_committed,
         pose_kind=pose_kind,
         visibility=visibility,
+        language=language,
     )
     # #1826 — posing in a scene is IC action in its area: lie-low breaks.
     _break_lie_low_for_interaction(persona, scene)
@@ -233,11 +238,22 @@ def create_action_interaction_core(
 def _send_to_objects(
     objects: Iterable[ObjectDB],
     payload: InteractionPayload,
+    *,
+    render_for: Callable[[ObjectDB], str] | None = None,
 ) -> None:
-    """Send an interaction payload to specific objects via WebSocket."""
+    """Send an interaction payload to specific objects via WebSocket.
+
+    When ``render_for`` is given (#2993 per-recipient language comprehension),
+    each object gets its own copy of the payload with ``content`` rebuilt via
+    ``render_for(obj)``. ``InteractionPayload`` is a TypedDict, so the per-object
+    payload is rebuilt via dict-spread rather than ``dataclasses.replace``.
+    """
     for obj in objects:
         try:
-            obj.msg(interaction=((), payload))
+            obj_payload = payload
+            if render_for is not None:
+                obj_payload = cast(InteractionPayload, {**payload, "content": render_for(obj)})
+            obj.msg(interaction=((), obj_payload))
         except AttributeError:
             continue
 
@@ -245,9 +261,11 @@ def _send_to_objects(
 def _broadcast_to_location(
     location: ObjectDB,
     payload: InteractionPayload,
+    *,
+    render_for: Callable[[ObjectDB], str] | None = None,
 ) -> None:
     """Send an interaction payload to all objects in a location via WebSocket."""
-    _send_to_objects(location.contents, payload)
+    _send_to_objects(location.contents, payload, render_for=render_for)
 
 
 def _build_interaction_payload(  # noqa: PLR0913 - payload needs all interaction fields
@@ -262,6 +280,8 @@ def _build_interaction_payload(  # noqa: PLR0913 - payload needs all interaction
     place_name: str | None = None,
     receiver_persona_ids: list[int] | None = None,
     target_persona_ids: list[int] | None = None,
+    language_id: int | None = None,
+    language_name: str | None = None,
 ) -> InteractionPayload:
     """Build a structured interaction payload for WebSocket delivery."""
     return InteractionPayload(
@@ -279,7 +299,58 @@ def _build_interaction_payload(  # noqa: PLR0913 - payload needs all interaction
         place_name=place_name,
         receiver_persona_ids=receiver_persona_ids or [],
         target_persona_ids=target_persona_ids or [],
+        language_id=language_id,
+        language_name=language_name,
     )
+
+
+def _language_render_for(
+    interaction: Interaction,
+    persona: Persona,
+) -> Callable[[ObjectDB], str] | None:
+    """Per-recipient language-comprehension renderer for the broadcast branch (#2993).
+
+    None when the interaction carries no language or a universal one — the caller
+    then skips the per-object payload rebuild and broadcasts identical content,
+    exactly as before #2993. The writer and staff always get ground truth; any
+    object without a resolvable sheet (no CharacterSheet — e.g. an NPC prop or
+    other non-player object) also gets ground truth rather than a garbled read.
+    """
+    language = interaction.language if interaction.language_id else None
+    if language is None or language.is_universal:
+        return None
+
+    from world.species.language_constants import fluency_band  # noqa: PLC0415
+    from world.species.language_services import fluency_value, render_speech  # noqa: PLC0415
+
+    speaker_sheet = persona.character_sheet
+    speaker_band = fluency_band(fluency_value(speaker_sheet, language))
+    writer_char = speaker_sheet.character
+
+    def _render_for(obj: ObjectDB) -> str:
+        if obj.pk == writer_char.pk:
+            return interaction.content
+        # obj.account is a plain nullable attribute on every ObjectDB (never
+        # raises); obj.sheet_data is the reverse OneToOne from
+        # CharacterSheet.character and raises ObjectDoesNotExist — not
+        # AttributeError — for a non-player object with no linked sheet
+        # (matches the existing sheet_data-access pattern in this file, e.g.
+        # personas_for_characters).
+        account = obj.account
+        if account is not None and account.is_staff:
+            return interaction.content
+        try:
+            sheet = obj.sheet_data
+        except ObjectDoesNotExist:
+            return interaction.content
+        return render_speech(
+            interaction.content,
+            language=language,
+            speaker_band=speaker_band,
+            listener_value=fluency_value(sheet, language),
+        )
+
+    return _render_for
 
 
 def push_interaction(
@@ -343,6 +414,8 @@ def push_interaction(
         place_name=interaction.place.name if interaction.place_id else None,
         receiver_persona_ids=r_ids,
         target_persona_ids=t_ids,
+        language_id=interaction.language_id,
+        language_name=interaction.language.name if interaction.language_id else None,
     )
 
     # Any escalated visibility is receiver-scoped, not room-heard. Before #2710 this
@@ -355,10 +428,15 @@ def push_interaction(
         or interaction.visibility != InteractionVisibility.DEFAULT
     )
     if receiver_scoped:
+        # Receiver-scoped modes (whisper, place-scoped, escalated visibility) keep
+        # full text to their explicit receivers — the speaker chose this audience,
+        # so it never gets the language garble (#2993).
         writer_char = persona.character_sheet.character
         _send_to_objects([writer_char, *r_chars], payload)
     else:
-        _broadcast_to_location(location, payload)
+        _broadcast_to_location(
+            location, payload, render_for=_language_render_for(interaction, persona)
+        )
 
 
 def push_ephemeral_interaction(  # noqa: PLR0913 - ephemeral payload mirrors persisted payload
@@ -713,6 +791,7 @@ def record_interaction(  # noqa: PLR0913 - all fields needed for interaction cre
     target_personas: list[Persona] | None = None,
     persona: Persona | None = None,
     pose_kind: str = PoseKind.STANDARD,
+    language: Language | None = None,
     on_created: Callable[[Interaction], None] | None = None,
 ) -> Interaction | None:
     """Record an IC interaction to the database.
@@ -730,6 +809,9 @@ def record_interaction(  # noqa: PLR0913 - all fields needed for interaction cre
     receiver rows are created from the place presences or explicit list.
 
     ``pose_kind`` classifies the interaction (Spec C; only meaningful for POSE mode).
+    ``language`` (#2993) stamps the spoken language; null = universal/untagged.
+    When set and not universal, ``push_interaction`` renders a per-recipient
+    comprehension view for the broadcast branch (writer + staff get ground truth).
     ``on_created``, if given, runs after the row is created and scene participation is
     recorded, but *before* the real-time push — the seam callers use to attach
     side effects that must exist before clients can react to the pushed payload
@@ -770,6 +852,7 @@ def record_interaction(  # noqa: PLR0913 - all fields needed for interaction cre
         receivers=receivers,
         target_personas=target_personas,
         pose_kind=pose_kind,
+        language=language,
     )
 
     if scene is not None:
@@ -808,8 +891,14 @@ def record_whisper_interaction(
     character: ObjectDB,
     target: ObjectDB,
     content: str,
+    language: Language | None = None,
 ) -> Interaction | None:
-    """Record a whisper interaction with only the target as receiver."""
+    """Record a whisper interaction with only the target as receiver.
+
+    ``language`` (#2993) stamps the spoken language on the persisted row; the
+    whisper text itself always stays full for its receiver-scoped audience
+    (never garbled -- the speaker chose this listener).
+    """
     try:
         persona = character.sheet_data.primary_persona
         target_persona = target.sheet_data.primary_persona
@@ -836,6 +925,7 @@ def record_whisper_interaction(
         receivers=[target_persona],
         scene=scene,
         target_personas=[target_persona],
+        language=language,
     )
     push_interaction(
         interaction,
@@ -849,26 +939,12 @@ def record_whisper_interaction(
 def mutter_fragment(text: str) -> str:
     """The room-audible fragment of a mutter (#905): random word leak.
 
-    Classic MUSH mutter, per Apostate's ruling: roughly one word in three
-    survives; elided runs collapse to a single "...". At least one word
-    always leaks (a mutter is audible, that's the point — and the risk).
+    Delegates to the shared garbler (#2993) at the classic one-word-in-three
+    ratio, nondeterministic (SystemRandom) - a fresh leak every mutter.
     """
-    import random  # noqa: PLC0415
+    from world.species.language_services import garble_text  # noqa: PLC0415
 
-    rng = random.SystemRandom()
-    words = text.split()
-    if not words:
-        return "..."
-    kept_flags = [rng.random() < 1 / 3 for _ in words]
-    if not any(kept_flags):
-        kept_flags[rng.randrange(len(words))] = True
-    parts: list[str] = []
-    for word, kept in zip(words, kept_flags, strict=True):
-        if kept:
-            parts.append(word)
-        elif not parts or parts[-1] != "...":
-            parts.append("...")
-    return " ".join(parts)
+    return garble_text(text, 1 / 3)
 
 
 def record_mutter_interaction(
@@ -876,6 +952,7 @@ def record_mutter_interaction(
     character: ObjectDB,
     receivers: list[ObjectDB],
     content: str,
+    language: Language | None = None,
 ) -> tuple[Interaction | None, Interaction | None]:
     """Record a mutter as TWO interactions (#905): full + fragment.
 
@@ -884,6 +961,10 @@ def record_mutter_interaction(
     heard, and the log never shows more than the room heard (#900/#903).
     Returns (full, fragment); ephemeral scenes push without persisting and
     return (None, None) exactly like the other recorders.
+
+    ``language`` (#2993) stamps only the full-text interaction -- the
+    fragment is already garbled by the mutter mechanic itself, so it stays
+    untagged.
     """
     receiver_personas: list[Persona] = []
     for receiver in receivers:
@@ -900,6 +981,7 @@ def record_mutter_interaction(
         mode=InteractionMode.MUTTER,
         receivers=receiver_personas,
         target_personas=receiver_personas or None,
+        language=language,
     )
     fragment = record_interaction(
         character=character,

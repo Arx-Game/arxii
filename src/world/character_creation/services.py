@@ -1707,6 +1707,13 @@ def finalize_magic_data(draft: CharacterDraft, sheet: CharacterSheet) -> None:
         _cg_resonance = Resonance.objects.filter(pk=_cg_resonance_id).first()
     provision_species_gifts(sheet, resonance=_cg_resonance)
 
+    # 1c. Grant CG starting languages (union of Beginnings' computed set - which
+    #     already folds in species racial languages - and every universal
+    #     language, e.g. Arvani Common) as fluent CharacterTraitValue rows (#2993).
+    from world.species.services import provision_starting_languages  # noqa: PLC0415
+
+    provision_starting_languages(sheet, beginnings=draft.selected_beginnings)
+
     # 2. Create CharacterTradition — unconditional: compute_magic_errors requires
     #    selected_tradition on any draft that reaches submission (#2426).
     CharacterTradition.objects.create(

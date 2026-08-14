@@ -50,6 +50,7 @@ class TraitType(models.TextChoices):
     STAT = "stat", "Stat"
     SKILL = "skill", "Skill"
     MODIFIER = "modifier", "Modifier"
+    LANGUAGE = "language", "Language"
     OTHER = "other", "Other"
 
 

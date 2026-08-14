@@ -25,6 +25,7 @@ import { TitlesPanel } from '@/achievements/components/TitlesPanel';
 import { MaturationPanel } from '@/character_sheets/components/MaturationPanel';
 import { StatPointPanel } from '@/character_sheets/components/StatPointPanel';
 import { MechanicsSection } from '@/character_sheets/components/MechanicsSection';
+import { LanguagesSection } from '@/character_sheets/components/LanguagesSection';
 import { OriginStoryEditorDialog } from '@/character_sheets/components/OriginStoryEditorDialog';
 import { useCharacterSheetQuery } from '@/character_sheets/queries';
 import { DistinctionsTab } from '@/distinctions/components/DistinctionsTab';
@@ -171,6 +172,7 @@ export function CharacterSheetPage() {
           {sheetPayload && (
             <MechanicsSection stats={sheetPayload.stats} skills={sheetPayload.skills} />
           )}
+          {isMyCharacter && <LanguagesSection />}
           <GalleriesSection galleries={entry.character.galleries} />
           <ApplicationSlot entry={entry} account={account} />
           {isMyCharacter && (

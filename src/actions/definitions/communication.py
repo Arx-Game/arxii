@@ -25,6 +25,8 @@ if TYPE_CHECKING:
     from evennia.objects.models import ObjectDB
 
     from world.scenes.models import Persona, Scene
+    from world.species.language_constants import Fluency
+    from world.species.models import Language
 
 
 # Module-level filter constants used as dataclass defaults (RUF009: no calls in defaults).
@@ -87,6 +89,91 @@ def _active_scene_for(actor: ObjectDB) -> Scene | None:
     return get_active_scene(actor.location)
 
 
+def _resolve_spoken_language(
+    actor: ObjectDB, kwargs: dict[str, Any]
+) -> tuple[Language | None, ActionResult | None]:
+    """The language this utterance is in (#2993).
+
+    Explicit ``language_id`` kwarg wins; otherwise falls back to the sheet's
+    sticky ``current_language``. ``(None, None)`` means the universal default
+    (no language tag) -- the legacy byte-identical broadcast path. Returns an
+    error result when the speaker names (or is stuck with) a language they
+    don't actually know (no linked trait row, or fluency below 1).
+    """
+    from world.species.language_services import fluency_value  # noqa: PLC0415
+    from world.species.models import Language  # noqa: PLC0415
+
+    unknown_tongue = ActionResult(success=False, message="You don't know that tongue.")
+
+    language_id = kwargs.get("language_id")
+    if language_id is not None:
+        language = Language.objects.filter(pk=language_id).first()
+        if language is None:
+            return None, unknown_tongue
+    else:
+        try:
+            language = actor.sheet_data.current_language
+        except ObjectDoesNotExist:
+            language = None
+        if language is None:
+            return None, None
+
+    if language.is_universal:
+        # Explicitly picking a universal language (via language_id or a sticky
+        # current_language) is the same in-fiction outcome as the untagged
+        # default -- normalize to None so Interaction.language stays null (the
+        # "null = universal/untagged" contract) and skip the fluency gate
+        # entirely: a universal tongue needs no fluency to speak, so a
+        # zero-fluency speaker can still explicitly select it (#2993
+        # final-review M3).
+        return None, None
+
+    try:
+        sheet = actor.sheet_data
+    except ObjectDoesNotExist:
+        return None, unknown_tongue
+
+    if fluency_value(sheet, language) < 1:
+        return None, unknown_tongue
+
+    return language, None
+
+
+def _render_speech_for_listener(
+    actor: ObjectDB,
+    obj: ObjectDB,
+    text: str,
+    *,
+    language: Language,
+    speaker_band: Fluency,
+) -> str:
+    """Per-listener comprehension render for live telnet delivery (#2993).
+
+    Mirrors ``world.scenes.interaction_services._language_render_for``'s
+    ordering: the writer and staff always get ground truth; an object with no
+    resolvable CharacterSheet (a prop, an NPC) also gets ground truth rather
+    than a garbled read.
+    """
+    if obj.pk == actor.pk:
+        return text
+    account = obj.account
+    if account is not None and account.is_staff:
+        return text
+    try:
+        sheet = obj.sheet_data
+    except ObjectDoesNotExist:
+        return text
+
+    from world.species.language_services import fluency_value, render_speech  # noqa: PLC0415
+
+    return render_speech(
+        text,
+        language=language,
+        speaker_band=speaker_band,
+        listener_value=fluency_value(sheet, language),
+    )
+
+
 @dataclass
 class SayAction(Action):
     """Say something to the room."""
@@ -112,18 +199,62 @@ class SayAction(Action):
         if not text:
             return ActionResult(success=False, message="Say what?")
 
+        language, error = _resolve_spoken_language(actor, kwargs)
+        if error is not None:
+            return error
+
         sdm = context.scene_data if context else SceneDataManager()
         caller_state = sdm.initialize_state_for_object(actor)
 
         target_personas = _characters_to_active_personas(targets) if targets else None
 
-        # Broadcast: raw text via Evennia msg_contents for telnet clients and
-        # non-character objects. Web clients receive this as a TEXT message
-        # but should prefer the structured INTERACTION payload from push_interaction.
-        message_location(
-            caller_state,
-            f'$You() $conj(say) "{text}"',
-        )
+        if language is None or language.is_universal:
+            # Broadcast: raw text via Evennia msg_contents for telnet clients and
+            # non-character objects. Web clients receive this as a TEXT message
+            # but should prefer the structured INTERACTION payload from push_interaction.
+            message_location(
+                caller_state,
+                f'$You() $conj(say) "{text}"',
+            )
+        else:
+            # Per-recipient telnet delivery (#2993): the writer and every other
+            # character-with-sheet listener gets a comprehension-graded read of
+            # the same tagged line -- the language name is always visible
+            # (ratified default #3), only the spoken content garbles.
+            from world.species.language_constants import fluency_band  # noqa: PLC0415
+            from world.species.language_services import fluency_value  # noqa: PLC0415
+
+            speaker_band = fluency_band(fluency_value(actor.sheet_data, language))
+            location = actor.location
+            if location is not None:
+                # #2287 parity (C2 final-review fix): the per-recipient loop below
+                # hand-rolls room delivery instead of going through
+                # message_location()/msg_contents, so it must apply the same
+                # dreamside-occupant exclusion by hand or a dreamside-perceiving
+                # character illegitimately hears waking-room language-tagged says.
+                from flows.service_functions.communication import (  # noqa: PLC0415
+                    _dreamside_occupants,
+                )
+
+                excluded_ids = {obj.pk for obj in _dreamside_occupants(location)}
+                for obj in location.contents:
+                    if not hasattr(obj, "msg"):
+                        continue
+                    if obj.pk in excluded_ids:
+                        continue
+                    rendered = _render_speech_for_listener(
+                        actor, obj, text, language=language, speaker_band=speaker_band
+                    )
+                    obj_state = sdm.initialize_state_for_object(obj)
+                    if obj.pk == actor.pk:
+                        # Speaker's own echo stays second-person, matching the
+                        # $You() $conj(say) voice of the universal-language branch
+                        # above (#2993 final-review M2).
+                        send_message(obj_state, f'You say in {language.name}, "{rendered}"')
+                    else:
+                        send_message(
+                            obj_state, f'{actor.key} says in {language.name}, "{rendered}"'
+                        )
         # Record + push: creates DB record and sends structured WebSocket payload.
         # Web clients use this for the scene feed display.
         record_interaction(
@@ -131,6 +262,7 @@ class SayAction(Action):
             content=text,
             mode=InteractionMode.SAY,
             target_personas=target_personas,
+            language=language,
         )
 
         # #1278/#2088 — flag circumvention: a blocked player directing a say at the
@@ -292,6 +424,10 @@ class MutterAction(Action):
         if not receivers:
             return ActionResult(success=False, message="Mutter to whom?")
 
+        language, error = _resolve_spoken_language(actor, kwargs)
+        if error is not None:
+            return error
+
         sdm = context.scene_data if context else SceneDataManager()
 
         fragment = mutter_fragment(text)
@@ -310,7 +446,9 @@ class MutterAction(Action):
                 bystander_state = sdm.initialize_state_for_object(obj)
                 send_message(bystander_state, f'{actor.key} mutters, "{fragment}"')
 
-        record_mutter_interaction(character=actor, receivers=receivers, content=text)
+        record_mutter_interaction(
+            character=actor, receivers=receivers, content=text, language=language
+        )
 
         return ActionResult(success=True)
 
@@ -407,20 +545,25 @@ class WhisperAction(Action):
         if target is None or not text:
             return ActionResult(success=False, message="Whisper what to whom?")
 
+        language, error = _resolve_spoken_language(actor, kwargs)
+        if error is not None:
+            return error
+
         sdm = context.scene_data if context else SceneDataManager()
         caller_state = sdm.initialize_state_for_object(actor)
         target_state = sdm.initialize_state_for_object(target)
 
         # Direct message: Evennia msg() to the target only, for telnet clients.
         # Web clients receive this as a TEXT message but should prefer the
-        # structured INTERACTION payload from push_interaction.
+        # structured INTERACTION payload from push_interaction. Receiver-scoped
+        # trust (#2993): the chosen audience always gets the full text, never garbled.
         send_message(
             target_state,
             f'{caller_state.get_display_name(looker=target_state)} whispers "{text}"',
         )
         # Record + push: creates DB record and sends structured WebSocket payload.
         # Web clients use this for the scene feed display.
-        record_whisper_interaction(character=actor, target=target, content=text)
+        record_whisper_interaction(character=actor, target=target, content=text, language=language)
 
         # #1278/#2088 — flag circumvention attempts: a blocked player whispering the
         # blocker via another identity. No-op when no active block exists.

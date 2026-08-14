@@ -614,6 +614,8 @@ class TestPushInteraction(TestCase):
             "place_name": None,
             "receiver_persona_ids": [],
             "target_persona_ids": [],
+            "language_id": None,
+            "language_name": None,
         }
         mock_a.assert_called_once_with(interaction=((), expected_payload))
         mock_b.assert_called_once_with(interaction=((), expected_payload))

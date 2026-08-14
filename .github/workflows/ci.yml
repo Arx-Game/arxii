@@ -482,6 +482,20 @@ jobs:
         with:
           python-version: '3.13'
       - run: uv sync
+      # build_schema.py creates the ENTIRE collapsed-app schema (every table,
+      # index, and FK) with migrations disabled, so the DDL locks land in one
+      # transaction. The schema outgrew PG's default lock table
+      # (max_locks_per_transaction=64) at #2993's two FK fields — raise the
+      # postmaster-level setting and restart the service before building.
+      - name: Raise PG lock capacity for one-transaction schema build
+        run: |
+          docker exec ${{ job.services.postgres.id }} psql -U postgres -c \
+            "ALTER SYSTEM SET max_locks_per_transaction = 512;"
+          docker restart ${{ job.services.postgres.id }}
+          for _ in $(seq 1 30); do
+            docker exec ${{ job.services.postgres.id }} pg_isready -U postgres && break
+            sleep 2
+          done
       # Build the default DB's schema straight from model state — no migration
       # replay (12.5-14 min of Python-side state rendering; see ADR
       # ci-schema-from-models). Migration-chain validity is gated by the

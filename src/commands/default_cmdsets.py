@@ -111,6 +111,7 @@ from commands.identification import CmdIdentify  # #1107
 from commands.imbue import CmdImbue
 from commands.investigation import CmdSearch  # #1866
 from commands.journals import CmdJournal
+from commands.language import CmdSpeak, CmdTrainLanguage  # #2993
 from commands.locations import CmdRoom
 from commands.market import CmdMarket
 from commands.missions import CmdMission
@@ -263,6 +264,9 @@ class CharacterCmdSet(default_cmds.CharacterCmdSet):
             CmdMotif,
             # #2739 — technique training sessions (bare = list meters).
             CmdTrain,
+            # #2993 — sticky spoken-language switch + weekly language training.
+            CmdSpeak,
+            CmdTrainLanguage,
             # #2183 — dramatic-moment suggestion inbox (suggestions/confirm/dismiss).
             CmdMoment,
             CmdWeaveThread,

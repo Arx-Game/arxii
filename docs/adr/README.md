@@ -221,6 +221,7 @@ treat those names as hints to confirm, not gospel.
 - [0211 — Predators are a thin dedicated model on a slow menace ladder](0211-predators-are-a-thin-dedicated-model-on-a-slow-ladder.md) (#3093; related ADR-0177, ADR-0209)
 - [0212 — OrgPact is a sibling of MarriagePact, not a generalization](0212-orgpact-is-a-sibling-of-marriagepact-not-a-generalization.md) (#2999; related ADR-0178, ADR-0209)
 - [0213 — Minor covenant membership rides the secondary-vow lane](0213-minor-covenant-membership-rides-secondary-vow-lane.md) (#2992; related ADR-0159, ADR-0042)
+- [0214 — Languages ride the Trait/DevelopmentPoints substrate; comprehension recomputes live per viewer](0214-languages-are-traits-comprehension-recomputed-live.md) (#2993; related ADR-0170)
 
 ### Gift & resonance economy
 - [0050 — Gifts are Major or Minor; species abilities are a species-granted Minor Gift](0050-gifts-are-major-or-minor-species-abilities-are-minor-gifts.md)

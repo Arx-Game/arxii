@@ -364,6 +364,8 @@ class ActionRegistryTests(TestCase):
             "file_writeup_complaint",
             "author_technique",
             "train_technique",
+            "set_language",
+            "train_language",
             "engage_covenant_membership",
             "disengage_covenant_membership",
             "leave_covenant",

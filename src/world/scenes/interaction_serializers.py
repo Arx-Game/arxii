@@ -20,6 +20,7 @@ from world.scenes.types import PersonaPayload, ReactionAggregation
 
 if TYPE_CHECKING:
     from evennia_extensions.models import PlayerData
+    from world.species.models import Language
 
 _MAX_POSE_LENGTH = 10_000
 
@@ -112,6 +113,8 @@ class InteractionListSerializer(serializers.ModelSerializer):
     entry_endorsed_by_me = serializers.SerializerMethodField()
     content = serializers.SerializerMethodField()
     is_muted = serializers.SerializerMethodField()
+    language_id = serializers.IntegerField(read_only=True, allow_null=True)
+    language_name = serializers.SerializerMethodField()
 
     class Meta:
         model = Interaction
@@ -126,6 +129,8 @@ class InteractionListSerializer(serializers.ModelSerializer):
             "timestamp",
             "pose_kind",
             "is_muted",
+            "language_id",
+            "language_name",
             "endorsee_sheet_id",
             "is_favorited",
             "reactions",
@@ -219,7 +224,143 @@ class InteractionListSerializer(serializers.ModelSerializer):
         """
         if obj.persona_id in self._muted_persona_ids():
             return ""
-        return obj.content
+        return self._comprehended_content(obj)
+
+    def _comprehended_content(self, obj: Interaction) -> str:
+        """Per-viewer language comprehension (#2993). Ground truth for the
+        writer's own sheets, staff, and a viewer who was a direct receiver of
+        this interaction (whisper target / mutter receiver / escalated
+        visibility) -- the speaker chose that audience, so it never garbles on
+        reread, mirroring ``push_interaction``'s ``receiver_scoped`` live rule
+        (#2993 I1). Everyone else reads through their best fluency across ONLY
+        the sheets that actually participated in this interaction's SCENE
+        (#2993 C1) -- ``SceneParticipation`` (world/scenes/models.py) is
+        account-scoped, not persona-scoped, so it can't discriminate between
+        two concurrently-active characters on the same account (the exact
+        cross-character leak C1 flags); presence is instead derived from
+        writer/receiver authorship within the scene itself, via
+        ``_scene_participant_sheet_id_map``. An interaction with no scene
+        (ephemeral broadcast, pre-#2993 row) has no participant evidence to
+        check, so a non-writer/non-receiver always garbles. Deterministic
+        seed - matches what the room heard live.
+        """
+        if obj.language_id is None:
+            return obj.content
+        if bool(self.context.get("is_staff", False)):
+            return obj.content
+        viewer_sheet_ids: set[int] = set(self.context.get("viewer_sheet_ids", set()))
+        if obj.persona.character_sheet_id in viewer_sheet_ids:
+            return obj.content
+        viewer_persona_ids: set[int] = set(self.context.get("persona_ids", set()))
+        receiver_persona_ids = {r.persona_id for r in obj.cached_receivers}
+        if viewer_persona_ids & receiver_persona_ids:
+            return obj.content
+        language = obj.language
+        if language.is_universal:
+            return obj.content
+        from world.species.language_constants import fluency_band  # noqa: PLC0415
+        from world.species.language_services import render_speech  # noqa: PLC0415
+
+        speaker_band = fluency_band(
+            self._fluency_for_sheet(obj.persona.character_sheet_id, language)
+        )
+        if obj.scene_id is None:
+            participant_sheet_ids: set[int] = set()
+        else:
+            participant_sheet_ids = self._scene_participant_sheet_id_map().get(obj.scene_id, set())
+        listener_value = max(
+            (self._fluency_for_sheet(sid, language) for sid in participant_sheet_ids),
+            default=0,
+        )
+        return render_speech(
+            obj.content,
+            language=language,
+            speaker_band=speaker_band,
+            listener_value=listener_value,
+        )
+
+    def _scene_participant_sheet_id_map(self) -> dict[int, set[int]]:
+        """Context-cached scene_id -> set of viewer sheet_ids that PARTICIPATED
+        in that scene (#2993 C1), for the language-comprehension gate.
+
+        "Participated" means the sheet's Persona wrote or received at least one
+        Interaction within that scene -- the precise per-character signal
+        ``SceneParticipation`` can't provide (it's account-scoped). Batched
+        page-wide in two queries total (writer authorship + receiver rows across
+        every scene on the page), never one query per row.
+        """
+        cache_key = "_scene_participant_sheet_ids_cache"
+        if cache_key in self.context:
+            return self.context[cache_key]
+
+        if self.parent is not None:
+            rows = list(self.parent.instance or [])
+        elif self.instance is not None:
+            rows = [self.instance]
+        else:
+            rows = []
+        scene_ids = {row.scene_id for row in rows if row.scene_id is not None}
+        viewer_sheet_ids: set[int] = set(self.context.get("viewer_sheet_ids", set()))
+
+        result: dict[int, set[int]] = {}
+        if scene_ids and viewer_sheet_ids:
+            writer_rows = Interaction.objects.filter(
+                scene_id__in=scene_ids,
+                persona__character_sheet_id__in=viewer_sheet_ids,
+            ).values_list("scene_id", "persona__character_sheet_id")
+            for scene_id, sheet_id in writer_rows:
+                result.setdefault(scene_id, set()).add(sheet_id)
+
+            receiver_rows = InteractionReceiver.objects.filter(
+                interaction__scene_id__in=scene_ids,
+                persona__character_sheet_id__in=viewer_sheet_ids,
+            ).values_list("interaction__scene_id", "persona__character_sheet_id")
+            for scene_id, sheet_id in receiver_rows:
+                result.setdefault(scene_id, set()).add(sheet_id)
+
+        self.context[cache_key] = result
+        return result
+
+    def _fluency_map(self, language: "Language") -> dict[int, int]:
+        """Context-cached sheet_id -> fluency value for one language (#2993).
+
+        One query per (page, language): covers every writer sheet on the page
+        plus the viewer's own sheets, so ``_fluency_for_sheet`` never queries
+        per-row. Cached on the shared context, mirroring ``_muted_persona_ids``.
+        """
+        cache: dict[int, dict[int, int]] = self.context.setdefault("_fluency_map_cache", {})
+        if language.pk in cache:
+            return cache[language.pk]
+        if language.trait_id is None:
+            cache[language.pk] = {}
+            return cache[language.pk]
+
+        from world.traits.models import CharacterTraitValue  # noqa: PLC0415
+
+        if self.parent is not None:
+            rows = list(self.parent.instance or [])
+        elif self.instance is not None:
+            rows = [self.instance]
+        else:
+            rows = []
+        writer_sheet_ids = {row.persona.character_sheet_id for row in rows}
+        viewer_sheet_ids: set[int] = set(self.context.get("viewer_sheet_ids", set()))
+        sheet_ids = writer_sheet_ids | viewer_sheet_ids
+        fluency_map: dict[int, int] = dict(
+            CharacterTraitValue.objects.filter(
+                trait_id=language.trait_id, character_id__in=sheet_ids
+            ).values_list("character_id", "value")
+        )
+        cache[language.pk] = fluency_map
+        return fluency_map
+
+    def _fluency_for_sheet(self, sheet_id: int | None, language: "Language") -> int:
+        if sheet_id is None:
+            return 0
+        return self._fluency_map(language).get(sheet_id, 0)
+
+    def get_language_name(self, obj: Interaction) -> str | None:
+        return obj.language.name if obj.language_id else None
 
     def get_is_favorited(self, obj: Interaction) -> bool:
         roster_entry_ids: set[int] = self.context.get("roster_entry_ids", set())
@@ -548,9 +689,11 @@ class InteractionDetailSerializer(InteractionListSerializer):
         """Detail endpoint always returns full content (#2087 — opt-in backfill).
 
         The list endpoint blanks content for muted personas; the detail endpoint
-        is the reveal path — a viewer who clicks 'expand' fetches the full content here.
+        is the reveal path — a viewer who clicks 'expand' fetches the full content
+        here. Still subject to per-viewer language comprehension (#2993) — the
+        mute reveal is not a comprehension bypass.
         """
-        return obj.content
+        return self._comprehended_content(obj)
 
 
 class InteractionFavoriteSerializer(serializers.ModelSerializer):

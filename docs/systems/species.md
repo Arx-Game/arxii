@@ -1,6 +1,7 @@
 # Species System
 
-Species/race definitions with stat bonuses, subspecies hierarchy, and starting language assignments.
+Species/race definitions with stat bonuses, subspecies hierarchy, and trait-backed language
+fluency/speech comprehension (#2993, ADR-0214).
 
 **Source:** `src/world/species/`
 
@@ -26,7 +27,7 @@ All models use `NaturalKeyMixin` (fixture support). `Species` and `Language` use
 | Model | Purpose | Key Fields |
 |-------|---------|------------|
 | `Species` | Core species/subspecies with optional parent hierarchy | `name`, `description`, `parent` (FK self), `sort_order`, `starting_languages` (M2M to Language) |
-| `Language` | Languages available in the game | `name`, `description` |
+| `Language` | A catalog tongue, backed by a `TraitType.LANGUAGE` Trait for per-character fluency (#2993) | `name`, `description`, `trait` (O2O to `traits.Trait`, `limit_choices_to={"trait_type": "language"}`, nullable only for pre-#2993 rows — `clean()` requires it on new rows), `is_universal` (bool, default False — granted to every character at CG finalize regardless of species/Beginnings, e.g. Arvani Common) |
 
 ### Per-Species Data (models.Model)
 
@@ -70,6 +71,61 @@ mechanics resolve against them; the species/gift rows that *use* them stay
 content-owned.)
 
 ---
+
+## Language Mechanics (#2993, ADR-0214)
+
+Fluency in a `Language` is trait-backed, not a bespoke progression model — see ADR-0214 for the
+full rationale (why not a dedicated `CharacterLanguage` model, why comprehension recomputes live
+instead of snapshotting per ADR-0170's pattern).
+
+- **Model** — `Language.trait` is an O2O to a `TraitType.LANGUAGE` `traits.Trait`; a character's
+  1-100 fluency is the ordinary `CharacterTraitValue` row for that trait. `Language.is_universal`
+  flags a tongue granted to every character at CG regardless of species/Beginnings (content-authored,
+  no hardcoded name lookups). `CharacterSheet.current_language` (FK, nullable) is the sticky
+  default a bare `say` speaks in; `Interaction.language` (FK, nullable = untagged/universal) records
+  which tongue a recorded pose/say/whisper was spoken in.
+- **Fluency bands** (`world/species/language_constants.py`, PLACEHOLDER tuning) — `Fluency.BROKEN`
+  (1-29), `.CONVERSATIONAL` (30-69), `.FLUENT` (70+), `.NONE` (0/absent); `FLUENT_GRANT_VALUE = 70`
+  is what CG/universal grants set. `BAND_KEEP_RATIO` maps each band to the fraction of a heard
+  sentence's words that survive garbling (broken 1/6, conversational 1/2, fluent 1.0).
+- **Comprehension services** (`world/species/language_services.py`) — `fluency_value(sheet,
+  language)` reads the `CharacterTraitValue`; `effective_band(speaker_band, listener_band)` is
+  `min()` (a broken speaker is hard for everyone, not just a weak listener); `garble_text(text,
+  keep_ratio, seed_key=...)` does deterministic per-word survival keyed on `speech_seed(language_id,
+  text)` so live delivery, the WS push, and every later scene-log read garble identically for a
+  given viewer's fluency — the retroactive-readability property ADR-0214 calls out (learn the
+  language later, reread old logs in the clear). `render_speech(...)` composes the three into the
+  full per-listener render. `garble_text(seed_key=None)` (SystemRandom, non-reproducible) is
+  `mutter_fragment`'s pre-existing behavior — mutter still garbles randomly per-read, not
+  per-language.
+- **CG provisioning** — `provision_starting_languages(sheet, *, beginnings)`
+  (`world/species/services.py`, called from `character_creation.services.finalize_magic_data`)
+  grants the union of every `is_universal` `Language` and `Beginnings.get_starting_languages(species)`
+  (which itself folds in the species' `starting_languages` M2M when
+  `Beginnings.grants_species_languages` is set) as `FLUENT_GRANT_VALUE` `CharacterTraitValue` rows,
+  with `CharacterTraitChange` provenance. Idempotent — re-finalize and post-CG growth never clobber
+  an existing fluency value.
+- **Actions & commands** (`actions/definitions/language.py`, `src/commands/language.py`) —
+  `SetLanguageAction` (`set_language` / telnet `speak <language>`) flips the actor's sticky
+  `current_language`; it never teaches, only requires fluency ≥ 1. `TrainLanguageAction`
+  (`train_language` / telnet `train_language <language>[=<teacher>]`) is a weekly-gated (per
+  `GameWeek`) `DevelopmentPoints` award session — `TEACHER_DP_PER_SESSION = 15` with a co-present
+  FLUENT teacher, `SELF_STUDY_DP_PER_SESSION = 8` self-study (both PLACEHOLDER, mirrors
+  `TrainTechniqueAction`'s teacher/self-study split); a `LANGUAGE`-typed trait is exempt from rust
+  decay. `say`/`whisper`/`mutter` resolve a per-utterance language via `_resolve_spoken_language`
+  (`actions/definitions/communication.py`) — a `(tongue) rest of the line` prefix on `CmdSay`
+  (`_LANGUAGE_TAG_RE`) switches just that line's language without touching the sticky default.
+  Delivery is per-listener (telnet send and WS push each render the speaker's text through
+  `render_speech` for that specific recipient's fluency); `mutter`'s fragment stays untagged
+  (delegates to `garble_text` with no seed, unchanged random-per-read behavior).
+- **Scene-log read-time comprehension** — `interaction_serializers.py`'s list and detail
+  serializers apply the same live per-viewer garble on read (including the muted-reveal path, which
+  no longer bypasses language garbling); `InteractionPayload`/`Interaction` querysets
+  `select_related("language")`.
+- **Endpoint** — `GET /api/species/my-languages/` (`MyLanguagesViewSet`,
+  `world/species/views.py`) — the caller's active character's known languages (fluency + band),
+  self-scoped only, no `character` query param. Frontend: the composer's `LanguageSelector` and the
+  character sheet's `LanguagesSection`.
 
 ## Sunlight Bane & Allergy (#2846, ADR-0179; extends ADR-0073)
 
@@ -225,4 +281,5 @@ All models registered in Django admin:
 
 - **`SpeciesAdmin`** - List display with parent filter, stat bonus summary, and language count. Includes `SpeciesChildrenInline` (read-only subspecies list with change links), `SpeciesStatBonusInline` (editable stat bonuses), and `SpeciesGiftGrantInline` (#2846). Fieldsets cover `codex_entry` and the aging axes (`eternal_youth`, `decline_start_age`). Uses `filter_horizontal` for starting languages.
 - **`SpeciesGiftGrantAdmin`** (#2846) - Standalone grant editing with species/inheritable filters.
-- **`LanguageAdmin`** - Simple list with name search.
+- **`LanguageAdmin`** - Simple list with name search (list display not yet extended to `trait`/
+  `is_universal`, #2993).

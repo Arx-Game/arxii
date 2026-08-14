@@ -77,3 +77,26 @@ Domain-local vocabulary for `world.species`. Root terms live in
 - **Moonlit Unease** — the Cani umbrella's flavor-only alertness condition under
   the open night moon (`reconcile_cani_unease`). _Avoid:_ wolf-specific khati
   subspecies (umbrella families only, ruled 2026-07-31).
+- **Language** — a catalog `Language` row backed 1:1 by a `TraitType.LANGUAGE`
+  `Trait` (#2993/ADR-0214). The trait link, not a bespoke model, is what makes
+  a tongue trainable/gradable — per-character fluency is an ordinary
+  `CharacterTraitValue` on that trait. _Avoid:_ `CharacterLanguage` (rejected
+  alternative, ADR-0214).
+- **Fluency** — the 1-100 `CharacterTraitValue` on a `Language`'s trait,
+  banded by `language_constants.fluency_band`: broken (1-29), conversational
+  (30-69), fluent (70+). `FLUENT_GRANT_VALUE=70` is what CG/universal grants
+  set. Trained like any other trait via `TrainLanguageAction`'s weekly
+  teacher/self-study DP sessions; LANGUAGE-typed traits are rust-exempt.
+- **Garble** — the per-observer comprehension rendering of speech in a
+  language the listener doesn't fully know: `language_services.garble_text`
+  keeps a fraction of words (`BAND_KEEP_RATIO` by `min(speaker_band,
+  listener_band)`), deterministically seeded on `language_id:text`
+  (`speech_seed`) so live delivery, WS push, and every later scene-log read
+  agree — and a character who later learns the language can reread old logs
+  in the clear (ADR-0214's deliberate divergence from ADR-0170 snapshotting).
+  _Avoid:_ persisting a garbled render (comprehension is always recomputed,
+  never stored).
+- **Universal language** — a `Language` with `is_universal=True` (e.g. Arvani
+  Common): granted to every character at CG finalize
+  (`provision_starting_languages`) regardless of species or `Beginnings`, a
+  content flag rather than a hardcoded name lookup.

@@ -1,4 +1,7 @@
-"""Species-gift provisioning (#1580, ADR-0050). Called from CG finalize."""
+"""Species-gift + starting-language provisioning (#1580 ADR-0050; #2993 ADR-0214).
+
+Called from CG finalize (`character_creation.services.finalize_magic_data`).
+"""
 
 from __future__ import annotations
 
@@ -16,8 +19,10 @@ from world.scenes.round_services import ensure_round_for_acute_condition
 from world.species.models import SpeciesGiftGrant
 
 if TYPE_CHECKING:
+    from world.character_creation.models import Beginnings
     from world.character_sheets.models import CharacterSheet
     from world.magic.models.gifts import CharacterGift
+    from world.species.models import Language
 
 logger = logging.getLogger(__name__)
 
@@ -300,3 +305,52 @@ def provision_species_gifts(sheet: CharacterSheet, *, resonance=None) -> list[Ch
         if grant.drawback_distinction_id is not None:
             _grant_species_distinction_once(sheet, grant.drawback_distinction)
     return minted
+
+
+def provision_starting_languages(
+    sheet: CharacterSheet,
+    *,
+    beginnings: Beginnings | None,
+) -> list[Language]:
+    """Grant CG starting languages as fluent CharacterTraitValue rows. Idempotent.
+
+    Union of the Beginnings' computed starting set (which already folds species
+    racial languages per ``grants_species_languages`` - the #2993 wiring of the
+    previously caller-less ``get_starting_languages``) and every ``is_universal``
+    language (Arvani Common). Existing rows are never modified - re-finalize and
+    post-CG growth both survive a re-run.
+    """
+    from world.species.language_constants import FLUENT_GRANT_VALUE  # noqa: PLC0415
+    from world.species.models import Language  # noqa: PLC0415
+    from world.traits.models import (  # noqa: PLC0415
+        CharacterTraitChange,
+        CharacterTraitValue,
+        TraitChangeSource,
+    )
+
+    languages: dict[int, Language] = {
+        lang.pk: lang for lang in Language.objects.filter(is_universal=True)
+    }
+    if beginnings is not None and sheet.species_id is not None:
+        for lang in beginnings.get_starting_languages(sheet.species):
+            languages[lang.pk] = lang
+
+    granted: list[Language] = []
+    for lang in languages.values():
+        if lang.trait_id is None:
+            continue
+        _value, created = CharacterTraitValue.objects.get_or_create(
+            character=sheet,
+            trait_id=lang.trait_id,
+            defaults={"value": FLUENT_GRANT_VALUE},
+        )
+        if created:
+            CharacterTraitChange.objects.create(
+                character_sheet=sheet,
+                trait_id=lang.trait_id,
+                old_value=0,
+                new_value=FLUENT_GRANT_VALUE,
+                source=TraitChangeSource.CHARACTER_CREATION,
+            )
+            granted.append(lang)
+    return granted

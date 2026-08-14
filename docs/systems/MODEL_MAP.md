@@ -372,6 +372,7 @@
 - `get_stat(character_sheet: 'CharacterSheet', stat: 'StatDefinition') -> 'int' - Return current value of a stat tracker, 0 if it doesn't exist.`
 - `grant_achievement(achievement: 'Achievement', character_sheets: 'list[CharacterSheet]') -> 'AchievementGrantResult' - Grant an achievement to one or more characters simultaneously.`
 - `increment_stat(character_sheet: 'CharacterSheet', stat: 'StatDefinition', amount: 'int' = 1) -> 'int' - Increment a stat tracker (create if needed) and check for achievements.`
+- `increment_stat_for_group(character_sheets: 'list[CharacterSheet]', stat: 'StatDefinition', amount: 'int' = 1) -> 'None' - Increment a stat for several sheets as one simultaneous group moment.`
 
 
 ## world.action_points
@@ -1344,6 +1345,7 @@
   - gender -> character_sheets.Gender [FK] (nullable)
   - pronouns -> character_sheets.Pronouns [FK] (nullable)
   - species -> species.Species [FK] (nullable)
+  - current_language -> species.Language [FK] (nullable)
   - current_residence -> evennia_extensions.RoomProfile [FK] (nullable)
   - true_profile -> character_sheets.Profile [OneToOne] (nullable)
   - active_persona -> scenes.Persona [FK] (nullable)
@@ -3236,7 +3238,7 @@
 - `can_spend_treasury(treasury: 'OrganizationTreasury', persona: 'Persona') -> 'bool' - Spend authority: an active membership at tier <= spend_rank_max.`
 - `collect_and_distribute(*, organization: 'Organization', character) -> 'DistributionResult' - The full collection-distribution dispatch (#2540, ruled 2026-07-20).`
 - `collect_asset_income(*, asset, character_sheet) -> 'CollectionResult' - One active collection of a personal asset's accumulated income (#2294).`
-- `collect_org_income(*, organization: 'Organization', character) -> 'CollectionResult' - One active collection dispatch across every pooled stream of ``organization`` (#930).`
+- `collect_org_income(*, organization: 'Organization', character, success_level_override: 'int | None' = None) -> 'CollectionResult' - One active collection dispatch across every pooled stream of ``organization`` (#930).`
 - `deliver_mission_money(*, recipient_sheet: 'CharacterSheet', amount: 'int', ref: 'str', reason_label: 'str' = 'mission reward') -> 'None' - Reward money lands in the purse (#932 — replaces the Phase 5b stub).`
 - `distribute_allowance(*, organization: 'Organization', surplus: 'int') -> 'AllowanceResult' - Auto-split a share of ``surplus`` among the org's active piloted members (#2540).`
 - `extend_loan(*, creditor: 'Organization', debtor: 'Organization', principal: 'int', interest_bps_monthly: 'int' = 50, fiat: 'bool' = False) -> 'DebtInstrument' - Create a loan: principal moves creditor→debtor, instrument records it (#927).`
@@ -7367,7 +7369,7 @@
 - `get_account_for_character(character: 'ObjectDB') -> 'AccountDB | None' - Get the account currently playing this character via roster tenure.`
 - `get_bond_combat_config() -> 'BondCombatConfig' - Get-or-create the BondCombatConfig singleton (pk=1).`
 - `give_writeup_kudos(*, giver_account: 'AccountDB', writeup) -> 'WriteupKudos' - Award a non-revocable commendation to the writeup author on behalf of the subject.`
-- `increment_stat(character_sheet: 'CharacterSheet', stat: 'StatDefinition', amount: 'int' = 1) -> 'int' - Increment a stat tracker (create if needed) and check for achievements.`
+- `increment_stat_for_group(character_sheets: 'list[CharacterSheet]', stat: 'StatDefinition', amount: 'int' = 1) -> 'None' - Increment a stat for several sheets as one simultaneous group moment.`
 - `mirror_npc_regard_event_to_track(event: 'NpcRegardEvent') -> 'RelationshipTrackProgress | None' - Mirror one NpcRegardEvent onto the PC's Regard/Friction system track (#2039).`
 - `redistribute_points(*, relationship: 'CharacterRelationship', author: 'CharacterSheet', title: 'str', writeup: 'str', source_track: 'RelationshipTrack', target_track: 'RelationshipTrack', points: 'int', visibility: 'UpdateVisibility') -> 'RelationshipChange' - Move developed points from one track to another. No new value is added.`
 - `register_grievance(*, source: 'CharacterSheet', target: 'CharacterSheet', option: 'GrievanceOption | None' = None, custom_points: 'int | None' = None, custom_track: 'RelationshipTrack | None' = None, writeup: 'str' = '', visibility: 'UpdateVisibility' = UpdateVisibility.PRIVATE) -> 'RelationshipCapstone' - Register a wronged character's one-sided grievance against whoever harmed them (#1429).`
@@ -7738,6 +7740,7 @@
   - writer_account -> evennia.AccountDB [FK] (nullable)
   - scene -> scenes.Scene [FK] (nullable)
   - place -> scenes.Place [FK] (nullable)
+  - language -> species.Language [FK] (nullable)
   - fury_committed -> magic.FuryTier [FK] (nullable)
   - target_personas -> scenes.Persona [M2M]
 **Pointed to by:**
@@ -8926,6 +8929,7 @@
 **Foreign Keys:**
   - written_by -> contributors.ContentContributor [FK] (nullable)
   - reviewed_by -> contributors.ContentContributor [FK] (nullable)
+  - trait -> traits.Trait [OneToOne] (nullable)
 **Pointed to by:**
   - beginnings <- character_creation.Beginnings
   - native_species <- species.Species
@@ -8966,6 +8970,7 @@
 - `ensure_round_for_acute_condition(character_sheet: 'CharacterSheet') -> 'SceneRound | None' - Ensure an active scene round exists for the character's room and enrol all present`
 - `has_condition(target: 'ObjectDB', condition: world.conditions.models.ConditionTemplate, *, include_suppressed: bool = False) -> bool - Check if target has a specific condition.`
 - `provision_species_gifts(sheet: 'CharacterSheet', *, resonance=None) -> 'list[CharacterGift]' - Mint the species' Minor Gift(s) + latent GIFT thread + any drawback. Idempotent.`
+- `provision_starting_languages(sheet: 'CharacterSheet', *, beginnings: 'Beginnings | None') -> 'list[Language]' - Grant CG starting languages as fluent CharacterTraitValue rows. Idempotent.`
 - `reconcile_sun_exposure_safely(character) -> 'None' - Best-effort sun reconcile for hook/cron call sites (#2846).`
 - `reconcile_sunlight_exposure(character, room) -> 'None' - Reconcile the Sunlight Exposure condition to the character's felt sun exposure`
 - `remove_condition(target: 'ObjectDB', condition: world.conditions.models.ConditionTemplate, *, remove_all_stacks: bool = True, include_suppressed: bool = False) -> bool - Remove a condition from a target.`
@@ -9505,6 +9510,7 @@
   - trait_requirements <- progression.TraitRequirement
   - anchored_threads <- magic.Thread
   - thread_weaving_unlocks <- magic.ThreadWeavingUnlock
+  - language <- species.Language
   - skill <- skills.Skill
 
 ### TraitRankDescription

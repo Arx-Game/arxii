@@ -15,6 +15,7 @@ urlpatterns = [
     path("api/conditions/", include("world.conditions.urls")),
     path("api/distinctions/", include("world.distinctions.urls")),
     path("api/skills/", include("world.skills.urls")),
+    path("api/species/", include("world.species.urls")),
     path("api/classes/", include("world.classes.urls")),
     path("api/items/", include("world.items.urls")),
     path("api/covenants/", include("world.covenants.urls")),

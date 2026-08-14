@@ -51,7 +51,16 @@ actions, backends, and service functions.
 - **`evennia_overrides/communication.py`**: `CmdSay`, `CmdWhisper`, `CmdPose`, `CmdPage`,
   `CmdPemit` (`pemit <name>[,<name>...]=<text>`, `cmd:all()`, #906/#2117 — private GM narration to
   specific characters via `PemitAction`, gated on `MinimumGMLevelPrerequisite(GMLevel.STARTING)`,
-  staff bypass preserved)
+  staff bypass preserved). `CmdSay` gains a per-utterance language switch (#2993): a leading
+  `say (tongue) text` tag (`_LANGUAGE_TAG_RE`, iexact `Language` name lookup) sets `language_id`
+  for that one say only, without touching the speaker's sticky `current_language` — an unknown
+  tongue raises `CommandError` naming it; no tag leaves kwargs unchanged (the sticky/current path).
+- **`language.py`**: `CmdSpeak` (`speak [<language>]`, #2993) — telnet face of
+  `SetLanguageAction`; sets (or, with no argument, resets to the universal default) the caller's
+  sticky `current_language` via iexact `Language` name lookup. `CmdTrainLanguage`
+  (`train_language <language>[=<teacher>]`, #2993) — telnet face of `TrainLanguageAction`; the
+  optional `=<teacher>` names a co-located character to check for FLUENT-teacher rates (silent
+  self-study fallback otherwise, mirrors `CmdTrain`'s `TrainTechniqueAction` teacher resolution).
 - **`evennia_overrides/movement.py`**: `CmdGet`, `CmdDrop`, `CmdGive` (#1909: swaps to
   `GiveCoinsAction` when the item-name text parses as money via `parse_coppers`),
   `CmdHome` (bare `home` recalls; `home/set` delegates to `SetPrimaryHomeAction` (#2036) —

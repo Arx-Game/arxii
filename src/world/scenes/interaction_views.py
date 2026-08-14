@@ -167,6 +167,7 @@ class InteractionViewSet(
             "persona",
             "scene",
             "place",
+            "language",  # #2993: read-time comprehension needs is_universal/trait_id inline
         ).prefetch_related(
             Prefetch(
                 "persona__character_sheet__resonances",

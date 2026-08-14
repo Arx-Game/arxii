@@ -411,6 +411,14 @@ class CharacterSheet(SharedMemoryModel):
         related_name="character_sheets",
         help_text="Character's species (may have parent for subspecies)",
     )
+    current_language = models.ForeignKey(
+        "arxii.Language",
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="+",
+        help_text="Sticky spoken language; null = the universal default.",
+    )
 
     # Residence & Trickle
     current_residence = models.ForeignKey(

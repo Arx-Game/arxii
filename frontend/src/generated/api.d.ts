@@ -19112,6 +19112,23 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
+  '/api/species/my-languages/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /** @description Return the caller's active character's known languages. */
+    get: operations['species_my_languages_list'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   '/api/staff-inbox/': {
     parameters: {
       query?: never;
@@ -27493,7 +27510,9 @@ export interface components {
        * @description Detail endpoint always returns full content (#2087 — opt-in backfill).
        *
        *     The list endpoint blanks content for muted personas; the detail endpoint
-       *     is the reveal path — a viewer who clicks 'expand' fetches the full content here.
+       *     is the reveal path — a viewer who clicks 'expand' fetches the full content
+       *     here. Still subject to per-viewer language comprehension (#2993) — the
+       *     mute reveal is not a comprehension bypass.
        */
       readonly content: string;
       /**
@@ -27535,6 +27554,8 @@ export interface components {
        *     divider for consecutive muted rows.
        */
       readonly is_muted: boolean;
+      readonly language_id: number | null;
+      readonly language_name: string | null;
       readonly endorsee_sheet_id: number;
       readonly is_favorited: boolean;
       /** @description Aggregate emoji counts with reacted-by-current-user flag. */
@@ -27682,6 +27703,8 @@ export interface components {
        *     divider for consecutive muted rows.
        */
       readonly is_muted: boolean;
+      readonly language_id: number | null;
+      readonly language_name: string | null;
       readonly endorsee_sheet_id: number;
       readonly is_favorited: boolean;
       /** @description Aggregate emoji counts with reacted-by-current-user flag. */
@@ -29378,6 +29401,20 @@ export interface components {
       organization_name: string;
       rank: number;
       rank_title: string;
+    };
+    /**
+     * @description Slim shape for ``MyLanguageRow`` (``world.species.types``).
+     *
+     *     Backs the ``my-languages`` read-only list endpoint: the requester's own
+     *     active character's known languages, with fluency/band and which one is
+     *     the sticky ``current_language``.
+     */
+    MyLanguage: {
+      readonly language_id: number;
+      readonly name: string;
+      readonly fluency: number;
+      readonly band: string;
+      readonly is_current: boolean;
     };
     /** @description Serialize a summary of a roster entry for account menus. */
     MyRosterEntry: {
@@ -40091,6 +40128,7 @@ export interface components {
        *     * `stat` - Stat
        *     * `skill` - Skill
        *     * `modifier` - Modifier
+       *     * `language` - Language
        *     * `other` - Other
        */
       readonly trait_type: components['schemas']['TraitTraitTypeEnum'];
@@ -40140,10 +40178,11 @@ export interface components {
      * @description * `stat` - Stat
      *     * `skill` - Skill
      *     * `modifier` - Modifier
+     *     * `language` - Language
      *     * `other` - Other
      * @enum {string}
      */
-    TraitTraitTypeEnum: 'stat' | 'skill' | 'modifier' | 'other';
+    TraitTraitTypeEnum: 'stat' | 'skill' | 'modifier' | 'language' | 'other';
     /** @description Request body for POST /api/covenants/ranks/{pk}/transfer-top/. */
     TransferTopRequestRequest: {
       /** @description PK of the CharacterCovenantRole that will receive the top rank. */
@@ -67491,6 +67530,25 @@ export interface operations {
         };
         content: {
           'application/json': components['schemas']['SpeakerQueue'];
+        };
+      };
+    };
+  };
+  species_my_languages_list: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['MyLanguage'][];
         };
       };
     };

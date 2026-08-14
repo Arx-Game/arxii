@@ -30700,6 +30700,23 @@ paths:
               schema:
                 $ref: '#/components/schemas/SpeakerQueue'
           description: ''
+  /api/species/my-languages/:
+    get:
+      operationId: species_my_languages_list
+      description: Return the caller's active character's known languages.
+      tags:
+      - species
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/MyLanguage'
+          description: ''
   /api/staff-inbox/:
     get:
       operationId: staff_inbox_retrieve
@@ -48128,7 +48145,9 @@ components:
             Detail endpoint always returns full content (#2087 — opt-in backfill).
 
             The list endpoint blanks content for muted personas; the detail endpoint
-            is the reveal path — a viewer who clicks 'expand' fetches the full content here.
+            is the reveal path — a viewer who clicks 'expand' fetches the full content
+            here. Still subject to per-viewer language comprehension (#2993) — the
+            mute reveal is not a comprehension bypass.
           readOnly: true
         mode:
           allOf:
@@ -48174,6 +48193,14 @@ components:
             Muted interactions stay in the feed with content blanked — the action
             still shows, just without the text. The frontend renders a "N hidden"
             divider for consecutive muted rows.
+          readOnly: true
+        language_id:
+          type: integer
+          readOnly: true
+          nullable: true
+        language_name:
+          type: string
+          nullable: true
           readOnly: true
         endorsee_sheet_id:
           type: integer
@@ -48315,6 +48342,8 @@ components:
       - id
       - is_favorited
       - is_muted
+      - language_id
+      - language_name
       - my_pose_endorsement
       - persona
       - place_name
@@ -48432,6 +48461,14 @@ components:
             Muted interactions stay in the feed with content blanked — the action
             still shows, just without the text. The frontend renders a "N hidden"
             divider for consecutive muted rows.
+          readOnly: true
+        language_id:
+          type: integer
+          readOnly: true
+          nullable: true
+        language_name:
+          type: string
+          nullable: true
           readOnly: true
         endorsee_sheet_id:
           type: integer
@@ -48568,6 +48605,8 @@ components:
       - id
       - is_favorited
       - is_muted
+      - language_id
+      - language_name
       - my_pose_endorsement
       - persona
       - place_name
@@ -51823,6 +51862,36 @@ components:
       - organization_name
       - rank
       - rank_title
+    MyLanguage:
+      type: object
+      description: |-
+        Slim shape for ``MyLanguageRow`` (``world.species.types``).
+
+        Backs the ``my-languages`` read-only list endpoint: the requester's own
+        active character's known languages, with fluency/band and which one is
+        the sticky ``current_language``.
+      properties:
+        language_id:
+          type: integer
+          readOnly: true
+        name:
+          type: string
+          readOnly: true
+        fluency:
+          type: integer
+          readOnly: true
+        band:
+          type: string
+          readOnly: true
+        is_current:
+          type: boolean
+          readOnly: true
+      required:
+      - band
+      - fluency
+      - is_current
+      - language_id
+      - name
     MyRosterEntry:
       type: object
       description: Serialize a summary of a roster entry for account menus.
@@ -71723,6 +71792,7 @@ components:
             * `stat` - Stat
             * `skill` - Skill
             * `modifier` - Modifier
+            * `language` - Language
             * `other` - Other
         category:
           allOf:
@@ -71780,12 +71850,14 @@ components:
       - stat
       - skill
       - modifier
+      - language
       - other
       type: string
       description: |-
         * `stat` - Stat
         * `skill` - Skill
         * `modifier` - Modifier
+        * `language` - Language
         * `other` - Other
     TransferTopRequestRequest:
       type: object
