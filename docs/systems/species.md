@@ -101,8 +101,12 @@ instead of snapshotting per ADR-0170's pattern).
 - **CG provisioning** — `provision_starting_languages(sheet, *, beginnings)`
   (`world/species/services.py`, called from `character_creation.services.finalize_magic_data`)
   grants the union of every `is_universal` `Language` and `Beginnings.get_starting_languages(species)`
-  (which itself folds in the species' `starting_languages` M2M when
-  `Beginnings.grants_species_languages` is set) as `FLUENT_GRANT_VALUE` `CharacterTraitValue` rows,
+  (which itself folds in the species' own `starting_languages` M2M AND every ancestor
+  species' `starting_languages` when `Beginnings.grants_species_languages` is set — via
+  `Species.lineage` (species + ancestors, nearest first, cycle-safe), #3162 — e.g. a
+  Cani character inherits Khati's parent-tongue row as well as any Cani-specific one;
+  `grants_species_languages=False` skips ALL species-derived languages, inherited or not)
+  as `FLUENT_GRANT_VALUE` `CharacterTraitValue` rows,
   with `CharacterTraitChange` provenance. Idempotent — re-finalize and post-CG growth never clobber
   an existing fluency value.
 - **Actions & commands** (`actions/definitions/language.py`, `src/commands/language.py`) —

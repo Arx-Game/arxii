@@ -114,6 +114,18 @@ against alphabetical load order, `load_world_content`'s retry step is a **fixpoi
 loop** (`_retry_deferred`) — repeated deferral-on passes until one resolves nothing
 new — not the single one-shot retry pass described above for the content/grid case.
 
+**Renaming an already-loaded content row needs a directive, not just an edit
+(#3162):** the upsert discipline above means `load_entries` only creates or updates
+by natural key — editing a row's name in the lore repo and reloading creates a
+NEW row under the new name and leaves the old one orphaned in every existing
+database. `core_management.content_fixtures.apply_content_renames` closes that
+gap: `load_world_content` reads `<content_root>/fixtures/RENAMES.json` (shape
+`{"<app_label.model>": {"Old Name": "New Name", ...}}`) and applies each rename
+BEFORE the content fixtures load, idempotently (a no-op once applied, or if the
+target name already exists) and only for single-field `"name"` natural keys — a
+composite-key model entry raises `ContentError`. `WorldLoadResult.renames_applied`
+carries what actually ran; `tools/build_content_fixtures.py --load` prints it.
+
 ### Natural-key lookup index and case-insensitivity (#2687, ADR-0163)
 
 `get_by_natural_key` is backed by a process-level `tuple -> pk` index
