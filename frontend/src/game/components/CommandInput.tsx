@@ -5,6 +5,7 @@ import { useGameSocket } from '@/hooks/useGameSocket';
 import { RichTextInput } from '@/components/RichTextInput';
 import { PersonaAvatar } from '@/components/PersonaAvatar';
 import { ModeSelector } from '@/scenes/components/ModeSelector';
+import { LanguageSelector } from './LanguageSelector';
 import { ActionAttachment } from '@/scenes/components/ActionAttachment';
 import {
   EntranceTechniqueAttachment,
@@ -33,6 +34,10 @@ export interface ComposerMode {
 // wrapped by buildFullCommand into IC prose instead of reaching CmdPage
 // verbatim as OOC.
 const KNOWN_COMMANDS = ['pose', 'say', 'emit', 'emote', 'whisper', 'tt', 'tabletalk', 'page'];
+
+// #2993 — the language selector only makes sense for speech modes (comprehension
+// gating applies to say/whisper/mutter; pose/emit/tt carry no in-fiction language).
+const SPEECH_COMPOSER_MODES = new Set(['say', 'whisper', 'mutter']);
 
 /**
  * Builds the full command string for a trimmed input given the active composer
@@ -358,6 +363,9 @@ export function CommandInput({
               isAtPlace={isAtPlace ?? false}
               locked={composerMode?.locked ?? false}
             />
+            {composerMode && SPEECH_COMPOSER_MODES.has(composerMode.command) && (
+              <LanguageSelector character={character} />
+            )}
           </div>
         }
         rightSlot={
