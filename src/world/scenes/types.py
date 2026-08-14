@@ -38,6 +38,8 @@ class InteractionPayload(TypedDict):
     place_name: str | None
     receiver_persona_ids: list[int]
     target_persona_ids: list[int]
+    language_id: int | None
+    language_name: str | None
 
 
 class ReactionAggregation(TypedDict):

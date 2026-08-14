@@ -54,10 +54,15 @@ REVERSE_SQL = SRC_DIR / "world/scenes/sql/partition_interaction_reverse.sql"
 # partitioned table cascades to every partition, so the column is correctly
 # present after 0024 — just intentionally absent from the partition SQL.
 #
+# `language_id` (#2993) is a FK to species.Language, added by migration 0142 —
+# long after the partition migration (0109) ran. Same story as fury_committed_id:
+# a plain post-partition AddField, correctly present after 0142 via the same
+# ADD COLUMN cascade, and intentionally absent from this frozen snapshot.
+#
 # These columns are subtracted from the model-column set before comparing to the
 # SQL, so the hook still catches drift for every OTHER column. Adding an entry
 # here is a deliberate "this column is post-partition by construction" assertion.
-POST_PARTITION_COLUMNS = {"fury_committed_id", "writer_account_id"}
+POST_PARTITION_COLUMNS = {"fury_committed_id", "writer_account_id", "language_id"}
 
 
 def _setup_django() -> None:

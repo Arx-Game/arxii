@@ -923,6 +923,14 @@ class Interaction(SharedMemoryModel):
         default=InteractionMode.POSE,
         help_text="The type of IC interaction",
     )
+    language = models.ForeignKey(
+        "arxii.Language",
+        null=True,
+        blank=True,
+        on_delete=models.PROTECT,
+        related_name="+",
+        help_text="Spoken language; null = universal/untagged (poses, emits, pre-#2993 rows).",
+    )
     visibility = models.CharField(
         max_length=20,
         choices=InteractionVisibility.choices,
