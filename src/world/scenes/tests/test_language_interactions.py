@@ -8,12 +8,19 @@ the model fields and the record/create plumbing.
 from unittest.mock import patch
 
 from django.test import TestCase
+from django.urls import reverse
+from rest_framework import status
+from rest_framework.test import APITestCase
 
-from evennia_extensions.factories import CharacterFactory, ObjectDBFactory
+from evennia_extensions.factories import AccountFactory, CharacterFactory, ObjectDBFactory
 from world.character_sheets.factories import CharacterSheetFactory
+from world.roster.factories import PlayerDataFactory, RosterEntryFactory, RosterTenureFactory
 from world.scenes.constants import InteractionMode
+from world.scenes.factories import InteractionFactory
 from world.scenes.interaction_services import create_interaction, record_interaction
 from world.species.factories import LanguageFactory
+from world.traits.factories import CharacterTraitValueFactory
+from world.traits.models import Trait, TraitCategory, TraitType
 
 
 class TestInteractionLanguageField(TestCase):
@@ -104,3 +111,78 @@ class TestCharacterSheetCurrentLanguage(TestCase):
         sheet.save(update_fields=["current_language"])
         sheet.refresh_from_db()
         self.assertEqual(sheet.current_language, self.language)
+
+
+class TestInteractionListComprehensionAPI(APITestCase):
+    """Task 7 (#2993): per-viewer read-time comprehension in the scene-log API.
+
+    Bypass order under test: writer's own sheets full, staff full, fluent
+    listener full, zero-fluency listener garbled and deterministic.
+    """
+
+    CONTENT = "the caravan leaves at dawn through the salt gate"
+
+    @classmethod
+    def setUpTestData(cls) -> None:
+        trait = Trait.objects.create(
+            name="TestComprehensionAPIKhatic",
+            trait_type=TraitType.LANGUAGE,
+            category=TraitCategory.GENERAL,
+        )
+        cls.language = LanguageFactory(name="TestComprehensionAPIKhatic", trait=trait)
+
+        def build_account():
+            account = AccountFactory()
+            character = CharacterFactory()
+            sheet = CharacterSheetFactory(character=character)
+            roster_entry = RosterEntryFactory(character_sheet=sheet)
+            player_data = PlayerDataFactory(account=account)
+            RosterTenureFactory(player_data=player_data, roster_entry=roster_entry)
+            return account, sheet
+
+        cls.writer_account, cls.writer_sheet = build_account()
+        CharacterTraitValueFactory(character=cls.writer_sheet, trait=trait, value=100)
+        cls.writer_persona = cls.writer_sheet.primary_persona
+
+        cls.fluent_account, cls.fluent_sheet = build_account()
+        CharacterTraitValueFactory(character=cls.fluent_sheet, trait=trait, value=100)
+
+        # Zero-fluency viewer: deliberately no CharacterTraitValue row —
+        # fluency_value() treats an absent row as 0.
+        cls.zero_account, cls.zero_sheet = build_account()
+
+        cls.staff_account = AccountFactory(is_staff=True)
+
+        cls.interaction = InteractionFactory(
+            persona=cls.writer_persona,
+            mode=InteractionMode.SAY,
+            language=cls.language,
+            content=cls.CONTENT,
+        )
+
+    def _get_row(self, account) -> dict:
+        self.client.force_authenticate(user=account)
+        url = reverse("interaction-list")
+        response = self.client.get(url)
+        assert response.status_code == status.HTTP_200_OK
+        return next(r for r in response.data["results"] if r["id"] == self.interaction.pk)
+
+    def test_fluent_viewer_sees_full_content_and_language_name(self) -> None:
+        row = self._get_row(self.fluent_account)
+        self.assertEqual(row["content"], self.CONTENT)
+        self.assertEqual(row["language_id"], self.language.pk)
+        self.assertEqual(row["language_name"], self.language.name)
+
+    def test_zero_fluency_viewer_sees_deterministic_garble(self) -> None:
+        row_1 = self._get_row(self.zero_account)
+        row_2 = self._get_row(self.zero_account)
+        self.assertNotEqual(row_1["content"], self.CONTENT)
+        self.assertEqual(row_1["content"], row_2["content"])
+
+    def test_writer_sees_own_content_full(self) -> None:
+        row = self._get_row(self.writer_account)
+        self.assertEqual(row["content"], self.CONTENT)
+
+    def test_staff_sees_full_content(self) -> None:
+        row = self._get_row(self.staff_account)
+        self.assertEqual(row["content"], self.CONTENT)
