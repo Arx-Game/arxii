@@ -18,12 +18,30 @@ from evennia_extensions.models import PlayerData
 from world.character_sheets.factories import CharacterSheetFactory
 from world.roster.factories import PlayerDataFactory, RosterEntryFactory, RosterTenureFactory
 from world.scenes.constants import InteractionMode
-from world.scenes.factories import InteractionFactory
+from world.scenes.factories import (
+    InteractionFactory,
+    InteractionReceiverFactory,
+    SceneFactory,
+    SceneGMParticipationFactory,
+)
 from world.scenes.interaction_services import create_interaction, record_interaction
 from world.scenes.mute_services import set_mute
 from world.species.factories import LanguageFactory
 from world.traits.factories import CharacterTraitValueFactory
 from world.traits.models import Trait, TraitCategory, TraitType
+
+
+def _build_language_account():
+    """Account -> player_data -> tenure -> roster_entry -> sheet, ready to be a
+    scene participant/persona party (shared by the comprehension tests below).
+    """
+    account = AccountFactory()
+    character = CharacterFactory()
+    sheet = CharacterSheetFactory(character=character)
+    roster_entry = RosterEntryFactory(character_sheet=sheet)
+    player_data = PlayerDataFactory(account=account)
+    RosterTenureFactory(player_data=player_data, roster_entry=roster_entry)
+    return account, sheet
 
 
 class TestInteractionLanguageField(TestCase):
@@ -129,40 +147,42 @@ class TestInteractionListComprehensionAPI(APITestCase):
 
     @classmethod
     def setUpTestData(cls) -> None:
-        trait = Trait.objects.create(
+        cls.trait = Trait.objects.create(
             name="TestComprehensionAPIKhatic",
             trait_type=TraitType.LANGUAGE,
             category=TraitCategory.GENERAL,
         )
-        cls.language = LanguageFactory(name="TestComprehensionAPIKhatic", trait=trait)
+        cls.language = LanguageFactory(name="TestComprehensionAPIKhatic", trait=cls.trait)
 
-        def build_account():
-            account = AccountFactory()
-            character = CharacterFactory()
-            sheet = CharacterSheetFactory(character=character)
-            roster_entry = RosterEntryFactory(character_sheet=sheet)
-            player_data = PlayerDataFactory(account=account)
-            RosterTenureFactory(player_data=player_data, roster_entry=roster_entry)
-            return account, sheet
-
-        cls.writer_account, cls.writer_sheet = build_account()
-        CharacterTraitValueFactory(character=cls.writer_sheet, trait=trait, value=100)
+        cls.writer_account, cls.writer_sheet = _build_language_account()
+        CharacterTraitValueFactory(character=cls.writer_sheet, trait=cls.trait, value=100)
         cls.writer_persona = cls.writer_sheet.primary_persona
 
-        cls.fluent_account, cls.fluent_sheet = build_account()
-        CharacterTraitValueFactory(character=cls.fluent_sheet, trait=trait, value=100)
+        cls.fluent_account, cls.fluent_sheet = _build_language_account()
+        CharacterTraitValueFactory(character=cls.fluent_sheet, trait=cls.trait, value=100)
 
         # Zero-fluency viewer: deliberately no CharacterTraitValue row —
         # fluency_value() treats an absent row as 0.
-        cls.zero_account, cls.zero_sheet = build_account()
+        cls.zero_account, cls.zero_sheet = _build_language_account()
 
         cls.staff_account = AccountFactory(is_staff=True)
 
+        cls.scene = SceneFactory()
         cls.interaction = InteractionFactory(
             persona=cls.writer_persona,
+            scene=cls.scene,
             mode=InteractionMode.SAY,
             language=cls.language,
             content=cls.CONTENT,
+        )
+        # C1 (#2993 final-review): comprehension is scoped to sheets that actually
+        # participated in THIS interaction's scene — give the fluent viewer's sheet
+        # a pose in the same scene so it counts as a participant.
+        InteractionFactory(
+            persona=cls.fluent_sheet.primary_persona,
+            scene=cls.scene,
+            mode=InteractionMode.POSE,
+            content="settles in nearby.",
         )
 
     def _get_row(self, account) -> dict:
@@ -191,6 +211,87 @@ class TestInteractionListComprehensionAPI(APITestCase):
     def test_staff_sees_full_content(self) -> None:
         row = self._get_row(self.staff_account)
         self.assertEqual(row["content"], self.CONTENT)
+
+    def test_other_account_character_fluency_does_not_leak(self) -> None:
+        """C1 (#2993 final-review): comprehension keys to the viewer's sheet that was
+        actually IN the scene, not the best fluency across the whole account's roster.
+
+        An account plays two active characters: Bob (in this scene, zero fluency) and
+        Alice (fluent, never in this scene). Reading the scene log through this account
+        must still garble — Alice's fluency must not leak onto Bob's read.
+        """
+        account = AccountFactory()
+        player_data = PlayerDataFactory(account=account)
+
+        bob_character = CharacterFactory()
+        bob_sheet = CharacterSheetFactory(character=bob_character)
+        bob_roster_entry = RosterEntryFactory(character_sheet=bob_sheet)
+        RosterTenureFactory(player_data=player_data, roster_entry=bob_roster_entry)
+        InteractionFactory(
+            persona=bob_sheet.primary_persona,
+            scene=self.scene,
+            mode=InteractionMode.POSE,
+            content="looks around, zero fluency here.",
+        )
+
+        alice_character = CharacterFactory()
+        alice_sheet = CharacterSheetFactory(character=alice_character)
+        alice_roster_entry = RosterEntryFactory(character_sheet=alice_sheet)
+        RosterTenureFactory(player_data=player_data, roster_entry=alice_roster_entry)
+        CharacterTraitValueFactory(character=alice_sheet, trait=self.trait, value=100)
+        # Alice never appears in ``self.scene`` at all.
+
+        row = self._get_row(account)
+        self.assertNotEqual(row["content"], self.CONTENT)
+
+    def test_whisper_receiver_rereads_full_text(self) -> None:
+        """I1 (#2993 final-review): a receiver of a receiver-scoped interaction
+        (whisper target here) always reads ground truth on reread — mirroring
+        ``push_interaction``'s live receiver-scoped-trust rule.
+        """
+        receiver_account, receiver_sheet = _build_language_account()
+        # Deliberately zero fluency — the receiver bypass must not depend on it.
+        whisper = InteractionFactory(
+            persona=self.writer_persona,
+            scene=self.scene,
+            mode=InteractionMode.WHISPER,
+            language=self.language,
+            content="a secret passed in the old tongue",
+        )
+        InteractionReceiverFactory(interaction=whisper, persona=receiver_sheet.primary_persona)
+
+        self.client.force_authenticate(user=receiver_account)
+        url = reverse("interaction-detail", args=[whisper.pk])
+        response = self.client.get(url)
+        assert response.status_code == status.HTTP_200_OK
+        self.assertEqual(response.data["content"], "a secret passed in the old tongue")
+
+    def test_non_receiver_participant_still_garbles(self) -> None:
+        """I1 sibling: a scene participant who is NOT a receiver of a receiver-scoped
+        interaction still garbles it per their own fluency — the receiver bypass is
+        receiver-scoped, not scene-wide. The scene's GM reaches whisper content via
+        the list endpoint's GM-visibility grant (``InteractionQuerySet.visible_to``)
+        without being a receiver, which exercises the comprehension gate on a
+        receiver-scoped row for a genuinely non-receiver viewer.
+        """
+        gm_account = AccountFactory()
+        SceneGMParticipationFactory(scene=self.scene, account=gm_account)
+
+        whisper = InteractionFactory(
+            persona=self.writer_persona,
+            scene=self.scene,
+            mode=InteractionMode.WHISPER,
+            language=self.language,
+            content="a secret passed in the old tongue",
+        )
+        InteractionReceiverFactory(interaction=whisper, persona=self.fluent_sheet.primary_persona)
+
+        self.client.force_authenticate(user=gm_account)
+        url = reverse("interaction-list")
+        response = self.client.get(url)
+        assert response.status_code == status.HTTP_200_OK
+        row = next(r for r in response.data["results"] if r["id"] == whisper.pk)
+        self.assertNotEqual(row["content"], "a secret passed in the old tongue")
 
     def test_detail_endpoint_garbles_muted_language_interaction(self) -> None:
         """Mute-reveal (detail endpoint, #2087) is NOT a comprehension bypass (#2993).

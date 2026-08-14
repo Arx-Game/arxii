@@ -102,6 +102,50 @@ class SayActionLanguageTests(LanguageSpeechTestCase):
         call_args = mock_broadcast.call_args.args
         assert call_args[1] == '$You() $conj(say) "hello"'
 
+    def test_speaker_own_line_is_second_person(self) -> None:
+        """M2 (#2993 final-review): the speaker's own echo reads 'You say ...',
+        matching the $You() $conj(say) voice of the universal-language branch,
+        not the third-person phrasing every other listener gets.
+        """
+        room = _make_room()
+        speaker, _ = self._sheeted_character(room, key="Speaker", fluency=100)
+
+        with patch.object(speaker, "msg") as mock_msg:
+            result = SayAction().run(speaker, text=self.TEXT, language_id=self.language.pk)
+
+        assert result.success is True
+        sent_text = mock_msg.call_args_list[0].args[0]
+        assert sent_text == f'You say in {self.language.name}, "{self.TEXT}"'
+
+    def test_dreamside_occupant_excluded_from_language_say(self) -> None:
+        """C2 (#2993 final-review): the language-tagged say branch hand-rolls room
+        delivery instead of going through message_location()/msg_contents, so it
+        must apply the same #2287 dreamside exclusion by hand or a dreamside-
+        perceiving character illegitimately hears waking-room language chatter.
+
+        Scoped to the telnet TEXT delivery this PR's per-recipient loop hand-rolls
+        (a positional-string ``msg()`` call) -- the structured WS interaction
+        payload (a kwarg-only ``msg(interaction=...)`` call from the pre-existing,
+        out-of-scope ``push_interaction``/``_broadcast_to_location`` path) is not
+        this fix's concern.
+        """
+        room = _make_room()
+        speaker, _ = self._sheeted_character(room, key="Speaker", fluency=100)
+        dreamer, _ = self._sheeted_character(room, key="Dreamer", fluency=100)
+
+        with (
+            patch(
+                "flows.service_functions.communication._dreamside_occupants",
+                return_value=[dreamer],
+            ),
+            patch.object(dreamer, "msg") as mock_msg,
+        ):
+            result = SayAction().run(speaker, text=self.TEXT, language_id=self.language.pk)
+
+        assert result.success is True
+        text_calls = [c for c in mock_msg.call_args_list if c.args]
+        assert not text_calls, f"dreamer received telnet text delivery: {text_calls}"
+
     def test_language_id_kwarg_beats_current_language(self) -> None:
         room = _make_room()
         other_trait = Trait.objects.create(
@@ -121,6 +165,34 @@ class SayActionLanguageTests(LanguageSpeechTestCase):
         assert result.success is True
         interaction = Interaction.objects.get(content=self.TEXT)
         assert interaction.language_id == self.language.pk
+
+
+class UniversalLanguageNormalizationTests(LanguageSpeechTestCase):
+    """M3 (#2993 final-review): explicitly picking a universal language normalizes
+    to the null 'universal/untagged' contract instead of stamping the real row, and
+    a zero-fluency speaker can still explicitly speak it (no fluency gate applies).
+    """
+
+    TEXT = "the caravan leaves at dawn through the salt gate"
+
+    def test_explicit_universal_language_id_stamps_none(self) -> None:
+        universal_trait = Trait.objects.create(
+            name="TestSpeechUniversalTongue",
+            trait_type=TraitType.LANGUAGE,
+            category=TraitCategory.GENERAL,
+        )
+        universal_language = LanguageFactory(
+            name="TestSpeechUniversalTongue", trait=universal_trait, is_universal=True
+        )
+        room = _make_room()
+        # Deliberately zero fluency — a universal tongue needs none to speak it.
+        speaker, _ = self._sheeted_character(room, key="Speaker")
+
+        result = SayAction().run(speaker, text=self.TEXT, language_id=universal_language.pk)
+
+        assert result.success is True
+        interaction = Interaction.objects.get(content=self.TEXT)
+        self.assertIsNone(interaction.language_id)
 
 
 class WhisperActionLanguageTests(LanguageSpeechTestCase):

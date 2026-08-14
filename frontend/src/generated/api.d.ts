@@ -27554,7 +27554,7 @@ export interface components {
        *     divider for consecutive muted rows.
        */
       readonly is_muted: boolean;
-      readonly language_id: number;
+      readonly language_id: number | null;
       readonly language_name: string | null;
       readonly endorsee_sheet_id: number;
       readonly is_favorited: boolean;
@@ -27703,7 +27703,7 @@ export interface components {
        *     divider for consecutive muted rows.
        */
       readonly is_muted: boolean;
-      readonly language_id: number;
+      readonly language_id: number | null;
       readonly language_name: string | null;
       readonly endorsee_sheet_id: number;
       readonly is_favorited: boolean;

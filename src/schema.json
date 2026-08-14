@@ -48197,6 +48197,7 @@ components:
         language_id:
           type: integer
           readOnly: true
+          nullable: true
         language_name:
           type: string
           nullable: true
@@ -48464,6 +48465,7 @@ components:
         language_id:
           type: integer
           readOnly: true
+          nullable: true
         language_name:
           type: string
           nullable: true

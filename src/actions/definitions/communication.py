@@ -118,6 +118,16 @@ def _resolve_spoken_language(
         if language is None:
             return None, None
 
+    if language.is_universal:
+        # Explicitly picking a universal language (via language_id or a sticky
+        # current_language) is the same in-fiction outcome as the untagged
+        # default -- normalize to None so Interaction.language stays null (the
+        # "null = universal/untagged" contract) and skip the fluency gate
+        # entirely: a universal tongue needs no fluency to speak, so a
+        # zero-fluency speaker can still explicitly select it (#2993
+        # final-review M3).
+        return None, None
+
     try:
         sheet = actor.sheet_data
     except ObjectDoesNotExist:
@@ -217,14 +227,34 @@ class SayAction(Action):
             speaker_band = fluency_band(fluency_value(actor.sheet_data, language))
             location = actor.location
             if location is not None:
+                # #2287 parity (C1 final-review fix): the per-recipient loop below
+                # hand-rolls room delivery instead of going through
+                # message_location()/msg_contents, so it must apply the same
+                # dreamside-occupant exclusion by hand or a dreamside-perceiving
+                # character illegitimately hears waking-room language-tagged says.
+                from flows.service_functions.communication import (  # noqa: PLC0415
+                    _dreamside_occupants,
+                )
+
+                excluded_ids = {obj.pk for obj in _dreamside_occupants(location)}
                 for obj in location.contents:
                     if not hasattr(obj, "msg"):
+                        continue
+                    if obj.pk in excluded_ids:
                         continue
                     rendered = _render_speech_for_listener(
                         actor, obj, text, language=language, speaker_band=speaker_band
                     )
                     obj_state = sdm.initialize_state_for_object(obj)
-                    send_message(obj_state, f'{actor.key} says in {language.name}, "{rendered}"')
+                    if obj.pk == actor.pk:
+                        # Speaker's own echo stays second-person, matching the
+                        # $You() $conj(say) voice of the universal-language branch
+                        # above (#2993 final-review M2).
+                        send_message(obj_state, f'You say in {language.name}, "{rendered}"')
+                    else:
+                        send_message(
+                            obj_state, f'{actor.key} says in {language.name}, "{rendered}"'
+                        )
         # Record + push: creates DB record and sends structured WebSocket payload.
         # Web clients use this for the scene feed display.
         record_interaction(
