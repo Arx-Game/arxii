@@ -56,8 +56,11 @@ services:
       # Pin the superpowers brainstorm-server port (server.cjs reads
       # BRAINSTORM_PORT, otherwise picks random in 49152-65535). Fixing it
       # to one port lets us forward exactly that one to the Windows host
-      # instead of opening a 16k-port range.
-      BRAINSTORM_PORT: "49200"
+      # instead of opening a 16k-port range. Must stay BELOW 49152: Windows'
+      # dynamic port range starts there, and Hyper-V/WinNAT reserves whole
+      # blocks inside it after reboots (netsh excludedportrange), which makes
+      # the host-side bind fail with "forbidden by its access permissions".
+      BRAINSTORM_PORT: "39200"
       # Relocate Claude Code's config directory inside the named-volume mount
       # so .claude.json (account/onboarding state) persists across
       # dc-down/dc-up. Default location is ~/.claude.json (a sibling of the
@@ -97,7 +100,7 @@ services:
       # keeps its own equivalent setup (shell-extras.sh) for `devcontainer exec`,
       # `bash -lc` and agent tooling.
       SHELL: /bin/zsh
-    # Forward the brainstorm-server port so http://localhost:49200/ in the
+    # Forward the brainstorm-server port so http://localhost:39200/ in the
     # Windows browser reaches the in-container server. The skill's
     # start-server.sh defaults to binding 127.0.0.1; pass --host 0.0.0.0
     # --url-host localhost so it actually listens on the forwarded interface.
@@ -111,7 +114,7 @@ services:
     # Use `arx serve` (which serves the built frontend from Django) if you
     # only want to forward 4001+4002 and skip Vite.
     ports:
-      - "49200:49200"
+      - "39200:39200"
       - "3000:3000"
       - "4001:4001"
       - "4002:4002"
