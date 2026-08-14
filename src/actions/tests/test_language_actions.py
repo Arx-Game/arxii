@@ -275,6 +275,8 @@ class RestrictedTrainLanguageActionTests(TestCase):
         assert result.data["self_study"] is False
         dev = DevelopmentPoints.objects.get(character_sheet=sheet, trait=self.trait)
         assert dev.total_earned == TEACHER_DP_PER_SESSION
+        txn = DevelopmentTransaction.objects.get(character_sheet=sheet, trait=self.trait)
+        assert txn.source == DevelopmentSource.TRAINING
 
     def test_existing_fluency_self_study_succeeds_at_practice_rate(self) -> None:
         room = _make_room()
@@ -287,6 +289,8 @@ class RestrictedTrainLanguageActionTests(TestCase):
         assert result.data["self_study"] is True
         dev = DevelopmentPoints.objects.get(character_sheet=sheet, trait=self.trait)
         assert dev.total_earned == SELF_STUDY_DP_PER_SESSION
+        txn = DevelopmentTransaction.objects.get(character_sheet=sheet, trait=self.trait)
+        assert txn.source == DevelopmentSource.PRACTICE
 
     def test_unrestricted_language_self_study_from_zero_still_succeeds(self) -> None:
         """Regression: unrestricted behavior is byte-identical to pre-#3162."""
