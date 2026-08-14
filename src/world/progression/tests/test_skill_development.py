@@ -24,7 +24,12 @@ from world.progression.types import DevelopmentSource
 from world.skills.factories import CharacterSkillValueFactory, SkillFactory
 from world.skills.models import CharacterSkillValue
 from world.traits.factories import TraitFactory
-from world.traits.models import CharacterTraitChange, CharacterTraitValue, TraitChangeSource
+from world.traits.models import (
+    CharacterTraitChange,
+    CharacterTraitValue,
+    TraitChangeSource,
+    TraitType,
+)
 
 
 class CumulativeDpForLevelTest(TestCase):
@@ -565,6 +570,9 @@ class ProcessWeeklySkillDevelopmentTest(TestCase):
         cls.sheet, _ = CharacterSheet.objects.get_or_create(character=cls.character)
         cls.trait_used = TraitFactory(name="weekly_used_trait")
         cls.trait_unused = TraitFactory(name="weekly_unused_trait")
+        cls.trait_language = TraitFactory(
+            name="weekly_unused_language", trait_type=TraitType.LANGUAGE
+        )
         cls.char_class = CharacterClassFactory(name="weekly_test_class")
         cls.game_week = get_current_game_week()
 
@@ -703,6 +711,43 @@ class ProcessWeeklySkillDevelopmentTest(TestCase):
             .first()
         )
         assert dev["rust_debt"] == 0
+
+    def test_language_traits_are_exempt_from_rust(self) -> None:
+        """#2993: a LANGUAGE-trait DevelopmentPoints row never rusts, even unused,
+
+        while a plain SKILL-trait row in the same run rusts normally.
+        """
+        self._set_class_level(5)
+
+        DevelopmentPoints.objects.create(
+            character_sheet=self.sheet, trait=self.trait_unused, total_earned=300
+        )
+        CharacterTraitValue.objects.create(
+            character=self.character.sheet_data, trait=self.trait_unused, value=12
+        )
+        DevelopmentPoints.objects.create(
+            character_sheet=self.sheet, trait=self.trait_language, total_earned=300
+        )
+        CharacterTraitValue.objects.create(
+            character=self.character.sheet_data, trait=self.trait_language, value=12
+        )
+
+        process_weekly_skill_development(self.game_week)
+
+        language_dev = (
+            DevelopmentPoints.objects.filter(character_sheet=self.sheet, trait=self.trait_language)
+            .values("rust_debt")
+            .first()
+        )
+        assert language_dev["rust_debt"] == 0
+
+        skill_dev = (
+            DevelopmentPoints.objects.filter(character_sheet=self.sheet, trait=self.trait_unused)
+            .values("rust_debt")
+            .first()
+        )
+        # char_level=5, rust = 5+5 = 10, cap = (12-10)*100 = 200
+        assert skill_dev["rust_debt"] == 10
 
     def test_no_rust_for_low_level_skills(self) -> None:
         """Skills at or below level 10 don't get rust even if unused."""

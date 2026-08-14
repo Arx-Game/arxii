@@ -231,6 +231,13 @@ def _apply_weekly_rust(
     # week), consider replacing with a subquery or raw SQL NOT IN clause. For MVP
     # scale this is acceptable.
     rust_qs = DevelopmentPoints.objects.select_related("trait").all()
+
+    from world.traits.models import TraitType
+
+    # #2993: languages don't rust - you don't forget your native tongue in a
+    # quiet month (ratified default #5).
+    rust_qs = rust_qs.exclude(trait__trait_type=TraitType.LANGUAGE)
+
     if used_pairs:
         from django.db.models import Q
 

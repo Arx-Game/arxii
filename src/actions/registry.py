@@ -230,6 +230,7 @@ from actions.definitions.journals import (
     EditJournalEntryAction,
     RespondToJournalAction,
 )
+from actions.definitions.language import SetLanguageAction, TrainLanguageAction
 from actions.definitions.locations import (
     AssignRoomTenantAction,
     CommissionDecorationAction,
@@ -612,6 +613,8 @@ _ALL_ACTIONS: list[Action] = [
     PerformRitualAction(),
     AuthorTechniqueAction(),
     TrainTechniqueAction(),
+    SetLanguageAction(),
+    TrainLanguageAction(),
     ImbueAction(),
     WeaveThreadAction(),
     StartRoundAction(),
