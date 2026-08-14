@@ -100,3 +100,13 @@ Domain-local vocabulary for `world.species`. Root terms live in
   Common): granted to every character at CG finalize
   (`provision_starting_languages`) regardless of species or `Beginnings`, a
   content flag rather than a hardcoded name lookup.
+- **Restricted language** — a `Language` with `restricted=True` (#3162):
+  gameplay-gated, cannot be self-studied from zero fluency
+  (`TrainLanguageAction` hard-blocks self-study below fluency 1), but a
+  co-present FLUENT teacher can still teach it from zero — first entry always
+  comes from a GM grant/`Distinction`/story hook, then spreads
+  person-to-person via teacher training. Species/`Beginnings` attachment and
+  `is_universal` grants bypass the flag entirely (CG-time grants are never
+  gated). _Avoid:_ conflating with `is_universal` — the two flags are
+  orthogonal (a language can be neither, either, or in principle both,
+  though a universal+restricted combination has no current content use).

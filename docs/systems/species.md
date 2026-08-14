@@ -146,6 +146,18 @@ graph (Apostate's regional table, 2026-08-14):
   Nox'alfar → Nox'alfar.
 - **No starting grants** — Ancient Chimeran (the tongue Khati derives from) exists as a
   language + trait only; reaching it is a future distinction gate.
+- **Restricted tongues** (`Language.restricted`, #3162) — a gameplay-gated flag for tongues
+  that must not be reachable by grinding alone. `TrainLanguageAction` blocks self-study from
+  zero fluency when `restricted=True` and no co-present FLUENT teacher is resolved (`"No one
+  can teach you {name}, and it is not a tongue you can puzzle out alone."`); a co-present
+  FLUENT teacher can still teach it from zero at the normal `TEACHER_DP_PER_SESSION` rate, and
+  once a character reaches fluency ≥ 1 by any path, ordinary self-study opens up for them.
+  Entry points are therefore: a GM grant, a `Distinction`, or a story hook that seeds the
+  first fluent speaker(s) — from there the tongue spreads person-to-person through the
+  teacher-training path. The flag never touches CG or content-attachment grants — species
+  `starting_languages`, `Beginnings.starting_languages`, and `is_universal` all bypass it
+  entirely, so e.g. Nox'alfar characters still start fluent in Nox'alfar even though it is
+  restricted for everyone who didn't get it at CG.
 
 Every `Language` row pairs with a same-named `LANGUAGE`-type `Trait` row (both in the fixture
 corpus); a `Language` without its trait grants nothing (CG provisioning skips it silently).

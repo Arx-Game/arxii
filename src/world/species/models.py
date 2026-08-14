@@ -325,6 +325,16 @@ class Language(NaturalKeyMixin, CreditedContent, SharedMemoryModel):
             "(Arvani Common). Content flag - no hardcoded name lookups in code."
         ),
     )
+    restricted = models.BooleanField(
+        default=False,
+        help_text=(
+            "Gameplay-gated tongue: cannot be self-studied from zero fluency, but a "
+            "co-present fluent teacher can still teach it from zero. First entry always "
+            "comes from a GM grant/distinction/story hook, then spreads person-to-person. "
+            "Never granted at CG unless explicitly attached (species/beginnings attachment "
+            "and is_universal are unaffected by this flag)."
+        ),
+    )
 
     objects = NaturalKeyManager()
 

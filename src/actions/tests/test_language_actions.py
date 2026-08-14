@@ -224,6 +224,91 @@ class TrainLanguageActionTests(LanguageActionTestCase):
         assert "fluency deepens to 11" in result.message
 
 
+class RestrictedTrainLanguageActionTests(TestCase):
+    """Restricted tongues (#3162): teacher can bootstrap from zero, self-study cannot."""
+
+    @classmethod
+    def setUpTestData(cls) -> None:
+        cls.trait = Trait.objects.create(
+            name="RestrictedTestTongue",
+            trait_type=TraitType.LANGUAGE,
+            category=TraitCategory.GENERAL,
+        )
+        cls.language = LanguageFactory(
+            name="RestrictedTestTongue", trait=cls.trait, restricted=True
+        )
+
+    def setUp(self) -> None:
+        DevelopmentPoints.flush_instance_cache()
+        CharacterTraitValue.flush_instance_cache()
+
+    def _sheeted_character(self, room, *, key, fluency=None):
+        character = CharacterFactory(db_key=key, location=room)
+        sheet = CharacterSheetFactory(character=character)
+        if fluency is not None:
+            CharacterTraitValue.objects.create(character=sheet, trait=self.trait, value=fluency)
+        return character, sheet
+
+    def test_zero_fluency_no_teacher_fails(self) -> None:
+        room = _make_room()
+        speaker, _sheet = self._sheeted_character(room, key="Student")
+
+        result = TrainLanguageAction().run(speaker, language_id=self.language.pk)
+
+        assert result.success is False
+        assert result.message == (
+            f"No one can teach you {self.language.name}, and it is not a tongue "
+            "you can puzzle out alone."
+        )
+
+    def test_zero_fluency_with_fluent_teacher_succeeds_at_training_rate(self) -> None:
+        room = _make_room()
+        speaker, sheet = self._sheeted_character(room, key="Student")
+        teacher, _teacher_sheet = self._sheeted_character(room, key="Teacher", fluency=100)
+
+        result = TrainLanguageAction().run(
+            speaker, language_id=self.language.pk, teacher_id=teacher.pk
+        )
+
+        assert result.success is True
+        assert result.data["amount"] == TEACHER_DP_PER_SESSION
+        assert result.data["self_study"] is False
+        dev = DevelopmentPoints.objects.get(character_sheet=sheet, trait=self.trait)
+        assert dev.total_earned == TEACHER_DP_PER_SESSION
+
+    def test_existing_fluency_self_study_succeeds_at_practice_rate(self) -> None:
+        room = _make_room()
+        speaker, sheet = self._sheeted_character(room, key="Student", fluency=1)
+
+        result = TrainLanguageAction().run(speaker, language_id=self.language.pk)
+
+        assert result.success is True
+        assert result.data["amount"] == SELF_STUDY_DP_PER_SESSION
+        assert result.data["self_study"] is True
+        dev = DevelopmentPoints.objects.get(character_sheet=sheet, trait=self.trait)
+        assert dev.total_earned == SELF_STUDY_DP_PER_SESSION
+
+    def test_unrestricted_language_self_study_from_zero_still_succeeds(self) -> None:
+        """Regression: unrestricted behavior is byte-identical to pre-#3162."""
+        room = _make_room()
+        unrestricted_trait = Trait.objects.create(
+            name="UnrestrictedTestTongue",
+            trait_type=TraitType.LANGUAGE,
+            category=TraitCategory.GENERAL,
+        )
+        unrestricted_language = LanguageFactory(
+            name="UnrestrictedTestTongue", trait=unrestricted_trait, restricted=False
+        )
+        speaker = CharacterFactory(db_key="Student", location=room)
+        CharacterSheetFactory(character=speaker)
+
+        result = TrainLanguageAction().run(speaker, language_id=unrestricted_language.pk)
+
+        assert result.success is True
+        assert result.data["amount"] == SELF_STUDY_DP_PER_SESSION
+        assert result.data["self_study"] is True
+
+
 class CmdSayLanguageTagTests(TestCase):
     """Unit tests for CmdSay.resolve_action_args' per-say language tag (#2993)."""
 
