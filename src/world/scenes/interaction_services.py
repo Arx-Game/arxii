@@ -849,26 +849,12 @@ def record_whisper_interaction(
 def mutter_fragment(text: str) -> str:
     """The room-audible fragment of a mutter (#905): random word leak.
 
-    Classic MUSH mutter, per Apostate's ruling: roughly one word in three
-    survives; elided runs collapse to a single "...". At least one word
-    always leaks (a mutter is audible, that's the point — and the risk).
+    Delegates to the shared garbler (#2993) at the classic one-word-in-three
+    ratio, nondeterministic (SystemRandom) - a fresh leak every mutter.
     """
-    import random  # noqa: PLC0415
+    from world.species.language_services import garble_text  # noqa: PLC0415
 
-    rng = random.SystemRandom()
-    words = text.split()
-    if not words:
-        return "..."
-    kept_flags = [rng.random() < 1 / 3 for _ in words]
-    if not any(kept_flags):
-        kept_flags[rng.randrange(len(words))] = True
-    parts: list[str] = []
-    for word, kept in zip(words, kept_flags, strict=True):
-        if kept:
-            parts.append(word)
-        elif not parts or parts[-1] != "...":
-            parts.append("...")
-    return " ".join(parts)
+    return garble_text(text, 1 / 3)
 
 
 def record_mutter_interaction(
