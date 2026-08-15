@@ -1569,11 +1569,13 @@ class ExpulsionBar(SharedMemoryModel):
 
     ``lifted_at`` is null while the bar is active (partial-unique per
     (room, barred_sheet), mirroring ``NPCAssignment``'s active-row pattern).
-    Entry enforcement lives at ``flows.service_functions.movement
-    .check_exit_traversal`` (pre-traversal — blocks the move before it
-    happens, mirroring the ward/alarm ``react_to_unauthorized_entry``
-    precedent but pre- rather than post-arrival, since re-entry must never
-    even land the barred character in the room).
+    Entry enforcement covers every route in: ``flows.service_functions.movement
+    .check_exit_traversal`` (walking), ``world.magic.services.portal_travel
+    .perform_portal_travel`` (portal fast-path, pre-anima-debit), and
+    ``HomeAction`` (direct home recall) — all pre-move, mirroring the
+    ward/alarm ``react_to_unauthorized_entry`` precedent but pre- rather
+    than post-arrival, since re-entry must never even land the barred
+    character in the room.
     """
 
     room = models.ForeignKey(
