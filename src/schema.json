@@ -2747,6 +2747,7 @@ paths:
           type: string
           enum:
           - blessing
+          - conversion
           - funeral
           - seance
           - sermon
@@ -2757,6 +2758,7 @@ paths:
           * `sermon` - Sermon
           * `seance` - Seance
           * `wedding` - Wedding
+          * `conversion` - Conversion
       - in: query
         name: location
         schema:
@@ -2821,6 +2823,114 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/Ceremony'
+          description: ''
+  /api/ceremonies/conversion-offers/:
+    get:
+      operationId: ceremonies_conversion_offers_list
+      description: |-
+        PENDING conversion-offer inbox for the requesting account (#2361).
+
+        Mirrors SeanceOfferViewSet's shape exactly, for the PC-officiated conversion
+        route (Ratified amendment #1a) — the self-officiated solo route never mints
+        an offer at all, so it needs no player-facing delivery surface.
+
+        GET  /api/ceremonies/conversion-offers/ — the caller's own PENDING offers,
+        across every character sheet they've ever held. Deliberately no pagination
+        — this list is always small (bounded by how many open PC-officiated
+        Conversion ceremonies currently name this account's characters).
+        POST .../{id}/accept/ — accept (repoints WorshipDeclaration at finish; body
+            may include ``sincere``, the heart-vs-lip-service choice, default True).
+        POST .../{id}/decline/ — decline.
+      tags:
+      - ceremonies
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/WorshipConversionOffer'
+          description: ''
+  /api/ceremonies/conversion-offers/{id}/accept/:
+    post:
+      operationId: ceremonies_conversion_offers_accept_create
+      description: |-
+        PENDING conversion-offer inbox for the requesting account (#2361).
+
+        Mirrors SeanceOfferViewSet's shape exactly, for the PC-officiated conversion
+        route (Ratified amendment #1a) — the self-officiated solo route never mints
+        an offer at all, so it needs no player-facing delivery surface.
+
+        GET  /api/ceremonies/conversion-offers/ — the caller's own PENDING offers,
+        across every character sheet they've ever held. Deliberately no pagination
+        — this list is always small (bounded by how many open PC-officiated
+        Conversion ceremonies currently name this account's characters).
+        POST .../{id}/accept/ — accept (repoints WorshipDeclaration at finish; body
+            may include ``sincere``, the heart-vs-lip-service choice, default True).
+        POST .../{id}/decline/ — decline.
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: string
+        required: true
+      tags:
+      - ceremonies
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/WorshipConversionOfferRequest'
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/WorshipConversionOffer'
+          description: ''
+  /api/ceremonies/conversion-offers/{id}/decline/:
+    post:
+      operationId: ceremonies_conversion_offers_decline_create
+      description: |-
+        PENDING conversion-offer inbox for the requesting account (#2361).
+
+        Mirrors SeanceOfferViewSet's shape exactly, for the PC-officiated conversion
+        route (Ratified amendment #1a) — the self-officiated solo route never mints
+        an offer at all, so it needs no player-facing delivery surface.
+
+        GET  /api/ceremonies/conversion-offers/ — the caller's own PENDING offers,
+        across every character sheet they've ever held. Deliberately no pagination
+        — this list is always small (bounded by how many open PC-officiated
+        Conversion ceremonies currently name this account's characters).
+        POST .../{id}/accept/ — accept (repoints WorshipDeclaration at finish; body
+            may include ``sincere``, the heart-vs-lip-service choice, default True).
+        POST .../{id}/decline/ — decline.
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: string
+        required: true
+      tags:
+      - ceremonies
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/WorshipConversionOfferRequest'
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/WorshipConversionOffer'
           description: ''
   /api/ceremonies/seance-offers/:
     get:
@@ -73600,6 +73710,52 @@ components:
       - detect_difficulty
       - fixture_key
       - id
+    WorshipConversionOffer:
+      type: object
+      description: |-
+        PENDING conversion-offer inbox row (#2361). Mirrors SeanceManifestationOfferSerializer.
+
+        ``presented_being_name`` is the being the rite converts the honoree TO — the LEAK
+        RULE above applies here too: only ``presented_being`` is ever exposed.
+      properties:
+        id:
+          type: integer
+          readOnly: true
+        honoree_name:
+          type: string
+          readOnly: true
+        ceremony_location_name:
+          type: string
+          readOnly: true
+        ceremony_id:
+          type: integer
+          readOnly: true
+        presented_being_name:
+          type: string
+          readOnly: true
+        status:
+          $ref: '#/components/schemas/Status7baEnum'
+        created_at:
+          type: string
+          format: date-time
+          readOnly: true
+      required:
+      - ceremony_id
+      - ceremony_location_name
+      - created_at
+      - honoree_name
+      - id
+      - presented_being_name
+    WorshipConversionOfferRequest:
+      type: object
+      description: |-
+        PENDING conversion-offer inbox row (#2361). Mirrors SeanceManifestationOfferSerializer.
+
+        ``presented_being_name`` is the being the rite converts the honoree TO — the LEAK
+        RULE above applies here too: only ``presented_being`` is ever exposed.
+      properties:
+        status:
+          $ref: '#/components/schemas/Status7baEnum'
     WorshippedBeingRef:
       type: object
       properties:

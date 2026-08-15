@@ -6617,7 +6617,12 @@ lightly-structured freeform RP. Full doc: `docs/systems/worship.md`; model decis
   Exceptions: `CeremonyError` (user_message). `respond_to_conversion_offer` (#2361,
   account-scoped accept/decline, mirrors `respond_to_seance_offer`; accepting records
   the heart-vs-lip-service choice on the offer — the actual repoint happens at finish),
-  `pending_conversion_offers_for_account`. Actions: `conversion_offer_respond`.
+  `pending_conversion_offers_for_account`. Actions: `conversion_offer_respond`; telnet
+  `conversion` (offers/accept/decline, telnet accept is always sincere — the lip-service
+  choice is web-only); API `/api/ceremonies/conversion-offers/` (list + accept/decline,
+  `WorshipConversionOfferSerializer`, `accept` body takes optional `sincere`); frontend
+  `ConversionOfferBanner`/`ConversionOfferDialog` (mounted in `Layout.tsx` next to
+  `SeanceOfferBanner`; the dialog's Switch carries the heart-vs-lip-service choice).
 - **Seance (#2393)**: `SeanceManifestationOffer` (one per honoree, PENDING/ACCEPTED/DECLINED)
   — created by `open_ceremony` for a SEANCE-type ceremony. `respond_to_seance_offer`
   (account-scoped accept/decline; accept moves the honoree's character to the ceremony's

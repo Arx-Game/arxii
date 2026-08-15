@@ -12,6 +12,7 @@ from world.ceremonies.models import (
     CeremonyHonoree,
     CeremonySpeech,
     SeanceManifestationOffer,
+    WorshipConversionOffer,
 )
 
 
@@ -75,6 +76,37 @@ class SeanceManifestationOfferSerializer(serializers.ModelSerializer):
             "honoree_name",
             "ceremony_location_name",
             "ceremony_id",
+            "status",
+            "created_at",
+        ]
+
+
+class WorshipConversionOfferSerializer(serializers.ModelSerializer):
+    """PENDING conversion-offer inbox row (#2361). Mirrors SeanceManifestationOfferSerializer.
+
+    ``presented_being_name`` is the being the rite converts the honoree TO — the LEAK
+    RULE above applies here too: only ``presented_being`` is ever exposed.
+    """
+
+    honoree_name = serializers.CharField(
+        source="ceremony_honoree.honoree_sheet.character.db_key", read_only=True
+    )
+    ceremony_location_name = serializers.CharField(
+        source="ceremony_honoree.ceremony.location.objectdb.db_key", read_only=True
+    )
+    ceremony_id = serializers.IntegerField(source="ceremony_honoree.ceremony_id", read_only=True)
+    presented_being_name = serializers.CharField(
+        source="ceremony_honoree.ceremony.presented_being.name", read_only=True
+    )
+
+    class Meta:
+        model = WorshipConversionOffer
+        fields = [
+            "id",
+            "honoree_name",
+            "ceremony_location_name",
+            "ceremony_id",
+            "presented_being_name",
             "status",
             "created_at",
         ]

@@ -33,14 +33,18 @@ Vitals (#2287 ghost containers), Events/Scenes (optional chassis)
   faith-colored Audere Majora crossing variants.
 - **Post-CG public conversion (#2361):** a `CONVERSION` ceremony repoints
   `WorshipDeclaration.public_being`, via either a PC-officiated rite the convert
-  must accept (`WorshipConversionOffer`, mirrors the Seance offer) or a
-  self-officiated solo rite (no other PC needed). The heart-vs-lip-service choice
-  (`public_is_sincere`) is private, owner/staff-only. The deed rides the existing
-  #1464 scandal fork — no bespoke social-consequence mechanism. Secret-faith
-  retarget/shed (the draft spec's Decisions 4/5) was scoped OUT of this pass: an
-  old secret faith's `Secret` row is proven untouched (a no-op), not built into a
-  retarget/shed service or a new secret-side Action — flag as a possible follow-on
-  if play surfaces demand for changing a *secret* faith post-CG.
+  must accept (`WorshipConversionOffer`, mirrors the Seance offer — player-reachable
+  through REST `/api/ceremonies/conversion-offers/`, the telnet `conversion` command,
+  and the web `ConversionOfferBanner`/`ConversionOfferDialog`, all mirroring the
+  Seance offer's own delivery surfaces) or a self-officiated solo rite (no other PC
+  needed). The heart-vs-lip-service choice (`public_is_sincere`) is private,
+  owner/staff-only; the web dialog carries the choice as a Switch, telnet acceptance
+  is always sincere. The deed rides the existing #1464 scandal fork — no bespoke
+  social-consequence mechanism. Secret-faith retarget/shed (the draft spec's Decisions
+  4/5) was scoped OUT of this pass: an old secret faith's `Secret` row is proven
+  untouched (a no-op), not built into a retarget/shed service or a new secret-side
+  Action — flag as a possible follow-on if play surfaces demand for changing a
+  *secret* faith post-CG.
 
 ## Not built (filed)
 

@@ -14,7 +14,11 @@ from rest_framework.response import Response
 from rest_framework.viewsets import GenericViewSet, ReadOnlyModelViewSet
 
 from world.ceremonies.models import Ceremony
-from world.ceremonies.serializers import CeremonySerializer, SeanceManifestationOfferSerializer
+from world.ceremonies.serializers import (
+    CeremonySerializer,
+    SeanceManifestationOfferSerializer,
+    WorshipConversionOfferSerializer,
+)
 from world.stories.pagination import StandardResultsSetPagination
 
 
@@ -61,6 +65,55 @@ class SeanceOfferViewSet(mixins.ListModelMixin, GenericViewSet):
 
         result = RespondSeanceOfferAction().run(
             actor=None, account=request.user, offer_id=pk, accept=accept
+        )
+        if not result.success:
+            return Response({"detail": result.message}, status=status.HTTP_400_BAD_REQUEST)
+        return Response({"detail": result.message, **(result.data or {})})
+
+    @action(detail=True, methods=["post"])
+    def accept(self, request: Request, pk: str | None = None) -> Response:
+        return self._respond(request, pk, accept=True)
+
+    @action(detail=True, methods=["post"])
+    def decline(self, request: Request, pk: str | None = None) -> Response:
+        return self._respond(request, pk, accept=False)
+
+
+class ConversionOfferViewSet(mixins.ListModelMixin, GenericViewSet):
+    """PENDING conversion-offer inbox for the requesting account (#2361).
+
+    Mirrors SeanceOfferViewSet's shape exactly, for the PC-officiated conversion
+    route (Ratified amendment #1a) — the self-officiated solo route never mints
+    an offer at all, so it needs no player-facing delivery surface.
+
+    GET  /api/ceremonies/conversion-offers/ — the caller's own PENDING offers,
+    across every character sheet they've ever held. Deliberately no pagination
+    — this list is always small (bounded by how many open PC-officiated
+    Conversion ceremonies currently name this account's characters).
+    POST .../{id}/accept/ — accept (repoints WorshipDeclaration at finish; body
+        may include ``sincere``, the heart-vs-lip-service choice, default True).
+    POST .../{id}/decline/ — decline.
+    """
+
+    serializer_class = WorshipConversionOfferSerializer
+    permission_classes = [IsAuthenticated]
+    pagination_class = None
+
+    def get_queryset(self):
+        from world.ceremonies.services import pending_conversion_offers_for_account  # noqa: PLC0415
+
+        return pending_conversion_offers_for_account(self.request.user)
+
+    def _respond(self, request: Request, pk: str | None, *, accept: bool) -> Response:
+        from actions.definitions.ceremonies import RespondConversionOfferAction  # noqa: PLC0415
+
+        sincere = request.data.get("sincere", True)
+        result = RespondConversionOfferAction().run(
+            actor=None,
+            account=request.user,
+            offer_id=pk,
+            accept=accept,
+            sincere=bool(sincere),
         )
         if not result.success:
             return Response({"detail": result.message}, status=status.HTTP_400_BAD_REQUEST)

@@ -227,7 +227,15 @@ honoree — the convert must accept it (`respond_to_conversion_offer`, the one
 new Action: `conversion_offer_respond`) before `finish_ceremony` will convert
 them; declining or leaving it unanswered means the rite concludes but honors
 nothing for them (no deed, no worship repoint — mirrors a declined Seance
-offer). (b) **Self-officiated solo** (the temple/no-officiant route): the
+offer). The offer's own delivery surfaces mirror the Seance offer's byte for
+byte: REST `/api/ceremonies/conversion-offers/` (`ConversionOfferViewSet`,
+list + `accept`/`decline`, accept body takes optional `sincere`), telnet
+`conversion` command (`commands/conversion.py`, offers/accept/decline — telnet
+accept is always sincere, since there's no syntax slot for the choice there),
+and the web `ConversionOfferBanner`/`ConversionOfferDialog`
+(`frontend/src/ceremonies/`, mounted in `Layout.tsx` next to
+`SeanceOfferBanner`; the dialog's Switch carries the heart-vs-lip-service
+choice). (b) **Self-officiated solo** (the temple/no-officiant route): the
 convert opens their own rite naming themself as both officiant and honoree —
 `open_ceremony` skips the offer entirely (nobody consents to their own
 choice); `finish_ceremony`'s optional `sincere` kwarg carries their

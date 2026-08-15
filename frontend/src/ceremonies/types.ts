@@ -16,3 +16,21 @@ export interface SeanceOfferRespondResult {
   offer_id?: number;
   status?: string;
 }
+
+/** A PENDING public-conversion offer (#2361) — the PC-officiated route only;
+ * the self-officiated solo route never mints one. */
+export interface ConversionOffer {
+  id: number;
+  honoree_name: string;
+  ceremony_location_name: string;
+  ceremony_id: number;
+  presented_being_name: string;
+  status: 'pending' | 'accepted' | 'declined';
+  created_at: string;
+}
+
+export interface ConversionOfferRespondResult {
+  detail: string;
+  offer_id?: number;
+  status?: string;
+}

@@ -42,6 +42,88 @@ def _retired_honoree_with_offer():
     return offer, player_data.account
 
 
+def _pc_officiated_conversion_offer():
+    """A PC-officiated CONVERSION offer (#2361), mirrors _retired_honoree_with_offer."""
+    CeremonyTypeFactory(key=CeremonyTypeKey.CONVERSION, name="Conversion")
+    officiant_sheet = CharacterSheetFactory()
+    CharacterVitalsFactory(character_sheet=officiant_sheet)
+    old_being = WorshippedBeingFactory()
+    new_being = WorshippedBeingFactory()
+    WorshipDeclaration.objects.create(character_sheet=officiant_sheet, public_being=old_being)
+
+    convert_sheet = CharacterSheetFactory()
+    CharacterVitalsFactory(character_sheet=convert_sheet)
+    player_data = PlayerDataFactory()
+    entry = RosterEntryFactory(character_sheet=convert_sheet)
+    RosterTenureFactory(roster_entry=entry, player_data=player_data)
+
+    ceremony = open_ceremony(
+        officiant_persona=officiant_sheet.primary_persona,
+        type_key=CeremonyTypeKey.CONVERSION,
+        honoree_sheets=[convert_sheet],
+        location_profile=RoomProfileFactory(),
+        being=new_being,
+    )
+    offer = ceremony.honorees.get(honoree_sheet=convert_sheet).conversion_offer
+    return offer, player_data.account, new_being
+
+
+class ConversionOfferApiTests(TestCase):
+    """Mirrors SeanceOfferApiTests — the player-facing delivery surface for route (a)."""
+
+    def setUp(self) -> None:
+        self.client = APIClient()
+
+    def test_list_returns_own_pending_offers_only(self) -> None:
+        offer, account, _new_being = _pc_officiated_conversion_offer()
+        stranger = AccountFactory()
+
+        self.client.force_authenticate(user=stranger)
+        stranger_response = self.client.get("/api/ceremonies/conversion-offers/")
+        self.assertEqual(stranger_response.status_code, 200)
+        self.assertEqual(stranger_response.data, [])
+
+        self.client.force_authenticate(user=account)
+        response = self.client.get("/api/ceremonies/conversion-offers/")
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual([row["id"] for row in response.data], [offer.pk])
+        self.assertEqual(response.data[0]["presented_being_name"], _new_being.name)
+
+    def test_accept_dispatches_the_action_and_records_sincerity(self) -> None:
+        offer, account, _new_being = _pc_officiated_conversion_offer()
+        self.client.force_authenticate(user=account)
+
+        response = self.client.post(
+            f"/api/ceremonies/conversion-offers/{offer.pk}/accept/",
+            {"sincere": False},
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, 200)
+        offer.refresh_from_db()
+        self.assertEqual(offer.status, "accepted")
+        self.assertFalse(offer.is_sincere)
+
+    def test_accept_defaults_sincere_true_when_unspecified(self) -> None:
+        offer, account, _new_being = _pc_officiated_conversion_offer()
+        self.client.force_authenticate(user=account)
+
+        self.client.post(f"/api/ceremonies/conversion-offers/{offer.pk}/accept/")
+
+        offer.refresh_from_db()
+        self.assertTrue(offer.is_sincere)
+
+    def test_decline_dispatches_the_action(self) -> None:
+        offer, account, _new_being = _pc_officiated_conversion_offer()
+        self.client.force_authenticate(user=account)
+
+        response = self.client.post(f"/api/ceremonies/conversion-offers/{offer.pk}/decline/")
+
+        self.assertEqual(response.status_code, 200)
+        offer.refresh_from_db()
+        self.assertEqual(offer.status, "declined")
+
+
 class SeanceOfferApiTests(TestCase):
     def setUp(self) -> None:
         self.client = APIClient()

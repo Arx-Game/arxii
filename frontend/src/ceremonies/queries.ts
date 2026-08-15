@@ -5,6 +5,7 @@ import * as api from './api';
 export const ceremonyKeys = {
   all: ['ceremonies'] as const,
   seanceOffers: () => [...ceremonyKeys.all, 'seance-offers'] as const,
+  conversionOffers: () => [...ceremonyKeys.all, 'conversion-offers'] as const,
 };
 
 /** Gates on account only — NOT on available_characters.length (see the
@@ -28,6 +29,39 @@ export function useRespondToSeanceOffer() {
       accept ? api.acceptSeanceOffer(offerId) : api.declineSeanceOffer(offerId),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ceremonyKeys.seanceOffers() });
+    },
+  });
+}
+
+/** Mirrors useSeanceOffers — gates on account only, same retired-only-account reasoning. */
+export function useConversionOffers() {
+  const account = useAccount();
+  return useQuery({
+    queryKey: ceremonyKeys.conversionOffers(),
+    queryFn: () => api.getConversionOffers(),
+    enabled: !!account,
+    staleTime: 30_000,
+    refetchInterval: 30_000,
+  });
+}
+
+export function useRespondToConversionOffer() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({
+      offerId,
+      accept,
+      sincere,
+    }: {
+      offerId: number;
+      accept: boolean;
+      sincere?: boolean;
+    }) =>
+      accept
+        ? api.acceptConversionOffer(offerId, sincere ?? true)
+        : api.declineConversionOffer(offerId),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ceremonyKeys.conversionOffers() });
     },
   });
 }
