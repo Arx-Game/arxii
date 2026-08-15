@@ -11,6 +11,7 @@ import type { AccountInvite, AccountInviteStatus } from '@/staff/types';
 import {
   useAccountInviteList,
   useIssueAccountInvite,
+  useResendAccountInvite,
   useRevokeAccountInvite,
 } from '@/staff/queries';
 
@@ -99,10 +100,19 @@ function IssueInviteForm() {
 
 function InviteRow({ invite }: { invite: AccountInvite }) {
   const revoke = useRevokeAccountInvite();
+  const resend = useResendAccountInvite();
 
   const handleCopyLink = () => {
     navigator.clipboard?.writeText(inviteLink(invite.token));
     toast.success('Invite link copied.');
+  };
+
+  const handleResend = () => {
+    resend.mutate(invite.id, {
+      onSuccess: () => toast.success(`Invite re-sent to ${invite.email}.`),
+      onError: (err) =>
+        toast.error(err instanceof Error ? err.message : 'Failed to resend invite.'),
+    });
   };
 
   const handleRevoke = () => {
@@ -127,6 +137,14 @@ function InviteRow({ invite }: { invite: AccountInvite }) {
           <Badge variant={statusVariant(invite.status)}>{invite.status}</Badge>
           {invite.status === 'pending' && (
             <>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={handleResend}
+                disabled={resend.isPending}
+              >
+                Resend Email
+              </Button>
               <Button variant="outline" size="sm" onClick={handleCopyLink}>
                 Copy Link
               </Button>

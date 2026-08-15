@@ -330,3 +330,12 @@ export async function revokeAccountInvite(id: number): Promise<AccountInvite> {
   if (!res.ok) throw new Error('Failed to revoke invite');
   return res.json();
 }
+
+export async function resendAccountInvite(id: number): Promise<AccountInvite> {
+  const res = await apiFetch(`${INVITES_URL}/${id}/resend/`, { method: 'POST' });
+  if (!res.ok) {
+    const data = await res.json().catch(() => null);
+    throw new Error(data?.detail ?? 'Failed to resend invite');
+  }
+  return res.json();
+}

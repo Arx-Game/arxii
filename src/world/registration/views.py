@@ -71,3 +71,25 @@ class AccountInviteViewSet(
         invite = self.get_object()
         services.revoke_invite(invite, by=request.user)
         return Response(AccountInviteSerializer(invite).data)
+
+    @action(detail=True, methods=["post"])
+    def resend(self, request: Request, pk=None) -> Response:
+        """Mail the redemption link again, for an invitee who lost the first one.
+
+        Refuses anything not currently redeemable: a redeemed, revoked or
+        expired invite has no working link to send, so mailing one would only
+        hand the recipient a dead end.
+        """
+        invite = self.get_object()
+        if not invite.is_redeemable:
+            return Response(
+                {"detail": "Only a pending invite can be resent.", "status": invite.status},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        sent = services.send_invite_email(invite)
+        if not sent:
+            return Response(
+                {"detail": "The invite could not be emailed. Use Copy Link instead."},
+                status=status.HTTP_502_BAD_GATEWAY,
+            )
+        return Response(AccountInviteSerializer(invite).data)

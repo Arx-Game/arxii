@@ -18,11 +18,14 @@ TOKEN_BYTES = 32
 
 
 def issue_invite(email: str, invited_by: AccountDB, note: str = "") -> AccountInvite:
-    """Issue an invite for ``email``.
+    """Issue an invite for ``email`` and email the redemption link to it.
 
     An already-active (redeemable) invite for the same email is returned
     unchanged rather than duplicated (active-invite dedup); an email with
-    only dead invites (redeemed/revoked/expired) gets a fresh row.
+    only dead invites (redeemed/revoked/expired) gets a fresh row. Either way
+    the invitee is mailed, because "invite this person" means the same thing
+    to staff whichever branch runs, and re-issuing is the natural way to say
+    "send it again".
     """
     normalized_email = email.strip().lower()
     existing = (
@@ -35,15 +38,33 @@ def issue_invite(email: str, invited_by: AccountDB, note: str = "") -> AccountIn
         .first()
     )
     if existing is not None and not existing.is_expired:
+        send_invite_email(existing)
         return existing
 
-    return AccountInvite.objects.create(
+    invite = AccountInvite.objects.create(
         email=normalized_email,
         token=secrets.token_urlsafe(TOKEN_BYTES),
         invited_by=invited_by,
         expires_at=timezone.now() + timedelta(days=DEFAULT_INVITE_DURATION_DAYS),
         note=note,
     )
+    send_invite_email(invite)
+    return invite
+
+
+def send_invite_email(invite: AccountInvite) -> bool:
+    """Mail ``invite``'s redemption link to the address it is bound to.
+
+    Returns True when the send succeeded, False when it did not. Reports
+    failure rather than raising: the invite row is already committed and still
+    valid, and the staff page keeps a Copy Link button precisely so a bounced
+    send stays recoverable by hand. The service swallows both of the failure
+    modes that matter (template render and SMTP), so nothing propagates here.
+    Never call this for an invite that is not redeemable.
+    """
+    from world.registration.email_service import RegistrationEmailService  # noqa: PLC0415
+
+    return RegistrationEmailService.send_account_invite(invite)
 
 
 @transaction.atomic

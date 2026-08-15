@@ -1,0 +1,53 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="utf-8">
+    <title>Your Invitation - Arx II</title>
+    <style>
+        body { font-family: Arial, sans-serif; line-height: 1.6; margin: 20px; }
+        .header { background: #2c3e50; color: white; padding: 20px; text-align: center; }
+        .content { padding: 20px; background: #f8f9fa; }
+        .footer { padding: 10px; font-size: 12px; color: #666; }
+        .highlight { background: #e8f4fd; padding: 15px; border-left: 4px solid #3498db; margin: 15px 0; }
+        .button { display: inline-block; background: #3498db; color: white; padding: 12px 24px;
+                  text-decoration: none; border-radius: 4px; font-weight: bold; }
+        .fallback { word-break: break-all; font-size: 12px; color: #444; }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <h1>Arx II - You Are Invited</h1>
+    </div>
+
+    <div class="content">
+        <p>Hello,</p>
+
+        <p>
+            {{ invited_by_name }} has invited you to create an account on Arx II.
+            Registration is invite-only right now, so this link is what lets you sign up.
+        </p>
+
+        <div class="highlight">
+            <p><a class="button" href="{{ invite_url }}">Create your account</a></p>
+            <p class="fallback">
+                If the button does not work, copy this address into your browser:<br>
+                {{ invite_url }}
+            </p>
+        </div>
+
+        <p>
+            This invitation was issued to <strong>{{ invite_email }}</strong> and can only be
+            used with that address. It can be used once, and it expires on
+            <strong>{{ expires_at|date:"F j, Y" }}</strong>.
+        </p>
+
+        <p>If you were not expecting this invitation, you can ignore this email.</p>
+
+        <p>- The Arx II Staff Team</p>
+    </div>
+
+    <div class="footer">
+        <p>This is an automated message from Arx II. Please do not reply to this email.</p>
+    </div>
+</body>
+</html>
