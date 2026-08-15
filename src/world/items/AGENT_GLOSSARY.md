@@ -88,6 +88,17 @@ _Avoid_: take (as a synonym), pickpocket, loot (as a verb for a live owner's ite
 - **Dual provenance** — `crafter_*` + `designer_*` pairs on `ItemInstance`;
   renders "Crafted by X, Designed by Y", collapsing when equal. The prose
   author is never erased again. _Avoid:_ maker (ambiguous).
+- **Standing-based service gating** (#2995) — a persona-bearing NPC seller
+  (`MarketStall.shopkeeper_persona`, `CraftingServiceOffer.crafter_persona`)
+  reads `NpcRegard` (#1717) of the buyer at purchase time: this is a
+  functionary **service** the NPC extends, not a fixed shop window — their
+  opinion shifts the price (`REGARD_PRICE_BANDS`), gates reserved stock
+  (`min_regard`), and past `REGARD_REFUSAL_FLOOR` refuses service outright.
+  Scoped to persona-bearing NPCs only — a class-1 `Functionary` (see
+  `npc_services/AGENT_GLOSSARY.md`) has no `Persona` to hold the opinion, and
+  a PC seller's stall/offer is never gated (`NpcRegard` never holds a PC's
+  opinion, ADR-0085). _Avoid:_ shop discount/markup (frames it as a fixed
+  price rule rather than the NPC's own standing-driven judgment).
 - **Revealing (garment)** — `ItemTemplate.is_revealing`: the garment occupies
   its slots but leaves the covered skin exposed — no sun coverage
   (`world.species.sun_exposure`), and the future tattoo/skin-visibility

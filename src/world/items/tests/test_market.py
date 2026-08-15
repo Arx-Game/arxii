@@ -41,9 +41,10 @@ class StockTests(TestCase):
         template = ItemTemplate.objects.create(name="Iron Ingot T")
         listing = StockListing.objects.create(stall=stall, template=template, price=120)
 
-        instance = purchase_stock(listing=listing, buyer=buyer)
+        instance, price = purchase_stock(listing=listing, buyer=buyer)
 
         assert instance.holder_character_sheet_id == buyer.character_sheet_id
+        assert price == 120
         purse = get_or_create_purse(buyer.character_sheet)
         purse.refresh_from_db()
         assert purse.balance == 880

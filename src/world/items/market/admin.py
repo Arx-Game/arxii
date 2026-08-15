@@ -21,14 +21,22 @@ from world.items.market.models import (
 class StockListingInline(admin.TabularInline):
     model = StockListing
     extra = 0
+    fields = ["template", "price", "min_regard", "is_active"]
     raw_id_fields = ["template"]
 
 
 class MarketStallInline(admin.TabularInline):
     model = MarketStall
     extra = 0
-    fields = ["name", "stall_kind", "owner_persona", "host_org", "cut_percent"]
-    raw_id_fields = ["owner_persona", "host_org"]
+    fields = [
+        "name",
+        "stall_kind",
+        "owner_persona",
+        "shopkeeper_persona",
+        "host_org",
+        "cut_percent",
+    ]
+    raw_id_fields = ["owner_persona", "shopkeeper_persona", "host_org"]
 
 
 @admin.register(MarketSquare)
@@ -43,10 +51,17 @@ class MarketSquareAdmin(admin.ModelAdmin):
 class MarketStallAdmin(admin.ModelAdmin):
     """Where a fence gets placed — ``stall_kind`` is the whole point (#2862)."""
 
-    list_display = ["name", "stall_kind", "square", "owner_persona", "host_org"]
+    list_display = [
+        "name",
+        "stall_kind",
+        "square",
+        "owner_persona",
+        "shopkeeper_persona",
+        "host_org",
+    ]
     list_filter = ["stall_kind"]
     search_fields = ["name", "square__name"]
-    raw_id_fields = ["square", "owner_persona", "host_org"]
+    raw_id_fields = ["square", "owner_persona", "shopkeeper_persona", "host_org"]
     inlines = [StockListingInline]
 
 
@@ -58,7 +73,14 @@ class WareListingAdmin(admin.ModelAdmin):
 
 @admin.register(CraftingServiceOffer)
 class CraftingServiceOfferAdmin(admin.ModelAdmin):
-    list_display = ["crafter_persona", "recipe_kind", "shop_room", "fee", "is_active"]
+    list_display = [
+        "crafter_persona",
+        "recipe_kind",
+        "shop_room",
+        "fee",
+        "min_regard",
+        "is_active",
+    ]
     list_filter = ["is_active"]
     raw_id_fields = ["crafter_persona", "shop_room"]
 

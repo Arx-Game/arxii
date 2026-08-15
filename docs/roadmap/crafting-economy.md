@@ -75,6 +75,16 @@ The Accents/quality/prestige arc (spec on #2878; ADR-0192):
   FACET_ATTACH/STYLE_ATTACH/GEM_CUT seeded pre-content (#3006 Task 2, above).
   Ware stock still comes from existing channels until the lore repo ships
   ITEM_CREATE recipe fixtures.
+- **Standing-based service gating shipped (#2995).** A persona-bearing NPC
+  seller (`MarketStall.shopkeeper_persona` / `CraftingServiceOffer.
+  crafter_persona`) now reads `NpcRegard` (#1717) at purchase time — a
+  functionary service the NPC extends, not a static shop window: standing
+  shifts the price (PLACEHOLDER bands), gates reserved stock
+  (`min_regard`), and past a hostile floor (PLACEHOLDER `-500`) refuses
+  service outright. Scoped to persona-bearing NPCs only (class-1
+  `Functionary` placements — e.g. the permit clerk — have no `Persona` to
+  hold an opinion, ADR-0070); `WareListing`'s PC-stall path is unaffected
+  (ADR-0085). See [market.md](market.md#standing-based-service-gating-2995).
 
 
 **Status:** in-progress

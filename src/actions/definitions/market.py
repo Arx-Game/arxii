@@ -66,14 +66,14 @@ class BuyStockAction(_MarketAction):
         if listing is None:
             return ActionResult(success=False, message="No such stock listing.")
         try:
-            instance = purchase_stock(listing=listing, buyer=persona)
+            instance, price = purchase_stock(listing=listing, buyer=persona)
         except MarketServiceError as exc:
             return ActionResult(success=False, message=exc.user_message)
         except ValidationError as exc:
             return ActionResult(success=False, message=exc.messages[0])
         return ActionResult(
             success=True,
-            message=f"You buy {instance.display_name} for {listing.price} coppers.",
+            message=f"You buy {instance.display_name} for {price} coppers.",
             data={"item_instance_id": instance.pk},
         )
 
@@ -285,7 +285,7 @@ class ServiceCraftAction(_MarketAction):
         if target is None:
             return ActionResult(success=False, message="No such facet or style.")
         try:
-            result = run_service_craft(
+            result, fee = run_service_craft(
                 offer=offer,
                 buyer=persona,
                 buyer_character=actor,
@@ -298,9 +298,10 @@ class ServiceCraftAction(_MarketAction):
             return ActionResult(success=False, message="; ".join(exc.messages))
         if not result.attached:
             suffix = f" — {result.consequence_label}." if result.consequence_label else "."
-            return ActionResult(success=False, message=f"The attempt fails{suffix}")
+            msg = f"The attempt fails{suffix} You paid {fee} coppers regardless."
+            return ActionResult(success=False, message=msg)
         tier = f" ({result.quality_tier})" if result.quality_tier else ""
-        return ActionResult(success=True, message=f"The work is done{tier}.")
+        return ActionResult(success=True, message=f"The work is done{tier} for {fee} coppers.")
 
 
 def _resolve_craft_target(recipe_kind: str, target_id: object) -> object | None:

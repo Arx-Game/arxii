@@ -11,10 +11,15 @@ RP hubs over one crowded square; the description belongs to the player
 
 - **`MarketSquare`** — one per realm capital, anchored to an Area.
 - **`MarketStall`** — cheap/abstract; `owner_persona` null = NPC stall;
-  `host_org` + `cut_percent` route a listing cut to an org treasury (#1884
-  merchant stream).
+  `shopkeeper_persona` (#2995) names a *notable*, persona-bearing NPC
+  fronting the stall's stock as a functionary service — mutually exclusive
+  with `owner_persona` (a PC stall has no NPC opinion to consult); `host_org`
+  + `cut_percent` route a listing cut to an org treasury (#1884 merchant
+  stream).
 - **`StockListing`** — NPC stock: template + authored price, infinite;
-  purchases mint an instance and sink the coin.
+  purchases mint an instance and sink the coin. `min_regard` (#2995,
+  nullable) reserves the listing above the global refusal floor — requires
+  the stall to have a `shopkeeper_persona`.
 - **`WareListing`** — a real crafted `ItemInstance` sold *unfinished*
   (generic name/desc; finite stock); `open_style_slot`/`open_facet_slot`
   flag what the buyer may attach.
@@ -22,7 +27,11 @@ RP hubs over one crowded square; the description belongs to the player
   piece (stamps designer credit).
 - **`CraftingServiceOffer`** — crafter, `recipe_kind`
   (`CraftingRecipeKind`), `shop_room`, fee: executes only at the shop.
-- **`MarketSale`** — provenance ledger for every transaction.
+  `min_regard` (#2995, nullable) is the same reserved-access gate, a no-op
+  when `crafter_persona` is a PC (`NpcRegard` never holds a PC's opinion,
+  ADR-0085).
+- **`MarketSale`** — provenance ledger for every transaction; `price` records
+  what was actually charged, post regard adjustment.
 - `ItemInstance` gains `designer_character_sheet` +
   `designer_persona_display` beside the crafter pair — "Crafted by X,
   Designed by Y" (collapses when equal); render via
@@ -37,7 +46,51 @@ designer credit), `set_service_offer`, `run_service_craft` (wraps the real
 attachment pipeline `run_crafting_recipe` with the **offering crafter as
 skill source**, buyer present at the shop, fee charged up front — Arx 1's
 craft-with-a-crafter's-skill loop made consensual and priced).
-`MarketServiceError.user_message` on refusals.
+`MarketServiceError.user_message` on refusals. `purchase_stock`/
+`run_service_craft` return `(result, charged_price)` — the amount actually
+charged, which the calling action reports to the player.
+
+## Standing-based service gating (#2995)
+
+A shop run by a persona-bearing NPC (a stall's `shopkeeper_persona`, or a
+`CraftingServiceOffer`'s `crafter_persona`) reads `NpcRegard` (#1717) at
+purchase time — this is a functionary **service** the NPC extends, not a
+static shop window: their opinion of the buyer shifts the price, can gate
+reserved stock, and past a hostile floor refuses service outright. "The
+world remembers you," wired at the one seam the gap issue called out.
+Scoped to persona-bearing NPCs only — `NpcRegard.holder_persona` requires a
+real `Persona` (class-2 Standing / class-3-4 Story NPC, ADR-0070); a class-1
+`Functionary` (room-placed, personaless — e.g. the permit clerk) has no
+opinion to consult, so it's out of scope for this pass. `WareListing`
+(a PC's own unfinished-ware stall) is never gated — `NpcRegard` never holds
+a PC's opinion (ADR-0085).
+
+Mechanics (`world/items/market/constants.py`, PLACEHOLDER tuning):
+
+- `REGARD_REFUSAL_FLOOR = -500` — at or below this, the seller refuses
+  service outright, any listing/offer, authored `min_regard` or not.
+- `REGARD_PRICE_BANDS` — ascending `(regard_floor, price_multiplier_percent)`
+  tuples walked highest-met-floor-wins (mirrors
+  `npc_services.offer_policy._band_count`); `_regard_adjusted_price` applies
+  the matched percent to the base price/fee.
+- `StockListing.min_regard` / `CraftingServiceOffer.min_regard` — an
+  optional per-row gate above the refusal floor, for reserved-stock flavor.
+
+Services: `_shopkeeper_regard` (0 with no shopkeeper or a PC crafter —
+`NpcRegard` never has a PC holder), `_regard_adjusted_price`,
+`_check_regard_gate` (raises `MarketServiceError` on refusal-floor or
+`min_regard` breach). `purchase_stock`/`run_service_craft` call the gate
+before charging and use the adjusted price for both the charge and the
+`MarketSale.price` ledger row.
+
+Browse (Decision 4 — no personalized price on the read side): the shop
+directory (`ServiceOfferViewSet`) and stall stock
+(`MarketStallSerializer.get_stock_listings`) show the *base authored*
+price/fee only, but hide any row whose `min_regard` the viewer's active
+persona doesn't meet (visibility = eligibility, resolved via the viewer's
+roster tenure — a fail-closed no-persona viewer sees only ungated rows).
+The regard-adjusted price is revealed at purchase-attempt time, in the
+action's success message.
 
 **Honest scope note:** item-*minting* crafting (`ITEM_CREATE`) is a real, wired
 flow — `craft_create_item` (`world/items/services/crafting.py`) delegates to
