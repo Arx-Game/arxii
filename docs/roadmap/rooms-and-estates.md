@@ -113,9 +113,9 @@
   equips them via the existing `equip()` service. Wardrobe stays in place.
 - **Only different-room `NotReachable` qualifies** — closed-container-in-
   same-room does not trigger servant fetch.
-- **Servant assignment actions deferred** — `assign_servant` / `unassign_servant`
-  / `list_servant_assignments` (mirroring the #2178 guard pattern) are a
-  follow-up issue.
+- **Servant assignment actions** — `assign_servant` / `unassign_servant` /
+  `list_servant_assignments` (mirroring the #2178 guard pattern) shipped in
+  #2989; see the entry below.
 
 ## Built (2026-07-12, #2178 — guard assignment + detection)
 
@@ -237,6 +237,55 @@ defenses:
 - **Details:** see `docs/systems/INDEX.md`'s "Areas" + "Grid content export/import"
   entries, `docs/adr/0140-grid-content-exports-as-graph-aware-area-bundles.md`.
 
+## Built (2026-08-15, #2989 — servant daily-life behaviors)
+
+- **SERVANT/DOORMAN assignment**: `assign_servant`/`unassign_servant`/
+  `list_servant_assignments` and `assign_doorman`/`unassign_doorman`/
+  `list_doorman_assignments` — line-for-line mirrors of the #2178 guard
+  action triplet (`IsRoomOwnerPrerequisite`-gated). Telnet: `servant`,
+  `doorman`.
+- **Doorman announcement**: deterministic room echo naming every arrival
+  when a DOORMAN is posted (`world.npc_services.doorman_services
+  .announce_arrival`, wired at `Character.at_post_move`). No check, no
+  gate — announces everyone. "Turning away the unwanted" (access
+  challenge) stays deferred — no invitation/guest-list primitive exists.
+- **Servant pampering ambience**: `servant_prepare_meal`/`servant_prepare_bath`
+  reuse the #2276 servant-fetch delay+echo idiom
+  (`world.npc_services.servant_ambience`). Meal is pure ambience (no
+  ordinary-meal/food-vitals system exists to hook a mechanical payoff
+  into — verified against code, not assumed). Bath additionally recovers a
+  small flat amount of PHYSICAL fatigue through the existing #2852
+  `recover_fatigue` partial-recovery seam (the same one food/drink use) —
+  wired because it was a genuine one-line hook.
+- **Expulsion (unresistable OOC soft gate)**: a room owner shows a
+  disruptive character out — `expel_character` moves the target through an
+  exit and writes an `ExpulsionBar` (new model). Owner-only authorization
+  (`IsRoomOwnerPrerequisite`); a posted SERVANT/DOORMAN is narration only
+  (names the escort in the room echo when one is on duty), not a separate
+  trigger. No check, no roll, no prerequisite bypass on the target, ever —
+  a consent/disruption valve, not a combat surface.
+  `lift_expulsion_bar` clears it. Entry enforcement is pre-traversal at
+  every commit-a-move seam, so the bar is checked before the barred
+  character ever lands in the room:
+  `flows.service_functions.movement.check_exit_traversal` (ordinary exits +
+  `TravelAction`'s walking hop pacing), `world.magic.services.portal_travel
+  .perform_portal_travel` (`TravelAction`'s portal fast-path — the DEFAULT
+  route when a portal exists, so this closes the same bypass class the
+  pre-#2177 ward/alarm bug hit in this same function), and
+  `actions.definitions.movement.HomeAction` (the `home` command). Telnet:
+  `expel <character>` / `expel/lift <character>`.
+- **Descoped**: player-to-player message-carrying between characters —
+  the issue's original ask — is folded into a future Arx-1-style messenger
+  system instead (ratified amendment); household servants carry no
+  messages. Household-scoped word-spread (notify all household members) was
+  evaluated against `world.tidings.services.house_feed_for` and found to be
+  a read-only aggregator with no generic push-a-message write path, not a
+  one-line hook — deferred rather than force-fit.
+- **Source:** `src/world/npc_services/doorman_services.py`,
+  `src/world/npc_services/servant_ambience.py`,
+  `src/world/npc_services/expulsion_services.py`,
+  `src/actions/definitions/npc_ambience.py`.
+
 ## Overview
 
 Rooms are the spatial substrate of the world. Buildings and estates are
@@ -263,13 +312,22 @@ building rooms (that lives in [Tooling](tooling.md)).
   - **Outfit retrieval:** "wear my Court Attire" from a parlor while the
     wardrobe is in the dressing room → servant fetches it. Room echo:
     *"A maid bows and departs to fetch your evening gown."* Delay before
-    the equip lands.
+    the equip lands. **Built** (#2276).
   - **Item fetch:** "bring me my sword" — servant retrieves any owned item
-    from any room in the same estate.
+    from any room in the same estate. **Built** (#2276).
   - **Bath / meal / refreshment preparation** — servants set up scenes,
-    delivering pose-relevant ambience.
-  - **Carrying messages** between rooms in the estate.
-  - **Guard / announce** behaviors when visitors enter.
+    delivering pose-relevant ambience; bath additionally recovers a small
+    amount of fatigue. **Built** (#2989) as pure ambience — no
+    household-provisioning/food-vitals system exists to hook a mechanical
+    meal payoff into.
+  - ~~Carrying messages~~ between rooms in the estate — **descoped** (#2989
+    ratified amendment): player-to-player IC messaging is its own future
+    Arx-1-style messenger system; household servants carry no messages.
+  - **Guard / announce** behaviors when visitors enter. **Built** (#2989) as
+    deterministic DOORMAN arrival announcement (no check, no access
+    challenge — "turning away the unwanted" needs a real invitation/
+    guest-list primitive that doesn't exist yet). A disruptive character is
+    instead shown out via the separate, unresistable expulsion valve.
   Servants are an alternative path that widens reach checks beyond
   same-room. The default path stays "you must be in reach" — servants
   layer on top, intercept the `NotReachable` failure case, queue the
@@ -374,11 +432,12 @@ ledger in issue **#1514**; security/access half (windows-as-egress, guards/defen
   unlocks its own gameplay system and warrants its own design
 - Decoration/furnishing system — items placed in rooms confer stats
 - Estate-level aggregation — "ownership of all rooms in this area"
-- **Servant entity** — NPC tied to an area + owner, capable of fetch
-  errands. Generalizes to outfit retrieval, item fetch, scene preparation,
-  message-carrying. Composes on top of existing reach checks: when an
-  action raises `NotReachable` and the actor owns the area + has servants,
-  intercept and queue a delayed servant action with room echoes.
+- ~~Servant entity~~ — **built** (#2276 fetch, #2989 assignment + pampering
+  ambience). No distinct entity was needed: the existing SERVANT
+  `NPCAssignment` (Functionary or NPCAsset) covers fetch/meal/bath —
+  verified as a non-gap in the #2989 spec's anti-reinvention ledger.
+  Servant-carried message-carrying stays deferred to the future
+  Arx-1-style player-to-player messenger system (#2989 ratified amendment).
 - Property purchase / construction economy
 - Per-room stat application during scenes (events use room stats for
   bonuses)

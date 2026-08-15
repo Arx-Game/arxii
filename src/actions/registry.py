@@ -283,10 +283,22 @@ from actions.definitions.movement import (
     TravelAction,
     TraverseExitAction,
 )
+from actions.definitions.npc_ambience import (
+    ExpelCharacterAction,
+    LiftExpulsionBarAction,
+    ServantPrepareBathAction,
+    ServantPrepareMealAction,
+)
 from actions.definitions.npc_assignments import (
+    AssignDoormanAction,
     AssignGuardAction,
+    AssignServantAction,
+    ListDoormanAssignmentsAction,
     ListGuardAssignmentsAction,
+    ListServantAssignmentsAction,
+    UnassignDoormanAction,
     UnassignGuardAction,
+    UnassignServantAction,
 )
 from actions.definitions.npc_services import (
     end_npc_interaction,
@@ -872,6 +884,17 @@ _ALL_ACTIONS: list[Action] = [
     AssignGuardAction(),
     UnassignGuardAction(),
     ListGuardAssignmentsAction(),
+    # #2989 — servant/doorman assignment + pampering ambience + expulsion.
+    AssignServantAction(),
+    UnassignServantAction(),
+    ListServantAssignmentsAction(),
+    AssignDoormanAction(),
+    UnassignDoormanAction(),
+    ListDoormanAssignmentsAction(),
+    ServantPrepareMealAction(),
+    ServantPrepareBathAction(),
+    ExpelCharacterAction(),
+    LiftExpulsionBarAction(),
     # #2820 — org tasking + spy networks (the `network` command family).
     ListOrgTasksAction(),
     IssueOrgTaskAction(),

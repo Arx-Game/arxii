@@ -343,7 +343,14 @@ class TravelAction(Action):
         route = portal_route(actor, destination)
         if route is None:
             return None
-        perform_portal_travel(actor, route)
+        try:
+            perform_portal_travel(actor, route)
+        except CommandError as exc:
+            # #2989 expulsion bar — perform_portal_travel raises pre-move when
+            # the destination bars the actor. Surface as a clean failure
+            # rather than letting the exception propagate; the walking path
+            # is not tried as a fallback (the bar applies to every route).
+            return ActionResult(success=False, message=exc.msg)
         return ActionResult(success=True, message="You travel instantly through the network.")
 
     @staticmethod
@@ -446,6 +453,15 @@ class HomeAction(Action):
         home = actor.home
         if home is None:
             return ActionResult(success=False, message="You have no home set.")
+
+        # #2989 expulsion bar — a barred character's home may be the room
+        # they were shown out of; block the same as ordinary exit traversal
+        # and portal travel rather than letting `home` bypass it.
+        from world.npc_services.expulsion_services import active_bar_for  # noqa: PLC0415
+
+        barred_sheet = actor.character_sheet
+        if barred_sheet is not None and active_bar_for(home, barred_sheet) is not None:
+            return ActionResult(success=False, message="You are barred from entering there.")
 
         sdm = context.scene_data if context else SceneDataManager()
         actor_state = sdm.initialize_state_for_object(actor)

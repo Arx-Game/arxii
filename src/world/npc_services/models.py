@@ -1438,8 +1438,13 @@ class AssignmentRole(models.TextChoices):
     """The role an NPC serves when assigned to a room.
 
     GUARD is the first implemented behavior (post-arrival detection).
-    DOORMAN is reserved for pre-traversal announcement (needs-design).
-    SERVANT is reserved for the follow-up servant-fetch issue.
+    DOORMAN announces every arrival to the room's owner/occupants (#2989,
+    ``doorman_services.announce_arrival``) — deterministic, no check; "turning
+    away the unwanted" stays deferred pending a real invitation/guest-list
+    primitive (see ``ExpulsionBar`` for the separate, unresistable OOC
+    disruption valve that ships instead).
+    SERVANT covers both fetch (#2276, ``servant_fetch.py``) and the #2989
+    pampering ambience (``servant_ambience.py`` — meal/bath prep).
     LISTENER (#2820 phase 3) is a standing informant post — the buzz/harvest
     loop lives in ``world.tasking`` (ListenerPost sidecar); this app only
     knows the role. One active assignment per (room, role) means prime
@@ -1547,6 +1552,70 @@ class NPCAssignment(SharedMemoryModel, DiscriminatorMixin):
     def __str__(self) -> str:
         target = self.get_active_target_name()
         return f"{target} as {self.assignment_role} @ room {self.room_id}"
+
+
+class ExpulsionBar(SharedMemoryModel):
+    """A re-entry bar on a barred character's sheet for one room (#2989).
+
+    Written by ``expulsion_services.expel_character`` when a room owner shows
+    a disruptive character out — the ratified #2989 amendment's OOC soft
+    gate: unresistable, no check, no prerequisite bypass, regardless of the
+    barred character's power. This is a consent/disruption valve, not a
+    combat surface. Authorization is owner-only (``IsRoomOwnerPrerequisite``
+    on ``ExpelCharacterAction``) — a posted SERVANT/DOORMAN NPC is narration
+    only: when one is on duty, the room echo names them as the one doing the
+    physical escorting, but they never independently trigger or authorize an
+    expulsion.
+
+    ``lifted_at`` is null while the bar is active (partial-unique per
+    (room, barred_sheet), mirroring ``NPCAssignment``'s active-row pattern).
+    Entry enforcement covers every route in: ``flows.service_functions.movement
+    .check_exit_traversal`` (walking), ``world.magic.services.portal_travel
+    .perform_portal_travel`` (portal fast-path, pre-anima-debit), and
+    ``HomeAction`` (direct home recall) — all pre-move, mirroring the
+    ward/alarm ``react_to_unauthorized_entry`` precedent but pre- rather
+    than post-arrival, since re-entry must never even land the barred
+    character in the room.
+    """
+
+    room = models.ForeignKey(
+        "arxii.RoomProfile",
+        on_delete=models.CASCADE,
+        related_name="expulsion_bars",
+        help_text="The room the barred character may not re-enter.",
+    )
+    barred_sheet = models.ForeignKey(
+        "arxii.CharacterSheet",
+        on_delete=models.CASCADE,
+        related_name="expulsion_bars",
+        help_text="The character sheet barred from re-entry.",
+    )
+    imposed_by = models.ForeignKey(
+        _PERSONA_FK,
+        on_delete=models.PROTECT,
+        related_name="expulsion_bars_imposed",
+        help_text="The persona who imposed the bar (audit trail, not a permission gate).",
+    )
+    imposed_at = models.DateTimeField(auto_now_add=True)
+    lifted_at = models.DateTimeField(
+        null=True,
+        blank=True,
+        help_text="When the bar was lifted. Null while active.",
+    )
+
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(
+                fields=["room", "barred_sheet"],
+                condition=models.Q(lifted_at__isnull=True),
+                name="unique_active_expulsion_bar_per_room_sheet",
+            ),
+        ]
+        ordering = ["-imposed_at"]
+
+    def __str__(self) -> str:
+        status = "active" if self.lifted_at is None else "lifted"
+        return f"ExpulsionBar(sheet {self.barred_sheet_id} @ room {self.room_id}, {status})"
 
 
 class StylingOfferDetails(SharedMemoryModel):

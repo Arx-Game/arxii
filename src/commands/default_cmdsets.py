@@ -64,6 +64,7 @@ from commands.deeds import CmdDeed
 from commands.defenses import CmdDefense
 from commands.domains import CmdDomain
 from commands.door import CmdBreak, CmdLock, CmdPick, CmdUnlock
+from commands.doorman import CmdDoorman  # #2989
 from commands.dramatic_moments import CmdMoment
 from commands.dreams import CmdSleep  # #2290
 from commands.duels import CmdDuel
@@ -92,6 +93,7 @@ from commands.evennia_overrides.items import (
 from commands.evennia_overrides.movement import CmdDrop, CmdGet, CmdGive, CmdHome
 from commands.evennia_overrides.perception import CmdInventory, CmdLook
 from commands.events import CmdEvent
+from commands.expulsion import CmdExpel  # #2989
 from commands.fashion import CmdJudgePresentation
 from commands.fatigue import CmdRest
 from commands.form import CmdForm
@@ -140,6 +142,7 @@ from commands.sanctum import CmdSanctum
 from commands.scene import CmdScene
 from commands.seance import CmdSeance
 from commands.select import CmdSelect
+from commands.servant import CmdServant  # #2989
 from commands.setsituation import CmdSetSituation
 from commands.setstage import CmdSetStage
 from commands.sheet_request import CmdSheetRequest  # #2628 — sheet-update requests.
@@ -418,6 +421,12 @@ class CharacterCmdSet(default_cmds.CharacterCmdSet):
             CmdRoom,
             # #2178 — NPC guard assignment (assign/unassign/list).
             CmdGuard,
+            # #2989 — servant assignment + pampering ambience (meal/bath).
+            CmdServant,
+            # #2989 — doorman assignment (arrival announcement).
+            CmdDoorman,
+            # #2989 — unresistable expulsion (show out + bar re-entry).
+            CmdExpel,
             # #2820 — org tasking + spy networks (board/issue/assign/accept/
             # post/collect/sweep/clear/suppress/flip/plant).
             CmdNetwork,

@@ -177,3 +177,46 @@ class NPCAssignmentModelTests(TestCase):
             assignment_role=AssignmentRole.DOORMAN,
             assigned_by=persona,
         )
+
+    def test_guard_doorman_servant_all_coexist(self):
+        """GUARD, DOORMAN, and SERVANT in the same room → all three active (#2989)."""
+        from evennia_extensions.factories import RoomProfileFactory
+        from world.npc_services.factories import FunctionaryFactory
+        from world.scenes.factories import PersonaFactory
+
+        room = RoomProfileFactory()
+        persona = PersonaFactory()
+        for role in (AssignmentRole.GUARD, AssignmentRole.DOORMAN, AssignmentRole.SERVANT):
+            NPCAssignment.objects.create(
+                source_type=NPCSourceType.FUNCTIONARY,
+                functionary=FunctionaryFactory(room=room),
+                room=room,
+                assignment_role=role,
+                assigned_by=persona,
+            )
+
+        self.assertEqual(NPCAssignment.objects.filter(room=room, is_active=True).count(), 3)
+
+    def test_second_servant_assignment_retires_first(self):
+        """Two SERVANT assignments in the same room collide (one active per role)."""
+        from evennia_extensions.factories import RoomProfileFactory
+        from world.npc_services.factories import FunctionaryFactory
+        from world.scenes.factories import PersonaFactory
+
+        room = RoomProfileFactory()
+        persona = PersonaFactory()
+        NPCAssignment.objects.create(
+            source_type=NPCSourceType.FUNCTIONARY,
+            functionary=FunctionaryFactory(room=room),
+            room=room,
+            assignment_role=AssignmentRole.SERVANT,
+            assigned_by=persona,
+        )
+        with transaction.atomic(), self.assertRaises(IntegrityError):
+            NPCAssignment.objects.create(
+                source_type=NPCSourceType.FUNCTIONARY,
+                functionary=FunctionaryFactory(room=room),
+                room=room,
+                assignment_role=AssignmentRole.SERVANT,
+                assigned_by=persona,
+            )
