@@ -19,6 +19,7 @@ from world.items.exceptions import (
     ContainerClosed,
     ContainerFull,
     InventoryError,
+    ItemFixedInPlace,
     ItemTooLarge,
     NoDropLocation,
     NotAContainer,
@@ -174,6 +175,21 @@ def _dead_owner_trusts(owner: CharacterSheet, taker_sheet: CharacterSheet) -> bo
     return is_friend(owner_tenure=owner_tenure, friend_tenure=taker_tenure)
 
 
+def _placed_as_active_decoration(item_instance: ItemInstance) -> bool:
+    """True when ``item_instance`` currently anchors an active ``RoomDecoration`` (#2991).
+
+    A crafted-furniture placement clears ``holder_character_sheet`` on anchor
+    (``buildings.services._anchor_crafted_item_in_room``) so the ordinary ownership gate
+    below never sees it — plain ``get`` would otherwise treat an anchored, un-held piece as
+    free-for-the-taking. A ``RoomDecoration`` row's mere existence IS "active"; removal
+    (``remove_decoration``) deletes the row, and the item goes back to being ordinarily
+    takeable — the round-2 review's explicit round-trip requirement.
+    """
+    from world.buildings.models import RoomDecoration  # noqa: PLC0415
+
+    return RoomDecoration.objects.filter(source_item_instance=item_instance).exists()
+
+
 def _take_denial(  # noqa: PLR0911
     taker_sheet: CharacterSheet | None, item_instance: ItemInstance
 ) -> type[InventoryError] | None:
@@ -182,11 +198,19 @@ def _take_denial(  # noqa: PLR0911
     Returns the exception class the take gate should raise so the raise sites
     report the true denial reason: ``ContainerAccessDenied`` when the
     container's policy bars the taker, ``OwnedByAnother`` when the item's own
-    ownership does.
+    ownership does, ``ItemFixedInPlace`` when it's anchored as an active
+    RoomDecoration (#2991 review round 2) — checked ahead of the owner branches
+    since an anchored item has no holder for those branches to catch it on.
     """
     # Vault gate: room items in a vault room require vault access (#2179).
     if _vault_denies(taker_sheet, item_instance):
         return VaultAccessDenied
+    # Fixed-in-place gate: an actively-placed crafted decoration is un-held (#2991), so
+    # ownership alone can't block plain take on it — this is the dedicated denial. Checked
+    # before the sheet-less short-circuit too: a GM/staff take shouldn't casually pop a
+    # placed fixture either; the sanctioned un-anchor path is RemoveFixtureAction.
+    if _placed_as_active_decoration(item_instance):
+        return ItemFixedInPlace
     if taker_sheet is None:
         # Sheet-less actors (GM/staff/companion tooling) keep legacy free-take
         # behavior — theft consequence machinery is sheet-anchored and cannot
@@ -581,7 +605,17 @@ def _record_theft_deed(character: CharacterState, item: ItemState) -> None:
 
 
 def steal_permitted(taker_sheet: CharacterSheet | None, item_instance: ItemInstance) -> bool:  # noqa: PLR0911
-    """Target-side-only availability (#1909): NPC-owned always; players by consent."""
+    """Target-side-only availability (#1909): NPC-owned always; players by consent.
+
+    An actively-placed decoration (#2991) is never stealable: routing it through
+    ``_take_denial`` makes ``take_requires_steal`` True (it has no holder for the ordinary
+    ownership branches to catch), and a holder-less item hits steal's "non-vault unowned
+    items" fallback, which allows it with NO consent gate at all — a worse bypass than plain
+    take would have been. The fixture's only sanctioned un-anchor path is
+    ``RemoveFixtureAction``, so this is checked first and unconditionally refuses.
+    """
+    if _placed_as_active_decoration(item_instance):
+        return False
     if not take_requires_steal(taker_sheet, item_instance):
         return False
     # take_requires_steal returns False for a None sheet (checked above), so
