@@ -28,3 +28,15 @@
   first of funeral / will-reading / sweeper wins; safe no-op for long-dead honorees).
 - **Trusted handler** — someone the dead player's tenure friended; may take from the
   corpse without `steal`.
+- **Conversion** — a `CeremonyType` (`CONVERSION`, #2361) that repoints the convert's
+  public `WorshipDeclaration.public_being` on finish. Two routes: a PC-officiated rite
+  the convert must accept (`WorshipConversionOffer`, mirrors the Seance offer), or a
+  self-officiated solo rite (officiant IS the honoree — no offer, no other PC needed).
+  Mints a deed through the same #1464 scandal fork any public deed uses; carries no
+  bespoke social-consequence mechanism.
+- **Conversion offer** — `WorshipConversionOffer`, the consent gate for a PC-officiated
+  conversion. Created at open only when the officiant differs from the convert. PENDING
+  until the convert's own account answers (`respond_to_conversion_offer`); accepting
+  records the heart-vs-lip-service choice right there. A declined or never-answered
+  offer means the rite concludes but honors nothing for that honoree — no deed, no
+  worship repoint (mirrors a declined Seance offer's shape, not its puppet mechanics).

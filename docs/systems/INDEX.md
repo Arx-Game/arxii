@@ -6582,26 +6582,47 @@ lightly-structured freeform RP. Full doc: `docs/systems/worship.md`; model decis
   skills.Specialization), `WorshippedBeing` (tradition FK, `resonance_pool` + `lifetime_worship`
   BigIntegers, nullable OneToOne `avatar_sheet`, `is_active`), `WorshipGrant` (audit ledger),
   `DevotionStanding` (unique sheet+being, `favor`/`lifetime_favor`), `WorshipDeclaration`
-  (OneToOne sheet; `public_being` + `secret_being` + minted `secret` FK).
+  (OneToOne sheet; `public_being` + `secret_being` + minted `secret` FK; `public_is_sincere`
+  BooleanField default True, #2361 — the heart-vs-lip-service inward truth, private,
+  owner/staff-only in the sheet identity serializer).
 - **Worship services**: `grant_worship`, `bump_devotion` (+ God's Favorite
   Princess/Prince/Chosen achievement on top-favor reach/tie), `gods_favorite_achievement_for`;
-  `mint_worship_secret` (`worship/secrets.py`). CG: `CharacterDraft.public_worship`/
+  `mint_worship_secret` (`worship/secrets.py`); `convert_public_worship(sheet, new_being, *,
+  is_sincere=True)` (#2361 — the single write path for a post-CG public conversion; get-or-
+  creates the declaration, repoints `public_being`, stores `public_is_sincere`; never touches
+  `DevotionStanding` or the secret side). CG: `CharacterDraft.public_worship`/
   `secret_worship` → `_create_worship_declaration` at finalization. Seeds: `worship` cluster
   (Rites skill + 4 specs, Ceremony Rites CheckType, Devotion aspect for Path of the Chosen,
   achievements, PLACEHOLDER beings); `secret-investigation` consent category in the consent seed.
-- **Ceremony models** (`world/ceremonies`): `CeremonyType` (Funeral/Blessing/Sermon/Seance
-  rows — seeded via the `"ceremonies"` cluster, #2393), `Ceremony` (officiant Persona, TRUE
+- **Ceremony models** (`world/ceremonies`): `CeremonyType` (Funeral/Blessing/Sermon/Seance/
+  Wedding/Conversion rows — seeded via the `"ceremonies"` cluster), `Ceremony` (officiant Persona, TRUE
   `being` vs `presented_being` — player surfaces render
   presented ONLY, one-OPEN-per-location constraint, nullable scene/event FKs, `quality_level`),
   `CeremonyHonoree`, `CeremonyOffering` (item destroyed; snapshot), `CeremonySpeech`,
-  `CeremonyConfig` singleton (`get_ceremony_config`, PLACEHOLDER magnitudes).
-- **Ceremony services**: `open_ceremony` (twisted-rite being/presented mapping),
+  `CeremonyConfig` singleton (`get_ceremony_config`, PLACEHOLDER magnitudes),
+  `WorshipConversionOffer` (#2361, one per PC-officiated Conversion honoree —
+  PENDING/ACCEPTED/DECLINED + `is_sincere`, mirrors `SeanceManifestationOffer`).
+- **Ceremony services**: `open_ceremony` (twisted-rite being/presented mapping; validates
+  honoree count/liveness per type — CONVERSION needs exactly one, the convert),
   `record_offering` (pool → TRUE being; devotion follows belief), `record_speech`
   (Performance/Oratory), `finish_ceremony` (Rites + tradition-spec quality roll; honoree deeds
-  via `create_solo_deed`; officiant cut; funeral → `execute_will` NO-OP seam for #1985),
+  via `create_solo_deed` — `_mint_ceremony_deed` takes optional `archetypes`/`scene` kwargs,
+  #2361; officiant cut; funeral → `execute_will` NO-OP seam for #1985; wedding →
+  solemnizes the honorees' active Betrothal; conversion → `convert_public_worship` per
+  confirmed honoree, tags the deed with the existing "Treacherous Scandal"
+  `PhilosophicalArchetype` when converting away from an already-declared faith so
+  `route_deed_reach` (#1464) judges it),
   `abandon_ceremony`, `open_funeral_for` (ghost container); `run_twisted_rite_leak`
   (`ceremonies/leak.py` — consent-gated Search roll → clue on the worship Secret).
-  Exceptions: `CeremonyError` (user_message).
+  Exceptions: `CeremonyError` (user_message). `respond_to_conversion_offer` (#2361,
+  account-scoped accept/decline, mirrors `respond_to_seance_offer`; accepting records
+  the heart-vs-lip-service choice on the offer — the actual repoint happens at finish),
+  `pending_conversion_offers_for_account`. Actions: `conversion_offer_respond`; telnet
+  `conversion` (offers/accept/decline, telnet accept is always sincere — the lip-service
+  choice is web-only); API `/api/ceremonies/conversion-offers/` (list + accept/decline,
+  `WorshipConversionOfferSerializer`, `accept` body takes optional `sincere`); frontend
+  `ConversionOfferBanner`/`ConversionOfferDialog` (mounted in `Layout.tsx` next to
+  `SeanceOfferBanner`; the dialog's Switch carries the heart-vs-lip-service choice).
 - **Seance (#2393)**: `SeanceManifestationOffer` (one per honoree, PENDING/ACCEPTED/DECLINED)
   — created by `open_ceremony` for a SEANCE-type ceremony. `respond_to_seance_offer`
   (account-scoped accept/decline; accept moves the honoree's character to the ceremony's

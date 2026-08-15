@@ -57,6 +57,10 @@ class IdentitySection(TypedDict):
     origin: IdNameRef | None
     path: IdNameRef | None
     worship: IdNameRef | None
+    # #2361 — the heart-vs-lip-service inward truth (WorshipDeclaration.public_is_sincere).
+    # Owner/staff only, always None for other viewers — the public record shows only
+    # the public act (Ratified amendment #2); mirrors the current_mood leak-table pattern.
+    worship_sincere: bool | None
     # #2994 — internal declared mood; owner/staff only, always None for other
     # viewers (never rendered to observers, per the spec's inward-only ruling).
     current_mood: IdNameRef | None

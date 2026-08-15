@@ -33,6 +33,7 @@ from actions.definitions.ceremonies import (
     CeremonySpeechAction,
     FinishCeremonyAction,
     OpenCeremonyAction,
+    RespondConversionOfferAction,
     RespondSeanceOfferAction,
 )
 from actions.definitions.charm_asset import CharmAssetAction
@@ -901,6 +902,8 @@ _ALL_ACTIONS: list[Action] = [
     FinishCeremonyAction(),
     AbandonCeremonyAction(),
     RespondSeanceOfferAction(),
+    # #2361 — post-CG worship conversion: consent gate for a PC-officiated rite.
+    RespondConversionOfferAction(),
     # #1985 — estates (the executor's will-reading settlement door).
     WillReadingAction(),
     # #2295 — voluntary asset sharing: introduce an owned asset to a co-present ally.

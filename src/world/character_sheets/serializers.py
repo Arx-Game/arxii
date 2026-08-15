@@ -278,8 +278,15 @@ def _build_identity(
         path_value = _id_name(path_history[0].path) if path_history else None
 
     # Public worship only (#2355) — the secret side never leaves owner surfaces.
+    # The heart-vs-lip-service inward truth (#2361) is privileged-only, same
+    # leak-table pattern as current_mood below — the public record shows only
+    # the public act (Ratified amendment #2).
+    worship_sincere: bool | None = None
     try:
-        worship = _id_name_or_null(sheet.worship_declaration.public_being)
+        declaration = sheet.worship_declaration
+        worship = _id_name_or_null(declaration.public_being)
+        if privileged:
+            worship_sincere = declaration.public_is_sincere
     except ObjectDoesNotExist:
         worship = None
 
@@ -310,6 +317,7 @@ def _build_identity(
         origin=lineage["origin"],
         path=path_value,
         worship=worship,
+        worship_sincere=worship_sincere,
         # #2994 — INTERNAL; owner/staff only, mirrors the age-axes leak-table pattern.
         current_mood=_id_name_or_null(sheet.current_mood) if privileged else None,
     )

@@ -9,6 +9,7 @@ from world.ceremonies.models import (
     CeremonyHonoree,
     CeremonyType,
     SeanceManifestationOffer,
+    WorshipConversionOffer,
 )
 from world.scenes.factories import PersonaFactory
 from world.worship.factories import WorshippedBeingFactory
@@ -45,5 +46,12 @@ class CeremonyHonoreeFactory(factory.django.DjangoModelFactory):
 class SeanceManifestationOfferFactory(factory.django.DjangoModelFactory):
     class Meta:
         model = SeanceManifestationOffer
+
+    ceremony_honoree = factory.SubFactory(CeremonyHonoreeFactory)
+
+
+class WorshipConversionOfferFactory(factory.django.DjangoModelFactory):
+    class Meta:
+        model = WorshipConversionOffer
 
     ceremony_honoree = factory.SubFactory(CeremonyHonoreeFactory)

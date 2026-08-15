@@ -286,8 +286,13 @@ class FinishCeremonyAction(Action):
         ceremony, error = _require_officiant(actor)
         if error is not None:
             return error
+        # #2361 — a self-officiated CONVERSION's heart-vs-lip-service choice
+        # (Ratified amendment #2). Ignored for every other ceremony type, and
+        # ignored for a PC-officiated conversion (the convert's own accept
+        # already recorded it). Defaults to sincere when unspecified.
+        sincere = kwargs.get("sincere")
         try:
-            finish_ceremony(ceremony=ceremony)
+            finish_ceremony(ceremony=ceremony, sincere=None if sincere is None else bool(sincere))
         except CeremonyError as exc:
             return ActionResult(success=False, message=exc.user_message)
         return ActionResult(
@@ -391,5 +396,64 @@ class RespondSeanceOfferAction(_SeanceOfferActionBase):
         return ActionResult(
             success=True,
             message=f"You {verb} the seance's call.",
+            data={"offer_id": offer.pk, "status": offer.status},
+        )
+
+
+def _conversion_offer_or_none(offer_id: Any):
+    from world.ceremonies.models import WorshipConversionOffer  # noqa: PLC0415
+
+    if offer_id is None:
+        return None
+    try:
+        return WorshipConversionOffer.objects.select_related(
+            "ceremony_honoree__ceremony", "ceremony_honoree__honoree_sheet"
+        ).get(pk=int(offer_id))
+    except (WorshipConversionOffer.DoesNotExist, ValueError, TypeError):
+        return None
+
+
+@dataclass
+class RespondConversionOfferAction(_SeanceOfferActionBase):
+    """Accept or decline a pending public-conversion offer (#2361, Ratified amendment #1a).
+
+    Expects kwargs: ``offer_id`` (int), ``account`` (AccountDB), ``accept`` (bool),
+    and — only meaningful when ``accept`` is True — ``sincere`` (bool, the
+    heart-vs-lip-service choice, Ratified amendment #2; defaults True).
+    """
+
+    key: str = "conversion_offer_respond"
+    name: str = "Respond to Conversion Offer"
+    icon: str = "candle"
+
+    def execute(
+        self, actor: ObjectDB | None, context: ActionContext | None = None, **kwargs: Any
+    ) -> ActionResult:
+        from world.ceremonies.services import (  # noqa: PLC0415
+            ConversionOfferError,
+            respond_to_conversion_offer,
+        )
+
+        offer = _conversion_offer_or_none(kwargs.get("offer_id"))
+        if offer is None:
+            return ActionResult(success=False, message="Which offer? Provide an offer id.")
+        account = kwargs.get("account")
+        if account is None:
+            return ActionResult(success=False, message="No account to answer for.")
+        accept = bool(kwargs.get("accept"))
+        sincere = kwargs.get("sincere")
+        try:
+            respond_to_conversion_offer(
+                offer,
+                account=account,
+                accept=accept,
+                sincere=True if sincere is None else bool(sincere),
+            )
+        except ConversionOfferError as exc:
+            return ActionResult(success=False, message=exc.user_message)
+        verb = "accept" if accept else "decline"
+        return ActionResult(
+            success=True,
+            message=f"You {verb} the offered conversion.",
             data={"offer_id": offer.pk, "status": offer.status},
         )

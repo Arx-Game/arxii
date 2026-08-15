@@ -1169,6 +1169,7 @@
 **Pointed to by:**
   - speeches <- ceremonies.CeremonySpeech
   - seance_offer <- ceremonies.SeanceManifestationOffer
+  - conversion_offer <- ceremonies.WorshipConversionOffer
 
 ### CeremonyOffering
 **Foreign Keys:**
@@ -1190,16 +1191,22 @@
 **Foreign Keys:**
   - ceremony_honoree -> ceremonies.CeremonyHonoree [OneToOne]
 
+### WorshipConversionOffer
+**Foreign Keys:**
+  - ceremony_honoree -> ceremonies.CeremonyHonoree [OneToOne]
+
 ### Service Functions
 - `abandon_ceremony(*, ceremony: world.ceremonies.models.Ceremony) -> world.ceremonies.models.Ceremony - Decision 12: close the rite awarding nothing; frees the location + ghost window.`
 - `execute_will(character_sheet: 'CharacterSheet') -> None - Execute the deceased's estate — the funeral door of #1985.`
-- `finish_ceremony(*, ceremony: world.ceremonies.models.Ceremony) -> world.ceremonies.models.Ceremony - Close the rite: quality roll, renown tallies, worship, funeral effects.`
+- `finish_ceremony(*, ceremony: world.ceremonies.models.Ceremony, sincere: bool | None = None) -> world.ceremonies.models.Ceremony - Close the rite: quality roll, renown tallies, worship, funeral effects.`
 - `get_ceremony_config() -> world.ceremonies.models.CeremonyConfig - Get-or-create the first CeremonyConfig row (singleton-by-convention).`
 - `open_ceremony(*, officiant_persona: 'Persona', type_key: str, honoree_sheets: 'list[CharacterSheet]', location_profile, being: 'WorshippedBeing | None' = None, scene=None, event=None) -> world.ceremonies.models.Ceremony - Open a ceremony at a location, recognizing zero or more honorees.`
 - `open_funeral_for(character_sheet: 'CharacterSheet') -> world.ceremonies.models.Ceremony | None - The OPEN funeral honoring this character, if any (the ghost container).`
+- `pending_conversion_offers_for_account(account: object) -> 'QuerySet[WorshipConversionOffer]' - PENDING conversion offers addressed to any character this account has ever held.`
 - `pending_seance_offers_for_account(account: object) -> 'QuerySet[SeanceManifestationOffer]' - PENDING seance offers addressed to any character this account has ever held (#2393).`
 - `record_offering(*, ceremony: world.ceremonies.models.Ceremony, item_instances: 'list[ItemInstance]') -> list[world.ceremonies.models.CeremonyOffering] - Sacrifice items: destroy them, feed the being's pool, log offerings.`
 - `record_speech(*, ceremony: world.ceremonies.models.Ceremony, speaker_persona: 'Persona', target_honoree: world.ceremonies.models.CeremonyHonoree | None = None) -> world.ceremonies.models.CeremonySpeech - Recognize a speaker; their Performance/Oratory roll shapes the tally.`
+- `respond_to_conversion_offer(offer: 'WorshipConversionOffer', *, account: object, accept: bool, sincere: bool = True) -> 'WorshipConversionOffer' - Accept or decline a pending public-conversion offer (#2361, Ratified amendment #1a).`
 - `respond_to_seance_offer(offer: 'SeanceManifestationOffer', *, account: object, accept: bool) -> 'SeanceManifestationOffer' - Accept or decline a pending seance manifestation offer (#2393).`
 - `revoke_seance_manifestations(ceremony: world.ceremonies.models.Ceremony) -> None - Force-unpuppet any manifested RETIRED honoree when a Seance closes (#2393).`
 
@@ -1565,6 +1572,9 @@
   - profiles <- character_sheets.Profile
 
 ### MoodOption
+**Foreign Keys:**
+  - written_by -> contributors.ContentContributor [FK] (nullable)
+  - reviewed_by -> contributors.ContentContributor [FK] (nullable)
 
 ### Profile
 **Foreign Keys:**
@@ -9798,6 +9808,7 @@
 - `active_patronage_for(sheet: 'CharacterSheet') -> list[world.worship.models.DevotionStanding] - Return all active patronages for a character, ordered by favor descending.`
 - `best_patronage_favor(sheet: 'CharacterSheet') -> int - Return the favor of the highest-favor active patronage, or 0.`
 - `bump_devotion(character_sheet: 'CharacterSheet', being: world.worship.models.WorshippedBeing, amount: int) -> world.worship.models.DevotionStanding - Upsert the (sheet, being) standing and run the God's Favorite check.`
+- `convert_public_worship(character_sheet: 'CharacterSheet', new_being: world.worship.models.WorshippedBeing, *, is_sincere: bool = True) -> world.worship.models.WorshipDeclaration - Repoint a character's PUBLIC worship declaration (#2361).`
 - `establish_patronage(sheet: 'CharacterSheet', being: world.worship.models.WorshippedBeing, *, valence: world.worship.models.PatronageValence) -> world.worship.models.DevotionStanding - Get-or-create a DevotionStanding and mark it as a patronage.`
 - `get_chosen_favor_config() -> world.worship.models.ChosenFavorConfig - Lazy-create the ChosenFavorConfig singleton (pk=1).`
 - `get_divine_intervention_config() -> 'DivineInterventionConfig' - Lazy-create the singleton (pk=1) divine intervention config (#2360).`

@@ -5,11 +5,17 @@ from unittest import mock
 from django.test import TestCase
 from django.utils import timezone
 
-from world.ceremonies.constants import CeremonyStatus, CeremonyTypeKey, SeanceOfferStatus
+from world.ceremonies.constants import (
+    CeremonyStatus,
+    CeremonyTypeKey,
+    ConversionOfferStatus,
+    SeanceOfferStatus,
+)
 from world.ceremonies.factories import CeremonyTypeFactory
 from world.ceremonies.models import CeremonyOffering, SeanceManifestationOffer
 from world.ceremonies.services import (
     CeremonyError,
+    ConversionOfferError,
     SeanceOfferError,
     abandon_ceremony,
     finish_ceremony,
@@ -17,6 +23,7 @@ from world.ceremonies.services import (
     open_funeral_for,
     pending_seance_offers_for_account,
     record_offering,
+    respond_to_conversion_offer,
     respond_to_seance_offer,
 )
 from world.character_sheets.factories import CharacterSheetFactory
@@ -547,3 +554,352 @@ class RevokeSeanceManifestationsTests(TestCase):
         abandon_ceremony(ceremony=ceremony)
 
         self.assertEqual(ceremony.status, CeremonyStatus.ABANDONED)
+
+
+class OpenConversionTests(TestCase):
+    """#2361 — the two public routes fork right at open_ceremony."""
+
+    @classmethod
+    def setUpTestData(cls) -> None:
+        from evennia_extensions.factories import RoomProfileFactory
+
+        CeremonyTypeFactory(key=CeremonyTypeKey.CONVERSION, name="Conversion")
+        cls.old_being = WorshippedBeingFactory()
+        cls.new_being = WorshippedBeingFactory()
+        cls.location = RoomProfileFactory()
+
+    def _convert(self):
+        persona, sheet = _persona_with_sheet()
+        WorshipDeclaration.objects.create(character_sheet=sheet, public_being=self.old_being)
+        return persona, sheet
+
+    def test_requires_exactly_one_honoree(self) -> None:
+        persona, sheet = self._convert()
+        other = CharacterSheetFactory()
+        with self.assertRaises(CeremonyError):
+            open_ceremony(
+                officiant_persona=persona,
+                type_key=CeremonyTypeKey.CONVERSION,
+                honoree_sheets=[],
+                location_profile=self.location,
+                being=self.new_being,
+            )
+        with self.assertRaises(CeremonyError):
+            open_ceremony(
+                officiant_persona=persona,
+                type_key=CeremonyTypeKey.CONVERSION,
+                honoree_sheets=[sheet, other],
+                location_profile=self.location,
+                being=self.new_being,
+            )
+
+    def test_self_officiated_solo_route_creates_no_offer(self) -> None:
+        """Ratified amendment #1b — the temple/solo route, no officiant needed."""
+        persona, sheet = self._convert()
+        ceremony = open_ceremony(
+            officiant_persona=persona,
+            type_key=CeremonyTypeKey.CONVERSION,
+            honoree_sheets=[sheet],
+            location_profile=self.location,
+            being=self.new_being,
+        )
+        honoree = ceremony.honorees.get()
+        self.assertEqual(honoree.ceremony.officiant.character_sheet_id, sheet.pk)
+        self.assertFalse(hasattr(honoree, "conversion_offer") and honoree.conversion_offer)
+
+    def test_pc_officiated_route_creates_pending_offer(self) -> None:
+        """Ratified amendment #1a — a PC officiant, the convert must accept."""
+        officiant_persona, _officiant_sheet = _persona_with_sheet()
+        _convert_persona, convert_sheet = self._convert()
+        ceremony = open_ceremony(
+            officiant_persona=officiant_persona,
+            type_key=CeremonyTypeKey.CONVERSION,
+            honoree_sheets=[convert_sheet],
+            location_profile=self.location,
+            being=self.new_being,
+        )
+        honoree = ceremony.honorees.get()
+        self.assertEqual(honoree.conversion_offer.status, ConversionOfferStatus.PENDING)
+
+
+class ConversionFinishTests(TestCase):
+    """#2361 — the self-officiated solo route resolves entirely at finish."""
+
+    @classmethod
+    def setUpTestData(cls) -> None:
+        from evennia_extensions.factories import RoomProfileFactory
+
+        CeremonyTypeFactory(key=CeremonyTypeKey.CONVERSION, name="Conversion")
+        cls.old_being = WorshippedBeingFactory()
+        cls.new_being = WorshippedBeingFactory()
+        cls.location = RoomProfileFactory()
+
+    def _self_officiated(self, *, with_prior_declaration=True):
+        sheet = CharacterSheetFactory()
+        if with_prior_declaration:
+            WorshipDeclaration.objects.create(character_sheet=sheet, public_being=self.old_being)
+        persona = sheet.primary_persona
+        ceremony = open_ceremony(
+            officiant_persona=persona,
+            type_key=CeremonyTypeKey.CONVERSION,
+            honoree_sheets=[sheet],
+            location_profile=self.location,
+            being=self.new_being,
+        )
+        return ceremony, sheet
+
+    def test_finish_repoints_public_being(self) -> None:
+        ceremony, sheet = self._self_officiated()
+        finish_ceremony(ceremony=ceremony, sincere=True)
+        declaration = WorshipDeclaration.objects.get(character_sheet=sheet)
+        self.assertEqual(declaration.public_being_id, self.new_being.pk)
+
+    def test_finish_creates_first_declaration_when_none_existed(self) -> None:
+        ceremony, sheet = self._self_officiated(with_prior_declaration=False)
+        finish_ceremony(ceremony=ceremony)
+        declaration = WorshipDeclaration.objects.get(character_sheet=sheet)
+        self.assertEqual(declaration.public_being_id, self.new_being.pk)
+
+    def test_sincere_choice_is_stored(self) -> None:
+        ceremony, sheet = self._self_officiated()
+        finish_ceremony(ceremony=ceremony, sincere=True)
+        declaration = WorshipDeclaration.objects.get(character_sheet=sheet)
+        self.assertTrue(declaration.public_is_sincere)
+
+    def test_lip_service_choice_is_stored(self) -> None:
+        ceremony, sheet = self._self_officiated()
+        finish_ceremony(ceremony=ceremony, sincere=False)
+        declaration = WorshipDeclaration.objects.get(character_sheet=sheet)
+        self.assertFalse(declaration.public_is_sincere)
+
+    def test_sincere_defaults_true_when_unspecified(self) -> None:
+        ceremony, sheet = self._self_officiated()
+        finish_ceremony(ceremony=ceremony)
+        declaration = WorshipDeclaration.objects.get(character_sheet=sheet)
+        self.assertTrue(declaration.public_is_sincere)
+
+    def test_devotion_standing_with_old_being_survives_untouched(self) -> None:
+        """Decision 3 (unamended): conversion never touches DevotionStanding rows."""
+        ceremony, sheet = self._self_officiated()
+        standing = DevotionStanding.objects.create(
+            character_sheet=sheet, being=self.old_being, favor=50, lifetime_favor=50
+        )
+        finish_ceremony(ceremony=ceremony)
+        standing.refresh_from_db()
+        self.assertEqual(standing.favor, 50)
+        self.assertEqual(standing.lifetime_favor, 50)
+
+    def test_old_secret_row_untouched_by_conversion(self) -> None:
+        """Ratified amendment #3 — a mooted secret faith becomes historical, not deleted.
+
+        This is a no-op to PROVE, not build: convert_public_worship only ever
+        writes ``public_being``/``public_is_sincere`` — the secret side of the
+        declaration is never in its ``update_fields``.
+        """
+        from world.secrets.factories import SecretFactory
+
+        sheet = CharacterSheetFactory()
+        dark_being = WorshippedBeingFactory()
+        secret = SecretFactory(subject_sheet=sheet, content="Secretly worships The Hollow Flame")
+        declaration = WorshipDeclaration.objects.create(
+            character_sheet=sheet,
+            public_being=self.old_being,
+            secret_being=dark_being,
+            secret=secret,
+        )
+        persona = sheet.primary_persona
+        ceremony = open_ceremony(
+            officiant_persona=persona,
+            type_key=CeremonyTypeKey.CONVERSION,
+            honoree_sheets=[sheet],
+            location_profile=self.location,
+            being=self.new_being,
+        )
+
+        finish_ceremony(ceremony=ceremony)
+
+        declaration.refresh_from_db()
+        self.assertEqual(declaration.public_being_id, self.new_being.pk)
+        self.assertEqual(declaration.secret_being_id, dark_being.pk)
+        self.assertEqual(declaration.secret_id, secret.pk)
+        secret.refresh_from_db()
+        self.assertEqual(secret.content, "Secretly worships The Hollow Flame")
+        # Still independently discoverable — untouched by conversion means the
+        # normal grant path still works exactly as it always did.
+        from world.roster.factories import (
+            PlayerDataFactory,
+            RosterEntryFactory,
+            RosterTenureFactory,
+        )
+        from world.secrets.services import grant_secret_knowledge, secret_known_to
+
+        knower_entry = RosterEntryFactory()
+        RosterTenureFactory(
+            roster_entry=knower_entry, player_data=PlayerDataFactory(), player_number=1
+        )
+        grant_secret_knowledge(roster_entry=knower_entry, secret=secret)
+        self.assertTrue(secret_known_to(secret, knower_entry))
+
+
+class RespondToConversionOfferTests(TestCase):
+    """#2361 Ratified amendment #1a — the PC-officiated consent-gated route."""
+
+    @classmethod
+    def setUpTestData(cls) -> None:
+        from evennia_extensions.factories import RoomProfileFactory
+
+        CeremonyTypeFactory(key=CeremonyTypeKey.CONVERSION, name="Conversion")
+        cls.old_being = WorshippedBeingFactory()
+        cls.new_being = WorshippedBeingFactory()
+        cls.location = RoomProfileFactory()
+
+    def _pending_offer(self):
+        from world.roster.factories import (
+            PlayerDataFactory,
+            RosterEntryFactory,
+            RosterTenureFactory,
+        )
+
+        officiant_persona, _officiant_sheet = _persona_with_sheet()
+        convert_sheet = CharacterSheetFactory()
+        WorshipDeclaration.objects.create(
+            character_sheet=convert_sheet, public_being=self.old_being
+        )
+        player_data = PlayerDataFactory()
+        entry = RosterEntryFactory(character_sheet=convert_sheet)
+        RosterTenureFactory(roster_entry=entry, player_data=player_data)
+
+        ceremony = open_ceremony(
+            officiant_persona=officiant_persona,
+            type_key=CeremonyTypeKey.CONVERSION,
+            honoree_sheets=[convert_sheet],
+            location_profile=self.location,
+            being=self.new_being,
+        )
+        offer = ceremony.honorees.get().conversion_offer
+        return ceremony, convert_sheet, offer, player_data.account
+
+    def test_accept_records_sincere_choice_on_the_offer(self) -> None:
+        _ceremony, _sheet, offer, account = self._pending_offer()
+        respond_to_conversion_offer(offer, account=account, accept=True, sincere=True)
+        offer.refresh_from_db()
+        self.assertEqual(offer.status, ConversionOfferStatus.ACCEPTED)
+        self.assertTrue(offer.is_sincere)
+
+    def test_accept_records_lip_service_choice_on_the_offer(self) -> None:
+        _ceremony, _sheet, offer, account = self._pending_offer()
+        respond_to_conversion_offer(offer, account=account, accept=True, sincere=False)
+        offer.refresh_from_db()
+        self.assertFalse(offer.is_sincere)
+
+    def test_accept_then_finish_converts_with_recorded_sincerity(self) -> None:
+        ceremony, sheet, offer, account = self._pending_offer()
+        respond_to_conversion_offer(offer, account=account, accept=True, sincere=False)
+        finish_ceremony(ceremony=ceremony)
+        declaration = WorshipDeclaration.objects.get(character_sheet=sheet)
+        self.assertEqual(declaration.public_being_id, self.new_being.pk)
+        self.assertFalse(declaration.public_is_sincere)
+
+    def test_decline_leaves_worship_untouched_at_finish(self) -> None:
+        ceremony, sheet, offer, account = self._pending_offer()
+        respond_to_conversion_offer(offer, account=account, accept=False)
+
+        finish_ceremony(ceremony=ceremony)
+
+        declaration = WorshipDeclaration.objects.get(character_sheet=sheet)
+        self.assertEqual(declaration.public_being_id, self.old_being.pk)
+        offer.refresh_from_db()
+        self.assertEqual(offer.status, ConversionOfferStatus.DECLINED)
+        honoree = ceremony.honorees.get()
+        self.assertEqual(honoree.prestige_awarded, 0)
+
+    def test_never_answered_offer_leaves_worship_untouched_at_finish(self) -> None:
+        ceremony, sheet, _offer, _account = self._pending_offer()
+        finish_ceremony(ceremony=ceremony)
+        declaration = WorshipDeclaration.objects.get(character_sheet=sheet)
+        self.assertEqual(declaration.public_being_id, self.old_being.pk)
+
+    def test_wrong_account_cannot_answer(self) -> None:
+        from world.roster.factories import PlayerDataFactory
+
+        _ceremony, _sheet, offer, _account = self._pending_offer()
+        stranger = PlayerDataFactory().account
+        with self.assertRaises(ConversionOfferError):
+            respond_to_conversion_offer(offer, account=stranger, accept=True)
+
+    def test_double_answer_rejected(self) -> None:
+        _ceremony, _sheet, offer, account = self._pending_offer()
+        respond_to_conversion_offer(offer, account=account, accept=True)
+        with self.assertRaises(ConversionOfferError):
+            respond_to_conversion_offer(offer, account=account, accept=True)
+
+
+class ConversionScandalForkTests(TestCase):
+    """#2361 — the deed rides the existing #1464 scandal fork via _mint_ceremony_deed."""
+
+    @classmethod
+    def setUpTestData(cls) -> None:
+        from evennia_extensions.factories import RoomProfileFactory
+        from world.areas.constants import AreaLevel
+        from world.areas.factories import AreaFactory
+        from world.character_creation.factories import RealmFactory
+        from world.seeds.scandal_archetypes import seed_scandal_archetypes
+        from world.societies.factories import SocietyFactory
+
+        CeremonyTypeFactory(key=CeremonyTypeKey.CONVERSION, name="Conversion")
+        cls.old_being = WorshippedBeingFactory()
+        cls.new_being = WorshippedBeingFactory()
+        seed_scandal_archetypes()
+        cls.realm = RealmFactory()
+        # method=5 (extreme Honor) reacts hard to Treacherous Scandal's method_delta=-3.
+        cls.honor_bound = SocietyFactory(realm=cls.realm, method=5)
+        cls.kingdom = AreaFactory(level=AreaLevel.KINGDOM, realm=cls.realm)
+        cls.profile = RoomProfileFactory(area=cls.kingdom, is_public=True)
+
+    def _scene(self):
+        from world.scenes.factories import SceneFactory
+
+        return SceneFactory(location=self.profile.objectdb)
+
+    def test_conversion_away_from_declared_faith_tags_treacherous_scandal(self) -> None:
+        from world.societies.models import LegendEntry
+
+        scene = self._scene()
+        sheet = CharacterSheetFactory()
+        WorshipDeclaration.objects.create(character_sheet=sheet, public_being=self.old_being)
+        persona = sheet.primary_persona
+        ceremony = open_ceremony(
+            officiant_persona=persona,
+            type_key=CeremonyTypeKey.CONVERSION,
+            honoree_sheets=[sheet],
+            location_profile=self.profile,
+            being=self.new_being,
+            scene=scene,
+        )
+
+        finish_ceremony(ceremony=ceremony)
+
+        entry = LegendEntry.objects.get(persona=persona, title__startswith="Converted to")
+        self.assertEqual({a.name for a in entry.archetypes.all()}, {"Treacherous Scandal"})
+        self.assertIn(self.honor_bound, entry.societies_aware.all())
+
+    def test_first_declaration_carries_no_archetype_and_skips_scandal_fork(self) -> None:
+        from world.societies.models import LegendEntry
+
+        scene = self._scene()
+        sheet = CharacterSheetFactory()  # no prior declaration
+        persona = sheet.primary_persona
+        ceremony = open_ceremony(
+            officiant_persona=persona,
+            type_key=CeremonyTypeKey.CONVERSION,
+            honoree_sheets=[sheet],
+            location_profile=self.profile,
+            being=self.new_being,
+            scene=scene,
+        )
+
+        finish_ceremony(ceremony=ceremony)
+
+        entry = LegendEntry.objects.get(persona=persona, title__startswith="Converted to")
+        self.assertEqual(entry.archetypes.count(), 0)
+        self.assertEqual(entry.societies_aware.count(), 0)

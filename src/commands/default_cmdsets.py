@@ -55,6 +55,7 @@ from commands.consent import (
 )
 from commands.consent_preferences import CmdConsent
 from commands.consider import CmdConsider
+from commands.conversion import CmdConversion
 from commands.covenant import CmdCovenant
 from commands.crafting import CmdCraft
 from commands.crafting_station import CmdLabStation
@@ -538,6 +539,10 @@ class AccountCmdSet(default_cmds.AccountCmdSet):
         # #2393 — seance manifestation-offer inbox: offers/accept/decline,
         # account-scoped (reaches a retired honoree with no active puppet).
         self.add(CmdSeance())
+        # #2361 — public-conversion offer inbox: offers/accept/decline,
+        # account-scoped (mirrors CmdSeance; only the PC-officiated route
+        # mints an offer, the self-officiated solo route needs none).
+        self.add(CmdConversion())
         self.add(CmdAccount())
         self.add(CmdSheet())
         self.add(CmdPage())
