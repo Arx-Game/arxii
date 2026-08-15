@@ -37,6 +37,13 @@ vi.mock('@/combat/queries', () => ({
   })),
 }));
 
+vi.mock('sonner', () => ({
+  toast: {
+    success: vi.fn(),
+    error: vi.fn(),
+  },
+}));
+
 vi.mock('../../queries', async () => {
   const actual = await vi.importActual<typeof import('../../queries')>('../../queries');
   return {
@@ -48,6 +55,7 @@ vi.mock('../../queries', async () => {
 import { ScenesListPage } from '../ScenesListPage';
 import { fetchScenes } from '../../queries';
 import { useDispatchPlayerAction } from '@/combat/queries';
+import { toast } from 'sonner';
 
 function makeScene(overrides: Partial<SceneListItem> = {}): SceneListItem {
   return {
@@ -116,10 +124,41 @@ describe('ScenesListPage — Go there button (#2163)', () => {
     await user.click(button);
 
     await waitFor(() => {
-      expect(mockMutate).toHaveBeenCalledWith({
-        ref: { backend: 'registry', registry_key: 'travel_to' },
-        kwargs: { target: 501 },
-      });
+      expect(mockMutate).toHaveBeenCalledWith(
+        {
+          ref: { backend: 'registry', registry_key: 'travel_to' },
+          kwargs: { target: 501 },
+        },
+        expect.objectContaining({ onSuccess: expect.any(Function), onError: expect.any(Function) })
+      );
     });
+  });
+
+  /**
+   * #3155: `DispatchActionView` resolves HTTP 200 even for a business-rule
+   * rejection (e.g. no path there). Before the fix this `mutate()` call had
+   * no result handling at all, so a rejected travel silently did nothing.
+   */
+  it('toasts the rejection reason when the dispatch resolves success: false', async () => {
+    const user = userEvent.setup();
+    const mockMutate = vi.fn();
+    vi.mocked(useDispatchPlayerAction).mockReturnValue({
+      mutate: mockMutate,
+      isPending: false,
+    } as unknown as ReturnType<typeof useDispatchPlayerAction>);
+    vi.mocked(fetchScenes).mockResolvedValue({ results: [makeScene()] });
+
+    render(<ScenesListPage />, { wrapper: createWrapper() });
+
+    const button = await screen.findByTestId('go-there-1');
+    await user.click(button);
+
+    await waitFor(() => expect(mockMutate).toHaveBeenCalled());
+    const options = mockMutate.mock.calls[0][1] as {
+      onSuccess: (result: { success: boolean; message: string }) => void;
+    };
+    options.onSuccess({ success: false, message: 'No path there.' });
+
+    expect(toast.error).toHaveBeenCalledWith('No path there.');
   });
 });

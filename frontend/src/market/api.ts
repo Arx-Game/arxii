@@ -4,7 +4,7 @@
  */
 
 import { apiFetch } from '@/evennia_replacements/api';
-import { throwApiError } from '@/lib/errors';
+import { parseDispatchBody } from '@/lib/errors';
 
 export interface StockListing {
   id: number;
@@ -71,6 +71,11 @@ export async function getServiceOffers(): Promise<ServiceOffer[]> {
 
 export type MarketActionKey = 'market_buy_stock' | 'market_buy_ware' | 'market_finish_ware';
 
+/**
+ * Dispatch a market REGISTRY action. `DispatchActionView` resolves HTTP 200
+ * even for a business-rule rejection (e.g. insufficient funds) — `success ===
+ * false` (not `res.ok` alone) is the signal the purchase was refused (#3155).
+ */
 export async function dispatchMarketAction(
   characterId: number,
   registryKey: MarketActionKey,
@@ -81,7 +86,7 @@ export async function dispatchMarketAction(
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ ref: { backend: 'registry', registry_key: registryKey }, kwargs }),
   });
-  if (!res.ok) await throwApiError(res, 'The action failed.');
-  const data = (await res.json()) as { message?: string };
-  return data.message ?? 'Done.';
+  const { success, message } = await parseDispatchBody(res);
+  if (!res.ok || success === false) throw new Error(message ?? 'The action failed.');
+  return message ?? 'Done.';
 }

@@ -1,7 +1,13 @@
 /** ApiError + throwApiError/readErrorDetail (2026-07 audit error-path fix). */
 import { describe, expect, it } from 'vitest';
 
-import { ApiError, extractErrorMessage, readErrorDetail, throwApiError } from '../errors';
+import {
+  ApiError,
+  extractErrorMessage,
+  parseDispatchBody,
+  readErrorDetail,
+  throwApiError,
+} from '../errors';
 
 function jsonResponse(body: unknown, status = 400): Response {
   return new Response(JSON.stringify(body), {
@@ -46,5 +52,39 @@ describe('throwApiError', () => {
     expect(err).toBeInstanceOf(ApiError);
     expect(err.status).toBe(403);
     expect(extractErrorMessage(err)).toBe('Nope.');
+  });
+});
+
+/**
+ * `parseDispatchBody` (#3155) — the shared parse hoisted out of the #2992
+ * `dispatchTreasuryResult` fix so every dispatch caller that reduces a
+ * `DispatchActionView` response to a message string applies the same
+ * `success === false` check instead of re-copying the parse per module.
+ */
+describe('parseDispatchBody', () => {
+  it('reads success and message off a business-rule rejection body (HTTP 200)', async () => {
+    const res = jsonResponse({ success: false, message: 'Only members may do that.' }, 200);
+    await expect(parseDispatchBody(res)).resolves.toEqual({
+      success: false,
+      message: 'Only members may do that.',
+    });
+  });
+
+  it('reads success: true off a real success body', async () => {
+    const res = jsonResponse({ success: true, message: 'Done.' }, 200);
+    await expect(parseDispatchBody(res)).resolves.toEqual({ success: true, message: 'Done.' });
+  });
+
+  it('prefers detail over message when both are present', async () => {
+    const res = jsonResponse({ success: false, detail: 'Detail wins.', message: 'Ignored.' });
+    await expect(parseDispatchBody(res)).resolves.toEqual({
+      success: false,
+      message: 'Detail wins.',
+    });
+  });
+
+  it('reads success: null and no message off a non-JSON body', async () => {
+    const res = new Response('<html>proxy error</html>', { status: 502 });
+    await expect(parseDispatchBody(res)).resolves.toEqual({ success: null, message: undefined });
   });
 });

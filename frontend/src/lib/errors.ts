@@ -109,3 +109,43 @@ export async function throwApiError(res: Response, fallback: string): Promise<ne
 export async function readErrorDetail(res: Response, fallback: string): Promise<never> {
   return throwApiError(res, fallback);
 }
+
+/**
+ * Parsed `POST /api/actions/characters/{id}/dispatch/` response body — the
+ * two fields every dispatch caller needs to decide success vs. rejection.
+ */
+export interface DispatchResultBody {
+  /**
+   * `DispatchActionView` always resolves HTTP 200 for a business-rule
+   * `ActionResult`, success or failure — only a structural ref error is a
+   * 400. So `success === false` (not `res.ok`) is the wire signal that
+   * distinguishes an honest rejection from a real success; `true`/`null`/
+   * `undefined` all read as success (`null` covers a deferred dispatch or a
+   * backend with no boolean-success notion).
+   */
+  success: boolean | null;
+  message: string | undefined;
+}
+
+/**
+ * Parse a dispatch-endpoint response body into `{success, message}`,
+ * swallowing a non-JSON body as `{success: null, message: undefined}`.
+ * Callers combine this with `!res.ok` to throw on either a structural error
+ * or a business-rule rejection — see `dispatchTreasuryResult` (the #2992
+ * reference fix in `@/covenants/api.ts`) for the throw-and-fallback shape.
+ * Hoisted here (#3155) so every dispatch caller that reduces the response to
+ * a single message string shares one parse, instead of re-copying it per
+ * module.
+ */
+export async function parseDispatchBody(res: Response): Promise<DispatchResultBody> {
+  try {
+    const data = (await res.json()) as {
+      detail?: string;
+      message?: string | null;
+      success?: boolean | null;
+    };
+    return { success: data.success ?? null, message: data.detail ?? data.message ?? undefined };
+  } catch {
+    return { success: null, message: undefined };
+  }
+}

@@ -19,9 +19,11 @@
  */
 
 import { Sparkles } from 'lucide-react';
+import { toast } from 'sonner';
 import { Button } from '@/components/ui/button';
 import { usePortalDestinationsQuery } from '@/locations/queries';
 import { useDispatchPlayerAction } from '@/combat/queries';
+import { isDispatchFailure } from '@/combat/types';
 
 interface PortalsBlockProps {
   /** The active puppet's ObjectDB/CharacterSheet pk, or null/undefined with none active. */
@@ -37,10 +39,23 @@ export function PortalsBlock({ characterId }: PortalsBlockProps) {
   }
 
   const dispatchTravel = (roomId: number) => {
-    mutate({
-      ref: { backend: 'registry', registry_key: 'travel_to' },
-      kwargs: { target: roomId },
-    });
+    mutate(
+      {
+        ref: { backend: 'registry', registry_key: 'travel_to' },
+        kwargs: { target: roomId },
+      },
+      {
+        // `DispatchActionView` resolves HTTP 200 even for a business-rule
+        // rejection (e.g. no path there) — without this check the rejection
+        // silently did nothing (#3155).
+        onSuccess: (result) => {
+          if (isDispatchFailure(result)) {
+            toast.error(result.message ?? "Couldn't travel there.");
+          }
+        },
+        onError: (error: Error) => toast.error(error.message),
+      }
+    );
   };
 
   return (
