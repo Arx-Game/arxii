@@ -10,7 +10,7 @@ from unittest.mock import patch
 
 from django.test import TestCase
 
-from world.ceremonies.constants import CeremonyTypeKey
+from world.ceremonies.constants import CeremonyStatus, CeremonyTypeKey
 from world.ceremonies.factories import CeremonyFactory, CeremonyHonoreeFactory, CeremonyTypeFactory
 from world.character_sheets.factories import CharacterSheetFactory
 from world.currency.services import get_or_create_purse, transfer
@@ -24,6 +24,7 @@ from world.events.services import (
     GRANDEUR_SCORE_CAP,
     _award_grandeur_prestige,
     _grandeur_score,
+    cancel_event,
     contribute_grandeur,
 )
 from world.events.types import EventError
@@ -209,7 +210,9 @@ class GrandeurHonoreeCutTest(TestCase):
     def test_wedding_ceremony_awards_an_additive_honoree_deed(self):
         wedding_type = CeremonyTypeFactory(key=CeremonyTypeKey.WEDDING, name="Wedding")
         honoree_sheet = CharacterSheetFactory()
-        ceremony = CeremonyFactory(ceremony_type=wedding_type, event=self.event)
+        ceremony = CeremonyFactory(
+            ceremony_type=wedding_type, event=self.event, status=CeremonyStatus.COMPLETED
+        )
         CeremonyHonoreeFactory(ceremony=ceremony, honoree_sheet=honoree_sheet)
 
         with patch("world.societies.services.create_solo_deed") as deed:
@@ -233,3 +236,78 @@ class GrandeurHonoreeCutTest(TestCase):
         with patch("world.societies.services.create_solo_deed") as deed:
             _award_grandeur_prestige(self.event)
         deed.assert_called_once()
+
+    def test_abandoned_wedding_ceremony_pays_no_honoree_cut(self):
+        """An event can complete independently of its ceremony (#2357 review).
+
+        ``abandon_ceremony`` closes the rite awarding its honorees nothing
+        (Decision 12) — if the *event* still completes, the grandeur honoree
+        cut must not pay out for a marriage that never solemnized.
+        """
+        wedding_type = CeremonyTypeFactory(key=CeremonyTypeKey.WEDDING, name="Wedding")
+        honoree_sheet = CharacterSheetFactory()
+        ceremony = CeremonyFactory(
+            ceremony_type=wedding_type, event=self.event, status=CeremonyStatus.ABANDONED
+        )
+        CeremonyHonoreeFactory(ceremony=ceremony, honoree_sheet=honoree_sheet)
+
+        with patch("world.societies.services.create_solo_deed") as deed:
+            _award_grandeur_prestige(self.event)
+
+        deed.assert_called_once()  # host only — the abandoned wedding pays no honoree cut
+        self.assertEqual(deed.call_args.args[0], self.host_persona)
+
+    def test_open_ceremony_pays_no_honoree_cut_yet(self):
+        """A ceremony still OPEN (never finished) is not COMPLETED — no cut yet."""
+        wedding_type = CeremonyTypeFactory(key=CeremonyTypeKey.WEDDING, name="Wedding")
+        honoree_sheet = CharacterSheetFactory()
+        ceremony = CeremonyFactory(
+            ceremony_type=wedding_type, event=self.event, status=CeremonyStatus.OPEN
+        )
+        CeremonyHonoreeFactory(ceremony=ceremony, honoree_sheet=honoree_sheet)
+
+        with patch("world.societies.services.create_solo_deed") as deed:
+            _award_grandeur_prestige(self.event)
+
+        deed.assert_called_once()  # host only
+
+
+class GrandeurCancellationTest(TestCase):
+    """Cancellation ruling (#2357 review, controller 2026-08-15): nonrefundable.
+
+    A SCHEDULED event's grandeur contributions are real currency-sink spends
+    (``currency.services.transfer``, null destination) the instant they're
+    made — ``cancel_event`` has no grandeur-specific unwind, so a cancelled
+    event leaves contributors out the coppers with no prestige minted either
+    (the completion hook only ever runs from ``complete_event``). This is a
+    deliberate nonrefundable-deposit flavor call, not an oversight — pinned
+    here so a future change to it is a conscious decision.
+    """
+
+    def test_cancel_leaves_contributions_spent_with_no_prestige_minted(self):
+        event = EventFactory(status=EventStatus.SCHEDULED)
+        host_persona = _funded_persona()
+        EventHost.objects.create(event=event, persona=host_persona, is_primary=True)
+        contributor = _funded_persona(coppers=50_000)
+        purse = get_or_create_purse(contributor.character_sheet)
+
+        contribute_grandeur(
+            event, contributor, category=GrandeurCategory.VENUE, amount=25_000, from_purse=purse
+        )
+        purse.refresh_from_db()
+        self.assertEqual(purse.balance, 25_000, "the spend already left the purse")
+
+        cancel_event(event)
+
+        purse.refresh_from_db()
+        self.assertEqual(purse.balance, 25_000, "cancellation does not refund the spend")
+        self.assertTrue(
+            EventGrandeurContribution.objects.filter(event=event).exists(),
+            "the contribution row survives cancellation as a spent record",
+        )
+        from world.societies.models import LegendEntry
+
+        self.assertFalse(
+            LegendEntry.objects.filter(persona=host_persona).exists(),
+            "no prestige mints on cancellation — only complete_event awards it",
+        )

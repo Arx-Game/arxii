@@ -439,6 +439,16 @@ def contribute_grandeur(  # noqa: PLR0913 - purse/treasury source pair is co-equ
     catering's contributor resolution) — this function just moves the money
     and tags it.
 
+    **Nonrefundable by design** (ruled by the controller 2026-08-15, spec
+    silent): a SCHEDULED event can take contributions and later be
+    ``cancel_event``'d — there is no grandeur-specific unwind on cancellation.
+    ``transfer``'s null destination is a genuine sink (the coppers are gone,
+    not parked anywhere recoverable), and no prestige is minted either
+    (``_award_grandeur_prestige`` only ever runs from ``complete_event``). This
+    reads as a nonrefundable-deposit flavor — throwing money at a wedding that
+    falls through doesn't buy it back — rather than an oversight; revisit if
+    that flavor call turns out wrong.
+
     Raises:
         EventError: If the event is not SCHEDULED/ACTIVE, or funds are short.
     """
@@ -519,19 +529,30 @@ def _award_grandeur_prestige(event: Event) -> None:
 
 
 def _award_grandeur_honoree_cut(event: Event, score: int, source_type) -> None:
-    """Additive honoree cut when *event* has a linked WEDDING/CORONATION ceremony.
+    """Additive honoree cut when *event* has a linked, COMPLETED WEDDING/CORONATION ceremony.
 
     Mirrors ``CeremonyConfig.officiant_cut_percent``'s shape: a percentage of
     the host's grandeur deed value mints as a second deed per honoree,
     additive to whatever ``finish_ceremony``'s own branch already awarded
     them (ratified 2026-08-15 — the "in addition to" ceremony honoree
-    prestige). No cut fires for a plain grand ball with no linked ceremony.
+    prestige). No cut fires for a plain grand ball with no linked ceremony,
+    nor for one that never solemnized: an event can complete independently of
+    its ceremony (two separate completion triggers, no ordering enforced
+    between them), so an ``abandon_ceremony``'d wedding — which awards its
+    honorees nothing (Decision 12) — must not still pay out a grandeur cut
+    for a marriage that never happened. Gated on
+    ``CeremonyStatus.COMPLETED``, not merely "linked."
     """
+    from world.ceremonies.constants import CeremonyStatus  # noqa: PLC0415
     from world.ceremonies.models import Ceremony  # noqa: PLC0415
     from world.societies.services import create_solo_deed  # noqa: PLC0415
 
     ceremony = (
-        Ceremony.objects.filter(event=event, ceremony_type__key__in=_GRANDEUR_HONOREE_CEREMONY_KEYS)
+        Ceremony.objects.filter(
+            event=event,
+            ceremony_type__key__in=_GRANDEUR_HONOREE_CEREMONY_KEYS,
+            status=CeremonyStatus.COMPLETED,
+        )
         .select_related("ceremony_type")
         .first()
     )
@@ -541,9 +562,11 @@ def _award_grandeur_honoree_cut(event: Event, score: int, source_type) -> None:
     if honoree_value <= 0:
         return
     for honoree in ceremony.honorees.select_related("honoree_sheet"):
+        # CharacterSheet.primary_persona raises Persona.DoesNotExist rather than
+        # returning None when the invariant is violated (world/character_sheets/
+        # models.py) — no None-guard needed, mirrors finish_ceremony's own
+        # unguarded use of the same property.
         persona = honoree.honoree_sheet.primary_persona
-        if persona is None:
-            continue
         create_solo_deed(
             persona,
             f"Honored by the grandeur of {event.name}",

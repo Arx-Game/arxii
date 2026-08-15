@@ -23,7 +23,6 @@ _EVENT_ERROR_MESSAGES: dict[str, str] = {
     "CATER_NOT_CONTAINER": "Only a container can be flagged for catering.",
     "CATER_NO_PERSONA": "You must have a persona to contribute to an event's table.",
     "GRANDEUR_INVALID": "Grandeur can only be invested at a scheduled or active event.",
-    "GRANDEUR_NO_PERSONA": "You must have a persona to invest in an event's grandeur.",
     "GRANDEUR_NOT_AUTHORIZED": "You do not have the standing to spend from that treasury.",
     "GRANDEUR_INSUFFICIENT_FUNDS": "You cannot afford that much grandeur investment.",
 }
@@ -50,7 +49,6 @@ class EventError(Exception):
     CATER_NOT_CONTAINER = _EVENT_ERROR_MESSAGES["CATER_NOT_CONTAINER"]
     CATER_NO_PERSONA = _EVENT_ERROR_MESSAGES["CATER_NO_PERSONA"]
     GRANDEUR_INVALID = _EVENT_ERROR_MESSAGES["GRANDEUR_INVALID"]
-    GRANDEUR_NO_PERSONA = _EVENT_ERROR_MESSAGES["GRANDEUR_NO_PERSONA"]
     GRANDEUR_NOT_AUTHORIZED = _EVENT_ERROR_MESSAGES["GRANDEUR_NOT_AUTHORIZED"]
     GRANDEUR_INSUFFICIENT_FUNDS = _EVENT_ERROR_MESSAGES["GRANDEUR_INSUFFICIENT_FUNDS"]
     INVITE_ACTIVE = _EVENT_ERROR_MESSAGES["INVITE_ACTIVE"]

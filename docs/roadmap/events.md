@@ -106,16 +106,32 @@ expansion (still gated on its own dedicated brainstorm — see below).
   mints the primary host's "Grandeur" deed via `create_solo_deed` +
   `_apply_grand_display` — the same pipeline catering uses, so the org's existing 10%
   member-deed trickle (`Organization.accumulated_prestige`) feeds off it automatically.
-- **Honoree cut** — when the completed event has a linked `Ceremony` whose
-  `ceremony_type.key` is WEDDING or CORONATION, `_award_grandeur_honoree_cut` mints an
-  additive per-honoree deed (a flat percent of the host's deed value, mirroring
+- **Honoree cut** — when the completed event has a linked, **COMPLETED**
+  `Ceremony` whose `ceremony_type.key` is WEDDING or CORONATION,
+  `_award_grandeur_honoree_cut` mints an additive per-honoree deed (a flat
+  percent of the host's deed value, mirroring
   `CeremonyConfig.officiant_cut_percent`'s shape) — on top of whatever
-  `finish_ceremony`'s own branch already awarded them. No cut for a plain grand ball.
+  `finish_ceremony`'s own branch already awarded them. No cut for a plain grand
+  ball, and no cut for a ceremony that opened but never solemnized: an event can
+  `complete_event` independently of its own ceremony's finish/abandon (two
+  separate triggers, no ordering enforced between them), so an
+  `abandon_ceremony`'d wedding — which awards its honorees nothing — must not
+  still pay a grandeur cut for a marriage that never happened (review fix,
+  2026-08-15).
 - **Ratified 2026-08-15 (supersedes the original draft):** no `is_milestone` flag, no
   cooldown bookkeeping. For a ceremony-linked event the economic cost of the spend IS
   the gate (chain-marrying is allowed and priced; coronations are one-off per
   (honoree, title) by #2358's own constraint, not by grandeur bookkeeping); plain
   diminishing returns apply to every event alike.
+- **Nonrefundable on cancellation (ruled by the controller 2026-08-15, spec silent —
+  Apostate to confirm on tuning pass):** `contribute_grandeur` accepts contributions on
+  a SCHEDULED or ACTIVE event, and `cancel_event` can cancel a SCHEDULED event with no
+  grandeur-specific unwind — the spend already left the payer's purse/treasury through
+  the real currency sink (null destination, non-recoverable) the instant it was made,
+  and no prestige mints either (only `complete_event` runs the completion hook). A
+  cancelled event's contributions stay spent, matching a nonrefundable-deposit reading
+  of "throwing money at a wedding that falls through." Pinned by
+  `test_grandeur.py::GrandeurCancellationTest`.
 - **Action/telnet/web** — `event_invest_grandeur` (`ContributeGrandeurAction`,
   REGISTRY, treasury-sourced spends gated on `can_spend_treasury` at the Action
   layer); telnet `event grandeur <id> category=<...> amount=<n> [org=<name>]`; web
