@@ -76,6 +76,18 @@ jobs:
           TF_VAR_state_bucket_label: ${{ vars.ARXII_BACKUPS_BUCKET }}
           TF_VAR_r2_bucket_name: ${{ vars.ARXII_R2_BUCKET }}
           TF_VAR_dmarc_rua: ${{ vars.ARXII_DMARC_RUA }}
+          # Resend's DNS rows, verbatim from its domain page's MANUAL SETUP
+          # view, as a JSON array. WITHOUT this the module receives its `[]`
+          # default and publishes NO Resend records, so the sending domain
+          # never verifies and no mail leaves the box. The `|| '[]'` matters:
+          # an unset Variable renders as an empty string, which is not valid
+          # JSON for a list(object) and fails the apply outright.
+          TF_VAR_resend_records: ${{ vars.ARXII_RESEND_RECORDS || '[]' }}
+          # Hostnames. Same empty-string trap as above — an unset Variable
+          # would otherwise override the module default with "", putting the
+          # record at the zone apex.
+          TF_VAR_web_hostname: ${{ vars.ARXII_WEB_HOSTNAME || 'play' }}
+          TF_VAR_telnet_hostname: ${{ vars.ARXII_TELNET_HOSTNAME || 'telnet' }}
           # SSH admin CIDR allowlist — conscious operator decision (JSON
           # list), enforced non-empty by standup.sh's preflight.
           TF_VAR_ssh_admin_cidrs: ${{ vars.ARXII_SSH_ADMIN_CIDRS }}

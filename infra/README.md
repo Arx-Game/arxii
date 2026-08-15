@@ -202,6 +202,23 @@ for prod.
   default to leave unmade.
 - `ARXII_ACME_EMAIL` — optional; Caddy's ACME account email. Defaults to
   `admin@<domain>` if unset.
+- `ARXII_RESEND_RECORDS` — **required for mail to work**, maps to
+  `TF_VAR_resend_records`. A JSON array of every row on Resend's domain page,
+  taken from its **Manual setup** view — never its Cloudflare auto-configure
+  button, which writes the records itself and collides with the
+  `cloudflare_dns` module. `priority` is set on the MX row only:
+  ```
+  [{"type":"TXT","name":"resend._domainkey","value":"p=MIGf..."},
+   {"type":"TXT","name":"send","value":"v=spf1 include:amazonses.com ~all"},
+   {"type":"MX","name":"send","value":"feedback-smtp.us-east-1.amazonses.com","priority":10}]
+  ```
+  Leave it unset and the workflow substitutes `[]`, the apply succeeds, and
+  the sending domain silently never verifies — so no registration or
+  password-reset mail ever leaves the box.
+- `ARXII_WEB_HOSTNAME` / `ARXII_TELNET_HOSTNAME` — optional; default to `play`
+  and `telnet`. Both are substituted in the workflow rather than left to the
+  tofu default, because an unset GitHub Variable renders as an empty string,
+  and an empty hostname would place the record at the zone apex.
 - `ARXII_CONTENT_REPO` — the private lore repo's `owner/repo` slug. Pairs
   with `ARXII_CONTENT_REPO_TOKEN` above; knowing the slug alone grants no
   access without the token, which is what keeps this a Variable rather than

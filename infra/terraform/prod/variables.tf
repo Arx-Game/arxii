@@ -38,7 +38,7 @@ variable "web_hostname" {
 }
 variable "telnet_hostname" {
   type    = string
-  default = "mud"
+  default = "telnet"
 }
 variable "tls_telnet_port" {
   type    = number
