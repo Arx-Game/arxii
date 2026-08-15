@@ -36,6 +36,8 @@ dependencies = [
     "django-linear-migrations>=2.19.0",
     "django-htmx>=1.27.0",
     "sentry-sdk>=2.64.0",
+    "pyopenssl>=19.1",
+    "service-identity>=18.1.0",
 ]
 
 [tool.ruff]

@@ -309,6 +309,14 @@ Installed once by the converge, then running unattended on the box:
   `OnFailure=` units that fire an immediate off-box alert on failure; the daily heartbeat
   independently re-flags any backup/offsite unit still in a failed state, in case the
   `OnFailure=` alert itself didn't land.
+- **SSL-telnet needs pyOpenSSL installed.** `django_hardening` sets `SSL_ENABLED = True`
+  with `SSL_PORTS = [4003]` (and `TELNET_ENABLED = False`, so TLS is the only telnet
+  offered). Evennia's Portal imports `OpenSSL` to bind that listener, and it is NOT a
+  base Evennia dependency: upstream keeps it in the `extra` extra, alongside jupyter,
+  scipy and boto3 that a game server has no use for. `pyopenssl` and `service-identity`
+  are therefore declared directly in `pyproject.toml`. Without them the Portal exits with
+  `ImportError: No module named 'OpenSSL'`, never writes `server.pid`, and systemd fails
+  the unit on `protocol` — which is what happened on the first standup that got this far.
 - **Telnet cert renewal** (`arxii-telnet-cert.timer`, daily). Caddy's ACME cert is the
   source of truth; Evennia's SSL-telnet paths are hardcoded and don't reload on `evennia
   reload`, so this timer syncs the cert in and reboots Evennia **only when the cert
