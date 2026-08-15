@@ -6,7 +6,14 @@
 # tls_telnet_cert's ttc_game_dir (#2236 review). Get this wrong and the
 # overlay deploys to a path settings.py's sibling import never reaches.
 dh_game_dir: /opt/arxii/current/src
-dh_settings_path: "{{ dh_game_dir }}/server/conf/secret_settings.py"
+# The overlay is rendered OUTSIDE any release, and app_deploy symlinks it into
+# the release it is building (app_secret_settings_src there must equal this).
+# It cannot live at dh_game_dir directly: app_deploy flips `current` LAST, on
+# purpose, so that path does not exist on a first converge and points at the
+# PREVIOUS release on every later one — the release actually being migrated
+# would never receive the overlay. Config outlives releases, so it belongs
+# beside the EnvironmentFile, and a rollback keeps working.
+dh_settings_path: /etc/arxii/secret_settings.py
 dh_service_user: arxii
 dh_service_group: arxii
 dh_allowed_hosts: []                 # = [web_fqdn, telnet_fqdn] (tofu outputs)

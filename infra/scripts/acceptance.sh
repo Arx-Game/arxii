@@ -198,6 +198,19 @@ chk   "caddy role loads that file into caddy.service via a drop-in" \
 chk   "Caddyfile validate gets the DNS-01 token in its environment" \
   "grep -q 'CADDY_CF_DNS_TOKEN: ' infra/ansible/roles/caddy/tasks/main.yml"
 
+# (c2) The hardening overlay is rendered by one role and consumed by another.
+# app_deploy flips `current` LAST, so the overlay must NOT live under a
+# release path: on a first converge `current` does not exist, and on later
+# ones it points at the PREVIOUS release, so the release being migrated would
+# never get it. Pin the two paths equal, and pin the link before migrate.
+chk   "django_hardening's overlay path is not under a release/current path" \
+  "sed -n 's/^dh_settings_path: //p' infra/ansible/roles/django_hardening/defaults/main.yml | grep -qv '/opt/arxii'"
+chk   "dh_settings_path == app_deploy's app_secret_settings_src" \
+  "[ \"\$(sed -n 's/^dh_settings_path: //p' infra/ansible/roles/django_hardening/defaults/main.yml)\" = \"\$(sed -n 's/^app_secret_settings_src: //p' infra/ansible/roles/app_deploy/defaults/main.yml)\" ]"
+assert_before "app_deploy links the overlay BEFORE evennia migrate reads it" \
+  'secret_settings\.py' 'evennia migrate --noinput' \
+  infra/ansible/roles/app_deploy/tasks/main.yml
+
 # (d) nftables must never `flush ruleset` (wipes fail2ban's own table too);
 # it must flush only OUR table. nc() strips comments first so the check
 # asserts real code, not the explanatory comment that mentions the banned
