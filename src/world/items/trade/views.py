@@ -9,6 +9,8 @@ from __future__ import annotations
 from typing import TYPE_CHECKING
 
 from django.db.models import Q, QuerySet
+import django_filters
+from django_filters.rest_framework import DjangoFilterBackend
 from rest_framework import viewsets
 from rest_framework.permissions import IsAuthenticated
 
@@ -37,12 +39,22 @@ def _viewer_sheet(request: Request) -> CharacterSheet | None:
     return puppet.character_sheet
 
 
+class TradeSessionFilterSet(django_filters.FilterSet):
+    status = django_filters.ChoiceFilter(choices=TradeSession.Status.choices)
+
+    class Meta:
+        model = TradeSession
+        fields = ["status"]
+
+
 class TradeSessionViewSet(viewsets.ReadOnlyModelViewSet):
     """Your open and past trade sessions — never an account-wide or global browse."""
 
     pagination_class = None
     serializer_class = TradeSessionSerializer
     permission_classes = [IsAuthenticated]
+    filter_backends = [DjangoFilterBackend]
+    filterset_class = TradeSessionFilterSet
 
     def get_queryset(self) -> QuerySet[TradeSession]:
         sheet = _viewer_sheet(self.request)

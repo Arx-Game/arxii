@@ -8,6 +8,8 @@ impossible, and cancel moves nothing (stakes are declarations, not escrow).
 
 from __future__ import annotations
 
+from unittest.mock import patch
+
 from django.core.exceptions import ValidationError
 from django.test import TestCase
 
@@ -187,6 +189,21 @@ class StakeTests(TradeTestBase):
         with self.assertRaises(RecipientConsentDenied):
             stake_item(session, self.alice_sheet, item)
 
+    def test_can_give_false_blocks_stake(self) -> None:
+        """A cursed/soulbound-style ``can_give`` package refusal blocks staking (#2990 review).
+
+        No live package implements this hook today, but ``stake_item`` must honor
+        it the same way ``give()`` does the moment one exists.
+        """
+        session = self._active_session()
+        item = self._held_item(self.alice_sheet)
+
+        with patch("flows.object_states.item_state.ItemState.can_give", return_value=False):
+            with self.assertRaises(NotInPossession):
+                stake_item(session, self.alice_sheet, item)
+
+        self.assertFalse(TradeItemStake.objects.filter(item_instance=item).exists())
+
 
 class CoinOfferTests(TradeTestBase):
     def test_over_balance_rejected_at_stage_time(self) -> None:
@@ -276,6 +293,31 @@ class ExecuteTradeTests(TradeTestBase):
         self.assertFalse(session.initiator_confirmed)
         self.assertFalse(session.counterparty_confirmed)
         self.assertTrue(TradeItemStake.objects.filter(pk=stake.pk).exists())
+
+    def test_can_give_false_between_confirm_and_execute_aborts_whole_trade(self) -> None:
+        """A ``can_give`` package refusal appearing between stage and execute (#2990 review).
+
+        Mirrors the stale-stake abort: the whole trade fails atomically, the
+        session survives ``ACTIVE`` with both confirms reset, and the stake
+        row is untouched — same shape as an item pulled out from under the
+        deal, since the two are the same "is this item still giveable" gate.
+        """
+        session = self._active_session()
+        alice_item = self._held_item(self.alice_sheet, key="AliceCursedRing")
+        stake = stake_item(session, self.alice_sheet, alice_item)
+        confirm(session, self.bob_sheet)
+
+        with patch("flows.object_states.item_state.ItemState.can_give", return_value=False):
+            with self.assertRaises(TradeItemUnavailable):
+                confirm(session, self.alice_sheet)
+
+        session.refresh_from_db()
+        self.assertEqual(session.status, TradeSession.Status.ACTIVE)
+        self.assertFalse(session.initiator_confirmed)
+        self.assertFalse(session.counterparty_confirmed)
+        self.assertTrue(TradeItemStake.objects.filter(pk=stake.pk).exists())
+        alice_item.refresh_from_db()
+        self.assertEqual(alice_item.holder_character_sheet_id, self.alice_sheet.pk)
 
     def test_purse_spent_between_stage_and_confirm_rolls_back(self) -> None:
         session = self._active_session()

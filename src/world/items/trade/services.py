@@ -38,6 +38,7 @@ from world.items.trade.exceptions import (
 from world.items.trade.models import TradeItemStake, TradeSession
 
 if TYPE_CHECKING:
+    from flows.object_states.base_state import BaseState
     from world.character_sheets.models import CharacterSheet
 
 # Exceptions that mean "the swap did not go through" — execute_trade resets both
@@ -60,6 +61,15 @@ def _other_party_sheet(session: TradeSession, party_sheet: CharacterSheet) -> Ch
     if party_sheet.pk == session.counterparty_sheet_id:
         return session.initiator_sheet
     raise NotATradeParty
+
+
+def _stake_parties(
+    session: TradeSession, stake: TradeItemStake
+) -> tuple[CharacterSheet, CharacterSheet]:
+    """Return ``(staking_sheet, other_sheet)`` for a stake's session pair."""
+    if stake.offered_by_sheet_id == session.initiator_sheet_id:
+        return session.initiator_sheet, session.counterparty_sheet
+    return session.counterparty_sheet, session.initiator_sheet
 
 
 def _reset_confirms(session: TradeSession) -> None:
@@ -131,6 +141,21 @@ def stake_item(
         locked_item = ItemInstance.objects.select_for_update().filter(pk=item_instance.pk).first()
         if locked_item is None or locked_item.holder_character_sheet_id != party_sheet.pk:
             raise NotInPossession
+
+        from flows.object_states.item_state import ItemState  # noqa: PLC0415
+        from flows.scene_data_manager import SceneDataManager  # noqa: PLC0415
+
+        sdm = SceneDataManager()
+        giver_state = sdm.initialize_state_for_object(party_sheet.character)
+        recipient_state = sdm.initialize_state_for_object(other_sheet.character)
+        item_state = ItemState(locked_item, context=sdm)
+        # Same gate give() runs first (inventory.py's give()) — the behavior-package
+        # extension point for refusing a cursed/soulbound/locked item. No live
+        # package implements it yet, but a trade must not launder around it the
+        # moment one does (#2990 review).
+        if not item_state.can_give(giver=giver_state, recipient=recipient_state):
+            raise NotInPossession
+
         already_staked = TradeItemStake.objects.filter(
             item_instance=locked_item,
             session__status__in=[TradeSession.Status.PROPOSED, TradeSession.Status.ACTIVE],
@@ -280,13 +305,93 @@ def _relocate_staked_item(
     to_sheet.character.carried_items.invalidate()
 
 
+def _lock_and_verify_stakes(
+    locked_session: TradeSession, stakes: list[TradeItemStake]
+) -> dict[int, ItemInstance]:
+    """Lock every staked item and re-verify it can still move.
+
+    Two checks per stake, either of which aborts the whole trade (raises
+    ``TradeItemUnavailable``, caught by ``execute_trade``'s outer handler):
+    the item must still be held by the party who staked it, and ``can_give``
+    (the same behavior-package gate ``give()`` honors — cursed/soulbound/
+    locked) must still pass. Runs to completion before any relocation starts.
+    """
+    from flows.object_states.item_state import ItemState  # noqa: PLC0415
+    from flows.scene_data_manager import SceneDataManager  # noqa: PLC0415
+
+    locked_items = {
+        item.pk: item
+        for item in ItemInstance.objects.select_for_update().filter(
+            pk__in=[stake.item_instance_id for stake in stakes],
+        )
+    }
+
+    sdm = SceneDataManager()
+    character_states: dict[int, BaseState] = {}
+
+    def _character_state(sheet: CharacterSheet) -> BaseState:
+        cached = character_states.get(sheet.pk)
+        if cached is None:
+            cached = sdm.initialize_state_for_object(sheet.character)
+            character_states[sheet.pk] = cached
+        return cached
+
+    for stake in stakes:
+        item = locked_items.get(stake.item_instance_id)
+        if item is None or item.holder_character_sheet_id != stake.offered_by_sheet_id:
+            raise TradeItemUnavailable(stake.pk)
+        staking_sheet, other_sheet = _stake_parties(locked_session, stake)
+        item_state = ItemState(item, context=sdm)
+        # Re-check the same can_give gate stake_item ran at stage time — a
+        # package could have gone cursed/soulbound/locked between staking and
+        # execute just as easily as the item could have moved (#2990 review).
+        if not item_state.can_give(
+            giver=_character_state(staking_sheet),
+            recipient=_character_state(other_sheet),
+        ):
+            raise TradeItemUnavailable(stake.pk)
+
+    return locked_items
+
+
+def _relocate_all_stakes(
+    locked_session: TradeSession,
+    stakes: list[TradeItemStake],
+    locked_items: dict[int, ItemInstance],
+) -> None:
+    for stake in stakes:
+        item = locked_items[stake.item_instance_id]
+        _, to_sheet = _stake_parties(locked_session, stake)
+        _relocate_staked_item(item, to_sheet=to_sheet, session=locked_session)
+
+
+def _transfer_staged_coin(locked_session: TradeSession) -> None:
+    from world.currency.services import get_or_create_purse, transfer  # noqa: PLC0415
+
+    if locked_session.initiator_coppers > 0:
+        transfer(
+            amount=locked_session.initiator_coppers,
+            reason=f"trade #{locked_session.pk}",
+            from_purse=get_or_create_purse(locked_session.initiator_sheet),
+            to_purse=get_or_create_purse(locked_session.counterparty_sheet),
+        )
+    if locked_session.counterparty_coppers > 0:
+        transfer(
+            amount=locked_session.counterparty_coppers,
+            reason=f"trade #{locked_session.pk}",
+            from_purse=get_or_create_purse(locked_session.counterparty_sheet),
+            to_purse=get_or_create_purse(locked_session.initiator_sheet),
+        )
+
+
 def execute_trade(session: TradeSession) -> TradeSession:
     """Atomically swap every staked item and staged coin (#2990).
 
     Two-phase ``select_for_update`` shape mirroring ``resolve_crossing_offer``:
     re-lock the session row, re-verify ``ACTIVE`` + both confirms, then re-lock
-    every staked item and re-verify it's still held by the party who staked it.
-    Any mismatch aborts the *whole* trade — no partial swap. Everything from the
+    every staked item and re-verify it's still held by the party who staked it
+    (``_lock_and_verify_stakes``, which also re-checks ``can_give``). Any
+    mismatch aborts the *whole* trade — no partial swap. Everything from the
     session lock through the final status write is one ``transaction.atomic()``
     block, so there is no window where an item or coin left one side without
     landing on the other.
@@ -313,42 +418,9 @@ def execute_trade(session: TradeSession) -> TradeSession:
                     "offered_by_sheet",
                 ),
             )
-            locked_items = {
-                item.pk: item
-                for item in ItemInstance.objects.select_for_update().filter(
-                    pk__in=[stake.item_instance_id for stake in stakes],
-                )
-            }
-            for stake in stakes:
-                item = locked_items.get(stake.item_instance_id)
-                if item is None or item.holder_character_sheet_id != stake.offered_by_sheet_id:
-                    raise TradeItemUnavailable(stake.pk)
-
-            for stake in stakes:
-                item = locked_items[stake.item_instance_id]
-                to_sheet = (
-                    locked_session.counterparty_sheet
-                    if stake.offered_by_sheet_id == locked_session.initiator_sheet_id
-                    else locked_session.initiator_sheet
-                )
-                _relocate_staked_item(item, to_sheet=to_sheet, session=locked_session)
-
-            from world.currency.services import get_or_create_purse, transfer  # noqa: PLC0415
-
-            if locked_session.initiator_coppers > 0:
-                transfer(
-                    amount=locked_session.initiator_coppers,
-                    reason=f"trade #{locked_session.pk}",
-                    from_purse=get_or_create_purse(locked_session.initiator_sheet),
-                    to_purse=get_or_create_purse(locked_session.counterparty_sheet),
-                )
-            if locked_session.counterparty_coppers > 0:
-                transfer(
-                    amount=locked_session.counterparty_coppers,
-                    reason=f"trade #{locked_session.pk}",
-                    from_purse=get_or_create_purse(locked_session.counterparty_sheet),
-                    to_purse=get_or_create_purse(locked_session.initiator_sheet),
-                )
+            locked_items = _lock_and_verify_stakes(locked_session, stakes)
+            _relocate_all_stakes(locked_session, stakes, locked_items)
+            _transfer_staged_coin(locked_session)
 
             locked_session.status = TradeSession.Status.COMPLETED
             locked_session.resolved_at = timezone.now()
