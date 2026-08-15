@@ -9,8 +9,14 @@ output "ipv4" {
 }
 
 output "ipv6" {
-  value       = linode_instance.host.ipv6
-  description = "Public IPv6."
+  # Linode returns this as a CIDR ("2600:3c03::.../128"), but every consumer
+  # wants a bare address: Cloudflare rejects an AAAA record whose content
+  # carries a prefix length ("AAAA record must be a valid IPv6 address"),
+  # which failed the first real prod apply after the instance already
+  # existed. Strip the prefix here, at the source, so no consumer has to
+  # remember to.
+  value       = split("/", linode_instance.host.ipv6)[0]
+  description = "Public IPv6, bare (prefix length stripped — see comment)."
 }
 
 output "data_volume_id" {
