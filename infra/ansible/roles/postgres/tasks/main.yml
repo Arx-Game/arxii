@@ -75,3 +75,25 @@
     state: present
   become: true
   become_user: postgres
+
+# Database-level ALL is NOT enough on PostgreSQL 15 and later. PG15 revoked
+# CREATE on schema public from the PUBLIC pseudo-role, so only the database
+# owner can create objects there. Ubuntu 24.04 ships PG16, and the first real
+# converge died on exactly this:
+#   psycopg.errors.InsufficientPrivilege: permission denied for schema public
+#   LINE 1: CREATE TABLE "django_migrations" ...
+# A schema grant rather than making the app role the database owner: ownership
+# would also confer DROP DATABASE, which this role deliberately never wants
+# (see "create-if-absent, NEVER drop" above). CREATE+USAGE is what migrations
+# actually need — the app then owns every table it creates. No migration in
+# this repo needs CREATE EXTENSION or any other superuser-only operation.
+- name: Grant CREATE/USAGE on schema public (PG15+ revoked it from PUBLIC)
+  community.postgresql.postgresql_privs:
+    db: "{{ postgres_db_name }}"
+    role: "{{ postgres_db_user }}"
+    type: schema
+    objs: public
+    privs: CREATE,USAGE
+    state: present
+  become: true
+  become_user: postgres
