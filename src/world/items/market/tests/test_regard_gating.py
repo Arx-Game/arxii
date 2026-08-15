@@ -101,10 +101,10 @@ class RegardGatingStockTests(TestCase):
         self.assertEqual(price, 150)  # 75% band
 
     def test_hostile_regard_surcharges_price(self) -> None:
-        NpcRegardFactory(holder_persona=self.shopkeeper, target_persona=self.buyer, value=-300)
+        NpcRegardFactory(holder_persona=self.shopkeeper, target_persona=self.buyer, value=-100)
         listing = self._listing(price=200)
         _instance, price = purchase_stock(listing=listing, buyer=self.buyer)
-        self.assertEqual(price, 230)  # 115% band
+        self.assertEqual(price, 230)  # 115% band (-200..-1 floor)
 
     def test_refusal_floor_blocks_purchase_at_and_below(self) -> None:
         NpcRegardFactory(
