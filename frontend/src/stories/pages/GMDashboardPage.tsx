@@ -16,6 +16,7 @@ import { Button } from '@/components/ui/button';
 import { ErrorBoundary } from '@/components/ErrorBoundary';
 import { Skeleton } from '@/components/ui/skeleton';
 import { apiFetch } from '@/evennia_replacements/api';
+import { parseDispatchBody } from '@/lib/errors';
 import { useAccount } from '@/store/hooks';
 
 // ---------------------------------------------------------------------------
@@ -77,6 +78,10 @@ async function getGMDashboard(): Promise<GMDashboardResponse> {
  * CharacterSheet.character is a primary_key=True OneToOneField). Mirrors the
  * generic-dispatch pattern in @/game/api/roomEditor.ts (#2119, Decision 8:
  * the generic action-dispatch endpoint, never a bespoke @action).
+ *
+ * `DispatchActionView` resolves HTTP 200 even for a business-rule rejection
+ * (e.g. someone else already claimed it) — `success === false` (not `res.ok`
+ * alone) is the signal the claim was refused (#3155).
  */
 async function claimGroupStoryRequest(characterId: number, requestId: number): Promise<string> {
   const res = await apiFetch(`/api/actions/characters/${characterId}/dispatch/`, {
@@ -87,14 +92,8 @@ async function claimGroupStoryRequest(characterId: number, requestId: number): P
       kwargs: { request_id: requestId },
     }),
   });
-  let detail: string | undefined;
-  try {
-    const data = (await res.json()) as { detail?: string; message?: string | null };
-    detail = data.detail ?? data.message ?? undefined;
-  } catch {
-    detail = undefined;
-  }
-  if (!res.ok) throw new Error(detail ?? 'Failed to claim the request.');
+  const { success, message: detail } = await parseDispatchBody(res);
+  if (!res.ok || success === false) throw new Error(detail ?? 'Failed to claim the request.');
   return detail ?? 'Request claimed.';
 }
 

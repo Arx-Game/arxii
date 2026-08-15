@@ -10,7 +10,7 @@
  */
 
 import { apiFetch } from '@/evennia_replacements/api';
-import { readErrorDetail } from '@/lib/errors';
+import { parseDispatchBody, readErrorDetail } from '@/lib/errors';
 import type { components } from '@/generated/api';
 
 // ---------------------------------------------------------------------------
@@ -465,21 +465,16 @@ export async function getPendingGroupStoryRequestForCovenant(
   return data.results[0] ?? null;
 }
 
-/** Shape of a dispatch-endpoint error/success body, local to this module. */
-async function dispatchDetail(res: Response): Promise<string | undefined> {
-  try {
-    const data = (await res.json()) as { detail?: string; message?: string | null };
-    return data.detail ?? data.message ?? undefined;
-  } catch {
-    return undefined;
-  }
-}
-
 /**
  * Dispatch RequestGMForCovenantAction as the actor's own character
  * (actorCharacterId is the ObjectDB pk — doubles as the character_sheet pk,
  * since CharacterSheet.character is a primary_key=True OneToOneField).
  * Mirrors the generic-dispatch pattern in @/game/api/roomEditor.ts.
+ *
+ * `DispatchActionView` resolves HTTP 200 even for a business-rule rejection
+ * (e.g. an already-open request) — `success === false` is the wire signal
+ * that distinguishes an honest failure from a real success, and `res.ok`
+ * alone is NOT enough (#3155; same fix shape as the treasury calls below).
  */
 export async function requestGMForCovenant(
   actorCharacterId: number,
@@ -494,12 +489,16 @@ export async function requestGMForCovenant(
       kwargs: { covenant_id: covenantId, message },
     }),
   });
-  const detail = await dispatchDetail(res);
-  if (!res.ok) throw new Error(detail ?? 'Failed to post the GM request.');
+  const { success, message: detail } = await parseDispatchBody(res);
+  if (!res.ok || success === false) throw new Error(detail ?? 'Failed to post the GM request.');
   return detail ?? 'GM request posted.';
 }
 
-/** Dispatch WithdrawGroupStoryRequestAction as the actor's own character. */
+/**
+ * Dispatch WithdrawGroupStoryRequestAction as the actor's own character.
+ * See `requestGMForCovenant`'s doc comment for the `success === false` wire
+ * signal this checks (#3155).
+ */
 export async function withdrawGroupStoryRequest(
   actorCharacterId: number,
   requestId: number
@@ -512,8 +511,8 @@ export async function withdrawGroupStoryRequest(
       kwargs: { request_id: requestId },
     }),
   });
-  const detail = await dispatchDetail(res);
-  if (!res.ok) throw new Error(detail ?? 'Failed to withdraw the GM request.');
+  const { success, message: detail } = await parseDispatchBody(res);
+  if (!res.ok || success === false) throw new Error(detail ?? 'Failed to withdraw the GM request.');
   return detail ?? 'GM request withdrawn.';
 }
 
@@ -527,32 +526,11 @@ export async function withdrawGroupStoryRequest(
 // ---------------------------------------------------------------------------
 
 /**
- * Parsed dispatch-endpoint body for the treasury calls. ``DispatchActionView``
- * returns HTTP 200 even for a business-rule rejection (e.g. rank-unauthorized
- * withdrawal) — ``success`` (from ``DispatchResultSerializer``) is the wire
- * signal that distinguishes an honest failure from a real success, and
- * ``res.ok`` alone is NOT enough. Scoped to the treasury calls below — the
- * other dispatch callers in this module (``requestGMForCovenant`` etc.) are
- * unchanged by this fix.
- */
-async function dispatchTreasuryResult(
-  res: Response
-): Promise<{ success: boolean | null; message: string | undefined }> {
-  try {
-    const data = (await res.json()) as {
-      detail?: string;
-      message?: string | null;
-      success?: boolean | null;
-    };
-    return { success: data.success ?? null, message: data.detail ?? data.message ?? undefined };
-  } catch {
-    return { success: null, message: undefined };
-  }
-}
-
-/**
  * Dispatch DepositCovenantFundsAction as the actor's own character.
  * Moves ``amount`` coppers from the actor's purse into the covenant treasury.
+ * See `requestGMForCovenant`'s doc comment for the `success === false` wire
+ * signal this checks (originally #2992; hoisted onto the shared
+ * `parseDispatchBody` in #3155).
  */
 export async function depositCovenantFunds(
   actorCharacterId: number,
@@ -567,7 +545,7 @@ export async function depositCovenantFunds(
       kwargs: { covenant_id: covenantId, amount },
     }),
   });
-  const { success, message } = await dispatchTreasuryResult(res);
+  const { success, message } = await parseDispatchBody(res);
   if (!res.ok || success === false) throw new Error(message ?? 'Failed to deposit covenant funds.');
   return message ?? 'Funds deposited.';
 }
@@ -591,7 +569,7 @@ export async function withdrawCovenantFunds(
       kwargs: { covenant_id: covenantId, amount },
     }),
   });
-  const { success, message } = await dispatchTreasuryResult(res);
+  const { success, message } = await parseDispatchBody(res);
   if (!res.ok || success === false)
     throw new Error(message ?? 'Failed to withdraw covenant funds.');
   return message ?? 'Funds withdrawn.';

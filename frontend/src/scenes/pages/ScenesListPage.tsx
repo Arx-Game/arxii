@@ -1,10 +1,12 @@
 import { useMemo, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { Link } from 'react-router-dom';
+import { toast } from 'sonner';
 import { CharacterLink } from '@/components/character';
 import { useAppSelector } from '@/store/hooks';
 import { useMyRosterEntriesQuery } from '@/roster/queries';
 import { useDispatchPlayerAction } from '@/combat/queries';
+import { isDispatchFailure } from '@/combat/types';
 import { fetchScenes, SceneListItem } from '../queries';
 
 export function ScenesListPage() {
@@ -23,10 +25,23 @@ export function ScenesListPage() {
   const { mutate: dispatchTravel, isPending } = useDispatchPlayerAction(characterId ?? 0);
 
   const goThere = (roomId: number) => {
-    dispatchTravel({
-      ref: { backend: 'registry', registry_key: 'travel_to' },
-      kwargs: { target: roomId },
-    });
+    dispatchTravel(
+      {
+        ref: { backend: 'registry', registry_key: 'travel_to' },
+        kwargs: { target: roomId },
+      },
+      {
+        // `DispatchActionView` resolves HTTP 200 even for a business-rule
+        // rejection (e.g. no path there) — without this check the rejection
+        // silently did nothing (#3155).
+        onSuccess: (result) => {
+          if (isDispatchFailure(result)) {
+            toast.error(result.message ?? "Couldn't travel there.");
+          }
+        },
+        onError: (error: Error) => toast.error(error.message),
+      }
+    );
   };
 
   return (

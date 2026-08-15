@@ -4,6 +4,7 @@ import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { useAppSelector } from '@/store/hooks';
 import { useMyRosterEntriesQuery } from '@/roster/queries';
 import { useDispatchPlayerAction } from '@/combat/queries';
+import { isDispatchFailure } from '@/combat/types';
 import { SceneDetail, updateScene, finishScene } from '../queries';
 import { useAvailableActionsQuery } from '../actionQueries';
 import type { PlayerAction } from '../actionTypes';
@@ -57,6 +58,13 @@ function GrantSceneGMControl() {
     if (!name) return;
     dispatchAction({ ref: grantAction.ref, kwargs: { target_name: name } })
       .then((result) => {
+        // `DispatchActionView` resolves HTTP 200 even for a business-rule
+        // rejection (e.g. target not found) — `isDispatchFailure` (not a
+        // resolved promise alone) is the signal the grant was refused (#3155).
+        if (isDispatchFailure(result)) {
+          setFeedback(result.message ?? 'Could not grant GM status.');
+          return;
+        }
         setFeedback(result.message ?? `GM status granted to ${name}.`);
         setTargetName('');
       })
