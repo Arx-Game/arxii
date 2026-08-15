@@ -62,6 +62,20 @@ echo "== postgres / app hardening =="
 chk   "postgres binds localhost only" "grep -q \"listen_addresses = 'localhost'\" infra/ansible/roles/postgres/templates/10-arxii.conf.j2"
 chkno "pg_hba has no 'trust'"         "nc infra/ansible/roles/postgres/templates/pg_hba.conf.j2 | grep -w trust"
 chk   "app runs as non-root user"     "grep -q 'User={{ app_user }}' infra/ansible/roles/app_deploy/templates/arxii.service.j2"
+# Caddy runs as its own user and serves /static/* off disk from under
+# /opt/arxii, so both parent dirs need the execute bit for "other" or every
+# asset 403s and the frontend renders a blank page. Traversal only: the dirs
+# still cannot be listed and file modes are untouched, so secret_settings.py
+# (0640) and the EnvironmentFile (0600) stay unreadable to the web server.
+chk   "app root is 0751 (Caddy can traverse, not list)" \
+  "grep -q 'mode: \"0751\"' infra/ansible/roles/base/tasks/main.yml"
+chk   "releases dir is 0751 (Caddy can traverse, not list)" \
+  "grep -q 'mode: \"0751\"' infra/ansible/roles/app_deploy/tasks/main.yml"
+# The tempting shortcut. Group membership would make the 0640 secret_settings.py
+# readable by Caddy — SECRET_KEY, DB password, Resend key. Traversal is the
+# smaller grant; never widen it to group membership.
+chkno "caddy is never added to the app group" \
+  "grep -rnE 'name: *caddy' infra/ansible/roles/*/tasks/main.yml | grep -iE 'group|append'"
 chk   "django: DEBUG = False"         "grep -q 'DEBUG = False' infra/ansible/roles/django_hardening/templates/secret_settings.py.j2"
 chk   "django: TELNET_ENABLED False"  "grep -q 'TELNET_ENABLED = False' infra/ansible/roles/django_hardening/templates/secret_settings.py.j2"
 # SSL_ENABLED binds a TLS-telnet listener, and Evennia's Portal imports OpenSSL

@@ -54,13 +54,27 @@
     home: "{{ base_app_root }}"
     create_home: true
 
-- name: Lock down the app root
+# 0751, not 0750: Caddy runs as its own `caddy` user and serves /static/* off
+# disk from under this tree, so it needs to *traverse* here. The execute bit
+# for "other" grants exactly that and nothing else — the directory still cannot
+# be listed, and every file keeps its own mode. The static assets Caddy serves
+# are already world-readable (0644); the secrets under here are not
+# (secret_settings.py is 0640 arxii:arxii, the EnvironmentFile 0600), so they
+# stay unreadable to Caddy.
+#
+# The alternative — adding `caddy` to the `arxii` group — was rejected: group
+# membership would make that 0640 secret_settings.py readable by the web
+# server, handing it SECRET_KEY, the database password and the Resend key.
+# Traversal is the smaller grant. Without it the frontend serves a blank page,
+# because index.html comes from Django through the reverse proxy while every
+# dist/assets bundle 403s from Caddy's file_server.
+- name: Lock down the app root (0751 so Caddy can traverse to /static)
   ansible.builtin.file:
     path: "{{ base_app_root }}"
     state: directory
     owner: "{{ base_service_user }}"
     group: "{{ base_service_group }}"
-    mode: "0750"
+    mode: "0751"
 
 # Waits out first-boot provisioning so the apt lock isn't held by
 # apt-daily/apt-daily-upgrade on a fresh image; tolerated if cloud-init
