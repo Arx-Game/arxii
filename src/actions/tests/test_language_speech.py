@@ -128,15 +128,24 @@ class SayActionLanguageTests(LanguageSpeechTestCase):
         payload (a kwarg-only ``msg(interaction=...)`` call from the pre-existing,
         out-of-scope ``push_interaction``/``_broadcast_to_location`` path) is not
         this fix's concern.
+
+        Post-#2997: the say path routes through the broadcast-exclusion registry
+        (``resolve_broadcast_exclusions``), which calls the real, still-registered
+        ``_dreamside_occupants`` resolver by object reference -- patching the name
+        in ``communication.py`` no longer intercepts it, so this patches
+        ``perceives_dreamside`` (what ``_dreamside_occupants`` itself calls) instead.
         """
         room = _make_room()
         speaker, _ = self._sheeted_character(room, key="Speaker", fluency=100)
-        dreamer, _ = self._sheeted_character(room, key="Dreamer", fluency=100)
+        dreamer, dreamer_sheet = self._sheeted_character(room, key="Dreamer", fluency=100)
+
+        def _fake_perceives_dreamside(sheet):
+            return sheet is not None and sheet.pk == dreamer_sheet.pk
 
         with (
             patch(
-                "flows.service_functions.communication._dreamside_occupants",
-                return_value=[dreamer],
+                "world.vitals.services.perceives_dreamside",
+                side_effect=_fake_perceives_dreamside,
             ),
             patch.object(dreamer, "msg") as mock_msg,
         ):
@@ -145,6 +154,34 @@ class SayActionLanguageTests(LanguageSpeechTestCase):
         assert result.success is True
         text_calls = [c for c in mock_msg.call_args_list if c.args]
         assert not text_calls, f"dreamer received telnet text delivery: {text_calls}"
+
+    def test_second_registered_resolver_honored_by_language_say(self) -> None:
+        """M1 (#2997 review fix): the language-say path must honor EVERY registered
+        broadcast-exclusion resolver, not just the built-in dreamside one -- it calls
+        ``resolve_broadcast_exclusions`` (the registry union), not
+        ``_dreamside_occupants`` by name, so a second resolver (a future haunting/
+        vision/glamour mechanism) is excluded here too.
+        """
+        from flows.service_functions import perception_registry
+
+        room = _make_room()
+        speaker, _ = self._sheeted_character(room, key="Speaker", fluency=100)
+        haunted, _ = self._sheeted_character(room, key="Haunted", fluency=100)
+
+        def _fake_resolver(location):
+            return [haunted] if location == room else []
+
+        original_resolvers = list(perception_registry._RESOLVERS)
+        perception_registry.register_broadcast_exclusion(_fake_resolver)
+        try:
+            with patch.object(haunted, "msg") as mock_msg:
+                result = SayAction().run(speaker, text=self.TEXT, language_id=self.language.pk)
+        finally:
+            perception_registry._RESOLVERS[:] = original_resolvers
+
+        assert result.success is True
+        text_calls = [c for c in mock_msg.call_args_list if c.args]
+        assert not text_calls, f"haunted listener received telnet text delivery: {text_calls}"
 
     def test_language_id_kwarg_beats_current_language(self) -> None:
         room = _make_room()

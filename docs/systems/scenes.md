@@ -1050,12 +1050,26 @@ send time, never persisted (a room broadcast has no receiver-row ledger the way
 
 **Seam:** `register_broadcast_exclusion(resolver)` /
 `resolve_broadcast_exclusions(location) -> set[ObjectDB]`
-(`flows/service_functions/perception_registry.py`), consumed by
-`message_location` (`flows/service_functions/communication.py`). A mechanism
-registers a resolver — `resolver(location) -> Iterable[ObjectDB]`, the objects to
-exclude — once, at import/`ready()` time; `message_location` unions every
-registered resolver's excluded set. The registry itself stays dependency-free
-(ADR-0010): it never imports a specific mechanism.
+(`flows/service_functions/perception_registry.py`). A mechanism registers a
+resolver — `resolver(location) -> Iterable[ObjectDB]`, the objects to exclude —
+once, at import/`ready()` time; every room-broadcast call site unions every
+registered resolver's excluded set instead of importing one mechanism by name.
+The registry itself stays dependency-free (ADR-0010): it never imports a
+specific mechanism.
+
+**Every live room-broadcast call site routes through this seam**, not just
+`message_location` — a second registered resolver has to apply everywhere a
+room broadcast is hand-rolled, or the registry silently fails to close the gap
+it exists for:
+
+- `message_location` (`flows/service_functions/communication.py`) — the
+  general broadcast path.
+- The language-aware `say` action's per-recipient delivery loop
+  (`actions/definitions/communication.py`) — hand-rolls per-listener room
+  delivery instead of calling `message_location`, so it calls the registry
+  directly.
+- `_broadcast_waking` (`world/vitals/carry_services.py`) — the pick-up/set-down
+  carry room emits.
 
 **Current consumer:** `_dreamside_occupants` (`communication.py`, #2287) — occupants
 whose perception has relocated dreamside (Unconscious or Sleeping) miss waking-room

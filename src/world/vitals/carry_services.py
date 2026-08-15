@@ -93,17 +93,20 @@ def set_down_body(carrier: ObjectDB) -> None:
 
 
 def _broadcast_waking(carrier: ObjectDB, text: str) -> None:
-    """Room emit that honors dreamside perception (#2287) — the carried body
-    is unconscious and dreaming; they must not hear the waking room handle
-    them (the same exclusion every routed room broadcast applies)."""
-    from flows.service_functions.communication import _dreamside_occupants  # noqa: PLC0415
+    """Room emit routed through the broadcast-exclusion registry (#2997) — the
+    carried body may be unconscious and dreaming (#2287) and must not hear the
+    waking room handle them, the same exclusion every routed room broadcast
+    applies. Uses the registry union (not `_dreamside_occupants` by name) so a
+    second registered resolver (a haunting/vision/glamour) is honored here too."""
+    from flows.service_functions.perception_registry import (  # noqa: PLC0415
+        resolve_broadcast_exclusions,
+    )
 
     location = carrier.location
     if location is None:
         return
-    excluded = _dreamside_occupants(location)
-    if carrier not in excluded:
-        excluded.append(carrier)
+    excluded = resolve_broadcast_exclusions(location)
+    excluded.add(carrier)
     location.msg_contents(text, exclude=excluded)
 
 
