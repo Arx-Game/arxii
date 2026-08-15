@@ -120,6 +120,14 @@ Roaming is mostly atmospheric. The overwhelming majority of room flavor when
 traveling is non-engaging — ambient texture, not required encounters. Players
 do not have to stop and resolve things while traveling.
 
+**Built (#2988):** `world.narrative.AmbientEmit` + `roll_and_echo_ambient_texture`
+deliver both halves of this promise off one substrate — periodic roaming
+flavor for occupied rooms, and a room-state risk telegraph (gated on the same
+`world.locations` crime/order stats this paragraph names) that makes danger
+legible in text before anything happens. Text only: the *spawner* that would
+actually put a pickpocket in a seedy room is #2378's job, a later consumer of
+the same gate. See `docs/systems/narrative.md`'s "Ambient Room Texture" section.
+
 ### Consequences make narrative sense
 
 Consequences (wounds, conditions, outcomes) must make narrative sense for the

@@ -85,6 +85,31 @@ def clear_registry() -> None:
     _registry.clear()
 
 
+def phase_transitioned_since_last_run(task_key: str) -> bool:
+    """Whether the IC time-of-day phase changed since ``task_key``'s last stamped run (#2845).
+
+    Shared by every phase-boundary-gated task (weather's ``roll_and_echo_weather``, #2988's
+    ``roll_and_echo_ambient_texture``): checked every scheduler tick, no-ops in between so the
+    task's own work lands right as dawn/day/dusk/night begins. The registry stamps
+    ``ScheduledTaskRecord.last_ic_run_at`` AFTER each run — including the no-op runs this guard
+    causes — so the stamp tracks tick-by-tick and the comparison is true exactly once per
+    boundary crossing. First-ever run (no stamp yet) fires, so a fresh world doesn't wait a
+    full phase for its first echo. No clock -> falls back to a 2-real-hour cadence (the
+    pre-#2845 weather behavior) so a clockless world still gets *something*.
+    """
+    record = ScheduledTaskRecord.objects.filter(task_key=task_key).first()
+    from world.game_clock.services import get_ic_now, phase_from_ic_time  # noqa: PLC0415
+
+    ic_now = get_ic_now()
+    if ic_now is None:
+        if record is None or record.last_run_at is None:
+            return True
+        return timezone.now() - record.last_run_at >= timedelta(hours=2)
+    if record is None or record.last_ic_run_at is None:
+        return True
+    return phase_from_ic_time(record.last_ic_run_at) != phase_from_ic_time(ic_now)
+
+
 def run_due_tasks(*, ic_now: datetime | None = None) -> list[str]:
     """Check all registered tasks and run any that are due.
 

@@ -2805,6 +2805,29 @@ General-purpose IC message delivery — GM/Staff/automated messages to character
   content, like `RegionWeatherState`). `deliver_ambient_group` only picks among an
   already-matched group's own lines (weighted + cooldown + fire-chance); it never re-decides
   whether a condition matched. Supersedes `world.societies.fame_reactions` (#881, retired).
+- **Ambient room texture (#2988):** `AmbientEmit` (periodic room-*linger* flavor — fires
+  while occupants remain, unlike entry-triggered `AmbientEmoteLine`; text-only, no NPC/
+  encounter spawning). One model serves both roaming flavor and risk telegraphing — the only
+  difference is whether `gate_stat_key` is set (a `StatKey` gate against
+  `world.locations.services.effective_value`, single axis per row, mirrors `WeatherType`'s
+  `min`/`max_temperature` shape). Plain nullable `area`/`room_profile` scope (not a
+  `DiscriminatorMixin` pair — most rows are scope-free); selection
+  (`world.narrative.ambient_texture.select_ambient_emit`) picks the most-specific non-empty
+  scope pool (room > area > generic), filters season/phase flags (`WeatherEmit`'s exact
+  shape) + cooldown + the state gate, then weighted-picks
+  (`checks.outcome_utils.select_weighted`). Driver
+  `roll_and_echo_ambient_texture` rides the `game_clock` scheduler exactly like
+  `roll_and_echo_weather` (shared phase-transition guard,
+  `game_clock.task_registry.phase_transitioned_since_last_run`); delivery audience is derived
+  from **live sessions** (`evennia.SESSION_HANDLER`), never a grid-wide room scan. Delivered
+  via `send_narrative_message` under `NarrativeCategory.ATMOSPHERE` (never `message_location`
+  — this is a systemic emit, not actor-driven scene text). Content round-trip splits by scope
+  like `AmbientEmoteLine`/`WeatherEmit`: room/area-scoped rows are meant to ride the
+  grid-import bundle (not yet wired — admin-authored only today); scope-free gated-pool rows
+  ride `content_export.py`'s natural-key round trip (`CONTENT_MODELS` entry
+  `narrative.ambientemit`, filtered to `area`/`room_profile` both null via `EXPORT_FILTERS`).
+  Risk telegraphing (a "seedy district can spawn pickpockets" read) is text-only here — actual
+  encounter/NPC spawning off the gate is #2378's job, a later consumer of the same substrate.
 - **Source:** `src/world/narrative/`
 
 ### Achievements

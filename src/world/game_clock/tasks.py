@@ -1020,6 +1020,25 @@ def _register_late_tasks(roll_and_echo_weather: object) -> None:
             description="Roll regional weather at IC phase boundaries and echo to rooms.",
         )
     )
+    # #2988: same phase-transition trigger as weather (Decision 6 — no second scheduler
+    # dimension); frequency variance between a sleepy alley and a bustling market is authored
+    # via each AmbientEmit row's weight + cooldown_minutes, not a second cron interval.
+    from world.narrative.ambient_texture import (
+        AMBIENT_TASK_KEY,
+        roll_and_echo_ambient_texture,
+    )
+
+    register_task(
+        CronDefinition(
+            task_key=AMBIENT_TASK_KEY,
+            callable=roll_and_echo_ambient_texture,
+            interval=timedelta(minutes=5),
+            description=(
+                "Echo one ambient room-texture line (roaming flavor or a gated risk "
+                "telegraph) to each online-occupied room at IC phase boundaries (#2988)."
+            ),
+        )
+    )
     register_task(
         CronDefinition(
             task_key="vitals.auto_retire",

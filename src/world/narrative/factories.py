@@ -7,6 +7,7 @@ from world.character_sheets.factories import CharacterSheetFactory
 from world.locations.constants import LocationParentType
 from world.narrative.constants import ConditionType, NarrativeCategory
 from world.narrative.models import (
+    AmbientEmit,
     AmbientEmoteCondition,
     AmbientEmoteLine,
     Gemit,
@@ -78,3 +79,31 @@ class AmbientEmoteConditionFactory(factory_django.DjangoModelFactory):
     line = factory.SubFactory(AmbientEmoteLineFactory)
     condition_type = ConditionType.SPECIES
     species = factory.SubFactory("world.species.factories.SpeciesFactory")
+
+
+class AmbientEmitFactory(factory_django.DjangoModelFactory):
+    """PLACEHOLDER ambient texture rows for tests (#2988) — never committed as fixtures.
+
+    Defaults every season/phase flag True (always time-eligible) and no scope/gate, so a
+    test only sets the axis it's actually exercising.
+    """
+
+    class Meta:
+        model = AmbientEmit
+
+    text = factory.Sequence(lambda n: f"PLACEHOLDER ambient texture line {n}")
+    weight = 1
+    cooldown_minutes = 0
+    area = None
+    room_profile = None
+    gate_stat_key = ""
+    gate_min = None
+    gate_max = None
+    in_spring = True
+    in_summer = True
+    in_autumn = True
+    in_winter = True
+    at_dawn = True
+    at_day = True
+    at_dusk = True
+    at_night = True
