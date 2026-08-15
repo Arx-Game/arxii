@@ -10070,7 +10070,18 @@ export interface paths {
       path?: never;
       cookie?: never;
     };
-    /** @description The shop directory: standing craft-as-service offers (visit to use). */
+    /**
+     * @description The shop directory: standing craft-as-service offers (visit to use).
+     *
+     *     Regard-gated (#2995): for a resolvable viewer, an offer is invisible when
+     *     it fails ``_regard_gate_passes`` against the crafter — the EXACT same
+     *     predicate (refusal floor + any authored ``min_regard``) the purchase-time
+     *     gate checks, so a hard-refused buyer never sees an offer they'd bounce
+     *     off at purchase. Visibility = eligibility, no separate rule. An
+     *     unresolvable viewer (no roster tenure) can't have their regard evaluated,
+     *     so only ``min_regard``-authored offers are hidden as a conservative
+     *     default.
+     */
     get: operations['items_service_offers_list'];
     put?: never;
     post?: never;
@@ -10087,7 +10098,18 @@ export interface paths {
       path?: never;
       cookie?: never;
     };
-    /** @description The shop directory: standing craft-as-service offers (visit to use). */
+    /**
+     * @description The shop directory: standing craft-as-service offers (visit to use).
+     *
+     *     Regard-gated (#2995): for a resolvable viewer, an offer is invisible when
+     *     it fails ``_regard_gate_passes`` against the crafter — the EXACT same
+     *     predicate (refusal floor + any authored ``min_regard``) the purchase-time
+     *     gate checks, so a hard-refused buyer never sees an offer they'd bounce
+     *     off at purchase. Visibility = eligibility, no separate rule. An
+     *     unresolvable viewer (no roster tenure) can't have their regard evaluated,
+     *     so only ``min_regard``-authored offers are hidden as a conservative
+     *     default.
+     */
     get: operations['items_service_offers_retrieve'];
     put?: never;
     post?: never;
@@ -28534,6 +28556,20 @@ export interface components {
       readonly id: number;
       readonly name: string;
       readonly owner_name: string;
+      /**
+       * @description Active stock, minus whatever the viewer's regard doesn't clear.
+       *
+       *     Base price only (Decision 4 — no personalized price on browse); the
+       *     regard-adjusted price is revealed at purchase-attempt time. Visibility
+       *     = eligibility: for a resolvable viewer this is the EXACT same
+       *     ``_regard_gate_passes`` predicate the purchase-time gate checks —
+       *     refusal floor included, not just an authored ``min_regard`` — so a
+       *     hard-refused buyer never sees a listing they'd bounce off at
+       *     purchase. An unresolvable viewer (no roster tenure / anonymous) can't
+       *     have their regard evaluated at all, so only authored ``min_regard``
+       *     rows are hidden as a conservative default; the floor never applies
+       *     without a real persona to check it against.
+       */
       readonly stock_listings: {
         [key: string]: unknown;
       }[];
