@@ -1,7 +1,10 @@
 ---
-- name: Install awscli + postgresql-client (pg_dump)
+# `aws` is NOT installed here: Ubuntu 24.04 has no awscli package at all, so
+# the base role installs AWS CLI v2 from Amazon's pinned, sha256-verified
+# bundle. Only postgresql-client (pg_dump) comes from apt.
+- name: Install postgresql-client (pg_dump)
   ansible.builtin.apt:
-    name: [awscli, postgresql-client]
+    name: [postgresql-client]
     state: present
     update_cache: true
     cache_valid_time: 3600

@@ -1,11 +1,11 @@
 ---
-- name: Ensure awscli present (also installed by backups; idempotent)
-  ansible.builtin.apt:
-    name: awscli
-    state: present
-    update_cache: true
-    cache_valid_time: 3600
-    lock_timeout: 600
+# `aws` comes from the base role's pinned, sha256-verified AWS CLI v2 bundle.
+# It used to be apt-installed here and in backups; Ubuntu 24.04 has no awscli
+# package, and one pinned copy beats two installs of a package that no longer
+# exists. Fail early and legibly rather than at 03:30 in a timer.
+- name: Assert the AWS CLI is present (installed by the base role)
+  ansible.builtin.command: "{{ base_awscli_bin | default('/usr/local/bin/aws') }} --version"
+  changed_when: false
 
 - name: Install the offsite-replication script
   ansible.builtin.template:

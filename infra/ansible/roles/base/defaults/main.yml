@@ -21,3 +21,16 @@ base_packages:
 base_uv_version: "0.11.15"
 base_uv_sha256: "b03e572f010bea94a4a52d42671ba72981e12894f71576181a1d26ff68546da7"
 base_uv_bin: /usr/local/bin/uv
+# AWS CLI v2, pinned + sha256-verified, same idiom as uv above. Ubuntu 24.04
+# dropped the `awscli` package from the archive entirely (universe included),
+# so apt cannot supply it: `apt-cache policy awscli` reports no candidate even
+# after an update. The backups and offsite_replication roles both need the
+# `aws` command, and it appears in 11 places across those roles' templates and
+# infra/scripts (restore.sh and pull_prod_db.sh included), so switching tools
+# would mean rewriting the restore path. Installed here in base rather than in
+# either role, so there is one pinned copy instead of two.
+# The versioned URL is byte-identical to the floating "latest" one; pin the
+# version so a new upstream release cannot change what we install.
+base_awscli_version: "2.36.24"
+base_awscli_sha256: "18a0807c25cb5b1737c652c554ab40404f6928dac677e1e263bbc19e16acd2fa"
+base_awscli_bin: /usr/local/bin/aws
