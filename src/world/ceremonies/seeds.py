@@ -14,10 +14,11 @@ _TYPE_NAMES: dict[str, str] = {
     CeremonyTypeKey.BLESSING: "Blessing",
     CeremonyTypeKey.SERMON: "Sermon",
     CeremonyTypeKey.SEANCE: "Seance",
-    # WEDDING (#2358/#2999) and CONVERSION (#2361) were added to CeremonyTypeKey
-    # without a seed entry — fixed on sight while touching this file for #2361.
+    # WEDDING (#2999), CONVERSION (#2361) and CORONATION (#2358) — WEDDING was
+    # originally added to CeremonyTypeKey without a seed entry; closed on sight.
     CeremonyTypeKey.WEDDING: "Wedding",
     CeremonyTypeKey.CONVERSION: "Conversion",
+    CeremonyTypeKey.CORONATION: "Coronation",
 }
 
 

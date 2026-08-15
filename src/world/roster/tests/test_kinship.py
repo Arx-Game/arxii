@@ -373,3 +373,26 @@ class RosterEntryFactoryCheck(TestCase):
         node, entry, sheet = _pc_with_entry("Selfcheck")
         assert node.sheet_id == sheet.pk
         assert isinstance(entry, RosterEntry)
+
+
+class EndUnionTests(TestCase):
+    """``end_union`` is the first writer for ``Union.ended_at`` (#2358)."""
+
+    def test_end_union_sets_ended_at(self) -> None:
+        marriage = UnionKindFactory()
+        a, b = _person("Spouse A"), _person("Spouse B")
+        union = kinship.record_union(kind=marriage, members=[a, b])
+        assert union.ended_at is None
+        kinship.end_union(union)
+        union.refresh_from_db()
+        assert union.ended_at is not None
+
+    def test_end_union_idempotent(self) -> None:
+        marriage = UnionKindFactory()
+        a, b = _person("Spouse C"), _person("Spouse D")
+        union = kinship.record_union(kind=marriage, members=[a, b])
+        kinship.end_union(union)
+        first_ended_at = union.ended_at
+        kinship.end_union(union)
+        union.refresh_from_db()
+        assert union.ended_at == first_ended_at

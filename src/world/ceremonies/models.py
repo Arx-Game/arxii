@@ -73,6 +73,14 @@ class Ceremony(SharedMemoryModel):
         on_delete=models.SET_NULL,
         related_name="ceremonies",
     )
+    title = models.ForeignKey(
+        "arxii.Title",
+        null=True,
+        blank=True,
+        on_delete=models.PROTECT,
+        related_name="coronation_ceremonies",
+        help_text="CORONATION only: the already-held title being solemnized (#2358).",
+    )
     status = models.CharField(
         max_length=20, choices=CeremonyStatus.choices, default=CeremonyStatus.OPEN
     )
@@ -300,3 +308,61 @@ class WorshipConversionOffer(SharedMemoryModel):
 
     def __str__(self) -> str:
         return f"Conversion offer for {self.ceremony_honoree} ({self.status})"
+
+
+class WeddingConsentOffer(SharedMemoryModel):
+    """Consent gate for a WEDDING honoree, created at ceremony START (#2358).
+
+    Ratified 2026-08-15: the officiant's ``open_ceremony`` call creates one row
+    per honoree on a WEDDING-type ceremony (mirrors ``SeanceManifestationOffer``'s
+    at-open creation). Both must reach ACCEPTED before ``finish_ceremony``'s
+    WEDDING branch may solemnize the betrothal — a DECLINE aborts the ceremony
+    (``ABANDONED``) instead. Never mutated once ACCEPTED/DECLINED; a fresh
+    ceremony mints a fresh row.
+    """
+
+    ceremony_honoree = models.OneToOneField(
+        CeremonyHonoree, on_delete=models.CASCADE, related_name="wedding_consent_offer"
+    )
+    status = models.CharField(
+        max_length=20, choices=SeanceOfferStatus.choices, default=SeanceOfferStatus.PENDING
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+    responded_at = models.DateTimeField(null=True, blank=True)
+
+    class Meta:
+        ordering = ["-created_at"]
+
+    def __str__(self) -> str:
+        return f"Wedding consent for {self.ceremony_honoree} ({self.status})"
+
+
+class Coronation(SharedMemoryModel):
+    """The permanent record of a solemnized coronation (#2358).
+
+    Created at ceremony FINISH, never at OPEN — an abandoned coronation
+    ceremony leaves no trace, so a retry for the same (honoree, title) pair
+    still works. The ``UniqueConstraint`` below is the actual one-off-per-
+    title enforcement (a ducal coronation and a later imperial one for the
+    same honoree are two distinct titles, so both stand); ``open_ceremony``'s
+    precondition is the friendly pre-check that raises before the rite even
+    begins.
+    """
+
+    ceremony = models.OneToOneField(Ceremony, on_delete=models.PROTECT, related_name="coronation")
+    honoree_sheet = models.ForeignKey(
+        "arxii.CharacterSheet", on_delete=models.PROTECT, related_name="coronations"
+    )
+    title = models.ForeignKey("arxii.Title", on_delete=models.PROTECT, related_name="coronations")
+    crowned_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["-crowned_at"]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["honoree_sheet", "title"], name="unique_coronation_per_honoree_title"
+            ),
+        ]
+
+    def __str__(self) -> str:
+        return f"{self.honoree_sheet} crowned for {self.title}"

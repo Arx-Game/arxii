@@ -21,16 +21,18 @@ from world.societies.houses.constants import (
     PactDissolutionReason,
     StatureShiftCause,
 )
-from world.societies.houses.models import Betrothal, BetrothalTerm, OrgPact, PactKind
+from world.societies.houses.models import Betrothal, BetrothalTerm, MarriagePact, OrgPact, PactKind
 from world.societies.houses.services import (
     CommitmentSpec,
     HousesServiceError,
+    dissolve_pact,
     is_org_leader,
     sign_marriage_pact,
 )
 
 if TYPE_CHECKING:
-    from world.roster.models import Kinsperson
+    from world.character_sheets.models import CharacterSheet
+    from world.roster.models import Kinsperson, Union
     from world.scenes.models import Persona
     from world.societies.models import Organization
 
@@ -267,11 +269,63 @@ def solemnize_wedding(betrothal: Betrothal):
     return pact
 
 
+@transaction.atomic
+def initiate_divorce(initiator_sheet: CharacterSheet, union: Union) -> Union:
+    """Either spouse may end a living union unilaterally (#2358 overnight ruling).
+
+    Writes ``Union.ended_at`` (``end_union``, the field's first writer since
+    #2062), dissolves the bound ``MarriagePact`` under
+    ``PactDissolutionReason.DIVORCE`` if one still stands — this already fires
+    ``apply_pact_shift``'s house-level alliance reprice, the pre-existing,
+    non-punitive consequence of any dissolution — then applies a personal
+    deed-prestige hit to BOTH spouses through the same channel
+    ``award_marriage_tier_prestige`` uses. The initiator's hit is steeper
+    (PLACEHOLDER magnitudes, ``DIVORCE_INITIATOR_PRESTIGE_PENALTY``/
+    ``DIVORCE_OTHER_SPOUSE_PRESTIGE_PENALTY``).
+    """
+    from world.roster.models import Kinsperson  # noqa: PLC0415
+    from world.roster.services.kinship import end_union  # noqa: PLC0415
+    from world.scenes.services import active_persona_for_sheet  # noqa: PLC0415
+    from world.societies.houses.constants import (  # noqa: PLC0415
+        DIVORCE_INITIATOR_PRESTIGE_PENALTY,
+        DIVORCE_OTHER_SPOUSE_PRESTIGE_PENALTY,
+    )
+    from world.societies.renown import award_deed_prestige  # noqa: PLC0415
+
+    initiator_kin = Kinsperson.objects.filter(sheet=initiator_sheet).first()
+    if initiator_kin is None or not union.members.filter(pk=initiator_kin.pk).exists():
+        msg = f"sheet {initiator_sheet.pk} is not a party to union {union.pk}"
+        raise HousesServiceError(msg, user_message="You are not a party to that union.")
+    if union.ended_at is not None:
+        msg = f"union {union.pk} has already ended"
+        raise HousesServiceError(msg, user_message="That marriage has already ended.")
+
+    end_union(union)
+    pact = MarriagePact.objects.filter(union=union, dissolved_at__isnull=True).first()
+    if pact is not None:
+        dissolve_pact(pact, reason=PactDissolutionReason.DIVORCE)
+
+    for member in union.members.select_related("sheet"):
+        if member.sheet is None:
+            continue
+        persona = active_persona_for_sheet(member.sheet)
+        if persona is None:
+            continue
+        penalty = (
+            DIVORCE_INITIATOR_PRESTIGE_PENALTY
+            if member.pk == initiator_kin.pk
+            else DIVORCE_OTHER_SPOUSE_PRESTIGE_PENALTY
+        )
+        award_deed_prestige(persona, -penalty)
+    return union
+
+
 __all__ = [
     "PactDissolutionReason",
     "break_betrothal",
     "dissolve_org_pact",
     "flag_betrayal_between",
+    "initiate_divorce",
     "propose_betrothal",
     "propose_org_pact",
     "ratify_org_pact",

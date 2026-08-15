@@ -5,7 +5,7 @@ Thin dispatch onto the ceremony Actions — no business logic here (ADR-0001).
 
 from commands.command import ArxCommand
 
-_OPEN_SUBVERBS = frozenset({"funeral", "blessing", "sermon"})
+_OPEN_SUBVERBS = frozenset({"funeral", "blessing", "sermon", "wedding", "coronation"})
 _SUBVERB_OFFERING = "offering"
 _SUBVERB_SPEECH = "speech"
 _SUBVERB_FINISH = "finish"
@@ -20,6 +20,8 @@ class CmdCeremony(ArxCommand):
         ceremony/funeral <name>[,<name2>…][=<being>]   - open a funeral for the dead
         ceremony/blessing [<name>,…][=<being>]         - open a blessing
         ceremony/sermon [<name>,…][=<being>]           - open a sermon
+        ceremony/wedding <spouse1>,<spouse2>[=<being>] - open a wedding (both must consent)
+        ceremony/coronation <honoree>=<title>          - solemnize an already-held title
         ceremony/offering <item>[,<item2>…]            - sacrifice items (officiant)
         ceremony/speech <name>[=<honoree>]             - recognize a speaker (officiant)
         ceremony/finish                                - conclude and tally (officiant)
@@ -27,7 +29,9 @@ class CmdCeremony(ArxCommand):
         ceremony                                       - show the rite underway here
 
     The rite is performed in the name of your public worship unless ``=<being>``
-    names another. Space form (``ceremony funeral …``) works too.
+    names another (coronation's ``=`` instead names the title being solemnized).
+    Space form (``ceremony funeral …``) works too. A wedding does not complete
+    until both spouses accept the officiant's prompt (see ``accept``/``decline``).
     """
 
     key = "ceremony"
@@ -67,13 +71,17 @@ class CmdCeremony(ArxCommand):
 
     def _dispatch_open(self, type_key: str, rest: str) -> None:
         from actions.definitions.ceremonies import OpenCeremonyAction  # noqa: PLC0415
+        from world.ceremonies.constants import CeremonyTypeKey  # noqa: PLC0415
 
-        names_part, _, being_part = rest.partition("=")
+        names_part, _, extra_part = rest.partition("=")
+        extra = extra_part.strip() or None
+        is_coronation = type_key == CeremonyTypeKey.CORONATION
         result = OpenCeremonyAction().run(
             actor=self.caller,
             type_key=type_key,
             honoree_names=self._split_names(names_part),
-            being_name=being_part.strip() or None,
+            being_name=None if is_coronation else extra,
+            title_name=extra if is_coronation else None,
         )
         if result.message:
             self.msg(result.message)

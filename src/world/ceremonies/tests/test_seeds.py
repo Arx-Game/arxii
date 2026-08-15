@@ -19,7 +19,11 @@ class SeedCeremonyTypesTests(TestCase):
                 CeremonyTypeKey.SERMON,
                 CeremonyTypeKey.SEANCE,
                 CeremonyTypeKey.WEDDING,
+<<<<<<< HEAD
                 CeremonyTypeKey.CONVERSION,
+=======
+                CeremonyTypeKey.CORONATION,
+>>>>>>> 91ad06b1e (Coronation ceremony, wedding consent prompts, divorce (#2358))
             },
         )
 

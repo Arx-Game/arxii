@@ -6739,10 +6739,12 @@ lightly-structured freeform RP. Full doc: `docs/systems/worship.md`; model decis
   `secret_worship` → `_create_worship_declaration` at finalization. Seeds: `worship` cluster
   (Rites skill + 4 specs, Ceremony Rites CheckType, Devotion aspect for Path of the Chosen,
   achievements, PLACEHOLDER beings); `secret-investigation` consent category in the consent seed.
-- **Ceremony models** (`world/ceremonies`): `CeremonyType` (Funeral/Blessing/Sermon/Seance/
-  Wedding/Conversion rows — seeded via the `"ceremonies"` cluster), `Ceremony` (officiant Persona, TRUE
+- **Ceremony models** (`world/ceremonies`): `CeremonyType`
+  (Funeral/Blessing/Sermon/Seance/Wedding/Conversion/Coronation rows — seeded via the
+  `"ceremonies"` cluster, #2393/#2358/#2361), `Ceremony` (officiant Persona, TRUE
   `being` vs `presented_being` — player surfaces render
-  presented ONLY, one-OPEN-per-location constraint, nullable scene/event FKs, `quality_level`),
+  presented ONLY, one-OPEN-per-location constraint, nullable scene/event/title FKs
+  — `title` is CORONATION-only, `quality_level`),
   `CeremonyHonoree`, `CeremonyOffering` (item destroyed; snapshot), `CeremonySpeech`,
   `CeremonyConfig` singleton (`get_ceremony_config`, PLACEHOLDER magnitudes),
   `WorshipConversionOffer` (#2361, one per PC-officiated Conversion honoree —
@@ -6752,8 +6754,10 @@ lightly-structured freeform RP. Full doc: `docs/systems/worship.md`; model decis
   `record_offering` (pool → TRUE being; devotion follows belief), `record_speech`
   (Performance/Oratory), `finish_ceremony` (Rites + tradition-spec quality roll; honoree deeds
   via `create_solo_deed` — `_mint_ceremony_deed` takes optional `archetypes`/`scene` kwargs,
-  #2361; officiant cut; funeral → `execute_will` NO-OP seam for #1985; wedding →
-  solemnizes the honorees' active Betrothal; conversion → `convert_public_worship` per
+  #2361; officiant cut; funeral → `execute_will` NO-OP seam for #1985; WEDDING
+  refuses to solemnize until every `WeddingConsentOffer` is ACCEPTED, then solemnizes the
+  honorees' active Betrothal; CORONATION (open precondition: exactly one honoree holding
+  `title`) mints the permanent `Coronation` record; conversion → `convert_public_worship` per
   confirmed honoree, tags the deed with the existing "Treacherous Scandal"
   `PhilosophicalArchetype` when converting away from an already-declared faith so
   `route_deed_reach` (#1464) judges it),
@@ -6768,6 +6772,20 @@ lightly-structured freeform RP. Full doc: `docs/systems/worship.md`; model decis
   `WorshipConversionOfferSerializer`, `accept` body takes optional `sincere`); frontend
   `ConversionOfferBanner`/`ConversionOfferDialog` (mounted in `Layout.tsx` next to
   `SeanceOfferBanner`; the dialog's Switch carries the heart-vs-lip-service choice).
+- **Wedding/Coronation (#2358)**: `WeddingConsentOffer` (one per spouse honoree, minted by
+  the officiant's `open_ceremony` call at ceremony START, shares `SeanceOfferStatus`) —
+  `respond_to_wedding_consent_offer` (account-scoped, mirrors `respond_to_seance_offer`; a
+  DECLINE calls `abandon_ceremony`), `pending_wedding_consent_offers_for_account`. Consent
+  replaced the earlier idea of gating at `propose_betrothal`; the union + marriage pact still
+  mint only at FINISH via `world.societies.houses.pact_services.solemnize_wedding`.
+  `Coronation` (`honoree_sheet` + `title`, `UniqueConstraint` — one-off per (honoree, title),
+  a later coronation for a DIFFERENT title still stands) is minted at FINISH, never OPEN, so an
+  abandoned attempt never blocks a retry. Neither type mints extra flat prestige beyond the
+  shared honoree-renown pass — event grandeur (#2357) is the prestige-influx lever. Actions:
+  `wedding_consent_respond`; telnet `ceremony/wedding`, `ceremony/coronation`, `wedding`
+  (offers/accept/decline, mirrors `seance`). Divorce (`initiate_divorce`, unilateral, both
+  spouses' personal prestige hit, initiator steeper) lives in `docs/systems/houses.md`'s pacts
+  section — it is a house-pact concern, not a ceremony.
 - **Seance (#2393)**: `SeanceManifestationOffer` (one per honoree, PENDING/ACCEPTED/DECLINED)
   — created by `open_ceremony` for a SEANCE-type ceremony. `respond_to_seance_offer`
   (account-scoped accept/decline; accept moves the honoree's character to the ceremony's

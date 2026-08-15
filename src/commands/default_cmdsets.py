@@ -182,6 +182,7 @@ from commands.voyages import CmdVoyage  # #1855
 from commands.wake import CmdWake  # #2287
 from commands.weather import CmdTime
 from commands.weave import CmdWeaveThread
+from commands.wedding import CmdWedding
 from commands.where import CmdWhere
 from commands.who import CmdWho
 from commands.windows import CmdCloseWindow, CmdOpenWindow
@@ -552,6 +553,9 @@ class AccountCmdSet(default_cmds.AccountCmdSet):
         # account-scoped (mirrors CmdSeance; only the PC-officiated route
         # mints an offer, the self-officiated solo route needs none).
         self.add(CmdConversion())
+        # #2358 — wedding consent-offer inbox: offers/accept/decline,
+        # account-scoped (mirrors CmdSeance exactly).
+        self.add(CmdWedding())
         self.add(CmdAccount())
         self.add(CmdSheet())
         self.add(CmdPage())

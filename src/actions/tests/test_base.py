@@ -525,6 +525,9 @@ class ActionRegistryTests(TestCase):
             "seance_offer_respond",
             # #2361 — post-CG worship conversion.
             "conversion_offer_respond",
+            # #2358 — wedding consent + divorce.
+            "wedding_consent_respond",
+            "initiate_divorce",
             # #1985 — estates.
             "will_reading",
             # #1855 — overworld travel / voyages.

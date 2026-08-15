@@ -10,9 +10,12 @@ from world.societies.dossier_services import build_dossier
 from world.societies.factories import OrganizationFactory, OrganizationMembershipFactory
 from world.societies.houses.constants import (
     BETROTHAL_STATURE_SHARE_PCT,
+    DIVORCE_INITIATOR_PRESTIGE_PENALTY,
+    DIVORCE_OTHER_SPOUSE_PRESTIGE_PENALTY,
     GIFTED_RATING_RENOWN,
     SCANDAL_PRESTIGE_PENALTY,
     OrgPactDissolutionReason,
+    PactDissolutionReason,
 )
 from world.societies.houses.models import (
     Betrothal,
@@ -25,6 +28,7 @@ from world.societies.houses.pact_services import (
     break_betrothal,
     dissolve_org_pact,
     flag_betrayal_between,
+    initiate_divorce,
     propose_betrothal,
     propose_org_pact,
     ratify_org_pact,
@@ -272,3 +276,82 @@ class WeddingCeremonyResolutionTests(TestCase):
         self.assertIsNotNone(betrothal.wed_at)
         self.assertTrue(OrgPact.objects.count() == 0)  # a marriage pact, not an org pact
         self.assertTrue(MarriagePact.objects.filter(senior_house=senior).exists())
+
+
+class DivorceTests(TestCase):
+    """Either spouse divorces unilaterally; BOTH take a prestige hit (#2358)."""
+
+    @classmethod
+    def setUpTestData(cls):
+        from world.character_sheets.factories import CharacterSheetFactory
+
+        UnionKind.objects.create(name="Marriage Divorce", confers_wedlock=True)
+        cls.senior, cls.leader = _house("Ember")
+        cls.junior, _ = _house("Thorn")
+        cls.sheet_a = CharacterSheetFactory()
+        cls.sheet_b = CharacterSheetFactory()
+        cls.bride = KinspersonFactory(family=cls.senior.family, sheet=cls.sheet_a)
+        cls.groom = KinspersonFactory(family=cls.junior.family, sheet=cls.sheet_b)
+        FamilyMembership.objects.create(
+            kinsperson=cls.bride,
+            family=cls.senior.family,
+            basis=MembershipBasis.BORN,
+            started_at="2020-01-01T00:00:00Z",
+        )
+
+    def setUp(self) -> None:
+        betrothal = propose_betrothal(
+            proposer=self.leader,
+            kinsperson_a=self.bride,
+            kinsperson_b=self.groom,
+            senior_house=self.senior,
+            junior_house=self.junior,
+        )
+        solemnize_wedding(betrothal)
+        self.union = Union.objects.filter(members=self.bride).filter(members=self.groom).get()
+
+    def test_initiate_divorce_ends_union_and_dissolves_pact_as_divorce(self):
+        initiate_divorce(self.sheet_a, self.union)
+        self.union.refresh_from_db()
+        self.assertIsNotNone(self.union.ended_at)
+        pact = MarriagePact.objects.get(union=self.union)
+        self.assertIsNotNone(pact.dissolved_at)
+        self.assertEqual(pact.dissolution_reason, PactDissolutionReason.DIVORCE)
+
+    def _primary_persona_prestige(self, sheet_pk: int) -> int:
+        """Fresh CharacterSheet + persona lookup — never the setUpTestData deep copy.
+
+        ``setUpTestData`` deep-copies its class attributes onto ``self`` for
+        every test (Django's cross-test mutation guard); a cached_property
+        (``CharacterSheet.primary_persona``) already resolved on the class
+        attribute carries a stale, disconnected Persona copy through that
+        deepcopy. Re-fetching the sheet by pk sidesteps it.
+        """
+        from world.character_sheets.models import CharacterSheet
+
+        sheet = CharacterSheet.objects.get(pk=sheet_pk)
+        return sheet.primary_persona.total_prestige
+
+    def test_initiate_divorce_hits_both_spouses_initiator_steeper(self):
+        before_a = self._primary_persona_prestige(self.sheet_a.pk)
+        before_b = self._primary_persona_prestige(self.sheet_b.pk)
+
+        initiate_divorce(self.sheet_a, self.union)
+
+        drop_a = before_a - self._primary_persona_prestige(self.sheet_a.pk)
+        drop_b = before_b - self._primary_persona_prestige(self.sheet_b.pk)
+        self.assertEqual(drop_a, DIVORCE_INITIATOR_PRESTIGE_PENALTY)
+        self.assertEqual(drop_b, DIVORCE_OTHER_SPOUSE_PRESTIGE_PENALTY)
+        self.assertGreater(drop_a, drop_b)
+
+    def test_double_divorce_refused(self):
+        initiate_divorce(self.sheet_a, self.union)
+        with self.assertRaises(HousesServiceError):
+            initiate_divorce(self.sheet_b, self.union)
+
+    def test_non_spouse_cannot_divorce(self):
+        from world.character_sheets.factories import CharacterSheetFactory
+
+        stranger_sheet = CharacterSheetFactory()
+        with self.assertRaises(HousesServiceError):
+            initiate_divorce(stranger_sheet, self.union)

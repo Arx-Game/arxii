@@ -223,12 +223,35 @@ their authored share alongside marriage pacts). `Betrothal` + `BetrothalTerm`
 `break_betrothal` costs standing) and `solemnize_wedding` — the WEDDING
 `CeremonyTypeKey` resolves the honorees' active betrothal at
 `finish_ceremony` and lands union + marriage pact + tier prestige in one
-rite (first in-play caller of `record_union`). The **match dossier**
+rite (first in-play caller of `record_union`). **Consent lives at the
+ceremony, not the proposal** (#2358 ratified 2026-08-15): the officiant's
+`open_ceremony` call mints a `WeddingConsentOffer` per spouse honoree at
+ceremony START; `finish_ceremony`'s WEDDING branch refuses to solemnize until
+every offer is ACCEPTED (`respond_to_wedding_consent_offer`, account-scoped —
+telnet `wedding`, mirrors `CmdSeance`), and a DECLINE aborts the whole
+ceremony. `propose_betrothal` itself stays an unconsented house-leader
+proposal artifact. The **match dossier**
 (`societies/dossier_services.py` + `GET /api/societies/organizations/{id}/dossier/`
 + `/orgs/:id/dossier`) is readable by ANY authenticated player: band/
 perceived/ranks, standing instruments, betrothals, known troubles (covert
 crises only via the viewer org's `CrisisIntel`), recent shifts, consort
-capacity. Telnet: `CmdPact` (`pact propose/ratify/dissolve/betroth/breakvow`).
-Seeds: cluster `pacts`. Union membership in stature reads the m2m THROUGH
-table — never `prefetch_related("members")` (idmapper corrupts prefetch
-grouping; see `_union_membership`).
+capacity. Telnet: `CmdPact` (`pact propose/ratify/dissolve/betroth/breakvow/
+divorce`). Seeds: cluster `pacts`. Union membership in stature reads the m2m
+THROUGH table — never `prefetch_related("members")` (idmapper corrupts
+prefetch grouping; see `_union_membership`).
+
+**Divorce & coronation (#2358).** `initiate_divorce(initiator_sheet, union)`
+(`pact_services.py`) — either spouse ends a living `Union` unilaterally:
+`end_union` (`roster.services.kinship`, the first writer of `Union.ended_at`
+since #2062) sets `ended_at`, `dissolve_pact` fires under
+`PactDissolutionReason.DIVORCE` (the existing house-level `apply_pact_shift`
+alliance reprice — non-punitive, fires for every dissolution reason), then
+BOTH spouses take a personal deed-prestige hit via `award_deed_prestige`
+(the same channel `award_marriage_tier_prestige` uses) — the initiator's
+steeper (`DIVORCE_INITIATOR_PRESTIGE_PENALTY`/
+`DIVORCE_OTHER_SPOUSE_PRESTIGE_PENALTY`, PLACEHOLDER magnitudes).
+`ANNULMENT` stays the zero-penalty void path. Action `initiate_divorce`;
+telnet `pact divorce <union-id>`.
+`CeremonyTypeKey.CORONATION` solemnizes an ALREADY-HELD `Title` — no
+title-passing mechanics; see `docs/systems/worship.md`'s Ceremony section
+for the model/service detail (`Coronation`, `Ceremony.title`).

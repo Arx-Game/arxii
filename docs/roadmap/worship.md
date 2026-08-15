@@ -1,8 +1,9 @@
 # Worship & Ceremonies
 
 **Status:** Core slice SHIPPED (#2355 worship foundation + #2289 ceremonies/funerals, 2026-07-13);
-Seance (#2393), Miracles/divine intervention (#2360), item legend value (#2359), Wedding (#2358/#2999),
-and post-CG public conversion (#2361) have since shipped too — see below.
+Seance (#2393), Miracles/divine intervention (#2360), item legend value (#2359), Wedding (#2358/#2999
+incl. wedding-consent/coronation/divorce, 2026-08-15), and post-CG public conversion (#2361) have
+since shipped too — see below.
 **Depends on:** Skills/Checks (Rites + aspects), Secrets, Consent, Clues, Renown/Legend,
 Vitals (#2287 ghost containers), Events/Scenes (optional chassis)
 
@@ -49,6 +50,26 @@ Vitals (#2287 ghost containers), Events/Scenes (optional chassis)
 ## Not built (filed)
 
 - Coronation ceremony type + divorce/murder prestige hits for Wedding (#2358)
+- **Wedding consent + Coronation + divorce prestige (#2358, 2026-08-15):** WEDDING
+  solemnizes a pre-existing `Betrothal` at FINISH, gated on a `WeddingConsentOffer`
+  per spouse honoree minted at ceremony START (both must ACCEPT; a DECLINE aborts the
+  whole ceremony) — replaces the earlier idea of gating consent at `propose_betrothal`.
+  CORONATION solemnizes an already-held `Title` (no title-passing mechanics; one-off
+  per (honoree, title) via the `Coronation` record). `initiate_divorce` — either spouse
+  ends a living `Union` unilaterally; both take a personal deed-prestige hit, the
+  initiator steeper. Neither ceremony type mints extra flat prestige; event grandeur
+  (#2357) is the intended payoff lever once it lands.
+
+## Not built (filed)
+
+- **Discovered spouse-murder prestige hit** — the mechanism
+  (`apply_spouse_murder_penalty`-shaped service, larger than the divorce penalty) is
+  deliberately not built: the justice app has no victim FK on any crime model, so
+  "this conviction's victim was the convict's spouse" cannot be derived. Building that
+  linkage is a justice-app design question with its own blast radius, not a #2358
+  side effect.
+
+## Not built (filed)
 - Event grandeur / prestige-wealth investment for once-in-a-lifetime events (#2357 —
   the events roadmap's reserved EventModification slot)
 - Generic RP turn-queue (#2356)

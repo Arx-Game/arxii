@@ -234,6 +234,20 @@ def record_union(  # noqa: PLR0913 — keyword-only
     return union
 
 
+def end_union(union: Union, *, ended_at: object | None = None) -> Union:
+    """Close a living union — the first writer for ``Union.ended_at`` (#2358).
+
+    ``Union.ended_at`` has existed since #2062 with no caller; divorce
+    (``world.societies.houses.pact_services.initiate_divorce``) is the first.
+    Idempotent: an already-ended union is returned unchanged.
+    """
+    if union.ended_at is not None:
+        return union
+    union.ended_at = ended_at or timezone.now()
+    union.save(update_fields=["ended_at"])
+    return union
+
+
 @transaction.atomic
 def record_incarnation(  # noqa: PLR0913 — keyword-only
     *,

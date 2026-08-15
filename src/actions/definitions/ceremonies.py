@@ -88,6 +88,63 @@ def _resolve_sheet_by_name(actor: ObjectDB, name: str):
         return None
 
 
+def _resolve_open_actor(actor: ObjectDB):
+    """(persona, profile, error) — the officiant's persona + the room they stand in."""
+    persona = _actor_persona(actor)
+    if persona is None:
+        return (
+            None,
+            None,
+            ActionResult(success=False, message="You have no persona to officiate as."),
+        )
+    profile = _room_profile(actor)
+    if profile is None:
+        return None, None, ActionResult(success=False, message="This place cannot host a ceremony.")
+    return persona, profile, None
+
+
+def _resolve_open_honorees(actor: ObjectDB, honoree_names: list[str]):
+    """(sheets, error) — resolves each honoree name or fails on the first miss."""
+    honoree_sheets = []
+    for name in honoree_names:
+        sheet = _resolve_sheet_by_name(actor, name)
+        if sheet is None:
+            return None, ActionResult(success=False, message=f"No character '{name}' found.")
+        honoree_sheets.append(sheet)
+    return honoree_sheets, None
+
+
+def _resolve_open_being(being_name: str | None):
+    """(being, error) — a named being must resolve; no name means "use your worship"."""
+    from world.worship.models import WorshippedBeing  # noqa: PLC0415
+
+    if not being_name:
+        return None, None
+    being = WorshippedBeing.objects.filter(name__iexact=being_name, is_active=True).first()
+    if being is None:
+        return None, ActionResult(
+            success=False, message=f"No worshipped being '{being_name}' is known."
+        )
+    return being, None
+
+
+def _resolve_open_title(type_key: str, title_name: str | None):
+    """(title, error) — CORONATION requires a resolvable title; other types ignore it."""
+    from world.ceremonies.constants import CeremonyTypeKey  # noqa: PLC0415
+    from world.societies.houses.models import Title  # noqa: PLC0415
+
+    if type_key != CeremonyTypeKey.CORONATION:
+        return None, None
+    if not title_name:
+        return None, ActionResult(
+            success=False, message="Name the title being solemnized (=<title>)."
+        )
+    title = Title.objects.filter(name__iexact=title_name).first()
+    if title is None:
+        return None, ActionResult(success=False, message=f"No title '{title_name}' is known.")
+    return title, None
+
+
 @dataclass
 class OpenCeremonyAction(Action):
     """Open a ceremony recognizing honorees (``ceremony/<type> names[=<being>]``)."""
@@ -101,34 +158,23 @@ class OpenCeremonyAction(Action):
     def execute(
         self, actor: ObjectDB, context: ActionContext | None = None, **kwargs: Any
     ) -> ActionResult:
+        from core_management.permissions import is_staff_observer  # noqa: PLC0415
         from world.ceremonies.services import CeremonyError, open_ceremony  # noqa: PLC0415
-        from world.worship.models import WorshippedBeing  # noqa: PLC0415
 
-        persona = _actor_persona(actor)
-        if persona is None:
-            return ActionResult(success=False, message="You have no persona to officiate as.")
-        profile = _room_profile(actor)
-        if profile is None:
-            return ActionResult(success=False, message="This place cannot host a ceremony.")
+        persona, profile, error = _resolve_open_actor(actor)
+        if error is not None:
+            return error
 
         type_key = kwargs.get("type_key", "")
-        honoree_names: list[str] = kwargs.get("honoree_names") or []
-        being_name: str | None = kwargs.get("being_name")
-
-        honoree_sheets = []
-        for name in honoree_names:
-            sheet = _resolve_sheet_by_name(actor, name)
-            if sheet is None:
-                return ActionResult(success=False, message=f"No character '{name}' found.")
-            honoree_sheets.append(sheet)
-
-        being = None
-        if being_name:
-            being = WorshippedBeing.objects.filter(name__iexact=being_name, is_active=True).first()
-            if being is None:
-                return ActionResult(
-                    success=False, message=f"No worshipped being '{being_name}' is known."
-                )
+        honoree_sheets, error = _resolve_open_honorees(actor, kwargs.get("honoree_names") or [])
+        if error is not None:
+            return error
+        being, error = _resolve_open_being(kwargs.get("being_name"))
+        if error is not None:
+            return error
+        title, error = _resolve_open_title(type_key, kwargs.get("title_name"))
+        if error is not None:
+            return error
 
         try:
             ceremony = open_ceremony(
@@ -137,6 +183,8 @@ class OpenCeremonyAction(Action):
                 honoree_sheets=honoree_sheets,
                 location_profile=profile,
                 being=being,
+                title=title,
+                is_staff_fiat=is_staff_observer(actor),
             )
         except CeremonyError as exc:
             return ActionResult(success=False, message=exc.user_message)
@@ -455,5 +503,58 @@ class RespondConversionOfferAction(_SeanceOfferActionBase):
         return ActionResult(
             success=True,
             message=f"You {verb} the offered conversion.",
+            data={"offer_id": offer.pk, "status": offer.status},
+        )
+
+
+def _wedding_consent_offer_or_none(offer_id: Any):
+    from world.ceremonies.models import WeddingConsentOffer  # noqa: PLC0415
+
+    if offer_id is None:
+        return None
+    try:
+        return WeddingConsentOffer.objects.select_related(
+            "ceremony_honoree__ceremony", "ceremony_honoree__honoree_sheet"
+        ).get(pk=int(offer_id))
+    except (WeddingConsentOffer.DoesNotExist, ValueError, TypeError):
+        return None
+
+
+@dataclass
+class RespondWeddingConsentOfferAction(_SeanceOfferActionBase):
+    """Accept or decline a pending wedding consent offer (#2358).
+
+    Expects kwargs: ``offer_id`` (int), ``account`` (AccountDB), ``accept`` (bool).
+    Mirrors ``RespondSeanceOfferAction`` — account-authorized, since the
+    consenting spouse may not be the officiant nor even co-located.
+    """
+
+    key: str = "wedding_consent_respond"
+    name: str = "Respond to Wedding Consent"
+    icon: str = "rings"
+
+    def execute(
+        self, actor: ObjectDB | None, context: ActionContext | None = None, **kwargs: Any
+    ) -> ActionResult:
+        from world.ceremonies.services import (  # noqa: PLC0415
+            SeanceOfferError,
+            respond_to_wedding_consent_offer,
+        )
+
+        offer = _wedding_consent_offer_or_none(kwargs.get("offer_id"))
+        if offer is None:
+            return ActionResult(success=False, message="Which offer? Provide an offer id.")
+        account = kwargs.get("account")
+        if account is None:
+            return ActionResult(success=False, message="No account to answer for.")
+        accept = bool(kwargs.get("accept"))
+        try:
+            respond_to_wedding_consent_offer(offer, account=account, accept=accept)
+        except SeanceOfferError as exc:
+            return ActionResult(success=False, message=exc.user_message)
+        verb = "accept" if accept else "decline"
+        return ActionResult(
+            success=True,
+            message=f"You {verb} the wedding.",
             data={"offer_id": offer.pk, "status": offer.status},
         )

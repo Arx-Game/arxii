@@ -189,11 +189,13 @@ to both; normally it runs inside them.
 
 **Models**: `CeremonyType` (data rows: Funeral full handler; Blessing/Sermon
 renown-only; Seance the third ghost-window handler, #2393; Wedding solemnizes
-an active Betrothal on finish, #2358/#2999; Conversion repoints public worship
-on finish, #2361; Coronation is a later row), `Ceremony` (officiant
+an active Betrothal on finish gated on WeddingConsentOffers, #2358/#2999;
+Conversion repoints public worship on finish, #2361; Coronation solemnizes an
+already-held title, #2358), `Ceremony` (officiant
 Persona, TRUE `being` vs `presented_being` — see leak rule, location
 RoomProfile, status OPEN/COMPLETED/ABANDONED, one-OPEN-per-location
-constraint, quality_level), `CeremonyHonoree`, `CeremonyOffering` (item
+constraint, quality_level, nullable `title` FK — CORONATION only),
+`CeremonyHonoree`, `CeremonyOffering` (item
 snapshot; the item is destroyed; `item_legend_value` snapshots the offered
 item's legend at sacrifice time — #2359), `CeremonySpeech`, `CeremonyConfig`
 singleton (all magnitudes PLACEHOLDER), `SeanceManifestationOffer` (#2393,
@@ -274,6 +276,27 @@ officiant's worship Secret. Failures silent.
 `steal`, unless the dead player's tenure friended the taker (friends-list
 trusted handler; direction matters — trust flows from the dead).
 
+**Wedding & Coronation (#2358).** WEDDING solemnizes a pre-existing
+`Betrothal` (`world/societies/houses/pact_services.solemnize_wedding`) —
+consent is gated at the CEREMONY, not the proposal: `open_ceremony` mints a
+`WeddingConsentOffer` per spouse honoree at START (mirrors
+`SeanceManifestationOffer`'s shape, shares `SeanceOfferStatus`);
+`finish_ceremony`'s WEDDING branch refuses to solemnize (union + marriage
+pact mint) until every offer is ACCEPTED, and a DECLINE
+(`respond_to_wedding_consent_offer`, account-scoped) aborts the whole
+ceremony via `abandon_ceremony`. CORONATION solemnizes an ALREADY-HELD
+`Title` — no title-passing mechanics: `open_ceremony`'s precondition
+requires exactly one honoree who holds `title` (or staff/GM fiat — a
+non-holder without fiat is the contested-claim case, rejected rather than
+auto-resolved), and `finish_ceremony` mints the permanent `Coronation`
+record (`honoree_sheet`, `title`, unique together — one-off per title, not
+per person: a later coronation for a DIFFERENT title still works). Neither
+type adds flat ceremony prestige beyond the shared honoree-renown pass every
+ceremony type gets — the event grandeur/prestige-influx pipeline (#2357) is
+what drives the real payoff, reading the same ceremony deed this pass
+mints. Divorce and the marriage-tier/pact mechanics themselves live in
+`docs/systems/houses.md`'s "Org pacts, betrothal & the dossier" section.
+
 **Bounded abandonment**: `ceremonies.auto_abandon` cron
 (`game_clock/tasks.py: abandon_stale_ceremonies`, hourly) abandons OPEN
 ceremonies whose scene finished, whose event completed/cancelled, or a real
@@ -281,16 +304,25 @@ day after opening.
 
 **Actions** (`actions/definitions/ceremonies.py`; registry keys
 `ceremony_open` / `ceremony_offering` / `ceremony_speech` / `ceremony_finish` /
-`ceremony_abandon` / `seance_offer_respond` / `conversion_offer_respond`):
+`ceremony_abandon` / `seance_offer_respond` / `conversion_offer_respond` /
+`wedding_consent_respond`):
 anyone may officiate — skill shapes the outcome, not
 permission; offering/speech/finish are officiant-only, abandon is
-officiant-or-staff. `conversion_offer_respond` (#2361) is account-authorized
-(mirrors `seance_offer_respond`) — kwargs `offer_id`, `account`, `accept`,
-`sincere` (bool, meaningful only on accept). Telnet: `ceremony` family
-(`commands/ceremonies.py`, switch or space subverbs). Web: read API
-`/api/ceremonies/ceremonies/` (filter `location__objectdb` for the game-view
-room card, `frontend/src/ceremonies/CeremonyRoomCard.tsx`); verbs ride the
-generic action dispatch.
+officiant-or-staff. `conversion_offer_respond` (#2361) and
+`wedding_consent_respond` (#2358) are account-authorized (mirror
+`seance_offer_respond`) — kwargs `offer_id`, `account`, `accept`, plus
+`sincere` (bool, conversion-accept only). `ceremony_open` takes `title_name`
+for CORONATION (resolved by name; `is_staff_fiat` derives from
+`is_staff_observer(actor)`). Telnet: `ceremony` family
+(`commands/ceremonies.py`, switch or space subverbs —
+`ceremony/wedding <a>,<b>[=<being>]`, `ceremony/coronation <honoree>=<title>`);
+`wedding` family (`commands/wedding.py`, mirrors `commands/seance.py`'s
+`offers`/`accept`/`decline` shape) answers a pending `WeddingConsentOffer`;
+`conversion` family (`commands/conversion.py`, same shape) answers a pending
+`WorshipConversionOffer`. Web: read API `/api/ceremonies/ceremonies/`
+(filter `location__objectdb` for the game-view room card,
+`frontend/src/ceremonies/CeremonyRoomCard.tsx`); verbs ride the generic
+action dispatch.
 
 **LEAK RULE**: player-facing surfaces (serializers, command output, card)
 render `presented_being` ONLY. The true `being` of a twisted rite never
