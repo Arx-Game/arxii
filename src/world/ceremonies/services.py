@@ -12,7 +12,12 @@ from typing import TYPE_CHECKING
 from django.db import IntegrityError, transaction
 from django.utils import timezone
 
-from world.ceremonies.constants import CeremonyStatus, CeremonyTypeKey, SeanceOfferStatus
+from world.ceremonies.constants import (
+    CeremonyStatus,
+    CeremonyTypeKey,
+    ConversionOfferStatus,
+    SeanceOfferStatus,
+)
 from world.ceremonies.models import (
     Ceremony,
     CeremonyHonoree,
@@ -25,10 +30,11 @@ from world.ceremonies.models import (
 if TYPE_CHECKING:
     from django.db.models import QuerySet
 
-    from world.ceremonies.models import SeanceManifestationOffer
+    from world.ceremonies.models import SeanceManifestationOffer, WorshipConversionOffer
     from world.character_sheets.models import CharacterSheet
     from world.items.models import ItemInstance
     from world.scenes.models import Persona
+    from world.societies.models import PhilosophicalArchetype
     from world.worship.models import WorshippedBeing
 
 logger = logging.getLogger(__name__)
@@ -37,6 +43,10 @@ CEREMONY_CHECK_TYPE_NAME = "Ceremony Rites"
 SPEECH_CHECK_TYPE_NAME = "Performance"
 SPEECH_SPECIALIZATION_NAME = "Oratory"
 CEREMONY_LEGEND_SOURCE = "Ceremony"
+# PLACEHOLDER content mapping (#2361): reuses the existing Apostate-authored
+# scandal vocabulary (#1464) for old→new conversion framing rather than
+# minting new PhilosophicalArchetype rows — see ``_conversion_archetypes``.
+_CONVERSION_BETRAYAL_ARCHETYPE = "Treacherous Scandal"
 
 
 class CeremonyError(Exception):
@@ -49,6 +59,14 @@ class CeremonyError(Exception):
 
 class SeanceOfferError(Exception):
     """Player-facing seance-offer failure; ``user_message`` is safe to display."""
+
+    def __init__(self, msg: str, *, user_message: str | None = None) -> None:
+        super().__init__(msg)
+        self.user_message = user_message or msg
+
+
+class ConversionOfferError(Exception):
+    """Player-facing conversion-offer failure; ``user_message`` is safe to display."""
 
     def __init__(self, msg: str, *, user_message: str | None = None) -> None:
         super().__init__(msg)
@@ -83,6 +101,46 @@ def _resolve_beings(
     return explicit, explicit
 
 
+def _validate_honorees_for_type(ceremony_type: CeremonyType, honoree_sheets: "list") -> None:
+    """Decision 13/#2361 pre-open validation, per ceremony type."""
+    if ceremony_type.key in (CeremonyTypeKey.FUNERAL, CeremonyTypeKey.SEANCE):
+        from world.vitals.services import is_dead  # noqa: PLC0415
+
+        if not honoree_sheets:
+            msg = "A funeral needs at least one deceased to honor."
+            if ceremony_type.key == CeremonyTypeKey.SEANCE:
+                msg = "A seance needs at least one dead soul to call."
+            raise CeremonyError(msg)
+        for sheet in honoree_sheets:
+            if not is_dead(sheet):
+                msg = f"{sheet} still lives; the rite of passing is not theirs."
+                raise CeremonyError(msg)
+    if ceremony_type.key == CeremonyTypeKey.CONVERSION and len(honoree_sheets) != 1:
+        msg = "A conversion rite has exactly one convert."
+        raise CeremonyError(msg)
+
+
+def _create_type_specific_offers(ceremony: Ceremony, officiant_sheet: "CharacterSheet") -> None:
+    """SEANCE/CONVERSION consent-offer rows, minted alongside the honorees at open."""
+    if ceremony.ceremony_type.key == CeremonyTypeKey.SEANCE:
+        from world.ceremonies.models import SeanceManifestationOffer  # noqa: PLC0415
+
+        SeanceManifestationOffer.objects.bulk_create(
+            SeanceManifestationOffer(ceremony_honoree=honoree)
+            for honoree in ceremony.honorees.all()
+        )
+    if ceremony.ceremony_type.key == CeremonyTypeKey.CONVERSION:
+        from world.ceremonies.models import WorshipConversionOffer  # noqa: PLC0415
+
+        convert_honoree = ceremony.honorees.get()
+        if convert_honoree.honoree_sheet_id != officiant_sheet.pk:
+            # PC-officiated route (Ratified amendment #1a): the convert is
+            # someone other than the officiant — needs a consent offer. A
+            # self-officiated solo rite (Ratified amendment #1b) needs none:
+            # nobody consents to their own choice.
+            WorshipConversionOffer.objects.create(ceremony_honoree=convert_honoree)
+
+
 def open_ceremony(  # noqa: PLR0913
     *,
     officiant_persona: "Persona",
@@ -96,24 +154,14 @@ def open_ceremony(  # noqa: PLR0913
     """Open a ceremony at a location, recognizing zero or more honorees.
 
     Funerals and Seances require every honoree dead (retired stays valid, Decision 13).
-    Only one OPEN ceremony may exist per location (DB constraint).
+    A Conversion requires exactly one honoree — the convert (#2361). Only one OPEN
+    ceremony may exist per location (DB constraint).
     """
     ceremony_type = CeremonyType.objects.filter(key=type_key).first()
     if ceremony_type is None:
         msg = "That kind of ceremony is not recognized."
         raise CeremonyError(msg)
-    if ceremony_type.key in (CeremonyTypeKey.FUNERAL, CeremonyTypeKey.SEANCE):
-        from world.vitals.services import is_dead  # noqa: PLC0415
-
-        if not honoree_sheets:
-            msg = "A funeral needs at least one deceased to honor."
-            if ceremony_type.key == CeremonyTypeKey.SEANCE:
-                msg = "A seance needs at least one dead soul to call."
-            raise CeremonyError(msg)
-        for sheet in honoree_sheets:
-            if not is_dead(sheet):
-                msg = f"{sheet} still lives; the rite of passing is not theirs."
-                raise CeremonyError(msg)
+    _validate_honorees_for_type(ceremony_type, honoree_sheets)
 
     officiant_sheet = officiant_persona.character_sheet
     true_being, presented = _resolve_beings(officiant_sheet, being)
@@ -132,13 +180,7 @@ def open_ceremony(  # noqa: PLR0913
             CeremonyHonoree.objects.bulk_create(
                 CeremonyHonoree(ceremony=ceremony, honoree_sheet=sheet) for sheet in honoree_sheets
             )
-            if ceremony_type.key == CeremonyTypeKey.SEANCE:
-                from world.ceremonies.models import SeanceManifestationOffer  # noqa: PLC0415
-
-                SeanceManifestationOffer.objects.bulk_create(
-                    SeanceManifestationOffer(ceremony_honoree=honoree)
-                    for honoree in ceremony.honorees.all()
-                )
+            _create_type_specific_offers(ceremony, officiant_sheet)
     except IntegrityError as exc:
         msg = "A ceremony is already underway here."
         raise CeremonyError(msg) from exc
@@ -228,8 +270,16 @@ def record_speech(
     )
 
 
-def finish_ceremony(*, ceremony: Ceremony) -> Ceremony:
-    """Close the rite: quality roll, renown tallies, worship, funeral effects."""
+def finish_ceremony(*, ceremony: Ceremony, sincere: bool | None = None) -> Ceremony:
+    """Close the rite: quality roll, renown tallies, worship, funeral effects.
+
+    ``sincere`` is the heart-vs-lip-service choice (#2361 Ratified amendment #2)
+    for a SELF-officiated CONVERSION honoree only (the officiant IS the convert,
+    so there is no WorshipConversionOffer to read it from). Ignored for every
+    other ceremony type, and ignored for a PC-officiated CONVERSION — there the
+    choice was already recorded on the offer at accept time
+    (``respond_to_conversion_offer``). Defaults True (sincere) when unspecified.
+    """
     _require_open(ceremony)
     from world.checks.models import CheckType  # noqa: PLC0415
     from world.checks.services import perform_check_with_modifiers  # noqa: PLC0415
@@ -259,27 +309,27 @@ def finish_ceremony(*, ceremony: Ceremony) -> Ceremony:
     offering_legend_total = sum(o.item_legend_value for o in ceremony.offerings.all())
     honorees = list(ceremony.honorees.select_related("honoree_sheet"))
     speeches = list(ceremony.speeches.all())
+    honoree_base = (
+        config.base_honoree_prestige
+        + offering_value_total * config.offering_prestige_per_value
+        + offering_legend_total
+    )
     total_awarded = 0
     for honoree in honorees:
-        speech_levels = sum(
-            max(s.success_level or 0, 0)
-            for s in speeches
-            if s.target_honoree_id is None or s.target_honoree_id == honoree.pk
+        amount = _award_honoree(
+            honoree,
+            ceremony=ceremony,
+            speeches=speeches,
+            base=honoree_base,
+            multiplier=multiplier,
+            speech_prestige_base=config.speech_prestige_base,
+            sincere=sincere,
         )
-        base = (
-            config.base_honoree_prestige
-            + offering_value_total * config.offering_prestige_per_value
-            + offering_legend_total
-            + speech_levels * config.speech_prestige_base
-        )
-        amount = base * multiplier // 100
-        _mint_ceremony_deed(
-            honoree.honoree_sheet,
-            f"Honored at a {ceremony.ceremony_type.name.lower()} PLACEHOLDER",
-            amount,
-        )
-        honoree.prestige_awarded = amount
-        honoree.save(update_fields=["prestige_awarded"])
+        if amount is None:
+            # CONVERSION honoree declined, or never answered — the rite
+            # concludes but honors nothing for them (mirrors a declined
+            # Seance offer): no deed, no worship repoint.
+            continue
         total_awarded += amount
 
     if total_awarded > 0:
@@ -465,14 +515,201 @@ def pending_seance_offers_for_account(account: object) -> "QuerySet[SeanceManife
     )
 
 
+def respond_to_conversion_offer(
+    offer: "WorshipConversionOffer", *, account: object, accept: bool, sincere: bool = True
+) -> "WorshipConversionOffer":
+    """Accept or decline a pending public-conversion offer (#2361, Ratified amendment #1a).
+
+    Mirrors ``respond_to_seance_offer``'s account-authorized shape — ``account``
+    must be the offer's honoree's own controlling account. Accepting records the
+    heart-vs-lip-service choice (Ratified amendment #2) right here on the offer;
+    the actual ``WorshipDeclaration`` repoint happens later, at ceremony finish
+    (``finish_ceremony``'s CONVERSION branch reads this row). Declining leaves the
+    convert's worship completely untouched — the officiant's rite still concludes,
+    it just honors nothing for them (mirrors a declined Seance offer). Unlike a
+    Seance accept, nothing physically moves — a conversion has no manifestation
+    window to open.
+    """
+    from world.magic.services.gain import account_for_sheet  # noqa: PLC0415
+
+    sheet = offer.ceremony_honoree.honoree_sheet
+    if account_for_sheet(sheet) != account:
+        msg = "That isn't your character to answer for."
+        raise ConversionOfferError(msg)
+    if offer.status != ConversionOfferStatus.PENDING:
+        msg = "That offer has already been answered."
+        raise ConversionOfferError(msg)
+    if offer.ceremony_honoree.ceremony.status != CeremonyStatus.OPEN:
+        msg = "That conversion rite has already closed."
+        raise ConversionOfferError(msg)
+
+    offer.status = ConversionOfferStatus.ACCEPTED if accept else ConversionOfferStatus.DECLINED
+    offer.is_sincere = bool(sincere) if accept else None
+    offer.responded_at = timezone.now()
+    offer.save(update_fields=["status", "is_sincere", "responded_at"])
+    return offer
+
+
+def pending_conversion_offers_for_account(
+    account: object,
+) -> "QuerySet[WorshipConversionOffer]":
+    """PENDING conversion offers addressed to any character this account has ever held.
+
+    Mirrors ``pending_seance_offers_for_account`` (#2393).
+    """
+    from world.ceremonies.models import WorshipConversionOffer  # noqa: PLC0415
+
+    return (
+        WorshipConversionOffer.objects.filter(
+            status=ConversionOfferStatus.PENDING,
+            ceremony_honoree__honoree_sheet__roster_entry__tenures__player_data__account=account,
+            ceremony_honoree__honoree_sheet__roster_entry__tenures__end_date__isnull=True,
+        )
+        .select_related("ceremony_honoree__honoree_sheet", "ceremony_honoree__ceremony")
+        .distinct()
+    )
+
+
 def _require_open(ceremony: Ceremony) -> None:
     if ceremony.status != CeremonyStatus.OPEN:
         msg = "This ceremony has already concluded."
         raise CeremonyError(msg)
 
 
-def _mint_ceremony_deed(sheet: "CharacterSheet", title: str, value: int) -> None:
-    """Mint a solo deed through the legend engine (renown flows from there)."""
+def _resolve_conversion_confirmation(
+    honoree: CeremonyHonoree, sincere: bool | None
+) -> tuple[bool, bool]:
+    """Whether a CONVERSION honoree's rite is confirmed, and their heart-vs-lip choice.
+
+    Self-officiated (the convert leading their own rite, Ratified amendment #1b)
+    needs no consent offer — confirmed unconditionally; the ``sincere`` kwarg
+    passed to ``finish_ceremony`` carries their choice (defaults True/sincere
+    when unspecified). A PC-officiated conversion (amendment #1a) gates on the
+    honoree's own ``WorshipConversionOffer``: confirmed only once ACCEPTED, and
+    the choice recorded there at accept time governs — the officiant's
+    ``sincere`` kwarg is never consulted for this route (only the convert's own
+    account may set their inward truth).
+    """
+    from django.core.exceptions import ObjectDoesNotExist  # noqa: PLC0415
+
+    try:
+        offer = honoree.conversion_offer
+    except ObjectDoesNotExist:
+        return True, True if sincere is None else sincere
+    if offer.status != ConversionOfferStatus.ACCEPTED:
+        return False, False
+    return True, bool(offer.is_sincere)
+
+
+def _award_honoree(  # noqa: PLR0913 — keyword-only; each arg is a distinct tally input
+    honoree: CeremonyHonoree,
+    *,
+    ceremony: Ceremony,
+    speeches: list,
+    base: int,
+    multiplier: int,
+    speech_prestige_base: int,
+    sincere: bool | None,
+) -> int | None:
+    """Resolve one honoree's deed (title/archetypes/scene), mint it, tally prestige.
+
+    Returns the awarded amount, or ``None`` for a CONVERSION honoree whose
+    conversion wasn't confirmed (declined/still-pending offer) — the caller skips
+    them entirely, no deed minted, no worship repoint.
+    """
+    title = f"Honored at a {ceremony.ceremony_type.name.lower()} PLACEHOLDER"
+    archetypes = None
+    deed_scene = None
+    if ceremony.ceremony_type.key == CeremonyTypeKey.CONVERSION:
+        outcome = _convert_honoree_if_confirmed(honoree, ceremony, sincere)
+        if outcome is None:
+            return None
+        title, archetypes, deed_scene = outcome
+
+    speech_levels = sum(
+        max(s.success_level or 0, 0)
+        for s in speeches
+        if s.target_honoree_id is None or s.target_honoree_id == honoree.pk
+    )
+    amount = (base + speech_levels * speech_prestige_base) * multiplier // 100
+    _mint_ceremony_deed(
+        honoree.honoree_sheet, title, amount, archetypes=archetypes, scene=deed_scene
+    )
+    honoree.prestige_awarded = amount
+    honoree.save(update_fields=["prestige_awarded"])
+    return amount
+
+
+def _convert_honoree_if_confirmed(
+    honoree: CeremonyHonoree, ceremony: Ceremony, sincere: bool | None
+) -> "tuple[str, list[PhilosophicalArchetype], object | None] | None":
+    """Repoint a CONVERSION honoree's worship if their conversion is confirmed.
+
+    Returns ``(deed_title, archetypes, scene)`` for ``finish_ceremony``'s per-honoree
+    deed mint, or ``None`` when the honoree declined/never answered — the caller
+    skips minting anything for them entirely. Side-effects (the actual
+    ``convert_public_worship`` repoint) only happen on the confirmed path.
+    """
+    confirmed, honoree_is_sincere = _resolve_conversion_confirmation(honoree, sincere)
+    if not confirmed:
+        return None
+    from world.worship.services import convert_public_worship  # noqa: PLC0415
+
+    archetypes = _conversion_archetypes(honoree.honoree_sheet, ceremony.presented_being)
+    convert_public_worship(
+        honoree.honoree_sheet, ceremony.presented_being, is_sincere=honoree_is_sincere
+    )
+    title = f"Converted to {ceremony.presented_being.name} PLACEHOLDER"
+    return title, archetypes, ceremony.scene
+
+
+def _conversion_archetypes(
+    sheet: "CharacterSheet", new_being: "WorshippedBeing"
+) -> "list[PhilosophicalArchetype]":
+    """PLACEHOLDER content mapping (#2361): archetype tags for the scandal fork.
+
+    Reuses the existing Apostate-authored scandal vocabulary (#1464) — a
+    conversion AWAY from an already-declared public faith reads as a broken vow
+    ("Treacherous Scandal") regardless of which being it moves to or from;
+    per-tradition/per-being framing (a specific "Heretical" vs "Pious" split)
+    would mean minting new ``PhilosophicalArchetype`` rows into that closed,
+    curated vocabulary, which this pass does not do — flagged for Apostate if a
+    finer split is wanted later. A first public declaration (no prior public
+    faith to betray) carries NO archetype tag, so ``route_deed_reach``'s
+    archetype-required guard skips the scandal fork for it entirely — converting
+    from nothing isn't a betrayal of anything.
+    """
+    from django.core.exceptions import ObjectDoesNotExist  # noqa: PLC0415
+
+    from world.societies.models import PhilosophicalArchetype  # noqa: PLC0415
+
+    try:
+        declaration = sheet.worship_declaration
+    except ObjectDoesNotExist:
+        return []
+    if declaration.public_being_id is None or declaration.public_being_id == new_being.pk:
+        return []
+    archetype = PhilosophicalArchetype.objects.filter(name=_CONVERSION_BETRAYAL_ARCHETYPE).first()
+    return [archetype] if archetype is not None else []
+
+
+def _mint_ceremony_deed(
+    sheet: "CharacterSheet",
+    title: str,
+    value: int,
+    *,
+    archetypes: "list[PhilosophicalArchetype] | None" = None,
+    scene=None,
+) -> None:
+    """Mint a solo deed through the legend engine (renown flows from there).
+
+    ``archetypes``/``scene`` (#2361) pass straight through to
+    ``create_solo_deed`` — untouched (None) for every ceremony type except
+    CONVERSION, whose scandal framing needs the #1464 reach fork
+    (``route_deed_reach``) to fire. ``create_solo_deed`` already no-ops the
+    fork when ``scene`` is None or ``archetypes`` is empty, so this is a pure
+    additive extension — every other caller's behavior is unchanged.
+    """
     from world.societies.models import LegendSourceType  # noqa: PLC0415
     from world.societies.services import create_solo_deed  # noqa: PLC0415
 
@@ -489,4 +726,6 @@ def _mint_ceremony_deed(sheet: "CharacterSheet", title: str, value: int) -> None
         source_type,
         value,
         description="PLACEHOLDER — ceremony deed prose pending Apostate rewrite.",
+        archetypes=archetypes,
+        scene=scene,
     )

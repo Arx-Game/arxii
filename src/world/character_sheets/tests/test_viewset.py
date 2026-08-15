@@ -88,6 +88,8 @@ from world.tarot.constants import ArcanaType
 from world.tarot.models import TarotCard
 from world.traits.factories import CharacterTraitValueFactory, StatTraitFactory
 from world.traits.models import TraitCategory
+from world.worship.factories import WorshippedBeingFactory
+from world.worship.models import WorshipDeclaration
 
 
 class TestCharacterSheetViewSet(TestCase):
@@ -285,6 +287,7 @@ class TestIdentitySection(TestCase):
             "origin",
             "path",
             "worship",
+            "worship_sincere",
             "current_mood",
         }
         assert set(identity.keys()) == expected_keys
@@ -2501,3 +2504,59 @@ class TestCurrentMoodPrivacy(TestCase):
     def test_foreign_viewer_never_sees_current_mood(self) -> None:
         identity = self._get_identity(self.foreign_player.account)
         assert identity["current_mood"] is None
+
+
+class TestWorshipSincerePrivacy(TestCase):
+    """Owner/staff-only visibility for the heart-vs-lip-service inward truth (#2361).
+
+    Mirrors ``TestCurrentMoodPrivacy``'s owner-vs-staff-vs-foreign shape — the
+    public record (``worship``) shows the public act to everyone; only the
+    inward truth (``worship_sincere``) is gated.
+    """
+
+    @classmethod
+    def setUpTestData(cls) -> None:
+        cls.player = PlayerDataFactory()
+        cls.character = CharacterFactory(db_key="WorshipPrivacyChar")
+        cls.being = WorshippedBeingFactory(name="The Hollow Flame")
+        cls.roster_entry = RosterEntryFactory(character_sheet__character=cls.character)
+        cls.sheet = cls.roster_entry.character_sheet
+        WorshipDeclaration.objects.create(
+            character_sheet=cls.sheet, public_being=cls.being, public_is_sincere=False
+        )
+        RosterTenureFactory(
+            player_data=cls.player,
+            roster_entry=cls.roster_entry,
+            player_number=1,
+        )
+
+        # Foreign viewer: authenticated account with no tenure on this character.
+        cls.foreign_player = PlayerDataFactory()
+
+    def _get_identity(self, account) -> dict:
+        client = APIClient()
+        client.force_authenticate(user=account)
+        url = f"/api/character-sheets/{self.character.pk}/"
+        response = client.get(url)
+        assert response.status_code == 200
+        return response.data["identity"]
+
+    def test_public_worship_visible_to_everyone(self) -> None:
+        """The public act (which being) is never gated — only sincerity is."""
+        identity = self._get_identity(self.foreign_player.account)
+        assert identity["worship"] == {"id": self.being.pk, "name": "The Hollow Flame"}
+
+    def test_owner_sees_worship_sincere(self) -> None:
+        identity = self._get_identity(self.player.account)
+        assert identity["worship_sincere"] is False
+
+    def test_staff_sees_worship_sincere(self) -> None:
+        staff_player = PlayerDataFactory()
+        staff_player.account.is_staff = True
+        staff_player.account.save(update_fields=["is_staff"])
+        identity = self._get_identity(staff_player.account)
+        assert identity["worship_sincere"] is False
+
+    def test_foreign_viewer_never_sees_worship_sincere(self) -> None:
+        identity = self._get_identity(self.foreign_player.account)
+        assert identity["worship_sincere"] is None

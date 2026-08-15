@@ -10,7 +10,12 @@ mapping, the devotion economy, bounded abandonment, and retired honorees.
 from django.db import models
 from evennia.utils.idmapper.models import SharedMemoryModel
 
-from world.ceremonies.constants import CeremonyStatus, CeremonyTypeKey, SeanceOfferStatus
+from world.ceremonies.constants import (
+    CeremonyStatus,
+    CeremonyTypeKey,
+    ConversionOfferStatus,
+    SeanceOfferStatus,
+)
 
 _PERSONA_MODEL = "arxii.Persona"
 
@@ -254,3 +259,44 @@ class SeanceManifestationOffer(SharedMemoryModel):
 
     def __str__(self) -> str:
         return f"Seance offer for {self.ceremony_honoree} ({self.status})"
+
+
+class WorshipConversionOffer(SharedMemoryModel):
+    """Consent gate for a CONVERSION honoree's own conversion (#2361, Ratified amendment #1a).
+
+    One row per CeremonyHonoree on a CONVERSION-type ceremony, created when the
+    ceremony opens — but ONLY when the officiant is someone other than the convert
+    themself. A self-officiated solo conversion (officiant IS the honoree, the
+    "temple, no officiant needed" route) never gets one: nobody needs to consent
+    to their own choice. PENDING until the honoree's own controlling account
+    answers (world.ceremonies.services.respond_to_conversion_offer). Accepting
+    records the heart-vs-lip-service choice (Ratified amendment #2, ``is_sincere``)
+    right here — finish_ceremony's CONVERSION branch reads it to decide both
+    whether to repoint WorshipDeclaration.public_being at all (declined/still-
+    pending honorees get nothing — the rite concludes but honors nothing, mirrors
+    a declined Seance offer) and what to store for the private inward truth.
+    Never mutated once ACCEPTED/DECLINED; a fresh ceremony mints a fresh row.
+    """
+
+    ceremony_honoree = models.OneToOneField(
+        CeremonyHonoree, on_delete=models.CASCADE, related_name="conversion_offer"
+    )
+    status = models.CharField(
+        max_length=20, choices=ConversionOfferStatus.choices, default=ConversionOfferStatus.PENDING
+    )
+    is_sincere = models.BooleanField(
+        null=True,
+        blank=True,
+        help_text=(
+            "Heart vs lip service, set on ACCEPT (Ratified amendment #2). "
+            "Null while PENDING or after DECLINED."
+        ),
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+    responded_at = models.DateTimeField(null=True, blank=True)
+
+    class Meta:
+        ordering = ["-created_at"]
+
+    def __str__(self) -> str:
+        return f"Conversion offer for {self.ceremony_honoree} ({self.status})"

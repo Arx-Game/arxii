@@ -16,6 +16,17 @@
   _Avoid_: CharacterRelationship for sheetless gods.
 - **Worship declaration** — a character's public being + optional secret being
   (`WorshipDeclaration`); the secret side mints a Secret at CG finalization.
+- **Heart vs lip service** — `WorshipDeclaration.public_is_sincere` (#2361): whether a
+  character genuinely believes their PUBLIC declaration (True) or it is performative
+  only (False). A player choice made explicitly at conversion; PRIVATE — never leaves
+  owner/staff surfaces (same leak-table pattern as `current_mood`). Defaults True for
+  CG declarations, where public and inward faith are the same thing by construction.
+  _Avoid_: confusing this with `secret_being` — that's a wholly separate, second faith
+  kept hidden; sincerity is about whether the PUBLIC faith is real.
+- **Public conversion** — repointing `WorshipDeclaration.public_being` post-CG, via a
+  Conversion ceremony (`world.ceremonies` glossary). Old `DevotionStanding` favor and
+  the old secret faith's `Secret` row are left standing as history — conversion never
+  deletes or mutates either.
 - **God's Favorite** — the achievement for reaching (or tying) a being's top devotion;
   three gendered rows (Princess/Prince/Chosen); never names the being.
 - **Miracle** — an authored effect a WorshippedBeing can perform by spending its

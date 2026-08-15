@@ -187,6 +187,17 @@ class WorshipDeclaration(SharedMemoryModel):
         on_delete=models.PROTECT,
         related_name="public_worshippers",
     )
+    public_is_sincere = models.BooleanField(
+        default=True,
+        help_text=(
+            "Heart vs lip service (#2361 Ratified amendment #2): whether the character "
+            "genuinely believes the public declaration (True) or it is performative only "
+            "(False). Set explicitly at conversion; defaults True for CG declarations, "
+            "where public and inward faith are the same thing by construction. PRIVATE — "
+            "never leaves owner/staff surfaces, same leak-table pattern as current_mood "
+            "in world.character_sheets.serializers._build_identity."
+        ),
+    )
     secret_being = models.ForeignKey(
         WorshippedBeing,
         null=True,

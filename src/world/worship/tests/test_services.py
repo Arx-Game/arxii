@@ -13,11 +13,17 @@ from world.worship.constants import (
     GODS_FAVORITE_PRINCESS,
 )
 from world.worship.factories import WorshippedBeingFactory
-from world.worship.models import PatronageValence, WorshipGrant
+from world.worship.models import (
+    DevotionStanding,
+    PatronageValence,
+    WorshipDeclaration,
+    WorshipGrant,
+)
 from world.worship.services import (
     active_patronage_for,
     best_patronage_favor,
     bump_devotion,
+    convert_public_worship,
     establish_patronage,
     get_chosen_favor_config,
     grant_worship,
@@ -51,6 +57,67 @@ class GrantWorshipTests(TestCase):
     def test_grant_rejects_non_positive(self) -> None:
         with self.assertRaises(ValueError):
             grant_worship(self.being, 0)
+
+
+class ConvertPublicWorshipTests(TestCase):
+    """#2361 — the single write path a conversion ceremony calls at finish."""
+
+    @classmethod
+    def setUpTestData(cls) -> None:
+        cls.old_being = WorshippedBeingFactory()
+        cls.new_being = WorshippedBeingFactory()
+        cls.sheet = CharacterSheetFactory()
+
+    def test_repoints_public_being_and_stores_sincerity(self) -> None:
+        WorshipDeclaration.objects.create(character_sheet=self.sheet, public_being=self.old_being)
+        convert_public_worship(self.sheet, self.new_being, is_sincere=False)
+        declaration = WorshipDeclaration.objects.get(character_sheet=self.sheet)
+        self.assertEqual(declaration.public_being_id, self.new_being.pk)
+        self.assertFalse(declaration.public_is_sincere)
+
+    def test_creates_declaration_when_none_existed(self) -> None:
+        self.assertFalse(WorshipDeclaration.objects.filter(character_sheet=self.sheet).exists())
+        convert_public_worship(self.sheet, self.new_being)
+        declaration = WorshipDeclaration.objects.get(character_sheet=self.sheet)
+        self.assertEqual(declaration.public_being_id, self.new_being.pk)
+        self.assertTrue(declaration.public_is_sincere)
+
+    def test_sincere_defaults_true(self) -> None:
+        convert_public_worship(self.sheet, self.new_being)
+        declaration = WorshipDeclaration.objects.get(character_sheet=self.sheet)
+        self.assertTrue(declaration.public_is_sincere)
+
+    def test_devotion_standing_with_old_being_untouched(self) -> None:
+        """Decision 3 (unamended, #2361 draft): favor history is never touched."""
+        WorshipDeclaration.objects.create(character_sheet=self.sheet, public_being=self.old_being)
+        standing = DevotionStanding.objects.create(
+            character_sheet=self.sheet, being=self.old_being, favor=30, lifetime_favor=30
+        )
+        convert_public_worship(self.sheet, self.new_being)
+        standing.refresh_from_db()
+        self.assertEqual(standing.favor, 30)
+        self.assertFalse(
+            DevotionStanding.objects.filter(
+                character_sheet=self.sheet, being=self.new_being
+            ).exists()
+        )
+
+    def test_secret_side_of_declaration_untouched(self) -> None:
+        """Ratified amendment #3 — convert_public_worship never writes secret fields."""
+        from world.secrets.factories import SecretFactory
+
+        dark_being = WorshippedBeingFactory()
+        secret = SecretFactory(subject_sheet=self.sheet)
+        declaration = WorshipDeclaration.objects.create(
+            character_sheet=self.sheet,
+            public_being=self.old_being,
+            secret_being=dark_being,
+            secret=secret,
+        )
+        convert_public_worship(self.sheet, self.new_being)
+        declaration.refresh_from_db()
+        self.assertEqual(declaration.secret_being_id, dark_being.pk)
+        self.assertEqual(declaration.secret_id, secret.pk)
 
 
 class GodsFavoriteTests(TestCase):

@@ -19,6 +19,7 @@ from world.worship.models import (
     ChosenFavorConfig,
     DevotionStanding,
     PatronageValence,
+    WorshipDeclaration,
     WorshipGrant,
     WorshippedBeing,
 )
@@ -46,6 +47,40 @@ def grant_worship(
     return WorshipGrant.objects.create(
         being=being, amount=amount, granted_by=granted_by, reason=reason
     )
+
+
+def convert_public_worship(
+    character_sheet: "CharacterSheet",
+    new_being: WorshippedBeing,
+    *,
+    is_sincere: bool = True,
+) -> WorshipDeclaration:
+    """Repoint a character's PUBLIC worship declaration (#2361).
+
+    The single write path for a public conversion — called from
+    ``world.ceremonies.services.finish_ceremony``'s CONVERSION branch for both
+    routes (a PC-officiated rite the convert accepted, or a self-officiated solo
+    rite). Get-or-creates the declaration so a character's first post-CG public
+    declaration (no prior ``WorshipDeclaration`` row at all) is the same code path
+    as a conversion — matches the draft spec's Decision 1.
+
+    Decision 3 (issue #2361 draft, unamended): ``DevotionStanding`` rows for the
+    old AND new being are untouched here — favor history with either god survives
+    a conversion as-is; only the public *front* changes. ``secret_being``/
+    ``secret`` are also untouched (out of scope for this pass per the ratified
+    amendments — the old Secret stays exactly as minted, still discoverable).
+
+    ``is_sincere`` is the private heart-vs-lip-service choice (Ratified
+    amendment #2): True means the character converts inwardly too, False means
+    the public act is performative only. Stored on the declaration itself;
+    never exposed to a non-owner/non-staff viewer (see the ``current_mood``
+    leak-table pattern in ``world.character_sheets.serializers._build_identity``).
+    """
+    declaration, _ = WorshipDeclaration.objects.get_or_create(character_sheet=character_sheet)
+    declaration.public_being = new_being
+    declaration.public_is_sincere = is_sincere
+    declaration.save(update_fields=["public_being", "public_is_sincere"])
+    return declaration
 
 
 def gods_favorite_achievement_for(character_sheet: "CharacterSheet") -> "Achievement | None":

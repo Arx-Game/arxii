@@ -27,7 +27,13 @@ issue bodies; the model decision is ADR-0132.
   (both optional) + the minted `secret` FK. Secret worship mints a `Secret`
   (`worship/secrets.py: mint_worship_secret`, mirrors the secret-distinction
   pattern). Set at CG (`CharacterDraft.public_worship`/`secret_worship`,
-  created in `_create_worship_declaration` at finalization).
+  created in `_create_worship_declaration` at finalization). `public_is_sincere`
+  (BooleanField, default True, #2361) — the heart-vs-lip-service inward truth:
+  whether the character genuinely believes the public declaration or it's
+  performative only. PRIVATE — the sheet identity serializer only shows it to
+  the owner/staff (`worship_sincere` in `IdentitySection`, same leak-table
+  pattern as `current_mood`); the public record (`worship`) shows the being to
+  everyone regardless.
 - `ChosenFavorConfig` — singleton (pk=1, lazy-created via
   `get_chosen_favor_config()`). Staff-tunable favor thresholds for Chosen
   benefits (#2550): `anima_recovery_threshold`/`anima_recovery_bonus` (wired —
@@ -57,6 +63,14 @@ issue bodies; the model decision is ADR-0132.
   idempotent; preserves existing favor). Called at CG when Path of the Chosen.
 - `release_patronage(standing)` → sets `released_at` (graceful degradation —
   the Chosen keeps the Path but this patron's favor no longer gates benefits).
+- `convert_public_worship(sheet, new_being, *, is_sincere=True)` → WorshipDeclaration
+  (#2361) — the single write path for a post-CG public conversion. Get-or-creates the
+  declaration (a first post-CG public declaration is the same code path as a
+  conversion), repoints `public_being`, stores the heart-vs-lip-service choice on
+  `public_is_sincere`. Never touches `DevotionStanding` (old favor history for either
+  being survives untouched) or the secret side (`secret_being`/`secret` — an old
+  secret faith's `Secret` row is left standing as history, still discoverable).
+  Called from `world.ceremonies.services.finish_ceremony`'s CONVERSION branch.
 
 ### Miracles & Divine Intervention (#2360)
 
@@ -174,27 +188,67 @@ carry the scene) → finish (or abandon). No Scene/Event required — nullable F
 to both; normally it runs inside them.
 
 **Models**: `CeremonyType` (data rows: Funeral full handler; Blessing/Sermon
-renown-only; Wedding/Coronation are later rows, #2358), `Ceremony` (officiant
+renown-only; Seance the third ghost-window handler, #2393; Wedding solemnizes
+an active Betrothal on finish, #2358/#2999; Conversion repoints public worship
+on finish, #2361; Coronation is a later row), `Ceremony` (officiant
 Persona, TRUE `being` vs `presented_being` — see leak rule, location
 RoomProfile, status OPEN/COMPLETED/ABANDONED, one-OPEN-per-location
 constraint, quality_level), `CeremonyHonoree`, `CeremonyOffering` (item
 snapshot; the item is destroyed; `item_legend_value` snapshots the offered
 item's legend at sacrifice time — #2359), `CeremonySpeech`, `CeremonyConfig`
-singleton (all magnitudes PLACEHOLDER).
+singleton (all magnitudes PLACEHOLDER), `SeanceManifestationOffer` (#2393,
+consent gate for a Seance honoree's manifestation), `WorshipConversionOffer`
+(#2361, consent gate for a PC-officiated Conversion honoree — see below).
 
 **Services** (`ceremonies/services.py`): `open_ceremony` (Decision-10
 being/presented mapping: default = officiant's public declaration; explicit
 override naming their `secret_being` = twisted rite presenting the public
-front; any other override = open rite), `record_offering` (destroys items via
+front; any other override = open rite; validates honoree counts/liveness per
+type — FUNERAL/SEANCE need every honoree dead, CONVERSION needs exactly one
+honoree, the convert), `record_offering` (destroys items via
 `hard_delete_item_instance`; snapshots `item.legend_value` before destruction
 as `CeremonyOffering.item_legend_value` — #2359; pool always to the TRUE
 being; devotion follows belief — Decision 11), `record_speech` (Performance/Oratory roll),
 `finish_ceremony` (one Rites + tradition-spec quality roll → multiplier;
 honoree deeds via the legend engine's `create_solo_deed`; offering legend
 total added to honoree prestige base — #2359; officiant lesser
-cut; funeral handler calls the `execute_will` **no-op seam** for #1985),
+cut; funeral handler calls the `execute_will` **no-op seam** for #1985; WEDDING
+handler solemnizes the honorees' active Betrothal; CONVERSION handler calls
+`convert_public_worship` per confirmed honoree — see below),
 `abandon_ceremony` (awards nothing), `open_funeral_for` (the ghost-container
 lookup).
+
+**Public conversion** (#2361, `CeremonyTypeKey.CONVERSION`): two routes reuse
+the same generic ceremony action set (Open/Offering/Speech/Finish/Abandon), no
+new Action classes for opening/finishing. (a) **PC-officiated**: clergy opens
+the rite naming the convert as the sole honoree; `open_ceremony` mints a
+`WorshipConversionOffer` (PENDING) since the officiant differs from the
+honoree — the convert must accept it (`respond_to_conversion_offer`, the one
+new Action: `conversion_offer_respond`) before `finish_ceremony` will convert
+them; declining or leaving it unanswered means the rite concludes but honors
+nothing for them (no deed, no worship repoint — mirrors a declined Seance
+offer). (b) **Self-officiated solo** (the temple/no-officiant route): the
+convert opens their own rite naming themself as both officiant and honoree —
+`open_ceremony` skips the offer entirely (nobody consents to their own
+choice); `finish_ceremony`'s optional `sincere` kwarg carries their
+heart-vs-lip-service choice directly (defaults True). Both routes converge on
+`world.worship.services.convert_public_worship`, called once per confirmed
+honoree from `finish_ceremony`'s CONVERSION branch. The minted deed
+(`_mint_ceremony_deed`, extended with optional `archetypes`/`scene` kwargs
+passed straight through to `create_solo_deed`) carries the existing
+"Treacherous Scandal" `PhilosophicalArchetype` (#1464's vocabulary — no new
+archetype rows minted) when converting AWAY from an already-declared public
+faith, so the ordinary scandal fork (`route_deed_reach`) judges it per
+society; a first public declaration (no prior faith to betray) carries no
+archetype tag and skips the scandal fork. **No temple/shrine location model
+exists in this codebase** (verified by grep — worship has no location
+substrate at all), so the solo route is NOT location-gated; it is simply the
+self-officiated shape. **No location gate for the temple route** is a known
+gap — flag for a future issue if a temple/shrine location primitive is ever
+built. `DevotionStanding` rows and the old faith's `Secret` row (if any) are
+never touched by a conversion — they stand as history (Decision 3/Ratified
+amendment #3 of #2361; the secret-faith retarget/shed services proposed in the
+draft spec were explicitly NOT built in this pass — only proven as a no-op).
 
 **Ghost window**: an OPEN funeral honoring a dead character at their location
 is the third recognized container in `GhostWindowPrerequisite`
@@ -219,13 +273,16 @@ day after opening.
 
 **Actions** (`actions/definitions/ceremonies.py`; registry keys
 `ceremony_open` / `ceremony_offering` / `ceremony_speech` / `ceremony_finish` /
-`ceremony_abandon`): anyone may officiate — skill shapes the outcome, not
+`ceremony_abandon` / `seance_offer_respond` / `conversion_offer_respond`):
+anyone may officiate — skill shapes the outcome, not
 permission; offering/speech/finish are officiant-only, abandon is
-officiant-or-staff. Telnet: `ceremony` family (`commands/ceremonies.py`,
-switch or space subverbs). Web: read API `/api/ceremonies/ceremonies/`
-(filter `location__objectdb` for the game-view room card,
-`frontend/src/ceremonies/CeremonyRoomCard.tsx`); verbs ride the generic
-action dispatch.
+officiant-or-staff. `conversion_offer_respond` (#2361) is account-authorized
+(mirrors `seance_offer_respond`) — kwargs `offer_id`, `account`, `accept`,
+`sincere` (bool, meaningful only on accept). Telnet: `ceremony` family
+(`commands/ceremonies.py`, switch or space subverbs). Web: read API
+`/api/ceremonies/ceremonies/` (filter `location__objectdb` for the game-view
+room card, `frontend/src/ceremonies/CeremonyRoomCard.tsx`); verbs ride the
+generic action dispatch.
 
 **LEAK RULE**: player-facing surfaces (serializers, command output, card)
 render `presented_being` ONLY. The true `being` of a twisted rite never
@@ -233,9 +290,13 @@ leaves the model layer except via the clue path.
 
 ## Deferred (filed)
 
-Wedding/Coronation types over `Union`/`MarriagePact` (#2358), event
+Coronation type (Wedding **shipped** — #2358/#2999, solemnizes `Betrothal` →
+`Union`/`MarriagePact` on finish), event
 grandeur/prestige investment (#2357), item legend value at offerings (#2359,
 **shipped** — `ItemInstance.legend_deeds` M2M + `CeremonyOffering.item_legend_value`
 + finish-tally wiring), miracles +
-audere coupling (#2360), post-CG conversion (#2361), getinline queue (#2356);
+audere coupling (#2360, **shipped**), post-CG public conversion (#2361,
+**shipped** — see "Public conversion" above; secret-faith retarget/shed was
+explicitly scoped OUT of the #2361 pass, proven a no-op rather than built),
+getinline queue (#2356);
 wills remain #1985 (the `execute_will` seam).
