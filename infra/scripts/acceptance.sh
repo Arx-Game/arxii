@@ -65,6 +65,13 @@ chk   "app runs as non-root user"     "grep -q 'User={{ app_user }}' infra/ansib
 chk   "django: DEBUG = False"         "grep -q 'DEBUG = False' infra/ansible/roles/django_hardening/templates/secret_settings.py.j2"
 chk   "django: TELNET_ENABLED False"  "grep -q 'TELNET_ENABLED = False' infra/ansible/roles/django_hardening/templates/secret_settings.py.j2"
 
+# PG15+ revoked CREATE on schema public from PUBLIC, so a database-level GRANT
+# ALL leaves `evennia migrate` unable to create django_migrations. The schema
+# grant is the fix; without it the very first migrate fails on every fresh
+# cluster (Ubuntu 24.04 ships PG16).
+chk   "postgres role grants CREATE on schema public (PG15+ requirement)" \
+  "grep -q 'type: schema' infra/ansible/roles/postgres/tasks/main.yml && grep -q 'privs: CREATE,USAGE' infra/ansible/roles/postgres/tasks/main.yml"
+
 echo "== first-run setup =="
 chk   "base role installs uv (pinned + sha-verified)" \
   "grep -q 'sha256:{{ base_uv_sha256 }}' infra/ansible/roles/base/tasks/main.yml"
