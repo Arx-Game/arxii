@@ -20,6 +20,7 @@ from django.test import TestCase, tag
 from django.utils import timezone
 
 from evennia_extensions.factories import AccountFactory, RoomProfileFactory
+from flows.service_functions import perception_registry
 from world.areas.constants import AreaLevel
 from world.areas.factories import AreaFactory
 from world.character_sheets.factories import CharacterSheetFactory
@@ -320,3 +321,71 @@ class OnlineOccupiedRoomDeliveryTests(TestCase):
             message__category=NarrativeCategory.ATMOSPHERE,
             recipient_character_sheet=sheet,
         ).exists()
+
+
+class BroadcastExclusionRegistryTests(TestCase):
+    """Axis 1 (#2997): a registered exclusion resolver keeps its occupant out of delivery.
+
+    Mirrors ``flows/tests/test_perception_registry.py``'s save/restore hygiene — production
+    code only ever appends a resolver at import time, but a test that registers a fake one
+    must not leak it into other tests.
+    """
+
+    def setUp(self) -> None:
+        self._original_resolvers = list(perception_registry._RESOLVERS)
+        self.addCleanup(self._restore_resolvers)
+
+    def _restore_resolvers(self) -> None:
+        perception_registry._RESOLVERS[:] = self._original_resolvers
+
+    def _fire(self, sessions: list) -> None:
+        from datetime import UTC, datetime
+
+        noon = datetime(2020, 5, 10, 12, tzinfo=UTC)
+        with patch("world.game_clock.services.get_ic_now", return_value=noon):
+            with patch("evennia.SESSION_HANDLER") as handler:
+                handler.get_sessions.return_value = sessions
+                roll_and_echo_ambient_texture()
+
+    def test_excluded_occupant_receives_no_ambient_delivery(self) -> None:
+        room = _room()
+        excluded_sheet = _online_sheet_in(room)
+        sighted_sheet = CharacterSheetFactory()
+        sighted_sheet.character.location = room
+        AmbientEmitFactory()
+
+        def fake_resolver(location: object) -> list:
+            return [excluded_sheet.character] if location == room else []
+
+        perception_registry.register_broadcast_exclusion(fake_resolver)
+
+        self._fire(
+            sessions=[
+                SimpleNamespace(puppet=excluded_sheet.character),
+                SimpleNamespace(puppet=sighted_sheet.character),
+            ]
+        )
+
+        message = NarrativeMessage.objects.get(category=NarrativeCategory.ATMOSPHERE)
+        recipient_ids = set(
+            message.deliveries.values_list("recipient_character_sheet_id", flat=True)
+        )
+        assert recipient_ids == {sighted_sheet.pk}
+        assert not NarrativeMessageDelivery.objects.filter(
+            message__category=NarrativeCategory.ATMOSPHERE,
+            recipient_character_sheet=excluded_sheet,
+        ).exists()
+
+    def test_room_with_only_excluded_occupants_gets_no_echo_at_all(self) -> None:
+        room = _room()
+        excluded_sheet = _online_sheet_in(room)
+        AmbientEmitFactory()
+
+        def fake_resolver(location: object) -> list:
+            return [excluded_sheet.character] if location == room else []
+
+        perception_registry.register_broadcast_exclusion(fake_resolver)
+
+        self._fire(sessions=[SimpleNamespace(puppet=excluded_sheet.character)])
+
+        assert not NarrativeMessage.objects.filter(category=NarrativeCategory.ATMOSPHERE).exists()

@@ -22,10 +22,11 @@ from typing import TYPE_CHECKING
 
 from django.utils import timezone
 
+from flows.service_functions.perception_registry import resolve_broadcast_exclusions
 from world.checks.outcome_utils import select_weighted
 from world.game_clock.services import get_ic_phase, get_ic_season
 from world.game_clock.task_registry import phase_transitioned_since_last_run
-from world.locations.services import effective_value
+from world.locations.services import effective_values_for_rooms
 from world.narrative.constants import NarrativeCategory
 from world.narrative.models import AmbientEmit
 from world.narrative.services import send_narrative_message
@@ -36,6 +37,7 @@ if TYPE_CHECKING:
     from evennia_extensions.models import RoomProfile
     from world.character_sheets.models import CharacterSheet
     from world.game_clock.constants import Season, TimePhase
+    from world.locations.constants import StatKey
 
 AMBIENT_TASK_KEY = "narrative.ambient_roll"
 
@@ -94,11 +96,24 @@ def _cooldown_clear(row: AmbientEmit, now: datetime) -> bool:
     return now >= row.last_fired_at + timedelta(minutes=row.cooldown_minutes)
 
 
-def _gate_clear(row: AmbientEmit, room: DefaultObject) -> bool:
+def _gate_values(room: DefaultObject, stat_keys: set[StatKey]) -> dict[StatKey, int]:
+    """Bulk-resolve every distinct gated stat axis a candidate pool needs, in one query batch.
+
+    One ``effective_values_for_rooms`` call for every candidate row's ``gate_stat_key``,
+    instead of a separate ``effective_value`` cascade walk per row (the same room's cascade
+    would otherwise be re-walked once per gated candidate).
+    """
+    if not stat_keys:
+        return {}
+    values = effective_values_for_rooms([room], stat_keys=stat_keys)
+    return values.get(room.pk, {})  # type: ignore[return-value]
+
+
+def _gate_clear(row: AmbientEmit, gate_values: dict[StatKey, int]) -> bool:
     """Whether a row's single-axis room-state gate (Decision 3) admits this room right now."""
     if not row.gate_stat_key:
         return True
-    value = effective_value(room, stat_key=row.gate_stat_key)
+    value = gate_values.get(row.gate_stat_key, 0)
     if row.gate_min is not None and value < row.gate_min:
         return False
     return not (row.gate_max is not None and value > row.gate_max)
@@ -139,7 +154,9 @@ def select_ambient_emit(
         if getattr(row, f"in_{season.value}") and getattr(row, f"at_{phase.value}")
     ]
     eligible = [row for row in eligible if _cooldown_clear(row, now)]
-    eligible = [row for row in eligible if _gate_clear(row, room)]
+    gate_keys = {row.gate_stat_key for row in eligible if row.gate_stat_key}
+    gate_values = _gate_values(room, gate_keys)
+    eligible = [row for row in eligible if _gate_clear(row, gate_values)]
     if not eligible:
         return None
     return select_weighted(eligible)
@@ -150,11 +167,18 @@ def _online_occupied_rooms() -> tuple[dict[int, DefaultObject], dict[int, list[C
 
     Derived from live sessions (``evennia.SESSION_HANDLER``), never a grid-wide room scan
     (Decision 5) — per-tick cost is bounded by online-player count, not map size.
+
+    Routes every occupant through the Axis-1 broadcast-exclusion registry
+    (``flows.service_functions.perception_registry.resolve_broadcast_exclusions``) before it
+    lands in ``sheets_by_room`` — a dreamside-perceiving occupant (or any other registered
+    exclusion) must not receive waking-room ambient/risk-telegraph text, exactly like every
+    other live room-broadcast call site. Resolved once per room, not once per session.
     """
     from evennia import SESSION_HANDLER  # noqa: PLC0415
 
     rooms: dict[int, DefaultObject] = {}
     sheets_by_room: dict[int, dict[int, CharacterSheet]] = {}
+    excluded_by_room: dict[int, set[int]] = {}
     for session in SESSION_HANDLER.get_sessions():
         puppet = session.puppet
         if puppet is None:
@@ -166,6 +190,10 @@ def _online_occupied_rooms() -> tuple[dict[int, DefaultObject], dict[int, list[C
         if sheet is None:
             continue
         rooms.setdefault(room.pk, room)
+        if room.pk not in excluded_by_room:
+            excluded_by_room[room.pk] = {obj.pk for obj in resolve_broadcast_exclusions(room)}
+        if puppet.pk in excluded_by_room[room.pk]:
+            continue
         sheets_by_room.setdefault(room.pk, {})[sheet.pk] = sheet
 
     return rooms, {room_pk: list(sheets.values()) for room_pk, sheets in sheets_by_room.items()}
