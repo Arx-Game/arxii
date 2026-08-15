@@ -184,7 +184,16 @@ def _placed_as_active_decoration(item_instance: ItemInstance) -> bool:
     free-for-the-taking. A ``RoomDecoration`` row's mere existence IS "active"; removal
     (``remove_decoration``) deletes the row, and the item goes back to being ordinarily
     takeable — the round-2 review's explicit round-trip requirement.
+
+    Held-item fast path (CI query-count fix): anchoring always clears
+    ``holder_character_sheet``, so a held item can never be an active decoration — skip the
+    ``RoomDecoration`` query entirely (no new read) for the overwhelming common case (a
+    normal carried/worn/room-owned item), which is every item this check runs against on
+    the ``can_steal``/plain-take hot paths except the rare actually-anchored piece.
     """
+    if item_instance.holder_character_sheet_id is not None:
+        return False
+
     from world.buildings.models import RoomDecoration  # noqa: PLC0415
 
     return RoomDecoration.objects.filter(source_item_instance=item_instance).exists()
@@ -608,17 +617,23 @@ def steal_permitted(taker_sheet: CharacterSheet | None, item_instance: ItemInsta
     """Target-side-only availability (#1909): NPC-owned always; players by consent.
 
     An actively-placed decoration (#2991) is never stealable: routing it through
-    ``_take_denial`` makes ``take_requires_steal`` True (it has no holder for the ordinary
-    ownership branches to catch), and a holder-less item hits steal's "non-vault unowned
-    items" fallback, which allows it with NO consent gate at all — a worse bypass than plain
-    take would have been. The fixture's only sanctioned un-anchor path is
-    ``RemoveFixtureAction``, so this is checked first and unconditionally refuses.
+    ``_take_denial`` makes plain take denied (it has no holder for the ordinary ownership
+    branches to catch), and a holder-less item would otherwise hit steal's "non-vault
+    unowned items" fallback, which allows it with NO consent gate at all — a worse bypass
+    than plain take would have been. The fixture's only sanctioned un-anchor path is
+    ``RemoveFixtureAction``.
+
+    Calls ``_take_denial`` directly (not via the ``take_requires_steal`` boolean wrapper)
+    so the fixed-in-place classification is read off the SAME query's result instead of a
+    second, redundant ``RoomDecoration`` lookup (CI query-count regression, #2991) — the
+    ``VisibleItemDetailQueryCountTests`` pin caught the duplicate read.
     """
-    if _placed_as_active_decoration(item_instance):
-        return False
-    if not take_requires_steal(taker_sheet, item_instance):
-        return False
-    # take_requires_steal returns False for a None sheet (checked above), so
+    denial = _take_denial(taker_sheet, item_instance)
+    if denial is None:
+        return False  # nothing for steal to bypass — plain take was already allowed
+    if denial is ItemFixedInPlace:
+        return False  # #2991: no bypass — RemoveFixtureAction is the only sanctioned path
+    # take_requires_steal (== denial is not None) returns False for a None sheet, so
     # taker_sheet is guaranteed non-None past this point — narrowed explicitly
     # for the type checker, which can't see across the function call.
     if taker_sheet is None:  # pragma: no cover - unreachable, narrows for ty

@@ -345,13 +345,17 @@ class RoomStatePayloadSerializer(serializers.Serializer):
 
         Additive: doesn't touch the room's authored ``desc``, and doesn't replace
         the owner build-HUD's richer ``comfort_summary`` breakdown.
+
+        Read-only: ``room_profile_or_none`` (not ``world.areas.services.get_room_profile``,
+        which get-or-creates) — this is a payload build on the room-state hot path, not a
+        place that should ever write a ``RoomProfile`` row into existence (CI query-count /
+        hot-path-write audit, #2991).
         """
-        from world.areas.services import get_room_profile  # noqa: PLC0415
         from world.buildings.models import RoomDecoration  # noqa: PLC0415
 
         try:
-            profile = get_room_profile(room.obj)
-        except (AttributeError, TypeError):
+            profile = room.obj.room_profile_or_none
+        except AttributeError:
             return []
         if profile is None:
             return []
