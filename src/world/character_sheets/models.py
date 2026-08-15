@@ -43,6 +43,7 @@ from world.character_sheets.types import (
     ProfileTextField,
     SheetVisibility,
 )
+from world.contributors.models import CreditedContent
 
 # Max day per month for the celebrated birthday pair (#2756); 29 for February so
 # leap-day birthdays are legal (the birthday tick is a range query, so non-leap
@@ -103,7 +104,7 @@ class Heritage(NaturalKeyMixin, SharedMemoryModel):
         return self.name
 
 
-class MoodOption(NaturalKeyMixin, SharedMemoryModel):
+class MoodOption(NaturalKeyMixin, CreditedContent, SharedMemoryModel):
     """Curated internal-mood states a character can declare via the ``feel`` verb (#2994).
 
     Mood is INTERNAL and silent by design (ratified amendment 2026-08-15, superseding
