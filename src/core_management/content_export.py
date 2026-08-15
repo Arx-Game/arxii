@@ -256,6 +256,12 @@ CONTENT_MODELS: frozenset[str] = frozenset(
         "mechanics.situationtemplate",
         "mechanics.situationchallengelink",
         "mechanics.situationtraplink",
+        # narrative — #2988: only the scope-free, state-gated generic pool rides this
+        # natural-key round trip (row-filtered via EXPORT_FILTERS below to
+        # area/room_profile both NULL). Room/area-scoped rows are tied to concrete grid
+        # rooms and ride the grid-import bundle instead, mirroring AmbientEmoteLine —
+        # see the #2988 spec's Decision 8.
+        "narrative.ambientemit",
         # npc_services - builder-domain, but missions name NPCRole by natural
         # key (MissionTemplate.report_to_role), so the role catalog must
         # travel with the content that references it (ruled 2026-08-07;
@@ -336,6 +342,9 @@ CONTENT_MODELS: frozenset[str] = frozenset(
 #: ``test_content_export`` carries a count tripwire for exactly that.
 EXPORT_FILTERS: dict[str, dict[str, object]] = {
     "evennia_extensions.media": {"slug__isnull": False},  # pre-existing behavior
+    # #2988 Decision 8: only the scope-free generic pool rides this natural-key round trip;
+    # room/area-scoped rows are tied to concrete grid rooms and ride the grid-import bundle.
+    "narrative.ambientemit": {"area__isnull": True, "room_profile__isnull": True},
     "magic.ritual": {"author_account__isnull": True},
     # #3034: a player's "author from scratch" Mage Scar (authored_by set) is
     # player data, not lore; only staff/system-seed rows (authored_by NULL,

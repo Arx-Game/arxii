@@ -224,6 +224,7 @@
   - ownership_records <- locations.LocationOwnership
   - tenancy_records <- locations.LocationTenancy
   - ambient_emote_lines <- narrative.AmbientEmoteLine
+  - ambient_emits <- narrative.AmbientEmit
   - functionaries <- npc_services.Functionary
   - npc_assignments <- npc_services.NPCAssignment
   - scene_rounds <- scenes.SceneRound
@@ -463,6 +464,7 @@
   - ownership_records <- locations.LocationOwnership
   - tenancy_records <- locations.LocationTenancy
   - ambient_emote_lines <- narrative.AmbientEmoteLine
+  - ambient_emits <- narrative.AmbientEmit
   - name_cultures <- npc_services.NameCulture
   - default_permits_offered <- npc_services.PermitOfferDetails
   - predator_bands <- predators.PredatorBand
@@ -6471,6 +6473,13 @@
 
 
 ## world.narrative
+
+### AmbientEmit
+**Foreign Keys:**
+  - written_by -> contributors.ContentContributor [FK] (nullable)
+  - reviewed_by -> contributors.ContentContributor [FK] (nullable)
+  - area -> areas.Area [FK] (nullable)
+  - room_profile -> evennia_extensions.RoomProfile [FK] (nullable)
 
 ### AmbientEmoteCondition
 **Foreign Keys:**

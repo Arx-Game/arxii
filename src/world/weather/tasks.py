@@ -69,29 +69,13 @@ def _echo_region_weather(region: Area) -> None:
 def _phase_transitioned_since_last_run() -> bool:
     """Whether the IC time-of-day phase changed since this task's last stamped run (#2845).
 
-    The registry stamps ``ScheduledTaskRecord.last_ic_run_at`` AFTER each run — including
-    the no-op runs this guard causes — so the stamp tracks tick-by-tick and the comparison
-    is true exactly once per boundary crossing. First-ever run (no stamp yet) fires, so a
-    fresh world gets weather immediately. No clock -> never fires.
+    Thin wrapper over the shared ``game_clock.task_registry.phase_transitioned_since_last_run``
+    (extracted #2988 so the ambient-texture roll can share the exact guard shape against its
+    own task key) — see that function's docstring for the full behavior.
     """
-    from datetime import timedelta  # noqa: PLC0415
+    from world.game_clock.task_registry import phase_transitioned_since_last_run  # noqa: PLC0415
 
-    from django.utils import timezone  # noqa: PLC0415
-
-    from world.game_clock.models import ScheduledTaskRecord  # noqa: PLC0415
-    from world.game_clock.services import get_ic_now, phase_from_ic_time  # noqa: PLC0415
-
-    record = ScheduledTaskRecord.objects.filter(task_key=WEATHER_TASK_KEY).first()
-    ic_now = get_ic_now()
-    if ic_now is None:
-        # No IC clock: fall back to the legacy 2-real-hour cadence so a
-        # clockless world still gets weather (the pre-#2845 behavior).
-        if record is None or record.last_run_at is None:
-            return True
-        return timezone.now() - record.last_run_at >= timedelta(hours=2)
-    if record is None or record.last_ic_run_at is None:
-        return True
-    return phase_from_ic_time(record.last_ic_run_at) != phase_from_ic_time(ic_now)
+    return phase_transitioned_since_last_run(WEATHER_TASK_KEY)
 
 
 def roll_and_echo_weather() -> None:

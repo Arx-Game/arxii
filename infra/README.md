@@ -249,10 +249,22 @@ after the box itself is provisioned, the app_deploy role runs (in order):
    bundle. Node/pnpm installation only happens once; the frontend rebuild
    recurs every release. **The first deploy takes noticeably longer** than
    subsequent ones as a result.
-4. **`evennia migrate --noinput`** — apply Django/Evennia migrations.
-   Idempotent: a no-op once everything is applied.
-5. **`evennia collectstatic --noinput`** — gather admin/Evennia static
-   files for Caddy. Idempotent.
+4. **`python -m django migrate --noinput`** — apply Django/Evennia migrations.
+   Idempotent: a no-op once everything is applied. The **first** run on a new
+   database applies 143 `arxii` migrations at roughly 30-35 seconds each, so
+   allow about 80 minutes for it; later deploys apply nothing and return in
+   seconds. The task runs detached (Ansible `async`/`poll`) because a dropped
+   SSH connection during that window would otherwise kill the migration.
+5. **`python -m django collectstatic --noinput`** — gather admin/Evennia
+   static files for Caddy. Idempotent.
+
+   Steps 4, 5 and 7 all call `python -m django`, never the `evennia`
+   launcher. The launcher runs `check_database()` first, which imports
+   `evennia.utils.gametime` and queries `server_serverconfig` at import time,
+   and which prompts interactively to create Account #1 when it is missing.
+   On a fresh box both conditions hold, so the launcher cannot run the very
+   commands that would resolve them. Do not "simplify" these back to
+   `evennia <command>`; `acceptance.sh` fails the build if you do.
 6. **Atomic symlink** `/opt/arxii/current → /opt/arxii/releases/<ref>` — done
    **last** among the release-prep steps, only after the venv, frontend
    build, migrations, and static collection all succeed against the new
@@ -297,6 +309,14 @@ Installed once by the converge, then running unattended on the box:
   `OnFailure=` units that fire an immediate off-box alert on failure; the daily heartbeat
   independently re-flags any backup/offsite unit still in a failed state, in case the
   `OnFailure=` alert itself didn't land.
+- **SSL-telnet needs pyOpenSSL installed.** `django_hardening` sets `SSL_ENABLED = True`
+  with `SSL_PORTS = [4003]` (and `TELNET_ENABLED = False`, so TLS is the only telnet
+  offered). Evennia's Portal imports `OpenSSL` to bind that listener, and it is NOT a
+  base Evennia dependency: upstream keeps it in the `extra` extra, alongside jupyter,
+  scipy and boto3 that a game server has no use for. `pyopenssl` and `service-identity`
+  are therefore declared directly in `pyproject.toml`. Without them the Portal exits with
+  `ImportError: No module named 'OpenSSL'`, never writes `server.pid`, and systemd fails
+  the unit on `protocol` — which is what happened on the first standup that got this far.
 - **Telnet cert renewal** (`arxii-telnet-cert.timer`, daily). Caddy's ACME cert is the
   source of truth; Evennia's SSL-telnet paths are hardcoded and don't reload on `evennia
   reload`, so this timer syncs the cert in and reboots Evennia **only when the cert

@@ -5,7 +5,9 @@ from django.db import models
 from evennia.utils.idmapper.models import SharedMemoryModel
 
 from core.mixins import DiscriminatorMixin
-from world.locations.constants import LocationParentType
+from core.natural_keys import NaturalKeyManager, NaturalKeyMixin
+from world.contributors.models import CreditedContent
+from world.locations.constants import LocationParentType, StatKey
 from world.narrative.constants import (
     ConditionConnector,
     ConditionType,
@@ -504,3 +506,110 @@ class AmbientEmoteCondition(SharedMemoryModel):
 
     def __str__(self) -> str:
         return f"AmbientEmoteCondition({self.condition_type} on line #{self.line_id})"
+
+
+class AmbientEmit(NaturalKeyMixin, CreditedContent, SharedMemoryModel):
+    """A periodic room-linger flavor line — plain atmosphere or a room-state risk telegraph
+    (#2988).
+
+    Fires while occupants remain in a room, not just on arrival (the gap
+    ``AmbientEmoteLine`` — entry-triggered — doesn't cover). One model serves both roaming
+    flavor and risk telegraphing: the only difference is whether ``gate_stat_key`` is set. A
+    "CRIME >= 60" row telegraphs a seedy district; an ungated row is plain atmosphere. No
+    NPC/encounter spawning lives here — text only (#2378 is the spawner, off this same
+    substrate, later).
+
+    Location scope is plain nullable FKs, NOT a ``DiscriminatorMixin`` pair (unlike
+    ``AmbientEmoteLine``): most rows have no scope at all (a generic "eyes in the shadows"
+    risk line fires in any CRIME-cleared room). ``room_profile`` set = this room only;
+    ``area`` set = this subtree; neither set = generic pool. Selection
+    (``world.narrative.ambient_texture.select_ambient_emit``) picks the most-specific
+    non-empty scope pool (room > area > generic), mirroring the location cascade's
+    most-specific-wins convention without reusing its cascade walk (pool selection, not a
+    stat/resonance axis).
+    """
+
+    key = models.CharField(
+        max_length=100,
+        unique=True,
+        null=True,
+        blank=True,
+        help_text=(
+            "Stable identity, e.g. 'market-bustle-003' or 'crime-telegraph-007' "
+            "(#2980-style convention). Assigned once, never recomputed from the text — "
+            "the text is what a writer rewrites in place."
+        ),
+    )
+    text = models.TextField(help_text="The line shown to the room. PLACEHOLDER.")
+    gm_notes = models.TextField(blank=True, default="")
+    weight = models.PositiveIntegerField(
+        default=1,
+        help_text="Relative weight in weighted-random selection within its scope pool.",
+    )
+    cooldown_minutes = models.PositiveIntegerField(
+        default=0,
+        help_text="Re-fire throttle after this row fires, scoped to the row itself.",
+    )
+    last_fired_at = models.DateTimeField(
+        null=True,
+        blank=True,
+        help_text="Runtime only — never exported to the content repo.",
+    )
+
+    # Location scope — plain nullable FKs (see class docstring): most rows carry neither.
+    area = models.ForeignKey(
+        "arxii.Area",
+        null=True,
+        blank=True,
+        on_delete=models.CASCADE,
+        related_name="ambient_emits",
+    )
+    room_profile = models.ForeignKey(
+        "arxii.RoomProfile",
+        null=True,
+        blank=True,
+        on_delete=models.CASCADE,
+        related_name="ambient_emits",
+    )
+
+    # Room-state gate — single axis per row (mirrors WeatherType's min/max_temperature shape).
+    # Blank/empty = ungated (plain flavor, no risk signal).
+    gate_stat_key = models.CharField(
+        max_length=20,
+        choices=StatKey.choices,
+        blank=True,
+        default="",
+        help_text="The world.locations stat axis this row telegraphs. Blank = ungated.",
+    )
+    gate_min = models.SmallIntegerField(
+        null=True,
+        blank=True,
+        help_text="Row fires only when the room's cascade-resolved gate_stat_key >= this.",
+    )
+    gate_max = models.SmallIntegerField(
+        null=True,
+        blank=True,
+        help_text="Row fires only when the room's cascade-resolved gate_stat_key <= this.",
+    )
+
+    # Season gates (IC calendar season from game_clock; AUTUMN <- Arx-1 "fall").
+    in_spring = models.BooleanField(default=False)
+    in_summer = models.BooleanField(default=False)
+    in_autumn = models.BooleanField(default=False)
+    in_winter = models.BooleanField(default=False)
+    # Time-of-day gates (game_clock TimePhase).
+    at_dawn = models.BooleanField(default=False)
+    at_day = models.BooleanField(default=False)
+    at_dusk = models.BooleanField(default=False)
+    at_night = models.BooleanField(default=False)
+
+    class Meta:
+        ordering = ["id"]
+
+    class NaturalKeyConfig:
+        fields = ["key"]
+
+    objects = NaturalKeyManager()
+
+    def __str__(self) -> str:
+        return f"AmbientEmit #{self.pk}"

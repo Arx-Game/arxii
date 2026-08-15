@@ -74,6 +74,28 @@ A staff/GM real-time broadcast, persisted for retroactive (reach-scoped) viewing
 | `related_era` / `related_story` | FK, nullable | Optional context links |
 | `sent_at` | DateTimeField | `auto_now_add` |
 
+### AmbientEmit (#2988)
+
+A periodic room-linger flavor line — plain roaming atmosphere or a room-state risk telegraph,
+distinguished only by whether `gate_stat_key` is set (one model, no second mechanism). Sibling
+of `AmbientEmoteLine` (entry-triggered) but fires while occupants *remain* in a room, driven by
+`world.narrative.ambient_texture.roll_and_echo_ambient_texture` on the `game_clock` scheduler.
+See "Ambient Room Texture" below for the full mechanism.
+
+| Field | Type | Notes |
+|-------|------|-------|
+| `key` | CharField, nullable, unique | Stable identity (`<pool-slug>-<nnn>`), #2980 convention |
+| `text` | TextField | The line shown. PLACEHOLDER pending the content pass |
+| `weight` | PositiveIntegerField | Weighted-random selection within its scope pool |
+| `cooldown_minutes` | PositiveIntegerField | Per-row re-fire throttle |
+| `last_fired_at` | DateTimeField, nullable | Runtime only — never exported |
+| `area` / `room_profile` | FK, nullable | Plain nullable scope (not a `DiscriminatorMixin` pair) — neither set = generic pool |
+| `gate_stat_key` | CharField (`StatKey`), blank | The `world.locations` axis this row telegraphs; blank = ungated |
+| `gate_min` / `gate_max` | SmallIntegerField, nullable | Single-axis threshold band |
+| `in_spring`…`in_winter`, `at_dawn`…`at_night` | BooleanField | Season/phase gates, `WeatherEmit`'s exact shape |
+
+Inherits `NaturalKeyMixin` + `CreditedContent` + `SharedMemoryModel` (mirrors `WeatherEmit`).
+
 ---
 
 ## Service Functions
@@ -169,6 +191,52 @@ The React surface lives in `frontend/src/narrative/`: `MessagesSection.tsx` +
 `SendGemitDialog.tsx`, and per-category muting via `CategoryMuteToggles.tsx` /
 `MuteSettingsPage.tsx`. Acknowledge goes through
 `/api/narrative/deliveries/{id}/acknowledge/`.
+
+---
+
+## Ambient Room Texture (#2988)
+
+Two design-tenet promises off one substrate: roaming flavor for streets/markets/taverns
+(silent between poses, previously) and a room-state risk telegraph off the same
+`world.locations` crime/order stats — both are `AmbientEmit` rows, distinguished only by
+whether `gate_stat_key` is set. **Text only** — no NPC/encounter spawning (that's #2378's job,
+consuming the same telegraphed state).
+
+**Selection** (`world.narrative.ambient_texture.select_ambient_emit(room, *, season=None,
+phase=None, now=None)`): resolves the room's most-specific **non-empty scope pool** — a
+room-scoped row set shadows an area-scoped set, which shadows the generic (scope-free) pool,
+mirroring the `world.locations` cascade's most-specific-wins convention without reusing its
+walk (this is pool selection, not a stat/resonance axis). Within the chosen pool: filters to
+rows flagged for the current IC season *and* phase, excludes rows still in
+`cooldown_minutes`, excludes rows whose `gate_stat_key` doesn't clear against
+`world.locations.services.effective_value(room, stat_key=...)`, then weighted-random picks
+(`world.checks.outcome_utils.select_weighted`, the same helper `deliver_ambient_group` uses).
+
+**Driver** (`roll_and_echo_ambient_texture`, registered on the `game_clock` scheduler exactly
+like `roll_and_echo_weather`): checked every tick, no-ops unless the IC time-of-day phase
+transitioned since the task's last stamped run (shared guard,
+`game_clock.task_registry.phase_transitioned_since_last_run` — extracted #2988 so weather and
+ambient texture share the exact guard shape against their own task keys). On fire: derives the
+candidate room set from **currently-connected sessions' locations** (`evennia.SESSION_HANDLER`,
+deduped to distinct rooms) — never a grid-wide room scan, so per-tick cost is bounded by
+online-player count, not map size. For each such room, selects and delivers one `AmbientEmit`
+via `send_narrative_message` (durable, squelchable — never `message_location`, which is
+ephemeral actor-driven scene text) under `NarrativeCategory.ATMOSPHERE`, the same category
+`AmbientEmoteLine` delivers under. Frequency variance between a sleepy alley and a bustling
+market is authored per-row via `weight` + `cooldown_minutes`, not a second cron interval.
+
+**Risk telegraph is just a gated row.** An author writes "the crowd here thins fast when
+trouble starts" with `gate_stat_key=CRIME, gate_min=60` — no separate mechanism, model, or
+delivery path.
+
+**Content round-trip splits by scope** (mirrors `AmbientEmoteLine`/`WeatherEmit` exactly):
+room/area-scoped rows ride the grid-import bundle (tied to concrete grid rooms); scope-free
+gated-pool rows ride `content_export.py`'s natural-key round trip
+(`CONTENT_MODELS` entry `narrative.ambientemit`, row-filtered via `EXPORT_FILTERS` to
+`area`/`room_profile` both null). **Grid-import wiring for scoped rows is not yet built** — an
+`AmbientEmit` with a room/area scope today is admin-authored only; the bundle-side install step
+(mirroring `_install_ambient_triggers`'s sibling pass) is a follow-up, not a structural gap in
+the model.
 
 ---
 
