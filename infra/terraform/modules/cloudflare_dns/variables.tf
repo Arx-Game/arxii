@@ -16,7 +16,7 @@ variable "web_hostname" {
 
 variable "telnet_hostname" {
   type        = string
-  default     = "mud"
+  default     = "telnet"
   description = "Subdomain for TLS-telnet. DNS-only (NOT proxied) — telnet bypasses Cloudflare straight to origin."
 }
 
