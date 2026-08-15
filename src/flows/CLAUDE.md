@@ -19,6 +19,11 @@ Database-driven workflow engine that replaces hardcoded command logic. All game 
 - **`communication.py`**: message sending, pose formatting, channels
 - **`movement.py`**: room traversal, following, arrival/departure messages
 - **`perception.py`**: looking, searching, inventory, object examination
+- **`perception_registry.py`** (#2997): broadcast-exclusion registry —
+  `register_broadcast_exclusion`/`resolve_broadcast_exclusions`, the Axis-1 seam
+  `communication.py`'s `message_location` calls instead of importing one
+  mechanism (e.g. dreamside) by name. See `docs/systems/scenes.md`'s "Perception
+  & altered reality" section.
 - **`packages.py`**: package imports and behavior attachment
 
 ### `service_functions/serializers/`

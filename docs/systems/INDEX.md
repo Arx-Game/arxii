@@ -2513,6 +2513,17 @@ action consent flow, and a three-mode non-combat round framework.
   `mute_services.account_muted`/`muted_player_ids_for`; `Friendship`/`Rivalry` are the positive
   connection primitives (`friend_services.py`) feeding the `FRIENDS_WHITELIST`/`RIVALS` consent
   modes. See `world/scenes/CLAUDE.md`'s Block/Mute entries and ADR-0204 for the full seam table.
+- **Perception & altered reality (#2997):** three axes for "who perceives what is
+  real" — room-broadcast membership exclusion (Axis 1, `register_broadcast_exclusion`/
+  `resolve_broadcast_exclusions` in `flows/service_functions/perception_registry.py`),
+  per-viewer content shape/tiering on a recorded event (Axis 2, ADR-0170 snapshot vs
+  ADR-0214 live recompute — deliberately not unified), and downstream read-time
+  feed filtering (Axis 3, mute/block/`visible_to`). Orthogonal canonical check seam:
+  `resolve_perception_check(observer_sheet, *, difficulty, specialization=None)`
+  (`world/checks/perception_services.py`) — the one AD&D-style roll every
+  perceive-the-real mechanic resolves through; ADR-0033 boundary: reveals wrongness,
+  never identity. See [scenes.md](scenes.md) §"Perception & altered reality" for the
+  full taxonomy and decision checklist.
 - **Integrates with:** roster (characters), stories (EpisodeScene join), instances (preservation check),
   flows (auto-logging via message_location), combat (encounter read gate + participation convergence via
   `Scene.objects.viewable_by` / `ensure_scene_participation`),

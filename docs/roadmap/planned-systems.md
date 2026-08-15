@@ -30,11 +30,22 @@ PLANNED-UNBUILT tier here. Where a planned system *does* already have an issue/m
   live trigger (Sunlight Exposure); **#1714** routed vehicle-hazard drowning/falling through it;
   **#1744** (ADR-0069) shipped the companion/location mitigation layer. Species-specific triggers
   beyond sunlight and the vehicle-hazard pair are still unbuilt.
-- **Perception-override / altered-reality primitive** — "who perceives what is real." The two intended
-  consumers each shipped as *separate mechanisms*: dreams as a room layer (`world/dreams` — sleep/wake/
-  dreamwalk, peril branching) and illusion/disguise as form overlays (`DisguiseKind`,
-  `ConcealmentLevel`, pierce contest). The shared seam — a scene where different participants perceive
-  different realities — is still unbuilt, and `SceneRound` has no mode/variety axis. `intent` — **#2997**.
+- ✅ **Perception taxonomy + broadcast-exclusion registry + canonical perception-check seam** —
+  DONE (#2997). Verified the "who perceives what is real" question against the seven shipped
+  per-observer mechanisms rather than building a fourth: they split into three genuinely
+  different axes (room-broadcast membership, per-viewer content shape/tiering — ADR-0170 snapshot
+  vs ADR-0214 live recompute, deliberately not unified — and downstream read-time feed filtering),
+  documented in `docs/systems/scenes.md`'s "Perception & altered reality" section. The one real
+  gap (Axis 1 had a repeat-offender risk — `_dreamside_occupants` was already hand-rolled into
+  `message_location`) is closed by `register_broadcast_exclusion`/`resolve_broadcast_exclusions`
+  (`flows/service_functions/perception_registry.py`). Also shipped: the canonical single
+  AD&D-style perception-check seam, `resolve_perception_check` (`world/checks
+  /perception_services.py`), the ONE roll every perceive-the-real mechanic should resolve
+  through going forward (ADR-0033 boundary: reveals wrongness, never identity). **Still
+  `intent`, deliberately deferred pending a real consumer:** a `SceneRound` mode/variety axis for
+  "different participants perceive different realities in one recorded round" — no live
+  consumer yet (no haunting/vision/glamour system in flight); file its own issue when one queues,
+  building on the Axis-1 registry + Axis-2 tiered-audience shape rather than new machinery.
 
 ## Scenes & RP
 
@@ -49,8 +60,9 @@ PLANNED-UNBUILT tier here. Where a planned system *does* already have an issue/m
 - **GM-run-table as a live scene variety** — today `GMTable` is only a membership grouping, not a live
   scene mode a player-GM runs. `intent`.
 - **Dreamstate / illusionary scene varieties** — superseded in part: dreams shipped as a room layer and
-  disguise as form overlays (see the perception-override entry above). What remains is the scene-level
-  shared-altered-reality mode — **#2997**. Dreams also have **zero web surface** — **#3003**.
+  disguise as form overlays (see the perception-taxonomy entry above). What remains is the scene-level
+  shared-altered-reality mode (the deferred `SceneRound` perception-split — see that entry; no issue
+  filed yet, no live consumer). Dreams also have **zero web surface** — **#3003**.
 - **Community pose-of-the-scene voting / award** — `partial`: `WeeklyVote`/`VoteButton` are built but
   unwired (#2161).
 - ✅ **New-player onboarding tutorial** — DONE (#1035; T1–T7 mission chain + e2e journey). Still
