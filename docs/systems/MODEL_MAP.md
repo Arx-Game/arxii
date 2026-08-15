@@ -227,6 +227,7 @@
   - ambient_emits <- narrative.AmbientEmit
   - functionaries <- npc_services.Functionary
   - npc_assignments <- npc_services.NPCAssignment
+  - expulsion_bars <- npc_services.ExpulsionBar
   - scene_rounds <- scenes.SceneRound
   - places <- scenes.Place
   - speaker_queues <- scenes.SpeakerQueue
@@ -1528,6 +1529,9 @@
   - recipe_knowledge <- items.CharacterRecipeKnowledge
   - common_gem_buckets <- items.CommonGemBucket
   - vault_transits <- items.VaultTransit
+  - trade_sessions_initiated <- items.TradeSession
+  - trade_sessions_received <- items.TradeSession
+  - trade_stakes <- items.TradeItemStake
   - reclamation_claims <- items.ReclamationClaim
   - original_reclamation_claims <- items.ReclamationClaim
   - journal_entries <- journals.JournalEntry
@@ -1538,6 +1542,7 @@
   - summoned_military_units <- military.MilitaryUnit
   - commanded_armies <- military.Army
   - narrative_message_deliveries <- narrative.NarrativeMessageDelivery
+  - expulsion_bars <- npc_services.ExpulsionBar
   - petitions_about <- player_submissions.Petition
   - relationships_as_source <- relationships.CharacterRelationship
   - relationships_as_target <- relationships.CharacterRelationship
@@ -4259,6 +4264,7 @@
   - vault_holding <- items.VaultHolding
   - vault_transit <- items.VaultTransit
   - org_vault_events <- items.OrgVaultEvent
+  - trade_stakes <- items.TradeItemStake
   - reclamation_claims <- items.ReclamationClaim
   - crime_evidence <- justice.CrimeEvidence
   - project_contributions <- projects.Contribution
@@ -4503,6 +4509,19 @@
 ### TemplateSlot
 **Foreign Keys:**
   - template -> items.ItemTemplate [FK]
+
+### TradeItemStake
+**Foreign Keys:**
+  - session -> items.TradeSession [FK]
+  - offered_by_sheet -> character_sheets.CharacterSheet [FK]
+  - item_instance -> items.ItemInstance [FK]
+
+### TradeSession
+**Foreign Keys:**
+  - initiator_sheet -> character_sheets.CharacterSheet [FK]
+  - counterparty_sheet -> character_sheets.CharacterSheet [FK]
+**Pointed to by:**
+  - item_stakes <- items.TradeItemStake
 
 ### Trendsetter
 **Foreign Keys:**
@@ -6564,6 +6583,12 @@
   - distinction -> distinctions.Distinction [FK]
   - npc_persona -> scenes.Persona [FK]
 
+### ExpulsionBar
+**Foreign Keys:**
+  - room -> evennia_extensions.RoomProfile [FK]
+  - barred_sheet -> character_sheets.CharacterSheet [FK]
+  - imposed_by -> scenes.Persona [FK]
+
 ### Functionary
 **Foreign Keys:**
   - role -> npc_services.NPCRole [FK]
@@ -7943,6 +7968,7 @@
   - summonses_received <- npc_services.OfferSummons
   - regard_seeds_from_distinctions <- npc_services.DistinctionRegardSeed
   - npc_assignments_made <- npc_services.NPCAssignment
+  - expulsion_bars_imposed <- npc_services.ExpulsionBar
   - recorded_profiles <- npc_services.RecordedProfile
   - feedback_submissions <- player_submissions.PlayerFeedback
   - bug_reports <- player_submissions.BugReport

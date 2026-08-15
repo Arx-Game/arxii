@@ -2484,6 +2484,11 @@ from world.items.org_vault_models import (  # noqa: E402,F401
     VaultTransit,
 )
 
+# ---------------------------------------------------------------------------
+# Trade submodule (#2990) — two-sided negotiated exchange session
+# ---------------------------------------------------------------------------
+from world.items.trade.models import TradeItemStake, TradeSession  # noqa: E402,F401
+
 
 class ReclamationClaim(SharedMemoryModel):
     """A wronged party's live claim on a stolen item (#2368).
