@@ -4,9 +4,16 @@
 # `caddy validate`/`caddy adapt` on the stock binary fails. Rather than a
 # custom xcaddy build (which forfeits the apt package's systemd unit/user/
 # upgrade scaffolding), install stock apt caddy, then swap the binary in
-# place for the SAME Caddy version WITH the plugin via `caddy add-package`
-# (Caddy's official build service). Idempotent — guarded by `caddy
-# list-modules`.
+# place for the SAME Caddy version WITH the plugin. Idempotent — guarded by
+# `caddy list-modules`.
+#
+# This used to call `caddy add-package`. That subcommand does not exist in
+# Ubuntu's packaged binary — the first real prod converge died on
+# `unknown command "add-package"`. It is a self-update mechanism, and a
+# distro package manages its own binary, so the distro build omits it.
+# `add-package` is only a convenience wrapper around Caddy's public build
+# service, so the tasks below call that service directly and swap the binary
+# themselves, which is what the original comment intended all along.
 - name: Install Caddy (base apt package; DNS-01 plugin added below)
   ansible.builtin.apt:
     name: caddy
@@ -28,24 +35,73 @@
   register: caddy_modules_before
   when: not caddy_rehearsal_mode
 
-- name: Add the caddy-dns/cloudflare plugin (needs outbound HTTPS)
-  ansible.builtin.command: caddy add-package github.com/caddy-dns/cloudflare
+- name: Read the installed Caddy version (so the rebuild matches it exactly)
+  ansible.builtin.command: caddy version
+  changed_when: false
+  register: caddy_version_raw
   when:
     - not caddy_rehearsal_mode
     - "'dns.providers.cloudflare' not in caddy_modules_before.stdout"
-  changed_when: true # gated by the `when` above: if it runs, it swapped the binary
-  # TRAP: a later plain `apt upgrade` of the `caddy` package replaces this
-  # binary with the plugin-less stock one, silently dropping DNS-01 — the
-  # next converge re-runs this task (guarded by the `when` above) and
-  # re-adds it. unattended-upgrades (roles/unattended_upgrades) only
-  # auto-installs the security pocket, and caddy isn't normally served from
-  # there, so this is an edge case in practice, not a routine occurrence.
-  # Until the next converge, the offbox heartbeat's cert-issuer check
-  # (roles/tls_telnet_cert) catches the fallout — DNS-01 renewal failing
-  # means Caddy falls back to a self-signed/expired cert, which that check
-  # flags.
 
-- name: Re-check installed Caddy modules (verify plugin state after add-package)
+# `caddy version` prints "v2.7.6 h1:<hash>" — the first token is the tag the
+# build service expects. Pinning it keeps the swapped binary on the SAME
+# version apt installed, so the package's unit file and config stay matched.
+#
+# TRAP: a later plain `apt upgrade` of the `caddy` package replaces this
+# binary with the plugin-less stock one, silently dropping DNS-01 — the next
+# converge re-runs these tasks (guarded by the `when` conditions) and re-adds
+# it. unattended-upgrades (roles/unattended_upgrades) only auto-installs the
+# security pocket, and caddy isn't normally served from there, so this is an
+# edge case in practice, not a routine occurrence. Until the next converge,
+# the offbox heartbeat's cert-issuer check (roles/tls_telnet_cert) catches
+# the fallout — DNS-01 renewal failing means Caddy falls back to a
+# self-signed/expired cert, which that check flags.
+- name: Fetch the same Caddy version rebuilt with caddy-dns/cloudflare
+  ansible.builtin.get_url:
+    url: >-
+      https://caddyserver.com/api/download?p=github.com/caddy-dns/cloudflare&os=linux&arch={{
+      caddy_download_arch }}&version={{ caddy_version_raw.stdout.split() | first }}
+    dest: "{{ caddy_staged_bin }}"
+    mode: "0755"
+    force: true
+  when:
+    - not caddy_rehearsal_mode
+    - "'dns.providers.cloudflare' not in caddy_modules_before.stdout"
+
+# Prove the download before it replaces a working binary. A build-service
+# error page saved to disk would otherwise be installed as /usr/bin/caddy and
+# only fail later, at Caddyfile validation, with a far less obvious message.
+- name: Verify the staged binary actually carries the plugin
+  ansible.builtin.command: "{{ caddy_staged_bin }} list-modules"
+  changed_when: false
+  register: caddy_staged_modules
+  failed_when: "'dns.providers.cloudflare' not in caddy_staged_modules.stdout"
+  when:
+    - not caddy_rehearsal_mode
+    - "'dns.providers.cloudflare' not in caddy_modules_before.stdout"
+
+# `copy` renames into place rather than writing through the existing inode,
+# so this does not hit ETXTBSY against the running caddy process.
+- name: Swap the staged binary into place
+  ansible.builtin.copy:
+    src: "{{ caddy_staged_bin }}"
+    dest: "{{ caddy_bin }}"
+    remote_src: true
+    owner: root
+    group: root
+    mode: "0755"
+  notify: Restart caddy
+  when:
+    - not caddy_rehearsal_mode
+    - "'dns.providers.cloudflare' not in caddy_modules_before.stdout"
+
+- name: Remove the staged binary
+  ansible.builtin.file:
+    path: "{{ caddy_staged_bin }}"
+    state: absent
+  when: not caddy_rehearsal_mode
+
+- name: Re-check installed Caddy modules (verify plugin state after the swap)
   ansible.builtin.command: caddy list-modules
   changed_when: false
   register: caddy_modules_after
@@ -55,7 +111,7 @@
   ansible.builtin.assert:
     that: "'dns.providers.cloudflare' in caddy_modules_after.stdout"
     fail_msg: >-
-      caddy-dns/cloudflare module missing after `caddy add-package` — the
+      caddy-dns/cloudflare module missing after the binary swap — the
       Caddyfile's `acme_dns cloudflare` directive (DNS-01) will fail to
       validate/adapt. Check outbound HTTPS to Caddy's build service
       (caddyserver.com) from this host and re-run the converge.
