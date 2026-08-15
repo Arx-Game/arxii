@@ -3,3 +3,12 @@
   ansible.builtin.systemd_service:
     name: caddy
     state: reloaded
+
+# A Caddyfile change only needs a reload, but a BINARY swap does not take
+# effect until the process is replaced — a reload keeps the old image running,
+# so the newly added DNS-01 plugin would appear absent until something else
+# restarted the service.
+- name: Restart caddy
+  ansible.builtin.systemd_service:
+    name: caddy
+    state: restarted

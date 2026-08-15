@@ -1,4 +1,14 @@
 ---
+# Where apt installs the binary, and where the plugin-carrying rebuild is
+# staged before it is renamed over that path. Both are overridable so a
+# different image layout does not need a task edit.
+caddy_bin: /usr/bin/caddy
+caddy_staged_bin: /tmp/caddy-with-cloudflare
+# Caddy's build service names architectures the Go way; Ansible reports the
+# uname spelling. Only the two we could plausibly run on are mapped, and an
+# unmapped value fails loudly at template time rather than downloading a
+# binary for the wrong architecture.
+caddy_download_arch: "{{ {'x86_64': 'amd64', 'aarch64': 'arm64'}[ansible_architecture] }}"
 caddy_web_fqdn: "play.example"          # = tofu output web_fqdn
 caddy_backend: "127.0.0.1:4001"         # localhost-bound Django/web app backend
 # Evennia portal websocket, localhost-bound. Templated into the Caddyfile's
@@ -18,13 +28,14 @@ caddy_ws_backend: "127.0.0.1:4002"
 caddy_static_root: "/opt/arxii/current/src/server/.static"
 # ACME behind Cloudflare proxy needs DNS-01 (HTTP-01 is intercepted by the
 # orange-cloud). DNS-01 requires Caddy BUILT WITH the caddy-dns/cloudflare
-# plugin (added idempotently by tasks/main.yml via `caddy add-package`) and a
+# plugin (added idempotently by tasks/main.yml, which fetches the matching
+# Caddy version rebuilt with that module from Caddy's build service) and a
 # DNS-edit-scoped Cloudflare token supplied via env (CADDY_CF_DNS_TOKEN),
 # which is a NEW on-box secret to add to the gated-Environment contract.
 caddy_acme_email: "ops@example"
 # #2236 Phase 3 P1 (dress rehearsal). When true: deploy Caddyfile.rehearsal.j2
 # (local_certs, no DNS-01) instead of Caddyfile.j2, and skip the
-# caddy-dns/cloudflare add-package steps below (not needed without acme_dns —
+# caddy-dns/cloudflare plugin steps below (not needed without acme_dns —
 # and the ephemeral-stage root has no Cloudflare credential to fail with
 # anyway, by the isolation doctrine). Set by the rehearsal group_vars
 # rehearse.sh generates; standup.sh never sets it, so prod always gets the

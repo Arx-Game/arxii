@@ -180,9 +180,11 @@ assert_before "standup.sh unsets LINODE_TOKEN/CLOUDFLARE_API_TOKEN before invoki
 
 # (c) The caddy DNS-01 plugin install and the Caddyfile directive that
 # needs it are paired — if either half disappears the other is stale.
-chk   "caddy role installs the caddy-dns/cloudflare plugin (add-package)" \
-  "grep -q 'caddy add-package github.com/caddy-dns/cloudflare' infra/ansible/roles/caddy/tasks/main.yml"
-chk   "Caddyfile.j2 still uses DNS-01 via cloudflare (paired with add-package above)" \
+chk   "caddy role fetches the caddy-dns/cloudflare plugin build" \
+  "grep -q 'p=github.com/caddy-dns/cloudflare' infra/ansible/roles/caddy/tasks/main.yml"
+chk   "caddy role verifies the staged binary before swapping it in" \
+  "grep -q 'caddy_staged_modules' infra/ansible/roles/caddy/tasks/main.yml"
+chk   "Caddyfile.j2 still uses DNS-01 via cloudflare (paired with the plugin fetch above)" \
   "grep -q 'acme_dns cloudflare' infra/ansible/roles/caddy/templates/Caddyfile.j2"
 
 # (d) nftables must never `flush ruleset` (wipes fail2ban's own table too);
@@ -316,7 +318,7 @@ chkno "Caddyfile.rehearsal.j2 never uses acme_dns (would need a credential rehea
 # (e) caddy role: rehearsal must skip the DNS-01 plugin install (a
 # guaranteed failure without a Cloudflare credential) and select the
 # rehearsal template by caddy_rehearsal_mode.
-chk   "caddy role skips the add-package plugin steps when caddy_rehearsal_mode" \
+chk   "caddy role skips the DNS-01 plugin steps when caddy_rehearsal_mode" \
   "grep -q 'not caddy_rehearsal_mode' infra/ansible/roles/caddy/tasks/main.yml"
 chk   "caddy role selects Caddyfile.rehearsal.j2 via caddy_rehearsal_mode" \
   "grep -q \"Caddyfile.rehearsal.j2' if caddy_rehearsal_mode\" infra/ansible/roles/caddy/tasks/main.yml"
