@@ -112,6 +112,51 @@
         mode: "0755"
         remote_src: true
 
+# AWS CLI v2. Pinned version + SHA verified, same idiom as uv above, and
+# idempotent the same way: if the binary already reports the pinned version,
+# the block is skipped and nothing is downloaded.
+#
+# This lives in base, not in backups/offsite_replication, because both of those
+# roles need the `aws` command and neither should own a second copy of the
+# install. Ubuntu 24.04 removed `awscli` from the archive, so apt cannot supply
+# it at all -- the 2026-08-15 standup failed here with "No package matching
+# 'awscli' is available" after universe was already enabled.
+- name: Check installed AWS CLI version (if present)
+  ansible.builtin.command: "{{ base_awscli_bin }} --version"
+  register: base_awscli_check
+  changed_when: false
+  failed_when: false
+
+- name: Install AWS CLI v2 (pinned + sha256-verified official bundle)
+  when: "base_awscli_version not in (base_awscli_check.stdout | default(''))"
+  block:
+    - name: Ensure unzip is present (AWS ships the installer as a zip)
+      ansible.builtin.apt:
+        name: unzip
+        state: present
+        update_cache: true
+        cache_valid_time: 3600
+        lock_timeout: 600
+
+    - name: Download the AWS CLI v2 bundle
+      ansible.builtin.get_url:
+        url: "https://awscli.amazonaws.com/awscli-exe-linux-x86_64-{{ base_awscli_version }}.zip"
+        dest: "/tmp/awscli-{{ base_awscli_version }}.zip"
+        checksum: "sha256:{{ base_awscli_sha256 }}"
+        mode: "0644"
+
+    - name: Extract the AWS CLI v2 bundle
+      ansible.builtin.unarchive:
+        src: "/tmp/awscli-{{ base_awscli_version }}.zip"
+        dest: /tmp/
+        remote_src: true
+
+    - name: Run AWS's own installer (writes {{ base_awscli_bin }})
+      # --update so a version bump replaces the existing /usr/local/aws-cli
+      # tree in place; without it the installer refuses when one is present.
+      ansible.builtin.command: /tmp/aws/install --update
+      changed_when: true
+
 - name: Create the game cgroup slice (MemoryMax isolates a leak from the box)
   ansible.builtin.copy:
     dest: /etc/systemd/system/arxii.slice

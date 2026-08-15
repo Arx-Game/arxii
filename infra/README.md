@@ -296,6 +296,29 @@ What the button **does not** do (deliberately, by-design):
   flip the singleton toggle to open registration for early access, via the
   Django admin's "Registration Config" entry — no deploy required.
 
+## The `aws` CLI is installed from Amazon's bundle, not apt
+
+Ubuntu 24.04 removed the `awscli` package from the archive. Universe is enabled on the box
+and `apt-cache policy awscli` still reports no candidate, so an apt install fails outright:
+that is how the 2026-08-15 standup died at the `backups` role with `No package matching
+'awscli' is available`.
+
+The `base` role therefore installs **AWS CLI v2** from Amazon's official bundle, pinned to a
+version with a `sha256` checksum, using the same `get_url` + verify + install idiom as `uv`
+(`base_awscli_version` / `base_awscli_sha256` / `base_awscli_bin`). It lives in `base`, not
+in `backups` or `offsite_replication`, because both roles need `aws` and neither should own a
+second copy of the install.
+
+Do not "fix" this back to apt, and do not switch to another S3 client casually: `aws` is
+called in 11 places across the backup, offsite and restore paths, `infra/scripts/restore.sh`
+and `pull_prod_db.sh` included. Changing the tool means rewriting the restore path, which is
+the last thing that should acquire untested differences. `acceptance.sh` fails the build if a
+role apt-installs `awscli` again, or if the pin loses its version or checksum.
+
+Bumping the version is deliberate work: change both `base_awscli_version` and
+`base_awscli_sha256` together. The versioned download URL is byte-identical to the floating
+"latest" one, so the pin costs nothing but has to be maintained by hand.
+
 ## Ongoing safety nets (after stand-up)
 
 Installed once by the converge, then running unattended on the box:

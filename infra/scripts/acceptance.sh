@@ -86,6 +86,17 @@ chk   "base role pins uv version + sha256"           \
   "grep -qE '^base_uv_version: ' infra/ansible/roles/base/defaults/main.yml && grep -qE '^base_uv_sha256: ' infra/ansible/roles/base/defaults/main.yml"
 chk   "app_deploy runs uv sync --frozen --no-dev"    \
   "grep -q 'sync --frozen --no-dev' infra/ansible/roles/app_deploy/tasks/main.yml"
+# Ubuntu 24.04 dropped the awscli package from the archive (universe included),
+# so `apt-cache policy awscli` reports no candidate and the apt install fails
+# outright — that is how the 2026-08-15 standup died at the backups role. The
+# `aws` command appears in 11 places across the backup, offsite and restore
+# paths, so it is installed once in base from Amazon's pinned bundle.
+chk   "base role installs AWS CLI v2 (pinned + sha-verified)" \
+  "grep -q 'awscli-exe-linux-x86_64-{{ base_awscli_version }}.zip' infra/ansible/roles/base/tasks/main.yml && grep -q 'sha256:{{ base_awscli_sha256 }}' infra/ansible/roles/base/tasks/main.yml"
+chk   "base role pins AWS CLI version + sha256" \
+  "grep -qE '^base_awscli_version: ' infra/ansible/roles/base/defaults/main.yml && grep -qE '^base_awscli_sha256: ' infra/ansible/roles/base/defaults/main.yml"
+chkno "no role apt-installs awscli (no such package on Ubuntu 24.04)" \
+  "grep -rn 'name: awscli\|\\[awscli' infra/ansible/roles/"
 chk   "app_deploy runs django migrate --noinput"     \
   "grep -q 'python -m django migrate --noinput' infra/ansible/roles/app_deploy/tasks/main.yml"
 chk   "app_deploy runs django collectstatic --noinput" \
