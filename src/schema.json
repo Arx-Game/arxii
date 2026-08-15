@@ -17130,11 +17130,6 @@ paths:
         resolve_cast_action_template enforces the same split at submit/finalize
         time. The technique builder's category-agnostic picker keeps the flat
         union by passing no param.
-      parameters:
-      - in: query
-        name: action_category
-        schema:
-          type: string
       tags:
       - magic
       security:
@@ -17166,8 +17161,7 @@ paths:
       - in: path
         name: id
         schema:
-          type: integer
-        description: A unique integer value identifying this Consequence Pool.
+          type: string
         required: true
       tags:
       - magic
@@ -30934,6 +30928,39 @@ paths:
         required: true
       tags:
       - staff
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AccountInvite'
+          description: ''
+  /api/staff/invites/{id}/resend/:
+    post:
+      operationId: staff_invites_resend_create
+      description: |-
+        Mail the redemption link again, for an invitee who lost the first one.
+
+        Refuses anything not currently redeemable: a redeemed, revoked or
+        expired invite has no working link to send, so mailing one would only
+        hand the recipient a dead end.
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: A unique integer value identifying this Account Invite.
+        required: true
+      tags:
+      - staff
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AccountInviteRequest'
+        required: true
       security:
       - cookieAuth: []
       responses:

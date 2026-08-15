@@ -19291,6 +19291,29 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
+  '/api/staff/invites/{id}/resend/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /**
+     * @description Mail the redemption link again, for an invitee who lost the first one.
+     *
+     *     Refuses anything not currently redeemable: a redeemed, revoked or
+     *     expired invite has no working link to send, so mailing one would only
+     *     hand the recipient a dead end.
+     */
+    post: operations['staff_invites_resend_create'];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   '/api/staff/invites/{id}/revoke/': {
     parameters: {
       query?: never;
@@ -55879,9 +55902,7 @@ export interface operations {
   };
   magic_consequence_pool_catalog_list: {
     parameters: {
-      query?: {
-        action_category?: string;
-      };
+      query?: never;
       header?: never;
       path?: never;
       cookie?: never;
@@ -55903,8 +55924,7 @@ export interface operations {
       query?: never;
       header?: never;
       path: {
-        /** @description A unique integer value identifying this Consequence Pool. */
-        id: number;
+        id: string;
       };
       cookie?: never;
     };
@@ -67880,6 +67900,32 @@ export interface operations {
       cookie?: never;
     };
     requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['AccountInvite'];
+        };
+      };
+    };
+  };
+  staff_invites_resend_create: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        /** @description A unique integer value identifying this Account Invite. */
+        id: number;
+      };
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['AccountInviteRequest'];
+      };
+    };
     responses: {
       200: {
         headers: {
