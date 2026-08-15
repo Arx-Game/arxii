@@ -12,7 +12,7 @@ from actions.definitions.mood import (
     SetMoodAction,
 )
 from commands.exceptions import CommandError
-from commands.mood import CmdFeel
+from commands.mood import CmdFeel, CmdSense
 from evennia_extensions.factories import CharacterFactory, ObjectDBFactory
 from world.character_sheets.factories import CharacterSheetFactory, MoodOptionFactory
 from world.checks.factories import CheckTypeFactory
@@ -245,6 +245,46 @@ class CmdFeelTests(TestCase):
             db_key="Feeler", db_typeclass_path="typeclasses.characters.Character", location=room
         )
         cmd = _make_cmd(CmdFeel, caller, args="nonexistentia")
+
+        with self.assertRaises(CommandError) as ctx:
+            cmd.resolve_action_args()
+        assert "nonexistentia" in str(ctx.exception)
+
+
+class CmdSenseTests(TestCase):
+    """Mirrors CmdFeelTests' idiom (this module) for the sense-mood dispatcher."""
+
+    def test_no_args_raises_usage(self) -> None:
+        room = _make_room()
+        caller = ObjectDBFactory(
+            db_key="Senser", db_typeclass_path="typeclasses.characters.Character", location=room
+        )
+        cmd = _make_cmd(CmdSense, caller, args="")
+
+        with self.assertRaises(CommandError) as ctx:
+            cmd.resolve_action_args()
+        assert "Usage" in str(ctx.exception)
+
+    def test_known_target_resolves_to_target_kwarg(self) -> None:
+        room = _make_room()
+        caller = ObjectDBFactory(
+            db_key="Senser", db_typeclass_path="typeclasses.characters.Character", location=room
+        )
+        target = ObjectDBFactory(
+            db_key="Target", db_typeclass_path="typeclasses.characters.Character", location=room
+        )
+        cmd = _make_cmd(CmdSense, caller, args="Target")
+
+        kwargs = cmd.resolve_action_args()
+
+        assert kwargs == {"target": target}
+
+    def test_unknown_target_raises_naming_it(self) -> None:
+        room = _make_room()
+        caller = ObjectDBFactory(
+            db_key="Senser", db_typeclass_path="typeclasses.characters.Character", location=room
+        )
+        cmd = _make_cmd(CmdSense, caller, args="nonexistentia")
 
         with self.assertRaises(CommandError) as ctx:
             cmd.resolve_action_args()

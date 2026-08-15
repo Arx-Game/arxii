@@ -1,15 +1,16 @@
-"""Telnet face of the sticky declared-mood switch (#2994).
+"""Telnet face of the sticky declared-mood switch + empathy sense (#2994).
 
-Thin `ArxCommand` shell over `SetMoodAction` (`actions/definitions/mood.py`) --
-no business logic lives here, only name-to-pk resolution. INTERNAL and SILENT:
-the resulting message is self-only (see `SetMoodAction`'s docstring).
+Thin `ArxCommand` shells over `SetMoodAction`/`SenseMoodAction`
+(`actions/definitions/mood.py`) -- no business logic lives here, only
+name/target resolution. `feel` is INTERNAL and SILENT (see `SetMoodAction`'s
+docstring); `sense` is the earned-empathy read of another's mood.
 """
 
 from __future__ import annotations
 
 from typing import Any
 
-from actions.definitions.mood import SetMoodAction
+from actions.definitions.mood import SenseMoodAction, SetMoodAction
 from commands.command import ArxCommand
 from commands.exceptions import CommandError
 
@@ -41,3 +42,31 @@ class CmdFeel(ArxCommand):
             msg = f"There is no mood called '{name}'."
             raise CommandError(msg)
         return {"mood_id": mood.pk}
+
+
+class CmdSense(ArxCommand):
+    """Try to privately read a co-located character's declared mood.
+
+    Usage:
+      sense <character>
+
+    Gated on an earned Empathy specialization and resolved via a check --
+    see `SenseMoodAction`. SILENT to the target in every outcome; only you
+    ever see a message.
+    """
+
+    key = "sense"
+    locks = "cmd:all()"
+    action = SenseMoodAction()
+
+    def resolve_action_args(self) -> dict[str, Any]:
+        name = (self.args or "").strip()
+        if not name:
+            msg = "Usage: sense <character>"
+            raise CommandError(msg)
+
+        target = self.caller.search(name)
+        if not target:
+            msg = f"Could not find '{name}'."
+            raise CommandError(msg)
+        return {"target": target}

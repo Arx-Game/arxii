@@ -7,8 +7,9 @@ returns only a self-facing ``ActionResult.message``, never calls
 Interaction row. Per the ratified spec amendments, mood is INTERNAL by design -- the
 draft's outward "Demeanor"/look-composition rendering was dropped entirely.
 
-``SenseMoodAction`` (telnet verb ``sense_mood``... actually see ``commands/mood.py``)
-is the sole way another character learns a mood: gated on the actor holding an
+``SenseMoodAction`` (action key ``sense_mood``, telnet verb ``sense`` --
+see ``CmdSense`` in ``commands/mood.py``) is the sole way another character
+learns a mood: gated on the actor holding an
 Empathy skill SPECIALIZATION (no thematically-right parent skill exists in the
 catalog yet -- flagged, not force-fit, per the skill-list-is-provisional convention)
 and resolved through ``perform_check`` (never flat probability). Success reveals the
