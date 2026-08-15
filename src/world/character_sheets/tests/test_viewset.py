@@ -14,6 +14,7 @@ from world.character_creation.factories import RealmFactory
 from world.character_sheets.factories import (
     CharacterSheetFactory,
     GenderFactory,
+    MoodOptionFactory,
 )
 from world.character_sheets.models import CharacterSheet, Heritage
 from world.character_sheets.serializers import (
@@ -284,6 +285,7 @@ class TestIdentitySection(TestCase):
             "origin",
             "path",
             "worship",
+            "current_mood",
         }
         assert set(identity.keys()) == expected_keys
 
@@ -2454,3 +2456,48 @@ class TestCurrentResidenceField(TestCase):
             response.data["current_residence"],
             {"id": rp.pk, "name": "Grand Hall"},
         )
+
+
+class TestCurrentMoodPrivacy(TestCase):
+    """Owner/staff-only visibility for the declared mood (#2994 — INTERNAL, never
+    rendered to observers; mirrors ``TestDistinctionsPrivacy``'s owner-vs-foreign shape).
+    """
+
+    @classmethod
+    def setUpTestData(cls) -> None:
+        cls.player = PlayerDataFactory()
+        cls.character = CharacterFactory(db_key="MoodPrivacyChar")
+        cls.mood = MoodOptionFactory(name="Guarded")
+        cls.sheet = CharacterSheetFactory(character=cls.character, current_mood=cls.mood)
+        cls.roster_entry = RosterEntryFactory(character_sheet__character=cls.character)
+        RosterTenureFactory(
+            player_data=cls.player,
+            roster_entry=cls.roster_entry,
+            player_number=1,
+        )
+
+        # Foreign viewer: authenticated account with no tenure on this character.
+        cls.foreign_player = PlayerDataFactory()
+
+    def _get_identity(self, account) -> dict:
+        client = APIClient()
+        client.force_authenticate(user=account)
+        url = f"/api/character-sheets/{self.character.pk}/"
+        response = client.get(url)
+        assert response.status_code == 200
+        return response.data["identity"]
+
+    def test_owner_sees_current_mood(self) -> None:
+        identity = self._get_identity(self.player.account)
+        assert identity["current_mood"] == {"id": self.mood.pk, "name": "Guarded"}
+
+    def test_staff_sees_current_mood(self) -> None:
+        staff_player = PlayerDataFactory()
+        staff_player.account.is_staff = True
+        staff_player.account.save(update_fields=["is_staff"])
+        identity = self._get_identity(staff_player.account)
+        assert identity["current_mood"] == {"id": self.mood.pk, "name": "Guarded"}
+
+    def test_foreign_viewer_never_sees_current_mood(self) -> None:
+        identity = self._get_identity(self.foreign_player.account)
+        assert identity["current_mood"] is None

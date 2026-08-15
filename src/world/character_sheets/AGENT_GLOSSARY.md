@@ -32,3 +32,24 @@ Domain-local vocabulary. Cross-cutting terms live in the root
   decline and reduces max health −1 per point via the `max_health`
   ModifierTarget. Crossing the aging floor opens the **dying window**
   (`CharacterVitals.aging_death_ic_deadline`).
+
+## Mood (#2994)
+
+- **Mood** — a character's declared internal emotional state (`feel <state>`,
+  `SetMoodAction`, `CharacterSheet.current_mood → MoodOption`). INTERNAL and
+  SILENT by design: setting one never echoes to the room, is never rendered
+  into look/appearance text, and carries no mechanical effect. Sticky until
+  re-declared or cleared (`feel` with no argument) — mirrors
+  `current_language`'s sticky-nullable-FK shape exactly, but lives on
+  `CharacterSheet` (not `Persona`) since a mask doesn't change how the person
+  underneath feels. Own mood is always visible to self and staff (owner/staff
+  gate on `CharacterSheetSerializer`'s identity section); any other viewer
+  learns it only through the earned `SenseMoodAction` (`sense_mood`, gated on
+  an Empathy skill specialization + `perform_check` — never ambient). No
+  collision with `StanceArchetype` (proclamations, ADR-0178) or `NpcRegard`'s
+  declared stance (ADR-0085) — both are directed, numeric-judgment concepts;
+  Mood has no target and no numeric value. `MoodOption` is a curated,
+  content-authored lookup (ships empty in code; seeded via the lore repo's
+  content round trip). _Avoid_: mood/stance/disposition as a synonym for
+  `StanceArchetype` or `NpcRegard`'s declared stance — those are different,
+  already-claimed concepts (see their own ADRs).

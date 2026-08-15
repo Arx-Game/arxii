@@ -103,6 +103,55 @@ class Heritage(NaturalKeyMixin, SharedMemoryModel):
         return self.name
 
 
+class MoodOption(NaturalKeyMixin, SharedMemoryModel):
+    """Curated internal-mood states a character can declare via the ``feel`` verb (#2994).
+
+    Mood is INTERNAL and silent by design (ratified amendment 2026-08-15, superseding
+    the issue's original outward-facing "Demeanor" draft): setting one never echoes to
+    the room and is never rendered into look/appearance text. Others learn a character's
+    mood only through the earned ``sense_mood`` action (Empathy specialization gate +
+    ``perform_check``), never ambiently.
+
+    Content-authored (see ``core_management/content_export.py``'s ``CONTENT_MODELS`` —
+    registered as ``character_sheets.moodoption``) — the option list ships EMPTY in code;
+    seed states (angry, upset, happy, sad, calm, flirty, PLACEHOLDER-extendable) arrive
+    via the lore repo's content round trip, not a fixture committed here (fixtures are
+    not in VCS).
+    """
+
+    name = models.CharField(
+        max_length=100,
+        unique=True,
+        help_text="Mood name (e.g., 'Angry', 'Content', 'Flirty')",
+    )
+    description = models.TextField(
+        blank=True,
+        help_text="Flavor text describing this mood (shown only to the declaring player)",
+    )
+    sort_order = models.PositiveIntegerField(
+        default=0,
+        help_text="Display order in the mood picker/selector",
+    )
+    is_active = models.BooleanField(
+        default=True,
+        help_text="Inactive options are hidden from the picker but preserved for characters "
+        "who already declared them",
+    )
+
+    objects = NaturalKeyManager()
+
+    class NaturalKeyConfig:
+        fields = ["name"]
+
+    class Meta:
+        verbose_name = "Mood Option"
+        verbose_name_plural = "Mood Options"
+        ordering = ["sort_order", "name"]
+
+    def __str__(self) -> str:
+        return self.name
+
+
 class Profile(SharedMemoryModel):
     """The bio/narrative surface a persona presents (#1270).
 
@@ -418,6 +467,18 @@ class CharacterSheet(SharedMemoryModel):
         on_delete=models.SET_NULL,
         related_name="+",
         help_text="Sticky spoken language; null = the universal default.",
+    )
+    current_mood = models.ForeignKey(
+        "arxii.MoodOption",
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="+",
+        help_text=(
+            "Sticky declared mood (#2994); null = none declared. INTERNAL — never "
+            "rendered to observers. Others learn it only via the earned sense_mood "
+            "action (Empathy specialization + perform_check), never ambiently."
+        ),
     )
 
     # Residence & Trickle

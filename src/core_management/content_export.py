@@ -106,6 +106,9 @@ CONTENT_MODELS: frozenset[str] = frozenset(
         "character_creation.origintemplateslot",
         # character_sheets
         "character_sheets.gender",
+        # #2994: internal declared-mood states ("feel <state>"); ships empty in
+        # code, seeded via the lore repo's content round trip.
+        "character_sheets.moodoption",
         # checks
         "checks.checkcategory",
         "checks.checktype",

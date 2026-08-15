@@ -83,6 +83,31 @@ When a caller has a specific persona (membership, event enrollment, etc.), call 
 
 ---
 
+## Mood (#2994)
+
+`CharacterSheet.current_mood` (nullable FK → `MoodOption`, `SET_NULL`, `related_name="+"`) is a
+sticky declared internal state — mirrors `current_language`'s shape, but lives on the sheet (not
+`Persona`) because a mask doesn't change how the person underneath feels. **INTERNAL and SILENT
+by design**: `SetMoodAction` (telnet `feel <state>` / bare `feel` to clear, `actions/definitions/
+mood.py`) writes only `current_mood`, never calls `message_location` or `record_interaction` — no
+room echo, no scene Interaction row, no look/appearance rendering. It carries no mechanical effect.
+
+Detection is earned, not ambient: `SenseMoodAction` (`sense_mood`) is the sole way another
+character learns a mood, gated on the actor holding a `skills.Specialization` named "Empathy"
+(value ≥ 1 — no thematically-right parent Skill exists in the catalog yet; flagged as a content
+gap rather than force-fit) and resolved via `perform_check` against a `checks.CheckType` named
+"Sense Mood" (also a content gap, same reason). Both gates fail cleanly with a vague in-fiction
+message when the underlying content row doesn't exist yet, rather than crashing — they are seams
+for the lore repo to fill, not code that needs re-touching once content lands. Success privately
+reveals the target's current mood (or "their feelings are settled" when null) to the senser only;
+the target is never notified, in either outcome (SILENT).
+
+`current_mood` is exposed on `CharacterSheetSerializer`'s `identity.current_mood` — owner/staff
+only, `None` for every other viewer (mirrors the age-axes leak-table pattern). `MoodOption` is a
+curated, content-authored lookup (`character_sheets.moodoption` in `core_management
+.content_export.CONTENT_MODELS`) — it ships EMPTY in code; states (angry, upset, happy, sad, calm,
+flirty, PLACEHOLDER-extendable) arrive via the lore repo's content round trip.
+
 ## Enums (types.py)
 
 ```python
@@ -103,6 +128,7 @@ from world.character_sheets.types import Gender as GenderChoices
 | `Heritage` | Origin story types (Sleeper, Misbegotten, Normal) | `name`, `description`, `is_special`, `family_known`, `family_display`, `chronological_age_unknown` (#2756 — Sleepers: CG leaves `ic_birth_year` null; everyone, the player included, sees "Unknown") |
 | `Gender` | Canonical gender identities | `key`, `display_name`, `is_default` |
 | `Pronouns` | Canonical pronoun sets (decoupled from gender) | `key`, `display_name`, `subject`, `object`, `possessive`, `is_default` |
+| `MoodOption` | Curated declared-mood states (#2994) | `name`, `description`, `sort_order`, `is_active` |
 
 Appearance traits are NOT here: the legacy `Characteristic`/`CharacteristicValue`/
 `CharacterSheetValue` models were retired (#1119) in favour of the forms app

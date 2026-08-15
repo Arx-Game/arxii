@@ -1346,6 +1346,7 @@
   - pronouns -> character_sheets.Pronouns [FK] (nullable)
   - species -> species.Species [FK] (nullable)
   - current_language -> species.Language [FK] (nullable)
+  - current_mood -> character_sheets.MoodOption [FK] (nullable)
   - current_residence -> evennia_extensions.RoomProfile [FK] (nullable)
   - true_profile -> character_sheets.Profile [OneToOne] (nullable)
   - active_persona -> scenes.Persona [FK] (nullable)
@@ -1562,6 +1563,8 @@
 **Pointed to by:**
   - beginnings <- character_creation.Beginnings
   - profiles <- character_sheets.Profile
+
+### MoodOption
 
 ### Profile
 **Foreign Keys:**

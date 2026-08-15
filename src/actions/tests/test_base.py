@@ -366,6 +366,8 @@ class ActionRegistryTests(TestCase):
             "train_technique",
             "set_language",
             "train_language",
+            "set_mood",
+            "sense_mood",
             "engage_covenant_membership",
             "disengage_covenant_membership",
             "leave_covenant",

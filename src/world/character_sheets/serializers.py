@@ -193,6 +193,8 @@ _IDENTITY_SELECT_RELATED: tuple[str, ...] = (
     "true_profile__origin_realm",
     # #2355 — public worship on the identity section (reverse OneToOne + its being).
     "worship_declaration__public_being",
+    # #2994 — owner/staff-only declared mood.
+    "current_mood",
 )
 _IDENTITY_PREFETCH_RELATED: tuple[str | Prefetch, ...] = (_SHARED_PATH_HISTORY_PREFETCH,)
 
@@ -308,6 +310,8 @@ def _build_identity(
         origin=lineage["origin"],
         path=path_value,
         worship=worship,
+        # #2994 — INTERNAL; owner/staff only, mirrors the age-axes leak-table pattern.
+        current_mood=_id_name_or_null(sheet.current_mood) if privileged else None,
     )
 
 

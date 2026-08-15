@@ -115,6 +115,7 @@ from commands.language import CmdSpeak, CmdTrainLanguage  # #2993
 from commands.locations import CmdRoom
 from commands.market import CmdMarket
 from commands.missions import CmdMission
+from commands.mood import CmdFeel  # #2994
 from commands.motif import CmdMotif
 from commands.network import CmdNetwork  # #2820
 from commands.offer_response import CmdDecline
@@ -267,6 +268,8 @@ class CharacterCmdSet(default_cmds.CharacterCmdSet):
             # #2993 — sticky spoken-language switch + weekly language training.
             CmdSpeak,
             CmdTrainLanguage,
+            # #2994 — sticky declared internal mood (silent; feel <state> / feel to clear).
+            CmdFeel,
             # #2183 — dramatic-moment suggestion inbox (suggestions/confirm/dismiss).
             CmdMoment,
             CmdWeaveThread,

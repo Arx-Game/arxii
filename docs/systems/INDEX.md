@@ -1759,7 +1759,15 @@ Character identity, appearance, demographics, and guise system.
   personality): full text per version, stamped with IC datetime + active `stories.Era`;
   written ONLY through `services.update_profile_text`, which also captures the CG
   original on the first post-CG write; admin edits route through it via
-  `ProfileAdmin.save_model`), `Heritage`, `Gender`, `Pronouns`
+  `ProfileAdmin.save_model`), `Heritage`, `Gender`, `Pronouns`, `MoodOption`
+- **Mood (#2994):** `CharacterSheet.current_mood` — a sticky, nullable, INTERNAL declared
+  state (`feel <state>` telnet / `SetMoodAction`, key `set_mood`). Silent by design: no room
+  echo, no scene Interaction row, no look/appearance rendering, no mechanical effect. Owner/
+  staff-only on `CharacterSheetSerializer`'s identity section; any other viewer learns it only
+  through the earned `SenseMoodAction` (`sense_mood`) — gated on a `skills.Specialization`
+  named "Empathy" and resolved via `perform_check` against a `checks.CheckType` named "Sense
+  Mood" (both content gaps, fail cleanly until the lore repo authors them). See
+  `character_sheets.md`'s "Mood" section.
 - **API:** `GET /api/character-sheets/{pk}/profile-text-versions/` — the prose-history
   timeline; **owner/staff-only by default** (#2631 ruling — everyone else gets an empty
   list); entries carry era/IC-date stamps + the applying request's reasoning caption

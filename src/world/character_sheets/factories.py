@@ -15,6 +15,7 @@ from world.character_sheets.models import (
     _PROFILE_FIELDS,
     CharacterSheet,
     Gender,
+    MoodOption,
     Profile,
     Pronouns,
 )
@@ -58,6 +59,19 @@ class PronounsFactory(factory_django.DjangoModelFactory):
     object = "them"
     possessive = "their"
     is_default = False
+
+
+class MoodOptionFactory(factory_django.DjangoModelFactory):
+    """Factory for creating MoodOption instances (#2994)."""
+
+    class Meta:
+        model = MoodOption
+        django_get_or_create = ("name",)
+
+    name = factory.Sequence(lambda n: f"Mood{n}")
+    description = factory.Faker("sentence")
+    sort_order = 0
+    is_active = True
 
 
 class CharacterSheetFactory(factory_django.DjangoModelFactory):

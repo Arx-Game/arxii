@@ -57,6 +57,9 @@ class IdentitySection(TypedDict):
     origin: IdNameRef | None
     path: IdNameRef | None
     worship: IdNameRef | None
+    # #2994 — internal declared mood; owner/staff only, always None for other
+    # viewers (never rendered to observers, per the spec's inward-only ruling).
+    current_mood: IdNameRef | None
 
 
 class FormTraitEntry(TypedDict):
