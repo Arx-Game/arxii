@@ -336,7 +336,40 @@ class RoomStatePayloadSerializer(serializers.Serializer):
             "heat": self._get_heat(caller, room),
             "hub": self._get_hub(room),
             "npc_givers": self._get_npc_givers(room),
+            "decorations": self._get_decorations(room),
+            "comfort_level": self._get_comfort_level(room),
         }
+
+    def _get_decorations(self, room: BaseState) -> list[str]:
+        """#2991 — placed decoration names, oldest first, so decor is legible in scenes.
+
+        Additive: doesn't touch the room's authored ``desc``, and doesn't replace
+        the owner build-HUD's richer ``comfort_summary`` breakdown.
+
+        Read-only: ``room_profile_or_none`` (not ``world.areas.services.get_room_profile``,
+        which get-or-creates) — this is a payload build on the room-state hot path, not a
+        place that should ever write a ``RoomProfile`` row into existence (CI query-count /
+        hot-path-write audit, #2991).
+        """
+        from world.buildings.models import RoomDecoration  # noqa: PLC0415
+
+        try:
+            profile = room.obj.room_profile_or_none
+        except AttributeError:
+            return []
+        if profile is None:
+            return []
+        return list(
+            RoomDecoration.objects.filter(room_profile=profile)
+            .order_by("placed_at")
+            .values_list("kind__name", flat=True)
+        )
+
+    def _get_comfort_level(self, room: BaseState) -> int:
+        """#2991 — the room's bare 1-10 comfort level (no per-character offset)."""
+        from world.locations.services import comfort_level  # noqa: PLC0415
+
+        return comfort_level(room.obj)
 
     def _get_heat(self, caller: BaseState, room: BaseState) -> dict[str, str] | None:
         """#1765 — the caller's own pursuit tier here (self-only; None when SAFE)."""

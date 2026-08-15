@@ -45816,6 +45816,8 @@ components:
           type: string
         amenity:
           type: integer
+        cost_coppers:
+          type: integer
         affinities:
           type: array
           items:
@@ -45823,6 +45825,7 @@ components:
       required:
       - affinities
       - amenity
+      - cost_coppers
       - description
       - id
       - name

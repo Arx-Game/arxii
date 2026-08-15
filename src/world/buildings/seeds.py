@@ -339,3 +339,57 @@ def ensure_placeholder_property_grant_profile() -> PropertyGrantProfile:
         defaults={"building_kind": kind},
     )
     return profile
+
+
+PLACEHOLDER_LISTING_KIND_NAME = "For-Sale Property (placeholder)"
+PLACEHOLDER_LISTING_WARD_SLUG = "building-listing-placeholder-ward"
+PLACEHOLDER_LISTING_PRICE_COPPERS = 5000
+
+
+def ensure_placeholder_building_listing():
+    """Get-or-create a generic dev/test ``BuildingListing`` (#2991).
+
+    Not content — a schema-exercising placeholder so ``purchase_building`` is exercisable
+    end-to-end on a fresh dev DB before any real fixture content curates sale inventory.
+    Mirrors ``ensure_placeholder_property_grant_profile``'s shape: get-or-create a minimal
+    unowned Building (own placeholder ward, distinct from the grant profile's, so the two
+    placeholders never collide) and a listing on it at a flat PLACEHOLDER price.
+    """
+    from world.areas.constants import AreaLevel  # noqa: PLC0415
+    from world.areas.models import Area  # noqa: PLC0415
+    from world.buildings.models import Building, BuildingListing, BuildingSizeTier  # noqa: PLC0415
+    from world.buildings.services import create_entry_room  # noqa: PLC0415
+
+    # Self-sufficient regardless of cluster ordering — the size-tier ladder isn't wired
+    # into the Big Button pipeline elsewhere today (idempotent, safe to call again).
+    ensure_building_size_tiers()
+
+    kind, _ = BuildingKind.objects.get_or_create(
+        name=PLACEHOLDER_LISTING_KIND_NAME,
+        defaults={
+            "description": "Placeholder catalog kind for dev/test building listings.",
+            "is_residential": True,
+        },
+    )
+    ward, _ = Area.objects.get_or_create(
+        slug=PLACEHOLDER_LISTING_WARD_SLUG,
+        defaults={"name": "For-Sale Properties (placeholder)", "level": AreaLevel.WARD},
+    )
+    listing = BuildingListing.objects.filter(building__area__parent=ward).first()
+    if listing is not None:
+        return listing
+
+    area = Area.objects.create(name=f"{kind.name} listing", level=AreaLevel.BUILDING, parent=ward)
+    building = Building.objects.create(
+        area=area,
+        kind=kind,
+        target_size=1,
+        target_grandeur=1,
+        space_budget=BuildingSizeTier.objects.get(tier=1).space_budget,
+    )
+    room = create_entry_room(building, "Entry Hall")
+    building.entry_room = room
+    building.save(update_fields=["entry_room"])
+    return BuildingListing.objects.create(
+        building=building, price_coppers=PLACEHOLDER_LISTING_PRICE_COPPERS
+    )

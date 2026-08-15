@@ -26503,6 +26503,7 @@ export interface components {
       name: string;
       description: string;
       amenity: number;
+      cost_coppers: number;
       affinities: components['schemas']['FixtureAffinity'][];
     };
     /**

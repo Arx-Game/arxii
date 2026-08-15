@@ -379,6 +379,21 @@ class VaultFull(InventoryError):
     SAFE_MESSAGES: ClassVar[frozenset[str]] = frozenset({"The vault is full."})
 
 
+class ItemFixedInPlace(InventoryError):
+    """Raised when plain take targets an item anchored as an active room decoration (#2991).
+
+    A crafted-furniture ``RoomDecoration`` (``source_item_instance`` set) leaves the item
+    un-held (``holder_character_sheet is None``, see ``buildings.services.
+    _anchor_crafted_item_in_room``) so ownership alone no longer blocks pickup — this is the
+    dedicated denial that closes that gap. Only an ACTIVE decoration denies; once removed via
+    ``RemoveFixtureAction``/``remove_decoration`` the item is ordinarily takeable again. The
+    owner's sanctioned un-anchor path is removing the fixture, not stealing it back.
+    """
+
+    user_message = "It is fixed in place."
+    SAFE_MESSAGES: ClassVar[frozenset[str]] = frozenset({"It is fixed in place."})
+
+
 # ---------------------------------------------------------------------------
 # Material consumption errors (services/materials.py)
 # ---------------------------------------------------------------------------

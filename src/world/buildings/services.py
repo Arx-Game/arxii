@@ -22,6 +22,7 @@ from dataclasses import dataclass
 import logging
 from typing import TYPE_CHECKING
 
+from django.core.exceptions import ValidationError
 from django.db import transaction
 from django.utils import timezone
 
@@ -35,6 +36,7 @@ from world.buildings.constants import (
 from world.buildings.models import (
     ArchitecturalStyle,
     Building,
+    BuildingListing,
     BuildingMaterial,
     BuildingPermitDetails,
     BuildingSizeTier,
@@ -47,11 +49,12 @@ from world.locations.models import LocationValueModifier
 if TYPE_CHECKING:
     from evennia_extensions.models import RoomProfile
     from world.areas.models import Area
-    from world.items.models import ItemInstance
+    from world.items.models import ItemInstance, QualityTier
     from world.npc_services.effects import EffectResult
     from world.npc_services.models import NPCServiceOffer
     from world.projects.models import Contribution, Project
     from world.scenes.models import Persona
+    from world.societies.models import Organization
 
 
 logger = logging.getLogger(__name__)
@@ -688,6 +691,47 @@ def set_building_style(building: Building, style: ArchitecturalStyle | None) -> 
     return building
 
 
+class DecorationPlacementError(Exception):
+    """A decoration placement was refused; carries a player-facing ``user_message``.
+
+    Never surface ``str(exc)`` to API responses — use ``exc.user_message``.
+    """
+
+    def __init__(self, message: str, *, user_message: str | None = None) -> None:
+        super().__init__(message)
+        self.user_message = user_message or message
+
+
+def crafted_decoration_amenity(kind: DecorationKind, quality_tier: QualityTier | None) -> int:
+    """The amenity a crafted-furniture placement contributes (#2991 amendment, ADR-0192).
+
+    ADR-0192: quality is the single aggregator that scales everything a crafted item
+    contributes — "the crafter's finished quality multiplies everything the item ever grows
+    into." Applied here exactly as it scales stat lines elsewhere
+    (``ItemInstance.effective_weapon_damage``/``effective_armor_soak``):
+    ``round(kind.amenity * quality_tier.stat_multiplier)``. An uncrafted/qualityless instance
+    (``quality_tier is None`` — not yet resolved, or the kind isn't crafted-furniture) falls
+    back to the kind's plain ``amenity``, matching pre-#2991 behavior.
+    """
+    if quality_tier is None:
+        return kind.amenity
+    return round(kind.amenity * float(quality_tier.stat_multiplier))
+
+
+def _decoration_amenity_value(decoration: RoomDecoration) -> int:
+    """The amenity to materialize for one placed decoration (#2991 amendment).
+
+    A crafted-furniture placement (``source_item_instance`` set) scales the kind's base
+    ``amenity`` by the anchored item's crafting quality via ``crafted_decoration_amenity``;
+    an ordinary catalog placement uses the kind's flat ``amenity`` unchanged.
+    """
+    kind = decoration.kind
+    instance = decoration.source_item_instance
+    if instance is None:
+        return kind.amenity
+    return crafted_decoration_amenity(kind, instance.quality_tier)
+
+
 def _decoration_modifier_source(decoration: RoomDecoration) -> str:
     """The ``source`` tag for one placed decoration's modifiers (clean removal)."""
     return f"decor:{decoration.pk}"
@@ -696,21 +740,23 @@ def _decoration_modifier_source(decoration: RoomDecoration) -> str:
 def _materialize_decoration(decoration: RoomDecoration) -> None:
     """Create the room-scoped comfort modifiers for one placed decoration (#1514).
 
-    The kind's ``amenity`` becomes an AMENITY modifier; each ``DecorationAffinity`` becomes a
-    mitigation modifier on its discomfort axis. All room-scoped, permanent (``change_per_day=0``),
-    and source-tagged so removal is a single filtered delete. Decorations stack — each one's
-    modifiers sum in the cascade.
+    The kind's ``amenity`` (quality-scaled for a crafted-furniture placement — #2991
+    amendment, see ``_decoration_amenity_value``) becomes an AMENITY modifier; each
+    ``DecorationAffinity`` becomes a mitigation modifier on its discomfort axis. All
+    room-scoped, permanent (``change_per_day=0``), and source-tagged so removal is a single
+    filtered delete. Decorations stack — each one's modifiers sum in the cascade.
     """
     source = _decoration_modifier_source(decoration)
     room_profile = decoration.room_profile
     kind = decoration.kind
-    if kind.amenity:
+    amenity = _decoration_amenity_value(decoration)
+    if amenity:
         LocationValueModifier.objects.create(
             parent_type=LocationParentType.ROOM,
             room_profile=room_profile,
             key_type=KeyType.STAT,
             stat_key=StatKey.AMENITY,
-            value=kind.amenity,
+            value=amenity,
             change_per_day=0,
             source=source,
         )
@@ -726,14 +772,106 @@ def _materialize_decoration(decoration: RoomDecoration) -> None:
         )
 
 
-@transaction.atomic
-def place_decoration(room_profile, kind: DecorationKind) -> RoomDecoration:
-    """Place a decoration in a room and materialize its comfort modifiers (#1514).
+def _anchor_crafted_item_in_room(item_instance: ItemInstance, room_profile) -> None:
+    """Physically move a crafted-furniture item into the room and un-hold it (review fix, #2991).
 
-    Cosmetic/instant. Permission gating (owner/tenant standing, the money/material cost) is the
-    caller's concern; this owns only the place + modifier materialization.
+    Mirrors the possession-transfer half of ``give()``/``drop()``
+    (``flows.service_functions.inventory``) — a placed piece must stop being carryable/
+    giveable/droppable, not just gain a ``RoomDecoration.source_item_instance`` pointer.
+    ``ItemState.is_in_possession`` is purely ``game_object.location``-based, so moving the
+    object out from under the former holder and clearing ``holder_character_sheet`` (the same
+    "unowned item lying in a room" state ``pick_up`` already handles, per the vault-deposit
+    precedent in ``drop()``) is what actually closes off Give/Drop/market-sale on the placed
+    instance. A test-only ``ItemInstance`` with no ``game_object`` (no physical representation)
+    skips the move — nothing to relocate — but still loses its holder.
     """
-    decoration = RoomDecoration.objects.create(room_profile=room_profile, kind=kind)
+    if item_instance.game_object is not None and not item_instance.game_object.move_to(
+        room_profile.objectdb, quiet=True
+    ):
+        msg = f"item_instance {item_instance.pk} could not be moved into the room."
+        raise DecorationPlacementError(msg, user_message="That piece can't be placed here.")
+    item_instance.holder_character_sheet = None
+    item_instance.save(update_fields=["holder_character_sheet"])
+
+
+@transaction.atomic
+def place_decoration(
+    room_profile,
+    kind: DecorationKind,
+    *,
+    buyer_persona: Persona | None = None,
+    item_instance: ItemInstance | None = None,
+) -> RoomDecoration:
+    """Place a decoration in a room and materialize its comfort modifiers (#1514, priced #2991).
+
+    Cosmetic/instant. Permission gating (owner/tenant standing) is the caller's concern; this
+    owns the place + charge + modifier materialization.
+
+    Two placement shapes:
+
+    - **Ordinary catalog decoration** (``kind.crafted_item_template`` is null): when
+      ``kind.cost_coppers > 0``, charges ``buyer_persona``'s purse via ``transfer()`` before
+      creating the row — no partial placement on insufficient funds. ``buyer_persona=None``
+      with a priced kind is a caller bug (raises), matching #2991's decision 3.
+    - **Crafted-furniture decoration** (#2991 amendment): ``item_instance`` must be a held
+      ItemInstance of ``kind.crafted_item_template``, not already placed elsewhere. No
+      ``cost_coppers`` charge — the crafting itself was the inherent material/labor cost.
+      The instance's ``quality_tier`` feeds the decor's amenity via ``crafted_decoration_amenity``.
+      Placement **physically moves the item into the room and clears its holder** (review
+      fix, matching what ``give()``/``drop()`` do for every other possession change — see
+      ``flows.service_functions.inventory``): a placed piece is no longer carryable, giveable,
+      or droppable (``ItemState.is_in_possession`` is location-based), so the same physical
+      instance can't simultaneously decorate a room and be handed off/sold elsewhere. This is
+      the same "unowned item lying around" state ``pick_up`` already expects (the vault-deposit
+      precedent in ``drop()``) — removing the decoration leaves the item sitting in the room,
+      reachable and pick-up-able by anyone, not auto-returned to a specific holder. Distinct
+      from — and NOT wired to — the older, uncalled ``RoomItem``/``place_item_in_room``
+      (``world.items.polish_services``, #676 Phase F, feeds ``RoomPolish``/prestige, not
+      comfort); flagged in the buildings glossary so the two don't drift further apart.
+      ``buyer_persona`` is REQUIRED for a crafted placement (fails closed) — unlike the
+      catalog branch, there's no zero-cost case that could omit it.
+
+    Raises ``DecorationPlacementError`` on a funds/kwarg/item mismatch.
+    """
+    if kind.crafted_item_template_id is not None:
+        if item_instance is None:
+            msg = f"DecorationKind {kind.pk} requires a crafted item_instance."
+            raise DecorationPlacementError(
+                msg, user_message=f"{kind.name} must be placed from a crafted piece."
+            )
+        if item_instance.template_id != kind.crafted_item_template_id:
+            msg = f"item_instance {item_instance.pk} is not a {kind.crafted_item_template_id}."
+            raise DecorationPlacementError(
+                msg, user_message=f"That isn't a {kind.crafted_item_template.name}."
+            )
+        if buyer_persona is None:
+            msg = f"DecorationKind {kind.pk} is crafted-furniture but no buyer_persona given."
+            raise DecorationPlacementError(msg, user_message="You need to be holding that piece.")
+        if item_instance.holder_character_sheet_id != buyer_persona.character_sheet_id:
+            msg = f"item_instance {item_instance.pk} is not held by persona {buyer_persona.pk}."
+            raise DecorationPlacementError(msg, user_message="You aren't holding that piece.")
+        if RoomDecoration.objects.filter(source_item_instance=item_instance).exists():
+            msg = f"item_instance {item_instance.pk} is already placed as decor."
+            raise DecorationPlacementError(msg, user_message="That piece is already placed.")
+        _anchor_crafted_item_in_room(item_instance, room_profile)
+    elif kind.cost_coppers:
+        from world.currency.services import get_or_create_purse, transfer  # noqa: PLC0415
+
+        if buyer_persona is None:
+            msg = f"DecorationKind {kind.pk} costs {kind.cost_coppers}c but no buyer_persona given."
+            raise DecorationPlacementError(msg, user_message="You need to be buying this fixture.")
+        try:
+            transfer(
+                amount=kind.cost_coppers,
+                reason=f"decoration placed: {kind.name}",
+                from_purse=get_or_create_purse(buyer_persona.character_sheet),
+            )
+        except ValidationError as exc:
+            raise DecorationPlacementError(str(exc), user_message=exc.messages[0]) from exc
+
+    decoration = RoomDecoration.objects.create(
+        room_profile=room_profile, kind=kind, source_item_instance=item_instance
+    )
     _materialize_decoration(decoration)
     _recompute_room_comfort_effect(room_profile)  # decor shifted room comfort → AP regen (#1514)
     return decoration
@@ -741,7 +879,15 @@ def place_decoration(room_profile, kind: DecorationKind) -> RoomDecoration:
 
 @transaction.atomic
 def remove_decoration(decoration: RoomDecoration) -> None:
-    """Remove a placed decoration and delete its comfort modifiers (#1514)."""
+    """Remove a placed decoration and delete its comfort modifiers (#1514).
+
+    A crafted-furniture placement's anchored item (``source_item_instance``, #2991 review
+    fix) is NOT moved anywhere further here — it was already relocated into the room and
+    un-held at placement time (``_anchor_crafted_item_in_room``), so removing the decoration
+    just leaves it sitting there as an ordinary, unowned, pick-up-able object (the same state
+    ``pick_up`` already expects) rather than teleporting it back into a specific holder's
+    hands — "unplace" returns the item to normal object status, not to any one player.
+    """
     room_profile = decoration.room_profile
     LocationValueModifier.objects.filter(
         source=_decoration_modifier_source(decoration),
@@ -749,3 +895,91 @@ def remove_decoration(decoration: RoomDecoration) -> None:
     ).delete()
     decoration.delete()
     _recompute_room_comfort_effect(room_profile)  # decor removed → AP regen recompute (#1514)
+
+
+# ---------------------------------------------------------------------------
+# Building purchase (#2991) — a real coin front door onto LocationOwnership,
+# alongside the existing CG-time grant_property_house freebie.
+# ---------------------------------------------------------------------------
+
+_PLACEHOLDER_TREASURY_ORG_NAME = "Unclaimed Properties Ward Office (placeholder)"
+_PLACEHOLDER_TREASURY_ORG_TYPE_NAME = "ward-office"
+
+
+class BuildingPurchaseError(Exception):
+    """A building purchase was refused; carries a player-facing ``user_message``.
+
+    Never surface ``str(exc)`` to API responses — use ``exc.user_message``.
+    """
+
+    def __init__(self, message: str, *, user_message: str | None = None) -> None:
+        super().__init__(message)
+        self.user_message = user_message or message
+
+
+def _placeholder_treasury_organization() -> Organization:
+    """Get-or-create the shared fallback ward/crown org a listing's sale coin sinks into.
+
+    Name-keyed for concurrency-safe idempotency, mirroring
+    ``property_grant_services._placeholder_ward_area``. Real content sets ``BuildingListing.
+    organization`` per listing via fixture upsert; this is only the fresh-DB/no-org fallback
+    (Adopted defaults).
+    """
+    from world.societies.models import Organization, OrganizationType  # noqa: PLC0415
+
+    org_type, _ = OrganizationType.objects.get_or_create(name=_PLACEHOLDER_TREASURY_ORG_TYPE_NAME)
+    organization, _ = Organization.objects.get_or_create(
+        name=_PLACEHOLDER_TREASURY_ORG_NAME, defaults={"org_type": org_type}
+    )
+    return organization
+
+
+@transaction.atomic
+def purchase_building(*, persona: Persona, listing: BuildingListing) -> BuildingListing:
+    """Buy a listed ``Building`` with coin (#2991): deed transfer + treasury sink.
+
+    Validates the listing is still available, debits ``persona``'s purse into the listing's
+    (or the shared placeholder) ward/crown treasury via ``transfer()``, transfers
+    ``LocationOwnership`` of the building's ``Area`` to ``persona`` via the existing
+    ``transfer_ownership`` lifecycle helper (ends any prior active ownership row, cascades
+    most-specific-wins to every room inside — unchanged mechanism), stamps
+    ``Building.owner_persona`` (the polish/prestige + upkeep-purse anchor —
+    ``upkeep_services``/``polish_services`` both read this field, not ``LocationOwnership``,
+    so both must move together for upkeep/prestige to actually reach the new owner), and flips
+    the listing to sold. Raises ``BuildingPurchaseError`` on an already-sold listing or
+    insufficient funds.
+    """
+    from world.currency.services import (  # noqa: PLC0415
+        get_or_create_purse,
+        get_or_create_treasury,
+        transfer,
+    )
+    from world.locations.services import transfer_ownership  # noqa: PLC0415
+
+    if not listing.is_available:
+        msg = f"listing {listing.pk} already sold"
+        raise BuildingPurchaseError(msg, user_message="That property has already sold.")
+
+    building = listing.building
+    organization = listing.organization or _placeholder_treasury_organization()
+    try:
+        transfer(
+            amount=listing.price_coppers,
+            reason=f"building purchase: {building}",
+            from_purse=get_or_create_purse(persona.character_sheet),
+            to_treasury=get_or_create_treasury(organization),
+        )
+    except ValidationError as exc:
+        raise BuildingPurchaseError(str(exc), user_message=exc.messages[0]) from exc
+
+    transfer_ownership(
+        area=building.area, to_persona=persona, notes=f"purchased listing #{listing.pk}"
+    )
+    building.owner_persona = persona
+    building.save(update_fields=["owner_persona"])
+
+    listing.is_available = False
+    listing.sold_to_persona = persona
+    listing.sold_at = timezone.now()
+    listing.save(update_fields=["is_available", "sold_to_persona", "sold_at"])
+    return listing

@@ -1137,7 +1137,10 @@ ambient stats (crime, order, lighting, climate-driven exposure), magical resonan
   income, `world/magic/CLAUDE.md`), conditions (`DamageType` FK for the hazard-shelter axis),
   weather (`Climate` folds into exposure axes, `world/weather/CLAUDE.md`), items
   (`GarmentMitigation` feeds per-character comfort mitigation), mechanics (`CharacterModifier`
-  comfort-mitigation targets)
+  comfort-mitigation targets), buildings (`place_decoration`/`RoomDecoration` write the AMENITY
+  axis this app resolves; the bare `comfort_level()` this app exposes is what #2991's room-state
+  `comfort_level` field surfaces in scenes — see the Buildings section's "Building purchase,
+  priced decoration & the crafted-furniture seam" entry)
 - **Source:** `src/world/locations/`
 - **Details:** `src/world/locations/CLAUDE.md`
 
@@ -3985,6 +3988,49 @@ unified NPCServiceOffer PERMIT effect handler. Buildings spawn from completed
   property_grant_profile` (cluster `"property_grants"`) — a generic
   placeholder profile/kind so the feature is exercisable before real content
   wires a `Beginnings` row at it.
+- **Building purchase, priced decoration & the crafted-furniture seam (#2991):** the
+  real coin front door onto `LocationOwnership`, alongside the CG-only
+  `grant_property_house` freebie above. `BuildingListing` (O2O → `Building`,
+  `price_coppers`, nullable `organization` treasury FK — falls back to a shared
+  placeholder ward-office org, `is_available` / `sold_to_persona` / `sold_at`) mirrors
+  `WareListing`'s shape at building scope; MVP inventory is staff/content-curated
+  (player-to-player resale is a deferred follow-up once this loop is proven — reuse
+  `WareListing`/`purchase_ware` when it lands). **Key function**
+  (`world.buildings.services`): `purchase_building(*, persona, listing) -> BuildingListing`
+  — validates `is_available`, debits the buyer's purse into the listing's (or the
+  placeholder) treasury via `transfer()`, calls the existing `world.locations.services.
+  transfer_ownership(area=building.area, to_persona=persona)` (ends any prior active
+  `LocationOwnership`, cascades most-specific-wins to every room — unchanged mechanism),
+  **also** stamps `Building.owner_persona` (the polish/prestige + upkeep-purse anchor —
+  `upkeep_services`/`polish_services` read this field, not `LocationOwnership`, so both
+  must move together), flips the listing sold. Raises typed `BuildingPurchaseError`.
+  Action: `PurchaseBuildingAction` (key `purchase_building`, `target_type=SELF`, kwarg
+  `listing_id`, gated only by `HasCharacterSheetPrerequisite` — funds/availability are
+  checked service-side). Dev seed: `ensure_placeholder_building_listing` (cluster
+  `"building_listings"`) — a schema-exercising placeholder Building + listing.
+  **Priced decoration placement:** `DecorationKind.cost_coppers` (PLACEHOLDER, default 0
+  — the pre-#2991 seeded catalog stays free); `place_decoration` gains `buyer_persona`/
+  `item_instance` kwargs and charges `cost_coppers` via `transfer()` before creating the
+  `RoomDecoration` row (no partial placement on insufficient funds); raises
+  `DecorationPlacementError`. `PlaceFixtureAction` passes the caller's persona and an
+  optional `item_instance_id` kwarg through; its success message carries the charged
+  amount. **Crafted-furniture seam (Ratified amendment, riding ADR-0192 — not a parallel
+  furniture path, no new recipe machinery, recipe content stays lore-repo authored):**
+  `DecorationKind.crafted_item_template` (nullable FK → `items.ItemTemplate`) marks a
+  kind as crafted-economy furniture; `RoomDecoration.source_item_instance` (nullable O2O
+  → `items.ItemInstance`) anchors the specific placed piece. `crafted_decoration_amenity
+  (kind, quality_tier) -> int` is the ADR-0192 mapping — `round(kind.amenity *
+  quality_tier.stat_multiplier)`, falling back to the flat `amenity` when
+  `quality_tier is None` — applied automatically by `_materialize_decoration` whenever a
+  placement carries a `source_item_instance`. `place_decoration` validates the held
+  instance matches the kind's template and isn't already placed elsewhere. **Room-state
+  legibility:** `flows.service_functions.serializers.room_state` gains additive
+  `decorations: list[str]` (ordered `RoomDecoration.kind.name` by `placed_at`) and
+  `comfort_level: int` (bare `comfort_level(room)`, no per-character offset) fields —
+  makes decor/comfort visible where scenes already read the room, without touching the
+  room's authored `desc` or `comfort_summary`. **Deferred:** player-to-player building
+  resale, comfort-flex/decor-driven prestige (#1522's natural next consumer — the
+  room-state field above is the read hook, not the prestige math), rent/tenancy pricing.
 
 ### Ships (#1832)
 Persistent upgrades + repair + ship-as-sanctum + covenant-scale combat bridge, the

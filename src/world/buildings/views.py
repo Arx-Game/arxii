@@ -286,6 +286,7 @@ class BuildingManagerViewSet(viewsets.ViewSet):
                     "name": kind.name,
                     "description": kind.description,
                     "amenity": kind.amenity,
+                    "cost_coppers": kind.cost_coppers,
                     "affinities": kind_affinities[kind.pk],
                 }
                 for kind in kinds

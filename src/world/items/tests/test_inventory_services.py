@@ -19,14 +19,18 @@ from flows.service_functions.inventory import (
     give,
     pick_up,
     put_in,
+    steal,
     take_out,
     unequip,
 )
+from world.buildings.factories import DecorationKindFactory
+from world.buildings.services import place_decoration, remove_decoration
 from world.character_sheets.factories import CharacterSheetFactory
 from world.items.constants import BodyRegion, EquipmentLayer, OwnershipEventType
 from world.items.exceptions import (
     ContainerClosed,
     ContainerFull,
+    ItemFixedInPlace,
     ItemTooLarge,
     NoDropLocation,
     NotAContainer,
@@ -36,6 +40,7 @@ from world.items.exceptions import (
     NotReachable,
     OwnedByAnother,
     RecipientNotAdjacent,
+    TheftNotPermitted,
 )
 from world.items.factories import ItemInstanceFactory, ItemTemplateFactory, TemplateSlotFactory
 from world.items.models import EquippedItem, OwnershipEvent
@@ -173,6 +178,112 @@ class PickUpTests(TestCase):
         self.item.game_object.refresh_from_db()
         self.assertIsNone(self.item.contained_in)
         self.assertEqual(self.item.game_object.location, self.character)
+
+
+class PickUpPlacedDecorationTests(TestCase):
+    """Review round 2 (#2991): an actively-placed crafted decoration can't be plain-taken.
+
+    Round 1 anchored the item into the room and cleared ``holder_character_sheet`` so
+    Give/Drop couldn't touch it — but that ALSO cleared the ownership signal ``_take_denial``
+    relies on, so plain ``get`` (``pick_up`` via ``GetAction``) slipped through unblocked.
+    This covers the dedicated ``ItemFixedInPlace`` denial that closes that gap, through the
+    real ``pick_up`` path (not just the ``_take_denial`` predicate directly).
+    """
+
+    def setUp(self) -> None:
+        self.account = AccountFactory()
+        self.room = ObjectDBFactory(
+            db_key="PlacedDecorRoom",
+            db_typeclass_path="typeclasses.rooms.Room",
+        )
+        self.room_profile = self.room.room_profile
+
+        # The placer: holds the crafted item, then anchors it as room decor.
+        placer_character = CharacterSheetFactory(character__db_key="DecorPlacer").character
+        placer_character.location = self.room
+        placer_character.save()
+        placer_sheet = CharacterSheetFactory(character=placer_character)
+        placer_persona = placer_sheet.primary_persona
+
+        template = ItemTemplateFactory(name="PickUp Test Chair T")
+        self.kind = DecorationKindFactory(
+            name="PickUp Test Chair", amenity=50, crafted_item_template=template
+        )
+        item_obj = ObjectDBFactory(
+            db_key="PickUpDecorItemObj",
+            db_typeclass_path="typeclasses.objects.Object",
+        )
+        item_obj.location = placer_character
+        item_obj.save()
+        self.instance = ItemInstanceFactory(
+            template=template, game_object=item_obj, holder_character_sheet=placer_sheet
+        )
+        self.decoration = place_decoration(
+            self.room_profile,
+            self.kind,
+            buyer_persona=placer_persona,
+            item_instance=self.instance,
+        )
+
+        # A DIFFERENT co-located character attempts a plain take — GetAction has no
+        # prerequisites, so this is the exact exploit path the round-2 review found.
+        self.taker_character = CharacterSheetFactory(character__db_key="DecorTaker").character
+        self.taker_character.location = self.room
+        self.taker_character.db_account = self.account
+        self.taker_character.save()
+        self.taker_sheet = CharacterSheetFactory(character=self.taker_character)
+
+        ctx = MagicMock()
+        self.taker_state = CharacterState(self.taker_character, context=ctx)
+        self.item_state = ItemState(self.instance, context=ctx)
+
+    def test_plain_take_on_active_decoration_is_denied(self) -> None:
+        with self.assertRaises(ItemFixedInPlace) as ctx:
+            pick_up(self.taker_state, self.item_state)
+        self.assertEqual(ctx.exception.user_message, "It is fixed in place.")
+
+        self.instance.refresh_from_db()
+        self.assertIsNone(self.instance.holder_character_sheet_id)  # untouched, still un-held
+        self.assertEqual(self.instance.game_object.location, self.room)  # still sitting there
+
+    def test_take_succeeds_once_the_decoration_is_removed(self) -> None:
+        remove_decoration(self.decoration)
+
+        pick_up(self.taker_state, self.item_state)
+
+        self.instance.refresh_from_db()
+        self.assertEqual(self.instance.game_object.location, self.taker_character)
+        self.assertEqual(self.instance.holder_character_sheet_id, self.taker_sheet.pk)
+
+    def test_steal_is_also_refused_on_an_active_decoration(self) -> None:
+        """Regression (self-discovered while fixing plain-take): routing the fixed-in-place
+
+        denial through ``_take_denial`` makes ``take_requires_steal`` True for a holder-less
+        anchored item, and steal's "non-vault unowned item" fallback allows ANYTHING with no
+        consent gate at all — a worse bypass than the original plain-take gap. Steal must
+        stay refused too; only ``RemoveFixtureAction`` un-anchors a placed decoration.
+        """
+        with self.assertRaises(TheftNotPermitted):
+            steal(self.taker_state, self.item_state)
+        self.instance.refresh_from_db()
+        self.assertIsNone(self.instance.holder_character_sheet_id)
+        self.assertEqual(self.instance.game_object.location, self.room)
+
+    def test_non_decoration_room_item_is_unaffected(self) -> None:
+        """Regression: an ordinary, un-anchored room item stays plainly takeable."""
+        other_obj = ObjectDBFactory(
+            db_key="PlainRoomItemObj",
+            db_typeclass_path="typeclasses.objects.Object",
+        )
+        other_obj.location = self.room
+        other_obj.save()
+        other_instance = ItemInstanceFactory(game_object=other_obj)
+        other_state = ItemState(other_instance, context=MagicMock())
+
+        pick_up(self.taker_state, other_state)
+
+        other_instance.refresh_from_db()
+        self.assertEqual(other_instance.game_object.location, self.taker_character)
 
 
 class DropTests(TestCase):

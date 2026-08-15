@@ -88,6 +88,53 @@ class RoomEditAction(Action):
         return ActionResult(success=True, message="Room updated.")
 
 
+@dataclass
+class PurchaseBuildingAction(Action):
+    """Buy a listed Building with coin (#2991). Kwarg: ``listing_id``.
+
+    No ownership prerequisite — the buyer is *becoming* the owner; funds and
+    listing-availability are checked service-side by ``purchase_building``.
+    """
+
+    key: str = "purchase_building"
+    name: str = "Purchase Building"
+    icon: str = "key"
+    category: str = "locations"
+    action_category: ActionCategory = ActionCategory.PHYSICAL
+    target_type: TargetType = TargetType.SELF
+
+    def get_prerequisites(self) -> list[Prerequisite]:
+        return [HasCharacterSheetPrerequisite()]
+
+    def execute(
+        self,
+        actor: ObjectDB,
+        context: ActionContext | None = None,
+        **kwargs: Any,
+    ) -> ActionResult:
+        from world.buildings.models import BuildingListing  # noqa: PLC0415
+        from world.buildings.services import (  # noqa: PLC0415
+            BuildingPurchaseError,
+            purchase_building,
+        )
+
+        listing = (
+            BuildingListing.objects.filter(pk=kwargs.get("listing_id"))
+            .select_related("building")
+            .first()
+        )
+        if listing is None:
+            return ActionResult(success=False, message="No such building listing.")
+        try:
+            purchase_building(persona=_persona_for(actor), listing=listing)
+        except BuildingPurchaseError as exc:
+            return ActionResult(success=False, message=exc.user_message)
+        return ActionResult(
+            success=True,
+            message=f"You purchase {listing.building} for {listing.price_coppers} coppers.",
+        )
+
+
 def _persona_for(actor: ObjectDB):
     from world.scenes.services import active_persona_for_sheet  # noqa: PLC0415
 
@@ -775,11 +822,14 @@ class StartExtensionAction(_RoomBuilderAction):
 
 @dataclass
 class PlaceFixtureAction(_RoomBuilderAction):
-    """Place a comfort fixture in a room. Kwargs: ``kind``, optional ``room_id``.
+    """Place a comfort fixture in a room. Kwargs: ``kind``, optional ``room_id``,
+    optional ``item_instance_id`` (crafted-furniture kinds, #2991 amendment).
 
     Fixtures are the build-to-win mitigation tools (#1514): stackable,
-    presence-only (no toggle — a hearth is always lit), instant and free
-    (cost is the economy pass's knob).
+    presence-only (no toggle — a hearth is always lit). Priced per #2991:
+    ``DecorationKind.cost_coppers`` is charged to the placer unless the kind is
+    crafted-furniture (``crafted_item_template`` set), in which case an
+    ``item_instance_id`` of a held matching crafted piece is required instead.
     """
 
     key: str = "place_room_fixture"
@@ -794,7 +844,11 @@ class PlaceFixtureAction(_RoomBuilderAction):
     ) -> ActionResult:
         from evennia_extensions.models import RoomProfile  # noqa: PLC0415
         from world.buildings.models import DecorationKind  # noqa: PLC0415
-        from world.buildings.services import place_decoration  # noqa: PLC0415
+        from world.buildings.services import (  # noqa: PLC0415
+            DecorationPlacementError,
+            place_decoration,
+        )
+        from world.items.models import ItemInstance  # noqa: PLC0415
 
         room = _resolve_room(actor, kwargs)
         if room is None:
@@ -808,8 +862,21 @@ class PlaceFixtureAction(_RoomBuilderAction):
             profile = room.room_profile
         except RoomProfile.DoesNotExist:
             return ActionResult(success=False, message="This room can't hold fixtures.")
-        place_decoration(profile, kind)
-        return ActionResult(success=True, message=f"{kind.name} placed.")
+        item_instance = None
+        item_instance_id = kwargs.get("item_instance_id")
+        if item_instance_id:
+            item_instance = ItemInstance.objects.filter(pk=item_instance_id).first()
+        try:
+            place_decoration(
+                profile,
+                kind,
+                buyer_persona=_persona_for(actor),
+                item_instance=item_instance,
+            )
+        except DecorationPlacementError as exc:
+            return ActionResult(success=False, message=exc.user_message)
+        suffix = f" (-{kind.cost_coppers}c)" if kind.cost_coppers and item_instance is None else ""
+        return ActionResult(success=True, message=f"{kind.name} placed.{suffix}")
 
 
 @dataclass

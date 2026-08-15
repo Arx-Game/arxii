@@ -156,6 +156,7 @@ class ActionRegistryTests(TestCase):
             "equip",
             "unequip",
             "edit_room",
+            "purchase_building",
             "dig_room",
             "resize_room",
             "remove_room",
