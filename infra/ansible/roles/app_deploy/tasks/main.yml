@@ -47,6 +47,24 @@
 # (whatever `current` still points at) untouched, instead of stranding a
 # half-deployed `current` with no rollback.
 
+# Which is exactly why the hardening overlay is symlinked in here rather than
+# written to a release path by django_hardening: `current` does not exist at
+# all on a first converge, and points at the PREVIOUS release on every later
+# one, so the release being migrated below would never see the overlay.
+# django_hardening renders the file itself (earlier in site.yml's role order)
+# at dh_settings_path — app_secret_settings_src MUST equal that value; both
+# defaults carry the pairing note and acceptance.sh pins them equal.
+# `secret_settings.py` is gitignored, so the checkout above never places a
+# real file at this path for the link to fight with.
+- name: Link the hardening overlay into this release (BEFORE migrate reads it)
+  ansible.builtin.file:
+    src: "{{ app_secret_settings_src }}"
+    dest: "{{ app_release_gamedir }}/server/conf/secret_settings.py"
+    state: link
+    owner: "{{ app_user }}"
+    group: "{{ app_group }}"
+    follow: false
+
 # Build the project venv from uv.lock so the `evennia` entrypoint exists
 # under the service user. --frozen ensures we install EXACTLY what the
 # lockfile says (no implicit resolution drift); --no-dev skips dev deps.

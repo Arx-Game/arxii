@@ -27,6 +27,11 @@ app_portal_pidfile: /opt/arxii/current/src/server/portal.pid
 # `current`-scoped).
 app_release_dir: "{{ app_releases_dir }}/{{ app_ref }}"
 app_release_gamedir: "{{ app_releases_dir }}/{{ app_ref }}/src"
+# Where django_hardening rendered the production settings overlay. MUST equal
+# roles/django_hardening/defaults/main.yml's dh_settings_path — the tasks here
+# only symlink it into the release being built, they never render it.
+# acceptance.sh pins the two values equal.
+app_secret_settings_src: /etc/arxii/secret_settings.py
 
 # Frontend build (Task D). The box has no Node preinstalled — installed here
 # via the NodeSource apt repo, pinned to the Node 20.x line to match CI
