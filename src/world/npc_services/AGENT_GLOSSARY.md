@@ -158,3 +158,26 @@ _Avoid_: custom NPC scripts, per-NPC handlers.
 - **Melt back / retire to the ether** — layer retirement (placement
   inactive, body unplaced). Never deletion; history keeps the identity
   resurrectable.
+
+## Household daily-life behaviors (#2989)
+
+- **Doorman announcement** — a deterministic room echo naming every arrival
+  when a room has an active DOORMAN `NPCAssignment`; no check, no gate on
+  owner/tenant standing. Distinct from "access challenge" (turning away the
+  unwanted), which stays deferred pending a real invitation/guest-list
+  primitive. _Avoid_: door guard, access control (neither exists here).
+- **Servant ambience** — the pampering pair (`prepare_meal`/`prepare_bath`,
+  `world.npc_services.servant_ambience`): same delay+departure/arrival-echo
+  shape as servant fetch. Meal is pure ambience (no mechanical payoff — no
+  ordinary-meal hunger system exists to hook); bath additionally carries a
+  small gated fatigue recovery through the existing `recover_fatigue` seam.
+  _Avoid_: household provisioning, meal system (neither is built — this is
+  ambience only).
+- **Expulsion bar** — the unresistable OOC soft gate (`ExpulsionBar` model):
+  a room owner (or a servant/doorman acting for one) shows a disruptive
+  character out and bars their re-entry, no check, no roll, ever. A
+  consent/disruption valve, not a combat surface — distinct from guard
+  detection (a rolled, resistible stealth check) and from the deferred
+  doorman access-challenge. Entry enforcement is pre-traversal
+  (`check_exit_traversal`), not post-arrival. _Avoid_: kick, ban, eviction
+  (this bars re-entry to one room, not an account- or building-wide action).

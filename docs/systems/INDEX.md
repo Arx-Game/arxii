@@ -3355,9 +3355,75 @@ enters, the intruder rolls Stealth vs. a difficulty constant.
 - **Actions:** `assign_guard` / `unassign_guard` / `list_guard_assignments`
   (REGISTRY, `IsRoomOwnerPrerequisite`-gated, `target_type=SELF`).
 - **Telnet:** `guard` command (`guard assign <npc>` / `guard unassign` / `guard`).
-- **Deferred:** servant fetch (intercepts `NotReachable`), persistent security
-  log, doorman pre-traversal announcement.
+- **Deferred:** persistent security log.
 - **Source:** `src/world/npc_services/guard_services.py`
+
+### Servant/Doorman Assignment, Pampering Ambience, Expulsion (#2989)
+Household daily-life behaviors riding the #2178 `NPCAssignment` substrate:
+SERVANT/DOORMAN assignment mirrors GUARD's action triplet; servants pamper
+(meal/bath prep, servant-fetch's delay+echo idiom) and a doorman announces
+every arrival (deterministic, no check). A separate, unresistable OOC
+expulsion valve (`ExpulsionBar`) covers "get rid of a disruptive character" —
+access-challenge doorman behavior stays deferred pending a real
+invitation/guest-list primitive (see the #2989 spec's Decision 4).
+
+- **Actions:** `assign_servant` / `unassign_servant` / `list_servant_assignments`
+  and `assign_doorman` / `unassign_doorman` / `list_doorman_assignments`
+  (REGISTRY, `IsRoomOwnerPrerequisite`-gated, `target_type=SELF`,
+  `actions/definitions/npc_assignments.py`, sharing `_assign_npc_role`/
+  `_unassign_npc_role`/`_list_npc_role` helpers with the GUARD actions'
+  logic). `servant_prepare_meal` / `servant_prepare_bath` (REGISTRY, gated
+  like servant fetch — owner/tenant standing + an active SERVANT in reach,
+  not owner-only) and `expel_character` / `lift_expulsion_bar` (REGISTRY,
+  `IsRoomOwnerPrerequisite`-gated) live in `actions/definitions/npc_ambience.py`.
+- **Telnet:** `servant` (`servant assign <npc>` / `unassign` / `meal` / `bath`),
+  `doorman` (`doorman assign <npc>` / `unassign`), `expel <character>` /
+  `expel/lift <character>` (`commands/servant.py`, `commands/doorman.py`,
+  `commands/expulsion.py`).
+- **Doorman announcement:** `announce_arrival(character, room)`
+  (`world.npc_services.doorman_services`) — fires from `Character.at_post_move`
+  alongside `check_guard_detection`; deterministic room echo naming the
+  arriver via the doorman's `get_active_target_name()`, excludes the arriving
+  character. No check, no owner/tenant gate — announces everyone.
+- **Servant pampering ambience:** `prepare_meal(actor)` / `prepare_bath(actor)`
+  (`world.npc_services.servant_ambience`) — same delay+departure/arrival-echo
+  shape as `servant_fetch.servant_fetch_item`. Meal is pure ambience (no
+  mechanical payoff — "appetites"/"catering" don't verify as a hookable
+  ordinary-meal system, see the #2989 spec's anti-reinvention ledger). Bath
+  additionally recovers a flat amount of PHYSICAL fatigue via
+  `world.fatigue.services.recover_fatigue` (the #2852 partial-recovery seam
+  food/drink already ride) — a genuine one-line hook, so it's wired rather
+  than staying prop-only.
+- **Household word-spread — deferred, not one line:** `world.tidings.services
+  .house_feed_for` is a read-only aggregator over other domains' own models
+  (Stature shifts, proclamations, open crises) with no generic
+  push-a-custom-message write path, so servant-carried household word-spread
+  (ratified amendment 1) does not verify as a one-call hook and ships
+  deferred, pending the future Arx-1-style messenger system.
+- **Expulsion (unresistable OOC soft gate):** `world.npc_services
+  .expulsion_services.expel_character(actor, target, imposed_by)` — moves the
+  target through the room's first exit (deterministic, ordered by `db_key`)
+  and writes/reactivates an `ExpulsionBar`. No check, no roll, no
+  prerequisite bypass on the target, regardless of character power — a
+  consent/disruption valve, not a combat surface. `lift_expulsion_bar(room,
+  name)` clears an active bar by the barred character's name.
+- **Model:** `ExpulsionBar` (`world.npc_services.models`) — `room` FK
+  (RoomProfile), `barred_sheet` FK (CharacterSheet), `imposed_by` persona FK,
+  `imposed_at`/`lifted_at` (null while active). Partial-unique per
+  `(room, barred_sheet)` while `lifted_at IS NULL`, mirroring
+  `NPCAssignment`'s active-row pattern.
+- **Entry enforcement:** `flows.service_functions.movement
+  .check_exit_traversal` — pre-traversal (not post-arrival like guard
+  detection/ward reaction, since a barred character must never even land in
+  the room), queries `expulsion_services.active_bar_for(destination,
+  caller_sheet)` and raises `CommandError` before any move happens. Wired
+  into the normal exit-traversal + `TravelAction` hop-pacing paths (both call
+  `check_exit_traversal`); portal travel (`world.magic.services.portal_travel
+  .perform_portal_travel`) does not check the bar — a known gap, mirroring
+  the pre-#2177 ward/alarm bypass, deferred rather than fixed in this pass.
+- **Source:** `src/world/npc_services/doorman_services.py`,
+  `src/world/npc_services/servant_ambience.py`,
+  `src/world/npc_services/expulsion_services.py`
 
 ### Missions & Living Grid
 Branching narrative quest chains — a character receives a mission with broad objectives,

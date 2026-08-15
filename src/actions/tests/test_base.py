@@ -486,6 +486,17 @@ class ActionRegistryTests(TestCase):
             "assign_guard",
             "unassign_guard",
             "list_guard_assignments",
+            # #2989 — servant/doorman assignment + pampering ambience + expulsion.
+            "assign_servant",
+            "unassign_servant",
+            "list_servant_assignments",
+            "assign_doorman",
+            "unassign_doorman",
+            "list_doorman_assignments",
+            "servant_prepare_meal",
+            "servant_prepare_bath",
+            "expel_character",
+            "lift_expulsion_bar",
             # #2820 — org tasking + spy networks.
             "list_org_tasks",
             "issue_org_task",

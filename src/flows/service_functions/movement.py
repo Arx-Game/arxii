@@ -111,6 +111,18 @@ def check_exit_traversal(
         msg = "That exit doesn't lead anywhere."
         raise CommandError(msg)
 
+    # #2989 — the unresistable expulsion bar. Pre-traversal (not post-arrival
+    # like guard detection/ward reaction) because a barred character must
+    # never even land in the room: no check, no roll, no way around it.
+    destination = exit.obj.destination
+    barred_sheet = caller.obj.character_sheet
+    if barred_sheet is not None:
+        from world.npc_services.expulsion_services import active_bar_for  # noqa: PLC0415
+
+        if active_bar_for(destination, barred_sheet) is not None:
+            msg = "You are barred from entering there."
+            raise CommandError(msg)
+
 
 def traverse_exit(
     caller: BaseState,
