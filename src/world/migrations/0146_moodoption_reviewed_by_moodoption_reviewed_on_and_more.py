@@ -23,9 +23,7 @@ class Migration(migrations.Migration):
         migrations.AddField(
             model_name="moodoption",
             name="reviewed_on",
-            field=models.DateField(
-                blank=True, help_text="Date the prose was reviewed.", null=True
-            ),
+            field=models.DateField(blank=True, help_text="Date the prose was reviewed.", null=True),
         ),
         migrations.AddField(
             model_name="moodoption",
@@ -42,8 +40,6 @@ class Migration(migrations.Migration):
         migrations.AddField(
             model_name="moodoption",
             name="written_on",
-            field=models.DateField(
-                blank=True, help_text="Date the prose was written.", null=True
-            ),
+            field=models.DateField(blank=True, help_text="Date the prose was written.", null=True),
         ),
     ]
