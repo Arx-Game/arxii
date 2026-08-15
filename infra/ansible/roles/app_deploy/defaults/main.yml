@@ -8,6 +8,17 @@ app_releases_dir: /opt/arxii/releases
 # settings.py is at app_gamedir/server/conf/settings.py).
 app_current: /opt/arxii/current
 app_gamedir: /opt/arxii/current/src
+# Deploy-time Django commands run through `python -m django`, NOT through the
+# `evennia` launcher, so they need the settings module named explicitly (the
+# launcher is what normally supplies it). Must match the gamedir layout above:
+# server/conf/settings.py under app_gamedir. See the migrate task for why the
+# launcher is bypassed.
+app_django_settings_module: server.conf.settings
+# Ceiling for the detached migrate task, in seconds. A measured first run is
+# ~80 minutes (143 arxii migrations at ~30-35 s each on a 2-core box); this
+# allows more than double that before Ansible gives up. Steady-state deploys
+# apply nothing and return in seconds.
+app_migrate_async_timeout: 10800
 # The org repo, matching this checkout's own origin. It was TehomCD/arxii with
 # a "# confirm" comment nobody ever actioned, and the first real converge hung
 # on it: GitHub answers 404 for a nonexistent-or-private repo, git responds by

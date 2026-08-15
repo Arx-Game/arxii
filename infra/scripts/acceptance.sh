@@ -66,7 +66,7 @@ chk   "django: DEBUG = False"         "grep -q 'DEBUG = False' infra/ansible/rol
 chk   "django: TELNET_ENABLED False"  "grep -q 'TELNET_ENABLED = False' infra/ansible/roles/django_hardening/templates/secret_settings.py.j2"
 
 # PG15+ revoked CREATE on schema public from PUBLIC, so a database-level GRANT
-# ALL leaves `evennia migrate` unable to create django_migrations. The schema
+# ALL leaves the migration unable to create django_migrations. The schema
 # grant is the fix; without it the very first migrate fails on every fresh
 # cluster (Ubuntu 24.04 ships PG16).
 chk   "postgres role grants CREATE on schema public (PG15+ requirement)" \
@@ -79,10 +79,21 @@ chk   "base role pins uv version + sha256"           \
   "grep -qE '^base_uv_version: ' infra/ansible/roles/base/defaults/main.yml && grep -qE '^base_uv_sha256: ' infra/ansible/roles/base/defaults/main.yml"
 chk   "app_deploy runs uv sync --frozen --no-dev"    \
   "grep -q 'sync --frozen --no-dev' infra/ansible/roles/app_deploy/tasks/main.yml"
-chk   "app_deploy runs evennia migrate --noinput"    \
-  "grep -q 'evennia migrate --noinput' infra/ansible/roles/app_deploy/tasks/main.yml"
-chk   "app_deploy runs evennia collectstatic --noinput" \
-  "grep -q 'evennia collectstatic --noinput' infra/ansible/roles/app_deploy/tasks/main.yml"
+chk   "app_deploy runs django migrate --noinput"     \
+  "grep -q 'python -m django migrate --noinput' infra/ansible/roles/app_deploy/tasks/main.yml"
+chk   "app_deploy runs django collectstatic --noinput" \
+  "grep -q 'python -m django collectstatic --noinput' infra/ansible/roles/app_deploy/tasks/main.yml"
+# Regression guard. Every deploy-time Django command must use `python -m
+# django`, never the `evennia` launcher: the launcher's check_database() both
+# queries server_serverconfig at import time (fatal on a half-migrated
+# database) and prompts interactively to create Account #1 (blocks with no
+# tty). Either one strands a first-run standup. See the migrate task comment.
+chk   "app_deploy never shells out to the evennia launcher" \
+  "! grep -qE '(^|[^-])\\brun evennia ' infra/ansible/roles/app_deploy/tasks/main.yml"
+chk   "app_deploy migrate runs detached (survives an SSH drop)" \
+  "grep -q 'async: \"{{ app_migrate_async_timeout }}\"' infra/ansible/roles/app_deploy/tasks/main.yml"
+chk   "ansible.cfg sets SSH keepalives for long silent tasks" \
+  "grep -q 'ServerAliveInterval=30' infra/ansible/ansible.cfg"
 chk   "app_deploy guards superuser create with an exists-check (idempotent)" \
   "grep -q 'is_superuser=True' infra/ansible/roles/app_deploy/tasks/main.yml && grep -q \"'YES' not in\" infra/ansible/roles/app_deploy/tasks/main.yml"
 chk   "secrets_vault maps ARXII_DJANGO_SUPERUSER_PASSWORD -> DJANGO_SUPERUSER_PASSWORD" \
@@ -214,8 +225,8 @@ chk   "django_hardening's overlay path is not under a release/current path" \
   "sed -n 's/^dh_settings_path: //p' infra/ansible/roles/django_hardening/defaults/main.yml | grep -qv '/opt/arxii'"
 chk   "dh_settings_path == app_deploy's app_secret_settings_src" \
   "[ \"\$(sed -n 's/^dh_settings_path: //p' infra/ansible/roles/django_hardening/defaults/main.yml)\" = \"\$(sed -n 's/^app_secret_settings_src: //p' infra/ansible/roles/app_deploy/defaults/main.yml)\" ]"
-assert_before "app_deploy links the overlay BEFORE evennia migrate reads it" \
-  'secret_settings\.py' 'evennia migrate --noinput' \
+assert_before "app_deploy links the overlay BEFORE the migration reads it" \
+  'secret_settings\.py' 'django migrate --noinput' \
   infra/ansible/roles/app_deploy/tasks/main.yml
 
 # app_deploy clones from app_repo. A wrong value does not fail cleanly: GitHub
