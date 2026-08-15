@@ -4,6 +4,11 @@
 # different image layout does not need a task edit.
 caddy_bin: /usr/bin/caddy
 caddy_staged_bin: /tmp/caddy-with-cloudflare
+# Caddy's OWN EnvironmentFile, holding only CADDY_CF_DNS_TOKEN. Deliberately
+# not secrets_vault's /etc/arxii/arxii.env: that one is arxii:arxii 0640
+# inside a 0750 dir, unreadable by the caddy user, and it carries every app
+# secret — Caddy has no business seeing the database password.
+caddy_env_file: /etc/caddy/caddy.env
 # Caddy's build service names architectures the Go way; Ansible reports the
 # uname spelling. Only the two we could plausibly run on are mapped, and an
 # unmapped value fails loudly at template time rather than downloading a

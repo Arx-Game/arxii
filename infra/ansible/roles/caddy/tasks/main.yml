@@ -118,8 +118,62 @@
     quiet: true
   when: not caddy_rehearsal_mode
 
+# --- DNS-01 token delivery ---------------------------------------------------
+# Caddyfile.j2 reads {env.CADDY_CF_DNS_TOKEN}. secrets_vault renders that key
+# into /etc/arxii/arxii.env — owned arxii:arxii inside a 0750 dir, which the
+# `caddy` user cannot read — and the distro caddy.service carries no
+# EnvironmentFile at all. So the token was in the contract but reached
+# nothing. Give caddy its own single-key file plus a drop-in that loads it.
+- name: Fail-closed — the DNS-01 token must be present outside rehearsal
+  ansible.builtin.assert:
+    that: lookup('env', 'ARXII_CADDY_CF_DNS_TOKEN') | length > 0
+    fail_msg: >-
+      ARXII_CADDY_CF_DNS_TOKEN is empty. Caddyfile.j2's `acme_dns cloudflare`
+      cannot provision without it, so `caddy validate` fails and no
+      certificate is ever issued. Set it as a gated Environment secret.
+    quiet: true
+  when: not caddy_rehearsal_mode
+
+- name: Render caddy's own DNS-01 EnvironmentFile (0640 root:caddy)
+  ansible.builtin.copy:
+    content: "CADDY_CF_DNS_TOKEN={{ lookup('env', 'ARXII_CADDY_CF_DNS_TOKEN') }}\n"
+    dest: "{{ caddy_env_file }}"
+    owner: root
+    group: caddy
+    mode: "0640"
+  no_log: true # the token is the whole content
+  notify: Restart caddy
+  when: not caddy_rehearsal_mode
+
+- name: Ensure the caddy.service drop-in directory exists
+  ansible.builtin.file:
+    path: /etc/systemd/system/caddy.service.d
+    state: directory
+    owner: root
+    group: root
+    mode: "0755"
+  when: not caddy_rehearsal_mode
+
+- name: Load that file into caddy.service via a drop-in
+  ansible.builtin.copy:
+    content: |
+      [Service]
+      EnvironmentFile={{ caddy_env_file }}
+    dest: /etc/systemd/system/caddy.service.d/10-arxii-dns01-token.conf
+    owner: root
+    group: root
+    mode: "0644"
+  notify: Restart caddy
+  when: not caddy_rehearsal_mode
+
 - name: Deploy Caddyfile (validated before reload)
   ansible.builtin.template:
+    # `caddy validate` PROVISIONS modules, it does not merely parse — the
+    # cloudflare DNS provider rejects an empty token at provision time. This
+    # runs as a bare subprocess with none of the service's environment, so
+    # the token has to be handed to the task explicitly. Separate from the
+    # EnvironmentFile above: that one is for the running service.
+
     # caddy_rehearsal_mode picks the internal-CA template (no DNS-01, no
     # Cloudflare credential needed) — see both templates' "EDIT BOTH" header.
     src: "{{ 'Caddyfile.rehearsal.j2' if caddy_rehearsal_mode else 'Caddyfile.j2' }}"
@@ -128,6 +182,8 @@
     group: caddy
     mode: "0640"
     validate: "caddy validate --adapter caddyfile --config %s"
+  environment:
+    CADDY_CF_DNS_TOKEN: "{{ lookup('env', 'ARXII_CADDY_CF_DNS_TOKEN') }}"
   notify: Reload caddy
 
 - name: Ensure caddy is enabled and running

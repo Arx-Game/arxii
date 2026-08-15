@@ -186,6 +186,17 @@ chk   "caddy role verifies the staged binary before swapping it in" \
   "grep -q 'caddy_staged_modules' infra/ansible/roles/caddy/tasks/main.yml"
 chk   "Caddyfile.j2 still uses DNS-01 via cloudflare (paired with the plugin fetch above)" \
   "grep -q 'acme_dns cloudflare' infra/ansible/roles/caddy/templates/Caddyfile.j2"
+# Caddyfile.j2's {env.CADDY_CF_DNS_TOKEN} is only as good as whatever puts
+# that key in caddy's environment. secrets_vault renders it into the APP's
+# EnvironmentFile, which the caddy user cannot read — so the role must give
+# caddy its own file AND a drop-in that loads it, or DNS-01 silently gets an
+# empty token (validate fails; worse, a runtime miss issues no cert).
+chk   "caddy role renders caddy's own DNS-01 EnvironmentFile" \
+  "grep -q 'CADDY_CF_DNS_TOKEN={{ lookup' infra/ansible/roles/caddy/tasks/main.yml"
+chk   "caddy role loads that file into caddy.service via a drop-in" \
+  "grep -q 'caddy.service.d' infra/ansible/roles/caddy/tasks/main.yml"
+chk   "Caddyfile validate gets the DNS-01 token in its environment" \
+  "grep -q 'CADDY_CF_DNS_TOKEN: ' infra/ansible/roles/caddy/tasks/main.yml"
 
 # (d) nftables must never `flush ruleset` (wipes fail2ban's own table too);
 # it must flush only OUR table. nc() strips comments first so the check
