@@ -149,8 +149,23 @@ A deterrence-blind crisis class (#3093): `DomainCrisisType.ignores_stature` rows
 _Avoid_: plague event, zombie crisis (content names live in the catalog).
 
 **Grand Display**:
-The upward half of the bluffing game (#3093): an event whose catering PROVISION score clears the bar elevates the host org's PERCEIVED stature, bounded above true by the bluff cap. Whispers push down; displays push up.
+The upward half of the bluffing game (#3093): an event whose catering PROVISION score OR grandeur score clears the bar elevates the host org's PERCEIVED stature, bounded above true by the bluff cap (#2357 added the grandeur input; both scores are independent and can fire on the same completed event). Whispers push down; displays push up.
 _Avoid_: propaganda event, fame party.
+
+**Grandeur** (`world/events`):
+Event-scoped prestige/wealth investment for once-in-a-lifetime events — royal wedding,
+coronation, grand ball (#2357). A catering-shaped sibling of `EventCatering`: hosts spend
+real coppers (a `world.currency.services.transfer` sink) across VENUE/ENTERTAINMENT/
+FAVORS/DECOR categories (food stays catering's Hospitality lane); at `complete_event` the
+spend converts through a sqrt-diminishing-returns curve into the host's "Grandeur" deed —
+same `create_solo_deed` + Grand Display pipeline catering uses — plus an additive honoree
+cut when the event is linked to a WEDDING or CORONATION `Ceremony` (in addition to, never
+instead of, whatever `finish_ceremony` itself awards the honoree). Orthogonal to the
+ceremony mechanics — ceremonies handle the rite, grandeur handles the party. No
+`is_milestone` flag: for a ceremony-linked event the spend's own cost is the once-in-a-
+lifetime gate.
+_Avoid_: milestone score, wedding tier, event prestige (that's the broader unbuilt system
+grandeur's deed pipeline feeds, not a synonym for it).
 
 **OrgPact / PactKind**:
 The signed-paper diplomacy instrument (#2999, ADR-0212) — a sibling of MarriagePact, never a generalization. PactKind rows are LEVERS (allied stature share, income tithe, non-aggression, mutual defense; ADR-0178 payload rule). Proposed by one org's leadership, ratified by the other's; BETRAYAL is a stamped dissolution reason with a permanent prestige cost, auto-flagged by hostile acts between partners.

@@ -4627,6 +4627,32 @@ Items, equipment, inventory, and currency. Spec D PR1 shipped facets, equip/uneq
   event-completion reward hook). Items carry their catering history on examine
   ("This amphora was used for catering at ..."), rendered through the
   `LookAction` examine-extras seam (ADR-0213). Telnet: `event cater <container>`.
+  **Event grandeur (#2357):** a catering-shaped sibling for once-in-a-lifetime events
+  (royal wedding, coronation, grand ball) — `EventGrandeurContribution` tags a
+  currency-sink spend (`contribute_grandeur`, `world.currency.services.transfer`,
+  null destination) against a `GrandeurCategory` (VENUE/ENTERTAINMENT/FAVORS/DECOR —
+  food stays catering's lane). At `complete_event`, `_award_grandeur_prestige` sums
+  spend into a sqrt-diminishing-returns score (`_grandeur_score`, capped), mints the
+  primary host's "Grandeur" deed via the same `create_solo_deed` +
+  `_apply_grand_display` pipeline catering uses (independent scores — both can fire on
+  one event), and — only when the event has a linked, COMPLETED `Ceremony` whose
+  `ceremony_type.key` is WEDDING or CORONATION — mints an additive per-honoree deed
+  (`_award_grandeur_honoree_cut`, a flat percent of the host's deed value, mirroring
+  `CeremonyConfig.officiant_cut_percent`'s shape) on top of whatever `finish_ceremony`
+  already awarded them (the COMPLETED gate, not merely "linked," stops an
+  `abandon_ceremony`'d wedding from still paying a cut — event completion and
+  ceremony finish/abandon are independent triggers). Ratified 2026-08-15: no
+  `is_milestone` flag and no cooldown bookkeeping — for a ceremony-linked event the
+  economic cost of the spend IS the gate; plain diminishing returns apply to every
+  event alike. **Nonrefundable on cancellation** (controller-ruled, spec silent):
+  `cancel_event` has no grandeur unwind — a cancelled SCHEDULED event's contributions
+  stay spent (real sink, no prestige minted) as nonrefundable-deposit flavor. The
+  org's existing 10% member-deed trickle (`Organization.accumulated_prestige`) feeds
+  off the bigger score automatically — no new house-benefit code path. Action:
+  `event_invest_grandeur` (`ContributeGrandeurAction`, treasury-sourced spends gated
+  on `can_spend_treasury`
+  at the Action layer). Telnet: `event grandeur <id> category=<...> amount=<n>
+  [org=<name>]`. Frontend: `GrandeurPanel` on the event detail page.
 services, and equipment-modifier integration. Spec D PR2 (#1031) added the generic
 crafting framework and check-driven facet/style attachment. #2211 added the ITEM_CREATE
 mint pipeline; #2240 made it playable web-first: `ItemCreateCraftViewSet` serves

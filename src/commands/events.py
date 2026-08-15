@@ -14,6 +14,9 @@ Invitee verb:
 
 - ``event rsvp <id> accept|decline`` → ``RespondInvitationAction`` (the invitee acts as
   their own active persona)
+- ``event grandeur <id> category=<...> amount=<n> [org=<name|id>]`` → ``ContributeGrandeurAction``
+  (#2357 — spend on a once-in-a-lifetime event's grandeur budget; ``org=`` sources a
+  treasury spend, checked for spend authority in the Action)
 
 The verbs live under the ``event`` namespace rather than as bare top-level keys (e.g.
 ``accept`` / ``decline``) to avoid exit/channel/alias collisions — mirrors
@@ -53,6 +56,7 @@ _SUBVERB_CANCEL = "cancel"
 _SUBVERB_INVITE = "invite"
 _SUBVERB_RSVP = "rsvp"
 _SUBVERB_CATER = "cater"
+_SUBVERB_GRANDEUR = "grandeur"
 _LIFECYCLE_SUBVERBS = frozenset(
     {_SUBVERB_SCHEDULE, _SUBVERB_START, _SUBVERB_COMPLETE, _SUBVERB_CANCEL}
 )
@@ -65,6 +69,9 @@ _KEY_DESC = "desc"
 _KEY_PUBLIC = "public"
 _KEY_PHASE = "phase"
 _KEY_BY = "by"
+_KEY_CATEGORY = "category"
+_KEY_AMOUNT = "amount"
+_KEY_ORG = "org"
 
 # Multi-word value keys — their value runs until the next ``key=`` token.
 # ``name`` / ``desc`` are free text; ``room`` (room names often have spaces) and
@@ -173,6 +180,8 @@ class CmdEvent(ArxCommand):
         event invite <id> persona=<name|id> [by=<persona>]
         event invite <id> org=<name|id>      - or organization= / society=
         event rsvp <id> accept|decline      - respond to your own persona invitation
+        event grandeur <id> category=<venue|entertainment|favors|decor> amount=<n>
+            [org=<name|id>]                 - spend on the event's grandeur budget
 
     ``when=`` accepts ISO 8601 or ``YYYY-MM-DD HH:MM``. Room resolves by name
     (caller.search) or numeric id; persona/org/society targets resolve by name
@@ -196,25 +205,36 @@ class CmdEvent(ArxCommand):
             parts = raw.split(maxsplit=1)
             subverb = parts[0].lower()
             rest = parts[1].strip() if len(parts) > 1 else ""
-            if subverb == _SUBVERB_LIST:
-                self._show_list()
-            elif subverb == _SUBVERB_SHOW:
-                self._show_detail(rest)
-            elif subverb == _SUBVERB_CREATE:
-                self._dispatch_create(rest)
-            elif subverb in _LIFECYCLE_SUBVERBS:
-                self._dispatch_lifecycle(subverb, rest)
-            elif subverb == _SUBVERB_INVITE:
-                self._dispatch_invite(rest)
-            elif subverb == _SUBVERB_RSVP:
-                self._dispatch_rsvp(rest)
-            elif subverb == _SUBVERB_CATER:
-                self._dispatch_cater(rest)
-            else:
-                self.msg(self._usage())
+            self._route_subverb(subverb, rest)
         except CommandError as err:
             self.msg(str(err))
             self.msg(command_error={"error": str(err), "command": self.raw_string or ""})
+
+    def _route_subverb(self, subverb: str, rest: str) -> None:
+        """Dispatch one subverb to its handler; unknown subverbs print usage.
+
+        A plain dict keeps this (and ``func``) below the McCabe complexity
+        ceiling as subverbs accumulate — the lifecycle verbs share one
+        handler that also needs the subverb name, so they're special-cased
+        before the table lookup.
+        """
+        if subverb in _LIFECYCLE_SUBVERBS:
+            self._dispatch_lifecycle(subverb, rest)
+            return
+        handlers: dict[str, Any] = {
+            _SUBVERB_LIST: lambda _rest: self._show_list(),
+            _SUBVERB_SHOW: self._show_detail,
+            _SUBVERB_CREATE: self._dispatch_create,
+            _SUBVERB_INVITE: self._dispatch_invite,
+            _SUBVERB_RSVP: self._dispatch_rsvp,
+            _SUBVERB_CATER: self._dispatch_cater,
+            _SUBVERB_GRANDEUR: self._dispatch_grandeur,
+        }
+        handler = handlers.get(subverb)
+        if handler is None:
+            self.msg(self._usage())
+            return
+        handler(rest)
 
     # -- host write verbs ----------------------------------------------------
 
@@ -302,6 +322,44 @@ class CmdEvent(ArxCommand):
             raise CommandError(msg)
         result = CaterEventAction().run(actor=self.caller, container_name=container_name)
         self.msg(result.message)
+
+    def _dispatch_grandeur(self, rest: str) -> None:
+        """``event grandeur <id> category=<venue|entertainment|favors|decor> amount=<n>
+        [org=<name|id>]`` — spend on the event's grandeur budget (#2357).
+
+        ``org=`` sources the spend from the named organization's treasury
+        (spend-authority checked by the Action); omitting it spends from the
+        caller's own purse.
+        """
+        from actions.definitions.events import ContributeGrandeurAction  # noqa: PLC0415
+        from world.societies.models import Organization  # noqa: PLC0415
+
+        usage = (
+            "Usage: event grandeur <id> category=<venue|entertainment|favors|decor> "
+            "amount=<n> [org=<name>]"
+        )
+        parts = rest.split(None, 1)
+        if len(parts) < 2:  # noqa: PLR2004
+            raise CommandError(usage)
+        event_id = self._parse_id(parts[0], _LABEL_EVENT_ID)
+        kwargs = _parse_kwargs(parts[1])
+        category = kwargs.get(_KEY_CATEGORY, "")
+        amount_token = kwargs.get(_KEY_AMOUNT, "")
+        if not category or not amount_token.isdigit():
+            raise CommandError(usage)
+        organization_id: int | None = None
+        if _KEY_ORG in kwargs:
+            organization_id = self._resolve_target_id(Organization, kwargs[_KEY_ORG], label="org")
+
+        result = ContributeGrandeurAction().run(
+            actor=self.caller,
+            event_id=event_id,
+            category=category,
+            amount=int(amount_token),
+            organization_id=organization_id,
+        )
+        if result.message:
+            self.msg(result.message)
 
     def _dispatch_rsvp(self, rest: str) -> None:
         """``event rsvp <id> accept|decline`` (the invitee acts as their persona)."""
@@ -559,5 +617,6 @@ class CmdEvent(ArxCommand):
         return (
             "Usage: event [list|show <id>|create name=… room=… when=…|"
             "schedule <id>|start <id>|complete <id>|cancel <id>|"
-            "invite <id> persona=…|rsvp <id> accept|decline|cater <container>]"
+            "invite <id> persona=…|rsvp <id> accept|decline|cater <container>|"
+            "grandeur <id> category=… amount=…]"
         )

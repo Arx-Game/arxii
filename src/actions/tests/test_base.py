@@ -383,6 +383,7 @@ class ActionRegistryTests(TestCase):
             "event_invite",
             "respond_invitation",
             "event_cater",
+            "event_invest_grandeur",
             "sanctum_install",
             "sanctum_homecoming",
             "sanctum_purging",

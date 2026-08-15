@@ -44881,6 +44881,14 @@ components:
           - $ref: '#/components/schemas/EventModification'
           readOnly: true
           nullable: true
+        grandeur_contributions:
+          type: array
+          items:
+            $ref: '#/components/schemas/EventGrandeurContribution'
+          readOnly: true
+        grandeur_total_spent:
+          type: integer
+          readOnly: true
         is_host:
           type: boolean
           readOnly: true
@@ -44891,6 +44899,8 @@ components:
       - created_at
       - description
       - ended_at
+      - grandeur_contributions
+      - grandeur_total_spent
       - hosts
       - id
       - invitations
@@ -44907,6 +44917,57 @@ components:
       - status
       - time_phase
       - updated_at
+    EventGrandeurContribution:
+      type: object
+      properties:
+        id:
+          type: integer
+          readOnly: true
+        category:
+          allOf:
+          - $ref: '#/components/schemas/EventGrandeurContributionCategoryEnum'
+          readOnly: true
+          description: |-
+            What slice of the budget this spend paid for.
+
+            * `venue` - Venue
+            * `entertainment` - Entertainment
+            * `favors` - Favors
+            * `decor` - Decor
+        contributed_by:
+          type: integer
+          readOnly: true
+          description: Who authorized the spend (purse or treasury source).
+        contributed_by_name:
+          type: string
+          readOnly: true
+        amount_spent:
+          type: integer
+          readOnly: true
+          description: Coppers spent, mirrors CurrencyTransfer.
+        created_at:
+          type: string
+          format: date-time
+          readOnly: true
+      required:
+      - amount_spent
+      - category
+      - contributed_by
+      - contributed_by_name
+      - created_at
+      - id
+    EventGrandeurContributionCategoryEnum:
+      enum:
+      - venue
+      - entertainment
+      - favors
+      - decor
+      type: string
+      description: |-
+        * `venue` - Venue
+        * `entertainment` - Entertainment
+        * `favors` - Favors
+        * `decor` - Decor
     EventHost:
       type: object
       properties:

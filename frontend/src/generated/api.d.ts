@@ -25997,9 +25997,38 @@ export interface components {
       readonly hosts: components['schemas']['EventHost'][];
       readonly invitations: components['schemas']['EventInvitation'][];
       readonly modification: components['schemas']['EventModification'] | null;
+      readonly grandeur_contributions: components['schemas']['EventGrandeurContribution'][];
+      readonly grandeur_total_spent: number;
       readonly is_host: boolean;
       readonly is_gm: boolean;
     };
+    EventGrandeurContribution: {
+      readonly id: number;
+      /**
+       * @description What slice of the budget this spend paid for.
+       *
+       *     * `venue` - Venue
+       *     * `entertainment` - Entertainment
+       *     * `favors` - Favors
+       *     * `decor` - Decor
+       */
+      readonly category: components['schemas']['EventGrandeurContributionCategoryEnum'];
+      /** @description Who authorized the spend (purse or treasury source). */
+      readonly contributed_by: number;
+      readonly contributed_by_name: string;
+      /** @description Coppers spent, mirrors CurrencyTransfer. */
+      readonly amount_spent: number;
+      /** Format: date-time */
+      readonly created_at: string;
+    };
+    /**
+     * @description * `venue` - Venue
+     *     * `entertainment` - Entertainment
+     *     * `favors` - Favors
+     *     * `decor` - Decor
+     * @enum {string}
+     */
+    EventGrandeurContributionCategoryEnum: 'venue' | 'entertainment' | 'favors' | 'decor';
     EventHost: {
       readonly id: number;
       persona?: number | null;

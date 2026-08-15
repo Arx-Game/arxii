@@ -229,3 +229,31 @@ class CmdEventJourneyTests(TestCase):
         _run(self.host, f"rsvp {invitation.pk} accept")
         invitation.refresh_from_db()
         self.assertEqual(invitation.response, InvitationResponse.PENDING)
+
+    # -- grandeur (#2357) -------------------------------------------------------
+
+    def test_grandeur_spends_from_the_actor_purse(self) -> None:
+        """``event grandeur <id> category=... amount=...`` debits the actor's purse."""
+        from world.currency.services import get_or_create_purse, transfer
+        from world.events.models import EventGrandeurContribution
+
+        purse = get_or_create_purse(self.host_sheet)
+        transfer(amount=10_000, reason="test seed", to_purse=purse)
+        _run(self.host, f"schedule {self.event.pk}")  # contributions need SCHEDULED/ACTIVE
+
+        _run(self.host, f"grandeur {self.event.pk} category=venue amount=4000")
+
+        row = EventGrandeurContribution.objects.filter(event=self.event).first()
+        self.assertIsNotNone(row, "event grandeur should record a contribution")
+        self.assertEqual(row.amount_spent, 4000)
+        self.assertEqual(row.category, "venue")
+        purse.refresh_from_db()
+        self.assertEqual(purse.balance, 6000)
+
+    def test_grandeur_without_funds_makes_no_contribution(self) -> None:
+        from world.events.models import EventGrandeurContribution
+
+        _run(self.host, f"schedule {self.event.pk}")
+        _run(self.host, f"grandeur {self.event.pk} category=venue amount=4000")
+
+        self.assertFalse(EventGrandeurContribution.objects.filter(event=self.event).exists())

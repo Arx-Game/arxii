@@ -581,6 +581,125 @@ class CaterEventAction(Action):
         )
 
 
+def _parse_grandeur_amount(raw: Any) -> int | None:
+    """A positive int amount, or None (unparseable or non-positive)."""
+    try:
+        amount = int(raw)
+    except (TypeError, ValueError):
+        return None
+    return amount if amount > 0 else None
+
+
+def _grandeur_input_error(category: Any, amount: int | None) -> str | None:
+    """The first input-validation error for ``ContributeGrandeurAction``, or None.
+
+    Consolidates the category/amount checks (mirrors ``_create_preflight_error``)
+    so ``execute`` stays under ruff's return ceiling (PLR0911).
+    """
+    from world.events.constants import GrandeurCategory  # noqa: PLC0415
+
+    if category not in GrandeurCategory.values:
+        return "Which category — venue, entertainment, favors, or decor?"
+    if amount is None:
+        return "Grandeur investment must be a positive amount."
+    return None
+
+
+def _resolve_grandeur_source(persona: Persona, organization_id: Any) -> tuple[Any, Any] | str:
+    """The (from_purse, from_treasury) pair for a grandeur spend, or an error message.
+
+    No ``organization_id`` spends from the actor's own purse; naming one spends
+    from that organization's treasury, gated on ``can_spend_treasury`` here at
+    the Action layer (mirrors ``WithdrawCovenantFundsAction``'s rank gate) —
+    never silently in the service.
+    """
+    from world.currency.services import (  # noqa: PLC0415
+        can_spend_treasury,
+        get_or_create_purse,
+        get_or_create_treasury,
+    )
+    from world.events.types import EventError  # noqa: PLC0415
+    from world.societies.models import Organization  # noqa: PLC0415
+
+    if organization_id is None:
+        return get_or_create_purse(persona.character_sheet), None
+    organization = Organization.objects.filter(pk=organization_id).first()
+    if organization is None:
+        return "That organization does not exist."
+    treasury = get_or_create_treasury(organization)
+    if not can_spend_treasury(treasury, persona):
+        return EventError.GRANDEUR_NOT_AUTHORIZED
+    return None, treasury
+
+
+@dataclass
+class ContributeGrandeurAction(Action):
+    """Spend on a once-in-a-lifetime event's grandeur budget (#2357).
+
+    Venue/entertainment/favors/decor — the uncovered slices of a wedding or
+    coronation budget (food stays ``CaterEventAction``'s lane). A treasury-
+    sourced spend requires the actor's persona to hold spend authority on the
+    named organization (mirrors ``WithdrawCovenantFundsAction``'s rank gate,
+    checked here at the Action layer, never silently in the service); a
+    purse-sourced spend (the default, no ``organization_id``) is open to any
+    persona with a character sheet.
+    """
+
+    key: str = "event_invest_grandeur"
+    name: str = "Invest in Grandeur"
+    icon: str = "gem"
+    category: str = "events"
+    action_category: ActionCategory = ActionCategory.SOCIAL
+    target_type: TargetType = TargetType.SELF
+
+    def get_prerequisites(self) -> list[Prerequisite]:
+        return [HasCharacterSheetPrerequisite()]
+
+    def execute(
+        self,
+        actor: ObjectDB,
+        context: ActionContext | None = None,
+        **kwargs: Any,
+    ) -> ActionResult:
+        from world.events.services import contribute_grandeur  # noqa: PLC0415
+        from world.events.types import EventError  # noqa: PLC0415
+
+        persona = _actor_persona(actor)
+        if persona is None:
+            return ActionResult(success=False, message=_MSG_NO_CHARACTER)
+        event = _event_or_none(kwargs.get("event_id"))
+        if event is None:
+            return ActionResult(success=False, message=_MSG_WHICH_EVENT)
+
+        category = kwargs.get("category")
+        amount = _parse_grandeur_amount(kwargs.get("amount"))
+        input_error = _grandeur_input_error(category, amount)
+        if input_error:
+            return ActionResult(success=False, message=input_error)
+
+        source = _resolve_grandeur_source(persona, kwargs.get("organization_id"))
+        if isinstance(source, str):
+            return ActionResult(success=False, message=source)
+        from_purse, from_treasury = source
+
+        try:
+            row = contribute_grandeur(
+                event,
+                persona,
+                category=category,
+                amount=amount,
+                from_purse=from_purse,
+                from_treasury=from_treasury,
+            )
+        except EventError as exc:
+            return ActionResult(success=False, message=exc.user_message)
+        return ActionResult(
+            success=True,
+            message=f"You invest in the {category} of '{event.name}'.",
+            data={"contribution_id": row.pk},
+        )
+
+
 def _find_local_item(actor: ObjectDB, name: str):
     """A held-or-present ItemInstance by name (catering vessels are often furniture)."""
     from world.items.models import ItemInstance  # noqa: PLC0415

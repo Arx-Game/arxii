@@ -7,6 +7,7 @@ import type {
   EventInvitation,
   EventListItem,
   EventUpdateData,
+  GrandeurCategory,
   PaginatedResponse,
 } from './types';
 
@@ -114,6 +115,46 @@ export async function respondToInvitation(
     throw new Error(data.detail || 'Failed to send your RSVP');
   }
   return data;
+}
+
+/**
+ * Invest in an event's grandeur budget (#2357) — dispatches
+ * ``ContributeGrandeurAction`` through the generic action-dispatch endpoint
+ * (same seam as the covenant treasury calls, ``covenants/api.ts``).
+ * ``organizationId`` sources the spend from that organization's treasury
+ * (spend-authority checked server-side); omit it to spend from the actor's
+ * own purse. ``DispatchActionView`` returns HTTP 200 even for a business-rule
+ * rejection, so ``success`` (not ``res.ok`` alone) is the real signal.
+ */
+export async function contributeGrandeur(
+  actorCharacterId: number,
+  eventId: number,
+  category: GrandeurCategory,
+  amount: number,
+  organizationId?: number
+): Promise<string> {
+  const res = await apiFetch(`/api/actions/characters/${actorCharacterId}/dispatch/`, {
+    method: 'POST',
+    body: JSON.stringify({
+      ref: { backend: 'registry', registry_key: 'event_invest_grandeur' },
+      kwargs: {
+        event_id: eventId,
+        category,
+        amount,
+        organization_id: organizationId ?? null,
+      },
+    }),
+  });
+  const data = (await res.json().catch(() => ({}))) as {
+    detail?: string;
+    message?: string | null;
+    success?: boolean | null;
+  };
+  const message = data.detail ?? data.message ?? undefined;
+  if (!res.ok || data.success === false) {
+    throw new Error(message ?? 'Failed to invest in grandeur.');
+  }
+  return message ?? 'Investment recorded.';
 }
 
 export interface PersonaSearchResult {

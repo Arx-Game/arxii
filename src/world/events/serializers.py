@@ -4,7 +4,13 @@ from django.utils import timezone
 from rest_framework import serializers
 
 from world.events.constants import InvitationTargetType
-from world.events.models import Event, EventHost, EventInvitation, EventModification
+from world.events.models import (
+    Event,
+    EventGrandeurContribution,
+    EventHost,
+    EventInvitation,
+    EventModification,
+)
 
 
 class EventHostSerializer(serializers.ModelSerializer):
@@ -38,6 +44,24 @@ class EventInvitationSerializer(serializers.ModelSerializer):
     def get_target_name(self, obj: EventInvitation) -> str | None:
         target = obj.get_active_target()
         return target.name if target else None
+
+
+class EventGrandeurContributionSerializer(serializers.ModelSerializer):
+    contributed_by_name = serializers.CharField(
+        source="contributed_by.name", read_only=True, default=None
+    )
+
+    class Meta:
+        model = EventGrandeurContribution
+        fields = [
+            "id",
+            "category",
+            "contributed_by",
+            "contributed_by_name",
+            "amount_spent",
+            "created_at",
+        ]
+        read_only_fields = fields
 
 
 class EventModificationSerializer(serializers.ModelSerializer):
@@ -78,6 +102,10 @@ class EventDetailSerializer(serializers.ModelSerializer):
     hosts = EventHostSerializer(source="hosts_cached", many=True, read_only=True)
     invitations = EventInvitationSerializer(source="invitations_cached", many=True, read_only=True)
     modification = EventModificationSerializer(read_only=True, allow_null=True)
+    grandeur_contributions = EventGrandeurContributionSerializer(
+        source="grandeur_contributions_cached", many=True, read_only=True
+    )
+    grandeur_total_spent = serializers.SerializerMethodField()
     location_name = serializers.CharField(source="location.objectdb.db_key", read_only=True)
     is_host = serializers.SerializerMethodField()
     is_gm = serializers.SerializerMethodField()
@@ -102,10 +130,15 @@ class EventDetailSerializer(serializers.ModelSerializer):
             "hosts",
             "invitations",
             "modification",
+            "grandeur_contributions",
+            "grandeur_total_spent",
             "is_host",
             "is_gm",
         ]
         read_only_fields = fields
+
+    def get_grandeur_total_spent(self, obj: Event) -> int:
+        return sum(row.amount_spent for row in obj.grandeur_contributions_cached)
 
     def get_is_gm(self, obj: Event) -> bool:
         request = self.context.get("request")
