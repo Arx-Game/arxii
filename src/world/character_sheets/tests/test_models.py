@@ -14,9 +14,10 @@ from world.character_sheets.factories import (
     CharacterFactory,
     CharacterSheetFactory,
     GenderFactory,
+    MoodOptionFactory,
     ObjectDisplayDataFactory,
 )
-from world.character_sheets.models import CharacterSheet
+from world.character_sheets.models import CharacterSheet, MoodOption
 from world.character_sheets.types import MaritalStatus
 from world.classes.factories import CharacterClassLevelFactory
 from world.conditions.factories import CapabilityTypeFactory
@@ -419,3 +420,64 @@ class CharacterSheetCapabilityPropertyProtocolTests(TestCase):
         sheet = CharacterSheetFactory()
         prop = PropertyFactory()
         self.assertFalse(sheet.has_property(prop))
+
+
+class MoodOptionModelTests(TestCase):
+    """MoodOption (#2994): the curated, content-authored ``feel <state>`` vocabulary."""
+
+    def test_str_returns_name(self) -> None:
+        mood = MoodOptionFactory(name="Angry")
+        self.assertEqual(str(mood), "Angry")
+
+    def test_name_must_be_unique(self) -> None:
+        MoodOptionFactory(name="Calm")
+        with self.assertRaises(Exception):  # noqa: B017 - IntegrityError, avoid a db import here
+            MoodOption.objects.create(name="Calm")
+
+    def test_ordering_is_sort_order_then_name(self) -> None:
+        MoodOptionFactory(name="Zeta", sort_order=1)
+        MoodOptionFactory(name="Alpha", sort_order=0)
+        MoodOptionFactory(name="Beta", sort_order=0)
+        names = list(MoodOption.objects.values_list("name", flat=True))
+        self.assertEqual(names, ["Alpha", "Beta", "Zeta"])
+
+    def test_defaults_active(self) -> None:
+        mood = MoodOptionFactory()
+        self.assertTrue(mood.is_active)
+
+
+class CharacterSheetCurrentMoodTests(TestCase):
+    """CharacterSheet.current_mood (#2994) -- sticky nullable FK, mirrors current_language."""
+
+    def test_defaults_to_none(self) -> None:
+        sheet = CharacterSheetFactory()
+        self.assertIsNone(sheet.current_mood)
+
+    def test_can_be_set_and_cleared(self) -> None:
+        sheet = CharacterSheetFactory()
+        mood = MoodOptionFactory(name="Content")
+
+        sheet.current_mood = mood
+        sheet.save(update_fields=["current_mood"])
+        sheet.refresh_from_db()
+        self.assertEqual(sheet.current_mood, mood)
+
+        sheet.current_mood = None
+        sheet.save(update_fields=["current_mood"])
+        sheet.refresh_from_db()
+        self.assertIsNone(sheet.current_mood)
+
+    def test_mood_deletion_sets_null(self) -> None:
+        sheet = CharacterSheetFactory()
+        mood = MoodOptionFactory(name="Wistful")
+        sheet.current_mood = mood
+        sheet.save(update_fields=["current_mood"])
+
+        mood.delete()
+
+        # A Collector-driven bulk SET_NULL (from deleting the FK target) bypasses
+        # per-instance .save(), so the idmapper identity map never sees it even
+        # via refresh_from_db() -- flush first (sharedmemory-model skill, trap #2).
+        CharacterSheet.flush_instance_cache()
+        sheet.refresh_from_db()
+        self.assertIsNone(sheet.current_mood)

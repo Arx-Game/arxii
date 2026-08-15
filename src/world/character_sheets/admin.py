@@ -6,6 +6,7 @@ from django.http import HttpRequest
 from world.character_sheets.models import (
     CharacterSheet,
     Gender,
+    MoodOption,
     Profile,
     ProfileTextVersion,
     Pronouns,
@@ -89,6 +90,16 @@ class PronounsAdmin(admin.ModelAdmin):
     list_display = ["key", "display_name", "subject", "object", "possessive", "is_default"]
     search_fields = ["key", "display_name"]
     ordering = ["display_name"]
+
+
+@admin.register(MoodOption)
+class MoodOptionAdmin(admin.ModelAdmin):
+    """Admin for Mood options (#2994) — the curated ``feel <state>`` vocabulary."""
+
+    list_display = ["name", "sort_order", "is_active"]
+    list_filter = ["is_active"]
+    search_fields = ["name", "description"]
+    ordering = ["sort_order", "name"]
 
 
 @admin.register(CharacterSheet)

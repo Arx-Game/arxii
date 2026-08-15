@@ -167,7 +167,9 @@ text is purely narrative expression.
 Reasons: parsing is brittle (typos, RTL text, creative phrasing), it punishes
 expressive writing, and it creates an arms race where players game the parser.
 The mood/stance system gives players the same expressive surface without the
-parsing trap.
+parsing trap. BUILT (#2994): an internal, sticky `Mood` declared via the
+`feel` verb (silent, no room echo) and read by others only through the
+earned, empathy-gated `sense` verb — never by parsing pose text.
 
 ### GM authority is constrained
 

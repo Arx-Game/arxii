@@ -267,6 +267,7 @@ from actions.definitions.market import (
     ServiceCraftAction,
     SetServiceOfferAction,
 )
+from actions.definitions.mood import SenseMoodAction, SetMoodAction
 from actions.definitions.motif_style import (
     BindMotifStyleAction,
     ListMotifStylesAction,
@@ -616,6 +617,9 @@ _ALL_ACTIONS: list[Action] = [
     TrainTechniqueAction(),
     SetLanguageAction(),
     TrainLanguageAction(),
+    # #2994 — declared internal mood + earned detection.
+    SetMoodAction(),
+    SenseMoodAction(),
     ImbueAction(),
     WeaveThreadAction(),
     StartRoundAction(),
