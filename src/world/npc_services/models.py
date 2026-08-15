@@ -1557,11 +1557,15 @@ class NPCAssignment(SharedMemoryModel, DiscriminatorMixin):
 class ExpulsionBar(SharedMemoryModel):
     """A re-entry bar on a barred character's sheet for one room (#2989).
 
-    Written by ``expulsion_services.expel_character`` when a room owner (or a
-    servant/doorman acting for one) shows a disruptive character out — the
-    ratified #2989 amendment's OOC soft gate: unresistable, no check, no
-    prerequisite bypass, regardless of the barred character's power. This is
-    a consent/disruption valve, not a combat surface.
+    Written by ``expulsion_services.expel_character`` when a room owner shows
+    a disruptive character out — the ratified #2989 amendment's OOC soft
+    gate: unresistable, no check, no prerequisite bypass, regardless of the
+    barred character's power. This is a consent/disruption valve, not a
+    combat surface. Authorization is owner-only (``IsRoomOwnerPrerequisite``
+    on ``ExpelCharacterAction``) — a posted SERVANT/DOORMAN NPC is narration
+    only: when one is on duty, the room echo names them as the one doing the
+    physical escorting, but they never independently trigger or authorize an
+    expulsion.
 
     ``lifted_at`` is null while the bar is active (partial-unique per
     (room, barred_sheet), mirroring ``NPCAssignment``'s active-row pattern).

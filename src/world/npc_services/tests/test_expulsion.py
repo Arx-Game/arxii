@@ -105,3 +105,49 @@ class ExpelCharacterServiceTests(TestCase):
             db_key="clean-room", db_typeclass_path="typeclasses.rooms.Room"
         )
         self.assertIsNone(active_bar_for(clean_room, self.target.character_sheet))
+
+
+class HomeActionExpulsionBarTests(TestCase):
+    """#2989 review fix: ``HomeAction`` (the ``home`` command) must also
+    respect the expulsion bar — a narrower vector than portal travel (only
+    reachable when a barred character's declared ``home`` is the room they
+    were shown out of), but a real one.
+    """
+
+    def setUp(self) -> None:
+        self.elsewhere = ObjectDBFactory(
+            db_key="elsewhere", db_typeclass_path="typeclasses.rooms.Room"
+        )
+        self.home_room = ObjectDBFactory(
+            db_key="home-room", db_typeclass_path="typeclasses.rooms.Room"
+        )
+        self.actor = CharacterFactory(db_key="Wanderer", location=self.elsewhere)
+        self.actor.home = self.home_room
+        self.actor.save()
+        self.sheet = CharacterSheetFactory(character=self.actor)
+
+    def _get_home_action(self):
+        from actions.registry import get_action
+
+        return get_action("home")
+
+    def test_barred_character_cannot_go_home(self) -> None:
+        from world.npc_services.models import ExpulsionBar
+
+        home_profile = RoomProfileFactory(objectdb=self.home_room)
+        ExpulsionBar.objects.create(
+            room=home_profile, barred_sheet=self.sheet, imposed_by=PersonaFactory()
+        )
+
+        result = self._get_home_action().run(self.actor)
+
+        self.assertFalse(result.success)
+        self.actor.refresh_from_db()
+        self.assertEqual(self.actor.location, self.elsewhere)
+
+    def test_unbarred_character_goes_home_normally(self) -> None:
+        result = self._get_home_action().run(self.actor)
+
+        self.assertTrue(result.success)
+        self.actor.refresh_from_db()
+        self.assertEqual(self.actor.location, self.home_room)

@@ -1,7 +1,12 @@
-"""NPC guard assignment actions (#2178).
+"""NPC role assignment actions: GUARD (#2178), SERVANT/DOORMAN (#2989).
 
-Owner-gated actions to assign/unassign NPCs as guards and view current
-assignments. Shared by telnet (``CmdGuard``) and the web dispatcher.
+Owner-gated actions to assign/unassign NPCs to a room role and view current
+assignments. Shared by telnet (``CmdGuard``/``CmdServant``/``CmdDoorman``)
+and the web dispatcher. All nine action classes below are thin dataclass
+wrappers over the three shared `_assign_npc_role`/`_unassign_npc_role`/
+`_list_npc_role` helpers — one implementation of "assign/unassign/list an
+NPC role," parameterized by `role`/message wording, not nine near-duplicate
+`execute()` bodies.
 """
 
 from __future__ import annotations
@@ -46,64 +51,7 @@ class AssignGuardAction(Action):
         context: ActionContext | None = None,
         **kwargs: Any,
     ) -> ActionResult:
-        from django.utils import timezone  # noqa: PLC0415
-
-        from world.npc_services.models import (  # noqa: PLC0415
-            AssignmentRole,
-            NPCAssignment,
-            NPCSourceType,
-        )
-        from world.scenes.services import active_persona_for_sheet  # noqa: PLC0415
-
-        room = _resolve_room(actor, kwargs)
-        if room is None:
-            return ActionResult(success=False, message=_no_room_message(kwargs))
-
-        source_type = kwargs.get("source_type", "")
-        npc_id = kwargs.get("npc_id")
-
-        if source_type == NPCSourceType.FUNCTIONARY.value:
-            from world.npc_services.models import Functionary  # noqa: PLC0415
-
-            npc = Functionary.objects.filter(pk=npc_id).first()
-            if npc is None:
-                return ActionResult(success=False, message="No such functionary.")
-            source_type_enum = NPCSourceType.FUNCTIONARY
-        elif source_type == NPCSourceType.NPC_ASSET.value:
-            from world.assets.models import NPCAsset  # noqa: PLC0415
-
-            npc = NPCAsset.objects.filter(pk=npc_id).first()
-            if npc is None:
-                return ActionResult(success=False, message="No such NPC asset.")
-            source_type_enum = NPCSourceType.NPC_ASSET
-        else:
-            return ActionResult(success=False, message="Invalid source type.")
-
-        profile = _room_profile_for(room)
-        if profile is None:
-            return ActionResult(success=False, message="This room has no profile.")
-
-        persona = active_persona_for_sheet(actor.sheet_data)
-
-        # Retire any existing active guard for this room.
-        NPCAssignment.objects.filter(
-            room=profile,
-            assignment_role=AssignmentRole.GUARD,
-            is_active=True,
-        ).update(is_active=False, ended_at=timezone.now())
-
-        assignment = NPCAssignment.objects.create(
-            source_type=source_type_enum,
-            functionary=npc if source_type_enum == NPCSourceType.FUNCTIONARY else None,
-            npc_asset=npc if source_type_enum == NPCSourceType.NPC_ASSET else None,
-            room=profile,
-            assignment_role=AssignmentRole.GUARD,
-            assigned_by=persona,
-        )
-        return ActionResult(
-            success=True,
-            message=f"{assignment.get_active_target_name()} is now on guard duty.",
-        )
+        return _assign_npc_role(actor, kwargs, role="guard", on_duty_label="on guard duty")
 
 
 @dataclass
@@ -130,30 +78,7 @@ class UnassignGuardAction(Action):
         context: ActionContext | None = None,
         **kwargs: Any,
     ) -> ActionResult:
-        from django.utils import timezone  # noqa: PLC0415
-
-        from world.npc_services.models import (  # noqa: PLC0415
-            AssignmentRole,
-            NPCAssignment,
-        )
-
-        room = _resolve_room(actor, kwargs)
-        if room is None:
-            return ActionResult(success=False, message=_no_room_message(kwargs))
-
-        profile = _room_profile_for(room)
-        if profile is None:
-            return ActionResult(success=False, message="This room has no profile.")
-
-        updated = NPCAssignment.objects.filter(
-            room=profile,
-            assignment_role=AssignmentRole.GUARD,
-            is_active=True,
-        ).update(is_active=False, ended_at=timezone.now())
-
-        if updated == 0:
-            return ActionResult(success=False, message="There is no guard assigned here.")
-        return ActionResult(success=True, message="Guard unassigned.")
+        return _unassign_npc_role(actor, kwargs, role="guard", noun="guard")
 
 
 @dataclass
@@ -180,46 +105,7 @@ class ListGuardAssignmentsAction(Action):
         context: ActionContext | None = None,
         **kwargs: Any,
     ) -> ActionResult:
-        from world.npc_services.models import (  # noqa: PLC0415
-            AssignmentRole,
-            NPCAssignment,
-        )
-
-        room = _resolve_room(actor, kwargs)
-        if room is None:
-            return ActionResult(success=False, message=_no_room_message(kwargs))
-
-        profile = _room_profile_for(room)
-        if profile is None:
-            return ActionResult(
-                success=True, message="No guard assignments.", data={"assignments": []}
-            )
-
-        assignments = NPCAssignment.objects.filter(
-            room=profile,
-            assignment_role=AssignmentRole.GUARD,
-            is_active=True,
-        ).select_related("functionary", "npc_asset")
-
-        if not assignments:
-            return ActionResult(
-                success=True, message="No guard assignments.", data={"assignments": []}
-            )
-
-        data = [
-            {
-                "id": a.pk,
-                "name": a.get_active_target_name(),
-                "role": a.assignment_role,
-                "source_type": a.source_type,
-            }
-            for a in assignments
-        ]
-        return ActionResult(
-            success=True,
-            message=f"{len(data)} guard(s) assigned.",
-            data={"assignments": data},
-        )
+        return _list_npc_role(actor, kwargs, role="guard", noun="guard")
 
 
 @dataclass

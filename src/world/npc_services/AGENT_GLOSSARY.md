@@ -174,10 +174,14 @@ _Avoid_: custom NPC scripts, per-NPC handlers.
   _Avoid_: household provisioning, meal system (neither is built — this is
   ambience only).
 - **Expulsion bar** — the unresistable OOC soft gate (`ExpulsionBar` model):
-  a room owner (or a servant/doorman acting for one) shows a disruptive
-  character out and bars their re-entry, no check, no roll, ever. A
-  consent/disruption valve, not a combat surface — distinct from guard
-  detection (a rolled, resistible stealth check) and from the deferred
-  doorman access-challenge. Entry enforcement is pre-traversal
-  (`check_exit_traversal`), not post-arrival. _Avoid_: kick, ban, eviction
-  (this bars re-entry to one room, not an account- or building-wide action).
+  a room owner shows a disruptive character out and bars their re-entry, no
+  check, no roll, ever. Authorization is owner-only
+  (`IsRoomOwnerPrerequisite`); a posted SERVANT/DOORMAN NPC is narration
+  only — the room echo names them as the one physically escorting the
+  target when one is on duty, but they never independently trigger or
+  authorize the expulsion. A consent/disruption valve, not a combat
+  surface — distinct from guard detection (a rolled, resistible stealth
+  check) and from the deferred doorman access-challenge. Entry enforcement
+  is pre-traversal (`check_exit_traversal`, portal travel, and `home`), not
+  post-arrival. _Avoid_: kick, ban, eviction (this bars re-entry to one
+  room, not an account- or building-wide action).

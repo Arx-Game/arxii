@@ -1,17 +1,26 @@
 """Expulsion service (#2989) — the unresistable OOC soft gate.
 
-A room owner (or a servant/doorman acting for one) shows a disruptive
-character out: moved outside through an exit, and BARRED from re-entry until
-the owner lifts it. Per the ratified #2989 amendments this is a
-consent/disruption valve, NOT a combat surface — no check, no roll, no
-prerequisite bypass, regardless of the target's character power. Guards and
-doormen matter most against future NPC antagonism; this ships the assignment
-surfaces and the expulsion valve now, without pre-building anything
-speculative for that future combat surface.
+A room owner shows a disruptive character out: moved outside through an
+exit, and BARRED from re-entry until the owner lifts it. Per the ratified
+#2989 amendments this is a consent/disruption valve, NOT a combat surface —
+no check, no roll, no prerequisite bypass, regardless of the target's
+character power. Authorization is owner-only
+(``IsRoomOwnerPrerequisite`` on ``ExpelCharacterAction``); a posted
+SERVANT/DOORMAN NPC is narration only (``_escort_name`` below names them as
+the one doing the physical escorting when one is on duty) — it is not a
+distinct authorization path. Guards and doormen matter most against future
+NPC antagonism; this ships the assignment surfaces and the expulsion valve
+now, without pre-building anything speculative for that future combat
+surface.
 
-Entry enforcement (the re-entry bar) lives at
-``flows.service_functions.movement.check_exit_traversal`` — pre-traversal,
-so a barred character never lands in the room at all.
+Entry enforcement (the re-entry bar) is pre-traversal, so a barred character
+never lands in the room at all — checked at every commit-a-move seam:
+``flows.service_functions.movement.check_exit_traversal`` (ordinary exits +
+``TravelAction``'s walking hop pacing), ``world.magic.services.portal_travel
+.perform_portal_travel`` (the portal fast-path ``TravelAction`` tries
+first), and ``actions.definitions.movement.HomeAction`` (the ``home``
+command, in case a barred character's declared home is the room they were
+shown out of).
 """
 
 from __future__ import annotations

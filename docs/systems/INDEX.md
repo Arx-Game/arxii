@@ -3370,9 +3370,14 @@ invitation/guest-list primitive (see the #2989 spec's Decision 4).
 - **Actions:** `assign_servant` / `unassign_servant` / `list_servant_assignments`
   and `assign_doorman` / `unassign_doorman` / `list_doorman_assignments`
   (REGISTRY, `IsRoomOwnerPrerequisite`-gated, `target_type=SELF`,
-  `actions/definitions/npc_assignments.py`, sharing `_assign_npc_role`/
-  `_unassign_npc_role`/`_list_npc_role` helpers with the GUARD actions'
-  logic). `servant_prepare_meal` / `servant_prepare_bath` (REGISTRY, gated
+  `actions/definitions/npc_assignments.py`). `assign_guard`/`unassign_guard`/
+  `list_guard_assignments` (#2178) were refactored onto the same
+  `_assign_npc_role`/`_unassign_npc_role`/`_list_npc_role` helpers when
+  SERVANT/DOORMAN shipped — one implementation of "assign/unassign/list an
+  NPC role" parameterized by role, not three near-duplicate GUARD-only
+  bodies plus three more for SERVANT/DOORMAN; guard behavior/messages are
+  unchanged (existing guard tests are the regression oracle).
+  `servant_prepare_meal` / `servant_prepare_bath` (REGISTRY, gated
   like servant fetch — owner/tenant standing + an active SERVANT in reach,
   not owner-only) and `expel_character` / `lift_expulsion_bar` (REGISTRY,
   `IsRoomOwnerPrerequisite`-gated) live in `actions/definitions/npc_ambience.py`.
@@ -3412,15 +3417,20 @@ invitation/guest-list primitive (see the #2989 spec's Decision 4).
   `imposed_at`/`lifted_at` (null while active). Partial-unique per
   `(room, barred_sheet)` while `lifted_at IS NULL`, mirroring
   `NPCAssignment`'s active-row pattern.
-- **Entry enforcement:** `flows.service_functions.movement
-  .check_exit_traversal` — pre-traversal (not post-arrival like guard
-  detection/ward reaction, since a barred character must never even land in
-  the room), queries `expulsion_services.active_bar_for(destination,
-  caller_sheet)` and raises `CommandError` before any move happens. Wired
-  into the normal exit-traversal + `TravelAction` hop-pacing paths (both call
-  `check_exit_traversal`); portal travel (`world.magic.services.portal_travel
-  .perform_portal_travel`) does not check the bar — a known gap, mirroring
-  the pre-#2177 ward/alarm bypass, deferred rather than fixed in this pass.
+- **Entry enforcement:** pre-traversal at every commit-a-move seam (not
+  post-arrival like guard detection/ward reaction, since a barred character
+  must never even land in the room) — all three read
+  `expulsion_services.active_bar_for(destination, caller_sheet)` before the
+  move. `flows.service_functions.movement.check_exit_traversal` raises
+  `CommandError` (covers ordinary exit traversal and `TravelAction`'s
+  walking hop-pacing, both call it). `world.magic.services.portal_travel
+  .perform_portal_travel` raises the same `CommandError` before any anima
+  debit or broadcast (covers `TravelAction`'s portal fast-path, the DEFAULT
+  route when a portal exists — `_try_portal_travel` catches it and returns a
+  failure `ActionResult`). `actions.definitions.movement.HomeAction` checks
+  inline and returns a failure `ActionResult` (covers the `home` command, a
+  narrower vector: only reachable when a barred character's declared home is
+  the room they were shown out of).
 - **Source:** `src/world/npc_services/doorman_services.py`,
   `src/world/npc_services/servant_ambience.py`,
   `src/world/npc_services/expulsion_services.py`

@@ -257,17 +257,23 @@ defenses:
   small flat amount of PHYSICAL fatigue through the existing #2852
   `recover_fatigue` partial-recovery seam (the same one food/drink use) —
   wired because it was a genuine one-line hook.
-- **Expulsion (unresistable OOC soft gate)**: a room owner (or a
-  servant/doorman acting for one) shows a disruptive character out —
-  `expel_character` moves the target through an exit and writes an
-  `ExpulsionBar` (new model). No check, no roll, no prerequisite bypass on
-  the target, ever — a consent/disruption valve, not a combat surface.
-  `lift_expulsion_bar` clears it. Entry enforcement is pre-traversal
-  (`flows.service_functions.movement.check_exit_traversal` — the bar is
-  checked before the barred character ever lands in the room). Telnet:
-  `expel <character>` / `expel/lift <character>`. Known gap: portal travel
-  does not check the bar (mirrors the pre-#2177 ward/alarm bypass);
-  deferred, not fixed, in this pass.
+- **Expulsion (unresistable OOC soft gate)**: a room owner shows a
+  disruptive character out — `expel_character` moves the target through an
+  exit and writes an `ExpulsionBar` (new model). Owner-only authorization
+  (`IsRoomOwnerPrerequisite`); a posted SERVANT/DOORMAN is narration only
+  (names the escort in the room echo when one is on duty), not a separate
+  trigger. No check, no roll, no prerequisite bypass on the target, ever —
+  a consent/disruption valve, not a combat surface.
+  `lift_expulsion_bar` clears it. Entry enforcement is pre-traversal at
+  every commit-a-move seam, so the bar is checked before the barred
+  character ever lands in the room:
+  `flows.service_functions.movement.check_exit_traversal` (ordinary exits +
+  `TravelAction`'s walking hop pacing), `world.magic.services.portal_travel
+  .perform_portal_travel` (`TravelAction`'s portal fast-path — the DEFAULT
+  route when a portal exists, so this closes the same bypass class the
+  pre-#2177 ward/alarm bug hit in this same function), and
+  `actions.definitions.movement.HomeAction` (the `home` command). Telnet:
+  `expel <character>` / `expel/lift <character>`.
 - **Descoped**: player-to-player message-carrying between characters —
   the issue's original ask — is folded into a future Arx-1-style messenger
   system instead (ratified amendment); household servants carry no
