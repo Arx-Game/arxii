@@ -211,6 +211,15 @@ assert_before "app_deploy links the overlay BEFORE evennia migrate reads it" \
   'secret_settings\.py' 'evennia migrate --noinput' \
   infra/ansible/roles/app_deploy/tasks/main.yml
 
+# app_deploy clones from app_repo. A wrong value does not fail cleanly: GitHub
+# 404s an unreachable repo, git prompts for credentials, and with no tty it
+# blocks until the connection dies — reported as UNREACHABLE, which sends the
+# operator hunting a network fault. Pin the org, and pin the prompt guard.
+chk   "app_repo points at this repo's own org (Arx-Game/arxii)" \
+  "grep -q '^app_repo: \"https://github.com/Arx-Game/arxii.git\"' infra/ansible/roles/app_deploy/defaults/main.yml"
+chk   "the checkout disables git's credential prompt (hang -> clear error)" \
+  "grep -q 'GIT_TERMINAL_PROMPT' infra/ansible/roles/app_deploy/tasks/main.yml"
+
 # (d) nftables must never `flush ruleset` (wipes fail2ban's own table too);
 # it must flush only OUR table. nc() strips comments first so the check
 # asserts real code, not the explanatory comment that mentions the banned

@@ -15,6 +15,14 @@
     depth: 1
   become: true
   become_user: "{{ app_user }}"
+  # Fail fast instead of hanging. Unauthenticated git against a repo GitHub
+  # will not show you gets a 404, and git's reflex is to ask for a username
+  # and password. With no tty it blocks on /dev/tty producing no output, the
+  # connection eventually dies, and Ansible reports UNREACHABLE rather than a
+  # failed task — which points the operator at the network instead of at the
+  # URL. With prompting disabled, a bad app_repo is a clear, immediate error.
+  environment:
+    GIT_TERMINAL_PROMPT: "0"
   register: app_checkout
 
 # #2236 Phase 5 (Sentry). app_checkout.after is the resolved commit SHA

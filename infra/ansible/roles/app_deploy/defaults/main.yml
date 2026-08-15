@@ -8,7 +8,13 @@ app_releases_dir: /opt/arxii/releases
 # settings.py is at app_gamedir/server/conf/settings.py).
 app_current: /opt/arxii/current
 app_gamedir: /opt/arxii/current/src
-app_repo: "https://github.com/TehomCD/arxii.git"  # confirm; no secret (public)
+# The org repo, matching this checkout's own origin. It was TehomCD/arxii with
+# a "# confirm" comment nobody ever actioned, and the first real converge hung
+# on it: GitHub answers 404 for a nonexistent-or-private repo, git responds by
+# prompting for credentials, and with no tty it blocks forever on /dev/tty.
+# Ansible reports that as UNREACHABLE, not as a failed task — see the
+# GIT_TERMINAL_PROMPT guard on the checkout task.
+app_repo: "https://github.com/Arx-Game/arxii.git"  # public; no credential needed
 app_ref: main                            # release tag/ref to deploy
 app_service: arxii
 # Evennia is a forking Twisted daemon; it writes its PID file relative to
