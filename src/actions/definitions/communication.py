@@ -227,16 +227,21 @@ class SayAction(Action):
             speaker_band = fluency_band(fluency_value(actor.sheet_data, language))
             location = actor.location
             if location is not None:
-                # #2287 parity (C2 final-review fix): the per-recipient loop below
+                # #2287 parity (C2 final-review fix), routed through the Axis-1
+                # broadcast-exclusion registry (#2997): the per-recipient loop below
                 # hand-rolls room delivery instead of going through
                 # message_location()/msg_contents, so it must apply the same
-                # dreamside-occupant exclusion by hand or a dreamside-perceiving
-                # character illegitimately hears waking-room language-tagged says.
-                from flows.service_functions.communication import (  # noqa: PLC0415
-                    _dreamside_occupants,
+                # room-broadcast exclusions by hand or a dreamside-perceiving (or any
+                # other registered-exclusion) character illegitimately hears
+                # waking-room language-tagged says. Calling the registry union
+                # (not `_dreamside_occupants` by name) means a second registered
+                # resolver (a haunting/vision/glamour) is honored here too, not
+                # just at `message_location`'s call site.
+                from flows.service_functions.perception_registry import (  # noqa: PLC0415
+                    resolve_broadcast_exclusions,
                 )
 
-                excluded_ids = {obj.pk for obj in _dreamside_occupants(location)}
+                excluded_ids = {obj.pk for obj in resolve_broadcast_exclusions(location)}
                 for obj in location.contents:
                     if not hasattr(obj, "msg"):
                         continue

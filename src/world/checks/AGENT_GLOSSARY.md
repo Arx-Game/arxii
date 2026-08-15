@@ -64,6 +64,23 @@ _Avoid_: resistance rating (use "resist increment" for this specific helper's re
 value), Composure score (the CheckType is Composure; the increment is its rating plus
 effort, not a raw trait value)
 
+**Perception Check** (#2997):
+The single canonical roll for "does this character notice something is off" —
+`resolve_perception_check(observer_sheet, *, difficulty, specialization=None)`
+(`perception_services.py`), resolving the seeded stat-only "Perception" `CheckType`
+(PERCEPTION primary stat) through `perform_check`. Every perception-gated mechanic
+(dreamside noticing, an illusion tell, a disguise tell) calls this one seam rather
+than minting its own roll or a flat probability. **ADR-0033 boundary:** a passed
+check may reveal that something is amiss, never identity — identification stays
+clue-driven (PERSONA_LINK), never an automatic roll. Distinct from Search (stat +
+Investigation skill, the deliberate-investigation action's own check) and
+Identification (intellect + Investigation, the "recognize who's under the mask"
+check, `world/seeds/investigation_checks.py`) — both keep their own compositions.
+PLACEHOLDER difficulty magnitudes: `perception_constants.py`'s
+EASY/STANDARD/HARD. Root cross-app framing: root `AGENT_GLOSSARY_MAP.md`'s
+"Perception" section.
+_Avoid_: awareness roll, spot check, notice check.
+
 **CheckTypeCapabilityModifier** (#2505):
 A curated, staff-authored `(check_type, capability, weight)` row — the only path by which a
 character's `conditions.CapabilityType` value reaches a check's point total. No row means the

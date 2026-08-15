@@ -439,6 +439,38 @@ rewards, or fire the stories reactivity hook. Enforced by the single `can_earn_a
 predicate inside `grant_achievement`, so every caller inherits it (#3024, ADR-0202).
 _Avoid_: ceremony eligible (the narrower pre-#3024 term), tenured sheet (staff tenures are still ineligible).
 
+## Perception (#2997)
+
+**Perception Axis**:
+One of three genuinely different answers to "who perceives what is real" — room-
+broadcast membership (Axis 1), per-viewer content shape/tiering on a recorded event
+(Axis 2, split further by ADR-0170 snapshot vs ADR-0214 live recompute), and
+downstream read-time feed filtering (Axis 3). Deliberately NOT unified behind one
+interface — each axis keeps its own canonical seam. Full taxonomy:
+`docs/systems/scenes.md`'s "Perception & altered reality" section; per-app framing in
+[scenes AGENT_GLOSSARY](src/world/scenes/AGENT_GLOSSARY.md). _Avoid_: perception
+layer, visibility mode (too broad — always name the axis).
+
+**Broadcast Exclusion**:
+Axis-1 registration: `register_broadcast_exclusion(resolver)` /
+`resolve_broadcast_exclusions(location)` (`flows/service_functions
+/perception_registry.py`) — a mechanism registers a resolver naming which occupants
+of a location should NOT receive a room broadcast; `message_location` unions every
+registered resolver instead of importing one mechanism by name. Dependency-free by
+design (ADR-0010) — mirrors `commands.offer_registry.register_offer_handler`.
+_Avoid_: perception filter, visibility gate (too broad — this is specifically the
+room-broadcast-membership registry).
+
+**Perception Check**:
+The single canonical roll for "does this character notice something is off" —
+`resolve_perception_check(observer_sheet, *, difficulty, specialization=None)`
+(`world/checks/perception_services.py`), resolved on the seeded stat-only
+"Perception" `CheckType`. ADR-0033 boundary: may reveal wrongness, never identity —
+identification stays clue-driven (PERSONA_LINK), never an automatic roll. Full
+entry: [checks AGENT_GLOSSARY](src/world/checks/AGENT_GLOSSARY.md). _Avoid_:
+awareness roll, spot check, notice check (Perception Check is the one canonical
+name).
+
 ## Public-event vectors
 
 **Scene**:

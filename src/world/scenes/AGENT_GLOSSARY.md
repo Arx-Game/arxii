@@ -74,3 +74,15 @@ _Avoid_: retroactive consent, backfill approval
 **Precapture truncation**:
 The scene starter's (or staff's) "start scene from here" cutoff control — detaches (`scene=None`, never deletes) every pre-scene-captured pose before a chosen one. Distinguishes captured poses from live ones purely by `timestamp < scene.date_started`; no separate flag exists, and a live in-scene pose can never be truncated.
 _Avoid_: trim, prune, delete (truncation only detaches; the interaction row survives)
+
+**Perception Axis** (#2997):
+One of three genuinely different answers to "who perceives what is real" — see
+`docs/systems/scenes.md`'s "Perception & altered reality" section for the full
+taxonomy. Room-broadcast membership exclusion (Axis 1 — `_dreamside_occupants` is
+this app's only current consumer, registered from `flows/service_functions
+/communication.py`) is deliberately kept separate from per-viewer content
+shape/tiering on a recorded event (Axis 2 — cast concealment's ADR-0170 snapshot,
+language/persona-display's ADR-0214 live recompute) and downstream read-time feed
+filtering (Axis 3 — this app's own Mute/`InteractionQuerySet.visible_to`/Block).
+Root cross-app entry: root `AGENT_GLOSSARY_MAP.md`'s "Perception" section.
+_Avoid_: perception layer, visibility mode.

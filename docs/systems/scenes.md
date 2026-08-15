@@ -1030,6 +1030,131 @@ perceive.
 
 ---
 
+## Perception & altered reality (#2997)
+
+"Who perceives what is real" is not one shared primitive — it is **three genuinely
+different axes** with incompatible timing contracts (write-time snapshot vs read-time
+live recompute) and incompatible return shapes (boolean exclude, tiered audience,
+rewritten text, read-time query filter). Forcing one interface onto all three would
+either violate an axis's own recorded ADR or produce an interface so abstract it
+carries no behavior. Each axis has ONE canonical seam; a new perceive-the-real
+mechanic (a haunting, a vision, a glamour) picks the axis that matches what it needs
+and plugs into that seam — it does not mint a fourth axis or a parallel mechanism on
+an existing one.
+
+### Axis 1 — room-broadcast membership
+
+"Does this observer receive a room broadcast at all." Boolean exclude, computed at
+send time, never persisted (a room broadcast has no receiver-row ledger the way
+`Interaction` does).
+
+**Seam:** `register_broadcast_exclusion(resolver)` /
+`resolve_broadcast_exclusions(location) -> set[ObjectDB]`
+(`flows/service_functions/perception_registry.py`). A mechanism registers a
+resolver — `resolver(location) -> Iterable[ObjectDB]`, the objects to exclude —
+once, at import/`ready()` time; every room-broadcast call site unions every
+registered resolver's excluded set instead of importing one mechanism by name.
+The registry itself stays dependency-free (ADR-0010): it never imports a
+specific mechanism.
+
+**Every live room-broadcast call site routes through this seam**, not just
+`message_location` — a second registered resolver has to apply everywhere a
+room broadcast is hand-rolled, or the registry silently fails to close the gap
+it exists for:
+
+- `message_location` (`flows/service_functions/communication.py`) — the
+  general broadcast path.
+- The language-aware `say` action's per-recipient delivery loop
+  (`actions/definitions/communication.py`) — hand-rolls per-listener room
+  delivery instead of calling `message_location`, so it calls the registry
+  directly.
+- `_broadcast_waking` (`world/vitals/carry_services.py`) — the pick-up/set-down
+  carry room emits.
+
+**Current consumer:** `_dreamside_occupants` (`communication.py`, #2287) — occupants
+whose perception has relocated dreamside (Unconscious or Sleeping) miss waking-room
+chatter; the dead are NOT excluded (a ghost still watches and hears the waking room).
+Self-registers at the bottom of `communication.py`, its long-standing home.
+
+### Axis 2 — per-viewer content shape/tiering on a recorded event
+
+"What does this observer's copy of a recorded event look like / how much do they get
+to attribute." Two consumers, **deliberately opposite** persistence policy — this is
+not an oversight to unify:
+
+- **Snapshot at write time (ADR-0170).** Cast concealment
+  (`world/magic/services/cast_observation.py`'s `resolve_cast_audience`) resolves a
+  three-tier attribution ladder (full / vague / effect-only) once per observer at
+  pose time and materializes it as `InteractionReceiver` rows under
+  `InteractionVisibility.PERCEIVED_ONLY`. Recomputing at read time would let a
+  bystander who *later* gains a detection capability retroactively "see" a cast their
+  character genuinely missed — a leak ADR-0170 rejects by name.
+- **Live recompute at read time (ADR-0214).** Language comprehension
+  (`world/species/language_services.py`'s `render_speech`/`garble_text`), persona
+  display resolution (`world/scenes/persona_display.py`'s `resolve_display_for_viewer`),
+  disguise/fake-overlay form presentation (`world/forms/services/__init__.py`'s
+  `_form_to_present`, backing `CharacterFormState.active_fake_overlay`,
+  `DisguiseKind`/`ConcealmentLevel`), and body-marking visibility
+  (`world/forms/services/markings.py`'s `visible_markings_for`, layered on the same
+  presented-form resolution) all recompute on every render (telnet delivery, WS push,
+  scene-log reads) instead of snapshotting. For language, the opposite failure mode
+  holds: a character who learns a tongue after the fact SHOULD reread old logs in the
+  clear, and the deterministic seed (`speech_seed`) keeps the recompute stable across
+  delivery paths.
+
+`flows/object_states/character_state.py`'s `CharacterState.return_appearance` is the
+existing per-observer composition seam for the look/examine call site — it takes a
+`looker`/observer and delegates to `resolve_display_for_viewer`,
+`visible_worn_items_for`, and `visible_markings_for`, each of the above. It already IS
+Axis 2's home at that call site; no further extraction is proposed on top of it.
+
+**No extraction proposed for this axis.** Unifying write-time-materialize with
+read-time-recompute behind one call shape would be the false consolidation both ADRs
+already ruled out by picking opposite policies on purpose.
+
+### Axis 3 — downstream read-time filtering of who-already-has-access
+
+"Who among people with raw access actually sees it in their own feed/list." Mute
+(`world/scenes/mute_services.py`'s `muted_persona_ids_for_viewer` — per-account,
+one-way), `InteractionQuerySet.visible_to` (`world/scenes/managers.py` — staff /
+anonymous / authenticated-participant / GM read-visibility tiers), and Block are
+account/privacy-scoped, not character-perception-scoped — a muted persona's poses
+still *happened*; the viewer just filters their own feed. A different domain from
+Axes 1/2, each with its own canonical seam already. No extraction proposed.
+
+### The canonical perception CHECK (ratified, supersedes any per-mechanism roll)
+
+Orthogonal to the three axes above: **when a mechanic needs to ask "does this
+character notice something is off," there is exactly one check to roll.**
+`resolve_perception_check(observer_sheet, *, difficulty, specialization=None)`
+(`world/checks/perception_services.py`) resolves the seeded, stat-only "Perception"
+`CheckType` through `perform_check` — one AD&D-style roll, not a bespoke mechanism per
+consumer. PLACEHOLDER difficulty constants (`world/checks/perception_constants.py`:
+EASY/STANDARD/HARD) are sized against the seeded `CheckRank` ladder and await
+calibration by a real consumer.
+
+**ADR-0033 boundary:** a passed perception check may reveal that something is
+amiss — a tell, a wrongness — **never WHO is behind it.** Identification stays
+clue-driven (PERSONA_LINK), never an automatic roll. The pierce *contest* in
+`world/forms/services/identification.py` is a separate substrate; when it wires up
+its own "something's off" half, it should call this seam rather than folding
+identity resolution into it.
+
+### Decision checklist for the next perceive-the-real mechanic
+
+1. **Snapshot or live?** If a viewer's later capability change could retroactively
+   alter what they perceived in the past, that's a snapshot-at-write leak — follow
+   ADR-0170. If old logs should reflect what a viewer can perceive *now* (e.g. a
+   later-learned skill), follow ADR-0214.
+2. **Which axis?** Excluding an observer from a room broadcast entirely → Axis 1
+   (register a resolver). Shaping/tiering a recorded event per viewer → Axis 2 (own
+   service function, own seam, no shared interface). Filtering an already-visible
+   event out of one viewer's own feed → Axis 3 (existing seams already cover this).
+3. **Does it need a roll?** Any "does the character notice" moment calls
+   `resolve_perception_check` — never mint a new check or a flat probability.
+
+---
+
 ## Permissions
 
 | Permission Class | Used For | Rule |
