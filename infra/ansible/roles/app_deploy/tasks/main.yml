@@ -245,6 +245,24 @@
 # EnvironmentFile gives the migration the Postgres password + SECRET_KEY it
 # needs. Runs every deploy by design — the gate against schema-breaking
 # changes lives in the release-safety classifier upstream, not here.
+#
+# Deliberately `python -m django migrate`, NOT `evennia migrate`. Evennia's
+# launcher calls check_database() before it dispatches the command, and that
+# helper imports evennia, whose utils/gametime.py queries server_serverconfig
+# at import time. On a half-migrated database that table does not exist yet,
+# so `evennia migrate` dies with ProgrammingError: the command that creates
+# the table cannot run until the table exists. check_database() also falls
+# through to an interactive create_superuser() prompt when Account #1 is
+# missing, which blocks forever with no tty attached. Django's own entrypoint
+# has neither behaviour. (Diagnosed on the prod standup, 2026-08-15.)
+#
+# async/poll: a first-run migration is ~80 minutes on a 2-core box, and the
+# SSH channel carries no output for any of it. When that connection dropped
+# at 09:23 UTC on 2026-08-15, systemd tore down the login session scope and
+# killed the migrate process with it, stranding the database at migration
+# 0013 while Ansible waited for a reply that was never coming. Running the
+# task detached and polling for its result makes a mid-migration disconnect
+# cost a reconnect instead of the whole run.
 - name: Apply Django/Evennia DB migrations (idempotent on every deploy)
   ansible.builtin.shell: |
     set -a
@@ -252,12 +270,16 @@
     . {{ secrets_env_file | default('/etc/arxii/arxii.env') }}
     set +a
     set -o pipefail
-    {{ base_uv_bin }} run evennia migrate --noinput
+    {{ base_uv_bin }} run python -m django migrate --noinput
   args:
     chdir: "{{ app_release_gamedir }}"
     executable: /bin/bash
+  environment:
+    DJANGO_SETTINGS_MODULE: "{{ app_django_settings_module }}"
   become: true
   become_user: "{{ app_user }}"
+  async: "{{ app_migrate_async_timeout }}"
+  poll: 15
   register: app_migrate
   changed_when: "'Applying' in app_migrate.stdout"
 
@@ -270,6 +292,9 @@
 # collectstatic already ran during THIS release's build (or a prior one,
 # if the frontend didn't need a rebuild either), so there is nothing new
 # to collect and the pass-over-every-static-file cost is pure waste.
+# Uses `python -m django`, not `evennia`, for the reason given on the migrate
+# task: at this point in the play no superuser exists yet, so the launcher's
+# check_database() would stop on an interactive create_superuser() prompt.
 - name: Collect Django static files (idempotent)
   ansible.builtin.shell: |
     set -a
@@ -277,10 +302,12 @@
     . {{ secrets_env_file | default('/etc/arxii/arxii.env') }}
     set +a
     set -o pipefail
-    {{ base_uv_bin }} run evennia collectstatic --noinput
+    {{ base_uv_bin }} run python -m django collectstatic --noinput
   args:
     chdir: "{{ app_release_gamedir }}"
     executable: /bin/bash
+  environment:
+    DJANGO_SETTINGS_MODULE: "{{ app_django_settings_module }}"
   become: true
   become_user: "{{ app_user }}"
   when: app_checkout is changed or app_frontend_build is changed
@@ -301,8 +328,12 @@
 
 # Idempotent superuser bootstrap: if any superuser already exists, skip
 # the create entirely. The credentials come from gated Environment values
-# (username/email = Variables, password = Secret); `evennia
-# createsuperuser --noinput` reads them from DJANGO_SUPERUSER_* env.
+# (username/email = Variables, password = Secret); `django createsuperuser
+# --noinput` reads them from DJANGO_SUPERUSER_* env. Both this task and the
+# guard above it go through `python -m django` rather than the `evennia`
+# launcher: the launcher's own check_database() tries to create a superuser
+# interactively when Account #1 is absent, which is exactly the state these
+# two tasks exist to detect and fix.
 # Runs post-flip (via app_gamedir, which now resolves through `current` to
 # this release) — it needs the running config, same as before; only its
 # position relative to the symlink flip changed.
@@ -313,13 +344,15 @@
     . {{ secrets_env_file | default('/etc/arxii/arxii.env') }}
     set +a
     set -o pipefail
-    {{ base_uv_bin }} run evennia shell <<'PY'
+    {{ base_uv_bin }} run python -m django shell <<'PY'
     from django.contrib.auth import get_user_model
     print('YES' if get_user_model().objects.filter(is_superuser=True).exists() else 'NO')
     PY
   args:
     chdir: "{{ app_gamedir }}"
     executable: /bin/bash
+  environment:
+    DJANGO_SETTINGS_MODULE: "{{ app_django_settings_module }}"
   become: true
   become_user: "{{ app_user }}"
   register: app_su_check
@@ -332,11 +365,12 @@
     . {{ secrets_env_file | default('/etc/arxii/arxii.env') }}
     set +a
     set -o pipefail
-    {{ base_uv_bin }} run evennia createsuperuser --noinput
+    {{ base_uv_bin }} run python -m django createsuperuser --noinput
   args:
     chdir: "{{ app_gamedir }}"
     executable: /bin/bash
   environment:
+    DJANGO_SETTINGS_MODULE: "{{ app_django_settings_module }}"
     DJANGO_SUPERUSER_USERNAME: "{{ app_superuser_username }}"
     DJANGO_SUPERUSER_EMAIL: "{{ app_superuser_email }}"
   become: true

@@ -35,7 +35,13 @@ jobs:
   standup:
     runs-on: ubuntu-latest
     environment: prod        # gated: required-reviewer approval before run
-    timeout-minutes: 45      # provisioning + converge; refuse to hang forever
+    # Provisioning + converge; refuse to hang forever. 45 minutes could not fit
+    # a first run: provisioning takes ~6 minutes and the initial migration adds
+    # ~80 (143 arxii migrations at ~30-35 s each on a 2-core box), so the guard
+    # fired every time before the database was built. Steady-state converges
+    # apply no migrations and finish well inside 15 minutes; this ceiling only
+    # has to cover the once-per-database first run.
+    timeout-minutes: 150
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
       # Shared with rehearse.yml (#2236 review): OpenTofu + Python +
