@@ -3,6 +3,7 @@ from django.contrib import admin
 from world.events.models import (
     Event,
     EventCatering,
+    EventGrandeurContribution,
     EventHost,
     EventInvitation,
     EventModification,
@@ -32,6 +33,12 @@ class EventModificationInline(admin.StackedInline):
     extra = 0
 
 
+class EventGrandeurContributionInline(admin.TabularInline):
+    model = EventGrandeurContribution
+    extra = 0
+    raw_id_fields = ["contributed_by", "transfer"]
+
+
 @admin.register(Event)
 class EventAdmin(admin.ModelAdmin):
     list_display = ["name", "status", "is_public", "scheduled_real_time", "location"]
@@ -42,6 +49,7 @@ class EventAdmin(admin.ModelAdmin):
         EventHostInline,
         EventInvitationInline,
         EventCateringInline,
+        EventGrandeurContributionInline,
         EventModificationInline,
     ]
     readonly_fields = ["created_at", "updated_at"]
@@ -55,4 +63,15 @@ class EventCateringAdmin(admin.ModelAdmin):
     list_filter = ["role"]
     search_fields = ["event__name"]
     raw_id_fields = ["event", "item_instance", "contributed_by"]
+    readonly_fields = ["created_at"]
+
+
+@admin.register(EventGrandeurContribution)
+class EventGrandeurContributionAdmin(admin.ModelAdmin):
+    """Grandeur spend tags — who paid for what slice of a once-in-a-lifetime event (#2357)."""
+
+    list_display = ["event", "category", "contributed_by", "amount_spent", "created_at"]
+    list_filter = ["category"]
+    search_fields = ["event__name"]
+    raw_id_fields = ["event", "contributed_by", "transfer"]
     readonly_fields = ["created_at"]

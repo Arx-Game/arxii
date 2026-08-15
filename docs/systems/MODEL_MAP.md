@@ -3459,6 +3459,7 @@
   - invitations <- events.EventInvitation
   - modification <- events.EventModification
   - catering <- events.EventCatering
+  - grandeur_contributions <- events.EventGrandeurContribution
   - fashion_presentations <- items.FashionPresentation
   - scenes <- scenes.Scene
   - session_requests <- stories.SessionRequest
@@ -3469,6 +3470,12 @@
   - event -> events.Event [FK]
   - item_instance -> items.ItemInstance [FK]
   - contributed_by -> scenes.Persona [FK] (nullable)
+
+### EventGrandeurContribution
+**Foreign Keys:**
+  - event -> events.Event [FK]
+  - contributed_by -> scenes.Persona [FK]
+  - transfer -> currency.CurrencyTransfer [FK]
 
 ### EventHost
 **Foreign Keys:**
@@ -3493,6 +3500,7 @@
 - `catering_event_for_container(container_instance: 'ItemInstance') -> world.events.models.Event | None - The open event this container is currently catering, if any (#2869).`
 - `catering_history(item_instance: 'ItemInstance') -> list[world.events.models.EventCatering] - Every event this item has served at, newest first (#2869) — the souvenir.`
 - `complete_event(event: world.events.models.Event) -> world.events.models.Event - Transition an event from ACTIVE to COMPLETED, finish linked scenes, and revert room.`
+- `contribute_grandeur(event: world.events.models.Event, persona: world.scenes.models.Persona, *, category: str, amount: int, from_purse: 'CharacterPurse | None' = None, from_treasury: 'OrganizationTreasury | None' = None) -> world.events.models.EventGrandeurContribution - Spend on an event's grandeur budget — a currency sink tagged per category (#2357).`
 - `create_event(*, name: str, location_id: int, scheduled_real_time: datetime.datetime, host_persona: world.scenes.models.Persona, description: str = '', is_public: bool = True, scheduled_ic_time: datetime.datetime | None = None, time_phase: str = TimePhase.DAY, status: str = EventStatus.DRAFT) -> world.events.models.Event - Create an event with a primary host.`
 - `derive_ic_time_from_real(real_time: datetime.datetime) -> datetime.datetime | None - Derive an IC datetime from a real datetime using the game clock.`
 - `designate_catering_container(event: world.events.models.Event, contributor: 'ObjectDB', container_instance: 'ItemInstance') -> world.events.models.EventCatering - Flag a container as catering for *event* (#2869).`
@@ -7856,6 +7864,7 @@
   - event_invitations <- events.EventInvitation
   - invitations_sent <- events.EventInvitation
   - catering_contributions <- events.EventCatering
+  - grandeur_contributions <- events.EventGrandeurContribution
   - alternate_self_grants <- forms.AlternateSelf
   - return_for_active <- forms.ActiveAlternateSelf
   - trait_descriptors <- forms.PersonaTraitDescriptor

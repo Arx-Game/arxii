@@ -84,17 +84,58 @@ and from GM sessions (which are narrative-driven, handled by Stories/GM system).
   rsvp` uses
 - Sidebar panel for quick event access
 - Timezone-correct datetime inputs
+- **Event grandeur (#2357):** `GrandeurPanel` on the event detail page — category
+  picker (venue/entertainment/favors/decor), amount input, running contribution list
+  + total spend. Post-completion score/tier display is a follow-up (score is visible
+  today only via the minted deed).
+
+### Event Grandeur (#2357)
+Prestige/wealth investment for once-in-a-lifetime events (royal wedding, coronation,
+grand ball) — the dedicated-brainstorm slot the Future Work bullet below used to
+reserve. Catering-shaped sibling to `EventCatering`, NOT an `EventModification`
+expansion (still gated on its own dedicated brainstorm — see below).
+- **`EventGrandeurContribution`** (`world/events/models.py`) — event FK, `GrandeurCategory`
+  (VENUE/ENTERTAINMENT/FAVORS/DECOR — food stays catering's lane), `contributed_by`
+  Persona, `amount_spent`, audit FK to the `CurrencyTransfer` the spend rode.
+  `contribute_grandeur` (`world/events/services.py`) resolves the currency sink via
+  `world.currency.services.transfer` (null destination); multiple hosts/contributors
+  can each add rows.
+- **Completion hook** — `_award_grandeur_prestige`, called from `complete_event`
+  alongside `_award_catering_prestige` (independent, both can fire on one event):
+  `_grandeur_score` sums spend into a sqrt-diminishing-returns score (capped), then
+  mints the primary host's "Grandeur" deed via `create_solo_deed` +
+  `_apply_grand_display` — the same pipeline catering uses, so the org's existing 10%
+  member-deed trickle (`Organization.accumulated_prestige`) feeds off it automatically.
+- **Honoree cut** — when the completed event has a linked `Ceremony` whose
+  `ceremony_type.key` is WEDDING or CORONATION, `_award_grandeur_honoree_cut` mints an
+  additive per-honoree deed (a flat percent of the host's deed value, mirroring
+  `CeremonyConfig.officiant_cut_percent`'s shape) — on top of whatever
+  `finish_ceremony`'s own branch already awarded them. No cut for a plain grand ball.
+- **Ratified 2026-08-15 (supersedes the original draft):** no `is_milestone` flag, no
+  cooldown bookkeeping. For a ceremony-linked event the economic cost of the spend IS
+  the gate (chain-marrying is allowed and priced; coronations are one-off per
+  (honoree, title) by #2358's own constraint, not by grandeur bookkeeping); plain
+  diminishing returns apply to every event alike.
+- **Action/telnet/web** — `event_invest_grandeur` (`ContributeGrandeurAction`,
+  REGISTRY, treasury-sourced spends gated on `can_spend_treasury` at the Action
+  layer); telnet `event grandeur <id> category=<...> amount=<n> [org=<name>]`; web
+  `GrandeurPanel` on the event detail page (purse-sourced only for now — no
+  "my organizations" picker exists yet for a treasury source).
 
 ## Future Work (not MVP)
 - **IC permission to host** — society reputation checks, bribery/permission gameplay loops
 - **IC costs** — currency/supplies for hosting, scaling with prestige
-- **Full EventModification** — security levels, prestige/wealth investment, access permeability
-  (open/guests/hard locked), interactive objects, guard NPCs. Needs dedicated brainstorm —
-  #2357 is that brainstorm's placeholder (event grandeur for weddings/coronations; #2289's
-  ceremony quality is a planned multiplier input)
-- **Prestige/fame system** — noble politics reputation distinct from Legend, affected by event
-  quality and noble house investment
-- **Domain effects** — event quality affecting noble house domain strength
+- **Full EventModification** — security levels, access permeability (open/guests/hard
+  locked), interactive objects, guard NPCs. Still needs its own dedicated brainstorm
+  before the schema expands — #2357 (event grandeur, above) deliberately did NOT use
+  this slot; #2289's ceremony quality remains a planned multiplier input here
+- **Prestige/fame system** — noble politics reputation distinct from Legend; #2357
+  covers the once-in-a-lifetime-event slice via the Legend/deed pipeline, a general
+  system is still open
+- **Domain effects** — event quality affecting noble house domain strength (named in
+  the original Future Work bullet #2357 grew from; not part of the ratified 2026-08-15
+  direction — no domain-model hook exists to verify against, stays a separate future
+  issue if wanted)
 - **Guest access mechanics** — invitees bringing +1s, sneak mechanics for uninvited
 - **Interactive event objects** — mini-games attached to events
 - **GM events** — integration with Stories/GM table system

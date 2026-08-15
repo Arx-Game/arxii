@@ -39,6 +39,9 @@ export function EventDetailPage() {
   }
 
   const isStaff = account?.is_staff ?? false;
+  const activeCharacter =
+    account?.available_characters?.find((c) => c.currently_puppeted_in_session) ?? null;
+  const actorCharacterId = activeCharacter?.id ?? null;
 
   return (
     <div className="container mx-auto max-w-3xl px-4 py-8">
@@ -49,7 +52,13 @@ export function EventDetailPage() {
         <ArrowLeft className="h-4 w-4" />
         Back to events
       </Link>
-      <EventDetail event={event} isHost={event.is_host} isStaff={isStaff} isGM={event.is_gm} />
+      <EventDetail
+        event={event}
+        isHost={event.is_host}
+        isStaff={isStaff}
+        isGM={event.is_gm}
+        actorCharacterId={actorCharacterId}
+      />
     </div>
   );
 }

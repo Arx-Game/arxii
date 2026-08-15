@@ -4,7 +4,12 @@ from django.utils.functional import cached_property
 from evennia.utils.idmapper.models import SharedMemoryModel
 
 from core.mixins import DiscriminatorMixin
-from world.events.constants import EventStatus, InvitationResponse, InvitationTargetType
+from world.events.constants import (
+    EventStatus,
+    GrandeurCategory,
+    InvitationResponse,
+    InvitationTargetType,
+)
 from world.game_clock.constants import TimePhase
 
 # Lazy model reference (Django app_label.ModelName), extracted to satisfy S1192.
@@ -115,6 +120,10 @@ class Event(SharedMemoryModel):
                 "target_persona", "target_organization", "target_society"
             )
         )
+
+    @cached_property
+    def grandeur_contributions_cached(self) -> list["EventGrandeurContribution"]:
+        return list(self.grandeur_contributions.select_related("contributed_by"))
 
 
 class EventHost(SharedMemoryModel):
@@ -315,3 +324,48 @@ class EventCatering(SharedMemoryModel):
 
     def __str__(self) -> str:
         return f"{self.item_instance} at {self.event} ({self.role})"
+
+
+class EventGrandeurContribution(SharedMemoryModel):
+    """One spend against a once-in-a-lifetime event's grandeur budget (#2357).
+
+    Catering-shaped sibling to ``EventCatering``: VENUE/ENTERTAINMENT/FAVORS/DECOR
+    are the uncovered slices of a wedding/coronation budget (food stays
+    ``EventCatering``'s lane). ``transfer`` is the audit link into the currency
+    ledger — never re-derive amount_spent from it, it is denormalized onto this
+    row for query convenience. Multiple hosts/contributors can each add rows,
+    mirroring catering's multi-contributor shape.
+    """
+
+    event = models.ForeignKey(
+        Event,
+        on_delete=models.CASCADE,
+        related_name="grandeur_contributions",
+    )
+    category = models.CharField(
+        max_length=16,
+        choices=GrandeurCategory.choices,
+        help_text="What slice of the budget this spend paid for.",
+    )
+    contributed_by = models.ForeignKey(
+        PERSONA_MODEL,
+        on_delete=models.PROTECT,
+        related_name="grandeur_contributions",
+        help_text="Who authorized the spend (purse or treasury source).",
+    )
+    amount_spent = models.PositiveIntegerField(help_text="Coppers spent, mirrors CurrencyTransfer.")
+    transfer = models.ForeignKey(
+        "arxii.CurrencyTransfer",
+        on_delete=models.PROTECT,
+        related_name="+",
+        help_text="Audit link to the currency sink transfer this row records.",
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        verbose_name = "Event Grandeur Contribution"
+        verbose_name_plural = "Event Grandeur Contributions"
+        ordering = ["-created_at"]
+
+    def __str__(self) -> str:
+        return f"{self.contributed_by} spent on {self.category} at {self.event}"

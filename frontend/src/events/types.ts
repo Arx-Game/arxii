@@ -56,6 +56,25 @@ export interface EventModification {
   room_description_overlay: string;
 }
 
+/** What slice of a once-in-a-lifetime event's budget a spend paid for (#2357). */
+export type GrandeurCategory = 'venue' | 'entertainment' | 'favors' | 'decor';
+
+export const GRANDEUR_CATEGORIES: { value: GrandeurCategory; label: string }[] = [
+  { value: 'venue', label: 'Venue' },
+  { value: 'entertainment', label: 'Entertainment' },
+  { value: 'favors', label: 'Favors' },
+  { value: 'decor', label: 'Decor' },
+];
+
+export interface EventGrandeurContribution {
+  id: number;
+  category: GrandeurCategory;
+  contributed_by: number;
+  contributed_by_name: string | null;
+  amount_spent: number;
+  created_at: string;
+}
+
 export interface EventDetailData extends EventListItem {
   started_at: string | null;
   ended_at: string | null;
@@ -64,6 +83,8 @@ export interface EventDetailData extends EventListItem {
   hosts: EventHost[];
   invitations: EventInvitation[];
   modification: EventModification | null;
+  grandeur_contributions: EventGrandeurContribution[];
+  grandeur_total_spent: number;
   is_host: boolean;
   is_gm: boolean;
 }

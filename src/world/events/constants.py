@@ -15,6 +15,21 @@ class InvitationTargetType(models.TextChoices):
     SOCIETY = "society", "Society"
 
 
+class GrandeurCategory(models.TextChoices):
+    """What a grandeur contribution paid for at a once-in-a-lifetime event (#2357).
+
+    Deliberately excludes food — ``EventCatering``/``CateringRole.PROVISION``
+    already owns that spend+prestige lane (the Hospitality deed); a grandeur
+    category for food would double-mint prestige off the same table.
+    PLACEHOLDER category list/count — Apostate's call on final naming.
+    """
+
+    VENUE = "venue", "Venue"
+    ENTERTAINMENT = "entertainment", "Entertainment"
+    FAVORS = "favors", "Favors"
+    DECOR = "decor", "Decor"
+
+
 class InvitationResponse(models.TextChoices):
     """An invitee's RSVP to a persona-targeted event invitation.
 

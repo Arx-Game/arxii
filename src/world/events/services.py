@@ -1,10 +1,11 @@
 """Service functions for event lifecycle, invitations, and visibility."""
 
 from datetime import datetime, timedelta
+import math
 from typing import TYPE_CHECKING
 
 from django.db import transaction
-from django.db.models import Q, QuerySet
+from django.db.models import Q, QuerySet, Sum
 from django.utils import timezone
 
 from evennia_extensions.models import ObjectDisplayData
@@ -13,6 +14,7 @@ from world.events.models import (
     CateringRole,
     Event,
     EventCatering,
+    EventGrandeurContribution,
     EventHost,
     EventInvitation,
     EventModification,
@@ -21,6 +23,7 @@ from world.events.models import (
 if TYPE_CHECKING:
     from evennia.objects.models import ObjectDB
 
+    from world.currency.models import CharacterPurse, OrganizationTreasury
     from world.items.models import ItemInstance
 from world.events.types import EventError
 from world.game_clock.constants import TimePhase
@@ -228,6 +231,7 @@ def complete_event(event: Event) -> Event:
         event.ended_at = timezone.now()
         event.save(update_fields=["status", "ended_at", "updated_at"])
         _award_catering_prestige(event)
+        _award_grandeur_prestige(event)
     return event
 
 
@@ -391,6 +395,162 @@ def _apply_grand_display(persona, score: int) -> None:
     if membership is None:
         return
     apply_grand_display(membership.organization, score)
+
+
+# --- Event grandeur → host/honoree prestige (#2357) --------------------------
+# Catering-shaped sibling for the once-in-a-lifetime event spend (wedding,
+# coronation, grand ball): a currency sink recorded per contribution, summed
+# into a sqrt-diminishing-returns score at completion, minted via the same
+# create_solo_deed + apply_grand_display pipeline catering uses. Ratified
+# 2026-08-15: for ceremony-linked (WEDDING/CORONATION) events the economic
+# cost IS the gate — no is_milestone flag, no cooldown bookkeeping; plain
+# diminishing returns apply to every event alike. All magnitudes PLACEHOLDER.
+
+GRANDEUR_COPPER_TO_POINT_RATE = 1000
+GRANDEUR_SCORE_CAP = 40
+GRANDEUR_DEED_MINIMUM_SCORE = 3
+GRANDEUR_DEED_BASE_PER_POINT = 5
+GRANDEUR_HONOREE_CUT_PERCENT = 30
+GRANDEUR_SOURCE_TYPE_NAME = "Grandeur"
+
+# Ceremony type keys whose honorees get an additive grandeur cut (#2357 amendments).
+# "coronation" is not yet a valid CeremonyTypeKey choice (lands with #2358) — the
+# plain string check is forward-compatible: no Ceremony row can carry that key
+# until #2358 adds it, so this simply never matches until then.
+_GRANDEUR_HONOREE_CEREMONY_KEYS = ("wedding", "coronation")
+
+
+def contribute_grandeur(  # noqa: PLR0913 - purse/treasury source pair is co-equal, mirrors transfer()
+    event: Event,
+    persona: Persona,
+    *,
+    category: str,
+    amount: int,
+    from_purse: "CharacterPurse | None" = None,
+    from_treasury: "OrganizationTreasury | None" = None,
+) -> EventGrandeurContribution:
+    """Spend on an event's grandeur budget — a currency sink tagged per category (#2357).
+
+    Mirrors ``designate_catering_container``'s shape: validates the event is
+    still open for contribution, moves the money through the audited
+    ``currency.services.transfer`` sink (null destination), then records the
+    tagged row. The purse-vs-treasury source and any treasury spend-authority
+    check are the caller's responsibility (the Action layer, mirroring
+    catering's contributor resolution) — this function just moves the money
+    and tags it.
+
+    Raises:
+        EventError: If the event is not SCHEDULED/ACTIVE, or funds are short.
+    """
+    if event.status not in (EventStatus.SCHEDULED, EventStatus.ACTIVE):
+        raise EventError(EventError.GRANDEUR_INVALID)
+    from django.core.exceptions import ValidationError as DjangoValidationError  # noqa: PLC0415
+
+    from world.currency.services import transfer  # noqa: PLC0415
+
+    try:
+        row = transfer(
+            amount=amount,
+            reason=f"Grandeur investment: {category} at {event.name}",
+            from_purse=from_purse,
+            from_treasury=from_treasury,
+        )
+    except DjangoValidationError as exc:
+        raise EventError(EventError.GRANDEUR_INSUFFICIENT_FUNDS) from exc
+    return EventGrandeurContribution.objects.create(
+        event=event,
+        category=category,
+        contributed_by=persona,
+        amount_spent=amount,
+        transfer=row,
+    )
+
+
+def _grandeur_score(event: Event) -> int:
+    """Sqrt-diminishing-returns score off total grandeur spend, capped (#2357).
+
+    A house that dumps 10x the coppers gets ~3x the score, not 10x — the
+    diminishing-returns lever the issue asks for. Reads the live rows, same
+    shape as ``_catering_score``.
+    """
+    total_spent = (
+        EventGrandeurContribution.objects.filter(event=event).aggregate(total=Sum("amount_spent"))[
+            "total"
+        ]
+        or 0
+    )
+    if total_spent <= 0:
+        return 0
+    points = total_spent / GRANDEUR_COPPER_TO_POINT_RATE
+    return min(GRANDEUR_SCORE_CAP, round(math.sqrt(points)))
+
+
+def _award_grandeur_prestige(event: Event) -> None:
+    """Mint the host's Grandeur deed from the event's spend, if any (#2357)."""
+    from world.societies.models import LegendSourceType  # noqa: PLC0415
+    from world.societies.services import create_solo_deed  # noqa: PLC0415
+
+    score = _grandeur_score(event)
+    if score < GRANDEUR_DEED_MINIMUM_SCORE:
+        return
+    host = (
+        EventHost.objects.filter(event=event, is_primary=True).select_related("persona").first()
+        or EventHost.objects.filter(event=event).select_related("persona").first()
+    )
+    if host is None or host.persona is None:
+        return
+    source_type, _created = LegendSourceType.objects.get_or_create(
+        name=GRANDEUR_SOURCE_TYPE_NAME,
+        defaults={
+            "description": (
+                "PLACEHOLDER: wealth thrown at a night no one present will forget (#2357)."
+            )
+        },
+    )
+    create_solo_deed(
+        host.persona,
+        f"Threw a legendary {event.name}",
+        source_type,
+        score * GRANDEUR_DEED_BASE_PER_POINT,
+        description="PLACEHOLDER: coin become memory, memory become standing.",
+    )
+    _apply_grand_display(host.persona, score)
+    _award_grandeur_honoree_cut(event, score, source_type)
+
+
+def _award_grandeur_honoree_cut(event: Event, score: int, source_type) -> None:
+    """Additive honoree cut when *event* has a linked WEDDING/CORONATION ceremony.
+
+    Mirrors ``CeremonyConfig.officiant_cut_percent``'s shape: a percentage of
+    the host's grandeur deed value mints as a second deed per honoree,
+    additive to whatever ``finish_ceremony``'s own branch already awarded
+    them (ratified 2026-08-15 — the "in addition to" ceremony honoree
+    prestige). No cut fires for a plain grand ball with no linked ceremony.
+    """
+    from world.ceremonies.models import Ceremony  # noqa: PLC0415
+    from world.societies.services import create_solo_deed  # noqa: PLC0415
+
+    ceremony = (
+        Ceremony.objects.filter(event=event, ceremony_type__key__in=_GRANDEUR_HONOREE_CEREMONY_KEYS)
+        .select_related("ceremony_type")
+        .first()
+    )
+    if ceremony is None:
+        return
+    honoree_value = score * GRANDEUR_DEED_BASE_PER_POINT * GRANDEUR_HONOREE_CUT_PERCENT // 100
+    if honoree_value <= 0:
+        return
+    for honoree in ceremony.honorees.select_related("honoree_sheet"):
+        persona = honoree.honoree_sheet.primary_persona
+        if persona is None:
+            continue
+        create_solo_deed(
+            persona,
+            f"Honored by the grandeur of {event.name}",
+            source_type,
+            honoree_value,
+            description="PLACEHOLDER: a share of the night's splendor, theirs by right.",
+        )
 
 
 def cancel_event(event: Event) -> Event:

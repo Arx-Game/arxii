@@ -97,6 +97,8 @@ function eventWithInvitations(invitations: EventInvitation[]): EventDetailData {
     hosts: [],
     invitations,
     modification: null,
+    grandeur_contributions: [],
+    grandeur_total_spent: 0,
     is_host: false,
     is_gm: false,
   };

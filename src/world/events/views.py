@@ -33,7 +33,7 @@ from world.events.filters import (
     OrganizationSearchFilter,
     SocietySearchFilter,
 )
-from world.events.models import Event, EventHost, EventInvitation
+from world.events.models import Event, EventGrandeurContribution, EventHost, EventInvitation
 from world.events.permissions import (
     IsEventHostGMOrStaff,
     IsEventHostOrStaff,
@@ -174,6 +174,11 @@ class EventViewSet(_EventActorMixin, ModelViewSet):
                     "target_society",
                 ),
                 to_attr="invitations_cached",
+            ),
+            Prefetch(
+                "grandeur_contributions",
+                queryset=EventGrandeurContribution.objects.select_related("contributed_by"),
+                to_attr="grandeur_contributions_cached",
             ),
             "modification",  # noqa: PREFETCH_STRING
         )

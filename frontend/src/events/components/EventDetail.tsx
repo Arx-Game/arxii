@@ -20,6 +20,7 @@ import { urls } from '@/utils/urls';
 import { FashionPresentationPanel } from '@/fashion/FashionPresentationPanel';
 import { EventInvitations } from './EventInvitations';
 import { EventStatusBadge } from './EventStatusBadge';
+import { GrandeurPanel } from './GrandeurPanel';
 import { TimePhaseBadge } from './TimePhaseBadge';
 import { eventLifecycleAction } from '../queries';
 import { EVENT_STATUS } from '../types';
@@ -30,6 +31,8 @@ interface EventDetailProps {
   isHost?: boolean;
   isStaff?: boolean;
   isGM?: boolean;
+  /** ObjectDB pk of the viewer's active character; null if none puppeted. */
+  actorCharacterId?: number | null;
 }
 
 export function EventDetail({
@@ -37,6 +40,7 @@ export function EventDetail({
   isHost = false,
   isStaff = false,
   isGM = false,
+  actorCharacterId = null,
 }: EventDetailProps) {
   const queryClient = useQueryClient();
   const canManageLifecycle = isHost || isStaff;
@@ -137,6 +141,17 @@ export function EventDetail({
 
       {/* Fashion presentations + peer judging (#514) */}
       <FashionPresentationPanel eventId={event.id} />
+
+      {/* Grandeur investment (#2357) */}
+      <GrandeurPanel
+        eventId={event.id}
+        contributions={event.grandeur_contributions}
+        totalSpent={event.grandeur_total_spent}
+        actorCharacterId={actorCharacterId}
+        canContribute={
+          event.status === EVENT_STATUS.SCHEDULED || event.status === EVENT_STATUS.ACTIVE
+        }
+      />
 
       {/* Host actions */}
       <div className="flex flex-wrap gap-2">
