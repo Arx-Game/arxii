@@ -920,6 +920,7 @@
   - granted_via_profile -> buildings.PropertyGrantProfile [FK] (nullable)
 **Pointed to by:**
   - battle_fortifications <- battles.Fortification
+  - listing <- buildings.BuildingListing
   - materials_used <- buildings.BuildingMaterial
   - extension_details <- buildings.BuildingExtensionDetails
   - fortification_upgrade_details <- buildings.FortificationUpgradeDetails
@@ -964,6 +965,12 @@
   - installable_features <- room_features.RoomFeatureKind
   - staffing_profile <- npc_services.StaffingProfile
   - offered_by <- npc_services.PermitOfferDetails
+
+### BuildingListing
+**Foreign Keys:**
+  - building -> buildings.Building [OneToOne]
+  - organization -> societies.Organization [FK] (nullable)
+  - sold_to_persona -> scenes.Persona [FK] (nullable)
 
 ### BuildingMaterial
 **Foreign Keys:**
@@ -1026,6 +1033,7 @@
 **Foreign Keys:**
   - written_by -> contributors.ContentContributor [FK] (nullable)
   - reviewed_by -> contributors.ContentContributor [FK] (nullable)
+  - crafted_item_template -> items.ItemTemplate [FK] (nullable)
 **Pointed to by:**
   - affinities <- buildings.DecorationAffinity
   - placements <- buildings.RoomDecoration
@@ -1085,6 +1093,7 @@
 **Foreign Keys:**
   - room_profile -> evennia_extensions.RoomProfile [FK]
   - kind -> buildings.DecorationKind [FK]
+  - source_item_instance -> items.ItemInstance [OneToOne] (nullable)
 
 ### RoomPolish
 **Foreign Keys:**
@@ -1106,9 +1115,11 @@
 - `can_build_style(persona: 'Persona', style: 'ArchitecturalStyle') -> 'bool' - Whether this persona may build in this style (#1469).`
 - `complete_building_construction(project: 'Project', outcome_tier: 'object | None' = None) -> 'Building' - Spawn a Building from a completed BUILDING_CONSTRUCTION project.`
 - `contribution_value_for_construction(contribution: 'Contribution') -> 'int' - How much a single contribution is worth toward a BUILDING_CONSTRUCTION project.`
+- `crafted_decoration_amenity(kind: 'DecorationKind', quality_tier: 'QualityTier | None') -> 'int' - The amenity a crafted-furniture placement contributes (#2991 amendment, ADR-0192).`
 - `create_entry_room(building: 'Building', name: 'str') -> 'RoomProfile' - Create one Evennia Room ObjectDB + ``RoomProfile`` for *building*, named *name*.`
 - `issue_permit(offer: 'NPCServiceOffer', persona: 'Persona') -> 'EffectResult' - Real PERMIT effect handler — creates the BuildingPermit ItemInstance + details.`
-- `place_decoration(room_profile, kind: 'DecorationKind') -> 'RoomDecoration' - Place a decoration in a room and materialize its comfort modifiers (#1514).`
+- `place_decoration(room_profile, kind: 'DecorationKind', *, buyer_persona: 'Persona | None' = None, item_instance: 'ItemInstance | None' = None) -> 'RoomDecoration' - Place a decoration in a room and materialize its comfort modifiers (#1514, priced #2991).`
+- `purchase_building(*, persona: 'Persona', listing: 'BuildingListing') -> 'BuildingListing' - Buy a listed ``Building`` with coin (#2991): deed transfer + treasury sink.`
 - `remove_decoration(decoration: 'RoomDecoration') -> 'None' - Remove a placed decoration and delete its comfort modifiers (#1514).`
 - `set_building_style(building: 'Building', style: 'ArchitecturalStyle | None') -> 'Building' - Assign (or clear) a building's architectural style and re-sync its climate modifiers.`
 - `sync_building_style_modifiers(building: 'Building') -> 'None' - Re-materialize a building's architectural-style affinities as cascade modifiers (#1514).`
@@ -4217,6 +4228,7 @@
   - legend_deeds -> societies.LegendEntry [M2M]
 **Pointed to by:**
   - building_permit_details <- buildings.BuildingPermitDetails
+  - placed_as_decoration <- buildings.RoomDecoration
   - currency_instrument <- currency.CurrencyInstrumentDetails
   - favor_token <- currency.FavorTokenDetails
   - bequests <- estates.Bequest
@@ -4283,6 +4295,7 @@
 **Pointed to by:**
   - lore_effects <- buildings.MaterialLoreEffect
   - building_uses <- buildings.BuildingMaterial
+  - furniture_decoration_kinds <- buildings.DecorationKind
   - clue_triggers <- clues.ItemClueTrigger
   - class_level_item_requirements <- progression.ItemRequirement
   - ritual_requirements <- magic.RitualComponentRequirement
@@ -7848,6 +7861,7 @@
   - asset_ownerships <- assets.NPCAsset
   - owned_buildings <- buildings.Building
   - buildings_constructed <- buildings.Building
+  - purchased_building_listings <- buildings.BuildingListing
   - materials_contributed <- buildings.BuildingMaterial
   - permits_consumed <- buildings.BuildingPermitDetails
   - construction_projects_led <- buildings.BuildingConstructionDetails
@@ -8678,6 +8692,7 @@
 **Pointed to by:**
   - held_assets <- assets.NPCAsset
   - capture_consequence_effects <- checks.ConsequenceEffect
+  - building_listings <- buildings.BuildingListing
   - captives <- captivity.Captivity
   - child_orgs <- societies.Organization
   - ranks <- societies.OrganizationRank

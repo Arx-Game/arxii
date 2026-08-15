@@ -142,6 +142,10 @@ export interface RoomStatePayload {
   hub?: HubTidings | null;
   /** Active NPC placements in this room (#3044); absent/empty when none stand here. */
   npc_givers?: NpcGiver[];
+  /** Placed decoration names, oldest first (#2991) — decor legible in scenes. */
+  decorations?: string[];
+  /** The room's bare 1-10 comfort level (#2991), no per-character offset. */
+  comfort_level?: number;
 }
 
 export interface SceneSummary {

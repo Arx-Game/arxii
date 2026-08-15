@@ -153,7 +153,7 @@ class RoomStateSerializerCharacterSplitTests(TestCase):
 
     def test_payload_has_all_expected_keys(self):
         """Payload keys: room/characters/objects/exits/scene + heat (#1765) + hub (#1450)
-        + npc_givers (#3044)."""
+        + npc_givers (#3044) + decorations/comfort_level (#2991)."""
         payload = build_room_state_payload(self.caller_state, self.room_state)
         assert set(payload.keys()) == {
             "room",
@@ -164,6 +164,8 @@ class RoomStateSerializerCharacterSplitTests(TestCase):
             "heat",
             "hub",
             "npc_givers",
+            "decorations",
+            "comfort_level",
         }
         # Cold persona → the self-only heat field is None (never another player's data).
         assert payload["heat"] is None
@@ -171,12 +173,59 @@ class RoomStateSerializerCharacterSplitTests(TestCase):
         assert payload["hub"] is None
         # No Functionary placed here → no NPC givers.
         assert payload["npc_givers"] == []
+        # No RoomDecoration rows here → empty, and the bare neutral comfort level (5).
+        assert payload["decorations"] == []
+        assert payload["comfort_level"] == 5
 
     def test_objects_carry_is_mission_board_false_by_default(self):
         """A plain object with no MissionGiver is never a board (#3044)."""
         payload = build_room_state_payload(self.caller_state, self.room_state)
         sword = next(o for o in payload["objects"] if o["name"] == "sword")
         assert sword["is_mission_board"] is False
+
+
+class RoomStateSerializerDecorAndComfortTests(TestCase):
+    """#2991 — placed decorations and comfort level are legible in scenes."""
+
+    def setUp(self):
+        self.room = ObjectDBFactory(
+            db_key="furnished parlor",
+            db_typeclass_path="typeclasses.rooms.Room",
+        )
+        self.caller = ObjectDBFactory(
+            db_key="hero",
+            db_typeclass_path="typeclasses.characters.Character",
+            location=self.room,
+        )
+        self.context = SceneDataManagerFactory()
+        self.room_state = self.context.initialize_state_for_object(self.room)
+        self.caller_state = self.context.initialize_state_for_object(self.caller)
+        self.room_state.dispatcher_tags = ["look"]
+        self.caller.cmdset.current = SimpleNamespace(commands=[])
+
+    def test_placed_decorations_appear_ordered_by_placement(self):
+        from world.buildings.factories import DecorationKindFactory
+        from world.buildings.services import place_decoration
+
+        profile = self.room.room_profile
+        place_decoration(profile, DecorationKindFactory(name="Rug", amenity=50))
+        place_decoration(profile, DecorationKindFactory(name="Tapestry", amenity=30))
+
+        payload = build_room_state_payload(self.caller_state, self.room_state)
+        assert payload["decorations"] == ["Rug", "Tapestry"]
+
+    def test_comfort_level_reflects_placed_amenity(self):
+        from world.buildings.factories import DecorationKindFactory
+        from world.buildings.services import place_decoration
+
+        profile = self.room.room_profile
+        payload_before = build_room_state_payload(self.caller_state, self.room_state)
+        assert payload_before["comfort_level"] == 5  # neutral, no decor yet
+
+        place_decoration(profile, DecorationKindFactory(name="Marble Bath", amenity=3000))
+
+        payload_after = build_room_state_payload(self.caller_state, self.room_state)
+        assert payload_after["comfort_level"] == 8  # 3000 points crosses the 2500 floor
 
 
 class RoomStateSerializerMissionDiscoveryTests(TestCase):

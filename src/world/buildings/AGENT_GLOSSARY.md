@@ -154,3 +154,37 @@ Builder #670, polish/renown-from-dwellings). Root terms live in
   choice — carries no "inactive" label. _Avoid:_ dormant (retired #676
   concept; collides with `DecayTier.DORMANT`, the 365d player-inactivity
   tier), hidden.
+- **Listing** — `BuildingListing` (#2991): a staff/content-curated coin
+  purchase front door onto one unowned `Building` (`price_coppers`,
+  `is_available`, `sold_to_persona`/`sold_at`). Distinct from **deed**
+  (`LocationOwnership` — the standing that `purchase_building` transfers once
+  a listing sells; this app doesn't own that term, see the Property grant
+  profile entry above) and **grant** (`PropertyGrantProfile` — a one-time,
+  coinless CG freebie via `grant_property_house`, no listing/sale involved).
+  A listing is what's for sale; a deed is who currently holds it; a grant is
+  a different, coinless acquisition path entirely. MVP is buy-from-inventory
+  only — player-to-player resale (an owner listing their own building) is a
+  deferred follow-up, not this model. _Avoid:_ deed (see above), for-sale
+  flag (it's a whole row, not a boolean on `Building`).
+- **Priced fixture placement** — `DecorationKind.cost_coppers` (#2991):
+  flat coppers charged to the placer via `transfer()` inside
+  `place_decoration`, before the `RoomDecoration` row is created (no partial
+  placement). Placement *is* the purchase — there's no separate decor
+  "inventory item" to carry first, matching how `commission_decoration`
+  already prices its `ProjectTemplate`s. Removal never refunds.
+- **Crafted-furniture seam** — the #2991 amendment's connective tissue
+  between the crafting-quality substrate (ADR-0192) and decoration: a
+  `DecorationKind` with `crafted_item_template` set (nullable FK →
+  `items.ItemTemplate`) is sourced from a crafted item, not the flat
+  catalog. Placing it anchors the specific held `ItemInstance` on
+  `RoomDecoration.source_item_instance`; `crafted_decoration_amenity(kind,
+  quality_tier)` scales `kind.amenity` by the instance's `quality_tier.
+  stat_multiplier` — the same "quality multiplies everything" rule ADR-0192
+  applies to stat lines elsewhere. Deliberately NOT new recipe machinery —
+  a furniture recipe is just an ordinary `CraftingRecipe` row whose
+  `output_item_template` happens to be furniture-kind; recipe *content*
+  (the actual chair/table templates and recipes) is lore-repo authored, not
+  built here. _Avoid:_ furniture recipe (there's no dedicated recipe
+  model — reuse `CraftingRecipe` as-is), placeable item (this is a narrow
+  decoration-only seam, not the general "anchor any item in a room"
+  placement-vs-carry design, which stays deferred).

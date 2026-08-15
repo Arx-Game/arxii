@@ -127,3 +127,21 @@ class EnsurePlaceholderPropertyGrantProfileTests(TestCase):
         first = ensure_placeholder_property_grant_profile()
         second = ensure_placeholder_property_grant_profile()
         self.assertEqual(first.pk, second.pk)
+
+
+class EnsurePlaceholderBuildingListingTests(TestCase):
+    def test_creates_placeholder_listing(self) -> None:
+        from world.buildings.models import BuildingListing
+        from world.buildings.seeds import ensure_placeholder_building_listing
+
+        listing = ensure_placeholder_building_listing()
+        self.assertTrue(BuildingListing.objects.filter(pk=listing.pk).exists())
+        self.assertTrue(listing.is_available)
+        self.assertGreater(listing.price_coppers, 0)
+
+    def test_is_idempotent(self) -> None:
+        from world.buildings.seeds import ensure_placeholder_building_listing
+
+        first = ensure_placeholder_building_listing()
+        second = ensure_placeholder_building_listing()
+        self.assertEqual(first.pk, second.pk)

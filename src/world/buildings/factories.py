@@ -8,10 +8,12 @@ from world.buildings.models import (
     Building,
     BuildingConstructionDetails,
     BuildingKind,
+    BuildingListing,
     BuildingMaterial,
     BuildingPermitDetails,
     BuildingRenovationDetails,
     BuildingUpgradeDetails,
+    DecorationKind,
     FortificationUpgradeDetails,
     MaterialLoreEffect,
     PropertyGrantProfile,
@@ -66,6 +68,30 @@ class BuildingFactory(DjangoModelFactory):
     space_budget = 1250  # PLACEHOLDER tier-5 (Estate) value; tests override as needed.
     constructed_by_persona = factory.SubFactory(_PERSONA_FACTORY)
     source_project = None
+
+
+class DecorationKindFactory(DjangoModelFactory):
+    class Meta:
+        model = DecorationKind
+        django_get_or_create = ("name",)
+
+    name = factory.Sequence(lambda n: f"decoration-kind-{n}")
+    description = ""
+    amenity = 100
+    cost_coppers = 0
+    crafted_item_template = None
+
+
+class BuildingListingFactory(DjangoModelFactory):
+    class Meta:
+        model = BuildingListing
+
+    building = factory.SubFactory(BuildingFactory)
+    price_coppers = 5000
+    organization = None
+    is_available = True
+    sold_to_persona = None
+    sold_at = None
 
 
 class BuildingMaterialFactory(DjangoModelFactory):

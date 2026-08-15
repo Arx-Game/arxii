@@ -430,7 +430,13 @@ ledger in issue **#1514**; security/access half (windows-as-egress, guards/defen
   to its own brainstorm
 - **Room installations as system markers** — see below; each installation
   unlocks its own gameplay system and warrants its own design
-- Decoration/furnishing system — items placed in rooms confer stats
+- **Decoration/furnishing system — items placed in rooms confer stats: BUILT-MVP (#2991).**
+  `DecorationKind.cost_coppers` prices placement (charged via `transfer()` inside
+  `place_decoration`); a crafted-furniture seam (`DecorationKind.crafted_item_template`,
+  `RoomDecoration.source_item_instance`, `crafted_decoration_amenity`) lets a crafted
+  `ItemInstance`'s `quality_tier` scale the placed amenity per ADR-0192, riding the shipped
+  crafting substrate rather than a parallel path — furniture recipe *content* stays lore-repo
+  authored. See `docs/systems/INDEX.md`'s "Buildings" section.
 - Estate-level aggregation — "ownership of all rooms in this area"
 - ~~Servant entity~~ — **built** (#2276 fetch, #2989 assignment + pampering
   ambience). No distinct entity was needed: the existing SERVANT
@@ -438,9 +444,16 @@ ledger in issue **#1514**; security/access half (windows-as-egress, guards/defen
   verified as a non-gap in the #2989 spec's anti-reinvention ledger.
   Servant-carried message-carrying stays deferred to the future
   Arx-1-style player-to-player messenger system (#2989 ratified amendment).
-- Property purchase / construction economy
+- **Property purchase / construction economy — BUILT-MVP (#2991).** `BuildingListing` +
+  `purchase_building()` is the coin front door onto the existing `LocationOwnership`
+  cascade: staff/content-curated sale inventory only (mirrors `PropertyGrantProfile`'s
+  shape), sink coin into a ward/crown `OrganizationTreasury`. **Deferred:** player-to-player
+  resale (an owner listing their own building, `WareListing`-style) — a real follow-up once
+  the from-inventory loop is proven. See `docs/systems/INDEX.md`'s "Buildings" section.
 - Per-room stat application during scenes (events use room stats for
-  bonuses)
+  bonuses) — partially covered: room-state now surfaces `decorations`/`comfort_level`
+  (#2991) so decor is legible in scenes; the RP/prestige *consequence* of high comfort
+  (comfort-flex, #1522) is still unbuilt.
 - Vault security rules — access lists, theft mechanics
 
 ## Ownership design notes (deferred — see 2026-05-09 brainstorm)

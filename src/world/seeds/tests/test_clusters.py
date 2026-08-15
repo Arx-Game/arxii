@@ -52,6 +52,7 @@ class TestClusterRegistry(TestCase):
                 "counterplay",
                 "building_condition",
                 "property_grants",
+                "building_listings",
                 "kudos",
                 "survivability",
                 "ceremonies",

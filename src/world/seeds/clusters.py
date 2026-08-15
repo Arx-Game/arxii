@@ -358,6 +358,12 @@ def _seed_property_grants() -> None:
     ensure_placeholder_property_grant_profile()
 
 
+def _seed_building_listings() -> None:
+    from world.buildings.seeds import ensure_placeholder_building_listing  # noqa: PLC0415
+
+    ensure_placeholder_building_listing()
+
+
 def _seed_agriculture() -> None:
     from world.agriculture.seeds import (  # noqa: PLC0415
         ensure_field_granary_kinds,
@@ -611,6 +617,10 @@ CLUSTER_SEEDERS: dict[str, Callable[[], None]] = {
     # grant_property_house is exercisable on a fresh dev DB before any real
     # fixture content wires a Beginnings row at a PropertyGrantProfile.
     "property_grants": _seed_property_grants,
+    # Building listings: a PLACEHOLDER for-sale Building + BuildingListing so
+    # purchase_building is exercisable on a fresh dev DB (#2991) — same shape as
+    # "property_grants" above, distinct placeholder ward so the two never collide.
+    "building_listings": _seed_building_listings,
     "agriculture": _seed_agriculture,
     # Kudos: the KudosSourceCategory rows the pose_kudos / spread_assist / social_engagement
     # reaction-kind + weekly-grant paths need, plus the "relationship_writeup" category and the
@@ -714,6 +724,7 @@ def seeded_models_by_cluster() -> dict[str, list[type[Model]]]:
     from world.boundaries.models import ContentTheme  # noqa: PLC0415
     from world.buildings.models import (  # noqa: PLC0415
         BuildingKind,
+        BuildingListing,
         DecorationKind,
         PropertyGrantProfile,
     )
@@ -906,6 +917,9 @@ def seeded_models_by_cluster() -> dict[str, list[type[Model]]]:
         # grant_property_house is exercisable on a fresh dev DB before any
         # real fixture content wires a Beginnings row at one.
         "property_grants": [PropertyGrantProfile],
+        # Building listings: a placeholder for-sale Building so purchase_building
+        # is exercisable on a fresh dev DB before real sale inventory is authored (#2991).
+        "building_listings": [BuildingListing],
         # Kudos: 4 KudosSourceCategory rows (pose_kudos/spread_assist/social_engagement/
         # relationship_writeup) + the "xp" KudosClaimCategory; represented by
         # KudosSourceCategory (#2026).

@@ -193,6 +193,7 @@ class FixtureKindSerializer(serializers.Serializer):
     name = serializers.CharField()
     description = serializers.CharField(allow_blank=True)
     amenity = serializers.IntegerField()
+    cost_coppers = serializers.IntegerField()
     affinities = FixtureAffinitySerializer(many=True)
 
 

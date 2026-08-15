@@ -45,6 +45,9 @@ _CODEX_SUBJECT_FK = "arxii.CodexSubject"
 _ARCHITECTURAL_STYLE_FK = "arxii.ArchitecturalStyle"
 _ROOM_PROFILE_FK = "arxii.RoomProfile"
 _AREA_FK = "arxii.Area"
+_ITEM_TEMPLATE_FK = "arxii.ItemTemplate"
+_ITEM_INSTANCE_FK = "arxii.ItemInstance"
+_ORGANIZATION_FK = "arxii.Organization"
 
 
 class BuildingKind(NaturalKeyMixin, CreditedContent, SharedMemoryModel):
@@ -488,6 +491,60 @@ class Building(SharedMemoryModel):
                     stats.get(effect.target_stat, 0) + tiers * effect.magnitude_per_tier
                 )
         return stats
+
+
+class BuildingListing(SharedMemoryModel):
+    """A staff/content-curated coin purchase front door onto an unowned ``Building`` (#2991).
+
+    Mirrors ``items.market.WareListing``'s shape at building scope (Decision 2 of the #2991
+    spec) but is **not** player-to-player resale — MVP inventory is content-authored, the same
+    way ``PropertyGrantProfile`` catalogs a CG-time freebie. Buying via ``purchase_building``
+    ends any existing ``LocationOwnership`` on the building's ``Area`` and creates a fresh one
+    for the buyer (the existing most-specific-wins cascade, unchanged), so the buyer becomes
+    owner of every room inside without a per-room step. Player-to-player resale (an owner
+    listing their own building) is a real, deferred follow-up — see the spec's Decision 2.
+    """
+
+    building = models.OneToOneField(
+        _BUILDING_MODEL_PATH,
+        on_delete=models.CASCADE,
+        related_name="listing",
+        help_text="The building for sale. One listing per building — metadata about it.",
+    )
+    price_coppers = models.PositiveIntegerField(
+        help_text="Asking price in coppers. No default — every seeded row sets one explicitly.",
+    )
+    organization = models.ForeignKey(
+        _ORGANIZATION_FK,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="building_listings",
+        help_text=(
+            "Ward/crown treasury the sale coin sinks into. NULL falls back to a shared "
+            "placeholder treasury org (mirrors PropertyGrantProfile.ward_area's null-fallback) "
+            "— coin stays in the world's economy rather than vanishing (Adopted defaults)."
+        ),
+    )
+    is_available = models.BooleanField(
+        default=True,
+        help_text="False once sold. Row is kept (not deleted) for audit trail.",
+    )
+    sold_to_persona = models.ForeignKey(
+        _PERSONA_FK,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="purchased_building_listings",
+    )
+    sold_at = models.DateTimeField(null=True, blank=True)
+
+    class Meta:
+        ordering = ["-is_available", "price_coppers"]
+
+    def __str__(self) -> str:
+        status = "available" if self.is_available else "sold"
+        return f"Listing({self.building_id}: {self.price_coppers}c, {status})"
 
 
 class BuildingMaterial(SharedMemoryModel):
@@ -1423,7 +1480,35 @@ class DecorationKind(NaturalKeyMixin, CreditedContent, SharedMemoryModel):
         default=0,
         help_text=(
             "Positive comfort points (the AMENITY pool) added by presence. Small for utility "
-            "pieces (a hearth is mostly mitigation); large for luxury/magical comfort."
+            "pieces (a hearth is mostly mitigation); large for luxury/magical comfort. For a "
+            "crafted-furniture kind (``crafted_item_template`` set), this is the BASE amenity — "
+            "the placed instance's crafting quality scales it (#2991 amendment)."
+        ),
+    )
+    cost_coppers = models.PositiveIntegerField(
+        default=0,
+        help_text=(
+            "Flat coppers charged to the placing persona's purse on placement (#2991). "
+            "PLACEHOLDER — 0 keeps the pre-#2991 seeded catalog free. Not charged for a "
+            "crafted-furniture placement (``crafted_item_template`` set) — the crafting cost "
+            "already paid the inherent material/labor cost."
+        ),
+    )
+    crafted_item_template = models.ForeignKey(
+        _ITEM_TEMPLATE_FK,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="furniture_decoration_kinds",
+        help_text=(
+            "Optional link marking this kind as crafted-economy furniture (#2991 amendment): "
+            "when set, placement requires a held ItemInstance of this template (see "
+            "``buildings.services.place_decoration``'s ``item_instance`` kwarg), and the "
+            "instance's ``quality_tier`` scales ``amenity`` via "
+            "``crafted_decoration_amenity`` (ADR-0192's quality-multiplies-everything rule) "
+            "instead of the flat value. NULL = the ordinary fixed-catalog decoration (unchanged "
+            "behavior). Recipe content producing a matching ItemTemplate is lore-repo authored, "
+            "not this app's concern — this field is only the placement-side seam."
         ),
     )
 
@@ -1488,6 +1573,18 @@ class RoomDecoration(SharedMemoryModel):
         related_name="placements",
     )
     placed_at = models.DateTimeField(auto_now_add=True)
+    source_item_instance = models.OneToOneField(
+        _ITEM_INSTANCE_FK,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="placed_as_decoration",
+        help_text=(
+            "The specific crafted ItemInstance anchored as this placement (#2991 amendment) — "
+            "set only when ``kind.crafted_item_template`` is not null. One item can decorate at "
+            "most one room at a time (OneToOne). NULL for the ordinary fixed-catalog case."
+        ),
+    )
 
     class Meta:
         ordering = ["room_profile", "placed_at"]
