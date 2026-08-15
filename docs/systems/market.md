@@ -86,11 +86,17 @@ before charging and use the adjusted price for both the charge and the
 Browse (Decision 4 — no personalized price on the read side): the shop
 directory (`ServiceOfferViewSet`) and stall stock
 (`MarketStallSerializer.get_stock_listings`) show the *base authored*
-price/fee only, but hide any row whose `min_regard` the viewer's active
-persona doesn't meet (visibility = eligibility, resolved via the viewer's
-roster tenure — a fail-closed no-persona viewer sees only ungated rows).
-The regard-adjusted price is revealed at purchase-attempt time, in the
-action's success message.
+price/fee only, but for a resolvable viewer hide any row that fails
+`_regard_gate_passes` — the exact same predicate the purchase-time gate
+checks (refusal floor **and** any authored `min_regard`), resolved via the
+viewer's roster tenure. A buyer at or below the refusal floor never sees
+even an ungated row at that shopkeeper/crafter — they'd bounce off the same
+floor at purchase, so browse and purchase never disagree. An unresolvable
+viewer (no roster tenure) can't have regard evaluated at all, so only
+`min_regard`-authored rows are hidden as a conservative default; the floor
+never applies without a real persona to check it against. The
+regard-adjusted price is revealed at purchase-attempt time, in the action's
+success message.
 
 **Honest scope note:** item-*minting* crafting (`ITEM_CREATE`) is a real, wired
 flow — `craft_create_item` (`world/items/services/crafting.py`) delegates to

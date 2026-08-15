@@ -227,3 +227,86 @@ class ServiceOfferBrowseGatingTests(TestCase):
         # Base fee only — no personalized price on browse (Decision 4).
         row = next(r for r in response.data if r["id"] == self.offer.pk)
         self.assertEqual(row["fee"], 100)
+
+    def test_refusal_floor_hides_even_an_ungated_offer(self) -> None:
+        """A hard-refused buyer never sees ANY offer from that crafter (#2995 review)."""
+        ungated = CraftingServiceOffer.objects.create(
+            crafter_persona=self.crafter,
+            recipe_kind="style_attach",
+            shop_room=self.shop_room,
+            fee=50,
+        )
+        NpcRegardFactory(
+            holder_persona=self.crafter, target_persona=self.viewer, value=REGARD_REFUSAL_FLOOR
+        )
+        response = self.client.get("/api/items/service-offers/")
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        ids = [row["id"] for row in response.data]
+        self.assertNotIn(self.offer.pk, ids)
+        self.assertNotIn(ungated.pk, ids)
+
+
+class StockListingBrowseGatingTests(TestCase):
+    """Regard-gated stock visibility on /api/items/market-squares/ (#2995)."""
+
+    def setUp(self) -> None:
+        self.client = APIClient()
+        self.account = AccountFactory()
+        self.client.force_authenticate(user=self.account)
+        self.viewer = _played_persona(account=self.account)
+        self.shopkeeper = PersonaFactory()
+        self.stall = MarketStall.objects.create(
+            square=_square(), name="Attended Stall 2", shopkeeper_persona=self.shopkeeper
+        )
+        self.ungated_listing = self.stall.stock_listings.create(
+            template=ItemTemplateFactory(name="Browsable Iron"), price=100
+        )
+        self.reserved_listing = self.stall.stock_listings.create(
+            template=ItemTemplateFactory(name="Reserved Silk"), price=200, min_regard=100
+        )
+
+    def _stock_listing_ids(self, response) -> list[int] | None:
+        for square in response.data:
+            for stall in square["stalls"]:
+                if stall["id"] == self.stall.pk:
+                    return [row["id"] for row in stall["stock_listings"]]
+        return None
+
+    def test_reserved_listing_hidden_below_threshold(self) -> None:
+        NpcRegardFactory(holder_persona=self.shopkeeper, target_persona=self.viewer, value=0)
+        response = self.client.get("/api/items/market-squares/")
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        ids = self._stock_listing_ids(response)
+        self.assertIn(self.ungated_listing.pk, ids)
+        self.assertNotIn(self.reserved_listing.pk, ids)
+
+    def test_reserved_listing_visible_once_earned(self) -> None:
+        NpcRegardFactory(holder_persona=self.shopkeeper, target_persona=self.viewer, value=100)
+        response = self.client.get("/api/items/market-squares/")
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        ids = self._stock_listing_ids(response)
+        self.assertIn(self.ungated_listing.pk, ids)
+        self.assertIn(self.reserved_listing.pk, ids)
+
+    def test_refusal_floor_hides_even_the_ungated_listing(self) -> None:
+        """A hard-refused buyer never sees ANY listing at that stall (#2995 review)."""
+        NpcRegardFactory(
+            holder_persona=self.shopkeeper,
+            target_persona=self.viewer,
+            value=REGARD_REFUSAL_FLOOR,
+        )
+        response = self.client.get("/api/items/market-squares/")
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        ids = self._stock_listing_ids(response)
+        self.assertEqual(ids, [])
+
+    def test_just_above_refusal_floor_shows_ungated_only(self) -> None:
+        NpcRegardFactory(
+            holder_persona=self.shopkeeper,
+            target_persona=self.viewer,
+            value=REGARD_REFUSAL_FLOOR + 1,
+        )
+        response = self.client.get("/api/items/market-squares/")
+        ids = self._stock_listing_ids(response)
+        self.assertIn(self.ungated_listing.pk, ids)
+        self.assertNotIn(self.reserved_listing.pk, ids)

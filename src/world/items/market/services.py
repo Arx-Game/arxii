@@ -92,16 +92,39 @@ def _regard_adjusted_price(base_price: int, regard: int) -> int:
     return base_price * pct // 100
 
 
+def _regard_gate_passes(
+    shopkeeper_persona: Persona | None, buyer: Persona, min_regard: int | None
+) -> bool:
+    """Whether ``buyer`` clears the seller's regard gate (#2995).
+
+    True with no persona-bearing shopkeeper (unchanged behavior). Otherwise
+    both the global refusal floor and any authored ``min_regard`` must clear —
+    THE single predicate: both ``_check_regard_gate`` (purchase-time) and the
+    browse-side visibility filters (``MarketStallSerializer.get_stock_listings``,
+    ``ServiceOfferViewSet.get_queryset``) call this one function, so a
+    hard-refused buyer never sees a listing/offer they'd bounce off at
+    purchase — visibility = eligibility, no separate rule.
+    """
+    if shopkeeper_persona is None:
+        return True
+    from world.items.market.constants import REGARD_REFUSAL_FLOOR  # noqa: PLC0415
+
+    regard = _shopkeeper_regard(shopkeeper_persona, buyer)
+    if regard <= REGARD_REFUSAL_FLOOR:
+        return False
+    return min_regard is None or regard >= min_regard
+
+
 def _check_regard_gate(
     shopkeeper_persona: Persona | None, buyer: Persona, min_regard: int | None
 ) -> None:
     """Raise ``MarketServiceError`` when the buyer's regard fails the gate.
 
-    No-op when there is no persona-bearing shopkeeper. Checks the global
-    refusal floor first (any shopkeeper, any listing), then the
-    listing/offer's own authored ``min_regard`` reserved-stock gate.
+    Wraps ``_regard_gate_passes`` (see its docstring — the single predicate
+    shared with browse-side visibility). Distinguishes the refusal-floor
+    message from the reserved-stock ``min_regard`` message for the player.
     """
-    if shopkeeper_persona is None:
+    if _regard_gate_passes(shopkeeper_persona, buyer, min_regard):
         return
     from world.items.market.constants import REGARD_REFUSAL_FLOOR  # noqa: PLC0415
 
@@ -111,11 +134,10 @@ def _check_regard_gate(
         raise MarketServiceError(
             msg, user_message="They take one look at you and refuse to deal with you at all."
         )
-    if min_regard is not None and regard < min_regard:
-        msg = f"regard {regard} below authored min_regard {min_regard}"
-        raise MarketServiceError(
-            msg, user_message="That's reserved for those who've earned more trust here."
-        )
+    msg = f"regard {regard} below authored min_regard {min_regard}"
+    raise MarketServiceError(
+        msg, user_message="That's reserved for those who've earned more trust here."
+    )
 
 
 @transaction.atomic

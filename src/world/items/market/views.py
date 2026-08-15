@@ -80,9 +80,14 @@ def _viewer_persona(request: Request) -> Persona | None:
 class ServiceOfferViewSet(viewsets.ReadOnlyModelViewSet):
     """The shop directory: standing craft-as-service offers (visit to use).
 
-    Regard-gated (#2995): an offer with ``min_regard`` set is invisible to a
-    viewer whose active persona's standing with the crafter doesn't meet it —
-    visibility = eligibility, the same predicate the purchase-time gate checks.
+    Regard-gated (#2995): for a resolvable viewer, an offer is invisible when
+    it fails ``_regard_gate_passes`` against the crafter — the EXACT same
+    predicate (refusal floor + any authored ``min_regard``) the purchase-time
+    gate checks, so a hard-refused buyer never sees an offer they'd bounce
+    off at purchase. Visibility = eligibility, no separate rule. An
+    unresolvable viewer (no roster tenure) can't have their regard evaluated,
+    so only ``min_regard``-authored offers are hidden as a conservative
+    default.
     """
 
     pagination_class = None  # 2026-07 audit: opt out of default paginator (ADR-0138)
@@ -98,17 +103,19 @@ class ServiceOfferViewSet(viewsets.ReadOnlyModelViewSet):
     filterset_class = ServiceOfferFilterSet
 
     def get_queryset(self) -> QuerySet[CraftingServiceOffer]:
-        from world.items.market.services import _shopkeeper_regard  # noqa: PLC0415
+        from world.items.market.services import _regard_gate_passes  # noqa: PLC0415
 
         qs = super().get_queryset()
-        gated = qs.filter(min_regard__isnull=False)
-        if not gated.exists():
-            return qs
         viewer = _viewer_persona(self.request)
-        hidden_ids = [
-            offer.pk
-            for offer in gated
-            if viewer is None
-            or _shopkeeper_regard(offer.crafter_persona, viewer) < offer.min_regard
-        ]
+        if viewer is not None:
+            # The refusal floor can bite on ANY offer (crafter_persona is
+            # always set), not only min_regard-authored ones — check every
+            # offer, not just the gated subset.
+            hidden_ids = [
+                offer.pk
+                for offer in qs
+                if not _regard_gate_passes(offer.crafter_persona, viewer, offer.min_regard)
+            ]
+        else:
+            hidden_ids = list(qs.filter(min_regard__isnull=False).values_list("pk", flat=True))
         return qs.exclude(pk__in=hidden_ids) if hidden_ids else qs

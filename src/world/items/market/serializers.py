@@ -83,25 +83,32 @@ class MarketStallSerializer(serializers.ModelSerializer):
         return obj.owner_persona.name if obj.owner_persona_id else ""
 
     def get_stock_listings(self, obj: MarketStall) -> list[dict]:
-        """Active stock, minus any reserved-stock rows the viewer's regard doesn't meet.
+        """Active stock, minus whatever the viewer's regard doesn't clear.
 
         Base price only (Decision 4 — no personalized price on browse); the
-        regard-adjusted price is revealed at purchase-attempt time. Visibility =
-        eligibility: same ``min_regard`` predicate the purchase-time gate checks.
+        regard-adjusted price is revealed at purchase-attempt time. Visibility
+        = eligibility: for a resolvable viewer this is the EXACT same
+        ``_regard_gate_passes`` predicate the purchase-time gate checks —
+        refusal floor included, not just an authored ``min_regard`` — so a
+        hard-refused buyer never sees a listing they'd bounce off at
+        purchase. An unresolvable viewer (no roster tenure / anonymous) can't
+        have their regard evaluated at all, so only authored ``min_regard``
+        rows are hidden as a conservative default; the floor never applies
+        without a real persona to check it against.
         """
-        from world.items.market.services import _shopkeeper_regard  # noqa: PLC0415
-
         rows = [row for row in obj.stock_listings.all() if row.is_active]
-        if any(row.min_regard is not None for row in rows):
+        if obj.shopkeeper_persona_id is not None:
+            from world.items.market.services import _regard_gate_passes  # noqa: PLC0415
+
             viewer = _viewer_persona(self.context)
-            regard = (
-                _shopkeeper_regard(obj.shopkeeper_persona, viewer) if viewer is not None else None
-            )
-            rows = [
-                row
-                for row in rows
-                if row.min_regard is None or (regard is not None and regard >= row.min_regard)
-            ]
+            if viewer is None:
+                rows = [row for row in rows if row.min_regard is None]
+            else:
+                rows = [
+                    row
+                    for row in rows
+                    if _regard_gate_passes(obj.shopkeeper_persona, viewer, row.min_regard)
+                ]
         return StockListingSerializer(rows, many=True, context=self.context).data
 
     def get_ware_listings(self, obj: MarketStall) -> list[dict]:
