@@ -64,6 +64,13 @@ chkno "pg_hba has no 'trust'"         "nc infra/ansible/roles/postgres/templates
 chk   "app runs as non-root user"     "grep -q 'User={{ app_user }}' infra/ansible/roles/app_deploy/templates/arxii.service.j2"
 chk   "django: DEBUG = False"         "grep -q 'DEBUG = False' infra/ansible/roles/django_hardening/templates/secret_settings.py.j2"
 chk   "django: TELNET_ENABLED False"  "grep -q 'TELNET_ENABLED = False' infra/ansible/roles/django_hardening/templates/secret_settings.py.j2"
+# SSL_ENABLED binds a TLS-telnet listener, and Evennia's Portal imports OpenSSL
+# to do it. pyOpenSSL is NOT a base Evennia dependency (upstream parks it in the
+# `extra` extra with jupyter/scipy/boto3), so it has to be declared here or the
+# Portal dies on ImportError, never writes server.pid, and systemd fails the unit
+# on 'protocol'. That is exactly how the 2026-08-15 standup failed.
+chk   "SSL-telnet's pyOpenSSL dependency is declared" \
+  "grep -qi '^ *\"pyopenssl' pyproject.toml && grep -qi '^ *\"service-identity' pyproject.toml"
 
 # PG15+ revoked CREATE on schema public from PUBLIC, so a database-level GRANT
 # ALL leaves the migration unable to create django_migrations. The schema
