@@ -75,14 +75,24 @@ class CmdCeremony(ArxCommand):
 
         names_part, _, extra_part = rest.partition("=")
         extra = extra_part.strip() or None
-        is_coronation = type_key == CeremonyTypeKey.CORONATION
-        result = OpenCeremonyAction().run(
-            actor=self.caller,
-            type_key=type_key,
-            honoree_names=self._split_names(names_part),
-            being_name=None if is_coronation else extra,
-            title_name=extra if is_coronation else None,
-        )
+        honoree_names = self._split_names(names_part)
+        # CORONATION's "=" names the title being solemnized, not a worshipped
+        # being — every other type keeps the original being_name-only call
+        # shape (funeral/blessing/sermon/wedding never pass title_name at all).
+        if type_key == CeremonyTypeKey.CORONATION:
+            result = OpenCeremonyAction().run(
+                actor=self.caller,
+                type_key=type_key,
+                honoree_names=honoree_names,
+                title_name=extra,
+            )
+        else:
+            result = OpenCeremonyAction().run(
+                actor=self.caller,
+                type_key=type_key,
+                honoree_names=honoree_names,
+                being_name=extra,
+            )
         if result.message:
             self.msg(result.message)
 

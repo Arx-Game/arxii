@@ -1814,99 +1814,6 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
-  '/api/ceremonies/conversion-offers/': {
-    parameters: {
-      query?: never;
-      header?: never;
-      path?: never;
-      cookie?: never;
-    };
-    /**
-     * @description PENDING conversion-offer inbox for the requesting account (#2361).
-     *
-     *     Mirrors SeanceOfferViewSet's shape exactly, for the PC-officiated conversion
-     *     route (Ratified amendment #1a) — the self-officiated solo route never mints
-     *     an offer at all, so it needs no player-facing delivery surface.
-     *
-     *     GET  /api/ceremonies/conversion-offers/ — the caller's own PENDING offers,
-     *     across every character sheet they've ever held. Deliberately no pagination
-     *     — this list is always small (bounded by how many open PC-officiated
-     *     Conversion ceremonies currently name this account's characters).
-     *     POST .../{id}/accept/ — accept (repoints WorshipDeclaration at finish; body
-     *         may include ``sincere``, the heart-vs-lip-service choice, default True).
-     *     POST .../{id}/decline/ — decline.
-     */
-    get: operations['ceremonies_conversion_offers_list'];
-    put?: never;
-    post?: never;
-    delete?: never;
-    options?: never;
-    head?: never;
-    patch?: never;
-    trace?: never;
-  };
-  '/api/ceremonies/conversion-offers/{id}/accept/': {
-    parameters: {
-      query?: never;
-      header?: never;
-      path?: never;
-      cookie?: never;
-    };
-    get?: never;
-    put?: never;
-    /**
-     * @description PENDING conversion-offer inbox for the requesting account (#2361).
-     *
-     *     Mirrors SeanceOfferViewSet's shape exactly, for the PC-officiated conversion
-     *     route (Ratified amendment #1a) — the self-officiated solo route never mints
-     *     an offer at all, so it needs no player-facing delivery surface.
-     *
-     *     GET  /api/ceremonies/conversion-offers/ — the caller's own PENDING offers,
-     *     across every character sheet they've ever held. Deliberately no pagination
-     *     — this list is always small (bounded by how many open PC-officiated
-     *     Conversion ceremonies currently name this account's characters).
-     *     POST .../{id}/accept/ — accept (repoints WorshipDeclaration at finish; body
-     *         may include ``sincere``, the heart-vs-lip-service choice, default True).
-     *     POST .../{id}/decline/ — decline.
-     */
-    post: operations['ceremonies_conversion_offers_accept_create'];
-    delete?: never;
-    options?: never;
-    head?: never;
-    patch?: never;
-    trace?: never;
-  };
-  '/api/ceremonies/conversion-offers/{id}/decline/': {
-    parameters: {
-      query?: never;
-      header?: never;
-      path?: never;
-      cookie?: never;
-    };
-    get?: never;
-    put?: never;
-    /**
-     * @description PENDING conversion-offer inbox for the requesting account (#2361).
-     *
-     *     Mirrors SeanceOfferViewSet's shape exactly, for the PC-officiated conversion
-     *     route (Ratified amendment #1a) — the self-officiated solo route never mints
-     *     an offer at all, so it needs no player-facing delivery surface.
-     *
-     *     GET  /api/ceremonies/conversion-offers/ — the caller's own PENDING offers,
-     *     across every character sheet they've ever held. Deliberately no pagination
-     *     — this list is always small (bounded by how many open PC-officiated
-     *     Conversion ceremonies currently name this account's characters).
-     *     POST .../{id}/accept/ — accept (repoints WorshipDeclaration at finish; body
-     *         may include ``sincere``, the heart-vs-lip-service choice, default True).
-     *     POST .../{id}/decline/ — decline.
-     */
-    post: operations['ceremonies_conversion_offers_decline_create'];
-    delete?: never;
-    options?: never;
-    head?: never;
-    patch?: never;
-    trace?: never;
-  };
   '/api/ceremonies/seance-offers/': {
     parameters: {
       query?: never;
@@ -19291,29 +19198,6 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
-  '/api/staff/invites/{id}/resend/': {
-    parameters: {
-      query?: never;
-      header?: never;
-      path?: never;
-      cookie?: never;
-    };
-    get?: never;
-    put?: never;
-    /**
-     * @description Mail the redemption link again, for an invitee who lost the first one.
-     *
-     *     Refuses anything not currently redeemable: a redeemed, revoked or
-     *     expired invite has no working link to send, so mailing one would only
-     *     hand the recipient a dead end.
-     */
-    post: operations['staff_invites_resend_create'];
-    delete?: never;
-    options?: never;
-    head?: never;
-    patch?: never;
-    trace?: never;
-  };
   '/api/staff/invites/{id}/revoke/': {
     parameters: {
       query?: never;
@@ -26526,7 +26410,6 @@ export interface components {
       name: string;
       description: string;
       amenity: number;
-      cost_coppers: number;
       affinities: components['schemas']['FixtureAffinity'][];
     };
     /**
@@ -41205,31 +41088,6 @@ export interface components {
       detect_difficulty: number;
       fixture_key: string | null;
     };
-    /**
-     * @description PENDING conversion-offer inbox row (#2361). Mirrors SeanceManifestationOfferSerializer.
-     *
-     *     ``presented_being_name`` is the being the rite converts the honoree TO — the LEAK
-     *     RULE above applies here too: only ``presented_being`` is ever exposed.
-     */
-    WorshipConversionOffer: {
-      readonly id: number;
-      readonly honoree_name: string;
-      readonly ceremony_location_name: string;
-      readonly ceremony_id: number;
-      readonly presented_being_name: string;
-      status?: components['schemas']['Status7baEnum'];
-      /** Format: date-time */
-      readonly created_at: string;
-    };
-    /**
-     * @description PENDING conversion-offer inbox row (#2361). Mirrors SeanceManifestationOfferSerializer.
-     *
-     *     ``presented_being_name`` is the being the rite converts the honoree TO — the LEAK
-     *     RULE above applies here too: only ``presented_being`` is ever exposed.
-     */
-    WorshipConversionOfferRequest: {
-      status?: components['schemas']['Status7baEnum'];
-    };
     WorshippedBeingRef: {
       readonly id: number;
       name: string;
@@ -43626,11 +43484,11 @@ export interface operations {
          *     * `sermon` - Sermon
          *     * `seance` - Seance
          *     * `wedding` - Wedding
-         *     * `conversion` - Conversion
+         *     * `coronation` - Coronation
          */
         ceremony_type__key?:
           | 'blessing'
-          | 'conversion'
+          | 'coronation'
           | 'funeral'
           | 'seance'
           | 'sermon'
@@ -43682,75 +43540,6 @@ export interface operations {
         };
         content: {
           'application/json': components['schemas']['Ceremony'];
-        };
-      };
-    };
-  };
-  ceremonies_conversion_offers_list: {
-    parameters: {
-      query?: never;
-      header?: never;
-      path?: never;
-      cookie?: never;
-    };
-    requestBody?: never;
-    responses: {
-      200: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content: {
-          'application/json': components['schemas']['WorshipConversionOffer'][];
-        };
-      };
-    };
-  };
-  ceremonies_conversion_offers_accept_create: {
-    parameters: {
-      query?: never;
-      header?: never;
-      path: {
-        id: string;
-      };
-      cookie?: never;
-    };
-    requestBody?: {
-      content: {
-        'application/json': components['schemas']['WorshipConversionOfferRequest'];
-      };
-    };
-    responses: {
-      200: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content: {
-          'application/json': components['schemas']['WorshipConversionOffer'];
-        };
-      };
-    };
-  };
-  ceremonies_conversion_offers_decline_create: {
-    parameters: {
-      query?: never;
-      header?: never;
-      path: {
-        id: string;
-      };
-      cookie?: never;
-    };
-    requestBody?: {
-      content: {
-        'application/json': components['schemas']['WorshipConversionOfferRequest'];
-      };
-    };
-    responses: {
-      200: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content: {
-          'application/json': components['schemas']['WorshipConversionOffer'];
         };
       };
     };
@@ -45770,15 +45559,10 @@ export interface operations {
   checks_consequence_outcomes_list: {
     parameters: {
       query?: {
-        character?: number;
-        created_after?: string;
-        created_before?: string;
-        encounter?: number;
         /** @description A page number within the paginated result set. */
         page?: number;
         /** @description Number of results to return per page. */
         page_size?: number;
-        pool?: number;
       };
       header?: never;
       path?: never;
@@ -45801,8 +45585,7 @@ export interface operations {
       query?: never;
       header?: never;
       path: {
-        /** @description A unique integer value identifying this consequence outcome. */
-        id: number;
+        id: string;
       };
       cookie?: never;
     };
@@ -67910,32 +67693,6 @@ export interface operations {
       cookie?: never;
     };
     requestBody?: never;
-    responses: {
-      200: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content: {
-          'application/json': components['schemas']['AccountInvite'];
-        };
-      };
-    };
-  };
-  staff_invites_resend_create: {
-    parameters: {
-      query?: never;
-      header?: never;
-      path: {
-        /** @description A unique integer value identifying this Account Invite. */
-        id: number;
-      };
-      cookie?: never;
-    };
-    requestBody: {
-      content: {
-        'application/json': components['schemas']['AccountInviteRequest'];
-      };
-    };
     responses: {
       200: {
         headers: {
