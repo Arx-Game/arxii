@@ -23,15 +23,21 @@ if TYPE_CHECKING:
 def announce_arrival(character: ObjectDB, room: ObjectDB) -> None:
     """Announce ``character``'s arrival in ``room`` if a DOORMAN is posted.
 
-    Called from ``Character.at_post_move``, alongside ``check_guard_detection``.
-    Short-circuits (one query) when the room has no active DOORMAN assignment.
-    The arriving character is excluded from the room echo — they know they
-    arrived. No check, no gate on owner/tenant standing: the doorman
-    announces everyone (per the ratified #2989 amendments).
+    Called from ``Character.at_post_move``, alongside ``check_guard_detection``,
+    on EVERY character movement anywhere — so the no-doorman case (the
+    overwhelming majority of rooms/moves) must create nothing and cost the
+    fewest possible queries. Reads the room's ``RoomProfile`` with a plain
+    ``filter().first()`` rather than ``world.areas.services.get_room_profile``
+    (which ``get_or_create``s — a write this hot path must never trigger just
+    to check whether a doorman is posted). Short-circuits (one read query,
+    zero writes) when the room has no profile or no active DOORMAN
+    assignment. The arriving character is excluded from the room echo — they
+    know they arrived. No check, no gate on owner/tenant standing: the
+    doorman announces everyone (per the ratified #2989 amendments).
     """
-    from world.areas.services import get_room_profile  # noqa: PLC0415
+    from evennia_extensions.models import RoomProfile  # noqa: PLC0415
 
-    profile = get_room_profile(room)
+    profile = RoomProfile.objects.filter(objectdb=room).first()
     if profile is None:
         return
 

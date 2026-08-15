@@ -140,11 +140,16 @@ def lift_expulsion_bar(*, room: ObjectDB, name: str) -> tuple[bool, str]:
 def active_bar_for(room: ObjectDB, sheet) -> ExpulsionBar | None:
     """Return the active ``ExpulsionBar`` for ``sheet`` in ``room``, or None.
 
-    The single-query read used by ``check_exit_traversal`` pre-traversal.
+    The read used by ``check_exit_traversal``/``perform_portal_travel``/
+    ``HomeAction`` pre-move — called on EVERY attempted move anywhere, so
+    the common (unbarred) case must create nothing and cost the fewest
+    queries. Uses a plain ``filter().first()`` for the room's
+    ``RoomProfile`` rather than ``world.areas.services.get_room_profile``
+    (which ``get_or_create``s — a write this hot path must never trigger).
     """
-    from world.areas.services import get_room_profile  # noqa: PLC0415
+    from evennia_extensions.models import RoomProfile  # noqa: PLC0415
 
-    profile = get_room_profile(room)
+    profile = RoomProfile.objects.filter(objectdb=room).first()
     if profile is None:
         return None
     return ExpulsionBar.objects.filter(
