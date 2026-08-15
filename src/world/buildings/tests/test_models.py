@@ -9,6 +9,7 @@ from world.buildings.factories import (
     BuildingKindFactory,
     BuildingMaterialFactory,
     BuildingPermitDetailsFactory,
+    DecorationKindFactory,
     FortificationUpgradeDetailsFactory,
     MaterialLoreEffectFactory,
 )
@@ -125,3 +126,36 @@ class FortificationUpgradeDetailsModelTests(TestCase):
         with self.assertRaises(ValidationError) as ctx:
             details.full_clean()
         self.assertIn("target_level", ctx.exception.message_dict)
+
+
+class DecorationKindModelTests(TestCase):
+    """Review fix (#2991, LOW): a crafted-furniture kind can't also charge cost_coppers."""
+
+    def test_crafted_template_with_cost_coppers_fails_validation(self) -> None:
+        from world.items.factories import ItemTemplateFactory
+
+        template = ItemTemplateFactory(name="Review Fix Chair T")
+        kind = DecorationKindFactory.build(
+            name="Review Fix Chair", crafted_item_template=template, cost_coppers=40
+        )
+
+        with self.assertRaises(ValidationError) as ctx:
+            kind.full_clean()
+        self.assertIn("cost_coppers", ctx.exception.message_dict)
+
+    def test_crafted_template_with_zero_cost_is_valid(self) -> None:
+        from world.items.factories import ItemTemplateFactory
+
+        template = ItemTemplateFactory(name="Review Fix Table T")
+        kind = DecorationKindFactory.build(
+            name="Review Fix Table", crafted_item_template=template, cost_coppers=0
+        )
+
+        kind.full_clean()  # does not raise
+
+    def test_flat_catalog_kind_with_cost_coppers_is_valid(self) -> None:
+        kind = DecorationKindFactory.build(
+            name="Review Fix Rug", crafted_item_template=None, cost_coppers=40
+        )
+
+        kind.full_clean()  # does not raise

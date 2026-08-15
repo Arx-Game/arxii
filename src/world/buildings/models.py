@@ -23,6 +23,7 @@ from __future__ import annotations
 
 from decimal import Decimal
 
+from django.core.exceptions import ValidationError
 from django.core.validators import MaxValueValidator, MinValueValidator
 from django.db import models
 from django.utils import timezone
@@ -1519,6 +1520,21 @@ class DecorationKind(NaturalKeyMixin, CreditedContent, SharedMemoryModel):
 
     class Meta:
         ordering = ["name"]
+
+    def clean(self) -> None:
+        """Crafted-furniture kinds never also charge a flat cost (review fix, #2991).
+
+        A row with both ``crafted_item_template`` and ``cost_coppers > 0`` set would have
+        ``place_decoration`` silently skip the charge (the crafted branch never charges
+        ``cost_coppers`` — the crafting itself is the cost) — crisp semantics beat silent
+        precedence, so this is a content-authoring error, not a default to fall back on.
+        """
+        if self.crafted_item_template_id is not None and self.cost_coppers:
+            msg = (
+                "A crafted-furniture kind (crafted_item_template set) can't also charge "
+                "cost_coppers — the crafting cost already covers it. Set cost_coppers to 0."
+            )
+            raise ValidationError({"cost_coppers": msg})
 
     def __str__(self) -> str:
         return self.name

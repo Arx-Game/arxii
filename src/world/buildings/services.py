@@ -772,6 +772,28 @@ def _materialize_decoration(decoration: RoomDecoration) -> None:
         )
 
 
+def _anchor_crafted_item_in_room(item_instance: ItemInstance, room_profile) -> None:
+    """Physically move a crafted-furniture item into the room and un-hold it (review fix, #2991).
+
+    Mirrors the possession-transfer half of ``give()``/``drop()``
+    (``flows.service_functions.inventory``) — a placed piece must stop being carryable/
+    giveable/droppable, not just gain a ``RoomDecoration.source_item_instance`` pointer.
+    ``ItemState.is_in_possession`` is purely ``game_object.location``-based, so moving the
+    object out from under the former holder and clearing ``holder_character_sheet`` (the same
+    "unowned item lying in a room" state ``pick_up`` already handles, per the vault-deposit
+    precedent in ``drop()``) is what actually closes off Give/Drop/market-sale on the placed
+    instance. A test-only ``ItemInstance`` with no ``game_object`` (no physical representation)
+    skips the move — nothing to relocate — but still loses its holder.
+    """
+    if item_instance.game_object is not None and not item_instance.game_object.move_to(
+        room_profile.objectdb, quiet=True
+    ):
+        msg = f"item_instance {item_instance.pk} could not be moved into the room."
+        raise DecorationPlacementError(msg, user_message="That piece can't be placed here.")
+    item_instance.holder_character_sheet = None
+    item_instance.save(update_fields=["holder_character_sheet"])
+
+
 @transaction.atomic
 def place_decoration(
     room_profile,
@@ -795,6 +817,19 @@ def place_decoration(
       ItemInstance of ``kind.crafted_item_template``, not already placed elsewhere. No
       ``cost_coppers`` charge — the crafting itself was the inherent material/labor cost.
       The instance's ``quality_tier`` feeds the decor's amenity via ``crafted_decoration_amenity``.
+      Placement **physically moves the item into the room and clears its holder** (review
+      fix, matching what ``give()``/``drop()`` do for every other possession change — see
+      ``flows.service_functions.inventory``): a placed piece is no longer carryable, giveable,
+      or droppable (``ItemState.is_in_possession`` is location-based), so the same physical
+      instance can't simultaneously decorate a room and be handed off/sold elsewhere. This is
+      the same "unowned item lying around" state ``pick_up`` already expects (the vault-deposit
+      precedent in ``drop()``) — removing the decoration leaves the item sitting in the room,
+      reachable and pick-up-able by anyone, not auto-returned to a specific holder. Distinct
+      from — and NOT wired to — the older, uncalled ``RoomItem``/``place_item_in_room``
+      (``world.items.polish_services``, #676 Phase F, feeds ``RoomPolish``/prestige, not
+      comfort); flagged in the buildings glossary so the two don't drift further apart.
+      ``buyer_persona`` is REQUIRED for a crafted placement (fails closed) — unlike the
+      catalog branch, there's no zero-cost case that could omit it.
 
     Raises ``DecorationPlacementError`` on a funds/kwarg/item mismatch.
     """
@@ -809,14 +844,16 @@ def place_decoration(
             raise DecorationPlacementError(
                 msg, user_message=f"That isn't a {kind.crafted_item_template.name}."
             )
-        if buyer_persona is not None and (
-            item_instance.holder_character_sheet_id != buyer_persona.character_sheet_id
-        ):
+        if buyer_persona is None:
+            msg = f"DecorationKind {kind.pk} is crafted-furniture but no buyer_persona given."
+            raise DecorationPlacementError(msg, user_message="You need to be holding that piece.")
+        if item_instance.holder_character_sheet_id != buyer_persona.character_sheet_id:
             msg = f"item_instance {item_instance.pk} is not held by persona {buyer_persona.pk}."
             raise DecorationPlacementError(msg, user_message="You aren't holding that piece.")
         if RoomDecoration.objects.filter(source_item_instance=item_instance).exists():
             msg = f"item_instance {item_instance.pk} is already placed as decor."
             raise DecorationPlacementError(msg, user_message="That piece is already placed.")
+        _anchor_crafted_item_in_room(item_instance, room_profile)
     elif kind.cost_coppers:
         from world.currency.services import get_or_create_purse, transfer  # noqa: PLC0415
 
@@ -842,7 +879,15 @@ def place_decoration(
 
 @transaction.atomic
 def remove_decoration(decoration: RoomDecoration) -> None:
-    """Remove a placed decoration and delete its comfort modifiers (#1514)."""
+    """Remove a placed decoration and delete its comfort modifiers (#1514).
+
+    A crafted-furniture placement's anchored item (``source_item_instance``, #2991 review
+    fix) is NOT moved anywhere further here — it was already relocated into the room and
+    un-held at placement time (``_anchor_crafted_item_in_room``), so removing the decoration
+    just leaves it sitting there as an ordinary, unowned, pick-up-able object (the same state
+    ``pick_up`` already expects) rather than teleporting it back into a specific holder's
+    hands — "unplace" returns the item to normal object status, not to any one player.
+    """
     room_profile = decoration.room_profile
     LocationValueModifier.objects.filter(
         source=_decoration_modifier_source(decoration),

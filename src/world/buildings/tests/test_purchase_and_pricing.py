@@ -7,9 +7,12 @@ quality → decor contribution mapping (the ratified amendment's seam over ADR-0
 
 from __future__ import annotations
 
+from unittest.mock import MagicMock
+
 from django.test import TestCase, tag
 
-from evennia_extensions.factories import CharacterFactory, RoomProfileFactory
+from evennia_extensions.factories import CharacterFactory, ObjectDBFactory, RoomProfileFactory
+from flows.object_states.item_state import ItemState
 from world.buildings.factories import (
     BuildingFactory,
     BuildingListingFactory,
@@ -22,6 +25,7 @@ from world.buildings.services import (
     crafted_decoration_amenity,
     place_decoration,
     purchase_building,
+    remove_decoration,
 )
 from world.character_sheets.factories import CharacterSheetFactory
 from world.currency.services import get_or_create_purse, get_or_create_treasury, transfer
@@ -36,6 +40,31 @@ def _persona(name: str, gold: int = 0):
     if gold:
         transfer(amount=gold, reason="seed", to_purse=get_or_create_purse(sheet))
     return sheet.primary_persona
+
+
+def _persona_and_character(name: str, gold: int = 0):
+    """Like ``_persona`` but also returns the underlying character ObjectDB (#2991 review fix
+    tests need it to check physical possession, not just the Persona/CharacterSheet pair)."""
+    character = CharacterFactory(db_key=name)
+    sheet = CharacterSheetFactory(character=character)
+    if gold:
+        transfer(amount=gold, reason="seed", to_purse=get_or_create_purse(sheet))
+    return sheet.primary_persona, character
+
+
+def _held_item(holder_persona, character, *, template):
+    """A crafted ItemInstance with a REAL game_object, physically carried by ``character``."""
+    item_obj = ObjectDBFactory(
+        db_key=f"{template.name} instance",
+        db_typeclass_path="typeclasses.objects.Object",
+    )
+    item_obj.location = character
+    item_obj.save()
+    return ItemInstanceFactory(
+        template=template,
+        game_object=item_obj,
+        holder_character_sheet=holder_persona.character_sheet,
+    )
 
 
 class PurchaseBuildingTests(TestCase):
@@ -179,6 +208,8 @@ class CraftedFurnitureQualityMappingTests(TestCase):
 
         assert decoration.source_item_instance_id == instance.pk
         assert comfort_points(profile.objectdb) == 200  # 100 base * 2.00 multiplier
+        instance.refresh_from_db()
+        assert instance.holder_character_sheet_id is None  # review fix: un-held on placement
 
     def test_placement_requires_matching_template(self) -> None:
         crafter = _persona("Crafter2")
@@ -206,6 +237,23 @@ class CraftedFurnitureQualityMappingTests(TestCase):
         with self.assertRaises(DecorationPlacementError):
             place_decoration(profile, kind, buyer_persona=crafter, item_instance=instance)
 
+    def test_crafted_placement_without_buyer_persona_fails_closed(self) -> None:
+        """Review fix (MEDIUM): omitting buyer_persona must refuse, not skip the holder check."""
+        holder = _persona("HolderNoBuyer")
+        profile = self._room()
+        template = ItemTemplateFactory(name="No Buyer Persona T")
+        kind = DecorationKindFactory(name="No Buyer Persona Chair", crafted_item_template=template)
+        instance = ItemInstanceFactory(
+            template=template, holder_character_sheet=holder.character_sheet
+        )
+
+        with self.assertRaises(DecorationPlacementError):
+            place_decoration(profile, kind, item_instance=instance)  # no buyer_persona
+
+        assert RoomDecoration.objects.count() == 0
+        instance.refresh_from_db()
+        assert instance.holder_character_sheet_id == holder.character_sheet_id  # untouched
+
     def test_crafted_kind_without_item_instance_is_refused(self) -> None:
         crafter = _persona("Crafter4")
         profile = self._room()
@@ -228,6 +276,54 @@ class CraftedFurnitureQualityMappingTests(TestCase):
 
         with self.assertRaises(DecorationPlacementError):
             place_decoration(profile_b, kind, buyer_persona=crafter, item_instance=instance)
+
+    @tag("postgres")  # comfort_points walks the areas_areaclosure materialized view
+    def test_placed_item_leaves_possession_give_and_drop_blocked(self) -> None:
+        """Review fix (HIGH): a placed crafted item physically moves into the room and is
+        un-held, so Give/Drop (is_in_possession is location-based) can no longer touch it —
+        it can't simultaneously decorate a room and be handed off/sold elsewhere."""
+        crafter, character = _persona_and_character("PossessionCrafter")
+        profile = self._room()
+        template = ItemTemplateFactory(name="Possession Chair T")
+        kind = DecorationKindFactory(
+            name="Possession Chair", amenity=100, crafted_item_template=template
+        )
+        instance = _held_item(crafter, character, template=template)
+        pre_state = ItemState(instance, context=MagicMock())
+        assert pre_state.is_in_possession(character) is True  # sanity: really held first
+
+        place_decoration(profile, kind, buyer_persona=crafter, item_instance=instance)
+
+        instance.refresh_from_db()
+        assert instance.holder_character_sheet_id is None
+        assert instance.game_object.location.pk == profile.objectdb.pk
+        post_state = ItemState(instance, context=MagicMock())
+        assert post_state.is_in_possession(character) is False
+        assert post_state.can_drop(dropper=MagicMock(obj=character)) is False
+        assert post_state.can_give(giver=MagicMock(obj=character), recipient=MagicMock()) is False
+
+    @tag("postgres")  # comfort_points walks the areas_areaclosure materialized view
+    def test_removing_crafted_decoration_reverts_comfort_and_leaves_item_pickupable(self) -> None:
+        """Review fix: 'unplace returns it' — the item stays in the room, unowned and
+        pick-up-able (the same state ``pick_up`` already expects), and comfort drops back."""
+        crafter, character = _persona_and_character("PossessionRemover")
+        profile = self._room()
+        template = ItemTemplateFactory(name="Possession Stool T")
+        kind = DecorationKindFactory(
+            name="Possession Stool", amenity=100, crafted_item_template=template
+        )
+        instance = _held_item(crafter, character, template=template)
+
+        decoration = place_decoration(profile, kind, buyer_persona=crafter, item_instance=instance)
+        assert comfort_points(profile.objectdb) == 100
+
+        remove_decoration(decoration)
+
+        assert comfort_points(profile.objectdb) == 0  # comfort only while placed
+        instance.refresh_from_db()
+        assert instance.holder_character_sheet_id is None  # still unowned, not auto-returned
+        assert instance.game_object.location.pk == profile.objectdb.pk  # still sitting there
+        assert RoomDecoration.objects.count() == 0
 
     def _room(self):
         building = BuildingFactory()

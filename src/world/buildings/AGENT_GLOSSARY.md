@@ -187,4 +187,14 @@ Builder #670, polish/renown-from-dwellings). Root terms live in
   built here. _Avoid:_ furniture recipe (there's no dedicated recipe
   model — reuse `CraftingRecipe` as-is), placeable item (this is a narrow
   decoration-only seam, not the general "anchor any item in a room"
-  placement-vs-carry design, which stays deferred).
+  placement-vs-carry design, which stays deferred). Placement physically moves the
+  item into the room and clears its holder (review fix — mirrors `give()`/`drop()`'s
+  possession transfer, `flows.service_functions.inventory`), so a placed piece is no
+  longer carryable/giveable/sellable while decorating. **Distinct from** `RoomItem` /
+  `place_item_in_room` (`world.items.models`/`world.items.polish_services`, #676
+  Phase F) — an older, currently-uncalled "item placed in a room" mechanism that
+  feeds `RoomPolish`/prestige, not comfort/amenity, and (as of this writing) doesn't
+  itself move the item's `game_object` or clear its holder. The two mechanisms are
+  not cross-aware — an item could in principle become both a `RoomItem` placement and
+  a `RoomDecoration.source_item_instance` at once. Consolidating them is a real future
+  cleanup, not done here.
