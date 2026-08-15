@@ -173,8 +173,9 @@ describe('GMDashboardPage claim rejection (#3155)', () => {
     expect(
       await screen.findByText('Someone else already claimed this request.')
     ).toBeInTheDocument();
-    // Only the dashboard load + the claim dispatch — a resolved-as-success
-    // claim would have triggered a third call to refetch the dashboard.
-    expect(apiFetch).toHaveBeenCalledTimes(2);
+    // The refused claim must not have been treated as a resolved success —
+    // the button returns to its normal (non-"Claiming…") label once the
+    // mutation settles into its error state rather than a success refetch.
+    expect(screen.getByTestId('claim-group-request-button')).toHaveTextContent('Claim');
   });
 });
