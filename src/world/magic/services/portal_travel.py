@@ -18,6 +18,9 @@ Public functions:
   destination, or ``None``.
 - ``perform_portal_travel(character, route)`` — commits the travel: anima
   debit, departure/arrival broadcasts, the move itself, room-state push.
+  Raises ``CommandError`` pre-move if the character is barred from the
+  destination room (#2989 expulsion bar) — the same gate
+  ``check_exit_traversal`` enforces for ordinary exit traversal.
 - ``install_portal_anchor(persona, room, kind, name)`` /
   ``dissolve_portal_anchor(persona, anchor)`` — standing-gated anchor
   lifecycle management.
@@ -227,7 +230,19 @@ def perform_portal_travel(character: ObjectDB, route: PortalRoute) -> None:
     ``anima_cost <= 0``, which is every seeded travel technique today).
     Movement reuses ``move_object`` + the state-handle/``send_room_state``
     idiom ``HomeAction`` uses (``actions/definitions/movement.py``).
+
+    Raises:
+        CommandError: The character is barred from the destination room
+            (#2989 expulsion bar). Checked BEFORE any anima debit or
+            broadcast so a refused portal travel costs nothing and
+            announces nothing — mirrors ``check_exit_traversal``'s
+            pre-traversal discipline, not the post-arrival ward/alarm
+            reaction below (a barred character must never land in the
+            room at all). ``TravelAction._try_portal_travel`` is this
+            function's one caller; it catches ``CommandError`` and
+            surfaces the message as a failure ``ActionResult``.
     """
+    from commands.exceptions import CommandError  # noqa: PLC0415
     from flows.scene_data_manager import SceneDataManager  # noqa: PLC0415
     from flows.service_functions.communication import (  # noqa: PLC0415
         message_location,
@@ -235,6 +250,14 @@ def perform_portal_travel(character: ObjectDB, route: PortalRoute) -> None:
     )
     from flows.service_functions.movement import move_object  # noqa: PLC0415
     from world.magic.services.anima import deduct_anima  # noqa: PLC0415
+    from world.npc_services.expulsion_services import active_bar_for  # noqa: PLC0415
+
+    destination_room = route.destination_anchor.room_profile.objectdb
+
+    barred_sheet = character.character_sheet
+    if barred_sheet is not None and active_bar_for(destination_room, barred_sheet) is not None:
+        msg = "You are barred from entering there."
+        raise CommandError(msg)
 
     deduct_anima(character, route.technique.anima_cost)
 
@@ -252,7 +275,6 @@ def perform_portal_travel(character: ObjectDB, route: PortalRoute) -> None:
         f"{actor_name} {route.origin_anchor.kind.departure_verb} {route.origin_anchor.name}.",
     )
 
-    destination_room = route.destination_anchor.room_profile.objectdb
     dest_state = sdm.initialize_state_for_object(destination_room)
     move_object(actor_state, dest_state, quiet=True)
 

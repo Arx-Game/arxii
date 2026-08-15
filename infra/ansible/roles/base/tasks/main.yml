@@ -54,13 +54,27 @@
     home: "{{ base_app_root }}"
     create_home: true
 
-- name: Lock down the app root
+# 0751, not 0750: Caddy runs as its own `caddy` user and serves /static/* off
+# disk from under this tree, so it needs to *traverse* here. The execute bit
+# for "other" grants exactly that and nothing else — the directory still cannot
+# be listed, and every file keeps its own mode. The static assets Caddy serves
+# are already world-readable (0644); the secrets under here are not
+# (secret_settings.py is 0640 arxii:arxii, the EnvironmentFile 0600), so they
+# stay unreadable to Caddy.
+#
+# The alternative — adding `caddy` to the `arxii` group — was rejected: group
+# membership would make that 0640 secret_settings.py readable by the web
+# server, handing it SECRET_KEY, the database password and the Resend key.
+# Traversal is the smaller grant. Without it the frontend serves a blank page,
+# because index.html comes from Django through the reverse proxy while every
+# dist/assets bundle 403s from Caddy's file_server.
+- name: Lock down the app root (0751 so Caddy can traverse to /static)
   ansible.builtin.file:
     path: "{{ base_app_root }}"
     state: directory
     owner: "{{ base_service_user }}"
     group: "{{ base_service_group }}"
-    mode: "0750"
+    mode: "0751"
 
 # Waits out first-boot provisioning so the apt lock isn't held by
 # apt-daily/apt-daily-upgrade on a fresh image; tolerated if cloud-init
@@ -111,6 +125,51 @@
         group: root
         mode: "0755"
         remote_src: true
+
+# AWS CLI v2. Pinned version + SHA verified, same idiom as uv above, and
+# idempotent the same way: if the binary already reports the pinned version,
+# the block is skipped and nothing is downloaded.
+#
+# This lives in base, not in backups/offsite_replication, because both of those
+# roles need the `aws` command and neither should own a second copy of the
+# install. Ubuntu 24.04 removed `awscli` from the archive, so apt cannot supply
+# it at all -- the 2026-08-15 standup failed here with "No package matching
+# 'awscli' is available" after universe was already enabled.
+- name: Check installed AWS CLI version (if present)
+  ansible.builtin.command: "{{ base_awscli_bin }} --version"
+  register: base_awscli_check
+  changed_when: false
+  failed_when: false
+
+- name: Install AWS CLI v2 (pinned + sha256-verified official bundle)
+  when: "base_awscli_version not in (base_awscli_check.stdout | default(''))"
+  block:
+    - name: Ensure unzip is present (AWS ships the installer as a zip)
+      ansible.builtin.apt:
+        name: unzip
+        state: present
+        update_cache: true
+        cache_valid_time: 3600
+        lock_timeout: 600
+
+    - name: Download the AWS CLI v2 bundle
+      ansible.builtin.get_url:
+        url: "https://awscli.amazonaws.com/awscli-exe-linux-x86_64-{{ base_awscli_version }}.zip"
+        dest: "/tmp/awscli-{{ base_awscli_version }}.zip"
+        checksum: "sha256:{{ base_awscli_sha256 }}"
+        mode: "0644"
+
+    - name: Extract the AWS CLI v2 bundle
+      ansible.builtin.unarchive:
+        src: "/tmp/awscli-{{ base_awscli_version }}.zip"
+        dest: /tmp/
+        remote_src: true
+
+    - name: Run AWS's own installer (writes {{ base_awscli_bin }})
+      # --update so a version bump replaces the existing /usr/local/aws-cli
+      # tree in place; without it the installer refuses when one is present.
+      ansible.builtin.command: /tmp/aws/install --update
+      changed_when: true
 
 - name: Create the game cgroup slice (MemoryMax isolates a leak from the box)
   ansible.builtin.copy:

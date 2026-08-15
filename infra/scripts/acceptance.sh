@@ -62,6 +62,20 @@ echo "== postgres / app hardening =="
 chk   "postgres binds localhost only" "grep -q \"listen_addresses = 'localhost'\" infra/ansible/roles/postgres/templates/10-arxii.conf.j2"
 chkno "pg_hba has no 'trust'"         "nc infra/ansible/roles/postgres/templates/pg_hba.conf.j2 | grep -w trust"
 chk   "app runs as non-root user"     "grep -q 'User={{ app_user }}' infra/ansible/roles/app_deploy/templates/arxii.service.j2"
+# Caddy runs as its own user and serves /static/* off disk from under
+# /opt/arxii, so both parent dirs need the execute bit for "other" or every
+# asset 403s and the frontend renders a blank page. Traversal only: the dirs
+# still cannot be listed and file modes are untouched, so secret_settings.py
+# (0640) and the EnvironmentFile (0600) stay unreadable to the web server.
+chk   "app root is 0751 (Caddy can traverse, not list)" \
+  "grep -q 'mode: \"0751\"' infra/ansible/roles/base/tasks/main.yml"
+chk   "releases dir is 0751 (Caddy can traverse, not list)" \
+  "grep -q 'mode: \"0751\"' infra/ansible/roles/app_deploy/tasks/main.yml"
+# The tempting shortcut. Group membership would make the 0640 secret_settings.py
+# readable by Caddy — SECRET_KEY, DB password, Resend key. Traversal is the
+# smaller grant; never widen it to group membership.
+chkno "caddy is never added to the app group" \
+  "grep -rnE 'name: *caddy' infra/ansible/roles/*/tasks/main.yml | grep -iE 'group|append'"
 chk   "django: DEBUG = False"         "grep -q 'DEBUG = False' infra/ansible/roles/django_hardening/templates/secret_settings.py.j2"
 chk   "django: TELNET_ENABLED False"  "grep -q 'TELNET_ENABLED = False' infra/ansible/roles/django_hardening/templates/secret_settings.py.j2"
 # SSL_ENABLED binds a TLS-telnet listener, and Evennia's Portal imports OpenSSL
@@ -86,6 +100,17 @@ chk   "base role pins uv version + sha256"           \
   "grep -qE '^base_uv_version: ' infra/ansible/roles/base/defaults/main.yml && grep -qE '^base_uv_sha256: ' infra/ansible/roles/base/defaults/main.yml"
 chk   "app_deploy runs uv sync --frozen --no-dev"    \
   "grep -q 'sync --frozen --no-dev' infra/ansible/roles/app_deploy/tasks/main.yml"
+# Ubuntu 24.04 dropped the awscli package from the archive (universe included),
+# so `apt-cache policy awscli` reports no candidate and the apt install fails
+# outright — that is how the 2026-08-15 standup died at the backups role. The
+# `aws` command appears in 11 places across the backup, offsite and restore
+# paths, so it is installed once in base from Amazon's pinned bundle.
+chk   "base role installs AWS CLI v2 (pinned + sha-verified)" \
+  "grep -q 'awscli-exe-linux-x86_64-{{ base_awscli_version }}.zip' infra/ansible/roles/base/tasks/main.yml && grep -q 'sha256:{{ base_awscli_sha256 }}' infra/ansible/roles/base/tasks/main.yml"
+chk   "base role pins AWS CLI version + sha256" \
+  "grep -qE '^base_awscli_version: ' infra/ansible/roles/base/defaults/main.yml && grep -qE '^base_awscli_sha256: ' infra/ansible/roles/base/defaults/main.yml"
+chkno "no role apt-installs awscli (no such package on Ubuntu 24.04)" \
+  "grep -rn 'name: awscli\|\\[awscli' infra/ansible/roles/"
 chk   "app_deploy runs django migrate --noinput"     \
   "grep -q 'python -m django migrate --noinput' infra/ansible/roles/app_deploy/tasks/main.yml"
 chk   "app_deploy runs django collectstatic --noinput" \
@@ -118,6 +143,16 @@ chkno "no tracked .env"               "git ls-files | grep -E '(^|/)\\.env$'"
 chkno "no ansible-vault ciphertext committed" "git grep -lE '^\\\$ANSIBLE_VAULT;1' -- ."
 chkno "no --vault-password-file in real config" "grep -rn --include='*.sh' --include='*.cfg' --include='*.yml' -- 'vault[_-]password[_-]file' infra/ .github/ | grep -v 'infra/scripts/acceptance.sh' | grep -vE '#'"
 chk   "secrets_vault uses lookup('env')"      "grep -q \"lookup('env'\" infra/ansible/roles/secrets_vault/tasks/main.yml"
+# The app-checkout secret scan matches the venv's vendored CA bundle/TLS test
+# fixtures and Evennia's own SSL-telnet cert+key on every healthy box. Those
+# exclusions must stay, or the guard fails every converge and gets disabled —
+# which is how a real leak eventually gets through. The SSL-telnet material is
+# excluded from the scan and then positively checked, so it is never simply
+# ignored.
+chk   "secret scan excludes the venv and Evennia's SSL-telnet material" \
+  "grep -q 'secrets_scan_exclude_venv_re' infra/ansible/roles/secrets_perms/tasks/main.yml && grep -q 'secrets_ssl_telnet_files' infra/ansible/roles/secrets_perms/tasks/main.yml"
+chk   "SSL-telnet key material has its own 0600/owner assertion" \
+  "grep -q 'SSL-telnet key material must be 0600' infra/ansible/roles/secrets_perms/tasks/main.yml"
 chk   "forbidden-env guard uses REAL token names (not a dead ARXII_ guard)" \
   "grep -A4 secrets_forbidden_env infra/ansible/roles/secrets_vault/defaults/main.yml | grep -q '^[[:space:]]*- LINODE_TOKEN$'"
 chkno "standup.sh never passes secrets via --extra-vars" "nc infra/scripts/standup.sh | grep -- '--extra-vars'"

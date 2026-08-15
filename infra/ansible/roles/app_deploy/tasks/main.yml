@@ -1,11 +1,16 @@
 ---
-- name: Ensure releases dir exists
+# 0751 for the same reason as the app root in roles/base: Caddy serves
+# /static/* from <releases>/<ref>/src/server/.static and must traverse to reach
+# it. Execute-for-other permits traversal only — no listing, and file modes are
+# untouched, so the 0640 secret_settings.py inside each release stays
+# unreadable to the web server.
+- name: Ensure releases dir exists (0751 so Caddy can traverse to /static)
   ansible.builtin.file:
     path: "{{ app_releases_dir }}"
     state: directory
     owner: "{{ app_user }}"
     group: "{{ app_group }}"
-    mode: "0750"
+    mode: "0751"
 
 - name: Check out the release at its ref (idempotent; no secrets — public repo)
   ansible.builtin.git:

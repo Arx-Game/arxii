@@ -2,7 +2,7 @@ from django.test import TestCase
 import pytest
 
 from commands.exceptions import CommandError
-from evennia_extensions.factories import ObjectDBFactory
+from evennia_extensions.factories import CharacterFactory, ObjectDBFactory, RoomProfileFactory
 from flows.consts import FlowActionChoices
 from flows.factories import (
     FlowDefinitionFactory,
@@ -10,7 +10,10 @@ from flows.factories import (
     FlowStepDefinitionFactory,
 )
 from flows.scene_data_manager import SceneDataManager
-from flows.service_functions.movement import move_object
+from flows.service_functions.movement import check_exit_traversal, move_object
+from world.character_sheets.factories import CharacterSheetFactory
+from world.npc_services.models import ExpulsionBar
+from world.scenes.factories import PersonaFactory
 
 
 class MoveObjectServiceFunctionTests(TestCase):
@@ -95,3 +98,63 @@ class MoveObjectServiceFunctionTests(TestCase):
 
         item.refresh_from_db()
         assert item.location == room2
+
+
+class CheckExitTraversalExpulsionBarTests(TestCase):
+    """The #2989 unresistable expulsion bar blocks entry pre-traversal.
+
+    No check, no roll: ``check_exit_traversal`` raises ``CommandError`` on
+    an active bar for the caller's sheet in the destination room, before any
+    move happens.
+    """
+
+    def setUp(self) -> None:
+        self.room = ObjectDBFactory(db_key="hall", db_typeclass_path="typeclasses.rooms.Room")
+        self.dest = ObjectDBFactory(db_key="parlor", db_typeclass_path="typeclasses.rooms.Room")
+        self.dest_profile = RoomProfileFactory(objectdb=self.dest)
+        self.exit = ObjectDBFactory(
+            db_key="out",
+            db_typeclass_path="typeclasses.exits.Exit",
+            location=self.room,
+            destination=self.dest,
+        )
+        self.char = CharacterFactory(db_key="barred", location=self.room)
+        self.sheet = CharacterSheetFactory(character=self.char)
+
+        self.sdm = SceneDataManager()
+        self.caller_state = self.sdm.initialize_state_for_object(self.char)
+        self.exit_state = self.sdm.initialize_state_for_object(self.exit)
+
+    def test_barred_character_blocked_before_move(self):
+        ExpulsionBar.objects.create(
+            room=self.dest_profile, barred_sheet=self.sheet, imposed_by=PersonaFactory()
+        )
+
+        with pytest.raises(CommandError):
+            check_exit_traversal(self.caller_state, self.exit_state)
+
+        self.char.refresh_from_db()
+        assert self.char.location == self.room
+
+    def test_unbarred_character_passes(self):
+        check_exit_traversal(self.caller_state, self.exit_state)
+
+    def test_lifted_bar_does_not_block(self):
+        from django.utils import timezone
+
+        bar = ExpulsionBar.objects.create(
+            room=self.dest_profile, barred_sheet=self.sheet, imposed_by=PersonaFactory()
+        )
+        bar.lifted_at = timezone.now()
+        bar.save()
+
+        check_exit_traversal(self.caller_state, self.exit_state)
+
+    def test_bar_in_a_different_room_does_not_block(self):
+        other_room = ObjectDBFactory(db_key="other", db_typeclass_path="typeclasses.rooms.Room")
+        other_profile = RoomProfileFactory(objectdb=other_room)
+        ExpulsionBar.objects.create(
+            room=other_profile, barred_sheet=self.sheet, imposed_by=PersonaFactory()
+        )
+
+        check_exit_traversal(self.caller_state, self.exit_state)

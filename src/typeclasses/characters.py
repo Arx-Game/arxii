@@ -595,6 +595,17 @@ class Character(ObjectParent, DefaultCharacter):
                 actor=self,
             )
 
+            # Doorman announcement (#2989) — deterministic arrival echo, no check.
+            from world.npc_services.doorman_services import (
+                announce_arrival,
+            )
+
+            run_safely(
+                "doorman_announce_on_enter",
+                lambda: announce_arrival(self, self.location),
+                actor=self,
+            )
+
             # Cancel any in-progress servant fetch (#2276) — the servant
             # can't deliver to an empty room.
             from world.npc_services.servant_fetch import (

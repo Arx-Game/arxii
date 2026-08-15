@@ -343,6 +343,72 @@ class PerformPortalTravelWardAlarmReactionTests(TestCase):
         )
 
 
+class PerformPortalTravelExpulsionBarTests(TestCase):
+    """#2989 review fix: the expulsion bar must block portal travel exactly
+    like ``check_exit_traversal`` blocks ordinary exit traversal — no check,
+    no roll, the barred character never lands in the room. Portal travel is
+    ``TravelAction``'s DEFAULT route whenever an eligible portal exists, so
+    this was the primary bypass vector, not a corner case.
+    """
+
+    def _make_route_and_traveler(self):
+        kind = PortalAnchorKindFactory(name="Mirror")
+        origin, origin_rp = _make_room("Origin Room")
+        dest, dest_rp = _make_room("Destination Room")
+        origin_anchor = PortalAnchorFactory(room_profile=origin_rp, kind=kind)
+        dest_anchor = PortalAnchorFactory(room_profile=dest_rp, kind=kind, is_network_open=True)
+        technique = TechniqueFactory(travel_anchor_kind=kind, anima_cost=3)
+        traveler, sheet = _make_traveler(origin, technique=technique, anima=10)
+        route = PortalRoute(
+            technique=technique, origin_anchor=origin_anchor, destination_anchor=dest_anchor
+        )
+        return traveler, sheet, route, origin, dest, dest_rp
+
+    def test_barred_character_cannot_portal_travel(self) -> None:
+        from commands.exceptions import CommandError
+        from world.npc_services.models import ExpulsionBar
+        from world.scenes.factories import PersonaFactory
+
+        traveler, sheet, route, origin, _dest, dest_rp = self._make_route_and_traveler()
+        ExpulsionBar.objects.create(room=dest_rp, barred_sheet=sheet, imposed_by=PersonaFactory())
+
+        with patch.object(traveler, "msg"), self.assertRaises(CommandError):
+            _perform_portal_travel(traveler, route)
+
+        traveler.refresh_from_db()
+        self.assertEqual(traveler.location, origin)
+
+    def test_barred_character_is_not_charged_anima_or_broadcast(self) -> None:
+        """The bar check happens BEFORE anima debit/departure broadcast."""
+        from commands.exceptions import CommandError
+        from world.npc_services.models import ExpulsionBar
+        from world.scenes.factories import PersonaFactory
+
+        traveler, sheet, route, origin, _dest, dest_rp = self._make_route_and_traveler()
+        witness = CharacterFactory(location=origin)
+        ExpulsionBar.objects.create(room=dest_rp, barred_sheet=sheet, imposed_by=PersonaFactory())
+
+        with (
+            patch.object(traveler, "msg"),
+            patch.object(witness, "msg") as witness_msg,
+            self.assertRaises(CommandError),
+        ):
+            _perform_portal_travel(traveler, route)
+
+        witness_msg.assert_not_called()
+        anima = CharacterAnima.objects.get(character=traveler.sheet_data)
+        self.assertEqual(anima.current, 10)
+
+    def test_unbarred_character_portal_travels_normally(self) -> None:
+        traveler, _sheet, route, _origin, dest, _dest_rp = self._make_route_and_traveler()
+
+        with patch.object(traveler, "msg"):
+            _perform_portal_travel(traveler, route)
+
+        traveler.refresh_from_db()
+        self.assertEqual(traveler.location, dest)
+
+
 class InstallPortalAnchorTests(TestCase):
     def test_no_standing_raises(self) -> None:
         room, _room_profile = _make_room("Locked Room")
