@@ -129,6 +129,16 @@ chkno "no tracked .env"               "git ls-files | grep -E '(^|/)\\.env$'"
 chkno "no ansible-vault ciphertext committed" "git grep -lE '^\\\$ANSIBLE_VAULT;1' -- ."
 chkno "no --vault-password-file in real config" "grep -rn --include='*.sh' --include='*.cfg' --include='*.yml' -- 'vault[_-]password[_-]file' infra/ .github/ | grep -v 'infra/scripts/acceptance.sh' | grep -vE '#'"
 chk   "secrets_vault uses lookup('env')"      "grep -q \"lookup('env'\" infra/ansible/roles/secrets_vault/tasks/main.yml"
+# The app-checkout secret scan matches the venv's vendored CA bundle/TLS test
+# fixtures and Evennia's own SSL-telnet cert+key on every healthy box. Those
+# exclusions must stay, or the guard fails every converge and gets disabled —
+# which is how a real leak eventually gets through. The SSL-telnet material is
+# excluded from the scan and then positively checked, so it is never simply
+# ignored.
+chk   "secret scan excludes the venv and Evennia's SSL-telnet material" \
+  "grep -q 'secrets_scan_exclude_venv_re' infra/ansible/roles/secrets_perms/tasks/main.yml && grep -q 'secrets_ssl_telnet_files' infra/ansible/roles/secrets_perms/tasks/main.yml"
+chk   "SSL-telnet key material has its own 0600/owner assertion" \
+  "grep -q 'SSL-telnet key material must be 0600' infra/ansible/roles/secrets_perms/tasks/main.yml"
 chk   "forbidden-env guard uses REAL token names (not a dead ARXII_ guard)" \
   "grep -A4 secrets_forbidden_env infra/ansible/roles/secrets_vault/defaults/main.yml | grep -q '^[[:space:]]*- LINODE_TOKEN$'"
 chkno "standup.sh never passes secrets via --extra-vars" "nc infra/scripts/standup.sh | grep -- '--extra-vars'"

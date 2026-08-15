@@ -39,8 +39,45 @@
     hidden: true
   register: leaked
 
+# The raw scan always matches two legitimate sets of files on a healthy box:
+# the virtualenv's vendored CA bundle and TLS test fixtures, and Evennia's own
+# SSL-telnet cert/key. See this role's defaults for why each is expected. Both
+# are dropped here so the assertion below only fires on something genuinely
+# unexpected — a stray key an operator copied in, a committed .env, a tfstate.
+- name: Reduce the scan to genuinely unexpected secret-shaped files
+  ansible.builtin.set_fact:
+    leaked_unexpected: >-
+      {{ leaked.files
+         | map(attribute='path')
+         | reject('search', secrets_scan_exclude_venv_re)
+         | reject('in', secrets_ssl_telnet_files)
+         | list }}
+
 - name: Fail if any secret-shaped file is committed in the app checkout
   ansible.builtin.assert:
     quiet: true
-    that: "leaked.files | length == 0"
-    fail_msg: "Secret-shaped files found in the app checkout: {{ leaked.files | map(attribute='path') | list }}"
+    that: "leaked_unexpected | length == 0"
+    fail_msg: "Secret-shaped files found in the app checkout: {{ leaked_unexpected }}"
+
+# The SSL-telnet key is excluded from the scan above, so assert its posture
+# directly rather than leaving it unchecked. A world-readable telnet private
+# key is exactly the kind of thing this role exists to catch.
+- name: Stat the SSL-telnet key material
+  ansible.builtin.stat:
+    path: "{{ item }}"
+  loop: "{{ secrets_ssl_telnet_files }}"
+  register: secrets_ssl_stat
+
+- name: SSL-telnet key material must be 0600 and service-user-owned
+  ansible.builtin.assert:
+    quiet: true
+    that:
+      - "not item.stat.exists or item.stat.mode == '0600'"
+      - "not item.stat.exists or item.stat.pw_name == (secrets_owner | default('arxii'))"
+    fail_msg: >-
+      {{ item.item }} is not 0600/service-user-owned
+      (mode={{ item.stat.mode | default('absent') }},
+      owner={{ item.stat.pw_name | default('absent') }}).
+  loop: "{{ secrets_ssl_stat.results }}"
+  loop_control:
+    label: "{{ item.item }}"

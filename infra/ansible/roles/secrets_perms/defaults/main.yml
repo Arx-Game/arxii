@@ -1,0 +1,23 @@
+---
+# Paths the "no secret-shaped files in the app checkout" scan must ignore.
+# Both are legitimate and appear on every healthy box, so without these the
+# guard fails every converge — and a check that always fails gets switched
+# off, which is how a real leak eventually gets through.
+
+# 1. The virtualenv is dependency code. `uv sync` recreates it on every
+#    deploy and we never audit or edit it (see CLAUDE.md: site-packages is
+#    read-only). certifi ships a CA bundle at certifi/cacert.pem, and Twisted
+#    ships TLS test fixtures under a directory literally named `fake_CAs`.
+secrets_scan_exclude_venv_re: '/\.venv/'
+
+# 2. Evennia's SSL-telnet material. With SSL_ENABLED the Portal generates a
+#    self-signed pair on first start, and tls_telnet_cert then syncs Caddy's
+#    real cert over it — its defaults call these paths out as HARDCODED in
+#    Evennia, not settings-driven. Runtime state, not committed secrets.
+#    Excluded from the scan and then positively checked below, so the posture
+#    is asserted rather than merely ignored.
+secrets_ssl_telnet_dir: "{{ app_gamedir | default('/opt/arxii/current/src') }}/server"
+secrets_ssl_telnet_files:
+  - "{{ secrets_ssl_telnet_dir }}/ssl.cert"
+  - "{{ secrets_ssl_telnet_dir }}/ssl.key"
+  - "{{ secrets_ssl_telnet_dir }}/ssl-public.key"
