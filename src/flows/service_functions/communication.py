@@ -6,6 +6,10 @@ from evennia.utils import funcparser
 
 from flows.object_states.base_state import BaseState
 from flows.scene_data_manager import SceneDataManager
+from flows.service_functions.perception_registry import (
+    register_broadcast_exclusion,
+    resolve_broadcast_exclusions,
+)
 from flows.service_functions.serializers.room_state import build_room_state_payload
 
 if TYPE_CHECKING:
@@ -102,7 +106,7 @@ def message_location(
         text,
         from_obj=caller.obj,
         mapping=resolved_mapping,
-        exclude=_dreamside_occupants(location) or None,
+        exclude=resolve_broadcast_exclusions(location) or None,
     )
 
 
@@ -112,6 +116,17 @@ def _dreamside_occupants(location: "ObjectDB") -> list["ObjectDB"]:
     Dead characters are NOT excluded: a ghost still watches and hears the
     waking room. Direct ``character.msg`` (system/vitals messages) is
     unaffected — only room broadcasts are gated.
+
+    Registered onto the broadcast-exclusion registry (#2997, Axis 1 — see
+    ``perception_registry.py``) at the bottom of this module. Self-registers
+    here rather than through an owning app's ``ready()`` hook because this
+    resolver's home always was ``communication.py`` itself (it only reaches
+    into ``world.vitals.services`` lazily to avoid an import cycle) — routing
+    its own registration through Django app-loading machinery for a function
+    that already lives beside its one caller would be the more-magic option,
+    not the less-magic one. A future mechanism (haunting/vision/glamour) that
+    lives in its own app SHOULD register via that app's ``ready()``, mirroring
+    ``commands.offer_registry.register_offer_handler``'s callers.
     """
     from django.core.exceptions import ObjectDoesNotExist  # noqa: PLC0415
 
@@ -126,6 +141,9 @@ def _dreamside_occupants(location: "ObjectDB") -> list["ObjectDB"]:
         if perceives_dreamside(sheet):
             excluded.append(obj)
     return excluded
+
+
+register_broadcast_exclusion(_dreamside_occupants)
 
 
 def send_room_state(

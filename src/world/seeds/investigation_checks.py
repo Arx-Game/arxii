@@ -194,8 +194,46 @@ def ensure_lockpicking_check():
     return check_type
 
 
+def ensure_perception_check():
+    """Look up (or sample) the **Perception** ``CheckType`` (#2997).
+
+    Stat-only — deliberately no skill leg, unlike Search (which shares the
+    same PERCEPTION stat but adds the Investigation skill). This is the
+    canonical AD&D-style "one passive perception roll"
+    ``world.checks.perception_services.resolve_perception_check`` rolls;
+    Search stays the deliberate-investigation action's own check. Shares the
+    perception stat trait row with Search via ``_ensure_perception_stat``.
+
+    ``checks.CheckCategory``/``CheckType``/``CheckTypeTrait`` are content-repo-owned
+    (#2698) — looked up rather than invented unless ``SEED_SAMPLE_CONTENT`` is
+    on. No longer wipes and rewrites the composition on each run (#2698 Part 1).
+    """
+    from world.checks.models import CheckType, CheckTypeTrait  # noqa: PLC0415
+    from world.checks.perception_constants import PERCEPTION_CHECK_TYPE_NAME  # noqa: PLC0415
+    from world.seeds.sample_content import authored_or_sample  # noqa: PLC0415
+
+    stat_trait = _ensure_perception_stat()
+    category = _ensure_exploration_category()
+    if category is None:
+        return None
+    check_type = authored_or_sample(
+        CheckType,
+        {"is_active": True},
+        name=PERCEPTION_CHECK_TYPE_NAME,
+        category=category,
+    )
+    if check_type is None:
+        return None
+    if stat_trait is not None:
+        weight = Decimal("1.0")  # PLACEHOLDER magnitude
+        authored_or_sample(
+            CheckTypeTrait, {"weight": weight}, check_type=check_type, trait=stat_trait
+        )
+    return check_type
+
+
 def seed_investigation_check_content() -> None:
-    """Cluster entry — seed the Investigation skill + the Search + Identification checks."""
+    """Cluster entry — seed the Investigation skill + Search/Identification/Perception."""
     from world.checks.models import CheckType, CheckTypeTrait  # noqa: PLC0415
     from world.clues.constants import SEARCH_CHECK_TYPE_NAME  # noqa: PLC0415
     from world.seeds.sample_content import authored_or_sample  # noqa: PLC0415
@@ -222,3 +260,4 @@ def seed_investigation_check_content() -> None:
                 )
     ensure_identification_check()
     ensure_lockpicking_check()
+    ensure_perception_check()
