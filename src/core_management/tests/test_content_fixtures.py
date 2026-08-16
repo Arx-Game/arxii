@@ -1604,6 +1604,34 @@ class ApplyContentRenamesTests(TestCase):
         with self.assertRaises(ContentError):
             apply_content_renames(self.root)
 
+    def test_build_all_does_not_scan_renames_as_a_fixture(self) -> None:
+        """RENAMES.json must not be read as a fixture array.
+
+        It lives at fixtures/RENAMES.json, inside the tree build_all scans, and
+        is a mapping rather than an array — so before this exclusion any corpus
+        carrying one failed EVERY load with "expected a JSON array of fixture
+        objects." That is exactly what production hit on the first real content
+        load, once the corpus gained language renames.
+
+        The bug was invisible until a corpus actually had the file, which is why
+        the existing coverage above (which only ever calls apply_content_renames)
+        never caught it. This test drives build_all, the caller that broke.
+        """
+        self._write_renames({"species.language": {"Ari": "Sanguinen"}})
+        # A real fixture beside it, so this also proves the exclusion is
+        # narrow: skipping the whole directory would satisfy a bare
+        # "RENAMES is absent" assertion just as well as the correct fix.
+        _write(
+            self.root,
+            "fixtures/species/language.json",
+            json.dumps([{"model": "arxii.language", "fields": {"name": "Sanguinen"}}]),
+        )
+
+        result = build_all(self.root)
+
+        assert not any("RENAMES" in key for key in result.fixtures)
+        assert any(key.endswith("language.json") for key in result.fixtures)
+
     def test_malformed_json_raises_content_error(self) -> None:
         """A RENAMES.json that isn't valid JSON fails loud, not silently skipped."""
         _write(self.root, "fixtures/RENAMES.json", "{not valid json")
