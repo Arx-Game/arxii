@@ -230,10 +230,27 @@ class ConsequencePoolCatalogViewSet(viewsets.ReadOnlyModelViewSet):
     filter_backends = [DjangoFilterBackend]
     filterset_class = ConsequencePoolCatalogFilter
 
+    # drf-spectacular sets this to True on the view instance while generating
+    # the schema. Declaring the default here keeps get_queryset's guard a plain
+    # attribute read rather than a getattr with a literal name.
+    swagger_fake_view = False
+
     def get_queryset(self):
         from actions.models import ConsequencePool  # noqa: PLC0415
         from world.combat.seeds_offense import get_melee_offense_pool  # noqa: PLC0415
         from world.magic.seeds_cast import get_standalone_cast_pool  # noqa: PLC0415
+
+        # Schema generation must never reach the database. The pool lookups below
+        # query authored content, so on any checkout whose database is behind the
+        # code drf-spectacular caught the exception, dropped this viewset, and
+        # emitted a degraded schema: the path parameter fell back to "string" and
+        # the filterset vanished. That output is committable and looks plausible,
+        # so the generated API types silently depended on the generating machine's
+        # migration state. Return an empty queryset instead: spectacular still
+        # resolves the model (typing the path parameter and the filterset), and
+        # the result no longer varies by database.
+        if self.swagger_fake_view:
+            return ConsequencePool.objects.none()
 
         # checks.CheckType is content-repo-owned (#2698) — get_melee_offense_pool()
         # is None when the 'Melee Attack' CheckType isn't authored; drop it

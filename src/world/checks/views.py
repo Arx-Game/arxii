@@ -102,10 +102,22 @@ class ConsequenceOutcomeViewSet(ReadOnlyModelViewSet):
     filterset_class = ConsequenceOutcomeFilter
     pagination_class = StandardResultsSetPagination
 
+    # drf-spectacular sets this to True on the view instance while generating
+    # the schema. Declaring the default here keeps get_queryset's guard a plain
+    # attribute read rather than a getattr with a literal name.
+    swagger_fake_view = False
+
     def get_permissions(self) -> list:
         return [IsAuthenticated()]
 
     def get_queryset(self) -> QuerySet[ConsequenceOutcome]:
+        # Schema generation must never reach the database, and carries no real
+        # user — the scoping below read AnonymousUser.id and raised, so
+        # drf-spectacular dropped this viewset and typed its path parameter as
+        # "string". See the same guard on ConsequencePoolCatalogViewSet.
+        if self.swagger_fake_view:
+            return ConsequenceOutcome.objects.none()
+
         user = self.request.user
         qs = (
             ConsequenceOutcome.objects.select_related(

@@ -45769,10 +45769,15 @@ export interface operations {
   checks_consequence_outcomes_list: {
     parameters: {
       query?: {
+        character?: number;
+        created_after?: string;
+        created_before?: string;
+        encounter?: number;
         /** @description A page number within the paginated result set. */
         page?: number;
         /** @description Number of results to return per page. */
         page_size?: number;
+        pool?: number;
       };
       header?: never;
       path?: never;
@@ -45795,7 +45800,8 @@ export interface operations {
       query?: never;
       header?: never;
       path: {
-        id: string;
+        /** @description A unique integer value identifying this consequence outcome. */
+        id: number;
       };
       cookie?: never;
     };
@@ -55902,7 +55908,9 @@ export interface operations {
   };
   magic_consequence_pool_catalog_list: {
     parameters: {
-      query?: never;
+      query?: {
+        action_category?: string;
+      };
       header?: never;
       path?: never;
       cookie?: never;
@@ -55924,7 +55932,8 @@ export interface operations {
       query?: never;
       header?: never;
       path: {
-        id: string;
+        /** @description A unique integer value identifying this Consequence Pool. */
+        id: number;
       };
       cookie?: never;
     };

@@ -5230,6 +5230,24 @@ paths:
         Write operations are intentionally absent — outcomes are append-only and
         written by the resolution pipeline.
       parameters:
+      - in: query
+        name: character
+        schema:
+          type: number
+      - in: query
+        name: created_after
+        schema:
+          type: string
+          format: date-time
+      - in: query
+        name: created_before
+        schema:
+          type: string
+          format: date-time
+      - in: query
+        name: encounter
+        schema:
+          type: number
       - name: page
         required: false
         in: query
@@ -5242,6 +5260,10 @@ paths:
         description: Number of results to return per page.
         schema:
           type: integer
+      - in: query
+        name: pool
+        schema:
+          type: number
       tags:
       - checks
       security:
@@ -5277,7 +5299,8 @@ paths:
       - in: path
         name: id
         schema:
-          type: string
+          type: integer
+        description: A unique integer value identifying this consequence outcome.
         required: true
       tags:
       - checks
@@ -17130,6 +17153,11 @@ paths:
         resolve_cast_action_template enforces the same split at submit/finalize
         time. The technique builder's category-agnostic picker keeps the flat
         union by passing no param.
+      parameters:
+      - in: query
+        name: action_category
+        schema:
+          type: string
       tags:
       - magic
       security:
@@ -17161,7 +17189,8 @@ paths:
       - in: path
         name: id
         schema:
-          type: string
+          type: integer
+        description: A unique integer value identifying this Consequence Pool.
         required: true
       tags:
       - magic
