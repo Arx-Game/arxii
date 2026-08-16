@@ -746,6 +746,12 @@ and `summary` — the plain-words line, e.g. *"Cast on an ally, anywhere in the 
 physical arena. Costs 5 anima. Applies Guarded."* The sentence is authored server-side and
 is byte-identical on the web and over telnet; clients render it, never re-derive it.
 
+**Ordering is authoring order.** The four payload models carry `Meta.ordering = ["pk"]`, so
+a multi-condition clause reads in the order staff attached the rows — "Applies Burning,
+Blinded and Slowed", every time. Without it the queryset is unordered and the same technique
+renders a different sentence between two requests, which also makes any test asserting the
+clause pass only by luck. Damage-type names are additionally sorted inside the damage clause.
+
 **Caching.** `Technique.cached_effect_summary` holds the built payload on the row, so a
 technique fetched by pk anywhere in the process answers every surface from the identity
 map after one build. The same rule made three query-per-call derivations read the cached
