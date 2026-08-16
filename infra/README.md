@@ -349,7 +349,10 @@ Installed once by the converge, then running unattended on the box:
   above draws for `app_gamedir`; `roles/tls_telnet_cert`'s `ttc_game_dir` and
   `roles/django_hardening`'s `dh_game_dir` both had this off-by-one until #2236 review).
   The heartbeat's cert-expiry and self-signed-issuer checks catch the case where this sync
-  has silently stopped working.
+  has silently stopped working. The sync installs `ssl.cert` at `0644` and `ssl.key` at
+  `0600`, and Evennia writes the same split when it generates the self-signed pair on a
+  first start; `roles/secrets_perms` asserts that posture per file, so do not "harden" the
+  cert to `0600` — the next renewal would revert it and fail the converge.
 
 ## Generating the SSH admin key (one-time)
 

@@ -59,16 +59,18 @@
     that: "leaked_unexpected | length == 0"
     fail_msg: "Secret-shaped files found in the app checkout: {{ leaked_unexpected }}"
 
-# The SSL-telnet key is excluded from the scan above, so assert its posture
-# directly rather than leaving it unchecked. A world-readable telnet private
-# key is exactly the kind of thing this role exists to catch.
-- name: Stat the SSL-telnet key material
+# The SSL-telnet material is excluded from the scan above, so assert its
+# posture directly rather than leaving it unchecked. A world-readable telnet
+# private key is exactly the kind of thing this role exists to catch. The
+# private key and the two public files get different checks — see this role's
+# defaults for why 0600 is both pointless and unholdable on the public ones.
+- name: Stat the SSL-telnet private key
   ansible.builtin.stat:
     path: "{{ item }}"
-  loop: "{{ secrets_ssl_telnet_files }}"
-  register: secrets_ssl_stat
+  loop: "{{ secrets_ssl_telnet_private_files }}"
+  register: secrets_ssl_private_stat
 
-- name: SSL-telnet key material must be 0600 and service-user-owned
+- name: SSL-telnet private key must be 0600 and service-user-owned
   ansible.builtin.assert:
     quiet: true
     that:
@@ -78,6 +80,29 @@
       {{ item.item }} is not 0600/service-user-owned
       (mode={{ item.stat.mode | default('absent') }},
       owner={{ item.stat.pw_name | default('absent') }}).
-  loop: "{{ secrets_ssl_stat.results }}"
+  loop: "{{ secrets_ssl_private_stat.results }}"
+  loop_control:
+    label: "{{ item.item }}"
+
+- name: Stat the SSL-telnet public material
+  ansible.builtin.stat:
+    path: "{{ item }}"
+  loop: "{{ secrets_ssl_telnet_public_files }}"
+  register: secrets_ssl_public_stat
+
+# Readable by anyone is fine and expected here. Writable by anyone is not: an
+# attacker who can rewrite the cert can serve players a key it also controls.
+- name: SSL-telnet public material must be service-user-owned and not group/world-writable
+  ansible.builtin.assert:
+    quiet: true
+    that:
+      - "not item.stat.exists or not item.stat.wgrp"
+      - "not item.stat.exists or not item.stat.woth"
+      - "not item.stat.exists or item.stat.pw_name == (secrets_owner | default('arxii'))"
+    fail_msg: >-
+      {{ item.item }} is group/world-writable or not service-user-owned
+      (mode={{ item.stat.mode | default('absent') }},
+      owner={{ item.stat.pw_name | default('absent') }}).
+  loop: "{{ secrets_ssl_public_stat.results }}"
   loop_control:
     label: "{{ item.item }}"

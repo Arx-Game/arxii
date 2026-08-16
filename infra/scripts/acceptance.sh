@@ -151,8 +151,17 @@ chk   "secrets_vault uses lookup('env')"      "grep -q \"lookup('env'\" infra/an
 # ignored.
 chk   "secret scan excludes the venv and Evennia's SSL-telnet material" \
   "grep -q 'secrets_scan_exclude_venv_re' infra/ansible/roles/secrets_perms/tasks/main.yml && grep -q 'secrets_ssl_telnet_files' infra/ansible/roles/secrets_perms/tasks/main.yml"
-chk   "SSL-telnet key material has its own 0600/owner assertion" \
-  "grep -q 'SSL-telnet key material must be 0600' infra/ansible/roles/secrets_perms/tasks/main.yml"
+# Split by what each file actually is. Only ssl.key is private. ssl.cert and
+# ssl-public.key go to every SSL-telnet client, and both Evennia's first-start
+# generation and tls_telnet_cert's sync write them 0644 — so a 0600 assertion
+# on them fails the converge on a healthy box. They get an owner +
+# not-group/world-writable assertion instead, which is the property that holds.
+chk   "SSL-telnet PRIVATE key has its own 0600/owner assertion" \
+  "grep -q 'SSL-telnet private key must be 0600' infra/ansible/roles/secrets_perms/tasks/main.yml"
+chk   "SSL-telnet PUBLIC material is asserted not group/world-writable" \
+  "grep -q 'SSL-telnet public material must be service-user-owned and not group/world-writable' infra/ansible/roles/secrets_perms/tasks/main.yml"
+chkno "no assertion demands 0600 on the public SSL-telnet cert/public key" \
+  "grep -n 'secrets_ssl_telnet_public_files' -A 12 infra/ansible/roles/secrets_perms/tasks/main.yml | grep \"mode == '0600'\""
 chk   "forbidden-env guard uses REAL token names (not a dead ARXII_ guard)" \
   "grep -A4 secrets_forbidden_env infra/ansible/roles/secrets_vault/defaults/main.yml | grep -q '^[[:space:]]*- LINODE_TOKEN$'"
 chkno "standup.sh never passes secrets via --extra-vars" "nc infra/scripts/standup.sh | grep -- '--extra-vars'"
