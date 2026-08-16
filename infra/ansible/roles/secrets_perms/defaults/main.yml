@@ -16,8 +16,24 @@ secrets_scan_exclude_venv_re: '/\.venv/'
 #    Evennia, not settings-driven. Runtime state, not committed secrets.
 #    Excluded from the scan and then positively checked below, so the posture
 #    is asserted rather than merely ignored.
+#
+#    The three files do not share one posture, so the checks are split. Only
+#    ssl.key is private and must be 0600. ssl.cert is an X.509 certificate and
+#    ssl-public.key is a public key: both are published to every client that
+#    opens an SSL-telnet connection, so 0600 buys nothing. Worse, it cannot
+#    hold — Evennia writes the pair at the default umask when it generates a
+#    self-signed cert on first start, and tls_telnet_cert's sync script
+#    installs the renewed Caddy cert at 0644 by design. Asserting 0600 on the
+#    public files therefore fails the converge on a correctly configured box,
+#    which is the "always fails, gets switched off" failure this role's other
+#    exclusions exist to avoid. They are checked for owner and for not being
+#    group- or world-writable instead.
 secrets_ssl_telnet_dir: "{{ app_gamedir | default('/opt/arxii/current/src') }}/server"
-secrets_ssl_telnet_files:
-  - "{{ secrets_ssl_telnet_dir }}/ssl.cert"
+secrets_ssl_telnet_private_files:
   - "{{ secrets_ssl_telnet_dir }}/ssl.key"
+secrets_ssl_telnet_public_files:
+  - "{{ secrets_ssl_telnet_dir }}/ssl.cert"
   - "{{ secrets_ssl_telnet_dir }}/ssl-public.key"
+# Combined, for the scan exclusion above — every one of them is runtime state.
+secrets_ssl_telnet_files: >-
+  {{ secrets_ssl_telnet_private_files + secrets_ssl_telnet_public_files }}
