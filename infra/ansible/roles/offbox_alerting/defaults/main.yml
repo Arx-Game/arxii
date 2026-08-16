@@ -9,3 +9,32 @@ offbox_ping_interval: "*-*-* *:0/15:00"   # every 15 min
 # itself; Evennia's ssl.cert lives under GAME_DIR/server/, one level deeper.
 offbox_cert_path: "{{ ttc_game_dir | default('/opt/arxii/current/src') }}/server/ssl.cert"
 offbox_cert_warn_days: 10
+
+# Memory observability (#3200). Nothing on the box recorded memory before this.
+#
+# The game already runs memory-capped: base creates arxii.slice with
+# MemoryMax={{ base_game_memory_max | default('1500M') }}, so a leak gets the
+# SLICE OOM-killed rather than taking the box and Postgres down. That contains
+# the damage but makes it invisible — the kernel kills inside the slice, the
+# watchdog restarts the service, the restart clears the idmapper cache, and the
+# box looks healthy the whole time. The failure erases its own evidence.
+#
+# Two signals, read straight from the cgroup rather than summing process RSS.
+#
+# 1. memory.events' oom_kill counter is DEFINITIVE — non-zero means the thing
+#    we are afraid of already happened. It lives on the slice, not the service,
+#    so it survives the watchdog restart that hides everything else. This is
+#    the single highest-value number on the box for this failure mode.
+# 2. memory.stat's `anon` is the early warning. Deliberately NOT memory.current:
+#    that includes reclaimable page cache (measured 2026-08-16 on prod:
+#    current 447 MB, of which 152 MB was file cache against only 286 MB anon),
+#    so alerting on it would page us for a healthy kernel doing its job. `anon`
+#    is the non-reclaimable part that actually drives an OOM kill.
+#
+# 60% of the cap gives real lead time: at the 1500 M cap that is 900 MB, versus
+# an idle anon baseline of ~286 MB measured on prod. It also sits well above
+# Evennia's own brake (conditional_flush targets IDMAPPER_CACHE_MAXSIZE, 400 MB),
+# so routine flush cycles never page us. Raise IDMAPPER_CACHE_MAXSIZE and this
+# must move with it.
+offbox_slice_name: arxii.slice
+offbox_slice_anon_warn_percent: 60

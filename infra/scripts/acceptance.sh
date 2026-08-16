@@ -521,6 +521,26 @@ chk   "arxii-media-mirror.service carries OnFailure= alerting (same convention a
 chk   "offbox_alerting heartbeat watches arxii-media-mirror.service" \
   "grep -q 'arxii-media-mirror.service' infra/ansible/roles/offbox_alerting/templates/arxii-heartbeat.sh.j2"
 
+echo "== #3200 memory observability =="
+# The game slice carries the MemoryMax cap, so a leak is contained but SILENT:
+# the kernel kills inside the slice, the watchdog restarts the service, and the
+# restart clears the idmapper cache. These checks keep the two signals that
+# survive that restart wired up.
+chk   "base still caps the game slice (the heartbeat's percentage is meaningless without it)" \
+  "grep -q 'MemoryMax={{ base_game_memory_max }}' infra/ansible/roles/base/tasks/main.yml"
+chk   "heartbeat alerts on the slice's cumulative oom_kill counter" \
+  "grep -q 'oom_kill' infra/ansible/roles/offbox_alerting/templates/arxii-heartbeat.sh.j2"
+# anon, NOT memory.current: page cache is reclaimable and would page us for a
+# healthy kernel. Measured on prod 2026-08-16: current 447MB vs anon 286MB.
+chk   "heartbeat's early warning reads anon, not memory.current" \
+  "grep -q 'anon' infra/ansible/roles/offbox_alerting/templates/arxii-heartbeat.sh.j2"
+chkno "heartbeat never thresholds on the reclaimable memory.current figure" \
+  "nc infra/ansible/roles/offbox_alerting/templates/arxii-heartbeat.sh.j2 | grep -nE 'memory\.current'"
+chk   "the idmapper ceiling is set explicitly, not inherited from Evennia" \
+  "grep -q 'IDMAPPER_CACHE_MAXSIZE' src/server/conf/settings.py"
+chk   "a periodic task logs idmapper cache size (the trend survives a restart)" \
+  "grep -q 'ops.memory_snapshot' src/world/game_clock/tasks.py"
+
 echo "== #2236 Phase 5 (real Sentry wiring) =="
 # The dependency declaration and the guarded init call are paired — either
 # half missing without the other is a real bug (a declared-but-never-

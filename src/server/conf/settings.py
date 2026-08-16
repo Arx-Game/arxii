@@ -159,6 +159,31 @@ else:
 DEFAULT_FROM_EMAIL = env("DEFAULT_FROM_EMAIL", default="noreply@arx2.com")
 SITE_URL = env("SITE_URL", default="https://arxmush.org")
 
+# Idmapper cache ceiling in MB (#3200). Stated explicitly rather than inherited.
+#
+# We used to take Evennia's settings_default value of 400 silently. That is a
+# number nobody chose, on a box nobody measured it against, guarding the failure
+# mode most likely to take this game down: Arx I ran on the 8 GB plan and
+# SharedMemoryModel consumed all of it on a regular basis. Arx II runs on 4 GB
+# with Postgres co-resident, and leans HARDER on the identity map (cached_property
+# handlers hang off model instances throughout world/).
+#
+# 400 is kept as the value, now on purpose: idle Server RSS on prod measured
+# ~156 MB (2026-08-16, no players, no content), so 400 leaves real working room
+# while capping growth at roughly a tenth of the box. Raise it only with a
+# measurement, and move offbox_rss_warn_mb (roles/offbox_alerting) up with it —
+# the heartbeat alert must stay above this ceiling or routine flushes page us.
+#
+# How the ceiling is enforced, and its limits: Evennia's server_maintenance()
+# runs every minute and calls conditional_flush, which flushes only when the
+# cache count is above an estimated maximum AND RSS is already above 90% of this
+# value. It is a last-ditch brake, not a governor. The cache-size estimate is
+# openly a guess (`Ncache = |RMEM - 35.0| / 0.0157`, "empirically estimated from
+# usage tests"), and a flush frees only what nothing else references — a
+# module-level registry or long-lived service pinning instances defeats it.
+# That is why #3200 pairs this with an external RSS alert instead of trusting it.
+IDMAPPER_CACHE_MAXSIZE = env.int("ARXII_IDMAPPER_CACHE_MAXSIZE", default=400)
+
 # Sample world content in the dev seeders (#2698). OFF by default.
 #
 # ``seed_dev_database()`` (the admin "Big Button") is mandatory — it is the only

@@ -45,6 +45,45 @@ if [ "${{ '{#' }}failed_units[@]}" -gt 0 ]; then
   exit 0
 fi
 
+# Memory (#3200). Checked BEFORE the cert window below: memory heading for an
+# OOM kill is more urgent than a cert expiring in {{ offbox_cert_warn_days }} days.
+#
+# Read from the cgroup, not from process RSS: the slice is what carries the
+# MemoryMax cap, so the slice's own accounting is what decides whether the
+# kernel kills anything. Liveness is deliberately NOT reported here —
+# arxii-watchdog owns that, and two components reporting the same dead process
+# makes an incident harder to read. A missing cgroup (rehearsal, or the slice
+# not yet started) is skipped silently.
+cg="/sys/fs/cgroup/{{ offbox_slice_name }}"
+if [ -d "${cg}" ] && [ -r "${cg}/memory.events" ]; then
+  # 1. Did it ALREADY happen. oom_kill is cumulative and lives on the slice,
+  #    which the watchdog's service restart does not recreate — so this is the
+  #    one number that survives the restart that erases everything else. Any
+  #    non-zero value means a process in the game slice was OOM-killed and
+  #    nothing else on this box would ever have told us.
+  oom_kills="$(awk '$1 == "oom_kill" {print $2}' "${cg}/memory.events" 2>/dev/null || echo 0)"
+  if [ -n "${oom_kills}" ] && [ "${oom_kills}" -gt 0 ]; then
+    /usr/local/sbin/arxii-alert \
+      "{{ offbox_slice_name }} has ${oom_kills} OOM kill(s) — a leak hit the memory cap and the watchdog restart hid it"
+    exit 0
+  fi
+  # 2. Is it heading there. `anon` is the non-reclaimable footprint; page cache
+  #    in memory.current is reclaimable and would false-positive (see this
+  #    role's defaults for the measured split).
+  if [ -r "${cg}/memory.stat" ] && [ -r "${cg}/memory.max" ]; then
+    anon="$(awk '$1 == "anon" {print $2}' "${cg}/memory.stat" 2>/dev/null || echo 0)"
+    cap="$(cat "${cg}/memory.max" 2>/dev/null || echo max)"
+    # "max" means uncapped — no percentage to compute, so nothing to warn about.
+    if [ "${cap}" != "max" ] && [ -n "${anon}" ] && [ "${cap}" -gt 0 ]; then
+      pct=$(( anon * 100 / cap ))
+      if [ "${pct}" -ge {{ offbox_slice_anon_warn_percent }} ]; then
+        /usr/local/sbin/arxii-alert \
+          "{{ offbox_slice_name }} anon memory $(( anon / 1048576 ))MB is ${pct}% of its $(( cap / 1048576 ))MB cap"
+        exit 0
+      fi
+    fi
+  fi
+fi
 # Cert-expiry: if the SSL-telnet/web cert expires within the warn window,
 # signal the /fail endpoint so the external service alerts EARLY.
 if [ -f "{{ offbox_cert_path }}" ]; then

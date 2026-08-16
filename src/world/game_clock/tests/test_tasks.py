@@ -439,3 +439,65 @@ class WeeklyMoneyOrderingWiringTests(TestCase):
             tasks["weekly_rollover"].phase,
             tasks["buildings.weekly_upkeep"].phase,
         )
+
+
+class MemorySnapshotTaskTests(TestCase):
+    """The periodic memory snapshot (#3200).
+
+    The value of this task is that its line survives the restart that erases
+    every other trace of an OOM kill, so the tests assert the line is actually
+    emitted and carries the numbers an incident needs — not merely that the
+    call returns.
+    """
+
+    def test_registered_in_cleanup_phase(self) -> None:
+        from world.game_clock.task_registry import CronPhase, get_registered_tasks
+        from world.game_clock.tasks import register_all_tasks
+
+        register_all_tasks()
+
+        tasks = {t.task_key: t for t in get_registered_tasks()}
+        self.assertIn("ops.memory_snapshot", tasks)
+        # Observes without mutating, so it reads state after the tasks that
+        # change it.
+        self.assertEqual(tasks["ops.memory_snapshot"].phase, CronPhase.CLEANUP)
+
+    def test_logs_cache_totals_and_rss(self) -> None:
+        from world.game_clock.tasks import memory_snapshot_task
+
+        with self.assertLogs("world.game_clock.tasks", level="INFO") as captured:
+            memory_snapshot_task()
+
+        line = "\n".join(captured.output)
+        self.assertIn("Memory snapshot", line)
+        self.assertIn("idmapper_objects=", line)
+        self.assertIn("rss=", line)
+
+    def test_names_the_largest_cached_class(self) -> None:
+        """The per-class breakdown answers 'which model is growing'."""
+        from unittest.mock import patch
+
+        from world.game_clock.tasks import memory_snapshot_task
+
+        with patch(
+            "evennia.utils.idmapper.models.cache_size",
+            return_value=(1234, {"SmallThing": 4, "BigThing": 999}),
+        ):
+            with self.assertLogs("world.game_clock.tasks", level="INFO") as captured:
+                memory_snapshot_task()
+
+        line = "\n".join(captured.output)
+        self.assertIn("idmapper_objects=1234", line)
+        self.assertIn("BigThing=999", line)
+
+    def test_rss_unavailable_does_not_raise(self) -> None:
+        """A non-Linux dev box still logs the cache figures."""
+        from unittest.mock import patch
+
+        from world.game_clock.tasks import memory_snapshot_task
+
+        with patch("world.game_clock.tasks._process_rss_mb", return_value=None):
+            with self.assertLogs("world.game_clock.tasks", level="INFO") as captured:
+                memory_snapshot_task()
+
+        self.assertIn("rss=unavailable", "\n".join(captured.output))
