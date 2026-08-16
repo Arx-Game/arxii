@@ -23,6 +23,19 @@ Core game objects (characters, rooms, exits, etc.) with Arx II customizations ex
 ### `accounts.py`
 - **`Account`**: Extends `DefaultAccount`
 - Integration with roster system and character management
+- **An override must accept everything the base method accepts.** Read the
+  parent's docstring for the argument contract before narrowing it.
+  `unpuppet_object` takes `Session OR a list of sessions` and fans out with
+  `make_iter`; an override that assumed a single session raised AttributeError
+  under `unpuppet_all` — which the Server calls on every cached account during
+  reload and shutdown — killing the shutdown Deferred and hanging
+  `evennia reload` until systemd timed it out (#3195). The same trap applies to
+  every hook the reload path touches.
+- **Do not use `MagicMock` for a session in tests.** It auto-creates `__iter__`,
+  so `make_iter` treats it as an empty sequence and the base call silently does
+  nothing. Use a plain `Mock` (see `_session_mock` in
+  `tests/test_account_puppet_broadcast.py`), which behaves like a real,
+  non-iterable session.
 
 ### `channels.py`
 - **`Channel`**: Extends `DefaultChannel`

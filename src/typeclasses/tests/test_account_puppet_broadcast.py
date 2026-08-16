@@ -1,6 +1,6 @@
 """Tests for Account puppet_changed broadcast on @ic swaps."""
 
-from unittest.mock import MagicMock
+from unittest.mock import MagicMock, Mock
 
 from django.test import TestCase
 
@@ -35,6 +35,41 @@ def _restore_super_puppet(account, original) -> None:
     """Restore the parent class's puppet_object to `original`."""
     parent = type(account).__mro__[1]
     parent.puppet_object = original
+
+
+def _session_mock(sessid, puppet=None):
+    """A stand-in session that is NOT iterable, like a real Evennia session.
+
+    Deliberately `Mock`, not `MagicMock`. MagicMock auto-creates `__iter__`,
+    and Evennia's `make_iter` dispatches on `hasattr(obj, "__iter__")` — so a
+    MagicMock session is silently treated as an empty sequence by every
+    make_iter caller, including the base `unpuppet_object`. That made the
+    single-session assertions pass for the wrong reason and hid the list-form
+    bug in #3195. A plain Mock has no `__iter__`, so make_iter wraps it exactly
+    as it wraps a real session.
+    """
+    sess = Mock(sessid=sessid)
+    sess.puppet = puppet
+    return sess
+
+
+def _patch_super_unpuppet(account, fake) -> object:
+    """Replace the parent class's unpuppet_object with `fake`; return the original.
+
+    The unpuppet tests assert what the OVERRIDE broadcasts. Stubbing the parent
+    keeps Evennia's real teardown (tag removal, signals, `del obj.account`) out
+    of a test that is not about it.
+    """
+    parent = type(account).__mro__[1]
+    original = parent.unpuppet_object
+    parent.unpuppet_object = fake
+    return original
+
+
+def _restore_super_unpuppet(account, original) -> None:
+    """Restore the parent class's unpuppet_object to `original`."""
+    parent = type(account).__mro__[1]
+    parent.unpuppet_object = original
 
 
 class PuppetCharacterBroadcastTests(TestCase):
@@ -182,12 +217,18 @@ class UnpuppetBroadcastTests(TestCase):
         )
 
     def test_unpuppet_broadcasts_with_null_character(self) -> None:
-        sess1 = MagicMock(sessid=10)
-        sess1.puppet = self.character
-        sess2 = MagicMock(sessid=11, puppet=None)
+        sess1 = _session_mock(10, puppet=self.character)
+        sess2 = _session_mock(11)
         self.account.sessions.all = lambda: [sess1, sess2]
 
-        self.account.unpuppet_object(sess1)
+        fake_super = MagicMock()
+        original = _patch_super_unpuppet(self.account, fake_super)
+        try:
+            self.account.unpuppet_object(sess1)
+        finally:
+            _restore_super_unpuppet(self.account, original)
+
+        assert fake_super.call_args.args[0] is sess1
 
         for sess in (sess1, sess2):
             puppet_calls = [
@@ -200,6 +241,36 @@ class UnpuppetBroadcastTests(TestCase):
             assert payload["session_id"] == 10
             assert payload["character_id"] is None
             assert payload["character_name"] is None
+
+    def test_unpuppet_all_passes_a_list_and_broadcasts_per_session(self) -> None:
+        """`unpuppet_all` hands `unpuppet_object` a LIST of sessions.
+
+        This is the reload/shutdown path: the Server calls `unpuppet_all` on
+        every cached account. The override used to read `.sessid` straight off
+        the argument, so the list form raised AttributeError, killed the
+        shutdown Deferred, and left `evennia reload` hanging until systemd
+        timed it out (#3195). One broadcast is expected per unpuppeted session.
+        """
+        sess1 = _session_mock(10, puppet=self.character)
+        sess2 = _session_mock(11)
+        self.account.sessions.all = lambda: [sess1, sess2]
+
+        fake_super = MagicMock()
+        original = _patch_super_unpuppet(self.account, fake_super)
+        try:
+            self.account.unpuppet_all()
+        finally:
+            _restore_super_unpuppet(self.account, original)
+
+        # The parent must receive the list unchanged — it does its own make_iter.
+        assert fake_super.call_args.args[0] == [sess1, sess2]
+
+        broadcast_session_ids = {
+            call.kwargs["args"][0]["session_id"]
+            for call in sess1.msg.call_args_list
+            if call.kwargs.get("type") == WebsocketMessageType.PUPPET_CHANGED.value
+        }
+        assert broadcast_session_ids == {10, 11}
 
 
 class CanPuppetForSeanceTests(TestCase):
