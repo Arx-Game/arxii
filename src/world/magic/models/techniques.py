@@ -959,6 +959,11 @@ class TechniqueCapabilityGrant(NaturalKeyMixin, AbstractCapabilityGrant):
         dependencies = [_TECHNIQUE_MODEL, _CAPABILITY_TYPE_MODEL]
 
     class Meta:
+        # Authoring order. These rows are read back into the player-facing effect
+        # sentence, so an unordered queryset lets the same technique read
+        # differently between two requests. Ordering by pk keeps the sentence in
+        # the order staff attached the rows.
+        ordering = ["pk"]
         constraints = [
             models.UniqueConstraint(
                 fields=["technique", "capability"],
@@ -1246,6 +1251,8 @@ class TechniqueAppliedCondition(NaturalKeyMixin, AbstractAppliedCondition):
         dependencies = [_TECHNIQUE_MODEL, _CONDITION_TEMPLATE_MODEL]
 
     class Meta:
+        # Authoring order — see TechniqueCapabilityGrant.Meta.
+        ordering = ["pk"]
         constraints = [
             models.UniqueConstraint(
                 fields=["technique", "condition", "target_kind"],
@@ -1294,6 +1301,8 @@ class TechniqueRemovedCondition(NaturalKeyMixin, AbstractAppliedCondition):
         dependencies = [_TECHNIQUE_MODEL, _CONDITION_TEMPLATE_MODEL]
 
     class Meta:
+        # Authoring order — see TechniqueCapabilityGrant.Meta.
+        ordering = ["pk"]
         constraints = [
             models.UniqueConstraint(
                 fields=["technique", "condition", "target_kind"],
@@ -1407,6 +1416,10 @@ class TechniqueDamageProfile(NaturalKeyMixin, AbstractDamageProfile):
         dependencies = [_TECHNIQUE_MODEL, "arxii.DamageType"]
 
     class Meta:
+        # Authoring order — see TechniqueCapabilityGrant.Meta. The damage clause
+        # sorts its type names itself, but the rows also feed combat resolution,
+        # so a stable read order is worth having here too.
+        ordering = ["pk"]
         constraints = [
             models.UniqueConstraint(
                 fields=["technique", "damage_type"],
