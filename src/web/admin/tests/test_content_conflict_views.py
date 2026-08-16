@@ -109,6 +109,11 @@ class TestContentConflictConfigured(TestCase):
         self.content = tempfile.TemporaryDirectory()
         self.addCleanup(self.content.cleanup)
         self.root = Path(self.content.name)
+        # A real checkout always carries fixtures/, even when a given test seeds
+        # no entries into it. build_all() rejects a root holding neither domain
+        # directories nor fixtures/ as "not a corpus root at all", so create the
+        # directory here: an empty corpus is legitimate and must still load.
+        (self.root / "fixtures").mkdir(exist_ok=True)
 
     def _seed_conflict(self) -> None:
         from core_management.content_fixtures import build_all, load_entries

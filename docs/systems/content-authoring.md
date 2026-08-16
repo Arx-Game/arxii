@@ -10,12 +10,23 @@ the durable source of truth, and credit stamps are the lock between them.**
 
 ## One-time setup
 
+The private lore repo is a two-game monorepo: one repo, two top-level game
+directories. The Arx II corpus lives in the `arx2/` subdirectory
+(`arx2/fixtures/`, `arx2/content/`, plus the domain directories such as
+`arx2/items/`, `arx2/skills/`). `CONTENT_REPO_PATH` must point at `arx2/`,
+not at the repo checkout root — the checkout root has no `fixtures/` or
+domain directories of its own, so every content lookup at that level
+silently finds nothing.
+
 1. Clone the private content repo somewhere on the machine.
-2. In `src/.env`, set `CONTENT_REPO_PATH` to that checkout. Every surface
-   below resolves the path through the same helper
+2. In `src/.env`, set `CONTENT_REPO_PATH` to the `arx2/` subdirectory of
+   that checkout (not the checkout root). Every surface below resolves the
+   path through the same helper
    (`core_management.content_repo.resolve_content_root()`); if it is unset,
    loading/export surfaces hide themselves and show a setup hint instead of
-   erroring.
+   erroring. A path with neither known domain directories nor a `fixtures/`
+   directory (for example, the checkout root by mistake) now raises a clear
+   error naming the path instead of silently loading zero rows.
 3. If this machine will open session pull requests (see below), make a
    GitHub token available: `GITHUB_ISSUE_TOKEN` in settings, or the
    `GH_TOKEN` env var. Local commits work without it; only the open-PR
@@ -38,8 +49,10 @@ infra" → Run workflow) with the **"Also refresh the private lore-repo
 checkout"** `workflow_dispatch` input checked — this appends
 `--tags all,content_repo` to the converge, running the ordinary deploy as
 usual plus this role. `CONTENT_REPO_PATH` is always set for the app process
-(a fixed path); the checkout itself only exists after the on-demand refresh
-has been run at least once. Expect to use this once during alpha bootstrap and
+(a fixed path, pointing at the `arx2/` subdirectory of the checkout, not the
+checkout root — see `infra/ansible/roles/content_repo/defaults/main.yml`);
+the checkout itself only exists after the on-demand refresh has been run at
+least once. Expect to use this once during alpha bootstrap and
 maybe again after a full alpha rebuild — not as part of routine ongoing
 operation. See `infra/README.md`'s "Content-repo checkout credential"
 section for the one-time credential setup.

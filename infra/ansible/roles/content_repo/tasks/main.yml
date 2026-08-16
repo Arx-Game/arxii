@@ -94,7 +94,7 @@
     - name: Clone/update the private lore-repo checkout (credential via env, never the URL or disk)
       ansible.builtin.git:
         repo: "https://github.com/{{ lookup('env', 'ARXII_CONTENT_REPO') }}.git"
-        dest: "{{ content_repo_path }}"
+        dest: "{{ content_repo_checkout }}"
         version: main
       become: true
       become_user: "{{ app_user }}"
@@ -103,13 +103,13 @@
         GIT_CONFIG_KEY_0: "http.https://github.com/.extraheader"
         GIT_CONFIG_VALUE_0: "AUTHORIZATION: basic {{ ('x-access-token:' + lookup('env', 'ARXII_CONTENT_REPO_TOKEN')) | b64encode }}"
       no_log: true
-      register: content_repo_checkout
+      register: content_repo_checkout_result
   rescue:
     - name: Fail with a diagnosable message (the block above is no_log; this is not)
       ansible.builtin.fail:
         msg: >-
           content_repo checkout failed. Likely causes: (1) local
-          modifications exist in {{ content_repo_path }} from prod-admin
+          modifications exist in {{ content_repo_checkout }} from prod-admin
           content authoring (uncommitted export output blocks the next
           refresh) — commit or discard them before the next
           refresh; (2) ARXII_CONTENT_REPO_TOKEN is expired, revoked, or

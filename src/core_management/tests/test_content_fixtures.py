@@ -112,6 +112,22 @@ class ParseAndValidateTests(TestCase):
         assert "world/traits/fixtures/content_skills.json" in outputs
         assert "world/traits/fixtures/content_stats.json" in outputs
 
+    def test_empty_content_root_raises_content_error_naming_the_path(self) -> None:
+        # No domain dirs, no fixtures/ dir. This is the shape of the #944
+        # production bug: CONTENT_REPO_PATH pointed at the repo checkout root
+        # instead of the arx2/ corpus subdirectory, so every lookup silently
+        # missed and the load reported "0 created, 0 updated" with no error.
+        with self.assertRaises(ContentError) as ctx:
+            build_all(self.root)
+        assert str(self.root) in str(ctx.exception)
+
+    def test_fixtures_dir_present_but_empty_does_not_raise(self) -> None:
+        # A legitimately empty corpus: fixtures/ exists but has no JSON files.
+        (self.root / "fixtures").mkdir()
+        result = build_all(self.root)
+        assert result.entries == []
+        assert result.fixtures == {}
+
     def test_bad_category_collects_error(self) -> None:
         _write(
             self.root,

@@ -1,10 +1,22 @@
 ---
-# Sibling of app_releases_dir/app_current (roles/app_deploy/defaults/main.yml)
-# — same /opt/arxii root, own subdirectory. Fixed/static (not operator-
-# supplied): the app resolves it via CONTENT_REPO_PATH, which this role's
-# clone task's dest and secrets_vault's arxii.env.j2 template both derive
-# from this single var (see roles/secrets_vault/templates/arxii.env.j2).
-content_repo_path: /opt/arxii/content
+# Two separate variables, on purpose. The lore repo is a two-game monorepo
+# (both games' content in one repo, each game's corpus in its own top-level
+# subdirectory); this role clones the WHOLE repo, but the app only reads ONE
+# subdirectory of it. Conflating the two used to point CONTENT_REPO_PATH at
+# the repo root instead of the corpus subdirectory, so every content lookup
+# silently found nothing (0 created, 0 updated, no error).
+#
+# content_repo_checkout: where the role clones the repo. Sibling of
+# app_releases_dir/app_current (roles/app_deploy/defaults/main.yml) — same
+# /opt/arxii root, own subdirectory. Used by tasks/main.yml's git `dest:`
+# and by every other reference to the checkout itself (rescue message, etc.).
+content_repo_checkout: /opt/arxii/content
+
+# content_repo_path: the app-visible content root — the Arx II corpus
+# subdirectory inside the checkout. This is the value written into
+# CONTENT_REPO_PATH (see roles/secrets_vault/templates/arxii.env.j2). Fixed/
+# static (not operator-supplied).
+content_repo_path: "{{ content_repo_checkout }}/arx2"
 
 # #2236 Phase 3 P1 (dress rehearsal): the ARXII_CONTENT_REPO_TOKEN credential
 # is prod-adjacent (real GitHub PAT with real private-repo read access) —
