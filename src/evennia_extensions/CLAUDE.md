@@ -29,6 +29,17 @@ Extends Evennia's functionality with additional models and data handlers while p
 - Adaptation layer between Evennia and Arx II systems
 - Integration utilities for data conversion
 
+### `typeclass_hook_guard.py`
+- Guards Evennia's server reload/shutdown lifecycle hooks (`at_server_reload`,
+  `at_server_shutdown`, `unpuppet_all`, `_pause_task`) against a cached `ObjectDB`,
+  `AccountDB`, or `ScriptDB` instance that is running bare (not as its typeclass) —
+  see issue #3195 and ADR-0217. `install_lifecycle_hook_guards()` runs once from
+  `EvenniaExtensionsConfig.ready()` and adds a loudly-logging no-op only for a hook
+  genuinely missing from the bare model class; a typeclass's own hook is never
+  touched. Never edit `evennia/server/service.py` (site-packages) to "fix" this —
+  the guard is the sanctioned fix location. Does not address how a bare instance
+  enters the idmapper cache; that root cause is still open in #3195.
+
 ## Key Classes
 
 - **`PlayerData`**: Account extensions without replacing core Evennia models
