@@ -850,13 +850,26 @@ def build_all(content_root: Path) -> BuildResult:
     (the lore repo's primary content format). Unknown directories are
     reference canon — ignored by design. Raises ``ContentError`` (with every
     failing file listed) when validation fails.
+
+    Also raises ``ContentError`` when ``content_root`` contains NEITHER any
+    known domain directory NOR a ``fixtures/`` directory — this is not a
+    legitimately empty corpus, it is a path that names nothing that looks
+    like a content corpus at all. The likely cause is ``CONTENT_REPO_PATH``
+    pointing at a parent of the actual corpus root (e.g. a repo checkout
+    root) rather than the corpus root itself: every domain lookup would
+    then silently miss, and a load would report "0 created, 0 updated"
+    with no error. An empty-but-present corpus (a ``fixtures/`` directory
+    with no JSON files, or a domain directory with no entries) does NOT
+    raise — that is a legitimately empty load.
     """
     result = BuildResult()
     errors: list[str] = []
+    found_any_domain_dir = False
     for domain, config in DOMAIN_BUILDERS.items():
         domain_dir = content_root / domain
         if not domain_dir.is_dir():
             continue
+        found_any_domain_dir = True
         objects: list[dict] = []
         paths: list[Path] = []
         for path in sorted(domain_dir.rglob("*.md")):
@@ -872,6 +885,15 @@ def build_all(content_root: Path) -> BuildResult:
         if objects:
             result.fixtures[config["output"]] = objects
             result.source_paths[config["output"]] = paths
+    if not found_any_domain_dir and not (content_root / "fixtures").is_dir():
+        msg = (
+            f"{content_root}: no known content domain directories and no "
+            "fixtures/ directory found. This path does not look like a "
+            "content corpus root. Likely cause: CONTENT_REPO_PATH points "
+            "at a parent of the actual corpus root instead of the corpus "
+            "root itself."
+        )
+        raise ContentError(msg)
     # Raw fixture JSON from the lore repo's fixtures/ directory.
     try:
         build_fixture_json(content_root, result)
