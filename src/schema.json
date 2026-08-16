@@ -5230,6 +5230,24 @@ paths:
         Write operations are intentionally absent — outcomes are append-only and
         written by the resolution pipeline.
       parameters:
+      - in: query
+        name: character
+        schema:
+          type: number
+      - in: query
+        name: created_after
+        schema:
+          type: string
+          format: date-time
+      - in: query
+        name: created_before
+        schema:
+          type: string
+          format: date-time
+      - in: query
+        name: encounter
+        schema:
+          type: number
       - name: page
         required: false
         in: query
@@ -5242,6 +5260,10 @@ paths:
         description: Number of results to return per page.
         schema:
           type: integer
+      - in: query
+        name: pool
+        schema:
+          type: number
       tags:
       - checks
       security:
@@ -5277,7 +5299,8 @@ paths:
       - in: path
         name: id
         schema:
-          type: string
+          type: integer
+        description: A unique integer value identifying this consequence outcome.
         required: true
       tags:
       - checks
@@ -30934,6 +30957,39 @@ paths:
         required: true
       tags:
       - staff
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AccountInvite'
+          description: ''
+  /api/staff/invites/{id}/resend/:
+    post:
+      operationId: staff_invites_resend_create
+      description: |-
+        Mail the redemption link again, for an invitee who lost the first one.
+
+        Refuses anything not currently redeemable: a redeemed, revoked or
+        expired invite has no working link to send, so mailing one would only
+        hand the recipient a dead end.
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: A unique integer value identifying this Account Invite.
+        required: true
+      tags:
+      - staff
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AccountInviteRequest'
+        required: true
       security:
       - cookieAuth: []
       responses:

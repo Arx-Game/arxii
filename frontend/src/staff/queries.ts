@@ -48,6 +48,7 @@ import {
   updateGMApplication,
   getAccountInviteList,
   issueAccountInvite,
+  resendAccountInvite,
   revokeAccountInvite,
 } from './api';
 
@@ -386,6 +387,16 @@ export function useRevokeAccountInvite() {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: (id: number) => revokeAccountInvite(id),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: staffKeys.all });
+    },
+  });
+}
+
+export function useResendAccountInvite() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (id: number) => resendAccountInvite(id),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: staffKeys.all });
     },

@@ -19291,6 +19291,29 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
+  '/api/staff/invites/{id}/resend/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /**
+     * @description Mail the redemption link again, for an invitee who lost the first one.
+     *
+     *     Refuses anything not currently redeemable: a redeemed, revoked or
+     *     expired invite has no working link to send, so mailing one would only
+     *     hand the recipient a dead end.
+     */
+    post: operations['staff_invites_resend_create'];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   '/api/staff/invites/{id}/revoke/': {
     parameters: {
       query?: never;
@@ -45747,10 +45770,15 @@ export interface operations {
   checks_consequence_outcomes_list: {
     parameters: {
       query?: {
+        character?: number;
+        created_after?: string;
+        created_before?: string;
+        encounter?: number;
         /** @description A page number within the paginated result set. */
         page?: number;
         /** @description Number of results to return per page. */
         page_size?: number;
+        pool?: number;
       };
       header?: never;
       path?: never;
@@ -45773,7 +45801,8 @@ export interface operations {
       query?: never;
       header?: never;
       path: {
-        id: string;
+        /** @description A unique integer value identifying this consequence outcome. */
+        id: number;
       };
       cookie?: never;
     };
@@ -67881,6 +67910,32 @@ export interface operations {
       cookie?: never;
     };
     requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['AccountInvite'];
+        };
+      };
+    };
+  };
+  staff_invites_resend_create: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        /** @description A unique integer value identifying this Account Invite. */
+        id: number;
+      };
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['AccountInviteRequest'];
+      };
+    };
     responses: {
       200: {
         headers: {

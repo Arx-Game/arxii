@@ -46,7 +46,13 @@ columns — never stored redundantly. `is_redeemable` is `True` only when none o
 - `issue_invite(email, invited_by, note="") -> AccountInvite` — active-invite dedup:
   an email with an existing redeemable invite gets that same row back, not a
   duplicate; an email with only dead (redeemed/revoked/expired) invites gets a
-  fresh row.
+  fresh row. **Emails the redemption link on both branches**, because "invite this
+  person" means the same thing to staff either way, and re-issuing is the natural
+  way to say "send it again".
+- `send_invite_email(invite) -> bool` — mails the redemption link to the address the
+  invite is bound to. Returns False and logs instead of raising: the row is already
+  committed and still valid, and the staff page keeps Copy Link as the manual
+  fallback for a bounced send. Only call it for a redeemable invite.
 - `revoke_invite(invite, by) -> AccountInvite` — stamps `revoked_at`.
 - `signup_allowed(email, token) -> bool` — the pure predicate the adapter calls;
   never distinguishes *why* a token fails (leak-analysis: no oracle for probing
@@ -104,6 +110,7 @@ redemption in the same request that created the account.
 | `/api/staff/invites/` | GET, POST | Staff (`IsAuthenticated` + `IsAdminUser`) | List (filterable by `email`, `status`) / issue |
 | `/api/staff/invites/{id}/` | GET | Staff | Retrieve one invite |
 | `/api/staff/invites/{id}/revoke/` | POST | Staff | Revoke an un-redeemed invite |
+| `/api/staff/invites/{id}/resend/` | POST | Staff | Email the redemption link again. 400 if the invite is not redeemable (a redeemed, revoked or expired invite has no working link to send); 502 if the send itself fails, so staff know to fall back to Copy Link |
 | `/api/auth/browser/v1/auth/signup` | POST | Public (gated) | allauth headless signup — the frontend posts `{username, email, password, invite_token?}` here; `invite_token` is omitted entirely when the signup form's Invite Code field is empty |
 
 ---
@@ -118,8 +125,31 @@ redemption in the same request that created the account.
   signup).
 - `frontend/src/staff/pages/StaffInvitesPage.tsx` (routed at `/staff/invites`,
   linked from the Staff Hub) — issue form (email + optional note), status-filter
-  tabs, per-invite copy-link/revoke actions. Mirrors `StaffApplicationsPage`'s
-  list/filter shape.
+  tabs, per-invite resend-email/copy-link/revoke actions. Mirrors
+  `StaffApplicationsPage`'s list/filter shape. Copy Link is kept alongside Resend
+  Email deliberately: it is the fallback when a send bounces or the address is
+  wrong, and it does not depend on outbound mail working.
+
+---
+
+## Email delivery
+
+`world.registration.email_service.RegistrationEmailService` subclasses
+`EmailServiceBase` from `world.roster.email_service` rather than adding a parallel
+sending helper — that base exists so sibling domain services can share
+`_send_email` without inheriting roster's domain-specific signatures (#2162). The
+template is `world/templates/registration/email/account_invite.html`, matching the
+roster email templates' shape.
+
+The link is built server-side from `settings.SITE_URL`
+(`{SITE_URL}/register?invite={token}`), not from a request origin. The staff page's
+own `inviteLink()` helper builds the same URL from `window.location.origin`, which
+is correct in the browser but unavailable when sending mail.
+
+Delivery rides the existing Resend SMTP backend: `settings.py` switches
+`EMAIL_BACKEND` to `smtp.resend.com` whenever `RESEND_API_KEY` is present and
+`DEBUG` is off, which is the same path allauth's verification and password-reset
+mail already uses. No separate mail configuration exists for invites.
 
 ---
 
