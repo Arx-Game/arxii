@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from datetime import timedelta
 import logging
+from pathlib import Path
 
 from django.db import models
 
@@ -1091,6 +1092,7 @@ def _register_late_tasks(roll_and_echo_weather: object) -> None:
         )
     )
     _register_area_quality_decay_task()
+    _register_memory_snapshot_task()
 
 
 def _register_room_ward_upkeep_task() -> None:
@@ -1141,6 +1143,79 @@ def _register_agriculture_tasks() -> None:
                 "Weekly inactivity-detection sweep (#671). Flips activity_state"
                 " ACTIVE↔INACTIVE based on decay_tier and expires HIATUS when"
                 " activity_state_until has passed."
+            ),
+        )
+    )
+
+
+def _process_rss_mb() -> int | None:
+    """Resident set size of this process in MB, or None where unavailable.
+
+    Reads ``/proc/self/status`` directly rather than shelling out to ``ps``
+    (Evennia's own ``conditional_flush`` uses ``os.popen("ps ...")``, which
+    spawns a process on every check) or using ``resource.getrusage``, whose
+    ``ru_maxrss`` is the PEAK — useless for watching a value climb. Returns
+    None off Linux so a Windows dev box logs the cache figures anyway instead
+    of raising.
+    """
+    try:
+        with Path("/proc/self/status").open(encoding="utf-8") as handle:
+            for line in handle:
+                if line.startswith("VmRSS:"):
+                    return int(line.split()[1]) // 1024
+    except (OSError, ValueError, IndexError):
+        return None
+    return None
+
+
+def memory_snapshot_task() -> None:
+    """Log idmapper cache size and process RSS so growth is visible (#3200).
+
+    The failure this exists to expose is self-erasing: the cache climbs, the
+    game drags, the OOM killer takes the Server, the watchdog restarts it, and
+    the restart clears the cache. Afterwards nothing anywhere says memory was
+    the cause. A periodic line in the log survives the restart and turns that
+    into a readable trend.
+
+    The per-class breakdown is the point of logging cache contents rather than
+    RSS alone: RSS says memory grew, the top classes say WHICH model is
+    accumulating, which is the first question anyone asks during an incident.
+    """
+    from evennia.utils.idmapper.models import cache_size
+
+    total, per_class = cache_size()
+    rss_mb = _process_rss_mb()
+    top = ", ".join(
+        f"{name}={count}"
+        for name, count in sorted(per_class.items(), key=lambda item: item[1], reverse=True)[:5]
+        if count
+    )
+    logger.info(
+        "Memory snapshot: rss=%s idmapper_objects=%d top=[%s]",
+        f"{rss_mb}MB" if rss_mb is not None else "unavailable",
+        total,
+        top or "empty",
+    )
+
+
+def _register_memory_snapshot_task() -> None:
+    """Register the periodic memory snapshot (#3200).
+
+    Ten minutes: frequent enough that a leak's slope is visible within an
+    evening, infrequent enough that the log stays readable. CLEANUP phase
+    because it observes and never mutates, so it should read state after the
+    tasks that change it.
+    """
+    register_task(
+        CronDefinition(
+            task_key="ops.memory_snapshot",
+            callable=memory_snapshot_task,
+            interval=timedelta(minutes=10),
+            phase=CronPhase.CLEANUP,
+            description=(
+                "Log process RSS and idmapper cache size (total plus the five "
+                "largest classes) so memory growth is visible before the OOM "
+                "killer and the watchdog restart erase the evidence. #3200."
             ),
         )
     )

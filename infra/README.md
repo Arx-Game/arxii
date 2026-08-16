@@ -328,6 +328,26 @@ Installed once by the converge, then running unattended on the box:
   the Portal alone dies, systemd sees the unit as "active" and does nothing while players
   can no longer connect. The watchdog checks both pidfiles, restarts the unit, and fires an
   off-box alert when either is dead but the unit claims active.
+- **Memory alerting** (#3200, in the heartbeat). The game runs inside `arxii.slice`, capped
+  at `base_game_memory_max` (1500 M), so a leak gets the SLICE OOM-killed instead of taking
+  the box and Postgres down. That contains the damage but makes it **invisible**: the kernel
+  kills inside the slice, the watchdog above restarts the service, and the restart clears the
+  idmapper cache, so the box looks healthy the whole time. The only visible symptom would be
+  periodic unexplained restarts. Two signals close that gap, both read from the cgroup rather
+  than from process RSS, because the slice is what carries the cap:
+  - `memory.events`' cumulative `oom_kill` counter — definitive, and it lives on the slice,
+    which a service restart does not recreate, so it survives the restart that erases
+    everything else. Non-zero means it already happened.
+  - `memory.stat`'s `anon` against `memory.max`, warning at `offbox_slice_anon_warn_percent`
+    (60%). Deliberately **not** `memory.current`: that includes reclaimable page cache
+    (measured on prod 2026-08-16: 447 MB current, of which 152 MB was file cache against only
+    286 MB anon), so thresholding it would alert on a healthy kernel doing its job.
+
+  Related: `IDMAPPER_CACHE_MAXSIZE` is set explicitly in `settings.py` (400 MB) rather than
+  inherited silently from Evennia. Raise it and `offbox_slice_anon_warn_percent` must move
+  with it — the alert has to stay above Evennia's own flush point or routine cache flushes
+  page us. Arx I ran on the 8 GB plan and `SharedMemoryModel` consumed all of it regularly;
+  this box has 4 GB, so the ceiling is a deliberate number, not a default.
 - **Backup-failure alerting.** `arxii-backup.service` and `arxii-offsite.service` both carry
   `OnFailure=` units that fire an immediate off-box alert on failure; the daily heartbeat
   independently re-flags any backup/offsite unit still in a failed state, in case the
