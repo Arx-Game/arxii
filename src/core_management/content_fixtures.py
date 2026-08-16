@@ -820,13 +820,21 @@ def build_fixture_json(content_root: Path, result: BuildResult) -> None:
     reader for that subtree. Without this exclusion, any content repo with
     authored grid content would fail every ``build_all`` call (including
     ``--check``) with "expected a JSON array of fixture objects."
+
+    ``RENAMES.json`` is excluded for exactly the same reason (#3162 added it,
+    this exclusion was missed). It lives at ``fixtures/RENAMES.json`` — inside
+    the scanned tree — and is a mapping of ``{"app.model": {"old": "new"}}``,
+    not an array, so a corpus that has one failed every load with that same
+    error. ``_apply_renames`` is its only reader. The name is reserved corpus-
+    wide rather than only at the top level: a nested one would be ignored by
+    the renames reader anyway, so failing the whole load over it helps nobody.
     """
     fixtures_dir = content_root / "fixtures"
     if not fixtures_dir.is_dir():
         return
     grid_dir = fixtures_dir / "grid"
     for path in sorted(fixtures_dir.rglob("*.json")):
-        if path.is_relative_to(grid_dir):
+        if path.is_relative_to(grid_dir) or path.name == RENAMES_FILENAME:
             continue
         try:
             raw = json.loads(path.read_text(encoding="utf-8"))
