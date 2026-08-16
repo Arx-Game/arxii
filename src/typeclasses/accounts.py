@@ -25,6 +25,7 @@ several more options for customizing the Guest account system.
 from django.conf import settings
 from django.utils.functional import cached_property
 from evennia.accounts.accounts import DefaultAccount, DefaultGuest
+from evennia.utils.utils import make_iter
 
 from commands.utils import serialize_cmdset
 from core.descriptors import ReverseOneToOneOrNone
@@ -320,15 +321,24 @@ class Account(DefaultAccount):
         return True, f"Now controlling {character.name}."
 
     def unpuppet_object(self, session) -> None:
-        """Unpuppet a character from a session and broadcast the change.
+        """Unpuppet a character from one session, or from a list of sessions.
 
         Triggered both by explicit @ic swaps (which call this internally before
         re-puppeting) and by session disconnects (browser tab close, telnet quit).
         Broadcasting on every unpuppet keeps other tabs' portrait-grid state
         consistent without requiring a refresh.
+
+        `session` takes a Session OR a list of them, matching the base method's
+        documented contract. Honouring the list form is not optional: Evennia's
+        own `unpuppet_all` calls `self.unpuppet_object(self.sessions.all())`,
+        and the Server calls `unpuppet_all` on every cached account during
+        reload and shutdown. An override that assumed a single session raised
+        AttributeError there, which killed the shutdown Deferred and left
+        `evennia reload` hanging on AMP until systemd timed it out (#3195).
         """
         super().unpuppet_object(session)
-        self._broadcast_puppet_changed(session, character=None)
+        for sess in make_iter(session):
+            self._broadcast_puppet_changed(sess, character=None)
 
     def at_account_creation(self):
         """Called when account is first created."""
