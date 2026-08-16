@@ -130,22 +130,33 @@ cloudinary.config(
 )
 
 # Email configuration
-if env("RESEND_API_KEY", default="") and not DEBUG:
-    # Use Resend for email delivery in production only.
-    # In DEBUG mode, always use the console backend so registration / email
-    # verification flows work without outbound SMTP (e.g. in the devcontainer,
-    # which blocks smtp.resend.com:587). The verification key prints to the
-    # server log, where it can be extracted for manual or automated testing.
-    EMAIL_BACKEND = "django.core.mail.backends.smtp.EmailBackend"
-    EMAIL_HOST = "smtp.resend.com"
-    EMAIL_PORT = 587
-    EMAIL_USE_TLS = True
-    EMAIL_HOST_USER = "resend"
-    EMAIL_HOST_PASSWORD = env("RESEND_API_KEY")
+#
+# RESEND_API_KEY is always read into a real setting: ResendAPIEmailBackend
+# reads it from `settings.RESEND_API_KEY` at send time, not from `env()`
+# directly (the backend has no import-time access to this file's `env`
+# object).
+RESEND_API_KEY = env("RESEND_API_KEY", default="")
+
+if RESEND_API_KEY and not DEBUG:
+    # Use Resend's HTTPS API for email delivery in production only.
+    #
+    # This used to be Django's SMTP backend against smtp.resend.com:587, but
+    # the production host's upstream provider blocks outbound SMTP (587 and
+    # 465, both timing out on smtp.resend.com AND smtp.gmail.com -- a
+    # provider-level policy, not something in our control). That timeout
+    # surfaced as an HTTP 500 on the signup endpoint, because allauth sends a
+    # verification email inline with account creation. Port 443 to
+    # api.resend.com is open, so ResendAPIEmailBackend sends over Resend's
+    # HTTPS API instead. See ADR-0216.
+    #
+    # In DEBUG mode, always use the console backend instead, so no real mail
+    # is sent in development -- the verification key prints to the server
+    # log, where it can be extracted for manual or automated testing.
+    EMAIL_BACKEND = "world.roster.email_backend.ResendAPIEmailBackend"
 else:
     # Use console backend for testing when no email service configured
     EMAIL_BACKEND = "django.core.mail.backends.console.EmailBackend"
-DEFAULT_FROM_EMAIL = env("DEFAULT_FROM_EMAIL", default="noreply@arxmush.org")
+DEFAULT_FROM_EMAIL = env("DEFAULT_FROM_EMAIL", default="noreply@arx2.com")
 SITE_URL = env("SITE_URL", default="https://arxmush.org")
 
 # Sample world content in the dev seeders (#2698). OFF by default.

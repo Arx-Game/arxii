@@ -146,10 +146,11 @@ The link is built server-side from `settings.SITE_URL`
 own `inviteLink()` helper builds the same URL from `window.location.origin`, which
 is correct in the browser but unavailable when sending mail.
 
-Delivery rides the existing Resend SMTP backend: `settings.py` switches
-`EMAIL_BACKEND` to `smtp.resend.com` whenever `RESEND_API_KEY` is present and
-`DEBUG` is off, which is the same path allauth's verification and password-reset
-mail already uses. No separate mail configuration exists for invites.
+Delivery rides the existing Resend HTTPS API backend: `settings.py` switches
+`EMAIL_BACKEND` to `world.roster.email_backend.ResendAPIEmailBackend` whenever
+`RESEND_API_KEY` is present and `DEBUG` is off, which is the same path allauth's
+verification and password-reset mail already uses. No separate mail configuration
+exists for invites. See ADR-0216 for why this is an HTTPS API call and not SMTP.
 
 ---
 

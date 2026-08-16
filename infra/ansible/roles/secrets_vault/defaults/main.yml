@@ -83,3 +83,14 @@ vault_allow_empty: []
 # ever set there) are never mistaken for real prod traffic in the Sentry
 # project.
 vault_sentry_environment: production
+
+# Resend HTTPS API fix (ADR-0216). DEFAULT_FROM_EMAIL is not a secret, so it
+# is rendered here directly (like FRONTEND_URL/SITE_URL/CONTENT_REPO_PATH
+# below in arxii.env.j2), not routed through secrets_map's lookup('env', ...)
+# pattern. settings.py reads it via its own `env("DEFAULT_FROM_EMAIL", ...)`.
+# The default is the Resend-verified sending domain; Resend rejects a send
+# whose From address is not on a domain it has verified, so this must never
+# point at a domain Resend does not know about. standup.sh overrides this to
+# "noreply@${TF_VAR_domain}" for a real prod converge; rehearse.sh overrides
+# it to "noreply@rehearsal.invalid".
+vault_default_from_email: "noreply@arx2.com"
