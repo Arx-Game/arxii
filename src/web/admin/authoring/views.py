@@ -4,10 +4,15 @@ content model (#3019).
 The dashboard page (`authoring_dashboard`) renders a skeleton of two
 HTMX-loaded panels - domain stats and the queue itself - both scanning the
 same `build_backlog()` result (Task 2, `web.admin.authoring.backlog`). The
-queue panel caps its display at 100 rows and applies `?domain=`, `?status=`,
-and `?q=` filters over the already-sorted rows in a single Python-side scan
-(no per-filter rescans, no extra DB queries - `build_backlog()` is the only
-query-issuing call in either fragment).
+queue panel caps its display at 100 rows and applies `?domain=`, `?model=`,
+`?status=`, and `?q=` filters over the already-sorted rows in a single
+Python-side scan (no per-filter rescans, no extra DB queries -
+`build_backlog()` is the only query-issuing call in either fragment). The
+`?model=` options come from `_model_options`, built off those same scanned
+rows and narrowed to the picked domain, so the dropdown can never offer a
+model with no rows behind it. Each visible row also carries a stock-admin
+change-form link (`_queue_row`): the workbench editor only exposes prose
+fields, so that link is how an author reaches the row's other fields.
 
 Task 4 gates the dashboard on a linked `ContentContributor` (see
 `web.admin.authoring.contributors`): an unlinked account gets the setup panel
@@ -65,11 +70,11 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-from django.contrib import admin, messages
+from django.contrib import messages
 from django.core.exceptions import ValidationError
 from django.http import HttpRequest, HttpResponse, QueryDict
 from django.shortcuts import redirect, render
-from django.urls import NoReverseMatch, reverse
+from django.urls import reverse
 from django.utils import timezone
 from django.views.decorators.http import require_POST
 
@@ -77,6 +82,7 @@ from core.app_domains import credited_content_models, resolve_model_by_name
 from core_management.prose_fields import prose_fields_for
 from web.admin.authoring.backlog import BacklogRow, build_backlog
 from web.admin.authoring.contributors import current_contributor, link_contributor
+from web.admin.authoring.links import admin_change_url
 from web.admin.authoring.reference import db_search, file_search, reference_roots
 from web.admin.authoring.relations import RelatedEntry, prose_mentions, related_entries
 from web.admin.constants import BacklogStatusFilter
@@ -112,31 +118,73 @@ def _setup_required(request: HttpRequest) -> bool:
     return current_contributor(request.user) is None
 
 
-def _row_matches(row: BacklogRow, domain: str, status: str, query: str) -> bool:
+def _row_matches(row: BacklogRow, domain: str, model: str, status: str, query: str) -> bool:
     """One row's pass/fail against every active filter, checked in one call.
 
     Called from a single list comprehension over the full row list in
     `_filtered_rows`, so the combined filter set is one scan regardless of
-    how many of `domain`/`status`/`query` are actually set.
+    how many of `domain`/`model`/`status`/`query` are actually set.
     """
     if domain and row.domain != domain:
         return False
-    if status == BacklogStatusFilter.PLACEHOLDER and not row.has_placeholder:
-        return False
-    if status == BacklogStatusFilter.UNWRITTEN and row.written:
-        return False
-    if status == BacklogStatusFilter.UNREVIEWED and row.reviewed:
+    if model and row.model_label != model:
         return False
     if query and query not in row.identity.lower():
         return False
+    return _status_matches(row, status)
+
+
+def _status_matches(row: BacklogRow, status: str) -> bool:
+    """One row against the status filter alone; an unset or unknown status matches every row.
+
+    Split out of `_row_matches` so neither function carries a branch per
+    filter *and* a branch per status value - the combined form tripped
+    ruff's return-count ceiling once the model filter joined it.
+    """
+    if status == BacklogStatusFilter.PLACEHOLDER:
+        return row.has_placeholder
+    if status == BacklogStatusFilter.UNWRITTEN:
+        return not row.written
+    if status == BacklogStatusFilter.UNREVIEWED:
+        return not row.reviewed
     return True
 
 
 def _filtered_rows(rows: list[BacklogRow], request: HttpRequest) -> list[BacklogRow]:
     domain = request.GET.get("domain") or ""
+    model = request.GET.get("model") or ""
     status = request.GET.get("status") or ""
     query = (request.GET.get("q") or "").strip().lower()
-    return [row for row in rows if _row_matches(row, domain, status, query)]
+    return [row for row in rows if _row_matches(row, domain, model, status, query)]
+
+
+def _model_options(rows: list[BacklogRow], domain: str) -> list[dict]:
+    """The `<option>` set for the model filter, narrowed to `domain` when one is picked.
+
+    Built off the same already-scanned `rows` the queue renders, so the
+    dropdown can never offer a model the backlog has no rows for. Each option
+    carries the full `domain.Model` label as its value (`model_label` is what
+    `_row_matches` compares) but shows the bare model name, since the domain
+    is already its own adjacent filter.
+    """
+    seen: dict[str, str] = {}
+    for row in rows:
+        if domain and row.domain != domain:
+            continue
+        seen.setdefault(row.model_label, row.model_name)
+    return [
+        {"label": label, "name": name} for label, name in sorted(seen.items(), key=lambda p: p[1])
+    ]
+
+
+def _queue_row(row: BacklogRow) -> dict:
+    """One queue row plus its stock-admin link, mirroring `_entry_row` below.
+
+    The link is built here rather than on `BacklogRow` itself for the same
+    reason the related-entries pane builds its own: `backlog.py` is the data
+    tier and knows nothing about the admin registry or URL routing.
+    """
+    return {"row": row, "admin_url": admin_change_url(row.model_label, row.pk)}
 
 
 @superuser_required
@@ -174,18 +222,21 @@ def authoring_queue_fragment(request: HttpRequest) -> HttpResponse:
     """
     rows, _ = build_backlog()
     domains = sorted({row.domain for row in rows})
+    selected_domain = request.GET.get("domain", "")
 
     filtered = _filtered_rows(rows, request)
     total = len(filtered)
     visible = filtered[:_QUEUE_DISPLAY_CAP]
 
     context = {
-        "rows": visible,
+        "rows": [_queue_row(row) for row in visible],
         "total": total,
         "display_cap": _QUEUE_DISPLAY_CAP,
         "capped": total > _QUEUE_DISPLAY_CAP,
         "domains": domains,
-        "selected_domain": request.GET.get("domain", ""),
+        "selected_domain": selected_domain,
+        "models": _model_options(rows, selected_domain),
+        "selected_model": request.GET.get("model", ""),
         "selected_status": request.GET.get("status", ""),
         "status_choices": BacklogStatusFilter.choices,
         "query": request.GET.get("q", ""),
@@ -441,37 +492,11 @@ def _workbench_url(entry: RelatedEntry) -> str | None:
     return f"{reverse('admin_authoring_editor')}?model={entry.model_label}&pk={entry.pk}"
 
 
-def _admin_change_url(entry: RelatedEntry) -> str | None:
-    """Admin change-form link for `entry`, or `None` when it has no `ModelAdmin`.
-
-    Three credited models `credited_content_models()`
-    covers (`NPCRole`, `BuildingKind`, `DecorationKind`) have never been
-    `@admin.register`ed - checking `admin.site._registry` first keeps an
-    unregistered model from ever reaching `reverse()`; the `NoReverseMatch`
-    catch below is defense in depth for any other reason `admin:<label>_
-    <model>_change` might not resolve (mirrors `content_row_export_views
-    ._change_url`'s app_label/model_name lookup, but never assumes the URL
-    exists the way that helper does).
-    """
-    try:
-        model = resolve_model_by_name(entry.model_label)
-    except LookupError:
-        return None
-    if model not in admin.site._registry:  # noqa: SLF001
-        return None
-    app_label = model._meta.app_label  # noqa: SLF001
-    model_name = model._meta.model_name  # noqa: SLF001
-    try:
-        return reverse(f"admin:{app_label}_{model_name}_change", args=[entry.pk])
-    except NoReverseMatch:
-        return None
-
-
 def _entry_row(entry: RelatedEntry) -> dict:
     return {
         "entry": entry,
         "workbench_url": _workbench_url(entry),
-        "admin_url": _admin_change_url(entry),
+        "admin_url": admin_change_url(entry.model_label, entry.pk),
     }
 
 

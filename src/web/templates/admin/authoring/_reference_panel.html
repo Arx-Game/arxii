@@ -80,8 +80,8 @@
     {% for hit in group.hits %}
     <tr>
       <td>
-        <a href="#" hx-get="{% url 'admin_authoring_editor' %}?model={{ group.model_label|urlencode }}&pk={{ hit.pk }}"
-           hx-target="#authoring-editor" hx-swap="innerHTML">
+        <a href="#authoring-editor" hx-get="{% url 'admin_authoring_editor' %}?model={{ group.model_label|urlencode }}&pk={{ hit.pk }}"
+           hx-target="#authoring-editor" hx-swap="innerHTML show:top">
           {{ hit.label }}
         </a>
       </td>

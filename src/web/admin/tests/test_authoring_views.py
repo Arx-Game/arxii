@@ -8,6 +8,7 @@ from evennia.accounts.models import AccountDB
 
 from evennia_extensions.models import PlayerData
 from world.contributors.factories import ContentContributorFactory
+from world.magic.factories import EffectTypeFactory
 from world.traits.models import Trait, TraitCategory, TraitType
 
 
@@ -157,6 +158,44 @@ class TestAuthoringQueueFragment(AuthoringViewsTestCase):
         self.assertIn(editor_url, body)
         self.assertIn("model=traits.Trait", body)
         self.assertIn(f"pk={trait.pk}", body)
+
+    def test_model_filter_excludes_other_models(self) -> None:
+        self._trait("Trait Row", "Ordinary finished prose here.")
+        EffectTypeFactory(name="Effect Row", description="Ordinary finished prose here.")
+
+        self.client.force_login(self.super)
+        resp = self.client.get(reverse("admin_authoring_queue"), {"model": "traits.Trait"})
+        body = resp.content.decode()
+        self.assertIn("Trait Row", body)
+        self.assertNotIn("Effect Row", body)
+
+    def test_model_options_narrow_to_the_selected_domain(self) -> None:
+        """Picking a domain must not leave other domains' models offered in the dropdown."""
+        self._trait("Trait Row", "Ordinary finished prose here.")
+        EffectTypeFactory(name="Effect Row", description="Ordinary finished prose here.")
+
+        self.client.force_login(self.super)
+        resp = self.client.get(reverse("admin_authoring_queue"), {"domain": "traits"})
+        body = resp.content.decode()
+        self.assertIn('value="traits.Trait"', body)
+        self.assertNotIn('value="magic.EffectType"', body)
+
+    def test_row_carries_admin_change_link(self) -> None:
+        """The workbench editor only exposes prose, so the queue links out to the full row."""
+        trait = self._trait("Linked Row", "Ordinary finished prose here.")
+
+        self.client.force_login(self.super)
+        resp = self.client.get(reverse("admin_authoring_queue"))
+        self.assertIn(reverse("admin:arxii_trait_change", args=[trait.pk]), resp.content.decode())
+
+    def test_editor_link_anchors_to_the_editor_panel(self) -> None:
+        """`href="#"` scrolled nowhere, so the swapped-in editor stayed below the fold."""
+        self._trait("Anchored Row", "Ordinary finished prose here.")
+
+        self.client.force_login(self.super)
+        body = self.client.get(reverse("admin_authoring_queue")).content.decode()
+        self.assertIn('href="#authoring-editor"', body)
+        self.assertIn('hx-swap="innerHTML show:top"', body)
 
     def test_display_capped_at_100_with_showing_note(self) -> None:
         for i in range(101):

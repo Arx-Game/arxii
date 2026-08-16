@@ -234,8 +234,15 @@ to `_authoring/` (`admin_authoring`).
   `CreditedContent` but sit outside the export registry (`NPCRole` left the
   exclusion 2026-08-07: missions name it by natural key, so it now rides
   the catalog). Rows sort
-  worst-first: placeholder-marked, then unwritten, then unreviewed, then
-  alphabetically by domain and identity. An FK-typed natural-key field spans
+  worst-first: placeholder-marked, then unwritten, then unreviewed; within a
+  tier, by domain, then **model**, then **pk**. The model term is what keeps a
+  tier readable - sorting straight to identity interleaved every model in a
+  domain into one alphabetical soup, so no two adjacent rows shared a shape -
+  and pk within a model is authoring order, which for an ordered set like
+  `OriginTemplateSlot` tracks its own `sort_order`. Alphabetical-by-identity is
+  arbitrary even inside one model and is the tiebreak nowhere. A model still
+  appears in up to three clumps, one per tier; the queue's model filter is what
+  collapses that to one model's rows worst-first. An FK-typed natural-key field spans
   one hop into the related row's own first natural-key field for display
   (`"The Sleeper's Rest, Sleeper"`, not a raw related pk) - still one query
   per model, since the span is a SQL join; a related field that is itself
@@ -248,11 +255,25 @@ to `_authoring/` (`admin_authoring`).
   account (see the setup gate below), else the two HTMX panels:
   `authoring_stats_fragment` (per-domain rows/unwritten/unreviewed/word-count
   rollup) and `authoring_queue_fragment` (the worst-first queue itself,
-  filterable by `?domain=`, `?status=` - `web.admin.constants
+  filterable by `?domain=`, `?model=` (a full `domain.Model` label),
+  `?status=` - `web.admin.constants
   .BacklogStatusFilter`: `placeholder`/`unwritten`/`unreviewed` - and `?q=`
   against the row's identity string, one Python-side scan over
   `build_backlog()`'s already-sorted rows, capped at 100 displayed rows with
-  a "Showing 100 of N" note when truncated).
+  a "Showing 100 of N" note when truncated). The `?model=` dropdown's options
+  come from `_model_options`, built off those same scanned rows and narrowed
+  to the picked domain, so it can never offer a model with no rows behind it.
+  Each row carries two links: the identity cell `hx-get`s the prose editor
+  into `#authoring-editor`, and an "Edit in admin" cell (`_queue_row` ->
+  `links.admin_change_url`) opens the stock change form - how an author
+  reaches the fields the prose-only editor deliberately does not expose. That
+  cell renders empty for a credited model with no registered `ModelAdmin`
+  rather than a dead link. The queue's editor link and the
+  related/mentions/reference panels' links all anchor
+  `href="#authoring-editor"` and swap with `show:top`: the editor panel sits
+  **below** the queue table in `dashboard.html`, so the old `href="#"`
+  scrolled nowhere and the swapped-in form landed off-screen, reading to an
+  operator as a link that does nothing.
 - **Guided first-run contributor setup gate** - `authoring/contributors.py`:
   `current_contributor(user)` reads `request.user -> PlayerData ->
   ContentContributor`, `None` at any missing link; `link_contributor(user,
@@ -402,7 +423,11 @@ The stock changelists carry the same credit story the workbench queue tells:
   `change_form.html`, beside the #3018 export button, for credited models
   with prose fields. All deep links share one URL builder:
   `web/admin/authoring/links.py:workbench_editor_url` (promoted from
-  `content_row_export_views`).
+  `content_row_export_views`). Its inverse lives beside it:
+  `links.py:admin_change_url` (`(model_label, pk) -> str | None`, promoted
+  from `authoring.views._admin_change_url`) is the outward link the
+  related-entries pane and the backlog queue both build - it returns `None`,
+  never a dead link, for a credited model with no registered `ModelAdmin`.
 - Tests: `tests/test_credit_admin_extras.py`,
   `tests/test_change_form_workbench_link.py`, `tests/test_authoring_links.py`,
   plus the E001 class in `tests/test_admin_checks.py`.

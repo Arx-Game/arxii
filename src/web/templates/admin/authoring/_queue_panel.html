@@ -60,6 +60,17 @@
     </select>
   </div>
   <div class="tuning-field">
+    <label for="queue-model">{% translate "Model" %}</label>
+    <select id="queue-model" name="model">
+      <option value="">{% translate "All models" %}</option>
+      {% for model in models %}
+      <option value="{{ model.label }}" {% if model.label == selected_model %}selected{% endif %}>
+        {{ model.name }}
+      </option>
+      {% endfor %}
+    </select>
+  </div>
+  <div class="tuning-field">
     <label for="queue-status">{% translate "Status" %}</label>
     <select id="queue-status" name="status">
       <option value="">{% translate "All statuses" %}</option>
@@ -91,31 +102,41 @@
       <th>{% translate "Domain" %}</th>
       <th>{% translate "Words" %}</th>
       <th>{% translate "Flags" %}</th>
+      <th>{% translate "All fields" %}</th>
     </tr>
   </thead>
   <tbody>
-    {% for row in rows %}
+    {% for entry in rows %}
     <tr>
       <td>
-        <a href="#"
-           hx-get="{{ editor_url }}?model={{ row.model_label|urlencode }}&amp;pk={{ row.pk }}"
-           hx-target="#authoring-editor" hx-swap="innerHTML">
-          {{ row.identity }}
+        <a href="#authoring-editor"
+           hx-get="{{ editor_url }}?model={{ entry.row.model_label|urlencode }}&amp;pk={{ entry.row.pk }}"
+           hx-target="#authoring-editor" hx-swap="innerHTML show:top">
+          {{ entry.row.identity }}
         </a>
       </td>
-      <td>{{ row.model_name }}</td>
-      <td>{{ row.domain }}</td>
-      <td>{{ row.words }}</td>
+      <td>{{ entry.row.model_name }}</td>
+      <td>{{ entry.row.domain }}</td>
+      <td>{{ entry.row.words }}</td>
       <td>
-        {% if row.has_placeholder %}
+        {% if entry.row.has_placeholder %}
         <span class="badge badge-placeholder">{% translate "Placeholder" %}</span>
         {% endif %}
-        {% if not row.written %}<span class="badge">{% translate "Unwritten" %}</span>{% endif %}
-        {% if not row.reviewed %}<span class="badge">{% translate "Unreviewed" %}</span>{% endif %}
+        {% if not entry.row.written %}
+        <span class="badge">{% translate "Unwritten" %}</span>
+        {% endif %}
+        {% if not entry.row.reviewed %}
+        <span class="badge">{% translate "Unreviewed" %}</span>
+        {% endif %}
+      </td>
+      <td>
+        {% if entry.admin_url %}
+        <a href="{{ entry.admin_url }}">{% translate "Edit in admin" %}</a>
+        {% endif %}
       </td>
     </tr>
     {% empty %}
-    <tr><td colspan="5">{% translate "No rows match these filters." %}</td></tr>
+    <tr><td colspan="6">{% translate "No rows match these filters." %}</td></tr>
     {% endfor %}
   </tbody>
 </table>

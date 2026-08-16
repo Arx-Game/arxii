@@ -7,9 +7,23 @@ ids, and every prose field value). An FK-typed natural-key field spans one hop
 into the related row's own first natural-key field (see ``_display_column``) so
 the identity string shows a name, not a raw related pk - still one query per
 model, since the span becomes a SQL join rather than a per-row lookup. Rows sort
-worst-first: placeholder-marked first, then unwritten, then unreviewed, then
-alphabetically by domain and identity - so the top of the queue is always the
-thing most worth a writer's attention next.
+worst-first: placeholder-marked first, then unwritten, then unreviewed - so the
+top of the queue is always the thing most worth a writer's attention next.
+
+Within a worst-first tier rows group by domain, then by model, then by pk. The
+model term is what keeps a tier readable: sorting a tier straight to identity
+interleaves every model in the domain into one alphabetical soup, so a writer
+scrolling `magic` used to meet an `EffectType`, then a `PortalAnchorKind`, then
+a `Technique`, with no two adjacent rows sharing a shape. Grouping by model
+keeps like with like, and pk within a model is authoring order - the sequence
+the rows were actually written in, which for an ordered set like
+``OriginTemplateSlot`` tracks its own ``sort_order``. Alphabetical-by-identity
+is arbitrary even inside one model, so it is not the tiebreak anywhere.
+
+A model still appears in up to three separate clumps down the page, one per
+tier; the queue panel's model filter (`web.admin.authoring.views`) is what
+collapses that to a single model's rows, worst-first, with nothing else
+interleaved.
 
 Scale ceiling: today's corpus is on the order of 2k rows and 70k prose words
 across credited models, and this whole module does one full Python-side scan
@@ -179,7 +193,8 @@ def build_backlog(
             r.written,
             r.reviewed,
             r.domain,
-            r.identity.lower(),
+            r.model_name,
+            r.pk,
         )
     )
     return rows, _aggregate(rows)
