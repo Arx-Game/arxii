@@ -280,7 +280,9 @@ ttc_web_fqdn: "${web_fqdn}"
 dh_allowed_hosts: ["${web_fqdn}", "${telnet_fqdn}"]
 dh_web_fqdn: "${web_fqdn}"
 dh_tls_telnet_port: ${tls_telnet_port}
-dh_default_from_email: "noreply@${TF_VAR_domain}"
+
+# secrets_vault (roles/secrets_vault/defaults/main.yml)
+vault_default_from_email: "noreply@${TF_VAR_domain}"
 
 # backups (roles/backups/defaults/main.yml)
 backups_bucket: "${backups_bucket}"

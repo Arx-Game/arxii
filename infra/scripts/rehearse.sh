@@ -283,9 +283,11 @@ ttc_web_fqdn: "${REHEARSAL_FQDN}"
 # django_hardening (roles/django_hardening/defaults/main.yml)
 dh_allowed_hosts: ["${REHEARSAL_FQDN}"]
 dh_web_fqdn: "${REHEARSAL_FQDN}"
-dh_default_from_email: "noreply@rehearsal.invalid"
 # Same single-sourcing as hostfw_tls_telnet_port above — see that comment.
 dh_tls_telnet_port: ${TLS_TELNET_PORT}
+
+# secrets_vault (roles/secrets_vault/defaults/main.yml)
+vault_default_from_email: "noreply@rehearsal.invalid"
 
 # backups (roles/backups/defaults/main.yml) — the REAL stage bucket
 # (terraform/ephemeral-stage's object_storage_ephemeral module) with
