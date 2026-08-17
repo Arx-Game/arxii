@@ -32,6 +32,7 @@ management)
 |-------|---------|------------|
 | `RegistrationConfig` | Singleton (pk=1) staff-tunable open/closed toggle — mirrors `world.scenes.models.SceneRoundDefaultsConfig` | `registration_open` (bool, default False), `updated_at`, `updated_by` |
 | `AccountInvite` | Staff-issued, per-email single-use invitation | `email`, `token` (unique, `secrets.token_urlsafe(32)`), `invited_by` (AccountDB, PROTECT), `created_at`, `expires_at` (default 30 days), `redeemed_at`/`redeemed_by`, `revoked_at`, `note` |
+| `AccountMailFailure` | Ledger of failed account-mail sends (#3193) — written by `ArxAccountAdapter.send_mail`'s catch, read-only in admin | `email`, `template_prefix`, `error`, `created_at` |
 
 `AccountInvite` is email-bound rather than a bare redeemable code: an issued invite
 is auditable ("who let this person in") and can't be shared beyond the invited
@@ -63,6 +64,15 @@ columns — never stored redundantly. `is_redeemable` is `True` only when none o
   `save_user` immediately after account creation. `None` on any mismatch (a
   concurrent redeem, since expired/revoked, etc.) — the signup itself has already
   happened by then, gated separately by `is_open_for_signup`.
+- `record_mail_failure(email, template_prefix, error) -> AccountMailFailure` —
+  persists a failed account-mail send (#3193); called from the adapter's
+  `send_mail` catch so a silent mail outage shows up in the admin.
+- `build_verification_link(email) -> str` — the staff fallback when mail cannot
+  reach a player (#3193): resolves the (unverified) allauth `EmailAddress`,
+  generates an `EmailConfirmationHMAC` key on demand (no DB row, time-bounded by
+  `ACCOUNT_EMAIL_CONFIRMATION_EXPIRE_DAYS`), and formats it into
+  `HEADLESS_FRONTEND_URLS["account_confirm_email"]`. Raises
+  `EmailAddress.DoesNotExist` / `AlreadyVerifiedError`.
 
 `get_registration_config()` (in `models.py`) mirrors
 `get_scene_round_defaults_config()` — `cached_singleton()` first, `get_or_create`
@@ -100,6 +110,14 @@ isolation) by `world/registration/tests/test_signup_journey.py`, which posts to
 `save_user` additionally calls `redeem_invite` when a token was posted, stamping
 redemption in the same request that created the account.
 
+**Mail is best-effort at this seam (#3193).** `ArxAccountAdapter.send_mail`
+wraps allauth's send in a broad catch: the account row and invite redemption
+commit *before* the verification send runs, so a mail-provider failure
+(SMTP timeout, Resend API error, broken template) must not turn a successful
+signup — or a login, via `send_verification_email_at_login` — into a 500. The
+failure is logged and recorded as an `AccountMailFailure` row; the next login
+retries the send, and staff can hand over a verification link directly (below).
+
 ---
 
 ## API
@@ -111,6 +129,7 @@ redemption in the same request that created the account.
 | `/api/staff/invites/{id}/` | GET | Staff | Retrieve one invite |
 | `/api/staff/invites/{id}/revoke/` | POST | Staff | Revoke an un-redeemed invite |
 | `/api/staff/invites/{id}/resend/` | POST | Staff | Email the redemption link again. 400 if the invite is not redeemable (a redeemed, revoked or expired invite has no working link to send); 502 if the send itself fails, so staff know to fall back to Copy Link |
+| `/api/staff/verification-link/` | POST | Staff | `{email}` → `{email, link}` — the email-verification URL for an unverified account (#3193). 404 unknown address, 400 already verified. Generation is audit-logged |
 | `/api/auth/browser/v1/auth/signup` | POST | Public (gated) | allauth headless signup — the frontend posts `{username, email, password, invite_token?}` here; `invite_token` is omitted entirely when the signup form's Invite Code field is empty |
 
 ---
@@ -128,7 +147,14 @@ redemption in the same request that created the account.
   tabs, per-invite resend-email/copy-link/revoke actions. Mirrors
   `StaffApplicationsPage`'s list/filter shape. Copy Link is kept alongside Resend
   Email deliberately: it is the fallback when a send bounces or the address is
-  wrong, and it does not depend on outbound mail working.
+  wrong, and it does not depend on outbound mail working. The page also carries
+  the Copy Verification Link form (#3193): staff enter an account's email and
+  get its verification URL on the clipboard — the post-signup sibling of the
+  invite Copy Link fallback.
+- The login/signup error paths in `frontend/src/evennia_replacements/api.ts`
+  parse error bodies with `res.json().catch(() => null)` and give 5xx responses
+  honest messages (#3193) — Django's HTML 500 page must never surface as a raw
+  `Unexpected token '<'` parser error.
 
 ---
 

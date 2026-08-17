@@ -7516,11 +7516,15 @@ access, no deploy required.
   `AccountInvite` (`email`, unique `token` via `secrets.token_urlsafe(32)`,
   `invited_by` PROTECT, `expires_at`, `redeemed_at`/`redeemed_by`, `revoked_at`,
   `note`; derived `status` property — `InviteStatus` PENDING/REDEEMED/REVOKED/
-  EXPIRED, never stored).
+  EXPIRED, never stored), `AccountMailFailure` (#3193 — ledger of failed
+  account-mail sends, written by the adapter's `send_mail` catch, read-only
+  admin).
 - **Services** (`world.registration.services`): `issue_invite` (active-invite
   dedup), `revoke_invite`, `signup_allowed` (the neutral bool predicate — never
   distinguishes *why* signup is refused), `redeem_invite` (stamps redemption from
-  the adapter's `save_user`).
+  the adapter's `save_user`), `record_mail_failure`, `build_verification_link`
+  (#3193 — on-demand allauth HMAC key for an unverified address; raises
+  `AlreadyVerifiedError` when there is nothing to verify).
 - **Adapter seam:** `evennia_extensions.adapters.ArxAccountAdapter
   .is_open_for_signup` overrides the previously-unused allauth hook, re-parsing
   the already-cached `request.body` JSON to read `email`/`invite_token` (the
@@ -7528,10 +7532,15 @@ access, no deploy required.
   exists). Proven at the real endpoint by journey tests, not just unit tests.
 - **Endpoints:** `/api/registration/status/` (public GET, `{"open": bool}`, no
   invite enumeration); `/api/staff/invites/` (staff `IsAdminUser` — issue/list/
-  retrieve + `revoke` action).
+  retrieve + `revoke` action); `/api/staff/verification-link/` (#3193 — staff
+  POST `{email}` → verification URL for an unverified account, audit-logged).
+- **Mail resilience (#3193):** `ArxAccountAdapter.send_mail` catches every
+  provider failure — a mail outage must not 500 signup or login; failures land
+  in `AccountMailFailure` and the client tolerates non-JSON error bodies.
 - **Web:** `RegisterPage` (invite field auto-filled from `?invite=`, invite-only
   notice when closed with no token); `StaffInvitesPage` (`/staff/invites`, linked
-  from the Staff Hub) — issue/list/filter/revoke/copy-link.
+  from the Staff Hub) — issue/list/filter/revoke/copy-link + Copy Verification
+  Link (#3193).
 - **Settings:** `NEW_ACCOUNT_REGISTRATION_ENABLED = False` closes telnet `create`;
   connect-screen copy points telnet users at the website.
 - **Adjacent (already built, verified via anti-reinvention pass):** the staff
