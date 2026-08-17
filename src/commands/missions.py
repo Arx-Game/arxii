@@ -27,6 +27,7 @@ from commands.exceptions import CommandError
 
 if TYPE_CHECKING:
     from world.missions.models import MissionInstance
+    from world.missions.services.journal import JournalEntry
     from world.missions.types import BeatOption
 
 _SUBVERBS = frozenset(
@@ -121,24 +122,27 @@ class CmdMission(ArxCommand):
         else:
             lines = ["|wYour missions:|n"]
             for entry in entries:
-                node = f" — at {entry.current_node_key}" if entry.current_node_key else ""
-                lines.append(
-                    f"  [#{entry.instance_id}] {entry.template_name} ({entry.status}){node}"
-                )
-                if entry.target_project_name is not None:
-                    progress = entry.target_project_progress or 0
-                    threshold = entry.target_project_threshold or "?"
-                    granted = entry.target_project_granted
-                    lines.append(
-                        f"    Advances: {entry.target_project_name} "
-                        f"({progress}/{threshold}, +{granted} this run)"
-                    )
-                if entry.source_beat_story_title is not None:
-                    hint = f" — {entry.source_beat_hint}" if entry.source_beat_hint else ""
-                    lines.append(f"    Story: {entry.source_beat_story_title}{hint}")
+                lines.extend(self._journal_entry_lines(entry))
         self._append_pending_invites(lines)
         self._append_pending_summonses(lines)
         self.msg("\n".join(lines))
+
+    def _journal_entry_lines(self, entry: JournalEntry) -> list[str]:
+        """Render one journal entry: header line + optional project/story lines."""
+        node = f" — at {entry.current_node_key}" if entry.current_node_key else ""
+        lines = [f"  [#{entry.instance_id}] {entry.template_name} ({entry.status}){node}"]
+        if entry.target_project_name is not None:
+            progress = entry.target_project_progress or 0
+            threshold = entry.target_project_threshold or "?"
+            granted = entry.target_project_granted
+            lines.append(
+                f"    Advances: {entry.target_project_name} "
+                f"({progress}/{threshold}, +{granted} this run)"
+            )
+        if entry.source_beat_story_title is not None:
+            hint = f" — {entry.source_beat_hint}" if entry.source_beat_hint else ""
+            lines.append(f"    Story: {entry.source_beat_story_title}{hint}")
+        return lines
 
     def _append_pending_invites(self, lines: list[str]) -> None:
         """Append pending mission invites addressed to any of the caller's personas (#887).

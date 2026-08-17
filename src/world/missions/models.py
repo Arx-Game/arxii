@@ -1101,8 +1101,17 @@ class MissionOptionRouteReward(NaturalKeyMixin, CreditedContent, SharedMemoryMod
             ),
         ]
 
-    def clean(self) -> None:  # noqa: C901, PLR0912 — one branch per sink, grows with the enum
+    def clean(self) -> None:
         super().clean()
+        self._validate_reward_parent()
+        self._validate_resonance_sink_field()
+        self._validate_item_sink_field()
+        self._validate_followon_sink_fields()
+        self._validate_project_sink_reward()
+        self._validate_legend_sink_reward()
+
+    def _validate_reward_parent(self) -> None:
+        """Exactly one of route / candidate must be set."""
         set_count = int(self.route_id is not None) + int(self.candidate_id is not None)
         if set_count == 0:
             # Non-field error — neither side is the "wrong" one.
@@ -1111,18 +1120,27 @@ class MissionOptionRouteReward(NaturalKeyMixin, CreditedContent, SharedMemoryMod
             raise ValidationError(
                 {"route": _ERR_REWARD_BOTH_PARENTS, "candidate": _ERR_REWARD_BOTH_PARENTS}
             )
+
+    def _validate_resonance_sink_field(self) -> None:
+        """resonance is required (and only valid) when sink=RESONANCE."""
         if self.sink == DeedRewardSink.RESONANCE and self.resonance_id is None:
             msg = "sink=RESONANCE requires resonance to be set."
             raise ValidationError(msg)
         if self.sink != DeedRewardSink.RESONANCE and self.resonance_id is not None:
             msg = "resonance may only be set when sink=RESONANCE."
             raise ValidationError(msg)
+
+    def _validate_item_sink_field(self) -> None:
+        """item_template is required (and only valid) when sink=ITEM."""
         if self.sink == DeedRewardSink.ITEM and self.item_template_id is None:
             msg = "sink=ITEM requires item_template to be set."
             raise ValidationError(msg)
         if self.sink != DeedRewardSink.ITEM and self.item_template_id is not None:
             msg = "item_template may only be set when sink=ITEM."
             raise ValidationError(msg)
+
+    def _validate_followon_sink_fields(self) -> None:
+        """followon_* fields are required/valid only when sink=FOLLOW_ON_SUMMONS."""
         if self.sink == DeedRewardSink.FOLLOW_ON_SUMMONS and self.followon_offer_id is None:
             msg = "sink=FOLLOW_ON_SUMMONS requires followon_offer to be set."
             raise ValidationError(msg)
@@ -1138,31 +1156,38 @@ class MissionOptionRouteReward(NaturalKeyMixin, CreditedContent, SharedMemoryMod
         if self.sink != DeedRewardSink.FOLLOW_ON_SUMMONS and self.followon_expiry_hours is not None:
             msg = "followon_expiry_hours may only be set when sink=FOLLOW_ON_SUMMONS."
             raise ValidationError(msg)
-        # #2045: PROJECT sink — route-parented only, amount ≥ 1.
-        if self.sink == DeedRewardSink.PROJECT:
-            if self.candidate_id is not None:
-                msg = (
-                    "PROJECT reward lines must be route-parented (candidate-parented "
-                    "lines can be dropped by _terminal_deed's single-deed pick — "
-                    "a pre-existing gap this feature declines to inherit)."
-                )
-                raise ValidationError({"candidate": msg})
-            if self.amount is None or self.amount < 1:
-                msg = "PROJECT reward lines require amount ≥ 1."
-                raise ValidationError({"amount": msg})
-        # #2051: legend guard — a LEGEND_POINTS reward requires the parent
-        # template's risk_tier to be at or above LEGEND_RISK_FLOOR_TIER (HIGH).
-        # Legend is earned in the company of others; a low-risk mission cannot
-        # pay legend.
-        if self.sink == DeedRewardSink.LEGEND_POINTS:
-            template = self._parent_template()
-            if template is not None and template.risk_tier < LEGEND_RISK_FLOOR_TIER:
-                msg = (
-                    f"LEGEND_POINTS reward requires risk_tier ≥ "
-                    f"{LEGEND_RISK_FLOOR_TIER} (HIGH), got {template.risk_tier}. "
-                    "Legend is earned in the company of others (#2051)."
-                )
-                raise ValidationError({"sink": msg})
+
+    def _validate_project_sink_reward(self) -> None:
+        """#2045: PROJECT sink — route-parented only, amount ≥ 1."""
+        if self.sink != DeedRewardSink.PROJECT:
+            return
+        if self.candidate_id is not None:
+            msg = (
+                "PROJECT reward lines must be route-parented (candidate-parented "
+                "lines can be dropped by _terminal_deed's single-deed pick — "
+                "a pre-existing gap this feature declines to inherit)."
+            )
+            raise ValidationError({"candidate": msg})
+        if self.amount is None or self.amount < 1:
+            msg = "PROJECT reward lines require amount ≥ 1."
+            raise ValidationError({"amount": msg})
+
+    def _validate_legend_sink_reward(self) -> None:
+        """#2051: legend guard — LEGEND_POINTS requires risk_tier ≥ LEGEND_RISK_FLOOR_TIER.
+
+        Legend is earned in the company of others; a low-risk mission cannot
+        pay legend.
+        """
+        if self.sink != DeedRewardSink.LEGEND_POINTS:
+            return
+        template = self._parent_template()
+        if template is not None and template.risk_tier < LEGEND_RISK_FLOOR_TIER:
+            msg = (
+                f"LEGEND_POINTS reward requires risk_tier ≥ "
+                f"{LEGEND_RISK_FLOOR_TIER} (HIGH), got {template.risk_tier}. "
+                "Legend is earned in the company of others (#2051)."
+            )
+            raise ValidationError({"sink": msg})
 
     def save(self, *args: object, **kwargs: object) -> None:
         if self.pk is None and self.sequence == 0:

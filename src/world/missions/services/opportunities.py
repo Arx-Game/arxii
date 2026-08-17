@@ -33,6 +33,7 @@ if TYPE_CHECKING:
     from evennia.objects.models import ObjectDB
 
     from typeclasses.characters import Character
+    from world.scenes.models import Persona
 
 
 @dataclass(frozen=True, slots=True)
@@ -139,32 +140,41 @@ def _nearby_givers(character: ObjectDB, room: ObjectDB | None) -> list[Opportuni
 
     rows: list[OpportunityRow] = []
     for giver in givers:
-        if giver.giver_kind == GiverKind.BOARD:
-            rows.extend(
-                OpportunityRow(
-                    name=posting.name,
-                    summary=posting.summary,
-                    pointer=f"At: {giver.target.db_key if giver.target else '?'}",
-                    source_flavor=f"Notice Board — {giver.name}",
-                )
-                for posting in postings_for_giver(giver, character)
-            )
-        else:
-            # Trigger giver — flavor only, never the pool
-            has_eligible = any(
-                t.is_active and template_visible_to(t, character, persona=persona)
-                for t in giver.templates.all()
-            )
-            if has_eligible:
-                rows.append(
-                    OpportunityRow(
-                        name="Something stirs here",
-                        summary="",
-                        pointer=f"At: {giver.target.db_key if giver.target else '?'}",
-                        source_flavor=giver.name,
-                    )
-                )
+        rows.extend(_nearby_giver_rows(giver, character, persona))
     return rows
+
+
+def _nearby_giver_rows(
+    giver: MissionGiver,
+    character: ObjectDB,
+    persona: Persona | None,
+) -> list[OpportunityRow]:
+    """Row(s) for one nearby giver — postings for BOARD, flavor line for trigger."""
+    if giver.giver_kind == GiverKind.BOARD:
+        return [
+            OpportunityRow(
+                name=posting.name,
+                summary=posting.summary,
+                pointer=f"At: {giver.target.db_key if giver.target else '?'}",
+                source_flavor=f"Notice Board — {giver.name}",
+            )
+            for posting in postings_for_giver(giver, character)
+        ]
+    # Trigger giver — flavor only, never the pool
+    has_eligible = any(
+        t.is_active and template_visible_to(t, character, persona=persona)
+        for t in giver.templates.all()
+    )
+    if not has_eligible:
+        return []
+    return [
+        OpportunityRow(
+            name="Something stirs here",
+            summary="",
+            pointer=f"At: {giver.target.db_key if giver.target else '?'}",
+            source_flavor=giver.name,
+        )
+    ]
 
 
 def _org_offers(character: ObjectDB) -> list[OpportunityRow]:
