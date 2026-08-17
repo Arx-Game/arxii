@@ -83,13 +83,21 @@ file parses as YAML before handing it to Ansible — already a transitive depend
       IPs from `module.compute`) — that pending state is expected, not a fault.
 - [ ] One-time Terraform remote-state bootstrap run (`terraform/bootstrap/`, see its README).
 
-## After a successful stand-up — credential hygiene (do this every time)
+## Credential hygiene
 
-- [ ] **Revoke the Linode and Cloudflare API tokens at the provider** (not just delete
-      the GitHub secret — revoke them so any leaked copy is already dead). Generate fresh
-      short-expiry, scoped tokens next time you run the button. Stand-ups are rare and
-      high-stakes; this removes the "powerful standing token sitting in GitHub forever"
-      risk.
+- **Provisioning tokens are STANDING credentials** (`TF_LINODE_TOKEN`,
+  `TF_CLOUDFLARE_API_TOKEN`): the button is the daily deploy vehicle and its
+  tofu step consumes both tokens on every run, so mint-per-run is not viable.
+  (Ruled by Tehom 2026-08-17, superseding the original revoke-after-every-run
+  checklist written when stand-ups were assumed rare.) The per-run control is
+  the gated `prod` Environment itself — a human approves every run before any
+  job can read the secrets. The standing-risk controls are:
+  - **Scope tight:** Cloudflare token zone-scoped to the prod zone with
+    exactly the scopes listed under its secret entry above; Linode token
+    scoped as narrowly as Linode allows.
+  - **Expire and rotate on a calendar:** mint with ~1-year expiry; rotate
+    quarterly or on any suspicion of compromise (revoke at the provider, not
+    just replace the secret).
 - [ ] The **runtime app secrets stay** (`ARXII_PG_PASSWORD`, `ARXII_DJANGO_SECRET_KEY`,
       the Cloudinary trio, `ARXII_RESEND_API_KEY`, the R2 credential, the SSH admin
       private key, etc.).
@@ -107,7 +115,7 @@ gated `prod` GitHub Environment (required-reviewer approval before any run).
 They are exposed ONLY to the approved job, never echoed, never `--extra-vars`.
 
 **Pre-stored by the operator — provisioning (tofu step; operator/CI-only,
-NEVER reach the box; revoke at the provider after each successful run):**
+NEVER reach the box; standing credentials — see "Credential hygiene"):**
 - `TF_LINODE_TOKEN` — Linode API token
 - `TF_CLOUDFLARE_API_TOKEN` — Cloudflare API token. Since the zone-security
   module (#3205) it needs, beyond the DNS scopes: **Zone Settings: Edit** and
