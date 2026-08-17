@@ -25,10 +25,13 @@ class CmdPact(ArxCommand):
         pact dissolve <id>
         pact betroth a=<kinsperson> b=<kinsperson> senior=<org> junior=<org>
         pact breakvow <betrothal-id> house=<org>
+        pact divorce <union-id>
 
     Proposing/ratifying/dissolving requires leadership rank in the acting
     org; the services re-check everything. A betrothal previews the
-    alliance at a fraction; the WEDDING ceremony solemnizes it.
+    alliance at a fraction; the WEDDING ceremony solemnizes it. Either
+    spouse may divorce unilaterally — both take a prestige hit, the
+    initiator's steeper (#2358).
     """
 
     key = "pact"
@@ -54,10 +57,11 @@ class CmdPact(ArxCommand):
             "dissolve": self._dissolve,
             "betroth": self._betroth,
             "breakvow": self._breakvow,
+            "divorce": self._divorce,
         }
         handler = handlers.get(first)
         if handler is None:
-            msg = "Usage: pact [list|propose|ratify|dissolve|betroth|breakvow] ..."
+            msg = "Usage: pact [list|propose|ratify|dissolve|betroth|breakvow|divorce] ..."
             raise CommandError(msg)
         handler(rest)
 
@@ -220,3 +224,13 @@ class CmdPact(ArxCommand):
             raise CommandError(msg)
         self._service_call(break_betrothal, betrothal, breaking_house=house)
         self.msg("The promise is broken. The realm will hear of it.")
+
+    def _divorce(self, rest: list[str]) -> None:
+        from actions.definitions.divorce import InitiateDivorceAction  # noqa: PLC0415
+
+        if not rest or not rest[0].lstrip("#").isdigit():
+            msg = "Usage: pact divorce <union-id>"
+            raise CommandError(msg)
+        result = InitiateDivorceAction().run(actor=self.caller, union_id=int(rest[0].lstrip("#")))
+        if result.message:
+            self.msg(result.message)

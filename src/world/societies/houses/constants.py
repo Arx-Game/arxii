@@ -156,6 +156,7 @@ class PactDissolutionReason(models.TextChoices):
     DEATH = "death", "A spouse died"
     ANNULMENT = "annulment", "Annulled"
     BREACH = "breach", "Broken by breach"
+    DIVORCE = "divorce", "Divorced"
 
 
 class DomainCrisisSeverity(models.TextChoices):
@@ -307,6 +308,15 @@ BETROTHAL_STATURE_SHARE_PCT = 25
 # Breaking a betrothal is a scandal: flat permanent prestige penalty on the
 # breaking side's house (same channel as pact breach).
 BETROTHAL_BREAK_PRESTIGE_PENALTY = 5_000
+
+# Divorce (#2358 overnight ruling): either spouse may end a living union
+# unilaterally; BOTH take a personal deed-prestige hit (award_deed_prestige,
+# the same channel award_marriage_tier_prestige uses — a PERSONAL penalty,
+# distinct from apply_pact_shift's house-level alliance reprice, which already
+# fires on dissolution regardless of reason). The initiator's hit is steeper.
+# PLACEHOLDER magnitudes pending Apostate's tuning pass.
+DIVORCE_INITIATOR_PRESTIGE_PENALTY = 5_000
+DIVORCE_OTHER_SPOUSE_PRESTIGE_PENALTY = 3_000
 
 
 class OrgPactDissolutionReason(models.TextChoices):

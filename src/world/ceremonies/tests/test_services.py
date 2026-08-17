@@ -25,6 +25,7 @@ from world.ceremonies.services import (
     record_offering,
     respond_to_conversion_offer,
     respond_to_seance_offer,
+    respond_to_wedding_consent_offer,
 )
 from world.character_sheets.factories import CharacterSheetFactory
 from world.vitals.constants import CharacterLifeState
@@ -198,6 +199,311 @@ class OpenSeanceTests(TestCase):
                 honoree_sheets=[],
                 location_profile=self.location,
             )
+
+
+class OpenCoronationTests(TestCase):
+    """Coronation open-time preconditions (#2358): solemnize-only, title required."""
+
+    @classmethod
+    def setUpTestData(cls) -> None:
+        from evennia_extensions.factories import RoomProfileFactory
+
+        CeremonyTypeFactory(key=CeremonyTypeKey.CORONATION, name="Coronation")
+        cls.location = RoomProfileFactory()
+
+    def _officiant(self):
+        persona, sheet = _persona_with_sheet()
+        being = WorshippedBeingFactory()
+        WorshipDeclaration.objects.create(character_sheet=sheet, public_being=being)
+        return persona
+
+    def _title_and_holder(self, *, title_name: str = "Duchess of Crownward"):
+        from world.roster.factories import FamilyFactory, KinspersonFactory
+        from world.societies.factories import OrganizationFactory
+        from world.societies.houses.models import Title
+
+        family = FamilyFactory(name=title_name)
+        org = OrganizationFactory(name=f"House {title_name}", family=family)
+        realm = org.society.realm
+        honoree_sheet = CharacterSheetFactory()
+        holder_kin = KinspersonFactory(family=family, sheet=honoree_sheet)
+        title = Title.objects.create(
+            name=title_name, tier="duchy", realm=realm, house=org, holder=holder_kin
+        )
+        return title, honoree_sheet
+
+    def test_open_requires_title_kwarg(self) -> None:
+        persona = self._officiant()
+        _title, honoree_sheet = self._title_and_holder()
+        with self.assertRaises(CeremonyError):
+            open_ceremony(
+                officiant_persona=persona,
+                type_key=CeremonyTypeKey.CORONATION,
+                honoree_sheets=[honoree_sheet],
+                location_profile=self.location,
+            )
+
+    def test_open_rejects_non_holder_without_fiat(self) -> None:
+        persona = self._officiant()
+        title, _honoree_sheet = self._title_and_holder()
+        outsider_sheet = CharacterSheetFactory()
+        with self.assertRaises(CeremonyError):
+            open_ceremony(
+                officiant_persona=persona,
+                type_key=CeremonyTypeKey.CORONATION,
+                honoree_sheets=[outsider_sheet],
+                location_profile=self.location,
+                title=title,
+            )
+
+    def test_open_staff_fiat_bypasses_holder_check(self) -> None:
+        persona = self._officiant()
+        title, _honoree_sheet = self._title_and_holder()
+        outsider_sheet = CharacterSheetFactory()
+        ceremony = open_ceremony(
+            officiant_persona=persona,
+            type_key=CeremonyTypeKey.CORONATION,
+            honoree_sheets=[outsider_sheet],
+            location_profile=self.location,
+            title=title,
+            is_staff_fiat=True,
+        )
+        self.assertEqual(ceremony.title_id, title.pk)
+
+    def test_open_accepts_holder(self) -> None:
+        persona = self._officiant()
+        title, honoree_sheet = self._title_and_holder()
+        ceremony = open_ceremony(
+            officiant_persona=persona,
+            type_key=CeremonyTypeKey.CORONATION,
+            honoree_sheets=[honoree_sheet],
+            location_profile=self.location,
+            title=title,
+        )
+        self.assertEqual(ceremony.title_id, title.pk)
+
+    def test_open_requires_exactly_one_honoree(self) -> None:
+        persona = self._officiant()
+        title, honoree_sheet = self._title_and_holder()
+        other_sheet = CharacterSheetFactory()
+        with self.assertRaises(CeremonyError):
+            open_ceremony(
+                officiant_persona=persona,
+                type_key=CeremonyTypeKey.CORONATION,
+                honoree_sheets=[honoree_sheet, other_sheet],
+                location_profile=self.location,
+                title=title,
+            )
+
+
+class CoronationFinishTests(TestCase):
+    """Coronation finish (#2358): mints the honoree deed + the permanent record."""
+
+    @classmethod
+    def setUpTestData(cls) -> None:
+        from evennia_extensions.factories import RoomProfileFactory
+
+        CeremonyTypeFactory(key=CeremonyTypeKey.CORONATION, name="Coronation")
+        cls.location = RoomProfileFactory()
+
+    def _open_coronation(self, *, title_name: str = "Duke of Crownfast"):
+        from world.roster.factories import FamilyFactory, KinspersonFactory
+        from world.societies.factories import OrganizationFactory
+        from world.societies.houses.models import Title
+
+        persona, officiant_sheet = _persona_with_sheet()
+        being = WorshippedBeingFactory()
+        WorshipDeclaration.objects.create(character_sheet=officiant_sheet, public_being=being)
+
+        family = FamilyFactory(name=title_name)
+        org = OrganizationFactory(name=f"House {title_name}", family=family)
+        realm = org.society.realm
+        honoree_sheet = CharacterSheetFactory()
+        holder_kin = KinspersonFactory(family=family, sheet=honoree_sheet)
+        title = Title.objects.create(
+            name=title_name, tier="duchy", realm=realm, house=org, holder=holder_kin
+        )
+        ceremony = open_ceremony(
+            officiant_persona=persona,
+            type_key=CeremonyTypeKey.CORONATION,
+            honoree_sheets=[honoree_sheet],
+            location_profile=self.location,
+            title=title,
+        )
+        return ceremony, honoree_sheet, title
+
+    def test_finish_records_coronation_and_prestige(self) -> None:
+        from world.ceremonies.models import Coronation
+
+        ceremony, honoree_sheet, title = self._open_coronation()
+        finish_ceremony(ceremony=ceremony)
+        record = Coronation.objects.get(ceremony=ceremony)
+        self.assertEqual(record.honoree_sheet_id, honoree_sheet.pk)
+        self.assertEqual(record.title_id, title.pk)
+        honoree = ceremony.honorees.get()
+        self.assertGreater(honoree.prestige_awarded, 0)
+
+    def test_second_coronation_same_title_rejected_at_open(self) -> None:
+        ceremony, honoree_sheet, title = self._open_coronation()
+        finish_ceremony(ceremony=ceremony)
+
+        persona2, officiant_sheet2 = _persona_with_sheet()
+        being2 = WorshippedBeingFactory()
+        WorshipDeclaration.objects.create(character_sheet=officiant_sheet2, public_being=being2)
+        with self.assertRaises(CeremonyError):
+            open_ceremony(
+                officiant_persona=persona2,
+                type_key=CeremonyTypeKey.CORONATION,
+                honoree_sheets=[honoree_sheet],
+                location_profile=self.location,
+                title=title,
+            )
+
+    def test_second_coronation_different_title_allowed(self) -> None:
+        from world.societies.houses.models import Title
+
+        ceremony, honoree_sheet, title = self._open_coronation()
+        finish_ceremony(ceremony=ceremony)
+
+        imperial_title = Title.objects.create(
+            name="Empress of Everything",
+            tier="empire",
+            realm=title.realm,
+            house=title.house,
+            holder=title.holder,
+        )
+        persona2, officiant_sheet2 = _persona_with_sheet()
+        being2 = WorshippedBeingFactory()
+        WorshipDeclaration.objects.create(character_sheet=officiant_sheet2, public_being=being2)
+
+        ceremony2 = open_ceremony(
+            officiant_persona=persona2,
+            type_key=CeremonyTypeKey.CORONATION,
+            honoree_sheets=[honoree_sheet],
+            location_profile=self.location,
+            title=imperial_title,
+        )
+        self.assertEqual(ceremony2.title_id, imperial_title.pk)
+
+
+class WeddingConsentTests(TestCase):
+    """Consent lives at the WEDDING ceremony, not at propose_betrothal (#2358)."""
+
+    @classmethod
+    def setUpTestData(cls) -> None:
+        from evennia_extensions.factories import RoomProfileFactory
+
+        CeremonyTypeFactory(key=CeremonyTypeKey.WEDDING, name="Wedding")
+        cls.location = RoomProfileFactory()
+
+    def _sheet_with_account(self):
+        from world.roster.factories import (
+            PlayerDataFactory,
+            RosterEntryFactory,
+            RosterTenureFactory,
+        )
+
+        sheet = CharacterSheetFactory()
+        player_data = PlayerDataFactory()
+        entry = RosterEntryFactory(character_sheet=sheet)
+        RosterTenureFactory(roster_entry=entry, player_data=player_data)
+        return sheet, player_data.account
+
+    def _open_wedding(self, *, sheets):
+        persona, officiant_sheet = _persona_with_sheet()
+        being = WorshippedBeingFactory()
+        WorshipDeclaration.objects.create(character_sheet=officiant_sheet, public_being=being)
+        return open_ceremony(
+            officiant_persona=persona,
+            type_key=CeremonyTypeKey.WEDDING,
+            honoree_sheets=sheets,
+            location_profile=self.location,
+        )
+
+    def test_open_creates_pending_consent_offer_per_honoree(self) -> None:
+        sheet_a, _ = self._sheet_with_account()
+        sheet_b, _ = self._sheet_with_account()
+        ceremony = self._open_wedding(sheets=[sheet_a, sheet_b])
+        for sheet in (sheet_a, sheet_b):
+            offer = ceremony.honorees.get(honoree_sheet=sheet).wedding_consent_offer
+            self.assertEqual(offer.status, SeanceOfferStatus.PENDING)
+
+    def test_finish_blocked_while_any_offer_pending(self) -> None:
+        sheet_a, account_a = self._sheet_with_account()
+        sheet_b, _account_b = self._sheet_with_account()
+        ceremony = self._open_wedding(sheets=[sheet_a, sheet_b])
+        offer_a = ceremony.honorees.get(honoree_sheet=sheet_a).wedding_consent_offer
+        respond_to_wedding_consent_offer(offer_a, account=account_a, accept=True)
+
+        with self.assertRaises(CeremonyError):
+            finish_ceremony(ceremony=ceremony)
+
+    def test_finish_proceeds_once_both_accept(self) -> None:
+        sheet_a, account_a = self._sheet_with_account()
+        sheet_b, account_b = self._sheet_with_account()
+        ceremony = self._open_wedding(sheets=[sheet_a, sheet_b])
+        offer_a = ceremony.honorees.get(honoree_sheet=sheet_a).wedding_consent_offer
+        offer_b = ceremony.honorees.get(honoree_sheet=sheet_b).wedding_consent_offer
+        respond_to_wedding_consent_offer(offer_a, account=account_a, accept=True)
+        respond_to_wedding_consent_offer(offer_b, account=account_b, accept=True)
+
+        finish_ceremony(ceremony=ceremony)
+
+        ceremony.refresh_from_db()
+        self.assertEqual(ceremony.status, CeremonyStatus.COMPLETED)
+
+    def test_decline_aborts_whole_ceremony(self) -> None:
+        sheet_a, account_a = self._sheet_with_account()
+        sheet_b, _account_b = self._sheet_with_account()
+        ceremony = self._open_wedding(sheets=[sheet_a, sheet_b])
+        offer_a = ceremony.honorees.get(honoree_sheet=sheet_a).wedding_consent_offer
+
+        respond_to_wedding_consent_offer(offer_a, account=account_a, accept=False)
+
+        ceremony.refresh_from_db()
+        self.assertEqual(ceremony.status, CeremonyStatus.ABANDONED)
+        with self.assertRaises(CeremonyError):
+            finish_ceremony(ceremony=ceremony)
+
+    def test_full_flow_solemnizes_only_after_both_consent(self) -> None:
+        from world.roster.factories import FamilyFactory, KinspersonFactory
+        from world.roster.models import Union, UnionKind
+        from world.scenes.factories import PersonaFactory
+        from world.societies.factories import OrganizationFactory, OrganizationMembershipFactory
+        from world.societies.houses.pact_services import propose_betrothal
+
+        UnionKind.objects.create(name="Marriage Ceremony Flow", confers_wedlock=True)
+        senior_family = FamilyFactory(name="Solemn")
+        senior_org = OrganizationFactory(name="House Solemn", family=senior_family)
+        junior_family = FamilyFactory(name="Vow")
+        junior_org = OrganizationFactory(name="House Vow", family=junior_family)
+        leader = PersonaFactory()
+        OrganizationMembershipFactory(organization=senior_org, persona=leader, rank=1)
+
+        sheet_a, account_a = self._sheet_with_account()
+        sheet_b, account_b = self._sheet_with_account()
+        bride = KinspersonFactory(family=senior_family, sheet=sheet_a)
+        groom = KinspersonFactory(family=junior_family, sheet=sheet_b)
+        propose_betrothal(
+            proposer=leader,
+            kinsperson_a=bride,
+            kinsperson_b=groom,
+            senior_house=senior_org,
+            junior_house=junior_org,
+        )
+
+        ceremony = self._open_wedding(sheets=[sheet_a, sheet_b])
+        # Not yet solemnized — consent is still outstanding.
+        self.assertFalse(Union.objects.filter(members=bride).filter(members=groom).exists())
+
+        offer_a = ceremony.honorees.get(honoree_sheet=sheet_a).wedding_consent_offer
+        offer_b = ceremony.honorees.get(honoree_sheet=sheet_b).wedding_consent_offer
+        respond_to_wedding_consent_offer(offer_a, account=account_a, accept=True)
+        respond_to_wedding_consent_offer(offer_b, account=account_b, accept=True)
+
+        finish_ceremony(ceremony=ceremony)
+
+        self.assertTrue(Union.objects.filter(members=bride).filter(members=groom).exists())
 
 
 class CeremonyFlowTests(TestCase):

@@ -184,8 +184,13 @@ Designed as a connected set (ADRs 0050–0057); most of it has now landed. See
   capped spread, scout/sabotage spycraft, grand-display upward bluff. ✅ **Org pacts + marriage-in-play** — DONE
   (#2999, ADR-0212): OrgPact/PactKind lever instrument with ratification + stamped
   betrayal, betrothal → WEDDING rite solemnization, and the any-viewer match dossier.
-  The deterrence arc (#3091 → #3093 → #2999) is complete; remaining follow-ons are
-  content passes and #2358's divorce/coronation remainder.
+  The deterrence arc (#3091 → #3093 → #2999) is complete. ✅ **Wedding consent +
+  Coronation + divorce prestige** — DONE (#2358): consent-gated WEDDING solemnization
+  (both spouses accept at ceremony START, union+pact mint at FINISH), CORONATION
+  (solemnize-only, one-off per (honoree, title)), and unilateral `initiate_divorce`
+  (both spouses' personal prestige hit, initiator steeper); remaining follow-ons are
+  content passes and the still-deferred discovered-spouse-murder prestige hit (needs
+  justice-app victim tracking, which doesn't exist yet).
 - ✅ **Battle / army / warfare system** — DONE (`world/military`: `MilitaryUnit`/`Army` + services;
   `world/battles`: staging, resolution, fortifications, vehicles, war funding, city defense). War
   covenants now have somewhere to resolve into.

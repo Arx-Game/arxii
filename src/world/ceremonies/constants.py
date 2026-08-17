@@ -15,11 +15,13 @@ class CeremonyTypeKey(models.TextChoices):
     FUNERAL carries the full handler (dead honorees, ghost container, will seam);
     BLESSING and SERMON are renown/resonance-only. SEANCE (#2393) carries the third
     ghost container plus a consent-gated voice/puppet grant for its honorees.
-    WEDDING (#2358/#2999) solemnizes an active Betrothal on finish. CONVERSION
-    (#2361) repoints the convert's public WorshipDeclaration on finish — either a
-    consent-gated PC-officiated rite (WorshipConversionOffer, mirrors the Seance
-    offer) or a self-officiated solo rite (officiant IS the honoree, no offer
-    needed). Coronation arrives as a new key + handler later.
+    WEDDING (#2358/#2999) solemnizes an active Betrothal on finish, consent-gated
+    at START (#2358). CONVERSION (#2361) repoints the convert's public
+    WorshipDeclaration on finish — either a consent-gated PC-officiated rite
+    (WorshipConversionOffer, mirrors the Seance offer) or a self-officiated solo
+    rite (officiant IS the honoree, no offer needed). CORONATION (#2358)
+    solemnizes an already-held Title — no title mechanics live here, it only
+    records the rite.
     """
 
     FUNERAL = "funeral", "Funeral"
@@ -28,10 +30,15 @@ class CeremonyTypeKey(models.TextChoices):
     SEANCE = "seance", "Seance"
     WEDDING = "wedding", "Wedding"
     CONVERSION = "conversion", "Conversion"
+    CORONATION = "coronation", "Coronation"
 
 
 class SeanceOfferStatus(models.TextChoices):
-    """Answer state of a SeanceManifestationOffer (#2393)."""
+    """Answer state of a pending consent/offer gate.
+
+    Originally the SeanceManifestationOffer answer state (#2393); reused as-is by
+    WeddingConsentOffer (#2358) — same three-state shape, no domain-specific value.
+    """
 
     PENDING = "pending", "Pending"
     ACCEPTED = "accepted", "Accepted"

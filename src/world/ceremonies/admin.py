@@ -37,7 +37,15 @@ class CeremonyTypeAdmin(admin.ModelAdmin):
 class CeremonyAdmin(admin.ModelAdmin):
     list_display = ("ceremony_type", "officiant", "location", "status", "opened_at")
     list_filter = ("ceremony_type", "status")
-    raw_id_fields = ("officiant", "being", "presented_being", "location", "scene", "event")
+    raw_id_fields = (
+        "officiant",
+        "being",
+        "presented_being",
+        "location",
+        "scene",
+        "event",
+        "title",
+    )
     inlines = [CeremonyHonoreeInline, CeremonyOfferingInline, CeremonySpeechInline]
 
 

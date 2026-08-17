@@ -43627,10 +43627,12 @@ export interface operations {
          *     * `seance` - Seance
          *     * `wedding` - Wedding
          *     * `conversion` - Conversion
+         *     * `coronation` - Coronation
          */
         ceremony_type__key?:
           | 'blessing'
           | 'conversion'
+          | 'coronation'
           | 'funeral'
           | 'seance'
           | 'sermon'

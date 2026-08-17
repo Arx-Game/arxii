@@ -30,7 +30,11 @@ from world.ceremonies.models import (
 if TYPE_CHECKING:
     from django.db.models import QuerySet
 
-    from world.ceremonies.models import SeanceManifestationOffer, WorshipConversionOffer
+    from world.ceremonies.models import (
+        SeanceManifestationOffer,
+        WeddingConsentOffer,
+        WorshipConversionOffer,
+    )
     from world.character_sheets.models import CharacterSheet
     from world.items.models import ItemInstance
     from world.scenes.models import Persona
@@ -58,7 +62,11 @@ class CeremonyError(Exception):
 
 
 class SeanceOfferError(Exception):
-    """Player-facing seance-offer failure; ``user_message`` is safe to display."""
+    """Player-facing consent/offer failure; ``user_message`` is safe to display.
+
+    Originally the Seance manifestation-offer error (#2393); reused as-is by
+    ``respond_to_wedding_consent_offer`` (#2358) — same account-authorized shape.
+    """
 
     def __init__(self, msg: str, *, user_message: str | None = None) -> None:
         super().__init__(msg)
@@ -101,8 +109,14 @@ def _resolve_beings(
     return explicit, explicit
 
 
-def _validate_honorees_for_type(ceremony_type: CeremonyType, honoree_sheets: "list") -> None:
-    """Decision 13/#2361 pre-open validation, per ceremony type."""
+def _validate_honorees_for_type(
+    ceremony_type: CeremonyType,
+    honoree_sheets: "list",
+    *,
+    title=None,
+    is_staff_fiat: bool = False,
+) -> None:
+    """Decision 13/#2361/#2358 pre-open validation, per ceremony type."""
     if ceremony_type.key in (CeremonyTypeKey.FUNERAL, CeremonyTypeKey.SEANCE):
         from world.vitals.services import is_dead  # noqa: PLC0415
 
@@ -118,10 +132,106 @@ def _validate_honorees_for_type(ceremony_type: CeremonyType, honoree_sheets: "li
     if ceremony_type.key == CeremonyTypeKey.CONVERSION and len(honoree_sheets) != 1:
         msg = "A conversion rite has exactly one convert."
         raise CeremonyError(msg)
+    if ceremony_type.key == CeremonyTypeKey.CORONATION:
+        _validate_coronation_open(honoree_sheets, title, is_staff_fiat=is_staff_fiat)
 
 
-def _create_type_specific_offers(ceremony: Ceremony, officiant_sheet: "CharacterSheet") -> None:
-    """SEANCE/CONVERSION consent-offer rows, minted alongside the honorees at open."""
+def _validate_coronation_open(
+    honoree_sheets: "list[CharacterSheet]", title, *, is_staff_fiat: bool
+) -> None:
+    """CORONATION precondition (#2358 overnight ruling): solemnize-only.
+
+    Exactly one honoree, who must already hold ``title`` (granted elsewhere via
+    the house/realm systems — no title-passing mechanics live here), unless the
+    caller is staff/GM fiat (mirrors ``pass_title``'s own "succession applied,
+    or staff fiat" comment). A caller outside the holder check without fiat is
+    the contested-claim case — rejected here, pushed to GM-adjudicated play
+    rather than an auto-formula. Also rejects a repeat coronation for a title
+    this honoree already holds a completed ``Coronation`` record for — a
+    DIFFERENT title (a later imperial coronation after a ducal one) still
+    works, since uniqueness is per (honoree, title).
+    """
+    from world.ceremonies.models import Coronation  # noqa: PLC0415
+    from world.roster.models import Kinsperson  # noqa: PLC0415
+
+    if title is None:
+        msg = "A coronation must name the title being solemnized."
+        raise CeremonyError(msg)
+    expected_honorees = 1
+    if len(honoree_sheets) != expected_honorees:
+        msg = "A coronation honors exactly one sovereign."
+        raise CeremonyError(msg)
+    honoree_sheet = honoree_sheets[0]
+    if Coronation.objects.filter(honoree_sheet=honoree_sheet, title=title).exists():
+        msg = f"{honoree_sheet} has already been crowned for {title}."
+        raise CeremonyError(msg)
+    if is_staff_fiat:
+        return
+    holder_kin = Kinsperson.objects.filter(sheet=honoree_sheet).first()
+    if holder_kin is None or title.holder_id != holder_kin.pk:
+        msg = f"{honoree_sheet} does not hold {title} — there is nothing to solemnize."
+        raise CeremonyError(msg)
+
+
+def open_ceremony(  # noqa: PLR0913
+    *,
+    officiant_persona: "Persona",
+    type_key: str,
+    honoree_sheets: "list[CharacterSheet]",
+    location_profile,
+    being: "WorshippedBeing | None" = None,
+    scene=None,
+    event=None,
+    title=None,
+    is_staff_fiat: bool = False,
+) -> Ceremony:
+    """Open a ceremony at a location, recognizing zero or more honorees.
+
+    Funerals and Seances require every honoree dead (retired stays valid, Decision 13).
+    A Conversion requires exactly one honoree — the convert (#2361). CORONATION requires
+    the single honoree already hold ``title`` (or staff fiat). Only one OPEN ceremony
+    may exist per location (DB constraint).
+    """
+    ceremony_type = CeremonyType.objects.filter(key=type_key).first()
+    if ceremony_type is None:
+        msg = "That kind of ceremony is not recognized."
+        raise CeremonyError(msg)
+    _validate_honorees_for_type(
+        ceremony_type, honoree_sheets, title=title, is_staff_fiat=is_staff_fiat
+    )
+
+    officiant_sheet = officiant_persona.character_sheet
+    true_being, presented = _resolve_beings(officiant_sheet, being)
+
+    try:
+        with transaction.atomic():
+            ceremony = Ceremony.objects.create(
+                ceremony_type=ceremony_type,
+                officiant=officiant_persona,
+                being=true_being,
+                presented_being=presented,
+                location=location_profile,
+                scene=scene,
+                event=event,
+                title=title if ceremony_type.key == CeremonyTypeKey.CORONATION else None,
+            )
+            CeremonyHonoree.objects.bulk_create(
+                CeremonyHonoree(ceremony=ceremony, honoree_sheet=sheet) for sheet in honoree_sheets
+            )
+            _create_open_side_offers(ceremony, officiant_sheet)
+    except IntegrityError as exc:
+        msg = "A ceremony is already underway here."
+        raise CeremonyError(msg) from exc
+
+    if ceremony.is_twisted:
+        from world.ceremonies.leak import run_twisted_rite_leak  # noqa: PLC0415
+
+        run_twisted_rite_leak(ceremony=ceremony, officiant_sheet=officiant_sheet)
+    return ceremony
+
+
+def _create_open_side_offers(ceremony: Ceremony, officiant_sheet: "CharacterSheet") -> None:
+    """Type-specific pending-offer rows minted at OPEN — SEANCE, CONVERSION, WEDDING."""
     if ceremony.ceremony_type.key == CeremonyTypeKey.SEANCE:
         from world.ceremonies.models import SeanceManifestationOffer  # noqa: PLC0415
 
@@ -139,57 +249,15 @@ def _create_type_specific_offers(ceremony: Ceremony, officiant_sheet: "Character
             # self-officiated solo rite (Ratified amendment #1b) needs none:
             # nobody consents to their own choice.
             WorshipConversionOffer.objects.create(ceremony_honoree=convert_honoree)
+    if ceremony.ceremony_type.key == CeremonyTypeKey.WEDDING:
+        # Ratified 2026-08-15: the OFFICIANT's start action (this call) creates
+        # the accept prompt for BOTH spouse honorees — consent lives at the
+        # ceremony, not at propose_betrothal.
+        from world.ceremonies.models import WeddingConsentOffer  # noqa: PLC0415
 
-
-def open_ceremony(  # noqa: PLR0913
-    *,
-    officiant_persona: "Persona",
-    type_key: str,
-    honoree_sheets: "list[CharacterSheet]",
-    location_profile,
-    being: "WorshippedBeing | None" = None,
-    scene=None,
-    event=None,
-) -> Ceremony:
-    """Open a ceremony at a location, recognizing zero or more honorees.
-
-    Funerals and Seances require every honoree dead (retired stays valid, Decision 13).
-    A Conversion requires exactly one honoree — the convert (#2361). Only one OPEN
-    ceremony may exist per location (DB constraint).
-    """
-    ceremony_type = CeremonyType.objects.filter(key=type_key).first()
-    if ceremony_type is None:
-        msg = "That kind of ceremony is not recognized."
-        raise CeremonyError(msg)
-    _validate_honorees_for_type(ceremony_type, honoree_sheets)
-
-    officiant_sheet = officiant_persona.character_sheet
-    true_being, presented = _resolve_beings(officiant_sheet, being)
-
-    try:
-        with transaction.atomic():
-            ceremony = Ceremony.objects.create(
-                ceremony_type=ceremony_type,
-                officiant=officiant_persona,
-                being=true_being,
-                presented_being=presented,
-                location=location_profile,
-                scene=scene,
-                event=event,
-            )
-            CeremonyHonoree.objects.bulk_create(
-                CeremonyHonoree(ceremony=ceremony, honoree_sheet=sheet) for sheet in honoree_sheets
-            )
-            _create_type_specific_offers(ceremony, officiant_sheet)
-    except IntegrityError as exc:
-        msg = "A ceremony is already underway here."
-        raise CeremonyError(msg) from exc
-
-    if ceremony.is_twisted:
-        from world.ceremonies.leak import run_twisted_rite_leak  # noqa: PLC0415
-
-        run_twisted_rite_leak(ceremony=ceremony, officiant_sheet=officiant_sheet)
-    return ceremony
+        WeddingConsentOffer.objects.bulk_create(
+            WeddingConsentOffer(ceremony_honoree=honoree) for honoree in ceremony.honorees.all()
+        )
 
 
 def record_offering(
@@ -270,6 +338,26 @@ def record_speech(
     )
 
 
+def _require_wedding_consent(ceremony: Ceremony) -> None:
+    """WEDDING may not finish until every honoree's consent offer is ACCEPTED.
+
+    Ratified 2026-08-15: both spouses must accept the officiant's start-time
+    prompt before the rite can complete. A DECLINE already aborts the whole
+    ceremony via ``respond_to_wedding_consent_offer`` (ABANDONED — finish never
+    reaches this ceremony again), so the only live case here is an outstanding
+    PENDING offer — the officiant trying to rush the rite past an unanswered
+    prompt.
+    """
+    from world.ceremonies.models import WeddingConsentOffer  # noqa: PLC0415
+
+    outstanding = WeddingConsentOffer.objects.filter(ceremony_honoree__ceremony=ceremony).exclude(
+        status=SeanceOfferStatus.ACCEPTED
+    )
+    if outstanding.exists():
+        msg = "Not every spouse has consented — the rite cannot be completed."
+        raise CeremonyError(msg)
+
+
 def finish_ceremony(*, ceremony: Ceremony, sincere: bool | None = None) -> Ceremony:
     """Close the rite: quality roll, renown tallies, worship, funeral effects.
 
@@ -279,8 +367,13 @@ def finish_ceremony(*, ceremony: Ceremony, sincere: bool | None = None) -> Cerem
     other ceremony type, and ignored for a PC-officiated CONVERSION — there the
     choice was already recorded on the offer at accept time
     (``respond_to_conversion_offer``). Defaults True (sincere) when unspecified.
+
+    WEDDING may not finish until every honoree's consent offer is ACCEPTED
+    (#2358) — see ``_require_wedding_consent``.
     """
     _require_open(ceremony)
+    if ceremony.ceremony_type.key == CeremonyTypeKey.WEDDING:
+        _require_wedding_consent(ceremony)
     from world.checks.models import CheckType  # noqa: PLC0415
     from world.checks.services import perform_check_with_modifiers  # noqa: PLC0415
     from world.worship.services import bump_devotion  # noqa: PLC0415
@@ -342,12 +435,7 @@ def finish_ceremony(*, ceremony: Ceremony, sincere: bool | None = None) -> Cerem
             )
     bump_devotion(officiant_sheet, ceremony.being, config.devotion_officiant)
 
-    if ceremony.ceremony_type.key == CeremonyTypeKey.FUNERAL:
-        for honoree in honorees:
-            execute_will(honoree.honoree_sheet)
-
-    if ceremony.ceremony_type.key == CeremonyTypeKey.WEDDING:
-        _solemnize_wedding_honorees(honorees)
+    _run_type_specific_finish(ceremony, honorees)
 
     ceremony.quality_level = quality_level
     ceremony.status = CeremonyStatus.COMPLETED
@@ -355,6 +443,19 @@ def finish_ceremony(*, ceremony: Ceremony, sincere: bool | None = None) -> Cerem
     ceremony.save(update_fields=["quality_level", "status", "finished_at"])
     revoke_seance_manifestations(ceremony)
     return ceremony
+
+
+def _run_type_specific_finish(ceremony: Ceremony, honorees: list[CeremonyHonoree]) -> None:
+    """The per-type finish payload, after the shared renown pass above."""
+    if ceremony.ceremony_type.key == CeremonyTypeKey.FUNERAL:
+        for honoree in honorees:
+            execute_will(honoree.honoree_sheet)
+
+    if ceremony.ceremony_type.key == CeremonyTypeKey.WEDDING:
+        _solemnize_wedding_honorees(honorees)
+
+    if ceremony.ceremony_type.key == CeremonyTypeKey.CORONATION and honorees:
+        _record_coronation(ceremony, honorees[0])
 
 
 def abandon_ceremony(*, ceremony: Ceremony) -> Ceremony:
@@ -430,6 +531,28 @@ def _solemnize_wedding_honorees(honorees) -> None:
     if betrothal is None or not betrothal.is_active:
         return
     solemnize_wedding(betrothal)
+
+
+def _record_coronation(ceremony: Ceremony, honoree: CeremonyHonoree) -> None:
+    """CORONATION rite (#2358): mint the permanent (honoree, title) record.
+
+    Solemnize-only — no title mechanics fire here (overnight ruling 4); the
+    honoree already holds ``ceremony.title`` (verified at open). The
+    UniqueConstraint on ``Coronation`` is the real one-off-per-title
+    enforcement; ``_validate_coronation_open`` is the friendly pre-check, so
+    this ``IntegrityError`` path is only reachable via a race.
+    """
+    from world.ceremonies.models import Coronation  # noqa: PLC0415
+
+    try:
+        Coronation.objects.create(
+            ceremony=ceremony,
+            honoree_sheet=honoree.honoree_sheet,
+            title=ceremony.title,
+        )
+    except IntegrityError as exc:
+        msg = f"{honoree.honoree_sheet} has already been crowned for {ceremony.title}."
+        raise CeremonyError(msg) from exc
 
 
 def execute_will(character_sheet: "CharacterSheet") -> None:
@@ -562,6 +685,58 @@ def pending_conversion_offers_for_account(
     return (
         WorshipConversionOffer.objects.filter(
             status=ConversionOfferStatus.PENDING,
+            ceremony_honoree__honoree_sheet__roster_entry__tenures__player_data__account=account,
+            ceremony_honoree__honoree_sheet__roster_entry__tenures__end_date__isnull=True,
+        )
+        .select_related("ceremony_honoree__honoree_sheet", "ceremony_honoree__ceremony")
+        .distinct()
+    )
+
+
+def respond_to_wedding_consent_offer(
+    offer: "WeddingConsentOffer", *, account: object, accept: bool
+) -> "WeddingConsentOffer":
+    """Accept or decline a pending wedding consent offer (#2358).
+
+    Ratified 2026-08-15: the officiant's ``open_ceremony`` call creates one of
+    these per spouse honoree at ceremony START; both must reach ACCEPTED
+    before ``finish_ceremony``'s WEDDING branch may solemnize (union + pact
+    mint at FINISH, never before). A DECLINE here aborts the whole ceremony —
+    ``abandon_ceremony`` (ABANDONED, no union minted) — rather than leaving it
+    stuck waiting on an answer that will never come.
+    """
+    from world.magic.services.gain import account_for_sheet  # noqa: PLC0415
+
+    sheet = offer.ceremony_honoree.honoree_sheet
+    if account_for_sheet(sheet) != account:
+        msg = "That isn't your character to answer for."
+        raise SeanceOfferError(msg)
+    if offer.status != SeanceOfferStatus.PENDING:
+        msg = "That offer has already been answered."
+        raise SeanceOfferError(msg)
+    ceremony = offer.ceremony_honoree.ceremony
+    if ceremony.status != CeremonyStatus.OPEN:
+        msg = "That wedding has already concluded."
+        raise SeanceOfferError(msg)
+
+    offer.status = SeanceOfferStatus.ACCEPTED if accept else SeanceOfferStatus.DECLINED
+    offer.responded_at = timezone.now()
+    offer.save(update_fields=["status", "responded_at"])
+
+    if not accept:
+        abandon_ceremony(ceremony=ceremony)
+    return offer
+
+
+def pending_wedding_consent_offers_for_account(
+    account: object,
+) -> "QuerySet[WeddingConsentOffer]":
+    """PENDING wedding consent offers addressed to any character this account holds (#2358)."""
+    from world.ceremonies.models import WeddingConsentOffer  # noqa: PLC0415
+
+    return (
+        WeddingConsentOffer.objects.filter(
+            status=SeanceOfferStatus.PENDING,
             ceremony_honoree__honoree_sheet__roster_entry__tenures__player_data__account=account,
             ceremony_honoree__honoree_sheet__roster_entry__tenures__end_date__isnull=True,
         )

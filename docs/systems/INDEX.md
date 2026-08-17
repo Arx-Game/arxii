@@ -1316,7 +1316,7 @@ Noble/merchant/crime houses as first-class play — a house IS an `Organization`
 - **Regional flavor (#2079):** `HouseAspectDefinition`/`HouseAspectOption` (required catalog-only choices per template, ADR-0101), `HouseFeature` (slug-anchored cultural facts), `HouseClaimAspect` picks → `OrganizationAspect`/`OrganizationFeature` facets at materialization; `Organization.words/colors/sigil_description` stylings (all org types); `Domain.description` lands writeup. **The aspect catalog is lore-repo content (#2868)** — both aspect models carry `NaturalKeyMixin` and sit in `CONTENT_MODELS`; `HouseAspectOption.codex_entry` binds an option to its lore write-up (Inferna's House Quiddities), surfaced to CG as `codex_entry_id`
 - **House Stature (#3091, ADR-0209/0210):** perceived-vs-true deterrence for landed orgs. Models: `StatureBand` (authored percentile tiers; `threat_multiplier` scales ambient predation; headline templates), `HouseStature` (components renown/military/economic/allied, `crisis_penalty`, true/perceived totals, band + trend, `prestige_rank`, stored realm rank), `StatureShift` (why-it-moved ledger → tidings), `PrestigeRankBand` (rank-relative benefits → prosperity drift), `OrgPrestigeRank` (unlanded orgs). Services in `stature_services.py`: `recompute_stature` (renown channels: members, head's COURT covenant, kin via `Kinsperson.gifted_rating`, union partners — marriage both-ways full, consorts half/senior-only/landed-title-gated/capped, paramours zero), `converge_perceived`, `apply_death_shock` (vitals seam), `apply_pact_shift`, `crisis_stature_shift` (covert threats hit perceived only after surfacing), `apply_whisper`, `assign_bands`/`assign_realm_ranks`/`recompute_org_prestige_ranks`, `apply_prestige_prosperity_drift` (zero-open-threats gate; ~3x income ceiling via prosperity clamp), `weekly_stature_tick` (rollover processor before crisis generation), `gifted_power_rating` (first live `MOST_POWERFUL_GIFTED` rater), `award_marriage_tier_prestige`. Six-step `TitleTier` (empire/kingdom/duchy/march/county/barony). Surfaces: org API `house.stature` panel, `domain stature` telnet, `FeedItemKind.STATURE` tidings, spy `_stature_lines` + `whisper_stature_delta` payout. Seeds: cluster `stature` (bands, rank bands, consort/paramour `UnionKind` rows — Luxen's non-recognition = no row)
 - **Predator ecology (#3093, ADR-0211):** named NPC antagonists in `world/predators/` (thin dedicated models, never Organizations): `PredatorKind` (authored vocabulary), `PredatorBand` (strength/loot/prey/home region + `MenaceStage` ladder: rumors → lawlessness → robbery → raids → terror, ~10 weekly crons rumor→raid, advancing only while unanswered), `MenaceEvent` (tidings source), `AfflictionSign` (the dread week before an outbreak). Services: `weekly_menace_tick` (spawn/stalk/pressure/escalate; prey = weakest-perceived landed org honoring consort regional peace), `strike_band`/`sabotage_band` (counterplay: burn, knockdown, dormancy, disband; wired into `resolve_crisis` for attributed raids), `weekly_affliction_tick` (SIGNS → deterrence-blind outbreak → capped one-hop spread; `DomainCrisisType.ignores_stature`/`affliction_spreads`, `DomainCrisis.aggressor_band`/`spread_count`, `CrisisOrigin.PREDATOR`/`AFFLICTION`). Espionage: `TaskTargetKind.PREDATOR` + `scout_predator`/`sabotage_predator` payouts. `FeedItemKind.MENACE` tidings. Grand displays: `apply_grand_display` (event PROVISION quality → bounded upward perceived-stature bluff, seamed at `complete_event`). Seeds: cluster `predators`. Details: [predators.md](predators.md)
-- **Org pacts & marriage-in-play (#2999, ADR-0212):** `PactKind` lever catalog + `OrgPact` (propose/ratify by leadership; income tithe mints `OrgObligation`; BETRAYAL is a stamped world event with a permanent prestige cost, auto-flagged when offensive spy tasks hit a pact partner), `Betrothal`/`BetrothalTerm` (25% stature preview; breaking costs standing), `solemnize_wedding` via the WEDDING `CeremonyTypeKey` (union + marriage pact + tier prestige in one rite — first in-play `record_union` caller). Stature's allied slot reads ratified OrgPacts at their authored share. **Match dossier**: `dossier_services.build_dossier` + `GET .../organizations/{id}/dossier/` + `/orgs/:id/dossier` — any authenticated player; covert crises enriched only via the viewer org's `CrisisIntel`. Telnet `CmdPact`. Seeds: cluster `pacts`. Union membership reads the m2m through table (idmapper corrupts `prefetch_related` grouping — `_union_membership`)
+- **Org pacts & marriage-in-play (#2999, ADR-0212):** `PactKind` lever catalog + `OrgPact` (propose/ratify by leadership; income tithe mints `OrgObligation`; BETRAYAL is a stamped world event with a permanent prestige cost, auto-flagged when offensive spy tasks hit a pact partner), `Betrothal`/`BetrothalTerm` (25% stature preview; breaking costs standing), `solemnize_wedding` via the WEDDING `CeremonyTypeKey` (union + marriage pact + tier prestige in one rite — first in-play `record_union` caller; #2358 adds officiant-driven dual consent at ceremony start and `initiate_divorce` — unilateral, `Union.ended_at` + `PactDissolutionReason.DIVORCE`, both spouses' prestige hit, initiator steeper). Stature's allied slot reads ratified OrgPacts at their authored share. **Match dossier**: `dossier_services.build_dossier` + `GET .../organizations/{id}/dossier/` + `/orgs/:id/dossier` — any authenticated player; covert crises enriched only via the viewer org's `CrisisIntel`. Telnet `CmdPact`. Seeds: cluster `pacts`. Union membership reads the m2m through table (idmapper corrupts `prefetch_related` grouping — `_union_membership`)
 - **Seeds:** cluster `houses` (rides `kinship`)
 - **Integrates with:** roster kinship (recognition/succession read parentage; RESIDENCY writes `FamilyMembership`), currency (`OrgIncomeStream` holdings, `OrgObligation` subsidies, treasury dowries), projects (`DOMAIN_IMPROVEMENT`), areas (Domain decorates an Area), tidings (house feed), secrets (breach scandal channel)
 - **Source:** `src/world/societies/houses/`
@@ -6739,10 +6739,12 @@ lightly-structured freeform RP. Full doc: `docs/systems/worship.md`; model decis
   `secret_worship` → `_create_worship_declaration` at finalization. Seeds: `worship` cluster
   (Rites skill + 4 specs, Ceremony Rites CheckType, Devotion aspect for Path of the Chosen,
   achievements, PLACEHOLDER beings); `secret-investigation` consent category in the consent seed.
-- **Ceremony models** (`world/ceremonies`): `CeremonyType` (Funeral/Blessing/Sermon/Seance/
-  Wedding/Conversion rows — seeded via the `"ceremonies"` cluster), `Ceremony` (officiant Persona, TRUE
+- **Ceremony models** (`world/ceremonies`): `CeremonyType`
+  (Funeral/Blessing/Sermon/Seance/Wedding/Conversion/Coronation rows — seeded via the
+  `"ceremonies"` cluster, #2393/#2358/#2361), `Ceremony` (officiant Persona, TRUE
   `being` vs `presented_being` — player surfaces render
-  presented ONLY, one-OPEN-per-location constraint, nullable scene/event FKs, `quality_level`),
+  presented ONLY, one-OPEN-per-location constraint, nullable scene/event/title FKs
+  — `title` is CORONATION-only, `quality_level`),
   `CeremonyHonoree`, `CeremonyOffering` (item destroyed; snapshot), `CeremonySpeech`,
   `CeremonyConfig` singleton (`get_ceremony_config`, PLACEHOLDER magnitudes),
   `WorshipConversionOffer` (#2361, one per PC-officiated Conversion honoree —
@@ -6752,8 +6754,10 @@ lightly-structured freeform RP. Full doc: `docs/systems/worship.md`; model decis
   `record_offering` (pool → TRUE being; devotion follows belief), `record_speech`
   (Performance/Oratory), `finish_ceremony` (Rites + tradition-spec quality roll; honoree deeds
   via `create_solo_deed` — `_mint_ceremony_deed` takes optional `archetypes`/`scene` kwargs,
-  #2361; officiant cut; funeral → `execute_will` NO-OP seam for #1985; wedding →
-  solemnizes the honorees' active Betrothal; conversion → `convert_public_worship` per
+  #2361; officiant cut; funeral → `execute_will` NO-OP seam for #1985; WEDDING
+  refuses to solemnize until every `WeddingConsentOffer` is ACCEPTED, then solemnizes the
+  honorees' active Betrothal; CORONATION (open precondition: exactly one honoree holding
+  `title`) mints the permanent `Coronation` record; conversion → `convert_public_worship` per
   confirmed honoree, tags the deed with the existing "Treacherous Scandal"
   `PhilosophicalArchetype` when converting away from an already-declared faith so
   `route_deed_reach` (#1464) judges it),
@@ -6768,6 +6772,20 @@ lightly-structured freeform RP. Full doc: `docs/systems/worship.md`; model decis
   `WorshipConversionOfferSerializer`, `accept` body takes optional `sincere`); frontend
   `ConversionOfferBanner`/`ConversionOfferDialog` (mounted in `Layout.tsx` next to
   `SeanceOfferBanner`; the dialog's Switch carries the heart-vs-lip-service choice).
+- **Wedding/Coronation (#2358)**: `WeddingConsentOffer` (one per spouse honoree, minted by
+  the officiant's `open_ceremony` call at ceremony START, shares `SeanceOfferStatus`) —
+  `respond_to_wedding_consent_offer` (account-scoped, mirrors `respond_to_seance_offer`; a
+  DECLINE calls `abandon_ceremony`), `pending_wedding_consent_offers_for_account`. Consent
+  replaced the earlier idea of gating at `propose_betrothal`; the union + marriage pact still
+  mint only at FINISH via `world.societies.houses.pact_services.solemnize_wedding`.
+  `Coronation` (`honoree_sheet` + `title`, `UniqueConstraint` — one-off per (honoree, title),
+  a later coronation for a DIFFERENT title still stands) is minted at FINISH, never OPEN, so an
+  abandoned attempt never blocks a retry. Neither type mints extra flat prestige beyond the
+  shared honoree-renown pass — event grandeur (#2357) is the prestige-influx lever. Actions:
+  `wedding_consent_respond`; telnet `ceremony/wedding`, `ceremony/coronation`, `wedding`
+  (offers/accept/decline, mirrors `seance`). Divorce (`initiate_divorce`, unilateral, both
+  spouses' personal prestige hit, initiator steeper) lives in `docs/systems/houses.md`'s pacts
+  section — it is a house-pact concern, not a ceremony.
 - **Seance (#2393)**: `SeanceManifestationOffer` (one per honoree, PENDING/ACCEPTED/DECLINED)
   — created by `open_ceremony` for a SEANCE-type ceremony. `respond_to_seance_offer`
   (account-scoped accept/decline; accept moves the honoree's character to the ceremony's

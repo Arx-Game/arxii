@@ -2748,6 +2748,7 @@ paths:
           enum:
           - blessing
           - conversion
+          - coronation
           - funeral
           - seance
           - sermon
@@ -2759,6 +2760,7 @@ paths:
           * `seance` - Seance
           * `wedding` - Wedding
           * `conversion` - Conversion
+          * `coronation` - Coronation
       - in: query
         name: location
         schema:

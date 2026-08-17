@@ -35,6 +35,7 @@ from actions.definitions.ceremonies import (
     OpenCeremonyAction,
     RespondConversionOfferAction,
     RespondSeanceOfferAction,
+    RespondWeddingConsentOfferAction,
 )
 from actions.definitions.charm_asset import CharmAssetAction
 from actions.definitions.coercion import coerce, reveal_secret
@@ -117,6 +118,7 @@ from actions.definitions.distinctions import (
     ReviewSheetUpdateRequestAction,
     SubmitSheetUpdateRequestAction,
 )
+from actions.definitions.divorce import InitiateDivorceAction
 from actions.definitions.domains import (
     AddDomainHoldingAction,
     AppointDomainOfficeAction,
@@ -929,6 +931,9 @@ _ALL_ACTIONS: list[Action] = [
     RespondSeanceOfferAction(),
     # #2361 — post-CG worship conversion: consent gate for a PC-officiated rite.
     RespondConversionOfferAction(),
+    # #2358 — wedding consent + divorce: unilateral union dissolution + prestige hits.
+    RespondWeddingConsentOfferAction(),
+    InitiateDivorceAction(),
     # #1985 — estates (the executor's will-reading settlement door).
     WillReadingAction(),
     # #2295 — voluntary asset sharing: introduce an owned asset to a co-present ally.
