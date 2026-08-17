@@ -82,6 +82,9 @@ _ROOM_TYPECLASS = "typeclasses.rooms.Room"
 # Lazy model reference (Django app_label.ModelName) used as a factory Meta.model
 # string, extracted to satisfy S1192.
 _TRIGGER_DEFINITION_MODEL = "arxii.TriggerDefinition"
+# SubFactory SelfAttribute path pulling the parent factory's own `encounter`
+# attribute, referenced by several factories below (S1192).
+_PARENT_ENCOUNTER_ATTR = "..encounter"
 
 
 class CombatEncounterFactory(factory_django.DjangoModelFactory):
@@ -1930,10 +1933,10 @@ class ThreatRecordFactory(factory_django.DjangoModelFactory):
 
     encounter = factory.SubFactory(CombatEncounterFactory)
     opponent = factory.SubFactory(
-        CombatOpponentFactory, encounter=factory.SelfAttribute("..encounter")
+        CombatOpponentFactory, encounter=factory.SelfAttribute(_PARENT_ENCOUNTER_ATTR)
     )
     participant = factory.SubFactory(
-        CombatParticipantFactory, encounter=factory.SelfAttribute("..encounter")
+        CombatParticipantFactory, encounter=factory.SelfAttribute(_PARENT_ENCOUNTER_ATTR)
     )
     threat_value = 0
 
@@ -1946,10 +1949,10 @@ class EngagementLockFactory(factory_django.DjangoModelFactory):
 
     encounter = factory.SubFactory(CombatEncounterFactory)
     opponent = factory.SubFactory(
-        CombatOpponentFactory, encounter=factory.SelfAttribute("..encounter")
+        CombatOpponentFactory, encounter=factory.SelfAttribute(_PARENT_ENCOUNTER_ATTR)
     )
     participant = factory.SubFactory(
-        CombatParticipantFactory, encounter=factory.SelfAttribute("..encounter")
+        CombatParticipantFactory, encounter=factory.SelfAttribute(_PARENT_ENCOUNTER_ATTR)
     )
     status = EngagementLockStatus.ACTIVE
     initiated_by = LockInitiator.THREAT
@@ -1969,5 +1972,5 @@ class PendingSelectionFactory(factory_django.DjangoModelFactory):
         {"id": "Test Weakness", "label": "Test Weakness", "description": "A test weakness."}
     ]
     target_opponent = factory.SubFactory(
-        CombatOpponentFactory, encounter=factory.SelfAttribute("..encounter")
+        CombatOpponentFactory, encounter=factory.SelfAttribute(_PARENT_ENCOUNTER_ATTR)
     )

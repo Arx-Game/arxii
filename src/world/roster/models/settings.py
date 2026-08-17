@@ -9,6 +9,8 @@ from evennia.utils.idmapper.models import SharedMemoryModel
 
 from .choices import PlotInvolvement
 
+_ROSTER_TENURE_FK = "arxii.RosterTenure"
+
 
 class TenureDisplaySettings(SharedMemoryModel):
     """
@@ -17,7 +19,7 @@ class TenureDisplaySettings(SharedMemoryModel):
     """
 
     tenure = models.OneToOneField(
-        "arxii.RosterTenure",
+        _ROSTER_TENURE_FK,
         on_delete=models.CASCADE,
         related_name="display_settings",
     )
@@ -76,14 +78,14 @@ class TenureGallery(SharedMemoryModel):
     """Collection of media for a roster tenure."""
 
     tenure = models.ForeignKey(
-        "arxii.RosterTenure",
+        _ROSTER_TENURE_FK,
         on_delete=models.CASCADE,
         related_name="galleries",
     )
     name = models.CharField(max_length=100)
     is_public = models.BooleanField(default=True, help_text="Visible to other players")
     allowed_viewers = models.ManyToManyField(
-        "arxii.RosterTenure",
+        _ROSTER_TENURE_FK,
         blank=True,
         related_name="shared_galleries",
         help_text="Tenures allowed to view this private gallery",
@@ -103,7 +105,7 @@ class TenureMedia(SharedMemoryModel):
     """Bridge between player media and character tenures."""
 
     tenure = models.ForeignKey(
-        "arxii.RosterTenure",
+        _ROSTER_TENURE_FK,
         on_delete=models.CASCADE,
         related_name="media",
     )

@@ -22,6 +22,9 @@ from world.progression.constants import (
 from world.progression.types import DevelopmentSource, ProgressionReason
 from world.traits.models import CharacterTraitChange, CharacterTraitValue, TraitChangeSource
 
+CHARACTER_SHEET_MODEL = "arxii.CharacterSheet"
+TRAIT_MODEL = "arxii.Trait"
+
 
 def cumulative_dp_for_level(level: int) -> int:
     """Total dp needed to reach *level* from the base level of 10.
@@ -122,7 +125,7 @@ class XPTransaction(SharedMemoryModel):
         help_text="Detailed description",
     )
     character = models.ForeignKey(
-        "arxii.CharacterSheet",
+        CHARACTER_SHEET_MODEL,
         null=True,
         blank=True,
         on_delete=models.CASCADE,
@@ -155,12 +158,12 @@ class DevelopmentPoints(SharedMemoryModel):
     """Development points earned by characters through activity."""
 
     character_sheet = models.ForeignKey(
-        "arxii.CharacterSheet",
+        CHARACTER_SHEET_MODEL,
         on_delete=models.CASCADE,
         related_name="development_points",
     )
     trait = models.ForeignKey(
-        "arxii.Trait",
+        TRAIT_MODEL,
         on_delete=models.CASCADE,
         related_name="development_points",
     )
@@ -249,12 +252,12 @@ class DevelopmentTransaction(SharedMemoryModel):
     """Audit trail for all development point awards."""
 
     character_sheet = models.ForeignKey(
-        "arxii.CharacterSheet",
+        CHARACTER_SHEET_MODEL,
         on_delete=models.CASCADE,
         related_name="development_transactions",
     )
     trait = models.ForeignKey(
-        "arxii.Trait",
+        TRAIT_MODEL,
         on_delete=models.CASCADE,
         related_name="development_transactions",
     )
@@ -310,12 +313,12 @@ class WeeklySkillUsage(SharedMemoryModel):
     """
 
     character_sheet = models.ForeignKey(
-        "arxii.CharacterSheet",
+        CHARACTER_SHEET_MODEL,
         on_delete=models.CASCADE,
         related_name="weekly_skill_usage",
     )
     trait = models.ForeignKey(
-        "arxii.Trait",
+        TRAIT_MODEL,
         on_delete=models.CASCADE,
         related_name="weekly_skill_usage",
     )

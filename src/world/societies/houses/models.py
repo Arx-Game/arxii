@@ -38,6 +38,7 @@ from world.societies.houses.constants import (
 _ORG_FK = "arxii.Organization"
 _KINSPERSON_FK = "arxii.Kinsperson"
 _REALM_FK = "arxii.Realm"
+_PERSONA_FK = "arxii.Persona"
 
 
 class NobiliaryParticle(SharedMemoryModel):
@@ -461,7 +462,7 @@ class DomainEdict(SharedMemoryModel):
         help_text="The proclaiming act that enacted this policy.",
     )
     enacted_by = models.ForeignKey(
-        "arxii.Persona",
+        _PERSONA_FK,
         on_delete=models.CASCADE,
         related_name="edicts_enacted",
     )
@@ -618,7 +619,7 @@ class DomainCrisis(SharedMemoryModel):
     # One machinery, two fictions (the CRIME_KICKUP precedent): the same row
     # is a crisis on a house's lands OR on the organization itself (#2837).
     org = models.ForeignKey(
-        "arxii.Organization",
+        _ORG_FK,
         null=True,
         blank=True,
         on_delete=models.CASCADE,
@@ -748,9 +749,7 @@ class CrisisIntel(SharedMemoryModel):
     """
 
     crisis = models.ForeignKey(DomainCrisis, on_delete=models.CASCADE, related_name="intel")
-    org = models.ForeignKey(
-        "arxii.Organization", on_delete=models.CASCADE, related_name="crisis_intel"
-    )
+    org = models.ForeignKey(_ORG_FK, on_delete=models.CASCADE, related_name="crisis_intel")
     source = models.CharField(
         max_length=20,
         choices=CrisisIntelSource.choices,
@@ -1143,9 +1142,7 @@ class OrganizationAspect(SharedMemoryModel):
     houses carry facets without a claim.
     """
 
-    organization = models.ForeignKey(
-        "arxii.Organization", on_delete=models.CASCADE, related_name="aspects"
-    )
+    organization = models.ForeignKey(_ORG_FK, on_delete=models.CASCADE, related_name="aspects")
     definition = models.ForeignKey(
         HouseAspectDefinition, on_delete=models.PROTECT, related_name="+"
     )
@@ -1164,9 +1161,7 @@ class OrganizationAspect(SharedMemoryModel):
 class OrganizationFeature(SharedMemoryModel):
     """A cultural feature stamped on a house org (#2079)."""
 
-    organization = models.ForeignKey(
-        "arxii.Organization", on_delete=models.CASCADE, related_name="features"
-    )
+    organization = models.ForeignKey(_ORG_FK, on_delete=models.CASCADE, related_name="features")
     feature = models.ForeignKey(
         HouseFeature, on_delete=models.PROTECT, related_name="organization_features"
     )
@@ -1317,7 +1312,7 @@ class StatureShift(SharedMemoryModel):
         help_text="The person whose death/marriage moved the number, when one did.",
     )
     subject_persona = models.ForeignKey(
-        "arxii.Persona",
+        _PERSONA_FK,
         on_delete=models.SET_NULL,
         null=True,
         blank=True,
@@ -1487,7 +1482,7 @@ class OrgPact(SharedMemoryModel):
         related_name="pacts_as_party_b",
     )
     proposed_by = models.ForeignKey(
-        "arxii.Persona",
+        _PERSONA_FK,
         on_delete=models.SET_NULL,
         null=True,
         blank=True,

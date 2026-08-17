@@ -16,6 +16,8 @@ from evennia.utils.idmapper.models import SharedMemoryModel
 
 from world.magic.constants import TargetKind
 
+_CROSSING_LEVEL_HELP = "PathStage crossing level (3, 6, 11, 16, 21)."
+
 
 class CrossingOption(SharedMemoryModel):
     """Authored catalog of resonance-matched aura enhancements.
@@ -37,7 +39,7 @@ class CrossingOption(SharedMemoryModel):
         related_name="crossing_options",
     )
     crossing_level = models.PositiveSmallIntegerField(
-        help_text="PathStage crossing level (3, 6, 11, 16, 21).",
+        help_text=_CROSSING_LEVEL_HELP,
     )
     name = models.CharField(
         max_length=120,
@@ -111,7 +113,7 @@ class CrossingChoice(SharedMemoryModel):
         related_name="crossing_choices",
     )
     crossing_level = models.PositiveSmallIntegerField(
-        help_text="PathStage crossing level (3, 6, 11, 16, 21).",
+        help_text=_CROSSING_LEVEL_HELP,
     )
     option = models.ForeignKey(
         CrossingOption,
@@ -147,7 +149,7 @@ class PendingCrossingOffer(SharedMemoryModel):
         related_name="pending_crossing_offers",
     )
     crossing_level = models.PositiveSmallIntegerField(
-        help_text="PathStage crossing level (3, 6, 11, 16, 21).",
+        help_text=_CROSSING_LEVEL_HELP,
     )
     created_at = models.DateTimeField(auto_now_add=True)
 
