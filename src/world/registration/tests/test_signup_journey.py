@@ -9,7 +9,9 @@ React signup form posts to (not just the adapter method in isolation).
 
 from datetime import timedelta
 import json
+from unittest.mock import patch
 
+from allauth.account.adapter import DefaultAccountAdapter
 from django.contrib.auth import get_user_model
 from django.test import TestCase
 from django.utils import timezone
@@ -18,7 +20,7 @@ from rest_framework.test import APIClient
 
 from evennia_extensions.factories import AccountFactory
 from world.registration.factories import AccountInviteFactory
-from world.registration.models import AccountInvite, get_registration_config
+from world.registration.models import AccountInvite, AccountMailFailure, get_registration_config
 
 User = get_user_model()
 
@@ -87,6 +89,32 @@ class SignupJourneyTests(TestCase):
 
         self.assertEqual(response.status_code, status.HTTP_401_UNAUTHORIZED)
         self.assertTrue(User.objects.filter(username="open_user").exists())
+
+    def test_mail_failure_does_not_fail_signup(self):
+        """A dead mail provider must not turn a successful signup into a 500 (#3193).
+
+        Patches the parent adapter's send_mail (the seam under
+        ArxAccountAdapter's catch) with the exact failure from the 2026-08-16
+        outage. Signup must still return the normal pending-verification shape,
+        the account must exist, and the failure must be recorded staff-visibly.
+        """
+        config = get_registration_config()
+        config.registration_open = True
+        config.save(update_fields=["registration_open"])
+
+        with patch.object(
+            DefaultAccountAdapter,
+            "send_mail",
+            side_effect=TimeoutError("[Errno 110] Connection timed out"),
+        ):
+            response = self._signup(username="mail_down_user", email="mail-down@example.com")
+
+        self.assertEqual(response.status_code, status.HTTP_401_UNAUTHORIZED)
+        self.assertTrue(User.objects.filter(username="mail_down_user").exists())
+
+        failure = AccountMailFailure.objects.get(email="mail-down@example.com")
+        self.assertIn("TimeoutError", failure.error)
+        self.assertIn("Connection timed out", failure.error)
 
     def test_reused_invite_is_rejected(self):
         invite = AccountInviteFactory(invited_by=self.staff, email="reused@example.com")

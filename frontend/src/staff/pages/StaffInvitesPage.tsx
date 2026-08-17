@@ -10,6 +10,7 @@ import { SubmitButton } from '@/components/SubmitButton';
 import type { AccountInvite, AccountInviteStatus } from '@/staff/types';
 import {
   useAccountInviteList,
+  useFetchVerificationLink,
   useIssueAccountInvite,
   useResendAccountInvite,
   useRevokeAccountInvite,
@@ -98,6 +99,54 @@ function IssueInviteForm() {
   );
 }
 
+/** Fallback when mail cannot reach a registered player (#3193): staff enter the
+ * account's email and get its verification link to hand over directly, the same
+ * trust model as Copy Link on an invite. */
+function VerificationLinkForm() {
+  const [email, setEmail] = useState('');
+  const [link, setLink] = useState<string | null>(null);
+  const mutation = useFetchVerificationLink();
+
+  const onSubmit = (event: React.FormEvent) => {
+    event.preventDefault();
+    setLink(null);
+    mutation.mutate(email, {
+      onSuccess: (data) => {
+        setLink(data.link);
+        navigator.clipboard?.writeText(data.link);
+        toast.success('Verification link copied.');
+      },
+      onError: (err) => {
+        toast.error(err instanceof Error ? err.message : 'Failed to generate link.');
+      },
+    });
+  };
+
+  return (
+    <Card className="mb-6">
+      <CardContent className="py-4">
+        <form onSubmit={onSubmit} className="flex flex-wrap items-end gap-3">
+          <div className="space-y-1">
+            <Label htmlFor="verification-email">Verification link for an account</Label>
+            <Input
+              id="verification-email"
+              type="email"
+              placeholder="player@example.com"
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+              required
+            />
+          </div>
+          <SubmitButton isLoading={mutation.isPending} disabled={!email}>
+            Copy Verification Link
+          </SubmitButton>
+        </form>
+        {link && <p className="mt-3 break-all text-sm text-muted-foreground">{link}</p>}
+      </CardContent>
+    </Card>
+  );
+}
+
 function InviteRow({ invite }: { invite: AccountInvite }) {
   const revoke = useRevokeAccountInvite();
   const resend = useResendAccountInvite();
@@ -174,6 +223,7 @@ export function StaffInvitesPage() {
       <h1 className="mb-6 text-2xl font-bold">Account Invites</h1>
 
       <IssueInviteForm />
+      <VerificationLinkForm />
 
       <div className="mb-6 flex flex-wrap gap-2">
         {STATUS_OPTIONS.map((opt) => (

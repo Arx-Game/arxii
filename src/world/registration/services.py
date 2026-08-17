@@ -5,16 +5,25 @@ the adapter — mirrors the project's action/service-function convention.
 """
 
 from datetime import timedelta
+import logging
 import secrets
 
+from allauth.account.models import EmailAddress, EmailConfirmationHMAC
+from django.conf import settings
 from django.db import transaction
 from django.utils import timezone
 from evennia.accounts.models import AccountDB
 
 from world.registration.constants import DEFAULT_INVITE_DURATION_DAYS
-from world.registration.models import AccountInvite
+from world.registration.models import AccountInvite, AccountMailFailure
+
+logger = logging.getLogger(__name__)
 
 TOKEN_BYTES = 32
+
+
+class AlreadyVerifiedError(Exception):
+    """The address already belongs to a verified account — no link to hand out."""
 
 
 def issue_invite(email: str, invited_by: AccountDB, note: str = "") -> AccountInvite:
@@ -117,3 +126,38 @@ def redeem_invite(token: str, email: str, account: AccountDB) -> AccountInvite |
     invite.redeemed_by = account
     invite.save(update_fields=["redeemed_at", "redeemed_by"])
     return invite
+
+
+def record_mail_failure(email: str, template_prefix: str, error: Exception) -> AccountMailFailure:
+    """Persist a failed account-mail send so staff can see the outage (#3193).
+
+    Called from ``ArxAccountAdapter.send_mail``'s catch — the request that
+    triggered the send has already succeeded on its own terms, so this row is
+    the only durable trace the send did not happen.
+    """
+    return AccountMailFailure.objects.create(
+        email=email,
+        template_prefix=template_prefix,
+        error=f"{type(error).__name__}: {error}",
+    )
+
+
+def build_verification_link(email: str) -> str:
+    """Return the email-verification URL for an unverified account address (#3193).
+
+    Staff-facing: email should not be the only route to a verified account, so
+    the staff invites page can copy this link and hand it over directly (the
+    same trust model as the invite link staff already paste by hand). Uses
+    allauth's HMAC confirmation key — generated on demand, no DB row, and
+    time-bounded by ``ACCOUNT_EMAIL_CONFIRMATION_EXPIRE_DAYS``.
+
+    Raises:
+        EmailAddress.DoesNotExist: No account has this address.
+        AlreadyVerifiedError: The address is already verified.
+    """
+    normalized_email = email.strip().lower()
+    address = EmailAddress.objects.get(email__iexact=normalized_email)
+    if address.verified:
+        raise AlreadyVerifiedError(normalized_email)
+    key = EmailConfirmationHMAC(address).key
+    return settings.HEADLESS_FRONTEND_URLS["account_confirm_email"].format(key=key)

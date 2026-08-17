@@ -1,6 +1,7 @@
 """Custom django-allauth adapters for Arx II."""
 
 import json
+import logging
 
 from allauth.account.adapter import DefaultAccountAdapter
 
@@ -8,9 +9,33 @@ from evennia_extensions.models import PlayerData
 from world.registration import services as registration_services
 from world.registration.models import get_registration_config
 
+logger = logging.getLogger(__name__)
+
 
 class ArxAccountAdapter(DefaultAccountAdapter):
     """Custom account adapter for Arx II that creates PlayerData on signup."""
+
+    def send_mail(self, template_prefix, email, context):
+        """Account mail is best-effort: a failed send never fails the request (#3193).
+
+        On 2026-08-16 an SMTP timeout inside the signup verification send
+        propagated out of ``/api/auth/browser/v1/auth/signup`` as an HTML 500,
+        after the account row and invite redemption had already committed — the
+        user got a real account and an apparent failure, and the retry read as
+        "username taken". The same send also runs at login
+        (``send_verification_email_at_login``), where a mail outage blocked
+        existing users from signing in. So every allauth account send
+        (verification, password reset) is caught here: the failure is logged
+        and recorded staff-visibly via ``record_mail_failure``, and the request
+        completes. Staff can hand over a verification link directly (the
+        ``/api/staff/verification-link/`` surface), and the next login retries
+        the send anyway.
+        """
+        try:
+            super().send_mail(template_prefix, email, context)
+        except Exception as exc:
+            logger.exception("Account mail send failed (%s to %s)", template_prefix, email)
+            registration_services.record_mail_failure(email, template_prefix, exc)
 
     def is_open_for_signup(self, request):
         """Registration is closed by default; a valid per-email invite opens it (#3054).

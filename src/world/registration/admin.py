@@ -4,7 +4,7 @@ from typing import ClassVar
 
 from django.contrib import admin
 
-from world.registration.models import AccountInvite, RegistrationConfig
+from world.registration.models import AccountInvite, AccountMailFailure, RegistrationConfig
 
 
 @admin.register(RegistrationConfig)
@@ -42,3 +42,17 @@ class AccountInviteAdmin(admin.ModelAdmin):
         "redeemed_at",
         "redeemed_by",
     ]
+
+
+@admin.register(AccountMailFailure)
+class AccountMailFailureAdmin(admin.ModelAdmin):
+    """Read-only ledger of failed account-mail sends (#3193) — staff visibility only."""
+
+    list_display: ClassVar[list[str]] = ["email", "template_prefix", "created_at"]
+    list_filter: ClassVar[list[str]] = ["created_at"]
+    search_fields: ClassVar[list[str]] = ["email", "template_prefix", "error"]
+    readonly_fields: ClassVar[list[str]] = ["email", "template_prefix", "error", "created_at"]
+
+    def has_add_permission(self, request) -> bool:  # noqa: ARG002
+        # Rows are written by the adapter's send_mail catch, never by hand.
+        return False

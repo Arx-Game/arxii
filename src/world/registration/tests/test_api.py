@@ -121,3 +121,61 @@ class AccountInviteViewSetJourneyTests(TestCase):
         invite.refresh_from_db()
         self.assertIsNotNone(invite.revoked_at)
         self.assertEqual(response.data["status"], "revoked")
+
+
+class VerificationLinkViewTests(TestCase):
+    """Staff copy a verification link when mail cannot reach the invitee (#3193)."""
+
+    @classmethod
+    def setUpTestData(cls):
+        cls.staff = AccountFactory(username="verify_link_staff", is_staff=True)
+        cls.player = AccountFactory(username="verify_link_player", is_staff=False)
+
+    def setUp(self):
+        self.client = APIClient()
+        self.url = "/api/staff/verification-link/"
+        self.client.force_authenticate(self.staff)
+
+    def _make_unverified(self, email: str):
+        from allauth.account.models import EmailAddress
+
+        account = AccountFactory(username=f"unverified_{email.split('@')[0]}", email=email)
+        return EmailAddress.objects.create(user=account, email=email, verified=False, primary=True)
+
+    def test_player_cannot_generate(self):
+        self.client.force_authenticate(self.player)
+        response = self.client.post(self.url, {"email": "someone@example.com"}, format="json")
+        self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
+
+    def test_unknown_email_is_404(self):
+        response = self.client.post(self.url, {"email": "nobody@example.com"}, format="json")
+        self.assertEqual(response.status_code, status.HTTP_404_NOT_FOUND)
+
+    def test_verified_email_is_400(self):
+        from allauth.account.models import EmailAddress
+
+        account = AccountFactory(username="already_verified", email="done@example.com")
+        EmailAddress.objects.create(
+            user=account, email="done@example.com", verified=True, primary=True
+        )
+        response = self.client.post(self.url, {"email": "done@example.com"}, format="json")
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+
+    def test_returns_link_whose_key_resolves(self):
+        """The returned link embeds an HMAC key allauth accepts for this address."""
+        from allauth.account.models import EmailConfirmationHMAC
+
+        address = self._make_unverified("locked-out@example.com")
+        response = self.client.post(self.url, {"email": "locked-out@example.com"}, format="json")
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        link = response.data["link"]
+        self.assertIn("/verify-email/", link)
+        key = link.rstrip("/").rsplit("/", 1)[-1]
+        confirmation = EmailConfirmationHMAC.from_key(key)
+        self.assertIsNotNone(confirmation)
+        self.assertEqual(confirmation.email_address.pk, address.pk)
+
+    def test_lookup_is_case_insensitive(self):
+        self._make_unverified("mixedcase@example.com")
+        response = self.client.post(self.url, {"email": "MixedCase@example.com"}, format="json")
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
