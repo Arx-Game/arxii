@@ -228,3 +228,33 @@ class KinRelationshipViewTests(APITestCase):
             response.status_code,
             (status.HTTP_401_UNAUTHORIZED, status.HTTP_403_FORBIDDEN),
         )
+
+
+class FamilySerializerParticleTests(APITestCase):
+    """#3261 — the family payload carries its resolved particle pair for CG preview."""
+
+    def test_particles_serialize_for_housed_family(self) -> None:
+        from world.roster.models import Family
+        from world.roster.serializers.families import FamilySerializer
+        from world.societies.factories import OrganizationFactory
+        from world.societies.houses.models import NobiliaryParticle
+
+        family = FamilyFactory(name="Volante", family_type=Family.FamilyType.NOBLE)
+        org = OrganizationFactory(name="House Volante", family=family)
+        NobiliaryParticle.objects.create(
+            realm=org.society.realm,
+            family_type=Family.FamilyType.NOBLE,
+            particle="za",
+            taken_in_particle="zas",
+        )
+        data = FamilySerializer(family).data
+        self.assertEqual(data["born_particle"], "za")
+        self.assertEqual(data["taken_in_particle"], "zas")
+
+    def test_particles_blank_for_unhoused_family(self) -> None:
+        from world.roster.serializers.families import FamilySerializer
+
+        family = FamilyFactory(name="Driftfolk")
+        data = FamilySerializer(family).data
+        self.assertEqual(data["born_particle"], "")
+        self.assertEqual(data["taken_in_particle"], "")

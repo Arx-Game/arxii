@@ -25072,6 +25072,38 @@ paths:
               schema:
                 $ref: '#/components/schemas/RenownCard'
           description: ''
+  /api/personas/{id}/set-name-display/:
+    post:
+      operationId: personas_set_name_display_create
+      description: |-
+        #3261 — set this persona's name-degree and title-suffix preferences.
+
+        Only the played character may restyle their own personas; a foreign or
+        unknown id is rejected uniformly (400) without revealing existence.
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: A unique integer value identifying this persona.
+        required: true
+      tags:
+      - personas
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SetNameDisplayRequestRequest'
+        required: true
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Persona'
+          description: ''
   /api/personas/{id}/spread/:
     post:
       operationId: personas_spread_create
@@ -45696,9 +45728,20 @@ components:
           nullable: true
           description: Canonical realm this family is associated with; used to filter
             in character creation and (#1884) to resolve the nobiliary particle
+        born_particle:
+          type: string
+          readOnly: true
+          description: Nobiliary particle a born member wears (#3261); '' when none.
+        taken_in_particle:
+          type: string
+          readOnly: true
+          description: Particle a married/adopted/legitimized member wears; '' when
+            none.
       required:
+      - born_particle
       - id
       - name
+      - taken_in_particle
     FamilyRequest:
       type: object
       description: Serializer for family selection and display.
@@ -52832,6 +52875,18 @@ components:
       required:
       - npc_persona
       - persona
+    NameDegreeEnum:
+      enum:
+      - familiar
+      - common
+      - styled
+      - full_formal
+      type: string
+      description: |-
+        * `familiar` - Familiar
+        * `common` - Common
+        * `styled` - Styled
+        * `full_formal` - Full Formal
     NarrativeCategoryEnum:
       enum:
       - story
@@ -62073,6 +62128,34 @@ components:
           type: string
           description: Display name for this persona
           maxLength: 255
+        display_name:
+          type: string
+          description: |-
+            The particled name at the persona's preferred degree (#3261).
+
+            Only the PRIMARY persona derives from the kinship graph; disguises and
+            alternate faces present their claimed name bare, so the née segment
+            can never leak the true birth family through a mask.
+          readOnly: true
+        name_degree:
+          allOf:
+          - $ref: '#/components/schemas/NameDegreeEnum'
+          description: |-
+            Degree of name this persona leads with (#3261).
+
+            * `familiar` - Familiar
+            * `common` - Common
+            * `styled` - Styled
+            * `full_formal` - Full Formal
+        title_suffix:
+          allOf:
+          - $ref: '#/components/schemas/TitleSuffixEnum'
+          description: |-
+            Which held titles trail the composed name (#3261).
+
+            * `none` - No Titles
+            * `primary` - Primary Title
+            * `all` - All Titles
         is_fake_name:
           type: boolean
           description: True when this persona obscures the character's identity
@@ -62129,6 +62212,7 @@ components:
       required:
       - allow_social_actions
       - character_sheet
+      - display_name
       - guise_background
       - guise_concept
       - guise_personality
@@ -66867,6 +66951,17 @@ components:
           minimum: 1
       required:
       - persona_id
+    SetNameDisplayRequestRequest:
+      type: object
+      description: 'POST body for the #3261 set-name-display endpoint (degree + titles).'
+      properties:
+        name_degree:
+          $ref: '#/components/schemas/NameDegreeEnum'
+        title_suffix:
+          $ref: '#/components/schemas/TitleSuffixEnum'
+      required:
+      - name_degree
+      - title_suffix
     SetPersonaProfileRequestRequest:
       type: object
       description: |-
@@ -72020,6 +72115,16 @@ components:
         * `day` - Day
         * `dusk` - Dusk
         * `night` - Night
+    TitleSuffixEnum:
+      enum:
+      - none
+      - primary
+      - all
+      type: string
+      description: |-
+        * `none` - No Titles
+        * `primary` - Primary Title
+        * `all` - All Titles
     TradeItemStake:
       type: object
       properties:

@@ -14,6 +14,13 @@ from world.roster.models import Family, KinSlotPool, Kinsperson
 class FamilySerializer(serializers.ModelSerializer):
     """Serializer for family selection and display."""
 
+    born_particle = serializers.SerializerMethodField(
+        help_text="Nobiliary particle a born member wears (#3261); '' when none."
+    )
+    taken_in_particle = serializers.SerializerMethodField(
+        help_text="Particle a married/adopted/legitimized member wears; '' when none."
+    )
+
     class Meta:
         model = Family
         fields = [
@@ -23,8 +30,20 @@ class FamilySerializer(serializers.ModelSerializer):
             "description",
             "is_playable",
             "origin_realm",
+            "born_particle",
+            "taken_in_particle",
         ]
         read_only_fields = ["id"]
+
+    def get_born_particle(self, obj: Family) -> str:
+        from world.societies.houses.services import resolve_particle  # noqa: PLC0415
+
+        return resolve_particle(obj)
+
+    def get_taken_in_particle(self, obj: Family) -> str:
+        from world.societies.houses.services import resolve_particle  # noqa: PLC0415
+
+        return resolve_particle(obj, taken_in=True)
 
 
 class KinspersonNodeSerializer(serializers.Serializer):
