@@ -235,6 +235,52 @@ def _presented_bio_fields(bio_profile: Profile | None) -> tuple[str, str, dict]:
     )
 
 
+def _resolve_identity_reveal(
+    character: ObjectDB,
+    family: Any,
+    name: str,
+    reveal_identity: bool,
+    sheet: CharacterSheet,
+) -> tuple[str, IdNameRef | None]:
+    if not reveal_identity:
+        # The presented (mask/cover) name is already resolved; never compose the real db_key
+        # with a family name here, and withhold the real progression path.
+        return name, None
+    # Compose the real fullname: "FirstName FamilyName" or just the db_key.
+    fullname = f"{character.db_key} {family.name}" if family is not None else character.db_key
+    # Latest path from prefetched path_history (ordered by -selected_at).
+    path_history: list = sheet.cached_path_history
+    path_value = _id_name(path_history[0].path) if path_history else None
+    return fullname, path_value
+
+
+def _resolve_worship(
+    sheet: CharacterSheet, privileged: bool
+) -> tuple[IdNameRef | None, bool | None]:
+    # Public worship only (#2355) — the secret side never leaves owner surfaces.
+    # The heart-vs-lip-service inward truth (#2361) is privileged-only, same
+    # leak-table pattern as current_mood below — the public record shows only
+    # the public act (Ratified amendment #2).
+    worship_sincere: bool | None = None
+    try:
+        declaration = sheet.worship_declaration
+        worship = _id_name_or_null(declaration.public_being)
+        if privileged:
+            worship_sincere = declaration.public_is_sincere
+    except ObjectDoesNotExist:
+        worship = None
+    return worship, worship_sincere
+
+
+def _resolve_birthday(sheet: CharacterSheet) -> str | None:
+    # Celebrated birthday is public sheet data (#2756); the true age axes are
+    # owner/staff-only per the leak table (chronological stays None for a
+    # Sleeper even when privileged — unknowable, rendered "Unknown").
+    if sheet.birthday_month is not None and sheet.birthday_day is not None:
+        return f"{calendar.month_name[sheet.birthday_month]} {sheet.birthday_day}"
+    return None
+
+
 def _build_identity(
     sheet: CharacterSheet,
     *,
@@ -265,38 +311,9 @@ def _build_identity(
         possessive=sheet.pronoun_possessive,
     )
 
-    if not reveal_identity:
-        # The presented (mask/cover) name is already resolved; never compose the real db_key
-        # with a family name here, and withhold the real progression path.
-        fullname = name
-        path_value: IdNameRef | None = None
-    else:
-        # Compose the real fullname: "FirstName FamilyName" or just the db_key.
-        fullname = f"{character.db_key} {family.name}" if family is not None else character.db_key
-        # Latest path from prefetched path_history (ordered by -selected_at).
-        path_history: list = sheet.cached_path_history
-        path_value = _id_name(path_history[0].path) if path_history else None
-
-    # Public worship only (#2355) — the secret side never leaves owner surfaces.
-    # The heart-vs-lip-service inward truth (#2361) is privileged-only, same
-    # leak-table pattern as current_mood below — the public record shows only
-    # the public act (Ratified amendment #2).
-    worship_sincere: bool | None = None
-    try:
-        declaration = sheet.worship_declaration
-        worship = _id_name_or_null(declaration.public_being)
-        if privileged:
-            worship_sincere = declaration.public_is_sincere
-    except ObjectDoesNotExist:
-        worship = None
-
-    # Celebrated birthday is public sheet data (#2756); the true age axes are
-    # owner/staff-only per the leak table (chronological stays None for a
-    # Sleeper even when privileged — unknowable, rendered "Unknown").
-    if sheet.birthday_month is not None and sheet.birthday_day is not None:
-        birthday = f"{calendar.month_name[sheet.birthday_month]} {sheet.birthday_day}"
-    else:
-        birthday = None
+    fullname, path_value = _resolve_identity_reveal(character, family, name, reveal_identity, sheet)
+    worship, worship_sincere = _resolve_worship(sheet, privileged)
+    birthday = _resolve_birthday(sheet)
 
     return IdentitySection(
         name=name,
@@ -472,6 +489,40 @@ def _resolve_presented_identity(
     )
 
 
+def _resolve_disguise_form_traits(
+    form_state: Any,
+    privileged: bool,
+    descriptors: dict[int, str],
+    form_traits: list[FormTraitEntry],
+) -> list[FormTraitEntry]:
+    # Disguise concealment (#1272): a non-privileged viewer of a disguised face sees
+    # the overlay's traits (not the real form's), filtered by the overlay's level.
+    # Gated on ``privileged`` only — a disguise overlay can be active even when the
+    # presented face is the primary persona (reveal_identity=True for a public face).
+    from world.forms.models import ConcealmentLevel  # noqa: PLC0415
+
+    if privileged or form_state is None or form_state.active_fake_overlay_id is None:
+        return form_traits
+    overlay = form_state.active_fake_overlay
+    if overlay.concealment_level == ConcealmentLevel.FULL:
+        return []
+    # DESCRIPTOR and NONE both show the overlay's traits; DESCRIPTOR hides
+    # the descriptor (shows only the normalized value).
+    show_descriptors = overlay.concealment_level == ConcealmentLevel.NONE
+    overlay_values = overlay.values.select_related("trait", "option").order_by("trait__sort_order")
+    return [
+        FormTraitEntry(
+            trait=v.trait.display_name,
+            value=(
+                descriptors.get(v.trait_id) or v.option.display_name
+                if show_descriptors
+                else v.option.display_name
+            ),
+        )
+        for v in overlay_values
+    ]
+
+
 def _build_appearance(
     sheet: CharacterSheet, *, reveal_identity: bool, privileged: bool
 ) -> AppearanceSection:
@@ -499,7 +550,6 @@ def _build_appearance(
 
     One query (the ``HeightBand`` range lookup); otherwise reads prefetched forms + personas.
     """
-    from world.forms.models import ConcealmentLevel  # noqa: PLC0415
     from world.forms.services import get_height_band  # noqa: PLC0415
 
     active = _resolve_active_persona(sheet)
@@ -519,33 +569,9 @@ def _build_appearance(
     else:
         form_traits = []
 
-    # Disguise concealment (#1272): a non-privileged viewer of a disguised face sees
-    # the overlay's traits (not the real form's), filtered by the overlay's level.
-    # Gated on ``privileged`` only — a disguise overlay can be active even when the
-    # presented face is the primary persona (reveal_identity=True for a public face).
-    form_state = sheet.form_state_or_none
-    if not privileged and form_state is not None and form_state.active_fake_overlay_id is not None:
-        overlay = form_state.active_fake_overlay
-        if overlay.concealment_level == ConcealmentLevel.FULL:
-            form_traits = []
-        else:
-            # DESCRIPTOR and NONE both show the overlay's traits; DESCRIPTOR hides
-            # the descriptor (shows only the normalized value).
-            show_descriptors = overlay.concealment_level == ConcealmentLevel.NONE
-            overlay_values = overlay.values.select_related("trait", "option").order_by(
-                "trait__sort_order"
-            )
-            form_traits = [
-                FormTraitEntry(
-                    trait=v.trait.display_name,
-                    value=(
-                        descriptors.get(v.trait_id) or v.option.display_name
-                        if show_descriptors
-                        else v.option.display_name
-                    ),
-                )
-                for v in overlay_values
-            ]
+    form_traits = _resolve_disguise_form_traits(
+        sheet.form_state_or_none, privileged, descriptors, form_traits
+    )
 
     true_height = sheet.true_height_inches
     band = get_height_band(true_height) if true_height is not None else None

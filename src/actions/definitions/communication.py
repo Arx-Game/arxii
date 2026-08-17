@@ -174,6 +174,66 @@ def _render_speech_for_listener(
     )
 
 
+def _deliver_say_to_object(  # noqa: PLR0913 - cohesive per-recipient say-delivery params
+    obj: ObjectDB,
+    actor: ObjectDB,
+    text: str,
+    language: Language,
+    speaker_band: Fluency,
+    excluded_ids: set[int],
+    sdm: SceneDataManager,
+) -> None:
+    if not hasattr(obj, "msg"):
+        return
+    if obj.pk in excluded_ids:
+        return
+    rendered = _render_speech_for_listener(
+        actor, obj, text, language=language, speaker_band=speaker_band
+    )
+    obj_state = sdm.initialize_state_for_object(obj)
+    if obj.pk == actor.pk:
+        # Speaker's own echo stays second-person, matching the
+        # $You() $conj(say) voice of the universal-language branch
+        # above (#2993 final-review M2).
+        send_message(obj_state, f'You say in {language.name}, "{rendered}"')
+    else:
+        send_message(obj_state, f'{actor.key} says in {language.name}, "{rendered}"')
+
+
+def _deliver_language_tagged_say(
+    actor: ObjectDB, text: str, language: Language, sdm: SceneDataManager
+) -> None:
+    # Per-recipient telnet delivery (#2993): the writer and every other
+    # character-with-sheet listener gets a comprehension-graded read of
+    # the same tagged line -- the language name is always visible
+    # (ratified default #3), only the spoken content garbles.
+    from world.species.language_constants import fluency_band  # noqa: PLC0415
+    from world.species.language_services import fluency_value  # noqa: PLC0415
+
+    speaker_band = fluency_band(fluency_value(actor.sheet_data, language))
+    location = actor.location
+    if location is None:
+        return
+
+    # #2287 parity (C2 final-review fix), routed through the Axis-1
+    # broadcast-exclusion registry (#2997): the per-recipient loop below
+    # hand-rolls room delivery instead of going through
+    # message_location()/msg_contents, so it must apply the same
+    # room-broadcast exclusions by hand or a dreamside-perceiving (or any
+    # other registered-exclusion) character illegitimately hears
+    # waking-room language-tagged says. Calling the registry union
+    # (not `_dreamside_occupants` by name) means a second registered
+    # resolver (a haunting/vision/glamour) is honored here too, not
+    # just at `message_location`'s call site.
+    from flows.service_functions.perception_registry import (  # noqa: PLC0415
+        resolve_broadcast_exclusions,
+    )
+
+    excluded_ids = {obj.pk for obj in resolve_broadcast_exclusions(location)}
+    for obj in location.contents:
+        _deliver_say_to_object(obj, actor, text, language, speaker_band, excluded_ids, sdm)
+
+
 @dataclass
 class SayAction(Action):
     """Say something to the room."""
@@ -217,49 +277,7 @@ class SayAction(Action):
                 f'$You() $conj(say) "{text}"',
             )
         else:
-            # Per-recipient telnet delivery (#2993): the writer and every other
-            # character-with-sheet listener gets a comprehension-graded read of
-            # the same tagged line -- the language name is always visible
-            # (ratified default #3), only the spoken content garbles.
-            from world.species.language_constants import fluency_band  # noqa: PLC0415
-            from world.species.language_services import fluency_value  # noqa: PLC0415
-
-            speaker_band = fluency_band(fluency_value(actor.sheet_data, language))
-            location = actor.location
-            if location is not None:
-                # #2287 parity (C2 final-review fix), routed through the Axis-1
-                # broadcast-exclusion registry (#2997): the per-recipient loop below
-                # hand-rolls room delivery instead of going through
-                # message_location()/msg_contents, so it must apply the same
-                # room-broadcast exclusions by hand or a dreamside-perceiving (or any
-                # other registered-exclusion) character illegitimately hears
-                # waking-room language-tagged says. Calling the registry union
-                # (not `_dreamside_occupants` by name) means a second registered
-                # resolver (a haunting/vision/glamour) is honored here too, not
-                # just at `message_location`'s call site.
-                from flows.service_functions.perception_registry import (  # noqa: PLC0415
-                    resolve_broadcast_exclusions,
-                )
-
-                excluded_ids = {obj.pk for obj in resolve_broadcast_exclusions(location)}
-                for obj in location.contents:
-                    if not hasattr(obj, "msg"):
-                        continue
-                    if obj.pk in excluded_ids:
-                        continue
-                    rendered = _render_speech_for_listener(
-                        actor, obj, text, language=language, speaker_band=speaker_band
-                    )
-                    obj_state = sdm.initialize_state_for_object(obj)
-                    if obj.pk == actor.pk:
-                        # Speaker's own echo stays second-person, matching the
-                        # $You() $conj(say) voice of the universal-language branch
-                        # above (#2993 final-review M2).
-                        send_message(obj_state, f'You say in {language.name}, "{rendered}"')
-                    else:
-                        send_message(
-                            obj_state, f'{actor.key} says in {language.name}, "{rendered}"'
-                        )
+            _deliver_language_tagged_say(actor, text, language, sdm)
         # Record + push: creates DB record and sends structured WebSocket payload.
         # Web clients use this for the scene feed display.
         record_interaction(
