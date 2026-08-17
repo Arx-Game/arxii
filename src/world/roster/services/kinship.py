@@ -309,6 +309,7 @@ def add_membership(
         ).exclude(pk=membership.pk).update(is_primary=False)
         kinsperson.family = family
         kinsperson.save(update_fields=["family"])
+        _resync_name_aliases(kinsperson)
     return membership
 
 
@@ -326,7 +327,20 @@ def end_membership(
     if membership.is_primary and person.family_id == membership.family_id:
         person.family = None
         person.save(update_fields=["family"])
+        _resync_name_aliases(person)
     return membership
+
+
+def _resync_name_aliases(person: Kinsperson) -> None:
+    """Re-derive the character object's name aliases after a surname change.
+
+    Explicit call, not a signal (ADR-0009). Function-local import: houses
+    services import this module for ``add_membership``, so the naming layer
+    can't be imported at module level without a cycle.
+    """
+    from world.societies.houses.services import sync_name_aliases  # noqa: PLC0415
+
+    sync_name_aliases(person)
 
 
 @transaction.atomic

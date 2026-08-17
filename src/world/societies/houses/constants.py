@@ -118,6 +118,10 @@ TITLE_TIER_RANK: dict[str, int] = {
 # full-formal degree, before the current-house segment.
 NEE_MARKER = "ne"
 
+# Evennia alias category for derived name forms (#3261): sync_name_aliases
+# clears/re-adds only this category, so player-set aliases survive.
+DERIVED_NAME_ALIAS_CATEGORY = "derived_name"
+
 # PLACEHOLDER personal styles by tier, (male, female, neutral) — used when the
 # Title row's authorable holder-style fields are blank.
 DEFAULT_TIER_STYLES: dict[str, tuple[str, str, str]] = {

@@ -208,6 +208,11 @@ def finalize_character(
     # deletion (the claim FKs live on the draft).
     _bind_kinship_node(draft, sheet)
 
+    # Derived-name aliases (#3261): the bind above may attach a node whose
+    # membership predates the sheet, so the add_membership choke point never
+    # fired for this character — sync explicitly now.
+    _sync_finalized_name_aliases(sheet)
+
     # Finalize magic data before deleting draft
     finalize_magic_data(draft, sheet)
 
@@ -229,6 +234,19 @@ def finalize_character(
     draft.delete()
 
     return character
+
+
+def _sync_finalized_name_aliases(sheet: CharacterSheet) -> None:
+    """Register the particled name forms as telnet aliases (#3261), best-effort."""
+    from django.core.exceptions import ObjectDoesNotExist  # noqa: PLC0415
+
+    from world.societies.houses.services import sync_name_aliases  # noqa: PLC0415
+
+    try:
+        person = sheet.kinsperson
+    except ObjectDoesNotExist:
+        return
+    sync_name_aliases(person)
 
 
 def _bind_house_claim(draft: CharacterDraft, sheet: CharacterSheet) -> None:

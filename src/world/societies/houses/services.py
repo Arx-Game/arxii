@@ -28,6 +28,7 @@ from world.roster.services.kinship import (
 )
 from world.societies.houses.constants import (
     DEFAULT_TIER_STYLES,
+    DERIVED_NAME_ALIAS_CATEGORY,
     NEE_MARKER,
     TITLE_TIER_RANK,
     UNREST_CRISIS_PCT_PER_POINT,
@@ -213,6 +214,16 @@ def full_display_name(
     ``title_suffix`` appends held titles (", Monarch of Luxen") in tier order.
     People without a housed family keep their bare node name at every degree.
     """
+    name = _name_body(person, degree)
+    if degree in (NameDegree.STYLED, NameDegree.FULL_FORMAL):
+        style = _personal_style(person)
+        if style:
+            name = f"{style} {name}"
+    return name + _title_suffix_text(person, title_suffix)
+
+
+def _name_body(person: Kinsperson, degree: str) -> str:
+    """The composed name without style prefix or title suffix."""
     base = person.display_name
     first = base.split()[0] if base else ""
     if not first:
@@ -221,23 +232,51 @@ def full_display_name(
     if degree == NameDegree.FAMILIAR:
         return first
     if family is None:
-        name = base
-    else:
-        memberships = list(person.family_memberships.filter(ended_at__isnull=True))
-        current = next((m for m in memberships if m.family_id == family.pk), None)
-        taken_in = current is not None and current.basis not in _BORN_EQUIVALENT_BASES
-        pieces = [first]
-        if degree == NameDegree.FULL_FORMAL and taken_in:
-            birth = next((m for m in memberships if m.basis == MembershipBasis.BORN), None)
-            if birth is not None and birth.family_id != family.pk:
-                pieces.extend([NEE_MARKER, birth.family.name])
-        pieces.extend([resolve_particle(family, taken_in=taken_in), family.name])
-        name = _join_name_pieces(pieces)
-    if degree in (NameDegree.STYLED, NameDegree.FULL_FORMAL):
-        style = _personal_style(person)
-        if style:
-            name = f"{style} {name}"
-    return name + _title_suffix_text(person, title_suffix)
+        return base
+    memberships = list(person.family_memberships.filter(ended_at__isnull=True))
+    current = next((m for m in memberships if m.family_id == family.pk), None)
+    taken_in = current is not None and current.basis not in _BORN_EQUIVALENT_BASES
+    pieces = [first]
+    if degree == NameDegree.FULL_FORMAL and taken_in:
+        birth = next((m for m in memberships if m.basis == MembershipBasis.BORN), None)
+        if birth is not None and birth.family_id != family.pk:
+            pieces.extend([NEE_MARKER, birth.family.name])
+    pieces.extend([resolve_particle(family, taken_in=taken_in), family.name])
+    return _join_name_pieces(pieces)
+
+
+def name_alias_forms(person: Kinsperson) -> set[str]:
+    """Every degree form a player may type to address this person (#3261).
+
+    Unstyled bodies only — "sharlotte", "sharlotte vael", "sharlotte dau
+    vael", "sharlotte ne regente dau vael" — styles and titles are display
+    dressing, not addresses. Includes the bare node name so pre-particle
+    forms keep matching.
+    """
+    forms = {
+        person.display_name,
+        _name_body(person, NameDegree.FAMILIAR),
+        _name_body(person, NameDegree.COMMON),
+        _name_body(person, NameDegree.FULL_FORMAL),
+    }
+    return {form for form in forms if form}
+
+
+def sync_name_aliases(person: Kinsperson) -> None:
+    """Sync the derived-name aliases onto the bound character object (#3261).
+
+    Called explicitly (no signals, ADR-0009) from membership writes and CG
+    finalize. No-ops for sheetless kin — NPC nodes without a game object
+    have nothing to address. Only the derived-name alias category is
+    touched; player-set aliases survive.
+    """
+    sheet = person.sheet
+    if sheet is None:
+        return
+    character = sheet.character
+    character.aliases.clear(category=DERIVED_NAME_ALIAS_CATEGORY)
+    for form in name_alias_forms(person):
+        character.aliases.add(form, category=DERIVED_NAME_ALIAS_CATEGORY)
 
 
 # ---------------------------------------------------------------------------

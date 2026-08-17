@@ -5,6 +5,7 @@ from django.test import TestCase, override_settings
 
 from world.areas.factories import AreaFactory
 from world.character_sheets.factories import GenderFactory
+from world.character_sheets.services import create_character_with_sheet
 from world.currency.services import (
     accrue_income_stream,
     get_or_create_treasury,
@@ -20,9 +21,11 @@ from world.roster.factories import (
     UnionKindFactory,
 )
 from world.roster.models import Family, FamilyMembership
+from world.roster.services.kinship import add_membership
 from world.scenes.factories import PersonaFactory
 from world.societies.factories import OrganizationFactory
 from world.societies.houses.constants import (
+    DERIVED_NAME_ALIAS_CATEGORY,
     DomainCrisisSeverity,
     NameDegree,
     PactCommitmentKind,
@@ -59,6 +62,7 @@ from world.societies.houses.services import (
     sign_marriage_pact,
     start_domain_improvement,
     swear_fealty,
+    sync_name_aliases,
     vassals_of,
 )
 from world.traits.factories import CheckOutcomeFactory
@@ -227,6 +231,52 @@ class CanonNamingTests(TestCase):
         )
         ward = self._member("Ryska Redcloud", family, MembershipBasis.ADOPTED)
         self.assertEqual(full_display_name(ward), "Ryska ul Redcloud")
+
+
+class NameAliasTests(TestCase):
+    """Derived-name aliases sync onto the character object (#3261)."""
+
+    @classmethod
+    def setUpTestData(cls):
+        cls.regente, cls.regente_org = _make_house("Regente")
+        cls.realm = cls.regente_org.society.realm
+        cls.vaelmont = FamilyFactory(name="Vaelmont", family_type=Family.FamilyType.NOBLE)
+        cls.vaelmont_org = OrganizationFactory(
+            name="House Vaelmont", family=cls.vaelmont, society=cls.regente_org.society
+        )
+        NobiliaryParticle.objects.create(
+            realm=cls.realm,
+            family_type=Family.FamilyType.NOBLE,
+            particle="du",
+            taken_in_particle="dau",
+        )
+
+    def _derived_aliases(self, character) -> set[str]:
+        return set(
+            character.aliases.get(
+                category=DERIVED_NAME_ALIAS_CATEGORY, return_list=True, default=[]
+            )
+        )
+
+    def test_membership_writes_resync_degree_aliases(self):
+        character, sheet, _persona = create_character_with_sheet(
+            character_key="Sharlotte Regente",
+            primary_persona_name="Sharlotte Regente",
+        )
+        person = KinspersonFactory(name="Sharlotte Regente", sheet=sheet)
+        add_membership(kinsperson=person, family=self.regente, basis=MembershipBasis.BORN)
+        self.assertIn("sharlotte du regente", self._derived_aliases(character))
+        self.assertIn("sharlotte", self._derived_aliases(character))
+
+        add_membership(kinsperson=person, family=self.vaelmont, basis=MembershipBasis.MARRIED_IN)
+        aliases = self._derived_aliases(character)
+        self.assertIn("sharlotte dau vaelmont", aliases)
+        self.assertIn("sharlotte ne regente dau vaelmont", aliases)
+        self.assertNotIn("sharlotte du regente", aliases)
+
+    def test_sheetless_kin_sync_is_a_noop(self):
+        person = KinspersonFactory(name="Quiet Cousin")
+        sync_name_aliases(person)  # must not raise
 
 
 class RecognitionTests(TestCase):
