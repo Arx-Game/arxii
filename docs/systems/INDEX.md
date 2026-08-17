@@ -994,14 +994,17 @@ per-class, per-stage health rate authoring and the primary-class level service.
 - **Source:** `src/world/classes/`
 - **Details:** [classes.md](classes.md)
 ### Areas
-Spatial hierarchy for organizing rooms into regions, districts, and neighborhoods.
+Spatial hierarchy for organizing rooms into a nested tree of areas, from individual
+buildings up to entire planes. A `Room` is not its own `Area` level — it hangs off a
+`Building`-level `Area` via `RoomProfile.area`.
 
 - **Models:** `Area` (nullable `grid_x`/`grid_y` parent-local rendering coordinates,
   #2223; `slug` unique `SlugField` + `NaturalKeyMixin` (`NaturalKeyConfig.fields =
   ["slug"]`) + `origin` (`GridOrigin`), #2436/#2448), `AreaClosure` (unmanaged,
   materialized view)
-- **Enums:** `AreaLevel` (Region, District, Neighborhood); `GridOrigin`
-  (`world.areas.constants` — AUTHORED/STORY/PLAYER, #2436/#2448): who authored a grid
+- **Enums:** `AreaLevel` (low to high: Building, Neighborhood, Ward, City, Region,
+  Kingdom, Continent, World, Plane); `GridOrigin` (both `world.areas.constants` —
+  AUTHORED/STORY/PLAYER, #2436/#2448): who authored a grid
   element. Only `origin=AUTHORED` areas/rooms (with their identity key set) export to
   the lore repo via `grid_export.export_grid_bundles()`; `STORY` (GM-built) and
   `PLAYER` (player-built) rows never export. Default is `PLAYER` so nothing exports by
