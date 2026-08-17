@@ -2,6 +2,16 @@
 Description=Arx II (Evennia) game server
 After=network-online.target postgresql.service
 Wants=network-online.target
+# Keep retrying for minutes, not systemd's default 5-tries-in-10s. During the
+# 2026-08-17 unattended-upgrades reboot, a slow cold start + RestartSec=5
+# made restart attempts race the dying predecessor ("Couldn't listen on
+# 127.0.0.1:4005: Address already in use"), burn the default start limit in
+# seconds, and park the unit in `failed` — where nothing retried and the
+# site stayed 502 until a human intervened. 10 tries spaced 15s apart cover
+# ~2.5 minutes; past that the watchdog's failed-state resurrection (see
+# arxii-watchdog.sh.j2) takes over with its own rate limit.
+StartLimitIntervalSec=600
+StartLimitBurst=10
 
 [Service]
 # Non-root, memory-isolated slice, secrets via the 0600 EnvironmentFile.
@@ -19,11 +29,23 @@ EnvironmentFile={{ secrets_env_file | default('/etc/arxii/arxii.env') }}
 # so the `evennia` entrypoint installed via uv sync is on PATH.
 Type=forking
 PIDFile={{ app_pidfile }}
+# A cold start after a host reboot (DB warmup, uv resolution, both daemons
+# forking) can exceed systemd's default 90s; declaring failure early is what
+# triggered the 2026-08-17 restart race. Five minutes is generous, and a
+# genuinely hung start still fails and retries.
+TimeoutStartSec=300
 ExecStart={{ base_uv_bin }} run evennia start
 ExecReload={{ base_uv_bin }} run evennia reload
 ExecStop={{ base_uv_bin }} run evennia stop
+# Runs after every stop AND after a failed start: force-clear any twistd
+# survivor so the next start can never collide with a predecessor still
+# holding a port. `-` prefix: pkill exiting 1 (nothing to kill, the normal
+# case) must not mark the stop failed. Scoped to the app user's twistd
+# processes only — deploy-time django commands under the same user don't
+# match.
+ExecStopPost=-/usr/bin/pkill -KILL -u {{ app_user }} -f twistd
 Restart=on-failure
-RestartSec=5
+RestartSec=15
 
 [Install]
 WantedBy=multi-user.target
