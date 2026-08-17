@@ -23,6 +23,7 @@ from web.admin.authoring.backlog import _rows_for_model, build_backlog
 from world.character_creation.factories import BeginningsFactory, StartingAreaFactory
 from world.contributors.factories import ContentContributorFactory
 from world.items.factories import ItemTemplateFactory
+from world.magic.factories import AffinityFactory, EffectTypeFactory
 from world.mechanics.factories import ChallengeApproachFactory
 from world.mechanics.models import ChallengeApproach
 from world.tarot.constants import ArcanaType
@@ -53,10 +54,11 @@ class BuildBacklogTests(TestCase):
         )
 
     def test_full_sort_key_across_every_tier(self):
-        # (not has_placeholder, written, reviewed, domain, identity.lower()):
+        # (not has_placeholder, written, reviewed, domain, model_name, pk):
         # placeholder-marked rows first regardless of credit, then unwritten,
-        # then unreviewed, then domain, then identity - all six rows below
-        # land in a different tier boundary from their neighbor.
+        # then unreviewed, then domain, then model, then authoring order - all
+        # six rows below land in a different tier boundary from their neighbor,
+        # so no two of them ever reach the model/pk tiebreak.
         self._trait("Alpha Placeholder", "PLACEHOLDER text here.")
         self._trait("Zeta Placeholder Written", "PLACEHOLDER also here.", written=True)
         ItemTemplateFactory(name="Aardvark Cloak", description="Ordinary described cloak here.")
@@ -83,6 +85,31 @@ class BuildBacklogTests(TestCase):
                 "Charlie Regular Written",
                 "Delta Regular Written Reviewed",
             ],
+        )
+
+    def test_rows_group_by_model_within_one_domain(self):
+        """Sorting a tier straight to identity interleaved a domain's models into one soup."""
+        identities = {"Aaa Effect", "Bbb Affinity", "Ccc Effect"}
+        EffectTypeFactory(name="Aaa Effect", description="Ordinary finished prose here.")
+        AffinityFactory(name="Bbb Affinity", description="Ordinary finished prose here.")
+        EffectTypeFactory(name="Ccc Effect", description="Ordinary finished prose here.")
+
+        rows, _ = build_backlog()
+        magic_rows = [r for r in rows if r.identity in identities]
+        # All three are magic-domain, so domain cannot be what separates them.
+        # Alphabetical-by-identity gave EffectType, Affinity, EffectType.
+        self.assertEqual(
+            [r.model_name for r in magic_rows], ["Affinity", "EffectType", "EffectType"]
+        )
+
+    def test_rows_within_one_model_follow_authoring_order_not_the_alphabet(self):
+        self._trait("Zeta Written First", "Ordinary finished prose here.")
+        self._trait("Alpha Written Second", "Ordinary finished prose here.")
+
+        rows, _ = build_backlog()
+        trait_rows = [r for r in rows if r.model_label == "traits.Trait"]
+        self.assertEqual(
+            [r.identity for r in trait_rows], ["Zeta Written First", "Alpha Written Second"]
         )
 
     def test_placeholder_row_sorts_first_even_when_fully_credited(self):
