@@ -16,6 +16,8 @@ from web.admin.services import HARDCODED_EXCLUDED_APPS, analyze_fixture, execute
 
 logger = logging.getLogger(__name__)
 
+_ERR_UNKNOWN_MODEL = "Unknown model"
+
 
 def _resolve_domain(app_label, model_name):
     """Resolve a request's ``(app_label, model_name)`` to its authoring domain.
@@ -49,7 +51,7 @@ def toggle_pin_model(request):
 
     domain = _resolve_domain(app_label, model_name)
     if domain is None:
-        return JsonResponse({"error": "Unknown model"}, status=400)
+        return JsonResponse({"error": _ERR_UNKNOWN_MODEL}, status=400)
 
     pin, created = AdminPinnedModel.objects.get_or_create(
         app_label=domain,
@@ -74,7 +76,7 @@ def is_model_pinned(request):
 
     domain = _resolve_domain(app_label, model_name)
     if domain is None:
-        return JsonResponse({"error": "Unknown model"}, status=400)
+        return JsonResponse({"error": _ERR_UNKNOWN_MODEL}, status=400)
 
     pinned = AdminPinnedModel.objects.filter(
         app_label=domain,
@@ -143,7 +145,7 @@ def toggle_export_exclusion(request):
 
     domain = _resolve_domain(app_label, model_name)
     if domain is None:
-        return JsonResponse({"error": "Unknown model"}, status=400)
+        return JsonResponse({"error": _ERR_UNKNOWN_MODEL}, status=400)
 
     exclusion, created = AdminExcludedModel.objects.get_or_create(
         app_label=domain,
@@ -168,7 +170,7 @@ def is_model_excluded(request):
 
     domain = _resolve_domain(app_label, model_name)
     if domain is None:
-        return JsonResponse({"error": "Unknown model"}, status=400)
+        return JsonResponse({"error": _ERR_UNKNOWN_MODEL}, status=400)
 
     excluded = AdminExcludedModel.objects.filter(
         app_label=domain,

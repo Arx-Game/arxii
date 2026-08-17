@@ -51,6 +51,8 @@ CEREMONY_LEGEND_SOURCE = "Ceremony"
 # scandal vocabulary (#1464) for old→new conversion framing rather than
 # minting new PhilosophicalArchetype rows — see ``_conversion_archetypes``.
 _CONVERSION_BETRAYAL_ARCHETYPE = "Treacherous Scandal"
+_ERR_NOT_YOUR_CHARACTER = "That isn't your character to answer for."
+_ERR_OFFER_ALREADY_ANSWERED = "That offer has already been answered."
 
 
 class CeremonyError(Exception):
@@ -598,10 +600,10 @@ def respond_to_seance_offer(
 
     sheet = offer.ceremony_honoree.honoree_sheet
     if account_for_sheet(sheet) != account:
-        msg = "That isn't your character to answer for."
+        msg = _ERR_NOT_YOUR_CHARACTER
         raise SeanceOfferError(msg)
     if offer.status != SeanceOfferStatus.PENDING:
-        msg = "That offer has already been answered."
+        msg = _ERR_OFFER_ALREADY_ANSWERED
         raise SeanceOfferError(msg)
     if offer.ceremony_honoree.ceremony.status != CeremonyStatus.OPEN:
         msg = "That seance has already closed."
@@ -657,10 +659,10 @@ def respond_to_conversion_offer(
 
     sheet = offer.ceremony_honoree.honoree_sheet
     if account_for_sheet(sheet) != account:
-        msg = "That isn't your character to answer for."
+        msg = _ERR_NOT_YOUR_CHARACTER
         raise ConversionOfferError(msg)
     if offer.status != ConversionOfferStatus.PENDING:
-        msg = "That offer has already been answered."
+        msg = _ERR_OFFER_ALREADY_ANSWERED
         raise ConversionOfferError(msg)
     if offer.ceremony_honoree.ceremony.status != CeremonyStatus.OPEN:
         msg = "That conversion rite has already closed."
@@ -709,10 +711,10 @@ def respond_to_wedding_consent_offer(
 
     sheet = offer.ceremony_honoree.honoree_sheet
     if account_for_sheet(sheet) != account:
-        msg = "That isn't your character to answer for."
+        msg = _ERR_NOT_YOUR_CHARACTER
         raise SeanceOfferError(msg)
     if offer.status != SeanceOfferStatus.PENDING:
-        msg = "That offer has already been answered."
+        msg = _ERR_OFFER_ALREADY_ANSWERED
         raise SeanceOfferError(msg)
     ceremony = offer.ceremony_honoree.ceremony
     if ceremony.status != CeremonyStatus.OPEN:

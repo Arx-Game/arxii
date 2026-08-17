@@ -16,6 +16,9 @@ from actions.base import Action, ActionResult
 from actions.prerequisites import Prerequisite
 from actions.types import ActionContext, TargetType
 
+_ERR_WHICH_OFFER = "Which offer? Provide an offer id."
+_ERR_NO_ACCOUNT = "No account to answer for."
+
 
 def _actor_sheet(actor: ObjectDB):
     from django.core.exceptions import ObjectDoesNotExist  # noqa: PLC0415
@@ -431,10 +434,10 @@ class RespondSeanceOfferAction(_SeanceOfferActionBase):
 
         offer = _seance_offer_or_none(kwargs.get("offer_id"))
         if offer is None:
-            return ActionResult(success=False, message="Which offer? Provide an offer id.")
+            return ActionResult(success=False, message=_ERR_WHICH_OFFER)
         account = kwargs.get("account")
         if account is None:
-            return ActionResult(success=False, message="No account to answer for.")
+            return ActionResult(success=False, message=_ERR_NO_ACCOUNT)
         accept = bool(kwargs.get("accept"))
         try:
             respond_to_seance_offer(offer, account=account, accept=accept)
@@ -484,10 +487,10 @@ class RespondConversionOfferAction(_SeanceOfferActionBase):
 
         offer = _conversion_offer_or_none(kwargs.get("offer_id"))
         if offer is None:
-            return ActionResult(success=False, message="Which offer? Provide an offer id.")
+            return ActionResult(success=False, message=_ERR_WHICH_OFFER)
         account = kwargs.get("account")
         if account is None:
-            return ActionResult(success=False, message="No account to answer for.")
+            return ActionResult(success=False, message=_ERR_NO_ACCOUNT)
         accept = bool(kwargs.get("accept"))
         sincere = kwargs.get("sincere")
         try:
@@ -543,10 +546,10 @@ class RespondWeddingConsentOfferAction(_SeanceOfferActionBase):
 
         offer = _wedding_consent_offer_or_none(kwargs.get("offer_id"))
         if offer is None:
-            return ActionResult(success=False, message="Which offer? Provide an offer id.")
+            return ActionResult(success=False, message=_ERR_WHICH_OFFER)
         account = kwargs.get("account")
         if account is None:
-            return ActionResult(success=False, message="No account to answer for.")
+            return ActionResult(success=False, message=_ERR_NO_ACCOUNT)
         accept = bool(kwargs.get("accept"))
         try:
             respond_to_wedding_consent_offer(offer, account=account, accept=accept)
