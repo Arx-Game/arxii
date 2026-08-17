@@ -1,8 +1,9 @@
 # Zone security configuration, codified from the live dashboard state on
-# 2026-08-17 (#3205). Values below are a FAITHFUL IMPORT of what the zone held
-# that day — first apply is a no-op write of identical values. Tightening any
-# of them is a deliberate, reviewed diff on this file, never a dashboard edit:
-# dashboard-side changes now surface as drift in `tofu plan`.
+# 2026-08-17 (#3205) and applied that day as a verified no-op. The TLS/HTTPS
+# cluster was then deliberately tightened (same day, reviewed diff — see its
+# comment below). Changing any value here is a reviewed diff on this file,
+# never a dashboard edit: dashboard-side changes surface as drift in
+# `tofu plan`.
 #
 # Why this module exists: #3189 — a dashboard-side rule 403'd lazily-imported
 # frontend chunks (`/static/dist/assets/*.js`) before they reached origin,
@@ -33,14 +34,19 @@ resource "cloudflare_zone_settings_override" "this" {
     browser_check  = "on"
     challenge_ttl  = 1800
 
-    # TLS/HTTPS posture, as found. KNOWN-WEAK, kept as-is by #3205's
-    # faithful-import rule (behavior change = its own reviewed PR):
-    #   - ssl "full" accepts any origin cert (not "strict")
-    #   - always_use_https off leaves plain HTTP unredirected at the edge
-    #   - min_tls_version 1.0 admits legacy clients
-    ssl                      = "full"
-    always_use_https         = "off"
-    min_tls_version          = "1.0"
+    # TLS/HTTPS posture, tightened 2026-08-17 (Tehom's call) from the weaker
+    # as-found dashboard values the #3205 import recorded (full / off / 1.0).
+    # The origin was already built for this: Caddy terminates real ACME
+    # DNS-01 certs for the web fqdn and its own Caddyfile assumed "Full
+    # strict", and Caddy 308-redirects plain HTTP itself — the edge was the
+    # only weak link.
+    #   - ssl "strict": Cloudflare verifies the origin cert (a bad origin
+    #     cert now fails loudly as 526 instead of silently accepting MITM)
+    #   - always_use_https on: edge 301s http:// before origin round-trip
+    #   - min_tls_version 1.2: refuses TLS 1.0/1.1 museum handshakes
+    ssl                      = "strict"
+    always_use_https         = "on"
+    min_tls_version          = "1.2"
     tls_1_3                  = "on"
     automatic_https_rewrites = "on"
   }
