@@ -49,6 +49,7 @@ import world.contributors.models
 import world.covenants.models
 import world.currency.models
 import world.distinctions.models
+import world.downtime.models
 import world.dreams.models
 import world.estates.models
 import world.events.models
