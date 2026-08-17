@@ -39,6 +39,15 @@ module "dns" {
   resend_records  = var.resend_records
 }
 
+# Zone security settings + bot-management levers, codified so dashboard-side
+# changes surface as drift instead of unrecorded incidents (#3189/#3205).
+# Apply needs the Cloudflare token to carry Zone Settings: Edit and Bot
+# Management: Edit in addition to the DNS scopes.
+module "zone_security" {
+  source  = "../modules/cloudflare_zone_security"
+  zone_id = module.dns.zone_id
+}
+
 module "object_storage" {
   source = "../modules/object_storage"
   region = var.region

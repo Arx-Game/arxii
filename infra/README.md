@@ -109,7 +109,10 @@ They are exposed ONLY to the approved job, never echoed, never `--extra-vars`.
 **Pre-stored by the operator — provisioning (tofu step; operator/CI-only,
 NEVER reach the box; revoke at the provider after each successful run):**
 - `TF_LINODE_TOKEN` — Linode API token
-- `TF_CLOUDFLARE_API_TOKEN` — Cloudflare API token
+- `TF_CLOUDFLARE_API_TOKEN` — Cloudflare API token. Since the zone-security
+  module (#3205) it needs, beyond the DNS scopes: **Zone Settings: Edit** and
+  **Bot Management: Edit** (scoped to the zone). Without them the tofu step
+  fails on `cloudflare_zone_settings_override` / `cloudflare_bot_management`.
 - `TF_STATE_S3_ACCESS_KEY`, `TF_STATE_S3_SECRET_KEY` — the Object Storage key
   for the remote-state bucket (created manually in bootstrap; scoped to that
   bucket only)
