@@ -19,15 +19,12 @@ class SeedCeremonyTypesTests(TestCase):
                 CeremonyTypeKey.SERMON,
                 CeremonyTypeKey.SEANCE,
                 CeremonyTypeKey.WEDDING,
-<<<<<<< HEAD
                 CeremonyTypeKey.CONVERSION,
-=======
                 CeremonyTypeKey.CORONATION,
->>>>>>> 91ad06b1e (Coronation ceremony, wedding consent prompts, divorce (#2358))
             },
         )
 
     def test_idempotent(self) -> None:
         seed_ceremony_types()
         seed_ceremony_types()
-        self.assertEqual(CeremonyType.objects.count(), 6)
+        self.assertEqual(CeremonyType.objects.count(), 7)
