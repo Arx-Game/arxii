@@ -31103,6 +31103,24 @@ paths:
               schema:
                 $ref: '#/components/schemas/AccountInvite'
           description: ''
+  /api/staff/verification-link/:
+    post:
+      operationId: staff_verification_link_create
+      description: |-
+        Staff POST — produce the email-verification link for an account (#3193).
+
+        Email must not be the only route to a verified account: when the mail
+        provider is down, staff copy this link and hand it over directly, the same
+        trust model as the invite link staff already paste by hand. Staff-only, so
+        the existence responses (404 unknown / 400 verified) are not an
+        enumeration oracle. Link generation is logged for audit.
+      tags:
+      - staff
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          description: No response body
   /api/stake-activations/:
     get:
       operationId: stake_activations_list

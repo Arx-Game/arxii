@@ -19387,6 +19387,31 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
+  '/api/staff/verification-link/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /**
+     * @description Staff POST — produce the email-verification link for an account (#3193).
+     *
+     *     Email must not be the only route to a verified account: when the mail
+     *     provider is down, staff copy this link and hand it over directly, the same
+     *     trust model as the invite link staff already paste by hand. Staff-only, so
+     *     the existence responses (404 unknown / 400 verified) are not an
+     *     enumeration oracle. Link generation is logged for audit.
+     */
+    post: operations['staff_verification_link_create'];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   '/api/stake-activations/': {
     parameters: {
       query?: never;
@@ -68133,6 +68158,24 @@ export interface operations {
         content: {
           'application/json': components['schemas']['AccountInvite'];
         };
+      };
+    };
+  };
+  staff_verification_link_create: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description No response body */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
       };
     };
   };
