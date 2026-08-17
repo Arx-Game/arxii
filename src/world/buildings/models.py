@@ -196,7 +196,7 @@ class MaterialLoreEffect(SharedMemoryModel):
     """
 
     template = models.ForeignKey(
-        "arxii.ItemTemplate",
+        _ITEM_TEMPLATE_FK,
         on_delete=models.CASCADE,
         related_name="lore_effects",
     )
@@ -563,7 +563,7 @@ class BuildingMaterial(SharedMemoryModel):
         related_name="materials_used",
     )
     item_template = models.ForeignKey(
-        "arxii.ItemTemplate",
+        _ITEM_TEMPLATE_FK,
         on_delete=models.PROTECT,
         related_name="building_uses",
     )

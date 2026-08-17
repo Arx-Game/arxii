@@ -63,6 +63,9 @@ _REDIRECT_AWAY_KEYWORD = "away"
 
 _NOT_IN_ACTIVE_ROUND = "You are not in an active combat round."
 
+# ``_require_rest`` argument-description literal, shared by cover/succor/rally.
+_ARG_AN_ALLY = "an ally"
+
 
 class CmdCombat(_CombatCommandMixin, DispatchCommand):
     """Take a combat action other than casting or clashing.
@@ -122,13 +125,13 @@ class CmdCombat(_CombatCommandMixin, DispatchCommand):
     def resolve_action_args(self) -> dict[str, Any]:  # noqa: PLR0911
         """Resolve name arguments (ally / opponent / combo) into dispatch kwargs."""
         if self._subverb == "cover":  # noqa: STRING_LITERAL
-            return {"ally_participant_id": self._resolve_ally_pk(self._require_rest("an ally"))}
+            return {"ally_participant_id": self._resolve_ally_pk(self._require_rest(_ARG_AN_ALLY))}
         if self._subverb == "interpose":  # noqa: STRING_LITERAL
             return self._resolve_interpose_args(self._rest)
         if self._subverb == "succor":  # noqa: STRING_LITERAL
-            return {"ally_participant_id": self._resolve_ally_pk(self._require_rest("an ally"))}
+            return {"ally_participant_id": self._resolve_ally_pk(self._require_rest(_ARG_AN_ALLY))}
         if self._subverb == "rally":  # noqa: STRING_LITERAL
-            return {"ally_participant_id": self._resolve_ally_pk(self._require_rest("an ally"))}
+            return {"ally_participant_id": self._resolve_ally_pk(self._require_rest(_ARG_AN_ALLY))}
         if self._subverb in _OPPONENT_SUBVERBS:
             return {"opponent_id": self._resolve_opponent_pk(self._require_rest("an opponent"))}
         if self._subverb == "combo":  # noqa: STRING_LITERAL

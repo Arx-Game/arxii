@@ -85,6 +85,8 @@ _WITHDRAW_KEYWORD = "withdraw"
 
 _MIN_RESOLVE_TOKENS = 2  # id + grant|deny
 
+_ERR_NOT_STORY_OWNER_OR_LEAD = "You do not own or lead this story."
+
 _PROTECT_USAGE = (
     "Usage:\n"
     "  story protect <story-id> add <kind>=<subject-ref> [beat=<id>] [notes=<text>]\n"
@@ -461,7 +463,7 @@ class CmdStory(ArxNamespaceCommand):
         account = self.caller.account
         is_staff = bool(account and account.is_staff)
         if not is_staff and not user_owns_or_leads_story(account, story):
-            msg = "You do not own or lead this story."
+            msg = _ERR_NOT_STORY_OWNER_OR_LEAD
             raise CommandError(msg)
 
         sub_rest = tokens[1].strip() if len(tokens) > 1 else ""
@@ -1228,7 +1230,7 @@ class CmdStory(ArxNamespaceCommand):
         account = self.caller.account
         is_staff = bool(account and account.is_staff)
         if not is_staff and not user_owns_or_leads_story(account, story):
-            msg = "You do not own or lead this story."
+            msg = _ERR_NOT_STORY_OWNER_OR_LEAD
             raise CommandError(msg)
         if story_is_cleared(story):
             msg = "This story's impact tier is frozen; it has a cleared canon review."
@@ -1259,7 +1261,7 @@ class CmdStory(ArxNamespaceCommand):
         account = self.caller.account
         is_staff = bool(account and account.is_staff)
         if not is_staff and not user_owns_or_leads_story(account, story):
-            msg = "You do not own or lead this story."
+            msg = _ERR_NOT_STORY_OWNER_OR_LEAD
             raise CommandError(msg)
 
         effective_tier = escalation_tier_for_story(story)
@@ -1297,7 +1299,7 @@ class CmdStory(ArxNamespaceCommand):
         account = self.caller.account
         is_staff = bool(account and account.is_staff)
         if not is_staff and not user_owns_or_leads_story(account, story):
-            msg = "You do not own or lead this story."
+            msg = _ERR_NOT_STORY_OWNER_OR_LEAD
             raise CommandError(msg)
         try:
             gm_profile = account.gm_profile

@@ -18,6 +18,7 @@ from world.societies.constants import FameTier
 
 _STR_PREVIEW_LEN = 40
 _GEMIT_PREVIEW_LEN = 60
+_STORY_FK = "arxii.Story"
 
 
 class NarrativeMessage(SharedMemoryModel):
@@ -55,7 +56,7 @@ class NarrativeMessage(SharedMemoryModel):
     # by the stories system. Consumers of the message can use these to
     # render story-log entries, link to the related story, etc.
     related_story = models.ForeignKey(
-        "arxii.Story",
+        _STORY_FK,
         null=True,
         blank=True,
         on_delete=models.SET_NULL,
@@ -232,7 +233,7 @@ class Gemit(SharedMemoryModel):
         help_text="Optional: link to the era this gemit relates to.",
     )
     related_story = models.ForeignKey(
-        "arxii.Story",
+        _STORY_FK,
         null=True,
         blank=True,
         on_delete=models.SET_NULL,
@@ -267,7 +268,7 @@ class UserStoryMute(SharedMemoryModel):
         related_name="story_mutes",
     )
     story = models.ForeignKey(
-        "arxii.Story",
+        _STORY_FK,
         on_delete=models.CASCADE,
         related_name="muted_by",
     )

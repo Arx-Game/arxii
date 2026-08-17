@@ -253,6 +253,39 @@ def _maybe_spawn_band(*, rng: random.Random) -> PredatorBand | None:
     return None
 
 
+def _tick_band_menace(band: PredatorBand, *, rng: random.Random) -> tuple[bool, bool]:
+    """Advance one active band's weekly stalk/pressure/escalate cycle.
+
+    Returns ``(pressured, advanced)``. An inactive band, or one with no reachable
+    prey, is skipped and returns ``(False, False)`` — mirrors the original loop's
+    early ``continue``.
+    """
+    if not band.is_active:
+        return False, False
+    if band.prey is None or has_regional_peace(band.prey, band):
+        band.prey = select_prey(band)
+        band.save(update_fields=["prey"])
+    if band.prey is None:
+        return False, False
+    stage_idx = _stage_index(band.stage)
+    pressured = False
+    if stage_idx >= _stage_index(MenaceStage.LAWLESSNESS):
+        _apply_lawlessness(band)
+        pressured = True
+    if stage_idx >= _stage_index(MenaceStage.ROBBERY):
+        _apply_robbery(band)
+    if stage_idx >= _stage_index(MenaceStage.RAIDS):
+        _ensure_raid_crisis(band, rng=rng)
+    band.weeks_unanswered += 1
+    band.save(update_fields=["weeks_unanswered"])
+    needed = _weeks_needed(band)
+    advanced = False
+    if needed is not None and band.weeks_unanswered >= needed:
+        _advance(band)
+        advanced = True
+    return pressured, advanced
+
+
 def weekly_menace_tick(*, rng: random.Random | None = None) -> dict[str, int]:
     """The weekly heartbeat: spawn, stalk, pressure, and (slowly) escalate."""
     rng = rng or random
@@ -262,26 +295,10 @@ def weekly_menace_tick(*, rng: random.Random | None = None) -> dict[str, int]:
     for band in PredatorBand.objects.filter(disbanded_at__isnull=True).select_related(
         "kind", "home_region", "prey"
     ):
-        if not band.is_active:
-            continue
-        if band.prey is None or has_regional_peace(band.prey, band):
-            band.prey = select_prey(band)
-            band.save(update_fields=["prey"])
-        if band.prey is None:
-            continue
-        stage_idx = _stage_index(band.stage)
-        if stage_idx >= _stage_index(MenaceStage.LAWLESSNESS):
-            _apply_lawlessness(band)
+        band_pressured, band_advanced = _tick_band_menace(band, rng=rng)
+        if band_pressured:
             pressured += 1
-        if stage_idx >= _stage_index(MenaceStage.ROBBERY):
-            _apply_robbery(band)
-        if stage_idx >= _stage_index(MenaceStage.RAIDS):
-            _ensure_raid_crisis(band, rng=rng)
-        band.weeks_unanswered += 1
-        band.save(update_fields=["weeks_unanswered"])
-        needed = _weeks_needed(band)
-        if needed is not None and band.weeks_unanswered >= needed:
-            _advance(band)
+        if band_advanced:
             advanced += 1
     return {"spawned": spawned, "advanced": advanced, "pressured": pressured}
 

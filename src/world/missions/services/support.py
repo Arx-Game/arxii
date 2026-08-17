@@ -99,30 +99,12 @@ def _node_challenge_category_ids(node: MissionNode) -> set[int]:
     return cat_ids
 
 
-def support_moves_for(
-    instance: MissionInstance,  # noqa: ARG001
-    node: MissionNode,
+def _gem_support_moves(
+    gems: list[MissionNodeSupportOption],
     character: ObjectDB,
 ) -> list[SupportMove]:
-    """Surface the support moves available to ``character`` at ``node``.
-
-    Gems whose qualifier passes are offered first. Unless a gem with
-    ``suppress_patterns`` exists, active patterns whose context matches
-    the node's live CHECK options (check_types and/or challenge_categories)
-    and whose qualifier passes are also offered. Rumored-but-unqualified
-    moves return as tease-only entries.
-
-    The list is per-viewer: each participant sees only their own qualifying
-    moves (plus rumored teases), mirroring how option lists work today.
-    """
-    from world.missions.models import MissionAssistPattern  # noqa: PLC0415
-
+    """Authored-gem support moves whose qualifier passes (or that are rumored)."""
     moves: list[SupportMove] = []
-
-    # --- Authored gems ---
-    gems = list(node.support_options.all())
-    suppress = any(gem.suppress_patterns for gem in gems)
-
     for gem in gems:
         qualifies = _qualifier_passes(gem.capability_id, gem.qualifier_rule, character)
         is_rumored = bool(gem.rumor_text)
@@ -142,48 +124,82 @@ def support_moves_for(
                 rumor_text=gem.rumor_text,
             )
         )
+    return moves
+
+
+def _pattern_support_moves(node: MissionNode, character: ObjectDB) -> list[SupportMove]:
+    """Active pattern-catalog support moves whose context matches ``node``.
+
+    Context match: at least one check_type or challenge_category axis
+    matches. A pattern with neither axis matches nowhere (explicit, no
+    globals).
+    """
+    from world.missions.models import MissionAssistPattern  # noqa: PLC0415
+
+    node_ct_ids = _node_check_type_ids(node)
+    node_cat_ids = _node_challenge_category_ids(node)
+
+    patterns = (
+        MissionAssistPattern.objects.filter(is_active=True)
+        .prefetch_related("check_types")  # noqa: PREFETCH_STRING
+        .prefetch_related("challenge_categories")  # noqa: PREFETCH_STRING
+    )
+    moves: list[SupportMove] = []
+    for pattern in patterns:
+        pattern_ct_ids = {ct.pk for ct in pattern.check_types.all()}
+        pattern_cat_ids = {cc.pk for cc in pattern.challenge_categories.all()}
+        if not pattern_ct_ids and not pattern_cat_ids:
+            continue
+        ct_match = bool(pattern_ct_ids & node_ct_ids)
+        cat_match = bool(pattern_cat_ids & node_cat_ids)
+        if not (ct_match or cat_match):
+            continue
+
+        qualifies = _qualifier_passes(pattern.capability_id, pattern.qualifier_rule, character)
+        is_rumored = bool(pattern.rumor_text)
+        if not qualifies and not is_rumored:
+            continue
+        moves.append(
+            SupportMove(
+                source_id=pattern.pk,
+                source_kind="pattern",
+                label=pattern.name,
+                capability_name=(pattern.capability.name if pattern.capability_id else None),
+                check_type_name=pattern.support_check_type.name,
+                difficulty=pattern.difficulty,
+                easing=pattern.easing,
+                flavor=pattern.flavor_template,
+                rumored=is_rumored and not qualifies,
+                rumor_text=pattern.rumor_text,
+            )
+        )
+    return moves
+
+
+def support_moves_for(
+    instance: MissionInstance,  # noqa: ARG001
+    node: MissionNode,
+    character: ObjectDB,
+) -> list[SupportMove]:
+    """Surface the support moves available to ``character`` at ``node``.
+
+    Gems whose qualifier passes are offered first. Unless a gem with
+    ``suppress_patterns`` exists, active patterns whose context matches
+    the node's live CHECK options (check_types and/or challenge_categories)
+    and whose qualifier passes are also offered. Rumored-but-unqualified
+    moves return as tease-only entries.
+
+    The list is per-viewer: each participant sees only their own qualifying
+    moves (plus rumored teases), mirroring how option lists work today.
+    """
+    # --- Authored gems ---
+    gems = list(node.support_options.all())
+    suppress = any(gem.suppress_patterns for gem in gems)
+    moves = _gem_support_moves(gems, character)
 
     # --- Pattern catalog (unless suppressed) ---
     if not suppress:
-        node_ct_ids = _node_check_type_ids(node)
-        node_cat_ids = _node_challenge_category_ids(node)
-
-        patterns = (
-            MissionAssistPattern.objects.filter(is_active=True)
-            .prefetch_related("check_types")  # noqa: PREFETCH_STRING
-            .prefetch_related("challenge_categories")  # noqa: PREFETCH_STRING
-        )
-        for pattern in patterns:
-            # Context match: at least one check_type or challenge_category
-            # axis matches. A pattern with neither axis matches nowhere
-            # (explicit, no globals).
-            pattern_ct_ids = {ct.pk for ct in pattern.check_types.all()}
-            pattern_cat_ids = {cc.pk for cc in pattern.challenge_categories.all()}
-            if not pattern_ct_ids and not pattern_cat_ids:
-                continue
-            ct_match = bool(pattern_ct_ids & node_ct_ids)
-            cat_match = bool(pattern_cat_ids & node_cat_ids)
-            if not (ct_match or cat_match):
-                continue
-
-            qualifies = _qualifier_passes(pattern.capability_id, pattern.qualifier_rule, character)
-            is_rumored = bool(pattern.rumor_text)
-            if not qualifies and not is_rumored:
-                continue
-            moves.append(
-                SupportMove(
-                    source_id=pattern.pk,
-                    source_kind="pattern",
-                    label=pattern.name,
-                    capability_name=(pattern.capability.name if pattern.capability_id else None),
-                    check_type_name=pattern.support_check_type.name,
-                    difficulty=pattern.difficulty,
-                    easing=pattern.easing,
-                    flavor=pattern.flavor_template,
-                    rumored=is_rumored and not qualifies,
-                    rumor_text=pattern.rumor_text,
-                )
-            )
+        moves.extend(_pattern_support_moves(node, character))
 
     return moves
 

@@ -794,6 +794,58 @@ def _anchor_crafted_item_in_room(item_instance: ItemInstance, room_profile) -> N
     item_instance.save(update_fields=["holder_character_sheet"])
 
 
+def _validate_crafted_decoration_placement(
+    *,
+    kind: DecorationKind,
+    item_instance: ItemInstance | None,
+    buyer_persona: Persona | None,
+) -> None:
+    """Validate a crafted-furniture decoration placement before anything moves (#2991).
+
+    Raises ``DecorationPlacementError`` on any mismatch: missing item_instance, wrong
+    template, missing buyer_persona, item not held by the buyer, or item already placed.
+    """
+    if item_instance is None:
+        msg = f"DecorationKind {kind.pk} requires a crafted item_instance."
+        raise DecorationPlacementError(
+            msg, user_message=f"{kind.name} must be placed from a crafted piece."
+        )
+    if item_instance.template_id != kind.crafted_item_template_id:
+        msg = f"item_instance {item_instance.pk} is not a {kind.crafted_item_template_id}."
+        raise DecorationPlacementError(
+            msg, user_message=f"That isn't a {kind.crafted_item_template.name}."
+        )
+    if buyer_persona is None:
+        msg = f"DecorationKind {kind.pk} is crafted-furniture but no buyer_persona given."
+        raise DecorationPlacementError(msg, user_message="You need to be holding that piece.")
+    if item_instance.holder_character_sheet_id != buyer_persona.character_sheet_id:
+        msg = f"item_instance {item_instance.pk} is not held by persona {buyer_persona.pk}."
+        raise DecorationPlacementError(msg, user_message="You aren't holding that piece.")
+    if RoomDecoration.objects.filter(source_item_instance=item_instance).exists():
+        msg = f"item_instance {item_instance.pk} is already placed as decor."
+        raise DecorationPlacementError(msg, user_message="That piece is already placed.")
+
+
+def _charge_decoration_cost(*, kind: DecorationKind, buyer_persona: Persona | None) -> None:
+    """Charge ``buyer_persona``'s purse for a priced catalog decoration (#2991 decision 3).
+
+    ``buyer_persona=None`` with a priced kind is a caller bug (raises).
+    """
+    from world.currency.services import get_or_create_purse, transfer  # noqa: PLC0415
+
+    if buyer_persona is None:
+        msg = f"DecorationKind {kind.pk} costs {kind.cost_coppers}c but no buyer_persona given."
+        raise DecorationPlacementError(msg, user_message="You need to be buying this fixture.")
+    try:
+        transfer(
+            amount=kind.cost_coppers,
+            reason=f"decoration placed: {kind.name}",
+            from_purse=get_or_create_purse(buyer_persona.character_sheet),
+        )
+    except ValidationError as exc:
+        raise DecorationPlacementError(str(exc), user_message=exc.messages[0]) from exc
+
+
 @transaction.atomic
 def place_decoration(
     room_profile,
@@ -834,40 +886,12 @@ def place_decoration(
     Raises ``DecorationPlacementError`` on a funds/kwarg/item mismatch.
     """
     if kind.crafted_item_template_id is not None:
-        if item_instance is None:
-            msg = f"DecorationKind {kind.pk} requires a crafted item_instance."
-            raise DecorationPlacementError(
-                msg, user_message=f"{kind.name} must be placed from a crafted piece."
-            )
-        if item_instance.template_id != kind.crafted_item_template_id:
-            msg = f"item_instance {item_instance.pk} is not a {kind.crafted_item_template_id}."
-            raise DecorationPlacementError(
-                msg, user_message=f"That isn't a {kind.crafted_item_template.name}."
-            )
-        if buyer_persona is None:
-            msg = f"DecorationKind {kind.pk} is crafted-furniture but no buyer_persona given."
-            raise DecorationPlacementError(msg, user_message="You need to be holding that piece.")
-        if item_instance.holder_character_sheet_id != buyer_persona.character_sheet_id:
-            msg = f"item_instance {item_instance.pk} is not held by persona {buyer_persona.pk}."
-            raise DecorationPlacementError(msg, user_message="You aren't holding that piece.")
-        if RoomDecoration.objects.filter(source_item_instance=item_instance).exists():
-            msg = f"item_instance {item_instance.pk} is already placed as decor."
-            raise DecorationPlacementError(msg, user_message="That piece is already placed.")
+        _validate_crafted_decoration_placement(
+            kind=kind, item_instance=item_instance, buyer_persona=buyer_persona
+        )
         _anchor_crafted_item_in_room(item_instance, room_profile)
     elif kind.cost_coppers:
-        from world.currency.services import get_or_create_purse, transfer  # noqa: PLC0415
-
-        if buyer_persona is None:
-            msg = f"DecorationKind {kind.pk} costs {kind.cost_coppers}c but no buyer_persona given."
-            raise DecorationPlacementError(msg, user_message="You need to be buying this fixture.")
-        try:
-            transfer(
-                amount=kind.cost_coppers,
-                reason=f"decoration placed: {kind.name}",
-                from_purse=get_or_create_purse(buyer_persona.character_sheet),
-            )
-        except ValidationError as exc:
-            raise DecorationPlacementError(str(exc), user_message=exc.messages[0]) from exc
+        _charge_decoration_cost(kind=kind, buyer_persona=buyer_persona)
 
     decoration = RoomDecoration.objects.create(
         room_profile=room_profile, kind=kind, source_item_instance=item_instance

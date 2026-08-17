@@ -38,6 +38,10 @@ from world.societies.constants import (
 from world.societies.renown_config import RenownAwardConfig
 from world.societies.types import ReputationTier
 
+# Cross-app FK string constants (SonarCloud python:S1192 duplicate-literal).
+PERSONA_MODEL = "arxii.Persona"
+SCENE_MODEL = "arxii.Scene"
+
 _PROJECT_MODEL = "arxii.Project"
 
 # Validators for principle fields (-5 to +5 range)
@@ -648,12 +652,12 @@ class OrganizationMembershipOffer(SharedMemoryModel):
         related_name="membership_offers",
     )
     from_persona = models.ForeignKey(
-        "arxii.Persona",
+        PERSONA_MODEL,
         on_delete=models.CASCADE,
         related_name="sent_org_membership_offers",
     )
     to_persona = models.ForeignKey(
-        "arxii.Persona",
+        PERSONA_MODEL,
         null=True,
         blank=True,
         on_delete=models.CASCADE,
@@ -713,7 +717,7 @@ class OrganizationMembership(SharedMemoryModel):
         help_text="The organization this membership belongs to",
     )
     persona = models.ForeignKey(
-        "arxii.Persona",
+        PERSONA_MODEL,
         on_delete=models.CASCADE,
         related_name="organization_memberships",
         help_text="The persona (character identity) that holds this membership",
@@ -836,7 +840,7 @@ class OrganizationOffice(SharedMemoryModel):
         help_text="Player-facing title, e.g. 'Minister of the Domains'.",
     )
     holder = models.ForeignKey(
-        "arxii.Persona",
+        PERSONA_MODEL,
         null=True,
         blank=True,
         on_delete=models.SET_NULL,
@@ -878,7 +882,7 @@ class SocietyReputation(SharedMemoryModel):
     """
 
     persona = models.ForeignKey(
-        "arxii.Persona",
+        PERSONA_MODEL,
         on_delete=models.CASCADE,
         related_name="society_reputations",
         help_text="The persona (character identity) this reputation belongs to",
@@ -955,7 +959,7 @@ class OrganizationReputation(SharedMemoryModel):
     """
 
     persona = models.ForeignKey(
-        "arxii.Persona",
+        PERSONA_MODEL,
         on_delete=models.CASCADE,
         related_name="organization_reputations",
         help_text="The persona (character identity) this reputation belongs to",
@@ -1185,7 +1189,7 @@ class LegendEvent(AbstractLegendRecord):
         help_text="The category of this legend-generating event",
     )
     scene = models.ForeignKey(
-        "arxii.Scene",
+        SCENE_MODEL,
         null=True,
         blank=True,
         on_delete=models.SET_NULL,
@@ -1228,7 +1232,7 @@ class LegendEntry(AbstractLegendRecord):
     """
 
     persona = models.ForeignKey(
-        "arxii.Persona",
+        PERSONA_MODEL,
         on_delete=models.CASCADE,
         related_name="legend_entries",
         help_text="The persona (identity) that earned this legend",
@@ -1258,7 +1262,7 @@ class LegendEntry(AbstractLegendRecord):
         help_text="The category of this deed's source",
     )
     scene = models.ForeignKey(
-        "arxii.Scene",
+        SCENE_MODEL,
         null=True,
         blank=True,
         on_delete=models.SET_NULL,
@@ -1372,7 +1376,7 @@ class LegendSpread(SharedMemoryModel):
         help_text="The legend entry being spread",
     )
     spreader_persona = models.ForeignKey(
-        "arxii.Persona",
+        PERSONA_MODEL,
         on_delete=models.CASCADE,
         related_name="legend_spreads",
         help_text="The persona (identity) that spread this legend",
@@ -1404,7 +1408,7 @@ class LegendSpread(SharedMemoryModel):
         help_text="Multiplier based on audience size/quality",
     )
     scene = models.ForeignKey(
-        "arxii.Scene",
+        SCENE_MODEL,
         null=True,
         blank=True,
         on_delete=models.SET_NULL,
@@ -1442,7 +1446,7 @@ class LegendDeedStory(SharedMemoryModel):
         help_text="The legend entry this story is about",
     )
     author = models.ForeignKey(
-        "arxii.Persona",
+        PERSONA_MODEL,
         on_delete=models.CASCADE,
         related_name="legend_stories_written",
         help_text="The persona that wrote this account",
@@ -1477,7 +1481,7 @@ class PersonaDeedKnowledge(SharedMemoryModel):
     """
 
     persona = models.ForeignKey(
-        "arxii.Persona",
+        PERSONA_MODEL,
         on_delete=models.CASCADE,
         related_name="deed_knowledge",
         help_text="The persona that knows of the deed",
@@ -1531,7 +1535,7 @@ class PersonaLegendSummary(SharedMemoryModel):
     """Read-only model backed by a PostgreSQL materialized view."""
 
     persona = models.OneToOneField(
-        "arxii.Persona",
+        PERSONA_MODEL,
         on_delete=models.DO_NOTHING,
         primary_key=True,
         related_name="+",
@@ -1833,7 +1837,7 @@ class Proclamation(SharedMemoryModel):
     """
 
     issuer = models.ForeignKey(
-        "arxii.Persona",
+        PERSONA_MODEL,
         on_delete=models.CASCADE,
         related_name="proclamations",
     )

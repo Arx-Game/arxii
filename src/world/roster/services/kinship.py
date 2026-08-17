@@ -562,21 +562,9 @@ def incarnation_chain_of(person: Kinsperson, viewer: object) -> list[SoulIncarna
     return chain
 
 
-def derive_relationship(  # noqa: C901, PLR0911, PLR0912 — a labeled precedence walk is irreducibly branchy
-    a: Kinsperson, b: Kinsperson, viewer: object
-) -> str | None:
-    """Label the visible relationship from ``a`` to ``b`` (or None).
-
-    Precedence: self → parent/child (typed; foster labeled distinctly) →
-    sibling/half → spouse → step → grandparent/grandchild → aunt/uncle →
-    niece/nephew → cousin → in-law → soul chain. Blood vs marriage vs foster
-    is never ambiguous: the label carries it.
-    """
-    if a.pk == b.pk:
-        return RelationshipType.SELF
-
-    a_parents = parents_of(a, viewer, include_foster=True)
-    for edge in a_parents:
+def _direct_parent_child_label(a: Kinsperson, b: Kinsperson, viewer: object) -> str | None:
+    """PARENT/CHILD (foster labeled distinctly) if ``b`` is a's direct parent or child."""
+    for edge in parents_of(a, viewer, include_foster=True):
         if edge.parent_id == b.pk:
             return (
                 RelationshipType.FOSTER_PARENT
@@ -590,60 +578,152 @@ def derive_relationship(  # noqa: C901, PLR0911, PLR0912 — a labeled precedenc
                 if edge.kind == ParentageKind.FOSTER
                 else RelationshipType.CHILD
             )
+    return None
 
-    sibling_label = siblings_of(a, viewer).get(b.pk)
-    if sibling_label is not None:
-        return sibling_label
 
+def _spousal_label(a: Kinsperson, b: Kinsperson, viewer: object) -> str | None:
+    """SPOUSE / STEP_PARENT / STEP_CHILD via active unions and step-parent derivation."""
     if any(s.pk == b.pk for s in spouses_of(a, viewer)):
         return RelationshipType.SPOUSE
     if any(s.pk == b.pk for s in step_parents_of(a, viewer)):
         return RelationshipType.STEP_PARENT
     if any(s.pk == b.pk for s in step_parents_of(b, viewer)):
         return RelationshipType.STEP_CHILD
+    return None
 
-    # Foster-sibling: share a foster parent.
+
+def _shares_foster_parent(a: Kinsperson, b: Kinsperson, viewer: object) -> bool:
+    """Whether ``a`` and ``b`` share a foster parent (foster-sibling test)."""
     a_foster = {e.parent_id for e in _visible_edges(Q(child=a, kind=ParentageKind.FOSTER), viewer)}
     b_foster = {e.parent_id for e in _visible_edges(Q(child=b, kind=ParentageKind.FOSTER), viewer)}
-    if a_foster & b_foster:
-        return RelationshipType.FOSTER_SIBLING
+    return bool(a_foster & b_foster)
 
-    lineage_parents = [e.parent for e in parents_of(a, viewer)]
+
+def _grandparent_label(
+    b: Kinsperson, viewer: object, lineage_parents: list[Kinsperson]
+) -> str | None:
+    """GRANDPARENT if ``b`` is a parent of one of ``a``'s parents."""
     for parent in lineage_parents:
         if any(e.parent_id == b.pk for e in parents_of(parent, viewer)):
             return RelationshipType.GRANDPARENT
+    return None
+
+
+def _grandchild_label(a: Kinsperson, b: Kinsperson, viewer: object) -> str | None:
+    """GRANDCHILD if ``b`` is a child of one of ``a``'s children."""
     for edge in children_of(a, viewer):
         if any(e.child_id == b.pk for e in children_of(edge.child, viewer)):
             return RelationshipType.GRANDCHILD
+    return None
+
+
+def _aunt_uncle_label(
+    b: Kinsperson, viewer: object, lineage_parents: list[Kinsperson]
+) -> str | None:
+    """AUNT_UNCLE if ``b`` is a sibling of one of ``a``'s parents."""
     for parent in lineage_parents:
         if b.pk in siblings_of(parent, viewer):
             return RelationshipType.AUNT_UNCLE
-    my_siblings = _people_by_id(set(siblings_of(a, viewer)))
+    return None
+
+
+def _niece_nephew_label(
+    b: Kinsperson, viewer: object, my_siblings: dict[int, Kinsperson]
+) -> str | None:
+    """NIECE_NEPHEW if ``b`` is a child of one of ``a``'s siblings."""
     for sibling in my_siblings.values():
         if any(e.child_id == b.pk for e in children_of(sibling, viewer)):
             return RelationshipType.NIECE_NEPHEW
+    return None
+
+
+def _cousin_label(b: Kinsperson, viewer: object, lineage_parents: list[Kinsperson]) -> str | None:
+    """COUSIN if ``b`` is a child of a sibling of one of ``a``'s parents."""
     for parent in lineage_parents:
         aunts = _people_by_id(set(siblings_of(parent, viewer)))
         for aunt in aunts.values():
             if any(e.child_id == b.pk for e in children_of(aunt, viewer)):
                 return RelationshipType.COUSIN
+    return None
 
-    # In-law: spouse's blood relative, or blood relative's spouse.
+
+def _in_law_label(
+    a: Kinsperson, b: Kinsperson, viewer: object, my_siblings: dict[int, Kinsperson]
+) -> str | None:
+    """IN_LAW: a spouse's blood relative, or a blood relative's spouse."""
     for spouse in spouses_of(a, viewer):
         if derive_blood_only(spouse, b, viewer):
             return RelationshipType.IN_LAW
     for sibling in my_siblings.values():
         if any(s.pk == b.pk for s in spouses_of(sibling, viewer)):
             return RelationshipType.IN_LAW
+    return None
 
+
+def _incarnation_label(a: Kinsperson, b: Kinsperson, viewer: object) -> str | None:
+    """PAST_INCARNATION / LATER_INCARNATION via the shared soul chain, else None."""
     for inc in incarnation_chain_of(a, viewer):
         if inc.kinsperson_id == b.pk:
             own_seqs = [i.sequence for i in a.incarnations.all() if fact_visible(i, viewer)]
             if own_seqs and inc.sequence < max(own_seqs):
                 return RelationshipType.PAST_INCARNATION
             return RelationshipType.LATER_INCARNATION
-
     return None
+
+
+def derive_relationship(  # noqa: C901, PLR0911 — one branch/return per precedence label
+    a: Kinsperson, b: Kinsperson, viewer: object
+) -> str | None:
+    """Label the visible relationship from ``a`` to ``b`` (or None).
+
+    Precedence: self → parent/child (typed; foster labeled distinctly) →
+    sibling/half → spouse → step → grandparent/grandchild → aunt/uncle →
+    niece/nephew → cousin → in-law → soul chain. Blood vs marriage vs foster
+    is never ambiguous: the label carries it.
+    """
+    if a.pk == b.pk:
+        return RelationshipType.SELF
+
+    direct = _direct_parent_child_label(a, b, viewer)
+    if direct is not None:
+        return direct
+
+    sibling_label = siblings_of(a, viewer).get(b.pk)
+    if sibling_label is not None:
+        return sibling_label
+
+    spousal = _spousal_label(a, b, viewer)
+    if spousal is not None:
+        return spousal
+
+    # Foster-sibling: share a foster parent.
+    if _shares_foster_parent(a, b, viewer):
+        return RelationshipType.FOSTER_SIBLING
+
+    lineage_parents = [e.parent for e in parents_of(a, viewer)]
+    grandparent = _grandparent_label(b, viewer, lineage_parents)
+    if grandparent is not None:
+        return grandparent
+    grandchild = _grandchild_label(a, b, viewer)
+    if grandchild is not None:
+        return grandchild
+    aunt_uncle = _aunt_uncle_label(b, viewer, lineage_parents)
+    if aunt_uncle is not None:
+        return aunt_uncle
+    my_siblings = _people_by_id(set(siblings_of(a, viewer)))
+    niece_nephew = _niece_nephew_label(b, viewer, my_siblings)
+    if niece_nephew is not None:
+        return niece_nephew
+    cousin = _cousin_label(b, viewer, lineage_parents)
+    if cousin is not None:
+        return cousin
+
+    # In-law: spouse's blood relative, or blood relative's spouse.
+    in_law = _in_law_label(a, b, viewer, my_siblings)
+    if in_law is not None:
+        return in_law
+
+    return _incarnation_label(a, b, viewer)
 
 
 def derive_blood_only(a: Kinsperson, b: Kinsperson, viewer: object) -> bool:

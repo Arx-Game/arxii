@@ -11,6 +11,8 @@ from world.player_submissions.constants import (
     SubmissionStatus,
 )
 
+PERSONA_MODEL = "arxii.Persona"
+
 
 class PlayerFeedback(SharedMemoryModel):
     """General freeform feedback from a player about the game.
@@ -26,7 +28,7 @@ class PlayerFeedback(SharedMemoryModel):
         help_text="The account that submitted this.",
     )
     reporter_persona = models.ForeignKey(
-        "arxii.Persona",
+        PERSONA_MODEL,
         on_delete=models.PROTECT,
         related_name="feedback_submissions",
         help_text="The persona the submitter was wearing when they submitted.",
@@ -68,7 +70,7 @@ class BugReport(SharedMemoryModel):
         help_text="The account that submitted this.",
     )
     reporter_persona = models.ForeignKey(
-        "arxii.Persona",
+        PERSONA_MODEL,
         on_delete=models.PROTECT,
         related_name="bug_reports",
     )
@@ -134,13 +136,13 @@ class PlayerReport(SharedMemoryModel):
         ),
     )
     reporter_persona = models.ForeignKey(
-        "arxii.Persona",
+        PERSONA_MODEL,
         on_delete=models.PROTECT,
         related_name="reports_submitted",
         help_text="The persona the reporter was wearing when submitting.",
     )
     reported_persona = models.ForeignKey(
-        "arxii.Persona",
+        PERSONA_MODEL,
         on_delete=models.PROTECT,
         related_name="reports_against",
         help_text="The persona of the reported player at the time of the incident.",
@@ -230,7 +232,7 @@ class SystemErrorReport(SharedMemoryModel):
     message = models.TextField(blank=True, help_text="The exception's message.")
     traceback = models.TextField(help_text="Full formatted traceback of the first occurrence.")
     actor_persona = models.ForeignKey(
-        "arxii.Persona",
+        PERSONA_MODEL,
         on_delete=models.SET_NULL,
         null=True,
         blank=True,

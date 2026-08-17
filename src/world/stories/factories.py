@@ -72,6 +72,11 @@ from world.stories.types import (
     TrustLevel,
 )
 
+# Factory-path string for the GMProfile sub-factory, referenced by multiple
+# factories below. Centralized to avoid the duplicated-literal SonarCloud
+# smell (python:S1192).
+_GM_PROFILE_FACTORY = "world.gm.factories.GMProfileFactory"
+
 
 class EraFactory(factory_django.DjangoModelFactory):
     class Meta:
@@ -505,7 +510,7 @@ class AssistantGMClaimFactory(factory_django.DjangoModelFactory):
     beat = factory.SubFactory(
         BeatFactory, agm_eligible=True, predicate_type=BeatPredicateType.GM_MARKED
     )
-    assistant_gm = factory.SubFactory("world.gm.factories.GMProfileFactory")
+    assistant_gm = factory.SubFactory(_GM_PROFILE_FACTORY)
     status = AssistantClaimStatus.REQUESTED
     approved_by = None
     rejection_note = ""
@@ -523,7 +528,7 @@ class StoryGMOfferFactory(factory_django.DjangoModelFactory):
         model = StoryGMOffer
 
     story = factory.SubFactory(StoryFactory, scope=StoryScope.CHARACTER, primary_table=None)
-    offered_to = factory.SubFactory("world.gm.factories.GMProfileFactory")
+    offered_to = factory.SubFactory(_GM_PROFILE_FACTORY)
     offered_by_account = factory.SubFactory("evennia_extensions.factories.AccountFactory")
     status = StoryGMOfferStatus.PENDING
     message = ""
@@ -698,7 +703,7 @@ class CustodyClearanceFactory(factory_django.DjangoModelFactory):
         model = CustodyClearance
 
     protected_subject = factory.SubFactory(StoryProtectedSubjectFactory)
-    requested_by = factory.SubFactory("world.gm.factories.GMProfileFactory")
+    requested_by = factory.SubFactory(_GM_PROFILE_FACTORY)
     requesting_story = None
     requesting_beat = None
     scope = CustodyScope.APPEAR

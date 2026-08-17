@@ -64,7 +64,7 @@ class MoveToPositionAction(Action):
         try:
             target = Position.objects.get(pk=position_id)
         except Position.DoesNotExist:
-            return ActionResult(success=False, message="That position does not exist.")
+            return ActionResult(success=False, message=_ERR_POSITION_NOT_FOUND)
 
         try:
             move_to_position(actor, target)
@@ -117,7 +117,7 @@ class TakePositionAction(Action):
         try:
             target = Position.objects.get(pk=position_id)
         except Position.DoesNotExist:
-            return ActionResult(success=False, message="That position does not exist.")
+            return ActionResult(success=False, message=_ERR_POSITION_NOT_FOUND)
 
         try:
             take_position(actor, target)

@@ -22,6 +22,10 @@ from world.traits.models import CharacterTraitValue, display_trait_value
 # Polymorphic related_name shared by requirement subclasses.
 _REQUIREMENTS_RELATED_NAME = "%(class)s_requirements"
 
+# Cross-app FK string constants (SonarCloud python:S1192 duplicate-literal).
+_CHARACTER_CLASS_FK = "arxii.CharacterClass"
+_TRAIT_FK = "arxii.Trait"
+
 # Cost modifier constants
 NORMAL_COST_PERCENTAGE = 100
 
@@ -99,7 +103,7 @@ class ClassXPCost(SharedMemoryModel):
     """
 
     character_class = models.ForeignKey(
-        "arxii.CharacterClass",
+        _CHARACTER_CLASS_FK,
         on_delete=models.CASCADE,
         related_name="xp_costs",
     )
@@ -137,7 +141,7 @@ class TraitXPCost(SharedMemoryModel):
     """
 
     trait = models.ForeignKey(
-        "arxii.Trait",
+        _TRAIT_FK,
         on_delete=models.CASCADE,
         related_name="xp_costs",
     )
@@ -174,7 +178,7 @@ class ClassLevelUnlock(SharedMemoryModel):
     """Unlocking a new level in a character class."""
 
     character_class = models.ForeignKey(
-        "arxii.CharacterClass",
+        _CHARACTER_CLASS_FK,
         on_delete=models.CASCADE,
         related_name="level_unlocks",
     )
@@ -202,7 +206,7 @@ class TraitRatingUnlock(SharedMemoryModel):
     """Unlocking a major trait rating threshold."""
 
     trait = models.ForeignKey(
-        "arxii.Trait",
+        _TRAIT_FK,
         on_delete=models.CASCADE,
         related_name="rating_unlocks",
     )
@@ -328,7 +332,7 @@ class TraitRequirement(AbstractClassLevelRequirement):
     """Requirement for a specific trait at a minimum value."""
 
     trait = models.ForeignKey(
-        "arxii.Trait",
+        _TRAIT_FK,
         on_delete=models.CASCADE,
         related_name="trait_requirements",
     )
@@ -399,7 +403,7 @@ class ClassLevelRequirement(AbstractClassLevelRequirement):
     """Requirement for a specific level in a specific class."""
 
     character_class = models.ForeignKey(
-        "arxii.CharacterClass",
+        _CHARACTER_CLASS_FK,
         on_delete=models.CASCADE,
     )
     minimum_level = models.PositiveIntegerField(
@@ -439,7 +443,7 @@ class MultiClassRequirement(AbstractClassLevelRequirement):
     """Requirement for having multiple classes at specific levels."""
 
     required_classes = models.ManyToManyField(
-        "arxii.CharacterClass",
+        _CHARACTER_CLASS_FK,
         through="MultiClassLevel",
         related_name="multi_requirements",
     )
@@ -490,7 +494,7 @@ class MultiClassLevel(SharedMemoryModel):
         related_name="class_levels",
     )
     character_class = models.ForeignKey(
-        "arxii.CharacterClass",
+        _CHARACTER_CLASS_FK,
         on_delete=models.CASCADE,
     )
     minimum_level = models.PositiveIntegerField(
@@ -908,7 +912,7 @@ class CharacterUnlock(SharedMemoryModel):
         related_name="unlocks",
     )
     character_class = models.ForeignKey(
-        "arxii.CharacterClass",
+        _CHARACTER_CLASS_FK,
         on_delete=models.CASCADE,
         related_name="character_unlocks",
     )

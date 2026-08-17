@@ -11,6 +11,8 @@ from __future__ import annotations
 from django.db import models
 from evennia.utils.idmapper.models import SharedMemoryModel
 
+CHARACTER_SHEET_MODEL = "arxii.CharacterSheet"
+
 
 class AbstractClassLevelAdvancement(models.Model):
     """Shared shape for a single class-level advance (within-tier or crossing)."""
@@ -47,7 +49,7 @@ class ClassLevelAdvancement(AbstractClassLevelAdvancement, SharedMemoryModel):
     """Receipt for a within-tier advance via the Ritual of the Durance. Survives death."""
 
     character_sheet = models.ForeignKey(
-        "arxii.CharacterSheet",
+        CHARACTER_SHEET_MODEL,
         on_delete=models.CASCADE,
         related_name="class_level_advancements",
     )
@@ -57,7 +59,7 @@ class ClassLevelAdvancement(AbstractClassLevelAdvancement, SharedMemoryModel):
         related_name="durance_advancements",
     )
     officiant = models.ForeignKey(
-        "arxii.CharacterSheet",
+        CHARACTER_SHEET_MODEL,
         on_delete=models.SET_NULL,
         null=True,
         blank=True,
@@ -103,7 +105,7 @@ class DuranceTrainingSite(SharedMemoryModel):
         related_name="durance_training_sites",
     )
     officiant = models.ForeignKey(
-        "arxii.CharacterSheet",
+        CHARACTER_SHEET_MODEL,
         on_delete=models.PROTECT,
         related_name="durance_training_roles",
     )

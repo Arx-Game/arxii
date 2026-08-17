@@ -40,6 +40,7 @@ from world.npc_services.constants import (
 # Centralized to avoid the duplicated-literal SonarCloud smell (python:S1192).
 _PERSONA_FK = "arxii.Persona"
 _ORG_MODEL_PATH = "arxii.Organization"
+_ROOM_PROFILE_FK = "arxii.RoomProfile"
 _NPC_OFFER_DETAILS_HELP_TEXT = "The NPCServiceOffer row this details model decorates."
 _REGARD_EVENT_CONFIG_LABEL = "Regard Event Config"
 
@@ -243,7 +244,7 @@ class Functionary(SharedMemoryModel):
         help_text="The NPC role this placement fronts (its offers, faction, rapport default).",
     )
     room = models.ForeignKey(
-        "arxii.RoomProfile",
+        _ROOM_PROFILE_FK,
         on_delete=models.CASCADE,
         related_name="functionaries",
         help_text="The room this Functionary serves — where a player must be to interact.",
@@ -1499,7 +1500,7 @@ class NPCAssignment(SharedMemoryModel, DiscriminatorMixin):
         help_text="The promoted NPCAsset (set when source_type=NPC_ASSET).",
     )
     room = models.ForeignKey(
-        "arxii.RoomProfile",
+        _ROOM_PROFILE_FK,
         on_delete=models.CASCADE,
         related_name="npc_assignments",
         help_text="The room this NPC is posted to.",
@@ -1579,7 +1580,7 @@ class ExpulsionBar(SharedMemoryModel):
     """
 
     room = models.ForeignKey(
-        "arxii.RoomProfile",
+        _ROOM_PROFILE_FK,
         on_delete=models.CASCADE,
         related_name="expulsion_bars",
         help_text="The room the barred character may not re-enter.",

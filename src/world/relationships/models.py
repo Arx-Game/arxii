@@ -30,6 +30,10 @@ from world.relationships.constants import (
 # Django related_name template producing a per-concrete-subclass reverse accessor.
 CLASS_SET_RELATED_NAME = "%(class)s_set"
 
+# Cross-app FK string constants (SonarCloud python:S1192 duplicate-literal).
+CHARACTER_SHEET_MODEL = "arxii.CharacterSheet"
+SCENE_MODEL = "arxii.Scene"
+
 
 class RelationshipCondition(SharedMemoryModel):
     """
@@ -316,13 +320,13 @@ class CharacterRelationship(SharedMemoryModel):
     """
 
     source = models.ForeignKey(
-        "arxii.CharacterSheet",
+        CHARACTER_SHEET_MODEL,
         on_delete=models.CASCADE,
         related_name="relationships_as_source",
         help_text="The character who holds this relationship",
     )
     target = models.ForeignKey(
-        "arxii.CharacterSheet",
+        CHARACTER_SHEET_MODEL,
         on_delete=models.CASCADE,
         related_name="relationships_as_target",
         help_text="The character this relationship is about",
@@ -607,7 +611,7 @@ class RelationshipUpdate(SharedMemoryModel):
         help_text="The relationship this update applies to",
     )
     author = models.ForeignKey(
-        "arxii.CharacterSheet",
+        CHARACTER_SHEET_MODEL,
         on_delete=models.CASCADE,
         help_text="The character who wrote this update",
     )
@@ -643,7 +647,7 @@ class RelationshipUpdate(SharedMemoryModel):
         help_text="Whether this is a first impression update",
     )
     linked_scene = models.ForeignKey(
-        "arxii.Scene",
+        SCENE_MODEL,
         on_delete=models.SET_NULL,
         null=True,
         blank=True,
@@ -717,7 +721,7 @@ class RelationshipDevelopment(SharedMemoryModel):
         help_text="The relationship this development applies to",
     )
     author = models.ForeignKey(
-        "arxii.CharacterSheet",
+        CHARACTER_SHEET_MODEL,
         on_delete=models.CASCADE,
         help_text="The character who performed this development",
     )
@@ -747,7 +751,7 @@ class RelationshipDevelopment(SharedMemoryModel):
         help_text="Who can see this development",
     )
     linked_scene = models.ForeignKey(
-        "arxii.Scene",
+        SCENE_MODEL,
         on_delete=models.SET_NULL,
         null=True,
         blank=True,
@@ -781,7 +785,7 @@ class RelationshipCapstone(SharedMemoryModel):
         help_text="The relationship this capstone applies to",
     )
     author = models.ForeignKey(
-        "arxii.CharacterSheet",
+        CHARACTER_SHEET_MODEL,
         on_delete=models.CASCADE,
         help_text="The character who recorded this capstone",
     )
@@ -807,7 +811,7 @@ class RelationshipCapstone(SharedMemoryModel):
         help_text="Who can see this capstone",
     )
     linked_scene = models.ForeignKey(
-        "arxii.Scene",
+        SCENE_MODEL,
         on_delete=models.SET_NULL,
         null=True,
         blank=True,
@@ -913,7 +917,7 @@ class AffectionShift(SharedMemoryModel):
         help_text="The directed (target→actor) relationship this shift moved",
     )
     scene = models.ForeignKey(
-        "arxii.Scene",
+        SCENE_MODEL,
         on_delete=models.CASCADE,
         related_name="affection_shifts",
         help_text="The scene the shifting action resolved in (dedup key)",
@@ -973,7 +977,7 @@ class RelationshipChange(SharedMemoryModel):
         help_text="The relationship this change applies to",
     )
     author = models.ForeignKey(
-        "arxii.CharacterSheet",
+        CHARACTER_SHEET_MODEL,
         on_delete=models.CASCADE,
         help_text="The character who authored this change",
     )
