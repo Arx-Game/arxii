@@ -54,6 +54,7 @@ if TYPE_CHECKING:
     from world.areas.models import Area
     from world.currency.models import OrgObligation
     from world.realms.models import Realm
+    from world.roster.models import ParentageEdge
 
 _FEMALE_GENDER_KEY = "female"
 _MALE_GENDER_KEY = "male"
@@ -261,7 +262,9 @@ def _order_candidates(candidates: list[Kinsperson], ordering: str) -> list[Kinsp
     return sorted(candidates, key=lambda p: p.age or 0, reverse=True)
 
 
-def _eligible_child_from_edge(edge, law: SuccessionLaw, family: Family | None) -> Kinsperson | None:
+def _eligible_child_from_edge(
+    edge: ParentageEdge, law: SuccessionLaw, family: Family | None
+) -> Kinsperson | None:
     """The edge's child, if eligible to succeed under ``law`` — else None."""
     if not (edge.is_public_record and edge.is_true):
         return None

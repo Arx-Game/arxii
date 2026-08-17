@@ -36,5 +36,3 @@ overrides:
   'ws@8': '8.21.0'
   'yaml@1': '1.10.3'
   'yaml@2': '2.8.3'
-minimumReleaseAgeExclude:
-  - brace-expansion@1.1.15
