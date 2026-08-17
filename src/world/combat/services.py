@@ -6790,6 +6790,64 @@ def revert_combo_upgrade(action: CombatRoundAction) -> None:
 # ---------------------------------------------------------------------------
 
 
+def _group_combo_outcomes(
+    action_outcomes: list[ActionOutcome],
+) -> dict[int, list[tuple[ActionOutcome, CombatParticipant]]]:
+    """Group ``action_outcomes`` by ``combo_used``, resolving each participant.
+
+    Extracted from ``_process_combo_outcomes`` (S3776) — same grouping pass,
+    same behavior, just named on its own.
+    """
+    combo_groups: dict[int, list[tuple[ActionOutcome, CombatParticipant]]] = defaultdict(list)
+    for outcome in action_outcomes:
+        if outcome.combo_used is not None and outcome.participant_id is not None:
+            participant = CombatParticipant.objects.filter(pk=outcome.participant_id).first()
+            if participant is not None:
+                combo_groups[outcome.combo_used.pk].append((outcome, participant))
+    return combo_groups
+
+
+def _broadcast_combo_finisher_narration(
+    combo: ComboDefinition,
+    group: list[tuple[ActionOutcome, CombatParticipant]],
+    round_number: int,
+    encounter: CombatEncounter,
+) -> None:
+    """Broadcast the joint finisher narration for one multi-contributor combo group.
+
+    Extracted from ``_process_combo_outcomes`` (S3776) — same target-label
+    lookup and narration/broadcast calls, same behavior, just named on its
+    own.
+    """
+    from world.combat.interaction_services import (  # noqa: PLC0415
+        broadcast_action_outcome,
+        render_combo_finisher_narration,
+    )
+
+    contributor_labels = [str(p) for _, p in group]
+    total_damage = sum(dr.damage_dealt for outcome, _ in group for dr in outcome.damage_results)
+    # Determine target label from the first outcome's action.
+    target_label = None
+    for _outcome, participant in group:
+        action = CombatRoundAction.objects.filter(
+            participant=participant,
+            round_number=round_number,
+        ).first()
+        if action and action.focused_opponent_target_id:
+            target_label = action.focused_opponent_target.name
+            break
+
+    signature_clause = _signature_clause_for(combo)
+    narration = render_combo_finisher_narration(
+        combo_name=combo.name,
+        contributor_labels=contributor_labels,
+        target_label=target_label,
+        total_damage=total_damage,
+        signature_clause=signature_clause,
+    )
+    broadcast_action_outcome(encounter=encounter, narration=narration)
+
+
 def _process_combo_outcomes(
     action_outcomes: list[ActionOutcome],
     encounter: CombatEncounter,
@@ -6808,53 +6866,21 @@ def _process_combo_outcomes(
     Single-contributor combos keep the existing per-PC narration (backward
     compatible — the per-PC ``_record_and_broadcast_pc_action`` already ran).
     """
-    from collections import defaultdict  # noqa: PLC0415
-
-    from world.combat.interaction_services import (  # noqa: PLC0415
-        broadcast_action_outcome,
-        render_combo_finisher_narration,
-    )
     from world.combat.models import ComboLearning  # noqa: PLC0415
 
     # Group outcomes by combo_used.
-    combo_groups: dict[int, list[tuple[ActionOutcome, CombatParticipant]]] = defaultdict(list)
-    for outcome in action_outcomes:
-        if outcome.combo_used is not None and outcome.participant_id is not None:
-            participant = CombatParticipant.objects.filter(pk=outcome.participant_id).first()
-            if participant is not None:
-                combo_groups[outcome.combo_used.pk].append((outcome, participant))
+    combo_groups = _group_combo_outcomes(action_outcomes)
 
     for group in combo_groups.values():
         combo = group[0][0].combo_used
+        # _group_combo_outcomes only ever groups outcomes with combo_used set.
+        assert combo is not None  # noqa: S101  # type narrowing for ty
         participant_sheets = [p.character_sheet for _, p in group]
 
         # 1. Joint finisher narration (only for multi-contributor combos).
         _MULTI_CONTRIBUTOR_THRESHOLD = 2
         if len(group) >= _MULTI_CONTRIBUTOR_THRESHOLD:
-            contributor_labels = [str(p) for _, p in group]
-            total_damage = sum(
-                dr.damage_dealt for outcome, _ in group for dr in outcome.damage_results
-            )
-            # Determine target label from the first outcome's action.
-            target_label = None
-            for _outcome, participant in group:
-                action = CombatRoundAction.objects.filter(
-                    participant=participant,
-                    round_number=round_number,
-                ).first()
-                if action and action.focused_opponent_target_id:
-                    target_label = action.focused_opponent_target.name
-                    break
-
-            signature_clause = _signature_clause_for(combo)
-            narration = render_combo_finisher_narration(
-                combo_name=combo.name,
-                contributor_labels=contributor_labels,
-                target_label=target_label,
-                total_damage=total_damage,
-                signature_clause=signature_clause,
-            )
-            broadcast_action_outcome(encounter=encounter, narration=narration)
+            _broadcast_combo_finisher_narration(combo, group, round_number, encounter)
 
         # 2. Fire discovery ceremony for first-ever triggers.
         was_known = ComboLearning.objects.filter(

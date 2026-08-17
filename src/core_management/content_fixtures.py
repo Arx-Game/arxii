@@ -666,7 +666,7 @@ def _build_tradition_fixture(entry: ContentEntry) -> dict:
     return {"model": _fixture_model_label(Tradition), "fields": fields}
 
 
-DOMAIN_BUILDERS = {
+DOMAIN_BUILDERS: dict[str, dict] = {
     "stats": {
         "builder": partial(_build_trait_fixture, trait_type="stat"),
         "output": "world/traits/fixtures/content_stats.json",
@@ -851,6 +851,36 @@ def build_fixture_json(content_root: Path, result: BuildResult) -> None:
         result.source_paths[key] = [path] * len(raw)
 
 
+def _build_domain_entries(
+    domain: str,
+    domain_dir: Path,
+    config: dict,
+    result: BuildResult,
+    errors: list[str],
+) -> tuple[list[dict], list[Path]]:
+    """Parse+build every ``*.md`` entry under one domain directory.
+
+    Extracted from ``build_all`` (S3776) — same per-file parse/build/record
+    loop, same behavior, just named on its own. Appends to ``result.entries``
+    and ``result.placeholder_counts`` and to ``errors`` exactly as the
+    inlined loop did; returns the built ``(objects, paths)`` pair for the
+    caller to fold into ``result.fixtures``/``result.source_paths``.
+    """
+    objects: list[dict] = []
+    paths: list[Path] = []
+    for path in sorted(domain_dir.rglob("*.md")):
+        try:
+            entry = parse_content_file(path, domain)
+            objects.append(config["builder"](entry))
+            paths.append(entry.path)
+            result.entries.append(entry)
+            if entry.has_placeholder:
+                result.placeholder_counts[domain] = result.placeholder_counts.get(domain, 0) + 1
+        except ContentError as exc:
+            errors.append(str(exc))
+    return objects, paths
+
+
 def build_all(content_root: Path) -> BuildResult:
     """Walk known domains under ``content_root``; parse, validate, build.
 
@@ -878,18 +908,7 @@ def build_all(content_root: Path) -> BuildResult:
         if not domain_dir.is_dir():
             continue
         found_any_domain_dir = True
-        objects: list[dict] = []
-        paths: list[Path] = []
-        for path in sorted(domain_dir.rglob("*.md")):
-            try:
-                entry = parse_content_file(path, domain)
-                objects.append(config["builder"](entry))
-                paths.append(entry.path)
-                result.entries.append(entry)
-                if entry.has_placeholder:
-                    result.placeholder_counts[domain] = result.placeholder_counts.get(domain, 0) + 1
-            except ContentError as exc:
-                errors.append(str(exc))
+        objects, paths = _build_domain_entries(domain, domain_dir, config, result, errors)
         if objects:
             result.fixtures[config["output"]] = objects
             result.source_paths[config["output"]] = paths
@@ -1665,6 +1684,26 @@ def _retry_deferred(
     return created, updated, deferred_resolved
 
 
+def _apply_renames_for_model(model: type[models.Model], mapping: dict) -> list[str]:
+    """Apply one model's ``{"Old Name": "New Name", ...}`` rename mapping.
+
+    Extracted from ``apply_content_renames`` (S3776) — same idempotent
+    rename-by-natural-key loop, same behavior, just named on its own.
+    """
+    applied: list[str] = []
+    for old_name, new_name in mapping.items():
+        if model.objects.filter(name__iexact=new_name).exists():
+            continue
+        try:
+            instance = model.objects.get(name__iexact=old_name)
+        except model.DoesNotExist:
+            continue
+        instance.name = new_name
+        instance.save()
+        applied.append(f"{model.__name__}: {old_name} -> {new_name}")
+    return applied
+
+
 def apply_content_renames(content_root: Path) -> list[str]:
     """Apply corpus rename directives from ``<content_root>/fixtures/RENAMES.json``.
 
@@ -1720,16 +1759,7 @@ def apply_content_renames(content_root: Path) -> list[str]:
             )
             raise ContentError(msg)
 
-        for old_name, new_name in mapping.items():
-            if model.objects.filter(name__iexact=new_name).exists():
-                continue
-            try:
-                instance = model.objects.get(name__iexact=old_name)
-            except model.DoesNotExist:
-                continue
-            instance.name = new_name
-            instance.save()
-            applied.append(f"{model.__name__}: {old_name} -> {new_name}")
+        applied.extend(_apply_renames_for_model(model, mapping))
     return applied
 
 
