@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from collections.abc import Sequence
+from collections.abc import Callable, Sequence
 from decimal import Decimal
 import logging
 from typing import TYPE_CHECKING
@@ -64,7 +64,7 @@ if TYPE_CHECKING:
     from world.achievements.constants import AccessChangeSource
     from world.combat.models import CombatEncounter
     from world.covenants.models import CharacterCovenantRole as _CharacterCovenantRole
-    from world.magic.models.sessions import RitualSession
+    from world.magic.models.sessions import RitualSession, RitualSessionParticipant
     from world.stories.models import Story
 
 logger = logging.getLogger(__name__)
@@ -1619,7 +1619,36 @@ def _emit_vow_dim_notice(membership: CharacterCovenantRole) -> None:
     character.msg("Your vow dims — the covenant is not with you.")
 
 
-def _auto_engage_durance(  # noqa: C901
+def _durance_lane_engaged(
+    active: list[_CharacterCovenantRole],
+    *,
+    secondary: bool,
+) -> bool:
+    """True if the given Durance lane (primary/secondary) already has an engaged row."""
+    return any(m.engaged and m.left_at is None and m.is_secondary is secondary for m in active)
+
+
+def _durance_best_candidate(
+    rows: list[_CharacterCovenantRole],
+    *,
+    room: ObjectDB,
+    can_engage_membership: Callable[[_CharacterCovenantRole], bool],
+) -> _CharacterCovenantRole | None:
+    """Pick the most co-present engageable row from ``rows``; ties broken by covenant_id."""
+    candidates: list[tuple[_CharacterCovenantRole, int]] = []
+    for membership in rows:
+        if not can_engage_membership(membership):
+            continue
+        co_present = _co_present_member_count(membership, room)
+        if co_present > 0:
+            candidates.append((membership, co_present))
+    if not candidates:
+        return None
+    candidates.sort(key=lambda c: (-c[1], c[0].covenant_id))
+    return candidates[0][0]
+
+
+def _auto_engage_durance(
     *,
     character_sheet: CharacterSheet,
     room: ObjectDB,
@@ -1639,25 +1668,11 @@ def _auto_engage_durance(  # noqa: C901
         character_sheet.character.covenant_roles.active_memberships_for_type(CovenantType.DURANCE)
     )
 
-    def lane_engaged(*, secondary: bool) -> bool:
-        return any(m.engaged and m.left_at is None and m.is_secondary is secondary for m in active)
-
-    def best_candidate(rows: list[_CharacterCovenantRole]) -> _CharacterCovenantRole | None:
-        candidates: list[tuple[_CharacterCovenantRole, int]] = []
-        for membership in rows:
-            if not can_engage_membership(membership):
-                continue
-            co_present = _co_present_member_count(membership, room)
-            if co_present > 0:
-                candidates.append((membership, co_present))
-        if not candidates:
-            return None
-        candidates.sort(key=lambda c: (-c[1], c[0].covenant_id))
-        return candidates[0][0]
-
-    if not lane_engaged(secondary=False):
+    if not _durance_lane_engaged(active, secondary=False):
         core_rows = [m for m in active if m.standing == MembershipStanding.CORE]
-        chosen = best_candidate(core_rows)
+        chosen = _durance_best_candidate(
+            core_rows, room=room, can_engage_membership=can_engage_membership
+        )
         if chosen is not None:
             set_engaged_membership(membership=chosen)
             active = list(
@@ -1665,9 +1680,11 @@ def _auto_engage_durance(  # noqa: C901
                     CovenantType.DURANCE
                 )
             )
-    if not lane_engaged(secondary=True):
+    if not _durance_lane_engaged(active, secondary=True):
         minor_rows = [m for m in active if m.standing == MembershipStanding.MINOR]
-        chosen = best_candidate(minor_rows)
+        chosen = _durance_best_candidate(
+            minor_rows, room=room, can_engage_membership=can_engage_membership
+        )
         if chosen is not None:
             set_engaged_membership(membership=chosen, as_secondary=True)
 
@@ -1896,6 +1913,51 @@ def assert_initiator_can_induct(*, session: RitualSession) -> None:
         raise NotAuthorizedToInviteError
 
 
+def _find_induction_candidate(
+    session: RitualSession,
+) -> tuple[RitualSessionParticipant | None, CovenantRole | None]:
+    """The one ACCEPTED participant with a COVENANT_ROLE ref, and their chosen role.
+
+    Existing-member participants have no role reference; they're just vouching.
+    Returns ``(None, None)`` when no such participant exists.
+    """
+    for p in session.participants.filter(state=ParticipantState.ACCEPTED):
+        role_ref = p.references.filter(kind=ReferenceKind.COVENANT_ROLE).first()
+        if role_ref is not None:
+            return p, role_ref.ref_covenant_role
+    return None, None
+
+
+def _resolve_induction_membership(
+    *,
+    existing: CharacterCovenantRole | None,
+    standing: str,
+    target_covenant: Covenant,
+    candidate_participant: RitualSessionParticipant,
+    chosen_role: CovenantRole,
+) -> CharacterCovenantRole:
+    """Upgrade an existing MINOR row to CORE via ``swear_core``, or add a new membership.
+
+    An existing MINOR row for this candidate/covenant upgrades in place via
+    swear_core rather than creating a second row (which would trip the
+    active-uniqueness constraint) — but ONLY when the session actually
+    requested CORE. Re-inducting with standing="minor" while already MINOR
+    must honor that pick as a no-op: it must not force-promote to CORE and
+    must not re-run swear_core's level-band gate (a spurious VowGateError
+    for a guest who never asked to be fully sworn in).
+    """
+    if existing is not None and existing.standing == MembershipStanding.MINOR:
+        if standing == MembershipStanding.CORE:
+            swear_core(membership=existing)
+        return existing
+    return add_member(
+        covenant=target_covenant,
+        character_sheet=candidate_participant.character_sheet,
+        role=chosen_role,
+        standing=standing,
+    )
+
+
 @transaction.atomic
 def induct_member_via_session(*, session: RitualSession) -> CharacterCovenantRole:
     """Dispatched on INDUCTION fire. Unpacks the session into add_member args.
@@ -1924,14 +1986,7 @@ def induct_member_via_session(*, session: RitualSession) -> CharacterCovenantRol
     target_covenant = target_ref.ref_covenant
 
     # The candidate is the one ACCEPTED participant with a COVENANT_ROLE ref.
-    candidate_participant = None
-    chosen_role = None
-    for p in session.participants.filter(state=ParticipantState.ACCEPTED):
-        role_ref = p.references.filter(kind=ReferenceKind.COVENANT_ROLE).first()
-        if role_ref is not None:
-            candidate_participant = p
-            chosen_role = role_ref.ref_covenant_role
-            break
+    candidate_participant, chosen_role = _find_induction_candidate(session)
     if candidate_participant is None or chosen_role is None:
         raise RequiredReferenceMissingError
 
@@ -1947,28 +2002,20 @@ def induct_member_via_session(*, session: RitualSession) -> CharacterCovenantRol
         raise MinorStandingDuranceOnlyError
 
     # An existing MINOR row for this candidate/covenant upgrades in place via
-    # swear_core rather than creating a second row (which would trip the
-    # active-uniqueness constraint) — but ONLY when the session actually
-    # requested CORE. Re-inducting with standing="minor" while already MINOR
-    # must honor that pick as a no-op: it must not force-promote to CORE and
-    # must not re-run swear_core's level-band gate (a spurious VowGateError
-    # for a guest who never asked to be fully sworn in).
+    # swear_core (see _resolve_induction_membership) rather than creating a
+    # second row (which would trip the active-uniqueness constraint).
     existing = CharacterCovenantRole.objects.filter(
         character_sheet=candidate_participant.character_sheet,
         covenant=target_covenant,
         left_at__isnull=True,
     ).first()
-    if existing is not None and existing.standing == MembershipStanding.MINOR:
-        if standing == MembershipStanding.CORE:
-            swear_core(membership=existing)
-        membership = existing
-    else:
-        membership = add_member(
-            covenant=target_covenant,
-            character_sheet=candidate_participant.character_sheet,
-            role=chosen_role,
-            standing=standing,
-        )
+    membership = _resolve_induction_membership(
+        existing=existing,
+        standing=standing,
+        target_covenant=target_covenant,
+        candidate_participant=candidate_participant,
+        chosen_role=chosen_role,
+    )
 
     # COURT post-step (#1589): swearing into a Court is a fealty ceremony — the
     # induction also binds a CourtPact whose pull-cap the master grants (read
