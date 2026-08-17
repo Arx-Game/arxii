@@ -7,11 +7,18 @@ from django.urls import reverse
 from rest_framework.test import APIClient
 
 from evennia_extensions.factories import AccountFactory
+from world.registration.models import get_registration_config
 from world.roster.factories import GameInviteFactory, PlayerDataFactory
 from world.roster.models import InviteStatus
 from world.stories.factories import PlayerTrustFactory, TrustCategoryFactory
 from world.stories.models import PlayerTrustLevel
 from world.stories.types import TrustLevel
+
+
+def _set_registration_open(is_open: bool) -> None:
+    config = get_registration_config()
+    config.registration_open = is_open
+    config.save(update_fields=["registration_open"])
 
 
 class GameInviteAPITests(TestCase):
@@ -27,6 +34,7 @@ class GameInviteAPITests(TestCase):
             trust_level=TrustLevel.BASIC,
         )
         self.client.force_authenticate(user=self.account)
+        _set_registration_open(True)
 
     def test_create_invite(self):
         """POST /api/roster/invites/ creates an invite."""
@@ -84,4 +92,46 @@ class GameInviteAPITests(TestCase):
         self.client.force_authenticate(user=None)
         url = reverse("roster:gameinvite-resolve")
         response = self.client.get(url, {"token": "nonexistent"}, format="json")
+        self.assertEqual(response.status_code, 404)
+
+
+class GameInviteRegistrationClosedAPITests(TestCase):
+    """While registration is closed, the invite-a-friend API is off (#3182)."""
+
+    def setUp(self):
+        self.client = APIClient()
+        self.account = AccountFactory()
+        self.player_data = PlayerDataFactory(account=self.account)
+        self.invite_category = TrustCategoryFactory(name="INVITE")
+        trust = PlayerTrustFactory(account=self.account)
+        PlayerTrustLevel.objects.create(
+            player_trust=trust,
+            trust_category=self.invite_category,
+            trust_level=TrustLevel.BASIC,
+        )
+        self.client.force_authenticate(user=self.account)
+        _set_registration_open(False)
+
+    def test_create_returns_403_with_closed_message(self):
+        """POST create is refused with the registration-closed message, not the trust one."""
+        url = reverse("roster:gameinvite-list")
+        response = self.client.post(url, {"message": "Come play Arx!"}, format="json")
+        self.assertEqual(response.status_code, 403)
+        self.assertIn("registration is closed", response.data["detail"])
+
+    def test_claim_returns_403(self):
+        """POST claim is refused for a valid pending token."""
+        invite = GameInviteFactory(status=InviteStatus.PENDING)
+        url = reverse("roster:gameinvite-claim")
+        response = self.client.post(url, {"token": invite.token}, format="json")
+        self.assertEqual(response.status_code, 403)
+        invite.refresh_from_db()
+        self.assertEqual(invite.status, InviteStatus.PENDING)
+
+    def test_resolve_returns_404_for_valid_token(self):
+        """GET resolve hides a valid pending invite while registration is closed."""
+        invite = GameInviteFactory(status=InviteStatus.PENDING)
+        self.client.force_authenticate(user=None)
+        url = reverse("roster:gameinvite-resolve")
+        response = self.client.get(url, {"token": invite.token}, format="json")
         self.assertEqual(response.status_code, 404)

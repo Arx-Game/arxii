@@ -15,6 +15,7 @@ from typing import TYPE_CHECKING
 from django.db import transaction
 from django.utils import timezone
 
+from world.registration.models import get_registration_config
 from world.roster.models import GameInvite, InviteStatus
 
 if TYPE_CHECKING:
@@ -26,6 +27,20 @@ if TYPE_CHECKING:
 logger = logging.getLogger(__name__)
 
 DEFAULT_INVITE_EXPIRY_DAYS = 30
+
+
+class RegistrationClosedError(Exception):
+    """Player invites are unavailable while registration is closed (#3182).
+
+    A closed game means staff decide who gets in via ``AccountInvite``; a
+    player-issued ``GameInvite`` must not be a side door around that gate.
+    Distinct from ``PermissionError`` (the trust threshold) so the API can
+    return a different message for each.
+    """
+
+
+def _registration_is_open() -> bool:
+    return get_registration_config().registration_open
 
 
 def _inviter_meets_trust_threshold(inviter: PlayerData) -> bool:
@@ -66,8 +81,13 @@ def create_game_invite(
         The created GameInvite instance.
 
     Raises:
+        RegistrationClosedError: If registration is closed (invites are off).
         PermissionError: If the inviter does not meet the trust threshold.
     """
+    if not _registration_is_open():
+        msg = "Player invites are disabled while registration is closed."
+        raise RegistrationClosedError(msg)
+
     if not _inviter_meets_trust_threshold(inviter):
         msg = "Inviter does not meet the trust threshold to send invites."
         raise PermissionError(msg)
@@ -89,9 +109,14 @@ def resolve_invite(token: str) -> GameInvite | None:
     """Resolve a token to its invite for registration-page context display.
 
     Returns the invite if it's pending and not expired. Returns None for
-    claimed, revoked, expired, or nonexistent tokens. This is safe to expose
+    claimed, revoked, expired, or nonexistent tokens — and for any token
+    while registration is closed, so a stale link cannot show a welcoming
+    banner for an invite that will not work (#3182). This is safe to expose
     to unauthenticated users — it only returns display-safe context.
     """
+    if not _registration_is_open():
+        return None
+
     try:
         invite = GameInvite.objects.get(token=token)
     except GameInvite.DoesNotExist:
@@ -118,8 +143,13 @@ def claim_game_invite(token: str, account: AccountDB) -> GameInvite:
         The claimed GameInvite instance.
 
     Raises:
+        RegistrationClosedError: If registration is closed (invites are off).
         ValueError: If the token is invalid, already claimed, revoked, or expired.
     """
+    if not _registration_is_open():
+        msg = "Player invites are disabled while registration is closed."
+        raise RegistrationClosedError(msg)
+
     try:
         invite = GameInvite.objects.get(token=token)
     except GameInvite.DoesNotExist:

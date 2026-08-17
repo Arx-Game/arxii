@@ -4,9 +4,11 @@ from __future__ import annotations
 
 from django.test import TestCase
 
+from world.registration.models import get_registration_config
 from world.roster.factories import GameInviteFactory, PlayerDataFactory
 from world.roster.models import InviteStatus
 from world.roster.services.invite_services import (
+    RegistrationClosedError,
     claim_game_invite,
     create_game_invite,
     get_invite_for_account,
@@ -18,9 +20,27 @@ from world.stories.models import PlayerTrustLevel
 from world.stories.types import TrustLevel
 
 
+def _set_registration_open(is_open: bool) -> None:
+    config = get_registration_config()
+    config.registration_open = is_open
+    config.save(update_fields=["registration_open"])
+
+
+def _make_trusted_inviter(invite_category):
+    player_data = PlayerDataFactory()
+    trust = PlayerTrustFactory(account=player_data.account)
+    PlayerTrustLevel.objects.create(
+        player_trust=trust,
+        trust_category=invite_category,
+        trust_level=TrustLevel.BASIC,
+    )
+    return player_data
+
+
 class CreateGameInviteTests(TestCase):
     def setUp(self):
         self.invite_category = TrustCategoryFactory(name="INVITE")
+        _set_registration_open(True)
 
     def test_creates_invite_with_token_and_pending_status(self):
         """create_game_invite generates a token and sets PENDING status."""
@@ -96,8 +116,21 @@ class CreateGameInviteTests(TestCase):
         )
         self.assertIsNone(invite.expires_at)
 
+    def test_rejects_trusted_inviter_when_registration_closed(self):
+        """create_game_invite refuses while registration is closed (#3182)."""
+        player_data = _make_trusted_inviter(self.invite_category)
+        _set_registration_open(False)
+        with self.assertRaises(RegistrationClosedError):
+            create_game_invite(
+                inviter=player_data,
+                message="Come play!",
+            )
+
 
 class ResolveInviteTests(TestCase):
+    def setUp(self):
+        _set_registration_open(True)
+
     def test_resolves_pending_invite(self):
         """resolve_invite returns a pending invite by token."""
         invite = GameInviteFactory(status=InviteStatus.PENDING)
@@ -118,8 +151,17 @@ class ResolveInviteTests(TestCase):
         """resolve_invite returns None for a nonexistent token."""
         self.assertIsNone(resolve_invite("nonexistent-token"))
 
+    def test_returns_none_for_pending_invite_when_registration_closed(self):
+        """resolve_invite hides even a valid invite while registration is closed (#3182)."""
+        invite = GameInviteFactory(status=InviteStatus.PENDING)
+        _set_registration_open(False)
+        self.assertIsNone(resolve_invite(invite.token))
+
 
 class ClaimGameInviteTests(TestCase):
+    def setUp(self):
+        _set_registration_open(True)
+
     def test_claims_pending_invite(self):
         """claim_game_invite links account and sets CLAIMED status."""
         from evennia_extensions.factories import AccountFactory
@@ -146,6 +188,17 @@ class ClaimGameInviteTests(TestCase):
         invite = GameInviteFactory(status=InviteStatus.REVOKED)
         with self.assertRaises(ValueError):
             claim_game_invite(invite.token, AccountFactory())
+
+    def test_rejects_pending_invite_when_registration_closed(self):
+        """claim_game_invite refuses even a valid token while registration is closed (#3182)."""
+        from evennia_extensions.factories import AccountFactory
+
+        invite = GameInviteFactory(status=InviteStatus.PENDING)
+        _set_registration_open(False)
+        with self.assertRaises(RegistrationClosedError):
+            claim_game_invite(invite.token, AccountFactory())
+        invite.refresh_from_db()
+        self.assertEqual(invite.status, InviteStatus.PENDING)
 
 
 class RevokeGameInviteTests(TestCase):

@@ -1958,7 +1958,11 @@ Character lifecycle management with web-first applications and player anonymity.
   gets a websocket push on submission. Services use the `game_invite` prefix
   (`create_game_invite`/`claim_game_invite`/`revoke_game_invite`) to avoid
   collision with `world/gm/services.py`'s `GMRosterInvite` functions. See
-  ADR-0141.
+  ADR-0141. **Gated on `RegistrationConfig.registration_open` (#3182):** while
+  registration is closed, `create_game_invite` and `claim_game_invite` raise
+  `RegistrationClosedError` (403 at the API) and `resolve_invite` returns None
+  (404) — a player invite is never a side door around the staff
+  `AccountInvite` gate.
 - **Integrates with:** accounts, character_sheets, scenes
 - **Source:** `src/world/roster/`
 - **Details:** [roster.md](roster.md)

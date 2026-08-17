@@ -18,11 +18,14 @@ from world.roster.serializers.invites import (
     GameInviteSerializer,
 )
 from world.roster.services.invite_services import (
+    RegistrationClosedError,
     claim_game_invite,
     create_game_invite,
     resolve_invite,
     revoke_game_invite,
 )
+
+INVITES_CLOSED_DETAIL = "Player invites are disabled while registration is closed."
 
 
 class GameInviteViewSet(viewsets.ModelViewSet):
@@ -64,6 +67,11 @@ class GameInviteViewSet(viewsets.ModelViewSet):
             invite = create_game_invite(
                 inviter=player_data,
                 message=serializer.validated_data["message"],
+            )
+        except RegistrationClosedError:
+            return Response(
+                {"detail": INVITES_CLOSED_DETAIL},
+                status=status.HTTP_403_FORBIDDEN,
             )
         except PermissionError:
             return Response(
@@ -112,6 +120,11 @@ class GameInviteViewSet(viewsets.ModelViewSet):
             )
         try:
             invite = claim_game_invite(token=token, account=request.user)  # type: ignore[arg-type]
+        except RegistrationClosedError:
+            return Response(
+                {"detail": INVITES_CLOSED_DETAIL},
+                status=status.HTTP_403_FORBIDDEN,
+            )
         except ValueError:
             return Response(
                 {"detail": "Invite could not be claimed (invalid, claimed, revoked, or expired)."},
