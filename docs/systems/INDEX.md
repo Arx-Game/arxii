@@ -7505,6 +7505,25 @@ Player-to-staff contact surfaces plus the unified staff triage inbox.
 
 ---
 
+## Downtime Announcements (#3194)
+
+Players get warned before the game goes down — staff-declared maintenance
+windows plus the host's automatic security reboot, derived live from systemd's
+scheduled-shutdown file rather than typed twice.
+
+- **Models** (`world.downtime.models`): `DowntimeWindow` (`starts_at`,
+  `expected_duration_minutes`, player-facing `message`, `canceled_at`;
+  authored in the admin, the `RegistrationConfig` staff-surface pattern).
+- **Services** (`world.downtime.services`): `get_next_downtime()` — merges the
+  next un-canceled window with the scheduled reboot parsed from
+  `settings.SCHEDULED_SHUTDOWN_FILE` (`/run/systemd/shutdown/scheduled`);
+  returns the frozen `PlannedDowntime` dataclass or None.
+- **Endpoints:** `/api/downtime/next/` (public GET, polled by the banner).
+- **Web:** `DowntimeBanner` in `Layout` — 5-minute poll, renders within 24h of
+  the window, flips to in-progress copy once it starts.
+- **Source:** `src/world/downtime/`
+- **Details:** [downtime.md](downtime.md)
+
 ## Registration (#3054)
 
 Invitation-gated account registration — closed by default; staff issue per-email

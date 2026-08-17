@@ -6,6 +6,7 @@ import { ThemeBackground } from './theme-background';
 import { PendingAlterationBanner } from '@/magic/components/alterations/PendingAlterationBanner';
 import { SeanceOfferBanner } from '@/ceremonies/SeanceOfferBanner';
 import { ConversionOfferBanner } from '@/ceremonies/ConversionOfferBanner';
+import { DowntimeBanner } from './DowntimeBanner';
 
 interface LayoutProps {
   children: ReactNode;
@@ -27,6 +28,7 @@ export function Layout({ children }: LayoutProps) {
         Skip to content
       </a>
       <Header />
+      <DowntimeBanner />
       <PendingAlterationBanner />
       <SeanceOfferBanner />
       <ConversionOfferBanner />
