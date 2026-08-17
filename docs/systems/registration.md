@@ -39,6 +39,17 @@ address. Its `status` property derives `InviteStatus` from the three timestamp
 columns — never stored redundantly. `is_redeemable` is `True` only when none of
 `is_redeemed`/`is_revoked`/`is_expired` hold.
 
+**Two invite systems, one gate (#3182).** `world.roster.GameInvite` (#2483,
+player-issued invite-a-friend, trust-gated, no email binding) shares the
+`/register?invite=TOKEN` URL but does **not** open signup:
+`ArxAccountAdapter.is_open_for_signup` consults `AccountInvite` only. While
+`registration_open` is False the invite-a-friend feature is off entirely —
+`create_game_invite` and `claim_game_invite` raise
+`world.roster.services.invite_services.RegistrationClosedError` and
+`resolve_invite` returns None — so a player invite can never side-door the
+staff gate. When registration is open, `GameInvite` adds context (inviter
+message, application annotation) on top of open signup.
+
 ---
 
 ## Service functions (`world.registration.services`)

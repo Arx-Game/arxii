@@ -27,6 +27,13 @@ from world.stories.types import TrustLevel
 class InvitedPlayerFullJourneyTests(TestCase):
     def test_full_invite_journey(self):
         """Full flow: inviter creates invite → friend claims → submits → inviter notified."""
+        # 0. Invite-a-friend only runs while registration is open (#3182)
+        from world.registration.models import get_registration_config
+
+        config = get_registration_config()
+        config.registration_open = True
+        config.save(update_fields=["registration_open"])
+
         # 1. Inviter creates invite
         inviter_pd = PlayerDataFactory()
         invite_category = TrustCategoryFactory(name="INVITE")
