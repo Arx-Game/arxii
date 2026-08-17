@@ -7289,12 +7289,16 @@
   - invited_by -> evennia.AccountDB [FK]
   - redeemed_by -> evennia.AccountDB [FK] (nullable)
 
+### AccountMailFailure
+
 ### RegistrationConfig
 **Foreign Keys:**
   - updated_by -> evennia.AccountDB [FK] (nullable)
 
 ### Service Functions
+- `build_verification_link(email: str) -> str - Return the email-verification URL for an unverified account address (#3193).`
 - `issue_invite(email: str, invited_by: evennia.accounts.models.AccountDB, note: str = '') -> world.registration.models.AccountInvite - Issue an invite for ``email`` and email the redemption link to it.`
+- `record_mail_failure(email: str, template_prefix: str, error: Exception) -> world.registration.models.AccountMailFailure - Persist a failed account-mail send so staff can see the outage (#3193).`
 - `redeem_invite(token: str, email: str, account: evennia.accounts.models.AccountDB) -> world.registration.models.AccountInvite | None - Validate + stamp redemption for the invite backing this signup.`
 - `revoke_invite(invite: world.registration.models.AccountInvite, by: evennia.accounts.models.AccountDB) -> world.registration.models.AccountInvite - Revoke an un-redeemed invite. ``by`` is accepted for future audit-log use.`
 - `send_invite_email(invite: world.registration.models.AccountInvite) -> bool - Mail ``invite``'s redemption link to the address it is bound to.`
