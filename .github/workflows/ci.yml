@@ -174,6 +174,8 @@ jobs:
           #   smallest shard at the time it was added).
           #   + world.registration (2026-08-08, #3054 invite-gated signup -
           #   smallest shard at the time it was added).
+          #   + world.downtime (2026-08-17, #3194 downtime announcements -
+          #   smallest shard at the time it was added).
           - name: shard-3
             split_app: world.combat
             split_part: 1
@@ -182,7 +184,7 @@ jobs:
               world.items world.checks world.gm world.seeds world.fatigue
               world.assets world.action_points world.tasking core world.tests
               world.contributors world.beta_reset world.registration
-              world.predators
+              world.predators world.downtime
           # shard-4 (~344s): world.combat half 2 (~178s) + world.covenants (65)
           #   + world.conditions (37) + world.locations (24) + world.justice (15)
           #   + world.game_clock (9) + world.narrative (7) + world.consent (6)

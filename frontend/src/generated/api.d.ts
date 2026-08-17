@@ -6697,6 +6697,28 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
+  '/api/downtime/next/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /**
+     * @description Public GET — the next planned downtime, or ``{"downtime": null}``.
+     *
+     *     Polled by the web client's banner; must stay cheap and anonymous-safe
+     *     (one bounded query plus one small file read).
+     */
+    get: operations['downtime_next_retrieve'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   '/api/dreams/{character_id}/': {
     parameters: {
       query?: never;
@@ -49715,6 +49737,24 @@ export interface operations {
         content: {
           'application/json': components['schemas']['DraftDistinctionSyncResult'];
         };
+      };
+    };
+  };
+  downtime_next_retrieve: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description No response body */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
       };
     };
   };

@@ -159,6 +159,10 @@ else:
 DEFAULT_FROM_EMAIL = env("DEFAULT_FROM_EMAIL", default="noreply@arx2.com")
 SITE_URL = env("SITE_URL", default="https://arxmush.org")
 
+# systemd writes this file when a shutdown/reboot is scheduled and removes it on
+# cancel; world.downtime derives the automatic-reboot announcement from it (#3194).
+SCHEDULED_SHUTDOWN_FILE = env("SCHEDULED_SHUTDOWN_FILE", default="/run/systemd/shutdown/scheduled")
+
 # Idmapper cache ceiling in MB (#3200). Stated explicitly rather than inherited.
 #
 # We used to take Evennia's settings_default value of 400 silently. That is a

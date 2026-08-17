@@ -3418,6 +3418,16 @@
 - `remove_distinction(character_distinction: 'CharacterDistinction', *, sheet_update_request: 'SheetUpdateRequest') -> 'None' - Remove a CharacterDistinction, reconciling all dependent systems.`
 
 
+## world.downtime
+
+### DowntimeWindow
+**Foreign Keys:**
+  - created_by -> evennia.AccountDB [FK] (nullable)
+
+### Service Functions
+- `get_next_downtime() -> world.downtime.types.PlannedDowntime | None - Return the soonest upcoming (or in-progress) downtime, if any.`
+
+
 ## world.dreams
 
 ### DreamPerilConfig

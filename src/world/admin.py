@@ -50,6 +50,7 @@ import world.contributors.admin
 import world.covenants.admin
 import world.currency.admin
 import world.distinctions.admin
+import world.downtime.admin
 import world.dreams.admin
 import world.estates.admin
 import world.events.admin
