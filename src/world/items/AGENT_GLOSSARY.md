@@ -140,3 +140,20 @@ _Avoid_: take (as a synonym), pickpocket, loot (as a verb for a live owner's ite
   recipe's materials (#2886). **Story-protected** items (active legend deeds)
   need an APPROVED `RecycleRequest` (GM sign-off) first. _Avoid_: junk,
   disenchant, salvage-as-a-skill (it's a lifecycle act, not a craft).
+
+- **Trade session** — a `TradeSession` (#2990): the two-sided negotiated
+  exchange between two co-located characters, `PROPOSED` -> `ACTIVE` ->
+  `COMPLETED`/`CANCELLED`. Distinct from a `WareListing` (single-party
+  posted-price buy-now) — a trade session has two confirming sides.
+  _Avoid_: deal, offer (that's the informal name for the stage/coin
+  contents, not the session row).
+- **Stake (trade)** — a `TradeItemStake`: one item a party has put on the
+  table in a trade session. Staking or unstaking, or changing either side's
+  coin offer, resets both sides' confirms — the standard trade-window
+  anti-bait-and-switch rule. Stakes are declarations, not escrow: nothing
+  moves until `execute_trade` runs. _Avoid_: escrow, lock (the item stays in
+  the staking party's possession and inventory until the swap executes).
+- **Barter** — goods-for-goods trade; not a separate mode or model, just a
+  `TradeSession` where both sides staked items (optionally mixed with coin).
+  _Avoid_: minting a `TradeKind`/`is_barter` flag — it falls out of the
+  primitive for free.

@@ -469,6 +469,15 @@ from actions.definitions.tasking import (
 from actions.definitions.technique_authoring import AuthorTechniqueAction
 from actions.definitions.technique_training import TrainTechniqueAction
 from actions.definitions.threads import WeaveThreadAction
+from actions.definitions.trade import (
+    AcceptTradeAction,
+    CancelTradeAction,
+    ConfirmTradeAction,
+    ProposeTradeAction,
+    SetTradeCoinAction,
+    StageTradeItemAction,
+    UnstageTradeItemAction,
+)
 from actions.definitions.traps import (
     ArmTrapAction,
     DisarmTrapAction,
@@ -587,6 +596,13 @@ _ALL_ACTIONS: list[Action] = [
     WithdrawCoinsAction(),
     DepositCoinsAction(),
     GiveCoinsAction(),
+    ProposeTradeAction(),
+    AcceptTradeAction(),
+    StageTradeItemAction(),
+    UnstageTradeItemAction(),
+    SetTradeCoinAction(),
+    ConfirmTradeAction(),
+    CancelTradeAction(),
     ActivatePermitAction(),
     UseItemAction(),
     GrantItemAction(),

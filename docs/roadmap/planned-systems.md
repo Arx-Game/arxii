@@ -207,9 +207,10 @@ Designed as a connected set (ADRs 0050–0057); most of it has now landed. See
 - ✅ **Crafting-station durability + repair economy** — DONE (#1234).
 - ✅ **Crafting Action + telnet command** — DONE (#1866/#1931 closed the coverage gap).
 - **Store / shop / vendor + player↔player trade** — `partial`: the market shipped (stalls, NPC stock,
-  PC ware listings, fence #2862, finishing/service offers, fashion showcase economy #2959). Still
-  absent: **negotiated two-sided player↔player trade, barter, auction** — the only direct channel is
-  one-way `give`. **#2990**.
+  PC ware listings, fence #2862, finishing/service offers, fashion showcase economy #2959). ✅
+  **Negotiated two-sided player↔player trade + barter** — DONE (`TradeSession`/`TradeItemStake`,
+  `world/items/trade/`, atomic stage/confirm/execute; #2990). Still `intent`: **auction** — no
+  bid/lot/time-boxed-escrow substrate; not two-party-confirm shaped, deferred to its own issue.
 - **Ship system** — `partial`: battle vehicles (#1714), persistent ships + upgrades/repair +
   ship-as-sanctum (#1832), and **out-of-combat sea travel** (`Voyage` + actions + telnet) are all
   built. Still `intent`: **crew as named NPCs and cargo as tracked goods** — both are PLACEHOLDER

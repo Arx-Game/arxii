@@ -15861,6 +15861,62 @@ paths:
               schema:
                 $ref: '#/components/schemas/ItemTemplateDetail'
           description: ''
+  /api/items/trade-sessions/:
+    get:
+      operationId: items_trade_sessions_list
+      description: Your open and past trade sessions — never an account-wide or global
+        browse.
+      parameters:
+      - in: query
+        name: status
+        schema:
+          type: string
+          enum:
+          - active
+          - cancelled
+          - completed
+          - proposed
+        description: |-
+          * `proposed` - Proposed
+          * `active` - Active
+          * `completed` - Completed
+          * `cancelled` - Cancelled
+      tags:
+      - items
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/TradeSession'
+          description: ''
+  /api/items/trade-sessions/{id}/:
+    get:
+      operationId: items_trade_sessions_retrieve
+      description: Your open and past trade sessions — never an account-wide or global
+        browse.
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: A unique integer value identifying this trade session.
+        required: true
+      tags:
+      - items
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TradeSession'
+          description: ''
   /api/items/visible-item-detail/{id}/:
     get:
       operationId: items_visible_item_detail_retrieve
@@ -71930,6 +71986,115 @@ components:
         * `day` - Day
         * `dusk` - Dusk
         * `night` - Night
+    TradeItemStake:
+      type: object
+      properties:
+        id:
+          type: integer
+          readOnly: true
+        item_instance:
+          type: integer
+          readOnly: true
+        item_name:
+          type: string
+          readOnly: true
+        offered_by_sheet:
+          type: integer
+          description: Must equal session.initiator_sheet or session.counterparty_sheet.
+          readOnly: true
+        offered_by_name:
+          type: string
+          readOnly: true
+        staked_at:
+          type: string
+          format: date-time
+          readOnly: true
+      required:
+      - id
+      - item_instance
+      - item_name
+      - offered_by_name
+      - offered_by_sheet
+      - staked_at
+    TradeSession:
+      type: object
+      properties:
+        id:
+          type: integer
+          readOnly: true
+        initiator_sheet:
+          type: integer
+          description: The character who proposed the trade.
+          readOnly: true
+        initiator_name:
+          type: string
+          readOnly: true
+        counterparty_sheet:
+          type: integer
+          description: The character invited to the trade.
+          readOnly: true
+        counterparty_name:
+          type: string
+          readOnly: true
+        status:
+          allOf:
+          - $ref: '#/components/schemas/TradeSessionStatusEnum'
+          readOnly: true
+        initiator_confirmed:
+          type: boolean
+          readOnly: true
+        counterparty_confirmed:
+          type: boolean
+          readOnly: true
+        initiator_coppers:
+          type: integer
+          readOnly: true
+          description: Coin the initiator has staged onto the table.
+        counterparty_coppers:
+          type: integer
+          readOnly: true
+          description: Coin the counterparty has staged onto the table.
+        item_stakes:
+          type: array
+          items:
+            $ref: '#/components/schemas/TradeItemStake'
+          readOnly: true
+        created_at:
+          type: string
+          format: date-time
+          readOnly: true
+        resolved_at:
+          type: string
+          format: date-time
+          readOnly: true
+          nullable: true
+          description: When the session reached COMPLETED or CANCELLED.
+      required:
+      - counterparty_confirmed
+      - counterparty_coppers
+      - counterparty_name
+      - counterparty_sheet
+      - created_at
+      - id
+      - initiator_confirmed
+      - initiator_coppers
+      - initiator_name
+      - initiator_sheet
+      - item_stakes
+      - resolved_at
+      - status
+    TradeSessionStatusEnum:
+      enum:
+      - proposed
+      - active
+      - completed
+      - cancelled
+      type: string
+      description: |-
+        * `proposed` - Proposed
+        * `active` - Active
+        * `completed` - Completed
+        * `cancelled` - Cancelled
     Tradition:
       type: object
       description: Serializer for Tradition records available during CG.

@@ -59,7 +59,9 @@ def _active_tenure_for_sheet(sheet: CharacterSheet) -> RosterTenure | None:
     ).first()
 
 
-def _require_hot_goods_consent(recipient: CharacterState, item_instance: ItemInstance) -> None:
+def require_hot_goods_consent(
+    recipient_sheet: CharacterSheet | None, item_instance: ItemInstance
+) -> None:
     """Refuse transferring a hot item to a consent-off recipient (#1985).
 
     An item is hot when its latest theft was never resolved (the victim never
@@ -67,8 +69,10 @@ def _require_hot_goods_consent(recipient: CharacterState, item_instance: ItemIns
     transfer; the raised message is category-generic so neither party learns
     the item's provenance from the refusal. NPC recipients (no live tenure)
     are unaffected — consent is a player-protection surface.
+
+    Public (not flow-state-scoped) so ``world.items.trade.services`` can gate
+    trade stakes the same way ``give()`` gates a plain hand-off (#2990).
     """
-    recipient_sheet = recipient.obj.character_sheet
     if recipient_sheet is None:
         return
     recipient_tenure = _active_tenure_for_sheet(recipient_sheet)
@@ -387,7 +391,7 @@ def give(
         raise NotInPossession
     if recipient.obj.location != giver.obj.location:
         raise RecipientNotAdjacent
-    _require_hot_goods_consent(recipient, item.instance)
+    require_hot_goods_consent(recipient.obj.character_sheet, item.instance)
 
     previous_holder_sheet = item.instance.holder_character_sheet
     # Snapshot rows before iteration — unequip_item deletes them as we go.

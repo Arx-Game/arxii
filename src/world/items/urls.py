@@ -3,6 +3,7 @@
 from rest_framework.routers import DefaultRouter
 
 from world.items.market.views import MarketSquareViewSet, ServiceOfferViewSet
+from world.items.trade.views import TradeSessionViewSet
 from world.items.views import (
     EquippedItemViewSet,
     FashionJudgementViewSet,
@@ -59,5 +60,6 @@ router.register(
     basename="fashion-judgement",
 )
 router.register("lab-stations", LabStationViewSet, basename="lab-station")
+router.register("trade-sessions", TradeSessionViewSet, basename="trade-session")
 
 urlpatterns = router.urls

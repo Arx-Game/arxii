@@ -432,3 +432,6 @@ class AudacityTuningAdmin(admin.ModelAdmin):
 # The market submodule keeps its own admin next to its models; Django only
 # autoloads <app>/admin.py, so import it here to register those models (#2862).
 from world.items.market import admin as _market_admin  # noqa: E402, F401
+
+# Same for the trade submodule (#2990).
+from world.items.trade import admin as _trade_admin  # noqa: E402, F401

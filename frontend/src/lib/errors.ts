@@ -125,6 +125,13 @@ export interface DispatchResultBody {
    */
   success: boolean | null;
   message: string | undefined;
+  /**
+   * The `ActionResult.data` payload, when the action returned one (e.g. a
+   * newly created session/stake id). Optional — most dispatch callers only
+   * need `success`/`message`; trade's propose/stage actions read this to
+   * learn the id the server minted (#2990).
+   */
+  data: Record<string, unknown> | undefined;
 }
 
 /**
@@ -139,13 +146,18 @@ export interface DispatchResultBody {
  */
 export async function parseDispatchBody(res: Response): Promise<DispatchResultBody> {
   try {
-    const data = (await res.json()) as {
+    const body = (await res.json()) as {
       detail?: string;
       message?: string | null;
       success?: boolean | null;
+      data?: Record<string, unknown> | null;
     };
-    return { success: data.success ?? null, message: data.detail ?? data.message ?? undefined };
+    return {
+      success: body.success ?? null,
+      message: body.detail ?? body.message ?? undefined,
+      data: body.data ?? undefined,
+    };
   } catch {
-    return { success: null, message: undefined };
+    return { success: null, message: undefined, data: undefined };
   }
 }

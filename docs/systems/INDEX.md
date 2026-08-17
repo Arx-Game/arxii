@@ -1873,6 +1873,22 @@ hostile floor refuses service outright.
 - **Source:** `src/world/items/market/`
 - **Details:** [market.md](market.md)
 
+### Trade (#2990)
+Player<->player negotiated exchange: both sides stage items/coin, either side
+restages until both confirm, atomic swap. Barter falls out for free; auction
+is deferred to its own follow-up (not two-party-confirm shaped).
+
+- **Models:** `TradeSession` (`CharacterSheet`-keyed, `PROPOSED`/`ACTIVE`/
+  `COMPLETED`/`CANCELLED`, plain coin columns per side), `TradeItemStake`
+- **Services:** `world.items.trade.services` — propose_trade/accept_trade/
+  stake_item/unstake_item/set_coin_offer/confirm/cancel_trade/execute_trade
+  (mirrors `resolve_crossing_offer`'s two-phase `select_for_update` shape;
+  item relocation mirrors `give()`; coin via `currency.services.transfer`)
+- **Surfaces:** 7 REGISTRY actions; `/api/items/trade-sessions/` (read-only,
+  IC-scoped); web `TradePanel` (two-column staging card)
+- **Source:** `src/world/items/trade/`
+- **Details:** [trade.md](trade.md)
+
 ### Roster
 Character lifecycle management with web-first applications and player anonymity.
 

@@ -10195,6 +10195,40 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
+  '/api/items/trade-sessions/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /** @description Your open and past trade sessions — never an account-wide or global browse. */
+    get: operations['items_trade_sessions_list'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/items/trade-sessions/{id}/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /** @description Your open and past trade sessions — never an account-wide or global browse. */
+    get: operations['items_trade_sessions_retrieve'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   '/api/items/visible-item-detail/{id}/': {
     parameters: {
       query?: never;
@@ -40252,6 +40286,48 @@ export interface components {
      * @enum {string}
      */
     TimePhaseEnum: 'dawn' | 'day' | 'dusk' | 'night';
+    TradeItemStake: {
+      readonly id: number;
+      readonly item_instance: number;
+      readonly item_name: string;
+      /** @description Must equal session.initiator_sheet or session.counterparty_sheet. */
+      readonly offered_by_sheet: number;
+      readonly offered_by_name: string;
+      /** Format: date-time */
+      readonly staked_at: string;
+    };
+    TradeSession: {
+      readonly id: number;
+      /** @description The character who proposed the trade. */
+      readonly initiator_sheet: number;
+      readonly initiator_name: string;
+      /** @description The character invited to the trade. */
+      readonly counterparty_sheet: number;
+      readonly counterparty_name: string;
+      readonly status: components['schemas']['TradeSessionStatusEnum'];
+      readonly initiator_confirmed: boolean;
+      readonly counterparty_confirmed: boolean;
+      /** @description Coin the initiator has staged onto the table. */
+      readonly initiator_coppers: number;
+      /** @description Coin the counterparty has staged onto the table. */
+      readonly counterparty_coppers: number;
+      readonly item_stakes: components['schemas']['TradeItemStake'][];
+      /** Format: date-time */
+      readonly created_at: string;
+      /**
+       * Format: date-time
+       * @description When the session reached COMPLETED or CANCELLED.
+       */
+      readonly resolved_at: string | null;
+    };
+    /**
+     * @description * `proposed` - Proposed
+     *     * `active` - Active
+     *     * `completed` - Completed
+     *     * `cancelled` - Cancelled
+     * @enum {string}
+     */
+    TradeSessionStatusEnum: 'proposed' | 'active' | 'completed' | 'cancelled';
     /** @description Serializer for Tradition records available during CG. */
     Tradition: {
       readonly id: number;
@@ -54761,6 +54837,55 @@ export interface operations {
         };
         content: {
           'application/json': components['schemas']['ItemTemplateDetail'];
+        };
+      };
+    };
+  };
+  items_trade_sessions_list: {
+    parameters: {
+      query?: {
+        /**
+         * @description * `proposed` - Proposed
+         *     * `active` - Active
+         *     * `completed` - Completed
+         *     * `cancelled` - Cancelled
+         */
+        status?: 'active' | 'cancelled' | 'completed' | 'proposed';
+      };
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['TradeSession'][];
+        };
+      };
+    };
+  };
+  items_trade_sessions_retrieve: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        /** @description A unique integer value identifying this trade session. */
+        id: number;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['TradeSession'];
         };
       };
     };
