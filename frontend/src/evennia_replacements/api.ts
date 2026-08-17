@@ -114,6 +114,57 @@ export async function postLogout(): Promise<void> {
   await apiFetch('/api/auth/browser/v1/auth/logout', { method: 'POST' });
 }
 
+/** True when a 401 signup response's payload indicates registration succeeded
+ * but email verification is still pending, rather than an actual auth failure. */
+function hasPendingEmailVerificationFlow(responseData: SignupResponse | null): boolean {
+  return (
+    responseData?.data?.flows?.some((flow) => flow.id === 'verify_email' && flow.is_pending) ??
+    false
+  );
+}
+
+/** Builds the Error to throw for a failed /auth/signup response. Tries, in
+ * order: the allauth `detail` field, aggregated `errors` array messages
+ * (allauth validation errors), a 409-specific duplicate-account message, a
+ * 5xx-specific message, then a generic fallback. */
+async function buildRegistrationError(res: Response): Promise<Error> {
+  // A 500 returns Django's HTML error page — never feed that to res.json() (#3193)
+  const errorData = (await res.json().catch(() => null)) ?? {};
+  console.error('Registration error response:', res.status, errorData);
+
+  // Handle different error response formats
+  // allauth headless sometimes returns minimal {status: 409} responses
+  if (errorData.detail) {
+    return new Error(errorData.detail);
+  }
+
+  // Check for errors array (allauth validation errors)
+  if (errorData.errors && Array.isArray(errorData.errors)) {
+    const errorMessages = errorData.errors
+      .map((err: { message?: string }) => err.message)
+      .filter(Boolean)
+      .join(', ');
+    if (errorMessages) {
+      return new Error(errorMessages);
+    }
+  }
+
+  // Provide specific message for 409 Conflict (duplicate username/email)
+  if (res.status === 409) {
+    return new Error('Username or email already exists');
+  }
+
+  if (res.status >= 500) {
+    return new Error(
+      'The server hit an error during registration. Your account may still have been ' +
+        'created - try logging in, and contact staff if you cannot.'
+    );
+  }
+
+  // Fallback to generic message
+  return new Error('Registration failed');
+}
+
 export async function postRegister(data: {
   username: string;
   password: string;
@@ -137,51 +188,13 @@ export async function postRegister(data: {
   if (res.status === 401) {
     // 401 with email verification flow means registration succeeded but email verification required
     const responseData: SignupResponse | null = await res.json().catch(() => null);
-    const hasEmailVerificationFlow = responseData?.data?.flows?.some(
-      (flow) => flow.id === 'verify_email' && flow.is_pending
-    );
-
-    if (hasEmailVerificationFlow) {
+    if (hasPendingEmailVerificationFlow(responseData)) {
       return { success: true, emailVerificationRequired: true };
     }
   }
 
   if (!res.ok) {
-    // A 500 returns Django's HTML error page — never feed that to res.json() (#3193)
-    const errorData = (await res.json().catch(() => null)) ?? {};
-    console.error('Registration error response:', res.status, errorData);
-
-    // Handle different error response formats
-    // allauth headless sometimes returns minimal {status: 409} responses
-    if (errorData.detail) {
-      throw new Error(errorData.detail);
-    }
-
-    // Check for errors array (allauth validation errors)
-    if (errorData.errors && Array.isArray(errorData.errors)) {
-      const errorMessages = errorData.errors
-        .map((err: { message?: string }) => err.message)
-        .filter(Boolean)
-        .join(', ');
-      if (errorMessages) {
-        throw new Error(errorMessages);
-      }
-    }
-
-    // Provide specific message for 409 Conflict (duplicate username/email)
-    if (res.status === 409) {
-      throw new Error('Username or email already exists');
-    }
-
-    if (res.status >= 500) {
-      throw new Error(
-        'The server hit an error during registration. Your account may still have been ' +
-          'created - try logging in, and contact staff if you cannot.'
-      );
-    }
-
-    // Fallback to generic message
-    throw new Error('Registration failed');
+    throw await buildRegistrationError(res);
   }
 
   // Registration completed without email verification required
