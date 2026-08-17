@@ -261,9 +261,45 @@ def _order_candidates(candidates: list[Kinsperson], ordering: str) -> list[Kinsp
     return sorted(candidates, key=lambda p: p.age or 0, reverse=True)
 
 
-def derive_succession_candidates(  # noqa: C901 — one branch per derivation law, irreducible
-    title: Title,
+def _eligible_child_from_edge(edge, law: SuccessionLaw, family: Family | None) -> Kinsperson | None:
+    """The edge's child, if eligible to succeed under ``law`` — else None."""
+    if not (edge.is_public_record and edge.is_true):
+        return None
+    child = edge.child
+    if child.is_deceased:
+        return None
+    if law.require_wedlock and not _edge_in_wedlock(edge):
+        return None
+    if law.derivation == SuccessionDerivation.MATRILINEAL_RECOGNITION and (
+        family is None or child.family_id != family.pk
+    ):
+        return None
+    return child
+
+
+def _eligible_succession_children(
+    holder: Kinsperson, law: SuccessionLaw, family: Family | None
 ) -> list[Kinsperson]:
+    """Living, eligible children of ``holder`` under ``law`` (public record, deduped)."""
+    candidates: list[Kinsperson] = []
+    for edge in children_of(holder, OMNISCIENT):
+        child = _eligible_child_from_edge(edge, law, family)
+        if child is not None and child not in candidates:
+            candidates.append(child)
+    return candidates
+
+
+def _apply_enatic_tiebreak(ordered: list[Kinsperson], law: SuccessionLaw) -> list[Kinsperson]:
+    """Daughters ahead of sons at equal age (stable sort), when the law calls for it."""
+    if law.derivation == SuccessionDerivation.FEMALE_LINE_CONSORTS_ENNOBLED or (
+        law.enatic_tiebreak
+    ):
+        # Enatic preference: daughters ahead of sons at equal age (stable sort).
+        ordered.sort(key=lambda p: _parent_gender_key(p) != _FEMALE_GENDER_KEY)
+    return ordered
+
+
+def derive_succession_candidates(title: Title) -> list[Kinsperson]:
     """The ordered candidate list for ``title`` under its resolved law.
 
     Runs on the omniscient public record (succession is a legal fact, not a
@@ -288,29 +324,9 @@ def derive_succession_candidates(  # noqa: C901 — one branch per derivation la
         pool = _living_family_members(family) if family is not None else []
         return _order_candidates(pool, law.ordering_rule)
 
-    candidates: list[Kinsperson] = []
-    for edge in children_of(holder, OMNISCIENT):
-        if not (edge.is_public_record and edge.is_true):
-            continue
-        child = edge.child
-        if child.is_deceased:
-            continue
-        if law.require_wedlock and not _edge_in_wedlock(edge):
-            continue
-        if law.derivation == SuccessionDerivation.MATRILINEAL_RECOGNITION and (
-            family is None or child.family_id != family.pk
-        ):
-            continue
-        if child not in candidates:
-            candidates.append(child)
-
+    candidates = _eligible_succession_children(holder, law, family)
     ordered = _order_candidates(candidates, law.ordering_rule)
-    if law.derivation == SuccessionDerivation.FEMALE_LINE_CONSORTS_ENNOBLED or (
-        law.enatic_tiebreak
-    ):
-        # Enatic preference: daughters ahead of sons at equal age (stable sort).
-        ordered.sort(key=lambda p: _parent_gender_key(p) != _FEMALE_GENDER_KEY)
-    return ordered
+    return _apply_enatic_tiebreak(ordered, law)
 
 
 @transaction.atomic
