@@ -1847,21 +1847,29 @@ Multi-stage character creation flow with draft system.
 - **Integrates with:** All character-related systems (traits, skills, magic, sheets)
 - **Source:** `src/world/character_creation/`
 - **Details:** [character_creation.md](character_creation.md)
-### Market (#2066)
+### Market (#2066, standing gating #2995)
 Two-tier commerce: capital market squares (NPC stock sinks + PC stalls of
 unfinished wares w/ buyer finishing passes) and crafter shops (stations +
 craft-as-service offers). The description belongs to the player; dual
-provenance ("Crafted by X, Designed by Y").
+provenance ("Crafted by X, Designed by Y"). A persona-bearing NPC seller
+(`MarketStall.shopkeeper_persona` / `CraftingServiceOffer.crafter_persona`)
+reads `NpcRegard` (#1717) at purchase time — a functionary service, not a
+static shop: standing shifts price, gates reserved stock, and past a
+hostile floor refuses service outright.
 
-- **Models:** `MarketSquare`, `MarketStall` (host-org cuts), `StockListing`,
-  `WareListing`, `FinishingPass`, `CraftingServiceOffer`, `MarketSale`;
+- **Models:** `MarketSquare`, `MarketStall` (host-org cuts,
+  `shopkeeper_persona`), `StockListing` (`min_regard`), `WareListing`,
+  `FinishingPass`, `CraftingServiceOffer` (`min_regard`), `MarketSale`;
   `ItemInstance.designer_*` pair
 - **Services:** `world.items.market.services` — purchase_stock/list_ware/
   purchase_ware/finish_ware/set_service_offer/run_service_craft (offering
-  crafter as skill source, shop-anchored), dual_provenance_line
+  crafter as skill source, shop-anchored, regard-gated + regard-adjusted
+  price), dual_provenance_line, `_shopkeeper_regard`/`_regard_adjusted_price`/
+  `_check_regard_gate` (`world.items.market.constants` bands/floor)
 - **Surfaces:** 6 `market_*` REGISTRY actions; `/api/items/market-squares/`
   + `/service-offers/` (read-only; directory advertises, execution requires
-  visiting); web `/market`; telnet `market` namespace; seeds cluster `market`
+  visiting; regard-gated rows hidden per-viewer); web `/market`; telnet
+  `market` namespace; seeds cluster `market`
 - **Source:** `src/world/items/market/`
 - **Details:** [market.md](market.md)
 

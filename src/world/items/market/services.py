@@ -62,15 +62,101 @@ def _host_cut(stall: MarketStall, price: int) -> int:
     return price * stall.cut_percent // 100
 
 
+# --- Standing-based service gating (#2995) -------------------------------------
+# A persona-bearing NPC seller (a stall's ``shopkeeper_persona``, or a
+# ``CraftingServiceOffer.crafter_persona``) reads its ``NpcRegard`` (#1717) of
+# the buyer at purchase time — this is a functionary SERVICE the NPC extends,
+# not a fixed shop window: standing shifts the price, can reserve stock, and
+# past a hostile floor refuses service outright. A ``None`` shopkeeper (today's
+# anonymous stalls) or a PC crafter (NpcRegard never holds a PC's opinion,
+# ADR-0085) both read as regard 0 — unchanged behavior.
+
+
+def _shopkeeper_regard(shopkeeper_persona: Persona | None, buyer: Persona) -> int:
+    """NpcRegard ``shopkeeper_persona`` holds of ``buyer``; 0 with no shopkeeper."""
+    if shopkeeper_persona is None:
+        return 0
+    from world.npc_services.regard import get_regard  # noqa: PLC0415
+
+    return get_regard(shopkeeper_persona, buyer)
+
+
+def _regard_adjusted_price(base_price: int, regard: int) -> int:
+    """Walk ``REGARD_PRICE_BANDS``; the highest floor ``regard`` meets wins."""
+    from world.items.market.constants import REGARD_PRICE_BANDS  # noqa: PLC0415
+
+    pct = 100
+    for floor, band_pct in REGARD_PRICE_BANDS:
+        if regard >= floor:
+            pct = band_pct
+    return base_price * pct // 100
+
+
+def _regard_gate_passes(
+    shopkeeper_persona: Persona | None, buyer: Persona, min_regard: int | None
+) -> bool:
+    """Whether ``buyer`` clears the seller's regard gate (#2995).
+
+    True with no persona-bearing shopkeeper (unchanged behavior). Otherwise
+    both the global refusal floor and any authored ``min_regard`` must clear —
+    THE single predicate: both ``_check_regard_gate`` (purchase-time) and the
+    browse-side visibility filters (``MarketStallSerializer.get_stock_listings``,
+    ``ServiceOfferViewSet.get_queryset``) call this one function, so a
+    hard-refused buyer never sees a listing/offer they'd bounce off at
+    purchase — visibility = eligibility, no separate rule.
+    """
+    if shopkeeper_persona is None:
+        return True
+    from world.items.market.constants import REGARD_REFUSAL_FLOOR  # noqa: PLC0415
+
+    regard = _shopkeeper_regard(shopkeeper_persona, buyer)
+    if regard <= REGARD_REFUSAL_FLOOR:
+        return False
+    return min_regard is None or regard >= min_regard
+
+
+def _check_regard_gate(
+    shopkeeper_persona: Persona | None, buyer: Persona, min_regard: int | None
+) -> None:
+    """Raise ``MarketServiceError`` when the buyer's regard fails the gate.
+
+    Wraps ``_regard_gate_passes`` (see its docstring — the single predicate
+    shared with browse-side visibility). Distinguishes the refusal-floor
+    message from the reserved-stock ``min_regard`` message for the player.
+    """
+    if _regard_gate_passes(shopkeeper_persona, buyer, min_regard):
+        return
+    from world.items.market.constants import REGARD_REFUSAL_FLOOR  # noqa: PLC0415
+
+    regard = _shopkeeper_regard(shopkeeper_persona, buyer)
+    if regard <= REGARD_REFUSAL_FLOOR:
+        msg = f"regard {regard} at/below refusal floor {REGARD_REFUSAL_FLOOR}"
+        raise MarketServiceError(
+            msg, user_message="They take one look at you and refuse to deal with you at all."
+        )
+    msg = f"regard {regard} below authored min_regard {min_regard}"
+    raise MarketServiceError(
+        msg, user_message="That's reserved for those who've earned more trust here."
+    )
+
+
 @transaction.atomic
-def purchase_stock(*, listing: StockListing, buyer: Persona) -> ItemInstance:
-    """Buy from an NPC stall: mint an instance of the template, sink the coin."""
+def purchase_stock(*, listing: StockListing, buyer: Persona) -> tuple[ItemInstance, int]:
+    """Buy from an NPC stall: mint an instance of the template, sink the coin.
+
+    Returns ``(instance, charged_price)`` — the price actually charged, after
+    the stall's ``shopkeeper_persona`` regard band (#2995), which may differ
+    from ``listing.price``. Anonymous stalls (no shopkeeper) are unaffected.
+    """
     from world.items.models import ItemInstance  # noqa: PLC0415
 
     if not listing.is_active:
         msg = f"stock listing {listing.pk} inactive"
         raise MarketServiceError(msg, user_message="That stock is no longer sold.")
-    _pay(buyer, None, listing.price, f"market stock: {listing.template.name}")
+    shopkeeper = listing.stall.shopkeeper_persona
+    _check_regard_gate(shopkeeper, buyer, listing.min_regard)
+    price = _regard_adjusted_price(listing.price, _shopkeeper_regard(shopkeeper, buyer))
+    _pay(buyer, None, price, f"market stock: {listing.template.name}")
     instance = ItemInstance.objects.create(
         template=listing.template,
         holder_character_sheet=buyer.character_sheet,
@@ -79,9 +165,9 @@ def purchase_stock(*, listing: StockListing, buyer: Persona) -> ItemInstance:
         kind=MarketSale.SaleKind.STOCK,
         buyer_persona=buyer,
         item_instance=instance,
-        price=listing.price,
+        price=price,
     )
-    return instance
+    return instance, price
 
 
 @transaction.atomic
@@ -240,7 +326,7 @@ def run_service_craft(
     buyer_character: ObjectDB,
     item_instance: ItemInstance,
     target: object,
-) -> CraftRunResult:
+) -> tuple[CraftRunResult, int]:
     """Run a crafting attempt with the OFFERING crafter's skill (#2066).
 
     Arx 1's loop made honest: the buyer must stand in the shop (crafting is
@@ -248,6 +334,9 @@ def run_service_craft(
     front (charged even on a failed roll — the smith worked either way);
     the crafter's character rolls the check and gets the crafter credit;
     the buyer takes designer credit. Works with the crafter offline.
+
+    Returns ``(result, charged_fee)`` — the fee actually charged, after the
+    crafter's regard band (#2995; a no-op when ``crafter_persona`` is a PC).
     """
     from world.items.crafting.services import run_crafting_recipe  # noqa: PLC0415
 
@@ -264,10 +353,12 @@ def run_service_craft(
     if item_instance.holder_character_sheet_id != buyer.character_sheet_id:
         msg = "buyer does not hold the instance"
         raise MarketServiceError(msg, user_message="You are not holding that item.")
+    _check_regard_gate(offer.crafter_persona, buyer, offer.min_regard)
+    fee = _regard_adjusted_price(offer.fee, _shopkeeper_regard(offer.crafter_persona, buyer))
 
     crafter_sheet = offer.crafter_persona.character_sheet
     crafter_character = crafter_sheet.character
-    _pay(buyer, offer.crafter_persona, offer.fee, f"crafting service: {offer.recipe_kind}")
+    _pay(buyer, offer.crafter_persona, fee, f"crafting service: {offer.recipe_kind}")
 
     result = run_crafting_recipe(
         kind=offer.recipe_kind,
@@ -284,9 +375,9 @@ def run_service_craft(
         buyer_persona=buyer,
         seller_persona=offer.crafter_persona,
         item_instance=item_instance,
-        price=offer.fee,
+        price=fee,
     )
-    return result
+    return result, fee
 
 
 def dual_provenance_line(instance: ItemInstance) -> str:

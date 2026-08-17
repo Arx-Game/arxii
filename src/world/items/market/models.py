@@ -14,8 +14,11 @@ provenance renders "Crafted by X, Designed by Y" (designer fields live on
 ``ItemInstance`` beside the crafter pair).
 """
 
+from django.core.exceptions import ValidationError
 from django.db import models
 from evennia.utils.idmapper.models import SharedMemoryModel
+
+from world.npc_services.models import regard_validators
 
 _PERSONA_FK = "arxii.Persona"
 _TEMPLATE_FK = "arxii.ItemTemplate"
@@ -57,6 +60,14 @@ class MarketStall(SharedMemoryModel):
     ``owner_persona`` null = an NPC stall (materials/reagents/necessities;
     authored ``StockListing`` rows, pure sinks). Owned shopfronts — the
     prestige retail tier with upkeep and cuts — are buildings, not stalls.
+
+    ``shopkeeper_persona`` (#2995) names a *notable*, persona-bearing NPC
+    fronting the stall as a functionary service — distinct from
+    ``owner_persona`` (a PC's own stall, no NPC opinion to consult). When set,
+    the stall's stock reads that NPC's ``NpcRegard`` (#1717) of the buyer at
+    purchase time: standing shifts the price, can gate reserved stock, and —
+    past a hostile floor — refuses service outright. Both null (the default)
+    is a fully anonymous stall: ungated, behavior unchanged.
     """
 
     class StallKind(models.TextChoices):
@@ -87,6 +98,17 @@ class MarketStall(SharedMemoryModel):
         related_name="market_stalls",
         help_text="Null = NPC stall (authored stock, infinite supply).",
     )
+    shopkeeper_persona = models.ForeignKey(
+        _PERSONA_FK,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="shopkeeper_of_stalls",
+        help_text=(
+            "The notable NPC whose NpcRegard gates this stall's service (#2995). "
+            "Null = anonymous stall, ungated. Mutually exclusive with owner_persona."
+        ),
+    )
     host_org = models.ForeignKey(
         "arxii.Organization",
         on_delete=models.SET_NULL,
@@ -107,6 +129,16 @@ class MarketStall(SharedMemoryModel):
                 fields=["square", "name"], name="items_market_stall_unique_name_per_square"
             ),
         ]
+
+    def clean(self) -> None:
+        """Reject a PC-owned stall from also naming an NPC shopkeeper (#2995).
+
+        A PC's own stall has no NPC opinion to consult — ``owner_persona``
+        and ``shopkeeper_persona`` are mutually exclusive.
+        """
+        if self.owner_persona_id is not None and self.shopkeeper_persona_id is not None:
+            msg = "A stall cannot have both a PC owner and an NPC shopkeeper."
+            raise ValidationError({"shopkeeper_persona": msg})
 
     def __str__(self) -> str:
         return f"{self.name} ({self.square.name})"
@@ -132,6 +164,16 @@ class StockListing(SharedMemoryModel):
     )
     price = models.PositiveIntegerField(help_text="Coppers. PLACEHOLDER pricing.")
     is_active = models.BooleanField(default=True)
+    min_regard = models.IntegerField(
+        null=True,
+        blank=True,
+        validators=regard_validators,
+        help_text=(
+            "Reserved-stock access gate (#2995): the stall's shopkeeper_persona's "
+            "NpcRegard of the buyer must meet this to see/buy the listing, above and "
+            "beyond the global refusal floor. Null (default) = no extra gate."
+        ),
+    )
 
     class Meta:
         ordering = ["stall", "template__name"]
@@ -140,6 +182,17 @@ class StockListing(SharedMemoryModel):
                 fields=["stall", "template"], name="items_market_stock_unique_per_stall"
             ),
         ]
+
+    def clean(self) -> None:
+        """Reject an authored ``min_regard`` on a stall with no shopkeeper (#2995).
+
+        Nothing to gate against when the stall is anonymous.
+        """
+        if self.min_regard is not None and (
+            self.stall_id is None or self.stall.shopkeeper_persona_id is None
+        ):
+            msg = "min_regard requires the stall to have a shopkeeper_persona."
+            raise ValidationError({"min_regard": msg})
 
     def __str__(self) -> str:
         return f"{self.template} @ {self.price}c ({self.stall.name})"
@@ -247,6 +300,16 @@ class CraftingServiceOffer(SharedMemoryModel):
     )
     fee = models.PositiveIntegerField(help_text="Coppers per attempt. PLACEHOLDER.")
     is_active = models.BooleanField(default=True)
+    min_regard = models.IntegerField(
+        null=True,
+        blank=True,
+        validators=regard_validators,
+        help_text=(
+            "Access gate on top of the global refusal floor (#2995): the crafter's "
+            "NpcRegard of the buyer must meet this. No-op when crafter_persona is a "
+            "PC (NpcRegard never holds a PC's opinion, ADR-0085). Null = no extra gate."
+        ),
+    )
 
     class Meta:
         ordering = ["crafter_persona", "recipe_kind"]
