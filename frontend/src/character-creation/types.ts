@@ -70,6 +70,9 @@ export interface Family {
   family_type: 'commoner' | 'noble' | 'crime';
   description: string;
   origin_realm?: number;
+  // #3261 — resolved nobiliary particles ('' when the family has none).
+  born_particle: string;
+  taken_in_particle: string;
 }
 
 // Open app-in positions for a family (#2062 slot mountain).

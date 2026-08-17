@@ -254,6 +254,13 @@ export function LineageStage({ draft, onStageSelect }: LineageStageProps) {
             </div>
           )}
 
+          {draft.family && (
+            <FamilyNamePreview
+              firstName={draft.draft_data.first_name}
+              family={families?.find((f) => f.id === draft.family?.id)}
+            />
+          )}
+
           {draft.family && <KinSlotPicker draft={draft} familyId={draft.family.id} />}
 
           {!draft.claimed_kin_slot && !draft.claimed_kin_pool && !draft.defer_parents && (
@@ -666,6 +673,51 @@ function HouseFoundingPanel({ draft }: { draft: CharacterDraft }) {
         </>
       )}
     </div>
+  );
+}
+
+// =============================================================================
+// FamilyNamePreview — the particled name, live as the player picks (#3261)
+// =============================================================================
+
+// Mirrors the backend join rule: an apostrophe-terminal particle attaches
+// unspaced ("Sybel D'Regente"); others join with spaces ("Elia du Vaelmont").
+function composeParticledName(
+  firstName: string | undefined,
+  particle: string,
+  familyName: string
+): string {
+  const surname = particle
+    ? particle.endsWith("'")
+      ? `${particle}${familyName}`
+      : `${particle} ${familyName}`
+    : familyName;
+  return firstName ? `${firstName} ${surname}` : surname;
+}
+
+function FamilyNamePreview({ firstName, family }: { firstName?: string; family?: Family }) {
+  if (!family) return null;
+  const fullName = composeParticledName(firstName, family.born_particle, family.name);
+  return (
+    <Card className="max-w-md" data-testid="family-name-preview">
+      <CardContent className="pt-6 text-center">
+        {firstName ? (
+          <p className="text-lg">
+            Your character will be known as <span className="font-bold">{fullName}</span>
+          </p>
+        ) : (
+          <p className="text-lg">
+            Members carry the name <span className="font-bold">{fullName}</span>
+          </p>
+        )}
+        {family.taken_in_particle && family.taken_in_particle !== family.born_particle && (
+          <p className="mt-1 text-sm text-muted-foreground">
+            Those who marry or are adopted into the house wear &ldquo;{family.taken_in_particle}
+            &rdquo; instead.
+          </p>
+        )}
+      </CardContent>
+    </Card>
   );
 }
 
