@@ -7,7 +7,10 @@
 # leaves the unit "active" from systemd's point of view (Server is fine)
 # while players cannot connect. This timer-driven script checks BOTH
 # pidfiles every run and restarts the unit (+ fires an off-box alert) when
-# the unit claims active but a daemon is dead.
+# the unit claims active but a daemon is dead. Since the 2026-08-17 reboot
+# outage it also resurrects a unit that systemd has parked in `failed`
+# (start-limit hit) — rate-limited, see the failed branch below — so a
+# crash-looped start eventually converges back to running without a human.
 #
 # Failure modes this deliberately guards against becoming false positives —
 # a watchdog that flaps (restarts on every transient blip) is worse than no
@@ -44,11 +47,41 @@ GRACE_PERIOD_S=120
 
 log() { printf '[watchdog] %s\n' "$*"; }
 
-# Not active at all (stopped/failed) — not our concern; systemd's own
-# Restart=on-failure handles a fully-dead unit. We only catch the "unit
-# says active but one daemon silently died" case.
+# Three states matter here:
+#   active  -> fall through to the half-dead pidfile checks below.
+#   failed  -> systemd's Restart= gave up (start-limit hit). Nothing else
+#              will ever retry — this was the 2026-08-17 outage: a reboot-
+#              time restart race parked the unit in `failed` and the site
+#              served 502s until a human pressed the deploy button. Resurrect
+#              it here, rate-limited by a stamp file so a genuinely broken
+#              build gets one attempt per RESURRECT_INTERVAL_S, not a flap
+#              storm (each attempt still gets the unit's own StartLimitBurst
+#              of internal retries).
+#   other (inactive/activating/...) -> deliberate stop or start in flight;
+#              not ours to touch.
+RESURRECT_INTERVAL_S=300
+RESURRECT_STAMP=/run/arxii-watchdog.resurrect-stamp
+
 active_state="$(systemctl is-active "${SERVICE}" 2>/dev/null || true)"
 if [ "${active_state}" != "active" ]; then
+  if [ "${active_state}" = "failed" ]; then
+    now_s="$(date +%s)"
+    last_s="$(stat -c %Y "${RESURRECT_STAMP}" 2>/dev/null || echo 0)"
+    if [ $(( now_s - last_s )) -lt "${RESURRECT_INTERVAL_S}" ]; then
+      log "unit failed but last resurrection was $(( now_s - last_s ))s ago" \
+        "(< ${RESURRECT_INTERVAL_S}s) — waiting"
+      exit 0
+    fi
+    touch "${RESURRECT_STAMP}"
+    log "unit is failed and nothing else will retry — reset-failed + start"
+    systemctl reset-failed "${SERVICE}"
+    systemctl start "${SERVICE}" || log "start failed; will retry next interval"
+    if [ -x /usr/local/sbin/arxii-alert ]; then
+      /usr/local/sbin/arxii-alert \
+        "watchdog resurrected ${SERVICE} from systemd 'failed' state (start-limit had been hit)"
+    fi
+    exit 0
+  fi
   log "unit not active (${active_state}) — nothing to do"
   exit 0
 fi
