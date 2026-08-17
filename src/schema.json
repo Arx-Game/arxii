@@ -9859,6 +9859,22 @@ paths:
               schema:
                 $ref: '#/components/schemas/DraftDistinctionSyncResult'
           description: ''
+  /api/downtime/next/:
+    get:
+      operationId: downtime_next_retrieve
+      description: |-
+        Public GET — the next planned downtime, or ``{"downtime": null}``.
+
+        Polled by the web client's banner; must stay cheap and anonymous-safe
+        (one bounded query plus one small file read).
+      tags:
+      - downtime
+      security:
+      - cookieAuth: []
+      - {}
+      responses:
+        '200':
+          description: No response body
   /api/dreams/{character_id}/:
     get:
       operationId: dreams_retrieve
