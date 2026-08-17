@@ -108,15 +108,7 @@ export function renderWithCharacterCreationProviders(
       <Provider store={store}>
         <QueryClientProvider client={queryClient}>
           <RealmThemeProvider>
-            <MemoryRouter
-              initialEntries={initialEntries}
-              future={{
-                v7_startTransition: true,
-                v7_relativeSplatPath: true,
-              }}
-            >
-              {children}
-            </MemoryRouter>
+            <MemoryRouter initialEntries={initialEntries}>{children}</MemoryRouter>
           </RealmThemeProvider>
         </QueryClientProvider>
       </Provider>

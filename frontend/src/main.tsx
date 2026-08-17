@@ -18,12 +18,7 @@ createRoot(document.getElementById('root')!).render(
       <QueryClientProvider client={queryClient}>
         <ErrorBoundary>
           <AuthProvider>
-            <BrowserRouter
-              future={{
-                v7_startTransition: true,
-                v7_relativeSplatPath: true,
-              }}
-            >
+            <BrowserRouter>
               <ThemeProvider attribute="class" defaultTheme="system" enableSystem>
                 <RealmThemeProvider>
                   <App />
