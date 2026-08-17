@@ -47,6 +47,7 @@ import {
   getGMApplicationDetail,
   updateGMApplication,
   getAccountInviteList,
+  fetchVerificationLink,
   issueAccountInvite,
   resendAccountInvite,
   revokeAccountInvite,
@@ -400,6 +401,13 @@ export function useResendAccountInvite() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: staffKeys.all });
     },
+  });
+}
+
+export function useFetchVerificationLink() {
+  // No cache invalidation: generating a link mutates nothing server-side (#3193).
+  return useMutation({
+    mutationFn: (email: string) => fetchVerificationLink(email),
   });
 }
 

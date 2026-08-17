@@ -123,3 +123,29 @@ class AccountInvite(SharedMemoryModel):
         if self.is_expired:
             return InviteStatus.EXPIRED
         return InviteStatus.PENDING
+
+
+class AccountMailFailure(SharedMemoryModel):
+    """A failed outbound account-mail send, recorded so staff can see it (#3193).
+
+    Account mail (verification at signup/login, password reset) is best-effort:
+    ``ArxAccountAdapter.send_mail`` catches provider failures instead of letting
+    them 500 the request, and writes a row here so a silent mail outage shows
+    up in the admin rather than staying invisible until players complain.
+    """
+
+    email = models.EmailField(db_index=True)
+    template_prefix = models.CharField(
+        max_length=100,
+        help_text="Allauth mail template prefix, e.g. account/email/email_confirmation_signup.",
+    )
+    error = models.TextField(help_text="Exception type and message from the failed send.")
+    created_at = models.DateTimeField(auto_now_add=True, db_index=True)
+
+    class Meta:
+        verbose_name = "Account Mail Failure"
+        verbose_name_plural = "Account Mail Failures"
+        ordering = ["-created_at"]
+
+    def __str__(self) -> str:
+        return f"AccountMailFailure({self.email}, {self.template_prefix})"

@@ -73,7 +73,8 @@ export async function postLogin(data: { login: string; password: string }): Prom
     body: JSON.stringify(requestData),
   });
   if (!res.ok) {
-    const errorData = await res.json();
+    // A 500 returns Django's HTML error page — never feed that to res.json() (#3193)
+    const errorData = (await res.json().catch(() => null)) ?? {};
     console.error('Login error response:', res.status, errorData);
 
     // Handle different error response formats
@@ -90,6 +91,10 @@ export async function postLogin(data: { login: string; password: string }): Prom
       if (errorMessages) {
         throw new Error(errorMessages);
       }
+    }
+
+    if (res.status >= 500) {
+      throw new Error('The server hit an error during login. Please try again shortly.');
     }
 
     // Fallback to generic message
@@ -131,8 +136,8 @@ export async function postRegister(data: {
 
   if (res.status === 401) {
     // 401 with email verification flow means registration succeeded but email verification required
-    const responseData: SignupResponse = await res.json();
-    const hasEmailVerificationFlow = responseData.data?.flows?.some(
+    const responseData: SignupResponse | null = await res.json().catch(() => null);
+    const hasEmailVerificationFlow = responseData?.data?.flows?.some(
       (flow) => flow.id === 'verify_email' && flow.is_pending
     );
 
@@ -142,7 +147,8 @@ export async function postRegister(data: {
   }
 
   if (!res.ok) {
-    const errorData = await res.json();
+    // A 500 returns Django's HTML error page — never feed that to res.json() (#3193)
+    const errorData = (await res.json().catch(() => null)) ?? {};
     console.error('Registration error response:', res.status, errorData);
 
     // Handle different error response formats
@@ -165,6 +171,13 @@ export async function postRegister(data: {
     // Provide specific message for 409 Conflict (duplicate username/email)
     if (res.status === 409) {
       throw new Error('Username or email already exists');
+    }
+
+    if (res.status >= 500) {
+      throw new Error(
+        'The server hit an error during registration. Your account may still have been ' +
+          'created - try logging in, and contact staff if you cannot.'
+      );
     }
 
     // Fallback to generic message

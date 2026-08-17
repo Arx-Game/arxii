@@ -339,3 +339,20 @@ export async function resendAccountInvite(id: number): Promise<AccountInvite> {
   }
   return res.json();
 }
+
+// Staff-only fallback when mail cannot reach the player (#3193): produces the
+// email-verification link for an unverified account so staff can hand it over
+// directly, mirroring the invite Copy Link flow.
+export async function fetchVerificationLink(
+  email: string
+): Promise<{ email: string; link: string }> {
+  const res = await apiFetch('/api/staff/verification-link/', {
+    method: 'POST',
+    body: JSON.stringify({ email }),
+  });
+  if (!res.ok) {
+    const data = await res.json().catch(() => null);
+    throw new Error(data?.detail ?? 'Failed to generate verification link');
+  }
+  return res.json();
+}

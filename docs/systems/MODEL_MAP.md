@@ -217,6 +217,9 @@
   - ward_details <- room_features.RoomWardDetails
   - alarm_details <- room_features.RoomAlarmDetails
   - defense_progression_projects <- room_features.DefenseProgressionDetails
+  - functionaries <- npc_services.Functionary
+  - npc_assignments <- npc_services.NPCAssignment
+  - expulsion_bars <- npc_services.ExpulsionBar
   - crafting_service_offers <- items.CraftingServiceOffer
   - crime_evidence <- justice.CrimeEvidence
   - stat_overrides <- locations.LocationValueOverride
@@ -225,9 +228,6 @@
   - tenancy_records <- locations.LocationTenancy
   - ambient_emote_lines <- narrative.AmbientEmoteLine
   - ambient_emits <- narrative.AmbientEmit
-  - functionaries <- npc_services.Functionary
-  - npc_assignments <- npc_services.NPCAssignment
-  - expulsion_bars <- npc_services.ExpulsionBar
   - scene_rounds <- scenes.SceneRound
   - places <- scenes.Place
   - speaker_queues <- scenes.SpeakerQueue
@@ -453,6 +453,8 @@
   - domain_profile <- societies.Domain
   - income_streams <- currency.OrgIncomeStream
   - story_ownership <- gm.StoryArea
+  - name_cultures <- npc_services.NameCulture
+  - default_permits_offered <- npc_services.PermitOfferDetails
   - market_squares <- items.MarketSquare
   - laws <- justice.AreaLaw
   - heat_rows <- justice.PersonaHeat
@@ -466,8 +468,6 @@
   - tenancy_records <- locations.LocationTenancy
   - ambient_emote_lines <- narrative.AmbientEmoteLine
   - ambient_emits <- narrative.AmbientEmit
-  - name_cultures <- npc_services.NameCulture
-  - default_permits_offered <- npc_services.PermitOfferDetails
   - predator_bands <- predators.PredatorBand
   - gossip_heat <- secrets.SecretGossip
 
@@ -1169,10 +1169,12 @@
   - location -> evennia_extensions.RoomProfile [FK]
   - scene -> scenes.Scene [FK] (nullable)
   - event -> events.Event [FK] (nullable)
+  - title -> societies.Title [FK] (nullable)
 **Pointed to by:**
   - honorees <- ceremonies.CeremonyHonoree
   - offerings <- ceremonies.CeremonyOffering
   - speeches <- ceremonies.CeremonySpeech
+  - coronation <- ceremonies.Coronation
 
 ### CeremonyConfig
 
@@ -1184,6 +1186,7 @@
   - speeches <- ceremonies.CeremonySpeech
   - seance_offer <- ceremonies.SeanceManifestationOffer
   - conversion_offer <- ceremonies.WorshipConversionOffer
+  - wedding_consent_offer <- ceremonies.WeddingConsentOffer
 
 ### CeremonyOffering
 **Foreign Keys:**
@@ -1201,7 +1204,17 @@
 **Pointed to by:**
   - ceremonies <- ceremonies.Ceremony
 
+### Coronation
+**Foreign Keys:**
+  - ceremony -> ceremonies.Ceremony [OneToOne]
+  - honoree_sheet -> character_sheets.CharacterSheet [FK]
+  - title -> societies.Title [FK]
+
 ### SeanceManifestationOffer
+**Foreign Keys:**
+  - ceremony_honoree -> ceremonies.CeremonyHonoree [OneToOne]
+
+### WeddingConsentOffer
 **Foreign Keys:**
   - ceremony_honoree -> ceremonies.CeremonyHonoree [OneToOne]
 
@@ -1214,14 +1227,16 @@
 - `execute_will(character_sheet: 'CharacterSheet') -> None - Execute the deceased's estate — the funeral door of #1985.`
 - `finish_ceremony(*, ceremony: world.ceremonies.models.Ceremony, sincere: bool | None = None) -> world.ceremonies.models.Ceremony - Close the rite: quality roll, renown tallies, worship, funeral effects.`
 - `get_ceremony_config() -> world.ceremonies.models.CeremonyConfig - Get-or-create the first CeremonyConfig row (singleton-by-convention).`
-- `open_ceremony(*, officiant_persona: 'Persona', type_key: str, honoree_sheets: 'list[CharacterSheet]', location_profile, being: 'WorshippedBeing | None' = None, scene=None, event=None) -> world.ceremonies.models.Ceremony - Open a ceremony at a location, recognizing zero or more honorees.`
+- `open_ceremony(*, officiant_persona: 'Persona', type_key: str, honoree_sheets: 'list[CharacterSheet]', location_profile, being: 'WorshippedBeing | None' = None, scene=None, event=None, title=None, is_staff_fiat: bool = False) -> world.ceremonies.models.Ceremony - Open a ceremony at a location, recognizing zero or more honorees.`
 - `open_funeral_for(character_sheet: 'CharacterSheet') -> world.ceremonies.models.Ceremony | None - The OPEN funeral honoring this character, if any (the ghost container).`
 - `pending_conversion_offers_for_account(account: object) -> 'QuerySet[WorshipConversionOffer]' - PENDING conversion offers addressed to any character this account has ever held.`
 - `pending_seance_offers_for_account(account: object) -> 'QuerySet[SeanceManifestationOffer]' - PENDING seance offers addressed to any character this account has ever held (#2393).`
+- `pending_wedding_consent_offers_for_account(account: object) -> 'QuerySet[WeddingConsentOffer]' - PENDING wedding consent offers addressed to any character this account holds (#2358).`
 - `record_offering(*, ceremony: world.ceremonies.models.Ceremony, item_instances: 'list[ItemInstance]') -> list[world.ceremonies.models.CeremonyOffering] - Sacrifice items: destroy them, feed the being's pool, log offerings.`
 - `record_speech(*, ceremony: world.ceremonies.models.Ceremony, speaker_persona: 'Persona', target_honoree: world.ceremonies.models.CeremonyHonoree | None = None) -> world.ceremonies.models.CeremonySpeech - Recognize a speaker; their Performance/Oratory roll shapes the tally.`
 - `respond_to_conversion_offer(offer: 'WorshipConversionOffer', *, account: object, accept: bool, sincere: bool = True) -> 'WorshipConversionOffer' - Accept or decline a pending public-conversion offer (#2361, Ratified amendment #1a).`
 - `respond_to_seance_offer(offer: 'SeanceManifestationOffer', *, account: object, accept: bool) -> 'SeanceManifestationOffer' - Accept or decline a pending seance manifestation offer (#2393).`
+- `respond_to_wedding_consent_offer(offer: 'WeddingConsentOffer', *, account: object, accept: bool) -> 'WeddingConsentOffer' - Accept or decline a pending wedding consent offer (#2358).`
 - `revoke_seance_manifestations(ceremony: world.ceremonies.models.Ceremony) -> None - Force-unpuppet any manifested RETIRED honoree when a Seance closes (#2393).`
 
 
@@ -1396,6 +1411,7 @@
   - treasured_by <- boundaries.TreasuredSubject
   - captivities <- captivity.Captivity
   - ceremony_honors <- ceremonies.CeremonyHonoree
+  - coronations <- ceremonies.Coronation
   - trait_values <- traits.CharacterTraitValue
   - trait_changes <- traits.CharacterTraitChange
   - character_class_levels <- classes.CharacterClassLevel
@@ -1528,6 +1544,7 @@
   - prepared_ground <- room_features.PreparedGround
   - recipe_knowledge <- items.CharacterRecipeKnowledge
   - common_gem_buckets <- items.CommonGemBucket
+  - expulsion_bars <- npc_services.ExpulsionBar
   - vault_transits <- items.VaultTransit
   - trade_sessions_initiated <- items.TradeSession
   - trade_sessions_received <- items.TradeSession
@@ -1542,7 +1559,6 @@
   - summoned_military_units <- military.MilitaryUnit
   - commanded_armies <- military.Army
   - narrative_message_deliveries <- narrative.NarrativeMessageDelivery
-  - expulsion_bars <- npc_services.ExpulsionBar
   - petitions_about <- player_submissions.Petition
   - relationships_as_source <- relationships.CharacterRelationship
   - relationships_as_target <- relationships.CharacterRelationship
@@ -2947,8 +2963,8 @@
   - court_pacts <- covenants.CourtPact
   - ritualsessionreference_set <- magic.RitualSessionReference
   - combo_signatures <- combat.ComboSignature
-  - armies <- military.Army
   - court_grant_offer_details <- npc_services.CourtGrantOfferDetails
+  - armies <- military.Army
   - constructed_ships <- ships.ShipConstructionDetails
   - storylines <- stories.Story
   - gm_requests <- stories.GroupStoryRequest
@@ -4367,6 +4383,7 @@
 **Foreign Keys:**
   - square -> items.MarketSquare [FK]
   - owner_persona -> scenes.Persona [FK] (nullable)
+  - shopkeeper_persona -> scenes.Persona [FK] (nullable)
   - host_org -> societies.Organization [FK] (nullable)
 **Pointed to by:**
   - stock_listings <- items.StockListing
@@ -6476,10 +6493,10 @@
   - clues <- clues.Clue
   - crisis_options <- societies.DomainCrisisTypeOption
   - situational_perks <- covenants.VowSituationalPerk
+  - offer_details <- npc_services.MissionOfferDetails
   - nodes <- missions.MissionNode
   - instances <- missions.MissionInstance
   - givers <- missions.MissionGiver
-  - offer_details <- npc_services.MissionOfferDetails
   - task_templates <- tasking.TaskTemplate
 
 ### Service Functions
@@ -6636,12 +6653,12 @@
 **Pointed to by:**
   - distinction_grants <- assets.DistinctionAssetGrant
   - permits_issued <- buildings.BuildingPermitDetails
-  - missions_reported_to <- missions.MissionTemplate
   - functionaries <- npc_services.Functionary
   - staffing_lines <- npc_services.StaffingProfileLine
   - offers <- npc_services.NPCServiceOffer
   - role_cooldowns <- npc_services.NPCRoleCooldown
   - reaction_lines <- npc_services.NPCReactionLine
+  - missions_reported_to <- missions.MissionTemplate
 
 ### NPCRoleCooldown
 **Foreign Keys:**
@@ -6654,7 +6671,6 @@
   - check_type -> checks.CheckType [FK] (nullable)
 **Pointed to by:**
   - asset_task_intel_details <- assets.AssetTaskIntelDetails
-  - mission_risk_acknowledgements <- missions.MissionRiskAcknowledgement
   - cooldowns <- npc_services.OfferCooldown
   - mission_offer_details <- npc_services.MissionOfferDetails
   - permit_offer_details <- npc_services.PermitOfferDetails
@@ -6664,6 +6680,7 @@
   - summonses <- npc_services.OfferSummons
   - styling_offer_details <- npc_services.StylingOfferDetails
   - profile_recording_offer_details <- npc_services.ProfileRecordingOfferDetails
+  - mission_risk_acknowledgements <- missions.MissionRiskAcknowledgement
 
 ### NPCStanding
 **Foreign Keys:**
@@ -7262,14 +7279,19 @@
   - invited_by -> evennia.AccountDB [FK]
   - redeemed_by -> evennia.AccountDB [FK] (nullable)
 
+### AccountMailFailure
+
 ### RegistrationConfig
 **Foreign Keys:**
   - updated_by -> evennia.AccountDB [FK] (nullable)
 
 ### Service Functions
-- `issue_invite(email: str, invited_by: evennia.accounts.models.AccountDB, note: str = '') -> world.registration.models.AccountInvite - Issue an invite for ``email``.`
+- `build_verification_link(email: str) -> str - Return the email-verification URL for an unverified account address (#3193).`
+- `issue_invite(email: str, invited_by: evennia.accounts.models.AccountDB, note: str = '') -> world.registration.models.AccountInvite - Issue an invite for ``email`` and email the redemption link to it.`
+- `record_mail_failure(email: str, template_prefix: str, error: Exception) -> world.registration.models.AccountMailFailure - Persist a failed account-mail send so staff can see the outage (#3193).`
 - `redeem_invite(token: str, email: str, account: evennia.accounts.models.AccountDB) -> world.registration.models.AccountInvite | None - Validate + stamp redemption for the invite backing this signup.`
 - `revoke_invite(invite: world.registration.models.AccountInvite, by: evennia.accounts.models.AccountDB) -> world.registration.models.AccountInvite - Revoke an un-redeemed invite. ``by`` is accepted for future audit-log use.`
+- `send_invite_email(invite: world.registration.models.AccountInvite) -> bool - Mail ``invite``'s redemption link to the address it is bound to.`
 - `signup_allowed(email: str, token: str) -> bool - True when ``token`` is a currently-redeemable invite bound to ``email``.`
 
 
@@ -7937,7 +7959,21 @@
   - founded_vaults <- room_features.VaultDetails
   - vault_access_entries <- room_features.VaultAccessEntry
   - vault_access_granted <- room_features.VaultAccessEntry
+  - npc_standings <- npc_services.NPCStanding
+  - standings_held_by <- npc_services.NPCStanding
+  - functionary_placements <- npc_services.Functionary
+  - npc_preferences <- npc_services.NpcPreference
+  - offer_cooldowns <- npc_services.OfferCooldown
+  - role_cooldowns <- npc_services.NPCRoleCooldown
+  - regards_held <- npc_services.NpcRegard
+  - regards_as_target <- npc_services.NpcRegard
+  - summonses_received <- npc_services.OfferSummons
+  - regard_seeds_from_distinctions <- npc_services.DistinctionRegardSeed
+  - npc_assignments_made <- npc_services.NPCAssignment
+  - expulsion_bars_imposed <- npc_services.ExpulsionBar
+  - recorded_profiles <- npc_services.RecordedProfile
   - market_stalls <- items.MarketStall
+  - shopkeeper_of_stalls <- items.MarketStall
   - ware_listings <- items.WareListing
   - finishing_passes <- items.FinishingPass
   - crafting_service_offers <- items.CraftingServiceOffer
@@ -7957,19 +7993,6 @@
   - mission_invites_received <- missions.MissionInvite
   - mission_invites_sent <- missions.MissionInvite
   - mission_risk_acknowledgements <- missions.MissionRiskAcknowledgement
-  - npc_standings <- npc_services.NPCStanding
-  - standings_held_by <- npc_services.NPCStanding
-  - functionary_placements <- npc_services.Functionary
-  - npc_preferences <- npc_services.NpcPreference
-  - offer_cooldowns <- npc_services.OfferCooldown
-  - role_cooldowns <- npc_services.NPCRoleCooldown
-  - regards_held <- npc_services.NpcRegard
-  - regards_as_target <- npc_services.NpcRegard
-  - summonses_received <- npc_services.OfferSummons
-  - regard_seeds_from_distinctions <- npc_services.DistinctionRegardSeed
-  - npc_assignments_made <- npc_services.NPCAssignment
-  - expulsion_bars_imposed <- npc_services.ExpulsionBar
-  - recorded_profiles <- npc_services.RecordedProfile
   - feedback_submissions <- player_submissions.PlayerFeedback
   - bug_reports <- player_submissions.BugReport
   - reports_submitted <- player_submissions.PlayerReport
@@ -8770,15 +8793,15 @@
   - event_invitations <- events.EventInvitation
   - vault_access_entries <- room_features.VaultAccessEntry
   - gem_stocks <- items.OrgGemStock
+  - npc_roles <- npc_services.NPCRole
+  - loan_offers <- npc_services.LoanOfferDetails
+  - regards_as_target <- npc_services.NpcRegard
   - hosted_stalls <- items.MarketStall
   - item_vault <- items.OrganizationVault
   - ownership_records <- locations.LocationOwnership
   - tenancies <- locations.LocationTenancy
   - military_units <- military.MilitaryUnit
   - gemits <- narrative.Gemit
-  - npc_roles <- npc_services.NPCRole
-  - loan_offers <- npc_services.LoanOfferDetails
-  - regards_as_target <- npc_services.NpcRegard
   - stalking_predators <- predators.PredatorBand
   - secret_victimhoods <- secrets.SecretVictim
   - org_tasks <- tasking.OrgTask
@@ -8928,12 +8951,12 @@
   - fashion_presentations <- items.FashionPresentation
   - facet_momentum <- items.FacetVogueMomentum
   - trendsetters <- items.Trendsetter
+  - name_cultures <- npc_services.NameCulture
+  - regards_as_target <- npc_services.NpcRegard
   - heat_rows <- justice.PersonaHeat
   - pardons <- justice.PardonGrant
   - justice_cases <- justice.JusticeCase
   - gemits <- narrative.Gemit
-  - name_cultures <- npc_services.NameCulture
-  - regards_as_target <- npc_services.NpcRegard
   - exposed_secrets <- secrets.Secret
 
 ### SocietyReputation
@@ -8979,6 +9002,8 @@
   - seat_domain -> societies.Domain [FK] (nullable)
   - succession_law -> societies.SuccessionLaw [FK] (nullable)
 **Pointed to by:**
+  - coronation_ceremonies <- ceremonies.Ceremony
+  - coronations <- ceremonies.Coronation
   - claims <- societies.HouseClaim
 
 ### Service Functions
@@ -9183,8 +9208,8 @@
 ### Era
 **Pointed to by:**
   - profile_text_versions <- character_sheets.ProfileTextVersion
-  - gemits <- narrative.Gemit
   - recorded_profiles <- npc_services.RecordedProfile
+  - gemits <- narrative.Gemit
   - stories_created_in_era <- stories.Story
   - aggregate_contributions <- stories.AggregateBeatContribution
   - beat_completions <- stories.BeatCompletion

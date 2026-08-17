@@ -43,6 +43,20 @@ class AccountInviteSerializer(serializers.ModelSerializer):
         ]
 
 
+class VerificationLinkRequestSerializer(serializers.Serializer):
+    """Input for the staff verification-link endpoint (#3193) — write-only."""
+
+    email = serializers.EmailField()
+
+    def create(self, validated_data):
+        msg = "VerificationLinkRequestSerializer never persists — the view builds the link."
+        raise NotImplementedError(msg)
+
+    def update(self, instance, validated_data):
+        msg = "VerificationLinkRequestSerializer never persists — the view builds the link."
+        raise NotImplementedError(msg)
+
+
 class IssueInviteSerializer(serializers.Serializer):
     """Input for issuing a new invite — write-only, not model-backed."""
 

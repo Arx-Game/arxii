@@ -7,6 +7,9 @@ pagination (see ``world.missions.views`` module docstring for the same
 convention spelled out).
 """
 
+import logging
+
+from allauth.account.models import EmailAddress
 from django_filters.rest_framework import DjangoFilterBackend
 from rest_framework import mixins, permissions, status, viewsets
 from rest_framework.decorators import action
@@ -17,8 +20,14 @@ from rest_framework.views import APIView
 from world.registration import services
 from world.registration.filters import AccountInviteFilter
 from world.registration.models import AccountInvite, get_registration_config
-from world.registration.serializers import AccountInviteSerializer, IssueInviteSerializer
+from world.registration.serializers import (
+    AccountInviteSerializer,
+    IssueInviteSerializer,
+    VerificationLinkRequestSerializer,
+)
 from world.stories.pagination import StandardResultsSetPagination
+
+logger = logging.getLogger(__name__)
 
 
 class RegistrationStatusView(APIView):
@@ -93,3 +102,39 @@ class AccountInviteViewSet(
                 status=status.HTTP_502_BAD_GATEWAY,
             )
         return Response(AccountInviteSerializer(invite).data)
+
+
+class VerificationLinkView(APIView):
+    """Staff POST — produce the email-verification link for an account (#3193).
+
+    Email must not be the only route to a verified account: when the mail
+    provider is down, staff copy this link and hand it over directly, the same
+    trust model as the invite link staff already paste by hand. Staff-only, so
+    the existence responses (404 unknown / 400 verified) are not an
+    enumeration oracle. Link generation is logged for audit.
+    """
+
+    permission_classes = [permissions.IsAuthenticated, permissions.IsAdminUser]
+
+    def post(self, request: Request, *args, **kwargs) -> Response:
+        serializer = VerificationLinkRequestSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        email = serializer.validated_data["email"]
+        try:
+            link = services.build_verification_link(email)
+        except EmailAddress.DoesNotExist:
+            return Response(
+                {"detail": "No account has that email address."},
+                status=status.HTTP_404_NOT_FOUND,
+            )
+        except services.AlreadyVerifiedError:
+            return Response(
+                {"detail": "That address is already verified."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        logger.info(
+            "Staff %s generated a verification link for %s",
+            request.user.username,
+            email,
+        )
+        return Response({"email": email, "link": link})
