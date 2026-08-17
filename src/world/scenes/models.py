@@ -31,6 +31,7 @@ from world.scenes.constants import (
 from world.scenes.managers import InteractionManager, SceneManager
 from world.scenes.round_models import AbstractRound
 from world.societies.constants import FameTier
+from world.societies.houses.constants import NameDegree, TitleSuffixMode
 
 if TYPE_CHECKING:
     from evennia.accounts.models import AccountDB
@@ -371,6 +372,20 @@ class Persona(CachedPropertiesMixin, SharedMemoryModel):
         blank=True,
         help_text="Neutral descriptive tags on this persona (e.g. masked-identity, "
         "abyssal), used by reactive examine-filters via has_property.",
+    )
+    # #3261 name-display preferences: the degree this persona LEADS with, and
+    # what titles trail it. Formal contexts render full formal regardless.
+    name_degree = models.CharField(
+        max_length=20,
+        choices=NameDegree.choices,
+        default=NameDegree.COMMON,
+        help_text="Degree of name this persona leads with (#3261).",
+    )
+    title_suffix = models.CharField(
+        max_length=20,
+        choices=TitleSuffixMode.choices,
+        default=TitleSuffixMode.NONE,
+        help_text="Which held titles trail the composed name (#3261).",
     )
 
     # #676 Phase A: Renown system fields. Five prestige sources (denormalized

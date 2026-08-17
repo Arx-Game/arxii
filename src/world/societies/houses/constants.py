@@ -101,6 +101,56 @@ class TitleTier(models.TextChoices):
     BARONY = "barony", "Barony"
 
 
+# Mechanical ordering of TitleTier for band resolution (#3261): a particle row
+# with ``tier_floor`` applies to houses whose highest held title ranks at or
+# above the floor; the blank-floor row is the realm's default band.
+TITLE_TIER_RANK: dict[str, int] = {
+    TitleTier.EMPIRE: 6,
+    TitleTier.KINGDOM: 5,
+    TitleTier.DUCHY: 4,
+    TitleTier.MARCH: 3,
+    TitleTier.COUNTY: 2,
+    TitleTier.BARONY: 1,
+}
+
+# Continental née grammar (#3261, canon 2026-08-17): ``ne <BirthFamilyName>``,
+# bare — it REPLACES the birth family's particle, and renders only at the
+# full-formal degree, before the current-house segment.
+NEE_MARKER = "ne"
+
+# PLACEHOLDER personal styles by tier, (male, female, neutral) — used when the
+# Title row's authorable holder-style fields are blank.
+DEFAULT_TIER_STYLES: dict[str, tuple[str, str, str]] = {
+    TitleTier.EMPIRE: ("Emperor", "Empress", "Sovereign"),
+    TitleTier.KINGDOM: ("King", "Queen", "Monarch"),
+    TitleTier.DUCHY: ("Duke", "Duchess", "Grace"),
+    TitleTier.MARCH: ("Margrave", "Margravine", "Warden"),
+    TitleTier.COUNTY: ("Count", "Countess", "Excellency"),
+    TitleTier.BARONY: ("Baron", "Baroness", "Lordship"),
+}
+
+
+class NameDegree(models.TextChoices):
+    """How much of a name renders (#3261): the degree a character leads with.
+
+    The née segment appears only at FULL_FORMAL; formal contexts (ceremony,
+    proclamation, sheet header) render FULL_FORMAL regardless of preference.
+    """
+
+    FAMILIAR = "familiar", "Familiar"
+    COMMON = "common", "Common"
+    STYLED = "styled", "Styled"
+    FULL_FORMAL = "full_formal", "Full Formal"
+
+
+class TitleSuffixMode(models.TextChoices):
+    """Orthogonal title-suffix axis (#3261): what trails the composed name."""
+
+    NONE = "none", "No Titles"
+    PRIMARY = "primary", "Primary Title"
+    ALL = "all", "All Titles"
+
+
 class RecognitionRuleKind(models.TextChoices):
     """Per-realm house-recognition rules (#1884, Apostate lore rulings).
 

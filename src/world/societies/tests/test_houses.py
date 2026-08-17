@@ -24,11 +24,14 @@ from world.scenes.factories import PersonaFactory
 from world.societies.factories import OrganizationFactory
 from world.societies.houses.constants import (
     DomainCrisisSeverity,
+    NameDegree,
     PactCommitmentKind,
     PactDissolutionReason,
     RecognitionRuleKind,
     SuccessionDerivation,
     SuccessionOrdering,
+    TitleSuffixMode,
+    TitleTier,
 )
 from world.societies.houses.models import (
     DomainCrisis,
@@ -88,6 +91,142 @@ class DisplayNameTests(TestCase):
     def test_unhoused_person_keeps_bare_name(self):
         person = KinspersonFactory(name="Nix")
         self.assertEqual(full_display_name(person), "Nix")
+
+
+class CanonNamingTests(TestCase):
+    """Canon particle grammar (#3261): bands, taken-in forms, née, degrees."""
+
+    @classmethod
+    def setUpTestData(cls):
+        from django.utils import timezone
+
+        cls.female = GenderFactory(key="female")
+        cls.regente, cls.regente_org = _make_house("Regente")
+        cls.society = cls.regente_org.society
+        cls.realm = cls.society.realm
+        cls.vaelmont = FamilyFactory(name="Vaelmont", family_type=Family.FamilyType.NOBLE)
+        cls.vaelmont_org = OrganizationFactory(
+            name="House Vaelmont", family=cls.vaelmont, society=cls.society
+        )
+        # Luxen canon rows: du at duchy+, attached D' below, dau taken-in.
+        NobiliaryParticle.objects.create(
+            realm=cls.realm,
+            family_type=Family.FamilyType.NOBLE,
+            tier_floor=TitleTier.DUCHY,
+            particle="du",
+            taken_in_particle="dau",
+        )
+        NobiliaryParticle.objects.create(
+            realm=cls.realm,
+            family_type=Family.FamilyType.NOBLE,
+            tier_floor="",
+            particle="D'",
+            taken_in_particle="dau",
+        )
+        Title.objects.create(
+            name="Duchy of Vaelmont",
+            tier=TitleTier.DUCHY,
+            realm=cls.realm,
+            house=cls.vaelmont_org,
+        )
+        cls.now = timezone.now()
+
+    def _member(self, name, family, basis, *, gender=None, also_born_in=None):
+        from django.utils import timezone
+
+        person = KinspersonFactory(name=name, family=family, gender=gender)
+        if also_born_in is not None:
+            FamilyMembership.objects.create(
+                kinsperson=person,
+                family=also_born_in,
+                basis=MembershipBasis.BORN,
+                is_primary=False,
+                started_at=timezone.now(),
+            )
+        FamilyMembership.objects.create(
+            kinsperson=person,
+            family=family,
+            basis=basis,
+            started_at=timezone.now(),
+        )
+        return person
+
+    def test_banded_particle_follows_house_tier(self):
+        ducal = self._member("Elia Vaelmont", self.vaelmont, MembershipBasis.BORN)
+        self.assertEqual(full_display_name(ducal), "Elia du Vaelmont")
+
+    def test_lesser_band_particle_attaches_unspaced(self):
+        lesser = self._member("Sybel Regente", self.regente, MembershipBasis.BORN)
+        self.assertEqual(full_display_name(lesser), "Sybel D'Regente")
+
+    def test_taken_in_full_formal_carries_bare_nee_segment(self):
+        bride = self._member(
+            "Sharlotte Vaelmont",
+            self.vaelmont,
+            MembershipBasis.MARRIED_IN,
+            also_born_in=self.regente,
+        )
+        self.assertEqual(full_display_name(bride), "Sharlotte ne Regente dau Vaelmont")
+
+    def test_common_degree_omits_nee_segment(self):
+        bride = self._member(
+            "Sharlotte Vaelmont",
+            self.vaelmont,
+            MembershipBasis.MARRIED_IN,
+            also_born_in=self.regente,
+        )
+        self.assertEqual(
+            full_display_name(bride, degree=NameDegree.COMMON),
+            "Sharlotte dau Vaelmont",
+        )
+
+    def test_familiar_degree_is_bare_first_name(self):
+        bride = self._member(
+            "Sharlotte Vaelmont",
+            self.vaelmont,
+            MembershipBasis.MARRIED_IN,
+            also_born_in=self.regente,
+        )
+        self.assertEqual(full_display_name(bride, degree=NameDegree.FAMILIAR), "Sharlotte")
+
+    def test_adopted_wears_taken_in_form_without_nee(self):
+        ward = self._member("Cyn Vaelmont", self.vaelmont, MembershipBasis.ADOPTED)
+        self.assertEqual(full_display_name(ward), "Cyn dau Vaelmont")
+
+    def test_styled_degree_and_title_suffix(self):
+        queen = self._member(
+            "Sharlotte Vaelmont",
+            self.vaelmont,
+            MembershipBasis.MARRIED_IN,
+            gender=self.female,
+            also_born_in=self.regente,
+        )
+        Title.objects.create(
+            name="Monarch of Luxen",
+            tier=TitleTier.KINGDOM,
+            realm=self.realm,
+            house=self.vaelmont_org,
+            holder=queen,
+        )
+        self.assertEqual(
+            full_display_name(queen, degree=NameDegree.STYLED),
+            "Queen Sharlotte dau Vaelmont",
+        )
+        self.assertEqual(
+            full_display_name(queen, title_suffix=TitleSuffixMode.PRIMARY),
+            "Queen Sharlotte ne Regente dau Vaelmont, Monarch of Luxen",
+        )
+
+    def test_taken_in_blank_falls_back_to_born_form(self):
+        family, org = _make_house("Redcloud")
+        NobiliaryParticle.objects.create(
+            realm=org.society.realm,
+            family_type=Family.FamilyType.NOBLE,
+            particle="ul",
+            taken_in_particle="",
+        )
+        ward = self._member("Ryska Redcloud", family, MembershipBasis.ADOPTED)
+        self.assertEqual(full_display_name(ward), "Ryska ul Redcloud")
 
 
 class RecognitionTests(TestCase):

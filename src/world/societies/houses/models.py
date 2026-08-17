@@ -42,11 +42,17 @@ _PERSONA_FK = "arxii.Persona"
 
 
 class NobiliaryParticle(SharedMemoryModel):
-    """Per-realm × family-type nobiliary particle (#1884).
+    """Per-realm × family-type × tier-band nobiliary particle (#1884, #3261).
 
-    Derived names render ``first_name + particle + house_name`` (e.g.
-    former-Luxen houses carry "du"). Particle strings are PLACEHOLDER in
-    seeds — the real per-realm particles are authored at content time.
+    Canon vocabulary ratified 2026-08-17 (seeded in ``world.seeds.houses``).
+    Derived names render ``first + particle + house_name`` for born/founding
+    members and ``first + taken_in_particle + house_name`` for everyone who
+    entered the name another way (married, adopted, legitimized, granted).
+    ``tier_floor`` bands a realm's particles by the house's highest held
+    title (Luxen: ``du`` at duchy+, attached ``D'`` below); the blank-floor
+    row is the realm's default band. A realm with no rows (Arx) renders bare
+    names — absence is its signature. A particle ending in ``'`` joins the
+    house name with no space ("Sybel D'Regente").
     """
 
     realm = models.ForeignKey(
@@ -58,32 +64,43 @@ class NobiliaryParticle(SharedMemoryModel):
         max_length=20,
         help_text="roster.Family.FamilyType value this particle applies to.",
     )
+    tier_floor = models.CharField(
+        max_length=20,
+        choices=TitleTier.choices,
+        blank=True,
+        default="",
+        help_text=(
+            "Lowest TitleTier this band covers (#3261): the row applies when "
+            "the house's highest held title ranks at or above this floor. "
+            "Blank = the realm's default band."
+        ),
+    )
     particle = models.CharField(
         max_length=20,
-        help_text='The particle between first and house name (e.g. "du"). PLACEHOLDER.',
+        help_text='Born/founding-member form between first and house name (e.g. "du").',
     )
-    spouse_particle = models.CharField(
+    taken_in_particle = models.CharField(
         max_length=20,
         blank=True,
         help_text=(
-            "Married-in spouse form (#3091): a courtesy-titled spouse renders "
-            "this particle with their BIRTH family name after the married "
-            "style, keeping the alliance legible in the name. PLACEHOLDER; "
-            "blank = no spouse form for this realm/family type."
+            "Taken-in form (#3261, widened from the #3091 spouse form): worn by "
+            "every non-born member — married-in, adopted, legitimized, granted "
+            '("dau", "vosk"). Blank = fall back to the born form.'
         ),
     )
 
     class Meta:
         constraints = [
             models.UniqueConstraint(
-                fields=["realm", "family_type"],
-                name="societies_particle_unique_per_realm_type",
+                fields=["realm", "family_type", "tier_floor"],
+                name="societies_particle_unique_per_realm_type_band",
             ),
         ]
-        ordering = ["realm", "family_type"]
+        ordering = ["realm", "family_type", "tier_floor"]
 
     def __str__(self) -> str:
-        return f"{self.realm} {self.family_type}: '{self.particle}'"
+        band = f" ({self.tier_floor}+)" if self.tier_floor else ""
+        return f"{self.realm} {self.family_type}{band}: '{self.particle}'"
 
 
 class HouseRecognitionRule(SharedMemoryModel):
@@ -224,6 +241,25 @@ class Title(SharedMemoryModel):
     is_claimable = models.BooleanField(
         default=False,
         help_text="Vacant slot set aside for the Phase D house creator.",
+    )
+    # #3261 styled-degree personal styles ("Queen Sharlotte…"). Authorable per
+    # title row; blank falls back to DEFAULT_TIER_STYLES for the tier.
+    holder_style_male = models.CharField(
+        max_length=60,
+        blank=True,
+        help_text='Personal style for a male holder (e.g. "King"). Blank = tier default.',
+    )
+    holder_style_female = models.CharField(
+        max_length=60,
+        blank=True,
+        help_text='Personal style for a female holder (e.g. "Queen"). Blank = tier default.',
+    )
+    holder_style_neutral = models.CharField(
+        max_length=60,
+        blank=True,
+        help_text=(
+            'Personal style for any other/unset gender (e.g. "Monarch"). Blank = tier default.'
+        ),
     )
 
     class Meta:

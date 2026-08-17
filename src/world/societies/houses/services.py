@@ -27,13 +27,18 @@ from world.roster.services.kinship import (
     parents_of,
 )
 from world.societies.houses.constants import (
+    DEFAULT_TIER_STYLES,
+    NEE_MARKER,
+    TITLE_TIER_RANK,
     UNREST_CRISIS_PCT_PER_POINT,
     UNREST_CRISIS_THRESHOLD,
+    NameDegree,
     PactCommitmentKind,
     PactDissolutionReason,
     RecognitionRuleKind,
     SuccessionDerivation,
     SuccessionOrdering,
+    TitleSuffixMode,
 )
 from world.societies.houses.models import (
     Domain,
@@ -87,56 +92,152 @@ def realm_for_house(house: Organization | None) -> Realm | None:
     return house.society.realm
 
 
-def full_display_name(person: Kinsperson) -> str:
-    """``first_name [particle] house_name`` when the person has a housed family.
+_BORN_EQUIVALENT_BASES = frozenset({MembershipBasis.BORN, MembershipBasis.FOUNDING})
 
-    The particle comes from the family's realm × family-type row (e.g.
-    former-Luxen houses carry "du"); with no particle row, the plain
-    ``first family`` form renders. People without a housed family keep their
-    bare node name.
+
+def house_tier_rank(house: Organization | None) -> int:
+    """Mechanical rank of the house's highest held title; 0 when untitled."""
+    if house is None:
+        return 0
+    ranks = [TITLE_TIER_RANK.get(t.tier, 0) for t in house.titles.all()]
+    return max(ranks, default=0)
+
+
+def resolve_particle(family: Family | None, *, taken_in: bool = False) -> str:
+    """The particle a member of ``family`` wears (#3261), or "".
+
+    Band resolution: among the realm × family-type rows, the applicable row
+    with the highest ``tier_floor`` at or below the house's highest held
+    title wins; the blank-floor row is the default band. ``taken_in`` picks
+    the taken-in form (married/adopted/legitimized/granted), falling back to
+    the born form when the row leaves it blank. A realm with no rows (Arx)
+    yields "" — bare names are its signature.
+    """
+    if family is None:
+        return ""
+    house = house_for_family(family)
+    realm = realm_for_house(house)
+    if realm is None:
+        return ""
+    rank = house_tier_rank(house)
+    rows = [
+        row
+        for row in NobiliaryParticle.objects.filter(realm=realm, family_type=family.family_type)
+        if TITLE_TIER_RANK.get(row.tier_floor, 0) <= rank
+    ]
+    row = max(rows, key=lambda r: TITLE_TIER_RANK.get(r.tier_floor, 0), default=None)
+    if row is None:
+        return ""
+    if taken_in and row.taken_in_particle:
+        return row.taken_in_particle
+    return row.particle
+
+
+def _join_name_pieces(pieces: list[str]) -> str:
+    """Join with spaces; a piece ending in ``'`` attaches to the next unspaced."""
+    out = ""
+    for piece in pieces:
+        if not piece:
+            continue
+        if out and not out.endswith("'"):
+            out += " "
+        out += piece
+    return out
+
+
+def _gender_key(person: Kinsperson) -> str:
+    """The person's gender key ('male'/'female'/…): sheet-bound reads the sheet."""
+    gender = person.sheet.gender if person.sheet is not None else person.gender
+    return gender.key if gender is not None else ""
+
+
+def _personal_style(person: Kinsperson) -> str:
+    """The styled-degree prefix ("Queen", "Lord") from the highest held title.
+
+    Authorable per Title row (holder_style_*); blank falls back to the tier's
+    PLACEHOLDER default. Untitled members of a housed family get the plain
+    courtesy style; the familyless get none.
+    """
+    title = max(
+        person.titles_held.all(),
+        key=lambda t: TITLE_TIER_RANK.get(t.tier, 0),
+        default=None,
+    )
+    key = _gender_key(person)
+    if title is None:
+        if house_for_family(person.family) is None:
+            return ""
+        # PLACEHOLDER courtesy pair; other/unset genders omit the style until
+        # a neutral courtesy is authored (flagged for content pass).
+        courtesy = {"male": "Lord", "female": "Lady"}
+        return courtesy.get(key, "")
+    styled = {
+        "male": title.holder_style_male,
+        "female": title.holder_style_female,
+    }.get(key, title.holder_style_neutral)
+    if styled:
+        return styled
+    defaults = DEFAULT_TIER_STYLES.get(title.tier, ("", "", ""))
+    return {"male": defaults[0], "female": defaults[1]}.get(key, defaults[2])
+
+
+def _title_suffix_text(person: Kinsperson, mode: str) -> str:
+    """ ", Title, Title…" for the held titles the mode admits, tier order."""
+    if mode == TitleSuffixMode.NONE:
+        return ""
+    titles = sorted(
+        person.titles_held.all(),
+        key=lambda t: TITLE_TIER_RANK.get(t.tier, 0),
+        reverse=True,
+    )
+    if mode == TitleSuffixMode.PRIMARY:
+        titles = titles[:1]
+    if not titles:
+        return ""
+    return ", " + ", ".join(t.name for t in titles)
+
+
+def full_display_name(
+    person: Kinsperson,
+    *,
+    degree: str = NameDegree.FULL_FORMAL,
+    title_suffix: str = TitleSuffixMode.NONE,
+) -> str:
+    """The canon composed name (#3261): ``[style] First [ne Birth] [particle Family]``.
+
+    Degrees: familiar = bare first; common = first + particled current house;
+    styled = common with the personal style; full formal adds the née segment
+    — ``ne <BirthFamilyName>``, bare, REPLACING the birth particle — before
+    the current-house segment ("Queen Sharlotte ne Regente dau Vaelmont").
+    Taken-in members (basis outside born/founding) wear the taken-in form.
+    ``title_suffix`` appends held titles (", Monarch of Luxen") in tier order.
+    People without a housed family keep their bare node name at every degree.
     """
     base = person.display_name
     first = base.split()[0] if base else ""
-    family = person.family
-    if family is None or not first:
+    if not first:
         return base
-    realm = realm_for_house(house_for_family(family))
-    particle = ""
-    if realm is not None:
-        row = NobiliaryParticle.objects.filter(realm=realm, family_type=family.family_type).first()
-        if row is not None:
-            particle = row.particle
-    pieces = [first, particle, family.name] if particle else [first, family.name]
-    # Married-in spouse form (#3091): the realm's spouse particle renders the
-    # BIRTH family after the married style, keeping the alliance the marriage
-    # embodies legible in the name.
-    if realm is not None:
-        birth_suffix = _spouse_birth_suffix(person, family, realm)
-        if birth_suffix:
-            pieces.extend(birth_suffix)
-    return " ".join(pieces)
-
-
-def _spouse_birth_suffix(person: Kinsperson, family, realm) -> list[str]:
-    """``[spouse_particle, birth_family_name]`` for married-in members, else []."""
-    memberships = list(person.family_memberships.filter(ended_at__isnull=True))
-    current = next(
-        (
-            m
-            for m in memberships
-            if m.family_id == family.pk and m.basis == MembershipBasis.MARRIED_IN
-        ),
-        None,
-    )
-    if current is None:
-        return []
-    birth = next((m for m in memberships if m.basis == MembershipBasis.BORN), None)
-    if birth is None or birth.family_id == family.pk:
-        return []
-    row = NobiliaryParticle.objects.filter(realm=realm, family_type=family.family_type).first()
-    if row is None or not row.spouse_particle:
-        return []
-    return [row.spouse_particle, birth.family.name]
+    family = person.family
+    if degree == NameDegree.FAMILIAR:
+        return first
+    if family is None:
+        name = base
+    else:
+        memberships = list(person.family_memberships.filter(ended_at__isnull=True))
+        current = next((m for m in memberships if m.family_id == family.pk), None)
+        taken_in = current is not None and current.basis not in _BORN_EQUIVALENT_BASES
+        pieces = [first]
+        if degree == NameDegree.FULL_FORMAL and taken_in:
+            birth = next((m for m in memberships if m.basis == MembershipBasis.BORN), None)
+            if birth is not None and birth.family_id != family.pk:
+                pieces.extend([NEE_MARKER, birth.family.name])
+        pieces.extend([resolve_particle(family, taken_in=taken_in), family.name])
+        name = _join_name_pieces(pieces)
+    if degree in (NameDegree.STYLED, NameDegree.FULL_FORMAL):
+        style = _personal_style(person)
+        if style:
+            name = f"{style} {name}"
+    return name + _title_suffix_text(person, title_suffix)
 
 
 # ---------------------------------------------------------------------------
