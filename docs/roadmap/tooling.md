@@ -3,6 +3,32 @@
 **Status:** in-progress
 **Depends on:** Areas, Items, Combat, Stories (for GM tools)
 
+## Built (2026-08-18, #3269 Phase A — grid bootstrap, recoverability, navigation)
+
+The world builder can now bootstrap a first grid and recover from mistakes.
+**Relational dig** is the primary flow: a ghost-cell click passes its anchor +
+direction to `staff_dig_room`, which derives the cell and auto-creates the
+aliased exit pair (the `Direction` spec moved to `world.areas.constants`,
+shared with buildings); an empty AUTHORED area offers "Dig first room" at the
+origin; a `like` exemplar copies size + description cross-area; blank
+descriptions default to the PLACEHOLDER stub and a "Needs prose (N)" list
+tracks them. **Recoverability:** deletion gates on `RoomProfile.exported_at`
+(stamped by `grid_export`; ADR-0220 — a fixture key alone no longer bricks a
+room), `staff_remove_area` removes empty areas, area slugs stay re-sluggable
+until a room fixture key bakes them in, and `staff_move_room` re-parents a
+mis-dug room. **Navigation:** world canvas gets minZoom 0.05 + MiniMap +
+refit-on-room-set-change; the phantom unplaced-room tray is replaced by a
+side-panel list with click-to-place mode; a cross-area room search
+(`room-search` endpoint + header box) answers "where did I put it". The
+rename bug (db_key vs longname split-brain) is fixed in
+`set_room_display_data`, `%r`/`%t` normalization now applies to web
+description writes, occupant counts exclude exits in SQL, and the
+`areas_areaclosure` refresh runs CONCURRENTLY so live readers never block
+during bulk authoring. The builder shows an explicit actor banner instead of
+silently no-oping when no character is played. Phases B (full room authoring:
+stats/places/features/staffing/ambient/exits/travel/bindings) and C (area
+metadata) remain — see #3269's spec.
+
 ## Built (2026-07-19, epic #2436 slice 4 / #2451 — discovery/portal authoring)
 
 The last of the epic's authoring slices: staff can now place clues and portal

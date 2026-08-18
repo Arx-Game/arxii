@@ -17,8 +17,9 @@ not from the actor's own position (#2163).
 
 ``staff_dig_room`` requires an AUTHORED area (canonical world rooms only — a
 STORY/PLAYER area is out of scope for this canvas). ``staff_remove_room``
-refuses an already-exported room (``fixture_key`` set + ``origin=AUTHORED``):
-those come out via the report-never-delete pipeline (see
+refuses a room that has actually shipped in an export bundle
+(``exported_at`` set, #3269 — a fixture key alone is a recoverable mistake):
+exported rooms come out via the report-never-delete pipeline (see
 ``core_management.content_export``), never the canvas. ``staff_unlink_rooms``'s
 stranding guard is deliberately looser than the building Room Builder's
 BFS-reachability check (which has no meaningful "anchor room" world-wide) — it

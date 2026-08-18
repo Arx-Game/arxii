@@ -1044,11 +1044,12 @@ buildings up to entire planes. A `Room` is not its own `Area` level — it hangs
   `cell_occupied`, `place_room_on_grid`, `stranded_rooms` BFS, `promote_to_authored`,
   `suggest_fixture_key`, `ensure_slug_change_allowed`) out of
   `world.buildings.room_services` (#670), so the owner-facing Room Builder and the
-  staff canvas share one substrate instead of two drifting copies. Eleven REGISTRY
+  staff canvas share one substrate instead of two drifting copies. Nineteen REGISTRY
   actions (`src/actions/definitions/world_builder.py`, `category="world_builder"`,
   `target_type=SELF`) — `create_area`/`edit_area`/`staff_dig_room`/`staff_edit_room`/
   `staff_link_rooms`/`staff_unlink_rooms`/`staff_rename_exit`/`staff_place_room`/
-  `staff_remove_room`/`promote_room`/`promote_area` — gated solely by
+  `staff_remove_room`/`staff_remove_area`/`staff_move_room` (#3269)/`promote_room`/
+  `promote_area` + the six #2451 discovery/portal verbs — gated solely by
   `StaffOnlyPrerequisite` (no ownership/tenancy standing, and deliberately no
   GM-ladder trust check — see ADR-0139). `staff_dig_room` requires an AUTHORED area
   and always authors the new room outright; `staff_remove_room` refuses an
