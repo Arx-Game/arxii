@@ -100,6 +100,7 @@ const StoryRoomsPage = lazy(() =>
 import { StaffInboxPage } from './staff/pages/StaffInboxPage';
 import { StaffApplicationsPage } from './staff/pages/StaffApplicationsPage';
 import { StaffRosterApplicationsPage } from './staff/pages/StaffRosterApplicationsPage';
+import { StaffRosterApplicationDetailPage } from './staff/pages/StaffRosterApplicationDetailPage';
 import { StaffInvitesPage } from './staff/pages/StaffInvitesPage';
 import { StaffApplicationDetailPage } from './staff/pages/StaffApplicationDetailPage';
 import { StaffFeedbackPage } from './staff/pages/StaffFeedbackPage';
@@ -643,6 +644,14 @@ function App() {
             element={
               <StaffRoute>
                 <StaffRosterApplicationsPage />
+              </StaffRoute>
+            }
+          />
+          <Route
+            path="/staff/roster-applications/:id"
+            element={
+              <StaffRoute>
+                <StaffRosterApplicationDetailPage />
               </StaffRoute>
             }
           />
