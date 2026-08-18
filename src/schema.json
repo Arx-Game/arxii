@@ -681,6 +681,10 @@ paths:
         name: parent
         schema:
           type: number
+      - in: query
+        name: search
+        schema:
+          type: string
       tags:
       - areas
       security:
@@ -35583,6 +35587,10 @@ paths:
         name: parent
         schema:
           type: number
+      - in: query
+        name: search
+        schema:
+          type: string
       tags:
       - world-builder
       security:
@@ -35642,6 +35650,51 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/WorldBuilderAreaManager'
+          description: ''
+  /api/world-builder/areas/room-search/:
+    get:
+      operationId: world_builder_areas_room_search_list
+      description: |-
+        GET /api/world-builder/areas/room-search/?search= — cross-area room lookup (#3269).
+
+        Matches room key or fixture_key, capped at 50 hits — the "where did I
+        put the Traitor's Gate" seam for a 400-room grid, also feeding the
+        link-rooms pickers.
+      parameters:
+      - in: query
+        name: has_parent
+        schema:
+          type: boolean
+      - name: page
+        required: false
+        in: query
+        description: A page number within the paginated result set.
+        schema:
+          type: integer
+      - name: page_size
+        required: false
+        in: query
+        description: Number of results to return per page.
+        schema:
+          type: integer
+      - in: query
+        name: parent
+        schema:
+          type: number
+      - in: query
+        name: search
+        schema:
+          type: string
+      tags:
+      - world-builder
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaginatedWorldBuilderRoomHitList'
           description: ''
   /api/worship/beings/:
     get:
@@ -59081,6 +59134,29 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/WorldBuilderArea'
+    PaginatedWorldBuilderRoomHitList:
+      type: object
+      required:
+      - count
+      - results
+      properties:
+        count:
+          type: integer
+          example: 123
+        next:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=4
+        previous:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=2
+        results:
+          type: array
+          items:
+            $ref: '#/components/schemas/WorldBuilderRoomHit'
     PaginatedWorshippedBeingRefList:
       type: object
       required:
@@ -70555,6 +70631,12 @@ components:
           nullable: true
         origin:
           type: string
+        exported_at:
+          type: string
+          format: date-time
+          nullable: true
+        needs_prose:
+          type: boolean
         occupant_count:
           type: integer
         clues:
@@ -70578,6 +70660,7 @@ components:
       - clues
       - description
       - enclosure
+      - exported_at
       - fixture_key
       - floor
       - grants
@@ -70588,6 +70671,7 @@ components:
       - is_public
       - is_social_hub
       - name
+      - needs_prose
       - occupant_count
       - origin
       - portal_anchors
@@ -74606,6 +74690,12 @@ components:
           nullable: true
         origin:
           type: string
+        exported_at:
+          type: string
+          format: date-time
+          nullable: true
+        needs_prose:
+          type: boolean
         occupant_count:
           type: integer
         clues:
@@ -74625,6 +74715,7 @@ components:
       - clues
       - description
       - enclosure
+      - exported_at
       - fixture_key
       - floor
       - grid_x
@@ -74634,6 +74725,7 @@ components:
       - is_public
       - is_social_hub
       - name
+      - needs_prose
       - occupant_count
       - origin
       - portal_anchors
@@ -74659,6 +74751,33 @@ components:
       - detect_difficulty
       - fixture_key
       - id
+    WorldBuilderRoomHit:
+      type: object
+      description: 'One cross-area room-search hit (#3269): the where-did-I-put-it
+        seam.'
+      properties:
+        id:
+          type: integer
+        name:
+          type: string
+        area_id:
+          type: integer
+          nullable: true
+        area_name:
+          type: string
+          nullable: true
+        floor:
+          type: integer
+        fixture_key:
+          type: string
+          nullable: true
+      required:
+      - area_id
+      - area_name
+      - fixture_key
+      - floor
+      - id
+      - name
     WorshipConversionOffer:
       type: object
       description: |-

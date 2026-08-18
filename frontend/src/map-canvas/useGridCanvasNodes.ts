@@ -54,6 +54,13 @@ export interface UseGridCanvasNodesArgs<TRoom extends GridRoomLike> {
   ghostLabel?: (ghost: GhostCell) => string;
   onExitClick?: (edge: ExitEdge) => void;
   onPlaceRoom: (args: PlaceRoomArgs) => void;
+  /**
+   * Render coordless rooms as a fake "tray" column left of the grid (the
+   * pre-#3269 behavior; buildings keeps it — its grids are small). The world
+   * canvas passes false and lists unplaced rooms in a side panel instead,
+   * where they can't get lost off-viewport.
+   */
+  unplacedTray?: boolean;
 }
 
 export interface UseGridCanvasNodesResult {
@@ -81,11 +88,14 @@ export function useGridCanvasNodes<TRoom extends GridRoomLike>({
   ghostLabel,
   onExitClick,
   onPlaceRoom,
+  unplacedTray = true,
 }: UseGridCanvasNodesArgs<TRoom>): UseGridCanvasNodesResult {
   const { computedNodes, computedEdges, edgeById } = useMemo(() => {
     const onFloor = rooms.filter((room) => room.floor === floor);
     const placed = onFloor.filter((room) => room.grid_x !== null && room.grid_y !== null);
-    const unplaced = onFloor.filter((room) => room.grid_x === null || room.grid_y === null);
+    const unplaced = unplacedTray
+      ? onFloor.filter((room) => room.grid_x === null || room.grid_y === null)
+      : [];
 
     const trayX = (placed.length > 0 ? Math.min(...placed.map((room) => room.grid_x!)) : 0) - 2;
     const trayTopY = placed.length > 0 ? Math.max(...placed.map((room) => room.grid_y!)) : 0;
@@ -163,6 +173,7 @@ export function useGridCanvasNodes<TRoom extends GridRoomLike>({
     buildNodeData,
     onDigAt,
     ghostLabel,
+    unplacedTray,
   ]);
 
   const [nodes, setNodes, onNodesChange] = useNodesState<Node>([]);

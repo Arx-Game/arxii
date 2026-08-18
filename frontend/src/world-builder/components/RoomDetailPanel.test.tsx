@@ -20,6 +20,8 @@ const room: WorldBuilderRoom = {
   floor: 0,
   fixture_key: null,
   origin: 'story',
+  exported_at: null,
+  needs_prose: false,
   occupant_count: 2,
   clues: [],
   clue_triggers: [],

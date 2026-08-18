@@ -129,6 +129,11 @@ export function RoomDetailPanel({
             {room.origin}
           </Badge>
         </div>
+        {!isStory && room.exported_at && (
+          <Badge variant="secondary" data-testid="room-exported-badge">
+            Exported
+          </Badge>
+        )}
         {!isStory && room.fixture_key && (
           <p className="text-xs text-muted-foreground">
             Fixture key: <code>{room.fixture_key}</code>
@@ -351,9 +356,15 @@ export function RoomDetailPanel({
 
       <div className="flex flex-col gap-2 rounded-md border border-destructive/40 p-2">
         <h4 className="text-sm font-semibold text-destructive">Remove room</h4>
+        {!isStory && room.exported_at ? (
+          <p className="text-xs text-muted-foreground" data-testid="room-remove-exported-note">
+            This room has shipped in an export bundle - it comes out via the report-never-delete
+            pipeline, not the canvas.
+          </p>
+        ) : null}
         <AlertDialog>
           <AlertDialogTrigger asChild>
-            <Button variant="destructive" size="sm">
+            <Button variant="destructive" size="sm" disabled={!isStory && room.exported_at != null}>
               Remove {room.name}
             </Button>
           </AlertDialogTrigger>
@@ -361,8 +372,8 @@ export function RoomDetailPanel({
             <AlertDialogHeader>
               <AlertDialogTitle>Remove {room.name}?</AlertDialogTitle>
               <AlertDialogDescription>
-                Refused if the room has any contents, an installed feature, or is already exported -
-                empty or unexport it first.
+                Refused if the room has any contents or an installed feature - empty it first. A
+                room that never shipped in an export bundle deletes cleanly, fixture key or not.
               </AlertDialogDescription>
             </AlertDialogHeader>
             <AlertDialogFooter>

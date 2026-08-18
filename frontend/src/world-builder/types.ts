@@ -25,6 +25,8 @@ export type WorldBuilderActionKey =
   | 'staff_rename_exit'
   | 'staff_place_room'
   | 'staff_remove_room'
+  | 'staff_remove_area'
+  | 'staff_move_room'
   | 'promote_room'
   | 'promote_area'
   | 'staff_place_clue'
@@ -33,6 +35,16 @@ export type WorldBuilderActionKey =
   | 'staff_remove_clue_trigger'
   | 'staff_place_portal_anchor'
   | 'staff_remove_portal_anchor';
+
+/** One cross-area room-search hit (#3269) — mirrors WorldBuilderRoomHitSerializer. */
+export interface WorldBuilderRoomHit {
+  id: number;
+  name: string;
+  area_id: number | null;
+  area_name: string | null;
+  floor: number;
+  fixture_key: string | null;
+}
 
 /** Mirrors `world.areas.constants.AreaLevel` — select options for CreateAreaDialog. */
 export const AREA_LEVELS: { value: number; label: string }[] = [

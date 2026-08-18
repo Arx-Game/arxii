@@ -103,6 +103,17 @@ class WorldBuilderPortalAnchorSerializer(serializers.Serializer):
     fixture_key = serializers.CharField(allow_null=True)
 
 
+class WorldBuilderRoomHitSerializer(serializers.Serializer):
+    """One cross-area room-search hit (#3269): the where-did-I-put-it seam."""
+
+    id = serializers.IntegerField()
+    name = serializers.CharField()
+    area_id = serializers.IntegerField(allow_null=True)
+    area_name = serializers.CharField(allow_null=True)
+    floor = serializers.IntegerField()
+    fixture_key = serializers.CharField(allow_null=True)
+
+
 class WorldBuilderRoomSerializer(serializers.Serializer):
     """One RoomProfile in the staff area-manager payload (#2449).
 
@@ -124,6 +135,8 @@ class WorldBuilderRoomSerializer(serializers.Serializer):
     floor = serializers.IntegerField()
     fixture_key = serializers.CharField(allow_null=True)
     origin = serializers.CharField()
+    exported_at = serializers.DateTimeField(allow_null=True)
+    needs_prose = serializers.BooleanField()
     occupant_count = serializers.IntegerField()
     clues = WorldBuilderRoomClueSerializer(many=True)
     clue_triggers = WorldBuilderClueTriggerSerializer(many=True)
