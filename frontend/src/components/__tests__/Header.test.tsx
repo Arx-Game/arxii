@@ -89,6 +89,25 @@ describe('Header', () => {
     expect(screen.getByRole('link', { name: /threads/i })).toBeInTheDocument();
   });
 
+  it('renders dropdown content inside its own nav item so it opens under the trigger', async () => {
+    const { user } = setupUser();
+    render(
+      <Wrapper>
+        <Header />
+      </Wrapper>
+    );
+
+    const trigger = screen.getByRole('button', { name: /characters/i });
+    await user.click(trigger);
+
+    // The panel must be a descendant of the trigger's list item — a shared
+    // viewport outside the item renders every dropdown at the same spot on
+    // the page instead of under its trigger (unclickable on hover-out).
+    const item = trigger.closest('li');
+    expect(item).not.toBeNull();
+    expect(item).toContainElement(screen.getByRole('link', { name: /roster/i }));
+  });
+
   it('renders Story dropdown links when opened', async () => {
     const { user } = setupUser();
     render(
