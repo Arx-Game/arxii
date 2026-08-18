@@ -114,6 +114,81 @@ class WorldBuilderRoomHitSerializer(serializers.Serializer):
     fixture_key = serializers.CharField(allow_null=True)
 
 
+class WorldBuilderRoomStatSerializer(serializers.Serializer):
+    """One ambient-stat row in the staff room payload (#3269)."""
+
+    key = serializers.CharField()
+    label = serializers.CharField()
+    default = serializers.IntegerField()
+    effective = serializers.IntegerField()
+    authored = serializers.IntegerField(allow_null=True)
+    pinned = serializers.IntegerField(allow_null=True)
+
+
+class WorldBuilderPlaceSerializer(serializers.Serializer):
+    """One conversational sub-location in the staff room payload (#3269)."""
+
+    id = serializers.IntegerField()
+    name = serializers.CharField()
+    description = serializers.CharField(allow_blank=True)
+
+
+class WorldBuilderRoomFeatureSerializer(serializers.Serializer):
+    """The room's active feature, if any (#3269)."""
+
+    kind = serializers.CharField()
+    level = serializers.IntegerField()
+
+
+class WorldBuilderAmbientCountsSerializer(serializers.Serializer):
+    """Entry-line/linger-emit counts for the Atmosphere section (#3269)."""
+
+    lines = serializers.IntegerField()
+    emits = serializers.IntegerField()
+
+
+class WorldBuilderTravelHubSerializer(serializers.Serializer):
+    """Travel-hub flag payload (#3269) — routes/methods are content-owned."""
+
+    name = serializers.CharField()
+    travel_modes = serializers.ListField(child=serializers.CharField())
+    is_transit_stop = serializers.BooleanField()
+
+
+class WorldBuilderExitDetailSerializer(serializers.Serializer):
+    """One outgoing exit with its profile detail (#3269 room-detail endpoint)."""
+
+    id = serializers.IntegerField()
+    name = serializers.CharField()
+    to_room_id = serializers.IntegerField(allow_null=True)
+    kind = serializers.CharField()
+    is_open = serializers.BooleanField()
+    aliases = serializers.ListField(child=serializers.CharField())
+
+
+class WorldBuilderComfortAxisSerializer(serializers.Serializer):
+    key = serializers.CharField()
+    pressure = serializers.IntegerField()
+    mitigation = serializers.IntegerField()
+    net = serializers.IntegerField()
+    sheltered = serializers.BooleanField()
+
+
+class WorldBuilderComfortSerializer(serializers.Serializer):
+    level = serializers.IntegerField()
+    points = serializers.IntegerField()
+    amenity = serializers.IntegerField()
+    axes = WorldBuilderComfortAxisSerializer(many=True)
+
+
+class WorldBuilderRoomDetailSerializer(serializers.Serializer):
+    """Selection-time room detail (#3269): exit profiles + comfort breakdown."""
+
+    id = serializers.IntegerField()
+    exits = WorldBuilderExitDetailSerializer(many=True)
+    comfort = WorldBuilderComfortSerializer()
+
+
 class WorldBuilderRoomSerializer(serializers.Serializer):
     """One RoomProfile in the staff area-manager payload (#2449).
 
@@ -137,6 +212,16 @@ class WorldBuilderRoomSerializer(serializers.Serializer):
     origin = serializers.CharField()
     exported_at = serializers.DateTimeField(allow_null=True)
     needs_prose = serializers.BooleanField()
+    stats = WorldBuilderRoomStatSerializer(many=True)
+    area_id = serializers.IntegerField(allow_null=True)
+    size_units = serializers.IntegerField(allow_null=True)
+    default_blueprint = serializers.CharField(allow_null=True)
+    places = WorldBuilderPlaceSerializer(many=True)
+    feature = WorldBuilderRoomFeatureSerializer(allow_null=True)
+    functionaries = serializers.ListField(child=serializers.CharField())
+    ambient_counts = WorldBuilderAmbientCountsSerializer()
+    travel_hub = WorldBuilderTravelHubSerializer(allow_null=True)
+    starting_bindings = serializers.ListField(child=serializers.CharField())
     occupant_count = serializers.IntegerField()
     clues = WorldBuilderRoomClueSerializer(many=True)
     clue_triggers = WorldBuilderClueTriggerSerializer(many=True)

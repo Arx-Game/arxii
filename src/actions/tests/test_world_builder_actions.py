@@ -1066,3 +1066,291 @@ class RoomRenameDisplayPathTests(TestCase):
         display = ObjectDisplayData.objects.get(object_id=self.profile.objectdb_id)
         assert "%r" not in display.permanent_description
         assert "%t" not in display.permanent_description
+
+
+class PhaseBRoomAuthoringTests(TestCase):
+    """#3269 Phase B — stats, places, ambient, features, staffing, travel,
+    blueprint, bindings, exit detail, duplicate, batch dig."""
+
+    def setUp(self) -> None:
+        self.staff = _staff_actor("PhaseBStaff")
+        self.area = AreaFactory(
+            name="Author Ward", level=AreaLevel.WARD, origin=GridOrigin.AUTHORED, slug="author-ward"
+        )
+        self.profile = RoomProfileFactory(area=self.area, grid_x=0, grid_y=0)
+
+    def test_stat_authoring_writes_zero_decay_modifier(self) -> None:
+        from actions.definitions.world_builder import StaffSetRoomStatAction
+        from world.locations.constants import AUTHORED_STAT_SOURCE
+        from world.locations.models import LocationValueModifier
+
+        result = StaffSetRoomStatAction().run(
+            self.staff, room_id=self.profile.objectdb_id, stat_key="noise", value=70
+        )
+        assert result.success, result.message
+        row = LocationValueModifier.objects.get(
+            room_profile=self.profile, stat_key="noise", source=AUTHORED_STAT_SOURCE
+        )
+        assert row.value == 70
+        assert row.change_per_day == 0
+
+    def test_stat_pin_writes_override_and_warns(self) -> None:
+        from actions.definitions.world_builder import StaffSetRoomStatAction
+        from world.locations.models import LocationValueOverride
+
+        result = StaffSetRoomStatAction().run(
+            self.staff, room_id=self.profile.objectdb_id, stat_key="cold", value=0, pin=True
+        )
+        assert result.success
+        assert "cuts the whole cascade" in result.message
+        assert LocationValueOverride.objects.filter(
+            room_profile=self.profile, stat_key="cold"
+        ).exists()
+
+    def test_stat_clear_removes_both(self) -> None:
+        from actions.definitions.world_builder import StaffSetRoomStatAction
+        from world.locations.models import LocationValueModifier, LocationValueOverride
+
+        StaffSetRoomStatAction().run(
+            self.staff, room_id=self.profile.objectdb_id, stat_key="noise", value=70
+        )
+        StaffSetRoomStatAction().run(
+            self.staff, room_id=self.profile.objectdb_id, stat_key="noise", value=10, pin=True
+        )
+        result = StaffSetRoomStatAction().run(
+            self.staff, room_id=self.profile.objectdb_id, stat_key="noise", clear=True
+        )
+        assert result.success
+        assert not LocationValueModifier.objects.filter(
+            room_profile=self.profile, stat_key="noise"
+        ).exists()
+        assert not LocationValueOverride.objects.filter(
+            room_profile=self.profile, stat_key="noise"
+        ).exists()
+
+    def test_place_add_and_duplicate_name_refused(self) -> None:
+        from actions.definitions.world_builder import StaffAddPlaceAction
+        from world.scenes.place_models import Place
+
+        result = StaffAddPlaceAction().run(
+            self.staff, room_id=self.profile.objectdb_id, name="The Bar"
+        )
+        assert result.success
+        assert Place.objects.filter(room=self.profile, name="The Bar").exists()
+        again = StaffAddPlaceAction().run(
+            self.staff, room_id=self.profile.objectdb_id, name="the bar"
+        )
+        assert not again.success
+
+    def test_ambient_emit_mints_key_from_fixture(self) -> None:
+        from actions.definitions.world_builder import StaffAddAmbientEmitAction
+        from world.narrative.models import AmbientEmit
+
+        self.profile.fixture_key = "author-ward/dusty-plaza"
+        self.profile.save(update_fields=["fixture_key"])
+        result = StaffAddAmbientEmitAction().run(
+            self.staff,
+            room_id=self.profile.objectdb_id,
+            text="Dust motes drift.",
+            gate_stat_key="crime",
+            gate_min=60,
+        )
+        assert result.success, result.message
+        emit = AmbientEmit.objects.get(room_profile=self.profile)
+        assert emit.key == "dusty-plaza-emit-001"
+        assert emit.gate_stat_key == "crime"
+
+    def test_feature_fiat_runs_the_real_strategy(self) -> None:
+        """A SOCIAL_HUB fiat install must land the traffic modifier + flag —
+        proof the fiat path runs the identical per-kind handler."""
+        from actions.definitions.world_builder import StaffInstallRoomFeatureAction
+        from world.locations.models import LocationValueModifier
+        from world.room_features.constants import (
+            RoomFeatureInstallMechanism,
+            RoomFeatureServiceStrategy,
+        )
+        from world.room_features.factories import RoomFeatureKindFactory
+        from world.room_features.models import RoomFeatureInstance
+
+        kind = RoomFeatureKindFactory(
+            name="Test Social Hub",
+            service_strategy=RoomFeatureServiceStrategy.SOCIAL_HUB,
+            install_mechanism=RoomFeatureInstallMechanism.PROJECT,
+        )
+        result = StaffInstallRoomFeatureAction().run(
+            self.staff, room_id=self.profile.objectdb_id, kind=kind.name, target_level=2
+        )
+        assert result.success, result.message
+        instance = RoomFeatureInstance.objects.filter(room_profile=self.profile).active().get()
+        assert instance.level == 2
+        self.profile.refresh_from_db()
+        assert self.profile.is_social_hub
+        assert LocationValueModifier.objects.filter(
+            room_profile=self.profile, stat_key="traffic"
+        ).exists()
+
+    def test_feature_fiat_refuses_vault_and_second_kind(self) -> None:
+        from actions.definitions.world_builder import StaffInstallRoomFeatureAction
+        from world.room_features.constants import RoomFeatureServiceStrategy
+        from world.room_features.factories import RoomFeatureKindFactory
+
+        vault = RoomFeatureKindFactory(
+            name="Test Vault", service_strategy=RoomFeatureServiceStrategy.VAULT
+        )
+        result = StaffInstallRoomFeatureAction().run(
+            self.staff, room_id=self.profile.objectdb_id, kind=vault.name
+        )
+        assert not result.success
+
+    def test_feature_remove_reconciles_traffic(self) -> None:
+        from actions.definitions.world_builder import (
+            StaffInstallRoomFeatureAction,
+            StaffRemoveRoomFeatureAction,
+        )
+        from world.locations.models import LocationValueModifier
+        from world.room_features.constants import (
+            RoomFeatureInstallMechanism,
+            RoomFeatureServiceStrategy,
+        )
+        from world.room_features.factories import RoomFeatureKindFactory
+
+        kind = RoomFeatureKindFactory(
+            name="Test Social Hub",
+            service_strategy=RoomFeatureServiceStrategy.SOCIAL_HUB,
+            install_mechanism=RoomFeatureInstallMechanism.PROJECT,
+        )
+        StaffInstallRoomFeatureAction().run(
+            self.staff, room_id=self.profile.objectdb_id, kind=kind.name
+        )
+        result = StaffRemoveRoomFeatureAction().run(self.staff, room_id=self.profile.objectdb_id)
+        assert result.success, result.message
+        assert not LocationValueModifier.objects.filter(
+            room_profile=self.profile, stat_key="traffic"
+        ).exists()
+
+    def test_functionary_assign_and_remove(self) -> None:
+        from actions.definitions.world_builder import (
+            StaffAssignFunctionaryAction,
+            StaffRemoveFunctionaryAction,
+        )
+        from world.npc_services.factories import NPCRoleFactory
+        from world.npc_services.models import Functionary
+
+        role = NPCRoleFactory(name="Test Registrar")
+        result = StaffAssignFunctionaryAction().run(
+            self.staff, room_id=self.profile.objectdb_id, role=role.name
+        )
+        assert result.success, result.message
+        assert Functionary.objects.filter(room=self.profile, role=role, is_active=True).exists()
+        removed = StaffRemoveFunctionaryAction().run(
+            self.staff, room_id=self.profile.objectdb_id, role=role.name
+        )
+        assert removed.success
+        assert not Functionary.objects.filter(room=self.profile, role=role, is_active=True).exists()
+
+    def test_travel_hub_toggle(self) -> None:
+        from actions.definitions.world_builder import StaffSetTravelHubAction
+        from world.travel.models import TravelHub
+
+        result = StaffSetTravelHubAction().run(
+            self.staff, room_id=self.profile.objectdb_id, enabled=True, modes="land, sea"
+        )
+        assert result.success, result.message
+        hub = TravelHub.objects.get(room_profile=self.profile)
+        assert hub.travel_modes == ["LAND", "SEA"]
+        off = StaffSetTravelHubAction().run(
+            self.staff, room_id=self.profile.objectdb_id, enabled=False
+        )
+        assert off.success
+        assert not TravelHub.objects.filter(room_profile=self.profile).exists()
+
+    def test_blueprint_set_and_clear(self) -> None:
+        from actions.definitions.world_builder import StaffSetRoomBlueprintAction
+        from world.areas.positioning.models import PositionBlueprint
+
+        blueprint = PositionBlueprint.objects.create(name="Test Camp Layout")
+        result = StaffSetRoomBlueprintAction().run(
+            self.staff, room_id=self.profile.objectdb_id, blueprint=blueprint.name
+        )
+        assert result.success
+        self.profile.refresh_from_db()
+        assert self.profile.default_blueprint_id == blueprint.pk
+        cleared = StaffSetRoomBlueprintAction().run(
+            self.staff, room_id=self.profile.objectdb_id, blueprint=""
+        )
+        assert cleared.success
+
+    def test_starting_room_binding(self) -> None:
+        from actions.definitions.world_builder import StaffSetStartingRoomAction
+        from world.character_creation.factories import StartingAreaFactory
+
+        starting_area = StartingAreaFactory()
+        result = StaffSetStartingRoomAction().run(
+            self.staff,
+            room_id=self.profile.objectdb_id,
+            starting_area_id=starting_area.pk,
+        )
+        assert result.success, result.message
+        starting_area.refresh_from_db()
+        assert starting_area.default_starting_room_id == self.profile.objectdb_id
+
+    def test_exit_window_switch_auto_opens(self) -> None:
+        from actions.definitions.world_builder import StaffSetExitDetailAction
+        from evennia_extensions.models import ExitProfile
+
+        other = RoomProfileFactory(area=self.area, grid_x=1, grid_y=0)
+        exit_out, _ = _exit_between(self.profile.objectdb, other.objectdb, "east", "west")
+        result = StaffSetExitDetailAction().run(
+            self.staff, exit_id=exit_out.pk, kind="window", aliases="peek, e"
+        )
+        assert result.success, result.message
+        exit_profile = ExitProfile.objects.get(objectdb=exit_out)
+        assert exit_profile.exit_kind == "window"
+        assert exit_profile.is_open is True
+        assert "peek" in exit_out.aliases.all()
+
+    def test_duplicate_room_copies_template_surfaces(self) -> None:
+        from actions.definitions.world_builder import (
+            StaffAddPlaceAction,
+            StaffDuplicateRoomAction,
+            StaffSetRoomStatAction,
+        )
+        from evennia_extensions.models import RoomProfile as RoomProfileModel
+        from world.locations.constants import AUTHORED_STAT_SOURCE
+        from world.locations.models import LocationValueModifier
+        from world.scenes.place_models import Place
+
+        StaffSetRoomStatAction().run(
+            self.staff, room_id=self.profile.objectdb_id, stat_key="noise", value=44
+        )
+        StaffAddPlaceAction().run(self.staff, room_id=self.profile.objectdb_id, name="Corner Booth")
+        result = StaffDuplicateRoomAction().run(
+            self.staff, room_id=self.profile.objectdb_id, name="Copy Shop"
+        )
+        assert result.success, result.message
+        copy = RoomProfileModel.objects.get(fixture_key="author-ward/copy-shop")
+        assert copy.grid_x is None
+        assert Place.objects.filter(room=copy, name="Corner Booth").exists()
+        assert LocationValueModifier.objects.filter(
+            room_profile=copy, stat_key="noise", source=AUTHORED_STAT_SOURCE, value=44
+        ).exists()
+
+    def test_batch_dig_corridor(self) -> None:
+        from actions.definitions.world_builder import StaffBatchDigAction
+        from evennia_extensions.models import RoomProfile as RoomProfileModel
+
+        result = StaffBatchDigAction().run(
+            self.staff,
+            area_id=self.area.pk,
+            base_name="Corridor",
+            count=3,
+            from_room_id=self.profile.objectdb_id,
+            direction="north",
+        )
+        assert result.success, result.message
+        rooms = list(
+            RoomProfileModel.objects.filter(
+                fixture_key__startswith="author-ward/corridor-"
+            ).order_by("grid_y")
+        )
+        assert [(r.grid_x, r.grid_y) for r in rooms] == [(0, 1), (0, 2), (0, 3)]

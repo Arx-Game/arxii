@@ -1,7 +1,9 @@
 """Staff world-builder actions (#2449) — the canvas's dispatch seam.
 
-Nineteen REGISTRY actions (eleven original + six discovery/portal-authoring #2451,
-plus remove-area and move-room #3269),
+Thirty-seven REGISTRY actions (eleven original + six discovery/portal-authoring
+#2451, plus the #3269 recoverability pair and the Phase B room-authoring set:
+stats, places, ambient lines/emits, feature fiat, staffing, travel hub,
+blueprint, starting-room bindings, exit detail, duplicate, batch dig),
 all ``category="world_builder"``, ``target_type=SELF``,
 gated by ``StaffOnlyPrerequisite`` alone (no ownership/tenancy standing — this is
 staff tooling, not a player-facing builder). Each is a thin wrapper over the
@@ -41,6 +43,10 @@ from actions.types import ActionResult, TargetType
 # Shared error messages.
 _NO_SUCH_AREA = "No such area."
 _NO_SUCH_ROOM_MSG = "No such room."
+
+# Batch-dig corridor bounds (#3269): 1 is a plain dig; >20 deserves deliberate strokes.
+_BATCH_DIG_MIN = 2
+_BATCH_DIG_MAX = 20
 
 if TYPE_CHECKING:
     from actions.types import ActionContext
@@ -132,6 +138,55 @@ def _resolve_authored_area(area_id: Any) -> tuple[Area | None, str | None]:
     if area.origin != GridOrigin.AUTHORED:
         return None, "This area must be AUTHORED before rooms can be dug into it."
     return area, None
+
+
+def _room_stat_override_qs(profile: Any, stat_key: str) -> Any:
+    from world.locations.constants import KeyType, LocationParentType  # noqa: PLC0415
+    from world.locations.models import LocationValueOverride  # noqa: PLC0415
+
+    return LocationValueOverride.objects.filter(
+        parent_type=LocationParentType.ROOM,
+        room_profile=profile,
+        key_type=KeyType.STAT,
+        stat_key=stat_key,
+    )
+
+
+def _upsert_room_stat_override(profile: Any, stat_key: str, value: int) -> None:
+    from world.locations.constants import KeyType, LocationParentType  # noqa: PLC0415
+    from world.locations.models import LocationValueOverride  # noqa: PLC0415
+
+    row = _room_stat_override_qs(profile, stat_key).first()
+    if row is None:
+        LocationValueOverride.objects.create(
+            parent_type=LocationParentType.ROOM,
+            room_profile=profile,
+            key_type=KeyType.STAT,
+            stat_key=stat_key,
+            value=value,
+        )
+    elif row.value != value:
+        row.value = value
+        row.save(update_fields=["value"])
+
+
+def _mint_emit_key(profile: Any) -> str:
+    """Mint a stable ambient-emit key from the room's fixture key (#3269).
+
+    "arx-city/golden-hart-taproom" -> "golden-hart-taproom-emit-001"; keyless
+    rooms fall back to the objectdb pk. Counter skips existing keys.
+    """
+    from world.narrative.models import AmbientEmit  # noqa: PLC0415
+
+    base = (
+        profile.fixture_key.rsplit("/", 1)[-1]
+        if profile.fixture_key
+        else f"room{profile.objectdb_id}"
+    )
+    counter = 1
+    while AmbientEmit.objects.filter(key=f"{base}-emit-{counter:03d}").exists():
+        counter += 1
+    return f"{base}-emit-{counter:03d}"
 
 
 def _room_description(profile: Any) -> str:
@@ -813,6 +868,823 @@ class StaffMoveRoomAction(_WorldBuilderAction):
             success=True,
             message=f"{profile.objectdb.db_key} moved to {area.name}; it is unplaced — "
             f"drag it into position.{note}",
+        )
+
+
+@dataclass
+class StaffSetRoomStatAction(_WorldBuilderAction):
+    """Author a room's ambient stat (#3269 Phase B). Kwargs: ``room_id``,
+    ``stat_key``, ``value`` (int), optional ``pin``/``clear``.
+
+    The default write is a permanent authored `LocationValueModifier`
+    (``source="authored:staff"``, ``change_per_day=0``) — the cascade's
+    documented authoring primitive, which composes with weather/traffic
+    instead of silencing them. ``pin=True`` writes a `LocationValueOverride`
+    instead: the rare "this is the value, period" claim that cuts the whole
+    cascade (including weather) for that stat — the result message says so.
+    ``clear=True`` removes both the authored modifier and any override.
+    """
+
+    key: str = "staff_set_room_stat"
+    name: str = "Set Room Stat"
+    icon: str = "sliders"
+
+    def execute(
+        self,
+        actor: ObjectDB,
+        context: ActionContext | None = None,
+        **kwargs: Any,
+    ) -> ActionResult:
+        from django.db import transaction  # noqa: PLC0415
+
+        from world.locations.constants import AUTHORED_STAT_SOURCE, StatKey  # noqa: PLC0415
+        from world.locations.services import set_room_stat_modifier  # noqa: PLC0415
+
+        profile = _resolve_room_profile(kwargs.get("room_id"))
+        if profile is None:
+            return ActionResult(success=False, message=_NO_SUCH_ROOM_MSG)
+        stat_key = (kwargs.get("stat_key") or "").strip().lower()
+        if stat_key not in StatKey.values:
+            options = ", ".join(StatKey.values)
+            return ActionResult(success=False, message=f"No '{stat_key}' stat. Stats: {options}.")
+        if kwargs.get("clear"):
+            with transaction.atomic():
+                set_room_stat_modifier(
+                    profile, StatKey(stat_key), source=AUTHORED_STAT_SOURCE, value=0
+                )
+                _room_stat_override_qs(profile, stat_key).delete()
+            return ActionResult(success=True, message=f"{stat_key} cleared (authored + pin).")
+        try:
+            value = int(kwargs.get("value"))
+        except (TypeError, ValueError):
+            return ActionResult(success=False, message="Value must be a number.")
+        if kwargs.get("pin"):
+            _upsert_room_stat_override(profile, stat_key, value)
+            return ActionResult(
+                success=True,
+                message=f"{stat_key} pinned at {value}. Pinning cuts the whole cascade "
+                "for this stat — weather, traffic, and area values no longer reach "
+                "this room until the pin is cleared.",
+            )
+        with transaction.atomic():
+            set_room_stat_modifier(
+                profile, StatKey(stat_key), source=AUTHORED_STAT_SOURCE, value=value
+            )
+        return ActionResult(success=True, message=f"{stat_key} authored at {value}.")
+
+
+@dataclass
+class StaffAddPlaceAction(_WorldBuilderAction):
+    """Add a conversational sub-location to a room (#3269 Phase B).
+
+    Kwargs: ``room_id``, ``name``, optional ``description``.
+    """
+
+    key: str = "staff_add_place"
+    name: str = "Add Place"
+    icon: str = "armchair"
+
+    def execute(
+        self,
+        actor: ObjectDB,
+        context: ActionContext | None = None,
+        **kwargs: Any,
+    ) -> ActionResult:
+        from world.scenes.place_models import Place  # noqa: PLC0415
+
+        profile = _resolve_room_profile(kwargs.get("room_id"))
+        if profile is None:
+            return ActionResult(success=False, message=_NO_SUCH_ROOM_MSG)
+        place_name = (kwargs.get("name") or "").strip()
+        if not place_name:
+            return ActionResult(success=False, message="Name the place.")
+        if Place.objects.filter(room=profile, name__iexact=place_name).exists():
+            return ActionResult(success=False, message="This room already has that place.")
+        Place.objects.create(
+            room=profile,
+            name=place_name,
+            description=(kwargs.get("description") or "").strip(),
+        )
+        return ActionResult(success=True, message=f"Place '{place_name}' added.")
+
+
+@dataclass
+class StaffEditPlaceAction(_WorldBuilderAction):
+    """Edit a place's name/description. Kwargs: ``place_id``, ``name?``, ``description?``."""
+
+    key: str = "staff_edit_place"
+    name: str = "Edit Place"
+    icon: str = "pencil"
+
+    def execute(
+        self,
+        actor: ObjectDB,
+        context: ActionContext | None = None,
+        **kwargs: Any,
+    ) -> ActionResult:
+        from world.scenes.place_models import Place  # noqa: PLC0415
+
+        place = Place.objects.filter(pk=kwargs.get("place_id") or 0).first()
+        if place is None:
+            return ActionResult(success=False, message="No such place.")
+        new_name = (kwargs.get("name") or "").strip()
+        if new_name:
+            place.name = new_name
+        if kwargs.get("description") is not None:
+            place.description = (kwargs.get("description") or "").strip()
+        place.save()
+        return ActionResult(success=True, message=f"Place '{place.name}' updated.")
+
+
+@dataclass
+class StaffRemovePlaceAction(_WorldBuilderAction):
+    """Remove a place. Kwarg: ``place_id``."""
+
+    key: str = "staff_remove_place"
+    name: str = "Remove Place"
+    icon: str = "trash"
+
+    def execute(
+        self,
+        actor: ObjectDB,
+        context: ActionContext | None = None,
+        **kwargs: Any,
+    ) -> ActionResult:
+        from world.scenes.place_models import Place  # noqa: PLC0415
+
+        place = Place.objects.filter(pk=kwargs.get("place_id") or 0).first()
+        if place is None:
+            return ActionResult(success=False, message="No such place.")
+        place_name = place.name
+        place.delete()
+        return ActionResult(success=True, message=f"Place '{place_name}' removed.")
+
+
+@dataclass
+class StaffAddAmbientLineAction(_WorldBuilderAction):
+    """Add an unconditional room-entry ambient line (#3269 Phase B).
+
+    Kwargs: ``room_id``, at least one of ``arriver_body``/``bystander_body``,
+    optional ``weight``/``fire_chance``/``cooldown_minutes``. Conditional
+    (DSL-filtered) lines stay admin/content authoring.
+    """
+
+    key: str = "staff_add_ambient_line"
+    name: str = "Add Ambient Line"
+    icon: str = "message-circle"
+
+    def execute(
+        self,
+        actor: ObjectDB,
+        context: ActionContext | None = None,
+        **kwargs: Any,
+    ) -> ActionResult:
+        from world.locations.constants import LocationParentType  # noqa: PLC0415
+        from world.narrative.models import AmbientEmoteLine  # noqa: PLC0415
+
+        profile = _resolve_room_profile(kwargs.get("room_id"))
+        if profile is None:
+            return ActionResult(success=False, message=_NO_SUCH_ROOM_MSG)
+        arriver = (kwargs.get("arriver_body") or "").strip()
+        bystander = (kwargs.get("bystander_body") or "").strip()
+        if not arriver and not bystander:
+            return ActionResult(
+                success=False, message="Author at least one of arriver/bystander text."
+            )
+        AmbientEmoteLine.objects.create(
+            parent_type=LocationParentType.ROOM,
+            room_profile=profile,
+            arriver_body=arriver,
+            bystander_body=bystander,
+            weight=int(kwargs.get("weight") or 1),
+            fire_chance=int(kwargs.get("fire_chance") or 100),
+            cooldown_minutes=int(kwargs.get("cooldown_minutes") or 0),
+        )
+        return ActionResult(success=True, message="Ambient entry line added.")
+
+
+@dataclass
+class StaffRemoveAmbientLineAction(_WorldBuilderAction):
+    """Remove an ambient entry line. Kwarg: ``line_id``."""
+
+    key: str = "staff_remove_ambient_line"
+    name: str = "Remove Ambient Line"
+    icon: str = "trash"
+
+    def execute(
+        self,
+        actor: ObjectDB,
+        context: ActionContext | None = None,
+        **kwargs: Any,
+    ) -> ActionResult:
+        from world.narrative.models import AmbientEmoteLine  # noqa: PLC0415
+
+        line = AmbientEmoteLine.objects.filter(pk=kwargs.get("line_id") or 0).first()
+        if line is None:
+            return ActionResult(success=False, message="No such ambient line.")
+        line.delete()
+        return ActionResult(success=True, message="Ambient entry line removed.")
+
+
+@dataclass
+class StaffAddAmbientEmitAction(_WorldBuilderAction):
+    """Add a periodic room-linger line (#3269 Phase B).
+
+    Kwargs: ``room_id``, ``text``, optional ``key`` (minted from the room's
+    fixture key when absent — required for export round-trip), ``weight``,
+    ``cooldown_minutes``, ``gate_stat_key``/``gate_min``/``gate_max`` (risk
+    telegraph; blank = plain atmosphere).
+    """
+
+    key: str = "staff_add_ambient_emit"
+    name: str = "Add Ambient Emit"
+    icon: str = "radio"
+
+    def execute(
+        self,
+        actor: ObjectDB,
+        context: ActionContext | None = None,
+        **kwargs: Any,
+    ) -> ActionResult:
+        from world.locations.constants import StatKey  # noqa: PLC0415
+        from world.narrative.models import AmbientEmit  # noqa: PLC0415
+
+        profile = _resolve_room_profile(kwargs.get("room_id"))
+        if profile is None:
+            return ActionResult(success=False, message=_NO_SUCH_ROOM_MSG)
+        text = (kwargs.get("text") or "").strip()
+        if not text:
+            return ActionResult(success=False, message="Write the line.")
+        gate_stat_key = (kwargs.get("gate_stat_key") or "").strip().lower()
+        if gate_stat_key and gate_stat_key not in StatKey.values:
+            options = ", ".join(StatKey.values)
+            return ActionResult(
+                success=False, message=f"No '{gate_stat_key}' stat. Stats: {options}."
+            )
+        emit_key = (kwargs.get("key") or "").strip() or _mint_emit_key(profile)
+        if AmbientEmit.objects.filter(key=emit_key).exists():
+            return ActionResult(success=False, message=f"Emit key '{emit_key}' already exists.")
+        AmbientEmit.objects.create(
+            key=emit_key,
+            text=text,
+            room_profile=profile,
+            weight=int(kwargs.get("weight") or 1),
+            cooldown_minutes=int(kwargs.get("cooldown_minutes") or 0),
+            gate_stat_key=gate_stat_key,
+            gate_min=kwargs.get("gate_min"),
+            gate_max=kwargs.get("gate_max"),
+        )
+        return ActionResult(success=True, message=f"Ambient emit '{emit_key}' added.")
+
+
+@dataclass
+class StaffRemoveAmbientEmitAction(_WorldBuilderAction):
+    """Remove an ambient emit. Kwarg: ``emit_id``. Warns when the row is credited."""
+
+    key: str = "staff_remove_ambient_emit"
+    name: str = "Remove Ambient Emit"
+    icon: str = "trash"
+
+    def execute(
+        self,
+        actor: ObjectDB,
+        context: ActionContext | None = None,
+        **kwargs: Any,
+    ) -> ActionResult:
+        from world.narrative.models import AmbientEmit  # noqa: PLC0415
+
+        emit = AmbientEmit.objects.filter(pk=kwargs.get("emit_id") or 0).first()
+        if emit is None:
+            return ActionResult(success=False, message="No such ambient emit.")
+        note = ""
+        if emit.written_by_id is not None:
+            note = " (It carried a writer credit; the content repo copy is untouched.)"
+        emit.delete()
+        return ActionResult(success=True, message=f"Ambient emit removed.{note}")
+
+
+@dataclass
+class StaffInstallRoomFeatureAction(_WorldBuilderAction):
+    """Install/level a room feature by staff fiat (#3269 Phase B).
+
+    Kwargs: ``room_id``, ``kind`` (RoomFeatureKind name), optional
+    ``target_level``. Runs the identical per-kind strategy handler as the
+    player project path via an instantly-completed audit project — see
+    ``world.room_features.services.staff_install_feature``. SANCTUM (ritual)
+    and VAULT (founder-owned) refuse; ward/alarm are a different seam.
+    """
+
+    key: str = "staff_install_room_feature"
+    name: str = "Install Room Feature"
+    icon: str = "puzzle"
+
+    def execute(
+        self,
+        actor: ObjectDB,
+        context: ActionContext | None = None,
+        **kwargs: Any,
+    ) -> ActionResult:
+        from actions.definitions.room_features import _resolve_active_persona  # noqa: PLC0415
+        from world.room_features.models import RoomFeatureKind  # noqa: PLC0415
+        from world.room_features.services import staff_install_feature  # noqa: PLC0415
+
+        profile = _resolve_room_profile(kwargs.get("room_id"))
+        if profile is None:
+            return ActionResult(success=False, message=_NO_SUCH_ROOM_MSG)
+        kind_name = (kwargs.get("kind") or "").strip()
+        kind = RoomFeatureKind.objects.filter(name__iexact=kind_name).first()
+        if kind is None:
+            options = ", ".join(RoomFeatureKind.objects.values_list("name", flat=True))
+            return ActionResult(success=False, message=f"No '{kind_name}' kind. Kinds: {options}.")
+        persona = _resolve_active_persona(actor)
+        if persona is None:
+            return ActionResult(success=False, message="You need an active persona to build as.")
+        try:
+            target_level = int(kwargs.get("target_level") or 1)
+        except (TypeError, ValueError):
+            return ActionResult(success=False, message="Level must be a number.")
+        refusal = staff_install_feature(
+            profile, kind, owner_persona=persona, target_level=target_level
+        )
+        if refusal is not None:
+            return ActionResult(success=False, message=refusal)
+        return ActionResult(success=True, message=f"{kind.name} installed at level {target_level}.")
+
+
+@dataclass
+class StaffRemoveRoomFeatureAction(_WorldBuilderAction):
+    """Dissolve the room's active feature by staff fiat. Kwarg: ``room_id``."""
+
+    key: str = "staff_remove_room_feature"
+    name: str = "Remove Room Feature"
+    icon: str = "trash"
+
+    def execute(
+        self,
+        actor: ObjectDB,
+        context: ActionContext | None = None,
+        **kwargs: Any,
+    ) -> ActionResult:
+        from world.room_features.services import staff_dissolve_feature  # noqa: PLC0415
+
+        profile = _resolve_room_profile(kwargs.get("room_id"))
+        if profile is None:
+            return ActionResult(success=False, message=_NO_SUCH_ROOM_MSG)
+        refusal = staff_dissolve_feature(profile)
+        if refusal is not None:
+            return ActionResult(success=False, message=refusal)
+        return ActionResult(success=True, message="Feature dissolved; side effects reconciled.")
+
+
+@dataclass
+class StaffAssignFunctionaryAction(_WorldBuilderAction):
+    """Staff a room with a Class-1 functionary NPC (#3269 Phase B).
+
+    Kwargs: ``room_id``, ``role`` (NPCRole name). The web mirror of telnet
+    ``functionary place`` (``commands/functionary.py``), sharing
+    ``place_functionary`` — idempotent per (role, room).
+    """
+
+    key: str = "staff_assign_functionary"
+    name: str = "Assign Functionary"
+    icon: str = "user-plus"
+
+    def execute(
+        self,
+        actor: ObjectDB,
+        context: ActionContext | None = None,
+        **kwargs: Any,
+    ) -> ActionResult:
+        from world.npc_services.functionaries import place_functionary  # noqa: PLC0415
+        from world.npc_services.models import NPCRole  # noqa: PLC0415
+
+        profile = _resolve_room_profile(kwargs.get("room_id"))
+        if profile is None:
+            return ActionResult(success=False, message=_NO_SUCH_ROOM_MSG)
+        role_name = (kwargs.get("role") or "").strip()
+        role = NPCRole.objects.filter(name__iexact=role_name).first()
+        if role is None:
+            options = ", ".join(NPCRole.objects.values_list("name", flat=True)[:30])
+            return ActionResult(success=False, message=f"No '{role_name}' role. Roles: {options}.")
+        place_functionary(role=role, room=profile)
+        return ActionResult(success=True, message=f"{role.name} staffed here.")
+
+
+@dataclass
+class StaffRemoveFunctionaryAction(_WorldBuilderAction):
+    """Remove a room's functionary. Kwargs: ``room_id``, ``role`` (NPCRole name).
+
+    Soft-removes (mirrors telnet ``functionary remove``). Note: a role on the
+    room's building-kind StaffingProfile is re-provisioned by the weekly
+    staffing sweep — the result message says so when it applies.
+    """
+
+    key: str = "staff_remove_functionary"
+    name: str = "Remove Functionary"
+    icon: str = "user-minus"
+
+    def execute(
+        self,
+        actor: ObjectDB,
+        context: ActionContext | None = None,
+        **kwargs: Any,
+    ) -> ActionResult:
+        from world.npc_services.functionaries import remove_functionary  # noqa: PLC0415
+        from world.npc_services.models import NPCRole, StaffingProfileLine  # noqa: PLC0415
+
+        profile = _resolve_room_profile(kwargs.get("room_id"))
+        if profile is None:
+            return ActionResult(success=False, message=_NO_SUCH_ROOM_MSG)
+        role_name = (kwargs.get("role") or "").strip()
+        role = NPCRole.objects.filter(name__iexact=role_name).first()
+        if role is None:
+            return ActionResult(success=False, message=f"No '{role_name}' role.")
+        removed = remove_functionary(role=role, room=profile)
+        if not removed:
+            return ActionResult(success=False, message="No such functionary here.")
+        note = ""
+        if StaffingProfileLine.objects.filter(role=role).exists():
+            note = (
+                " This role appears on a staffing profile — the weekly sweep re-provisions "
+                "it in profiled buildings."
+            )
+        return ActionResult(success=True, message=f"{role.name} removed.{note}")
+
+
+@dataclass
+class StaffSetTravelHubAction(_WorldBuilderAction):
+    """Toggle a room as a travel hub (#3269 Phase B).
+
+    Kwargs: ``room_id``, ``enabled`` (bool), optional ``name``/``modes``
+    (comma list of LAND/SEA/AIR)/``is_transit_stop``. Exports as a room flag
+    only — routes/methods remain admin/content-owned prerequisites.
+    """
+
+    key: str = "staff_set_travel_hub"
+    name: str = "Set Travel Hub"
+    icon: str = "ship"
+
+    def execute(
+        self,
+        actor: ObjectDB,
+        context: ActionContext | None = None,
+        **kwargs: Any,
+    ) -> ActionResult:
+        from world.travel.constants import TravelMode  # noqa: PLC0415
+        from world.travel.models import TravelHub  # noqa: PLC0415
+
+        profile = _resolve_room_profile(kwargs.get("room_id"))
+        if profile is None:
+            return ActionResult(success=False, message=_NO_SUCH_ROOM_MSG)
+        if not kwargs.get("enabled"):
+            deleted, _ = TravelHub.objects.filter(room_profile=profile).delete()
+            message = "Travel hub removed." if deleted else "This room was not a hub."
+            return ActionResult(success=True, message=message)
+        modes_raw = [m.strip().upper() for m in (kwargs.get("modes") or "").split(",") if m.strip()]
+        bad = [m for m in modes_raw if m not in TravelMode.values]
+        if bad:
+            options = ", ".join(TravelMode.values)
+            return ActionResult(
+                success=False, message=f"Unknown mode(s) {', '.join(bad)}. Modes: {options}."
+            )
+        hub, _created = TravelHub.objects.update_or_create(
+            room_profile=profile,
+            defaults={
+                "name": (kwargs.get("name") or "").strip() or profile.objectdb.db_key,
+                "travel_modes": modes_raw or [TravelMode.LAND.value],
+                "is_transit_stop": bool(kwargs.get("is_transit_stop", True)),
+                "is_active": True,
+            },
+        )
+        return ActionResult(
+            success=True,
+            message=f"Travel hub '{hub.name}' set ({', '.join(hub.travel_modes)}). "
+            "Routes/methods are authored separately.",
+        )
+
+
+@dataclass
+class StaffSetRoomBlueprintAction(_WorldBuilderAction):
+    """Set/clear the room's default tactical blueprint (#3269 Phase B).
+
+    Kwargs: ``room_id``, ``blueprint`` (PositionBlueprint name, or blank to clear).
+    """
+
+    key: str = "staff_set_room_blueprint"
+    name: str = "Set Room Blueprint"
+    icon: str = "map"
+
+    def execute(
+        self,
+        actor: ObjectDB,
+        context: ActionContext | None = None,
+        **kwargs: Any,
+    ) -> ActionResult:
+        from world.areas.positioning.models import PositionBlueprint  # noqa: PLC0415
+
+        profile = _resolve_room_profile(kwargs.get("room_id"))
+        if profile is None:
+            return ActionResult(success=False, message=_NO_SUCH_ROOM_MSG)
+        blueprint_name = (kwargs.get("blueprint") or "").strip()
+        if not blueprint_name:
+            profile.default_blueprint = None
+            profile.save(update_fields=["default_blueprint"])
+            return ActionResult(success=True, message="Default blueprint cleared.")
+        blueprint = PositionBlueprint.objects.filter(name__iexact=blueprint_name).first()
+        if blueprint is None:
+            options = ", ".join(PositionBlueprint.objects.values_list("name", flat=True)[:30])
+            return ActionResult(
+                success=False, message=f"No '{blueprint_name}' blueprint. Blueprints: {options}."
+            )
+        profile.default_blueprint = blueprint
+        profile.save(update_fields=["default_blueprint"])
+        return ActionResult(success=True, message=f"Default blueprint set to {blueprint.name}.")
+
+
+@dataclass
+class StaffSetStartingRoomAction(_WorldBuilderAction):
+    """Bind a room as a CG starting room (#3269 Phase B) — the last admin-only
+    step between "grid built" and "characters can enter it".
+
+    Kwargs: ``room_id``, exactly one of ``starting_area_id``
+    (StartingArea.default_starting_room) or ``beginnings_id``
+    (Beginnings.starting_room_override); ``clear=True`` unbinds instead.
+    """
+
+    key: str = "staff_set_starting_room"
+    name: str = "Set Starting Room"
+    icon: str = "flag"
+
+    def execute(
+        self,
+        actor: ObjectDB,
+        context: ActionContext | None = None,
+        **kwargs: Any,
+    ) -> ActionResult:
+        from world.character_creation.models import Beginnings, StartingArea  # noqa: PLC0415
+
+        starting_area_id = kwargs.get("starting_area_id")
+        beginnings_id = kwargs.get("beginnings_id")
+        if bool(starting_area_id) == bool(beginnings_id):
+            return ActionResult(
+                success=False,
+                message="Name exactly one of starting_area_id or beginnings_id.",
+            )
+        room_profile = None
+        if not kwargs.get("clear"):
+            room_profile = _resolve_room_profile(kwargs.get("room_id"))
+            if room_profile is None:
+                return ActionResult(success=False, message=_NO_SUCH_ROOM_MSG)
+        if starting_area_id:
+            target = StartingArea.objects.filter(pk=starting_area_id).first()
+            if target is None:
+                return ActionResult(success=False, message="No such starting area.")
+            target.default_starting_room = room_profile
+            target.save(update_fields=["default_starting_room"])
+            label = f"starting area '{target.name}'"
+        else:
+            target = Beginnings.objects.filter(pk=beginnings_id).first()
+            if target is None:
+                return ActionResult(success=False, message="No such beginning.")
+            target.starting_room_override = room_profile
+            target.save(update_fields=["starting_room_override"])
+            label = f"beginning '{target.name}'"
+        verb = "cleared for" if room_profile is None else "bound to"
+        room_name = room_profile.objectdb.db_key if room_profile is not None else ""
+        return ActionResult(success=True, message=f"Starting room {verb} {label}. {room_name}")
+
+
+@dataclass
+class StaffSetExitDetailAction(_WorldBuilderAction):
+    """Edit an exit's kind/openness/aliases (#3269 Phase B).
+
+    Kwargs: ``exit_id``, optional ``kind`` (door/window), ``is_open`` (bool),
+    ``aliases`` (comma list — replaces the alias set). Switching to WINDOW
+    auto-opens unless ``is_open`` is passed explicitly — a closed window
+    blocks traversal, so a bare kind-flip must never sever a live link.
+    """
+
+    key: str = "staff_set_exit_detail"
+    name: str = "Set Exit Detail"
+    icon: str = "door-open"
+
+    def execute(
+        self,
+        actor: ObjectDB,
+        context: ActionContext | None = None,
+        **kwargs: Any,
+    ) -> ActionResult:
+        from evennia_extensions.constants import ExitKind  # noqa: PLC0415
+        from evennia_extensions.models import ExitProfile  # noqa: PLC0415
+
+        exit_obj = _resolve_exit(kwargs.get("exit_id"))
+        if exit_obj is None:
+            return ActionResult(success=False, message="No such exit.")
+        exit_profile, _ = ExitProfile.objects.get_or_create(objectdb=exit_obj)
+        notes = []
+        kind = (kwargs.get("kind") or "").strip().lower()
+        if kind:
+            if kind not in ExitKind.values:
+                options = ", ".join(ExitKind.values)
+                return ActionResult(success=False, message=f"No '{kind}' kind. Kinds: {options}.")
+            switching_to_window = kind == ExitKind.WINDOW and exit_profile.exit_kind != kind
+            exit_profile.exit_kind = kind
+            if switching_to_window and kwargs.get("is_open") is None:
+                exit_profile.is_open = True
+                notes.append("opened (a closed window blocks traversal)")
+        if kwargs.get("is_open") is not None:
+            exit_profile.is_open = bool(kwargs.get("is_open"))
+        exit_profile.save()
+        if kwargs.get("aliases") is not None:
+            wanted = [a.strip() for a in str(kwargs.get("aliases")).split(",") if a.strip()]
+            exit_obj.aliases.clear()
+            for alias in wanted:
+                exit_obj.aliases.add(alias)
+            notes.append(f"aliases: {', '.join(wanted) or 'none'}")
+        suffix = f" ({'; '.join(notes)})" if notes else ""
+        return ActionResult(success=True, message=f"Exit updated.{suffix}")
+
+
+@dataclass
+class StaffDuplicateRoomAction(_WorldBuilderAction):
+    """Duplicate a room as a template, cross-area (#3269 Phase B bulk).
+
+    Kwargs: ``room_id`` (source), ``name``, optional ``area_id`` (defaults to
+    the source's area). Copies size, description, authored stat rows, places,
+    and the feature (same kind/level, via the fiat installer). Exits and grid
+    position are NOT copied — the copy lands unplaced.
+    """
+
+    key: str = "staff_duplicate_room"
+    name: str = "Duplicate Room"
+    icon: str = "copy"
+
+    def execute(
+        self,
+        actor: ObjectDB,
+        context: ActionContext | None = None,
+        **kwargs: Any,
+    ) -> ActionResult:
+        from actions.definitions.room_features import _resolve_active_persona  # noqa: PLC0415
+        from world.areas.constants import GridOrigin  # noqa: PLC0415
+        from world.areas.grid_services import (  # noqa: PLC0415
+            GridServiceError,
+            create_room,
+            suggest_fixture_key,
+        )
+        from world.locations.constants import AUTHORED_STAT_SOURCE  # noqa: PLC0415
+        from world.locations.models import LocationValueModifier  # noqa: PLC0415
+        from world.room_features.models import RoomFeatureInstance  # noqa: PLC0415
+        from world.room_features.services import staff_install_feature  # noqa: PLC0415
+        from world.scenes.place_models import Place  # noqa: PLC0415
+
+        source = _resolve_room_profile(kwargs.get("room_id"))
+        if source is None:
+            return ActionResult(success=False, message=_NO_SUCH_ROOM_MSG)
+        area, area_error = _resolve_authored_area(kwargs.get("area_id") or source.area_id)
+        if area_error is not None:
+            return ActionResult(success=False, message=area_error)
+        room_name = (kwargs.get("name") or "").strip()
+        if not room_name:
+            return ActionResult(success=False, message="Name the copy.")
+        try:
+            fixture_key = suggest_fixture_key(area, room_name)
+        except GridServiceError as exc:
+            return ActionResult(success=False, message=exc.user_message)
+        profile = create_room(
+            area=area,
+            name=room_name,
+            description=_room_description(source),
+            size=source.size,
+            origin=GridOrigin.AUTHORED,
+            fixture_key=fixture_key,
+        )
+        for row in LocationValueModifier.objects.filter(
+            room_profile=source, source=AUTHORED_STAT_SOURCE
+        ):
+            LocationValueModifier.objects.create(
+                parent_type=row.parent_type,
+                room_profile=profile,
+                key_type=row.key_type,
+                stat_key=row.stat_key,
+                value=row.value,
+                change_per_day=0,
+                source=AUTHORED_STAT_SOURCE,
+            )
+        for place in Place.objects.filter(room=source):
+            Place.objects.create(room=profile, name=place.name, description=place.description)
+        feature_note = ""
+        instance = RoomFeatureInstance.objects.filter(room_profile=source).active().first()
+        if instance is not None:
+            persona = _resolve_active_persona(actor)
+            if persona is not None:
+                refusal = staff_install_feature(
+                    profile,
+                    instance.feature_kind,
+                    owner_persona=persona,
+                    target_level=instance.level,
+                )
+                feature_note = f" Feature copy: {refusal}" if refusal else " Feature copied."
+        return ActionResult(
+            success=True,
+            message=f"{room_name} duplicated (#{profile.pk}); it is unplaced — "
+            f"drag it into position.{feature_note}",
+        )
+
+
+@dataclass
+class StaffBatchDigAction(_WorldBuilderAction):
+    """Dig a corridor of linked rooms in one stroke (#3269 Phase B bulk).
+
+    Kwargs: ``area_id``, ``base_name``, ``count`` (2-20), ``from_room_id``,
+    ``direction``. Rooms are named "Base 1..N", each aliased-linked to the
+    previous; refuses up-front if any target cell is occupied.
+    """
+
+    key: str = "staff_batch_dig"
+    name: str = "Batch Dig"
+    icon: str = "rows"
+
+    def execute(  # noqa: PLR0911 — a validation ladder; each refusal is one message
+        self,
+        actor: ObjectDB,
+        context: ActionContext | None = None,
+        **kwargs: Any,
+    ) -> ActionResult:
+        from world.areas.constants import DIRECTIONS, GridOrigin  # noqa: PLC0415
+        from world.areas.grid_services import (  # noqa: PLC0415
+            GridServiceError,
+            cell_occupied,
+            create_exit_pair,
+            create_room,
+            suggest_fixture_key,
+        )
+
+        area, area_error = _resolve_authored_area(kwargs.get("area_id"))
+        if area_error is not None:
+            return ActionResult(success=False, message=area_error)
+        base_name = (kwargs.get("base_name") or "").strip()
+        if not base_name:
+            return ActionResult(success=False, message="Name the rooms.")
+        try:
+            count = int(kwargs.get("count") or 0)
+        except (TypeError, ValueError):
+            return ActionResult(success=False, message="Count must be a number.")
+        if not _BATCH_DIG_MIN <= count <= _BATCH_DIG_MAX:
+            return ActionResult(
+                success=False,
+                message=f"Count must be between {_BATCH_DIG_MIN} and {_BATCH_DIG_MAX}.",
+            )
+        anchor, spec, rel_error = _relational_dig_target(kwargs, area)
+        if rel_error is not None or anchor is None or spec is None:
+            return ActionResult(
+                success=False, message=rel_error or "Batch digs need an anchor + direction."
+            )
+        cells = []
+        x, y, floor = anchor.grid_x, anchor.grid_y, anchor.floor
+        for _step in range(count):
+            x, y, floor = x + spec.dx, y + spec.dy, floor + spec.dfloor
+            if cell_occupied(area, x, y, floor):
+                return ActionResult(
+                    success=False, message=f"Cell ({x}, {y}) floor {floor} is occupied."
+                )
+            cells.append((x, y, floor))
+        direction_name = (kwargs.get("direction") or "").strip().lower()
+        previous = anchor.objectdb
+        made = []
+        for index, (cx, cy, cfloor) in enumerate(cells, start=1):
+            room_name = f"{base_name} {index}"
+            try:
+                fixture_key = suggest_fixture_key(area, room_name)
+            except GridServiceError as exc:
+                return ActionResult(
+                    success=False,
+                    message=f"Stopped at {room_name}: {exc.user_message} "
+                    f"({len(made)} room(s) already dug).",
+                )
+            profile = create_room(
+                area=area,
+                name=room_name,
+                grid_x=cx,
+                grid_y=cy,
+                floor=cfloor,
+                origin=GridOrigin.AUTHORED,
+                fixture_key=fixture_key,
+            )
+            create_exit_pair(
+                name=direction_name,
+                aliases=spec.aliases,
+                reverse_name=spec.opposite,
+                reverse_aliases=DIRECTIONS[spec.opposite].aliases,
+                room_a=previous,
+                room_b=profile.objectdb,
+            )
+            previous = profile.objectdb
+            made.append(room_name)
+        return ActionResult(
+            success=True,
+            message=f"Dug {len(made)} linked rooms {direction_name} of "
+            f"{anchor.objectdb.db_key}: {made[0]} … {made[-1]}.",
         )
 
 
