@@ -1963,6 +1963,20 @@ Character lifecycle management with web-first applications and player anonymity.
   `RegistrationClosedError` (403 at the API) and `resolve_invite` returns None
   (404) — a player invite is never a side door around the staff
   `AccountInvite` gate.
+- **Staff application review queue (#3265):** `RosterApplicationViewSet`
+  (`/api/roster/applications/`, staff-only via `CanApproveApplications` →
+  `PlayerData.can_approve_applications()`) surfaces the review workflow the admin
+  bulk actions previously gated alone. List/detail use the new
+  `RosterApplicationListSerializer` and the (now-wired) pre-existing
+  `RosterApplicationDetailSerializer`; `review` posts through the pre-existing
+  `RosterApplicationApprovalSerializer` to `RosterApplication.approve()`/`.deny()`.
+  Fixed in the same change: `character_name` on both serializers now sources
+  `character.character.db_key` (was `character.db_key`, one hop short of the
+  `ObjectDB` - `character` here is the `CharacterSheet`, not the game object).
+  Frontend: `/staff/roster-applications` (queue) + `/staff/roster-applications/:id`
+  (detail, approve/deny), linked from the staff hub's "Roster Character
+  Applications" card; the pre-existing hub card was retitled "Character
+  Applications" to disambiguate from CG's DraftApplication queue.
 - **Integrates with:** accounts, character_sheets, scenes
 - **Source:** `src/world/roster/`
 - **Details:** [roster.md](roster.md)

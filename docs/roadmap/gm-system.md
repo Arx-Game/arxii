@@ -42,6 +42,10 @@ Progression is driven by player feedback/upvotes tied to stories run and how pla
 - GMs create new roster characters scoped to their table (gated by level)
 - Created characters go through the normal roster application flow
 - GM approves/denies applications to their table's roster (via their own job queue)
+- **Site-wide staff approval shipped (#3265):** `RosterApplicationViewSet` +
+  `/staff/roster-applications` give staff a review queue for applications to any
+  staff-authored roster character. The table-scoped GM job queue frontend (a GM
+  seeing only applications to their own table) remains open - see #3268.
 - **Invite codes** — GM sends an out-of-game invite code (email); new player signs up and can claim the character during registration. Crucial for recruitment — brings in players who aren't on the game at all.
 
 ### Stories (GM's role only — stories app owns itself)
