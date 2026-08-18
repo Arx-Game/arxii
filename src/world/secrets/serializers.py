@@ -6,13 +6,14 @@ hasn't unlocked (``category``, ``consequences``), and any layer the secret itsel
 unplaced, renders as **"Unknown"** (a first-class state, not a blank).
 """
 
+from django.core.exceptions import ValidationError as DjangoValidationError
 from rest_framework import serializers
 
-from world.secrets.constants import GossipAction
+from world.secrets.constants import GossipAction, SecretLevel, SecretProvenance
 
 # Runtime import (not TYPE_CHECKING): drf-spectacular calls get_type_hints() on the method
 # fields, which evaluates the ``obj: SecretKnowledge`` annotations — they must resolve at runtime.
-from world.secrets.models import SecretKnowledge
+from world.secrets.models import Secret, SecretCategory, SecretKnowledge
 
 UNKNOWN = "Unknown"
 
@@ -133,3 +134,66 @@ class GossipActionSerializer(serializers.Serializer):
         if needs_secret and attrs.get("secret") is None:
             raise serializers.ValidationError({"secret": "Required for plant and suppress."})
         return attrs
+
+
+class SecretCategorySerializer(serializers.ModelSerializer):
+    class Meta:
+        model = SecretCategory
+        fields = ["id", "name", "description"]
+
+
+class AuthoredSecretSerializer(serializers.ModelSerializer):
+    """Staff authoring shape for Secret (#3266). Provenance is fixed server-side."""
+
+    level_display = serializers.CharField(source="get_level_display", read_only=True)
+    provenance_display = serializers.CharField(source="get_provenance_display", read_only=True)
+    category_name = serializers.CharField(source="category.name", read_only=True, default=None)
+    is_act_anchored = serializers.BooleanField(read_only=True)
+
+    class Meta:
+        model = Secret
+        fields = [
+            "id",
+            "subject_sheet",
+            "level",
+            "level_display",
+            "category",
+            "category_name",
+            "content",
+            "consequences",
+            "subject_aware",
+            "provenance",
+            "provenance_display",
+            "is_act_anchored",
+            "created_date",
+            "updated_date",
+        ]
+        read_only_fields = ["provenance", "created_date", "updated_date"]
+
+    def create(self, validated_data: dict) -> Secret:
+        from world.secrets.services import SecretError, author_secret  # noqa: PLC0415
+
+        try:
+            return author_secret(
+                subject_sheet=validated_data["subject_sheet"],
+                provenance=SecretProvenance.GM_AUTHORED,
+                level=validated_data.get("level", SecretLevel.UNCOMMON_KNOWLEDGE),
+                content=validated_data.get("content", ""),
+                category=validated_data.get("category"),
+                consequences=validated_data.get("consequences", ""),
+                subject_aware=validated_data.get("subject_aware", True),
+                author_persona=None,
+            )
+        except SecretError as exc:
+            raise serializers.ValidationError(exc.user_message) from exc
+
+    def update(self, instance: Secret, validated_data: dict) -> Secret:
+        validated_data.pop("subject_sheet", None)  # subject is immutable after mint
+        for field, value in validated_data.items():
+            setattr(instance, field, value)
+        try:
+            instance.full_clean()
+        except DjangoValidationError as exc:
+            raise serializers.ValidationError(exc.message_dict or exc.messages) from exc
+        instance.save()
+        return instance

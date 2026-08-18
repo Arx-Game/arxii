@@ -9,16 +9,18 @@ account's knowledge. Locked partial-knowledge layers render as "Unknown" in the 
 
 from __future__ import annotations
 
+from http import HTTPMethod
 from typing import TYPE_CHECKING
 
 from django.core.exceptions import ValidationError
 from django.db.models import BooleanField, Exists, ExpressionWrapper, OuterRef
 from django_filters.rest_framework import DjangoFilterBackend
 from drf_spectacular.utils import OpenApiParameter, extend_schema
-from rest_framework import status
+from rest_framework import mixins, status, viewsets
+from rest_framework.decorators import action
 from rest_framework.generics import ListAPIView
 from rest_framework.pagination import PageNumberPagination
-from rest_framework.permissions import IsAuthenticated
+from rest_framework.permissions import IsAdminUser, IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.views import APIView
 from rest_framework.viewsets import ReadOnlyModelViewSet
@@ -27,13 +29,15 @@ from world.relationships.models import GrievanceOption, RelationshipTrack
 from world.roster.models import RosterEntry
 from world.secrets.constants import GossipAction
 from world.secrets.filters import KnownSecretFilter
-from world.secrets.models import Secret, SecretKnowledge
+from world.secrets.models import Secret, SecretCategory, SecretKnowledge
 from world.secrets.serializers import (
+    AuthoredSecretSerializer,
     GossipActionSerializer,
     GossipResultSerializer,
     GossipSecretSerializer,
     GrievanceOptionSerializer,
     KnownSecretSerializer,
+    SecretCategorySerializer,
     SecretGrievanceSerializer,
 )
 from world.secrets.services import SecretError, known_secrets_for, register_secret_grievance
@@ -45,6 +49,12 @@ if TYPE_CHECKING:
 
 class SecretsPagination(PageNumberPagination):
     page_size = 50
+
+
+class AuthoredSecretPagination(PageNumberPagination):
+    """Page size for the staff authoring list (#3266) — a smaller, denser admin table."""
+
+    page_size = 20
 
 
 class KnownSecretViewSet(ReadOnlyModelViewSet):
@@ -92,6 +102,50 @@ class KnownSecretViewSet(ReadOnlyModelViewSet):
         if not raw or not raw.isdigit():
             return None
         return RosterEntry.objects.for_account(self.request.user).filter(pk=int(raw)).first()
+
+
+class AuthoredSecretViewSet(
+    mixins.CreateModelMixin,
+    mixins.UpdateModelMixin,
+    mixins.ListModelMixin,
+    mixins.RetrieveModelMixin,
+    viewsets.GenericViewSet,
+):
+    """Staff-only omniscient authoring surface for a character's secrets (#3266).
+
+    Deliberately unscoped by viewer knowledge: access is IsAdminUser. The
+    player-facing knowledge-scoped read stays on KnownSecretViewSet.
+    """
+
+    serializer_class = AuthoredSecretSerializer
+    permission_classes = [IsAdminUser]
+    pagination_class = AuthoredSecretPagination
+    http_method_names = ["get", "post", "patch", "head", "options"]
+
+    def get_queryset(self) -> QuerySet[Secret]:
+        return Secret.objects.select_related("category", "subject_sheet").order_by("created_date")
+
+    def list(self, request: Request, *args: object, **kwargs: object) -> Response:
+        subject = request.query_params.get("subject")  # noqa: use_filterset — required-param gate
+        if not subject or not subject.isdigit():
+            return Response(
+                {"detail": "subject query parameter is required"},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        return super().list(request, *args, **kwargs)
+
+    def filter_queryset(self, queryset: QuerySet[Secret]) -> QuerySet[Secret]:
+        queryset = super().filter_queryset(queryset)
+        subject = self.request.query_params.get("subject")  # noqa: use_filterset — scoping gate
+        if subject and self.action == "list":
+            queryset = queryset.filter(subject_sheet_id=subject)
+        return queryset
+
+    @extend_schema(responses=SecretCategorySerializer(many=True))
+    @action(detail=False, methods=[HTTPMethod.GET], pagination_class=None)
+    def categories(self, request: Request) -> Response:
+        rows = SecretCategory.objects.filter(is_active=True).order_by("name")
+        return Response(SecretCategorySerializer(rows, many=True).data)
 
 
 class GrievanceOptionListView(ListAPIView):

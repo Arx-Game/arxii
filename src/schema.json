@@ -29595,6 +29595,133 @@ paths:
               schema:
                 $ref: '#/components/schemas/SceneDetail'
           description: ''
+  /api/secrets/authored/:
+    get:
+      operationId: secrets_authored_list
+      description: |-
+        Staff-only omniscient authoring surface for a character's secrets (#3266).
+
+        Deliberately unscoped by viewer knowledge: access is IsAdminUser. The
+        player-facing knowledge-scoped read stays on KnownSecretViewSet.
+      parameters:
+      - name: page
+        required: false
+        in: query
+        description: A page number within the paginated result set.
+        schema:
+          type: integer
+      tags:
+      - secrets
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaginatedAuthoredSecretList'
+          description: ''
+    post:
+      operationId: secrets_authored_create
+      description: |-
+        Staff-only omniscient authoring surface for a character's secrets (#3266).
+
+        Deliberately unscoped by viewer knowledge: access is IsAdminUser. The
+        player-facing knowledge-scoped read stays on KnownSecretViewSet.
+      tags:
+      - secrets
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AuthoredSecretRequest'
+        required: true
+      security:
+      - cookieAuth: []
+      responses:
+        '201':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthoredSecret'
+          description: ''
+  /api/secrets/authored/{id}/:
+    get:
+      operationId: secrets_authored_retrieve
+      description: |-
+        Staff-only omniscient authoring surface for a character's secrets (#3266).
+
+        Deliberately unscoped by viewer knowledge: access is IsAdminUser. The
+        player-facing knowledge-scoped read stays on KnownSecretViewSet.
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: A unique integer value identifying this secret.
+        required: true
+      tags:
+      - secrets
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthoredSecret'
+          description: ''
+    patch:
+      operationId: secrets_authored_partial_update
+      description: |-
+        Staff-only omniscient authoring surface for a character's secrets (#3266).
+
+        Deliberately unscoped by viewer knowledge: access is IsAdminUser. The
+        player-facing knowledge-scoped read stays on KnownSecretViewSet.
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: A unique integer value identifying this secret.
+        required: true
+      tags:
+      - secrets
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PatchedAuthoredSecretRequest'
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthoredSecret'
+          description: ''
+  /api/secrets/authored/categories/:
+    get:
+      operationId: secrets_authored_categories_list
+      description: |-
+        Staff-only omniscient authoring surface for a character's secrets (#3266).
+
+        Deliberately unscoped by viewer knowledge: access is IsAdminUser. The
+        player-facing knowledge-scoped read stays on KnownSecretViewSet.
+      tags:
+      - secrets
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/SecretCategory'
+          description: ''
   /api/secrets/gossip/:
     get:
       operationId: secrets_gossip_list
@@ -36552,6 +36679,134 @@ components:
       required:
       - accept
       - offer_id
+    AuthoredSecret:
+      type: object
+      description: Staff authoring shape for Secret (#3266). Provenance is fixed server-side.
+      properties:
+        id:
+          type: integer
+          readOnly: true
+        subject_sheet:
+          type: integer
+          description: The character this secret is about — and its sole owner.
+        level:
+          allOf:
+          - $ref: '#/components/schemas/AuthoredSecretLevelEnum'
+          description: |-
+            How deep/dangerous — narrative weight + default share-scope.
+
+            * `1` - Uncommon Knowledge
+            * `2` - Whispers
+            * `3` - Carefully Kept
+            * `4` - Dangerous Secret
+          minimum: 0
+          maximum: 32767
+        level_display:
+          type: string
+          readOnly: true
+        category:
+          type: integer
+          nullable: true
+          description: What the secret is about. Null = Unknown (not yet placed).
+        category_name:
+          type: string
+          readOnly: true
+        content:
+          type: string
+          description: The secret itself, as narrated. Player- or GM-authored prose.
+        consequences:
+          type: string
+          description: What happens if it surfaces. Blank = Unknown.
+        subject_aware:
+          type: boolean
+          description: 'Whether the subject starts knowing this secret about themselves.
+            False for subject-unaware truths (#2062 — e.g. hidden parentage a Misbegotten
+            hasn''t discovered): excluded from the subject''s own-secrets shelf until
+            a SecretKnowledge row grants it.'
+        provenance:
+          allOf:
+          - $ref: '#/components/schemas/ProvenanceEnum'
+          readOnly: true
+          description: |-
+            Where the secret came from (drives the anchor rule + OOC attribution).
+
+            * `gm` - GM/Staff authored (canon)
+            * `action` - Action-anchored (minted by play)
+            * `flavor` - Player flavor (unverified)
+            * `accusation` - Accusation (player-authored, consent-gated, weight-bearing)
+        provenance_display:
+          type: string
+          readOnly: true
+        is_act_anchored:
+          type: boolean
+          readOnly: true
+        created_date:
+          type: string
+          format: date-time
+          readOnly: true
+        updated_date:
+          type: string
+          format: date-time
+          readOnly: true
+      required:
+      - category_name
+      - created_date
+      - id
+      - is_act_anchored
+      - level_display
+      - provenance
+      - provenance_display
+      - subject_sheet
+      - updated_date
+    AuthoredSecretLevelEnum:
+      enum:
+      - 1
+      - 2
+      - 3
+      - 4
+      type: integer
+      description: |-
+        * `1` - Uncommon Knowledge
+        * `2` - Whispers
+        * `3` - Carefully Kept
+        * `4` - Dangerous Secret
+    AuthoredSecretRequest:
+      type: object
+      description: Staff authoring shape for Secret (#3266). Provenance is fixed server-side.
+      properties:
+        subject_sheet:
+          type: integer
+          description: The character this secret is about — and its sole owner.
+        level:
+          allOf:
+          - $ref: '#/components/schemas/AuthoredSecretLevelEnum'
+          description: |-
+            How deep/dangerous — narrative weight + default share-scope.
+
+            * `1` - Uncommon Knowledge
+            * `2` - Whispers
+            * `3` - Carefully Kept
+            * `4` - Dangerous Secret
+          minimum: 0
+          maximum: 32767
+        category:
+          type: integer
+          nullable: true
+          description: What the secret is about. Null = Unknown (not yet placed).
+        content:
+          type: string
+          description: The secret itself, as narrated. Player- or GM-authored prose.
+        consequences:
+          type: string
+          description: What happens if it surfaces. Blank = Unknown.
+        subject_aware:
+          type: boolean
+          description: 'Whether the subject starts knowing this secret about themselves.
+            False for subject-unaware truths (#2062 — e.g. hidden parentage a Misbegotten
+            hasn''t discovered): excluded from the subject''s own-secrets shelf until
+            a SecretKnowledge row grants it.'
+      required:
+      - subject_sheet
     AvailableEnhancement:
       type: object
       description: Read-only serializer for AvailableEnhancement (technique enhancement
@@ -54569,6 +54824,29 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/AssistantGMClaim'
+    PaginatedAuthoredSecretList:
+      type: object
+      required:
+      - count
+      - results
+      properties:
+        count:
+          type: integer
+          example: 123
+        next:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=4
+        previous:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=2
+        results:
+          type: array
+          items:
+            $ref: '#/components/schemas/AuthoredSecret'
     PaginatedBattleListList:
       type: object
       required:
@@ -59026,6 +59304,41 @@ components:
         * `FORMATION` - Formation (all must accept, ≥2)
         * `INDUCTION` - Induction (majority of respondents)
         * `BILATERAL` - Bilateral (exactly 2, both must accept)
+    PatchedAuthoredSecretRequest:
+      type: object
+      description: Staff authoring shape for Secret (#3266). Provenance is fixed server-side.
+      properties:
+        subject_sheet:
+          type: integer
+          description: The character this secret is about — and its sole owner.
+        level:
+          allOf:
+          - $ref: '#/components/schemas/AuthoredSecretLevelEnum'
+          description: |-
+            How deep/dangerous — narrative weight + default share-scope.
+
+            * `1` - Uncommon Knowledge
+            * `2` - Whispers
+            * `3` - Carefully Kept
+            * `4` - Dangerous Secret
+          minimum: 0
+          maximum: 32767
+        category:
+          type: integer
+          nullable: true
+          description: What the secret is about. Null = Unknown (not yet placed).
+        content:
+          type: string
+          description: The secret itself, as narrated. Player- or GM-authored prose.
+        consequences:
+          type: string
+          description: What happens if it surfaces. Blank = Unknown.
+        subject_aware:
+          type: boolean
+          description: 'Whether the subject starts knowing this secret about themselves.
+            False for subject-unaware truths (#2062 — e.g. hidden parentage a Misbegotten
+            hasn''t discovered): excluded from the subject''s own-secrets shelf until
+            a SecretKnowledge row grants it.'
     PatchedBeatRequest:
       type: object
       description: Full serializer for Beat including all Phase 2 predicate config
@@ -64025,6 +64338,18 @@ components:
         * `elite` - elite
         * `boss` - boss
         * `hero_killer` - hero_killer
+    ProvenanceEnum:
+      enum:
+      - gm
+      - action
+      - flavor
+      - accusation
+      type: string
+      description: |-
+        * `gm` - GM/Staff authored (canon)
+        * `action` - Action-anchored (minted by play)
+        * `flavor` - Player flavor (unverified)
+        * `accusation` - Accusation (player-authored, consent-gated, weight-bearing)
     PublicFeedItem:
       type: object
       description: One feed row — a deed or a scandal. Read-only; serializes a ``PublicFeedItem``
@@ -67052,6 +67377,22 @@ components:
         * `summer` - Summer
         * `autumn` - Autumn
         * `winter` - Winter
+    SecretCategory:
+      type: object
+      properties:
+        id:
+          type: integer
+          readOnly: true
+        name:
+          type: string
+          description: Category label (player-visible).
+          maxLength: 60
+        description:
+          type: string
+          description: Staff note on what belongs here.
+      required:
+      - id
+      - name
     ServiceOffer:
       type: object
       description: 'Shop-directory row: who crafts what, where — execution requires

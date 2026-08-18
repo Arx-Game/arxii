@@ -1,14 +1,24 @@
-/** React Query hooks for the secret tab (#1334) + the grievance flow (#1429). */
+/** React Query hooks for the secret tab (#1334), the grievance flow (#1429), and staff
+ * authoring (#3266). */
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 
 import {
+  createAuthoredSecret,
+  getAuthoredSecrets,
+  getSecretCategories,
   gossipAction,
   listGossip,
   listGrievanceOptions,
   listKnownSecrets,
   submitGrievance,
+  updateAuthoredSecret,
 } from './api';
-import type { GossipActionPayload, SubmitGrievancePayload } from './api';
+import type {
+  AuthorSecretPayload,
+  GossipActionPayload,
+  SubmitGrievancePayload,
+  UpdateAuthoredSecretPayload,
+} from './api';
 
 export const secretKeys = {
   knownAll: ['secrets', 'known'] as const,
@@ -68,6 +78,56 @@ export function useGossipActionMutation() {
     mutationFn: (payload: GossipActionPayload) => gossipAction(payload),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: gossipKeys.all });
+    },
+  });
+}
+
+export const authoredSecretKeys = {
+  all: ['secrets', 'authored'] as const,
+  bySubject: (subjectId: number) => [...authoredSecretKeys.all, subjectId] as const,
+  categories: ['secrets', 'authored-categories'] as const,
+};
+
+/** Staff-only omniscient view of a character's authored secrets (#3266). */
+export function useAuthoredSecretsQuery(subjectId: number) {
+  return useQuery({
+    queryKey: authoredSecretKeys.bySubject(subjectId),
+    queryFn: () => getAuthoredSecrets(subjectId),
+    enabled: Number.isFinite(subjectId),
+  });
+}
+
+/** The staff-authored category catalog a secret's category select is fed by (#3266). */
+export function useSecretCategoriesQuery() {
+  return useQuery({
+    queryKey: authoredSecretKeys.categories,
+    queryFn: getSecretCategories,
+  });
+}
+
+/** Staff-mint a new secret; refetches the subject's authored list on success (#3266). */
+export function useCreateAuthoredSecretMutation() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (payload: AuthorSecretPayload) => createAuthoredSecret(payload),
+    onSuccess: (secret) => {
+      queryClient.invalidateQueries({
+        queryKey: authoredSecretKeys.bySubject(secret.subject_sheet),
+      });
+    },
+  });
+}
+
+/** Staff-edit an authored secret; refetches the subject's authored list on success (#3266). */
+export function useUpdateAuthoredSecretMutation() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, payload }: { id: number; payload: UpdateAuthoredSecretPayload }) =>
+      updateAuthoredSecret(id, payload),
+    onSuccess: (secret) => {
+      queryClient.invalidateQueries({
+        queryKey: authoredSecretKeys.bySubject(secret.subject_sheet),
+      });
     },
   });
 }

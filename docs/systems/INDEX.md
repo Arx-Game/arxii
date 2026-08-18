@@ -1494,6 +1494,13 @@ secret-tab display) + the #1269 distinction migration + the **act-anchor cross-l
   The evidence/frame/nullify/denounce/case-file machinery is justice-side (see Justice)
 - **Discovery:** secrets are a `Clue` `target_kind` (`SECRET` + `target_secret` FK) — found
   through the same Search / `acquire_clue` loop; `grant_clue_target` teaches the fact
+- **Staff authoring (#3266):** `AuthoredSecretViewSet` at `/api/secrets/authored/`
+  (`IsAdminUser`, no player IC scope): list (`?subject=` required), create, patch, and a
+  `categories` action; no delete (secrets are story data). `AuthoredSecretSerializer` fixes
+  provenance server-side (`GM_AUTHORED` + `author_persona=None`) and exposes `author_secret`'s
+  `subject_aware` kwarg; `SecretVictim`/`archetypes` (reputation) stay admin-only, off the API.
+  Frontend: `StaffSecretsPanel` + `AuthorSecretDialog`, staff-only-mounted on
+  `CharacterSheetPage`.
 - **Codex boundary:** cut on *authorship* — Codex = canon lore (lore-authority, reviewed);
   Secret = self-serve hidden fact about a concrete entity
 - **Source:** `src/world/secrets/`
