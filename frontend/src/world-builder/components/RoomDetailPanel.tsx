@@ -39,12 +39,15 @@ import { Switch } from '@/components/ui/switch';
 import { Textarea } from '@/components/ui/textarea';
 
 import { ROOM_ENCLOSURES } from '../types';
-import type { WorldBuilderExit, WorldBuilderRoom } from '../types';
+import type { WorldBuilderAreaManager, WorldBuilderExit, WorldBuilderRoom } from '../types';
+import { RoomAuthoringSections } from './RoomAuthoringSections';
 import { PlaceClueDialog } from './PlaceClueDialog';
 import { PlacePortalAnchorDialog } from './PlacePortalAnchorDialog';
 
 export interface RoomDetailPanelProps {
   room: WorldBuilderRoom;
+  /** Panel pick-lists from the manager payload (#3269); absent on the story palette. */
+  catalogs?: WorldBuilderAreaManager['catalogs'];
   /** Every exit in the area; the panel filters to this room's outgoing ones. */
   exits: WorldBuilderExit[];
   /** Keyed generically (not `WorldBuilderActionKey`) so the story palette's own action-key union type-checks too (#2450). */
@@ -62,6 +65,7 @@ export interface RoomDetailPanelProps {
 
 export function RoomDetailPanel({
   room,
+  catalogs,
   exits,
   runAction,
   onLinkRooms,
@@ -352,6 +356,10 @@ export function RoomDetailPanel({
             </AlertDialogContent>
           </AlertDialog>
         </div>
+      )}
+
+      {!isStory && catalogs && (
+        <RoomAuthoringSections room={room} catalogs={catalogs} runAction={runAction} />
       )}
 
       <div className="flex flex-col gap-2 rounded-md border border-destructive/40 p-2">

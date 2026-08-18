@@ -7,6 +7,7 @@ import type {
   WorldBuilderActionKey,
   WorldBuilderArea,
   WorldBuilderAreaManager,
+  WorldBuilderRoomDetail,
   WorldBuilderRoomHit,
 } from './types';
 
@@ -41,6 +42,12 @@ export function fetchWorldBuilderArea(areaId: number): Promise<WorldBuilderArea>
 
 export function fetchAreaManager(areaId: number): Promise<WorldBuilderAreaManager> {
   return getJson(`/api/world-builder/areas/${areaId}/manager/`, 'Failed to load the area map.');
+}
+
+/** Selection-time room detail (#3269): exit profiles, comfort, ambient rows. */
+export function fetchRoomDetail(roomId: number): Promise<WorldBuilderRoomDetail> {
+  const qs = new URLSearchParams({ room_id: String(roomId) }).toString();
+  return getJson(`/api/world-builder/areas/room-detail/?${qs}`, 'Failed to load room detail.');
 }
 
 /** Cross-area room search (#3269): matches room key or fixture key, capped at 50. */

@@ -6,6 +6,7 @@ import {
   fetchAreaManager,
   fetchWorldBuilderArea,
   fetchWorldBuilderAreas,
+  fetchRoomDetail,
   searchWorldBuilderRooms,
   type AreaListParams,
 } from './api';
@@ -43,6 +44,16 @@ export function useAreaManagerQuery(areaId: number | null | undefined) {
     queryFn: () => fetchAreaManager(areaId!),
     enabled: areaId != null,
     staleTime: 15_000,
+  });
+}
+
+/** Selection-time room detail (#3269); refetches with the manager payload. */
+export function useRoomDetailQuery(roomId: number | null) {
+  return useQuery({
+    queryKey: [...worldBuilderKeys.all, 'room-detail', roomId ?? 0] as const,
+    queryFn: () => fetchRoomDetail(roomId!),
+    enabled: roomId != null,
+    staleTime: 10_000,
   });
 }
 
@@ -94,6 +105,7 @@ export function useWorldBuilderAction(characterId: number, areaId: number | null
       if (areaId != null) {
         queryClient.invalidateQueries({ queryKey: worldBuilderKeys.manager(areaId) });
       }
+      queryClient.invalidateQueries({ queryKey: [...worldBuilderKeys.all, 'room-detail'] });
       if (AREA_TREE_KEYS.includes(key)) {
         queryClient.invalidateQueries({ queryKey: [...worldBuilderKeys.all, 'areas'] });
         queryClient.invalidateQueries({ queryKey: [...worldBuilderKeys.all, 'area'] });

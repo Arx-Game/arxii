@@ -54,6 +54,40 @@ export type WorldBuilderActionKey =
   | 'staff_place_portal_anchor'
   | 'staff_remove_portal_anchor';
 
+/** Selection-time room detail (#3269) — mirrors WorldBuilderRoomDetailSerializer. */
+export interface WorldBuilderRoomDetail {
+  id: number;
+  exits: {
+    id: number;
+    name: string;
+    to_room_id: number | null;
+    kind: string;
+    is_open: boolean;
+    aliases: string[];
+  }[];
+  comfort: {
+    level: number;
+    points: number;
+    amenity: number;
+    axes: {
+      key: string;
+      pressure: number;
+      mitigation: number;
+      net: number;
+      sheltered: boolean;
+    }[];
+  };
+  ambient_lines: { id: number; arriver_body: string; bystander_body: string }[];
+  ambient_emits: {
+    id: number;
+    key: string;
+    text: string;
+    gate_stat_key: string;
+    gate_min: number | null;
+    gate_max: number | null;
+  }[];
+}
+
 /** One cross-area room-search hit (#3269) — mirrors WorldBuilderRoomHitSerializer. */
 export interface WorldBuilderRoomHit {
   id: number;

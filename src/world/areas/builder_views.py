@@ -258,6 +258,24 @@ def _clue_and_anchor_sidecars(
     return clues_by_room, triggers_by_room, anchors_by_room
 
 
+def _authoring_catalogs() -> dict:
+    """Pick-lists the Phase B panel sections need (#3269) — one query each."""
+    from evennia_extensions.models import RoomSizeTier  # noqa: PLC0415
+    from world.areas.positioning.models import PositionBlueprint  # noqa: PLC0415
+    from world.character_creation.models import Beginnings, StartingArea  # noqa: PLC0415
+    from world.npc_services.models import NPCRole  # noqa: PLC0415
+    from world.room_features.models import RoomFeatureKind  # noqa: PLC0415
+
+    return {
+        "feature_kinds": list(RoomFeatureKind.objects.values_list("name", flat=True)),
+        "npc_roles": list(NPCRole.objects.values_list("name", flat=True)),
+        "blueprints": list(PositionBlueprint.objects.values_list("name", flat=True)),
+        "size_tiers": list(RoomSizeTier.objects.values_list("name", flat=True)),
+        "starting_areas": [{"id": sa.pk, "name": sa.name} for sa in StartingArea.objects.all()],
+        "beginnings": [{"id": b.pk, "name": b.name} for b in Beginnings.objects.all()],
+    }
+
+
 def area_manager_payload(area: Area) -> dict:
     """Area + all rooms + exits for the world-builder/story-builder manager canvas.
 
@@ -292,6 +310,7 @@ def area_manager_payload(area: Area) -> dict:
 
     return {
         "area": area,
+        "catalogs": _authoring_catalogs(),
         "rooms": [
             {
                 "id": p.objectdb_id,
@@ -458,10 +477,33 @@ class WorldBuilderViewSet(viewsets.ReadOnlyModelViewSet):
             # areas_areaclosure is absent on the SQLite fast tier (known gap;
             # CI's PG parity is the gate) — degrade to a neutral block.
             comfort = {"level": 5, "points": 0, "amenity": 0, "axes": []}
+        from world.narrative.models import AmbientEmit, AmbientEmoteLine  # noqa: PLC0415
+
+        ambient_lines = [
+            {
+                "id": line.pk,
+                "arriver_body": line.arriver_body,
+                "bystander_body": line.bystander_body,
+            }
+            for line in AmbientEmoteLine.objects.filter(room_profile=profile)
+        ]
+        ambient_emits = [
+            {
+                "id": emit.pk,
+                "key": emit.key or "",
+                "text": emit.text,
+                "gate_stat_key": emit.gate_stat_key,
+                "gate_min": emit.gate_min,
+                "gate_max": emit.gate_max,
+            }
+            for emit in AmbientEmit.objects.filter(room_profile=profile)
+        ]
         payload = {
             "id": profile.objectdb_id,
             "exits": exits,
             "comfort": comfort,
+            "ambient_lines": ambient_lines,
+            "ambient_emits": ambient_emits,
         }
         return Response(WorldBuilderRoomDetailSerializer(payload).data)
 

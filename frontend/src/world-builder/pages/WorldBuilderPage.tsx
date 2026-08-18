@@ -306,6 +306,7 @@ export function WorldBuilderPage() {
             {selectedRoom ? (
               <RoomDetailPanel
                 room={selectedRoom}
+                catalogs={manager?.catalogs}
                 exits={manager?.exits ?? []}
                 runAction={runAction}
                 onLinkRooms={() => setLinkOpen(true)}

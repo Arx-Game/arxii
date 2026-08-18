@@ -181,12 +181,45 @@ class WorldBuilderComfortSerializer(serializers.Serializer):
     axes = WorldBuilderComfortAxisSerializer(many=True)
 
 
+class WorldBuilderAmbientLineSerializer(serializers.Serializer):
+    id = serializers.IntegerField()
+    arriver_body = serializers.CharField(allow_blank=True)
+    bystander_body = serializers.CharField(allow_blank=True)
+
+
+class WorldBuilderAmbientEmitSerializer(serializers.Serializer):
+    id = serializers.IntegerField()
+    key = serializers.CharField(allow_blank=True)
+    text = serializers.CharField()
+    gate_stat_key = serializers.CharField(allow_blank=True)
+    gate_min = serializers.IntegerField(allow_null=True)
+    gate_max = serializers.IntegerField(allow_null=True)
+
+
+class WorldBuilderIdNameSerializer(serializers.Serializer):
+    id = serializers.IntegerField()
+    name = serializers.CharField()
+
+
+class WorldBuilderCatalogsSerializer(serializers.Serializer):
+    """Panel pick-lists (#3269)."""
+
+    feature_kinds = serializers.ListField(child=serializers.CharField())
+    npc_roles = serializers.ListField(child=serializers.CharField())
+    blueprints = serializers.ListField(child=serializers.CharField())
+    size_tiers = serializers.ListField(child=serializers.CharField())
+    starting_areas = WorldBuilderIdNameSerializer(many=True)
+    beginnings = WorldBuilderIdNameSerializer(many=True)
+
+
 class WorldBuilderRoomDetailSerializer(serializers.Serializer):
     """Selection-time room detail (#3269): exit profiles + comfort breakdown."""
 
     id = serializers.IntegerField()
     exits = WorldBuilderExitDetailSerializer(many=True)
     comfort = WorldBuilderComfortSerializer()
+    ambient_lines = WorldBuilderAmbientLineSerializer(many=True)
+    ambient_emits = WorldBuilderAmbientEmitSerializer(many=True)
 
 
 class WorldBuilderRoomSerializer(serializers.Serializer):
@@ -248,5 +281,6 @@ class WorldBuilderAreaManagerSerializer(serializers.Serializer):
     """The full staff-only area-manager payload: area header + rooms + exits."""
 
     area = WorldBuilderAreaSerializer()
+    catalogs = WorldBuilderCatalogsSerializer()
     rooms = WorldBuilderRoomSerializer(many=True)
     exits = WorldBuilderExitSerializer(many=True)
