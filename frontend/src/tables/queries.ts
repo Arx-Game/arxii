@@ -18,7 +18,9 @@ import type {
   BulletinPostUpdateBody,
   BulletinReplyCreateBody,
   BulletinReplyUpdateBody,
+  GMApplicationAction,
   GMApplicationCreateBody,
+  GMRosterInviteCreateBody,
   GMTableCreateBody,
   GMTableMembershipCreateBody,
   GMTableTransferBody,
@@ -61,6 +63,8 @@ export const tablesKeys = {
     params === undefined
       ? ([...TABLES_ROOT, 'bulletin-replies'] as const)
       : ([...TABLES_ROOT, 'bulletin-replies', params] as const),
+  invites: () => [...TABLES_ROOT, 'invites'] as const,
+  gmQueue: () => [...TABLES_ROOT, 'gm-queue'] as const,
 };
 
 // ---------------------------------------------------------------------------
@@ -318,5 +322,78 @@ export function useDeleteBulletinReply() {
 export function useCreateGMApplication() {
   return useMutation({
     mutationFn: (data: GMApplicationCreateBody) => api.createGMApplication(data),
+  });
+}
+
+// ---------------------------------------------------------------------------
+// GM roster invite hooks (#3268)
+// ---------------------------------------------------------------------------
+
+export function useInvites() {
+  return useQuery({
+    queryKey: tablesKeys.invites(),
+    queryFn: () => api.getTableInvites(),
+    throwOnError: true,
+  });
+}
+
+export function useMintInvite() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (data: GMRosterInviteCreateBody) => api.mintInvite(data),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: tablesKeys.invites() }).catch(() => {});
+    },
+  });
+}
+
+export function useRevokeInvite() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (id: number) => api.revokeInvite(id),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: tablesKeys.invites() }).catch(() => {});
+    },
+  });
+}
+
+/**
+ * POST /api/gm/invites/claim/ (#3268). No cache to invalidate — the invites
+ * list is creator-scoped (the claimant isn't the invite's creator) and the
+ * new `RosterApplication` isn't surfaced by any query this claimant can see.
+ */
+export function useClaimInvite() {
+  return useMutation({
+    mutationFn: (code: string) => api.claimInvite(code),
+  });
+}
+
+// ---------------------------------------------------------------------------
+// GM application queue hooks (#3268)
+// ---------------------------------------------------------------------------
+
+export function useGMQueue() {
+  return useQuery({
+    queryKey: tablesKeys.gmQueue(),
+    queryFn: () => api.getGMQueue(),
+    throwOnError: true,
+  });
+}
+
+export function useActionGMApplication() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({
+      id,
+      action,
+      reviewNotes,
+    }: {
+      id: number;
+      action: GMApplicationAction;
+      reviewNotes?: string;
+    }) => api.actionGMApplication(id, action, reviewNotes),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: tablesKeys.gmQueue() }).catch(() => {});
+    },
   });
 }

@@ -1,4 +1,4 @@
-"""Endpoint tests for the GM character-finalize flow (#1506).
+"""Endpoint tests for the GM character-finalize flow (#1506, hardened #3268).
 
 POST /api/character-creation/drafts/<pk>/finalize-gm/ — a player-GM finalizes a draft
 onto the Available roster for a table they own, stamped with GM_TABLE provenance.
@@ -6,36 +6,36 @@ onto the Available roster for a table they own, stamped with GM_TABLE provenance
 
 from __future__ import annotations
 
+from unittest.mock import patch
+
 from rest_framework import status
 from rest_framework.test import APITestCase
 
-from world.character_creation.factories import CharacterDraftFactory
+from world.character_creation.models import CharacterDraft
+from world.character_creation.tests.finalization_fixtures import FinalizationTestMixin
 from world.gm.factories import GMProfileFactory, GMTableFactory
-from world.magic.factories import TraditionFactory
+from world.magic.exceptions import GiftResonanceUnresolvable
 from world.roster.models import RosterEntry
 from world.roster.models.choices import CreationProvenance, RosterType
-from world.roster.seeds import ensure_rosters
 
 
-class GMFinalizeViewTests(APITestCase):
+class GMFinalizeViewTests(FinalizationTestMixin, APITestCase):
     @classmethod
     def setUpTestData(cls) -> None:
-        # finalize_gm_character() looks up a seeded roster by roster_type (#2728).
-        ensure_rosters()
+        cls._setup_finalization_base(cls, prefix="GM Finalize", height_min=700, height_max=800)
         cls.gm = GMProfileFactory()
         cls.table = GMTableFactory(gm=cls.gm)
 
     def _url(self, draft) -> str:
         return f"/api/character-creation/drafts/{draft.pk}/finalize-gm/"
 
-    def _draft(self, account=None):
-        return CharacterDraftFactory(
-            account=account or self.gm.account,
-            # CharacterTradition creation is unconditional in finalize_magic_data
-            # (#2426) — a tradition is required even for GM-created drafts.
-            selected_tradition=TraditionFactory(),
-            draft_data={"first_name": "Aurelius"},
-        )
+    def _draft(self, account=None, **extra_draft_data):
+        # _create_base_draft (FinalizationTestMixin) builds a fully submittable
+        # draft, reusing the same CG prerequisites/tradition/gift/technique/resonance
+        # fixtures the service-level finalization tests use (#3268 Decision 3) —
+        # finalize_gm now gates on draft.can_submit() same as add_to_roster.
+        self.account = account or self.gm.account
+        return self._create_base_draft(first_name="Aurelius", **extra_draft_data)
 
     def test_owner_finalizes_with_gm_table_provenance(self) -> None:
         draft = self._draft()
@@ -83,3 +83,59 @@ class GMFinalizeViewTests(APITestCase):
             format="json",
         )
         self.assertEqual(response.status_code, status.HTTP_404_NOT_FOUND)
+
+    def test_incomplete_draft_returns_400_with_incomplete_stages_detail(self) -> None:
+        """An incomplete draft is rejected before any mutation (#3268) — mirrors the
+        completeness gate finalize_character (and thus add_to_roster) already enforces.
+        """
+        draft = CharacterDraft.objects.create(
+            account=self.gm.account,
+            selected_area=self.area,
+            selected_beginnings=self.beginnings,
+            selected_species=self.species,
+            selected_gender=self.gender,
+            age=25,
+            birthday_month=6,
+            birthday_day=12,
+            height_band=self.height_band,
+            height_inches=750,
+            build=self.build,
+            draft_data={
+                "first_name": "Half Finished",
+                "lineage_is_orphan": True,
+                "tarot_card_name": self.tarot_card.name,
+                "tarot_reversed": False,
+                "path_skills_complete": True,
+                "traits_complete": True,
+                "magic_complete": True,
+                # No stats field - attributes stage incomplete
+            },
+        )
+        self.client.force_authenticate(user=self.gm.account)
+        response = self.client.post(
+            self._url(draft),
+            {"target_table": self.table.pk, "story_title": "Unfinished Business"},
+            format="json",
+        )
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST, response.content)
+        self.assertIn("incomplete stages", response.data["detail"])
+
+    def test_unresolvable_gift_resonance_returns_400_not_500(self) -> None:
+        """A GiftResonanceUnresolvable from finalize_gm_character must not surface as an
+        unhandled 500 — mirrors add_to_roster's #2971 handling exactly.
+        """
+        draft = self._draft()
+        self.client.force_authenticate(user=self.gm.account)
+
+        with patch(
+            "world.character_creation.services.finalize_gm_character",
+            side_effect=GiftResonanceUnresolvable,
+        ):
+            response = self.client.post(
+                self._url(draft),
+                {"target_table": self.table.pk, "story_title": "Unresolvable Resonance"},
+                format="json",
+            )
+
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST, response.content)
+        self.assertEqual(response.data["detail"], "Character creation failed.")

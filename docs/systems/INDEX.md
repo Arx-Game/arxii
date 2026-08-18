@@ -2122,7 +2122,17 @@ GM at a given level may author (#2000, ADR-0097).
   staff-only actions), `GMTableMembershipViewSet`, `GMRosterInviteViewSet`,
   `GMApplicationQueueView`/`GMApplicationActionView` (a GM's own pending-application
   queue), `GMInviteClaimView`, `DemandRansomView`, `GMSummonOfferViewSet`
-  (`/api/gm/summon-offers/`, read-only, #3071 — see "GM summon" below)
+  (`/api/gm/summon-offers/`, read-only, #3071 — see "GM summon" below). **UI-wired
+  (#3268):** the invite/application group (`GMRosterInviteViewSet`,
+  `GMApplicationQueueView`/`GMApplicationActionView`) renders in `RecruitmentTab` on
+  `frontend/src/tables/pages/TableDetailPage.tsx`; `GMInviteClaimView` renders in
+  `frontend/src/tables/pages/ClaimInvitePage.tsx` (route `/invites/claim`); the
+  `character_creation` app's `finalize-gm` draft action renders in
+  `FinalizeForTableDialog` off the CG Review stage (see character_creation.md).
+  `GMDashboardView` (`GET /api/gm/dashboard/`) payload gained `pending_applications`
+  (count from `gm_application_queue(gm)`) and `open_invites` (this GM's unclaimed,
+  unexpired `GMRosterInvite` rows) as the tile source for those same recruitment
+  surfaces (#3268).
 - **Telnet:** `CmdGMTable` (`gmtable`) — table admin parity. `CmdGMTrust` (`gmtrust`,
   #2000) — `gmtrust show [account]` (self-service; naming another is staff-only),
   `gmtrust evidence <account>` (staff-only), `gmtrust promote <account>=<level>

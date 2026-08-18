@@ -188,3 +188,78 @@ export interface BulletinReplyCreateBody {
 export interface BulletinReplyUpdateBody {
   body: string;
 }
+
+// ---------------------------------------------------------------------------
+// GM roster invites (#3268) — hand-defined because the generated schema does
+// not yet reflect GMRosterInviteSerializer's shape.
+// Mirrors world/gm/serializers.py's GMRosterInviteSerializer.
+// ---------------------------------------------------------------------------
+
+export interface GMRosterInvite {
+  readonly id: number;
+  /** PK of the RosterEntry this invite grants. */
+  roster_entry: number;
+  readonly code: string;
+  /** PK of the creating GMProfile. */
+  readonly created_by: number;
+  readonly created_at: string;
+  expires_at: string | null;
+  is_public: boolean;
+  invited_email: string;
+  readonly claimed_at: string | null;
+  /** PK of the claiming AccountDB, or null if unclaimed. */
+  readonly claimed_by: number | null;
+  readonly claimed_username: string | null;
+}
+
+export interface GMRosterInviteCreateBody {
+  roster_entry: number;
+  expires_at?: string | null;
+  is_public?: boolean;
+  invited_email?: string;
+}
+
+export interface PaginatedGMRosterInvites {
+  count: number;
+  next: string | null;
+  previous: string | null;
+  results: GMRosterInvite[];
+}
+
+/**
+ * 201 response from POST /api/gm/invites/claim/ — mirrors
+ * `GMInviteClaimView`. Only the new `RosterApplication`'s pk; the claimed
+ * roster entry/character aren't echoed back, so a claim success view can
+ * only link somewhere generic (e.g. `/roster`), not the specific entry.
+ */
+export interface GMInviteClaimResponse {
+  application_id: number;
+}
+
+// ---------------------------------------------------------------------------
+// GM application queue (#3268) — hand-defined; mirrors
+// GMApplicationQueueSerializer. RosterApplication status values are
+// pending/approved/denied/withdrawn (world/roster/models/choices.py's
+// ApplicationStatus), but the queue endpoint only ever returns pending rows.
+// ---------------------------------------------------------------------------
+
+export interface GMQueueApplication {
+  readonly id: number;
+  /** PK of the character (ObjectDB) applied for. */
+  readonly character: number;
+  readonly character_key: string;
+  readonly applicant_username: string;
+  readonly status: string;
+  readonly applied_date: string;
+  readonly application_text: string;
+}
+
+export interface PaginatedGMQueueApplications {
+  count: number;
+  next: string | null;
+  previous: string | null;
+  results: GMQueueApplication[];
+}
+
+/** action is validated server-side against GMApplicationActionSerializer.APPROVE/DENY. */
+export type GMApplicationAction = 'approve' | 'deny';

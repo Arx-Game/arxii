@@ -49,6 +49,8 @@ const mockDashboard = {
     beats_completed_by_risk: {},
     last_active_at: '2026-07-08T00:00:00Z',
   },
+  pending_applications: 3,
+  open_invites: 2,
 };
 
 describe('GMDashboardPage', () => {
@@ -65,6 +67,27 @@ describe('GMDashboardPage', () => {
     });
     expect(screen.getByText('Test Table')).toBeInTheDocument();
     expect(screen.getByText('gm')).toBeInTheDocument();
+  });
+
+  it('renders the pending applications and open invites tiles, linking to /tables (#3268)', async () => {
+    vi.mocked(apiFetch).mockResolvedValueOnce({
+      ok: true,
+      json: () => Promise.resolve(mockDashboard),
+    } as Response);
+
+    render(withProviders(<GMDashboardPage />));
+
+    await waitFor(() => {
+      expect(screen.getByText('GM Dashboard')).toBeInTheDocument();
+    });
+
+    const applicationsTile = screen.getByTestId('pending-applications-tile');
+    expect(applicationsTile).toHaveTextContent('3');
+    expect(applicationsTile).toHaveAttribute('href', '/tables');
+
+    const invitesTile = screen.getByTestId('open-invites-tile');
+    expect(invitesTile).toHaveTextContent('2');
+    expect(invitesTile).toHaveAttribute('href', '/tables');
   });
 
   it('renders not-a-GM message on 403', async () => {

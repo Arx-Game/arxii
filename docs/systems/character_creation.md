@@ -252,7 +252,14 @@ by `ty`'s `invalid-method-override`). The applicant's email comes from `DraftApp
 - `GET /api/character-creation/drafts/{id}/cg-points/` - CG points breakdown
 - `POST /api/character-creation/drafts/{id}/select-tradition/` - Select/clear tradition
 - `POST /api/character-creation/drafts/{id}/add-to-roster/` - Staff: finalize directly to roster (STAFF provenance)
-- `POST /api/character-creation/drafts/{id}/finalize-gm/` - Player-GM: finalize onto the Available roster for a table they own (GM_TABLE provenance; body `target_table`, `story_title`, optional `story_description`) (#1506)
+- `POST /api/character-creation/drafts/{id}/finalize-gm/` - Player-GM: finalize onto the Available roster for a table they own (GM_TABLE provenance; body `target_table`, `story_title`, optional `story_description`) (#1506). Gated by
+  `require_draft_complete` (#3268), the same completeness check `finalize_character`
+  applies at submit, now factored out so `add-to-roster` and `finalize-gm` share it
+  instead of each re-deriving stage completion. A 400 with `{"detail": "Cannot finalize:
+  incomplete stages: <label>, ..."}` means the draft isn't ready; a
+  `GiftResonanceUnresolvable` from `finalize_gm_character` is caught the same way
+  `add-to-roster` catches it (logged, `{"detail": "Character creation failed."}`, 400)
+  rather than surfacing a 500.
 
 ### Magic (Gift/Technique Selection, #2426)
 - `GET /api/character-creation/gifts/?draft_id=X` - List gifts pickable for the draft's chosen tradition + path

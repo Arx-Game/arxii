@@ -7,6 +7,7 @@
  *  - Stories: role-aware story list
  *  - Members: role-aware member roster
  *  - Bulletin: placeholder ("Bulletin board coming soon")
+ *  - Recruitment (GM/staff only, #3268): roster invites + application queue
  *
  * GM/staff viewers see all content + admin actions.
  * Member/guest viewers see scoped content and no admin actions.
@@ -30,6 +31,7 @@ import { RemoveFromTableDialog } from '../components/RemoveFromTableDialog';
 import { LeaveTableDialog } from '../components/LeaveTableDialog';
 import { ArchiveTableDialog } from '../components/ArchiveTableDialog';
 import { TableBulletin } from '../components/TableBulletin';
+import { RecruitmentTab } from '../components/RecruitmentTab';
 
 // ---------------------------------------------------------------------------
 // Inner detail (inside error boundary)
@@ -161,6 +163,7 @@ function TableDetailInner({ tableId }: { tableId: number }) {
             <TabsTrigger value="stories">Stories</TabsTrigger>
             <TabsTrigger value="members">Members</TabsTrigger>
             <TabsTrigger value="bulletin">Bulletin</TabsTrigger>
+            {isGMOrStaff && <TabsTrigger value="recruitment">Recruitment</TabsTrigger>}
           </TabsList>
         </div>
 
@@ -198,6 +201,12 @@ function TableDetailInner({ tableId }: { tableId: number }) {
         <TabsContent value="bulletin" className="mt-4">
           <TableBulletin table={table} />
         </TabsContent>
+
+        {isGMOrStaff && (
+          <TabsContent value="recruitment" className="mt-4">
+            <RecruitmentTab table={table} />
+          </TabsContent>
+        )}
       </Tabs>
 
       {/* Dialogs */}

@@ -228,7 +228,10 @@ unlocks, never grants" makes XP scarce, so this is the pull). Built:
 - ✅ Service functions (create, archive, transfer_ownership, join, leave, retire-persona hook)
 - ✅ ViewSets with staff/GM permission split and staff-only actions (archive, transfer_ownership)
 - ✅ `last_active_at` stub on GMProfile (not yet auto-stamped)
-- Remaining: story attachment (future phase when stories are wired up), frontend pages (Phase 5)
+- ✅ Story attachment (`Story.primary_table`, Phase 3) and frontend pages (`TablesListPage`,
+  `TableDetailPage` — Stories phase 5, #407, 73fa32d2a) — both landed once Stories existed to
+  attach to. #3268 built on top of that frontend rather than adding it: `RecruitmentTab` on
+  `TableDetailPage` (Task 2) and `ClaimInvitePage` (Task 3) — see Phase 3 below
 
 ### Phase 3 — Roster & Recruitment ✅
 - ✅ `Story.primary_table` FK links stories to tables (orphaned stories are legal, character falls out of default visibility)
@@ -243,7 +246,11 @@ unlocks, never grants" makes XP scarce, so this is the pull). Built:
 - ✅ Invite services: `create_invite`, `revoke_invite`, `claim_invite` with `select_for_update` for race safety
 - ✅ API: `GMRosterInviteViewSet`, `GMApplicationQueueView`, `GMApplicationActionView`, `GMInviteClaimView`
 - ✅ Staff continue to see applications via existing staff inbox; GM queue surfaces the same apps to the overseeing GM
-- Remaining: frontend (Phase 5), email delivery for private invites (follow-up), level-gated character creation exceptions (kudo points / GM leeway — post-MVP)
+- ✅ Frontend (#3268): `RecruitmentTab` on `TableDetailPage` (invite minting/revocation, application
+  approve/deny — Task 2); `FinalizeForTableDialog` on the CG Review stage (a player-GM finalizes
+  their own draft straight onto their table's Available roster, no staff review needed) and
+  `ClaimInvitePage` (`/invites/claim?code=...`, any authenticated player) — Task 3
+- Remaining: email delivery for private invites (follow-up), level-gated character creation exceptions (kudo points / GM leeway — post-MVP)
 
 ### Phase 4 — Reward Tooling (cut — moved to Stories)
 Rewards are not a GM concern. GMs are storytellers and umpires, not
@@ -293,6 +300,9 @@ it. `surrender_character_story` is wired (`POST /api/stories/{id}/surrender/`
 from GM-verb services; idle-table detection surfaces on `StaffWorkloadView`
 and a weekly cron summary. GMProfile presence (`is_gm`) added to the account
 payload so the frontend can gate navigation without probing for 403s.
+`pending_applications`/`open_invites` counts (recruitment attention, #3268) joined
+the payload and render as two tiles on `GMDashboardPage`, both linking to `/tables`
+since the actual review/mint actions live per-table on `RecruitmentTab`.
 
 Day-to-day GM ops that the staff inbox + existing APIs cover for now:
 - Application queue (staff / admin can action; GMs will get the

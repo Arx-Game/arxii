@@ -253,6 +253,43 @@ export async function addToRoster(
   return res.json();
 }
 
+/** Body for POST .../drafts/{id}/finalize-gm/ (#3268). */
+export interface FinalizeForTablePayload {
+  target_table: number;
+  story_title: string;
+  story_description?: string;
+}
+
+/** 201 response from POST .../drafts/{id}/finalize-gm/. */
+export interface FinalizeForTableResponse {
+  character_id: number;
+  roster_entry_id: number;
+  story_id: number;
+  message: string;
+}
+
+/**
+ * POST /api/character-creation/drafts/{id}/finalize-gm/
+ * A player-GM finalizes their own completed draft directly onto the
+ * Available roster for a table they own, minting a story tied to it
+ * (#3268). Non-staff equivalent of `addToRoster` — errors surface a
+ * `{detail}` string (incomplete draft, missing table ownership, or a
+ * finalize-time validation failure), which the caller should render
+ * verbatim via `ApiError.detail`/`message`.
+ */
+export async function finalizeDraftForTable(
+  draftId: number,
+  payload: FinalizeForTablePayload
+): Promise<FinalizeForTableResponse> {
+  const res = await apiFetch(`${BASE_URL}/drafts/${draftId}/finalize-gm/`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload),
+  });
+  if (!res.ok) await throwApiError(res, 'Failed to finalize character for your table');
+  return res.json();
+}
+
 export async function canCreateCharacter(): Promise<{ can_create: boolean; reason: string }> {
   const res = await apiFetch(`${BASE_URL}/can-create/`);
   if (!res.ok) {

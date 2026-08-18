@@ -18,8 +18,12 @@ import type {
   BulletinPostUpdateBody,
   BulletinReplyCreateBody,
   BulletinReplyUpdateBody,
+  GMApplicationAction,
   GMApplicationCreateBody,
   GMApplicationCreateResponse,
+  GMInviteClaimResponse,
+  GMRosterInvite,
+  GMRosterInviteCreateBody,
   GMTable,
   GMTableCreateBody,
   GMTableMembership,
@@ -28,6 +32,8 @@ import type {
   GMTableUpdateBody,
   PaginatedBulletinPosts,
   PaginatedBulletinReplies,
+  PaginatedGMQueueApplications,
+  PaginatedGMRosterInvites,
   PaginatedMemberships,
   PaginatedTables,
   TableBulletinPost,
@@ -62,6 +68,8 @@ const MEMBERSHIPS_URL = '/api/gm/table-memberships';
 const BULLETIN_POSTS_URL = '/api/table-bulletin-posts';
 const BULLETIN_REPLIES_URL = '/api/table-bulletin-replies';
 const GM_APPLICATIONS_URL = '/api/gm/applications';
+const INVITES_URL = '/api/gm/invites';
+const QUEUE_URL = '/api/gm/queue';
 
 // ---------------------------------------------------------------------------
 // Tables CRUD
@@ -348,4 +356,92 @@ export async function createGMApplication(
   });
   if (!res.ok) await throwApiError(res, 'Failed to submit GM application');
   return res.json() as Promise<GMApplicationCreateResponse>;
+}
+
+// ---------------------------------------------------------------------------
+// GM roster invites (#3268)
+// ---------------------------------------------------------------------------
+
+/**
+ * GET /api/gm/invites/
+ * Creator-scoped server-side (GMRosterInviteViewSet.get_queryset) — staff see
+ * all invites, GMs see only their own. No filter param needed.
+ */
+export async function getTableInvites(): Promise<PaginatedGMRosterInvites> {
+  const res = await apiFetch(`${INVITES_URL}/`);
+  if (!res.ok) await throwApiError(res, 'Failed to load invites');
+  return res.json() as Promise<PaginatedGMRosterInvites>;
+}
+
+/**
+ * POST /api/gm/invites/
+ * GM only; the serializer validates the requester oversees roster_entry's
+ * character at an active table.
+ */
+export async function mintInvite(data: GMRosterInviteCreateBody): Promise<GMRosterInvite> {
+  const res = await apiFetch(`${INVITES_URL}/`, {
+    method: 'POST',
+    headers: jsonHeaders(),
+    body: JSON.stringify(data),
+  });
+  if (!res.ok) await throwApiError(res, 'Failed to mint invite');
+  return res.json() as Promise<GMRosterInvite>;
+}
+
+/**
+ * DELETE /api/gm/invites/{id}/
+ * Revokes an unclaimed invite. Claimed invites 400 (validated server-side).
+ */
+export async function revokeInvite(id: number): Promise<void> {
+  const res = await apiFetch(`${INVITES_URL}/${id}/`, { method: 'DELETE' });
+  if (!res.ok) await throwApiError(res, `Failed to revoke invite ${id}`);
+}
+
+/**
+ * POST /api/gm/invites/claim/
+ * Any authenticated player claims an invite by code, creating (or reusing an
+ * existing pending) `RosterApplication` for the invited character. Field
+ * errors on `code` (invalid/claimed/expired/private-email-mismatch) — render
+ * verbatim via `ApiError.fieldErrors.code` / `.message`.
+ */
+export async function claimInvite(code: string): Promise<GMInviteClaimResponse> {
+  const res = await apiFetch(`${INVITES_URL}/claim/`, {
+    method: 'POST',
+    headers: jsonHeaders(),
+    body: JSON.stringify({ code }),
+  });
+  if (!res.ok) await throwApiError(res, 'Failed to claim invite');
+  return res.json() as Promise<GMInviteClaimResponse>;
+}
+
+// ---------------------------------------------------------------------------
+// GM application queue (#3268)
+// ---------------------------------------------------------------------------
+
+/**
+ * GET /api/gm/queue/
+ * Pending RosterApplications for characters this GM (or staff) oversees.
+ */
+export async function getGMQueue(): Promise<PaginatedGMQueueApplications> {
+  const res = await apiFetch(`${QUEUE_URL}/`);
+  if (!res.ok) await throwApiError(res, 'Failed to load application queue');
+  return res.json() as Promise<PaginatedGMQueueApplications>;
+}
+
+/**
+ * POST /api/gm/queue/{id}/{action}/ where action is 'approve' | 'deny'.
+ * GM only (IsGM permission — staff without a GMProfile are rejected).
+ */
+export async function actionGMApplication(
+  id: number,
+  action: GMApplicationAction,
+  reviewNotes?: string
+): Promise<{ status: string }> {
+  const res = await apiFetch(`${QUEUE_URL}/${id}/${action}/`, {
+    method: 'POST',
+    headers: jsonHeaders(),
+    body: JSON.stringify({ review_notes: reviewNotes ?? '' }),
+  });
+  if (!res.ok) await throwApiError(res, `Failed to ${action} application ${id}`);
+  return res.json() as Promise<{ status: string }>;
 }

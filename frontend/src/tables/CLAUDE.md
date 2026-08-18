@@ -18,6 +18,11 @@ REST API client for `/api/gm/tables/` and `/api/gm/table-memberships/`.
 - **Table actions:** `archiveTable()`, `transferOwnership()`
 - **Membership reads:** `getTableMemberships()`
 - **Membership writes:** `inviteToTable()`, `removeMembership()`, `leaveTable()`
+- **GM roster recruitment (#3268):** `getTableInvites()`, `mintInvite()`, `revokeInvite()`,
+  `getGMQueue()`, `actionGMApplication()` (approve/deny) — the GM-facing side, rendered in
+  `RecruitmentTab` on `TableDetailPage`. `claimInvite(code)` is the player-facing side (any
+  authenticated account, not GM-scoped) — `POST /api/gm/invites/claim/`, rendered on
+  `ClaimInvitePage`.
 
 ### `queries.ts`
 
@@ -67,12 +72,17 @@ TypeScript types for the tables feature.
 
 ### `pages/`
 
-| File                  | Route         | Auth           |
-| --------------------- | ------------- | -------------- |
-| `TablesListPage.tsx`  | `/tables`     | ProtectedRoute |
-| `TableDetailPage.tsx` | `/tables/:id` | ProtectedRoute |
+| File                  | Route            | Auth           |
+| --------------------- | ---------------- | -------------- |
+| `TablesListPage.tsx`  | `/tables`        | ProtectedRoute |
+| `TableDetailPage.tsx` | `/tables/:id`    | ProtectedRoute |
+| `ClaimInvitePage.tsx` | `/invites/claim` | ProtectedRoute |
 
-Routes registered in `App.tsx` during Wave 14.
+Routes registered in `App.tsx` during Wave 14 (`ClaimInvitePage` added #3268). `ClaimInvitePage`
+reads the invite code from `?code=` (a GM-shared link pre-fills it) and posts to
+`GMInviteClaimView`; success creates a pending `RosterApplication` that surfaces in the target
+table's `RecruitmentTab` queue for the GM to approve/deny — this page doesn't itself await or
+poll for that outcome.
 
 ## Data Flow
 

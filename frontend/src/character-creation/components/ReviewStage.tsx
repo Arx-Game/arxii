@@ -26,6 +26,8 @@ import {
 } from '@/components/ui/dialog';
 import { cn } from '@/lib/utils';
 import { motion } from 'framer-motion';
+import { useTables } from '@/tables/queries';
+import type { GMTable } from '@/tables/types';
 import {
   AlertCircle,
   Clock,
@@ -34,10 +36,12 @@ import {
   MessageSquare,
   Play,
   Send,
+  Sparkles,
   Undo2,
   UserPlus,
   XCircle,
 } from 'lucide-react';
+import { FinalizeForTableDialog } from './FinalizeForTableDialog';
 import {
   useAddToRoster,
   useCGExplanations,
@@ -69,9 +73,18 @@ export function ReviewStage({ draft, isStaff, onStageSelect }: ReviewStageProps)
 
   const cgPoints = useDraftCGPoints(draft.id);
 
+  // Active tables this (non-staff) account GMs — gates the "Finalize for My
+  // Table" flow (#3268). `useTables()` returns every table the requester has
+  // any relationship to; `viewer_role` narrows to ones they own as GM.
+  const tablesQuery = useTables({ status: 'active' });
+  const ownedGMTables: GMTable[] = (tablesQuery.data?.results ?? []).filter(
+    (table) => table.viewer_role === 'gm'
+  );
+
   const [submissionNotes, setSubmissionNotes] = useState('');
   const [resubmitComment, setResubmitComment] = useState('');
   const [showConversionModal, setShowConversionModal] = useState(false);
+  const [showFinalizeForTable, setShowFinalizeForTable] = useState(false);
 
   const stageCompletion = draft.stage_completion;
   const incompleteStages = Object.entries(stageCompletion)
@@ -320,6 +333,8 @@ export function ReviewStage({ draft, isStaff, onStageSelect }: ReviewStageProps)
           submitPending={submitDraft.isPending}
           onAddToRoster={() => addToRoster.mutate(draft.id)}
           addToRosterPending={addToRoster.isPending}
+          hasGMTable={ownedGMTables.length > 0}
+          onFinalizeForTable={() => setShowFinalizeForTable(true)}
         />
       )}
 
@@ -376,6 +391,16 @@ export function ReviewStage({ draft, isStaff, onStageSelect }: ReviewStageProps)
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      {/* Finalize for My Table (#3268) — player-GM direct-to-roster flow */}
+      {!isStaff && ownedGMTables.length > 0 && (
+        <FinalizeForTableDialog
+          draftId={draft.id}
+          tables={ownedGMTables}
+          open={showFinalizeForTable}
+          onOpenChange={setShowFinalizeForTable}
+        />
+      )}
     </motion.div>
   );
 }
@@ -512,6 +537,9 @@ interface NoApplicationActionsProps {
   submitPending: boolean;
   onAddToRoster: () => void;
   addToRosterPending: boolean;
+  /** Non-staff account owns at least one active GM-role table (#3268). */
+  hasGMTable: boolean;
+  onFinalizeForTable: () => void;
 }
 
 function NoApplicationActions({
@@ -523,6 +551,8 @@ function NoApplicationActions({
   submitPending,
   onAddToRoster,
   addToRosterPending,
+  hasGMTable,
+  onFinalizeForTable,
 }: NoApplicationActionsProps) {
   return (
     <div className="space-y-4">
@@ -569,6 +599,13 @@ function NoApplicationActions({
                 Add to Roster
               </>
             )}
+          </Button>
+        )}
+
+        {!isStaff && hasGMTable && (
+          <Button size="lg" variant="secondary" disabled={!canSubmit} onClick={onFinalizeForTable}>
+            <Sparkles className="mr-2 h-4 w-4" />
+            Finalize for My Table
           </Button>
         )}
       </div>
