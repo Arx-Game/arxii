@@ -359,6 +359,11 @@ class RosterApplicationCreateSerializerTestCase(TestCase):
         assert app.player_data == self.player_data
         assert app.character == self.character.sheet_data
 
+        # #3265: to_representation must resolve character_name through
+        # CharacterSheet -> ObjectDB (character FK is a CharacterSheet since
+        # #2608), not read db_key directly off the sheet.
+        assert serializer.data["character_name"] == self.character.db_key
+
     def test_application_validation_scenarios(self):
         """Test all scenarios where applications should be rejected"""
         test_cases = [

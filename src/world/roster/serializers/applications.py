@@ -157,7 +157,7 @@ class RosterApplicationCreateSerializer(serializers.Serializer):
         return {
             "id": instance.id,
             "status": instance.status,
-            "character_name": instance.character.db_key,
+            "character_name": instance.character.character.db_key,
             "applied_date": instance.applied_date,
             "policy_issues": policy_issues,
             "requires_staff_review": bool(policy_issues),
@@ -169,7 +169,7 @@ class RosterApplicationDetailSerializer(serializers.ModelSerializer):
     Serializer for retrieving application details.
     """
 
-    character_name = serializers.CharField(source="character.db_key", read_only=True)
+    character_name = serializers.CharField(source="character.character.db_key", read_only=True)
     player_username = serializers.CharField(
         source="player_data.account.username",
         read_only=True,
@@ -199,6 +199,28 @@ class RosterApplicationDetailSerializer(serializers.ModelSerializer):
         if request and request.user.player_data.can_approve_applications():
             return obj.get_policy_review_info()
         return None
+
+
+class RosterApplicationListSerializer(serializers.ModelSerializer):
+    """Slim row for the staff review queue (no per-row policy queries)."""
+
+    character_name = serializers.CharField(source="character.character.db_key", read_only=True)
+    player_username = serializers.CharField(
+        source="player_data.account.username",
+        read_only=True,
+    )
+    status_display = serializers.CharField(source="get_status_display", read_only=True)
+
+    class Meta:
+        model = RosterApplication
+        fields: ClassVar[list[str]] = [
+            "id",
+            "character_name",
+            "player_username",
+            "status",
+            "status_display",
+            "applied_date",
+        ]
 
 
 class RosterApplicationApprovalSerializer(serializers.Serializer):

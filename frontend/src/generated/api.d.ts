@@ -17477,6 +17477,86 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
+  '/api/roster/applications/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /**
+     * @description Staff-only review queue for applications to existing roster characters.
+     *
+     *     Distinct from character_creation's DraftApplication review (new player-made
+     *     characters): this queue is players applying for staff-authored characters
+     *     on the Available shelf.
+     */
+    get: operations['roster_applications_list'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/roster/applications/{id}/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /**
+     * @description Staff-only review queue for applications to existing roster characters.
+     *
+     *     Distinct from character_creation's DraftApplication review (new player-made
+     *     characters): this queue is players applying for staff-authored characters
+     *     on the Available shelf.
+     */
+    get: operations['roster_applications_retrieve'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/roster/applications/{id}/review/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /** @description Approve or deny one pending application. */
+    post: operations['roster_applications_review_create'];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/roster/applications/pending-count/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /** @description Count of applications awaiting review, for the staff hub badge. */
+    get: operations['roster_applications_pending_count_retrieve'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   '/api/roster/entries/': {
     parameters: {
       query?: never;
@@ -32761,6 +32841,21 @@ export interface components {
       previous?: string | null;
       results: components['schemas']['RoomWardDetails'][];
     };
+    PaginatedRosterApplicationListList: {
+      /** @example 123 */
+      count: number;
+      /**
+       * Format: uri
+       * @example http://api.example.org/accounts/?page=4
+       */
+      next?: string | null;
+      /**
+       * Format: uri
+       * @example http://api.example.org/accounts/?page=2
+       */
+      previous?: string | null;
+      results: components['schemas']['RosterApplicationList'][];
+    };
     PaginatedRosterEntryList: {
       /** @example 123 */
       count: number;
@@ -37314,6 +37409,37 @@ export interface components {
     /** @description Validate a roster application message. */
     RosterApplication: {
       message: string;
+    };
+    /** @description Serializer for retrieving application details. */
+    RosterApplicationDetail: {
+      readonly id: number;
+      readonly character_name: string;
+      readonly player_username: string;
+      status?: components['schemas']['StatusBa9Enum'];
+      readonly status_display: string;
+      /** @description Why player wants this character */
+      application_text: string;
+      /** @description Staff notes on application */
+      review_notes?: string;
+      /** Format: date-time */
+      readonly applied_date: string;
+      /** Format: date-time */
+      readonly reviewed_date: string | null;
+      readonly policy_review_info: string;
+    };
+    /** @description Slim row for the staff review queue (no per-row policy queries). */
+    RosterApplicationList: {
+      readonly id: number;
+      readonly character_name: string;
+      readonly player_username: string;
+      status?: components['schemas']['StatusBa9Enum'];
+      readonly status_display: string;
+      /** Format: date-time */
+      readonly applied_date: string;
+    };
+    /** @description Slim row for the staff review queue (no per-row policy queries). */
+    RosterApplicationListRequest: {
+      status?: components['schemas']['StatusBa9Enum'];
     };
     /** @description Validate a roster application message. */
     RosterApplicationRequest: {
@@ -65631,6 +65757,102 @@ export interface operations {
         };
         content: {
           'application/json': components['schemas']['Trap'][];
+        };
+      };
+    };
+  };
+  roster_applications_list: {
+    parameters: {
+      query?: {
+        /** @description A page number within the paginated result set. */
+        page?: number;
+        /**
+         * @description * `pending` - Pending Review
+         *     * `approved` - Approved
+         *     * `denied` - Denied
+         *     * `withdrawn` - Withdrawn
+         */
+        status?: 'approved' | 'denied' | 'pending' | 'withdrawn';
+      };
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['PaginatedRosterApplicationListList'];
+        };
+      };
+    };
+  };
+  roster_applications_retrieve: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        /** @description A unique integer value identifying this Roster Application. */
+        id: number;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['RosterApplicationDetail'];
+        };
+      };
+    };
+  };
+  roster_applications_review_create: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        /** @description A unique integer value identifying this Roster Application. */
+        id: number;
+      };
+      cookie?: never;
+    };
+    requestBody?: {
+      content: {
+        'application/json': components['schemas']['RosterApplicationListRequest'];
+      };
+    };
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['RosterApplicationList'];
+        };
+      };
+    };
+  };
+  roster_applications_pending_count_retrieve: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['RosterApplicationList'];
         };
       };
     };

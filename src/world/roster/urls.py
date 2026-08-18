@@ -13,6 +13,7 @@ from world.roster.views import (
     KinRelationshipView,
     MediaViewSet,
     PlayerMailViewSet,
+    RosterApplicationViewSet,
     RosterEntryViewSet,
     RosterTenureViewSet,
     RosterViewSet,
@@ -23,6 +24,7 @@ from world.roster.views.settings_views import VisibilitySettingsView
 app_name = "roster"
 
 router = DefaultRouter()
+router.register("applications", RosterApplicationViewSet, basename="applications")
 router.register("rosters", RosterViewSet, basename="rosters")
 router.register("entries", RosterEntryViewSet, basename="entries")
 router.register("families", FamilyViewSet, basename="families")

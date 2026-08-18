@@ -329,6 +329,23 @@ Web-only surface: compose at `/profile/mail` or in-scene via `SendLetterDialog` 
 `ComposeMailForm` from the character card quick actions), unread badge in the header
 (`UnreadMailBadge`), mark-read-on-open in `ReceivedMailList`. No telnet mail command.
 
+### Applications (`/api/roster/applications/`) - staff review queue (#3265)
+- `GET /api/roster/applications/` - List applications; `?status=` filters by
+  `ApplicationStatus` (`pending`/`approved`/`denied`/`withdrawn`), defaulting to
+  pending-only when omitted (`RosterApplicationFilterSet.qs`) so the queue opens on
+  what needs action
+- `GET /api/roster/applications/{id}/` - Application detail (full text, `policy_review_info`)
+- `POST /api/roster/applications/{id}/review/` - `{"action": "approve"|"deny",
+  "review_notes"}` drives `RosterApplication.approve()`/`.deny()`
+- `GET /api/roster/applications/pending-count/` - Count of pending applications, for
+  the staff hub badge
+
+All four routes are staff-only, gated by `CanApproveApplications`
+(`PlayerData.can_approve_applications()` - staff today; trust-system integration is
+future work). Distinct from `character_creation`'s DraftApplication review: this
+queue is players applying for staff-authored characters already on the Available
+shelf, not new player-made characters going through CG.
+
 ### Families (`/api/roster/families/`)
 - `GET /api/roster/families/` - List playable families
 - `GET /api/roster/families/{id}/` - Family detail
@@ -362,6 +379,7 @@ Web-only surface: compose at `/profile/mail` or in-scene via `SendLetterDialog` 
 | `IsPlayerOrStaff` | Roster entry modifications | Active tenure for the entry or staff |
 | `ReadOnlyOrOwner` | Media/gallery viewing | Safe methods for all; write requires ownership |
 | `StaffOnlyWrite` | Roster management | Safe methods for all; write requires staff |
+| `CanApproveApplications` | Application review queue (#3265) | `PlayerData.can_approve_applications()` (staff today) |
 
 ---
 
@@ -379,7 +397,7 @@ Web-only surface: compose at `/profile/mail` or in-scene via `SendLetterDialog` 
 - `RosterAdmin` - List/filter by active status and application permission
 - `RosterEntryAdmin` - Autocomplete for characters; fieldsets for status, history, notes, timestamps
 - `RosterTenureAdmin` - Autocomplete for entry/player_data; date hierarchy on start_date; displays `is_current` boolean
-- `RosterApplicationAdmin` - Bulk approve/deny actions; autocomplete for character/player_data; date hierarchy on applied_date
+- `RosterApplicationAdmin` - Bulk approve/deny actions; autocomplete for character/player_data; date hierarchy on applied_date. No longer the only review surface: staff also review from `/staff/roster-applications` via `RosterApplicationViewSet` (#3265)
 - `TenureDisplaySettingsAdmin` - Grouped fieldsets for display, communication, and roleplay preferences
 - `TenureGalleryAdmin` - Autocomplete for tenure and allowed_viewers
 - `TenureMediaAdmin` - Autocomplete for tenure, media, and gallery

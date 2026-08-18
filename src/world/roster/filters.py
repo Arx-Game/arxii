@@ -1,7 +1,8 @@
 from django.db.models import Q, QuerySet
 import django_filters
 
-from world.roster.models import Family, RosterEntry, RosterTenure, TenureGallery
+from world.roster.models import Family, RosterApplication, RosterEntry, RosterTenure, TenureGallery
+from world.roster.models.choices import ApplicationStatus
 
 
 class RosterEntryFilterSet(django_filters.FilterSet):
@@ -100,3 +101,27 @@ class RosterTenureFilterSet(django_filters.FilterSet):
         return queryset.filter(
             roster_entry__character_sheet__character__db_key__icontains=value,
         )
+
+
+class RosterApplicationFilterSet(django_filters.FilterSet):
+    """Filter roster applications by review status.
+
+    The staff review queue opens on what needs action, so an omitted ``status``
+    defaults to pending-only rather than showing every application ever filed.
+    ``self.data`` is the raw incoming query dict django-filters hands every
+    FilterSet (not a view's ``query_params``/``GET``, which this repo's
+    use-filterset lint reserves views from touching directly).
+    """
+
+    status = django_filters.ChoiceFilter(choices=ApplicationStatus.choices)
+
+    class Meta:
+        model = RosterApplication
+        fields = ["status"]
+
+    @property
+    def qs(self) -> QuerySet[RosterApplication]:
+        queryset = super().qs
+        if self.data.get("status") is None:
+            queryset = queryset.filter(status=ApplicationStatus.PENDING)
+        return queryset

@@ -17,6 +17,7 @@ from world.roster.serializers.applications import (
     RosterApplicationCreateSerializer,
     RosterApplicationDetailSerializer,
     RosterApplicationEligibilitySerializer,
+    RosterApplicationListSerializer,
     RosterApplicationSerializer,
 )
 from world.roster.serializers.characters import (
@@ -78,6 +79,7 @@ __all__ = [
     "RosterApplicationCreateSerializer",
     "RosterApplicationDetailSerializer",
     "RosterApplicationEligibilitySerializer",
+    "RosterApplicationListSerializer",
     # Application serializers
     "RosterApplicationSerializer",
     "RosterEntryListSerializer",
