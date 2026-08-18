@@ -308,7 +308,7 @@ describe('Non-GM staff viewer', () => {
     expect(link).toHaveAttribute('href', '/staff/roster-applications');
   });
 
-  it('still shows Mint invite and Revoke for a staff viewer (invites are not GM-gated)', () => {
+  it('hides Mint invite but still shows Revoke for a staff viewer (mint requires a GMProfile; revoke staff-bypasses)', () => {
     mockInvitesQuery([makeInvite()]);
     mockQueueQuery([]);
 
@@ -316,7 +316,7 @@ describe('Non-GM staff viewer', () => {
       wrapper: createWrapper(false),
     });
 
-    expect(screen.getByRole('button', { name: /mint invite/i })).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /mint invite/i })).not.toBeInTheDocument();
     expect(screen.getByRole('button', { name: /revoke/i })).toBeInTheDocument();
   });
 });

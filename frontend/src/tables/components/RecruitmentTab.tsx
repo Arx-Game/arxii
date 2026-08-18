@@ -10,6 +10,13 @@
  * action endpoint requires a GMProfile (`IsGM` permission), so staff viewing
  * a table they don't personally GM would only get a 403 from those buttons.
  * They instead see read-only rows plus a pointer to the staff review page.
+ *
+ * Mint Invite is gated on `account.is_gm` the same way: `GMRosterInviteSerializer
+ * .validate` (world/gm/serializers.py) hard-requires `request.user.gm_profile`,
+ * so a staff account without a GMProfile would only get a 400 "GM profile
+ * required." from that button. Revoke stays visible to any staff viewer —
+ * `GMInviteRevokeSerializer.validate` genuinely bypasses for `request.user
+ * .is_staff` — so it is not gated here.
  */
 
 import { useState } from 'react';
@@ -161,7 +168,7 @@ function RevokeInviteDialog({
   );
 }
 
-function InvitesSection() {
+function InvitesSection({ isGM }: { isGM: boolean }) {
   const { data, isLoading } = useInvites();
   const [revokeTarget, setRevokeTarget] = useState<GMRosterInvite | null>(null);
 
@@ -174,9 +181,11 @@ function InvitesSection() {
           <CardTitle className="text-base">Invites</CardTitle>
           <CardDescription>Claim codes for characters you oversee.</CardDescription>
         </div>
-        <MintInviteDialog>
-          <Button size="sm">Mint invite</Button>
-        </MintInviteDialog>
+        {isGM && (
+          <MintInviteDialog>
+            <Button size="sm">Mint invite</Button>
+          </MintInviteDialog>
+        )}
       </CardHeader>
       <CardContent>
         {isLoading ? (
@@ -388,7 +397,7 @@ export function RecruitmentTab({ table: _table }: RecruitmentTabProps) {
   return (
     <div className="space-y-6">
       <CreateCharacterCallout />
-      <InvitesSection />
+      <InvitesSection isGM={isGM} />
       <QueueSection isGM={isGM} />
     </div>
   );
