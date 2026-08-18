@@ -17,6 +17,7 @@ import type {
   PlayerReport,
   RosterApplicationDetail,
   RosterApplicationListItem,
+  RosterApplicationReviewResult,
   RosterApplicationStatus,
   SubmissionCategory,
   SubmissionStatus,
@@ -375,7 +376,7 @@ export async function reviewRosterApplication(
   id: number,
   action: 'approve' | 'deny',
   reviewNotes?: string
-): Promise<RosterApplicationDetail> {
+): Promise<RosterApplicationReviewResult> {
   const res = await apiFetch(`${ROSTER_APPS_URL}/${id}/review/`, {
     method: 'POST',
     body: JSON.stringify({ action, review_notes: reviewNotes ?? '' }),

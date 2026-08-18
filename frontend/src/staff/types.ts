@@ -193,6 +193,13 @@ export interface RosterApplicationDetail extends RosterApplicationListItem {
   policy_review_info: Record<string, unknown> | null;
 }
 
+// Response shape from POST .../review/ — a discriminated union on `action`,
+// NOT a RosterApplicationDetail. See RosterApplicationApprovalSerializer.save()
+// in world/roster/serializers/applications.py.
+export type RosterApplicationReviewResult =
+  | { action: 'approved'; tenure_created: boolean }
+  | { action: 'denied'; success: boolean };
+
 // Submission status values
 export type SubmissionStatus = 'open' | 'reviewed' | 'dismissed';
 

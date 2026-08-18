@@ -157,7 +157,7 @@ class RosterApplicationCreateSerializer(serializers.Serializer):
         return {
             "id": instance.id,
             "status": instance.status,
-            "character_name": instance.character.db_key,
+            "character_name": instance.character.character.db_key,
             "applied_date": instance.applied_date,
             "policy_issues": policy_issues,
             "requires_staff_review": bool(policy_issues),

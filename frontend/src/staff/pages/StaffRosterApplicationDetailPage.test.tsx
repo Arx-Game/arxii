@@ -78,9 +78,10 @@ describe('StaffRosterApplicationDetailPage', () => {
 
   it('fires the approve mutation without requiring notes', async () => {
     vi.mocked(api.getRosterApplicationDetail).mockResolvedValue(makeApplication());
-    vi.mocked(api.reviewRosterApplication).mockResolvedValue(
-      makeApplication({ status: 'approved', status_display: 'Approved' })
-    );
+    vi.mocked(api.reviewRosterApplication).mockResolvedValue({
+      action: 'approved',
+      tenure_created: true,
+    });
 
     renderDetail();
 
@@ -94,9 +95,10 @@ describe('StaffRosterApplicationDetailPage', () => {
 
   it('requires notes before firing the deny mutation, then sends the typed notes', async () => {
     vi.mocked(api.getRosterApplicationDetail).mockResolvedValue(makeApplication());
-    vi.mocked(api.reviewRosterApplication).mockResolvedValue(
-      makeApplication({ status: 'denied', status_display: 'Denied' })
-    );
+    vi.mocked(api.reviewRosterApplication).mockResolvedValue({
+      action: 'denied',
+      success: true,
+    });
 
     renderDetail();
 
