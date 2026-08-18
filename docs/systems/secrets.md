@@ -78,6 +78,10 @@ widen the `PLAYER_FLAVOR` caps to catch it.
 ## Services (`services.py`)
 
 - `author_secret(...)` — author a secret, enforcing the invariant (raises `SecretError`).
+  `subject_aware` (default `True`) controls whether the subject starts knowing this secret about
+  themselves; `False` marks a subject-unaware truth (#2062, e.g. hidden parentage a Misbegotten
+  hasn't discovered yet), excluded from the subject's own-secrets shelf until a
+  `SecretKnowledge` grants it.
 - `author_player_flavor_secret(...)` — the only *free* path a player may write: Level-1 flavor,
   attributed to their persona.
 - `mint_accusation(*, accuser_persona, subject_sheet, content, level=1, ...)` (#1825) — the
@@ -99,6 +103,40 @@ widen the `PLAYER_FLAVOR` caps to catch it.
 - `secrets_explaining(*, roster_entry, legend_deed|mission_deed|scene)` — the "vice-versa"
   direction (#1573): the secrets a viewer **already knows** that are the truth behind a given
   record. Gated by `SecretKnowledge`, so the backlink never leaks an unearned secret's existence.
+
+## Staff authoring (#3266)
+
+An omniscient staff surface, kept separate from the knowledge-scoped player read
+(`KnownSecretViewSet`). `AuthoredSecretViewSet` at `/api/secrets/authored/` is gated by
+`IsAdminUser` (not the player's IC scope) and pages 20 at a time (`AuthoredSecretPagination`):
+
+- `GET /api/secrets/authored/?subject=<CharacterSheet pk>`: a subject's secrets, oldest first.
+  `subject` is **required**; a request without it 400s instead of falling back to every secret
+  in the game. (A `GET .../<id>/` detail route also exists via the mixin, but the frontend panel
+  doesn't call it: list plus inline patch cover the flow.)
+- `POST /api/secrets/authored/`: mint via `author_secret`. Provenance is fixed server-side,
+  never client-supplied. Every row minted here is `SecretProvenance.GM_AUTHORED` with
+  `author_persona=None` (an OOC GM voice, not a played persona), regardless of payload.
+  `subject_aware` is the one authoring-specific kwarg exposed on this surface (default `True`).
+- `PATCH /api/secrets/authored/<id>/`: edit `level`, `category`, `content`, `consequences`, and
+  `subject_aware`. `subject_sheet` is immutable after mint (popped from the payload before
+  assignment); `provenance` and the timestamps stay read-only. Re-validates via `full_clean()`
+  on save, so the anchor-scales-with-level invariant still holds on edit: a raised
+  `ValidationError` surfaces as a 400, not a silent write.
+- `GET /api/secrets/authored/categories/`: the active `SecretCategory` lookup, for the authoring
+  dialog's category picker.
+
+**No delete, deliberately.** A secret is story data, potentially already partially known via
+`SecretKnowledge`, gossiped, or cross-linked to an act anchor. Removing the row out from under
+those references would corrupt state meant to be durable. Staff who need a secret gone correct
+it in place (blank the content, retire the category) instead of deleting it; the ViewSet's
+`http_method_names` omits `delete` entirely.
+
+**No reputation payload, deliberately.** This surface only ever writes `Secret` itself.
+`SecretVictim` (the #1429 relational reputation hit) and `archetypes` (the diffuse
+philosophical-reputation M2M) stay off the API and admin-only. Authoring a secret's *fact* is
+safe for staff self-serve; wiring its reputation consequences is a heavier edit with a wider
+blast radius, better made deliberately in Django admin than exposed on a general authoring form.
 
 ## Discovery (the clue loop)
 
