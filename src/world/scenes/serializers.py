@@ -1,3 +1,4 @@
+from django.core.exceptions import ObjectDoesNotExist
 from drf_spectacular.utils import extend_schema_field
 from evennia.objects.models import ObjectDB
 from rest_framework import serializers
@@ -12,17 +13,21 @@ from world.areas.positioning.serializers import (
 from world.scenes.constants import ScenePrivacyMode, SceneRoundMode, SceneRoundStartReason
 from world.scenes.models import (
     Persona,
+    PersonaType,
     Scene,
     SceneParticipation,
     SceneRound,
     SceneSummaryRevision,
 )
+from world.societies.houses.constants import NameDegree, TitleSuffixMode
 
 
 class PersonaSerializer(serializers.ModelSerializer):
     roster_entry = serializers.SerializerMethodField()
     thumbnail_media_url = serializers.SerializerMethodField()
     allow_social_actions = serializers.SerializerMethodField()
+    # #3261 — the particled composed name at this persona's preferred degree.
+    display_name = serializers.SerializerMethodField()
     # #1682 — the guise's fabricated bio (null profile → empty strings), so the
     # web authoring dialog can prefill and blank-clears stay safe.
     guise_concept = serializers.SerializerMethodField()
@@ -36,6 +41,9 @@ class PersonaSerializer(serializers.ModelSerializer):
             "id",
             "character_sheet",
             "name",
+            "display_name",
+            "name_degree",
+            "title_suffix",
             "is_fake_name",
             "persona_type",
             "thumbnail_url",
@@ -47,7 +55,26 @@ class PersonaSerializer(serializers.ModelSerializer):
             "guise_personality",
             "guise_background",
         ]
-        read_only_fields = ["roster_entry", "allow_social_actions"]
+        read_only_fields = ["roster_entry", "allow_social_actions", "display_name"]
+
+    def get_display_name(self, obj: Persona) -> str:
+        """The particled name at the persona's preferred degree (#3261).
+
+        Only the PRIMARY persona derives from the kinship graph; disguises and
+        alternate faces present their claimed name bare, so the née segment
+        can never leak the true birth family through a mask.
+        """
+        from world.societies.houses.services import full_display_name  # noqa: PLC0415
+
+        if obj.persona_type != PersonaType.PRIMARY:
+            return obj.name
+        try:
+            person = obj.character_sheet.kinsperson
+        except (AttributeError, ObjectDoesNotExist):
+            return obj.name
+        if person is None:
+            return obj.name
+        return full_display_name(person, degree=obj.name_degree, title_suffix=obj.title_suffix)
 
     def get_guise_concept(self, obj: Persona) -> str:
         return obj.profile.concept if obj.profile_id else ""
@@ -512,6 +539,13 @@ class SetActivePersonaRequestSerializer(serializers.Serializer):
     """POST body for the #981 set-active-persona endpoint."""
 
     persona_id = serializers.IntegerField(min_value=1)
+
+
+class SetNameDisplayRequestSerializer(serializers.Serializer):
+    """POST body for the #3261 set-name-display endpoint (degree + titles)."""
+
+    name_degree = serializers.ChoiceField(choices=NameDegree.choices)
+    title_suffix = serializers.ChoiceField(choices=TitleSuffixMode.choices)
 
 
 class ActivePersonaResultSerializer(serializers.Serializer):

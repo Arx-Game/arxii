@@ -9,8 +9,20 @@ streams→treasury spine, and marriage pacts fire coded commitments. Lives in
 
 ## Models (`world/societies/houses/models.py`)
 
-- **`NobiliaryParticle`** — realm × family-type → particle ("du"); names render
-  `First particle House`.
+- **`NobiliaryParticle`** — realm × family-type × tier-band → born/taken-in
+  particle pair (#3261, canon vocabulary ratified 2026-08-17 and seeded by realm
+  theme in `world/seeds/houses.py`). `tier_floor` (blank = default band) bands a
+  realm's particles by the house's highest held title — Luxen wears `du` at
+  duchy+ and attached `D'` below (apostrophe-terminal particles join unspaced:
+  "Sybel D'Regente"); `taken_in_particle` is worn by every non-born member
+  (married/adopted/legitimized/granted; born + founding wear the born form).
+  Arx has no rows by canon — bare names are its signature. Full formal names
+  carry the continental née segment `ne <BirthFamilyName>` (bare — it REPLACES
+  the birth particle): "Sharlotte ne Regente dau Vaelmont". Degrees of address
+  (`NameDegree`: familiar/common/styled/full-formal) and the orthogonal title
+  suffix (`TitleSuffixMode`: none/primary/all) are per-`Persona` preferences;
+  `Title` rows carry authorable holder styles (King/Queen/Monarch, tier-default
+  PLACEHOLDER via `DEFAULT_TIER_STYLES`).
 - **`HouseRecognitionRule`** — a realm's birth-recognition law
   (`MATRILINEAL_AUTO_WEDLOCK`, `MOTHER_OPTION_OUT_OF_WEDLOCK`,
   `CONSORT_CHILDREN_ENNOBLED`, `PATRILINEAL_AUTO_WEDLOCK`).
@@ -21,8 +33,10 @@ streams→treasury spine, and marriage pacts fire coded commitments. Lives in
   rater, PLACEHOLDER falls back to eldest) + `require_wedlock`/`enatic_tiebreak`.
   House default on `Organization.default_succession_law`; per-title override on
   `Title.succession_law` (Imperial Tanistry).
-- **`Title`** — first-class: name, tier (crown/duchy/county/barony), realm,
-  house, holder (→ `Kinsperson`), seat domain, `is_claimable` (Phase D slots).
+- **`Title`** — first-class: name, tier (`TitleTier`:
+  empire/kingdom/duchy/march/county/barony — #3091's six-step ladder), realm,
+  house, holder (→ `Kinsperson`), seat domain, `is_claimable` (Phase D slots),
+  authorable holder styles (`holder_style_male/female/neutral`, #3261).
 - **`Domain`** — decorates an `Area` (seeds use `AreaLevel.REGION`; no DOMAIN
   level exists) (OneToOne PK): owner org + PLACEHOLDER civ stats
   (population/prosperity/unrest). Abstract — no room grids yet.
@@ -54,7 +68,13 @@ streams→treasury spine, and marriage pacts fire coded commitments. Lives in
 
 ## Services (`world/societies/houses/services.py`)
 
-`full_display_name` (particle naming), `recognize_birth` (realm rules over
+`full_display_name(person, degree=, title_suffix=)` (the universal name
+renderer, #3261 — canon grammar `[style] First [ne Birth] [particle Family][,
+titles]`; particle band via `resolve_particle` + `house_tier_rank`),
+`name_alias_forms` / `sync_name_aliases` (derived-name Evennia aliases under
+the `derived_name` category so every degree form matches in telnet — called
+explicitly from `add_membership`/`end_membership` primary writes and CG
+finalize, never signals), `recognize_birth` (realm rules over
 public-record edges; mother's-option returns None — `acknowledge_into_family`
 is the explicit seam), `derive_succession_candidates` (omniscient public
 record; tanistry returns the unordered eligible pool; empty list = succession
@@ -85,8 +105,16 @@ MOST_POWERFUL_GIFTED plug. `HousesServiceError.user_message` on refusals.
   members, vassal houses cascaded. Idempotent explicit call (no signals) —
   run it after membership or fealty changes.
 - **Seeds:** cluster `houses` (rides `kinship`) — the demo house made a landed
-  peer: org, particle, recognition rules, succession law, crown fealty, ducal
-  title, domain + farmland holding.
+  peer: org, recognition rules, succession law, crown fealty, ducal title,
+  domain + farmland holding; plus `seed_nobiliary_particles()` upserting the
+  canon particle table onto every authored realm by theme (#3261 — Arx
+  deliberately gets none).
+- **Persona/web (#3261):** `PersonaSerializer.display_name` renders the
+  particled name at the persona's preferred degree (non-primary faces stay
+  bare — a mask never leaks the née segment); `POST
+  /api/scenes/personas/{id}/set-name-display/` writes the degree/title-suffix
+  preferences; `FamilySerializer` ships `born_particle`/`taken_in_particle`
+  for the CG live preview (`FamilyNamePreview` in `LineageStage`).
 
 ## House creator (Phase D)
 

@@ -178,3 +178,15 @@ _Avoid_: engagement record, pre-marriage.
 **Match Dossier**:
 The full-information review of a candidate house (#2999 hard requirement): band/perceived/ranks, standing instruments, betrothals, known troubles (covert ones only through the VIEWER org's CrisisIntel), shifts, consort capacity. Readable by any authenticated player — reviewing rivals is the point.
 _Avoid_: org report, house profile.
+
+**Nobiliary Particle**:
+The realm-signature word between a noble's first and house name ("du", "arn", "za"), keyed per realm × family-type × tier band (`NobiliaryParticle`, #3261 canon). Each realm carries a **born form** (born/founding members) and a **taken-in form** (married, adopted, legitimized, granted — e.g. Luxen `dau`, Ariwn `vosk`). Apostrophe-terminal particles attach unspaced ("D'Regente"). Arx has none by canon — a bare noble name reads as Arx.
+_Avoid_: prefix, honorific, surname marker.
+
+**Née Segment**:
+The continental birth-family marker in a full formal name — `ne <BirthFamilyName>`, bare, *replacing* the birth family's particle ("Sharlotte ne Regente dau Vaelmont"). Renders only at the full-formal degree and only when a prior family exists.
+_Avoid_: maiden name, birth suffix.
+
+**Degree of Address**:
+How much of a composed name a persona leads with (`NameDegree`: familiar / common / styled / full formal), a per-Persona preference orthogonal to the **Title Suffix** (`TitleSuffixMode`: none / primary / all held titles). Formal contexts render full formal regardless of preference.
+_Avoid_: name length setting, verbosity.

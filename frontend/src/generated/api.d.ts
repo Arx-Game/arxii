@@ -15594,6 +15594,28 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
+  '/api/personas/{id}/set-name-display/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /**
+     * @description #3261 — set this persona's name-degree and title-suffix preferences.
+     *
+     *     Only the played character may restyle their own personas; a foreign or
+     *     unknown id is rejected uniformly (400) without revealing existence.
+     */
+    post: operations['personas_set_name_display_create'];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   '/api/personas/{id}/spread/': {
     parameters: {
       query?: never;
@@ -26473,6 +26495,10 @@ export interface components {
       is_playable?: boolean;
       /** @description Canonical realm this family is associated with; used to filter in character creation and (#1884) to resolve the nobiliary particle */
       origin_realm?: number | null;
+      /** @description Nobiliary particle a born member wears (#3261); '' when none. */
+      readonly born_particle: string;
+      /** @description Particle a married/adopted/legitimized member wears; '' when none. */
+      readonly taken_in_particle: string;
     };
     /** @description Serializer for family selection and display. */
     FamilyRequest: {
@@ -30007,6 +30033,14 @@ export interface components {
       /** @description Free-text summary of the last interaction; used by both mission and functionary contexts to surface 'why we left off where we did'. */
       last_interaction_summary?: string;
     };
+    /**
+     * @description * `familiar` - Familiar
+     *     * `common` - Common
+     *     * `styled` - Styled
+     *     * `full_formal` - Full Formal
+     * @enum {string}
+     */
+    NameDegreeEnum: 'familiar' | 'common' | 'styled' | 'full_formal';
     /**
      * @description * `story` - Story update
      *     * `atmosphere` - Atmosphere
@@ -35494,6 +35528,31 @@ export interface components {
       character_sheet: number;
       /** @description Display name for this persona */
       name: string;
+      /**
+       * @description The particled name at the persona's preferred degree (#3261).
+       *
+       *     Only the PRIMARY persona derives from the kinship graph; disguises and
+       *     alternate faces present their claimed name bare, so the née segment
+       *     can never leak the true birth family through a mask.
+       */
+      readonly display_name: string;
+      /**
+       * @description Degree of name this persona leads with (#3261).
+       *
+       *     * `familiar` - Familiar
+       *     * `common` - Common
+       *     * `styled` - Styled
+       *     * `full_formal` - Full Formal
+       */
+      name_degree?: components['schemas']['NameDegreeEnum'];
+      /**
+       * @description Which held titles trail the composed name (#3261).
+       *
+       *     * `none` - No Titles
+       *     * `primary` - Primary Title
+       *     * `all` - All Titles
+       */
+      title_suffix?: components['schemas']['TitleSuffixEnum'];
       /** @description True when this persona obscures the character's identity */
       is_fake_name?: boolean;
       /**
@@ -37767,6 +37826,11 @@ export interface components {
     /** @description POST body for the #981 set-active-persona endpoint. */
     SetActivePersonaRequestRequest: {
       persona_id: number;
+    };
+    /** @description POST body for the #3261 set-name-display endpoint (degree + titles). */
+    SetNameDisplayRequestRequest: {
+      name_degree: components['schemas']['NameDegreeEnum'];
+      title_suffix: components['schemas']['TitleSuffixEnum'];
     };
     /**
      * @description POST body for the #1682 set-profile endpoint — author a guise's bio.
@@ -40333,6 +40397,13 @@ export interface components {
      * @enum {string}
      */
     TimePhaseEnum: 'dawn' | 'day' | 'dusk' | 'night';
+    /**
+     * @description * `none` - No Titles
+     *     * `primary` - Primary Title
+     *     * `all` - All Titles
+     * @enum {string}
+     */
+    TitleSuffixEnum: 'none' | 'primary' | 'all';
     TradeItemStake: {
       readonly id: number;
       readonly item_instance: number;
@@ -62862,6 +62933,32 @@ export interface operations {
         };
         content: {
           'application/json': components['schemas']['RenownCard'];
+        };
+      };
+    };
+  };
+  personas_set_name_display_create: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        /** @description A unique integer value identifying this persona. */
+        id: number;
+      };
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['SetNameDisplayRequestRequest'];
+      };
+    };
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['Persona'];
         };
       };
     };

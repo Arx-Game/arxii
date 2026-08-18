@@ -10,6 +10,39 @@ derivation, and the feed on a dev DB.
 
 from __future__ import annotations
 
+# Canon nobiliary particles (#3261, ratified 2026-08-17) keyed by Realm.theme:
+# (tier_floor, born particle, taken-in particle). Blank floor = default band.
+# Arx has NO rows by canon — it has no nobility; bare names are its signature.
+CANON_NOBILIARY_PARTICLES: dict[str, tuple[tuple[str, str, str], ...]] = {
+    "luxen": (("duchy", "du", "dau"), ("", "D'", "dau")),
+    "umbros": (("empire", "mar", "mal"), ("", "arn", "ard")),
+    "inferna": (("kingdom", "aza", "azas"), ("", "za", "zas")),
+    "ariwn": (("", "ul", "vosk"),),
+    "aythirmok": (("", "jor", "jorn"),),
+}
+
+
+def seed_nobiliary_particles() -> None:
+    """Upsert the canon particle rows onto every authored realm, by theme.
+
+    ``update_or_create`` (not ``get_or_create``) so canon overwrites any
+    placeholder rows already in a dev DB (idmapper rows don't update via
+    loaddata — #946).
+    """
+    from world.realms.models import Realm  # noqa: PLC0415
+    from world.roster.models import Family  # noqa: PLC0415
+    from world.societies.houses.models import NobiliaryParticle  # noqa: PLC0415
+
+    for realm in Realm.objects.filter(theme__in=CANON_NOBILIARY_PARTICLES):
+        for tier_floor, born, taken_in in CANON_NOBILIARY_PARTICLES[realm.theme]:
+            NobiliaryParticle.objects.update_or_create(
+                realm=realm,
+                family_type=Family.FamilyType.NOBLE,
+                tier_floor=tier_floor,
+                defaults={"particle": born, "taken_in_particle": taken_in},
+            )
+
+
 CROWN_ORG_NAME = "The Crown of Arx PLACEHOLDER"
 HOUSE_ORG_NAME = "House Veyrane PLACEHOLDER"
 DUCAL_TITLE_NAME = "Duchy of Veyrane PLACEHOLDER"
@@ -43,7 +76,6 @@ def seed_houses_demo() -> None:
     from world.societies.houses.models import (  # noqa: PLC0415
         HoldingKind,
         HouseRecognitionRule,
-        NobiliaryParticle,
         SuccessionLaw,
         Title,
     )
@@ -55,6 +87,7 @@ def seed_houses_demo() -> None:
     from world.societies.models import Organization, OrganizationType, Society  # noqa: PLC0415
 
     seed_kinship_demo()
+    seed_nobiliary_particles()
     family = Family.objects.get(name=DUCAL_HOUSE_NAME)
 
     realm = authored_or_sample(
@@ -109,11 +142,6 @@ def seed_houses_demo() -> None:
     if not created:
         return
 
-    NobiliaryParticle.objects.get_or_create(
-        realm=realm,
-        family_type=Family.FamilyType.NOBLE,
-        defaults={"particle": "du"},
-    )
     for kind in (
         RecognitionRuleKind.MATRILINEAL_AUTO_WEDLOCK,
         RecognitionRuleKind.MOTHER_OPTION_OUT_OF_WEDLOCK,

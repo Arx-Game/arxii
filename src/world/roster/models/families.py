@@ -269,7 +269,9 @@ class Kinsperson(SharedMemoryModel):
     @property
     def display_name(self) -> str:
         if self.sheet is not None:
-            return str(self.sheet)
+            # The character's in-game key, not str(sheet) — CharacterSheet's
+            # __str__ is the debug form "Sheet for X" (#3261 fix-on-sight).
+            return self.sheet.character.key
         return self.name or "Unnamed"
 
 

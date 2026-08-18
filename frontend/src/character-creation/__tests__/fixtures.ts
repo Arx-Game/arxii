@@ -138,6 +138,8 @@ export const mockNobleFamily: Family = {
   name: 'Valardin',
   family_type: 'noble',
   description: 'An honorable noble house known for martial prowess.',
+  born_particle: 'du',
+  taken_in_particle: 'dau',
 };
 
 export const mockNobleFamily2: Family = {
@@ -145,6 +147,8 @@ export const mockNobleFamily2: Family = {
   name: 'Velenosa',
   family_type: 'noble',
   description: 'A cunning noble house with southern roots.',
+  born_particle: 'za',
+  taken_in_particle: 'zas',
 };
 
 export const mockCommonerFamily: Family = {
@@ -152,6 +156,8 @@ export const mockCommonerFamily: Family = {
   name: 'Smith',
   family_type: 'commoner',
   description: 'A common family of craftspeople.',
+  born_particle: '',
+  taken_in_particle: '',
 };
 
 export const mockFamilies: Family[] = [mockNobleFamily, mockNobleFamily2, mockCommonerFamily];

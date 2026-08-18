@@ -51,6 +51,7 @@ from world.scenes.serializers import (
     ScenesSpotlightSerializer,
     SceneSummaryRevisionSerializer,
     SetActivePersonaRequestSerializer,
+    SetNameDisplayRequestSerializer,
     SetPersonaProfileRequestSerializer,
     SetRoundModeRequestSerializer,
     TruncatePrecaptureRequestSerializer,
@@ -601,6 +602,35 @@ class PersonaViewSet(
             msg = "You must be playing a character to create an identity."
             raise serializers.ValidationError(msg)
         return sheet
+
+    @extend_schema(
+        request=SetNameDisplayRequestSerializer,
+        responses={200: PersonaSerializer},
+        tags=["personas"],
+    )
+    @action(
+        detail=True,
+        methods=[HTTPMethod.POST],
+        url_path="set-name-display",
+        permission_classes=[permissions.IsAuthenticated],
+    )
+    def set_name_display(self, request: Request, pk: str | None = None) -> Response:
+        """#3261 — set this persona's name-degree and title-suffix preferences.
+
+        Only the played character may restyle their own personas; a foreign or
+        unknown id is rejected uniformly (400) without revealing existence.
+        """
+        body = SetNameDisplayRequestSerializer(data=request.data)
+        body.is_valid(raise_exception=True)
+        sheet = self._played_sheet(request)
+        persona = self.get_queryset().filter(pk=pk, character_sheet=sheet).first()
+        if persona is None:
+            msg = "That is not one of your identities."
+            raise serializers.ValidationError(msg)
+        persona.name_degree = body.validated_data["name_degree"]
+        persona.title_suffix = body.validated_data["title_suffix"]
+        persona.save(update_fields=["name_degree", "title_suffix"])
+        return Response(PersonaSerializer(persona, context={"request": request}).data)
 
     @extend_schema(
         request=CreateEstablishedPersonaRequestSerializer,
