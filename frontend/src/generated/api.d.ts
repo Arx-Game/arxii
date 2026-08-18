@@ -35832,6 +35832,14 @@ export interface components {
       readonly treasured_subject_ids: number[];
     };
     /**
+     * @description * `open` - Open — anyone with a permit
+     *     * `reputation_gated` - Reputation gated — minimum standing required
+     *     * `npc_controlled` - NPC controlled — only via specific NPC's authority
+     *     * `closed` - Closed — no permits issued
+     * @enum {string}
+     */
+    PermitEligibilityEnum: 'open' | 'reputation_gated' | 'npc_controlled' | 'closed';
+    /**
      * @description Staff CRUD for permit-kind offer details (#1684, closing #728's residual).
      *
      *     ``building_kind`` and ``default_approved_wards`` are PK-related writes; the
@@ -41791,6 +41799,15 @@ export interface components {
       readonly grid_x: number | null;
       /** @description Position within the PARENT area's local grid (rendering/hint data only — never routing); units are parent-local cells, meaningful only among siblings. */
       readonly grid_y: number | null;
+      readonly realm: string | null;
+      readonly climate: string | null;
+      readonly dominant_society: string | null;
+      /** @description The inherited climate + its source, e.g. "Temperate (from Arx Region)". */
+      readonly effective_climate: string | null;
+      readonly description: string;
+      /** @description Evennia colour tag for this area in the `where` hierarchy path (e.g. '|y', '|520'). Inherited by descendants that leave their own colour blank, so a colour set on a region/house cascades down. Author-set flavour (#1463). */
+      readonly color: string;
+      readonly permit_eligibility: components['schemas']['PermitEligibilityEnum'];
     };
     /** @description The full staff-only area-manager payload: area header + rooms + exits. */
     WorldBuilderAreaManager: {
@@ -41801,6 +41818,10 @@ export interface components {
     };
     /** @description Panel pick-lists (#3269). */
     WorldBuilderCatalogs: {
+      realms: string[];
+      climates: string[];
+      societies: string[];
+      permit_options: string[];
       feature_kinds: string[];
       npc_roles: string[];
       blueprints: string[];

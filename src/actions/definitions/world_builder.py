@@ -189,6 +189,110 @@ def _mint_emit_key(profile: Any) -> str:
     return f"{base}-emit-{counter:03d}"
 
 
+def _apply_area_identity(area: Any, kwargs: dict[str, Any], new_slug: Any) -> str | None:
+    """Apply name/slug/level/parent kwargs to ``area``, pre-save."""
+    if kwargs.get("name") is not None:
+        area.name = kwargs["name"]
+    if new_slug is not None:
+        area.slug = new_slug
+    if kwargs.get("level") is not None:
+        try:
+            area.level = int(kwargs["level"])
+        except (TypeError, ValueError):
+            return "Pick a valid level."
+    parent_id = kwargs.get("parent_id")
+    if parent_id is not None:
+        parent = _resolve_area(parent_id)
+        if parent is None:
+            return "No such parent area."
+        area.parent = parent
+    return None
+
+
+def _resolve_named_row(model: Any, value: str) -> tuple[Any | None, str | None]:
+    """Resolve a name-keyed row; "" clears (None), unknown names refuse."""
+    if value == "":
+        return None, None
+    row = model.objects.filter(name__iexact=value).first()
+    if row is None:
+        options = ", ".join(model.objects.values_list("name", flat=True)[:30])
+        return None, f"No {model.__name__} named '{value}'. Options: {options}."
+    return row, None
+
+
+def _apply_area_named_fks(area: Any, kwargs: dict[str, Any]) -> tuple[str | None, str]:
+    """Apply realm/climate/dominant_society by name (#3269 Phase C)."""
+    from world.areas.constants import AreaLevel  # noqa: PLC0415
+
+    climate_note = ""
+    if kwargs.get("realm") is not None:
+        from world.realms.models import Realm  # noqa: PLC0415
+
+        row, error = _resolve_named_row(Realm, kwargs["realm"])
+        if error:
+            return error, ""
+        area.realm = row
+    if kwargs.get("climate") is not None:
+        from world.weather.models import Climate  # noqa: PLC0415
+
+        row, error = _resolve_named_row(Climate, kwargs["climate"])
+        if error:
+            return error, ""
+        area.climate = row
+        if row is not None and area.level < AreaLevel.REGION:
+            climate_note = (
+                " Warning: this area is below REGION level — a climate here rolls "
+                "its own weather independently of its parents."
+            )
+    if kwargs.get("dominant_society") is not None:
+        from world.societies.models import Society  # noqa: PLC0415
+
+        row, error = _resolve_named_row(Society, kwargs["dominant_society"])
+        if error:
+            return error, ""
+        area.dominant_society = row
+    return None, climate_note
+
+
+def _apply_area_plain_fields(area: Any, kwargs: dict[str, Any]) -> str | None:
+    """Apply description/color/permits/ward-grid coords (#3269 Phase C)."""
+    if kwargs.get("description") is not None:
+        area.description = kwargs["description"]
+    if kwargs.get("color") is not None:
+        area.color = kwargs["color"]
+    if kwargs.get("permit_eligibility") is not None:
+        from world.buildings.constants import PermitEligibility  # noqa: PLC0415
+
+        value = (kwargs["permit_eligibility"] or "").strip().lower()
+        if value not in PermitEligibility.values:
+            options = ", ".join(PermitEligibility.values)
+            return f"No '{value}' permit eligibility. Options: {options}."
+        area.permit_eligibility = value
+    for coord in ("grid_x", "grid_y"):
+        if coord not in kwargs:
+            continue
+        raw = kwargs[coord]
+        if raw is None:
+            setattr(area, coord, None)
+            continue
+        try:
+            setattr(area, coord, int(raw))
+        except (TypeError, ValueError):
+            return "Grid coordinates must be numbers."
+    return None
+
+
+def _apply_area_metadata(area: Any, kwargs: dict[str, Any]) -> tuple[str | None, str]:
+    """Apply every Phase C metadata kwarg to ``area``, pre-save (#3269)."""
+    error, climate_note = _apply_area_named_fks(area, kwargs)
+    if error is not None:
+        return error, ""
+    plain_error = _apply_area_plain_fields(area, kwargs)
+    if plain_error is not None:
+        return plain_error, ""
+    return None, climate_note
+
+
 def _room_description(profile: Any) -> str:
     """The room's permanent description, or "" when none is written."""
     from evennia_extensions.models import ObjectDisplayData  # noqa: PLC0415
@@ -384,11 +488,17 @@ class CreateAreaAction(_WorldBuilderAction):
 
 @dataclass
 class EditAreaAction(_WorldBuilderAction):
-    """Edit an area. Kwargs: ``area_id``, optional ``name``/``slug``/``level``/``parent_id``.
+    """Edit an area. Kwargs: ``area_id``, optional ``name``/``slug``/``level``/
+    ``parent_id``, plus the Phase C metadata (#3269): ``realm``/``climate``/
+    ``dominant_society`` (names; empty string clears), ``description``,
+    ``color``, ``permit_eligibility``, ``grid_x``/``grid_y`` (parent-local
+    ward placement).
 
-    A slug change on an already-keyed area is refused — keys are permanent
-    once set (shares ``ensure_slug_change_allowed`` with
-    ``promote_to_authored``'s guard).
+    A slug change is refused once a room beneath carries a fixture key —
+    keys are permanent from that moment (shares ``ensure_slug_change_allowed``
+    with ``promote_to_authored``'s guard). Setting a climate below REGION
+    level succeeds but the result message warns: each climate-bearing area
+    rolls its own weather, so per-ward climates mean per-ward weather.
     """
 
     key: str = "edit_area"
@@ -412,26 +522,17 @@ class EditAreaAction(_WorldBuilderAction):
         refusal = ensure_slug_change_allowed(area, new_slug)
         if refusal is not None:
             return ActionResult(success=False, message=refusal)
-        if kwargs.get("name") is not None:
-            area.name = kwargs["name"]
-        if new_slug is not None:
-            area.slug = new_slug
-        if kwargs.get("level") is not None:
-            try:
-                area.level = int(kwargs["level"])
-            except (TypeError, ValueError):
-                return ActionResult(success=False, message="Pick a valid level.")
-        parent_id = kwargs.get("parent_id")
-        if parent_id is not None:
-            parent = _resolve_area(parent_id)
-            if parent is None:
-                return ActionResult(success=False, message="No such parent area.")
-            area.parent = parent
+        identity_error = _apply_area_identity(area, kwargs, new_slug)
+        if identity_error is not None:
+            return ActionResult(success=False, message=identity_error)
+        meta_error, climate_note = _apply_area_metadata(area, kwargs)
+        if meta_error is not None:
+            return ActionResult(success=False, message=meta_error)
         try:
             area.save()
         except ValidationError as exc:
             return ActionResult(success=False, message="; ".join(exc.messages))
-        return ActionResult(success=True, message=f"{area.name} updated.")
+        return ActionResult(success=True, message=f"{area.name} updated.{climate_note}")
 
 
 @dataclass

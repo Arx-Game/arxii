@@ -57,6 +57,11 @@ class WorldBuilderAreaSerializer(serializers.ModelSerializer):
     level_display = serializers.CharField(source="get_level_display", read_only=True)
     children_count = serializers.IntegerField(read_only=True)
     parent = serializers.IntegerField(source="parent_id", read_only=True, allow_null=True)
+    # Phase C metadata (#3269) — name-resolved reads for the edit-area dialog.
+    realm = serializers.SerializerMethodField()
+    climate = serializers.SerializerMethodField()
+    dominant_society = serializers.SerializerMethodField()
+    effective_climate = serializers.SerializerMethodField()
 
     class Meta:
         model = Area
@@ -71,8 +76,34 @@ class WorldBuilderAreaSerializer(serializers.ModelSerializer):
             "children_count",
             "grid_x",
             "grid_y",
+            "realm",
+            "climate",
+            "dominant_society",
+            "effective_climate",
+            "description",
+            "color",
+            "permit_eligibility",
         ]
         read_only_fields = fields
+
+    def get_realm(self, obj: Area) -> str | None:
+        return obj.realm.name if obj.realm_id else None
+
+    def get_climate(self, obj: Area) -> str | None:
+        return obj.climate.name if obj.climate_id else None
+
+    def get_dominant_society(self, obj: Area) -> str | None:
+        return obj.dominant_society.name if obj.dominant_society_id else None
+
+    def get_effective_climate(self, obj: Area) -> str | None:
+        """The inherited climate + its source, e.g. "Temperate (from Arx Region)"."""
+        node = obj
+        while node is not None:
+            if node.climate_id is not None:
+                suffix = "" if node.pk == obj.pk else f" (from {node.name})"
+                return f"{node.climate.name}{suffix}"
+            node = node.parent
+        return None
 
 
 class WorldBuilderRoomClueSerializer(serializers.Serializer):
@@ -204,6 +235,10 @@ class WorldBuilderIdNameSerializer(serializers.Serializer):
 class WorldBuilderCatalogsSerializer(serializers.Serializer):
     """Panel pick-lists (#3269)."""
 
+    realms = serializers.ListField(child=serializers.CharField())
+    climates = serializers.ListField(child=serializers.CharField())
+    societies = serializers.ListField(child=serializers.CharField())
+    permit_options = serializers.ListField(child=serializers.CharField())
     feature_kinds = serializers.ListField(child=serializers.CharField())
     npc_roles = serializers.ListField(child=serializers.CharField())
     blueprints = serializers.ListField(child=serializers.CharField())

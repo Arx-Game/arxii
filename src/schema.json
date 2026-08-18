@@ -62583,6 +62583,18 @@ components:
       required:
       - beat_id
       - treasured_subject_ids
+    PermitEligibilityEnum:
+      enum:
+      - open
+      - reputation_gated
+      - npc_controlled
+      - closed
+      type: string
+      description: |-
+        * `open` - Open — anyone with a permit
+        * `reputation_gated` - Reputation gated — minimum standing required
+        * `npc_controlled` - NPC controlled — only via specific NPC's authority
+        * `closed` - Closed — no permits issued
     PermitOfferDetails:
       type: object
       description: |-
@@ -74675,8 +74687,45 @@ components:
           description: Position within the PARENT area's local grid (rendering/hint
             data only — never routing); units are parent-local cells, meaningful only
             among siblings.
+        realm:
+          type: string
+          nullable: true
+          readOnly: true
+        climate:
+          type: string
+          nullable: true
+          readOnly: true
+        dominant_society:
+          type: string
+          nullable: true
+          readOnly: true
+        effective_climate:
+          type: string
+          nullable: true
+          description: The inherited climate + its source, e.g. "Temperate (from Arx
+            Region)".
+          readOnly: true
+        description:
+          type: string
+          readOnly: true
+        color:
+          type: string
+          readOnly: true
+          description: Evennia colour tag for this area in the `where` hierarchy path
+            (e.g. '|y', '|520'). Inherited by descendants that leave their own colour
+            blank, so a colour set on a region/house cascades down. Author-set flavour
+            (#1463).
+        permit_eligibility:
+          allOf:
+          - $ref: '#/components/schemas/PermitEligibilityEnum'
+          readOnly: true
       required:
       - children_count
+      - climate
+      - color
+      - description
+      - dominant_society
+      - effective_climate
       - grid_x
       - grid_y
       - id
@@ -74685,6 +74734,8 @@ components:
       - name
       - origin
       - parent
+      - permit_eligibility
+      - realm
       - slug
     WorldBuilderAreaManager:
       type: object
@@ -74712,6 +74763,22 @@ components:
       type: object
       description: Panel pick-lists (#3269).
       properties:
+        realms:
+          type: array
+          items:
+            type: string
+        climates:
+          type: array
+          items:
+            type: string
+        societies:
+          type: array
+          items:
+            type: string
+        permit_options:
+          type: array
+          items:
+            type: string
         feature_kinds:
           type: array
           items:
@@ -74739,9 +74806,13 @@ components:
       required:
       - beginnings
       - blueprints
+      - climates
       - feature_kinds
       - npc_roles
+      - permit_options
+      - realms
       - size_tiers
+      - societies
       - starting_areas
     WorldBuilderClueTrigger:
       type: object

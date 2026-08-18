@@ -1354,3 +1354,47 @@ class PhaseBRoomAuthoringTests(TestCase):
             ).order_by("grid_y")
         )
         assert [(r.grid_x, r.grid_y) for r in rooms] == [(0, 1), (0, 2), (0, 3)]
+
+
+class PhaseCAreaMetadataTests(TestCase):
+    """#3269 Phase C — edit_area's metadata kwargs + the below-REGION climate warning."""
+
+    def setUp(self) -> None:
+        self.staff = _staff_actor("PhaseCStaff")
+        self.area = AreaFactory(name="Meta Ward", level=AreaLevel.WARD)
+
+    def test_metadata_fields_apply(self) -> None:
+        from actions.definitions.world_builder import EditAreaAction
+        from world.realms.models import Realm
+
+        realm = Realm.objects.create(name="Testland")
+        result = EditAreaAction().run(
+            self.staff,
+            area_id=self.area.pk,
+            realm=realm.name,
+            description="A test ward.",
+            color="|y",
+            permit_eligibility="open",
+            grid_x=3,
+            grid_y=4,
+        )
+        assert result.success, result.message
+        self.area.refresh_from_db()
+        assert self.area.realm_id == realm.pk
+        assert self.area.description == "A test ward."
+        assert (self.area.grid_x, self.area.grid_y) == (3, 4)
+
+    def test_unknown_realm_name_refused(self) -> None:
+        from actions.definitions.world_builder import EditAreaAction
+
+        result = EditAreaAction().run(self.staff, area_id=self.area.pk, realm="Nowhereland")
+        assert not result.success
+
+    def test_climate_below_region_warns(self) -> None:
+        from actions.definitions.world_builder import EditAreaAction
+        from world.weather.models import Climate
+
+        climate = Climate.objects.create(name="Test Drizzle")
+        result = EditAreaAction().run(self.staff, area_id=self.area.pk, climate=climate.name)
+        assert result.success, result.message
+        assert "below REGION" in result.message

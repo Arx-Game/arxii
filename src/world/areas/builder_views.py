@@ -262,11 +262,19 @@ def _authoring_catalogs() -> dict:
     """Pick-lists the Phase B panel sections need (#3269) — one query each."""
     from evennia_extensions.models import RoomSizeTier  # noqa: PLC0415
     from world.areas.positioning.models import PositionBlueprint  # noqa: PLC0415
+    from world.buildings.constants import PermitEligibility  # noqa: PLC0415
     from world.character_creation.models import Beginnings, StartingArea  # noqa: PLC0415
     from world.npc_services.models import NPCRole  # noqa: PLC0415
+    from world.realms.models import Realm  # noqa: PLC0415
     from world.room_features.models import RoomFeatureKind  # noqa: PLC0415
+    from world.societies.models import Society  # noqa: PLC0415
+    from world.weather.models import Climate  # noqa: PLC0415
 
     return {
+        "realms": list(Realm.objects.values_list("name", flat=True)),
+        "climates": list(Climate.objects.values_list("name", flat=True)),
+        "societies": list(Society.objects.values_list("name", flat=True)),
+        "permit_options": list(PermitEligibility.values),
         "feature_kinds": list(RoomFeatureKind.objects.values_list("name", flat=True)),
         "npc_roles": list(NPCRole.objects.values_list("name", flat=True)),
         "blueprints": list(PositionBlueprint.objects.values_list("name", flat=True)),

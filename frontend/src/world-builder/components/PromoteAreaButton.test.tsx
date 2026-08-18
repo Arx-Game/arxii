@@ -17,6 +17,13 @@ const area: WorldBuilderArea = {
   children_count: 0,
   grid_x: null,
   grid_y: null,
+  realm: null,
+  climate: null,
+  dominant_society: null,
+  effective_climate: null,
+  description: '',
+  color: '',
+  permit_eligibility: 'open' as const,
 };
 
 function renderButton(overrides: Partial<WorldBuilderArea> = {}) {
