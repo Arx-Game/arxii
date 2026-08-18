@@ -28149,6 +28149,116 @@ paths:
                 items:
                   $ref: '#/components/schemas/Trap'
           description: ''
+  /api/roster/applications/:
+    get:
+      operationId: roster_applications_list
+      description: |-
+        Staff-only review queue for applications to existing roster characters.
+
+        Distinct from character_creation's DraftApplication review (new player-made
+        characters): this queue is players applying for staff-authored characters
+        on the Available shelf.
+      parameters:
+      - name: page
+        required: false
+        in: query
+        description: A page number within the paginated result set.
+        schema:
+          type: integer
+      - in: query
+        name: status
+        schema:
+          type: string
+          enum:
+          - approved
+          - denied
+          - pending
+          - withdrawn
+        description: |-
+          * `pending` - Pending Review
+          * `approved` - Approved
+          * `denied` - Denied
+          * `withdrawn` - Withdrawn
+      tags:
+      - roster
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaginatedRosterApplicationListList'
+          description: ''
+  /api/roster/applications/{id}/:
+    get:
+      operationId: roster_applications_retrieve
+      description: |-
+        Staff-only review queue for applications to existing roster characters.
+
+        Distinct from character_creation's DraftApplication review (new player-made
+        characters): this queue is players applying for staff-authored characters
+        on the Available shelf.
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: A unique integer value identifying this Roster Application.
+        required: true
+      tags:
+      - roster
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RosterApplicationDetail'
+          description: ''
+  /api/roster/applications/{id}/review/:
+    post:
+      operationId: roster_applications_review_create
+      description: Approve or deny one pending application.
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: A unique integer value identifying this Roster Application.
+        required: true
+      tags:
+      - roster
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RosterApplicationListRequest'
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RosterApplicationList'
+          description: ''
+  /api/roster/applications/pending-count/:
+    get:
+      operationId: roster_applications_pending_count_retrieve
+      description: Count of applications awaiting review, for the staff hub badge.
+      tags:
+      - roster
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RosterApplicationList'
+          description: ''
   /api/roster/entries/:
     get:
       operationId: roster_entries_list
@@ -57419,6 +57529,29 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/RoomWardDetails'
+    PaginatedRosterApplicationListList:
+      type: object
+      required:
+      - count
+      - results
+      properties:
+        count:
+          type: integer
+          example: 123
+        next:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=4
+        previous:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=2
+        results:
+          type: array
+          items:
+            $ref: '#/components/schemas/RosterApplicationList'
     PaginatedRosterEntryList:
       type: object
       required:
@@ -65754,6 +65887,85 @@ components:
           type: string
       required:
       - message
+    RosterApplicationDetail:
+      type: object
+      description: Serializer for retrieving application details.
+      properties:
+        id:
+          type: integer
+          readOnly: true
+        character_name:
+          type: string
+          readOnly: true
+        player_username:
+          type: string
+          readOnly: true
+        status:
+          $ref: '#/components/schemas/StatusBa9Enum'
+        status_display:
+          type: string
+          readOnly: true
+        application_text:
+          type: string
+          description: Why player wants this character
+        review_notes:
+          type: string
+          description: Staff notes on application
+        applied_date:
+          type: string
+          format: date-time
+          readOnly: true
+        reviewed_date:
+          type: string
+          format: date-time
+          readOnly: true
+          nullable: true
+        policy_review_info:
+          type: string
+          readOnly: true
+      required:
+      - application_text
+      - applied_date
+      - character_name
+      - id
+      - player_username
+      - policy_review_info
+      - reviewed_date
+      - status_display
+    RosterApplicationList:
+      type: object
+      description: Slim row for the staff review queue (no per-row policy queries).
+      properties:
+        id:
+          type: integer
+          readOnly: true
+        character_name:
+          type: string
+          readOnly: true
+        player_username:
+          type: string
+          readOnly: true
+        status:
+          $ref: '#/components/schemas/StatusBa9Enum'
+        status_display:
+          type: string
+          readOnly: true
+        applied_date:
+          type: string
+          format: date-time
+          readOnly: true
+      required:
+      - applied_date
+      - character_name
+      - id
+      - player_username
+      - status_display
+    RosterApplicationListRequest:
+      type: object
+      description: Slim row for the staff review queue (no per-row policy queries).
+      properties:
+        status:
+          $ref: '#/components/schemas/StatusBa9Enum'
     RosterApplicationRequest:
       type: object
       description: Validate a roster application message.
