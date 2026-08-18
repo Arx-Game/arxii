@@ -361,7 +361,8 @@ export async function getRosterApplications(
     params.append('page', page.toString());
   }
   const qs = params.toString();
-  const res = await apiFetch(`${ROSTER_APPS_URL}/${qs ? `?${qs}` : ''}`);
+  const suffix = qs ? `?${qs}` : '';
+  const res = await apiFetch(`${ROSTER_APPS_URL}/${suffix}`);
   if (!res.ok) throw new Error('Failed to load roster application list');
   return res.json();
 }

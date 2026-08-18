@@ -7,7 +7,12 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Textarea } from '@/components/ui/textarea';
 import { useReviewRosterApplication, useRosterApplicationDetail } from '@/staff/queries';
 
-function InfoRow({ label, value }: { label: string; value: string }) {
+interface InfoRowProps {
+  label: string;
+  value: string;
+}
+
+function InfoRow({ label, value }: Readonly<InfoRowProps>) {
   return (
     <div className="flex gap-2">
       <span className="min-w-32 font-medium text-muted-foreground">{label}</span>
@@ -26,13 +31,14 @@ function formatPolicyLabel(key: string): string {
 function formatPolicyValue(value: unknown): string {
   if (typeof value === 'boolean') return value ? 'Yes' : 'No';
   if (value === null || value === undefined) return '';
+  if (typeof value === 'object') return JSON.stringify(value);
   return String(value);
 }
 
 export function StaffRosterApplicationDetailPage() {
   const navigate = useNavigate();
   const { id } = useParams<{ id: string }>();
-  const appId = id ? parseInt(id, 10) : undefined;
+  const appId = id ? Number.parseInt(id, 10) : undefined;
   const { data: application, isLoading, isError } = useRosterApplicationDetail(appId);
   const review = useReviewRosterApplication();
 

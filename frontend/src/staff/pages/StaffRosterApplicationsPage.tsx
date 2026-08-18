@@ -1,9 +1,10 @@
 import { useState } from 'react';
+import type { ReactNode } from 'react';
 import { Link } from 'react-router-dom';
 
 import { Badge } from '@/components/ui/badge';
-import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
+import { NextPrevPagination, StatusFilterBar } from '@/staff/components/listControls';
 import { useRosterApplications } from '@/staff/queries';
 import type { RosterApplicationStatus } from '@/staff/types';
 
@@ -35,74 +36,57 @@ export function StaffRosterApplicationsPage() {
   const { data, isLoading } = useRosterApplications(statusFilter, page);
   const applications = data?.results;
 
+  let content: ReactNode;
+  if (isLoading) {
+    content = <p className="text-muted-foreground">Loading...</p>;
+  } else if (!applications?.length) {
+    content = <p className="text-muted-foreground">No roster applications found.</p>;
+  } else {
+    content = (
+      <>
+        <div className="space-y-3">
+          {applications.map((app) => (
+            <Link key={app.id} to={`/staff/roster-applications/${app.id}`}>
+              <Card className="cursor-pointer transition-colors hover:bg-muted/50">
+                <CardContent className="flex items-center justify-between py-4">
+                  <div>
+                    <p className="font-medium">{app.character_name}</p>
+                    <p className="text-sm text-muted-foreground">
+                      by {app.player_username} &middot;{' '}
+                      {new Date(app.applied_date).toLocaleDateString()}
+                    </p>
+                  </div>
+                  <Badge variant={rosterStatusVariant(app.status)}>{app.status_display}</Badge>
+                </CardContent>
+              </Card>
+            </Link>
+          ))}
+        </div>
+
+        <NextPrevPagination
+          page={page}
+          hasPrevious={!!data?.previous}
+          hasNext={!!data?.next}
+          onPageChange={setPage}
+        />
+      </>
+    );
+  }
+
   return (
     <div className="container mx-auto max-w-6xl px-4 py-8">
       <h1 className="mb-6 text-2xl font-bold">Roster Character Applications</h1>
 
-      <div className="mb-6 flex flex-wrap gap-2">
-        {STATUS_OPTIONS.map((opt) => (
-          <Button
-            key={opt.label}
-            variant={statusFilter === opt.value ? 'default' : 'outline'}
-            size="sm"
-            onClick={() => {
-              setStatusFilter(opt.value);
-              setPage(1);
-            }}
-          >
-            {opt.label}
-          </Button>
-        ))}
-      </div>
+      <StatusFilterBar
+        options={STATUS_OPTIONS}
+        value={statusFilter}
+        onChange={(value) => {
+          setStatusFilter(value);
+          setPage(1);
+        }}
+      />
 
-      {isLoading ? (
-        <p className="text-muted-foreground">Loading...</p>
-      ) : !applications?.length ? (
-        <p className="text-muted-foreground">No roster applications found.</p>
-      ) : (
-        <>
-          <div className="space-y-3">
-            {applications.map((app) => (
-              <Link key={app.id} to={`/staff/roster-applications/${app.id}`}>
-                <Card className="cursor-pointer transition-colors hover:bg-muted/50">
-                  <CardContent className="flex items-center justify-between py-4">
-                    <div>
-                      <p className="font-medium">{app.character_name}</p>
-                      <p className="text-sm text-muted-foreground">
-                        by {app.player_username} &middot;{' '}
-                        {new Date(app.applied_date).toLocaleDateString()}
-                      </p>
-                    </div>
-                    <Badge variant={rosterStatusVariant(app.status)}>{app.status_display}</Badge>
-                  </CardContent>
-                </Card>
-              </Link>
-            ))}
-          </div>
-
-          {data && data.count > 0 && (data.next || data.previous) && (
-            <div className="mt-6 flex items-center justify-center gap-4">
-              <Button
-                variant="outline"
-                size="sm"
-                disabled={!data.previous}
-                onClick={() => setPage((p) => p - 1)}
-              >
-                Previous
-              </Button>
-              <span className="text-sm text-muted-foreground">Page {page}</span>
-              <Button
-                variant="outline"
-                size="sm"
-                disabled={!data.next}
-                onClick={() => setPage((p) => p + 1)}
-              >
-                Next
-              </Button>
-            </div>
-          )}
-        </>
-      )}
+      {content}
     </div>
   );
 }
