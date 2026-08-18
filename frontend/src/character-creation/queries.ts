@@ -297,7 +297,10 @@ export function useAddToRoster() {
  * shows a success panel naming the character before the player navigates
  * away, and nulling the draft here would unmount `ReviewStage` (and the
  * dialog with it) out from under that panel. The dialog clears the draft
- * cache itself once the player dismisses the success view.
+ * cache itself once the player dismisses the success view (X/Cancel/Link),
+ * plus a belt-and-suspenders unmount-cleanup effect for router navigation
+ * (e.g. browser Back) that unmounts the dialog without going through that
+ * dismissal path — see `FinalizeForTableDialog`'s effect for the full case.
  */
 export function useFinalizeDraftForTable() {
   return useMutation({

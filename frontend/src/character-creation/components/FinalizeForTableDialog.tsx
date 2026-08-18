@@ -6,11 +6,12 @@
  * since `finalize-gm` also mints a `Story` tied to the target table, the GM
  * picks which of their active GM-role tables to attach it to and names the
  * story. On success, shows a panel naming the character and linking to the
- * table instead of immediately redirecting — the player-GM stays in control
- * of when the draft is cleared (see `useFinalizeDraftForTable`'s doc comment).
+ * specific table instead of immediately redirecting — the player-GM stays in
+ * control of when the draft is cleared (see `useFinalizeDraftForTable`'s doc
+ * comment and the unmount-cleanup effect below).
  */
 
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { useQueryClient } from '@tanstack/react-query';
 import { Button } from '@/components/ui/button';
@@ -61,6 +62,16 @@ export function FinalizeForTableDialog({
   const [fieldErrors, setFieldErrors] = useState<BulletinFieldErrors>({});
   const [result, setResult] = useState<FinalizeForTableResponse | null>(null);
 
+  // Mirrors `result` for the unmount-cleanup effect below, which needs a
+  // synchronous read of "did this finalize succeed" without depending on
+  // `result` (a dependency would re-run the effect, and re-subscribing an
+  // unmount handler on every render defeats the point — it must only ever
+  // run once, on the component's actual teardown).
+  const resultRef = useRef<FinalizeForTableResponse | null>(null);
+  useEffect(() => {
+    resultRef.current = result;
+  }, [result]);
+
   function resetForm() {
     setTableId('');
     setStoryTitle('');
@@ -81,6 +92,29 @@ export function FinalizeForTableDialog({
     onOpenChange(next);
     if (!next) resetForm();
   }
+
+  // Route-level safety net (#3268 review fix): this dialog stays mounted
+  // across open/close (its parent, `ReviewStage`, only toggles the `open`
+  // prop), so `handleOpenChange` above catches the in-dialog dismissal path
+  // (X button, Cancel, "Go to My Table"). But a player can also leave via
+  // browser Back or any other router nav that unmounts `ReviewStage` (and
+  // this dialog with it) without `handleOpenChange` ever running — e.g.
+  // right after a successful finalize, before they click through. Without
+  // this, the already-finalized draft stays cached (`staleTime` is 5 min —
+  // see `queryClient.ts`), and a return to /characters/create resurrects a
+  // phantom draft whose actions all 404 server-side. This effect's cleanup
+  // fires on every unmount path, so it clears the cache whenever the dialog
+  // goes away having actually finalized, regardless of how the player left.
+  // (`clearFinalizedDraft` intentionally omitted from deps: it must run its
+  // cleanup only on the component's final unmount, not on every re-render.)
+  useEffect(() => {
+    return () => {
+      if (resultRef.current) {
+        clearFinalizedDraft();
+      }
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -119,7 +153,7 @@ export function FinalizeForTableDialog({
             <p className="text-sm">{result.message}</p>
             <DialogFooter>
               <Button asChild onClick={clearFinalizedDraft}>
-                <Link to="/tables">Go to My Tables</Link>
+                <Link to={`/tables/${tableId}`}>Go to My Table</Link>
               </Button>
             </DialogFooter>
           </div>

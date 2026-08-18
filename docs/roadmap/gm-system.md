@@ -229,7 +229,9 @@ unlocks, never grants" makes XP scarce, so this is the pull). Built:
 - ✅ ViewSets with staff/GM permission split and staff-only actions (archive, transfer_ownership)
 - ✅ `last_active_at` stub on GMProfile (not yet auto-stamped)
 - ✅ Story attachment (`Story.primary_table`, Phase 3) and frontend pages (`TablesListPage`,
-  `TableDetailPage`, #3268 Task 3) — both landed once Stories existed to attach to
+  `TableDetailPage` — Stories phase 5, #407, 73fa32d2a) — both landed once Stories existed to
+  attach to. #3268 built on top of that frontend rather than adding it: `RecruitmentTab` on
+  `TableDetailPage` (Task 2) and `ClaimInvitePage` (Task 3) — see Phase 3 below
 
 ### Phase 3 — Roster & Recruitment ✅
 - ✅ `Story.primary_table` FK links stories to tables (orphaned stories are legal, character falls out of default visibility)

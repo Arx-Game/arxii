@@ -14,10 +14,10 @@ import userEvent from '@testing-library/user-event';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { MemoryRouter } from 'react-router-dom';
 import { vi } from 'vitest';
-import type { ReactNode } from 'react';
 import { ApiError } from '@/lib/errors';
 import type { GMTable } from '@/tables/types';
 import { FinalizeForTableDialog } from '../../components/FinalizeForTableDialog';
+import { characterCreationKeys } from '../../queries';
 import type { FinalizeForTableResponse } from '../../api';
 
 /** Shape of the second argument `mutate(variables, opts)` is called with. */
@@ -82,22 +82,26 @@ function makeTable(overrides: Partial<GMTable> = {}): GMTable {
   } as GMTable;
 }
 
-function Wrapper({ children }: { children: ReactNode }) {
-  const client = new QueryClient({
+function makeQueryClient(): QueryClient {
+  return new QueryClient({
     defaultOptions: { queries: { retry: false }, mutations: { retry: false } },
   });
-  return (
-    <QueryClientProvider client={client}>
-      <MemoryRouter>{children}</MemoryRouter>
-    </QueryClientProvider>
-  );
 }
 
-function renderDialog(tables: GMTable[] = [makeTable()]) {
-  return render(
-    <FinalizeForTableDialog draftId={7} tables={tables} open={true} onOpenChange={vi.fn()} />,
-    { wrapper: Wrapper }
+/**
+ * Renders the dialog with an explicit (returned) QueryClient — tests that
+ * check cache side effects (the unmount-cleanup safety net, #3268 review fix)
+ * need a handle on the same client instance the component reads/writes.
+ */
+function renderDialog(tables: GMTable[] = [makeTable()], client: QueryClient = makeQueryClient()) {
+  const utils = render(
+    <QueryClientProvider client={client}>
+      <MemoryRouter>
+        <FinalizeForTableDialog draftId={7} tables={tables} open={true} onOpenChange={vi.fn()} />
+      </MemoryRouter>
+    </QueryClientProvider>
   );
+  return { ...utils, client };
 }
 
 describe('FinalizeForTableDialog', () => {
@@ -175,7 +179,7 @@ describe('FinalizeForTableDialog', () => {
     expect(await screen.findByText('That draft is not complete yet.')).toBeInTheDocument();
   });
 
-  it('shows a success panel naming the message and linking to /tables', async () => {
+  it('shows a success panel naming the message and linking to the specific table', async () => {
     const mutateFn = vi.fn((_vars: unknown, opts: MutateOpts) => {
       opts.onSuccess?.({
         character_id: 55,
@@ -190,17 +194,91 @@ describe('FinalizeForTableDialog', () => {
     } as unknown as ReturnType<typeof queries.useFinalizeDraftForTable>);
 
     const user = userEvent.setup();
-    renderDialog();
+    renderDialog([makeTable({ id: 42 })]);
 
-    await userEvent.selectOptions(screen.getByTestId('mock-select'), '1');
+    await userEvent.selectOptions(screen.getByTestId('mock-select'), '42');
     await user.type(screen.getByLabelText(/story title/i), 'The Long Road Home');
     await user.click(screen.getByRole('button', { name: /^finalize for my table$/i }));
 
     expect(
       await screen.findByText('GM character created on the Available roster.')
     ).toBeInTheDocument();
-    const link = screen.getByRole('link', { name: /go to my tables/i });
-    expect(link).toHaveAttribute('href', '/tables');
+    const link = screen.getByRole('link', { name: /go to my table/i });
+    expect(link).toHaveAttribute('href', '/tables/42');
+  });
+
+  it('clears the finalized draft from cache when the link to the table is clicked', async () => {
+    const mutateFn = vi.fn((_vars: unknown, opts: MutateOpts) => {
+      opts.onSuccess?.({
+        character_id: 55,
+        roster_entry_id: 66,
+        story_id: 77,
+        message: 'GM character created on the Available roster.',
+      });
+    });
+    vi.mocked(queries.useFinalizeDraftForTable).mockReturnValue({
+      mutate: mutateFn,
+      isPending: false,
+    } as unknown as ReturnType<typeof queries.useFinalizeDraftForTable>);
+
+    const user = userEvent.setup();
+    const client = makeQueryClient();
+    client.setQueryData(characterCreationKeys.draft(), { id: 7 });
+    renderDialog([makeTable()], client);
+
+    await userEvent.selectOptions(screen.getByTestId('mock-select'), '1');
+    await user.type(screen.getByLabelText(/story title/i), 'The Long Road Home');
+    await user.click(screen.getByRole('button', { name: /^finalize for my table$/i }));
+    await user.click(await screen.findByRole('link', { name: /go to my table/i }));
+
+    expect(client.getQueryData(characterCreationKeys.draft())).toBeNull();
+  });
+
+  it('clears the finalized draft from cache on unmount even if the player never dismisses the panel (#3268 review fix)', async () => {
+    const mutateFn = vi.fn((_vars: unknown, opts: MutateOpts) => {
+      opts.onSuccess?.({
+        character_id: 55,
+        roster_entry_id: 66,
+        story_id: 77,
+        message: 'GM character created on the Available roster.',
+      });
+    });
+    vi.mocked(queries.useFinalizeDraftForTable).mockReturnValue({
+      mutate: mutateFn,
+      isPending: false,
+    } as unknown as ReturnType<typeof queries.useFinalizeDraftForTable>);
+
+    const user = userEvent.setup();
+    const client = makeQueryClient();
+    client.setQueryData(characterCreationKeys.draft(), { id: 7 });
+    const { unmount } = renderDialog([makeTable()], client);
+
+    await userEvent.selectOptions(screen.getByTestId('mock-select'), '1');
+    await user.type(screen.getByLabelText(/story title/i), 'The Long Road Home');
+    await user.click(screen.getByRole('button', { name: /^finalize for my table$/i }));
+    await screen.findByText('GM character created on the Available roster.');
+
+    // Simulates a router navigation away (e.g. browser Back) that unmounts
+    // ReviewStage/this dialog directly, bypassing the X/Cancel/Link handlers.
+    unmount();
+
+    expect(client.getQueryData(characterCreationKeys.draft())).toBeNull();
+  });
+
+  it('does not touch the draft cache on unmount when the player never finalized', () => {
+    vi.mocked(queries.useFinalizeDraftForTable).mockReturnValue({
+      mutate: vi.fn(),
+      isPending: false,
+    } as unknown as ReturnType<typeof queries.useFinalizeDraftForTable>);
+
+    const client = makeQueryClient();
+    const sentinelDraft = { id: 7 };
+    client.setQueryData(characterCreationKeys.draft(), sentinelDraft);
+    const { unmount } = renderDialog([makeTable()], client);
+
+    unmount();
+
+    expect(client.getQueryData(characterCreationKeys.draft())).toBe(sentinelDraft);
   });
 
   describe('submit gating', () => {
