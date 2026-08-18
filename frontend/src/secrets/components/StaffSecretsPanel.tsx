@@ -37,8 +37,8 @@ function SecretRow({ subjectId, secret }: { subjectId: number; secret: AuthoredS
       <TableCell>{secret.category_name || 'Unknown'}</TableCell>
       <TableCell>{secret.subject_aware ? 'Yes' : 'No'}</TableCell>
       <TableCell>{secret.provenance_display}</TableCell>
-      <TableCell className="max-w-sm truncate" title={secret.content}>
-        {previewContent(secret.content)}
+      <TableCell className="max-w-sm truncate" title={secret.content ?? ''}>
+        {previewContent(secret.content ?? '')}
       </TableCell>
       <TableCell>
         <AuthorSecretDialog
