@@ -15,6 +15,9 @@ import type {
   InboxResponse,
   PlayerFeedback,
   PlayerReport,
+  RosterApplicationDetail,
+  RosterApplicationListItem,
+  RosterApplicationStatus,
   SubmissionCategory,
   SubmissionStatus,
   SystemErrorReport,
@@ -24,6 +27,7 @@ const INBOX_URL = '/api/staff-inbox';
 const SUBMISSIONS_URL = '/api/player-submissions';
 const GM_URL = '/api/gm/applications';
 const INVITES_URL = '/api/staff/invites';
+const ROSTER_APPS_URL = '/api/roster/applications';
 
 // =============================================================================
 // Staff Inbox
@@ -338,6 +342,56 @@ export async function resendAccountInvite(id: number): Promise<AccountInvite> {
     throw new Error(data?.detail ?? 'Failed to resend invite');
   }
   return res.json();
+}
+
+// =============================================================================
+// Roster-Character Applications (#3265)
+// =============================================================================
+
+export async function getRosterApplications(
+  status?: RosterApplicationStatus,
+  page?: number
+): Promise<PaginatedResponse<RosterApplicationListItem>> {
+  const params = new URLSearchParams();
+  if (status) {
+    params.append('status', status);
+  }
+  if (page != null) {
+    params.append('page', page.toString());
+  }
+  const qs = params.toString();
+  const res = await apiFetch(`${ROSTER_APPS_URL}/${qs ? `?${qs}` : ''}`);
+  if (!res.ok) throw new Error('Failed to load roster application list');
+  return res.json();
+}
+
+export async function getRosterApplicationDetail(id: number): Promise<RosterApplicationDetail> {
+  const res = await apiFetch(`${ROSTER_APPS_URL}/${id}/`);
+  if (!res.ok) throw new Error('Failed to load roster application detail');
+  return res.json();
+}
+
+export async function reviewRosterApplication(
+  id: number,
+  action: 'approve' | 'deny',
+  reviewNotes?: string
+): Promise<RosterApplicationDetail> {
+  const res = await apiFetch(`${ROSTER_APPS_URL}/${id}/review/`, {
+    method: 'POST',
+    body: JSON.stringify({ action, review_notes: reviewNotes ?? '' }),
+  });
+  if (!res.ok) {
+    const data = await res.json().catch(() => null);
+    throw new Error(data?.detail ?? 'Failed to review roster application');
+  }
+  return res.json();
+}
+
+export async function getPendingRosterApplicationCount(): Promise<number> {
+  const res = await apiFetch(`${ROSTER_APPS_URL}/pending-count/`);
+  if (!res.ok) return 0;
+  const data = await res.json();
+  return data.count;
 }
 
 // Staff-only fallback when mail cannot reach the player (#3193): produces the

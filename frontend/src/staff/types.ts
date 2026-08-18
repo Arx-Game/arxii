@@ -172,6 +172,27 @@ export interface AccountInvite {
   redeemed_by_username: string | null;
 }
 
+// Roster-character applications (#3265) — players applying for staff-authored
+// characters on the Available shelf, from /api/roster/applications/. Distinct
+// from character_creation's DraftApplication (new player-made characters).
+export type RosterApplicationStatus = 'pending' | 'approved' | 'denied' | 'withdrawn';
+
+export interface RosterApplicationListItem {
+  id: number;
+  character_name: string;
+  player_username: string;
+  status: string;
+  status_display: string;
+  applied_date: string;
+}
+
+export interface RosterApplicationDetail extends RosterApplicationListItem {
+  application_text: string;
+  review_notes: string;
+  reviewed_date: string | null;
+  policy_review_info: Record<string, unknown> | null;
+}
+
 // Submission status values
 export type SubmissionStatus = 'open' | 'reviewed' | 'dismissed';
 

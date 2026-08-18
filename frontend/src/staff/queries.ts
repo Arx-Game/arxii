@@ -21,6 +21,9 @@ import type {
   InboxResponse,
   PlayerFeedback,
   PlayerReport,
+  RosterApplicationDetail,
+  RosterApplicationListItem,
+  RosterApplicationStatus,
   SubmissionCategory,
   SubmissionStatus,
   SystemErrorReport,
@@ -51,6 +54,10 @@ import {
   issueAccountInvite,
   resendAccountInvite,
   revokeAccountInvite,
+  getRosterApplications,
+  getRosterApplicationDetail,
+  reviewRosterApplication,
+  getPendingRosterApplicationCount,
 } from './api';
 
 interface FileIssueArgs {
@@ -85,6 +92,11 @@ export const staffKeys = {
   gmApplicationDetail: (id: number) => [...staffKeys.all, 'gm-application-detail', id] as const,
   accountInvites: (status?: string, page?: number) =>
     [...staffKeys.all, 'account-invites', status, page] as const,
+  rosterApplications: (status?: string, page?: number) =>
+    [...staffKeys.all, 'roster-applications', status, page] as const,
+  rosterApplication: (id: number) => [...staffKeys.all, 'roster-application', id] as const,
+  rosterApplicationPendingCount: () =>
+    [...staffKeys.all, 'roster-application-pending-count'] as const,
 };
 
 export function useApplications(statusFilter?: string) {
@@ -408,6 +420,52 @@ export function useFetchVerificationLink() {
   // No cache invalidation: generating a link mutates nothing server-side (#3193).
   return useMutation({
     mutationFn: (email: string) => fetchVerificationLink(email),
+  });
+}
+
+// =============================================================================
+// Roster-Character Application Hooks (#3265)
+// =============================================================================
+
+export function useRosterApplications(status?: RosterApplicationStatus, page?: number) {
+  return useQuery<PaginatedResponse<RosterApplicationListItem>>({
+    queryKey: staffKeys.rosterApplications(status, page),
+    queryFn: () => getRosterApplications(status, page),
+  });
+}
+
+export function useRosterApplicationDetail(id: number | undefined) {
+  return useQuery<RosterApplicationDetail>({
+    queryKey: staffKeys.rosterApplication(id!),
+    queryFn: () => getRosterApplicationDetail(id!),
+    enabled: !!id,
+  });
+}
+
+export function useReviewRosterApplication() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({
+      id,
+      action,
+      reviewNotes,
+    }: {
+      id: number;
+      action: 'approve' | 'deny';
+      reviewNotes?: string;
+    }) => reviewRosterApplication(id, action, reviewNotes),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: staffKeys.all });
+    },
+  });
+}
+
+export function usePendingRosterApplicationCount(enabled = true) {
+  return useQuery({
+    queryKey: staffKeys.rosterApplicationPendingCount(),
+    queryFn: getPendingRosterApplicationCount,
+    refetchInterval: 60_000,
+    enabled,
   });
 }
 

@@ -2,11 +2,16 @@ import { Link } from 'react-router-dom';
 
 import { Badge } from '@/components/ui/badge';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { useOpenSubmissionCount, usePendingApplicationCount } from '@/staff/queries';
+import {
+  useOpenSubmissionCount,
+  usePendingApplicationCount,
+  usePendingRosterApplicationCount,
+} from '@/staff/queries';
 
 export function StaffHubPage() {
   const { data: pendingAppCount } = usePendingApplicationCount();
   const { data: openInboxCount } = useOpenSubmissionCount();
+  const { data: pendingRosterAppCount } = usePendingRosterApplicationCount();
 
   return (
     <div className="container mx-auto max-w-4xl px-4 py-8">
@@ -91,7 +96,7 @@ export function StaffHubPage() {
           <Card className="cursor-pointer transition-colors hover:bg-muted/50">
             <CardHeader>
               <CardTitle className="flex items-center gap-2">
-                Roster Applications
+                Character Applications
                 {pendingAppCount && pendingAppCount > 0 ? (
                   <Badge variant="destructive">{pendingAppCount}</Badge>
                 ) : null}
@@ -99,7 +104,24 @@ export function StaffHubPage() {
             </CardHeader>
             <CardContent>
               <p className="text-sm text-muted-foreground">
-                Review character creation submissions.
+                Review player-created character submissions.
+              </p>
+            </CardContent>
+          </Card>
+        </Link>
+        <Link to="/staff/roster-applications">
+          <Card className="cursor-pointer transition-colors hover:bg-muted/50">
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                Roster Character Applications
+                {pendingRosterAppCount && pendingRosterAppCount > 0 ? (
+                  <Badge variant="destructive">{pendingRosterAppCount}</Badge>
+                ) : null}
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              <p className="text-sm text-muted-foreground">
+                Review applications for existing staff-authored roster characters.
               </p>
             </CardContent>
           </Card>
