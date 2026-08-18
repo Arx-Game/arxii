@@ -4,9 +4,7 @@ from django.db import migrations, models
 
 
 class Migration(migrations.Migration):
-    dependencies = [
-        ("arxii", "0157_downtimewindow"),
-    ]
+    dependencies = [("arxii", "0158_alter_nobiliaryparticle_options_and_more")]
 
     operations = [
         migrations.AddField(
