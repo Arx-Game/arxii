@@ -92,6 +92,9 @@ def _serialize_rooms(rooms, display_map: dict) -> list[dict]:
                 "grid_x": room.grid_x,
                 "grid_y": room.grid_y,
                 "floor": room.floor,
+                "default_blueprint": (
+                    room.default_blueprint.name if room.default_blueprint_id else None
+                ),
             }
         )
     rooms_data.sort(key=lambda r: r["fixture_key"])
@@ -266,6 +269,61 @@ def _serialize_ambient_lines(lines, room_fixture_by_pk: dict) -> list[dict]:
     return lines_data
 
 
+def _serialize_places(places, room_fixture_by_pk: dict) -> list[dict]:
+    """Conversational sub-locations (#3269) — keyed by (room fixture, name) on import."""
+    return [
+        {
+            "room": room_fixture_by_pk[place.room_id],
+            "name": place.name,
+            "description": place.description,
+            "status": place.status,
+        }
+        for place in places
+    ]
+
+
+def _serialize_ambient_emits(
+    rows, room_fixture_by_pk: dict, result: GridExportResult
+) -> list[dict]:
+    """Room/area-scoped linger lines (#3269). Keyless rows can't round-trip — reported."""
+    data = []
+    for row in rows:
+        if not row.key:
+            result.reports.append(
+                f"ambient emit pk={row.pk} has no key; skipped from the bundle "
+                "(assign a key to make it durable content)"
+            )
+            continue
+        data.append(
+            {
+                "key": row.key,
+                "text": row.text,
+                "gm_notes": row.gm_notes,
+                "weight": row.weight,
+                "cooldown_minutes": row.cooldown_minutes,
+                "room": room_fixture_by_pk.get(row.room_profile_id),
+                "area_scoped": row.area_id is not None,
+                "gate_stat_key": row.gate_stat_key,
+                "gate_min": row.gate_min,
+                "gate_max": row.gate_max,
+                "in_spring": row.in_spring,
+                "in_summer": row.in_summer,
+                "in_autumn": row.in_autumn,
+                "in_winter": row.in_winter,
+                "at_dawn": row.at_dawn,
+                "at_day": row.at_day,
+                "at_dusk": row.at_dusk,
+                "at_night": row.at_night,
+                "written_by": row.written_by.name if row.written_by_id else None,
+                "written_on": row.written_on.isoformat() if row.written_on else None,
+                "reviewed_by": row.reviewed_by.name if row.reviewed_by_id else None,
+                "reviewed_on": row.reviewed_on.isoformat() if row.reviewed_on else None,
+            }
+        )
+    data.sort(key=lambda r: r["key"])
+    return data
+
+
 def _serialize_ambient_conditions(line) -> list[dict]:
     conditions_data = [
         {
@@ -344,6 +402,33 @@ def _build_area_bundle(area, result: GridExportResult) -> dict:
     )
     ambient_lines = list(AmbientEmoteLine.objects.filter(sidecar_scope))
 
+    from world.narrative.models import AmbientEmit  # noqa: PLC0415
+    from world.scenes.place_models import Place  # noqa: PLC0415
+
+    places = list(Place.objects.filter(room_id__in=room_objectdb_ids).order_by("room_id", "name"))
+    from world.npc_services.models import Functionary  # noqa: PLC0415
+    from world.room_features.models import RoomFeatureInstance  # noqa: PLC0415
+    from world.travel.models import TravelHub  # noqa: PLC0415
+
+    travel_hubs = list(
+        TravelHub.objects.filter(room_profile_id__in=room_objectdb_ids, is_active=True)
+    )
+    functionaries = list(
+        Functionary.objects.filter(room_id__in=room_objectdb_ids, is_active=True).select_related(
+            "role"
+        )
+    )
+    feature_instances = list(
+        RoomFeatureInstance.objects.filter(room_profile_id__in=room_objectdb_ids)
+        .active()
+        .select_related("feature_kind")
+    )
+    ambient_emits = list(
+        AmbientEmit.objects.filter(
+            Q(room_profile_id__in=room_objectdb_ids) | Q(area=area)
+        ).order_by("key")
+    )
+
     from world.clues.models import ClueTrigger, RoomClue  # noqa: PLC0415
     from world.magic.models import PortalAnchor  # noqa: PLC0415
 
@@ -378,6 +463,32 @@ def _build_area_bundle(area, result: GridExportResult) -> dict:
         "overrides": overrides_data,
         "modifiers": modifiers_data,
         "ambient_lines": _serialize_ambient_lines(ambient_lines, room_fixture_by_pk),
+        "places": _serialize_places(places, room_fixture_by_pk),
+        "travel_hubs": [
+            {
+                "room": room_fixture_by_pk[hub.room_profile_id],
+                "name": hub.name,
+                "description": hub.description,
+                "travel_modes": hub.travel_modes,
+                "is_transit_stop": hub.is_transit_stop,
+            }
+            for hub in sorted(travel_hubs, key=lambda h: room_fixture_by_pk[h.room_profile_id])
+        ],
+        "functionaries": [
+            {"room": room_fixture_by_pk[f.room_id], "role": f.role.name}
+            for f in sorted(
+                functionaries, key=lambda f: (room_fixture_by_pk[f.room_id], f.role.name)
+            )
+        ],
+        "room_features": [
+            {
+                "room": room_fixture_by_pk[i.room_profile_id],
+                "kind": i.feature_kind.name,
+                "level": i.level,
+            }
+            for i in sorted(feature_instances, key=lambda i: room_fixture_by_pk[i.room_profile_id])
+        ],
+        "ambient_emits": _serialize_ambient_emits(ambient_emits, room_fixture_by_pk, result),
         "clues": _serialize_clues(clues, room_fixture_by_pk),
         "clue_triggers": _serialize_clue_triggers(clue_triggers, room_fixture_by_pk),
         "portal_anchors": _serialize_portal_anchors(portal_anchors, room_fixture_by_pk),

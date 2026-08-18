@@ -26,14 +26,21 @@ import { useMyRosterEntriesQuery } from '@/roster/queries';
 import { useAppSelector } from '@/store/hooks';
 import { toast } from 'sonner';
 
+import { AreaArrangeCanvas } from '../components/AreaArrangeCanvas';
 import { AreaTreePanel } from '../components/AreaTreePanel';
+import { EditAreaDialog } from '../components/EditAreaDialog';
 import { CreateAreaDialog } from '../components/CreateAreaDialog';
 import { DigRoomDialog } from '../components/DigRoomDialog';
 import { LinkRoomsDialog } from '../components/LinkRoomsDialog';
 import { PromoteAreaButton } from '../components/PromoteAreaButton';
 import { RoomDetailPanel } from '../components/RoomDetailPanel';
 import { WorldCanvas } from '../components/WorldCanvas';
-import { useAreaManagerQuery, useRoomSearchQuery, useWorldBuilderAction } from '../queries';
+import {
+  useAreaManagerQuery,
+  useRoomSearchQuery,
+  useWorldBuilderAction,
+  useWorldBuilderAreasQuery,
+} from '../queries';
 import type { WorldBuilderActionKey } from '../types';
 
 export function WorldBuilderPage() {
@@ -56,6 +63,13 @@ export function WorldBuilderPage() {
   // #3269 place-mode: an unplaced room awaiting a ghost-cell click.
   const [placeModeRoomId, setPlaceModeRoomId] = useState<number | null>(null);
   const [searchTerm, setSearchTerm] = useState('');
+  const [arrangeMode, setArrangeMode] = useState(false);
+  const [editAreaOpen, setEditAreaOpen] = useState(false);
+  const { data: childAreasPage } = useWorldBuilderAreasQuery(
+    { parent: selectedAreaId ?? undefined },
+    selectedAreaId != null
+  );
+  const childAreas = childAreasPage?.results ?? [];
   const { data: roomHits } = useRoomSearchQuery(searchTerm);
   const [linkOpen, setLinkOpen] = useState(false);
 
@@ -106,6 +120,20 @@ export function WorldBuilderPage() {
         <div className="flex items-center gap-2">
           <h1 className="text-lg font-semibold">World Builder</h1>
           {manager && <PromoteAreaButton area={manager.area} runAction={runAction} />}
+          {manager && (
+            <Button size="sm" variant="outline" onClick={() => setEditAreaOpen(true)}>
+              Edit area
+            </Button>
+          )}
+          {manager && childAreas.length > 0 && (
+            <Button
+              size="sm"
+              variant={arrangeMode ? 'default' : 'outline'}
+              onClick={() => setArrangeMode((mode) => !mode)}
+            >
+              {arrangeMode ? 'Room map' : 'Arrange children'}
+            </Button>
+          )}
         </div>
         <div className="relative">
           <Input
@@ -190,7 +218,7 @@ export function WorldBuilderPage() {
             {selectedAreaId && isLoading && (
               <p className="text-sm text-muted-foreground">Loading…</p>
             )}
-            {selectedAreaId && manager && manager.rooms.length === 0 && (
+            {selectedAreaId && manager && !arrangeMode && manager.rooms.length === 0 && (
               <div
                 className="flex h-full flex-col items-center justify-center gap-3"
                 data-testid="dig-first-room-empty-state"
@@ -211,7 +239,21 @@ export function WorldBuilderPage() {
                 </Button>
               </div>
             )}
-            {selectedAreaId && manager && manager.rooms.length > 0 && (
+            {selectedAreaId && manager && arrangeMode && (
+              <div className="flex-1">
+                <AreaArrangeCanvas
+                  childAreas={childAreas}
+                  selectedAreaId={selectedAreaId}
+                  onSelectArea={(id) => {
+                    setSelectedAreaId(id);
+                    setSelectedRoomId(null);
+                    setArrangeMode(false);
+                  }}
+                  runAction={runAction}
+                />
+              </div>
+            )}
+            {selectedAreaId && manager && !arrangeMode && manager.rooms.length > 0 && (
               <>
                 <Button
                   type="button"
@@ -306,6 +348,7 @@ export function WorldBuilderPage() {
             {selectedRoom ? (
               <RoomDetailPanel
                 room={selectedRoom}
+                catalogs={manager?.catalogs}
                 exits={manager?.exits ?? []}
                 runAction={runAction}
                 onLinkRooms={() => setLinkOpen(true)}
@@ -324,6 +367,16 @@ export function WorldBuilderPage() {
           onOpenChange={(open) => {
             if (!open) setCreateAreaParent(undefined);
           }}
+          runAction={runAction}
+        />
+      )}
+
+      {manager && (
+        <EditAreaDialog
+          area={manager.area}
+          catalogs={manager.catalogs}
+          open={editAreaOpen}
+          onOpenChange={setEditAreaOpen}
           runAction={runAction}
         />
       )}

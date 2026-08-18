@@ -27,6 +27,24 @@ export type WorldBuilderActionKey =
   | 'staff_remove_room'
   | 'staff_remove_area'
   | 'staff_move_room'
+  | 'staff_set_room_stat'
+  | 'staff_add_place'
+  | 'staff_edit_place'
+  | 'staff_remove_place'
+  | 'staff_add_ambient_line'
+  | 'staff_remove_ambient_line'
+  | 'staff_add_ambient_emit'
+  | 'staff_remove_ambient_emit'
+  | 'staff_install_room_feature'
+  | 'staff_remove_room_feature'
+  | 'staff_assign_functionary'
+  | 'staff_remove_functionary'
+  | 'staff_set_travel_hub'
+  | 'staff_set_room_blueprint'
+  | 'staff_set_starting_room'
+  | 'staff_set_exit_detail'
+  | 'staff_duplicate_room'
+  | 'staff_batch_dig'
   | 'promote_room'
   | 'promote_area'
   | 'staff_place_clue'
@@ -35,6 +53,40 @@ export type WorldBuilderActionKey =
   | 'staff_remove_clue_trigger'
   | 'staff_place_portal_anchor'
   | 'staff_remove_portal_anchor';
+
+/** Selection-time room detail (#3269) — mirrors WorldBuilderRoomDetailSerializer. */
+export interface WorldBuilderRoomDetail {
+  id: number;
+  exits: {
+    id: number;
+    name: string;
+    to_room_id: number | null;
+    kind: string;
+    is_open: boolean;
+    aliases: string[];
+  }[];
+  comfort: {
+    level: number;
+    points: number;
+    amenity: number;
+    axes: {
+      key: string;
+      pressure: number;
+      mitigation: number;
+      net: number;
+      sheltered: boolean;
+    }[];
+  };
+  ambient_lines: { id: number; arriver_body: string; bystander_body: string }[];
+  ambient_emits: {
+    id: number;
+    key: string;
+    text: string;
+    gate_stat_key: string;
+    gate_min: number | null;
+    gate_max: number | null;
+  }[];
+}
 
 /** One cross-area room-search hit (#3269) — mirrors WorldBuilderRoomHitSerializer. */
 export interface WorldBuilderRoomHit {

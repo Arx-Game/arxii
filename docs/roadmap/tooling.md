@@ -3,6 +3,28 @@
 **Status:** in-progress
 **Depends on:** Areas, Items, Combat, Stories (for GM tools)
 
+## Built (2026-08-18, #3269 Phases B+C — full room authoring + area metadata)
+
+Rooms are no longer hollow: the staff panel gained sections for ambient stats
+(authored zero-decay modifiers by default; pin = the rare cascade-cutting
+override, warned loudly), places, atmosphere (entry lines + gated linger
+emits with minted keys), feature install/dissolve by fiat (the identical
+per-kind strategy handlers, run through an instantly-completed audit
+project; VAULT/SANCTUM refused), functionary staffing (web mirror of telnet
+`functionary`), travel-hub flags, default tactical blueprints
+(`PositionBlueprint` + nodes/edges join `CONTENT_MODELS` with natural keys +
+credits), starting-room bindings (the last admin-only step before characters
+could enter a new grid), exit kind/openness/alias editing (a WINDOW switch
+auto-opens so a kind flip can't sever a live link), cross-area room
+duplication, and corridor batch-digs. Grid bundles round-trip every one of
+those surfaces (credited ambient emits freeze rather than overwrite, ADR-0201
+pattern), so a live-server build is durable content. Phase C: `edit_area`
+finally has a UI — realm/climate/dominant-society/description/colour/ward
+permits, with effective-climate display and a below-REGION warning — plus
+the "Arrange children" canvas: child areas drag-to-place on the same grid,
+one level up (the city map of wards). `PlaceViewSet`'s player-reachable POST
+was removed (staff authoring only); `AmbientEmit` gained admin parity.
+
 ## Built (2026-08-18, #3269 Phase A — grid bootstrap, recoverability, navigation)
 
 The world builder can now bootstrap a first grid and recover from mistakes.

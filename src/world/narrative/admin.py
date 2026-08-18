@@ -1,6 +1,7 @@
 from django.contrib import admin
 
 from world.narrative.models import (
+    AmbientEmit,
     AmbientEmoteCondition,
     AmbientEmoteLine,
     AmbientStirLine,
@@ -85,3 +86,13 @@ class AmbientEmoteLineAdmin(admin.ModelAdmin):
     search_fields = ("bystander_body", "arriver_body")
     raw_id_fields = ("area", "room_profile")
     inlines = [AmbientEmoteConditionInline]
+
+
+@admin.register(AmbientEmit)
+class AmbientEmitAdmin(admin.ModelAdmin):
+    """#2988 linger lines / risk telegraphs — admin parity for the #3269 builder verbs."""
+
+    list_display = ("key", "gate_stat_key", "gate_min", "gate_max", "weight", "written_by")
+    list_filter = ("gate_stat_key",)
+    search_fields = ("key", "text")
+    raw_id_fields = ("area", "room_profile", "written_by", "reviewed_by")

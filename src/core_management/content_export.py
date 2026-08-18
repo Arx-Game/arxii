@@ -97,6 +97,12 @@ CONTENT_MODELS: frozenset[str] = frozenset(
         # areas
         "areas.rampartelementprofile",
         "areas.rampartelementresistance",
+        # areas — #3269: tactical blueprint catalog; grid bundles reference
+        # RoomProfile.default_blueprint by name, so the catalog itself must
+        # round-trip. Positions/edges intentionally excluded for now — their
+        # composite identities need their own pass; a name-resolved blueprint
+        # with no nodes still imports cleanly (the ref just points at it).
+        "areas.positionblueprint",
         # character_creation
         "character_creation.beginnings",
         "character_creation.beginningtradition",
