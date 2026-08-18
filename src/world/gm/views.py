@@ -560,6 +560,17 @@ class GMDashboardView(APIView):
         # Evidence summary (self-view of what staff sees).
         evidence = gm_evidence_summary(gm_profile)
 
+        # Pending applications at this GM's tables (#3268 — GM-owned roster creation
+        # dashboard surface).
+        pending_applications = gm_application_queue(gm_profile).count()
+
+        # This GM's roster invites that haven't been claimed and haven't expired yet.
+        open_invites = GMRosterInvite.objects.filter(
+            created_by=gm_profile,
+            claimed_at__isnull=True,
+            expires_at__gt=timezone.now(),
+        ).count()
+
         return Response(
             {
                 "episodes_ready_to_run": buckets.episodes_ready,
@@ -575,6 +586,8 @@ class GMDashboardView(APIView):
                     "beats_completed_by_risk": evidence.beats_completed_by_risk,
                     "last_active_at": evidence.last_active_at,
                 },
+                "pending_applications": pending_applications,
+                "open_invites": open_invites,
             }
         )
 

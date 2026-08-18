@@ -73,6 +73,7 @@ from world.character_creation.serializers import (
 )
 from world.character_creation.services import (
     CharacterCreationError,
+    DraftIncompleteError,
     add_application_comment,
     approve_application,
     can_create_character,
@@ -81,6 +82,7 @@ from world.character_creation.services import (
     finalize_character,
     get_accessible_starting_areas,
     request_revisions,
+    require_draft_complete,
     resubmit_draft,
     submit_draft_for_review,
     unsubmit_draft,
@@ -749,6 +751,15 @@ class CharacterDraftViewSet(viewsets.ModelViewSet):
             )
 
         draft = self.get_object()
+
+        try:
+            require_draft_complete(draft)
+        except DraftIncompleteError as exc:
+            return Response(
+                {"detail": exc.reason},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
         draft.is_gm_creation = True
         draft.target_table = table
         draft.story_title = story_title
@@ -759,11 +770,13 @@ class CharacterDraftViewSet(viewsets.ModelViewSet):
 
         try:
             entry, story = finalize_gm_character(draft)
-        except DjangoValidationError as exc:
-            return Response(
-                {"detail": "; ".join(exc.messages)},
-                status=status.HTTP_400_BAD_REQUEST,
-            )
+        except (DjangoValidationError, GiftResonanceUnresolvable) as exc:
+            if isinstance(exc, DjangoValidationError):
+                detail = "; ".join(exc.messages)
+            else:
+                logger.exception("GM character finalize failed while resolving gift resonance.")
+                detail = "Character creation failed."
+            return Response({"detail": detail}, status=status.HTTP_400_BAD_REQUEST)
         return Response(
             {
                 "character_id": entry.character_sheet.pk,

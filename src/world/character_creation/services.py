@@ -76,6 +76,26 @@ class DraftExpiredError(CharacterCreationError):
     """Raised when attempting to use an expired draft."""
 
 
+def require_draft_complete(draft: CharacterDraft) -> None:
+    """Raise DraftIncompleteError unless every non-Review stage is complete.
+
+    Shared completeness gate for the direct-finalize paths that skip the normal
+    application review process (staff add-to-roster, player-GM finalize, #3268).
+
+    Raises:
+        DraftIncompleteError: If required stages are not complete.
+    """
+    if draft.can_submit():
+        return
+    incomplete = [
+        CharacterDraft.Stage(stage).label
+        for stage, complete in draft.get_stage_completion().items()
+        if not complete and stage != CharacterDraft.Stage.REVIEW
+    ]
+    msg = f"Cannot finalize: incomplete stages: {', '.join(incomplete)}"
+    raise DraftIncompleteError(msg)
+
+
 @transaction.atomic
 def finalize_character(
     draft: CharacterDraft,
@@ -108,14 +128,7 @@ def finalize_character(
         msg = "This character draft has expired due to inactivity."
         raise DraftExpiredError(msg)
 
-    if not draft.can_submit():
-        incomplete = [
-            CharacterDraft.Stage(stage).label
-            for stage, complete in draft.get_stage_completion().items()
-            if not complete and stage != CharacterDraft.Stage.REVIEW
-        ]
-        msg = f"Cannot finalize: incomplete stages: {', '.join(incomplete)}"
-        raise DraftIncompleteError(msg)
+    require_draft_complete(draft)
 
     # Build character name
     full_name = _build_character_full_name(draft)
