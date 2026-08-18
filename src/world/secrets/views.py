@@ -126,7 +126,8 @@ class AuthoredSecretViewSet(
         return Secret.objects.select_related("category", "subject_sheet").order_by("created_date")
 
     def list(self, request: Request, *args: object, **kwargs: object) -> Response:
-        if not request.query_params.get("subject"):  # noqa: use_filterset — required-param gate
+        subject = request.query_params.get("subject")  # noqa: use_filterset — required-param gate
+        if not subject or not subject.isdigit():
             return Response(
                 {"detail": "subject query parameter is required"},
                 status=status.HTTP_400_BAD_REQUEST,

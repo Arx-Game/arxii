@@ -48,6 +48,12 @@ class AuthoredSecretViewTests(TestCase):
         ids = [row["id"] for row in response.data["results"]]
         assert ids == [self.existing.id]
 
+    def test_list_rejects_non_numeric_subject(self):
+        self.client.force_authenticate(self.staff)
+        url = reverse("secrets:authored-list")
+        response = self.client.get(url, {"subject": "abc"})
+        assert response.status_code == 400
+
     def test_create_sets_gm_provenance_and_round_trips(self):
         self.client.force_authenticate(self.staff)
         url = reverse("secrets:authored-list")
