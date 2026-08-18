@@ -1,3 +1,4 @@
+from django.core.exceptions import ObjectDoesNotExist
 from rest_framework import permissions
 from rest_framework.request import Request
 from rest_framework.views import APIView
@@ -96,3 +97,19 @@ class StaffOnlyWrite(permissions.BasePermission):
 
         # Write permissions require staff
         return request.user.is_staff
+
+
+class CanApproveApplications(permissions.BasePermission):
+    """Allow only reviewers (PlayerData.can_approve_applications; staff today)."""
+
+    message = "You do not have permission to review roster applications."
+
+    def has_permission(self, request: Request, view: APIView) -> bool:
+        user = request.user
+        if not (user and user.is_authenticated):
+            return False
+        try:
+            player_data = user.player_data
+        except ObjectDoesNotExist:
+            return False
+        return player_data.can_approve_applications()

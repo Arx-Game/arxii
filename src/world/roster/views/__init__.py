@@ -9,6 +9,10 @@ This module is organized into logical groups:
 """
 
 # Import all views for backward compatibility
+from world.roster.views.application_views import (
+    RosterApplicationPagination,
+    RosterApplicationViewSet,
+)
 from world.roster.views.entry_views import RosterEntryPagination, RosterEntryViewSet
 from world.roster.views.family_views import (
     CharacterKinTreeView,
@@ -29,6 +33,8 @@ __all__ = [
     "MediaViewSet",
     "PlayerMailPagination",
     "PlayerMailViewSet",
+    "RosterApplicationPagination",
+    "RosterApplicationViewSet",
     "RosterEntryPagination",
     "RosterEntryViewSet",
     "RosterTenureViewSet",
