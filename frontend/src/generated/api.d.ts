@@ -18227,6 +18227,84 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
+  '/api/secrets/authored/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /**
+     * @description Staff-only omniscient authoring surface for a character's secrets (#3266).
+     *
+     *     Deliberately unscoped by viewer knowledge: access is IsAdminUser. The
+     *     player-facing knowledge-scoped read stays on KnownSecretViewSet.
+     */
+    get: operations['secrets_authored_list'];
+    put?: never;
+    /**
+     * @description Staff-only omniscient authoring surface for a character's secrets (#3266).
+     *
+     *     Deliberately unscoped by viewer knowledge: access is IsAdminUser. The
+     *     player-facing knowledge-scoped read stays on KnownSecretViewSet.
+     */
+    post: operations['secrets_authored_create'];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/secrets/authored/{id}/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /**
+     * @description Staff-only omniscient authoring surface for a character's secrets (#3266).
+     *
+     *     Deliberately unscoped by viewer knowledge: access is IsAdminUser. The
+     *     player-facing knowledge-scoped read stays on KnownSecretViewSet.
+     */
+    get: operations['secrets_authored_retrieve'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    /**
+     * @description Staff-only omniscient authoring surface for a character's secrets (#3266).
+     *
+     *     Deliberately unscoped by viewer knowledge: access is IsAdminUser. The
+     *     player-facing knowledge-scoped read stays on KnownSecretViewSet.
+     */
+    patch: operations['secrets_authored_partial_update'];
+    trace?: never;
+  };
+  '/api/secrets/authored/categories/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /**
+     * @description Staff-only omniscient authoring surface for a character's secrets (#3266).
+     *
+     *     Deliberately unscoped by viewer knowledge: access is IsAdminUser. The
+     *     player-facing knowledge-scoped read stays on KnownSecretViewSet.
+     */
+    get: operations['secrets_authored_categories_list'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   '/api/secrets/gossip/': {
     parameters: {
       query?: never;
@@ -22175,6 +22253,76 @@ export interface components {
     AudereRespondRequest: {
       offer_id: number;
       accept: boolean;
+    };
+    /** @description Staff authoring shape for Secret (#3266). Provenance is fixed server-side. */
+    AuthoredSecret: {
+      readonly id: number;
+      /** @description The character this secret is about — and its sole owner. */
+      subject_sheet: number;
+      /**
+       * @description How deep/dangerous — narrative weight + default share-scope.
+       *
+       *     * `1` - Uncommon Knowledge
+       *     * `2` - Whispers
+       *     * `3` - Carefully Kept
+       *     * `4` - Dangerous Secret
+       */
+      level?: components['schemas']['AuthoredSecretLevelEnum'];
+      readonly level_display: string;
+      /** @description What the secret is about. Null = Unknown (not yet placed). */
+      category?: number | null;
+      readonly category_name: string;
+      /** @description The secret itself, as narrated. Player- or GM-authored prose. */
+      content?: string;
+      /** @description What happens if it surfaces. Blank = Unknown. */
+      consequences?: string;
+      /** @description Whether the subject starts knowing this secret about themselves. False for subject-unaware truths (#2062 — e.g. hidden parentage a Misbegotten hasn't discovered): excluded from the subject's own-secrets shelf until a SecretKnowledge row grants it. */
+      subject_aware?: boolean;
+      /**
+       * @description Where the secret came from (drives the anchor rule + OOC attribution).
+       *
+       *     * `gm` - GM/Staff authored (canon)
+       *     * `action` - Action-anchored (minted by play)
+       *     * `flavor` - Player flavor (unverified)
+       *     * `accusation` - Accusation (player-authored, consent-gated, weight-bearing)
+       */
+      readonly provenance: components['schemas']['ProvenanceEnum'];
+      readonly provenance_display: string;
+      readonly is_act_anchored: boolean;
+      /** Format: date-time */
+      readonly created_date: string;
+      /** Format: date-time */
+      readonly updated_date: string;
+    };
+    /**
+     * @description * `1` - Uncommon Knowledge
+     *     * `2` - Whispers
+     *     * `3` - Carefully Kept
+     *     * `4` - Dangerous Secret
+     * @enum {integer}
+     */
+    AuthoredSecretLevelEnum: 1 | 2 | 3 | 4;
+    /** @description Staff authoring shape for Secret (#3266). Provenance is fixed server-side. */
+    AuthoredSecretRequest: {
+      /** @description The character this secret is about — and its sole owner. */
+      subject_sheet: number;
+      /**
+       * @description How deep/dangerous — narrative weight + default share-scope.
+       *
+       *     * `1` - Uncommon Knowledge
+       *     * `2` - Whispers
+       *     * `3` - Carefully Kept
+       *     * `4` - Dangerous Secret
+       */
+      level?: components['schemas']['AuthoredSecretLevelEnum'];
+      /** @description What the secret is about. Null = Unknown (not yet placed). */
+      category?: number | null;
+      /** @description The secret itself, as narrated. Player- or GM-authored prose. */
+      content?: string;
+      /** @description What happens if it surfaces. Blank = Unknown. */
+      consequences?: string;
+      /** @description Whether the subject starts knowing this secret about themselves. False for subject-unaware truths (#2062 — e.g. hidden parentage a Misbegotten hasn't discovered): excluded from the subject's own-secrets shelf until a SecretKnowledge row grants it. */
+      subject_aware?: boolean;
     };
     /** @description Read-only serializer for AvailableEnhancement (technique enhancement option). */
     AvailableEnhancement: {
@@ -30802,6 +30950,21 @@ export interface components {
       previous?: string | null;
       results: components['schemas']['AssistantGMClaim'][];
     };
+    PaginatedAuthoredSecretList: {
+      /** @example 123 */
+      count: number;
+      /**
+       * Format: uri
+       * @example http://api.example.org/accounts/?page=4
+       */
+      next?: string | null;
+      /**
+       * Format: uri
+       * @example http://api.example.org/accounts/?page=2
+       */
+      previous?: string | null;
+      results: components['schemas']['AuthoredSecret'][];
+    };
     PaginatedBattleListList: {
       /** @example 123 */
       count: number;
@@ -33645,6 +33808,28 @@ export interface components {
      * @enum {string}
      */
     ParticipationRuleEnum: 'SINGLE_ACTOR' | 'FORMATION' | 'INDUCTION' | 'BILATERAL';
+    /** @description Staff authoring shape for Secret (#3266). Provenance is fixed server-side. */
+    PatchedAuthoredSecretRequest: {
+      /** @description The character this secret is about — and its sole owner. */
+      subject_sheet?: number;
+      /**
+       * @description How deep/dangerous — narrative weight + default share-scope.
+       *
+       *     * `1` - Uncommon Knowledge
+       *     * `2` - Whispers
+       *     * `3` - Carefully Kept
+       *     * `4` - Dangerous Secret
+       */
+      level?: components['schemas']['AuthoredSecretLevelEnum'];
+      /** @description What the secret is about. Null = Unknown (not yet placed). */
+      category?: number | null;
+      /** @description The secret itself, as narrated. Player- or GM-authored prose. */
+      content?: string;
+      /** @description What happens if it surfaces. Blank = Unknown. */
+      consequences?: string;
+      /** @description Whether the subject starts knowing this secret about themselves. False for subject-unaware truths (#2062 — e.g. hidden parentage a Misbegotten hasn't discovered): excluded from the subject's own-secrets shelf until a SecretKnowledge row grants it. */
+      subject_aware?: boolean;
+    };
     /** @description Full serializer for Beat including all Phase 2 predicate config fields. */
     PatchedBeatRequest: {
       episode?: number;
@@ -36319,6 +36504,14 @@ export interface components {
      * @enum {string}
      */
     ProposeLethalDuelTierEnum: 'elite' | 'boss' | 'hero_killer';
+    /**
+     * @description * `gm` - GM/Staff authored (canon)
+     *     * `action` - Action-anchored (minted by play)
+     *     * `flavor` - Player flavor (unverified)
+     *     * `accusation` - Accusation (player-authored, consent-gated, weight-bearing)
+     * @enum {string}
+     */
+    ProvenanceEnum: 'gm' | 'action' | 'flavor' | 'accusation';
     /** @description One feed row — a deed or a scandal. Read-only; serializes a ``PublicFeedItem`` dataclass. */
     PublicFeedItem: {
       kind: components['schemas']['PublicFeedItemKindEnum'];
@@ -37720,6 +37913,13 @@ export interface components {
      * @enum {string}
      */
     SeasonEnum: 'spring' | 'summer' | 'autumn' | 'winter';
+    SecretCategory: {
+      readonly id: number;
+      /** @description Category label (player-visible). */
+      name: string;
+      /** @description Staff note on what belongs here. */
+      description?: string;
+    };
     /** @description Shop-directory row: who crafts what, where — execution requires visiting. */
     ServiceOffer: {
       readonly id: number;
@@ -66767,6 +66967,118 @@ export interface operations {
         };
         content: {
           'application/json': components['schemas']['SceneDetail'];
+        };
+      };
+    };
+  };
+  secrets_authored_list: {
+    parameters: {
+      query?: {
+        /** @description A page number within the paginated result set. */
+        page?: number;
+      };
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['PaginatedAuthoredSecretList'];
+        };
+      };
+    };
+  };
+  secrets_authored_create: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['AuthoredSecretRequest'];
+      };
+    };
+    responses: {
+      201: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['AuthoredSecret'];
+        };
+      };
+    };
+  };
+  secrets_authored_retrieve: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        /** @description A unique integer value identifying this secret. */
+        id: number;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['AuthoredSecret'];
+        };
+      };
+    };
+  };
+  secrets_authored_partial_update: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        /** @description A unique integer value identifying this secret. */
+        id: number;
+      };
+      cookie?: never;
+    };
+    requestBody?: {
+      content: {
+        'application/json': components['schemas']['PatchedAuthoredSecretRequest'];
+      };
+    };
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['AuthoredSecret'];
+        };
+      };
+    };
+  };
+  secrets_authored_categories_list: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['SecretCategory'][];
         };
       };
     };

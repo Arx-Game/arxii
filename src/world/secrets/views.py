@@ -140,6 +140,7 @@ class AuthoredSecretViewSet(
             queryset = queryset.filter(subject_sheet_id=subject)
         return queryset
 
+    @extend_schema(responses=SecretCategorySerializer(many=True))
     @action(detail=False, methods=[HTTPMethod.GET], pagination_class=None)
     def categories(self, request: Request) -> Response:
         rows = SecretCategory.objects.filter(is_active=True).order_by("name")

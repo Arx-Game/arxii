@@ -19,6 +19,7 @@ import { RivalButton } from '@/friends/components/RivalButton';
 import { FriendsTab } from '@/friends/components/FriendsTab';
 import { GossipPanel } from '@/secrets/components/GossipPanel';
 import { SecretsTab } from '@/secrets/components/SecretsTab';
+import { StaffSecretsPanel } from '@/secrets/components/StaffSecretsPanel';
 import { CluesTab } from '@/clues/components/CluesTab';
 import { CrimeTab } from '@/justice/components/CrimeTab';
 import { TitlesPanel } from '@/achievements/components/TitlesPanel';
@@ -262,6 +263,11 @@ export function CharacterSheetPage() {
               CharacterSheet pk the secret-tab API filters by. Radix unmounts inactive tab
               content, so the query only fires when this tab is opened. */}
           <SecretsTab subjectId={entry.character.id} viewerId={viewerEntryId} />
+          {/* Staff omniscient authoring surface (#3266) — every authored secret about this
+              character, mint/edit included. character.id is the CharacterSheet pk the
+              endpoint expects (shared with the ObjectDB pk). The backend also enforces
+              IsAdminUser; this gate just keeps the panel from flashing for non-staff. */}
+          {account?.is_staff && <StaffSecretsPanel subjectId={entry.character.id} />}
         </TabsContent>
 
         {isMyCharacter && (
