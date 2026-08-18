@@ -21860,6 +21860,29 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
+  '/api/world-builder/areas/room-search/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /**
+     * @description GET /api/world-builder/areas/room-search/?search= — cross-area room lookup (#3269).
+     *
+     *     Matches room key or fixture_key, capped at 50 hits — the "where did I
+     *     put the Traitor's Gate" seam for a 400-room grid, also feeding the
+     *     link-rooms pickers.
+     */
+    get: operations['world_builder_areas_room_search_list'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   '/api/worship/beings/': {
     parameters: {
       query?: never;
@@ -33799,6 +33822,21 @@ export interface components {
       previous?: string | null;
       results: components['schemas']['WorldBuilderArea'][];
     };
+    PaginatedWorldBuilderRoomHitList: {
+      /** @example 123 */
+      count: number;
+      /**
+       * Format: uri
+       * @example http://api.example.org/accounts/?page=4
+       */
+      next?: string | null;
+      /**
+       * Format: uri
+       * @example http://api.example.org/accounts/?page=2
+       */
+      previous?: string | null;
+      results: components['schemas']['WorldBuilderRoomHit'][];
+    };
     PaginatedWorshippedBeingRefList: {
       /** @example 123 */
       count: number;
@@ -39681,6 +39719,9 @@ export interface components {
       floor: number;
       fixture_key: string | null;
       origin: string;
+      /** Format: date-time */
+      exported_at: string | null;
+      needs_prose: boolean;
       occupant_count: number;
       clues: components['schemas']['WorldBuilderRoomClue'][];
       clue_triggers: components['schemas']['WorldBuilderClueTrigger'][];
@@ -41748,6 +41789,9 @@ export interface components {
       floor: number;
       fixture_key: string | null;
       origin: string;
+      /** Format: date-time */
+      exported_at: string | null;
+      needs_prose: boolean;
       occupant_count: number;
       clues: components['schemas']['WorldBuilderRoomClue'][];
       clue_triggers: components['schemas']['WorldBuilderClueTrigger'][];
@@ -41759,6 +41803,15 @@ export interface components {
       clue_name: string;
       clue_slug: string;
       detect_difficulty: number;
+      fixture_key: string | null;
+    };
+    /** @description One cross-area room-search hit (#3269): the where-did-I-put-it seam. */
+    WorldBuilderRoomHit: {
+      id: number;
+      name: string;
+      area_id: number | null;
+      area_name: string | null;
+      floor: number;
       fixture_key: string | null;
     };
     /**
@@ -42487,6 +42540,7 @@ export interface operations {
         /** @description Number of results to return per page. */
         page_size?: number;
         parent?: number;
+        search?: string;
       };
       header?: never;
       path?: never;
@@ -72321,6 +72375,7 @@ export interface operations {
         /** @description Number of results to return per page. */
         page_size?: number;
         parent?: number;
+        search?: string;
       };
       header?: never;
       path?: never;
@@ -72378,6 +72433,33 @@ export interface operations {
         };
         content: {
           'application/json': components['schemas']['WorldBuilderAreaManager'];
+        };
+      };
+    };
+  };
+  world_builder_areas_room_search_list: {
+    parameters: {
+      query?: {
+        has_parent?: boolean;
+        /** @description A page number within the paginated result set. */
+        page?: number;
+        /** @description Number of results to return per page. */
+        page_size?: number;
+        parent?: number;
+        search?: string;
+      };
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['PaginatedWorldBuilderRoomHitList'];
         };
       };
     };

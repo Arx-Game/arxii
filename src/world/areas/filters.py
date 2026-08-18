@@ -1,4 +1,4 @@
-from django.db.models import QuerySet
+from django.db.models import Q, QuerySet
 import django_filters
 
 from evennia_extensions.models import RoomProfile
@@ -8,10 +8,18 @@ from world.areas.models import Area, AreaClosure
 class AreaFilter(django_filters.FilterSet):
     parent = django_filters.NumberFilter(field_name="parent_id")
     has_parent = django_filters.BooleanFilter(method="filter_has_parent")
+    # #3269 — find an area by name/slug anywhere in a big tree.
+    search = django_filters.CharFilter(method="filter_search")
 
     class Meta:
         model = Area
-        fields = ["parent", "has_parent"]
+        fields = ["parent", "has_parent", "search"]
+
+    def filter_search(self, queryset: QuerySet[Area], name: str, value: str) -> QuerySet[Area]:
+        value = value.strip()
+        if not value:
+            return queryset
+        return queryset.filter(Q(name__icontains=value) | Q(slug__icontains=value))
 
     def filter_has_parent(self, queryset: QuerySet[Area], name: str, value: bool) -> QuerySet[Area]:
         if value is True:

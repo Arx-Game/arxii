@@ -1,6 +1,7 @@
 """Staff world-builder actions (#2449) — the canvas's dispatch seam.
 
-Seventeen REGISTRY actions (eleven original + six discovery/portal-authoring, #2451),
+Nineteen REGISTRY actions (eleven original + six discovery/portal-authoring #2451,
+plus remove-area and move-room #3269),
 all ``category="world_builder"``, ``target_type=SELF``,
 gated by ``StaffOnlyPrerequisite`` alone (no ownership/tenancy standing — this is
 staff tooling, not a player-facing builder). Each is a thin wrapper over the
@@ -16,8 +17,9 @@ not from the actor's own position (#2163).
 
 ``staff_dig_room`` requires an AUTHORED area (canonical world rooms only — a
 STORY/PLAYER area is out of scope for this canvas). ``staff_remove_room``
-refuses an already-exported room (``fixture_key`` set + ``origin=AUTHORED``):
-those come out via the report-never-delete pipeline (see
+refuses a room that has actually shipped in an export bundle
+(``exported_at`` set, #3269 — a fixture key alone is a recoverable mistake):
+exported rooms come out via the report-never-delete pipeline (see
 ``core_management.content_export``), never the canvas. ``staff_unlink_rooms``'s
 stranding guard is deliberately looser than the building Room Builder's
 BFS-reachability check (which has no meaningful "anchor room" world-wide) — it
@@ -130,6 +132,103 @@ def _resolve_authored_area(area_id: Any) -> tuple[Area | None, str | None]:
     if area.origin != GridOrigin.AUTHORED:
         return None, "This area must be AUTHORED before rooms can be dug into it."
     return area, None
+
+
+def _room_description(profile: Any) -> str:
+    """The room's permanent description, or "" when none is written."""
+    from evennia_extensions.models import ObjectDisplayData  # noqa: PLC0415
+
+    row = ObjectDisplayData.objects.filter(object_id=profile.objectdb_id).first()
+    return row.permanent_description if row is not None else ""
+
+
+def _relational_dig_target(  # noqa: PLR0911 — a validation ladder; each refusal is one message
+    kwargs: dict[str, Any], area: Any
+) -> tuple[Any | None, Any | None, str | None]:
+    """Resolve the ``from_room_id``/``direction`` relational-dig kwargs (#3269).
+
+    Returns ``(anchor_profile, direction_spec, error)``. Both anchor and
+    direction must come together; the anchor must sit placed in the target
+    area, since the new cell derives from its area-local coordinates.
+    """
+    from world.areas.constants import DIRECTIONS  # noqa: PLC0415
+
+    from_room_id = kwargs.get("from_room_id")
+    direction = (kwargs.get("direction") or "").strip().lower()
+    if from_room_id is None and not direction:
+        return None, None, None
+    if from_room_id is None or not direction:
+        return None, None, "Relational digs need both from_room_id and direction."
+    spec = DIRECTIONS.get(direction)
+    if spec is None:
+        options = ", ".join(DIRECTIONS)
+        return None, None, f"No '{direction}' direction. Directions: {options}."
+    anchor = _resolve_room_profile(from_room_id)
+    if anchor is None:
+        return None, None, _NO_SUCH_ROOM_MSG
+    if anchor.area_id != area.pk:
+        return None, None, "The anchor room is in a different area."
+    if anchor.grid_x is None or anchor.grid_y is None:
+        return None, None, "Place the anchor room on the grid first."
+    return anchor, spec, None
+
+
+def _resolve_dig_exemplar_and_size(
+    kwargs: dict[str, Any],
+) -> tuple[Any | None, Any | None, str | None]:
+    """Resolve the ``like_room_id`` exemplar and the room size (#3269).
+
+    Returns ``(size, like_profile, error)``: an explicit ``size`` name wins;
+    otherwise the exemplar's size carries over.
+    """
+    from evennia_extensions.models import RoomSizeTier  # noqa: PLC0415
+
+    like_profile = None
+    if kwargs.get("like_room_id") is not None:
+        like_profile = _resolve_room_profile(kwargs.get("like_room_id"))
+        if like_profile is None:
+            return None, None, "No such model room."
+    size = None
+    size_name = (kwargs.get("size") or "").strip()
+    if size_name:
+        size = RoomSizeTier.objects.filter(name__iexact=size_name).first()
+        if size is None:
+            options = ", ".join(RoomSizeTier.objects.values_list("name", flat=True))
+            return None, like_profile, f"No '{size_name}' size. Sizes: {options}."
+    elif like_profile is not None:
+        size = like_profile.size
+    return size, like_profile, None
+
+
+def _resolve_dig_description(kwargs: dict[str, Any], like_profile: Any | None) -> str:
+    """Explicit text, else the exemplar's prose, else the PLACEHOLDER stub (#3269)."""
+    from world.areas.constants import UNFINISHED_ROOM_DESC  # noqa: PLC0415
+
+    description = kwargs.get("description") or ""
+    if not description and like_profile is not None:
+        description = _room_description(like_profile)
+    return description or UNFINISHED_ROOM_DESC
+
+
+def _resolve_dig_placement(
+    kwargs: dict[str, Any], area: Any
+) -> tuple[int | None, int | None, int, Any | None, Any | None, str | None]:
+    """Resolve the dig cell: relational (anchor + direction) or absolute (#3269).
+
+    Returns ``(grid_x, grid_y, floor, anchor, direction_spec, error)``.
+    """
+    anchor, direction_spec, rel_error = _relational_dig_target(kwargs, area)
+    if rel_error is not None:
+        return None, None, 0, None, None, rel_error
+    parsed_grid = _parse_dig_room_grid(kwargs)
+    if parsed_grid is None:
+        return None, None, 0, None, None, "Grid position and floor must be numbers."
+    grid_x, grid_y, floor = parsed_grid
+    if anchor is not None and direction_spec is not None:
+        grid_x = anchor.grid_x + direction_spec.dx
+        grid_y = anchor.grid_y + direction_spec.dy
+        floor = anchor.floor + direction_spec.dfloor
+    return grid_x, grid_y, floor, anchor, direction_spec, None
 
 
 def _parse_dig_room_grid(kwargs: dict[str, Any]) -> tuple[int | None, int | None, int] | None:
@@ -282,10 +381,16 @@ class EditAreaAction(_WorldBuilderAction):
 
 @dataclass
 class StaffDigRoomAction(_WorldBuilderAction):
-    """Dig a room into an AUTHORED area — no exit requirement (linking is separate).
+    """Dig a room into an AUTHORED area.
 
     Kwargs: ``area_id``, ``name``, optional ``description``/``size``/``grid_x``/
-    ``grid_y``/``floor``/``fixture_key`` (defaults to ``suggest_fixture_key``).
+    ``grid_y``/``floor``/``fixture_key`` (defaults to ``suggest_fixture_key``),
+    plus (#3269): ``from_room_id`` + ``direction`` for a relational dig — the
+    cell derives from the anchor room and the aliased exit pair is created in
+    that direction (the primary flow; absolute coordinates are the advanced
+    path) — and ``like_room_id``, an exemplar whose size and description seed
+    the new room (cross-area allowed). A blank description defaults to the
+    PLACEHOLDER stub so the needs-prose list can find it later.
     """
 
     key: str = "staff_dig_room"
@@ -298,11 +403,11 @@ class StaffDigRoomAction(_WorldBuilderAction):
         context: ActionContext | None = None,
         **kwargs: Any,
     ) -> ActionResult:
-        from evennia_extensions.models import RoomSizeTier  # noqa: PLC0415
-        from world.areas.constants import GridOrigin  # noqa: PLC0415
+        from world.areas.constants import DIRECTIONS, GridOrigin  # noqa: PLC0415
         from world.areas.grid_services import (  # noqa: PLC0415
             GridServiceError,
             cell_occupied,
+            create_exit_pair,
             create_room,
             suggest_fixture_key,
         )
@@ -313,25 +418,21 @@ class StaffDigRoomAction(_WorldBuilderAction):
         room_name = (kwargs.get("name") or "").strip()
         if not room_name:
             return ActionResult(success=False, message="Name the room.")
-        size = None
-        size_name = (kwargs.get("size") or "").strip()
-        if size_name:
-            size = RoomSizeTier.objects.filter(name__iexact=size_name).first()
-            if size is None:
-                options = ", ".join(RoomSizeTier.objects.values_list("name", flat=True))
-                return ActionResult(
-                    success=False, message=f"No '{size_name}' size. Sizes: {options}."
-                )
+        size, like_profile, exemplar_error = _resolve_dig_exemplar_and_size(kwargs)
+        if exemplar_error is not None:
+            return ActionResult(success=False, message=exemplar_error)
         fixture_key = kwargs.get("fixture_key")
         if not fixture_key:
             try:
                 fixture_key = suggest_fixture_key(area, room_name)
             except GridServiceError as exc:
                 return ActionResult(success=False, message=exc.user_message)
-        parsed_grid = _parse_dig_room_grid(kwargs)
-        if parsed_grid is None:
-            return ActionResult(success=False, message="Grid position and floor must be numbers.")
-        grid_x, grid_y, floor = parsed_grid
+        grid_x, grid_y, floor, anchor, direction_spec, placement_error = _resolve_dig_placement(
+            kwargs, area
+        )
+        if placement_error is not None:
+            return ActionResult(success=False, message=placement_error)
+        description = _resolve_dig_description(kwargs, like_profile)
         unplaced_note = ""
         if grid_x is not None and grid_y is not None and cell_occupied(area, grid_x, grid_y, floor):
             # Cosmetic coordinates never block creation (mirrors dig_room's
@@ -342,7 +443,7 @@ class StaffDigRoomAction(_WorldBuilderAction):
         profile = create_room(
             area=area,
             name=room_name,
-            description=kwargs.get("description") or "",
+            description=description,
             size=size,
             grid_x=grid_x,
             grid_y=grid_y,
@@ -350,9 +451,21 @@ class StaffDigRoomAction(_WorldBuilderAction):
             origin=GridOrigin.AUTHORED,
             fixture_key=fixture_key,
         )
+        link_note = ""
+        if anchor is not None and direction_spec is not None:
+            direction_name = (kwargs.get("direction") or "").strip().lower()
+            create_exit_pair(
+                name=direction_name,
+                aliases=direction_spec.aliases,
+                reverse_name=direction_spec.opposite,
+                reverse_aliases=DIRECTIONS[direction_spec.opposite].aliases,
+                room_a=anchor.objectdb,
+                room_b=profile.objectdb,
+            )
+            link_note = f" Linked {direction_name} from {anchor.objectdb.db_key}."
         return ActionResult(
             success=True,
-            message=f"{profile.objectdb.db_key} dug (#{profile.pk}).{unplaced_note}",
+            message=f"{profile.objectdb.db_key} dug (#{profile.pk}).{link_note}{unplaced_note}",
         )
 
 
@@ -564,10 +677,12 @@ class StaffRemoveRoomAction(_WorldBuilderAction):
 
     Refuses when the room has any contents (characters or items — empty it
     first, so an item is never silently orphaned with ``db_location=NULL``),
-    when it has an installed ``RoomFeatureInstance``, or when it's already
-    exported (``fixture_key`` set + ``origin=AUTHORED`` — those come out via
-    the report-never-delete pipeline, not the canvas). Else deletes exits
-    pointing in/out, then the room itself, atomically.
+    when it has an installed ``RoomFeatureInstance``, or when it has actually
+    shipped in an export bundle (``exported_at`` set — those come out via the
+    report-never-delete pipeline, not the canvas). A keyed-but-never-exported
+    room is a recoverable mistake and deletes fine (#3269 — the old
+    fixture_key gate made every builder-dug room instantly undeletable).
+    Else deletes exits pointing in/out, then the room itself, atomically.
     """
 
     key: str = "staff_remove_room"
@@ -582,7 +697,6 @@ class StaffRemoveRoomAction(_WorldBuilderAction):
     ) -> ActionResult:
         from django.db import transaction  # noqa: PLC0415
 
-        from world.areas.constants import GridOrigin  # noqa: PLC0415
         from world.areas.grid_services import has_non_exit_contents  # noqa: PLC0415
         from world.room_features.models import RoomFeatureInstance  # noqa: PLC0415
 
@@ -596,7 +710,7 @@ class StaffRemoveRoomAction(_WorldBuilderAction):
             return ActionResult(
                 success=False, message="This room has an installed feature; remove that first."
             )
-        if profile.fixture_key is not None and profile.origin == GridOrigin.AUTHORED:
+        if profile.exported_at is not None:
             return ActionResult(
                 success=False,
                 message="Exported rooms are removed via the report-never-delete pipeline, "
@@ -607,6 +721,99 @@ class StaffRemoveRoomAction(_WorldBuilderAction):
             ObjectDB.objects.filter(db_typeclass_path=_EXIT_TYPECLASS, db_destination=room).delete()
             room.delete()
         return ActionResult(success=True, message="Room removed.")
+
+
+@dataclass
+class StaffRemoveAreaAction(_WorldBuilderAction):
+    """Remove an empty area. Kwarg: ``area_id``.
+
+    Refuses while the area still contains rooms or child areas — deletion is
+    for undoing a mistaken creation, never for pruning live geography (#3269).
+    Anything else still referencing the area (a domain, a starting area, …)
+    surfaces as a refusal rather than a cascade.
+    """
+
+    key: str = "staff_remove_area"
+    name: str = "Remove Area"
+    icon: str = "trash"
+
+    def execute(
+        self,
+        actor: ObjectDB,
+        context: ActionContext | None = None,
+        **kwargs: Any,
+    ) -> ActionResult:
+        from django.db.models.deletion import ProtectedError  # noqa: PLC0415
+
+        from world.areas.models import Area  # noqa: PLC0415
+
+        area = _resolve_area(kwargs.get("area_id"))
+        if area is None:
+            return ActionResult(success=False, message=_NO_SUCH_AREA)
+        if area.rooms.exists():
+            return ActionResult(
+                success=False,
+                message="This area still contains rooms; remove or move them first.",
+            )
+        if Area.objects.filter(parent=area).exists():
+            return ActionResult(
+                success=False, message="This area has child areas; remove them first."
+            )
+        try:
+            area.delete()
+        except ProtectedError:
+            return ActionResult(
+                success=False,
+                message="Something still references this area (a domain, starting area, "
+                "or similar); detach that first.",
+            )
+        return ActionResult(success=True, message="Area removed.")
+
+
+@dataclass
+class StaffMoveRoomAction(_WorldBuilderAction):
+    """Re-parent a room to another AUTHORED area. Kwargs: ``room_id``, ``area_id``.
+
+    Grid coordinates reset to unplaced — cells are area-local, so the old
+    position is meaningless in the new area. A fixture key, if already set,
+    keeps its old area prefix (permanent by ADR-0140); the result message says
+    so, and round-tripping is unaffected since import keys on fixture_key
+    globally (#3269).
+    """
+
+    key: str = "staff_move_room"
+    name: str = "Move World Room"
+    icon: str = "move"
+
+    def execute(
+        self,
+        actor: ObjectDB,
+        context: ActionContext | None = None,
+        **kwargs: Any,
+    ) -> ActionResult:
+        profile = _resolve_room_profile(kwargs.get("room_id"))
+        if profile is None:
+            return ActionResult(success=False, message=_NO_SUCH_ROOM_MSG)
+        area, area_error = _resolve_authored_area(kwargs.get("area_id"))
+        if area_error is not None:
+            return ActionResult(success=False, message=area_error)
+        if profile.area_id == area.pk:
+            return ActionResult(success=False, message="That room is already in this area.")
+        profile.area = area
+        profile.grid_x = None
+        profile.grid_y = None
+        profile.save(update_fields=["area", "grid_x", "grid_y"])
+        note = ""
+        if profile.fixture_key:
+            note = (
+                " Its fixture key keeps the old area prefix (keys are permanent); "
+                "exports still resolve it by key."
+            )
+        return ActionResult(
+            success=True,
+            message=f"{profile.objectdb.db_key} moved to {area.name}; it is unplaced — "
+            f"drag it into position.{note}",
+        )
 
 
 @dataclass

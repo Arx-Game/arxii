@@ -7,6 +7,7 @@ import type {
   WorldBuilderActionKey,
   WorldBuilderArea,
   WorldBuilderAreaManager,
+  WorldBuilderRoomHit,
 } from './types';
 
 export type { DispatchResult };
@@ -40,6 +41,12 @@ export function fetchWorldBuilderArea(areaId: number): Promise<WorldBuilderArea>
 
 export function fetchAreaManager(areaId: number): Promise<WorldBuilderAreaManager> {
   return getJson(`/api/world-builder/areas/${areaId}/manager/`, 'Failed to load the area map.');
+}
+
+/** Cross-area room search (#3269): matches room key or fixture key, capped at 50. */
+export function searchWorldBuilderRooms(term: string): Promise<WorldBuilderRoomHit[]> {
+  const qs = new URLSearchParams({ search: term }).toString();
+  return getJson(`/api/world-builder/areas/room-search/?${qs}`, 'Room search failed.');
 }
 
 /**

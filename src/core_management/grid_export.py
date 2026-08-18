@@ -28,6 +28,10 @@ from dataclasses import dataclass, field
 import json
 import logging
 from pathlib import Path
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from world.areas.models import Area
 
 logger = logging.getLogger(__name__)
 
@@ -474,5 +478,24 @@ def export_grid_bundles(content_root: Path | None = None) -> GridExportResult:
             result.errors.append(f"{area.slug}: write failed: {exc}")
             continue
         result.written.append(out_path)
+        _stamp_exported(area)
 
     return result
+
+
+def _stamp_exported(area: Area) -> None:
+    """Stamp ``exported_at`` on the area's authored rooms after a bundle write (#3269).
+
+    Per-instance saves (not a queryset ``.update``) so SharedMemoryModel's
+    cached instances stay coherent — the canvas delete gate reads this field
+    off the identity-mapped profile.
+    """
+    from django.utils import timezone  # noqa: PLC0415
+
+    from evennia_extensions.models import RoomProfile  # noqa: PLC0415
+    from world.areas.constants import GridOrigin  # noqa: PLC0415
+
+    now = timezone.now()
+    for profile in RoomProfile.objects.filter(area=area, origin=GridOrigin.AUTHORED):
+        profile.exported_at = now
+        profile.save(update_fields=["exported_at"])

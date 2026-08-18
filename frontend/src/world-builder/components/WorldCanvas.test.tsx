@@ -15,6 +15,8 @@ const baseRoom: WorldBuilderRoom = {
   floor: 0,
   fixture_key: null,
   origin: 'authored',
+  exported_at: null,
+  needs_prose: false,
   occupant_count: 0,
   clues: [],
   clue_triggers: [],

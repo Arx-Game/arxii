@@ -1588,9 +1588,12 @@ def set_room_display_data(  # noqa: PLR0913 — staff bypass adds one flag to th
 
     Re-checks owner-or-tenant standing as a hard boundary (the action prerequisite is the primary
     UX gate). Refuses to make a room public while a non-public scene is active in
-    it. Writes name → ``ObjectDisplayData.longname``, description →
-    ``permanent_description``, listing → ``RoomProfile.is_public``. Idempotent;
-    only the provided fields are touched.
+    it. Writes name → BOTH ``ObjectDB.db_key`` and ``ObjectDisplayData.longname``
+    (#3269 — ``look`` reads the key while the area path reads display data, so
+    the two must stay in sync; the old longname-only write made canvas renames
+    silently invisible), description → ``permanent_description`` (``%r``/``%t``
+    normalized — the convention telnet input already applies, #3269), listing →
+    ``RoomProfile.is_public``. Idempotent; only the provided fields are touched.
 
     ``persona`` is only ever consulted when ``bypass_ownership=False`` — the
     owner-facing caller always has one. ``bypass_ownership=True`` (staff
@@ -1611,11 +1614,15 @@ def set_room_display_data(  # noqa: PLR0913 — staff bypass adds one flag to th
         raise RoomEditError(msg)
 
     if name is not None or description is not None:
+        from server.conf.mush_markup import normalize_mush_markup  # noqa: PLC0415
+
         display, _ = ObjectDisplayData.objects.get_or_create(object=room)
         if name is not None:
             display.longname = name
+            room.db_key = name
+            room.save(update_fields=["db_key"])
         if description is not None:
-            display.permanent_description = description
+            display.permanent_description = normalize_mush_markup(description)
         display.save()
     if is_public is not None:
         profile, _ = RoomProfile.objects.get_or_create(objectdb=room)

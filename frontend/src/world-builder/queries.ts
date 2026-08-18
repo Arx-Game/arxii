@@ -6,6 +6,7 @@ import {
   fetchAreaManager,
   fetchWorldBuilderArea,
   fetchWorldBuilderAreas,
+  searchWorldBuilderRooms,
   type AreaListParams,
 } from './api';
 import type { WorldBuilderActionKey } from './types';
@@ -45,13 +46,29 @@ export function useAreaManagerQuery(areaId: number | null | undefined) {
   });
 }
 
+/** Debounce-friendly cross-area room search (#3269); disabled under 2 chars. */
+export function useRoomSearchQuery(term: string) {
+  return useQuery({
+    queryKey: [...worldBuilderKeys.all, 'room-search', term] as const,
+    queryFn: () => searchWorldBuilderRooms(term),
+    enabled: term.trim().length >= 2,
+    staleTime: 10_000,
+  });
+}
+
 export interface WorldBuilderActionInput {
   key: WorldBuilderActionKey;
   kwargs: Record<string, unknown>;
 }
 
 /** Actions that reshape the area tree itself, not just one area's manager payload. */
-const AREA_TREE_KEYS: WorldBuilderActionKey[] = ['create_area', 'edit_area', 'promote_area'];
+const AREA_TREE_KEYS: WorldBuilderActionKey[] = [
+  'create_area',
+  'edit_area',
+  'promote_area',
+  'staff_remove_area',
+  'staff_move_room',
+];
 
 /**
  * The one mutation every staff world-builder verb goes through: dispatch by

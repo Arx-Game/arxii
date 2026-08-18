@@ -17,7 +17,7 @@ manager doesn't: occupant counts and cross-area exit destination areas.
 
 from __future__ import annotations
 
-from django.db.models import Count, QuerySet
+from django.db.models import Count, Q, QuerySet
 from django_filters.rest_framework import DjangoFilterBackend
 from drf_spectacular.utils import extend_schema
 from evennia.objects.models import ObjectDB
@@ -29,12 +29,18 @@ from rest_framework.request import Request
 from rest_framework.response import Response
 
 from evennia_extensions.models import ObjectDisplayData, RoomProfile
+from world.areas.constants import UNFINISHED_ROOM_DESC
 from world.areas.filters import AreaFilter
 from world.areas.grid_services import exits_from_rooms
 from world.areas.models import Area
-from world.areas.serializers import WorldBuilderAreaManagerSerializer, WorldBuilderAreaSerializer
+from world.areas.serializers import (
+    WorldBuilderAreaManagerSerializer,
+    WorldBuilderAreaSerializer,
+    WorldBuilderRoomHitSerializer,
+)
 
 _CHARACTER_TYPECLASS = "typeclasses.characters.Character"
+_EXIT_TYPECLASS = "typeclasses.exits.Exit"
 
 
 class WorldBuilderAreaPagination(PageNumberPagination):
@@ -53,15 +59,29 @@ def _occupant_counts(room_ids: list[int]) -> dict[int, int]:
     """Character-occupant counts per room, one bulk query (no per-room N+1).
 
     Mirrors ``world.areas.grid_services.has_character_occupants``'s
-    typeclass check, but batched: every object located in ``room_ids`` is
-    fetched once and grouped in Python, instead of querying each room's
-    contents separately.
+    typeclass check, but batched. Exits are excluded in SQL (#3269) — they
+    live in rooms too and dominate the contents at grid scale, so fetching
+    and type-checking them in Python made every payload rebuild scale with
+    exit count. The authoritative subclass-aware check stays in Python for
+    the (few) remaining objects.
     """
     counts: dict[int, int] = {}
-    for obj in ObjectDB.objects.filter(db_location_id__in=room_ids):
+    contents = ObjectDB.objects.filter(db_location_id__in=room_ids).exclude(
+        db_typeclass_path=_EXIT_TYPECLASS
+    )
+    for obj in contents:
         if obj.is_typeclass(_CHARACTER_TYPECLASS, exact=False):
             counts[obj.db_location_id] = counts.get(obj.db_location_id, 0) + 1
     return counts
+
+
+def _needs_prose(description: str) -> bool:
+    """Whether a room still awaits its prose pass (#3269): empty or stub text."""
+    text = description.strip()
+    return (
+        # PLACEHOLDER is the repo-wide prose-stub marker in free text, not an identifier.
+        not text or text == UNFINISHED_ROOM_DESC or "PLACEHOLDER" in text  # noqa: STRING_LITERAL
+    )
 
 
 def _clue_and_anchor_sidecars(
@@ -153,6 +173,8 @@ def area_manager_payload(area: Area) -> dict:
                 "floor": p.floor,
                 "fixture_key": p.fixture_key,
                 "origin": p.origin,
+                "exported_at": p.exported_at,
+                "needs_prose": _needs_prose(descriptions.get(p.objectdb_id, "")),
                 "occupant_count": occupant_counts.get(p.objectdb_id, 0),
                 "clues": clues_by_room.get(p.objectdb_id, []),
                 "clue_triggers": triggers_by_room.get(p.objectdb_id, []),
@@ -188,6 +210,40 @@ class WorldBuilderViewSet(viewsets.ReadOnlyModelViewSet):
 
     def get_queryset(self) -> QuerySet[Area]:
         return Area.objects.annotate(children_count=Count("children")).order_by("name")
+
+    @extend_schema(responses={200: WorldBuilderRoomHitSerializer(many=True)})
+    @action(detail=False, methods=["get"], url_path="room-search")
+    def room_search(self, request: Request) -> Response:
+        """GET /api/world-builder/areas/room-search/?search= — cross-area room lookup (#3269).
+
+        Matches room key or fixture_key, capped at 50 hits — the "where did I
+        put the Traitor's Gate" seam for a 400-room grid, also feeding the
+        link-rooms pickers.
+        """
+        # noqa-rationale: one free-text param on a non-queryset action endpoint;
+        # a FilterSet needs a queryset-backed list view to attach to.
+        term = (request.query_params.get("search") or "").strip()  # noqa: USE_FILTERSET
+        if not term:
+            return Response([])
+        hits = list(
+            RoomProfile.objects.filter(
+                Q(objectdb__db_key__icontains=term) | Q(fixture_key__icontains=term)
+            )
+            .select_related("objectdb", "area")
+            .order_by("objectdb__db_key")[:50]
+        )
+        payload = [
+            {
+                "id": p.objectdb_id,
+                "name": p.objectdb.db_key,
+                "area_id": p.area_id,
+                "area_name": p.area.name if p.area_id else None,
+                "floor": p.floor,
+                "fixture_key": p.fixture_key,
+            }
+            for p in hits
+        ]
+        return Response(WorldBuilderRoomHitSerializer(payload, many=True).data)
 
     @extend_schema(responses={200: WorldBuilderAreaManagerSerializer})
     @action(detail=True, methods=["get"], url_path="manager")
