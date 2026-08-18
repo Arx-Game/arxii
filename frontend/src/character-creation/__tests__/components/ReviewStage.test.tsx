@@ -28,8 +28,37 @@ import { Stage } from '../../types';
 vi.mock('../../api', () => ({
   submitDraftForReview: vi.fn(),
   addToRoster: vi.fn(),
+  finalizeDraftForTable: vi.fn(),
   getCGExplanations: vi.fn(),
 }));
+
+// ReviewStage now calls useTables() to gate the "Finalize for My Table"
+// button (#3268) — mock it so these tests don't hit the network. Individual
+// tests override the return value with vi.mocked(...).mockReturnValue(...)
+// where the GM-table gating matters.
+vi.mock('@/tables/queries', () => ({
+  useTables: vi.fn(() => ({ data: { count: 0, next: null, previous: null, results: [] } })),
+}));
+
+import { useTables } from '@/tables/queries';
+import type { GMTable } from '@/tables/types';
+
+function makeGMTable(overrides: Partial<GMTable> = {}): GMTable {
+  return {
+    id: 1,
+    gm: 10,
+    gm_username: 'gmUser',
+    name: 'Test Table',
+    description: '',
+    status: 'active',
+    created_at: '2026-01-01T00:00:00Z',
+    archived_at: null,
+    member_count: 2,
+    story_count: 1,
+    viewer_role: 'gm',
+    ...overrides,
+  } as GMTable;
+}
 
 describe('ReviewStage', () => {
   const mockOnStageSelect = vi.fn();
@@ -438,6 +467,108 @@ describe('ReviewStage', () => {
       expect(
         screen.getByText(/review your character before submitting for approval/i)
       ).toBeInTheDocument();
+    });
+  });
+
+  describe('Finalize for My Table (#3268)', () => {
+    it('does not show the button when the account owns no active GM table', () => {
+      const queryClient = createTestQueryClient();
+
+      renderWithCharacterCreationProviders(
+        <ReviewStage draft={mockCompleteDraft} isStaff={false} onStageSelect={mockOnStageSelect} />,
+        { queryClient, account: mockPlayerAccount }
+      );
+
+      expect(
+        screen.queryByRole('button', { name: /finalize for my table/i })
+      ).not.toBeInTheDocument();
+    });
+
+    it('shows the button for a non-staff account that owns an active GM table', () => {
+      vi.mocked(useTables).mockReturnValue({
+        data: { count: 1, next: null, previous: null, results: [makeGMTable()] },
+      } as unknown as ReturnType<typeof useTables>);
+      const queryClient = createTestQueryClient();
+
+      renderWithCharacterCreationProviders(
+        <ReviewStage draft={mockCompleteDraft} isStaff={false} onStageSelect={mockOnStageSelect} />,
+        { queryClient, account: mockPlayerAccount }
+      );
+
+      expect(screen.getByRole('button', { name: /finalize for my table/i })).toBeInTheDocument();
+    });
+
+    it('is disabled when stages are incomplete (reuses the Submit condition)', () => {
+      vi.mocked(useTables).mockReturnValue({
+        data: { count: 1, next: null, previous: null, results: [makeGMTable()] },
+      } as unknown as ReturnType<typeof useTables>);
+      const queryClient = createTestQueryClient();
+
+      renderWithCharacterCreationProviders(
+        <ReviewStage
+          draft={mockIncompleteDraft}
+          isStaff={false}
+          onStageSelect={mockOnStageSelect}
+        />,
+        { queryClient, account: mockPlayerAccount }
+      );
+
+      expect(screen.getByRole('button', { name: /finalize for my table/i })).toBeDisabled();
+    });
+
+    it('ignores tables where the account is not the GM (viewer_role !== "gm")', () => {
+      vi.mocked(useTables).mockReturnValue({
+        data: {
+          count: 1,
+          next: null,
+          previous: null,
+          results: [makeGMTable({ viewer_role: 'member' })],
+        },
+      } as unknown as ReturnType<typeof useTables>);
+      const queryClient = createTestQueryClient();
+
+      renderWithCharacterCreationProviders(
+        <ReviewStage draft={mockCompleteDraft} isStaff={false} onStageSelect={mockOnStageSelect} />,
+        { queryClient, account: mockPlayerAccount }
+      );
+
+      expect(
+        screen.queryByRole('button', { name: /finalize for my table/i })
+      ).not.toBeInTheDocument();
+    });
+
+    it('does not show the button for staff even if they own a GM table', () => {
+      vi.mocked(useTables).mockReturnValue({
+        data: { count: 1, next: null, previous: null, results: [makeGMTable()] },
+      } as unknown as ReturnType<typeof useTables>);
+      const queryClient = createTestQueryClient();
+
+      renderWithCharacterCreationProviders(
+        <ReviewStage draft={mockCompleteDraft} isStaff={true} onStageSelect={mockOnStageSelect} />,
+        { queryClient, account: mockStaffAccount }
+      );
+
+      expect(
+        screen.queryByRole('button', { name: /finalize for my table/i })
+      ).not.toBeInTheDocument();
+    });
+
+    it('opens the dialog on click', async () => {
+      vi.mocked(useTables).mockReturnValue({
+        data: { count: 1, next: null, previous: null, results: [makeGMTable()] },
+      } as unknown as ReturnType<typeof useTables>);
+      const user = userEvent.setup();
+      const queryClient = createTestQueryClient();
+
+      renderWithCharacterCreationProviders(
+        <ReviewStage draft={mockCompleteDraft} isStaff={false} onStageSelect={mockOnStageSelect} />,
+        { queryClient, account: mockPlayerAccount }
+      );
+
+      await user.click(screen.getByRole('button', { name: /finalize for my table/i }));
+
+      expect(screen.getByRole('dialog')).toBeInTheDocument();
+      expect(screen.getByText('Story Title *')).toBeInTheDocument();
     });
   });
 });

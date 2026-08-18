@@ -30,6 +30,7 @@ character-creation/
     ├── IdentityStage.tsx    # Stage 9: Identity
     ├── FinalTouchesStage.tsx # Stage 10: Goals
     ├── ReviewStage.tsx      # Stage 11: Review and submit
+    ├── FinalizeForTableDialog.tsx # Player-GM direct-to-roster flow from ReviewStage (#3268)
     ├── TraditionPicker.tsx  # Tradition card grid — mounted inside gift/TraditionStep
     └── gift/                # GiftStage funnel steps (#2426 Task 10)
         ├── TraditionStep.tsx    # Wraps TraditionPicker
@@ -49,6 +50,11 @@ character-creation/
 - **Visual cards**: Starting areas displayed as cards with crest images or gradient placeholders
 - **Real-time validation**: Stage completion tracked, submit blocked until all required stages complete
 - **Staff-only features**: "Add to Roster" button visible only to staff
+- **Player-GM direct-to-roster (#3268)**: a non-staff account that owns at least one active
+  GM-role table sees a "Finalize for My Table" button beside Submit, gated by the same
+  completeness condition. Opens `FinalizeForTableDialog` — picks the target table, names a
+  story, and finalizes onto that table's Available roster (`POST .../finalize-gm/`) without
+  going through staff review.
 
 ## API Endpoints Used
 
@@ -65,6 +71,8 @@ character-creation/
 - `GET /api/character-creation/form-options/{species_id}/?draft=X` - Trait palettes (`{traits, inherited}`; traits carry `is_required`, `?draft=` appends cross-line option groups from the draft's parents, #2815)
 - `POST /api/character-creation/drafts/{id}/submit/` - Submit for review
 - `POST /api/character-creation/drafts/{id}/add-to-roster/` - Staff direct add
+- `POST /api/character-creation/drafts/{id}/finalize-gm/` - Player-GM direct-to-roster for a
+  table they own (`target_table`, `story_title`, optional `story_description`) (#3268)
 
 ## Route
 

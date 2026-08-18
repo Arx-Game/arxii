@@ -226,6 +226,16 @@ export interface PaginatedGMRosterInvites {
   results: GMRosterInvite[];
 }
 
+/**
+ * 201 response from POST /api/gm/invites/claim/ — mirrors
+ * `GMInviteClaimView`. Only the new `RosterApplication`'s pk; the claimed
+ * roster entry/character aren't echoed back, so a claim success view can
+ * only link somewhere generic (e.g. `/roster`), not the specific entry.
+ */
+export interface GMInviteClaimResponse {
+  application_id: number;
+}
+
 // ---------------------------------------------------------------------------
 // GM application queue (#3268) — hand-defined; mirrors
 // GMApplicationQueueSerializer. RosterApplication status values are

@@ -357,6 +357,17 @@ export function useRevokeInvite() {
   });
 }
 
+/**
+ * POST /api/gm/invites/claim/ (#3268). No cache to invalidate — the invites
+ * list is creator-scoped (the claimant isn't the invite's creator) and the
+ * new `RosterApplication` isn't surfaced by any query this claimant can see.
+ */
+export function useClaimInvite() {
+  return useMutation({
+    mutationFn: (code: string) => api.claimInvite(code),
+  });
+}
+
 // ---------------------------------------------------------------------------
 // GM application queue hooks (#3268)
 // ---------------------------------------------------------------------------

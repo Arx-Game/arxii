@@ -21,6 +21,7 @@ import type {
   GMApplicationAction,
   GMApplicationCreateBody,
   GMApplicationCreateResponse,
+  GMInviteClaimResponse,
   GMRosterInvite,
   GMRosterInviteCreateBody,
   GMTable,
@@ -394,6 +395,23 @@ export async function mintInvite(data: GMRosterInviteCreateBody): Promise<GMRost
 export async function revokeInvite(id: number): Promise<void> {
   const res = await apiFetch(`${INVITES_URL}/${id}/`, { method: 'DELETE' });
   if (!res.ok) await throwApiError(res, `Failed to revoke invite ${id}`);
+}
+
+/**
+ * POST /api/gm/invites/claim/
+ * Any authenticated player claims an invite by code, creating (or reusing an
+ * existing pending) `RosterApplication` for the invited character. Field
+ * errors on `code` (invalid/claimed/expired/private-email-mismatch) — render
+ * verbatim via `ApiError.fieldErrors.code` / `.message`.
+ */
+export async function claimInvite(code: string): Promise<GMInviteClaimResponse> {
+  const res = await apiFetch(`${INVITES_URL}/claim/`, {
+    method: 'POST',
+    headers: jsonHeaders(),
+    body: JSON.stringify({ code }),
+  });
+  if (!res.ok) await throwApiError(res, 'Failed to claim invite');
+  return res.json() as Promise<GMInviteClaimResponse>;
 }
 
 // ---------------------------------------------------------------------------

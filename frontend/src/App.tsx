@@ -169,6 +169,9 @@ const GMUpdateRequestsPage = lazy(() =>
 const TableDetailPage = lazy(() =>
   import('@/tables/pages/TableDetailPage').then((m) => ({ default: m.TableDetailPage }))
 );
+const ClaimInvitePage = lazy(() =>
+  import('@/tables/pages/ClaimInvitePage').then((m) => ({ default: m.ClaimInvitePage }))
+);
 const EraAdminPage = lazy(() =>
   import('@/stories/pages/EraAdminPage').then((m) => ({ default: m.EraAdminPage }))
 );
@@ -893,6 +896,16 @@ function App() {
               <Suspense fallback={<PageLoadingFallback />}>
                 <ProtectedRoute>
                   <TableDetailPage />
+                </ProtectedRoute>
+              </Suspense>
+            }
+          />
+          <Route
+            path="/invites/claim"
+            element={
+              <Suspense fallback={<PageLoadingFallback />}>
+                <ProtectedRoute>
+                  <ClaimInvitePage />
                 </ProtectedRoute>
               </Suspense>
             }

@@ -60,6 +60,10 @@ interface GMDashboardResponse {
   my_tables: GMDashboardTable[];
   pending_story_offers: GMDashboardOffer[];
   evidence_summary: GMDashboardEvidence;
+  /** Pending RosterApplications at this GM's tables (#3268). Reviewed from the per-table Recruitment tab. */
+  pending_applications: number;
+  /** This GM's unclaimed, unexpired roster invites (#3268). Managed from the per-table Recruitment tab. */
+  open_invites: number;
 }
 
 async function getGMDashboard(): Promise<GMDashboardResponse> {
@@ -220,6 +224,25 @@ function GMDashboardContent() {
           <p className="text-sm text-muted-foreground">Stories waiting on you</p>
           <p className="text-2xl font-bold">{data.waiting_for_gm.length}</p>
         </div>
+        {/* Pending applications + open invites (#3268) — GM-owned roster creation
+            surface. Both counts are reviewed/managed from the per-table
+            Recruitment tab, not this dashboard, so both link to /tables. */}
+        <Link
+          to="/tables"
+          className="rounded-lg border p-4 transition-colors hover:bg-accent"
+          data-testid="pending-applications-tile"
+        >
+          <p className="text-sm text-muted-foreground">Pending applications</p>
+          <p className="text-2xl font-bold">{data.pending_applications}</p>
+        </Link>
+        <Link
+          to="/tables"
+          className="rounded-lg border p-4 transition-colors hover:bg-accent"
+          data-testid="open-invites-tile"
+        >
+          <p className="text-sm text-muted-foreground">Open invites</p>
+          <p className="text-2xl font-bold">{data.open_invites}</p>
+        </Link>
       </section>
 
       {/* Pending story offers */}
