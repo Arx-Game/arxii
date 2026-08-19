@@ -5618,7 +5618,7 @@ paths:
   /api/codex/categories/:
     get:
       operationId: codex_categories_list
-      description: List and retrieve codex categories.
+      description: List and retrieve codex categories with a visible subtree.
       tags:
       - codex
       security:
@@ -5636,7 +5636,7 @@ paths:
   /api/codex/categories/{id}/:
     get:
       operationId: codex_categories_retrieve
-      description: List and retrieve codex categories.
+      description: List and retrieve codex categories with a visible subtree.
       parameters:
       - in: path
         name: id
@@ -5660,10 +5660,10 @@ paths:
     get:
       operationId: codex_categories_tree_retrieve
       description: |-
-        Return categories with top-level subjects only.
+        Return visible categories with their visible top-level subjects.
 
-        Children are loaded on demand via SubjectViewSet with ?parent= filter.
-        This avoids deep nested prefetches that perform poorly.
+        Children are loaded on demand via SubjectViewSet's ``children``
+        action. This avoids deep nested prefetches that perform poorly.
       tags:
       - codex
       security:
@@ -5737,7 +5737,11 @@ paths:
   /api/codex/subjects/:
     get:
       operationId: codex_subjects_list
-      description: List and retrieve codex subjects.
+      description: |-
+        List and retrieve codex subjects with a visible subtree.
+
+        A subject whose subtree holds no visible entry 404s on direct retrieve
+        too -- its description must not be readable by probing ids.
       parameters:
       - in: query
         name: category
@@ -5764,7 +5768,11 @@ paths:
   /api/codex/subjects/{id}/:
     get:
       operationId: codex_subjects_retrieve
-      description: List and retrieve codex subjects.
+      description: |-
+        List and retrieve codex subjects with a visible subtree.
+
+        A subject whose subtree holds no visible entry 404s on direct retrieve
+        too -- its description must not be readable by probing ids.
       parameters:
       - in: path
         name: id
@@ -5788,7 +5796,7 @@ paths:
     get:
       operationId: codex_subjects_children_retrieve
       description: |-
-        Return children of a subject with has_children and entry_count.
+        Return visible children of a subject with has_children/entry_count.
 
         Used for lazy-loading tree expansion in the UI.
       parameters:
@@ -40942,10 +40950,7 @@ components:
       - name
     CodexEntryDetail:
       type: object
-      description: |-
-        Full serializer for entry detail view.
-
-        Uses annotated fields from ViewSet queryset for knowledge data.
+      description: Full serializer for entry detail view.
       properties:
         id:
           type: integer
@@ -41020,12 +41025,18 @@ components:
           description: Total progress needed to complete learning.
         knowledge_status:
           type: string
-          readOnly: true
           nullable: true
+          readOnly: true
         research_progress:
           type: integer
-          readOnly: true
           nullable: true
+          readOnly: true
+        known_by:
+          type: array
+          items:
+            type: object
+            additionalProperties: {}
+          readOnly: true
         art_url:
           type: string
           nullable: true
@@ -41034,6 +41045,7 @@ components:
       - art_url
       - id
       - knowledge_status
+      - known_by
       - lore_content
       - lore_links
       - mechanics_content
@@ -41045,10 +41057,7 @@ components:
       - subject_path
     CodexEntryList:
       type: object
-      description: |-
-        Light serializer for entry lists.
-
-        Uses annotated fields from ViewSet queryset for knowledge data.
+      description: Light serializer for entry lists.
       properties:
         id:
           type: integer
@@ -41094,8 +41103,14 @@ components:
           description: Order for display within subject.
         knowledge_status:
           type: string
-          readOnly: true
           nullable: true
+          readOnly: true
+        known_by:
+          type: array
+          items:
+            type: object
+            additionalProperties: {}
+          readOnly: true
         art_url:
           type: string
           nullable: true
@@ -41104,6 +41119,7 @@ components:
       - art_url
       - id
       - knowledge_status
+      - known_by
       - name
       - subject
       - subject_name

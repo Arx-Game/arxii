@@ -62,6 +62,7 @@ function makeEntry(
     ],
     display_order: 0,
     knowledge_status: 'known' as const,
+    known_by: [],
     learn_threshold: 10,
     research_progress: null,
     art_url: artUrl,

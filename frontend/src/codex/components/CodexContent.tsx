@@ -17,6 +17,8 @@ interface CodexContentProps {
   categoryId?: number;
   subjectId?: number;
   entryId?: number;
+  /** Roster entry id scoping knowledge to one character (undefined = all). */
+  characterId?: number;
   onSelectSubject: (subjectId: number) => void;
   onSelectEntry: (entryId: number) => void;
   onNavigateBreadcrumb: (type: 'home' | 'category' | 'subject', id?: number) => void;
@@ -26,13 +28,20 @@ export function CodexContent({
   categoryId,
   subjectId,
   entryId,
+  characterId,
   onSelectSubject,
   onSelectEntry,
   onNavigateBreadcrumb,
 }: CodexContentProps) {
   // Entry detail view
   if (entryId) {
-    return <EntryDetailView entryId={entryId} onNavigateBreadcrumb={onNavigateBreadcrumb} />;
+    return (
+      <EntryDetailView
+        entryId={entryId}
+        characterId={characterId}
+        onNavigateBreadcrumb={onNavigateBreadcrumb}
+      />
+    );
   }
 
   // Subject view (children or entries)
@@ -40,6 +49,7 @@ export function CodexContent({
     return (
       <SubjectView
         subjectId={subjectId}
+        characterId={characterId}
         onSelectSubject={onSelectSubject}
         onSelectEntry={onSelectEntry}
       />
@@ -48,7 +58,13 @@ export function CodexContent({
 
   // Category view (subjects)
   if (categoryId) {
-    return <CategoryView categoryId={categoryId} onSelectSubject={onSelectSubject} />;
+    return (
+      <CategoryView
+        categoryId={categoryId}
+        characterId={characterId}
+        onSelectSubject={onSelectSubject}
+      />
+    );
   }
 
   // Home view - always show welcome splash, users navigate via sidebar
@@ -72,13 +88,15 @@ function LoadingSkeleton() {
 
 function CategoryView({
   categoryId,
+  characterId,
   onSelectSubject,
 }: {
   categoryId: number;
+  characterId?: number;
   onSelectSubject: (id: number) => void;
 }) {
   // Use tree data which includes subjects (already cached from sidebar)
-  const { data: tree, isLoading } = useCodexTree();
+  const { data: tree, isLoading } = useCodexTree(characterId);
 
   if (isLoading) {
     return <LoadingSkeleton />;
@@ -125,16 +143,21 @@ function CategoryView({
 
 function SubjectView({
   subjectId,
+  characterId,
   onSelectSubject,
   onSelectEntry,
 }: {
   subjectId: number;
+  characterId?: number;
   onSelectSubject: (id: number) => void;
   onSelectEntry: (id: number) => void;
 }) {
-  const { data: subject, isLoading: subjectLoading } = useCodexSubject(subjectId);
-  const { data: children, isLoading: childrenLoading } = useCodexSubjectChildren(subjectId);
-  const { data: entries, isLoading: entriesLoading } = useCodexEntries(subjectId);
+  const { data: subject, isLoading: subjectLoading } = useCodexSubject(subjectId, characterId);
+  const { data: children, isLoading: childrenLoading } = useCodexSubjectChildren(
+    subjectId,
+    characterId
+  );
+  const { data: entries, isLoading: entriesLoading } = useCodexEntries(subjectId, characterId);
 
   const isLoading = subjectLoading || childrenLoading || entriesLoading;
 
@@ -200,12 +223,14 @@ function SubjectView({
 
 function EntryDetailView({
   entryId,
+  characterId,
   onNavigateBreadcrumb,
 }: {
   entryId: number;
+  characterId?: number;
   onNavigateBreadcrumb: (type: 'home' | 'category' | 'subject', id?: number) => void;
 }) {
-  const { data: entry, isLoading } = useCodexEntry(entryId);
+  const { data: entry, isLoading } = useCodexEntry(entryId, characterId);
 
   if (isLoading) {
     return <LoadingSkeleton />;

@@ -37,6 +37,14 @@ export interface BreadcrumbSegment {
   name: string;
 }
 
+/** One of the viewer's characters' knowledge of an entry. */
+export interface CodexKnownBy {
+  roster_entry_id: number;
+  character_name: string;
+  status: 'known' | 'uncovered';
+  research_progress: number;
+}
+
 export interface CodexEntryListItem {
   id: number;
   name: string;
@@ -48,7 +56,10 @@ export interface CodexEntryListItem {
   subject_name: string;
   subject_path: BreadcrumbSegment[];
   display_order: number;
+  /** Best status across the viewer's selected characters. */
   knowledge_status: 'known' | 'uncovered' | null;
+  /** Per-character breakdown of the viewer's characters that know this entry. */
+  known_by: CodexKnownBy[];
   art_url: string | null;
 }
 

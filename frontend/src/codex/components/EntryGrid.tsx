@@ -1,4 +1,4 @@
-import { Lock } from 'lucide-react';
+import { BookOpenCheck, Lock } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import type { CodexEntryListItem } from '../types';
@@ -32,8 +32,22 @@ function EntryCard({ entry, onClick }: { entry: CodexEntryListItem; onClick: () 
           )}
         </div>
       </CardHeader>
-      <CardContent>
+      <CardContent className="space-y-2">
         <p className="line-clamp-2 text-sm text-muted-foreground">{entry.summary}</p>
+        {entry.known_by.length > 0 && (
+          <div className="flex flex-wrap items-center gap-1">
+            {entry.known_by.map((knower) => (
+              <Badge key={knower.roster_entry_id} variant="secondary" className="text-xs">
+                {knower.status === 'known' ? (
+                  <BookOpenCheck className="mr-1 h-3 w-3" />
+                ) : (
+                  <Lock className="mr-1 h-3 w-3" />
+                )}
+                {knower.character_name}
+              </Badge>
+            ))}
+          </div>
+        )}
       </CardContent>
     </Card>
   );

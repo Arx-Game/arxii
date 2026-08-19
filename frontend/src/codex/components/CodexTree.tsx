@@ -5,6 +5,8 @@ import { getSubjectChildren } from '../api';
 
 interface CodexTreeProps {
   categories: CodexCategoryTree[];
+  /** Roster entry id scoping knowledge to one character (undefined = all). */
+  characterId?: number;
   selectedCategoryId?: number;
   selectedSubjectId?: number;
   onSelectCategory: (categoryId: number) => void;
@@ -13,6 +15,7 @@ interface CodexTreeProps {
 
 export function CodexTree({
   categories,
+  characterId,
   selectedCategoryId,
   selectedSubjectId,
   onSelectCategory,
@@ -61,6 +64,13 @@ export function CodexTree({
     }
   }, [selectedCategoryId, selectedSubjectId]);
 
+  // Lazily-loaded children are scoped to the character selection; drop the
+  // cache when the scope changes so hidden branches disappear and revealed
+  // ones load fresh.
+  useEffect(() => {
+    setLoadedChildren(new Map());
+  }, [characterId]);
+
   const toggleNode = (nodeKey: string) => {
     setExpandedNodes((prev) => {
       const next = new Set(prev);
@@ -81,7 +91,7 @@ export function CodexTree({
 
       setLoadingNodes((prev) => new Set(prev).add(subjectId));
       try {
-        const children = await getSubjectChildren(subjectId);
+        const children = await getSubjectChildren(subjectId, characterId);
         setLoadedChildren((prev) => new Map(prev).set(subjectId, children));
       } catch (error) {
         console.error('Failed to load children:', error);
@@ -93,7 +103,7 @@ export function CodexTree({
         });
       }
     },
-    [loadedChildren, loadingNodes]
+    [loadedChildren, loadingNodes, characterId]
   );
 
   return (

@@ -1,5 +1,8 @@
 /**
  * Codex React Query hooks
+ *
+ * `characterId` scopes knowledge to one of the viewer's characters (see
+ * api.ts); it is part of every query key so switching scope refetches.
  */
 
 import { useQuery } from '@tanstack/react-query';
@@ -15,28 +18,33 @@ import {
 
 export const codexKeys = {
   all: ['codex'] as const,
-  tree: () => [...codexKeys.all, 'tree'] as const,
-  subject: (id: number) => [...codexKeys.all, 'subject', id] as const,
-  subjectChildren: (id: number) => [...codexKeys.all, 'subject', id, 'children'] as const,
-  entries: (subjectId?: number) => [...codexKeys.all, 'entries', subjectId] as const,
+  tree: (characterId?: number) => [...codexKeys.all, 'tree', characterId ?? null] as const,
+  subject: (id: number, characterId?: number) =>
+    [...codexKeys.all, 'subject', id, characterId ?? null] as const,
+  subjectChildren: (id: number, characterId?: number) =>
+    [...codexKeys.all, 'subject', id, 'children', characterId ?? null] as const,
+  entries: (subjectId?: number, characterId?: number) =>
+    [...codexKeys.all, 'entries', subjectId, characterId ?? null] as const,
   featured: () => [...codexKeys.all, 'featured'] as const,
-  entry: (id: number) => [...codexKeys.all, 'entry', id] as const,
-  search: (query: string) => [...codexKeys.all, 'search', query] as const,
+  entry: (id: number, characterId?: number) =>
+    [...codexKeys.all, 'entry', id, characterId ?? null] as const,
+  search: (query: string, characterId?: number) =>
+    [...codexKeys.all, 'search', query, characterId ?? null] as const,
 };
 
-export function useCodexTree() {
+export function useCodexTree(characterId?: number) {
   return useQuery({
-    queryKey: codexKeys.tree(),
-    queryFn: getCodexTree,
+    queryKey: codexKeys.tree(characterId),
+    queryFn: () => getCodexTree(characterId),
     staleTime: 5 * 60 * 1000, // 5 minutes - codex structure changes rarely
     throwOnError: true,
   });
 }
 
-export function useCodexEntries(subjectId?: number) {
+export function useCodexEntries(subjectId?: number, characterId?: number) {
   return useQuery({
-    queryKey: codexKeys.entries(subjectId),
-    queryFn: () => getEntries(subjectId),
+    queryKey: codexKeys.entries(subjectId, characterId),
+    queryFn: () => getEntries(subjectId, characterId),
     throwOnError: true,
   });
 }
@@ -50,39 +58,39 @@ export function useFeaturedCodexEntries() {
   });
 }
 
-export function useCodexEntry(id: number) {
+export function useCodexEntry(id: number, characterId?: number) {
   return useQuery({
-    queryKey: codexKeys.entry(id),
-    queryFn: () => getEntry(id),
+    queryKey: codexKeys.entry(id, characterId),
+    queryFn: () => getEntry(id, characterId),
     enabled: id > 0,
     throwOnError: true,
   });
 }
 
-export function useCodexSearch(query: string) {
+export function useCodexSearch(query: string, characterId?: number) {
   return useQuery({
-    queryKey: codexKeys.search(query),
-    queryFn: () => searchEntries(query),
+    queryKey: codexKeys.search(query, characterId),
+    queryFn: () => searchEntries(query, characterId),
     enabled: query.length >= 2,
     staleTime: 30 * 1000, // 30 seconds
     throwOnError: true,
   });
 }
 
-export function useCodexSubject(id: number) {
+export function useCodexSubject(id: number, characterId?: number) {
   return useQuery({
-    queryKey: codexKeys.subject(id),
-    queryFn: () => getSubject(id),
+    queryKey: codexKeys.subject(id, characterId),
+    queryFn: () => getSubject(id, characterId),
     enabled: id > 0,
     staleTime: 5 * 60 * 1000,
     throwOnError: true,
   });
 }
 
-export function useCodexSubjectChildren(id: number) {
+export function useCodexSubjectChildren(id: number, characterId?: number) {
   return useQuery({
-    queryKey: codexKeys.subjectChildren(id),
-    queryFn: () => getSubjectChildren(id),
+    queryKey: codexKeys.subjectChildren(id, characterId),
+    queryFn: () => getSubjectChildren(id, characterId),
     enabled: id > 0,
     staleTime: 5 * 60 * 1000,
     throwOnError: true,
