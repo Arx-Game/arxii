@@ -1388,6 +1388,11 @@ Lore storage and character knowledge tracking.
 
 - **Models:** `CodexCategory`, `CodexSubject`, `CodexEntry`, `CharacterCodexKnowledge`
 - **Key Methods:** Character learning from starting choices or teaching
+- **Visibility (ADR-0219):** entries are the only unit of secrecy; categories/subjects
+  with no visible entry in their subtree are hidden by every endpoint. Reader knowledge
+  is the union across the account's characters (`?character=` narrows; `known_by`
+  per-character breakdown in entry payloads) — `CodexVisibilityMixin` in
+  `world/codex/views.py`
 - **Art (#2408):** `CodexEntry.art` — nullable FK → `evennia_extensions.Media`,
   `SET_NULL`; illustration rendered in the codex-modal lore-card (`CodexModal.tsx`).
   No art set falls back to the existing placeholder convention.

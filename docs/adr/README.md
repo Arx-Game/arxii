@@ -224,6 +224,7 @@ treat those names as hints to confirm, not gospel.
 - [0214 — Languages ride the Trait/DevelopmentPoints substrate; comprehension recomputes live per viewer](0214-languages-are-traits-comprehension-recomputed-live.md) (#2993; related ADR-0170)
 - [0215 — Public conversion historicizes the old faith instead of retiring it, and heart-vs-lip-service is a boolean flag, not a new model](0215-conversion-historicizes-not-retires-and-sincerity-is-a-flag.md) (#2361; extends ADR-0132)
 - [0218 — Derived display names; née replaces the birth particle; Arx abstains](0218-derived-display-names-and-nee-grammar.md) (#3261; extends ADR-0098)
+- [0219 — Codex containers hide when their subtree is empty; knowledge is an account-wide union](0219-codex-containers-hide-when-empty-knowledge-is-account-union.md)
 
 ### Gift & resonance economy
 - [0050 — Gifts are Major or Minor; species abilities are a species-granted Minor Gift](0050-gifts-are-major-or-minor-species-abilities-are-minor-gifts.md)
