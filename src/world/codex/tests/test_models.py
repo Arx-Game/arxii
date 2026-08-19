@@ -745,3 +745,24 @@ class LibraryDiscountTests(TestCase):
         pool.refresh_from_db()
         # 10 - 10 = 0, floored to 1; 100 - 1 = 99
         assert pool.current == 99
+
+
+class BeginningsPerspectiveConstraintTests(TestCase):
+    """One perspective holder per entry (partial unique constraint, #3277)."""
+
+    def test_second_perspective_row_for_same_entry_rejected(self):
+        from world.codex.factories import BeginningsCodexGrantFactory
+
+        entry = CodexEntryFactory()
+        BeginningsCodexGrantFactory(entry=entry, is_perspective=True)
+        with self.assertRaises(IntegrityError):
+            BeginningsCodexGrantFactory(entry=entry, is_perspective=True)
+
+    def test_plain_grants_and_one_perspective_coexist(self):
+        from world.codex.factories import BeginningsCodexGrantFactory
+
+        entry = CodexEntryFactory()
+        BeginningsCodexGrantFactory(entry=entry, is_perspective=True)
+        BeginningsCodexGrantFactory(entry=entry, is_perspective=False)
+        BeginningsCodexGrantFactory(entry=entry, is_perspective=False)
+        assert entry.beginnings_grants.filter(is_perspective=True).count() == 1
