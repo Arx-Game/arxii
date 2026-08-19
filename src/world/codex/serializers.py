@@ -14,6 +14,7 @@ from world.codex.models import (
     CodexSubject,
 )
 from world.codex.services import resolve_codex_links
+from world.codex.types import CharacterKnowledge
 
 
 class CodexCategorySerializer(serializers.ModelSerializer):
@@ -92,16 +93,52 @@ class CodexCategoryTreeSerializer(serializers.ModelSerializer):
         return CodexSubjectTreeSerializer(top_subjects, many=True, context=self.context).data
 
 
-class CodexEntryListSerializer(serializers.ModelSerializer):
-    """Light serializer for entry lists.
+class EntryKnowledgeMixin(serializers.Serializer):
+    """Per-character knowledge fields, read from the view's knowledge map.
 
-    Uses annotated fields from ViewSet queryset for knowledge data.
+    The view builds ``context["knowledge_by_entry"]`` (entry id -> list of
+    :class:`~world.codex.types.CharacterKnowledge` for the reader's selected
+    characters) in one query; these fields aggregate it. ``knowledge_status``
+    is the best status across the selected characters, ``research_progress``
+    the furthest progress, and ``known_by`` the full per-character breakdown.
     """
+
+    knowledge_status = serializers.SerializerMethodField()
+    research_progress = serializers.SerializerMethodField()
+    known_by = serializers.SerializerMethodField()
+
+    def _entry_knowledge(self, obj: CodexEntry) -> list[CharacterKnowledge]:
+        return self.context.get("knowledge_by_entry", {}).get(obj.id, [])
+
+    def get_knowledge_status(self, obj: CodexEntry) -> str | None:
+        statuses = {item.status for item in self._entry_knowledge(obj)}
+        if CodexKnowledgeStatus.KNOWN in statuses:
+            return CodexKnowledgeStatus.KNOWN
+        if CodexKnowledgeStatus.UNCOVERED in statuses:
+            return CodexKnowledgeStatus.UNCOVERED
+        return None
+
+    def get_research_progress(self, obj: CodexEntry) -> int | None:
+        progresses = [item.learning_progress for item in self._entry_knowledge(obj)]
+        return max(progresses) if progresses else None
+
+    def get_known_by(self, obj: CodexEntry) -> list[dict]:
+        return [
+            {
+                "roster_entry_id": item.roster_entry_id,
+                "character_name": item.character_name,
+                "status": item.status,
+                "research_progress": item.learning_progress,
+            }
+            for item in self._entry_knowledge(obj)
+        ]
+
+
+class CodexEntryListSerializer(EntryKnowledgeMixin, serializers.ModelSerializer):
+    """Light serializer for entry lists."""
 
     subject_name = serializers.CharField(source="subject.name", read_only=True)
     subject_path = serializers.SerializerMethodField()
-    # Read from Subquery annotation set by ViewSet
-    knowledge_status = serializers.CharField(read_only=True, allow_null=True)
     art_url = serializers.SerializerMethodField()
 
     class Meta:
@@ -118,6 +155,7 @@ class CodexEntryListSerializer(serializers.ModelSerializer):
             "subject_path",
             "display_order",
             "knowledge_status",
+            "known_by",
             "art_url",
         ]
 
@@ -132,17 +170,11 @@ class CodexEntryListSerializer(serializers.ModelSerializer):
         return obj.art.cloudinary_url if obj.art_id else None
 
 
-class CodexEntryDetailSerializer(serializers.ModelSerializer):
-    """Full serializer for entry detail view.
-
-    Uses annotated fields from ViewSet queryset for knowledge data.
-    """
+class CodexEntryDetailSerializer(EntryKnowledgeMixin, serializers.ModelSerializer):
+    """Full serializer for entry detail view."""
 
     subject_name = serializers.CharField(source="subject.name", read_only=True)
     subject_path = serializers.SerializerMethodField()
-    # Read from Subquery annotations set by ViewSet
-    knowledge_status = serializers.CharField(read_only=True, allow_null=True)
-    research_progress = serializers.IntegerField(read_only=True, allow_null=True)
     lore_content = serializers.SerializerMethodField()
     mechanics_content = serializers.SerializerMethodField()
     lore_links = serializers.SerializerMethodField()
@@ -169,6 +201,7 @@ class CodexEntryDetailSerializer(serializers.ModelSerializer):
             "learn_threshold",
             "knowledge_status",
             "research_progress",
+            "known_by",
             "art_url",
         ]
 
@@ -181,7 +214,7 @@ class CodexEntryDetailSerializer(serializers.ModelSerializer):
 
     def _can_see_content(self, obj: CodexEntry) -> bool:
         """Check if full content should be visible to the user."""
-        return obj.is_public or obj.knowledge_status == CodexKnowledgeStatus.KNOWN
+        return obj.is_public or self.get_knowledge_status(obj) == CodexKnowledgeStatus.KNOWN
 
     def get_lore_content(self, obj: CodexEntry) -> str | None:
         """Return lore content only if public or KNOWN."""
@@ -195,8 +228,8 @@ class CodexEntryDetailSerializer(serializers.ModelSerializer):
         """Resolve inline wikilinks if the reader can see the content."""
         if not self._can_see_content(obj) or not content:
             return []
-        roster_entry = self.context.get("roster_entry")
-        return resolve_codex_links(content, obj.subject, roster_entry)
+        roster_entries = self.context.get("roster_entries", [])
+        return resolve_codex_links(content, obj.subject, roster_entries)
 
     def get_lore_links(self, obj: CodexEntry) -> list[dict]:
         """Return resolved wikilinks from lore_content."""

@@ -13,6 +13,8 @@ from world.codex.constants import CodexKnowledgeStatus
 from world.codex.models import CharacterCodexKnowledge, CodexEntry
 
 if TYPE_CHECKING:
+    from collections.abc import Sequence
+
     from world.codex.models import CodexSubject
     from world.roster.models import RosterEntry, RosterTenure
 
@@ -96,7 +98,7 @@ def grant_codex_entry(
 def resolve_codex_links(
     content: str | None,
     subject: CodexSubject,
-    roster_entry: RosterEntry | None,
+    roster_entries: Sequence[RosterEntry],
 ) -> list[dict]:
     """Parse ``[[Entry Name]]`` wikilinks from content and resolve to link refs.
 
@@ -104,8 +106,10 @@ def resolve_codex_links(
         content: The raw ``lore_content`` or ``mechanics_content`` text.
         subject: The ``CodexSubject`` of the entry the content belongs to.
             Used for same-subject preference in name resolution.
-        roster_entry: The reader's active roster entry, or ``None`` for
-            anonymous users. Controls access checking.
+        roster_entries: The reader's selected roster entries (all the
+            account's characters, or one when the codex is scoped to a
+            single character); empty for anonymous users. Controls access
+            checking -- an entry any of them KNOWs is accessible.
 
     Returns:
         A list of dicts, one per wikilink found, in order of appearance::
@@ -133,7 +137,7 @@ def resolve_codex_links(
     ``[[shrouded veil]]`` will NOT match an entry named ``"Shrouded Veil"``.
 
     Access check: ``is_public=True`` OR ``CharacterCodexKnowledge`` with
-    ``status=KNOWN`` for the roster_entry. If no roster_entry, only
+    ``status=KNOWN`` for any of the roster_entries. With none, only
     ``is_public`` entries are accessible.
     """
     if not content:
@@ -167,11 +171,11 @@ def resolve_codex_links(
             )
         )
         accessible_ids = public_ids
-        if roster_entry is not None:
+        if roster_entries:
             known_ids = set(
                 CodexEntry.objects.filter(
                     pk__in=all_candidate_ids,
-                    character_knowledge__roster_entry=roster_entry,
+                    character_knowledge__roster_entry__in=roster_entries,
                     character_knowledge__status=CodexKnowledgeStatus.KNOWN,
                 ).values_list("pk", flat=True)
             )
