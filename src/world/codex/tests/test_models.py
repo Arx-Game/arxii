@@ -2,7 +2,7 @@
 
 from django.core.exceptions import ValidationError
 from django.db import IntegrityError
-from django.test import TestCase
+from django.test import TestCase, tag
 
 from world.action_points.factories import ActionPointPoolFactory
 from world.action_points.models import ActionPointPool
@@ -99,6 +99,8 @@ class CodexSubjectModelTests(TestCase):
         assert child2.name == "Child"
 
 
+@tag("postgres")  # asserts on codex_subjectbreadcrumb matview contents (PG-only);
+# the SQLite tier has only an empty stand-in table (see sqlite_test_runner)
 class CodexSubjectBreadcrumbTests(TestCase):
     """Tests for the CodexSubjectBreadcrumb materialized view."""
 

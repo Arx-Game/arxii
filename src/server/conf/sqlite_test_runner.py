@@ -63,6 +63,10 @@ from server.conf.test_runner import TimedEvenniaTestRunner
 # src/.test_schema_cache/ — gitignored; one file per model-state fingerprint.
 SCHEMA_CACHE_DIR = Path(__file__).resolve().parents[2] / ".test_schema_cache"
 
+# The single first-party app label since the #2906 single-app collapse
+# (ADR-0195); scopes the matview stand-in scan to models we own.
+FIRST_PARTY_APP_LABEL = "arxii"
+
 # How many fingerprint files to keep before pruning the oldest (branch
 # switching produces a handful of live fingerprints; more than this is
 # churn). A fingerprint mismatch is always safe — it just rebuilds and
@@ -276,6 +280,43 @@ def _noop() -> None:
     """No-op stub used as a ``__code__`` donor for PG-only refresh helpers."""
 
 
+def _create_matview_stand_in_tables() -> None:
+    """Create empty stand-in tables for the PG materialized views.
+
+    The SQLite tier never runs the ``RunSQL`` migrations that create the
+    materialized views (see module docstring), so the first-party
+    ``managed = False`` models backed by them (``CodexSubjectBreadcrumb``,
+    ``AreaClosure``, the legend summaries) have no table at all, and any ORM
+    read through one raises ``OperationalError`` — which sails past the
+    ``ObjectDoesNotExist`` fallbacks production code keeps for the
+    row-missing case (e.g. the codex serializers' Python breadcrumb walk).
+    An empty ordinary table restores the intended SQLite-tier semantics:
+    reads find no rows and callers take their fallback path, while the
+    refresh helpers stay no-ops. Tests that assert on view *contents* still
+    belong on the PG tier under ``@tag("postgres")``.
+
+    Idempotent (skips tables that already exist) so it can run after both a
+    fresh schema build and a template restore, including templates dumped
+    before this helper existed.
+    """
+    from django.apps import apps  # noqa: PLC0415
+    from django.db import connections  # noqa: PLC0415
+
+    connection = connections[DEFAULT_DB_ALIAS]
+    existing = set(connection.introspection.table_names())
+    stand_ins = [
+        model
+        for model in apps.get_models()
+        if not model._meta.managed  # noqa: SLF001
+        and not model._meta.proxy  # noqa: SLF001
+        and model._meta.app_label == FIRST_PARTY_APP_LABEL  # noqa: SLF001
+        and model._meta.db_table not in existing  # noqa: SLF001
+    ]
+    with connection.schema_editor() as editor:
+        for model in stand_ins:
+            editor.create_model(model)
+
+
 class SqliteTestRunner(TimedEvenniaTestRunner):
     """Test runner for the SQLite inner-loop tier.
 
@@ -300,14 +341,22 @@ class SqliteTestRunner(TimedEvenniaTestRunner):
         new template. ``ARX_SCHEMA_CACHE=0`` bypasses the cache.
         """
         if os.environ.get("ARX_SCHEMA_CACHE") == "0":
-            return super().setup_databases(**kwargs)
+            config = super().setup_databases(**kwargs)
+            _create_matview_stand_in_tables()
+            return config
         template = SCHEMA_CACHE_DIR / f"schema-{_schema_fingerprint()}.sqlite3"
         if template.exists():
             if self.verbosity >= 1:
                 print(f"Restoring cached test schema ({template.name}).")
             with _migrate_replaced_by_restore(template):
-                return super().setup_databases(**kwargs)
+                config = super().setup_databases(**kwargs)
+            _create_matview_stand_in_tables()
+            return config
         old_config = super().setup_databases(**kwargs)
+        # Create the stand-ins before dumping so the cached template carries
+        # them; the restore path still re-runs the (idempotent) helper to
+        # upgrade templates dumped before the stand-ins existed.
+        _create_matview_stand_in_tables()
         _dump_sqlite_to_template(DEFAULT_DB_ALIAS, template)
         _prune_schema_cache()
         if self.verbosity >= 1:
