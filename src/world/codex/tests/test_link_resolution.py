@@ -57,7 +57,7 @@ class ResolveCodexLinksTests(TestCase):
     def test_resolve_links_same_subject(self):
         """Link resolves to entry in same subject first."""
         content = "See [[Same Subject Public]] for details."
-        links = resolve_codex_links(content, self.subject, None)
+        links = resolve_codex_links(content, self.subject, [])
         assert len(links) == 1
         assert links[0]["entry_id"] == self.same_subject_public.pk
         assert links[0]["display_text"] == "Same Subject Public"
@@ -66,7 +66,7 @@ class ResolveCodexLinksTests(TestCase):
     def test_resolve_links_global_fallback(self):
         """Link resolves to entry in different subject when no same-subject match."""
         content = "See [[Other Subject Public]] for more."
-        links = resolve_codex_links(content, self.subject, None)
+        links = resolve_codex_links(content, self.subject, [])
         assert len(links) == 1
         assert links[0]["entry_id"] == self.other_subject_public.pk
         assert links[0]["accessible"] is True
@@ -74,7 +74,7 @@ class ResolveCodexLinksTests(TestCase):
     def test_resolve_links_inaccessible_shows_unknown(self):
         """Link to private entry the reader hasn't learned returns ??? and no entry_id."""
         content = "See [[Restricted Entry]] if you dare."
-        links = resolve_codex_links(content, self.subject, None)
+        links = resolve_codex_links(content, self.subject, [])
         assert len(links) == 1
         assert links[0]["entry_id"] is None
         assert links[0]["display_text"] == "???"
@@ -83,14 +83,14 @@ class ResolveCodexLinksTests(TestCase):
     def test_resolve_links_public_accessible_to_anonymous(self):
         """Public entry links are accessible even without a roster entry."""
         content = "See [[Same Subject Public]]."
-        links = resolve_codex_links(content, self.subject, None)
+        links = resolve_codex_links(content, self.subject, [])
         assert links[0]["accessible"] is True
         assert links[0]["entry_id"] == self.same_subject_public.pk
 
     def test_resolve_links_no_match(self):
         """Link text that doesn't match any entry returns raw text, not ???."""
         content = "See [[Nonexistent Entry]] for nothing."
-        links = resolve_codex_links(content, self.subject, None)
+        links = resolve_codex_links(content, self.subject, [])
         assert len(links) == 1
         assert links[0]["entry_id"] is None
         assert links[0]["display_text"] == "Nonexistent Entry"
@@ -99,7 +99,7 @@ class ResolveCodexLinksTests(TestCase):
     def test_resolve_links_inaccessible_vs_no_match(self):
         """Existing-but-locked entry returns ???, non-existent returns raw text."""
         content = "[[Restricted Entry]] and [[Totally Fake Entry]] in one string."
-        links = resolve_codex_links(content, self.subject, None)
+        links = resolve_codex_links(content, self.subject, [])
         assert len(links) == 2
 
         # First link: entry exists but is restricted
@@ -120,7 +120,7 @@ class ResolveCodexLinksTests(TestCase):
             status=CodexKnowledgeStatus.KNOWN,
         )
         content = "See [[Restricted Entry]]."
-        links = resolve_codex_links(content, self.subject, self.roster_entry)
+        links = resolve_codex_links(content, self.subject, [self.roster_entry])
         assert len(links) == 1
         assert links[0]["entry_id"] == self.restricted_entry.pk
         assert links[0]["display_text"] == "Restricted Entry"
@@ -134,7 +134,7 @@ class ResolveCodexLinksTests(TestCase):
             status=CodexKnowledgeStatus.UNCOVERED,
         )
         content = "See [[Restricted Entry]]."
-        links = resolve_codex_links(content, self.subject, self.roster_entry)
+        links = resolve_codex_links(content, self.subject, [self.roster_entry])
         assert links[0]["accessible"] is False
         assert links[0]["display_text"] == "???"
 
@@ -144,7 +144,7 @@ class ResolveCodexLinksTests(TestCase):
             "[[Same Subject Public]] and [[Other Subject Public]] "
             "and [[Restricted Entry]] and [[Fake Entry]]."
         )
-        links = resolve_codex_links(content, self.subject, None)
+        links = resolve_codex_links(content, self.subject, [])
         assert len(links) == 4
         assert links[0]["display_text"] == "Same Subject Public"
         assert links[1]["display_text"] == "Other Subject Public"
@@ -159,13 +159,13 @@ class ResolveCodexLinksTests(TestCase):
     def test_resolve_links_no_links_in_content(self):
         """Content without wikilinks returns empty list."""
         content = "Just plain text with no links."
-        links = resolve_codex_links(content, self.subject, None)
+        links = resolve_codex_links(content, self.subject, [])
         assert links == []
 
     def test_resolve_links_case_sensitive(self):
         """Name matching is case-sensitive."""
         content = "See [[same subject public]]."
-        links = resolve_codex_links(content, self.subject, None)
+        links = resolve_codex_links(content, self.subject, [])
         assert len(links) == 1
         assert links[0]["entry_id"] is None
         assert links[0]["display_text"] == "same subject public"
@@ -174,7 +174,7 @@ class ResolveCodexLinksTests(TestCase):
     def test_resolve_links_inaccessible_does_not_leak_name(self):
         """The entry name of an inaccessible entry never appears in the response."""
         content = "See [[Restricted Entry]]."
-        links = resolve_codex_links(content, self.subject, None)
+        links = resolve_codex_links(content, self.subject, [])
         assert links[0]["display_text"] == "???"
         # The real name "Restricted Entry" should not appear anywhere in the link ref
         assert "Restricted Entry" not in links[0]["display_text"]

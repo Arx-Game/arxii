@@ -3874,7 +3874,7 @@ export interface paths {
       path?: never;
       cookie?: never;
     };
-    /** @description List and retrieve codex categories. */
+    /** @description List and retrieve codex categories with a visible subtree. */
     get: operations['codex_categories_list'];
     put?: never;
     post?: never;
@@ -3891,7 +3891,7 @@ export interface paths {
       path?: never;
       cookie?: never;
     };
-    /** @description List and retrieve codex categories. */
+    /** @description List and retrieve codex categories with a visible subtree. */
     get: operations['codex_categories_retrieve'];
     put?: never;
     post?: never;
@@ -3909,10 +3909,10 @@ export interface paths {
       cookie?: never;
     };
     /**
-     * @description Return categories with top-level subjects only.
+     * @description Return visible categories with their visible top-level subjects.
      *
-     *     Children are loaded on demand via SubjectViewSet with ?parent= filter.
-     *     This avoids deep nested prefetches that perform poorly.
+     *     Children are loaded on demand via SubjectViewSet's ``children``
+     *     action. This avoids deep nested prefetches that perform poorly.
      */
     get: operations['codex_categories_tree_retrieve'];
     put?: never;
@@ -3964,7 +3964,12 @@ export interface paths {
       path?: never;
       cookie?: never;
     };
-    /** @description List and retrieve codex subjects. */
+    /**
+     * @description List and retrieve codex subjects with a visible subtree.
+     *
+     *     A subject whose subtree holds no visible entry 404s on direct retrieve
+     *     too -- its description must not be readable by probing ids.
+     */
     get: operations['codex_subjects_list'];
     put?: never;
     post?: never;
@@ -3981,7 +3986,12 @@ export interface paths {
       path?: never;
       cookie?: never;
     };
-    /** @description List and retrieve codex subjects. */
+    /**
+     * @description List and retrieve codex subjects with a visible subtree.
+     *
+     *     A subject whose subtree holds no visible entry 404s on direct retrieve
+     *     too -- its description must not be readable by probing ids.
+     */
     get: operations['codex_subjects_retrieve'];
     put?: never;
     post?: never;
@@ -3999,7 +4009,7 @@ export interface paths {
       cookie?: never;
     };
     /**
-     * @description Return children of a subject with has_children and entry_count.
+     * @description Return visible children of a subject with has_children/entry_count.
      *
      *     Used for lazy-loading tree expansion in the UI.
      */
@@ -24390,11 +24400,7 @@ export interface components {
       /** @description Order for display in lists. */
       display_order?: number;
     };
-    /**
-     * @description Full serializer for entry detail view.
-     *
-     *     Uses annotated fields from ViewSet queryset for knowledge data.
-     */
+    /** @description Full serializer for entry detail view. */
     CodexEntryDetail: {
       readonly id: number;
       /** @description Title of this entry. */
@@ -24431,13 +24437,12 @@ export interface components {
       learn_threshold?: number;
       readonly knowledge_status: string | null;
       readonly research_progress: number | null;
+      readonly known_by: {
+        [key: string]: unknown;
+      }[];
       readonly art_url: string | null;
     };
-    /**
-     * @description Light serializer for entry lists.
-     *
-     *     Uses annotated fields from ViewSet queryset for knowledge data.
-     */
+    /** @description Light serializer for entry lists. */
     CodexEntryList: {
       readonly id: number;
       /** @description Title of this entry. */
@@ -24459,6 +24464,9 @@ export interface components {
       /** @description Order for display within subject. */
       display_order?: number;
       readonly knowledge_status: string | null;
+      readonly known_by: {
+        [key: string]: unknown;
+      }[];
       readonly art_url: string | null;
     };
     CodexSubject: {

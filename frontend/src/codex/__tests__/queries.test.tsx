@@ -122,6 +122,7 @@ describe('Codex Query Hooks', () => {
           ],
           display_order: 1,
           knowledge_status: null,
+          known_by: [],
           art_url: null,
         },
         {
@@ -140,6 +141,7 @@ describe('Codex Query Hooks', () => {
           ],
           display_order: 2,
           knowledge_status: null,
+          known_by: [],
           art_url: null,
         },
       ];
@@ -154,7 +156,7 @@ describe('Codex Query Hooks', () => {
       });
 
       expect(result.current.data).toEqual(mockEntries);
-      expect(api.getEntries).toHaveBeenCalledWith(undefined);
+      expect(api.getEntries).toHaveBeenCalledWith(undefined, undefined);
     });
 
     it('fetches entries filtered by subjectId', async () => {
@@ -175,6 +177,7 @@ describe('Codex Query Hooks', () => {
           ],
           display_order: 1,
           knowledge_status: null,
+          known_by: [],
           art_url: null,
         },
       ];
@@ -189,7 +192,7 @@ describe('Codex Query Hooks', () => {
       });
 
       expect(result.current.data).toEqual(mockEntries);
-      expect(api.getEntries).toHaveBeenCalledWith(5);
+      expect(api.getEntries).toHaveBeenCalledWith(5, undefined);
     });
   });
 
@@ -208,6 +211,7 @@ describe('Codex Query Hooks', () => {
           subject_path: [],
           display_order: 1,
           knowledge_status: null,
+          known_by: [],
           art_url: null,
         },
       ];
@@ -245,6 +249,7 @@ describe('Codex Query Hooks', () => {
         ],
         display_order: 1,
         knowledge_status: null,
+        known_by: [],
         learn_threshold: 10,
         research_progress: null,
         art_url: null,
@@ -260,7 +265,7 @@ describe('Codex Query Hooks', () => {
       });
 
       expect(result.current.data).toEqual(mockEntry);
-      expect(api.getEntry).toHaveBeenCalledWith(1);
+      expect(api.getEntry).toHaveBeenCalledWith(1, undefined);
     });
 
     it('does not fetch when id is 0', () => {
@@ -297,6 +302,7 @@ describe('Codex Query Hooks', () => {
           subject_path: [{ type: 'category' as const, id: 1, name: 'Magic' }],
           display_order: 1,
           knowledge_status: null,
+          known_by: [],
           art_url: null,
         },
       ];
@@ -310,7 +316,7 @@ describe('Codex Query Hooks', () => {
         expect(result.current.isSuccess).toBe(true);
       });
 
-      expect(api.searchEntries).toHaveBeenCalledWith('Be');
+      expect(api.searchEntries).toHaveBeenCalledWith('Be', undefined);
       expect(result.current.data).toEqual(mockResults);
     });
 
@@ -336,11 +342,18 @@ describe('Codex Query Hooks', () => {
   describe('codexKeys', () => {
     it('generates correct query keys', () => {
       expect(codexKeys.all).toEqual(['codex']);
-      expect(codexKeys.tree()).toEqual(['codex', 'tree']);
-      expect(codexKeys.entries(1)).toEqual(['codex', 'entries', 1]);
-      expect(codexKeys.entries(undefined)).toEqual(['codex', 'entries', undefined]);
-      expect(codexKeys.entry(1)).toEqual(['codex', 'entry', 1]);
-      expect(codexKeys.search('test')).toEqual(['codex', 'search', 'test']);
+      expect(codexKeys.tree()).toEqual(['codex', 'tree', null]);
+      expect(codexKeys.entries(1)).toEqual(['codex', 'entries', 1, null]);
+      expect(codexKeys.entries(undefined)).toEqual(['codex', 'entries', undefined, null]);
+      expect(codexKeys.entry(1)).toEqual(['codex', 'entry', 1, null]);
+      expect(codexKeys.search('test')).toEqual(['codex', 'search', 'test', null]);
+    });
+
+    it('keys include the character scope when set', () => {
+      expect(codexKeys.tree(7)).toEqual(['codex', 'tree', 7]);
+      expect(codexKeys.entries(1, 7)).toEqual(['codex', 'entries', 1, 7]);
+      expect(codexKeys.entry(1, 7)).toEqual(['codex', 'entry', 1, 7]);
+      expect(codexKeys.search('test', 7)).toEqual(['codex', 'search', 'test', 7]);
     });
   });
 });

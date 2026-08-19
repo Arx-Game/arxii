@@ -448,11 +448,13 @@ class TestCodexTreeQueryCount(TestCase):
         # Steady-state queries for the anonymous tree endpoint:
         #   1. SELECT django_session
         #   2. SELECT public CodexEntry ids (visibility set)
-        #   3. SELECT top-level CodexSubjects (with has_children + entry_count)
-        #   4. SELECT CodexCategory list
-        # The prior N+1 added one COUNT per subject (8 here) -> 12 queries.
-        # After the fix the count is constant in the number of subjects.
-        with self.assertNumQueries(4):
+        #   3. SELECT all CodexSubjects (subtree-visibility ancestor walk)
+        #   4. SELECT subject ids of the visible entries
+        #   5. SELECT top-level CodexSubjects (with has_children + entry_count)
+        #   6. SELECT CodexCategory list
+        # The prior N+1 added one COUNT per subject (8 here). The count must
+        # stay constant in the number of subjects.
+        with self.assertNumQueries(6):
             response = self.client.get("/api/codex/categories/tree/")
         assert response.status_code == status.HTTP_200_OK
 
@@ -483,13 +485,16 @@ class TestCodexTreeQueryCount(TestCase):
 
         # Steady-state queries for the authenticated tree endpoint:
         #   1. SELECT django_session
-        #   2. SELECT public CodexEntry ids
-        #   3. Resolve active RosterEntry (tenures join)
-        #   4. SELECT known CharacterCodexKnowledge entry_ids for that entry
-        #   5. SELECT top-level CodexSubjects (with has_children + entry_count)
-        #   6. SELECT CodexCategory list
-        # Prior to the fix this also fired one COUNT per subject.
-        with self.assertNumQueries(6):
+        #   2. SELECT the account's RosterEntries (character union scope)
+        #   3. SELECT CharacterCodexKnowledge rows for those entries
+        #   4. SELECT public CodexEntry ids
+        #   5. SELECT all CodexSubjects (subtree-visibility ancestor walk)
+        #   6. SELECT subject ids of the visible entries
+        #   7. SELECT top-level CodexSubjects (with has_children + entry_count)
+        #   8. SELECT CodexCategory list
+        # Prior to the N+1 fix this also fired one COUNT per subject; the
+        # count must stay constant in the number of subjects and characters.
+        with self.assertNumQueries(8):
             response = self.client.get("/api/codex/categories/tree/")
         assert response.status_code == status.HTTP_200_OK
 

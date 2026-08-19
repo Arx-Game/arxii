@@ -603,6 +603,7 @@ export function mockCodexEntry(id: number): CodexEntryDetail {
     subject_path: [],
     display_order: 0,
     knowledge_status: 'known',
+    known_by: [],
     lore_content: 'Lore content.',
     mechanics_content: null,
     lore_links: [],

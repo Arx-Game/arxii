@@ -143,31 +143,45 @@ restored_ap = offer.cancel()
 ## API Endpoints
 
 ### Categories
-- `GET /api/codex/categories/` - List all categories
-- `GET /api/codex/categories/{id}/` - Get category detail
-- `GET /api/codex/categories/tree/` - Categories with top-level subjects (lazy-loaded tree)
+- `GET /api/codex/categories/` - List visible categories
+- `GET /api/codex/categories/{id}/` - Get category detail (404 when hidden)
+- `GET /api/codex/categories/tree/` - Visible categories with visible top-level subjects
+  (lazy-loaded tree)
 
 ### Subjects
-- `GET /api/codex/subjects/` - List subjects (filterable)
-- `GET /api/codex/subjects/{id}/` - Get subject detail
-- `GET /api/codex/subjects/{id}/children/` - Lazy-load children for tree expansion
+- `GET /api/codex/subjects/` - List visible subjects (filterable)
+- `GET /api/codex/subjects/{id}/` - Get subject detail (404 when hidden)
+- `GET /api/codex/subjects/{id}/children/` - Lazy-load visible children for tree expansion
 
 **Query Parameters (subjects):**
 - `category` - Filter by category ID
 - `parent` - Filter by parent subject ID
+- `character` - Scope knowledge to one of the account's roster entries (see Visibility Rules)
 
 ### Entries
-- `GET /api/codex/entries/` - List visible entries (public + character's known entries)
+- `GET /api/codex/entries/` - List visible entries (public + entries the reader's
+  characters know)
 - `GET /api/codex/entries/{id}/` - Get entry detail (content gated by knowledge status)
 
 **Query Parameters (entries):**
 - `subject` - Filter by subject ID
 - `category` - Filter by category ID (via subject)
 - `search` - Search name, summary, lore/mechanics content (min 2 chars)
+- `character` - Scope knowledge to one of the account's roster entries
 
-**Visibility Rules:**
+**Visibility Rules (ADR-0221):**
 - Anonymous users see only `is_public=True` entries
-- Authenticated users see public entries + entries they have `CharacterCodexKnowledge` for
+- Authenticated users see public entries plus the **union** of entries any of their
+  playable characters has `CharacterCodexKnowledge` for (`CodexVisibilityMixin` in
+  `views.py`); `?character=<roster_entry_id>` narrows the scope to one character, and a
+  foreign/unknown id yields public-only (never another player's knowledge)
+- Entry serializers expose `known_by` (per-character name/status/progress) alongside
+  best-of-union `knowledge_status` and max `research_progress`
+- **Containers are hidden when their subtree holds no visible entry**: categories and
+  subjects have no visibility of their own, so tree/list/retrieve/children all filter
+  out any category/subject without at least one visible entry among its descendants.
+  A subject description must not become the public face of a topic with no readable
+  entries, and an all-secret branch must not leak its name
 - Detail view gates `lore_content` and `mechanics_content` behind KNOWN status or `is_public`
 
 ---

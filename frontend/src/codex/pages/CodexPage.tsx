@@ -1,13 +1,23 @@
 import { useState, useCallback } from 'react';
 import { useSearchParams } from 'react-router-dom';
-import { Search, Loader2 } from 'lucide-react';
+import { Search, Loader2, Users } from 'lucide-react';
 import { Input } from '@/components/ui/input';
 import { Skeleton } from '@/components/ui/skeleton';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
+import { useMyRosterEntriesQuery } from '@/roster/queries';
 import { useCodexTree, useCodexSearch } from '../queries';
 import { CodexTree } from '../components/CodexTree';
 import { CodexContent } from '../components/CodexContent';
 import { useDebouncedValue } from '@/hooks/useDebouncedValue';
 import type { CodexEntryListItem } from '../types';
+
+const ALL_CHARACTERS = 'all';
 
 export function CodexPage() {
   const [searchParams, setSearchParams] = useSearchParams();
@@ -21,56 +31,108 @@ export function CodexPage() {
     ? parseInt(searchParams.get('subject')!, 10)
     : undefined;
   const entryId = searchParams.get('entry') ? parseInt(searchParams.get('entry')!, 10) : undefined;
+  const characterId = searchParams.get('character')
+    ? parseInt(searchParams.get('character')!, 10)
+    : undefined;
 
-  const { data: tree, isLoading: treeLoading } = useCodexTree();
-  const { data: searchResults, isLoading: searchLoading } = useCodexSearch(debouncedSearch);
+  const { data: myCharacters } = useMyRosterEntriesQuery();
+  const { data: tree, isLoading: treeLoading } = useCodexTree(characterId);
+  const { data: searchResults, isLoading: searchLoading } = useCodexSearch(
+    debouncedSearch,
+    characterId
+  );
+
+  // Every navigation preserves the character scope.
+  const updateParams = useCallback(
+    (params: Record<string, string>) => {
+      const character = searchParams.get('character');
+      if (character) params.character = character;
+      setSearchParams(params);
+    },
+    [searchParams, setSearchParams]
+  );
 
   const handleSelectCategory = useCallback(
     (id: number) => {
-      setSearchParams({ category: id.toString() });
+      updateParams({ category: id.toString() });
       setSearchInput('');
     },
-    [setSearchParams]
+    [updateParams]
   );
 
   const handleSelectSubject = useCallback(
     (id: number) => {
-      setSearchParams({ subject: id.toString() });
+      updateParams({ subject: id.toString() });
       setSearchInput('');
     },
-    [setSearchParams]
+    [updateParams]
   );
 
   const handleSelectEntry = useCallback(
     (id: number) => {
       const params: Record<string, string> = { entry: id.toString() };
       if (subjectId) params.subject = subjectId.toString();
-      setSearchParams(params);
+      updateParams(params);
       setSearchInput('');
     },
-    [setSearchParams, subjectId]
+    [updateParams, subjectId]
   );
 
   const handleNavigateBreadcrumb = useCallback(
     (type: 'home' | 'category' | 'subject', id?: number) => {
       if (type === 'home') {
-        setSearchParams({});
+        updateParams({});
       } else if (type === 'category' && id) {
-        setSearchParams({ category: id.toString() });
+        updateParams({ category: id.toString() });
       } else if (type === 'subject' && id) {
-        setSearchParams({ subject: id.toString() });
+        updateParams({ subject: id.toString() });
       }
     },
-    [setSearchParams]
+    [updateParams]
+  );
+
+  const handleSelectCharacter = useCallback(
+    (value: string) => {
+      const params = new URLSearchParams(searchParams);
+      if (value === ALL_CHARACTERS) {
+        params.delete('character');
+      } else {
+        params.set('character', value);
+      }
+      setSearchParams(params);
+    },
+    [searchParams, setSearchParams]
   );
 
   const showSearchResults = debouncedSearch.length >= 2;
+  const showCharacterScope = (myCharacters?.length ?? 0) >= 2;
 
   return (
     <div className="flex gap-6">
       {/* Sidebar */}
       <aside className="w-64 shrink-0">
         <div className="sticky top-4 space-y-4">
+          {/* Character knowledge scope (multi-character accounts only) */}
+          {showCharacterScope && (
+            <Select
+              value={characterId ? characterId.toString() : ALL_CHARACTERS}
+              onValueChange={handleSelectCharacter}
+            >
+              <SelectTrigger aria-label="Character knowledge scope">
+                <Users className="mr-2 h-4 w-4 shrink-0 text-muted-foreground" />
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value={ALL_CHARACTERS}>All characters</SelectItem>
+                {myCharacters?.map((character) => (
+                  <SelectItem key={character.id} value={character.id.toString()}>
+                    {character.name}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          )}
+
           {/* Search */}
           <div className="relative">
             <Search className="absolute left-2 top-2.5 h-4 w-4 text-muted-foreground" />
@@ -112,6 +174,7 @@ export function CodexPage() {
           ) : tree ? (
             <CodexTree
               categories={tree}
+              characterId={characterId}
               selectedCategoryId={categoryId}
               selectedSubjectId={subjectId}
               onSelectCategory={handleSelectCategory}
@@ -127,6 +190,7 @@ export function CodexPage() {
           categoryId={categoryId}
           subjectId={subjectId}
           entryId={entryId}
+          characterId={characterId}
           onSelectSubject={handleSelectSubject}
           onSelectEntry={handleSelectEntry}
           onNavigateBreadcrumb={handleNavigateBreadcrumb}

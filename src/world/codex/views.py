@@ -2,19 +2,18 @@
 Codex System Views
 
 API viewsets for browsing codex entries with visibility control.
-Public entries visible to all, restricted entries require character knowledge.
+
+Visibility model: anonymous visitors see ``is_public`` entries only.
+Authenticated players see public entries plus the union of what all their
+characters know; ``?character=<roster_entry_id>`` narrows the knowledge
+scope to one of the account's characters. Categories and subjects are pure
+taxonomy with no visibility of their own, so any container whose subtree
+holds no visible entry is hidden outright -- subject descriptions are prose,
+and prose nobody can contextualize with entries must not become the public
+face of a topic (nor leak the existence of an all-secret branch).
 """
 
-from django.db.models import (
-    CharField,
-    Count,
-    Exists,
-    IntegerField,
-    OuterRef,
-    Q,
-    Subquery,
-    Value,
-)
+from django.db.models import Count, Exists, OuterRef, Q
 from django_filters.rest_framework import DjangoFilterBackend
 from rest_framework import viewsets
 from rest_framework.decorators import action
@@ -36,25 +35,142 @@ from world.codex.serializers import (
     CodexSubjectSerializer,
     CodexSubjectTreeSerializer,
 )
+from world.codex.types import CharacterKnowledge
 from world.roster.models import RosterEntry
 
 
-class CodexCategoryViewSet(viewsets.ReadOnlyModelViewSet):
-    """List and retrieve codex categories."""
+def _subjects_with_visible_entries(visible_entry_ids: set[int]) -> set[int]:
+    """Return IDs of subjects with at least one visible entry in their subtree.
 
-    queryset = CodexCategory.objects.all()
+    A subject is visible when it, or any descendant subject, holds a visible
+    entry. Computed in Python over the full (small, idmapper-cached) subject
+    set: collect the subjects of the visible entries, then walk each parent
+    chain upward so every ancestor stays visible too.
+    """
+    if not visible_entry_ids:
+        return set()
+    subjects_by_id = {subject.pk: subject for subject in CodexSubject.objects.all()}
+    direct_ids = set(
+        CodexEntry.objects.filter(id__in=visible_entry_ids).values_list("subject_id", flat=True)
+    )
+    visible: set[int] = set()
+    for subject_id in direct_ids:
+        current = subjects_by_id.get(subject_id)
+        while current is not None and current.pk not in visible:
+            visible.add(current.pk)
+            current = subjects_by_id.get(current.parent_id) if current.parent_id else None
+    return visible
+
+
+class CodexVisibilityMixin:
+    """Account-scoped visibility and knowledge resolution for codex viewsets.
+
+    Replaces the old implicit first-roster-entry selection: knowledge is the
+    union across every character the account can currently play, optionally
+    narrowed by ``?character=<roster_entry_id>``. A ``character`` id that is
+    not one of the account's own yields public-only visibility -- it can
+    never widen into another player's knowledge.
+    """
+
+    _knowledge_map: dict[int, list[CharacterKnowledge]] | None = None
+    _selected_entries: list[RosterEntry] | None = None
+    _visible_entry_id_set: set[int] | None = None
+
+    def _selected_roster_entries(self) -> list[RosterEntry]:
+        """The account's playable roster entries, narrowed by ``?character=``."""
+        if self._selected_entries is not None:
+            return self._selected_entries
+        self._selected_entries = self._resolve_selected_roster_entries()
+        return self._selected_entries
+
+    def _resolve_selected_roster_entries(self) -> list[RosterEntry]:
+        request = self.request
+        if not request.user.is_authenticated:
+            return []
+        try:
+            player_data = request.user.player_data
+        except AttributeError:
+            return []
+        characters = player_data.get_available_characters()
+        if not characters:
+            return []
+        entries = list(
+            RosterEntry.objects.filter(character_sheet__character__in=characters).select_related(
+                "character_sheet__character"
+            )
+        )
+        raw = request.query_params.get("character")  # noqa: USE_FILTERSET - knowledge scope, not a queryset filter
+        if raw is None:
+            return entries
+        try:
+            wanted = int(raw)
+        except (TypeError, ValueError):
+            return []
+        return [entry for entry in entries if entry.pk == wanted]
+
+    def _knowledge_by_entry(self) -> dict[int, list[CharacterKnowledge]]:
+        """Map entry id -> selected characters' knowledge rows, one query."""
+        if self._knowledge_map is not None:
+            return self._knowledge_map
+        knowledge: dict[int, list[CharacterKnowledge]] = {}
+        roster_entries = self._selected_roster_entries()
+        if roster_entries:
+            rows = CharacterCodexKnowledge.objects.filter(
+                roster_entry__in=roster_entries
+            ).select_related("roster_entry__character_sheet__character")
+            for row in rows:
+                knowledge.setdefault(row.entry_id, []).append(
+                    CharacterKnowledge(
+                        roster_entry_id=row.roster_entry_id,
+                        character_name=row.roster_entry.character_sheet.character.name,
+                        status=row.status,
+                        learning_progress=row.learning_progress,
+                    )
+                )
+        for rows_for_entry in knowledge.values():
+            rows_for_entry.sort(key=lambda item: item.character_name)
+        self._knowledge_map = knowledge
+        return knowledge
+
+    def _visible_entry_ids(self) -> set[int]:
+        """Public entries plus every entry a selected character has a row for."""
+        if self._visible_entry_id_set is not None:
+            return self._visible_entry_id_set
+        public_ids = set(CodexEntry.objects.filter(is_public=True).values_list("id", flat=True))
+        self._visible_entry_id_set = public_ids | set(self._knowledge_by_entry())
+        return self._visible_entry_id_set
+
+    def _visible_subject_ids(self) -> set[int]:
+        return _subjects_with_visible_entries(self._visible_entry_ids())
+
+
+class CodexCategoryViewSet(CodexVisibilityMixin, viewsets.ReadOnlyModelViewSet):
+    """List and retrieve codex categories with a visible subtree."""
+
     serializer_class = CodexCategorySerializer
     permission_classes = [AllowAny]
     pagination_class = None
 
+    def get_queryset(self):
+        """Only categories with at least one visible subject."""
+        visible_category_ids = set(
+            CodexSubject.objects.filter(
+                parent=None, id__in=self._visible_subject_ids()
+            ).values_list("category_id", flat=True)
+        )
+        return CodexCategory.objects.filter(id__in=visible_category_ids).order_by(
+            "display_order", "name"
+        )
+
     @action(detail=False, methods=["get"])
     def tree(self, request):
-        """Return categories with top-level subjects only.
+        """Return visible categories with their visible top-level subjects.
 
-        Children are loaded on demand via SubjectViewSet with ?parent= filter.
-        This avoids deep nested prefetches that perform poorly.
+        Children are loaded on demand via SubjectViewSet's ``children``
+        action. This avoids deep nested prefetches that perform poorly.
         """
-        visible_entry_ids = self._get_visible_entry_ids(request)
+        visible_entry_ids = self._visible_entry_ids()
+        visible_subject_ids = self._visible_subject_ids()
 
         # Two flat queries (categories + top-level subjects with annotation),
         # grouped in Python via the serializer context.
@@ -63,11 +179,12 @@ class CodexCategoryViewSet(viewsets.ReadOnlyModelViewSet):
         # the cached instance, and Django's prefetch_related skips re-fetching
         # when the attribute already exists, leaking annotation values across
         # requests with different visibility sets.
-        categories = CodexCategory.objects.order_by("display_order", "name")
         top_subjects = (
-            CodexSubject.objects.filter(parent=None)
+            CodexSubject.objects.filter(parent=None, id__in=visible_subject_ids)
             .annotate(
-                has_children=Exists(CodexSubject.objects.filter(parent=OuterRef("pk"))),
+                has_children=Exists(
+                    CodexSubject.objects.filter(parent=OuterRef("pk"), id__in=visible_subject_ids)
+                ),
                 entry_count=Count(
                     "entries",
                     filter=Q(entries__id__in=visible_entry_ids),
@@ -79,6 +196,11 @@ class CodexCategoryViewSet(viewsets.ReadOnlyModelViewSet):
         for subject in top_subjects:
             subjects_by_category.setdefault(subject.category_id, []).append(subject)
 
+        categories = [
+            category
+            for category in CodexCategory.objects.order_by("display_order", "name")
+            if category.id in subjects_by_category
+        ]
         serializer = CodexCategoryTreeSerializer(
             categories,
             many=True,
@@ -89,57 +211,41 @@ class CodexCategoryViewSet(viewsets.ReadOnlyModelViewSet):
         )
         return Response(serializer.data)
 
-    def _get_visible_entry_ids(self, request) -> set[int]:
-        """Get IDs of entries visible to current user."""
-        public_ids = set(CodexEntry.objects.filter(is_public=True).values_list("id", flat=True))
 
-        if not request.user.is_authenticated:
-            return public_ids
+class CodexSubjectViewSet(CodexVisibilityMixin, viewsets.ReadOnlyModelViewSet):
+    """List and retrieve codex subjects with a visible subtree.
 
-        # Get active character's knowledge
-        roster_entry = self._get_active_roster_entry(request)
-        if not roster_entry:
-            return public_ids
+    A subject whose subtree holds no visible entry 404s on direct retrieve
+    too -- its description must not be readable by probing ids.
+    """
 
-        known_ids = set(
-            CharacterCodexKnowledge.objects.filter(roster_entry=roster_entry).values_list(
-                "entry_id", flat=True
-            )
-        )
-        return public_ids | known_ids
-
-    def _get_active_roster_entry(self, request):
-        """Get active character's roster entry from session or default."""
-        # TODO: Integrate with session character selection
-        # For now, return first roster entry for the account
-        return RosterEntry.objects.filter(
-            tenures__player_data__account=request.user, tenures__end_date__isnull=True
-        ).first()
-
-
-class CodexSubjectViewSet(viewsets.ReadOnlyModelViewSet):
-    """List and retrieve codex subjects."""
-
-    queryset = CodexSubject.objects.select_related("category", "parent", "breadcrumb_cache").all()
     serializer_class = CodexSubjectSerializer
     permission_classes = [AllowAny]
     filter_backends = [DjangoFilterBackend]
     filterset_fields = ["category", "parent"]
     pagination_class = None
 
+    def get_queryset(self):
+        return CodexSubject.objects.select_related("category", "parent", "breadcrumb_cache").filter(
+            id__in=self._visible_subject_ids()
+        )
+
     @action(detail=True, methods=["get"])
     def children(self, request, pk=None):
-        """Return children of a subject with has_children and entry_count.
+        """Return visible children of a subject with has_children/entry_count.
 
         Used for lazy-loading tree expansion in the UI.
         """
         subject = self.get_object()
-        visible_entry_ids = self._get_visible_entry_ids(request)
+        visible_entry_ids = self._visible_entry_ids()
+        visible_subject_ids = self._visible_subject_ids()
 
         children = (
-            CodexSubject.objects.filter(parent=subject)
+            CodexSubject.objects.filter(parent=subject, id__in=visible_subject_ids)
             .annotate(
-                has_children=Exists(CodexSubject.objects.filter(parent=OuterRef("pk"))),
+                has_children=Exists(
+                    CodexSubject.objects.filter(parent=OuterRef("pk"), id__in=visible_subject_ids)
+                ),
                 entry_count=Count(
                     "entries",
                     filter=Q(entries__id__in=visible_entry_ids),
@@ -153,32 +259,8 @@ class CodexSubjectViewSet(viewsets.ReadOnlyModelViewSet):
         )
         return Response(serializer.data)
 
-    def _get_visible_entry_ids(self, request) -> set[int]:
-        """Get IDs of entries visible to current user."""
-        public_ids = set(CodexEntry.objects.filter(is_public=True).values_list("id", flat=True))
 
-        if not request.user.is_authenticated:
-            return public_ids
-
-        roster_entry = self._get_active_roster_entry(request)
-        if not roster_entry:
-            return public_ids
-
-        known_ids = set(
-            CharacterCodexKnowledge.objects.filter(roster_entry=roster_entry).values_list(
-                "entry_id", flat=True
-            )
-        )
-        return public_ids | known_ids
-
-    def _get_active_roster_entry(self, request):
-        """Get active character's roster entry from session or default."""
-        return RosterEntry.objects.filter(
-            tenures__player_data__account=request.user, tenures__end_date__isnull=True
-        ).first()
-
-
-class CodexEntryViewSet(viewsets.ReadOnlyModelViewSet):
+class CodexEntryViewSet(CodexVisibilityMixin, viewsets.ReadOnlyModelViewSet):
     """List and retrieve codex entries with visibility control."""
 
     permission_classes = [AllowAny]
@@ -188,45 +270,12 @@ class CodexEntryViewSet(viewsets.ReadOnlyModelViewSet):
     pagination_class = None
 
     def get_queryset(self):
-        """Return only visible entries with knowledge annotations.
-
-        Always annotates knowledge_status and research_progress so serializers
-        can access them directly without getattr.
-        """
-        qs = CodexEntry.objects.select_related(
+        """Return only entries visible to the selected characters."""
+        return CodexEntry.objects.select_related(
             "subject",
             "subject__category",
             "subject__breadcrumb_cache",
-        )
-
-        roster_entry = self._get_active_roster_entry()
-
-        # Always annotate - NULL for anonymous/no character
-        if roster_entry:
-            knowledge_subquery = CharacterCodexKnowledge.objects.filter(
-                entry=OuterRef("pk"),
-                roster_entry=roster_entry,
-            )
-            qs = qs.annotate(
-                knowledge_status=Subquery(knowledge_subquery.values("status")[:1]),
-                research_progress=Subquery(knowledge_subquery.values("learning_progress")[:1]),
-            )
-        else:
-            # Annotate with NULL so the attribute always exists
-            qs = qs.annotate(
-                knowledge_status=Value(None, output_field=CharField()),
-                research_progress=Value(None, output_field=IntegerField()),
-            )
-
-        # Anonymous users see only public entries
-        if not self.request.user.is_authenticated or not roster_entry:
-            return qs.filter(is_public=True)
-
-        # Filter to visible entries (public or known by character)
-        known_entry_ids = CharacterCodexKnowledge.objects.filter(
-            roster_entry=roster_entry
-        ).values_list("entry_id", flat=True)
-        return qs.filter(Q(is_public=True) | Q(id__in=known_entry_ids))
+        ).filter(id__in=self._visible_entry_ids())
 
     def get_serializer_class(self):
         if self.action == "retrieve":
@@ -234,14 +283,8 @@ class CodexEntryViewSet(viewsets.ReadOnlyModelViewSet):
         return CodexEntryListSerializer
 
     def get_serializer_context(self):
-        """Pass roster_entry so the detail serializer can resolve wikilinks."""
+        """Pass the knowledge map and reader characters to the serializers."""
         context = super().get_serializer_context()
-        context["roster_entry"] = self._get_active_roster_entry()
+        context["knowledge_by_entry"] = self._knowledge_by_entry()
+        context["roster_entries"] = self._selected_roster_entries()
         return context
-
-    def _get_active_roster_entry(self):
-        if not self.request.user.is_authenticated:
-            return None
-        return RosterEntry.objects.filter(
-            tenures__player_data__account=self.request.user, tenures__end_date__isnull=True
-        ).first()
