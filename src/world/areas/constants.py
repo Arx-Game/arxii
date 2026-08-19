@@ -1,4 +1,36 @@
+from typing import NamedTuple
+
 from django.db import models
+
+
+class Direction(NamedTuple):
+    """A dig direction: coordinate delta, reverse name, and telnet aliases.
+
+    Canonical home (#3269; moved from ``buildings.room_constants`` so the
+    staff world builder and the player building builder share one spec and
+    the two dig flows cannot drift).
+    """
+
+    dx: int
+    dy: int
+    dfloor: int
+    opposite: str
+    aliases: tuple[str, ...]
+
+
+# North renders as +y (maps draw +y upward). Up/down move floors, not cells.
+DIRECTIONS: dict[str, Direction] = {
+    "north": Direction(0, 1, 0, "south", ("n",)),
+    "south": Direction(0, -1, 0, "north", ("s",)),
+    "east": Direction(1, 0, 0, "west", ("e",)),
+    "west": Direction(-1, 0, 0, "east", ("w",)),
+    "northeast": Direction(1, 1, 0, "southwest", ("ne",)),
+    "northwest": Direction(-1, 1, 0, "southeast", ("nw",)),
+    "southeast": Direction(1, -1, 0, "northwest", ("se",)),
+    "southwest": Direction(-1, -1, 0, "northeast", ("sw",)),
+    "up": Direction(0, 0, 1, "down", ("u",)),
+    "down": Direction(0, 0, -1, "up", ("d",)),
+}
 
 
 class AreaLevel(models.IntegerChoices):
@@ -23,6 +55,12 @@ class GridOrigin(models.TextChoices):
     AUTHORED = "authored", "Authored (canonical, exported)"
     STORY = "story", "GM Story (never exported)"
     PLAYER = "player", "Player-built (never exported)"
+
+
+# Stub description every dig defaults to (#3269; moved from buildings so the
+# world builder shares it without inverting the areas←buildings layering).
+# The "needs prose" list keys off this + any PLACEHOLDER marker.
+UNFINISHED_ROOM_DESC = "An unfinished room."  # PLACEHOLDER
 
 
 # Area quality ladder (PLACEHOLDER labels, staff-tunable).

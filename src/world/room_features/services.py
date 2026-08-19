@@ -126,6 +126,106 @@ def complete_room_feature_progression(
 # ---------------------------------------------------------------------------
 
 
+# Strategy keys the staff-fiat installer refuses (#3269): SANCTUM is
+# ritual-installed (its handler needs the ritual/persona context a bare fiat
+# lacks) and VAULT's detail row is persona-owned (``VaultDetails.founder_persona``
+# non-null PROTECT) — neither can be minted "as staff". Ward/alarm/bars are a
+# different seam entirely (ROOM_DEFENSE_INSTALLATION) and never reach here.
+STAFF_FIAT_UNSUPPORTED_STRATEGIES: frozenset[str] = frozenset({"SANCTUM", "VAULT"})
+
+
+def staff_install_feature(
+    room_profile: RoomProfile,
+    feature_kind,
+    *,
+    owner_persona: Persona,
+    target_level: int = 1,
+) -> str | None:
+    """Install/level a room feature by staff fiat (#3269 Phase B).
+
+    Runs the IDENTICAL per-kind strategy handler as the player project path —
+    by minting a real, instantly-completed ROOM_FEATURE_PROGRESSION project
+    and dispatching ``complete_room_feature_progression`` on it. Zero cost,
+    zero funding window, full audit trail (the completed project row records
+    the fiat), and no second install seam that could drift from the player
+    one. Returns a refusal message, or ``None`` on success.
+    """
+    from django.utils import timezone as _tz  # noqa: PLC0415
+
+    from world.projects.constants import CompletionMode, ProjectKind, ProjectStatus  # noqa: PLC0415
+    from world.projects.models import Project  # noqa: PLC0415
+    from world.room_features.models import (  # noqa: PLC0415
+        RoomFeatureInstance,
+        RoomFeatureProgressionDetails,
+    )
+
+    if feature_kind.service_strategy in STAFF_FIAT_UNSUPPORTED_STRATEGIES:
+        return (
+            f"{feature_kind.name} cannot be installed by fiat — it needs its own "
+            "install path (ritual or founder-owned)."
+        )
+    existing = RoomFeatureInstance.objects.filter(room_profile=room_profile).active().first()
+    if existing is not None and existing.feature_kind_id != feature_kind.pk:
+        return (
+            f"This room already carries a {existing.feature_kind.name} "
+            "(one feature per room); remove it first."
+        )
+    if existing is not None and target_level <= existing.level:
+        return f"{feature_kind.name} is already at level {existing.level}."
+    now = _tz.now()
+    project = Project.objects.create(
+        kind=ProjectKind.ROOM_FEATURE_PROGRESSION,
+        completion_mode=CompletionMode.SINGLE_THRESHOLD,
+        owner_persona=owner_persona,
+        started_at=now,
+        time_limit=now,
+        threshold_target=0,
+        status=ProjectStatus.COMPLETED,
+        description=f"Staff fiat: {feature_kind.name} to level {target_level} (#3269)",
+    )
+    RoomFeatureProgressionDetails.objects.create(
+        project=project,
+        target_room_profile=room_profile,
+        target_feature_kind=feature_kind,
+        target_level=target_level,
+    )
+    complete_room_feature_progression(project, outcome_tier=None)
+    return None
+
+
+def staff_dissolve_feature(room_profile: RoomProfile) -> str | None:
+    """Dissolve the room's active feature by staff fiat (#3269 Phase B).
+
+    Soft-delete (``dissolved_at``), then reconcile the side effects the
+    install strategies own: the crowd-draw TRAFFIC modifier drops via
+    ``sync_social_hub_traffic`` (correct-after-dissolve by design), and a
+    crier's Functionary is removed. ``is_social_hub`` is deliberately left
+    set (a staff-set baseline may predate the feature — the same rule the
+    install handler documents). Returns a refusal message, or ``None``.
+    """
+    from django.utils import timezone as _tz  # noqa: PLC0415
+
+    from world.room_features.constants import RoomFeatureServiceStrategy  # noqa: PLC0415
+    from world.room_features.models import RoomFeatureInstance  # noqa: PLC0415
+
+    instance = RoomFeatureInstance.objects.filter(room_profile=room_profile).active().first()
+    if instance is None:
+        return "This room has no active feature."
+    strategy = instance.feature_kind.service_strategy
+    instance.dissolved_at = _tz.now()
+    instance.save(update_fields=["dissolved_at"])
+    if strategy == RoomFeatureServiceStrategy.SOCIAL_HUB:
+        sync_social_hub_traffic(room_profile)
+    if strategy == RoomFeatureServiceStrategy.TOWN_CRIER:
+        from world.npc_services.functionaries import remove_functionary  # noqa: PLC0415
+        from world.room_features.seeds import ensure_town_crier_role  # noqa: PLC0415
+
+        role = ensure_town_crier_role()
+        if role is not None:
+            remove_functionary(role=role, room=room_profile)
+    return None
+
+
 def can_modify_room_features(persona: Persona, room: DefaultObject) -> bool:
     """Standing required to install or upgrade a feature in this room.
 

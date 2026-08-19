@@ -14,6 +14,11 @@ from django.db import models
 
 from evennia_extensions.constants import RoomEnclosure
 
+# Source tag for staff-authored room stat modifiers (#3269) — the world
+# builder writes and displays rows with this source; grid_export's
+# authored:-prefix filter already ships them.
+AUTHORED_STAT_SOURCE = "authored:staff"
+
 
 class LocationParentType(models.TextChoices):
     """Discriminator for Location*Stat rows: which FK is active."""

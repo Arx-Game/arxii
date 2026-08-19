@@ -42,9 +42,12 @@ class GridServiceError(Exception):
 
 def _set_room_description(room: DefaultObject, description: str) -> None:
     from evennia_extensions.models import ObjectDisplayData  # noqa: PLC0415
+    from server.conf.mush_markup import normalize_mush_markup  # noqa: PLC0415
 
     display, _ = ObjectDisplayData.objects.get_or_create(object=room)
-    display.permanent_description = description
+    # %r/%t normalization (#3269) — web-authored prose gets the same linebreak
+    # convention telnet input already applies.
+    display.permanent_description = normalize_mush_markup(description)
     display.save()
 
 
@@ -280,20 +283,46 @@ def _promote_room_to_authored(room_profile: RoomProfile, key: str) -> None:
     room_profile.save(update_fields=["origin", "fixture_key"])
 
 
-def ensure_slug_change_allowed(area: Area, new_slug: str | None) -> str | None:
-    """Refusal message when ``new_slug`` would re-slug an already-keyed area.
+def _descendant_area_ids(area: Area) -> list[int]:
+    """The area's own id plus every descendant area id, via a parent-FK walk.
 
-    Once an area has a slug, changing it is refused outright — regardless of
-    the area's current ``origin``. An edit can touch ``slug`` without touching
-    ``origin`` at all, so ``origin`` alone isn't a reliable "already exported"
-    signal; the stricter, origin-independent rule is what actually protects an
-    exported area's permanent key (shared by ``promote_to_authored`` and
-    ``EditAreaAction``, #2449). Returns ``None`` when the change is allowed: no
-    slug set yet, ``new_slug`` is ``None``, or it matches the existing slug.
+    Deliberately avoids the ``AreaClosure`` materialized view — this runs
+    inside authoring actions and must not depend on the view's freshness (or
+    its existence, in the SQLite test tier).
+    """
+    from world.areas.models import Area as AreaModel  # noqa: PLC0415
+
+    ids = [area.pk]
+    frontier = [area.pk]
+    while frontier:
+        frontier = list(
+            AreaModel.objects.filter(parent_id__in=frontier).values_list("pk", flat=True)
+        )
+        ids.extend(frontier)
+    return ids
+
+
+def ensure_slug_change_allowed(area: Area, new_slug: str | None) -> str | None:
+    """Refusal message when ``new_slug`` would break permanent fixture keys.
+
+    A slug becomes permanent the moment a room beneath the area carries a
+    ``fixture_key`` — the key embeds the area slug (``<area-slug>/<room-slug>``,
+    ADR-0140), so a re-slug would orphan every one of them. Until then the
+    slug is a recoverable authoring choice: a typo'd ward created five minutes
+    ago can be fixed (#3269 relaxation of the #2449 refuse-outright rule).
+    Shared by ``promote_to_authored`` and ``EditAreaAction``. Returns ``None``
+    when the change is allowed.
     """
     if new_slug is None or area.slug is None or new_slug == area.slug:
         return None
-    return "This area already has a different slug; keys are permanent once set."
+    if RoomProfile.objects.filter(
+        area_id__in=_descendant_area_ids(area), fixture_key__isnull=False
+    ).exists():
+        return (
+            "This area's slug is baked into room fixture keys beneath it; "
+            "keys are permanent once set."
+        )
+    return None
 
 
 def _promote_area_to_authored(area: Area, key: str) -> None:

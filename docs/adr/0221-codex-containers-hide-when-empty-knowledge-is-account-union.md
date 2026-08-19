@@ -1,4 +1,4 @@
-# ADR-0219: Codex containers hide when their subtree is empty; knowledge is an account-wide union
+# ADR-0221: Codex containers hide when their subtree is empty; knowledge is an account-wide union
 
 Date: 2026-08-19. Status: accepted (Tehom ruling).
 

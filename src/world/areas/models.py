@@ -263,9 +263,15 @@ class CleanupTierThreshold(SharedMemoryModel):
 
 
 def refresh_area_closure() -> None:
-    """Refresh the areas_areaclosure materialized view."""
+    """Refresh the areas_areaclosure materialized view.
+
+    ``CONCURRENTLY`` (#3269) so live readers never block behind a rebuild
+    while staff author areas in bulk — the unique index it requires already
+    exists (``areas/sql/areaclosure.sql``); mirrors
+    ``societies.refresh_legend_views``'s established pattern.
+    """
     with connection.cursor() as cursor:
-        cursor.execute("REFRESH MATERIALIZED VIEW areas_areaclosure")
+        cursor.execute("REFRESH MATERIALIZED VIEW CONCURRENTLY areas_areaclosure")
 
 
 from world.areas.positioning.models import (  # noqa: E402,F401

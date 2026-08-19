@@ -15774,7 +15774,14 @@ export interface paths {
     /** @description ViewSet for managing places within rooms. */
     get: operations['places_list'];
     put?: never;
-    /** @description ViewSet for managing places within rooms. */
+    /**
+     * @description Place creation is staff authoring, not a player verb (#3269).
+     *
+     *     The ModelViewSet POST previously let ANY authenticated player mint
+     *     authored Places. Creation now lives in the world-builder
+     *     ``staff_add_place`` action; join/leave (the actual player verbs)
+     *     keep their own POST routes below.
+     */
     post: operations['places_create'];
     delete?: never;
     options?: never;
@@ -21862,6 +21869,52 @@ export interface paths {
      *     the canvas needs to see (and select) private rooms too.
      */
     get: operations['world_builder_areas_manager_retrieve'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/world-builder/areas/room-detail/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /**
+     * @description GET /api/world-builder/areas/room-detail/?room_id= — selection-time detail (#3269).
+     *
+     *     Carries what the area payload deliberately can't: per-exit
+     *     kind/openness/aliases (Evennia's alias handler has no batch API) and
+     *     the comfort/exposure breakdown (single-room cascade math).
+     */
+    get: operations['world_builder_areas_room_detail_retrieve'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/world-builder/areas/room-search/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /**
+     * @description GET /api/world-builder/areas/room-search/?search= — cross-area room lookup (#3269).
+     *
+     *     Matches room key or fixture_key, capped at 50 hits — the "where did I
+     *     put the Traitor's Gate" seam for a 400-room grid, also feeding the
+     *     link-rooms pickers.
+     */
+    get: operations['world_builder_areas_room_search_list'];
     put?: never;
     post?: never;
     delete?: never;
@@ -33807,6 +33860,21 @@ export interface components {
       previous?: string | null;
       results: components['schemas']['WorldBuilderArea'][];
     };
+    PaginatedWorldBuilderRoomHitList: {
+      /** @example 123 */
+      count: number;
+      /**
+       * Format: uri
+       * @example http://api.example.org/accounts/?page=4
+       */
+      next?: string | null;
+      /**
+       * Format: uri
+       * @example http://api.example.org/accounts/?page=2
+       */
+      previous?: string | null;
+      results: components['schemas']['WorldBuilderRoomHit'][];
+    };
     PaginatedWorshippedBeingRefList: {
       /** @example 123 */
       count: number;
@@ -35771,6 +35839,14 @@ export interface components {
       readonly beat_id: number;
       readonly treasured_subject_ids: number[];
     };
+    /**
+     * @description * `open` - Open — anyone with a permit
+     *     * `reputation_gated` - Reputation gated — minimum standing required
+     *     * `npc_controlled` - NPC controlled — only via specific NPC's authority
+     *     * `closed` - Closed — no permits issued
+     * @enum {string}
+     */
+    PermitEligibilityEnum: 'open' | 'reputation_gated' | 'npc_controlled' | 'closed';
     /**
      * @description Staff CRUD for permit-kind offer details (#1684, closing #728's residual).
      *
@@ -39332,6 +39408,7 @@ export interface components {
     /** @description The story-builder area-manager payload: area header + rooms (with grants) + exits. */
     StoryAreaManager: {
       area: components['schemas']['WorldBuilderArea'];
+      catalogs: components['schemas']['WorldBuilderCatalogs'];
       rooms: components['schemas']['StoryRoom'][];
       exits: components['schemas']['WorldBuilderExit'][];
     };
@@ -39689,6 +39766,19 @@ export interface components {
       floor: number;
       fixture_key: string | null;
       origin: string;
+      /** Format: date-time */
+      exported_at: string | null;
+      needs_prose: boolean;
+      stats: components['schemas']['WorldBuilderRoomStat'][];
+      area_id: number | null;
+      size_units: number | null;
+      default_blueprint: string | null;
+      places: components['schemas']['WorldBuilderPlace'][];
+      feature: components['schemas']['WorldBuilderRoomFeature'] | null;
+      functionaries: string[];
+      ambient_counts: components['schemas']['WorldBuilderAmbientCounts'];
+      travel_hub: components['schemas']['WorldBuilderTravelHub'] | null;
+      starting_bindings: string[];
       occupant_count: number;
       clues: components['schemas']['WorldBuilderRoomClue'][];
       clue_triggers: components['schemas']['WorldBuilderClueTrigger'][];
@@ -41670,6 +41760,24 @@ export interface components {
       /** @description Slug from the window's choices payload. */
       choice: string;
     };
+    /** @description Entry-line/linger-emit counts for the Atmosphere section (#3269). */
+    WorldBuilderAmbientCounts: {
+      lines: number;
+      emits: number;
+    };
+    WorldBuilderAmbientEmit: {
+      id: number;
+      key: string;
+      text: string;
+      gate_stat_key: string;
+      gate_min: number | null;
+      gate_max: number | null;
+    };
+    WorldBuilderAmbientLine: {
+      id: number;
+      arriver_body: string;
+      bystander_body: string;
+    };
     /**
      * @description Area-tree node for the staff world-builder canvas (#2449).
      *
@@ -41699,12 +41807,35 @@ export interface components {
       readonly grid_x: number | null;
       /** @description Position within the PARENT area's local grid (rendering/hint data only — never routing); units are parent-local cells, meaningful only among siblings. */
       readonly grid_y: number | null;
+      readonly realm: string | null;
+      readonly climate: string | null;
+      readonly dominant_society: string | null;
+      /** @description The inherited climate + its source, e.g. "Temperate (from Arx Region)". */
+      readonly effective_climate: string | null;
+      readonly description: string;
+      /** @description Evennia colour tag for this area in the `where` hierarchy path (e.g. '|y', '|520'). Inherited by descendants that leave their own colour blank, so a colour set on a region/house cascades down. Author-set flavour (#1463). */
+      readonly color: string;
+      readonly permit_eligibility: components['schemas']['PermitEligibilityEnum'];
     };
     /** @description The full staff-only area-manager payload: area header + rooms + exits. */
     WorldBuilderAreaManager: {
       area: components['schemas']['WorldBuilderArea'];
+      catalogs: components['schemas']['WorldBuilderCatalogs'];
       rooms: components['schemas']['WorldBuilderRoom'][];
       exits: components['schemas']['WorldBuilderExit'][];
+    };
+    /** @description Panel pick-lists (#3269). */
+    WorldBuilderCatalogs: {
+      realms: string[];
+      climates: string[];
+      societies: string[];
+      permit_options: string[];
+      feature_kinds: string[];
+      npc_roles: string[];
+      blueprints: string[];
+      size_tiers: string[];
+      starting_areas: components['schemas']['WorldBuilderIdName'][];
+      beginnings: components['schemas']['WorldBuilderIdName'][];
     };
     /** @description One ClueTrigger placement, nested in a WorldBuilderRoom payload (#2451). */
     WorldBuilderClueTrigger: {
@@ -41712,6 +41843,19 @@ export interface components {
       clue_name: string;
       clue_slug: string;
       fixture_key: string | null;
+    };
+    WorldBuilderComfort: {
+      level: number;
+      points: number;
+      amenity: number;
+      axes: components['schemas']['WorldBuilderComfortAxis'][];
+    };
+    WorldBuilderComfortAxis: {
+      key: string;
+      pressure: number;
+      mitigation: number;
+      net: number;
+      sheltered: boolean;
     };
     /**
      * @description One directed exit in the staff area-manager payload (#2449).
@@ -41727,6 +41871,25 @@ export interface components {
       to_room_id: number | null;
       to_room_name: string | null;
       to_area_id: number | null;
+    };
+    /** @description One outgoing exit with its profile detail (#3269 room-detail endpoint). */
+    WorldBuilderExitDetail: {
+      id: number;
+      name: string;
+      to_room_id: number | null;
+      kind: string;
+      is_open: boolean;
+      aliases: string[];
+    };
+    WorldBuilderIdName: {
+      id: number;
+      name: string;
+    };
+    /** @description One conversational sub-location in the staff room payload (#3269). */
+    WorldBuilderPlace: {
+      id: number;
+      name: string;
+      description: string;
     };
     /** @description One active PortalAnchor, nested in a WorldBuilderRoom payload (#2451). */
     WorldBuilderPortalAnchor: {
@@ -41756,6 +41919,19 @@ export interface components {
       floor: number;
       fixture_key: string | null;
       origin: string;
+      /** Format: date-time */
+      exported_at: string | null;
+      needs_prose: boolean;
+      stats: components['schemas']['WorldBuilderRoomStat'][];
+      area_id: number | null;
+      size_units: number | null;
+      default_blueprint: string | null;
+      places: components['schemas']['WorldBuilderPlace'][];
+      feature: components['schemas']['WorldBuilderRoomFeature'] | null;
+      functionaries: string[];
+      ambient_counts: components['schemas']['WorldBuilderAmbientCounts'];
+      travel_hub: components['schemas']['WorldBuilderTravelHub'] | null;
+      starting_bindings: string[];
       occupant_count: number;
       clues: components['schemas']['WorldBuilderRoomClue'][];
       clue_triggers: components['schemas']['WorldBuilderClueTrigger'][];
@@ -41768,6 +41944,43 @@ export interface components {
       clue_slug: string;
       detect_difficulty: number;
       fixture_key: string | null;
+    };
+    /** @description Selection-time room detail (#3269): exit profiles + comfort breakdown. */
+    WorldBuilderRoomDetail: {
+      id: number;
+      exits: components['schemas']['WorldBuilderExitDetail'][];
+      comfort: components['schemas']['WorldBuilderComfort'];
+      ambient_lines: components['schemas']['WorldBuilderAmbientLine'][];
+      ambient_emits: components['schemas']['WorldBuilderAmbientEmit'][];
+    };
+    /** @description The room's active feature, if any (#3269). */
+    WorldBuilderRoomFeature: {
+      kind: string;
+      level: number;
+    };
+    /** @description One cross-area room-search hit (#3269): the where-did-I-put-it seam. */
+    WorldBuilderRoomHit: {
+      id: number;
+      name: string;
+      area_id: number | null;
+      area_name: string | null;
+      floor: number;
+      fixture_key: string | null;
+    };
+    /** @description One ambient-stat row in the staff room payload (#3269). */
+    WorldBuilderRoomStat: {
+      key: string;
+      label: string;
+      default: number;
+      effective: number;
+      authored: number | null;
+      pinned: number | null;
+    };
+    /** @description Travel-hub flag payload (#3269) — routes/methods are content-owned. */
+    WorldBuilderTravelHub: {
+      name: string;
+      travel_modes: string[];
+      is_transit_stop: boolean;
     };
     /**
      * @description PENDING conversion-offer inbox row (#2361). Mirrors SeanceManifestationOfferSerializer.
@@ -42495,6 +42708,7 @@ export interface operations {
         /** @description Number of results to return per page. */
         page_size?: number;
         parent?: number;
+        search?: string;
       };
       header?: never;
       path?: never;
@@ -72329,6 +72543,7 @@ export interface operations {
         /** @description Number of results to return per page. */
         page_size?: number;
         parent?: number;
+        search?: string;
       };
       header?: never;
       path?: never;
@@ -72386,6 +72601,52 @@ export interface operations {
         };
         content: {
           'application/json': components['schemas']['WorldBuilderAreaManager'];
+        };
+      };
+    };
+  };
+  world_builder_areas_room_detail_retrieve: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['WorldBuilderRoomDetail'];
+        };
+      };
+    };
+  };
+  world_builder_areas_room_search_list: {
+    parameters: {
+      query?: {
+        has_parent?: boolean;
+        /** @description A page number within the paginated result set. */
+        page?: number;
+        /** @description Number of results to return per page. */
+        page_size?: number;
+        parent?: number;
+        search?: string;
+      };
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['PaginatedWorldBuilderRoomHitList'];
         };
       };
     };

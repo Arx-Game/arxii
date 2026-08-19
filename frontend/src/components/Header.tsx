@@ -9,7 +9,6 @@ import {
   NavigationMenuItem,
   NavigationMenuTrigger,
   NavigationMenuContent,
-  NavigationMenuViewport,
 } from './ui/navigation-menu';
 import { Sheet, SheetTrigger, SheetContent } from './ui/sheet';
 import { Button } from './ui/button';
@@ -151,7 +150,6 @@ export function Header() {
               <UserNav />
             </NavigationMenuItem>
           </NavigationMenuList>
-          <NavigationMenuViewport />
         </NavigationMenu>
         <div className="md:hidden">
           <Sheet>

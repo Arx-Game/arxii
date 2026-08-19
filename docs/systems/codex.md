@@ -169,7 +169,7 @@ restored_ap = offer.cancel()
 - `search` - Search name, summary, lore/mechanics content (min 2 chars)
 - `character` - Scope knowledge to one of the account's roster entries
 
-**Visibility Rules (ADR-0219):**
+**Visibility Rules (ADR-0221):**
 - Anonymous users see only `is_public=True` entries
 - Authenticated users see public entries plus the **union** of entries any of their
   playable characters has `CharacterCodexKnowledge` for (`CodexVisibilityMixin` in

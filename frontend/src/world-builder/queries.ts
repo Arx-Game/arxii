@@ -6,6 +6,8 @@ import {
   fetchAreaManager,
   fetchWorldBuilderArea,
   fetchWorldBuilderAreas,
+  fetchRoomDetail,
+  searchWorldBuilderRooms,
   type AreaListParams,
 } from './api';
 import type { WorldBuilderActionKey } from './types';
@@ -45,13 +47,39 @@ export function useAreaManagerQuery(areaId: number | null | undefined) {
   });
 }
 
+/** Selection-time room detail (#3269); refetches with the manager payload. */
+export function useRoomDetailQuery(roomId: number | null) {
+  return useQuery({
+    queryKey: [...worldBuilderKeys.all, 'room-detail', roomId ?? 0] as const,
+    queryFn: () => fetchRoomDetail(roomId!),
+    enabled: roomId != null,
+    staleTime: 10_000,
+  });
+}
+
+/** Debounce-friendly cross-area room search (#3269); disabled under 2 chars. */
+export function useRoomSearchQuery(term: string) {
+  return useQuery({
+    queryKey: [...worldBuilderKeys.all, 'room-search', term] as const,
+    queryFn: () => searchWorldBuilderRooms(term),
+    enabled: term.trim().length >= 2,
+    staleTime: 10_000,
+  });
+}
+
 export interface WorldBuilderActionInput {
   key: WorldBuilderActionKey;
   kwargs: Record<string, unknown>;
 }
 
 /** Actions that reshape the area tree itself, not just one area's manager payload. */
-const AREA_TREE_KEYS: WorldBuilderActionKey[] = ['create_area', 'edit_area', 'promote_area'];
+const AREA_TREE_KEYS: WorldBuilderActionKey[] = [
+  'create_area',
+  'edit_area',
+  'promote_area',
+  'staff_remove_area',
+  'staff_move_room',
+];
 
 /**
  * The one mutation every staff world-builder verb goes through: dispatch by
@@ -77,6 +105,7 @@ export function useWorldBuilderAction(characterId: number, areaId: number | null
       if (areaId != null) {
         queryClient.invalidateQueries({ queryKey: worldBuilderKeys.manager(areaId) });
       }
+      queryClient.invalidateQueries({ queryKey: [...worldBuilderKeys.all, 'room-detail'] });
       if (AREA_TREE_KEYS.includes(key)) {
         queryClient.invalidateQueries({ queryKey: [...worldBuilderKeys.all, 'areas'] });
         queryClient.invalidateQueries({ queryKey: [...worldBuilderKeys.all, 'area'] });

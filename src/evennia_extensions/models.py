@@ -646,6 +646,15 @@ class RoomProfile(NaturalKeyMixin, SharedMemoryModel):
         db_index=True,
         help_text="Who authored this room — only AUTHORED rooms export (#2448).",
     )
+    exported_at = models.DateTimeField(
+        null=True,
+        blank=True,
+        help_text=(
+            "Stamped by grid_export when this room last shipped in a bundle (#3269). "
+            "Null = never exported. Canvas deletion gates on THIS, not fixture_key — "
+            "a keyed-but-unexported room is still a recoverable mistake."
+        ),
+    )
 
     objects = NaturalKeyManager()
 

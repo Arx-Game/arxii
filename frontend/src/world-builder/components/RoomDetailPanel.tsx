@@ -39,12 +39,15 @@ import { Switch } from '@/components/ui/switch';
 import { Textarea } from '@/components/ui/textarea';
 
 import { ROOM_ENCLOSURES } from '../types';
-import type { WorldBuilderExit, WorldBuilderRoom } from '../types';
+import type { WorldBuilderAreaManager, WorldBuilderExit, WorldBuilderRoom } from '../types';
+import { RoomAuthoringSections } from './RoomAuthoringSections';
 import { PlaceClueDialog } from './PlaceClueDialog';
 import { PlacePortalAnchorDialog } from './PlacePortalAnchorDialog';
 
 export interface RoomDetailPanelProps {
   room: WorldBuilderRoom;
+  /** Panel pick-lists from the manager payload (#3269); absent on the story palette. */
+  catalogs?: WorldBuilderAreaManager['catalogs'];
   /** Every exit in the area; the panel filters to this room's outgoing ones. */
   exits: WorldBuilderExit[];
   /** Keyed generically (not `WorldBuilderActionKey`) so the story palette's own action-key union type-checks too (#2450). */
@@ -62,6 +65,7 @@ export interface RoomDetailPanelProps {
 
 export function RoomDetailPanel({
   room,
+  catalogs,
   exits,
   runAction,
   onLinkRooms,
@@ -129,6 +133,11 @@ export function RoomDetailPanel({
             {room.origin}
           </Badge>
         </div>
+        {!isStory && room.exported_at && (
+          <Badge variant="secondary" data-testid="room-exported-badge">
+            Exported
+          </Badge>
+        )}
         {!isStory && room.fixture_key && (
           <p className="text-xs text-muted-foreground">
             Fixture key: <code>{room.fixture_key}</code>
@@ -349,11 +358,21 @@ export function RoomDetailPanel({
         </div>
       )}
 
+      {!isStory && catalogs && (
+        <RoomAuthoringSections room={room} catalogs={catalogs} runAction={runAction} />
+      )}
+
       <div className="flex flex-col gap-2 rounded-md border border-destructive/40 p-2">
         <h4 className="text-sm font-semibold text-destructive">Remove room</h4>
+        {!isStory && room.exported_at ? (
+          <p className="text-xs text-muted-foreground" data-testid="room-remove-exported-note">
+            This room has shipped in an export bundle - it comes out via the report-never-delete
+            pipeline, not the canvas.
+          </p>
+        ) : null}
         <AlertDialog>
           <AlertDialogTrigger asChild>
-            <Button variant="destructive" size="sm">
+            <Button variant="destructive" size="sm" disabled={!isStory && room.exported_at != null}>
               Remove {room.name}
             </Button>
           </AlertDialogTrigger>
@@ -361,8 +380,8 @@ export function RoomDetailPanel({
             <AlertDialogHeader>
               <AlertDialogTitle>Remove {room.name}?</AlertDialogTitle>
               <AlertDialogDescription>
-                Refused if the room has any contents, an installed feature, or is already exported -
-                empty or unexport it first.
+                Refused if the room has any contents or an installed feature - empty it first. A
+                room that never shipped in an export bundle deletes cleanly, fixture key or not.
               </AlertDialogDescription>
             </AlertDialogHeader>
             <AlertDialogFooter>

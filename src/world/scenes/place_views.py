@@ -9,6 +9,7 @@ from django.db.models import QuerySet
 from django_filters.rest_framework import DjangoFilterBackend
 from rest_framework import serializers, status, viewsets
 from rest_framework.decorators import action
+from rest_framework.exceptions import MethodNotAllowed
 from rest_framework.pagination import PageNumberPagination
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.request import Request
@@ -90,6 +91,17 @@ class PlaceViewSet(viewsets.ModelViewSet):
 
     def get_queryset(self) -> QuerySet[Place]:
         return Place.objects.filter(status="active").order_by("name")
+
+    def create(self, request: Request, *args: object, **kwargs: object) -> Response:
+        """Place creation is staff authoring, not a player verb (#3269).
+
+        The ModelViewSet POST previously let ANY authenticated player mint
+        authored Places. Creation now lives in the world-builder
+        ``staff_add_place`` action; join/leave (the actual player verbs)
+        keep their own POST routes below.
+        """
+        method = "POST"
+        raise MethodNotAllowed(method)
 
     @action(detail=True, methods=[HTTPMethod.POST], url_path="join")
     def join(self, request: Request, pk: int | None = None) -> Response:

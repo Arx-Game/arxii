@@ -26,8 +26,16 @@ import { Textarea } from '@/components/ui/textarea';
 export interface DigRoomDialogProps {
   areaId: number;
   floor: number;
-  /** Prefills grid position from a ghost-cell click; absent for the plain "Dig room" button. */
-  prefill?: { grid_x: number; grid_y: number };
+  /** "Where am I digging" breadcrumb (#3269), e.g. "Arx > Upper Ward". */
+  areaBreadcrumb?: string;
+  /**
+   * Prefills from a ghost-cell click; absent for the plain "Dig room" button.
+   * When the ghost carries its anchor (#3269), the dig is relational — the
+   * backend derives the cell and auto-links the aliased exit pair.
+   */
+  prefill?: { grid_x: number; grid_y: number; fromRoomId?: number; direction?: string };
+  /** Anchor room's display name for the relational-dig header. */
+  fromRoomName?: string;
   open: boolean;
   onOpenChange: (open: boolean) => void;
   /** Keyed generically (not `WorldBuilderActionKey`) so the story palette's own action-key union type-checks too (#2450). */
@@ -43,7 +51,9 @@ export interface DigRoomDialogProps {
 export function DigRoomDialog({
   areaId,
   floor,
+  areaBreadcrumb,
   prefill,
+  fromRoomName,
   open,
   onOpenChange,
   runAction,
@@ -54,7 +64,10 @@ export function DigRoomDialog({
   const [description, setDescription] = useState('');
   const [gridX, setGridX] = useState('');
   const [gridY, setGridY] = useState('');
+  const [floorValue, setFloorValue] = useState(String(floor));
+  const [sizeName, setSizeName] = useState('');
   const [fixtureKey, setFixtureKey] = useState('');
+  const isRelational = prefill?.fromRoomId != null && Boolean(prefill?.direction);
 
   useEffect(() => {
     if (open) {
@@ -62,9 +75,11 @@ export function DigRoomDialog({
       setDescription('');
       setGridX(prefill ? String(prefill.grid_x) : '');
       setGridY(prefill ? String(prefill.grid_y) : '');
+      setFloorValue(String(floor));
+      setSizeName('');
       setFixtureKey('');
     }
-  }, [open, prefill]);
+  }, [open, prefill, floor]);
 
   const canSubmit = name.trim() !== '';
 
@@ -72,13 +87,18 @@ export function DigRoomDialog({
     const kwargs: Record<string, unknown> = {
       area_id: areaId,
       name: name.trim(),
-      floor,
+      floor: floorValue.trim() === '' ? floor : Number(floorValue),
     };
     if (description.trim()) kwargs.description = description.trim();
-    if (gridX.trim() !== '' && gridY.trim() !== '') {
+    if (isRelational) {
+      kwargs.from_room_id = prefill!.fromRoomId;
+      kwargs.direction = prefill!.direction;
+      delete kwargs.floor; // the backend derives floor from the anchor + direction
+    } else if (gridX.trim() !== '' && gridY.trim() !== '') {
       kwargs.grid_x = Number(gridX);
       kwargs.grid_y = Number(gridY);
     }
+    if (!isStory && sizeName.trim()) kwargs.size = sizeName.trim();
     if (!isStory && fixtureKey.trim() !== '') kwargs.fixture_key = fixtureKey.trim();
     runAction(isStory ? 'story_dig_room' : 'staff_dig_room', kwargs);
     onOpenChange(false);
@@ -89,6 +109,17 @@ export function DigRoomDialog({
       <DialogContent className="max-w-md">
         <DialogHeader>
           <DialogTitle>Dig world room</DialogTitle>
+          {areaBreadcrumb && (
+            <p className="text-xs text-muted-foreground" data-testid="dig-room-target">
+              Digging into: {areaBreadcrumb} - floor {floorValue || floor}
+            </p>
+          )}
+          {isRelational && (
+            <p className="text-xs text-muted-foreground" data-testid="dig-room-relational">
+              {prefill!.direction} of {fromRoomName ?? 'the selected room'} - the exit pair is
+              created and aliased automatically.
+            </p>
+          )}
         </DialogHeader>
         <div className="flex flex-col gap-3">
           <div className="flex flex-col gap-1.5">
@@ -100,7 +131,7 @@ export function DigRoomDialog({
               placeholder="Market Square"
             />
           </div>
-          <div className="flex gap-2">
+          <div className={isRelational ? 'hidden' : 'flex gap-2'}>
             <div className="flex flex-1 flex-col gap-1.5">
               <Label htmlFor="dig-room-grid-x">Grid X</Label>
               <Input
@@ -122,6 +153,30 @@ export function DigRoomDialog({
               />
             </div>
           </div>
+          {!isRelational && (
+            <div className="flex gap-2">
+              <div className="flex flex-1 flex-col gap-1.5">
+                <Label htmlFor="dig-room-floor">Floor</Label>
+                <Input
+                  id="dig-room-floor"
+                  type="number"
+                  value={floorValue}
+                  onChange={(event) => setFloorValue(event.target.value)}
+                />
+              </div>
+              {!isStory && (
+                <div className="flex flex-1 flex-col gap-1.5">
+                  <Label htmlFor="dig-room-size">Size tier (optional)</Label>
+                  <Input
+                    id="dig-room-size"
+                    value={sizeName}
+                    onChange={(event) => setSizeName(event.target.value)}
+                    placeholder="e.g. Modest"
+                  />
+                </div>
+              )}
+            </div>
+          )}
           <div className="flex flex-col gap-1.5">
             <Label htmlFor="dig-room-description">Description (optional)</Label>
             <Textarea

@@ -157,7 +157,21 @@ export function WorldCanvas({
     ghostLabel,
     onExitClick,
     onPlaceRoom,
+    // #3269 — unplaced rooms list in the side panel instead of a phantom
+    // off-viewport tray column.
+    unplacedTray: false,
   });
+
+  // Refit only when the room-id set changes (dig/remove/move), never on
+  // rename/stat edits — see MapCanvasShell.refitKey (#3269).
+  const refitKey = useMemo(
+    () =>
+      payload.rooms
+        .map((room) => room.id)
+        .sort((a, b) => a - b)
+        .join(','),
+    [payload.rooms]
+  );
 
   return (
     <MapCanvasShell
@@ -171,6 +185,9 @@ export function WorldCanvas({
       snapToGrid
       snapGrid={[CELL, CELL]}
       backgroundGap={CELL}
+      minZoom={0.05}
+      showMiniMap
+      refitKey={refitKey}
       emptyState={
         payload.rooms.length === 0 ? (
           <div

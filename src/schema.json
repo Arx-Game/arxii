@@ -681,6 +681,10 @@ paths:
         name: parent
         schema:
           type: number
+      - in: query
+        name: search
+        schema:
+          type: string
       tags:
       - areas
       security:
@@ -25380,7 +25384,13 @@ paths:
           description: ''
     post:
       operationId: places_create
-      description: ViewSet for managing places within rooms.
+      description: |-
+        Place creation is staff authoring, not a player verb (#3269).
+
+        The ModelViewSet POST previously let ANY authenticated player mint
+        authored Places. Creation now lives in the world-builder
+        ``staff_add_place`` action; join/leave (the actual player verbs)
+        keep their own POST routes below.
       tags:
       - places
       requestBody:
@@ -35591,6 +35601,10 @@ paths:
         name: parent
         schema:
           type: number
+      - in: query
+        name: search
+        schema:
+          type: string
       tags:
       - world-builder
       security:
@@ -35650,6 +35664,71 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/WorldBuilderAreaManager'
+          description: ''
+  /api/world-builder/areas/room-detail/:
+    get:
+      operationId: world_builder_areas_room_detail_retrieve
+      description: |-
+        GET /api/world-builder/areas/room-detail/?room_id= — selection-time detail (#3269).
+
+        Carries what the area payload deliberately can't: per-exit
+        kind/openness/aliases (Evennia's alias handler has no batch API) and
+        the comfort/exposure breakdown (single-room cascade math).
+      tags:
+      - world-builder
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/WorldBuilderRoomDetail'
+          description: ''
+  /api/world-builder/areas/room-search/:
+    get:
+      operationId: world_builder_areas_room_search_list
+      description: |-
+        GET /api/world-builder/areas/room-search/?search= — cross-area room lookup (#3269).
+
+        Matches room key or fixture_key, capped at 50 hits — the "where did I
+        put the Traitor's Gate" seam for a 400-room grid, also feeding the
+        link-rooms pickers.
+      parameters:
+      - in: query
+        name: has_parent
+        schema:
+          type: boolean
+      - name: page
+        required: false
+        in: query
+        description: A page number within the paginated result set.
+        schema:
+          type: integer
+      - name: page_size
+        required: false
+        in: query
+        description: Number of results to return per page.
+        schema:
+          type: integer
+      - in: query
+        name: parent
+        schema:
+          type: number
+      - in: query
+        name: search
+        schema:
+          type: string
+      tags:
+      - world-builder
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaginatedWorldBuilderRoomHitList'
           description: ''
   /api/worship/beings/:
     get:
@@ -59097,6 +59176,29 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/WorldBuilderArea'
+    PaginatedWorldBuilderRoomHitList:
+      type: object
+      required:
+      - count
+      - results
+      properties:
+        count:
+          type: integer
+          example: 123
+        next:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=4
+        previous:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=2
+        results:
+          type: array
+          items:
+            $ref: '#/components/schemas/WorldBuilderRoomHit'
     PaginatedWorshippedBeingRefList:
       type: object
       required:
@@ -62497,6 +62599,18 @@ components:
       required:
       - beat_id
       - treasured_subject_ids
+    PermitEligibilityEnum:
+      enum:
+      - open
+      - reputation_gated
+      - npc_controlled
+      - closed
+      type: string
+      description: |-
+        * `open` - Open — anyone with a permit
+        * `reputation_gated` - Reputation gated — minimum standing required
+        * `npc_controlled` - NPC controlled — only via specific NPC's authority
+        * `closed` - Closed — no permits issued
     PermitOfferDetails:
       type: object
       description: |-
@@ -69836,6 +69950,8 @@ components:
       properties:
         area:
           $ref: '#/components/schemas/WorldBuilderArea'
+        catalogs:
+          $ref: '#/components/schemas/WorldBuilderCatalogs'
         rooms:
           type: array
           items:
@@ -69846,6 +69962,7 @@ components:
             $ref: '#/components/schemas/WorldBuilderExit'
       required:
       - area
+      - catalogs
       - exits
       - rooms
     StoryCreate:
@@ -70571,6 +70688,47 @@ components:
           nullable: true
         origin:
           type: string
+        exported_at:
+          type: string
+          format: date-time
+          nullable: true
+        needs_prose:
+          type: boolean
+        stats:
+          type: array
+          items:
+            $ref: '#/components/schemas/WorldBuilderRoomStat'
+        area_id:
+          type: integer
+          nullable: true
+        size_units:
+          type: integer
+          nullable: true
+        default_blueprint:
+          type: string
+          nullable: true
+        places:
+          type: array
+          items:
+            $ref: '#/components/schemas/WorldBuilderPlace'
+        feature:
+          allOf:
+          - $ref: '#/components/schemas/WorldBuilderRoomFeature'
+          nullable: true
+        functionaries:
+          type: array
+          items:
+            type: string
+        ambient_counts:
+          $ref: '#/components/schemas/WorldBuilderAmbientCounts'
+        travel_hub:
+          allOf:
+          - $ref: '#/components/schemas/WorldBuilderTravelHub'
+          nullable: true
+        starting_bindings:
+          type: array
+          items:
+            type: string
         occupant_count:
           type: integer
         clues:
@@ -70590,12 +70748,18 @@ components:
           items:
             type: string
       required:
+      - ambient_counts
+      - area_id
       - clue_triggers
       - clues
+      - default_blueprint
       - description
       - enclosure
+      - exported_at
+      - feature
       - fixture_key
       - floor
+      - functionaries
       - grants
       - grid_x
       - grid_y
@@ -70604,10 +70768,16 @@ components:
       - is_public
       - is_social_hub
       - name
+      - needs_prose
       - occupant_count
       - origin
+      - places
       - portal_anchors
       - size_name
+      - size_units
+      - starting_bindings
+      - stats
+      - travel_hub
     StrainAvailability:
       type: object
       description: Read-only serializer for StrainAvailability — per-character strain
@@ -74424,6 +74594,54 @@ components:
       required:
       - choice
       - persona_id
+    WorldBuilderAmbientCounts:
+      type: object
+      description: Entry-line/linger-emit counts for the Atmosphere section (#3269).
+      properties:
+        lines:
+          type: integer
+        emits:
+          type: integer
+      required:
+      - emits
+      - lines
+    WorldBuilderAmbientEmit:
+      type: object
+      properties:
+        id:
+          type: integer
+        key:
+          type: string
+        text:
+          type: string
+        gate_stat_key:
+          type: string
+        gate_min:
+          type: integer
+          nullable: true
+        gate_max:
+          type: integer
+          nullable: true
+      required:
+      - gate_max
+      - gate_min
+      - gate_stat_key
+      - id
+      - key
+      - text
+    WorldBuilderAmbientLine:
+      type: object
+      properties:
+        id:
+          type: integer
+        arriver_body:
+          type: string
+        bystander_body:
+          type: string
+      required:
+      - arriver_body
+      - bystander_body
+      - id
     WorldBuilderArea:
       type: object
       description: |-
@@ -74485,8 +74703,45 @@ components:
           description: Position within the PARENT area's local grid (rendering/hint
             data only — never routing); units are parent-local cells, meaningful only
             among siblings.
+        realm:
+          type: string
+          nullable: true
+          readOnly: true
+        climate:
+          type: string
+          nullable: true
+          readOnly: true
+        dominant_society:
+          type: string
+          nullable: true
+          readOnly: true
+        effective_climate:
+          type: string
+          nullable: true
+          description: The inherited climate + its source, e.g. "Temperate (from Arx
+            Region)".
+          readOnly: true
+        description:
+          type: string
+          readOnly: true
+        color:
+          type: string
+          readOnly: true
+          description: Evennia colour tag for this area in the `where` hierarchy path
+            (e.g. '|y', '|520'). Inherited by descendants that leave their own colour
+            blank, so a colour set on a region/house cascades down. Author-set flavour
+            (#1463).
+        permit_eligibility:
+          allOf:
+          - $ref: '#/components/schemas/PermitEligibilityEnum'
+          readOnly: true
       required:
       - children_count
+      - climate
+      - color
+      - description
+      - dominant_society
+      - effective_climate
       - grid_x
       - grid_y
       - id
@@ -74495,6 +74750,8 @@ components:
       - name
       - origin
       - parent
+      - permit_eligibility
+      - realm
       - slug
     WorldBuilderAreaManager:
       type: object
@@ -74503,6 +74760,8 @@ components:
       properties:
         area:
           $ref: '#/components/schemas/WorldBuilderArea'
+        catalogs:
+          $ref: '#/components/schemas/WorldBuilderCatalogs'
         rooms:
           type: array
           items:
@@ -74513,8 +74772,64 @@ components:
             $ref: '#/components/schemas/WorldBuilderExit'
       required:
       - area
+      - catalogs
       - exits
       - rooms
+    WorldBuilderCatalogs:
+      type: object
+      description: Panel pick-lists (#3269).
+      properties:
+        realms:
+          type: array
+          items:
+            type: string
+        climates:
+          type: array
+          items:
+            type: string
+        societies:
+          type: array
+          items:
+            type: string
+        permit_options:
+          type: array
+          items:
+            type: string
+        feature_kinds:
+          type: array
+          items:
+            type: string
+        npc_roles:
+          type: array
+          items:
+            type: string
+        blueprints:
+          type: array
+          items:
+            type: string
+        size_tiers:
+          type: array
+          items:
+            type: string
+        starting_areas:
+          type: array
+          items:
+            $ref: '#/components/schemas/WorldBuilderIdName'
+        beginnings:
+          type: array
+          items:
+            $ref: '#/components/schemas/WorldBuilderIdName'
+      required:
+      - beginnings
+      - blueprints
+      - climates
+      - feature_kinds
+      - npc_roles
+      - permit_options
+      - realms
+      - size_tiers
+      - societies
+      - starting_areas
     WorldBuilderClueTrigger:
       type: object
       description: One ClueTrigger placement, nested in a WorldBuilderRoom payload
@@ -74534,6 +74849,43 @@ components:
       - clue_slug
       - fixture_key
       - id
+    WorldBuilderComfort:
+      type: object
+      properties:
+        level:
+          type: integer
+        points:
+          type: integer
+        amenity:
+          type: integer
+        axes:
+          type: array
+          items:
+            $ref: '#/components/schemas/WorldBuilderComfortAxis'
+      required:
+      - amenity
+      - axes
+      - level
+      - points
+    WorldBuilderComfortAxis:
+      type: object
+      properties:
+        key:
+          type: string
+        pressure:
+          type: integer
+        mitigation:
+          type: integer
+        net:
+          type: integer
+        sheltered:
+          type: boolean
+      required:
+      - key
+      - mitigation
+      - net
+      - pressure
+      - sheltered
     WorldBuilderExit:
       type: object
       description: |-
@@ -74565,6 +74917,56 @@ components:
       - to_area_id
       - to_room_id
       - to_room_name
+    WorldBuilderExitDetail:
+      type: object
+      description: One outgoing exit with its profile detail (#3269 room-detail endpoint).
+      properties:
+        id:
+          type: integer
+        name:
+          type: string
+        to_room_id:
+          type: integer
+          nullable: true
+        kind:
+          type: string
+        is_open:
+          type: boolean
+        aliases:
+          type: array
+          items:
+            type: string
+      required:
+      - aliases
+      - id
+      - is_open
+      - kind
+      - name
+      - to_room_id
+    WorldBuilderIdName:
+      type: object
+      properties:
+        id:
+          type: integer
+        name:
+          type: string
+      required:
+      - id
+      - name
+    WorldBuilderPlace:
+      type: object
+      description: One conversational sub-location in the staff room payload (#3269).
+      properties:
+        id:
+          type: integer
+        name:
+          type: string
+        description:
+          type: string
+      required:
+      - description
+      - id
+      - name
     WorldBuilderPortalAnchor:
       type: object
       description: One active PortalAnchor, nested in a WorldBuilderRoom payload (#2451).
@@ -74622,6 +75024,47 @@ components:
           nullable: true
         origin:
           type: string
+        exported_at:
+          type: string
+          format: date-time
+          nullable: true
+        needs_prose:
+          type: boolean
+        stats:
+          type: array
+          items:
+            $ref: '#/components/schemas/WorldBuilderRoomStat'
+        area_id:
+          type: integer
+          nullable: true
+        size_units:
+          type: integer
+          nullable: true
+        default_blueprint:
+          type: string
+          nullable: true
+        places:
+          type: array
+          items:
+            $ref: '#/components/schemas/WorldBuilderPlace'
+        feature:
+          allOf:
+          - $ref: '#/components/schemas/WorldBuilderRoomFeature'
+          nullable: true
+        functionaries:
+          type: array
+          items:
+            type: string
+        ambient_counts:
+          $ref: '#/components/schemas/WorldBuilderAmbientCounts'
+        travel_hub:
+          allOf:
+          - $ref: '#/components/schemas/WorldBuilderTravelHub'
+          nullable: true
+        starting_bindings:
+          type: array
+          items:
+            type: string
         occupant_count:
           type: integer
         clues:
@@ -74637,12 +75080,18 @@ components:
           items:
             $ref: '#/components/schemas/WorldBuilderPortalAnchor'
       required:
+      - ambient_counts
+      - area_id
       - clue_triggers
       - clues
+      - default_blueprint
       - description
       - enclosure
+      - exported_at
+      - feature
       - fixture_key
       - floor
+      - functionaries
       - grid_x
       - grid_y
       - id
@@ -74650,10 +75099,16 @@ components:
       - is_public
       - is_social_hub
       - name
+      - needs_prose
       - occupant_count
       - origin
+      - places
       - portal_anchors
       - size_name
+      - size_units
+      - starting_bindings
+      - stats
+      - travel_hub
     WorldBuilderRoomClue:
       type: object
       description: One RoomClue placement, nested in a WorldBuilderRoom payload (#2451).
@@ -74675,6 +75130,111 @@ components:
       - detect_difficulty
       - fixture_key
       - id
+    WorldBuilderRoomDetail:
+      type: object
+      description: 'Selection-time room detail (#3269): exit profiles + comfort breakdown.'
+      properties:
+        id:
+          type: integer
+        exits:
+          type: array
+          items:
+            $ref: '#/components/schemas/WorldBuilderExitDetail'
+        comfort:
+          $ref: '#/components/schemas/WorldBuilderComfort'
+        ambient_lines:
+          type: array
+          items:
+            $ref: '#/components/schemas/WorldBuilderAmbientLine'
+        ambient_emits:
+          type: array
+          items:
+            $ref: '#/components/schemas/WorldBuilderAmbientEmit'
+      required:
+      - ambient_emits
+      - ambient_lines
+      - comfort
+      - exits
+      - id
+    WorldBuilderRoomFeature:
+      type: object
+      description: The room's active feature, if any (#3269).
+      properties:
+        kind:
+          type: string
+        level:
+          type: integer
+      required:
+      - kind
+      - level
+    WorldBuilderRoomHit:
+      type: object
+      description: 'One cross-area room-search hit (#3269): the where-did-I-put-it
+        seam.'
+      properties:
+        id:
+          type: integer
+        name:
+          type: string
+        area_id:
+          type: integer
+          nullable: true
+        area_name:
+          type: string
+          nullable: true
+        floor:
+          type: integer
+        fixture_key:
+          type: string
+          nullable: true
+      required:
+      - area_id
+      - area_name
+      - fixture_key
+      - floor
+      - id
+      - name
+    WorldBuilderRoomStat:
+      type: object
+      description: One ambient-stat row in the staff room payload (#3269).
+      properties:
+        key:
+          type: string
+        label:
+          type: string
+        default:
+          type: integer
+        effective:
+          type: integer
+        authored:
+          type: integer
+          nullable: true
+        pinned:
+          type: integer
+          nullable: true
+      required:
+      - authored
+      - default
+      - effective
+      - key
+      - label
+      - pinned
+    WorldBuilderTravelHub:
+      type: object
+      description: Travel-hub flag payload (#3269) — routes/methods are content-owned.
+      properties:
+        name:
+          type: string
+        travel_modes:
+          type: array
+          items:
+            type: string
+        is_transit_stop:
+          type: boolean
+      required:
+      - is_transit_stop
+      - name
+      - travel_modes
     WorshipConversionOffer:
       type: object
       description: |-

@@ -251,15 +251,22 @@ class PositionEdge(PositionEdgeBase):
         return result
 
 
-class PositionBlueprint(SharedMemoryModel):
+class PositionBlueprint(NaturalKeyMixin, CreditedContent, SharedMemoryModel):
     """A reusable template of positions and edges, independent of any room.
 
     GMs author a blueprint once and apply it to any room, generating a
-    live Position/PositionEdge graph from the template.
+    live Position/PositionEdge graph from the template. Content-repo-owned
+    (#3269): ``RoomProfile.default_blueprint`` references it by name in grid
+    bundles, so the catalog must survive a fresh import.
     """
 
     name = models.CharField(max_length=50, unique=True)
     description = models.TextField(blank=True)
+
+    objects = NaturalKeyManager()
+
+    class NaturalKeyConfig:
+        fields = ["name"]
 
     class Meta:
         app_label = "arxii"
@@ -269,7 +276,7 @@ class PositionBlueprint(SharedMemoryModel):
         return self.name
 
 
-class BlueprintPosition(PositionNodeBase):
+class BlueprintPosition(NaturalKeyMixin, CreditedContent, PositionNodeBase):
     """A position node template that belongs to a PositionBlueprint.
 
     Mirrors ``Position`` but anchored to a blueprint rather than a room.
@@ -305,7 +312,7 @@ class BlueprintPosition(PositionNodeBase):
         return f"{self.name} ({self.get_kind_display()}) in blueprint:{self.blueprint_id}"
 
 
-class BlueprintEdge(PositionEdgeBase):
+class BlueprintEdge(NaturalKeyMixin, PositionEdgeBase):
     """Traversable adjacency between two BlueprintPositions in the same blueprint.
 
     Stored canonically (position_a_id < position_b_id). Mirrors ``PositionEdge``
@@ -330,6 +337,11 @@ class BlueprintEdge(PositionEdgeBase):
         blank=True,
         related_name="+",
     )
+
+    objects = NaturalKeyManager()
+
+    class NaturalKeyConfig:
+        fields = ["position_a", "position_b"]
 
     class Meta:
         app_label = "arxii"

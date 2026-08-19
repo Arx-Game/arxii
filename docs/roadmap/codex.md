@@ -19,7 +19,7 @@ The living lore repository that reflects what each character knows — not a sta
 ## What Exists
 - **Models:** CodexCategory, CodexSubject (nestable with breadcrumb paths), CodexSubjectBreadcrumb (materialized view), CodexEntry (lore pieces with prerequisites, learn/share costs, visibility), CharacterCodexKnowledge (learning progress — uncovered/known), CodexClue (hints granting research progress), CharacterClueKnowledge, CodexTeachingOffer (teaching with AP banking), BeginningsCodexGrant, PathCodexGrant, DistinctionCodexGrant, TraditionCodexGrant (CG knowledge grants)
 - **APIs:** Full viewsets and serializers
-- **Visibility & knowledge scope (2026-08-19, ADR-0219):** categories/subjects with no
+- **Visibility & knowledge scope (2026-08-19, ADR-0221):** categories/subjects with no
   visible entry in their subtree are hidden everywhere (empty taxonomy prose never
   becomes the public face of a topic; secret branches don't leak their names). Reader
   knowledge is the union across the account's characters, with a per-character

@@ -24,6 +24,13 @@ function makeArea(overrides: Partial<WorldBuilderArea> = {}): WorldBuilderArea {
     children_count: 0,
     grid_x: null,
     grid_y: null,
+    realm: null,
+    climate: null,
+    dominant_society: null,
+    effective_climate: null,
+    description: '',
+    color: '',
+    permit_eligibility: 'open' as const,
     ...overrides,
   };
 }

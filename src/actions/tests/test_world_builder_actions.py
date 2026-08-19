@@ -126,16 +126,29 @@ class EditAreaActionTests(TestCase):
         self.area.refresh_from_db()
         assert self.area.name == "Old Name"
 
-    def test_slug_change_on_exported_area_is_refused(self) -> None:
+    def test_slug_change_with_keyed_room_beneath_is_refused(self) -> None:
         from actions.definitions.world_builder import EditAreaAction
 
         self.area.origin = GridOrigin.AUTHORED
         self.area.slug = "old-name"
         self.area.save()
+        RoomProfileFactory(area=self.area, fixture_key="old-name/kept-room")
         result = EditAreaAction().run(self.staff, area_id=self.area.pk, slug="new-name")
         assert not result.success
         self.area.refresh_from_db()
         assert self.area.slug == "old-name"
+
+    def test_slug_change_before_any_keyed_room_is_allowed(self) -> None:
+        """#3269 — a typo'd slug is recoverable until a fixture key bakes it in."""
+        from actions.definitions.world_builder import EditAreaAction
+
+        self.area.origin = GridOrigin.AUTHORED
+        self.area.slug = "typo-slug"
+        self.area.save()
+        result = EditAreaAction().run(self.staff, area_id=self.area.pk, slug="fixed-slug")
+        assert result.success
+        self.area.refresh_from_db()
+        assert self.area.slug == "fixed-slug"
 
     def test_parent_level_violation_surfaces_as_failure_message(self) -> None:
         from actions.definitions.world_builder import EditAreaAction
@@ -471,14 +484,28 @@ class StaffRemoveRoomActionTests(TestCase):
         assert RoomProfile.objects.filter(objectdb_id=room_id).exists()
 
     def test_remove_of_exported_room_fails(self) -> None:
+        from django.utils import timezone
+
         from actions.definitions.world_builder import StaffRemoveRoomAction
 
         self.profile.origin = GridOrigin.AUTHORED
         self.profile.fixture_key = "some-ward/exported-room"
+        self.profile.exported_at = timezone.now()
         self.profile.save()
         result = StaffRemoveRoomAction().run(self.staff, room_id=self.profile.objectdb_id)
         assert not result.success
         assert RoomProfile.objects.filter(objectdb_id=self.profile.objectdb_id).exists()
+
+    def test_keyed_but_never_exported_room_deletes(self) -> None:
+        """#3269 — a fixture key alone is not an export; mistakes stay deletable."""
+        from actions.definitions.world_builder import StaffRemoveRoomAction
+
+        self.profile.origin = GridOrigin.AUTHORED
+        self.profile.fixture_key = "some-ward/typo-room"
+        self.profile.save()
+        result = StaffRemoveRoomAction().run(self.staff, room_id=self.profile.objectdb_id)
+        assert result.success
+        assert not RoomProfile.objects.filter(objectdb_id=self.profile.objectdb_id).exists()
 
     def test_occupied_room_refused(self) -> None:
         from actions.definitions.world_builder import StaffRemoveRoomAction
@@ -807,3 +834,567 @@ class StaffRemovePortalAnchorActionTests(TestCase):
         self.assertTrue(result.success, result.message)
         anchor.refresh_from_db()
         self.assertIsNotNone(anchor.dissolved_at)
+
+
+class RelationalDigActionTests(TestCase):
+    """#3269 — dig off an anchor room: derived cell + aliased exit pair."""
+
+    def setUp(self) -> None:
+        self.staff = _staff_actor("RelDigStaff")
+        self.area = AreaFactory(
+            name="Grid Ward", level=AreaLevel.WARD, origin=GridOrigin.AUTHORED, slug="grid-ward"
+        )
+        self.anchor = RoomProfileFactory(area=self.area, grid_x=2, grid_y=3, floor=0)
+
+    def test_relational_dig_creates_linked_neighbor(self) -> None:
+        from actions.definitions.world_builder import StaffDigRoomAction
+
+        result = StaffDigRoomAction().run(
+            self.staff,
+            area_id=self.area.pk,
+            name="North Walk",
+            from_room_id=self.anchor.objectdb_id,
+            direction="north",
+        )
+        assert result.success, result.message
+        profile = RoomProfile.objects.get(fixture_key="grid-ward/north-walk")
+        assert (profile.grid_x, profile.grid_y, profile.floor) == (2, 4, 0)
+        exit_out = ObjectDB.objects.get(
+            db_typeclass_path="typeclasses.exits.Exit",
+            db_location=self.anchor.objectdb,
+            db_destination=profile.objectdb,
+        )
+        assert exit_out.db_key == "north"
+        assert "n" in exit_out.aliases.all()
+        back = ObjectDB.objects.get(
+            db_typeclass_path="typeclasses.exits.Exit",
+            db_location=profile.objectdb,
+            db_destination=self.anchor.objectdb,
+        )
+        assert back.db_key == "south"
+        assert "s" in back.aliases.all()
+
+    def test_up_direction_moves_floors(self) -> None:
+        from actions.definitions.world_builder import StaffDigRoomAction
+
+        result = StaffDigRoomAction().run(
+            self.staff,
+            area_id=self.area.pk,
+            name="Upper Landing",
+            from_room_id=self.anchor.objectdb_id,
+            direction="up",
+        )
+        assert result.success, result.message
+        profile = RoomProfile.objects.get(fixture_key="grid-ward/upper-landing")
+        assert (profile.grid_x, profile.grid_y, profile.floor) == (2, 3, 1)
+
+    def test_unplaced_anchor_is_refused(self) -> None:
+        from actions.definitions.world_builder import StaffDigRoomAction
+
+        floating = RoomProfileFactory(area=self.area)
+        result = StaffDigRoomAction().run(
+            self.staff,
+            area_id=self.area.pk,
+            name="Nowhere Room",
+            from_room_id=floating.objectdb_id,
+            direction="east",
+        )
+        assert not result.success
+
+    def test_anchor_in_other_area_is_refused(self) -> None:
+        from actions.definitions.world_builder import StaffDigRoomAction
+
+        other = AreaFactory(
+            name="Elsewhere", level=AreaLevel.WARD, origin=GridOrigin.AUTHORED, slug="elsewhere"
+        )
+        foreign = RoomProfileFactory(area=other, grid_x=0, grid_y=0)
+        result = StaffDigRoomAction().run(
+            self.staff,
+            area_id=self.area.pk,
+            name="Wrong Anchor",
+            from_room_id=foreign.objectdb_id,
+            direction="west",
+        )
+        assert not result.success
+
+    def test_like_exemplar_copies_size_and_description(self) -> None:
+        from actions.definitions.world_builder import StaffDigRoomAction
+        from evennia_extensions.models import RoomSizeTier
+
+        tier = RoomSizeTier.objects.create(name="Modest Test Tier", units=7)
+        model_room = RoomProfileFactory(area=self.area, size=tier)
+        ObjectDisplayData.objects.create(
+            object=model_room.objectdb, permanent_description="A cozy den."
+        )
+        result = StaffDigRoomAction().run(
+            self.staff,
+            area_id=self.area.pk,
+            name="Copy Den",
+            like_room_id=model_room.objectdb_id,
+        )
+        assert result.success, result.message
+        profile = RoomProfile.objects.get(fixture_key="grid-ward/copy-den")
+        assert profile.size_id == tier.pk
+        desc = ObjectDisplayData.objects.get(object_id=profile.objectdb_id)
+        assert desc.permanent_description == "A cozy den."
+
+    def test_blank_description_defaults_to_placeholder_stub(self) -> None:
+        from actions.definitions.world_builder import StaffDigRoomAction
+        from world.areas.constants import UNFINISHED_ROOM_DESC
+
+        result = StaffDigRoomAction().run(self.staff, area_id=self.area.pk, name="Bare Room")
+        assert result.success, result.message
+        profile = RoomProfile.objects.get(fixture_key="grid-ward/bare-room")
+        desc = ObjectDisplayData.objects.get(object_id=profile.objectdb_id)
+        assert desc.permanent_description == UNFINISHED_ROOM_DESC
+
+
+class StaffRemoveAreaActionTests(TestCase):
+    """#3269 — empty areas are deletable; populated ones refuse."""
+
+    def setUp(self) -> None:
+        self.staff = _staff_actor("RemoveAreaStaff")
+        self.player = _player_actor("RemoveAreaPlayer")
+        self.area = AreaFactory(name="Mistake Ward", level=AreaLevel.WARD)
+
+    def test_staff_removes_empty_area(self) -> None:
+        from actions.definitions.world_builder import StaffRemoveAreaAction
+
+        area_id = self.area.pk
+        result = StaffRemoveAreaAction().run(self.staff, area_id=area_id)
+        assert result.success, result.message
+        assert not Area.objects.filter(pk=area_id).exists()
+
+    def test_non_staff_rejected(self) -> None:
+        from actions.definitions.world_builder import StaffRemoveAreaAction
+
+        result = StaffRemoveAreaAction().run(self.player, area_id=self.area.pk)
+        assert not result.success
+        assert Area.objects.filter(pk=self.area.pk).exists()
+
+    def test_area_with_rooms_refused(self) -> None:
+        from actions.definitions.world_builder import StaffRemoveAreaAction
+
+        RoomProfileFactory(area=self.area)
+        result = StaffRemoveAreaAction().run(self.staff, area_id=self.area.pk)
+        assert not result.success
+        assert Area.objects.filter(pk=self.area.pk).exists()
+
+    def test_area_with_children_refused(self) -> None:
+        from actions.definitions.world_builder import StaffRemoveAreaAction
+
+        AreaFactory(name="Child Block", level=AreaLevel.NEIGHBORHOOD, parent=self.area)
+        result = StaffRemoveAreaAction().run(self.staff, area_id=self.area.pk)
+        assert not result.success
+        assert Area.objects.filter(pk=self.area.pk).exists()
+
+
+class StaffMoveRoomActionTests(TestCase):
+    """#3269 — re-parent a mis-dug room; coords reset; fixture key warned."""
+
+    def setUp(self) -> None:
+        self.staff = _staff_actor("MoveRoomStaff")
+        self.source = AreaFactory(
+            name="Wrong Ward", level=AreaLevel.WARD, origin=GridOrigin.AUTHORED, slug="wrong-ward"
+        )
+        self.target = AreaFactory(
+            name="Right Ward", level=AreaLevel.WARD, origin=GridOrigin.AUTHORED, slug="right-ward"
+        )
+        self.profile = RoomProfileFactory(area=self.source, grid_x=1, grid_y=1)
+
+    def test_staff_moves_room_and_resets_coords(self) -> None:
+        from actions.definitions.world_builder import StaffMoveRoomAction
+
+        result = StaffMoveRoomAction().run(
+            self.staff, room_id=self.profile.objectdb_id, area_id=self.target.pk
+        )
+        assert result.success, result.message
+        self.profile.refresh_from_db()
+        assert self.profile.area_id == self.target.pk
+        assert self.profile.grid_x is None
+        assert self.profile.grid_y is None
+
+    def test_move_warns_about_retained_fixture_key_prefix(self) -> None:
+        from actions.definitions.world_builder import StaffMoveRoomAction
+
+        self.profile.fixture_key = "wrong-ward/kept-room"
+        self.profile.save(update_fields=["fixture_key"])
+        result = StaffMoveRoomAction().run(
+            self.staff, room_id=self.profile.objectdb_id, area_id=self.target.pk
+        )
+        assert result.success
+        assert "fixture key" in result.message
+
+    def test_move_to_non_authored_area_refused(self) -> None:
+        from actions.definitions.world_builder import StaffMoveRoomAction
+
+        story = AreaFactory(name="Story Spot", level=AreaLevel.WARD, origin=GridOrigin.STORY)
+        result = StaffMoveRoomAction().run(
+            self.staff, room_id=self.profile.objectdb_id, area_id=story.pk
+        )
+        assert not result.success
+
+
+class RoomRenameDisplayPathTests(TestCase):
+    """#3269 — a rename must land in BOTH db_key (look) and longname (area path)."""
+
+    def setUp(self) -> None:
+        self.staff = _staff_actor("RenamePathStaff")
+        self.area = AreaFactory(level=AreaLevel.WARD)
+        self.profile = RoomProfileFactory(area=self.area)
+
+    def test_rename_updates_both_display_sources(self) -> None:
+        from actions.definitions.world_builder import StaffEditRoomAction
+
+        result = StaffEditRoomAction().run(
+            self.staff, room_id=self.profile.objectdb_id, name="Renamed Hall"
+        )
+        assert result.success, result.message
+        assert ObjectDB.objects.get(pk=self.profile.objectdb_id).db_key == "Renamed Hall"
+        display = ObjectDisplayData.objects.get(object_id=self.profile.objectdb_id)
+        assert display.longname == "Renamed Hall"
+
+    def test_description_normalizes_mush_markup(self) -> None:
+        from actions.definitions.world_builder import StaffEditRoomAction
+
+        result = StaffEditRoomAction().run(
+            self.staff,
+            room_id=self.profile.objectdb_id,
+            description="First paragraph.%r%rSecond%tindented.",
+        )
+        assert result.success, result.message
+        display = ObjectDisplayData.objects.get(object_id=self.profile.objectdb_id)
+        assert "%r" not in display.permanent_description
+        assert "%t" not in display.permanent_description
+
+
+class PhaseBRoomAuthoringTests(TestCase):
+    """#3269 Phase B — stats, places, ambient, features, staffing, travel,
+    blueprint, bindings, exit detail, duplicate, batch dig."""
+
+    def setUp(self) -> None:
+        self.staff = _staff_actor("PhaseBStaff")
+        self.area = AreaFactory(
+            name="Author Ward", level=AreaLevel.WARD, origin=GridOrigin.AUTHORED, slug="author-ward"
+        )
+        self.profile = RoomProfileFactory(area=self.area, grid_x=0, grid_y=0)
+
+    def test_stat_authoring_writes_zero_decay_modifier(self) -> None:
+        from actions.definitions.world_builder import StaffSetRoomStatAction
+        from world.locations.constants import AUTHORED_STAT_SOURCE
+        from world.locations.models import LocationValueModifier
+
+        result = StaffSetRoomStatAction().run(
+            self.staff, room_id=self.profile.objectdb_id, stat_key="noise", value=70
+        )
+        assert result.success, result.message
+        row = LocationValueModifier.objects.get(
+            room_profile=self.profile, stat_key="noise", source=AUTHORED_STAT_SOURCE
+        )
+        assert row.value == 70
+        assert row.change_per_day == 0
+
+    def test_stat_pin_writes_override_and_warns(self) -> None:
+        from actions.definitions.world_builder import StaffSetRoomStatAction
+        from world.locations.models import LocationValueOverride
+
+        result = StaffSetRoomStatAction().run(
+            self.staff, room_id=self.profile.objectdb_id, stat_key="cold", value=0, pin=True
+        )
+        assert result.success
+        assert "cuts the whole cascade" in result.message
+        assert LocationValueOverride.objects.filter(
+            room_profile=self.profile, stat_key="cold"
+        ).exists()
+
+    def test_stat_clear_removes_both(self) -> None:
+        from actions.definitions.world_builder import StaffSetRoomStatAction
+        from world.locations.models import LocationValueModifier, LocationValueOverride
+
+        StaffSetRoomStatAction().run(
+            self.staff, room_id=self.profile.objectdb_id, stat_key="noise", value=70
+        )
+        StaffSetRoomStatAction().run(
+            self.staff, room_id=self.profile.objectdb_id, stat_key="noise", value=10, pin=True
+        )
+        result = StaffSetRoomStatAction().run(
+            self.staff, room_id=self.profile.objectdb_id, stat_key="noise", clear=True
+        )
+        assert result.success
+        assert not LocationValueModifier.objects.filter(
+            room_profile=self.profile, stat_key="noise"
+        ).exists()
+        assert not LocationValueOverride.objects.filter(
+            room_profile=self.profile, stat_key="noise"
+        ).exists()
+
+    def test_place_add_and_duplicate_name_refused(self) -> None:
+        from actions.definitions.world_builder import StaffAddPlaceAction
+        from world.scenes.place_models import Place
+
+        result = StaffAddPlaceAction().run(
+            self.staff, room_id=self.profile.objectdb_id, name="The Bar"
+        )
+        assert result.success
+        assert Place.objects.filter(room=self.profile, name="The Bar").exists()
+        again = StaffAddPlaceAction().run(
+            self.staff, room_id=self.profile.objectdb_id, name="the bar"
+        )
+        assert not again.success
+
+    def test_ambient_emit_mints_key_from_fixture(self) -> None:
+        from actions.definitions.world_builder import StaffAddAmbientEmitAction
+        from world.narrative.models import AmbientEmit
+
+        self.profile.fixture_key = "author-ward/dusty-plaza"
+        self.profile.save(update_fields=["fixture_key"])
+        result = StaffAddAmbientEmitAction().run(
+            self.staff,
+            room_id=self.profile.objectdb_id,
+            text="Dust motes drift.",
+            gate_stat_key="crime",
+            gate_min=60,
+        )
+        assert result.success, result.message
+        emit = AmbientEmit.objects.get(room_profile=self.profile)
+        assert emit.key == "dusty-plaza-emit-001"
+        assert emit.gate_stat_key == "crime"
+
+    def test_feature_fiat_runs_the_real_strategy(self) -> None:
+        """A SOCIAL_HUB fiat install must land the traffic modifier + flag —
+        proof the fiat path runs the identical per-kind handler."""
+        from actions.definitions.world_builder import StaffInstallRoomFeatureAction
+        from world.locations.models import LocationValueModifier
+        from world.room_features.constants import (
+            RoomFeatureInstallMechanism,
+            RoomFeatureServiceStrategy,
+        )
+        from world.room_features.factories import RoomFeatureKindFactory
+        from world.room_features.models import RoomFeatureInstance
+
+        kind = RoomFeatureKindFactory(
+            name="Test Social Hub",
+            service_strategy=RoomFeatureServiceStrategy.SOCIAL_HUB,
+            install_mechanism=RoomFeatureInstallMechanism.PROJECT,
+        )
+        result = StaffInstallRoomFeatureAction().run(
+            self.staff, room_id=self.profile.objectdb_id, kind=kind.name, target_level=2
+        )
+        assert result.success, result.message
+        instance = RoomFeatureInstance.objects.filter(room_profile=self.profile).active().get()
+        assert instance.level == 2
+        self.profile.refresh_from_db()
+        assert self.profile.is_social_hub
+        assert LocationValueModifier.objects.filter(
+            room_profile=self.profile, stat_key="traffic"
+        ).exists()
+
+    def test_feature_fiat_refuses_vault_and_second_kind(self) -> None:
+        from actions.definitions.world_builder import StaffInstallRoomFeatureAction
+        from world.room_features.constants import RoomFeatureServiceStrategy
+        from world.room_features.factories import RoomFeatureKindFactory
+
+        vault = RoomFeatureKindFactory(
+            name="Test Vault", service_strategy=RoomFeatureServiceStrategy.VAULT
+        )
+        result = StaffInstallRoomFeatureAction().run(
+            self.staff, room_id=self.profile.objectdb_id, kind=vault.name
+        )
+        assert not result.success
+
+    def test_feature_remove_reconciles_traffic(self) -> None:
+        from actions.definitions.world_builder import (
+            StaffInstallRoomFeatureAction,
+            StaffRemoveRoomFeatureAction,
+        )
+        from world.locations.models import LocationValueModifier
+        from world.room_features.constants import (
+            RoomFeatureInstallMechanism,
+            RoomFeatureServiceStrategy,
+        )
+        from world.room_features.factories import RoomFeatureKindFactory
+
+        kind = RoomFeatureKindFactory(
+            name="Test Social Hub",
+            service_strategy=RoomFeatureServiceStrategy.SOCIAL_HUB,
+            install_mechanism=RoomFeatureInstallMechanism.PROJECT,
+        )
+        StaffInstallRoomFeatureAction().run(
+            self.staff, room_id=self.profile.objectdb_id, kind=kind.name
+        )
+        result = StaffRemoveRoomFeatureAction().run(self.staff, room_id=self.profile.objectdb_id)
+        assert result.success, result.message
+        assert not LocationValueModifier.objects.filter(
+            room_profile=self.profile, stat_key="traffic"
+        ).exists()
+
+    def test_functionary_assign_and_remove(self) -> None:
+        from actions.definitions.world_builder import (
+            StaffAssignFunctionaryAction,
+            StaffRemoveFunctionaryAction,
+        )
+        from world.npc_services.factories import NPCRoleFactory
+        from world.npc_services.models import Functionary
+
+        role = NPCRoleFactory(name="Test Registrar")
+        result = StaffAssignFunctionaryAction().run(
+            self.staff, room_id=self.profile.objectdb_id, role=role.name
+        )
+        assert result.success, result.message
+        assert Functionary.objects.filter(room=self.profile, role=role, is_active=True).exists()
+        removed = StaffRemoveFunctionaryAction().run(
+            self.staff, room_id=self.profile.objectdb_id, role=role.name
+        )
+        assert removed.success
+        assert not Functionary.objects.filter(room=self.profile, role=role, is_active=True).exists()
+
+    def test_travel_hub_toggle(self) -> None:
+        from actions.definitions.world_builder import StaffSetTravelHubAction
+        from world.travel.models import TravelHub
+
+        result = StaffSetTravelHubAction().run(
+            self.staff, room_id=self.profile.objectdb_id, enabled=True, modes="land, sea"
+        )
+        assert result.success, result.message
+        hub = TravelHub.objects.get(room_profile=self.profile)
+        assert hub.travel_modes == ["LAND", "SEA"]
+        off = StaffSetTravelHubAction().run(
+            self.staff, room_id=self.profile.objectdb_id, enabled=False
+        )
+        assert off.success
+        assert not TravelHub.objects.filter(room_profile=self.profile).exists()
+
+    def test_blueprint_set_and_clear(self) -> None:
+        from actions.definitions.world_builder import StaffSetRoomBlueprintAction
+        from world.areas.positioning.models import PositionBlueprint
+
+        blueprint = PositionBlueprint.objects.create(name="Test Camp Layout")
+        result = StaffSetRoomBlueprintAction().run(
+            self.staff, room_id=self.profile.objectdb_id, blueprint=blueprint.name
+        )
+        assert result.success
+        self.profile.refresh_from_db()
+        assert self.profile.default_blueprint_id == blueprint.pk
+        cleared = StaffSetRoomBlueprintAction().run(
+            self.staff, room_id=self.profile.objectdb_id, blueprint=""
+        )
+        assert cleared.success
+
+    def test_starting_room_binding(self) -> None:
+        from actions.definitions.world_builder import StaffSetStartingRoomAction
+        from world.character_creation.factories import StartingAreaFactory
+
+        starting_area = StartingAreaFactory()
+        result = StaffSetStartingRoomAction().run(
+            self.staff,
+            room_id=self.profile.objectdb_id,
+            starting_area_id=starting_area.pk,
+        )
+        assert result.success, result.message
+        starting_area.refresh_from_db()
+        assert starting_area.default_starting_room_id == self.profile.objectdb_id
+
+    def test_exit_window_switch_auto_opens(self) -> None:
+        from actions.definitions.world_builder import StaffSetExitDetailAction
+        from evennia_extensions.models import ExitProfile
+
+        other = RoomProfileFactory(area=self.area, grid_x=1, grid_y=0)
+        exit_out, _ = _exit_between(self.profile.objectdb, other.objectdb, "east", "west")
+        result = StaffSetExitDetailAction().run(
+            self.staff, exit_id=exit_out.pk, kind="window", aliases="peek, e"
+        )
+        assert result.success, result.message
+        exit_profile = ExitProfile.objects.get(objectdb=exit_out)
+        assert exit_profile.exit_kind == "window"
+        assert exit_profile.is_open is True
+        assert "peek" in exit_out.aliases.all()
+
+    def test_duplicate_room_copies_template_surfaces(self) -> None:
+        from actions.definitions.world_builder import (
+            StaffAddPlaceAction,
+            StaffDuplicateRoomAction,
+            StaffSetRoomStatAction,
+        )
+        from evennia_extensions.models import RoomProfile as RoomProfileModel
+        from world.locations.constants import AUTHORED_STAT_SOURCE
+        from world.locations.models import LocationValueModifier
+        from world.scenes.place_models import Place
+
+        StaffSetRoomStatAction().run(
+            self.staff, room_id=self.profile.objectdb_id, stat_key="noise", value=44
+        )
+        StaffAddPlaceAction().run(self.staff, room_id=self.profile.objectdb_id, name="Corner Booth")
+        result = StaffDuplicateRoomAction().run(
+            self.staff, room_id=self.profile.objectdb_id, name="Copy Shop"
+        )
+        assert result.success, result.message
+        copy = RoomProfileModel.objects.get(fixture_key="author-ward/copy-shop")
+        assert copy.grid_x is None
+        assert Place.objects.filter(room=copy, name="Corner Booth").exists()
+        assert LocationValueModifier.objects.filter(
+            room_profile=copy, stat_key="noise", source=AUTHORED_STAT_SOURCE, value=44
+        ).exists()
+
+    def test_batch_dig_corridor(self) -> None:
+        from actions.definitions.world_builder import StaffBatchDigAction
+        from evennia_extensions.models import RoomProfile as RoomProfileModel
+
+        result = StaffBatchDigAction().run(
+            self.staff,
+            area_id=self.area.pk,
+            base_name="Corridor",
+            count=3,
+            from_room_id=self.profile.objectdb_id,
+            direction="north",
+        )
+        assert result.success, result.message
+        rooms = list(
+            RoomProfileModel.objects.filter(
+                fixture_key__startswith="author-ward/corridor-"
+            ).order_by("grid_y")
+        )
+        assert [(r.grid_x, r.grid_y) for r in rooms] == [(0, 1), (0, 2), (0, 3)]
+
+
+class PhaseCAreaMetadataTests(TestCase):
+    """#3269 Phase C — edit_area's metadata kwargs + the below-REGION climate warning."""
+
+    def setUp(self) -> None:
+        self.staff = _staff_actor("PhaseCStaff")
+        self.area = AreaFactory(name="Meta Ward", level=AreaLevel.WARD)
+
+    def test_metadata_fields_apply(self) -> None:
+        from actions.definitions.world_builder import EditAreaAction
+        from world.realms.models import Realm
+
+        realm = Realm.objects.create(name="Testland")
+        result = EditAreaAction().run(
+            self.staff,
+            area_id=self.area.pk,
+            realm=realm.name,
+            description="A test ward.",
+            color="|y",
+            permit_eligibility="open",
+            grid_x=3,
+            grid_y=4,
+        )
+        assert result.success, result.message
+        self.area.refresh_from_db()
+        assert self.area.realm_id == realm.pk
+        assert self.area.description == "A test ward."
+        assert (self.area.grid_x, self.area.grid_y) == (3, 4)
+
+    def test_unknown_realm_name_refused(self) -> None:
+        from actions.definitions.world_builder import EditAreaAction
+
+        result = EditAreaAction().run(self.staff, area_id=self.area.pk, realm="Nowhereland")
+        assert not result.success
+
+    def test_climate_below_region_warns(self) -> None:
+        from actions.definitions.world_builder import EditAreaAction
+        from world.weather.models import Climate
+
+        climate = Climate.objects.create(name="Test Drizzle")
+        result = EditAreaAction().run(self.staff, area_id=self.area.pk, climate=climate.name)
+        assert result.success, result.message
+        assert "below REGION" in result.message

@@ -328,10 +328,19 @@ class PromoteToAuthoredAreaTests(TestCase):
         with self.assertRaises(GridServiceError):
             promote_to_authored(area=area, key="not/a/plain/slug")
 
-    def test_rekeying_with_a_different_key_raises(self) -> None:
+    def test_rekeying_with_a_keyed_room_beneath_raises(self) -> None:
         area = AreaFactory(origin=GridOrigin.AUTHORED, slug="old-region")
+        profile = create_room(area=area, name="Kept Hall")
+        promote_to_authored(room_profile=profile, key="old-region/kept-hall")
         with self.assertRaises(GridServiceError):
             promote_to_authored(area=area, key="new-region")
+
+    def test_rekeying_before_any_keyed_room_is_allowed(self) -> None:
+        """#3269 — an area slug stays fixable until a room fixture key bakes it in."""
+        area = AreaFactory(origin=GridOrigin.AUTHORED, slug="typo-region")
+        promote_to_authored(area=area, key="fixed-region")
+        area.refresh_from_db()
+        self.assertEqual(area.slug, "fixed-region")
 
     def test_repromoting_with_same_key_is_idempotent(self) -> None:
         area = AreaFactory(origin=GridOrigin.AUTHORED, slug="stable-region")

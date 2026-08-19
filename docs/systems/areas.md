@@ -612,3 +612,12 @@ Blueprint-authored gated edges work the same way as hand-authored ones:
   that prevents `enter_aerial` from crossing above a blocked node.
 - Zone-aware targeting (#533), POV visibility (#531), combat-UI positioning rendering (#532)
 - Occupancy-screening reachability (crowded-position filtering)
+- **World-builder completeness (#3269) — all three phases shipped** (Phase A:
+  relational dig + recoverability + navigation/search, ADR-0219/0220; Phase B: the
+  full room-authoring set + durable grid-bundle export of places/emits/hubs/
+  functionaries/features/blueprint refs; Phase C: area metadata + the ward
+  arrange canvas). Deliberately NOT built: staff authoring for VAULT (founder-
+  persona-owned) and ward/alarm defenses (their own seam), travel routes/methods
+  and Realm/Climate catalogs (admin/content-owned prerequisites), and
+  BlueprintPosition/Edge canvas editing (rows round-trip as content; authoring
+  stays admin).
