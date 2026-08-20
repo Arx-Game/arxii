@@ -41116,6 +41116,15 @@ components:
             type: object
             additionalProperties: {}
           readOnly: true
+        perspective_of:
+          type: string
+          nullable: true
+          description: |-
+            Name of the culture whose take this entry is; None for canon entries.
+
+            Reads the queryset annotation; falls back to None where a caller
+            serializes without it (e.g. featured lore).
+          readOnly: true
         art_url:
           type: string
           nullable: true
@@ -41130,6 +41139,7 @@ components:
       - mechanics_content
       - mechanics_links
       - name
+      - perspective_of
       - research_progress
       - subject
       - subject_name
@@ -41190,6 +41200,15 @@ components:
             type: object
             additionalProperties: {}
           readOnly: true
+        perspective_of:
+          type: string
+          nullable: true
+          description: |-
+            Name of the culture whose take this entry is; None for canon entries.
+
+            Reads the queryset annotation; falls back to None where a caller
+            serializes without it (e.g. featured lore).
+          readOnly: true
         art_url:
           type: string
           nullable: true
@@ -41200,6 +41219,7 @@ components:
       - knowledge_status
       - known_by
       - name
+      - perspective_of
       - subject
       - subject_name
       - subject_path

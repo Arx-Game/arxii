@@ -24440,6 +24440,13 @@ export interface components {
       readonly known_by: {
         [key: string]: unknown;
       }[];
+      /**
+       * @description Name of the culture whose take this entry is; None for canon entries.
+       *
+       *     Reads the queryset annotation; falls back to None where a caller
+       *     serializes without it (e.g. featured lore).
+       */
+      readonly perspective_of: string | null;
       readonly art_url: string | null;
     };
     /** @description Light serializer for entry lists. */
@@ -24467,6 +24474,13 @@ export interface components {
       readonly known_by: {
         [key: string]: unknown;
       }[];
+      /**
+       * @description Name of the culture whose take this entry is; None for canon entries.
+       *
+       *     Reads the queryset annotation; falls back to None where a caller
+       *     serializes without it (e.g. featured lore).
+       */
+      readonly perspective_of: string | null;
       readonly art_url: string | null;
     };
     CodexSubject: {
