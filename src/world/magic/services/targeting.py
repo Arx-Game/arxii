@@ -7,6 +7,8 @@ cast routing downstream.
 
 from __future__ import annotations
 
+from dataclasses import dataclass
+
 from django.core.exceptions import ValidationError
 from django.db.models import Prefetch
 
@@ -257,6 +259,86 @@ def protective_flavor(technique: Technique) -> str | None:
     """
     resolved = protective_condition_and_flavor(technique)
     return resolved[1] if resolved is not None else None
+
+
+#: ProtectiveMagnitude.mode values (#3279) — named constants, not bare strings, so
+#: callers (e.g. technique_power_eval's mitigation valuator) compare against an
+#: identifier.
+PROTECTIVE_MAGNITUDE_MULTIPLY = "multiply"
+PROTECTIVE_MAGNITUDE_FLAT = "flat"
+
+#: The MODIFY_PAYLOAD step shape :func:`protective_magnitude` recognizes — the same
+#: field/op vocabulary ``world.combat.defend_content.ensure_defend_content`` seeds
+#: for the shipped Defend technique and
+#: ``flows.models.flows.FlowStepDefinition._execute_modify_payload`` interprets.
+_MODIFY_PAYLOAD_AMOUNT_FIELD = "amount"
+_MODIFY_PAYLOAD_OP_MULTIPLY = "multiply"
+_MODIFY_PAYLOAD_OP_ADD = "add"
+
+
+@dataclass(frozen=True, slots=True)
+class ProtectiveMagnitude:
+    """A parsed damage-mitigation magnitude extracted from a protective condition (#3279).
+
+    ``mode=PROTECTIVE_MAGNITUDE_MULTIPLY`` carries ``factor`` (e.g. Defend's 0.5
+    halves incoming damage); ``mode=PROTECTIVE_MAGNITUDE_FLAT`` carries ``amount``
+    (a flat per-hit reduction). Exactly one of ``factor``/``amount`` is populated
+    per mode — the other stays ``None``.
+    """
+
+    mode: str
+    factor: float | None = None
+    amount: int | None = None
+
+
+def protective_magnitude(condition_template: ConditionTemplate) -> ProtectiveMagnitude | None:
+    """Extract a parseable damage-mitigation magnitude from a protective condition (#3279).
+
+    Sibling to :func:`protective_flavor` for the technique combat-power evaluator's
+    mitigation valuator (``world.magic.services.technique_power_eval``): walks
+    *condition_template*'s ``reactive_triggers -> flow_definition -> steps`` looking
+    for a ``MODIFY_PAYLOAD`` step on the ``"amount"`` field (the shape
+    ``world.combat.defend_content.ensure_defend_content`` seeds for the shipped
+    Defend technique — ``{"field": "amount", "op": "multiply", "value": 0.5}``):
+
+    - ``op == "multiply"`` -> ``ProtectiveMagnitude(mode="multiply", factor=value)``
+      (percentage mitigation — Defend's 0.5 halves incoming damage).
+    - ``op == "add"`` with a negative ``value`` -> ``ProtectiveMagnitude(mode="flat",
+      amount=abs(value))`` (a flat per-hit reduction — ``modify_payload``'s op
+      vocabulary has no literal "subtract", so a flat reduction is authored as an
+      add of a negative amount, see ``flows.models.flows.FlowStepDefinition
+      ._execute_modify_payload``).
+
+    Returns the FIRST matching step across every trigger (authored protective
+    conditions carry at most one in practice). Any other shape — a
+    ``CALL_SERVICE_FUNCTION`` handler (the barrier/blink/reflect families
+    :func:`protective_flavor` classifies), a ``MODIFY_PAYLOAD`` step on a
+    different field, or an unrecognized op — returns ``None``: an authoring-gap
+    bucket for the evaluator's UNPRICEABLE provenance, not an error.
+    """
+    triggers = condition_template.reactive_triggers.select_related(
+        "flow_definition"
+    ).prefetch_related(
+        Prefetch(
+            "flow_definition__steps",
+            queryset=FlowStepDefinition.objects.filter(action=FlowActionChoices.MODIFY_PAYLOAD),
+            to_attr="cached_modify_payload_steps",
+        )
+    )
+    for trigger in triggers:
+        for step in trigger.flow_definition.cached_modify_payload_steps:
+            params = step.parameters or {}
+            if params.get("field") != _MODIFY_PAYLOAD_AMOUNT_FIELD:
+                continue
+            op = params.get("op")
+            value = params.get("value")
+            if not isinstance(value, (int, float)):
+                continue
+            if op == _MODIFY_PAYLOAD_OP_MULTIPLY:
+                return ProtectiveMagnitude(mode=PROTECTIVE_MAGNITUDE_MULTIPLY, factor=float(value))
+            if op == _MODIFY_PAYLOAD_OP_ADD and value < 0:
+                return ProtectiveMagnitude(mode=PROTECTIVE_MAGNITUDE_FLAT, amount=int(abs(value)))
+    return None
 
 
 #: Reactive-trigger handler families that consume a caster-declared position PAIR

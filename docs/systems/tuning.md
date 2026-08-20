@@ -10,7 +10,7 @@ admin-hosted with vanilla `django-htmx` instead of `django-unfold` or a React st
 Read+preview only — sliders/forms re-render fragments via `hx-get`; nothing here writes
 game config except the Monte Carlo run (which itself writes nothing persistent, see
 below). Edits to the underlying config models still go through the normal admin change
-forms. Four panels, each its own HTMX fragment endpoint loaded with `hx-trigger="load"`
+forms. Five panels, each its own HTMX fragment endpoint loaded with `hx-trigger="load"`
 from `src/web/templates/admin/tuning/dashboard.html`:
 
 | Panel | Fragment view | URL name | Analytics module |
@@ -19,6 +19,7 @@ from `src/web/templates/admin/tuning/dashboard.html`:
 | Consequences | `tuning_consequences_fragment` | `admin_tuning_consequences` | `consequence_analytics.py` |
 | Conditions | `tuning_conditions_fragment` | `admin_tuning_conditions` | `condition_analytics.py` |
 | Simulation | `tuning_simulation_fragment` | `admin_tuning_simulation` | `world.combat.simulation` |
+| Techniques | `tuning_techniques_fragment` | `admin_tuning_techniques` | `technique_analytics.py` + `world.magic.services.technique_power_eval` |
 
 All views live in `src/web/admin/tuning/views.py` and are wrapped in `superuser_required`
 (defined there), which mirrors `game_setup_views.py`'s gate: `@staff_member_required` plus
@@ -156,6 +157,51 @@ persisted):
    scaling config exists — including a GM's live tuning edits — this module never
    overwrites it, so the preview tool can't silently reset the very tuning it's
    supposed to be previewing.
+
+### Techniques panel — technique combat-power league table (#3279)
+
+Answers "what does this technique contribute to combat power" in one currency: **expected
+damage-equivalent (DE) per cast** against a reference matchup, so attacks, buffs,
+mitigation, control, and healing are comparable on one axis (see ADR-0223 for the
+currency decision). The evaluator lives in `world.magic` (not the web layer) so it reuses
+live combat formulas and stays importable by future budget/simulation phases:
+
+- `world/magic/services/technique_power_eval.py` —
+  `evaluate_all_with_reference(EvalContext) -> (list[TechniquePowerReport], ReferenceFrame)`
+  (and the `evaluate_all` wrapper). Types in `world/magic/types/technique_power.py`.
+- **SL distribution:** rolls 1..100 enumerated against the context's
+  roller-points/target-difficulty matchup (same math as the Checks panel; local
+  re-implementation over `world.traits` models because `world` services must not import
+  `web` code). Every valuation is an expectation over those bands.
+- **Two power contexts per technique:** baseline (the technique's own `intensity`,
+  equal to `_derive_power(character=None)`) and a fully-matched-anchor amplification at
+  the context's thread level, computed by the SAME pure helpers the live covenant power
+  terms call (`blend_power_contribution` / `specialty_power_contribution` in
+  `services/power_terms.py`) — retuning `CovenantRoleBlendConfig` moves the panel.
+- **Valuators by payload family:** damage profiles through `compute_damage_budget` and
+  the `DamageSuccessLevelMultiplier` table; team-damage-lane buffs through the priced
+  percent path times reference DPR times expected duration; other modifier conditions as
+  the DE shift of a synthetic reference attack; DoT and stat debuffs sign-flipped; hard
+  control (HOLD/FEAR/DISTRACTION function tags) as enemy rounds denied times incoming
+  DPR; mitigation via `protective_magnitude` (flow-step parse of MODIFY_PAYLOAD triggers,
+  e.g. Defend's multiply-0.5); treatments as capped healing. Dispel is deliberately
+  unpriced; capability grants are valued 0 (no cast seam exists).
+- **Provenance on every valuation:** FORMULA / PARSED / ESTIMATE / UNPRICED_DISPEL /
+  UNPRICEABLE / INERT_PAYLOAD — the panel shows per-corpus provenance counts, and
+  UNPRICEABLE rows double as an authoring-gap worklist.
+- **Reference DPR is self-anchoring:** the median baseline attack DE of the corpus at the
+  chosen context (labeled "median-attack estimate"); no hand-maintained constant.
+
+Panel mechanics mirror the Simulation panel: a param form (level, thread level, matchup
+knobs, sort) POSTs a recompute cached 24h under an exact-param key with a
+`tuning-tech-power:last` pointer; `technique_analytics.py` adds an inner cache keyed on
+the analytics knobs only (excluding `sort`) so header-sort clicks never re-run the
+evaluator. The league table sorts by baseline DE, anchor DE, DE-per-anima, name, or
+level (whitelisted); each row has a `<details>` drill-down showing every valuation line
+(kind, label, value, provenance, arithmetic detail). Below the table: the zero/unpriced
+bucket and provenance summary. Weapon-scaled damage profiles are flagged
+(`weapon_scaled`), not weapon-augmented; execute ramps are flagged, not folded into the
+headline; windup techniques divide DE by `1 + windup_rounds`.
 
 ## Game Ops — `/admin/_ops/` (`admin_ops`)
 
