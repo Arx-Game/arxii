@@ -13,11 +13,10 @@ from __future__ import annotations
 
 from collections.abc import Callable, Sequence
 from dataclasses import dataclass
+from decimal import Decimal
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
-    from decimal import Decimal
-
     from world.character_sheets.models import CharacterSheet
     from world.magic.models import (
         AuraPowerConfig,
@@ -284,6 +283,22 @@ def get_covenant_role_blend_config() -> CovenantRoleBlendConfig:
     return config
 
 
+def blend_power_contribution(
+    thread_level: int, blend_weight: Decimal, multiplier_tenths: int
+) -> Decimal:
+    """Per-role blend arithmetic (#2529, extracted #3279): thread_level x
+    blend_weight x multiplier_tenths / 10.
+
+    Pure helper shared by the live ``covenant_role_blend_power_term`` provider
+    (summed over every engaged role, then int-truncated) and the technique
+    combat-power evaluator (``world.magic.services.technique_power_eval``),
+    which calls this with ``blend_weight=Decimal(1)`` — the "fully matched
+    anchor" case — to compute the amplified-power comparison. Never
+    duplicate this formula elsewhere; both callers must go through here.
+    """
+    return Decimal(thread_level) * blend_weight * multiplier_tenths / 10
+
+
 def covenant_role_blend_power_term(ctx: PowerTermContext) -> int:
     """Baseline blend boost for engaged covenant roles (#2529, Layer 1).
 
@@ -295,8 +310,6 @@ def covenant_role_blend_power_term(ctx: PowerTermContext) -> int:
     (#2536's presentation contract). PRIMARY-only (#2641): a secondary vow
     never contributes to the combat-identity blend — this is the chassis.
     """
-    from decimal import Decimal  # noqa: PLC0415
-
     from world.magic.services.threads import (  # noqa: PLC0415
         total_thread_level_across_all_kinds,
     )
@@ -319,7 +332,7 @@ def covenant_role_blend_power_term(ctx: PowerTermContext) -> int:
         weight = role.blend_weight_for(alignment)
         if not weight:
             continue
-        total += Decimal(total_threads) * weight * config.multiplier_tenths / 10
+        total += blend_power_contribution(total_threads, weight, config.multiplier_tenths)
     return int(total)
 
 
@@ -345,14 +358,27 @@ def _scale_secondary_contribution(secondary_total: Decimal) -> Decimal:
     .potency_tenths / 10`` (#2641) — a no-op (zero query) when the total is zero, so
     the common all-primary case costs nothing extra.
     """
-    from decimal import Decimal  # noqa: PLC0415
-
     if not secondary_total:
         return secondary_total
     from world.covenants.services import secondary_vow_config  # noqa: PLC0415
 
     potency_tenths = secondary_vow_config().potency_tenths
     return secondary_total * Decimal(potency_tenths) / 10
+
+
+def specialty_power_contribution(thread_level: int, multiplier_tenths: int) -> Decimal:
+    """Per-row specialty arithmetic (#2443, extracted #3279): thread_level x
+    multiplier_tenths / 10.
+
+    Pure helper shared by the live ``covenant_role_specialty_power_term``
+    provider (summed over every matching specialty row, secondary-scaled,
+    then int-truncated) and the technique combat-power evaluator
+    (``world.magic.services.technique_power_eval``), which calls this with
+    ``multiplier_tenths=10`` (x1.0, primary side only) for the amplified-power
+    comparison. Never duplicate this formula elsewhere; both callers must go
+    through here.
+    """
+    return Decimal(thread_level) * multiplier_tenths / 10
 
 
 def covenant_role_specialty_power_term(ctx: PowerTermContext) -> int:
@@ -376,8 +402,6 @@ def covenant_role_specialty_power_term(ctx: PowerTermContext) -> int:
     BEFORE being added to the primary-side sum and int-truncated — a secondary
     vow's specialty reward is real but always situational, never raw.
     """
-    from decimal import Decimal  # noqa: PLC0415
-
     from world.covenants.models import CovenantRoleTechniqueSpecialty  # noqa: PLC0415
     from world.magic.services.threads import (  # noqa: PLC0415
         total_thread_level_across_all_kinds,
@@ -406,7 +430,7 @@ def covenant_role_specialty_power_term(ctx: PowerTermContext) -> int:
     primary_total = Decimal(0)
     secondary_total = Decimal(0)
     for row in rows:
-        contribution = Decimal(total_threads) * row.multiplier_tenths / 10
+        contribution = specialty_power_contribution(total_threads, row.multiplier_tenths)
         if row.covenant_role_id in secondary_role_ids:
             secondary_total += contribution
         else:
