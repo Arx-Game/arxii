@@ -25,6 +25,12 @@ The living lore repository that reflects what each character knows — not a sta
   knowledge is the union across the account's characters, with a per-character
   `known_by` breakdown and a `?character=` scope filter (frontend selector on the
   codex page) replacing the old implicit first-character selection
+- **Perspective entries (2026-08-20, #3277, ADR-0222):** a `BeginningsCodexGrant` row
+  can carry `is_perspective=True`, marking the entry as the granting culture's own
+  biased take on its subject (at most one holder per entry). The holder surfaces as
+  `perspective_of` on entry list/detail payloads and renders as an "As told by"
+  attribution line on the frontend. Granting is viewer-only; species perspectives are
+  deferred pending a `SpeciesCodexGrant` table
 - **Frontend:** Codex pages, components, and queries in frontend/src/codex/. IC/OOC split navigation, breadcrumb display, character knowledge-scope selector with known-by badges
 - **Tests:** Model tests, visibility tests, view tests, container-hiding and knowledge-union tests
 
