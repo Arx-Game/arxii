@@ -34,6 +34,8 @@ from world.areas.filters import AreaFilter
 from world.areas.grid_services import exits_from_rooms
 from world.areas.models import Area
 from world.areas.serializers import (
+    MintBuilderCharacterRequestSerializer,
+    MintBuilderCharacterResultSerializer,
     WorldBuilderAreaManagerSerializer,
     WorldBuilderAreaSerializer,
     WorldBuilderRoomDetailSerializer,
@@ -284,6 +286,67 @@ def _authoring_catalogs() -> dict:
     }
 
 
+def _room_rows(profiles: list[RoomProfile]) -> list[dict]:
+    """The per-room payload dicts (#3283) — single source for the area
+    manager payload and the full-page room editor's one-room fetch."""
+    room_ids = [p.objectdb_id for p in profiles]
+    descriptions = {
+        row.object_id: row.permanent_description
+        for row in ObjectDisplayData.objects.filter(object_id__in=room_ids)
+    }
+    occupant_counts = _occupant_counts(room_ids)
+    stats_by_room = _stat_sidecars(profiles)
+    authoring = _authoring_sidecars(profiles)
+    clues_by_room, triggers_by_room, anchors_by_room = _clue_and_anchor_sidecars(room_ids)
+    return [
+        {
+            "id": p.objectdb_id,
+            "name": p.objectdb.db_key,
+            "description": descriptions.get(p.objectdb_id, ""),
+            "is_public": p.is_public,
+            "is_social_hub": p.is_social_hub,
+            "is_outdoor": p.is_outdoor,
+            "enclosure": p.enclosure,
+            "size_name": p.size.name if p.size_id else None,
+            "grid_x": p.grid_x,
+            "grid_y": p.grid_y,
+            "floor": p.floor,
+            "fixture_key": p.fixture_key,
+            "origin": p.origin,
+            "exported_at": p.exported_at,
+            "needs_prose": _needs_prose(descriptions.get(p.objectdb_id, "")),
+            "stats": stats_by_room.get(p.objectdb_id, []),
+            "area_id": p.area_id,
+            "size_units": p.size.units if p.size_id else None,
+            "default_blueprint": (p.default_blueprint.name if p.default_blueprint_id else None),
+            "places": authoring["places"].get(p.objectdb_id, []),
+            "feature": authoring["feature"].get(p.objectdb_id),
+            "functionaries": authoring["functionaries"].get(p.objectdb_id, []),
+            "ambient_counts": authoring["ambient_counts"].get(
+                p.objectdb_id, {"lines": 0, "emits": 0}
+            ),
+            "travel_hub": authoring["travel_hub"].get(p.objectdb_id),
+            "starting_bindings": authoring["starting_bindings"].get(p.objectdb_id, []),
+            "occupant_count": occupant_counts.get(p.objectdb_id, 0),
+            "clues": clues_by_room.get(p.objectdb_id, []),
+            "clue_triggers": triggers_by_room.get(p.objectdb_id, []),
+            "portal_anchors": anchors_by_room.get(p.objectdb_id, []),
+        }
+        for p in profiles
+    ]
+
+
+def _area_breadcrumb(area: Area | None) -> list[dict]:
+    """Ancestor chain, outermost first (#3283): World > City > Ward > ..."""
+    chain: list[dict] = []
+    node = area
+    while node is not None:
+        chain.append({"id": node.pk, "name": node.name, "level_display": node.get_level_display()})
+        node = node.parent
+    chain.reverse()
+    return chain
+
+
 def area_manager_payload(area: Area) -> dict:
     """Area + all rooms + exits for the world-builder/story-builder manager canvas.
 
@@ -299,14 +362,7 @@ def area_manager_payload(area: Area) -> dict:
         )
     )
     room_ids = [p.objectdb_id for p in profiles]
-    descriptions = {
-        row.object_id: row.permanent_description
-        for row in ObjectDisplayData.objects.filter(object_id__in=room_ids)
-    }
-    occupant_counts = _occupant_counts(room_ids)
-    stats_by_room = _stat_sidecars(profiles)
-    authoring = _authoring_sidecars(profiles)
-    clues_by_room, triggers_by_room, anchors_by_room = _clue_and_anchor_sidecars(room_ids)
+    rooms_data = _room_rows(profiles)
 
     exits = list(exits_from_rooms(set(room_ids)).select_related("db_destination"))
     destination_ids = {e.db_destination_id for e in exits if e.db_destination_id is not None}
@@ -319,42 +375,8 @@ def area_manager_payload(area: Area) -> dict:
     return {
         "area": area,
         "catalogs": _authoring_catalogs(),
-        "rooms": [
-            {
-                "id": p.objectdb_id,
-                "name": p.objectdb.db_key,
-                "description": descriptions.get(p.objectdb_id, ""),
-                "is_public": p.is_public,
-                "is_social_hub": p.is_social_hub,
-                "is_outdoor": p.is_outdoor,
-                "enclosure": p.enclosure,
-                "size_name": p.size.name if p.size_id else None,
-                "grid_x": p.grid_x,
-                "grid_y": p.grid_y,
-                "floor": p.floor,
-                "fixture_key": p.fixture_key,
-                "origin": p.origin,
-                "exported_at": p.exported_at,
-                "needs_prose": _needs_prose(descriptions.get(p.objectdb_id, "")),
-                "stats": stats_by_room.get(p.objectdb_id, []),
-                "area_id": p.area_id,
-                "size_units": p.size.units if p.size_id else None,
-                "default_blueprint": (p.default_blueprint.name if p.default_blueprint_id else None),
-                "places": authoring["places"].get(p.objectdb_id, []),
-                "feature": authoring["feature"].get(p.objectdb_id),
-                "functionaries": authoring["functionaries"].get(p.objectdb_id, []),
-                "ambient_counts": authoring["ambient_counts"].get(
-                    p.objectdb_id, {"lines": 0, "emits": 0}
-                ),
-                "travel_hub": authoring["travel_hub"].get(p.objectdb_id),
-                "starting_bindings": authoring["starting_bindings"].get(p.objectdb_id, []),
-                "occupant_count": occupant_counts.get(p.objectdb_id, 0),
-                "clues": clues_by_room.get(p.objectdb_id, []),
-                "clue_triggers": triggers_by_room.get(p.objectdb_id, []),
-                "portal_anchors": anchors_by_room.get(p.objectdb_id, []),
-            }
-            for p in profiles
-        ],
+        "rooms": rooms_data,
+        "breadcrumb": _area_breadcrumb(area),
         "exits": [
             {
                 "id": e.pk,
@@ -417,6 +439,36 @@ class WorldBuilderViewSet(viewsets.ReadOnlyModelViewSet):
             for p in hits
         ]
         return Response(WorldBuilderRoomHitSerializer(payload, many=True).data)
+
+    @extend_schema(
+        request=MintBuilderCharacterRequestSerializer,
+        responses={201: MintBuilderCharacterResultSerializer},
+    )
+    @action(detail=False, methods=["post"], url_path="mint-builder-character")
+    def mint_builder_character(self, request: Request) -> Response:
+        """POST /api/world-builder/areas/mint-builder-character/ (#3283).
+
+        Mints an OOC staff character (character + sheet + persona + NPC-shelf
+        roster entry + active tenure on the requesting account) so staff never
+        touch the CG wizard for a working builder character.
+        """
+        from world.roster.services.staff_characters import (  # noqa: PLC0415
+            StaffMintError,
+            mint_staff_character,
+        )
+
+        body = MintBuilderCharacterRequestSerializer(data=request.data)
+        body.is_valid(raise_exception=True)
+        try:
+            character = mint_staff_character(request.user, body.validated_data["name"])
+        except StaffMintError as exc:
+            return Response({"detail": exc.user_message}, status=400)
+        return Response(
+            MintBuilderCharacterResultSerializer(
+                {"character_id": character.pk, "name": character.db_key}
+            ).data,
+            status=201,
+        )
 
     @extend_schema(responses={200: WorldBuilderRoomDetailSerializer})
     @action(detail=False, methods=["get"], url_path="room-detail")
@@ -508,6 +560,9 @@ class WorldBuilderViewSet(viewsets.ReadOnlyModelViewSet):
         ]
         payload = {
             "id": profile.objectdb_id,
+            "room": _room_rows([profile])[0],
+            "catalogs": _authoring_catalogs(),
+            "breadcrumb": _area_breadcrumb(profile.area),
             "exits": exits,
             "comfort": comfort,
             "ambient_lines": ambient_lines,

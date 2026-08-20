@@ -21877,6 +21877,29 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
+  '/api/world-builder/areas/mint-builder-character/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /**
+     * @description POST /api/world-builder/areas/mint-builder-character/ (#3283).
+     *
+     *     Mints an OOC staff character (character + sheet + persona + NPC-shelf
+     *     roster entry + active tenure on the requesting account) so staff never
+     *     touch the CG wizard for a working builder character.
+     */
+    post: operations['world_builder_areas_mint_builder_character_create'];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   '/api/world-builder/areas/room-detail/': {
     parameters: {
       query?: never;
@@ -29077,6 +29100,15 @@ export interface components {
      * @enum {string}
      */
     MinRiskEnum: 'none' | 'low' | 'moderate' | 'high' | 'extreme';
+    /** @description POST body for the #3283 staff-character mint. */
+    MintBuilderCharacterRequestRequest: {
+      name: string;
+    };
+    /** @description Result of the #3283 staff-character mint. */
+    MintBuilderCharacterResult: {
+      character_id: number;
+      name: string;
+    };
     /** @description Staff-facing miracle catalog serializer (#2360). */
     Miracle: {
       readonly id: number;
@@ -39423,6 +39455,7 @@ export interface components {
     StoryAreaManager: {
       area: components['schemas']['WorldBuilderArea'];
       catalogs: components['schemas']['WorldBuilderCatalogs'];
+      breadcrumb: components['schemas']['WorldBuilderBreadcrumb'][];
       rooms: components['schemas']['StoryRoom'][];
       exits: components['schemas']['WorldBuilderExit'][];
     };
@@ -41835,8 +41868,15 @@ export interface components {
     WorldBuilderAreaManager: {
       area: components['schemas']['WorldBuilderArea'];
       catalogs: components['schemas']['WorldBuilderCatalogs'];
+      breadcrumb: components['schemas']['WorldBuilderBreadcrumb'][];
       rooms: components['schemas']['WorldBuilderRoom'][];
       exits: components['schemas']['WorldBuilderExit'][];
+    };
+    /** @description One ancestor link in the area hierarchy chain (#3283). */
+    WorldBuilderBreadcrumb: {
+      id: number;
+      name: string;
+      level_display: string;
     };
     /** @description Panel pick-lists (#3269). */
     WorldBuilderCatalogs: {
@@ -41962,6 +42002,9 @@ export interface components {
     /** @description Selection-time room detail (#3269): exit profiles + comfort breakdown. */
     WorldBuilderRoomDetail: {
       id: number;
+      room: components['schemas']['WorldBuilderRoom'];
+      catalogs: components['schemas']['WorldBuilderCatalogs'];
+      breadcrumb: components['schemas']['WorldBuilderBreadcrumb'][];
       exits: components['schemas']['WorldBuilderExitDetail'][];
       comfort: components['schemas']['WorldBuilderComfort'];
       ambient_lines: components['schemas']['WorldBuilderAmbientLine'][];
@@ -72615,6 +72658,29 @@ export interface operations {
         };
         content: {
           'application/json': components['schemas']['WorldBuilderAreaManager'];
+        };
+      };
+    };
+  };
+  world_builder_areas_mint_builder_character_create: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['MintBuilderCharacterRequestRequest'];
+      };
+    };
+    responses: {
+      201: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['MintBuilderCharacterResult'];
         };
       };
     };

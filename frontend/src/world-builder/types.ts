@@ -55,8 +55,17 @@ export type WorldBuilderActionKey =
   | 'staff_remove_portal_anchor';
 
 /** Selection-time room detail (#3269) — mirrors WorldBuilderRoomDetailSerializer. */
+export interface WorldBuilderBreadcrumbEntry {
+  id: number;
+  name: string;
+  level_display: string;
+}
+
 export interface WorldBuilderRoomDetail {
   id: number;
+  room: WorldBuilderRoom;
+  catalogs: WorldBuilderAreaManager['catalogs'];
+  breadcrumb: WorldBuilderBreadcrumbEntry[];
   exits: {
     id: number;
     name: string;

@@ -87,6 +87,11 @@ const WorldBuilderPage = lazy(() =>
     default: m.WorldBuilderPage,
   }))
 );
+const RoomEditorPage = lazy(() =>
+  import('@/world-builder/pages/RoomEditorPage').then((m) => ({
+    default: m.RoomEditorPage,
+  }))
+);
 const StoryBuilderPage = lazy(() =>
   import('@/story-builder/pages/StoryBuilderPage').then((m) => ({
     default: m.StoryBuilderPage,
@@ -569,6 +574,16 @@ function App() {
               <StaffRoute>
                 <Suspense fallback={<Skeleton className="h-64 w-full" />}>
                   <WorldBuilderPage />
+                </Suspense>
+              </StaffRoute>
+            }
+          />
+          <Route
+            path="/staff/world-builder/rooms/:roomId"
+            element={
+              <StaffRoute>
+                <Suspense fallback={<Skeleton className="h-64 w-full" />}>
+                  <RoomEditorPage />
                 </Suspense>
               </StaffRoute>
             }
