@@ -21,6 +21,7 @@ import { useEffect, useMemo, useState } from 'react';
 
 import {
   useBeginnings,
+  useBeginningsPerspectives,
   useCGExplanations,
   useCGPointBudget,
   useGenders,
@@ -30,6 +31,7 @@ import {
 import type { Beginnings, CharacterDraft, GenderOption, Species } from '../types';
 import { Stage } from '../types';
 import { CGPointsWidget } from './CGPointsWidget';
+import { PerspectivesPanel } from './PerspectivesPanel';
 import { SpeciesCard } from './SpeciesCard';
 import { getGradientColors } from './StartingAreaCard';
 import { StatBonusBadges } from './StatBonusBadges';
@@ -494,6 +496,7 @@ function BeginningsDetailPanel({
   isSelected: boolean;
 }) {
   const [color1, color2] = getGradientColors(beginnings.name);
+  const { data: perspectives } = useBeginningsPerspectives(beginnings.id);
 
   return (
     <AnimatePresence mode="wait">
@@ -539,6 +542,7 @@ function BeginningsDetailPanel({
                 This beginning is not currently accessible to your account.
               </p>
             )}
+            <PerspectivesPanel perspectives={perspectives} />
           </CardContent>
         </Card>
       </motion.div>
