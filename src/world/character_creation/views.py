@@ -10,6 +10,7 @@ if TYPE_CHECKING:
     from evennia.accounts.models import AccountDB
 
 from django.db.models import Case, IntegerField, Prefetch, QuerySet, Value, When
+from django.http import Http404
 from django.shortcuts import get_object_or_404
 from django_filters.rest_framework import DjangoFilterBackend
 from drf_spectacular.utils import extend_schema
@@ -91,7 +92,7 @@ from world.character_creation.services import (
 )
 from world.character_sheets.models import Gender, Pronouns
 from world.classes.models import Path, PathAspect, PathStage
-from world.codex.models import BeginningsCodexGrant, PathCodexGrant
+from world.codex.models import BeginningsCodexGrant, PathCodexGrant, TraditionCodexGrant
 from world.forms.models import FormTrait, FormTraitOption, SpeciesFormTrait
 from world.forms.services import get_cg_form_options
 from world.magic.exceptions import GiftResonanceUnresolvable
@@ -389,6 +390,27 @@ class TraditionViewSet(viewsets.ReadOnlyModelViewSet):
             else {}
         )
         return context
+
+    @action(detail=True, methods=[HTTPMethod.GET])
+    def perspectives(self, request: Request, pk: str | None = None) -> Response:
+        """This tradition's perspective entries, ungated for the CG shop window (ADR-0224).
+
+        Resolved directly: get_queryset is beginning_id-scoped and would 404
+        every detail route.
+        """
+        try:
+            tradition = Tradition.objects.get(pk=pk, is_active=True)
+        except (Tradition.DoesNotExist, ValueError):
+            raise Http404 from None
+        entries = [
+            grant.entry
+            for grant in TraditionCodexGrant.objects.filter(
+                tradition=tradition, is_perspective=True
+            )
+            .select_related("entry__subject")
+            .order_by("entry__subject__name", "entry__display_order")
+        ]
+        return Response(PerspectiveEntrySerializer(entries, many=True).data)
 
 
 class CGGiftOptionViewSet(viewsets.ReadOnlyModelViewSet):

@@ -61,3 +61,51 @@ class BeginningsPerspectivesEndpointTests(TestCase):
         """The carve-out must not widen codex visibility (regression pin)."""
         response = self.client.get(f"/api/codex/entries/{self.opinion.id}/")
         assert response.status_code == 404
+
+
+class TraditionPerspectivesEndpointTests(TestCase):
+    @classmethod
+    def setUpTestData(cls):
+        from world.codex.factories import (
+            CodexEntryFactory,
+            CodexSubjectFactory,
+            TraditionCodexGrantFactory,
+        )
+        from world.magic.factories import TraditionFactory
+
+        cls.account = AccountFactory()
+        cls.tradition = TraditionFactory(is_active=True)
+        subject_a = CodexSubjectFactory(name="A Silent Choir")
+        subject_b = CodexSubjectFactory(name="B Wandering Vow")
+        cls.opinion_a = CodexEntryFactory(subject=subject_a, is_public=False)
+        cls.opinion_b = CodexEntryFactory(subject=subject_b, is_public=False)
+        # Grants created out of subject-name order, to pin the order_by clause.
+        TraditionCodexGrantFactory(
+            tradition=cls.tradition, entry=cls.opinion_b, is_perspective=True
+        )
+        TraditionCodexGrantFactory(
+            tradition=cls.tradition, entry=cls.opinion_a, is_perspective=True
+        )
+
+    def setUp(self):
+        self.client = APIClient()
+        self.client.force_authenticate(user=self.account)
+
+    def test_returns_flagged_grants_without_beginning_id_param(self):
+        response = self.client.get(
+            f"/api/character-creation/traditions/{self.tradition.id}/perspectives/"
+        )
+        assert response.status_code == 200
+        assert [row["entry_id"] for row in response.json()] == [
+            self.opinion_a.id,
+            self.opinion_b.id,
+        ]
+
+    def test_inactive_tradition_404s(self):
+        from world.magic.factories import TraditionFactory
+
+        inactive = TraditionFactory(is_active=False)
+        response = self.client.get(
+            f"/api/character-creation/traditions/{inactive.id}/perspectives/"
+        )
+        assert response.status_code == 404
