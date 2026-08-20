@@ -13,7 +13,7 @@ and prose nobody can contextualize with entries must not become the public
 face of a topic (nor leak the existence of an all-secret branch).
 """
 
-from django.db.models import Count, Exists, OuterRef, Q
+from django.db.models import Count, Exists, OuterRef, Q, Subquery
 from django_filters.rest_framework import DjangoFilterBackend
 from rest_framework import viewsets
 from rest_framework.decorators import action
@@ -22,6 +22,7 @@ from rest_framework.response import Response
 
 from world.codex.filters import CodexEntryFilter
 from world.codex.models import (
+    BeginningsCodexGrant,
     CharacterCodexKnowledge,
     CodexCategory,
     CodexEntry,
@@ -271,11 +272,18 @@ class CodexEntryViewSet(CodexVisibilityMixin, viewsets.ReadOnlyModelViewSet):
 
     def get_queryset(self):
         """Return only entries visible to the selected characters."""
-        return CodexEntry.objects.select_related(
-            "subject",
-            "subject__category",
-            "subject__breadcrumb_cache",
-        ).filter(id__in=self._visible_entry_ids())
+        perspective_holder = BeginningsCodexGrant.objects.filter(
+            entry=OuterRef("pk"), is_perspective=True
+        ).values("beginnings__name")[:1]
+        return (
+            CodexEntry.objects.select_related(
+                "subject",
+                "subject__category",
+                "subject__breadcrumb_cache",
+            )
+            .filter(id__in=self._visible_entry_ids())
+            .annotate(perspective_of=Subquery(perspective_holder))
+        )
 
     def get_serializer_class(self):
         if self.action == "retrieve":

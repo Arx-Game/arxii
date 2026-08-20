@@ -106,6 +106,15 @@ class EntryKnowledgeMixin(serializers.Serializer):
     knowledge_status = serializers.SerializerMethodField()
     research_progress = serializers.SerializerMethodField()
     known_by = serializers.SerializerMethodField()
+    perspective_of = serializers.SerializerMethodField()
+
+    def get_perspective_of(self, obj: CodexEntry) -> str | None:
+        """Name of the culture whose take this entry is; None for canon entries.
+
+        Reads the queryset annotation; falls back to None where a caller
+        serializes without it (e.g. featured lore).
+        """
+        return getattr(obj, "perspective_of", None)  # noqa: GETATTR_LITERAL - may be unannotated
 
     def _entry_knowledge(self, obj: CodexEntry) -> list[CharacterKnowledge]:
         return self.context.get("knowledge_by_entry", {}).get(obj.id, [])
@@ -156,6 +165,7 @@ class CodexEntryListSerializer(EntryKnowledgeMixin, serializers.ModelSerializer)
             "display_order",
             "knowledge_status",
             "known_by",
+            "perspective_of",
             "art_url",
         ]
 
@@ -202,6 +212,7 @@ class CodexEntryDetailSerializer(EntryKnowledgeMixin, serializers.ModelSerialize
             "knowledge_status",
             "research_progress",
             "known_by",
+            "perspective_of",
             "art_url",
         ]
 
