@@ -79,6 +79,9 @@ export function EntryDetail({ entry, onNavigateBreadcrumb }: EntryDetailProps) {
             </div>
           </div>
         )}
+        {entry.perspective_of && (
+          <p className="text-sm italic text-muted-foreground">As told by {entry.perspective_of}</p>
+        )}
         {entry.lore_content || entry.mechanics_content ? (
           <div className="space-y-3">
             {entry.lore_content && (

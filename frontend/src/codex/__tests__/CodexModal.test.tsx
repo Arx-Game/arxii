@@ -11,6 +11,7 @@ import userEvent from '@testing-library/user-event';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { MemoryRouter } from 'react-router-dom';
 import { CodexModal } from '../components/CodexModal';
+import { EntryDetail } from '../components/EntryDetail';
 import type { CodexEntryDetail } from '../types';
 
 // Mock the API module
@@ -41,7 +42,8 @@ function makeEntry(
   name: string,
   loreContent: string,
   links: CodexEntryDetail['lore_links'],
-  artUrl: string | null = null
+  artUrl: string | null = null,
+  perspectiveOf: string | null = null
 ): CodexEntryDetail {
   return {
     id,
@@ -66,6 +68,7 @@ function makeEntry(
     learn_threshold: 10,
     research_progress: null,
     art_url: artUrl,
+    perspective_of: perspectiveOf,
   };
 }
 
@@ -193,5 +196,25 @@ describe('CodexModal navigation', () => {
     });
 
     expect(screen.queryByRole('img')).not.toBeInTheDocument();
+  });
+
+  it('shows the attribution line when perspective_of is set', () => {
+    const entry = makeEntry(3, 'The Cleansing', 'A rite of purification.', [], null, 'The Blessed');
+
+    render(<EntryDetail entry={entry} onNavigateBreadcrumb={vi.fn()} />, {
+      wrapper: createWrapper(),
+    });
+
+    expect(screen.getByText('As told by The Blessed')).toBeInTheDocument();
+  });
+
+  it('hides the attribution line when perspective_of is null', () => {
+    const entry = makeEntry(4, 'The Reckoning', 'A canon entry.', [], null, null);
+
+    render(<EntryDetail entry={entry} onNavigateBreadcrumb={vi.fn()} />, {
+      wrapper: createWrapper(),
+    });
+
+    expect(screen.queryByText('As told by', { exact: false })).not.toBeInTheDocument();
   });
 });
