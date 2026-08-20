@@ -94,6 +94,11 @@ export function CodexModal({ entryId, open, onOpenChange }: CodexModalProps) {
                 className="mb-2 h-40 w-full rounded-md object-cover"
               />
             )}
+            {entry.perspective_of && (
+              <p className="text-sm italic text-muted-foreground">
+                As told by {entry.perspective_of}
+              </p>
+            )}
             <div className="space-y-3">
               <p className="text-sm text-muted-foreground">{entry.summary}</p>
               {entry.lore_content && (

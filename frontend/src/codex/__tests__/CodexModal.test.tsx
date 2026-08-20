@@ -217,4 +217,36 @@ describe('CodexModal navigation', () => {
 
     expect(screen.queryByText('As told by', { exact: false })).not.toBeInTheDocument();
   });
+
+  it('CodexModal shows the attribution line when perspective_of is set', async () => {
+    const entry = makeEntry(5, 'The Vigil', 'A watch kept in silence.', [], null, 'les Ouwoux');
+
+    vi.mocked(api.getEntry).mockResolvedValue(entry);
+
+    render(<CodexModal entryId={5} open={true} onOpenChange={vi.fn()} />, {
+      wrapper: createWrapper(),
+    });
+
+    await waitFor(() => {
+      expect(screen.getByText('The Vigil')).toBeInTheDocument();
+    });
+
+    expect(screen.getByText('As told by les Ouwoux')).toBeInTheDocument();
+  });
+
+  it('CodexModal hides the attribution line when perspective_of is null', async () => {
+    const entry = makeEntry(6, 'The Founding', 'A canon entry.', [], null, null);
+
+    vi.mocked(api.getEntry).mockResolvedValue(entry);
+
+    render(<CodexModal entryId={6} open={true} onOpenChange={vi.fn()} />, {
+      wrapper: createWrapper(),
+    });
+
+    await waitFor(() => {
+      expect(screen.getByText('The Founding')).toBeInTheDocument();
+    });
+
+    expect(screen.queryByText('As told by', { exact: false })).not.toBeInTheDocument();
+  });
 });
