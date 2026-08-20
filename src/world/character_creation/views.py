@@ -66,6 +66,7 @@ from world.character_creation.serializers import (
     GenderSerializer,
     HouseClaimStatusSerializer,
     PathSerializer,
+    PerspectiveEntrySerializer,
     PronounsSerializer,
     SpeciesSerializer,
     StartingAreaSerializer,
@@ -178,6 +179,20 @@ class BeginningsViewSet(viewsets.ReadOnlyModelViewSet):
                 queryset = queryset.filter(trust_required=0)
 
         return queryset
+
+    @action(detail=True, methods=[HTTPMethod.GET])
+    def perspectives(self, request: Request, pk: int | None = None) -> Response:
+        """This beginning's perspective entries, ungated for the CG shop window (ADR-0224)."""
+        beginnings = self.get_object()
+        entries = [
+            grant.entry
+            for grant in BeginningsCodexGrant.objects.filter(
+                beginnings=beginnings, is_perspective=True
+            )
+            .select_related("entry__subject")
+            .order_by("entry__subject__name", "entry__display_order")
+        ]
+        return Response(PerspectiveEntrySerializer(entries, many=True).data)
 
 
 class SpeciesViewSet(viewsets.ReadOnlyModelViewSet):

@@ -49,6 +49,20 @@ from world.worship.models import WorshippedBeing
 from world.worship.serializers import WorshippedBeingRefSerializer
 
 
+class PerspectiveEntrySerializer(serializers.Serializer):
+    """Shop-window payload for a holder's perspective entries (#3281, ADR-0224).
+
+    Serves CodexEntry rows ungated by codex knowledge: the CG wizard shows a
+    culture's own voice while the player chooses. Read-only by construction.
+    """
+
+    entry_id = serializers.IntegerField(source="id")
+    name = serializers.CharField()
+    summary = serializers.CharField()
+    lore_content = serializers.CharField()
+    subject_name = serializers.CharField(source="subject.name")
+
+
 class BeginningsSerializer(serializers.ModelSerializer):
     """Serializer for Beginnings options."""
 
