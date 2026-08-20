@@ -35726,6 +35726,32 @@ paths:
               schema:
                 $ref: '#/components/schemas/WorldBuilderAreaManager'
           description: ''
+  /api/world-builder/areas/mint-builder-character/:
+    post:
+      operationId: world_builder_areas_mint_builder_character_create
+      description: |-
+        POST /api/world-builder/areas/mint-builder-character/ (#3283).
+
+        Mints an OOC staff character (character + sheet + persona + NPC-shelf
+        roster entry + active tenure on the requesting account) so staff never
+        touch the CG wizard for a working builder character.
+      tags:
+      - world-builder
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/MintBuilderCharacterRequestRequest'
+        required: true
+      security:
+      - cookieAuth: []
+      responses:
+        '201':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MintBuilderCharacterResult'
+          description: ''
   /api/world-builder/areas/room-detail/:
     get:
       operationId: world_builder_areas_room_detail_retrieve
@@ -51068,6 +51094,27 @@ components:
         * `moderate` - Moderate
         * `high` - High
         * `extreme` - Extreme
+    MintBuilderCharacterRequestRequest:
+      type: object
+      description: 'POST body for the #3283 staff-character mint.'
+      properties:
+        name:
+          type: string
+          minLength: 1
+          maxLength: 80
+      required:
+      - name
+    MintBuilderCharacterResult:
+      type: object
+      description: 'Result of the #3283 staff-character mint.'
+      properties:
+        character_id:
+          type: integer
+        name:
+          type: string
+      required:
+      - character_id
+      - name
     Miracle:
       type: object
       description: Staff-facing miracle catalog serializer (#2360).
@@ -70057,6 +70104,10 @@ components:
           $ref: '#/components/schemas/WorldBuilderArea'
         catalogs:
           $ref: '#/components/schemas/WorldBuilderCatalogs'
+        breadcrumb:
+          type: array
+          items:
+            $ref: '#/components/schemas/WorldBuilderBreadcrumb'
         rooms:
           type: array
           items:
@@ -70067,6 +70118,7 @@ components:
             $ref: '#/components/schemas/WorldBuilderExit'
       required:
       - area
+      - breadcrumb
       - catalogs
       - exits
       - rooms
@@ -74867,6 +74919,10 @@ components:
           $ref: '#/components/schemas/WorldBuilderArea'
         catalogs:
           $ref: '#/components/schemas/WorldBuilderCatalogs'
+        breadcrumb:
+          type: array
+          items:
+            $ref: '#/components/schemas/WorldBuilderBreadcrumb'
         rooms:
           type: array
           items:
@@ -74877,9 +74933,24 @@ components:
             $ref: '#/components/schemas/WorldBuilderExit'
       required:
       - area
+      - breadcrumb
       - catalogs
       - exits
       - rooms
+    WorldBuilderBreadcrumb:
+      type: object
+      description: One ancestor link in the area hierarchy chain (#3283).
+      properties:
+        id:
+          type: integer
+        name:
+          type: string
+        level_display:
+          type: string
+      required:
+      - id
+      - level_display
+      - name
     WorldBuilderCatalogs:
       type: object
       description: Panel pick-lists (#3269).
@@ -75241,6 +75312,14 @@ components:
       properties:
         id:
           type: integer
+        room:
+          $ref: '#/components/schemas/WorldBuilderRoom'
+        catalogs:
+          $ref: '#/components/schemas/WorldBuilderCatalogs'
+        breadcrumb:
+          type: array
+          items:
+            $ref: '#/components/schemas/WorldBuilderBreadcrumb'
         exits:
           type: array
           items:
@@ -75258,9 +75337,12 @@ components:
       required:
       - ambient_emits
       - ambient_lines
+      - breadcrumb
+      - catalogs
       - comfort
       - exits
       - id
+      - room
     WorldBuilderRoomFeature:
       type: object
       description: The room's active feature, if any (#3269).

@@ -40,6 +40,8 @@ import { Textarea } from '@/components/ui/textarea';
 
 import { ROOM_ENCLOSURES } from '../types';
 import type { WorldBuilderAreaManager, WorldBuilderExit, WorldBuilderRoom } from '../types';
+import { Link } from 'react-router-dom';
+
 import { RoomAuthoringSections } from './RoomAuthoringSections';
 import { PlaceClueDialog } from './PlaceClueDialog';
 import { PlacePortalAnchorDialog } from './PlacePortalAnchorDialog';
@@ -356,6 +358,12 @@ export function RoomDetailPanel({
             </AlertDialogContent>
           </AlertDialog>
         </div>
+      )}
+
+      {!isStory && (
+        <Button asChild size="sm" variant="outline" className="self-start">
+          <Link to={`/staff/world-builder/rooms/${room.id}`}>Open full editor</Link>
+        </Button>
       )}
 
       {!isStory && catalogs && (

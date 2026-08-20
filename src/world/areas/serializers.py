@@ -247,14 +247,25 @@ class WorldBuilderCatalogsSerializer(serializers.Serializer):
     beginnings = WorldBuilderIdNameSerializer(many=True)
 
 
-class WorldBuilderRoomDetailSerializer(serializers.Serializer):
-    """Selection-time room detail (#3269): exit profiles + comfort breakdown."""
+class MintBuilderCharacterRequestSerializer(serializers.Serializer):
+    """POST body for the #3283 staff-character mint."""
+
+    name = serializers.CharField(max_length=80)
+
+
+class MintBuilderCharacterResultSerializer(serializers.Serializer):
+    """Result of the #3283 staff-character mint."""
+
+    character_id = serializers.IntegerField()
+    name = serializers.CharField()
+
+
+class WorldBuilderBreadcrumbSerializer(serializers.Serializer):
+    """One ancestor link in the area hierarchy chain (#3283)."""
 
     id = serializers.IntegerField()
-    exits = WorldBuilderExitDetailSerializer(many=True)
-    comfort = WorldBuilderComfortSerializer()
-    ambient_lines = WorldBuilderAmbientLineSerializer(many=True)
-    ambient_emits = WorldBuilderAmbientEmitSerializer(many=True)
+    name = serializers.CharField()
+    level_display = serializers.CharField()
 
 
 class WorldBuilderRoomSerializer(serializers.Serializer):
@@ -312,10 +323,24 @@ class WorldBuilderExitSerializer(serializers.Serializer):
     to_area_id = serializers.IntegerField(allow_null=True)
 
 
+class WorldBuilderRoomDetailSerializer(serializers.Serializer):
+    """Selection-time room detail (#3269): exit profiles + comfort breakdown."""
+
+    id = serializers.IntegerField()
+    room = WorldBuilderRoomSerializer()
+    catalogs = WorldBuilderCatalogsSerializer()
+    breadcrumb = WorldBuilderBreadcrumbSerializer(many=True)
+    exits = WorldBuilderExitDetailSerializer(many=True)
+    comfort = WorldBuilderComfortSerializer()
+    ambient_lines = WorldBuilderAmbientLineSerializer(many=True)
+    ambient_emits = WorldBuilderAmbientEmitSerializer(many=True)
+
+
 class WorldBuilderAreaManagerSerializer(serializers.Serializer):
     """The full staff-only area-manager payload: area header + rooms + exits."""
 
     area = WorldBuilderAreaSerializer()
     catalogs = WorldBuilderCatalogsSerializer()
+    breadcrumb = WorldBuilderBreadcrumbSerializer(many=True)
     rooms = WorldBuilderRoomSerializer(many=True)
     exits = WorldBuilderExitSerializer(many=True)

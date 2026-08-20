@@ -3,6 +3,25 @@
 **Status:** in-progress
 **Depends on:** Areas, Items, Combat, Stories (for GM tools)
 
+## Built (2026-08-20, #3283 — field feedback: staff mint, breadcrumbs, room editor page)
+
+First real authoring session on the deployed builder produced three fixes.
+**Staff character mint**: `POST /api/world-builder/areas/mint-builder-character/`
+(`world.roster.services.staff_characters.mint_staff_character`) creates the
+whole working set — character + sheet + PRIMARY persona + NPC-shelf roster
+entry + active tenure — in one transaction, skipping the CG wizard entirely;
+the world-builder actor banner grew the create form, and actor resolution
+falls back to the account's first owned character (dispatch checks ownership,
+not puppeting), so the minted character works immediately. Player-GM OOC
+characters ride the same service gated on GMProfile later; sheet free-editing
+stays on the admin. **Hierarchy at a glance**: the manager payload and
+room-detail endpoint carry an `ancestors` breadcrumb chain, rendered on the
+canvas header and the room editor. **Full-page room editor**:
+`/staff/world-builder/rooms/:id` gives one room the full width (identity +
+every authoring section in responsive columns), deep-linkable via the
+self-sufficient room-detail payload; the canvas side panel keeps an "Open
+full editor" link for quick jumps.
+
 ## Built (2026-08-18, #3269 Phases B+C — full room authoring + area metadata)
 
 Rooms are no longer hollow: the staff panel gained sections for ambient stats

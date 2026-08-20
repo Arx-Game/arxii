@@ -22,11 +22,12 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import type { GhostCell } from '@/map-canvas/ghosts';
-import { useMyRosterEntriesQuery } from '@/roster/queries';
-import { useAppSelector } from '@/store/hooks';
+import { useQueryClient } from '@tanstack/react-query';
 import { toast } from 'sonner';
 
 import { AreaArrangeCanvas } from '../components/AreaArrangeCanvas';
+import { useWorldBuilderActor } from '../useWorldBuilderActor';
+import { mintBuilderCharacter } from '../api';
 import { AreaTreePanel } from '../components/AreaTreePanel';
 import { EditAreaDialog } from '../components/EditAreaDialog';
 import { CreateAreaDialog } from '../components/CreateAreaDialog';
@@ -44,12 +45,7 @@ import {
 import type { WorldBuilderActionKey } from '../types';
 
 export function WorldBuilderPage() {
-  const activeCharacterName = useAppSelector((state) => state.game.active);
-  const { data: myRosterEntries = [] } = useMyRosterEntriesQuery();
-  const characterId = useMemo(
-    () => myRosterEntries.find((entry) => entry.name === activeCharacterName)?.character_id ?? null,
-    [myRosterEntries, activeCharacterName]
-  );
+  const characterId = useWorldBuilderActor();
 
   const [selectedAreaId, setSelectedAreaId] = useState<number | null>(null);
   const [selectedRoomId, setSelectedRoomId] = useState<number | null>(null);
@@ -63,6 +59,9 @@ export function WorldBuilderPage() {
   // #3269 place-mode: an unplaced room awaiting a ghost-cell click.
   const [placeModeRoomId, setPlaceModeRoomId] = useState<number | null>(null);
   const [searchTerm, setSearchTerm] = useState('');
+  const [mintName, setMintName] = useState('');
+  const [minting, setMinting] = useState(false);
+  const queryClient = useQueryClient();
   const [arrangeMode, setArrangeMode] = useState(false);
   const [editAreaOpen, setEditAreaOpen] = useState(false);
   const { data: childAreasPage } = useWorldBuilderAreasQuery(
@@ -119,6 +118,15 @@ export function WorldBuilderPage() {
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-2">
           <h1 className="text-lg font-semibold">World Builder</h1>
+          {manager && (manager.breadcrumb?.length ?? 0) > 1 && (
+            <span className="text-xs text-muted-foreground" data-testid="area-breadcrumb">
+              {manager.breadcrumb
+                .slice(0, -1)
+                .map((crumb) => crumb.name)
+                .join(' › ')}{' '}
+              ›
+            </span>
+          )}
           {manager && <PromoteAreaButton area={manager.area} runAction={runAction} />}
           {manager && (
             <Button size="sm" variant="outline" onClick={() => setEditAreaOpen(true)}>
@@ -183,11 +191,40 @@ export function WorldBuilderPage() {
       </div>
       {characterId == null && (
         <div
-          className="rounded border border-amber-500/50 bg-amber-500/10 px-3 py-2 text-sm"
+          className="flex items-center gap-2 rounded border border-amber-500/50 bg-amber-500/10 px-3 py-2 text-sm"
           data-testid="world-builder-actor-banner"
         >
-          Select a character to build as - builder actions dispatch through your played character,
-          so every control is inert until you are playing one.
+          <span className="flex-1">
+            You need a character to build as. Staff can mint an OOC builder character here — no
+            character creation required.
+          </span>
+          <Input
+            className="h-8 w-48"
+            value={mintName}
+            onChange={(event) => setMintName(event.target.value)}
+            placeholder="Builder name"
+            data-testid="mint-name-input"
+          />
+          <Button
+            size="sm"
+            disabled={!mintName.trim() || minting}
+            data-testid="mint-submit"
+            onClick={async () => {
+              setMinting(true);
+              try {
+                const made = await mintBuilderCharacter(mintName.trim());
+                toast.success(`${made.name} created - you can build as them immediately.`);
+                setMintName('');
+                await queryClient.invalidateQueries({ queryKey: ['my-roster-entries'] });
+              } catch (error) {
+                toast.error(error instanceof Error ? error.message : 'Mint failed.');
+              } finally {
+                setMinting(false);
+              }
+            }}
+          >
+            Create staff character
+          </Button>
         </div>
       )}
       {placeModeRoomId != null && (
