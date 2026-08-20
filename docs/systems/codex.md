@@ -45,7 +45,7 @@ from world.codex.constants import CodexKnowledgeStatus
 
 | Model | Purpose | Key Fields |
 |-------|---------|------------|
-| `BeginningsCodexGrant` | Codex entries granted by a Beginnings choice | `beginnings`, `entry` |
+| `BeginningsCodexGrant` | Codex entries granted by a Beginnings choice | `beginnings`, `entry`, `is_perspective` |
 | `PathCodexGrant` | Codex entries granted by a Path choice | `path`, `entry` |
 | `DistinctionCodexGrant` | Codex entries granted by a Distinction | `distinction`, `entry` |
 | `TraditionCodexGrant` | Codex entries granted by a Tradition | `tradition`, `entry` |
@@ -54,6 +54,28 @@ Species are the exception: there is no `SpeciesCodexGrant` table. `Species.codex
 is a plain nullable FK on the species row (one entry per species, not many), and
 `_finalize_species_codex` walks `Species.parent` so a subspecies character receives
 its own entry *and* every ancestor's — see `docs/systems/species.md`.
+
+---
+
+## Perspective entries (#3277)
+
+A `BeginningsCodexGrant` row with `is_perspective=True` marks the entry as the
+granting culture's own take on its subject - a canon-accurate record of a biased
+in-world voice, not canon-neutral knowledge the culture happens to teach. At most
+one grant row per entry may claim it, enforced by the partial unique constraint
+`one_perspective_holder_per_entry` (`condition=Q(is_perspective=True)` on `entry`).
+
+The holder surfaces as `perspective_of` on the entry list and detail payloads: a
+`Subquery` annotation in `CodexEntryViewSet.get_queryset` resolves the perspective
+holder's `beginnings__name`, and `EntryKnowledgeMixin.get_perspective_of` (shared by
+both entry serializers) reads the annotation. The frontend renders it as an "As told
+by {perspective_of}" attribution line in both `EntryDetail.tsx` and `CodexModal.tsx`.
+
+Granting is viewer-only: creating the flagged grant row does not itself teach anyone
+anything, so the viewed culture's own characters discover other cultures' takes on
+them the same way they discover any other codex entry, in play. Species perspectives
+are deferred - there is no `SpeciesCodexGrant` table for the flag to live on (see
+above), so a species-level perspective would need that table to exist first.
 
 ---
 

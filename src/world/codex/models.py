@@ -532,7 +532,13 @@ class CodexTeachingOffer(VisibilityMixin, SharedMemoryModel):
 
 
 class BeginningsCodexGrant(NaturalKeyMixin, SharedMemoryModel):
-    """Codex entries granted by a Beginnings choice."""
+    """Codex entries granted by a Beginnings choice.
+
+    A row with ``is_perspective=True`` additionally marks the entry as this
+    culture's own take on its subject (attribution surfaces as
+    ``perspective_of`` on the entry API); at most one row per entry may claim
+    it (#3277).
+    """
 
     beginnings = models.ForeignKey(
         "arxii.Beginnings",
@@ -544,6 +550,12 @@ class BeginningsCodexGrant(NaturalKeyMixin, SharedMemoryModel):
         on_delete=models.CASCADE,
         related_name="beginnings_grants",
     )
+    is_perspective = models.BooleanField(
+        default=False,
+        help_text="This entry is the granting culture's own take on its subject, "
+        "written in that culture's voice, rather than canon-neutral knowledge "
+        "it happens to teach (#3277).",
+    )
 
     objects = NaturalKeyManager()
 
@@ -553,6 +565,13 @@ class BeginningsCodexGrant(NaturalKeyMixin, SharedMemoryModel):
 
     class Meta:
         unique_together = ["beginnings", "entry"]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["entry"],
+                condition=models.Q(is_perspective=True),
+                name="one_perspective_holder_per_entry",
+            ),
+        ]
         verbose_name = "Beginnings Codex Grant"
         verbose_name_plural = "Beginnings Codex Grants"
 

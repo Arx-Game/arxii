@@ -611,6 +611,7 @@ export function mockCodexEntry(id: number): CodexEntryDetail {
     learn_threshold: 0,
     research_progress: null,
     art_url: null,
+    perspective_of: null,
   };
 }
 

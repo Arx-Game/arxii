@@ -61,6 +61,8 @@ export interface CodexEntryListItem {
   /** Per-character breakdown of the viewer's characters that know this entry. */
   known_by: CodexKnownBy[];
   art_url: string | null;
+  /** Name of the culture whose take this entry is; null for canon entries. */
+  perspective_of: string | null;
 }
 
 export interface CodexLinkRef {

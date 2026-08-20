@@ -489,6 +489,8 @@
 
 ### BlueprintPosition
 **Foreign Keys:**
+  - written_by -> contributors.ContentContributor [FK] (nullable)
+  - reviewed_by -> contributors.ContentContributor [FK] (nullable)
   - blueprint -> areas.PositionBlueprint [FK]
 **Pointed to by:**
   - edges_as_a <- areas.BlueprintEdge
@@ -534,6 +536,9 @@
   - traps <- room_features.Trap
 
 ### PositionBlueprint
+**Foreign Keys:**
+  - written_by -> contributors.ContentContributor [FK] (nullable)
+  - reviewed_by -> contributors.ContentContributor [FK] (nullable)
 **Pointed to by:**
   - positions <- areas.BlueprintPosition
   - edges <- areas.BlueprintEdge
@@ -7597,6 +7602,8 @@
 - `register_room_feature_strategy(strategy_key: 'str', handler: 'RoomFeatureStrategyHandler', *, as_default: 'bool' = False) -> 'None' - Register/override the strategy handler for ``strategy_key``.`
 - `reset_room_feature_strategies() -> 'None' - Restore the at-ready baseline registrations. Test-only escape hatch.`
 - `room_ward_upkeep_tick() -> 'None' - Drain each active ward's resonance_reserve; lapse it if depleted (#2177).`
+- `staff_dissolve_feature(room_profile: 'RoomProfile') -> 'str | None' - Dissolve the room's active feature by staff fiat (#3269 Phase B).`
+- `staff_install_feature(room_profile: 'RoomProfile', feature_kind, *, owner_persona: 'Persona', target_level: 'int' = 1) -> 'str | None' - Install/level a room feature by staff fiat (#3269 Phase B).`
 - `sync_social_hub_traffic(room_profile: 'RoomProfile') -> 'None' - Reconcile the room's crowd-draw TRAFFIC modifier to its hub's current level.`
 
 

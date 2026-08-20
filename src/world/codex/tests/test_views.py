@@ -504,3 +504,24 @@ class TestCodexTreeQueryCount(TestCase):
         assert relevant[self.subjects[0].name] == 3
         for subject in self.subjects[1:]:
             assert relevant[subject.name] == 2
+
+
+class PerspectiveOfFieldTests(TestCase):
+    """perspective_of names the flagged holder; null on plain entries (#3277)."""
+
+    @classmethod
+    def setUpTestData(cls):
+        from world.codex.factories import BeginningsCodexGrantFactory, CodexEntryFactory
+
+        cls.plain = CodexEntryFactory(is_public=True)
+        cls.opinion = CodexEntryFactory(is_public=True, subject=cls.plain.subject)
+        grant = BeginningsCodexGrantFactory(entry=cls.opinion, is_perspective=True)
+        cls.holder_name = grant.beginnings.name
+
+    def test_list_and_detail_expose_perspective_of(self):
+        listed = {e["id"]: e for e in self.client.get("/api/codex/entries/").json()}
+        assert listed[self.opinion.pk]["perspective_of"] == self.holder_name
+        assert listed[self.plain.pk]["perspective_of"] is None
+
+        detail = self.client.get(f"/api/codex/entries/{self.opinion.pk}/").json()
+        assert detail["perspective_of"] == self.holder_name
