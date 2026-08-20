@@ -3486,6 +3486,29 @@ paths:
               schema:
                 $ref: '#/components/schemas/Beginnings'
           description: ''
+  /api/character-creation/beginnings/{id}/perspectives/:
+    get:
+      operationId: character_creation_beginnings_perspectives_retrieve
+      description: This beginning's perspective entries, ungated for the CG shop window
+        (ADR-0224).
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: A unique integer value identifying this Beginnings.
+        required: true
+      tags:
+      - character-creation
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Beginnings'
+          description: ''
   /api/character-creation/can-create/:
     get:
       operationId: character_creation_can_create_retrieve
@@ -4908,6 +4931,32 @@ paths:
 
         Query params:
             beginning_id: Filter by beginning (required)
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: A unique integer value identifying this Tradition.
+        required: true
+      tags:
+      - character-creation
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Tradition'
+          description: ''
+  /api/character-creation/traditions/{id}/perspectives/:
+    get:
+      operationId: character_creation_traditions_perspectives_retrieve
+      description: |-
+        This tradition's perspective entries, ungated for the CG shop window (ADR-0224).
+
+        Resolved directly: get_queryset is beginning_id-scoped and would 404
+        every detail route.
       parameters:
       - in: path
         name: id

@@ -32,6 +32,9 @@ character-creation/
     ├── ReviewStage.tsx      # Stage 11: Review and submit
     ├── FinalizeForTableDialog.tsx # Player-GM direct-to-roster flow from ReviewStage (#3268)
     ├── TraditionPicker.tsx  # Tradition card grid — mounted inside gift/TraditionStep
+    ├── PerspectivesPanel.tsx # "On {subject}" shop-window opinions, mounted in
+    │                        #   HeritageStage's beginning detail panel and
+    │                        #   TraditionPicker's tradition detail panel (#3281)
     └── gift/                # GiftStage funnel steps (#2426 Task 10)
         ├── TraditionStep.tsx    # Wraps TraditionPicker
         ├── GiftSelector.tsx     # Gift catalog cards (GET .../gifts/?draft_id=)
@@ -73,6 +76,10 @@ character-creation/
 - `POST /api/character-creation/drafts/{id}/add-to-roster/` - Staff direct add
 - `POST /api/character-creation/drafts/{id}/finalize-gm/` - Player-GM direct-to-roster for a
   table they own (`target_table`, `story_title`, optional `story_description`) (#3268)
+- `GET /api/character-creation/beginnings/{id}/perspectives/` - A beginning's shop-window
+  perspective entries, ungated by codex knowledge (ADR-0224, #3281)
+- `GET /api/character-creation/traditions/{id}/perspectives/` - Same, for a tradition
+  (ADR-0224, #3281)
 
 ## Route
 

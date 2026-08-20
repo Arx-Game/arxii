@@ -48,7 +48,7 @@ from world.codex.constants import CodexKnowledgeStatus
 | `BeginningsCodexGrant` | Codex entries granted by a Beginnings choice | `beginnings`, `entry`, `is_perspective` |
 | `PathCodexGrant` | Codex entries granted by a Path choice | `path`, `entry` |
 | `DistinctionCodexGrant` | Codex entries granted by a Distinction | `distinction`, `entry` |
-| `TraditionCodexGrant` | Codex entries granted by a Tradition | `tradition`, `entry` |
+| `TraditionCodexGrant` | Codex entries granted by a Tradition | `tradition`, `entry`, `is_perspective` |
 
 Species are the exception: there is no `SpeciesCodexGrant` table. `Species.codex_entry`
 is a plain nullable FK on the species row (one entry per species, not many), and
@@ -57,17 +57,24 @@ its own entry *and* every ancestor's — see `docs/systems/species.md`.
 
 ---
 
-## Perspective entries (#3277)
+## Perspective entries (#3277, #3281; ADR-0222, ADR-0224)
 
-A `BeginningsCodexGrant` row with `is_perspective=True` marks the entry as the
-granting culture's own take on its subject - a canon-accurate record of a biased
-in-world voice, not canon-neutral knowledge the culture happens to teach. At most
-one grant row per entry may claim it, enforced by the partial unique constraint
-`one_perspective_holder_per_entry` (`condition=Q(is_perspective=True)` on `entry`).
+A `BeginningsCodexGrant` or `TraditionCodexGrant` row with `is_perspective=True`
+marks the entry as the granting culture's or tradition's own take on its
+subject - a canon-accurate record of a biased in-world voice, not canon-neutral
+knowledge the holder happens to teach. Each table caps its own holders at one
+per entry with a partial unique constraint on `entry`
+(`condition=Q(is_perspective=True)`): `one_perspective_holder_per_entry` on
+`BeginningsCodexGrant`, `one_tradition_perspective_holder_per_entry` on
+`TraditionCodexGrant`. That per-table constraint cannot see across tables, so
+an entry has at most one perspective holder overall, not one per table: both
+models' `clean()` additionally queries the other table and rejects a second
+holder there.
 
 The holder surfaces as `perspective_of` on the entry list and detail payloads: a
-`Subquery` annotation in `CodexEntryViewSet.get_queryset` resolves the perspective
-holder's `beginnings__name`, and `EntryKnowledgeMixin.get_perspective_of` (shared by
+`Coalesce` of two `Subquery` annotations in `CodexEntryViewSet.get_queryset`
+resolves the perspective holder's `beginnings__name` first, falling back to
+`tradition__name`, and `EntryKnowledgeMixin.get_perspective_of` (shared by
 both entry serializers) reads the annotation. The frontend renders it as an "As told
 by {perspective_of}" attribution line in both `EntryDetail.tsx` and `CodexModal.tsx`.
 
@@ -76,6 +83,21 @@ anything, so the viewed culture's own characters discover other cultures' takes 
 them the same way they discover any other codex entry, in play. Species perspectives
 are deferred - there is no `SpeciesCodexGrant` table for the flag to live on (see
 above), so a species-level perspective would need that table to exist first.
+
+**CG shop-window endpoints (ADR-0224).** Mid-chargen players have no roster entry, so
+`CharacterCodexKnowledge` rows don't exist yet and non-public entries (which most
+perspective entries are) stay invisible through `/api/codex/`. Two ungated detail
+actions serve perspective content straight from the grant tables while a player is
+still choosing, with no codex-knowledge gating: `GET
+/api/character-creation/beginnings/{id}/perspectives/` and `GET
+/api/character-creation/traditions/{id}/perspectives/` (`world/character_creation`,
+not `world/codex`). Both return the same holder-agnostic
+`PerspectiveEntrySerializer` shape - `{entry_id, name, summary, lore_content,
+subject_name}` - built directly from the `is_perspective=True` grants for that
+holder. Codex proper is unchanged by this: the viewed culture still discovers a
+stereotype about itself through play, same as always. Corollary authoring rule: a
+perspective entry is shop-window content by definition, so it must never carry
+secret or spoiler material.
 
 ---
 

@@ -245,6 +245,11 @@ by `ty`'s `invalid-method-override`). The applicant's email comes from `DraftApp
 - `GET /api/character-creation/tarot-cards/` - Tarot cards for naming ritual
 - `GET /api/character-creation/form-options/{species_id}/` - Form traits for a species
 - `GET /api/character-creation/can-create/` - Eligibility check
+- `GET /api/character-creation/beginnings/{id}/perspectives/` - That beginning's
+  `is_perspective=True` codex grants, ungated by codex knowledge (CG shop window,
+  ADR-0224, #3281)
+- `GET /api/character-creation/traditions/{id}/perspectives/` - Same shop-window read
+  for a tradition's perspective grants (ADR-0224, #3281)
 
 ### Draft Management
 - `GET/POST /api/character-creation/drafts/` - List/create drafts
