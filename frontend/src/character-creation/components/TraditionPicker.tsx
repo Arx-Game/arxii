@@ -13,8 +13,9 @@ import { cn } from '@/lib/utils';
 import { motion } from 'framer-motion';
 import { CheckCircle2, LinkIcon, Loader2, Sparkles } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
-import { useSelectTradition, useTraditions } from '../queries';
+import { useSelectTradition, useTraditionPerspectives, useTraditions } from '../queries';
 import type { CharacterDraft } from '../types';
+import { PerspectivesPanel } from './PerspectivesPanel';
 
 interface TraditionCardTradition {
   id: number;
@@ -107,6 +108,9 @@ export function TraditionPicker({ draft, beginningId }: TraditionPickerProps) {
   const selectTradition = useSelectTradition();
   const [hoveredTradition, setHoveredTradition] = useState<TraditionCardTradition | null>(null);
 
+  const detailTradition = hoveredTradition ?? draft.selected_tradition ?? null;
+  const { data: perspectives } = useTraditionPerspectives(detailTradition?.id);
+
   const isMutating = selectTradition.isPending;
   const mutatingTraditionId = selectTradition.variables?.traditionId;
 
@@ -181,27 +185,28 @@ export function TraditionPicker({ draft, beginningId }: TraditionPickerProps) {
         {/* Sidebar: Hover Detail Panel */}
         <div className="hidden lg:block">
           <div className="sticky top-4">
-            {hoveredTradition ? (
+            {detailTradition ? (
               <Card>
                 <CardHeader className="pb-2">
                   <CardTitle className="text-sm font-medium">
-                    {hoveredTradition.codex_entry_ids.length > 0 ? (
-                      <CodexTerm entryId={hoveredTradition.codex_entry_ids[0]}>
-                        {hoveredTradition.name}
+                    {detailTradition.codex_entry_ids.length > 0 ? (
+                      <CodexTerm entryId={detailTradition.codex_entry_ids[0]}>
+                        {detailTradition.name}
                       </CodexTerm>
                     ) : (
-                      hoveredTradition.name
+                      detailTradition.name
                     )}
                   </CardTitle>
                 </CardHeader>
                 <CardContent className="space-y-3 pt-0">
-                  <p className="text-xs text-muted-foreground">{hoveredTradition.description}</p>
-                  {hoveredTradition.required_distinction_id && (
+                  <p className="text-xs text-muted-foreground">{detailTradition.description}</p>
+                  {detailTradition.required_distinction_id && (
                     <Badge variant="outline" className="gap-1 text-xs">
                       <LinkIcon className="h-3 w-3" />
                       Includes required distinction
                     </Badge>
                   )}
+                  <PerspectivesPanel perspectives={perspectives} />
                 </CardContent>
               </Card>
             ) : (

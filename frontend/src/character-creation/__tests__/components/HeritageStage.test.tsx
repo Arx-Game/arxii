@@ -39,6 +39,7 @@ vi.mock('../../api', () => ({
   getFamiliesWithOpenPositions: vi.fn(),
   updateDraft: vi.fn(),
   getCGExplanations: vi.fn(),
+  getBeginningsPerspectives: vi.fn(),
 }));
 
 // Mock CG Point Budget data
@@ -266,6 +267,55 @@ describe('HeritageStage', () => {
         // Selected button should have default variant (not outline)
         expect(femaleButton).not.toHaveClass('border-input');
       });
+    });
+  });
+
+  describe('Perspectives Panel', () => {
+    it('shows the beginnings perspective opinion for the selected beginning', async () => {
+      const queryClient = createTestQueryClient();
+      seedHeritageStageData(queryClient);
+      seedQueryData(queryClient, characterCreationKeys.beginningsPerspectives(mockBeginnings.id), [
+        {
+          entry_id: 1,
+          name: 'Duskborn Doorways',
+          summary: 'They talk to doors.',
+          lore_content: 'Every Duskborn home has a second door no guest may use.',
+          subject_name: 'The Duskborn',
+        },
+      ]);
+
+      renderWithCharacterCreationProviders(
+        <HeritageStage draft={mockDraftWithArea} onStageSelect={mockOnStageSelect} />,
+        { queryClient }
+      );
+
+      await waitFor(() => {
+        // The detail panel renders in both the desktop and mobile layout.
+        expect(screen.getAllByText('On The Duskborn').length).toBeGreaterThanOrEqual(1);
+      });
+      expect(
+        screen.getAllByText('Every Duskborn home has a second door no guest may use.').length
+      ).toBeGreaterThanOrEqual(1);
+    });
+
+    it('does not show a Perspectives heading when the endpoint returns none', async () => {
+      const queryClient = createTestQueryClient();
+      seedHeritageStageData(queryClient);
+      seedQueryData(
+        queryClient,
+        characterCreationKeys.beginningsPerspectives(mockBeginnings.id),
+        []
+      );
+
+      renderWithCharacterCreationProviders(
+        <HeritageStage draft={mockDraftWithArea} onStageSelect={mockOnStageSelect} />,
+        { queryClient }
+      );
+
+      await waitFor(() => {
+        expect(screen.getAllByText('Normal Upbringing').length).toBeGreaterThanOrEqual(1);
+      });
+      expect(screen.queryByText('Perspectives')).not.toBeInTheDocument();
     });
   });
 

@@ -537,7 +537,9 @@ class BeginningsCodexGrant(NaturalKeyMixin, SharedMemoryModel):
     A row with ``is_perspective=True`` additionally marks the entry as this
     culture's own take on its subject (attribution surfaces as
     ``perspective_of`` on the entry API); at most one row per entry may claim
-    it (#3277).
+    it (#3277). That single-holder rule spans this table and
+    ``TraditionCodexGrant`` together - an entry has at most one perspective
+    holder overall, enforced across tables by ``clean()`` (#3281).
     """
 
     beginnings = models.ForeignKey(
@@ -574,6 +576,18 @@ class BeginningsCodexGrant(NaturalKeyMixin, SharedMemoryModel):
         ]
         verbose_name = "Beginnings Codex Grant"
         verbose_name_plural = "Beginnings Codex Grants"
+
+    def clean(self) -> None:
+        """The partial unique constraints are per-table; enforce one holder across tables."""
+        super().clean()
+        if self.is_perspective and (
+            TraditionCodexGrant.objects.filter(entry=self.entry, is_perspective=True).exists()
+        ):
+            msg = (
+                "This entry already has a tradition perspective holder; an entry has "
+                "at most one perspective holder across all holder types."
+            )
+            raise ValidationError(msg)
 
     def __str__(self) -> str:
         return f"{self.beginnings} grants {self.entry}"
@@ -639,7 +653,15 @@ class DistinctionCodexGrant(NaturalKeyMixin, SharedMemoryModel):
 
 
 class TraditionCodexGrant(NaturalKeyMixin, SharedMemoryModel):
-    """Codex entries granted by a Tradition."""
+    """Codex entries granted by a Tradition.
+
+    A row with ``is_perspective=True`` additionally marks the entry as this
+    tradition's own take on its subject, written in that tradition's voice;
+    at most one row per entry may claim it. That single-holder rule spans
+    this table and ``BeginningsCodexGrant`` together - an entry has at most
+    one perspective holder overall, enforced across tables by ``clean()``
+    (#3281).
+    """
 
     tradition = models.ForeignKey(
         "arxii.Tradition",
@@ -651,6 +673,12 @@ class TraditionCodexGrant(NaturalKeyMixin, SharedMemoryModel):
         on_delete=models.CASCADE,
         related_name="tradition_grants",
     )
+    is_perspective = models.BooleanField(
+        default=False,
+        help_text="This entry is the granting tradition's own take on its subject, "
+        "written in that tradition's voice, rather than canon-neutral knowledge "
+        "it happens to teach (#3281).",
+    )
 
     objects = NaturalKeyManager()
 
@@ -660,8 +688,27 @@ class TraditionCodexGrant(NaturalKeyMixin, SharedMemoryModel):
 
     class Meta:
         unique_together = ["tradition", "entry"]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["entry"],
+                condition=models.Q(is_perspective=True),
+                name="one_tradition_perspective_holder_per_entry",
+            ),
+        ]
         verbose_name = "Tradition Codex Grant"
         verbose_name_plural = "Tradition Codex Grants"
+
+    def clean(self) -> None:
+        """The partial unique constraints are per-table; enforce one holder across tables."""
+        super().clean()
+        if self.is_perspective and (
+            BeginningsCodexGrant.objects.filter(entry=self.entry, is_perspective=True).exists()
+        ):
+            msg = (
+                "This entry already has a beginnings perspective holder; an entry has "
+                "at most one perspective holder across all holder types."
+            )
+            raise ValidationError(msg)
 
     def __str__(self) -> str:
         return f"{self.tradition} grants {self.entry}"

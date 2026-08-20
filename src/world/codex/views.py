@@ -14,6 +14,7 @@ face of a topic (nor leak the existence of an all-secret branch).
 """
 
 from django.db.models import Count, Exists, OuterRef, Q, Subquery
+from django.db.models.functions import Coalesce
 from django_filters.rest_framework import DjangoFilterBackend
 from rest_framework import viewsets
 from rest_framework.decorators import action
@@ -27,6 +28,7 @@ from world.codex.models import (
     CodexCategory,
     CodexEntry,
     CodexSubject,
+    TraditionCodexGrant,
 )
 from world.codex.serializers import (
     CodexCategorySerializer,
@@ -272,9 +274,12 @@ class CodexEntryViewSet(CodexVisibilityMixin, viewsets.ReadOnlyModelViewSet):
 
     def get_queryset(self):
         """Return only entries visible to the selected characters."""
-        perspective_holder = BeginningsCodexGrant.objects.filter(
+        beginnings_holder = BeginningsCodexGrant.objects.filter(
             entry=OuterRef("pk"), is_perspective=True
         ).values("beginnings__name")[:1]
+        tradition_holder = TraditionCodexGrant.objects.filter(
+            entry=OuterRef("pk"), is_perspective=True
+        ).values("tradition__name")[:1]
         return (
             CodexEntry.objects.select_related(
                 "subject",
@@ -282,7 +287,9 @@ class CodexEntryViewSet(CodexVisibilityMixin, viewsets.ReadOnlyModelViewSet):
                 "subject__breadcrumb_cache",
             )
             .filter(id__in=self._visible_entry_ids())
-            .annotate(perspective_of=Subquery(perspective_holder))
+            .annotate(
+                perspective_of=Coalesce(Subquery(beginnings_holder), Subquery(tradition_holder))
+            )
         )
 
     def get_serializer_class(self):

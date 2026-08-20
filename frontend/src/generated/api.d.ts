@@ -2238,6 +2238,23 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
+  '/api/character-creation/beginnings/{id}/perspectives/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /** @description This beginning's perspective entries, ungated for the CG shop window (ADR-0224). */
+    get: operations['character_creation_beginnings_perspectives_list'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   '/api/character-creation/can-create/': {
     parameters: {
       query?: never;
@@ -3290,6 +3307,28 @@ export interface paths {
      *         beginning_id: Filter by beginning (required)
      */
     get: operations['character_creation_traditions_retrieve'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/character-creation/traditions/{id}/perspectives/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /**
+     * @description This tradition's perspective entries, ungated for the CG shop window (ADR-0224).
+     *
+     *     Resolved directly: get_queryset is beginning_id-scoped and would 404
+     *     every detail route.
+     */
+    get: operations['character_creation_traditions_perspectives_list'];
     put?: never;
     post?: never;
     delete?: never;
@@ -35993,6 +36032,19 @@ export interface components {
      * @enum {string}
      */
     PersonaTypeEnum: 'primary' | 'established' | 'temporary' | 'alternate';
+    /**
+     * @description Shop-window payload for a holder's perspective entries (#3281, ADR-0224).
+     *
+     *     Serves CodexEntry rows ungated by codex knowledge: the CG wizard shows a
+     *     culture's own voice while the player chooses. Read-only by construction.
+     */
+    PerspectiveEntry: {
+      entry_id: number;
+      name: string;
+      summary: string;
+      lore_content: string;
+      subject_name: string;
+    };
     /** @description Read serializer for petitions (#2288). */
     Petition: {
       readonly id: number;
@@ -45025,6 +45077,30 @@ export interface operations {
       };
     };
   };
+  character_creation_beginnings_perspectives_list: {
+    parameters: {
+      query?: {
+        starting_area?: number;
+      };
+      header?: never;
+      path: {
+        /** @description A unique integer value identifying this Beginnings. */
+        id: number;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['PerspectiveEntry'][];
+        };
+      };
+    };
+  };
   character_creation_can_create_retrieve: {
     parameters: {
       query?: never;
@@ -46300,6 +46376,30 @@ export interface operations {
         };
         content: {
           'application/json': components['schemas']['Tradition'];
+        };
+      };
+    };
+  };
+  character_creation_traditions_perspectives_list: {
+    parameters: {
+      query?: {
+        beginning_id?: number;
+      };
+      header?: never;
+      path: {
+        /** @description A unique integer value identifying this Tradition. */
+        id: number;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['PerspectiveEntry'][];
         };
       };
     };

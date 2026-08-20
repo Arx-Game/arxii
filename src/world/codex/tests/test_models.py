@@ -766,3 +766,60 @@ class BeginningsPerspectiveConstraintTests(TestCase):
         BeginningsCodexGrantFactory(entry=entry, is_perspective=False)
         BeginningsCodexGrantFactory(entry=entry, is_perspective=False)
         assert entry.beginnings_grants.filter(is_perspective=True).count() == 1
+
+
+class PerspectiveHolderExclusivityTests(TestCase):
+    """An entry has at most one perspective holder across both holder tables (#3281)."""
+
+    @classmethod
+    def setUpTestData(cls):
+        from world.codex.factories import CodexEntryFactory
+
+        cls.entry = CodexEntryFactory()
+
+    def test_tradition_grant_has_perspective_flag(self):
+        from world.codex.factories import TraditionCodexGrantFactory
+
+        grant = TraditionCodexGrantFactory(entry=self.entry, is_perspective=True)
+        assert grant.is_perspective is True
+
+    def test_second_tradition_perspective_on_same_entry_rejected(self):
+        from django.db import IntegrityError
+
+        from world.codex.factories import TraditionCodexGrantFactory
+
+        TraditionCodexGrantFactory(entry=self.entry, is_perspective=True)
+        with self.assertRaises(IntegrityError):
+            TraditionCodexGrantFactory(entry=self.entry, is_perspective=True)
+
+    def test_clean_rejects_cross_table_second_holder(self):
+        from django.core.exceptions import ValidationError
+
+        from world.codex.factories import (
+            BeginningsCodexGrantFactory,
+            TraditionCodexGrantFactory,
+        )
+
+        BeginningsCodexGrantFactory(entry=self.entry, is_perspective=True)
+        grant = TraditionCodexGrantFactory.build(entry=self.entry, is_perspective=True)
+        with self.assertRaises(ValidationError):
+            grant.clean()
+
+    def test_clean_rejects_cross_table_second_holder_reverse(self):
+        from django.core.exceptions import ValidationError
+
+        from world.codex.factories import (
+            BeginningsCodexGrantFactory,
+            TraditionCodexGrantFactory,
+        )
+
+        TraditionCodexGrantFactory(entry=self.entry, is_perspective=True)
+        grant = BeginningsCodexGrantFactory.build(entry=self.entry, is_perspective=True)
+        with self.assertRaises(ValidationError):
+            grant.clean()
+
+    def test_clean_allows_plain_grants(self):
+        from world.codex.factories import TraditionCodexGrantFactory
+
+        grant = TraditionCodexGrantFactory.build(entry=self.entry, is_perspective=False)
+        grant.clean()

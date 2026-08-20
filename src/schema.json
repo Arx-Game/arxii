@@ -3486,6 +3486,35 @@ paths:
               schema:
                 $ref: '#/components/schemas/Beginnings'
           description: ''
+  /api/character-creation/beginnings/{id}/perspectives/:
+    get:
+      operationId: character_creation_beginnings_perspectives_list
+      description: This beginning's perspective entries, ungated for the CG shop window
+        (ADR-0224).
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: A unique integer value identifying this Beginnings.
+        required: true
+      - in: query
+        name: starting_area
+        schema:
+          type: integer
+      tags:
+      - character-creation
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/PerspectiveEntry'
+          description: ''
   /api/character-creation/can-create/:
     get:
       operationId: character_creation_can_create_retrieve
@@ -4925,6 +4954,38 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/Tradition'
+          description: ''
+  /api/character-creation/traditions/{id}/perspectives/:
+    get:
+      operationId: character_creation_traditions_perspectives_list
+      description: |-
+        This tradition's perspective entries, ungated for the CG shop window (ADR-0224).
+
+        Resolved directly: get_queryset is beginning_id-scoped and would 404
+        every detail route.
+      parameters:
+      - in: query
+        name: beginning_id
+        schema:
+          type: number
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: A unique integer value identifying this Tradition.
+        required: true
+      tags:
+      - character-creation
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/PerspectiveEntry'
           description: ''
   /api/character-sheets/{id}/:
     get:
@@ -62885,6 +62946,30 @@ components:
         * `established` - Established
         * `temporary` - Temporary
         * `alternate` - Alternate
+    PerspectiveEntry:
+      type: object
+      description: |-
+        Shop-window payload for a holder's perspective entries (#3281, ADR-0224).
+
+        Serves CodexEntry rows ungated by codex knowledge: the CG wizard shows a
+        culture's own voice while the player chooses. Read-only by construction.
+      properties:
+        entry_id:
+          type: integer
+        name:
+          type: string
+        summary:
+          type: string
+        lore_content:
+          type: string
+        subject_name:
+          type: string
+      required:
+      - entry_id
+      - lore_content
+      - name
+      - subject_name
+      - summary
     Petition:
       type: object
       description: Read serializer for petitions (#2288).

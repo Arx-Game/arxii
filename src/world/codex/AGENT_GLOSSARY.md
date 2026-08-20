@@ -5,12 +5,22 @@ The canon-lore store: a `CodexEntry` is an individual piece of reviewed world kn
 _Avoid_: lore entry, wiki article, article.
 
 **Perspective entry**:
-A `CodexEntry` whose `BeginningsCodexGrant` row carries `is_perspective=True`: a canon-accurate
-record of a biased in-world voice, attributed to the culture (Beginnings) that holds it and
-surfaced as `perspective_of` on the entry API. The entry's subject is what the take is about;
-the grant row's beginnings is who holds it; granting is viewer-only (#3277). This is the
-carve-out to "Codex is canon-true": the *attribution* is canon-true, the prose is deliberately
-partisan.
+A `CodexEntry` whose `BeginningsCodexGrant` or `TraditionCodexGrant` row carries
+`is_perspective=True`: a canon-accurate record of a biased in-world voice, attributed to the
+culture (Beginnings) or tradition that holds it and surfaced as `perspective_of` on the entry
+API. The entry's subject is what the take is about; the grant row's beginnings/tradition is who
+holds it; granting is viewer-only (#3277, #3281). An entry has at most one holder across both
+tables, not one per table - each table's partial unique constraint only sees its own rows, so
+`clean()` on both models cross-checks the other table. This is the carve-out to "Codex is
+canon-true": the *attribution* is canon-true, the prose is deliberately partisan.
+
+Because a perspective entry is typically non-public and mid-chargen players have no roster
+entry yet, the CG wizard reads it through a dedicated ungated shop-window path rather than the
+gated codex API - `GET .../beginnings/{id}/perspectives/` and `GET
+.../traditions/{id}/perspectives/` on `world.character_creation` (ADR-0224). That ungated read
+is a deliberate carve-out for chargen only; it does not change codex visibility. Corollary
+authoring rule: because that shop window has no knowledge gate, a perspective entry must never
+carry secret or spoiler material - anyone mid-chargen can read it.
 _Avoid_: stereotype (WoD term, fine in discussion, not in code), opinion entry, viewpoint.
 
 **CharacterCodexKnowledge**:

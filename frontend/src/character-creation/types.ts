@@ -33,6 +33,19 @@ export interface Beginnings {
   codex_entry_ids: number[];
 }
 
+/**
+ * A holder's opinion about another subject, surfaced during CG picks (#3281).
+ * From GET /api/character-creation/beginnings/{id}/perspectives/ and
+ * GET /api/character-creation/traditions/{id}/perspectives/.
+ */
+export interface PerspectiveEntry {
+  entry_id: number;
+  name: string;
+  summary: string;
+  lore_content: string;
+  subject_name: string;
+}
+
 export interface Species {
   id: number;
   name: string;

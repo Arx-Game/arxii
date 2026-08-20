@@ -31,6 +31,15 @@ The living lore repository that reflects what each character knows — not a sta
   `perspective_of` on entry list/detail payloads and renders as an "As told by"
   attribution line on the frontend. Granting is viewer-only; species perspectives are
   deferred pending a `SpeciesCodexGrant` table
+- **CG wizard perspective panels (2026-08-20, #3281, ADR-0224):** `TraditionCodexGrant`
+  gained its own `is_perspective` flag (cross-table `clean()` keeps the single-holder
+  rule across both tables), and `perspective_of` now coalesces a tradition holder's
+  name alongside a beginnings holder's. Two ungated shop-window endpoints -
+  `GET .../beginnings/{id}/perspectives/` and `GET .../traditions/{id}/perspectives/`
+  on `world.character_creation` - serve perspective content to mid-chargen players who
+  have no roster entry yet and so can't see it through the gated codex API. A
+  `PerspectivesPanel` frontend component renders these in HeritageStage's beginning
+  detail panel and TraditionPicker's tradition detail panel
 - **Frontend:** Codex pages, components, and queries in frontend/src/codex/. IC/OOC split navigation, breadcrumb display, character knowledge-scope selector with known-by badges
 - **Tests:** Model tests, visibility tests, view tests, container-hiding and knowledge-union tests
 
