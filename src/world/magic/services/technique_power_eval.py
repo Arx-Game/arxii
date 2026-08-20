@@ -872,15 +872,23 @@ def evaluate_technique(
     )
 
 
-def evaluate_all(context: EvalContext) -> list[TechniquePowerReport]:
-    """Evaluate every technique in the catalog, two-pass (#3279).
+def evaluate_all_with_reference(
+    context: EvalContext,
+) -> tuple[list[TechniquePowerReport], ReferenceFrame]:
+    """Evaluate every technique in the catalog, two-pass, exposing the reference (#3279).
 
     Pass 1 computes baseline attack DE for every technique carrying at least one
     damage-profile row; the median of those figures becomes the reference frame's
-    ``outgoing_dpr``/``incoming_dpr`` (self-anchoring — derived from the game's own
+    ``outgoing_dpr``/``incoming_dpr`` (self-anchoring - derived from the game's own
     content, not an authored constant). Pass 2 evaluates every technique in the
     catalog against that reference. A run shares one matchup-band computation and
     one damage-multiplier cache across both passes and every technique.
+
+    ``evaluate_all`` (below) is the pre-#3279-Task-3 signature every existing caller
+    and test still uses; this wrapper is the one that also hands back the
+    ``ReferenceFrame`` the two-pass bootstrap computed, for the Techniques tuning
+    panel's "Reference DPR" line (`web.admin.tuning.technique_analytics`) - the only
+    consumer of the reference frame outside this module.
     """
     multiplier_cache: dict[int, Decimal] = {}
     bands = _matchup_bands(context)
@@ -917,9 +925,21 @@ def evaluate_all(context: EvalContext) -> list[TechniquePowerReport]:
         )
 
     all_techniques = Technique.objects.all().select_related("gift", "effect_type")
-    return [
+    reports = [
         evaluate_technique(
             technique, context, reference, _multiplier_cache=multiplier_cache, _bands=bands
         )
         for technique in all_techniques
     ]
+    return reports, reference
+
+
+def evaluate_all(context: EvalContext) -> list[TechniquePowerReport]:
+    """Evaluate every technique in the catalog, two-pass (#3279).
+
+    Thin wrapper over :func:`evaluate_all_with_reference` that drops the
+    ``ReferenceFrame`` - kept as the stable pre-Task-3 signature for existing
+    callers/tests that only want the reports.
+    """
+    reports, _reference = evaluate_all_with_reference(context)
+    return reports

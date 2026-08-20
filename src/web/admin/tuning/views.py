@@ -1,18 +1,21 @@
-"""Game Tuning dashboard — superuser-only difficulty analytics + simulation (#1221).
+"""Game Tuning dashboard - superuser-only difficulty analytics + simulation (#1221).
 
-The dashboard page (`tuning_dashboard`) renders a skeleton of four panels, each
+The dashboard page (`tuning_dashboard`) renders a skeleton of five panels, each
 an HTMX fragment loaded on page load. Task 2 replaced the checks-panel stub
 with `tuning_checks_fragment` (real analytics, see `checks_analytics.py`). Task 3
 replaced the consequences-panel stub with `tuning_consequences_fragment` (see
 `consequence_analytics.py`). Task 4 replaced the conditions-panel stub with
 `tuning_conditions_fragment` (see `condition_analytics.py`). Task 6 replaced the
 simulation-panel stub with `tuning_simulation_fragment` (Monte Carlo party-vs-boss
-batches over the real engine, see `world.combat.simulation`).
+batches over the real engine, see `world.combat.simulation`). #3279 Task 3 added a
+fifth panel, `tuning_techniques_fragment` (technique combat-power league table,
+see `technique_analytics.py`).
 """
 
 from __future__ import annotations
 
 from collections.abc import Callable
+from dataclasses import replace
 from functools import wraps
 from typing import Any
 
@@ -24,6 +27,7 @@ from django.http import HttpRequest, HttpResponse
 from django.shortcuts import render
 
 from actions.models.consequence_pools import ConsequencePool
+from web.admin.tuning import technique_analytics
 from web.admin.tuning.checks_analytics import compute_chart_distributions, compute_matchup
 from web.admin.tuning.condition_analytics import compute_condition_danger
 from web.admin.tuning.consequence_analytics import inspect_pool, list_pools
@@ -35,7 +39,7 @@ _DEFAULT_ROLLER_POINTS = 25
 _DEFAULT_TARGET_DIFFICULTY = 25
 _DEFAULT_CONDITION_SEVERITY = 5
 
-# 24h — a simulation batch is expensive (dozens of full combat rounds), so a
+# 24h - a simulation batch is expensive (dozens of full combat rounds), so a
 # cached report should outlive a single admin session by a wide margin.
 _SIMULATION_CACHE_TIMEOUT = 60 * 60 * 24
 # Fixed pointer key: GET renders "the most recently cached result" by looking
@@ -69,7 +73,7 @@ def superuser_required(view: Callable[..., HttpResponse]) -> Callable[..., HttpR
 
 @superuser_required
 def tuning_dashboard(request: HttpRequest) -> HttpResponse:
-    """Game Tuning dashboard skeleton: four HTMX-loaded panels."""
+    """Game Tuning dashboard skeleton: five HTMX-loaded panels."""
     context = {"title": "Game Tuning"}
     return render(request, "admin/tuning/dashboard.html", context)
 
@@ -147,10 +151,10 @@ def _clamp(value: int, minimum: int, maximum: int) -> int:
 class SimulationRunForm(forms.Form):
     """Validates enum membership; clamps numeric ranges (#1221 Task 6).
 
-    `tier`/`risk_level` are `ChoiceField`s — an unrecognized value is a real
+    `tier`/`risk_level` are `ChoiceField`s - an unrecognized value is a real
     form error (there's no sane way to "clamp" a string into an enum member).
     The numeric fields are silently clamped into range instead of erroring, per
-    the brief ("clamps iterations to 1..500 via the form") — a GM fat-fingering
+    the brief ("clamps iterations to 1..500 via the form") - a GM fat-fingering
     9999 iterations should get the capped run, not a rejected form.
     """
 
@@ -209,7 +213,7 @@ def tuning_simulation_fragment(request: HttpRequest) -> HttpResponse:
     """Monte Carlo simulation panel: run + cache party-vs-boss batches (#1221 Task 6).
 
     GET renders the form (seeded with `SimulationParams` defaults) plus the most
-    recently cached result, if any — tracked via the fixed `_SIMULATION_LAST_KEY`
+    recently cached result, if any - tracked via the fixed `_SIMULATION_LAST_KEY`
     pointer so a plain page reload doesn't lose the last run. POST validates and
     clamps inputs through `SimulationRunForm`, runs the batch synchronously, and
     caches the report under both the exact-param key and the last-key pointer
@@ -219,7 +223,7 @@ def tuning_simulation_fragment(request: HttpRequest) -> HttpResponse:
     `from world.combat.simulation import run_party_vs_boss_simulation` directly)
     so tests can patch the real function at its origin
     (`world.combat.simulation.run_party_vs_boss_simulation`) and still intercept
-    this call — a bare `from ... import f` would bind a name here that patching
+    this call - a bare `from ... import f` would bind a name here that patching
     the origin module wouldn't reach.
     """
     report: SimulationReport | None = None
@@ -250,3 +254,123 @@ def tuning_simulation_fragment(request: HttpRequest) -> HttpResponse:
         "histogram": _round_count_histogram(report.round_counts) if report else [],
     }
     return render(request, "admin/tuning/_simulation_panel.html", context)
+
+
+# 24h - mirrors `_SIMULATION_CACHE_TIMEOUT`; a full technique-catalog evaluation
+# run should outlive a single admin session by a wide margin.
+_TECHNIQUE_CACHE_TIMEOUT = 60 * 60 * 24
+# Fixed pointer key, mirroring `_SIMULATION_LAST_KEY` - GET renders "the most
+# recently cached result" via whichever exact-param key was last written here.
+_TECHNIQUE_LAST_KEY = "tuning-tech-power:last"
+
+
+class TechniqueAnalyticsForm(forms.Form):
+    """Validates `sort` enum membership; clamps `level`/`thread_level` (#3279 Task 3).
+
+    Mirrors `SimulationRunForm`'s contract: `sort` is a `ChoiceField` (an
+    unrecognized value is a real form error on submit - but the header-link GET
+    re-render never goes through this form; it resolves `sort` via
+    `technique_analytics.resolve_sort_key` instead, which silently falls back).
+    `level`/`thread_level` are clamped rather than rejected, per the currency
+    spec's stated ranges; `roller_points`/`target_difficulty`/`roll_modifier` are
+    plain ints with no authored range to clamp to.
+    """
+
+    level = forms.IntegerField()
+    thread_level = forms.IntegerField()
+    roller_points = forms.IntegerField()
+    target_difficulty = forms.IntegerField()
+    roll_modifier = forms.IntegerField()
+    sort = forms.ChoiceField(choices=[(key, key) for key in sorted(technique_analytics.SORT_KEYS)])
+
+    def clean_level(self) -> int:
+        return _clamp(self.cleaned_data["level"], 1, 30)
+
+    def clean_thread_level(self) -> int:
+        return _clamp(self.cleaned_data["thread_level"], 0, 30)
+
+
+def _technique_form_defaults() -> dict[str, Any]:
+    """Initial values for a fresh GET form, mirroring `TechniqueAnalyticsParams` defaults."""
+    defaults = technique_analytics.TechniqueAnalyticsParams()
+    return {
+        "level": defaults.level,
+        "thread_level": defaults.thread_level,
+        "roller_points": defaults.roller_points,
+        "target_difficulty": defaults.target_difficulty,
+        "roll_modifier": defaults.roll_modifier,
+        "sort": defaults.sort,
+    }
+
+
+def _technique_cache_key(params: technique_analytics.TechniqueAnalyticsParams) -> str:
+    """Exact-param cache key (every knob, including `sort`) for the built panel."""
+    return (
+        f"tuning-tech-power:{params.level}:{params.thread_level}:{params.roller_points}:"
+        f"{params.target_difficulty}:{params.roll_modifier}:{params.sort}"
+    )
+
+
+def _cache_technique_panel(
+    params: technique_analytics.TechniqueAnalyticsParams,
+    panel: technique_analytics.TechniquePanelData,
+) -> None:
+    cache_key = _technique_cache_key(params)
+    cache.set(cache_key, panel, _TECHNIQUE_CACHE_TIMEOUT)
+    cache.set(_TECHNIQUE_LAST_KEY, cache_key, _TECHNIQUE_CACHE_TIMEOUT)
+
+
+@superuser_required
+def tuning_techniques_fragment(request: HttpRequest) -> HttpResponse:
+    """Techniques combat-power panel: league table of every technique's DE (#3279 Task 3).
+
+    GET renders the form (seeded with `TechniqueAnalyticsParams` defaults) plus the
+    most recently cached result, if any - tracked via the fixed
+    `_TECHNIQUE_LAST_KEY` pointer, mirroring the simulation panel. POST validates
+    and clamps inputs through `TechniqueAnalyticsForm`, builds the panel
+    synchronously, and caches it under both the exact-param key and the last-key
+    pointer (24h timeout).
+
+    The header league-table links re-render via a plain `hx-get` carrying only
+    `?sort=<key>` - evaluating the whole catalog is too slow to redo on every sort
+    click, so a GET whose resolved `sort` differs from the cached panel's own
+    rebuilds via `technique_analytics.build_technique_panel` (which reuses its own
+    independently-cached corpus, see that module) rather than re-running the
+    evaluator end to end.
+
+    Calls `technique_analytics.build_technique_panel` via the module object (never
+    a bare `from ... import`) so tests can patch it at its origin and still
+    intercept this call - same discipline as `tuning_simulation_fragment`.
+    """
+    panel: technique_analytics.TechniquePanelData | None = None
+
+    if request.method == "POST":
+        form = TechniqueAnalyticsForm(request.POST)
+        if form.is_valid():
+            params = technique_analytics.TechniqueAnalyticsParams(
+                level=form.cleaned_data["level"],
+                thread_level=form.cleaned_data["thread_level"],
+                roller_points=form.cleaned_data["roller_points"],
+                target_difficulty=form.cleaned_data["target_difficulty"],
+                roll_modifier=form.cleaned_data["roll_modifier"],
+                sort=form.cleaned_data["sort"],
+            )
+            panel = technique_analytics.build_technique_panel(params)
+            _cache_technique_panel(params, panel)
+    else:
+        form = TechniqueAnalyticsForm(initial=_technique_form_defaults())
+        last_key = cache.get(_TECHNIQUE_LAST_KEY)
+        cached_panel = cache.get(last_key) if last_key else None
+        if cached_panel is not None:
+            requested_sort = technique_analytics.resolve_sort_key(
+                request.GET.get("sort", cached_panel.params.sort)
+            )
+            if requested_sort != cached_panel.params.sort:
+                params = replace(cached_panel.params, sort=requested_sort)
+                panel = technique_analytics.build_technique_panel(params)
+                _cache_technique_panel(params, panel)
+            else:
+                panel = cached_panel
+
+    context = {"form": form, "panel": panel}
+    return render(request, "admin/tuning/_techniques_panel.html", context)

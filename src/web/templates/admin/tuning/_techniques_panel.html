@@ -1,0 +1,236 @@
+{% load i18n %}
+<style>
+  #panel-techniques .tuning-form {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: flex-end;
+    gap: 1.5rem;
+    margin-bottom: 1rem;
+  }
+  #panel-techniques .tuning-field {
+    display: flex;
+    flex-direction: column;
+    min-width: 9rem;
+  }
+  #panel-techniques .tuning-field label {
+    font-size: 0.85rem;
+    margin-bottom: 0.25rem;
+  }
+  #panel-techniques table.tuning-table {
+    width: 100%;
+    border-collapse: collapse;
+    margin-bottom: 1rem;
+  }
+  #panel-techniques table.tuning-table th,
+  #panel-techniques table.tuning-table td {
+    border-bottom: 1px solid var(--hairline-color);
+    padding: 0.4rem 0.5rem;
+    text-align: left;
+    vertical-align: middle;
+  }
+  #panel-techniques table.tuning-table th a {
+    color: inherit;
+    text-decoration: underline dotted;
+  }
+  #panel-techniques .badge {
+    display: inline-block;
+    font-size: 0.75rem;
+    padding: 0.1rem 0.4rem;
+    border-radius: 2px;
+    border: 1px solid var(--hairline-color);
+    color: var(--body-quiet-color);
+    margin-right: 0.25rem;
+  }
+  #panel-techniques .valuation-lines {
+    margin: 0.4rem 0 0.6rem 1rem;
+    font-size: 0.85rem;
+  }
+  #panel-techniques .valuation-lines li {
+    margin-bottom: 0.15rem;
+  }
+  #panel-techniques .provenance-summary {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.75rem;
+    font-size: 0.85rem;
+    color: var(--body-quiet-color);
+  }
+  #panel-techniques .zero-bucket-list {
+    font-size: 0.85rem;
+    margin: 0 0 1rem 1rem;
+  }
+  #panel-techniques .zero-bucket-list li {
+    margin-bottom: 0.15rem;
+  }
+  #panel-techniques .errorlist {
+    color: var(--error-fg);
+    font-size: 0.8rem;
+    margin: 0.2rem 0 0;
+    padding-left: 1rem;
+  }
+</style>
+
+<h2>{% translate "Technique Combat Power" %}</h2>
+<p>
+  {% translate "Prices every authored technique's combat payloads into DE (damage-equivalent per cast in a reference matchup) and compares baseline power to a fully-matched covenant anchor at the chosen thread level." %}
+</p>
+
+<form id="panel-techniques-form" class="tuning-form" method="post"
+      hx-post="{% url 'admin_tuning_techniques' %}" hx-target="#panel-techniques">
+  <div class="tuning-field">
+    <label for="{{ form.level.id_for_label }}">{% translate "Level" %}</label>
+    {{ form.level }}
+    {{ form.level.errors }}
+  </div>
+  <div class="tuning-field">
+    <label for="{{ form.thread_level.id_for_label }}">{% translate "Thread level" %}</label>
+    {{ form.thread_level }}
+    {{ form.thread_level.errors }}
+  </div>
+  <div class="tuning-field">
+    <label for="{{ form.roller_points.id_for_label }}">{% translate "Roller points" %}</label>
+    {{ form.roller_points }}
+    {{ form.roller_points.errors }}
+  </div>
+  <div class="tuning-field">
+    <label for="{{ form.target_difficulty.id_for_label }}">{% translate "Target difficulty" %}</label>
+    {{ form.target_difficulty }}
+    {{ form.target_difficulty.errors }}
+  </div>
+  <div class="tuning-field">
+    <label for="{{ form.roll_modifier.id_for_label }}">{% translate "Roll modifier" %}</label>
+    {{ form.roll_modifier }}
+    {{ form.roll_modifier.errors }}
+  </div>
+  <div class="tuning-field">
+    <label for="{{ form.sort.id_for_label }}">{% translate "Sort" %}</label>
+    {{ form.sort }}
+    {{ form.sort.errors }}
+  </div>
+  <div class="tuning-field">
+    <button type="submit">{% translate "Evaluate catalog" %}</button>
+  </div>
+</form>
+
+{% if panel %}
+<p>
+  {% translate "Reference DPR" %}:
+  <strong>{{ panel.reference.outgoing_dpr|floatformat:2 }}</strong>
+  ({{ panel.reference.source_label }})
+</p>
+
+<table class="tuning-table">
+  <thead>
+    <tr>
+      <th>
+        <a href="{% url 'admin_tuning_techniques' %}?sort=name"
+           hx-get="{% url 'admin_tuning_techniques' %}?sort=name" hx-target="#panel-techniques">
+          {% translate "Technique" %}
+        </a>
+      </th>
+      <th>{% translate "Gift" %}</th>
+      <th>
+        <a href="{% url 'admin_tuning_techniques' %}?sort=level"
+           hx-get="{% url 'admin_tuning_techniques' %}?sort=level" hx-target="#panel-techniques">
+          {% translate "Lvl/Tier" %}
+        </a>
+      </th>
+      <th>{% translate "Category" %}</th>
+      <th>
+        <a href="{% url 'admin_tuning_techniques' %}?sort=baseline_de"
+           hx-get="{% url 'admin_tuning_techniques' %}?sort=baseline_de" hx-target="#panel-techniques">
+          {% translate "Base DE" %}
+        </a>
+      </th>
+      <th>
+        <a href="{% url 'admin_tuning_techniques' %}?sort=amplified_de"
+           hx-get="{% url 'admin_tuning_techniques' %}?sort=amplified_de" hx-target="#panel-techniques">
+          {% translate "Anchor DE" %}
+        </a>
+      </th>
+      <th>{% translate "Amp x" %}</th>
+      <th>{% translate "Anima" %}</th>
+      <th>
+        <a href="{% url 'admin_tuning_techniques' %}?sort=de_per_anima"
+           hx-get="{% url 'admin_tuning_techniques' %}?sort=de_per_anima" hx-target="#panel-techniques">
+          {% translate "DE/Anima" %}
+        </a>
+      </th>
+      <th>{% translate "Flags" %}</th>
+    </tr>
+  </thead>
+  <tbody>
+    {% for row in panel.rows %}
+    <tr>
+      <td>
+        <details>
+          <summary>{{ row.report.name }}</summary>
+          <ul class="valuation-lines">
+            {% for valuation in row.report.valuations %}
+            <li>
+              <strong>{{ valuation.kind }}</strong> &middot; {{ valuation.label }} &middot;
+              {{ valuation.value|floatformat:2 }} &middot;
+              <span class="badge">{{ valuation.provenance }}</span>
+              {{ valuation.detail }}
+            </li>
+            {% empty %}
+            <li>{% translate "No priced valuations." %}</li>
+            {% endfor %}
+          </ul>
+        </details>
+      </td>
+      <td>{{ row.report.gift_name }}</td>
+      <td>{{ row.report.level }}/{{ row.report.tier }}</td>
+      <td>{{ row.report.category }}</td>
+      <td>{{ row.report.baseline_de|floatformat:2 }}</td>
+      <td>{{ row.report.amplified_de|floatformat:2 }}</td>
+      <td>
+        {% if row.amplification_ratio is not None %}
+        {{ row.amplification_ratio|floatformat:2 }}x
+        {% else %}
+        n/a
+        {% endif %}
+      </td>
+      <td>{{ row.report.effective_anima }}</td>
+      <td>{{ row.report.de_per_anima|floatformat:3 }}</td>
+      <td>
+        {% for flag in row.report.flags %}
+        <span class="badge">{{ flag }}</span>
+        {% endfor %}
+      </td>
+    </tr>
+    {% empty %}
+    <tr><td colspan="10">{% translate "No priced techniques at these parameters." %}</td></tr>
+    {% endfor %}
+  </tbody>
+</table>
+
+<h3>{% translate "Unpriced or zero-value" %}</h3>
+{% if panel.zero_bucket %}
+<ul class="zero-bucket-list">
+  {% for report in panel.zero_bucket %}
+  <li>
+    {{ report.name }} ({{ report.gift_name }}) &middot;
+    {% if report.flags %}
+    {% for flag in report.flags %}<span class="badge">{{ flag }}</span>{% endfor %}
+    {% else %}
+    <span class="badge">{% translate "no priced payload" %}</span>
+    {% endif %}
+  </li>
+  {% endfor %}
+</ul>
+{% else %}
+<p>{% translate "Every technique in the catalog priced at least one payload." %}</p>
+{% endif %}
+
+<h3>{% translate "Valuation provenance" %}</h3>
+<p class="provenance-summary">
+  {% for provenance, count in panel.provenance_summary.items %}
+  <span>{{ provenance }}: {{ count }}</span>
+  {% empty %}
+  <span>{% translate "No valuations to summarize." %}</span>
+  {% endfor %}
+</p>
+{% else %}
+<p>{% translate "No evaluation has been run yet - set parameters above and evaluate the catalog." %}</p>
+{% endif %}
