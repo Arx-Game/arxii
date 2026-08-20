@@ -56,6 +56,15 @@ class EvalContext:
     technique's own intensity; amplified power adds the blend + specialty
     pure-helper contributions at ``thread_level`` for a "fully matched
     anchor" caster.
+
+    ``passive`` (#3279 Task 2) flags that the technique is being evaluated as a
+    passive-applied payload (no roll — combat applies it at
+    ``effective_power=intensity``, ``success_level=row.minimum_success_level``,
+    see ``world/combat/services.py:5889`` ``_apply_passive_technique``). v1 does
+    NOT attempt to auto-detect passive-ness from a technique's authored data —
+    that requires combat-slot context this evaluator doesn't have — so this
+    field exists as a documented seam only; it defaults False and nothing reads
+    it yet.
     """
 
     level: int = 10
@@ -63,6 +72,7 @@ class EvalContext:
     roller_points: int = 25
     target_difficulty: int = 25
     roll_modifier: int = 0
+    passive: bool = False
 
 
 @dataclass(frozen=True, slots=True)
