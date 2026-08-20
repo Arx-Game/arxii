@@ -2246,7 +2246,7 @@ export interface paths {
       cookie?: never;
     };
     /** @description This beginning's perspective entries, ungated for the CG shop window (ADR-0224). */
-    get: operations['character_creation_beginnings_perspectives_retrieve'];
+    get: operations['character_creation_beginnings_perspectives_list'];
     put?: never;
     post?: never;
     delete?: never;
@@ -3328,7 +3328,7 @@ export interface paths {
      *     Resolved directly: get_queryset is beginning_id-scoped and would 404
      *     every detail route.
      */
-    get: operations['character_creation_traditions_perspectives_retrieve'];
+    get: operations['character_creation_traditions_perspectives_list'];
     put?: never;
     post?: never;
     delete?: never;
@@ -36032,6 +36032,19 @@ export interface components {
      * @enum {string}
      */
     PersonaTypeEnum: 'primary' | 'established' | 'temporary' | 'alternate';
+    /**
+     * @description Shop-window payload for a holder's perspective entries (#3281, ADR-0224).
+     *
+     *     Serves CodexEntry rows ungated by codex knowledge: the CG wizard shows a
+     *     culture's own voice while the player chooses. Read-only by construction.
+     */
+    PerspectiveEntry: {
+      entry_id: number;
+      name: string;
+      summary: string;
+      lore_content: string;
+      subject_name: string;
+    };
     /** @description Read serializer for petitions (#2288). */
     Petition: {
       readonly id: number;
@@ -45064,9 +45077,11 @@ export interface operations {
       };
     };
   };
-  character_creation_beginnings_perspectives_retrieve: {
+  character_creation_beginnings_perspectives_list: {
     parameters: {
-      query?: never;
+      query?: {
+        starting_area?: number;
+      };
       header?: never;
       path: {
         /** @description A unique integer value identifying this Beginnings. */
@@ -45081,7 +45096,7 @@ export interface operations {
           [name: string]: unknown;
         };
         content: {
-          'application/json': components['schemas']['Beginnings'];
+          'application/json': components['schemas']['PerspectiveEntry'][];
         };
       };
     };
@@ -46365,9 +46380,11 @@ export interface operations {
       };
     };
   };
-  character_creation_traditions_perspectives_retrieve: {
+  character_creation_traditions_perspectives_list: {
     parameters: {
-      query?: never;
+      query?: {
+        beginning_id?: number;
+      };
       header?: never;
       path: {
         /** @description A unique integer value identifying this Tradition. */
@@ -46382,7 +46399,7 @@ export interface operations {
           [name: string]: unknown;
         };
         content: {
-          'application/json': components['schemas']['Tradition'];
+          'application/json': components['schemas']['PerspectiveEntry'][];
         };
       };
     };

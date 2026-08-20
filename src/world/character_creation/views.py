@@ -181,6 +181,7 @@ class BeginningsViewSet(viewsets.ReadOnlyModelViewSet):
 
         return queryset
 
+    @extend_schema(responses=PerspectiveEntrySerializer(many=True))
     @action(detail=True, methods=[HTTPMethod.GET])
     def perspectives(self, request: Request, pk: int | None = None) -> Response:
         """This beginning's perspective entries, ungated for the CG shop window (ADR-0224)."""
@@ -391,6 +392,7 @@ class TraditionViewSet(viewsets.ReadOnlyModelViewSet):
         )
         return context
 
+    @extend_schema(responses=PerspectiveEntrySerializer(many=True))
     @action(detail=True, methods=[HTTPMethod.GET])
     def perspectives(self, request: Request, pk: str | None = None) -> Response:
         """This tradition's perspective entries, ungated for the CG shop window (ADR-0224).
