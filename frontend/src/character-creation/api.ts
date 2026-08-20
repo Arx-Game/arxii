@@ -35,6 +35,7 @@ import type {
   OriginTemplate,
   Path,
   PathSkillSuggestion,
+  PerspectiveEntry,
   Resonance,
   ResonanceAssociation,
   Restriction,
@@ -462,6 +463,26 @@ export async function getOriginTemplates(beginningId: number): Promise<OriginTem
   const res = await apiFetch(`${BASE_URL}/origin-templates/?beginning=${beginningId}`);
   if (!res.ok) {
     throw new Error('Failed to load origin templates');
+  }
+  return res.json();
+}
+
+// =============================================================================
+// Perspective Entry API (CG wizard perspective panels, #3281)
+// =============================================================================
+
+export async function getBeginningsPerspectives(beginningId: number): Promise<PerspectiveEntry[]> {
+  const res = await apiFetch(`${BASE_URL}/beginnings/${beginningId}/perspectives/`);
+  if (!res.ok) {
+    throw new Error('Failed to load perspectives');
+  }
+  return res.json();
+}
+
+export async function getTraditionPerspectives(traditionId: number): Promise<PerspectiveEntry[]> {
+  const res = await apiFetch(`${BASE_URL}/traditions/${traditionId}/perspectives/`);
+  if (!res.ok) {
+    throw new Error('Failed to load perspectives');
   }
   return res.json();
 }

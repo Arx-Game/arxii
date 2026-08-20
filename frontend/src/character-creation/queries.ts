@@ -17,6 +17,7 @@ import {
   deleteTechnique,
   getAffinities,
   getBeginnings,
+  getBeginningsPerspectives,
   getBuilds,
   getCGGifts,
   getCGPointBudget,
@@ -52,6 +53,7 @@ import {
   getNamingRitualConfig,
   getTarotCards,
   getTechniqueStyles,
+  getTraditionPerspectives,
   getTraditions,
   getWorshippedBeings,
   resubmitDraft,
@@ -102,6 +104,11 @@ export const characterCreationKeys = {
   // Origin template catalog (guided origin-story flow, #2478)
   originTemplates: (beginningId: number) =>
     [...characterCreationKeys.all, 'origin-templates', beginningId] as const,
+  // Perspective entries (CG wizard perspective panels, #3281)
+  beginningsPerspectives: (beginningId: number) =>
+    [...characterCreationKeys.all, 'beginnings-perspectives', beginningId] as const,
+  traditionPerspectives: (traditionId: number) =>
+    [...characterCreationKeys.all, 'tradition-perspectives', traditionId] as const,
   // Build-your-own magic system keys
   techniqueStyles: () => [...characterCreationKeys.all, 'technique-styles'] as const,
   effectTypes: () => [...characterCreationKeys.all, 'effect-types'] as const,
@@ -447,6 +454,25 @@ export function useOriginTemplates(beginningId: number | null | undefined) {
     queryKey: characterCreationKeys.originTemplates(beginningId ?? 0),
     queryFn: () => getOriginTemplates(beginningId!),
     enabled: !!beginningId,
+    staleTime: 5 * 60 * 1000,
+  });
+}
+
+// Perspective entries (CG wizard perspective panels, #3281)
+export function useBeginningsPerspectives(beginningId: number | null | undefined) {
+  return useQuery({
+    queryKey: characterCreationKeys.beginningsPerspectives(beginningId ?? 0),
+    queryFn: () => getBeginningsPerspectives(beginningId!),
+    enabled: !!beginningId,
+    staleTime: 5 * 60 * 1000,
+  });
+}
+
+export function useTraditionPerspectives(traditionId: number | null | undefined) {
+  return useQuery({
+    queryKey: characterCreationKeys.traditionPerspectives(traditionId ?? 0),
+    queryFn: () => getTraditionPerspectives(traditionId!),
+    enabled: !!traditionId,
     staleTime: 5 * 60 * 1000,
   });
 }
