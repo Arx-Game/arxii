@@ -525,3 +525,21 @@ class PerspectiveOfFieldTests(TestCase):
 
         detail = self.client.get(f"/api/codex/entries/{self.opinion.pk}/").json()
         assert detail["perspective_of"] == self.holder_name
+
+
+class TraditionPerspectiveAttributionTests(TestCase):
+    """perspective_of surfaces a tradition holder's name too (#3281)."""
+
+    @classmethod
+    def setUpTestData(cls):
+        from world.codex.factories import CodexEntryFactory, TraditionCodexGrantFactory
+        from world.magic.factories import TraditionFactory
+
+        cls.tradition = TraditionFactory(name="Emberwrights")
+        cls.entry = CodexEntryFactory(is_public=True)
+        TraditionCodexGrantFactory(tradition=cls.tradition, entry=cls.entry, is_perspective=True)
+
+    def test_detail_shows_tradition_holder(self):
+        response = self.client.get(f"/api/codex/entries/{self.entry.id}/")
+        assert response.status_code == 200
+        assert response.json()["perspective_of"] == "Emberwrights"
