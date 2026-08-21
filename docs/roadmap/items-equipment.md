@@ -322,9 +322,11 @@ What shipped:
 - **`ItemTemplate.is_usable` as canonical predicate** — `ItemUsablePrerequisite` and
   `ItemInstanceReadSerializer.get_is_usable` (from #1026) both delegate to
   `template.on_use_pool_id is not None` via `is_usable`. Single source of truth.
-- **Visibility proxy (MVP):** `_is_visible_to` in `prerequisites.py` checks same-location
-  presence. This is an explicit MVP proxy — there is no perception/stealth/darkness system.
-  A follow-up will replace it when that system is built.
+- **Visibility:** `_is_visible_to` in `prerequisites.py` checks same-location presence
+  and delegates to the real perception/concealment seam `can_perceive`
+  (`world.conditions.services`, #1225). Player-driven concealment exists too — the
+  sneak stance (#3288, ADR-0226) produces the same `Concealed` condition. No
+  darkness system yet.
 - **`CmdUse` telnet command** (`src/commands/evennia_overrides/items.py`) — grammars:
   `use <item>` and `use <item> on <target>`. Alias: `apply`.
 
