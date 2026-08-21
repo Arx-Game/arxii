@@ -12,3 +12,8 @@ output "telnet_fqdn" {
   value       = "${var.telnet_hostname}.${var.domain}"
   description = "DNS-only TLS-telnet hostname (origin-direct)."
 }
+
+output "archive_fqdn" {
+  value       = "${var.archive_hostname}.${var.domain}"
+  description = "Proxied Arx I static-archive hostname."
+}

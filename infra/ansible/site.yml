@@ -36,6 +36,14 @@
     # `never`-tagged role simply doesn't run unless asked for, so ordinary
     # deploys (and every other role above/below) are completely unaffected.
     - { role: content_repo, when: content_repo_enabled, tags: [content_repo, never] }
+    # Arx I static-archive content sync — same on-demand idiom as
+    # content_repo above (`never` tag; runs only with `--tags arx1_archive`,
+    # standup.yml's `run_arx1_archive_sync` input): a one-time historical
+    # import, not an every-deploy concern. The vhost that SERVES the content
+    # is roles/caddy's (every deploy, gated on the basic-auth hash secret);
+    # this role only pulls the export out of the backups bucket. See
+    # docs/operations/arx1-archival.md.
+    - { role: arx1_archive, when: arx1_archive_enabled, tags: [arx1_archive, never] }
     - backups
     # #2236 Phase 3 P1: skipped entirely in rehearsal (offsite_enabled: false
     # — the R2 credential is prod-adjacent; see roles/offsite_replication's

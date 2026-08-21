@@ -166,6 +166,21 @@
   notify: Restart caddy
   when: not caddy_rehearsal_mode
 
+# --- Arx I static archive web root ------------------------------------------
+# The archive site block (rendered only when caddy_archive_enabled — see
+# defaults) points file_server at this root, so it must exist before the
+# Caddyfile deploys. CONTENT arrives separately, via the on-demand
+# arx1_archive role (`--tags arx1_archive`), not here — a converge before
+# the first content sync just serves authenticated 404s, which is fine.
+- name: Arx I archive web root exists (content arrives via arx1_archive)
+  ansible.builtin.file:
+    path: "{{ caddy_archive_root }}"
+    state: directory
+    owner: root
+    group: root
+    mode: "0755"
+  when: caddy_archive_enabled | bool
+
 - name: Deploy Caddyfile (validated before reload)
   ansible.builtin.template:
     # `caddy validate` PROVISIONS modules, it does not merely parse — the

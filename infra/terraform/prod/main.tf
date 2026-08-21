@@ -27,16 +27,17 @@ module "firewall" {
 }
 
 module "dns" {
-  source          = "../modules/cloudflare_dns"
-  account_id      = var.cloudflare_account_id
-  domain          = var.domain
-  web_hostname    = var.web_hostname
-  telnet_hostname = var.telnet_hostname
-  origin_ipv4     = module.compute.ipv4
-  origin_ipv6     = module.compute.ipv6
-  dmarc_policy    = var.dmarc_policy
-  dmarc_rua       = var.dmarc_rua
-  resend_records  = var.resend_records
+  source           = "../modules/cloudflare_dns"
+  account_id       = var.cloudflare_account_id
+  domain           = var.domain
+  web_hostname     = var.web_hostname
+  telnet_hostname  = var.telnet_hostname
+  archive_hostname = var.archive_hostname
+  origin_ipv4      = module.compute.ipv4
+  origin_ipv6      = module.compute.ipv6
+  dmarc_policy     = var.dmarc_policy
+  dmarc_rua        = var.dmarc_rua
+  resend_records   = var.resend_records
 }
 
 # Zone security settings + bot-management levers, codified so dashboard-side

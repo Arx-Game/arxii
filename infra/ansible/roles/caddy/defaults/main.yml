@@ -19,10 +19,10 @@ caddy_backend: "127.0.0.1:4001"         # localhost-bound Django/web app backend
 # Evennia portal websocket, localhost-bound. Templated into the Caddyfile's
 # @ws route exactly like caddy_backend above (a single whole-address token,
 # not "host:{{ var }}" split across a literal host and a templated port) —
-# CI's validate.yml stubs every WHOLE `{{ ... }}` substitution with one
-# hostname placeholder (`placeholder.example.com`) before running `caddy
-# adapt`, and a bare hostname is itself a valid reverse_proxy upstream (no
-# port = Caddy's default), so this form survives that stub. The old
+# CI's validate.yml stubs every WHOLE `{{ ... }}` substitution with a
+# unique placeholder hostname (`placeholderN.example.com`) before running
+# `caddy adapt`, and a bare hostname is itself a valid reverse_proxy
+# upstream (no port = Caddy's default), so this form survives that stub. The old
 # "port-only var, hardcoded host" split would NOT have survived it (that's
 # why it used to be informational-only) — keep this as a whole address.
 caddy_ws_backend: "127.0.0.1:4002"
@@ -38,6 +38,30 @@ caddy_static_root: "/opt/arxii/current/src/server/.static"
 # DNS-edit-scoped Cloudflare token supplied via env (CADDY_CF_DNS_TOKEN),
 # which is a NEW on-box secret to add to the gated-Environment contract.
 caddy_acme_email: "ops@example"
+# --- Arx I static archive vhost (docs/operations/arx1-archival.md) ----------
+# A second, static-only site block: the read-only Arx I historical archive,
+# served straight from disk behind basic auth. Enabled only when ALL of:
+# not rehearsal (the hash secret is prod-adjacent), the fqdn is wired
+# (standup.sh writes it from `tofu output archive_fqdn`), and the operator
+# has set the ARXII_ARX1_ARCHIVE_BASICAUTH_HASH gated-Environment secret
+# (a bcrypt hash from `caddy hash-password`). A missing secret means
+# "archive not rolled out yet" — a clean converge with no archive vhost,
+# NOT a refused one. This is deliberately the secrets_map_optional posture
+# (see roles/secrets_vault), not the fail-closed secrets_map one, and the
+# var is read here directly (like the DNS-01 token) because it configures
+# Caddy, never the app — it has no business in /etc/arxii/arxii.env.
+# NOTE: consume caddy_archive_enabled with `| bool` — the folded expression
+# renders to the STRING "True"/"False", and a bare `{% if %}` on a non-empty
+# string is always truthy.
+caddy_archive_fqdn: "" # = tofu output archive_fqdn (via generated group_vars)
+caddy_archive_root: /srv/arx1-archive
+caddy_archive_basicauth_user: archive
+caddy_archive_basicauth_hash: "{{ lookup('env', 'ARXII_ARX1_ARCHIVE_BASICAUTH_HASH') }}"
+caddy_archive_enabled: >-
+  {{ (not caddy_rehearsal_mode)
+     and (caddy_archive_fqdn | length > 0)
+     and (caddy_archive_basicauth_hash | length > 0) }}
+
 # #2236 Phase 3 P1 (dress rehearsal). When true: deploy Caddyfile.rehearsal.j2
 # (local_certs, no DNS-01) instead of Caddyfile.j2, and skip the
 # caddy-dns/cloudflare plugin steps below (not needed without acme_dns —

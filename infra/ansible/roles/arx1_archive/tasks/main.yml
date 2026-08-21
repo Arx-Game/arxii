@@ -1,0 +1,55 @@
+---
+# On-demand one-shot (see defaults/main.yml): pull the static Arx I archive
+# export out of the primary backups bucket, verify its checksum, and install
+# it under the Caddy vhost's web root. The vhost itself (basic auth, TLS,
+# headers) belongs to roles/caddy; this role only delivers content. Full
+# pipeline: docs/operations/arx1-archival.md.
+
+- name: Zstd present (the archive tarball is .tar.zst)
+  ansible.builtin.apt:
+    name: [zstd]
+    state: present
+    update_cache: true
+    cache_valid_time: 3600
+    lock_timeout: 600
+
+- name: Install the sync script
+  ansible.builtin.template:
+    src: arx1-archive-sync.sh.j2
+    dest: /usr/local/sbin/arx1-archive-sync
+    owner: root
+    group: root
+    mode: "0750"
+
+# A oneshot unit rather than running the script straight from Ansible: the
+# bucket credential lives in the vault EnvironmentFile, and a systemd
+# EnvironmentFile is the established way creds reach a job on this box (see
+# roles/backups) — the key never transits Ansible's process environment.
+- name: Install the sync service (reads the EnvironmentFile for creds)
+  ansible.builtin.copy:
+    dest: /etc/systemd/system/arx1-archive-sync.service
+    owner: root
+    group: root
+    mode: "0644"
+    content: |
+      [Unit]
+      Description=Arx I static archive - pull + verify + install from the backups bucket
+      [Service]
+      Type=oneshot
+      EnvironmentFile={{ secrets_env_file | default('/etc/arxii/arxii.env') }}
+      ExecStart=/usr/local/sbin/arx1-archive-sync
+  notify: Reload systemd
+
+- name: Reload systemd before starting (the unit may be new this run)
+  ansible.builtin.meta: flush_handlers
+
+# Starting a Type=oneshot unit (no RemainAfterExit) BLOCKS until the job
+# exits and propagates its failure, so this task IS the sync, not a
+# fire-and-forget. Re-running the role re-runs the sync — that is the
+# point of invoking `--tags arx1_archive` again after re-uploading a
+# corrected export.
+- name: Run the sync (blocks until the oneshot exits; fails loudly)
+  ansible.builtin.systemd_service:
+    name: arx1-archive-sync.service
+    state: started
+  changed_when: true

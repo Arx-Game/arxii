@@ -1,0 +1,53 @@
+#!/usr/bin/env bash
+# Managed by Ansible (arx1_archive). One-shot: pull the static Arx I archive
+# site export from the primary backups bucket, verify its checksum, and swap
+# it into the Caddy-served web root. Read-only against the bucket — never
+# deletes remote objects. Safe to re-run: the end state is the freshly
+# verified export, whatever was there before.
+set -euo pipefail
+
+# Creds come from the systemd unit's EnvironmentFile (/etc/arxii/arxii.env):
+# the on-box bucket-scoped writer key the backups job already uses.
+export AWS_ACCESS_KEY_ID="${BACKUP_WRITER_ACCESS_KEY:?BACKUP_WRITER_ACCESS_KEY missing from environment}"
+export AWS_SECRET_ACCESS_KEY="${BACKUP_WRITER_SECRET_KEY:?BACKUP_WRITER_SECRET_KEY missing from environment}"
+
+endpoint="{{ arx1_archive_s3_endpoint }}"
+region="{{ arx1_archive_region }}"
+src="s3://{{ arx1_archive_bucket }}/{{ arx1_archive_object }}"
+dest="{{ arx1_archive_root }}"
+obj="$(basename "{{ arx1_archive_object }}")"
+
+# /var/tmp, not /tmp: /tmp may be tmpfs, and the extracted site should not
+# have to fit in RAM.
+work="$(mktemp -d /var/tmp/arx1-archive-sync.XXXXXX)"
+trap 'rm -rf "${work}"' EXIT
+
+aws --endpoint-url "${endpoint}" --region "${region}" s3 cp "${src}" "${work}/${obj}"
+aws --endpoint-url "${endpoint}" --region "${region}" s3 cp "${src}.sha256" "${work}/${obj}.sha256"
+(cd "${work}" && sha256sum -c "${obj}.sha256")
+
+mkdir "${work}/site"
+# The tarball root IS the site root (index.html at top level) — the freeze
+# pipeline's export step packs it that way; see the runbook. --long=27
+# mirrors the compression side (infra/scripts/arx1/): long-window zstd
+# frames refuse to decompress without it ("Frame requires too much memory").
+zstd -dc --long=27 "${work}/${obj}" | tar -xf - -C "${work}/site"
+if [ ! -e "${work}/site/index.html" ]; then
+  echo "extracted tree has no top-level index.html — refusing to install" >&2
+  exit 1
+fi
+chmod -R a+rX "${work}/site"
+
+# Swap. ${work} may sit on a different filesystem, so stage the tree beside
+# the destination first; the two mv renames are then atomic each, and the
+# only transient state a concurrent request can see is "site briefly absent"
+# (a 404), never a half-written mix. The old-tree mv must come first — mv
+# onto an EXISTING directory would move the new tree INSIDE it instead of
+# replacing it.
+rm -rf "${dest}.new" "${dest}.old"
+cp -a "${work}/site" "${dest}.new"
+if [ -e "${dest}" ]; then mv "${dest}" "${dest}.old"; fi
+mv "${dest}.new" "${dest}"
+rm -rf "${dest}.old"
+
+echo "arx1 archive installed at ${dest} ($(du -sh "${dest}" | cut -f1))"

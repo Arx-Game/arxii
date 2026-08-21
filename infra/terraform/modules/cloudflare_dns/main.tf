@@ -32,6 +32,27 @@ resource "cloudflare_record" "web_aaaa" {
   proxied = true
 }
 
+# --- Arx I static archive (proxied / orange) --------------------------------
+# Same origin, own hostname: Caddy serves the read-only Arx I archive as a
+# separate basic-auth-gated vhost (roles/caddy). The record exists whether or
+# not the vhost is enabled yet — an A record pointing at an origin with no
+# matching site block is inert (Caddy answers nothing for that SNI).
+resource "cloudflare_record" "archive_a" {
+  zone_id = cloudflare_zone.this.id
+  name    = var.archive_hostname
+  type    = "A"
+  content = var.origin_ipv4
+  proxied = true
+}
+
+resource "cloudflare_record" "archive_aaaa" {
+  zone_id = cloudflare_zone.this.id
+  name    = var.archive_hostname
+  type    = "AAAA"
+  content = var.origin_ipv6
+  proxied = true
+}
+
 # --- TLS-telnet (DNS-only / grey — bypasses Cloudflare) ---------------------
 resource "cloudflare_record" "telnet_a" {
   zone_id = cloudflare_zone.this.id
