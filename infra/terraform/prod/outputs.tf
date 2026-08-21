@@ -11,6 +11,9 @@ output "web_fqdn" {
 output "telnet_fqdn" {
   value = module.dns.telnet_fqdn
 }
+output "archive_fqdn" {
+  value = module.dns.archive_fqdn
+}
 output "backups_bucket" {
   value = module.object_storage.bucket
 }

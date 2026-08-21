@@ -20,6 +20,12 @@ variable "telnet_hostname" {
   description = "Subdomain for TLS-telnet. DNS-only (NOT proxied) — telnet bypasses Cloudflare straight to origin."
 }
 
+variable "archive_hostname" {
+  type        = string
+  default     = "archive"
+  description = "Subdomain for the read-only Arx I static archive (proxied through Cloudflare; basic-auth-gated at Caddy)."
+}
+
 variable "origin_ipv4" {
   type        = string
   description = "Instance public IPv4 (from the compute module)."

@@ -38,9 +38,9 @@
 		# Evennia portal websocket, localhost-bound. Templated as a single
 		# whole-address token exactly like the plain-handle block's
 		# caddy_backend below — CI's validate.yml stubs each entire Jinja
-		# substitution with one hostname placeholder before running caddy
-		# adapt, and a bare hostname is a valid reverse_proxy upstream on its
-		# own, so this survives that stub.
+		# substitution with a unique placeholder hostname before running
+		# caddy adapt, and a bare hostname is a valid reverse_proxy upstream
+		# on its own, so this survives that stub.
 		reverse_proxy {{ caddy_ws_backend }} {
 			# No Cloudflare in front during rehearsal — smoke.sh runs ON the
 			# stage box itself (over SSH, host_firewall's Cloudflare-only
@@ -65,3 +65,30 @@
 		}
 	}
 }
+{% if caddy_archive_enabled | bool %}
+
+# Arx I static archive — kept in lockstep with Caddyfile.j2 (see its block
+# comment). Never actually rendered in rehearsal: caddy_archive_enabled is
+# hard-false there (its defaults expression includes `not
+# caddy_rehearsal_mode`, and the stage box holds no
+# ARXII_ARX1_ARCHIVE_BASICAUTH_HASH secret anyway — prod-adjacent, by the
+# isolation doctrine). Present so the two templates stay the same site set,
+# and CI's validate.yml (which drops control-flow lines before adapt) still
+# validates this block's shape against the stock binary.
+{{ caddy_archive_fqdn }} {
+	encode zstd gzip
+	header {
+		Strict-Transport-Security "max-age=31536000; includeSubDomains; preload"
+		X-Content-Type-Options "nosniff"
+		X-Frame-Options "DENY"
+		Referrer-Policy "strict-origin-when-cross-origin"
+		X-Robots-Tag "noindex, nofollow"
+		-Server
+	}
+	basic_auth {
+		{{ caddy_archive_basicauth_user }} {{ caddy_archive_basicauth_hash }}
+	}
+	root * {{ caddy_archive_root }}
+	file_server
+}
+{% endif %}

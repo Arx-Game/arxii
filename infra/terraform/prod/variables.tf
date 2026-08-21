@@ -40,6 +40,10 @@ variable "telnet_hostname" {
   type    = string
   default = "telnet"
 }
+variable "archive_hostname" {
+  type    = string
+  default = "archive"
+}
 variable "tls_telnet_port" {
   type    = number
   default = 4003

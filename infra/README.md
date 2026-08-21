@@ -174,6 +174,12 @@ disables the feature, never refuses the converge — `secrets_vault`'s
   `SENTRY_ENVIRONMENT` (prod: `production`; rehearsal: `rehearsal`) and
   `SENTRY_RELEASE` (the deployed commit SHA, stamped by `app_deploy` after
   checkout) are derived on-box, not operator-supplied.
+- `ARXII_ARX1_ARCHIVE_BASICAUTH_HASH` — bcrypt hash (from `caddy
+  hash-password`) of the shared password for the read-only Arx I archive
+  site. Caddy-step-only: read via `lookup('env', ...)` in `roles/caddy`'s
+  defaults, never written on-box (it configures Caddy, not the app). Unset
+  means the `archive.<domain>` vhost is simply not rendered. See "Arx I
+  archive" below and `docs/operations/arx1-archival.md`.
 
 **Pre-stored by the operator — ansible-step-only, never written to the app's
 own EnvironmentFile (#3153; a third category alongside "on-box runtime"
@@ -683,6 +689,26 @@ recovery-only, so:
   rehearsal" above).
 - Watched by the off-box heartbeat (`roles/offbox_alerting`) alongside
   `arxii-backup.service`/`arxii-offsite.service`.
+
+## Arx I archive (`archive.<domain>`, read-only, basic auth)
+
+The retired Arx I game's history lives in both backup buckets under the
+`arx1/` prefix (sqlite snapshot, rpevent logs, resurrection kit — uploaded
+and byte-verified by `infra/scripts/arx1/`), and a static export of its
+website is served by the Arx II box's Caddy behind basic auth. Two levers:
+
+- **Vhost**: `roles/caddy` renders the `archive.<domain>` site block only
+  when the optional `ARXII_ARX1_ARCHIVE_BASICAUTH_HASH` gated-Environment
+  secret is set (a bcrypt hash from `caddy hash-password`) — unset means no
+  vhost, a clean converge (same posture as `ARXII_SENTRY_DSN`).
+- **Content**: `roles/arx1_archive` (`never`-tagged, like content_repo)
+  pulls `arx1/arx1-site-export.tar.zst` from the primary bucket, verifies
+  its checksum, and installs it at `/srv/arx1-archive` — the button's
+  "Also pull the static Arx I archive export" checkbox.
+
+The GM/OOC rpevent logs are backup-only and never served. Full runbook
+(freeze, upload, export, serve, Linode teardown):
+`docs/operations/arx1-archival.md`; decision: ADR-0225.
 
 ## Known gap: Object Lock
 

@@ -213,11 +213,12 @@ main() {
   tf_read_outputs "${TF_DIR}"   # lib.sh — caches into TF_OUTPUT_JSON; jqr/jqc read it
 
   # Non-sensitive scalars.
-  local ip web_fqdn telnet_fqdn backups_bucket backups_s3_endpoint backups_region
+  local ip web_fqdn telnet_fqdn archive_fqdn backups_bucket backups_s3_endpoint backups_region
   local r2_offsite_bucket r2_s3_endpoint tls_telnet_port
   ip="$(jqr instance_ipv4)"
   web_fqdn="$(jqr web_fqdn)"
   telnet_fqdn="$(jqr telnet_fqdn)"
+  archive_fqdn="$(jqr archive_fqdn)"
   backups_bucket="$(jqr backups_bucket)"
   backups_s3_endpoint="$(jqr backups_s3_endpoint)"
   backups_region="$(jqr region)"
@@ -271,6 +272,11 @@ hostfw_tls_telnet_port: ${tls_telnet_port}
 
 # caddy (roles/caddy/defaults/main.yml)
 caddy_web_fqdn: "${web_fqdn}"
+# The Arx I archive vhost fqdn — wiring it here does NOT enable the vhost:
+# roles/caddy's caddy_archive_enabled also requires the (optional)
+# ARXII_ARX1_ARCHIVE_BASICAUTH_HASH secret to be set. See
+# docs/operations/arx1-archival.md.
+caddy_archive_fqdn: "${archive_fqdn}"
 caddy_acme_email: "${ARXII_ACME_EMAIL:-admin@${TF_VAR_domain}}"
 
 # tls_telnet_cert (roles/tls_telnet_cert/defaults/main.yml)
@@ -326,9 +332,20 @@ EOF
   # specific `never`-tagged role. So `--tags all,content_repo` runs the
   # full ordinary converge PLUS the content-repo refresh, correctly
   # positioned in the play order (see site.yml).
-  local ansible_extra_args=()
+  # Same idiom for the Arx I archive content sync (roles/arx1_archive,
+  # `never`-tagged in site.yml): on-demand, expected roughly once ever. Both
+  # opt-ins compose into ONE --tags list — two separate --tags flags would
+  # not (ansible-playbook keeps only the last one).
+  local ansible_run_tags="all"
   if [[ "${ARXII_RUN_CONTENT_REFRESH:-false}" == "true" ]]; then
-    ansible_extra_args+=(--tags "all,content_repo")
+    ansible_run_tags+=",content_repo"
+  fi
+  if [[ "${ARXII_RUN_ARX1_ARCHIVE_SYNC:-false}" == "true" ]]; then
+    ansible_run_tags+=",arx1_archive"
+  fi
+  local ansible_extra_args=()
+  if [[ "${ansible_run_tags}" != "all" ]]; then
+    ansible_extra_args+=(--tags "${ansible_run_tags}")
   fi
 
   # Backup-writer keys are handed to ansible via env in-memory — never

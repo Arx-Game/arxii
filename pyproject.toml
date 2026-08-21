@@ -136,6 +136,22 @@ external = ["STRING_LITERAL", "PREFETCH_STRING", "SHARED_MEMORY", "USE_FILTERSET
     "S607",    # partial executable path for git CLI in tests
 ]
 
+# Arx I archival static-site exporter (docs/operations/arx1-archival.md) —
+# runs inside the RETIRED game's own venv against the arxcode codebase, not
+# this repo's toolchain: stdlib os.path + percent-format on purpose (the old
+# venv's exact Python floor is unverified), function-level imports because
+# django.setup() must precede them, and one deliberately-monolithic crawl
+# loop for a run-roughly-once operator tool.
+"infra/scripts/arx1/arx1_static_export.py" = [
+    "UP031",   # percent-format — oldest-Python-compatible on purpose
+    "PTH100", "PTH103", "PTH110", "PTH112", "PTH118", "PTH120", "PTH123", # os.path ditto
+    "PLC0415", # imports after django.setup(), by necessity
+    "ARG002",  # HTMLParser.handle_starttag's signature is fixed by the stdlib
+    "C901", "PLR0912", "PLR0915", # one monolithic crawl loop, by choice
+    "PLR2004", # HTTP 200
+    "PLW2901", # loop-var reassign in link normalization
+]
+
 # Content push module — subprocess git calls are its core function
 "src/core_management/content_push.py" = [
     "S603",    # subprocess without shell check — git CLI calls

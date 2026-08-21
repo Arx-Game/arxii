@@ -1,0 +1,30 @@
+---
+# On-demand (site.yml tags this role `never` + `arx1_archive`, like
+# content_repo): it runs only when an operator explicitly passes
+# `--tags arx1_archive` — standup.yml's `run_arx1_archive_sync` input, via
+# standup.sh. The Arx I archive is a one-time historical import, not an
+# every-deploy concern; see docs/operations/arx1-archival.md for the whole
+# freeze -> upload -> serve pipeline this is the last leg of.
+#
+# Kept impossible in rehearsal even if `--tags arx1_archive` were passed
+# there by mistake: the source bucket + its writer credential are
+# prod-adjacent (same reasoning content_repo_enabled documents for the
+# GitHub PAT). rehearse.sh's generated group_vars never sets this true...
+# and does not need to set it false either — the `never` tag already keeps
+# the role dormant; this var is the belt to that suspender.
+arx1_archive_enabled: true
+
+# Where the site lands. Must match roles/caddy's caddy_archive_root (the
+# vhost's file_server root) — both default to the same path on purpose.
+arx1_archive_root: /srv/arx1-archive
+
+# Source object: the static-site export tarball the Arx I freeze pipeline
+# uploaded (infra/scripts/arx1/ + the runbook). Lives in the PRIMARY backups
+# bucket under its own prefix; the R2 copy of the same object is the offsite
+# backup, not this sync's source. Bucket/endpoint/region reuse the backups
+# group_vars standup.sh already generates — same bucket, same on-box writer
+# credential (BACKUP_WRITER_* in /etc/arxii/arxii.env).
+arx1_archive_bucket: "{{ backups_bucket }}"
+arx1_archive_s3_endpoint: "{{ backups_s3_endpoint }}"
+arx1_archive_region: "{{ backups_region }}"
+arx1_archive_object: "arx1/arx1-site-export.tar.zst"

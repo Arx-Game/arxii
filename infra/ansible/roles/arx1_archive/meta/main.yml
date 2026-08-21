@@ -1,0 +1,11 @@
+---
+galaxy_info:
+  role_name: arx1_archive
+  author: Arx II
+  description: One-shot pull of the static Arx I archive site from the backups bucket onto the box (Caddy serves it; roles/caddy owns the vhost).
+  license: proprietary
+  min_ansible_version: "2.15"
+  platforms:
+    - name: Ubuntu
+      versions: [noble]
+dependencies: []

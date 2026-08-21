@@ -35,7 +35,7 @@ jobs:
         run: |
           set -euo pipefail
           shopt -s nullglob
-          files=(infra/scripts/*.sh)
+          files=(infra/scripts/*.sh infra/scripts/arx1/*.sh)
           if [ ${#files[@]} -eq 0 ]; then echo "no shell scripts yet — skip"; exit 0; fi
           sudo apt-get update -qq && sudo apt-get install -y shellcheck
           shellcheck "${files[@]}"
@@ -139,14 +139,22 @@ jobs:
 
           for cf in "${cfs[@]}"; do
             echo "== $cf =="
-            # The repo ships a Jinja TEMPLATE; Caddy cannot parse `{{ ... }}`.
-            # Every Caddyfile* template here has no Jinja control flow (only
-            # simple substitutions), so stub every `{{ ... }}` with a
-            # placeholder host to get a syntactically real Caddyfile.
-            # Caddy-native single-brace placeholders ({env.X}, {remote_host})
-            # are intentionally left intact.
+            # The repo ships a Jinja TEMPLATE; Caddy cannot parse `{{ ... }}`
+            # or `{% ... %}`. Render a syntactically real Caddyfile by (1)
+            # DROPPING Jinja control-flow lines — `{% if %}`/`{% endif %}`
+            # sit ALONE on their own lines in these templates (a contract
+            # the templates' own comments state) — so conditionally-rendered
+            # blocks like the Arx I archive vhost are ALWAYS validated, and
+            # (2) stubbing each `{{ ... }}` with a UNIQUE placeholder host:
+            # two site blocks stubbed to the SAME host would be an
+            # ambiguous-site adapt error, a stub artifact rather than a real
+            # config problem. A unique hostname is simultaneously a valid
+            # site address, reverse_proxy upstream, root path token, and
+            # basic_auth hash string at adapt time (adapt parses; it does
+            # not provision hashes). Caddy-native single-brace placeholders
+            # ({env.X}, {remote_host}) are intentionally left intact.
             rendered="/tmp/$(basename "$cf").rendered"
-            sed -E 's/\{\{[^}]*\}\}/placeholder.example.com/g' "$cf" > "$rendered"
+            perl -ne 'next if /^\s*\{%.*%\}\s*$/; s/\{\{[^}]*\}\}/"placeholder".(++$i).".example.com"/ge; print' "$cf" > "$rendered"
             # Dispatch on CONTENT (#2236 review), not filename: a "does the
             # filename contain the word rehearsal" substring match trusts a
             # naming convention that can drift (a renamed/new template
