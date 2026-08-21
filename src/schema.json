@@ -26240,6 +26240,32 @@ paths:
               schema:
                 $ref: '#/components/schemas/PlayerReportDetail'
           description: ''
+  /api/player-submissions/player-reports/hidden-presence/:
+    post:
+      operationId: player_submissions_player_reports_hidden_presence_create
+      description: |-
+        #3288 — report the unseen presence in the reporter's room.
+
+        No reported-identity input and none in the response: the server resolves
+        the room's concealed occupants into staff-visible PlayerReports; the
+        reporter only learns that the report was filed.
+      tags:
+      - player-submissions
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/HiddenPresenceReportCreateRequest'
+        required: true
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HiddenPresenceReportCreate'
+          description: ''
   /api/player-submissions/system-errors/:
     get:
       operationId: player_submissions_system_errors_list
@@ -48357,6 +48383,49 @@ components:
       - id
       - name
       - target_kind
+    HiddenPresenceReportCreate:
+      type: object
+      description: |-
+        #3288 — report the unseen presence in your current room.
+
+        Deliberately carries NO reported-identity input: the reporter never learns who
+        the hidden presence is. Resolution happens server-side in
+        ``services.report_hidden_presence`` against the concealed occupants of the
+        reporter's room.
+      properties:
+        reporter_persona:
+          type: integer
+        category:
+          allOf:
+          - $ref: '#/components/schemas/CategoryC06Enum'
+          default: harassment
+        behavior_description:
+          type: string
+      required:
+      - behavior_description
+      - reporter_persona
+    HiddenPresenceReportCreateRequest:
+      type: object
+      description: |-
+        #3288 — report the unseen presence in your current room.
+
+        Deliberately carries NO reported-identity input: the reporter never learns who
+        the hidden presence is. Resolution happens server-side in
+        ``services.report_hidden_presence`` against the concealed occupants of the
+        reporter's room.
+      properties:
+        reporter_persona:
+          type: integer
+        category:
+          allOf:
+          - $ref: '#/components/schemas/CategoryC06Enum'
+          default: harassment
+        behavior_description:
+          type: string
+          minLength: 1
+      required:
+      - behavior_description
+      - reporter_persona
     HighlightReel:
       type: object
       description: |-

@@ -35,6 +35,7 @@ from world.player_submissions.serializers import (
     BugReportCreateSerializer,
     BugReportDetailSerializer,
     FileIssueInputSerializer,
+    HiddenPresenceReportCreateSerializer,
     PetitionCreateSerializer,
     PetitionSerializer,
     PlayerFeedbackCreateSerializer,
@@ -106,7 +107,9 @@ class _SubmissionViewSetMixin:
     pagination_class = StandardResultsSetPagination
 
     def get_permissions(self) -> builtins.list:
-        if self.action == "create":
+        # hidden_presence (#3288) is a player-facing create variant — any
+        # authenticated player may file it, exactly like create.
+        if self.action in ("create", "hidden_presence"):
             return [IsAuthenticated()]
         return [IsAdminUser()]
 
@@ -236,6 +239,8 @@ class PlayerReportViewSet(
     def get_serializer_class(self) -> type[serializers.Serializer]:
         if self.action == "create":
             return PlayerReportCreateSerializer
+        if self.action == "hidden_presence":
+            return HiddenPresenceReportCreateSerializer
         return PlayerReportDetailSerializer
 
     def perform_create(self, serializer: serializers.BaseSerializer) -> None:
@@ -245,6 +250,37 @@ class PlayerReportViewSet(
             reporter_account=self.request.user,
             location_id=location_id,
         )
+
+    @action(detail=False, methods=[HTTPMethod.POST], url_path="hidden-presence")
+    def hidden_presence(self, request: Request) -> Response:
+        """#3288 — report the unseen presence in the reporter's room.
+
+        No reported-identity input and none in the response: the server resolves
+        the room's concealed occupants into staff-visible PlayerReports; the
+        reporter only learns that the report was filed.
+        """
+        from world.player_submissions.services import (  # noqa: PLC0415
+            HiddenPresenceReportError,
+            report_hidden_presence,
+        )
+
+        serializer = HiddenPresenceReportCreateSerializer(
+            data=request.data, context={"account": request.user}
+        )
+        serializer.is_valid(raise_exception=True)
+        try:
+            reports = report_hidden_presence(
+                reporter_account=cast("AccountDB", request.user),
+                reporter_persona=serializer.validated_data["reporter_persona"],
+                behavior_description=serializer.validated_data["behavior_description"],
+                category=serializer.validated_data["category"],
+            )
+        except HiddenPresenceReportError as exc:
+            return Response(
+                {"detail": exc.user_message},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        return Response({"filed": len(reports)}, status=status.HTTP_201_CREATED)
 
 
 class PetitionViewSet(
