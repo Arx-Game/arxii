@@ -107,7 +107,9 @@ class _SubmissionViewSetMixin:
     pagination_class = StandardResultsSetPagination
 
     def get_permissions(self) -> builtins.list:
-        if self.action == "create":
+        # hidden_presence (#3288) is a player-facing create variant — any
+        # authenticated player may file it, exactly like create.
+        if self.action in ("create", "hidden_presence"):
             return [IsAuthenticated()]
         return [IsAdminUser()]
 
