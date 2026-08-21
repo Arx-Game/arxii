@@ -92,9 +92,14 @@ character sheets (every roster state, so departed characters too), **actions**
 (`/character/sheet/<id>/actions/` lists + per-action pages, force-enqueued
 for every discovered sheet rather than trusting the sheet template's links),
 **journals** (`/comms/journals/list/`, paginated - entries render inline in
-the list), events, crises, boards, help topics, and news. Still test a run
-against real data before trusting it; the summary prints errors and skipped
-URLs to guide tuning.
+the list), events, crises, boards, help topics, and news. It also writes a
+**synthetic `/lore/` appendix rendered straight from the DB** (ruled in
+2026-08-21): all mysteries, revelations, and clues - never-discovered ones
+and gm_notes included - because none of that had a crawlable surface in
+Arx I (telnet investigation commands + Django admin only). Skippable with
+`--skip-lore-appendix` for tuning runs. Still test a run against real data
+before trusting it; the summary prints errors and skipped URLs to guide
+tuning.
 
 Two things to know before running:
 

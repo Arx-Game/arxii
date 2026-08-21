@@ -24,6 +24,9 @@ login-gated pages render. Coverage includes the big lore surfaces:
     render inline in the list - there is no per-journal detail URL)
   - events (/dom/cal/list/ + display pages), crises, boards
     (/comms/boards/), help topics, news
+  - a synthetic /lore/ appendix rendered straight from the DB: all
+    mysteries, revelations, and clues (never-discovered ones included,
+    gm_notes included) - none of which had a crawlable surface in Arx I
 
 Crawl as a STAFF account (the default: first superuser). Ruled 2026-08-21:
 everything written with the intent of being read by staff belongs in the
@@ -216,6 +219,179 @@ def extract_links(html, base_path, seen, queue, skipped):
                 queue.append(key)
 
 
+LORE_CSS = (
+    "<style>body{max-width:60em;margin:2em auto;padding:0 1em;"
+    "font-family:Georgia,serif;line-height:1.5;background:#f8f6f0;color:#222}"
+    "h1,h2,h3{font-family:Palatino,Georgia,serif}article{border-bottom:1px solid #ccc;"
+    "margin-bottom:1.5em;padding-bottom:1em}.meta{color:#666;font-size:.9em}"
+    ".herring{color:#a00}.gm{background:#fff3d6;padding:.5em;margin:.5em 0}"
+    ".undiscovered{color:#666;font-style:italic}</style>"
+)
+CLUES_PER_PAGE = 100
+
+
+def write_page(out, relpath, title, body_html):
+    full = os.path.join(out, relpath)
+    os.makedirs(os.path.dirname(full), exist_ok=True)
+    with open(full, "w", encoding="utf-8") as fh:
+        fh.write(
+            "<!doctype html><html><head><meta charset='utf-8'><title>%s</title>%s"
+            "</head><body><p><a href='/lore/'>Lore appendix</a> | <a href='/'>Archive home</a>"
+            "</p>%s</body></html>" % (title, LORE_CSS, body_html)
+        )
+
+
+def export_lore_appendix(out):
+    """Render mysteries/revelations/clues straight from the DB under /lore/.
+
+    Revelations and mysteries never had a web surface in Arx I (telnet
+    investigation commands + Django admin only), and clues only appeared on
+    the sheets of characters who discovered them - so this appendix is the
+    only place never-discovered lore becomes readable without standing the
+    game back up. Ruled in scope 2026-08-21: all of it was staff-intended
+    (gm_notes included). Pages land under /lore/, a prefix arxcode never
+    used, so nothing collides with the crawled tree.
+    """
+    from html import escape
+
+    from web.character.models import Clue, Mystery, Revelation
+
+    def revelation_html(rev):
+        clues = list(rev.clues.all().order_by("rating", "name"))
+        clue_links = ", ".join(
+            "<a href='/lore/clues/#clue-%d'>%s</a>" % (c.id, escape(c.name or "Clue #%d" % c.id))
+            for c in clues
+        )
+        finders = ", ".join(sorted(str(e) for e in rev.characters.all())) or (
+            "<span class='undiscovered'>never discovered</span>"
+        )
+        parts = [
+            "<article id='rev-%d'><h3>%s%s</h3>"
+            % (
+                rev.id,
+                escape(rev.name or "Revelation #%d" % rev.id),
+                " <span class='herring'>(red herring)</span>" if rev.red_herring else "",
+            ),
+            "<div>%s</div>" % escape(rev.desc).replace("\n", "<br>"),
+        ]
+        if rev.gm_notes:
+            parts.append(
+                "<div class='gm'><b>GM notes:</b> %s</div>"
+                % escape(rev.gm_notes).replace("\n", "<br>")
+            )
+        parts.append("<p class='meta'>Clues: %s</p>" % (clue_links or "none"))
+        parts.append("<p class='meta'>Discovered by: %s</p></article>" % finders)
+        return "".join(parts)
+
+    def clue_html(clue):
+        revs = ", ".join(
+            "<a href='/lore/mysteries/#rev-%d'>%s</a>"
+            % (r.id, escape(r.name or "Revelation #%d" % r.id))
+            for r in clue.revelations.all()
+        )
+        finders = ", ".join(sorted(str(e) for e in clue.characters.all())) or (
+            "<span class='undiscovered'>never discovered</span>"
+        )
+        parts = [
+            "<article id='clue-%d'><h3>%s%s</h3>"
+            % (
+                clue.id,
+                escape(clue.name or "Clue #%d" % clue.id),
+                " <span class='herring'>(red herring)</span>" if clue.red_herring else "",
+            ),
+            "<p class='meta'>%s | rating %s</p>" % (clue.get_clue_type_display(), clue.rating),
+            "<div>%s</div>" % escape(clue.desc).replace("\n", "<br>"),
+        ]
+        if clue.gm_notes:
+            parts.append(
+                "<div class='gm'><b>GM notes:</b> %s</div>"
+                % escape(clue.gm_notes).replace("\n", "<br>")
+            )
+        parts.append("<p class='meta'>Revelations: %s</p>" % (revs or "none"))
+        parts.append("<p class='meta'>Discovered by: %s</p></article>" % finders)
+        return "".join(parts)
+
+    # One page for all mysteries + their revelations (there are far fewer of
+    # these than clues), with mystery-less revelations appended at the end.
+    revs_seen = set()
+    sections = []
+    for mystery in Mystery.objects.all().order_by("category", "name"):
+        revs = list(mystery.revelations.all().order_by("name"))
+        revs_seen.update(r.id for r in revs)
+        sections.append(
+            "<section><h2>%s</h2><p class='meta'>%s</p><div>%s</div>%s</section>"
+            % (
+                escape(mystery.name),
+                escape(mystery.category or ""),
+                escape(mystery.desc).replace("\n", "<br>"),
+                "".join(revelation_html(r) for r in revs),
+            )
+        )
+    orphans = Revelation.objects.exclude(id__in=revs_seen).order_by("name")
+    if orphans:
+        sections.append(
+            "<section><h2>Revelations outside any mystery</h2>%s</section>"
+            % "".join(revelation_html(r) for r in orphans)
+        )
+    write_page(
+        out,
+        "lore/mysteries/index.html",
+        "Mysteries and Revelations",
+        "<h1>Mysteries and Revelations</h1>" + "".join(sections),
+    )
+
+    # Clues, paginated by hand (six years of them will not fit one page).
+    # Bare-string prefetch on purpose: this runs against ARX I's Django, not
+    # this repo's - arxcode has no Prefetch-object convention to honor, and
+    # plain M2M prefetches are exactly right for a one-shot full dump.
+    clues = list(
+        Clue.objects.all().order_by("name", "id").prefetch_related("revelations", "characters")  # noqa: PREFETCH_STRING
+    )
+    total_pages = max(1, (len(clues) + CLUES_PER_PAGE - 1) // CLUES_PER_PAGE)
+    for page in range(total_pages):
+        chunk = clues[page * CLUES_PER_PAGE : (page + 1) * CLUES_PER_PAGE]
+        nav = " | ".join(
+            "<b>%d</b>" % (n + 1)
+            if n == page
+            else "<a href='/lore/clues/%s'>%d</a>" % ("" if n == 0 else "page-%d/" % (n + 1), n + 1)
+            for n in range(total_pages)
+        )
+        relpath = (
+            "lore/clues/index.html" if page == 0 else "lore/clues/page-%d/index.html" % (page + 1)
+        )
+        write_page(
+            out,
+            relpath,
+            "Clues (page %d)" % (page + 1),
+            "<h1>All Clues</h1><p class='meta'>Pages: %s</p>%s<p class='meta'>Pages: %s</p>"
+            % (nav, "".join(clue_html(c) for c in chunk), nav),
+        )
+
+    undiscovered = sum(1 for c in clues if not c.characters.all())
+    write_page(
+        out,
+        "lore/index.html",
+        "Lore Appendix",
+        "<h1>Lore Appendix</h1><p>Rendered straight from the game database - "
+        "including lore no player ever found.</p><ul>"
+        "<li><a href='/lore/mysteries/'>Mysteries and revelations</a> (%d mysteries, "
+        "%d revelations)</li>"
+        "<li><a href='/lore/clues/'>All clues</a> (%d clues, %d never discovered, "
+        "%d pages)</li></ul>"
+        % (
+            Mystery.objects.count(),
+            Revelation.objects.count(),
+            len(clues),
+            undiscovered,
+            total_pages,
+        ),
+    )
+    print(
+        "lore appendix: %d mysteries, %d revelations, %d clues (%d never discovered)"
+        % (Mystery.objects.count(), Revelation.objects.count(), len(clues), undiscovered)
+    )
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--out", required=True, help="output directory for the static tree")
@@ -244,6 +420,13 @@ def main():
         type=int,
         default=300000,
         help="hard stop against crawler traps (default: %(default)s)",
+    )
+    parser.add_argument(
+        "--skip-lore-appendix",
+        action="store_true",
+        help="skip the /lore/ appendix (mysteries/revelations/all-clues "
+        "rendered straight from the DB - on by default because that lore "
+        "has no crawlable surface)",
     )
     args = parser.parse_args()
 
@@ -315,6 +498,9 @@ def main():
 
         if exported % 500 == 0:
             print("  %d exported (%d resumed), %d queued" % (exported, resumed, len(queue)))
+
+    if not args.skip_lore_appendix:
+        export_lore_appendix(out)
 
     # Static assets straight from disk - the crawl only picks up assets a
     # page referenced; this sweeps the rest (css url() references etc.).
