@@ -146,6 +146,12 @@ export interface RoomStatePayload {
   decorations?: string[];
   /** The room's bare 1-10 comfort level (#2991), no per-character offset. */
   comfort_level?: number;
+  /**
+   * #3288 — mandatory OOC disclosure: true when ANY occupant is concealed
+   * (sneaking, invisible, whatever). Identity-free by construction; room-derived,
+   * so it works with or without an active scene.
+   */
+  has_unseen_presence?: boolean;
 }
 
 export interface SceneSummary {
