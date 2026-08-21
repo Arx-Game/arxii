@@ -25,15 +25,15 @@ login-gated pages render. Coverage includes the big lore surfaces:
   - events (/dom/cal/list/ + display pages), crises, boards
     (/comms/boards/), help topics, news
 
-WHO YOU CRAWL AS decides what the archive contains (pick via --username):
-  - a STAFF account sees everything: secrets and clues on sheets, GM notes,
-    and ALL black (private) journals mixed into the journal list
-    (JournalListView uses all_permitted_journals(user); a fresh account has
-    read nothing, so the "unread" list IS the full list)
-  - a fresh NON-staff account sees white journals only, but also loses the
-    sheet secrets/clues the archive is supposed to keep
-There is no URL-level way to include clues but exclude black journals -
-that choice is the account you crawl with.
+Crawl as a STAFF account (the default: first superuser). Ruled 2026-08-21:
+everything written with the intent of being read by staff belongs in the
+archive - black journals, secrets, clues, GM notes included (all were
+always staff-viewable and known to be). The staff journal list contains
+every black journal because a fresh account has read nothing, so its
+"unread" list IS the full permitted set. The privacy boundary - messengers,
+player-to-player IC mail staff was never meant to read - cannot leak in:
+messengers have no web view in arxcode (model + telnet handler + Django
+admin only, and /admin is skipped).
 
 Runtime expectation for ~6 years of data: tens of thousands to ~150k pages
 at roughly 100-500ms each through the test client = several hours to

@@ -11,8 +11,14 @@ the Arx I website (crawled through Django's test client as staff, so
 login-gated content renders) served by the Arx II box's Caddy at
 `archive.<domain>` behind basic auth: previously-private content should not be
 stranger-readable or crawlable, but anyone WITH archive access may see
-anything - spoilers included. The GM/OOC logs are the one exception: backup
-only, never served (player OOC information, not merely spoilers). The
+anything that was written with the intent of being read by staff - black
+journals, secrets, clues, actions, events, spoilers included (all were
+always staff-viewable and explicitly known to be so). The boundary is IC
+communication players did NOT intend staff to read: messengers
+(player-to-player mail) carried an expectation of privacy, illusory or not,
+and are never surfaced - they have no web view in arxcode, so they exist
+only inside the private sqlite backup, alongside the GM/OOC event logs
+(also backup-only, never served). The
 basic-auth hash secret doubles as the vhost's enable switch (optional-secret
 posture); content delivery is an on-demand `never`-tagged role, mirroring
 content_repo. **Rejected:** keeping Arx I playable/running on the new box (a

@@ -12,11 +12,18 @@ Linode backups bucket the Arx II box already pays for, plus Cloudflare R2
 costs the Arx II box only disk and an extra Caddy vhost. The $50/month Arx I
 Linode goes away entirely.
 
-Decision record: ADR-0225. Rulings baked in: spoilers/secrets/clues may all
-appear in the archive (anyone with archive access may see anything), the site
-is basic-auth gated (previously-private content should not be crawlable or
-stranger-readable), and the GM/OOC rpevent logs are backup-only - they contain
-player OOC information and are NEVER served, not even behind the auth gate.
+Decision record: ADR-0225. Content policy (ruled 2026-08-21): **everything
+written with the intent of being read by staff is fair game for the archive**
+- black journals, secrets, clues, actions, events, spoilers - all were always
+staff-viewable and explicitly known to be so. **The boundary is IC
+communication players did not intend staff to read: messengers**
+(player-to-player mail) carried an expectation of privacy and are never
+surfaced. Verified: messengers have no web view in arxcode (model + telnet
+handler + Django admin only, and the crawler skips /admin), so they exist
+only inside the private sqlite backup - if anyone ever builds NEW archive
+surfaces from that DB, messengers stay excluded. The GM/OOC rpevent logs are
+likewise backup-only (player OOC information). The site is basic-auth gated
+so previously login-gated content is not crawlable or stranger-readable.
 
 ## Moving parts (all in this repo)
 
@@ -89,13 +96,14 @@ the list), events, crises, boards, help topics, and news. Still test a run
 against real data before trusting it; the summary prints errors and skipped
 URLs to guide tuning.
 
-Two things to decide/know before running:
+Two things to know before running:
 
-- **The crawl account decides the content.** A staff account sees secrets,
-  clues, GM notes - AND every **black (private) journal**, because the
-  journal list shows all journals the viewer is permitted. A fresh non-staff
-  account gets white journals only but loses the sheet secrets/clues too.
-  There is no URL-level way to split the difference; pick via `--username`.
+- **Crawl as a staff account** (the default: first superuser). Ruled
+  2026-08-21: black journals, secrets, clues, and GM notes all belong in the
+  archive - everything staff-intended is in (see the content policy above).
+  The staff journal list includes every black journal because a fresh
+  account has read nothing, so its "unread" list is the full permitted set.
+  Messengers cannot leak in regardless: they have no web view.
 - **Runtime: hours, plan for overnight.** Six years of data is plausibly
   50k-150k pages at ~100-500ms each, single-threaded. The exporter streams
   every page to disk immediately (flat memory) and supports `--resume`
