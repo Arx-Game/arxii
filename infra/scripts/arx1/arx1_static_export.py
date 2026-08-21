@@ -65,7 +65,7 @@ from urllib.parse import urldefrag, urljoin, urlsplit
 # logout link would end the crawl session. Extend as the first real run
 # reveals more (the summary prints a sample of skipped URLs).
 SKIP_PATTERNS = [
-    r"^/admin\b",
+    r"^/admin",  # /admin/ AND /admintools/ (staff search tool - no archive value)
     r"^/logout\b",
     r"^/accounts/log",
     r"^/webclient\b",
