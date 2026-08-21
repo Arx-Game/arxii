@@ -77,17 +77,40 @@ touching) the Arx II `db/` and `media/` objects.
 ## Step 3 - build and upload the static site export
 
 `arx1_static_export.py` is a DRAFT crawler: it walks the Arx I site through
-Django's test client logged in as a staff account, so login-gated pages render
-with full content, and writes a plain-HTML tree. Test it against the real data
-before trusting it (expect to tune `DEFAULT_SEEDS` and `SKIP_PATTERNS` against
-arxcode's actual urls.py; the run summary prints errors and skips to guide
-that). It can run on the old box before retirement, or later anywhere the
-resurrection kit + db snapshot are restored - so this step does NOT block
-Step 5.
+Django's test client (no webserver involved - it renders views directly
+against the sqlite DB) logged in as an account you choose, and writes a
+plain-HTML tree. Its seeds and skip rules were written against arxcode's
+actual urls.py, so coverage includes the big lore surfaces: rosters and
+character sheets (every roster state, so departed characters too), **actions**
+(`/character/sheet/<id>/actions/` lists + per-action pages, force-enqueued
+for every discovered sheet rather than trusting the sheet template's links),
+**journals** (`/comms/journals/list/`, paginated - entries render inline in
+the list), events, crises, boards, help topics, and news. Still test a run
+against real data before trusting it; the summary prints errors and skipped
+URLs to guide tuning.
+
+Two things to decide/know before running:
+
+- **The crawl account decides the content.** A staff account sees secrets,
+  clues, GM notes - AND every **black (private) journal**, because the
+  journal list shows all journals the viewer is permitted. A fresh non-staff
+  account gets white journals only but loses the sheet secrets/clues too.
+  There is no URL-level way to split the difference; pick via `--username`.
+- **Runtime: hours, plan for overnight.** Six years of data is plausibly
+  50k-150k pages at ~100-500ms each, single-threaded. The exporter streams
+  every page to disk immediately (flat memory) and supports `--resume`
+  (re-parses already-saved files for links instead of re-rendering), so run
+  it under `tmux`/`screen` and an interruption costs minutes, not the run.
+
+It runs wherever the Arx I Django environment exists: on the old box before
+retirement (easiest - SSH in, tmux, run), or later anywhere the resurrection
+kit + db snapshot are restored - so this step does NOT block Step 5. It does
+NOT run on the Arx II box, which never gets Arx I code; the Arx II box only
+receives the finished tarball in Step 4.
 
 ```sh
 cd <arx1 game dir>
-<venv>/bin/python arx1_static_export.py --out ~/arx1-site
+<venv>/bin/python arx1_static_export.py --out ~/arx1-site --resume
 # spot-check ~/arx1-site in a browser (python -m http.server), then pack:
 tar -C ~/arx1-site -cf - . | zstd -19 --long=27 -T0 -o arx1-site-export.tar.zst
 sha256sum arx1-site-export.tar.zst > arx1-site-export.tar.zst.sha256
