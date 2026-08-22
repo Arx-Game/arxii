@@ -85,6 +85,7 @@ import world.species.admin
 import world.stories.admin
 import world.tarot.admin
 import world.tasking.admin
+import world.tavern_games.admin
 import world.traits.admin
 import world.travel.admin
 import world.vitals.admin

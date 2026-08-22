@@ -87,6 +87,7 @@ import world.species.models
 import world.stories.models
 import world.tarot.models
 import world.tasking.models
+import world.tavern_games.models
 import world.traits.models
 import world.travel.models
 import world.vitals.models
