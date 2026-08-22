@@ -137,10 +137,10 @@ class ResolveTests(TavernGamesServiceTestBase):
         joiner = _persona_at_place(self.place, name="Joiner", funded=100)
         session = open_session(place=self.place, game=self.game, persona=opener, ante=10)
         join_session(session=session, persona=joiner)
-        with patch("world.tavern_games.services.random.randint", return_value=3):
+        with patch("world.tavern_games.services._TABLE_RNG.randint", return_value=3):
             roll(session=session, persona=opener)
         with self.assertRaises(AlreadyRolledError):
-            with patch("world.tavern_games.services.random.randint", return_value=3):
+            with patch("world.tavern_games.services._TABLE_RNG.randint", return_value=3):
                 roll(session=session, persona=opener)
 
     def test_highest_roll_wins_pot_and_resolves(self):
@@ -151,7 +151,7 @@ class ResolveTests(TavernGamesServiceTestBase):
 
         rolls = iter([2, 5])
         with patch(
-            "world.tavern_games.services.random.randint", side_effect=lambda *_a: next(rolls)
+            "world.tavern_games.services._TABLE_RNG.randint", side_effect=lambda *_a: next(rolls)
         ):
             roll(session=session, persona=opener)
             roll(session=session, persona=joiner)
@@ -169,7 +169,7 @@ class ResolveTests(TavernGamesServiceTestBase):
         session = open_session(place=self.place, game=self.game, persona=opener, ante=10)
         join_session(session=session, persona=joiner)
 
-        with patch("world.tavern_games.services.random.randint", return_value=4):
+        with patch("world.tavern_games.services._TABLE_RNG.randint", return_value=4):
             roll(session=session, persona=opener)
             roll(session=session, persona=joiner)
 
@@ -181,7 +181,7 @@ class ResolveTests(TavernGamesServiceTestBase):
 
         rolls = iter([1, 6])
         with patch(
-            "world.tavern_games.services.random.randint", side_effect=lambda *_a: next(rolls)
+            "world.tavern_games.services._TABLE_RNG.randint", side_effect=lambda *_a: next(rolls)
         ):
             roll(session=session, persona=opener)
             roll(session=session, persona=joiner)
