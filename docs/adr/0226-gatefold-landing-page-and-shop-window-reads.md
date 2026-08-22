@@ -4,9 +4,10 @@
 
 The public front page (issue #3305, three prototypes plus a 3-round adversarial
 review and user testing, ApostateCD-approved) is a scroll-through folio ("Gatefold"):
-a night cover, Chapter I realms-first pitch (public starting areas + expandable
-Beginnings), Chapter II codex drop-cap, Chapter III scene excerpt, a
-registration-aware Door, and a motto imprint. Ruling: it serves realm/Beginnings
+a night cover carrying a monthly scene-count line, Chapter I realms-first pitch
+(public starting areas + expandable Beginnings), Chapter II codex drop-cap,
+Chapter III scene excerpt, a registration-aware Door (surfacing ADR-0208's
+invite gate), and a motto imprint. Ruling: it serves realm/Beginnings
 pitch content by opening the existing `world/character_creation`
 `StartingAreaViewSet`/`BeginningsViewSet` to anonymous reads (queryset-gated, not
 permission-gated - the same shop-window shape ADR-0224 established for CG
@@ -27,6 +28,6 @@ navigating away.
   no capability gain, the same reasoning ADR-0146 used to reject a second media
   model.
 - Keeping `/api/status/` as a stats/news portal page alongside the Gatefold -
-  the folio's Chapter III scene excerpt and monthly count already cover the
-  "the game is alive" signal; a separate portal page would be redundant surface
-  with its own maintenance cost.
+  the folio's cover monthly-count line and Chapter III scene excerpt already
+  cover the "the game is alive" signal; a separate portal page would be
+  redundant surface with its own maintenance cost.

@@ -180,12 +180,12 @@ Details: `docs/systems/character_creation.md`'s "Email Notifications (#2162)" se
 ## Built - Gatefold Landing Page (#3305)
 
 Replaces the #2162-era branded-hero homepage with a scroll-through folio
-(`frontend/src/home/`, `GatefoldPage`): a night cover, Chapter I realms (public
-starting areas + expandable Beginnings), Chapter II codex drop-cap with featured
-entries, Chapter III a scene excerpt plus a monthly-count line, a registration-aware
-Door, and a motto imprint. The old `evennia_replacements` homepage components,
-`/api/status/`, and `SceneListCard` were deleted rather than kept alongside the new
-page; see ADR-0226.
+(`frontend/src/home/`, `GatefoldPage`): a night cover carrying a monthly
+scene-count line, Chapter I realms (public starting areas + expandable
+Beginnings), Chapter II codex drop-cap with featured entries, Chapter III a
+scene excerpt, a registration-aware Door, and a motto imprint. The old
+`evennia_replacements` homepage components, `/api/status/`, and `SceneListCard`
+were deleted rather than kept alongside the new page; see ADR-0226.
 
 - **Door funnel preserved, `NewPlayerSection` retired.** The Door slot renders
   `WelcomePanel` for an authenticated visitor (unchanged component, unchanged
