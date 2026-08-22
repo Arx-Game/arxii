@@ -6,7 +6,7 @@ This app extends Evennia's core models rather than replacing them.
 from typing import Union
 
 from allauth.account.models import EmailAddress
-from django.core.exceptions import ObjectDoesNotExist
+from django.core.exceptions import ObjectDoesNotExist, ValidationError
 from django.db import models
 from django.utils.functional import cached_property
 from evennia.accounts.models import AccountDB
@@ -19,6 +19,7 @@ from evennia_extensions.mixins import RelatedCacheClearingMixin
 from server.conf.serversession import ServerSession
 from world.areas.constants import GridOrigin
 from world.contributors.models import CreditedContent
+from world.game_clock.constants import Season, TimePhase
 from world.roster.models import ApplicationStatus, ApprovalScope, RosterApplication
 
 # Type for Evennia command callers - can be Account, Session, or ObjectDB instance
@@ -669,6 +670,71 @@ class RoomProfile(NaturalKeyMixin, SharedMemoryModel):
     def __str__(self):
         area_name = self.area.name if self.area else "unplaced"
         return f"RoomProfile for {self.objectdb.db_key} ({area_name})"
+
+
+class RoomDescVariant(SharedMemoryModel):
+    """An optional season/phase-specific description variant for a room (#3291).
+
+    Rows, not sparse nullable columns (ADR-0007 spirit): a builder authors as
+    many or as few variants as they want, season-only, phase-only, or both,
+    and ``resolve_room_description`` (``evennia_extensions.services.room_desc_variants``)
+    picks the most specific match for the current IC season/phase, falling back
+    to the room's base ``ObjectDisplayData.permanent_description`` when nothing
+    matches (including when the game clock is unset, e.g. pre-launch).
+
+    Enclosure-aware by author choice, not by mechanical gate (#3291 Decision 3):
+    a fully interior room can still carry night/day variants, a tavern reads
+    differently at midnight than at noon even with no windows.
+    """
+
+    room_profile = models.ForeignKey(
+        RoomProfile,
+        on_delete=models.CASCADE,
+        related_name="desc_variants",
+    )
+    season = models.CharField(
+        max_length=10,
+        choices=Season.choices,
+        null=True,
+        blank=True,
+        help_text="IC season this variant applies to, or blank for any season.",
+    )
+    phase = models.CharField(
+        max_length=10,
+        choices=TimePhase.choices,
+        null=True,
+        blank=True,
+        help_text="Time-of-day phase this variant applies to, or blank for any phase.",
+    )
+    description = models.TextField(
+        help_text="Description text shown when this variant is the most specific match.",
+    )
+
+    class Meta:
+        app_label = "arxii"
+        verbose_name = "Room Description Variant"
+        verbose_name_plural = "Room Description Variants"
+        constraints = [
+            models.UniqueConstraint(
+                fields=["room_profile", "season", "phase"],
+                name="unique_room_desc_variant",
+            ),
+        ]
+        ordering = ["room_profile_id", "season", "phase"]
+
+    def clean(self) -> None:
+        super().clean()
+        if self.season is None and self.phase is None:
+            msg = (
+                "A description variant needs at least a season or a phase - "
+                "leaving both blank would just duplicate the base description."
+            )
+            raise ValidationError(msg)
+
+    def __str__(self) -> str:
+        season_label = self.get_season_display() if self.season else "any season"
+        phase_label = self.get_phase_display() if self.phase else "any phase"
+        return f"{self.room_profile} ({season_label}, {phase_label})"
 
 
 class ExitProfile(SharedMemoryModel):

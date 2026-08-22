@@ -1037,14 +1037,29 @@ buildings up to entire planes. A `Room` is not its own `Area` level — it hangs
   trigger). Weekly decay sweep (`cleanup_quality_decay_tick`) decays above-normal
   quality after `CLEANUP_DWELL_DAYS` and regains below-normal after
   `CLEANUP_REGAIN_WEEKS`. Room descriptions get quality-based suffixes at display
-  time. Contributors earn celestial resonance (via `ProjectKindResonanceAward`) and
-  society reputation (via `bump_society_reputation` with `area.dominant_society`).
+  time, appended after any #3291 season/phase description variant has already
+  replaced the base desc (see `RoomState.get_display_desc`,
+  `flows/object_states/room_state.py`). Contributors earn celestial resonance (via
+  `ProjectKindResonanceAward`) and society reputation (via `bump_society_reputation`
+  with `area.dominant_society`).
+- **Room Description Variants (#3291):** `evennia_extensions.RoomDescVariant`
+  (`room_profile` FK, nullable `season`/`phase` TextChoices reusing
+  `world.game_clock.constants.Season`/`TimePhase`, `description` text, unique on
+  `(room_profile, season, phase)`) - optional builder-authored prose for a specific
+  IC season/time-of-day. `resolve_room_description(profile, ic_now)`
+  (`evennia_extensions.services.room_desc_variants`) resolves most-specific-wins:
+  `(season, phase)` > `(season, -)` > `(-, phase)`, falling back to the base desc
+  (including when the game clock is unset). An event's `temporary_description`
+  overlay (`world.events.services._apply_room_overlay`) always takes precedence
+  over a variant. Authoring: `RoomDescVariantInline` on `RoomProfileAdmin`, plus
+  `staff_set_room_desc_variant`/`staff_remove_room_desc_variant` in the staff
+  world-builder canvas below.
 - **Staff World-Builder Canvas (#2449, epic #2436):** `world.areas.grid_services`
   extracts the area-generic room-graph core (`create_room`, `create_exit_pair`,
   `cell_occupied`, `place_room_on_grid`, `stranded_rooms` BFS, `promote_to_authored`,
   `suggest_fixture_key`, `ensure_slug_change_allowed`) out of
   `world.buildings.room_services` (#670), so the owner-facing Room Builder and the
-  staff canvas share one substrate instead of two drifting copies. Thirty-seven REGISTRY
+  staff canvas share one substrate instead of two drifting copies. Thirty-nine REGISTRY
   actions (`src/actions/definitions/world_builder.py`, `category="world_builder"`,
   `target_type=SELF`) — `create_area`/`edit_area`/`staff_dig_room`/`staff_edit_room`/
   `staff_link_rooms`/`staff_unlink_rooms`/`staff_rename_exit`/`staff_place_room`/
@@ -1052,7 +1067,8 @@ buildings up to entire planes. A `Room` is not its own `Area` level — it hangs
   `promote_area` + the six #2451 discovery/portal verbs + the #3269 Phase B
   room-authoring set (stats/places/ambient/feature/staffing/travel/blueprint/
   bindings/exit-detail/duplicate/batch-dig; `edit_area` carries the Phase C
-  area metadata) — gated solely by
+  area metadata) + the #3291 `staff_set_room_desc_variant`/
+  `staff_remove_room_desc_variant` pair — gated solely by
   `StaffOnlyPrerequisite` (no ownership/tenancy standing, and deliberately no
   GM-ladder trust check — see ADR-0139). `staff_dig_room` requires an AUTHORED area
   and always authors the new room outright; `staff_remove_room` refuses an
