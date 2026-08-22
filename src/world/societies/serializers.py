@@ -30,6 +30,8 @@ class OrganizationRankSerializer(serializers.ModelSerializer):
             "can_kick",
             "can_manage_ranks",
             "can_lead_rituals",
+            "can_post_to_board",
+            "can_moderate_board",
         ]
 
 

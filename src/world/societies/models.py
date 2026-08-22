@@ -566,6 +566,19 @@ class OrganizationRank(SharedMemoryModel):
             "Covenant Sanctification."
         ),
     )
+    can_post_to_board = models.BooleanField(
+        default=False,
+        help_text=(
+            "Members at this rank can pin new notices to this organization's board (#3286)."
+        ),
+    )
+    can_moderate_board = models.BooleanField(
+        default=False,
+        help_text=(
+            "Members at this rank can remove ANY notice from this organization's "
+            "board (authors may always remove their own; staff always can) (#3286)."
+        ),
+    )
 
     class Meta:
         ordering = ["tier"]

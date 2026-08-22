@@ -628,6 +628,10 @@ class ActionRegistryTests(TestCase):
             "leave_story_room",
             "spin_up_scene_room",
             "close_scene_room",
+            # #3286 — player-postable bulletin boards.
+            "post_to_board",
+            "edit_board_post",
+            "remove_board_post",
         }
         assert set(ACTIONS_BY_KEY.keys()) == expected_keys
 

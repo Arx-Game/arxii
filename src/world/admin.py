@@ -32,6 +32,7 @@ import world.agriculture.admin
 import world.areas.admin
 import world.assets.admin
 import world.battles.admin
+import world.boards.admin
 import world.boundaries.admin
 import world.buildings.admin
 import world.captivity.admin

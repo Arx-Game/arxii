@@ -4436,6 +4436,59 @@ registering a service strategy + per-kind details model.
     ward's reaction at install time; the condition must be from a harmful
     (`is_negative=True`) category.
 
+### Boards (player-postable bulletin boards - #3286)
+The IC read/write layer the Notice Board room feature and org pages were
+missing: a `Board` is anchored to EITHER a `RoomProfile` (LOCATION board,
+riding the shipped NOTICE_BOARD room feature) OR an `Organization` (ORG
+board) - never both (DB check constraint, no JSON). Posts are signed,
+persistent, exact-text notices authored by a `scenes.Persona` - a masked
+persona posts under its false identity. Distinct from #2986 rumors
+(distorting, spreading) and the GM-only `TableBulletinPost` (OOC,
+table-scoped) - see `docs/adr/0228-board-posts-are-authored-by-persona.md`.
+
+- **Models** (`world.boards.models`): `Board` (nullable `room_profile` /
+  `organization` FKs, exactly-one-set check constraint + a per-anchor unique
+  constraint - one board per room, one per org; `max_active_posts`, default
+  30, newest-first display cap - no auto-expiry at MVP, older posts stay in
+  the DB), `BoardPost` (`board` FK, `author_persona` FK `scenes.Persona`,
+  `title`, `body`, `created_at`, `edited_at`, soft-delete
+  `removed_by_persona` / `removed_at` - moderation never hard-deletes).
+- **Permission booleans** on `societies.OrganizationRank`: `can_post_to_board`
+  (every default rank grants it - org boards are rank-and-file coordination),
+  `can_moderate_board` (leadership-only by default, mirrors
+  `can_manage_ranks`).
+- **Services** (`world.boards.services`): `create_board_post` /
+  `edit_board_post` / `remove_board_post` (permission logic lives here,
+  raises typed `BoardError`) - LOCATION posting/remove-own requires physical
+  presence in the board's room; ORG posting requires `can_post_to_board`,
+  removing another member's post requires `can_moderate_board` or staff.
+  `get_or_create_location_board` / `get_or_create_org_board`;
+  `visible_posts_for_board` (display-cap + soft-delete filter);
+  `exclude_blocked_and_muted_board_authors` (mirrors
+  `journals.services.exclude_blocked_and_muted_authors`).
+- **Room-feature integration:** `room_features.services.handle_notice_board_progression`
+  get-or-creates the LOCATION board on install; `PostToBoardAction` also
+  lazily get-or-creates it at first post (covers a NOTICE_BOARD room
+  installed before #3286 shipped).
+- **Action-backed (ADR-0001):** `PostToBoardAction` / `EditBoardPostAction` /
+  `RemoveBoardPostAction` (`actions/definitions/boards.py`); telnet
+  `CmdBoard` (`board`, `board read <n>`, `board post <title>=<body>`,
+  `board remove <n>`, scoped to the caller's current room) and the web
+  dispatch seam converge on the same Actions.
+- **API:** `BoardViewSet` / `BoardPostViewSet` (`world/boards/views.py`,
+  read-only - writes go through action dispatch); ORG board visibility is
+  gated on active `OrganizationMembership` (mirrors
+  `tasking.views.OrgTaskViewSet`), LOCATION boards are public reads.
+- **Web:** OrgPage's Board section (`orgs/pages/OrgPage.tsx`), and the room
+  panel's board block (`game/components/RoomPanel.tsx`,
+  `boards/components/BoardPanel.tsx`) - both share one `BoardPanel` read/post
+  component.
+- **Examine integration:** `actions/definitions/examine_extras.py`'s room
+  section renders the LOCATION board's current postings under the existing
+  Notice Board hint line.
+- **Source:** `src/world/boards/` (see the app's `AGENT_GLOSSARY.md` and
+  `docs/systems/boards.md` for the full write-up).
+
 ### Sanctum (Plan 4 §F — first Room Feature kind)
 Plan 4 §F (#669 §F, shipped via #703). Per-resonance per-room
 generation surface installed via the Ritual of Sanctification. Two
