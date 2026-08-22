@@ -13,6 +13,8 @@ from world.societies.models import (
     OrganizationMembershipOffer,
     OrganizationRank,
     OrganizationReputation,
+    OrgAppeal,
+    OrgAppealSignon,
     Proclamation,
 )
 
@@ -30,6 +32,7 @@ class OrganizationRankSerializer(serializers.ModelSerializer):
             "can_kick",
             "can_manage_ranks",
             "can_lead_rituals",
+            "can_resolve_appeals",
         ]
 
 
@@ -500,3 +503,73 @@ class OrgDossierSerializer(serializers.Serializer):
     open_crises = DossierCrisisSerializer(many=True)
     recent_shifts = DossierShiftSerializer(many=True)
     consorts = DossierConsortSerializer(many=True)
+
+
+class OrgAppealSignonSerializer(serializers.ModelSerializer):
+    """A member's signon on an appeal (#3293)."""
+
+    member_persona_name = serializers.CharField(source="member_persona.name", read_only=True)
+
+    class Meta:
+        model = OrgAppealSignon
+        fields = ["id", "member_persona", "member_persona_name", "note", "created_at"]
+
+
+class OrgAppealSerializer(serializers.ModelSerializer):
+    """Read serializer for an appeal to an organization (#3293).
+
+    ``signons`` is a nested read; the queryset that feeds list/retrieve
+    prefetches ``signons__member_persona`` for it. Mutating endpoints
+    (signon/resolve/withdraw) re-fetch and drop the stale prefetch cache
+    before re-serializing (see ``OrgAppealViewSet``).
+    """
+
+    organization_name = serializers.CharField(source=_ORGANIZATION_NAME_SOURCE, read_only=True)
+    petitioner_persona_name = serializers.CharField(
+        source="petitioner_persona.name", read_only=True
+    )
+    resolved_by_persona_name = serializers.SerializerMethodField()
+    signons = OrgAppealSignonSerializer(many=True, read_only=True)
+
+    class Meta:
+        model = OrgAppeal
+        fields = [
+            "id",
+            "organization",
+            "organization_name",
+            "petitioner_persona",
+            "petitioner_persona_name",
+            "title",
+            "body",
+            "state",
+            "resolution_text",
+            "resolved_by_persona",
+            "resolved_by_persona_name",
+            "created_at",
+            "resolved_at",
+            "signons",
+        ]
+
+    def get_resolved_by_persona_name(self, obj: OrgAppeal) -> str:
+        return obj.resolved_by_persona.name if obj.resolved_by_persona_id else ""
+
+
+class OrgAppealCreateSerializer(serializers.Serializer):
+    """Lodge-an-appeal payload (#3293)."""
+
+    organization = serializers.PrimaryKeyRelatedField(queryset=Organization.objects.all())
+    title = serializers.CharField(max_length=120)
+    body = serializers.CharField()
+
+
+class OrgAppealSignonInputSerializer(serializers.Serializer):
+    """Signon payload (#3293) — an optional short note."""
+
+    note = serializers.CharField(max_length=240, required=False, allow_blank=True, default="")
+
+
+class OrgAppealResolveInputSerializer(serializers.Serializer):
+    """Resolve payload (#3293) — grant or decline, with a written answer."""
+
+    verdict = serializers.ChoiceField(choices=["grant", "decline"])
+    answer = serializers.CharField(required=False, allow_blank=True, default="")

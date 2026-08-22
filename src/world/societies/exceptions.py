@@ -165,3 +165,42 @@ class ObligationNotOwedError(ObligationError):
 
     user_message = "This obligation has already been settled."
     SAFE_MESSAGES = frozenset({"This obligation has already been settled."})
+
+
+class OrgAppealError(Exception):
+    """Base for typed :class:`~world.societies.models.OrgAppeal` exceptions.
+
+    Carries a safe ``user_message`` and an allowlist, mirroring
+    ``OrganizationMembershipError``'s convention.
+    """
+
+    user_message: str = "An organization appeal error occurred."
+    SAFE_MESSAGES: ClassVar[frozenset[str]] = frozenset({"An organization appeal error occurred."})
+
+
+class AppealNotOpenError(OrgAppealError):
+    """Raised when signing onto, resolving, or withdrawing a non-OPEN appeal."""
+
+    user_message = "That appeal is no longer open."
+    SAFE_MESSAGES = frozenset({"That appeal is no longer open."})
+
+
+class NotAuthorizedToResolveAppealError(OrgAppealError):
+    """Raised when resolving an appeal without the ``can_resolve_appeals`` rank or staff."""
+
+    user_message = "You are not authorized to resolve this organization's appeals."
+    SAFE_MESSAGES = frozenset({"You are not authorized to resolve this organization's appeals."})
+
+
+class NotAppealPetitionerError(OrgAppealError):
+    """Raised when withdrawing an appeal that is not your own."""
+
+    user_message = "You may only withdraw your own appeal."
+    SAFE_MESSAGES = frozenset({"You may only withdraw your own appeal."})
+
+
+class InvalidAppealVerdictError(OrgAppealError):
+    """Raised when resolving an appeal with something other than grant/decline."""
+
+    user_message = "An appeal must be resolved as either granted or declined."
+    SAFE_MESSAGES = frozenset({"An appeal must be resolved as either granted or declined."})

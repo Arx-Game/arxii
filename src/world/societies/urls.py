@@ -10,6 +10,7 @@ from world.societies.views import (
     OrganizationRankViewSet,
     OrganizationReputationViewSet,
     OrganizationViewSet,
+    OrgAppealViewSet,
     ProclamationViewSet,
 )
 
@@ -31,6 +32,7 @@ router.register(
     OrganizationMembershipOfferViewSet,
     basename="organization-membership-offer",
 )
+router.register(r"appeals", OrgAppealViewSet, basename="organization-appeal")
 
 urlpatterns = [
     path("", include(router.urls)),

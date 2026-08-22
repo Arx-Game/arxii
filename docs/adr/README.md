@@ -231,6 +231,7 @@ treat those names as hints to confirm, not gospel.
 - [0223 - Technique combat power is measured in damage-equivalents against a reference matchup, with parsed (not probed) mitigation](0223-technique-combat-power-in-damage-equivalents.md) (#3279)
 - [0224 - The CG shop window serves perspective content ungated](0224-cg-shop-window-serves-perspective-content-ungated.md) (#3281; extends ADR-0222)
 - [0225 - Arx I is archived to object storage + a static basic-auth site, not kept running](0225-arx1-archived-to-object-storage-static-site.md)
+- [0231 - Org appeals are a distinct IC surface from the OOC staff-contact Petition](0231-org-appeals-are-distinct-from-ooc-petitions.md) (#3293)
 
 ### Gift & resonance economy
 - [0050 — Gifts are Major or Minor; species abilities are a species-granted Minor Gift](0050-gifts-are-major-or-minor-species-abilities-are-minor-gifts.md)

@@ -25,6 +25,31 @@ vi.mock('@/orgs/queries', () => ({
     error: null,
   })),
   useHouseFeedQuery: vi.fn(() => ({ data: [] })),
+  useOrgAppealsQuery: vi.fn(() => ({ data: [], isLoading: false })),
+  useLodgeOrgAppealMutation: vi.fn(() => ({
+    mutate: vi.fn(),
+    isPending: false,
+    isError: false,
+    error: null,
+  })),
+  useSignonOrgAppealMutation: vi.fn(() => ({
+    mutate: vi.fn(),
+    isPending: false,
+    isError: false,
+    error: null,
+  })),
+  useResolveOrgAppealMutation: vi.fn(() => ({
+    mutate: vi.fn(),
+    isPending: false,
+    isError: false,
+    error: null,
+  })),
+  useWithdrawOrgAppealMutation: vi.fn(() => ({
+    mutate: vi.fn(),
+    isPending: false,
+    isError: false,
+    error: null,
+  })),
 }));
 
 vi.mock('@/tasking/queries', () => ({

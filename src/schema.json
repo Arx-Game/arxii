@@ -30540,6 +30540,182 @@ paths:
       responses:
         '200':
           description: No response body
+  /api/societies/appeals/:
+    get:
+      operationId: societies_appeals_list
+      description: |-
+        Appeals to organizations (#3293) — list/read + lodge/signon/resolve/withdraw.
+
+        Read is member-gated (mirrors `tasking/views.py`'s `OrgTaskViewSet`):
+        visible rows are the organization's active members' + the petitioner's
+        own appeals — an org's inbound asks are its own business, not public.
+        Lodging, signing on, resolving, and withdrawing all dispatch through the
+        matching REGISTRY Action (ADR-0001) — the same seam telnet's `CmdAppeal`
+        uses.
+      parameters:
+      - in: query
+        name: organization
+        schema:
+          type: number
+      - name: page
+        required: false
+        in: query
+        description: A page number within the paginated result set.
+        schema:
+          type: integer
+      - in: query
+        name: petitioner_persona
+        schema:
+          type: number
+      - in: query
+        name: state
+        schema:
+          type: string
+      tags:
+      - societies
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaginatedOrgAppealList'
+          description: ''
+    post:
+      operationId: societies_appeals_create
+      description: Lodge an appeal — dispatched through LodgeAppealAction (ADR-0001).
+      tags:
+      - societies
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/OrgAppealRequest'
+        required: true
+      security:
+      - cookieAuth: []
+      responses:
+        '201':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OrgAppeal'
+          description: ''
+  /api/societies/appeals/{id}/:
+    get:
+      operationId: societies_appeals_retrieve
+      description: |-
+        Appeals to organizations (#3293) — list/read + lodge/signon/resolve/withdraw.
+
+        Read is member-gated (mirrors `tasking/views.py`'s `OrgTaskViewSet`):
+        visible rows are the organization's active members' + the petitioner's
+        own appeals — an org's inbound asks are its own business, not public.
+        Lodging, signing on, resolving, and withdrawing all dispatch through the
+        matching REGISTRY Action (ADR-0001) — the same seam telnet's `CmdAppeal`
+        uses.
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: A unique integer value identifying this org appeal.
+        required: true
+      tags:
+      - societies
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OrgAppeal'
+          description: ''
+  /api/societies/appeals/{id}/resolve/:
+    post:
+      operationId: societies_appeals_resolve_create
+      description: Leadership (or staff) grants/declines this open appeal — ResolveAppealAction.
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: A unique integer value identifying this org appeal.
+        required: true
+      tags:
+      - societies
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/OrgAppealRequest'
+        required: true
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OrgAppeal'
+          description: ''
+  /api/societies/appeals/{id}/signon/:
+    post:
+      operationId: societies_appeals_signon_create
+      description: A member signs onto this open appeal — SignonAppealAction.
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: A unique integer value identifying this org appeal.
+        required: true
+      tags:
+      - societies
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/OrgAppealRequest'
+        required: true
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OrgAppeal'
+          description: ''
+  /api/societies/appeals/{id}/withdraw/:
+    post:
+      operationId: societies_appeals_withdraw_create
+      description: The petitioner withdraws their own open appeal — WithdrawAppealAction.
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: A unique integer value identifying this org appeal.
+        required: true
+      tags:
+      - societies
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/OrgAppealRequest'
+        required: true
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OrgAppeal'
+          description: ''
   /api/societies/memberships/:
     get:
       operationId: societies_memberships_list
@@ -54091,6 +54267,162 @@ components:
         * `branch` - Branch
         * `check` - Check
         * `external_act` - External Act
+    OrgAppeal:
+      type: object
+      description: |-
+        Read serializer for an appeal to an organization (#3293).
+
+        ``signons`` is a nested read; the queryset that feeds list/retrieve
+        prefetches ``signons__member_persona`` for it. Mutating endpoints
+        (signon/resolve/withdraw) re-fetch and drop the stale prefetch cache
+        before re-serializing (see ``OrgAppealViewSet``).
+      properties:
+        id:
+          type: integer
+          readOnly: true
+        organization:
+          type: integer
+          description: The organization this appeal was lodged with.
+        organization_name:
+          type: string
+          readOnly: true
+        petitioner_persona:
+          type: integer
+          description: The persona asking the organization for help.
+        petitioner_persona_name:
+          type: string
+          readOnly: true
+        title:
+          type: string
+          description: Short subject line for the ask.
+          maxLength: 120
+        body:
+          type: string
+          description: The free-text appeal, addressed to the organization.
+        state:
+          allOf:
+          - $ref: '#/components/schemas/StateEnum'
+          default: open
+        resolution_text:
+          type: string
+          description: 'Leadership''s written answer (RP, not a mechanical payload
+            — see #3293 Decision 5). Empty until resolved.'
+        resolved_by_persona:
+          type: integer
+          nullable: true
+          description: The member persona who granted/declined this appeal. Null until
+            resolved.
+        resolved_by_persona_name:
+          type: string
+          readOnly: true
+        created_at:
+          type: string
+          format: date-time
+          readOnly: true
+        resolved_at:
+          type: string
+          format: date-time
+          nullable: true
+        signons:
+          type: array
+          items:
+            $ref: '#/components/schemas/OrgAppealSignon'
+          readOnly: true
+      required:
+      - body
+      - created_at
+      - id
+      - organization
+      - organization_name
+      - petitioner_persona
+      - petitioner_persona_name
+      - resolved_by_persona_name
+      - signons
+      - title
+    OrgAppealRequest:
+      type: object
+      description: |-
+        Read serializer for an appeal to an organization (#3293).
+
+        ``signons`` is a nested read; the queryset that feeds list/retrieve
+        prefetches ``signons__member_persona`` for it. Mutating endpoints
+        (signon/resolve/withdraw) re-fetch and drop the stale prefetch cache
+        before re-serializing (see ``OrgAppealViewSet``).
+      properties:
+        organization:
+          type: integer
+          description: The organization this appeal was lodged with.
+        petitioner_persona:
+          type: integer
+          description: The persona asking the organization for help.
+        title:
+          type: string
+          minLength: 1
+          description: Short subject line for the ask.
+          maxLength: 120
+        body:
+          type: string
+          minLength: 1
+          description: The free-text appeal, addressed to the organization.
+        state:
+          allOf:
+          - $ref: '#/components/schemas/StateEnum'
+          default: open
+        resolution_text:
+          type: string
+          description: 'Leadership''s written answer (RP, not a mechanical payload
+            — see #3293 Decision 5). Empty until resolved.'
+        resolved_by_persona:
+          type: integer
+          nullable: true
+          description: The member persona who granted/declined this appeal. Null until
+            resolved.
+        resolved_at:
+          type: string
+          format: date-time
+          nullable: true
+      required:
+      - body
+      - organization
+      - petitioner_persona
+      - title
+    OrgAppealSignon:
+      type: object
+      description: A member's signon on an appeal (#3293).
+      properties:
+        id:
+          type: integer
+          readOnly: true
+        member_persona:
+          type: integer
+        member_persona_name:
+          type: string
+          readOnly: true
+        note:
+          type: string
+          description: Optional short note.
+          maxLength: 240
+        created_at:
+          type: string
+          format: date-time
+          readOnly: true
+      required:
+      - created_at
+      - id
+      - member_persona
+      - member_persona_name
+    OrgAppealSignonRequest:
+      type: object
+      description: A member's signon on an appeal (#3293).
+      properties:
+        member_persona:
+          type: integer
+        note:
+          type: string
+          description: Optional short note.
+          maxLength: 240
+      required:
+      - member_persona
     OrgBooks:
       type: object
       description: The whole books page in one read.
@@ -54503,6 +54835,11 @@ components:
             — see needs-design follow-up filed alongside #708 (''Generic organization-ritual
             dispatch for non-Covenant org kinds''). Mirrors CovenantRank.can_lead_rituals,
             which IS consumed today by Covenant Sanctification.'
+        can_resolve_appeals:
+          type: boolean
+          description: Members at this rank can grant/decline appeals lodged with
+            this organization (#3293). Staff may always resolve regardless of this
+            flag.
       required:
       - id
       - name
@@ -54536,6 +54873,11 @@ components:
             — see needs-design follow-up filed alongside #708 (''Generic organization-ritual
             dispatch for non-Covenant org kinds''). Mirrors CovenantRank.can_lead_rituals,
             which IS consumed today by Covenant Sanctification.'
+        can_resolve_appeals:
+          type: boolean
+          description: Members at this rank can grant/decline appeals lodged with
+            this organization (#3293). Staff may always resolve regardless of this
+            flag.
       required:
       - name
       - tier
@@ -57121,6 +57463,29 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/OfferSummons'
+    PaginatedOrgAppealList:
+      type: object
+      required:
+      - count
+      - results
+      properties:
+        count:
+          type: integer
+          example: 123
+        next:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=4
+        previous:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=2
+        results:
+          type: array
+          items:
+            $ref: '#/components/schemas/OrgAppeal'
     PaginatedOrgTaskList:
       type: object
       required:
@@ -69950,6 +70315,18 @@ components:
       - level
       - stat_cap
       - stats
+    StateEnum:
+      enum:
+      - open
+      - granted
+      - declined
+      - withdrawn
+      type: string
+      description: |-
+        * `open` - Open
+        * `granted` - Granted
+        * `declined` - Declined
+        * `withdrawn` - Withdrawn
     StationStatus:
       type: object
       description: LAB station snapshot within a crafting quote (#1234).

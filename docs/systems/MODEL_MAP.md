@@ -7937,6 +7937,8 @@
   - received_org_membership_offers <- societies.OrganizationMembershipOffer
   - organization_memberships <- societies.OrganizationMembership
   - offices_held <- societies.OrganizationOffice
+  - lodged_org_appeals <- societies.OrgAppeal
+  - org_appeal_signons <- societies.OrgAppealSignon
   - society_reputations <- societies.SocietyReputation
   - organization_reputations <- societies.OrganizationReputation
   - legend_entries <- societies.LegendEntry
@@ -8736,6 +8738,19 @@
 **Foreign Keys:**
   - realm -> realms.Realm [FK]
 
+### OrgAppeal
+**Foreign Keys:**
+  - organization -> societies.Organization [FK]
+  - petitioner_persona -> scenes.Persona [FK]
+  - resolved_by_persona -> scenes.Persona [FK] (nullable)
+**Pointed to by:**
+  - signons <- societies.OrgAppealSignon
+
+### OrgAppealSignon
+**Foreign Keys:**
+  - appeal -> societies.OrgAppeal [FK]
+  - member_persona -> scenes.Persona [FK]
+
 ### OrgPact
 **Foreign Keys:**
   - kind -> societies.PactKind [FK]
@@ -8767,6 +8782,7 @@
   - membership_offers <- societies.OrganizationMembershipOffer
   - memberships <- societies.OrganizationMembership
   - offices <- societies.OrganizationOffice
+  - appeals <- societies.OrgAppeal
   - reputations <- societies.OrganizationReputation
   - proclamations <- societies.Proclamation
   - held_turf <- societies.NeighborhoodTurf

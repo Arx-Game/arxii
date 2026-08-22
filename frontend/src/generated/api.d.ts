@@ -19015,6 +19015,110 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
+  '/api/societies/appeals/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /**
+     * @description Appeals to organizations (#3293) — list/read + lodge/signon/resolve/withdraw.
+     *
+     *     Read is member-gated (mirrors `tasking/views.py`'s `OrgTaskViewSet`):
+     *     visible rows are the organization's active members' + the petitioner's
+     *     own appeals — an org's inbound asks are its own business, not public.
+     *     Lodging, signing on, resolving, and withdrawing all dispatch through the
+     *     matching REGISTRY Action (ADR-0001) — the same seam telnet's `CmdAppeal`
+     *     uses.
+     */
+    get: operations['societies_appeals_list'];
+    put?: never;
+    /** @description Lodge an appeal — dispatched through LodgeAppealAction (ADR-0001). */
+    post: operations['societies_appeals_create'];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/societies/appeals/{id}/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /**
+     * @description Appeals to organizations (#3293) — list/read + lodge/signon/resolve/withdraw.
+     *
+     *     Read is member-gated (mirrors `tasking/views.py`'s `OrgTaskViewSet`):
+     *     visible rows are the organization's active members' + the petitioner's
+     *     own appeals — an org's inbound asks are its own business, not public.
+     *     Lodging, signing on, resolving, and withdrawing all dispatch through the
+     *     matching REGISTRY Action (ADR-0001) — the same seam telnet's `CmdAppeal`
+     *     uses.
+     */
+    get: operations['societies_appeals_retrieve'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/societies/appeals/{id}/resolve/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /** @description Leadership (or staff) grants/declines this open appeal — ResolveAppealAction. */
+    post: operations['societies_appeals_resolve_create'];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/societies/appeals/{id}/signon/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /** @description A member signs onto this open appeal — SignonAppealAction. */
+    post: operations['societies_appeals_signon_create'];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/societies/appeals/{id}/withdraw/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /** @description The petitioner withdraws their own open appeal — WithdrawAppealAction. */
+    post: operations['societies_appeals_withdraw_create'];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   '/api/societies/memberships/': {
     parameters: {
       query?: never;
@@ -30735,6 +30839,81 @@ export interface components {
      * @enum {string}
      */
     OptionKindEnum: 'branch' | 'check' | 'external_act';
+    /**
+     * @description Read serializer for an appeal to an organization (#3293).
+     *
+     *     ``signons`` is a nested read; the queryset that feeds list/retrieve
+     *     prefetches ``signons__member_persona`` for it. Mutating endpoints
+     *     (signon/resolve/withdraw) re-fetch and drop the stale prefetch cache
+     *     before re-serializing (see ``OrgAppealViewSet``).
+     */
+    OrgAppeal: {
+      readonly id: number;
+      /** @description The organization this appeal was lodged with. */
+      organization: number;
+      readonly organization_name: string;
+      /** @description The persona asking the organization for help. */
+      petitioner_persona: number;
+      readonly petitioner_persona_name: string;
+      /** @description Short subject line for the ask. */
+      title: string;
+      /** @description The free-text appeal, addressed to the organization. */
+      body: string;
+      /** @default open */
+      state: components['schemas']['StateEnum'];
+      /** @description Leadership's written answer (RP, not a mechanical payload — see #3293 Decision 5). Empty until resolved. */
+      resolution_text?: string;
+      /** @description The member persona who granted/declined this appeal. Null until resolved. */
+      resolved_by_persona?: number | null;
+      readonly resolved_by_persona_name: string;
+      /** Format: date-time */
+      readonly created_at: string;
+      /** Format: date-time */
+      resolved_at?: string | null;
+      readonly signons: components['schemas']['OrgAppealSignon'][];
+    };
+    /**
+     * @description Read serializer for an appeal to an organization (#3293).
+     *
+     *     ``signons`` is a nested read; the queryset that feeds list/retrieve
+     *     prefetches ``signons__member_persona`` for it. Mutating endpoints
+     *     (signon/resolve/withdraw) re-fetch and drop the stale prefetch cache
+     *     before re-serializing (see ``OrgAppealViewSet``).
+     */
+    OrgAppealRequest: {
+      /** @description The organization this appeal was lodged with. */
+      organization: number;
+      /** @description The persona asking the organization for help. */
+      petitioner_persona: number;
+      /** @description Short subject line for the ask. */
+      title: string;
+      /** @description The free-text appeal, addressed to the organization. */
+      body: string;
+      /** @default open */
+      state: components['schemas']['StateEnum'];
+      /** @description Leadership's written answer (RP, not a mechanical payload — see #3293 Decision 5). Empty until resolved. */
+      resolution_text?: string;
+      /** @description The member persona who granted/declined this appeal. Null until resolved. */
+      resolved_by_persona?: number | null;
+      /** Format: date-time */
+      resolved_at?: string | null;
+    };
+    /** @description A member's signon on an appeal (#3293). */
+    OrgAppealSignon: {
+      readonly id: number;
+      member_persona: number;
+      readonly member_persona_name: string;
+      /** @description Optional short note. */
+      note?: string;
+      /** Format: date-time */
+      readonly created_at: string;
+    };
+    /** @description A member's signon on an appeal (#3293). */
+    OrgAppealSignonRequest: {
+      member_persona: number;
+      /** @description Optional short note. */
+      note?: string;
+    };
     /** @description The whole books page in one read. */
     OrgBooks: {
       organization_id: number;
@@ -30913,6 +31092,8 @@ export interface components {
       can_manage_ranks?: boolean;
       /** @description Members at this rank may lead this organization's group rituals. No org-ritual dispatch mechanism consumes this yet for non-Covenant organizations — see needs-design follow-up filed alongside #708 ('Generic organization-ritual dispatch for non-Covenant org kinds'). Mirrors CovenantRank.can_lead_rituals, which IS consumed today by Covenant Sanctification. */
       can_lead_rituals?: boolean;
+      /** @description Members at this rank can grant/decline appeals lodged with this organization (#3293). Staff may always resolve regardless of this flag. */
+      can_resolve_appeals?: boolean;
     };
     OrganizationRankRequest: {
       /** @description Diegetic name for this rung (e.g., Guildmaster, Captain) */
@@ -30927,6 +31108,8 @@ export interface components {
       can_manage_ranks?: boolean;
       /** @description Members at this rank may lead this organization's group rituals. No org-ritual dispatch mechanism consumes this yet for non-Covenant organizations — see needs-design follow-up filed alongside #708 ('Generic organization-ritual dispatch for non-Covenant org kinds'). Mirrors CovenantRank.can_lead_rituals, which IS consumed today by Covenant Sanctification. */
       can_lead_rituals?: boolean;
+      /** @description Members at this rank can grant/decline appeals lodged with this organization (#3293). Staff may always resolve regardless of this flag. */
+      can_resolve_appeals?: boolean;
     };
     /** @description A persona's standing with an organization — named tier only, never the raw value. */
     OrganizationReputation: {
@@ -32533,6 +32716,21 @@ export interface components {
        */
       previous?: string | null;
       results: components['schemas']['OfferSummons'][];
+    };
+    PaginatedOrgAppealList: {
+      /** @example 123 */
+      count: number;
+      /**
+       * Format: uri
+       * @example http://api.example.org/accounts/?page=4
+       */
+      next?: string | null;
+      /**
+       * Format: uri
+       * @example http://api.example.org/accounts/?page=2
+       */
+      previous?: string | null;
+      results: components['schemas']['OrgAppeal'][];
     };
     PaginatedOrgTaskList: {
       /** @example 123 */
@@ -39407,6 +39605,14 @@ export interface components {
       level: number;
       stats: components['schemas']['MaturationStatEntry'][];
     };
+    /**
+     * @description * `open` - Open
+     *     * `granted` - Granted
+     *     * `declined` - Declined
+     *     * `withdrawn` - Withdrawn
+     * @enum {string}
+     */
+    StateEnum: 'open' | 'granted' | 'declined' | 'withdrawn';
     /** @description LAB station snapshot within a crafting quote (#1234). */
     StationStatus: {
       present: boolean;
@@ -68419,6 +68625,154 @@ export interface operations {
           [name: string]: unknown;
         };
         content?: never;
+      };
+    };
+  };
+  societies_appeals_list: {
+    parameters: {
+      query?: {
+        organization?: number;
+        /** @description A page number within the paginated result set. */
+        page?: number;
+        petitioner_persona?: number;
+        state?: string;
+      };
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['PaginatedOrgAppealList'];
+        };
+      };
+    };
+  };
+  societies_appeals_create: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['OrgAppealRequest'];
+      };
+    };
+    responses: {
+      201: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['OrgAppeal'];
+        };
+      };
+    };
+  };
+  societies_appeals_retrieve: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        /** @description A unique integer value identifying this org appeal. */
+        id: number;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['OrgAppeal'];
+        };
+      };
+    };
+  };
+  societies_appeals_resolve_create: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        /** @description A unique integer value identifying this org appeal. */
+        id: number;
+      };
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['OrgAppealRequest'];
+      };
+    };
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['OrgAppeal'];
+        };
+      };
+    };
+  };
+  societies_appeals_signon_create: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        /** @description A unique integer value identifying this org appeal. */
+        id: number;
+      };
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['OrgAppealRequest'];
+      };
+    };
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['OrgAppeal'];
+        };
+      };
+    };
+  };
+  societies_appeals_withdraw_create: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        /** @description A unique integer value identifying this org appeal. */
+        id: number;
+      };
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['OrgAppealRequest'];
+      };
+    };
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['OrgAppeal'];
+        };
       };
     };
   };

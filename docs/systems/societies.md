@@ -48,7 +48,7 @@ tier.range_description                       # "+250 to +499"
 
 | Model | Purpose | Key Fields |
 |-------|---------|------------|
-| `OrganizationRank` | One rung on an org's five-tier authority ladder | `organization`, `name`, `tier` (1 highest, 5 lowest), `can_invite`, `can_kick`, `can_manage_ranks`, `can_lead_rituals` |
+| `OrganizationRank` | One rung on an org's five-tier authority ladder | `organization`, `name`, `tier` (1 highest, 5 lowest), `can_invite`, `can_kick`, `can_manage_ranks`, `can_lead_rituals`, `can_resolve_appeals` (#3293) |
 | `OrganizationMembership` | Links a Persona to an Organization at a rank | `organization`, `persona` (FK to `scenes.Persona`), `rank` (FK to `OrganizationRank`), `joined_date`, `left_at`, `exiled_at` |
 | `OrganizationMembershipOffer` | Pending or resolved invitation/application | `organization`, `from_persona`, `to_persona`, `kind` (`INVITE`/`APPLICATION`), `status` (`PENDING`/`ACCEPTED`/`DECLINED`/`CANCELLED`), `created_at`, `resolved_at` |
 | `SocietyReputation` | Persona's reputation with a Society | `persona`, `society`, `value` (-1000 to +1000) |
@@ -117,6 +117,81 @@ resulting entry is linked back via `AudereMajoraCrossing.legend_entry` (OneToOne
 related_name `audere_majora_crossing`). Personas present in the scene are recorded as
 `WITNESSED` via `grant_deed_knowledge`. No `LegendEntry` is created when
 `threshold.risk == NONE`.
+
+---
+
+## Appeals to organizations (#3293)
+
+An appeal is a free-text IC ask lodged with an organization: any character may
+lodge one (no membership required), members read and sign onto it to show
+support, and leadership resolves it with a written answer. "Appeal" is the
+canonical term — "petition" stays reserved for the unrelated OOC staff-contact
+ticket (`world.player_submissions.models.Petition`); see ADR-0231.
+
+| Model | Purpose | Key Fields |
+|-------|---------|------------|
+| `OrgAppeal` | A free-text ask lodged with an org | `organization`, `petitioner_persona`, `title`, `body`, `state` (`OrgAppealState`: `OPEN`/`GRANTED`/`DECLINED`/`WITHDRAWN`), `resolution_text`, `resolved_by_persona` (nullable), `created_at`, `resolved_at` |
+| `OrgAppealSignon` | A member's public show of support for an open appeal | `appeal`, `member_persona`, `note`, `created_at` — unique per (appeal, member) |
+
+**Lifecycle** mirrors `GroupStoryRequest` (`stories/models.py` #2119) — a
+sibling shape for a different target (org vs. GM pool), not a generalization
+of it: `OPEN` → `GRANTED`/`DECLINED` (leadership, written answer) or
+`WITHDRAWN` (petitioner). A DB-level partial unique constraint enforces one
+`OPEN` appeal per (organization, petitioner) — the constraint is the contract;
+`appeal_services.py` does not pre-check it, but `LodgeAppealAction` catches the
+resulting `IntegrityError` and surfaces a friendly refusal (mirrors
+`InviteToEventAction`'s `EventError.INVITE_DUPLICATE` pattern).
+
+FK direction (ADR-0010): `OrgAppeal`/`OrgAppealSignon` are the
+specific/dependent request models; they point at the general primitives
+(`Organization`, `scenes.Persona`) with no back-reference from either.
+
+**`appeal_services.py`:**
+
+- `lodge_appeal(*, organization, petitioner_persona, title, body)` — creates
+  an `OPEN` row. No `is_established_or_primary` gate (unlike
+  `apply_to_organization`) — lodging is not membership.
+- `signon_appeal(*, appeal, member_persona, note="")` — idempotent
+  get-or-create; requires an active membership (`NotOrganizationMemberError`)
+  and an `OPEN` appeal (`AppealNotOpenError`).
+- `resolve_appeal(*, appeal, verdict, resolution_text, resolver_persona, is_staff=False)`
+  — requires a `can_resolve_appeals` rank (`can_resolve_org_appeals`) or
+  `is_staff=True`; raises `NotAuthorizedToResolveAppealError`,
+  `InvalidAppealVerdictError`, or `AppealNotOpenError`.
+- `withdraw_appeal(*, appeal, petitioner_persona)` — petitioner-only
+  (`NotAppealPetitionerError`) while `OPEN`.
+- `can_resolve_org_appeals(persona, organization)` — active-membership +
+  `rank__can_resolve_appeals` check, mirrors `houses.services.is_org_leader`.
+
+**No mechanical rewards** — the written answer is RP; an org acts on a
+granted appeal through existing levers (`OrgTask`, standing, coin). Composed,
+not wired, in this PR.
+
+**Actions** (`actions/definitions/org_appeals.py`, all `target_type=SELF`,
+`category="social"`): `org_appeal_lodge` (`LodgeAppealAction`),
+`org_appeal_signon` (`SignonAppealAction`), `org_appeal_resolve`
+(`ResolveAppealAction` — `verdict` kwarg is `"grant"`/`"decline"`, `answer`
+becomes `resolution_text`), `org_appeal_withdraw` (`WithdrawAppealAction`).
+
+**Telnet** (`commands/organizations.py`, `CmdAppeal`, key `appeal`, a sibling
+namespace to `CmdOrg` — not a subverb of it, since its default grammar lodges
+rather than listing subverbs): `appeal <org>=<title>/<body>` (lodge),
+`appeal list <org>` (read, member + own-appeal gated), `appeal signon
+<id>[=<note>]`, `appeal resolve <id>=grant|decline/<answer>`, `appeal
+withdraw <id>`.
+
+**DRF** (`OrgAppealViewSet`, `/api/societies/appeals/`): list/retrieve
+(queryset = active members of the org + the petitioner's own appeals,
+mirrors `tasking/views.py`'s `OrgTaskViewSet` member-gated board read),
+`create` (lodge), and detail actions `signon`/`resolve`/`withdraw` — all
+dispatch through the matching Action (ADR-0001), the same seam telnet uses.
+
+**Frontend** (`frontend/src/orgs/`): `AppealsPanel` on the members-only
+`OrgPage` (list + sign-on dialog + leadership resolve dialog — every member
+sees the Resolve button, the backend enforces the rank/staff gate and a
+non-privileged attempt surfaces as a toast error); `LodgeAppealDialog` on the
+public `DossierPage` (readable by any authenticated player — the "Appeal to
+`<org>`" surface for an outsider who isn't a member).
 
 ---
 
@@ -268,6 +343,7 @@ Read-only endpoints under `/api/societies/`:
 | `/ranks/` | `OrganizationRankViewSet` | Rank ladders for visible organizations |
 | `/offers/` | `OrganizationMembershipOfferViewSet` | Offers owned/received/org-visible to the requester |
 | `/reputations/` | `OrganizationReputationViewSet` | The requester's active persona's org reputations (standing) — `{id, persona, organization, organization_name, tier}`, tier only, self-scoped (#1446) |
+| `/appeals/` | `OrgAppealViewSet` | Appeals to organizations (#3293) — list/retrieve is members + own appeals; `create` lodges, `signon`/`resolve`/`withdraw` detail actions dispatch through the matching Action |
 
 All covenant-backed organizations are excluded from the membership/rank/offer endpoints.
 

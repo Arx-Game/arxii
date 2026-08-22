@@ -9,6 +9,7 @@ from world.societies.models import (
     OrganizationMembership,
     OrganizationMembershipOffer,
     OrganizationRank,
+    OrgAppeal,
 )
 
 
@@ -59,3 +60,13 @@ class OrganizationMembershipOfferFilter(django_filters.FilterSet):
     class Meta:
         model = OrganizationMembershipOffer
         fields = ["organization", "kind", "status", "to_persona", "from_persona"]
+
+
+class OrgAppealFilter(django_filters.FilterSet):
+    organization = django_filters.NumberFilter(field_name="organization_id")
+    state = django_filters.CharFilter(field_name="state", lookup_expr="iexact")
+    petitioner_persona = django_filters.NumberFilter(field_name="petitioner_persona_id")
+
+    class Meta:
+        model = OrgAppeal
+        fields = ["organization", "state", "petitioner_persona"]
