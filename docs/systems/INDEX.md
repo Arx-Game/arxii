@@ -4193,10 +4193,20 @@ companion. Full detail: [companions.md](companions.md).
 - **Actions** (`actions/definitions/companions.py`, REGISTRY,
   `category="companions"`): `BindCompanionAction` (`bind_companion`) — gated
   by `HasCompanionCapacityPrerequisite`, executes via `perform_check` against
-  `CompanionArchetype.bind_difficulty`.
+  `CompanionArchetype.bind_difficulty`. `CompanionEmoteAction`
+  (`companion_emote`, #3294) — pose *as* a bonded, present companion, gated
+  by `CompanionPresentPrerequisite` (owned + active + co-located).
+- **Companion emote (#3294):** `world.scenes.models.Interaction
+  .attributed_companion` — nullable FK → `Companion`, purely cosmetic feed
+  attribution (`Interaction.persona` stays the owner for block/mute/consent).
+  Telnet `companion emote <name|id> <text>`; web `POST
+  /api/companions/companions/{id}/emote/` + a composer toggle gated on
+  `CompanionSerializer.is_present`. Full detail: [companions.md](companions.md#companion-emote-3294),
+  [scenes.md](scenes.md#companion-pose-attribution-3294).
 - **REST API:** `world.companions.views.{CompanionViewSet,
-  CompanionArchetypeViewSet}` — read-only, mounted at `/api/companions/`.
-  Binding happens via the Action dispatch seam, not a ViewSet write.
+  CompanionArchetypeViewSet}` — read endpoints are read-only; write endpoints
+  (`bind`/`release`/`fight`/`deploy`/`order`/`emote`) converge on
+  `action.run()` via `PuppetActorMixin`, mounted at `/api/companions/`.
 - **Cross-app dependencies:** `world.character_sheets`, `world.magic`
   (Gift/Thread/ThreadPullEffect), `world.checks` (`perform_check`).
 - **Source:** `src/world/companions/`

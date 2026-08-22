@@ -28,6 +28,7 @@ if TYPE_CHECKING:
 
     from evennia.objects.models import ObjectDB
 
+    from world.companions.models import Companion
     from world.magic.models import FuryTier
     from world.scenes.models import SceneRound
     from world.species.models import Language
@@ -120,6 +121,7 @@ def create_interaction(  # noqa: PLR0913 - atomic creation requires all interact
     pose_kind: str = PoseKind.STANDARD,
     visibility: str = InteractionVisibility.DEFAULT,
     language: Language | None = None,
+    attributed_companion: Companion | None = None,
 ) -> Interaction:
     """Create an atomic RP interaction with optional receiver records.
 
@@ -150,6 +152,9 @@ def create_interaction(  # noqa: PLR0913 - atomic creation requires all interact
             or mode already implies.
         language: Spoken language (#2993); null = universal/untagged (poses, emits,
             pre-#2993 rows). Drives per-recipient comprehension rendering at push time.
+        attributed_companion: Cosmetic pose attribution (#3294) — a bonded companion the
+            room sees as the actor. Authorship stays on ``persona`` (always the companion's
+            owner); this never substitutes for it in block/mute/consent/visibility.
 
     Returns:
         The created Interaction.
@@ -168,6 +173,7 @@ def create_interaction(  # noqa: PLR0913 - atomic creation requires all interact
         pose_kind=pose_kind,
         visibility=visibility,
         language=language,
+        attributed_companion=attributed_companion,
     )
     # #1826 — posing in a scene is IC action in its area: lie-low breaks.
     _break_lie_low_for_interaction(persona, scene)
@@ -282,6 +288,8 @@ def _build_interaction_payload(  # noqa: PLR0913 - payload needs all interaction
     target_persona_ids: list[int] | None = None,
     language_id: int | None = None,
     language_name: str | None = None,
+    attributed_companion_id: int | None = None,
+    attributed_companion_name: str | None = None,
 ) -> InteractionPayload:
     """Build a structured interaction payload for WebSocket delivery."""
     return InteractionPayload(
@@ -301,6 +309,8 @@ def _build_interaction_payload(  # noqa: PLR0913 - payload needs all interaction
         target_persona_ids=target_persona_ids or [],
         language_id=language_id,
         language_name=language_name,
+        attributed_companion_id=attributed_companion_id,
+        attributed_companion_name=attributed_companion_name,
     )
 
 
@@ -416,6 +426,10 @@ def push_interaction(
         target_persona_ids=t_ids,
         language_id=interaction.language_id,
         language_name=interaction.language.name if interaction.language_id else None,
+        attributed_companion_id=interaction.attributed_companion_id,
+        attributed_companion_name=(
+            interaction.attributed_companion.name if interaction.attributed_companion_id else None
+        ),
     )
 
     # Any escalated visibility is receiver-scoped, not room-heard. Before #2710 this
@@ -450,6 +464,7 @@ def push_ephemeral_interaction(  # noqa: PLR0913 - ephemeral payload mirrors per
     place_name: str | None = None,
     receiver_persona_ids: list[int] | None = None,
     target_persona_ids: list[int] | None = None,
+    attributed_companion: Companion | None = None,
 ) -> None:
     """Push an ephemeral interaction payload — real-time delivery without persistence.
 
@@ -471,6 +486,7 @@ def push_ephemeral_interaction(  # noqa: PLR0913 - ephemeral payload mirrors per
         place_name: Optional place name for display.
         receiver_persona_ids: IDs of receiver personas.
         target_persona_ids: IDs of target personas.
+        attributed_companion: Cosmetic pose attribution (#3294) — see ``record_interaction``.
     """
     now = timezone.now()
     counter = next(_ephemeral_counter) % 1000
@@ -487,6 +503,8 @@ def push_ephemeral_interaction(  # noqa: PLR0913 - ephemeral payload mirrors per
         place_name=place_name,
         receiver_persona_ids=receiver_persona_ids,
         target_persona_ids=target_persona_ids,
+        attributed_companion_id=attributed_companion.pk if attributed_companion else None,
+        attributed_companion_name=attributed_companion.name if attributed_companion else None,
     )
 
     if recipients is not None:
@@ -792,6 +810,7 @@ def record_interaction(  # noqa: PLR0913 - all fields needed for interaction cre
     persona: Persona | None = None,
     pose_kind: str = PoseKind.STANDARD,
     language: Language | None = None,
+    attributed_companion: Companion | None = None,
     on_created: Callable[[Interaction], None] | None = None,
 ) -> Interaction | None:
     """Record an IC interaction to the database.
@@ -816,6 +835,8 @@ def record_interaction(  # noqa: PLR0913 - all fields needed for interaction cre
     recorded, but *before* the real-time push — the seam callers use to attach
     side effects that must exist before clients can react to the pushed payload
     (e.g. opening a reaction window, bulk-creating InteractionAction links).
+    ``attributed_companion`` (#3294) stamps cosmetic pose attribution — ``persona``
+    (resolved above) stays the actual writer/author for block/mute/consent purposes.
 
     After persisting, pushes the interaction payload to all objects in the
     room via WebSocket for real-time delivery. Ephemeral scenes never persist —
@@ -840,6 +861,7 @@ def record_interaction(  # noqa: PLR0913 - all fields needed for interaction cre
             content=content,
             mode=mode,
             scene=scene,
+            attributed_companion=attributed_companion,
         )
         return None
 
@@ -853,6 +875,7 @@ def record_interaction(  # noqa: PLR0913 - all fields needed for interaction cre
         target_personas=target_personas,
         pose_kind=pose_kind,
         language=language,
+        attributed_companion=attributed_companion,
     )
 
     if scene is not None:

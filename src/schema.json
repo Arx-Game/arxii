@@ -7021,8 +7021,10 @@ paths:
       description: |-
         Read + action endpoints for the player's companion surface.
 
-        `list`/`retrieve` return the caller's own active companions (read-only).
-        POST actions delegate to the four Actions in
+        `list`/`retrieve` return the caller's own active companions (read-only),
+        each carrying `is_present` (#3294) — whether the companion's live object
+        currently shares the actor's room, gating the web composer's "as
+        <companion>" emote toggle. POST actions delegate to the Actions in
         ``actions/definitions/companions.py``; ``ActionResult`` fields map 1:1 to
         the response bodies so the contract matches ``SanctumViewSet`` (#1918).
       parameters:
@@ -7065,8 +7067,10 @@ paths:
       description: |-
         Read + action endpoints for the player's companion surface.
 
-        `list`/`retrieve` return the caller's own active companions (read-only).
-        POST actions delegate to the four Actions in
+        `list`/`retrieve` return the caller's own active companions (read-only),
+        each carrying `is_present` (#3294) — whether the companion's live object
+        currently shares the actor's room, gating the web composer's "as
+        <companion>" emote toggle. POST actions delegate to the Actions in
         ``actions/definitions/companions.py``; ``ActionResult`` fields map 1:1 to
         the response bodies so the contract matches ``SanctumViewSet`` (#1918).
       parameters:
@@ -7094,6 +7098,36 @@ paths:
         Deploy a companion into a battle — ``POST /api/companions/companions/{id}/deploy/``.
 
         Wraps :class:`actions.definitions.companions.DeployCompanionAction`.
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: A unique integer value identifying this Companion.
+        required: true
+      tags:
+      - companions
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Companion'
+          description: ''
+  /api/companions/companions/{id}/emote/:
+    post:
+      operationId: companions_companions_emote_create
+      description: |-
+        Pose as a bonded, present companion — ``POST
+        /api/companions/companions/{id}/emote/`` (#3294).
+
+        Wraps :class:`actions.definitions.companions.CompanionEmoteAction`. The
+        companion id comes from the URL; ``get_queryset`` scopes it to the
+        caller's own active companions (foreign -> 404). The Action re-validates
+        ownership + room presence via ``CompanionPresentPrerequisite`` (defense
+        in depth).
       parameters:
       - in: path
         name: id
@@ -41406,10 +41440,20 @@ components:
           format: date-time
           readOnly: true
           nullable: true
+        is_present:
+          type: boolean
+          description: |-
+            True when the companion's live object shares the actor's current room (#3294).
+
+            Gates the web composer's "as <companion>" emote toggle. ``actor_location_id``
+            is seeded onto the serializer context by ``CompanionViewSet.get_serializer_context``;
+            with no resolvable actor location, every companion reads as absent.
+          readOnly: true
       required:
       - archetype
       - bonded_at
       - id
+      - is_present
       - name
       - released_at
     CompanionArchetype:
@@ -49152,6 +49196,19 @@ components:
           type: string
           nullable: true
           readOnly: true
+        attributed_companion:
+          type: object
+          additionalProperties: {}
+          nullable: true
+          description: |-
+            Cosmetic companion pose attribution (#3294): ``{id, name}`` or ``None``.
+
+            Authorship stays entirely on ``persona`` — already resolved above with the
+            full per-viewer display/mask/discovery treatment via ``_persona_display_map``.
+            The frontend builds the owner tell ("via <owner>") from that same resolved
+            ``persona`` field rather than a second identity-resolution path here, so a
+            masked owner's companion pose correctly shows the mask, never the real name.
+          readOnly: true
         endorsee_sheet_id:
           type: integer
           readOnly: true
@@ -49282,6 +49339,7 @@ components:
           readOnly: true
       required:
       - action_links
+      - attributed_companion
       - content
       - dramatic_moment_suggestions
       - dramatic_moment_tags
@@ -49420,6 +49478,19 @@ components:
           type: string
           nullable: true
           readOnly: true
+        attributed_companion:
+          type: object
+          additionalProperties: {}
+          nullable: true
+          description: |-
+            Cosmetic companion pose attribution (#3294): ``{id, name}`` or ``None``.
+
+            Authorship stays entirely on ``persona`` — already resolved above with the
+            full per-viewer display/mask/discovery treatment via ``_persona_display_map``.
+            The frontend builds the owner tell ("via <owner>") from that same resolved
+            ``persona`` field rather than a second identity-resolution path here, so a
+            masked owner's companion pose correctly shows the mask, never the real name.
+          readOnly: true
         endorsee_sheet_id:
           type: integer
           readOnly: true
@@ -49545,6 +49616,7 @@ components:
           readOnly: true
       required:
       - action_links
+      - attributed_companion
       - content
       - dramatic_moment_suggestions
       - dramatic_moment_tags

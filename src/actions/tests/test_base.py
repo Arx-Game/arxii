@@ -439,6 +439,7 @@ class ActionRegistryTests(TestCase):
             "mount_companion",
             "dismount_companion",
             "promote_summon",
+            "companion_emote",
             "charm_asset",
             "lock_exit",
             "unlock_exit",

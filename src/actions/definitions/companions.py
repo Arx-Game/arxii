@@ -3,11 +3,19 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from typing import TYPE_CHECKING, Any
 
 from actions.base import Action
 from actions.constants import ActionCategory
-from actions.prerequisites import HasCompanionCapacityPrerequisite, Prerequisite
-from actions.types import ActionResult, TargetType
+from actions.prerequisites import (
+    CompanionPresentPrerequisite,
+    HasCompanionCapacityPrerequisite,
+    Prerequisite,
+)
+from actions.types import ActionContext, ActionResult, TargetType
+
+if TYPE_CHECKING:
+    from evennia.objects.models import ObjectDB
 
 
 def _resolve_owned_companion(actor, companion_id: int):
@@ -437,3 +445,84 @@ class PromoteSummonAction(Action):
             message=f"{name} the {archetype.name} is now bonded to you.",
             data={"companion_id": companion.pk},
         )
+
+
+def _resolve_present_companion(actor: ObjectDB, companion_id: int):
+    """Resolve a companion for :class:`CompanionEmoteAction` (#3294).
+
+    Layers a room-presence check on top of ``_resolve_owned_companion``'s
+    owner/active/objectdb checks — the standard the tactical companion verbs
+    (``DeployCompanionAction``/``OrderCompanionAction``, via
+    ``_resolve_owned_companion``) already use, extended here because an emote
+    is a room-level pose: a bonded companion that isn't physically standing in
+    the actor's room can't be puppeted into one (no ghost-posing an absent pet).
+    """
+    companion, failure = _resolve_owned_companion(actor, companion_id)
+    if failure is not None:
+        return None, failure
+    if companion.objectdb.db_location_id != actor.db_location_id:
+        return None, ActionResult(success=False, message=f"{companion.name} is not here.")
+    return companion, None
+
+
+@dataclass
+class CompanionEmoteAction(Action):
+    """Pose *as* a bonded, present companion (#3294) — cosmetic attribution only.
+
+    The room sees the companion as the actor (with an owner tell in the
+    feed); authorship for consent/moderation/block/mute stays entirely on
+    the owner's own persona — ``record_interaction`` resolves that persona
+    exactly as a plain ``companion emote`` pose would. POSE-level delivery:
+    the player writes the companion's own name into the text, same MUSH-pose
+    convention as ``PoseAction``.
+    """
+
+    key: str = "companion_emote"
+    name: str = "Companion Emote"
+    icon: str = "paw"
+    category: str = "companions"
+    action_category: ActionCategory = ActionCategory.SOCIAL
+    target_type: TargetType = TargetType.AREA
+
+    def get_prerequisites(self) -> list[Prerequisite]:
+        return [CompanionPresentPrerequisite()]
+
+    def execute(
+        self,
+        actor: ObjectDB,
+        context: ActionContext | None = None,
+        **kwargs: Any,
+    ) -> ActionResult:
+        from flows.scene_data_manager import SceneDataManager  # noqa: PLC0415
+        from flows.service_functions.communication import message_location  # noqa: PLC0415
+        from world.scenes.constants import InteractionMode  # noqa: PLC0415
+        from world.scenes.interaction_services import record_interaction  # noqa: PLC0415
+
+        text = kwargs.get("text", "")
+        if not text:
+            return ActionResult(success=False, message="Emote what?")
+
+        companion_id = kwargs.get("companion_id")
+        if not companion_id:
+            return ActionResult(success=False, message="Pick a companion to emote as.")
+
+        companion, failure = _resolve_present_companion(actor, companion_id)
+        if failure is not None:
+            return failure
+
+        sdm = context.scene_data if context else SceneDataManager()
+        caller_state = sdm.initialize_state_for_object(actor)
+
+        # Broadcast raw text, same convention as PoseAction — the player writes
+        # the companion's own name into the pose text.
+        message_location(caller_state, text)
+        # Record + push: the interaction's `persona` stays the owner's worn face
+        # (authorship, block/mute, consent); `attributed_companion` is cosmetic.
+        record_interaction(
+            character=actor,
+            content=text,
+            mode=InteractionMode.POSE,
+            attributed_companion=companion,
+        )
+
+        return ActionResult(success=True)

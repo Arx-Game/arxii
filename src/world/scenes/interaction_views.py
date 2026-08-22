@@ -168,6 +168,7 @@ class InteractionViewSet(
             "scene",
             "place",
             "language",  # #2993: read-time comprehension needs is_universal/trait_id inline
+            "attributed_companion",  # #3294: N+1-safe companion-attribution rendering
         ).prefetch_related(
             Prefetch(
                 "persona__character_sheet__resonances",

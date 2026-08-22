@@ -281,6 +281,14 @@ export interface Interaction {
   entry_endorsed_by_me: boolean;
   /** True when this interaction's persona is muted by the viewer — content is blanked (#2087). */
   is_muted?: boolean;
+  /**
+   * Cosmetic companion pose attribution (#3294): when set, the feed renders this bonded
+   * companion as the visible actor with an owner tell built from `persona.name` (already
+   * resolved with the full per-viewer display/mask treatment) rather than a second identity
+   * lookup. `null`/absent for a normal, non-companion pose. Authorship (block/mute/consent)
+   * always stays on `persona`, the companion's owner — this field is never a second writer.
+   */
+  attributed_companion?: { id: number; name: string } | null;
 }
 
 /** The single featured (fully sealed) moment of a scene's highlight reel (#1241). */
