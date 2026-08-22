@@ -145,7 +145,11 @@ export function SelfCheckPanel({ className }: SelfCheckPanelProps) {
   const [search, setSearch] = useState('');
   const [checkTypeId, setCheckTypeId] = useState<number | null>(null);
   const [difficulty, setDifficulty] = useState<DifficultyBand>('normal');
-  const { data: checkTypes = [] } = usePlayerCheckTypeCatalog(search, characterId, true);
+  const { data: checkTypes = [] } = usePlayerCheckTypeCatalog(
+    search,
+    characterId,
+    characterId !== null
+  );
   const dispatch = useDispatchPlayerAction(characterId ?? 0);
 
   if (characterId === null) {
