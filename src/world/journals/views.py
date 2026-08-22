@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from django.db.models import Count, Prefetch, Q, QuerySet
+from django.db.models import Prefetch, Q, QuerySet
 from django_filters.rest_framework import DjangoFilterBackend
 from rest_framework import status, viewsets
 from rest_framework.decorators import action
@@ -25,10 +25,9 @@ from world.journals.serializers import (
     JournalResponseCreateSerializer,
 )
 from world.journals.services import (
+    base_entries_queryset,
     entry_visible_via_bequest,
     exclude_blocked_and_muted_authors,
-    has_journal_bequest_grant,
-    sealed_effective_q,
 )
 
 
@@ -62,16 +61,8 @@ class JournalEntryViewSet(CharacterContextMixin, viewsets.GenericViewSet):
 
     @staticmethod
     def _get_base_queryset() -> QuerySet[JournalEntry]:
-        """Base queryset with annotations and prefetches."""
-        return (
-            JournalEntry.objects.select_related("author__character")
-            .prefetch_related(
-                Prefetch("tags", queryset=JournalTag.objects.all(), to_attr="cached_tags"),
-            )
-            .annotate(response_count=Count("responses"))
-            .order_by("-created_at")
-            .distinct()
-        )
+        """Base queryset with annotations and prefetches (shared with the FilterSet, #3287)."""
+        return base_entries_queryset()
 
     @staticmethod
     def _get_entry_for_response(pk: int) -> JournalEntry:
@@ -100,58 +91,36 @@ class JournalEntryViewSet(CharacterContextMixin, viewsets.GenericViewSet):
             return None
 
     def get_queryset(self) -> QuerySet[JournalEntry]:
-        """Return base queryset for filterset integration."""
-        return self._get_base_queryset()
+        """The public feed queryset ``filter_queryset()`` (author/tag/deceased) builds on.
+
+        Public entries plus ones revealed by an estate settlement (#3287 Decision 2) — a
+        reveal never flips ``is_public``. Blocked/muted authors excluded (#2996 Decision 2).
+        ``?deceased=`` (``JournalEntryFilter.filter_deceased``) replaces this queryset
+        outright rather than narrowing it — the bequest corpus is a different shape (the
+        deceased's non-sealed private+public entries), so this restriction is moot for that
+        branch but harmless to compute either way (querysets are lazy).
+        """
+        queryset = self._get_base_queryset().filter(
+            Q(is_public=True) | Q(revealed_at__isnull=False)
+        )
+        return exclude_blocked_and_muted_authors(queryset, viewer_account=self.request.user)
 
     def list(self, request: Request) -> Response:
         """
         List public journal entries, or (with ``?deceased=``) a bequeathed corpus.
 
-        Supports query params:
+        Supports query params (all handled by ``JournalEntryFilter``):
         - ?author=<character_id> — filter by author
         - ?tag=<tag_name> — filter by tag name
         - ?deceased=<character_sheet_id> — browse a deceased sheet's non-sealed private
           entries, ONLY when the caller holds a ``JournalBequestGrant`` for that sheet
-          (#3287 Decision 3). Empty when no grant exists — never a permission error, so a
-          probing id can't confirm whether a grant exists for someone else.
+          (#3287 Decision 3, gated in ``JournalEntryFilter.filter_deceased`` per
+          ``tools/lint_use_filterset.py``). Empty when no grant exists — never a permission
+          error, so a probing id can't confirm whether a grant exists for someone else.
 
-        The public feed includes entries revealed by an estate settlement
-        (``revealed_at`` set) alongside ``is_public=True`` ones (#3287 Decision 2) — a
-        reveal never flips ``is_public``. Blocked/muted authors' entries are excluded
-        (#2996 Decision 2) — see ``exclude_blocked_and_muted_authors``.
+        See ``get_queryset()`` for the public-feed contract (revealed entries, block/mute).
         """
-        deceased_id = request.query_params.get("deceased")
-        if deceased_id:
-            return self._list_bequeathed_corpus(request, deceased_id)
-
-        queryset = self.filter_queryset(self.get_queryset()).filter(
-            Q(is_public=True) | Q(revealed_at__isnull=False)
-        )
-        queryset = exclude_blocked_and_muted_authors(queryset, viewer_account=request.user)
-
-        page = self.paginate_queryset(queryset)
-        if page is not None:
-            serializer = JournalEntryListSerializer(page, many=True)
-            return self.get_paginated_response(serializer.data)
-
-        return Response(JournalEntryListSerializer(queryset, many=True).data)
-
-    def _list_bequeathed_corpus(self, request: Request, deceased_id: str) -> Response:
-        """``?deceased=`` branch of ``list`` — see its docstring for the contract."""
-        sheet = self._get_character_sheet(request)
-        if not sheet:
-            return Response(
-                {"detail": "No character found."},
-                status=status.HTTP_404_NOT_FOUND,
-            )
-        if not has_journal_bequest_grant(recipient_sheet=sheet, deceased_sheet_id=deceased_id):
-            queryset = self._get_base_queryset().none()
-        else:
-            queryset = (
-                self._get_base_queryset()
-                .filter(author_id=deceased_id)
-                .exclude(sealed_effective_q())
-            )
+        queryset = self.filter_queryset(self.get_queryset())
 
         page = self.paginate_queryset(queryset)
         if page is not None:

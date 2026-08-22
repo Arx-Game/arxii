@@ -5,7 +5,7 @@ from __future__ import annotations
 from typing import TYPE_CHECKING, Any
 
 from django.db import transaction
-from django.db.models import Q
+from django.db.models import Count, Prefetch, Q
 from django.utils import timezone
 from evennia.accounts.models import AccountDB
 
@@ -419,3 +419,53 @@ def entry_visible_via_bequest(entry: JournalEntry, viewer_sheet: CharacterSheet 
     return has_journal_bequest_grant(
         recipient_sheet=viewer_sheet, deceased_sheet_id=entry.author_id
     )
+
+
+def base_entries_queryset() -> QuerySet[JournalEntry]:
+    """The annotated/prefetched base queryset every list-style journal read builds on.
+
+    Extracted from ``JournalEntryViewSet._get_base_queryset`` (#3287) so
+    ``JournalEntryFilter.filter_deceased`` gets the same tag prefetch + response_count
+    annotation the serializer needs, without ``world.journals.filters`` importing
+    ``world.journals.views`` (would create a filters.py <-> views.py import cycle).
+    """
+    return (
+        JournalEntry.objects.select_related("author__character")
+        .prefetch_related(
+            Prefetch("tags", queryset=JournalTag.objects.all(), to_attr="cached_tags"),
+        )
+        .annotate(response_count=Count("responses"))
+        .order_by("-created_at")
+        .distinct()
+    )
+
+
+def viewer_sheet_for_request(request: Any) -> CharacterSheet | None:
+    """Resolve the requesting account's active CharacterSheet from the X-Character-ID header.
+
+    A small, request-only duplicate of ``web.api.mixins.CharacterContextMixin._get_character``
+    + ``JournalEntryViewSet._get_character_sheet`` — needed because
+    ``JournalEntryFilter.filter_deceased`` (the FilterSet gating the ``?deceased=``
+    bequest-corpus browse, per ``tools/lint_use_filterset.py``'s USE_FILTERSET rule) has
+    ``self.request`` but no view instance to call the mixin method on. Mirrors this file's
+    existing ``player_for_sheet`` precedent of an app owning its own small copy of a
+    resolution walk rather than reaching into another app's private surface.
+    """
+    from world.character_sheets.models import CharacterSheet
+
+    character_id = request.headers.get("X-Character-ID")
+    if not character_id:
+        return None
+    try:
+        character_id = int(character_id)
+    except (ValueError, TypeError):
+        return None
+
+    available = request.user.get_available_characters()
+    character = next((c for c in available if c.id == character_id), None)
+    if character is None:
+        return None
+    try:
+        return character.sheet_data
+    except CharacterSheet.DoesNotExist:
+        return None

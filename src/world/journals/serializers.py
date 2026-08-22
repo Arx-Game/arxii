@@ -6,6 +6,10 @@ from world.character_sheets.types import PosthumousJournalDisposition
 from world.journals.constants import PosthumousOverride, ResponseType
 from world.journals.models import JournalEntry, JournalTag
 
+# The JournalEntryEditSerializer field name, extracted to satisfy the string-literal lint
+# (tools/lint_string_literal.py) at its "posthumous_override" in attrs membership check below.
+_POSTHUMOUS_OVERRIDE_FIELD = "posthumous_override"
+
 
 class JournalTagSerializer(serializers.ModelSerializer):
     """Serializer for journal tags."""
@@ -139,7 +143,7 @@ class JournalEntryEditSerializer(serializers.Serializer):
 
     def validate(self, attrs: dict) -> dict:
         has_content = attrs.get("title") or attrs.get("body")
-        has_override = "posthumous_override" in attrs
+        has_override = _POSTHUMOUS_OVERRIDE_FIELD in attrs
         if not has_content and not has_override:
             msg = "At least one of title, body, or posthumous_override is required."
             raise serializers.ValidationError(msg)
