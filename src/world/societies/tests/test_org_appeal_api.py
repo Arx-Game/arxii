@@ -18,13 +18,24 @@ from world.societies.factories import (
 
 
 def _active_primary_persona(*, account):
-    """Create a character sheet + active tenure and return its primary persona."""
+    """Create a character sheet + active tenure and return its primary persona.
+
+    Mirrors ``test_organization_api.py``'s helper of the same name, plus one
+    fix: ``RosterTenure.related_cache_fields`` only lists ``player_data`` (and
+    ``player_data.account``), not ``roster_entry`` — so creating a tenure does
+    not itself invalidate ``RosterEntry.cached_tenures`` (a ``cached_property``).
+    Without dropping it explicitly, ``Character.active_account`` (which
+    ``OrgAppealViewSet``'s ``_active_persona_for_request`` walks through) can
+    read a stale, pre-tenure empty cache. Same trap as
+    ``OrgAppealActionTests.test_resolve_action_allows_staff_without_rank``.
+    """
     character = CharacterFactory()
     sheet = CharacterSheetFactory(character=character)
     roster = RosterFactory()
-    RosterEntryFactory(character_sheet=sheet, roster=roster)
+    entry = RosterEntryFactory(character_sheet=sheet, roster=roster)
     player_data = PlayerData.objects.create(account=account)
-    RosterTenureFactory(player_data=player_data, roster_entry=sheet.roster_entry)
+    RosterTenureFactory(player_data=player_data, roster_entry=entry)
+    entry.invalidate_tenure_cache()
     return sheet.primary_persona
 
 
