@@ -100,7 +100,7 @@ class RollGameActionTests(TavernGameActionsTestBase):
         GameSeat.objects.create(session=session, persona=opener_persona, ante_paid=10)
         GameSeat.objects.create(session=session, persona=joiner_persona, ante_paid=10)
 
-        with patch("world.tavern_games.services.random.randint", return_value=4):
+        with patch("world.tavern_games.services._TABLE_RNG.randint", return_value=4):
             result = RollGameAction().run(actor=opener, session=session)
         assert result.success
         assert result.data["roll_result"] == 4

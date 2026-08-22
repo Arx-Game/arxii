@@ -81,7 +81,7 @@ class TavernGameTelnetJourneyTest(TestCase):
 
         rolls = iter([2, 6])
         with patch(
-            "world.tavern_games.services.random.randint", side_effect=lambda *_a: next(rolls)
+            "world.tavern_games.services._TABLE_RNG.randint", side_effect=lambda *_a: next(rolls)
         ):
             alice_msgs = _run(self.alice, "roll")
             bob_msgs = _run(self.bob, "roll")

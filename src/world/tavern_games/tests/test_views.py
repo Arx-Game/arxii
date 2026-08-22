@@ -101,7 +101,7 @@ class TavernGamesViewSetTestCase(APITestCase):
         session_id = opened.data["id"]
 
         roll_url = reverse("tavern-game-session-roll", kwargs={"pk": session_id})
-        with patch("world.tavern_games.services.random.randint", return_value=3):
+        with patch("world.tavern_games.services._TABLE_RNG.randint", return_value=3):
             response = self.client.post(roll_url)
         assert response.status_code == status.HTTP_400_BAD_REQUEST
 
