@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 from django.db.models import Prefetch, Q, QuerySet
-from django_filters.rest_framework import DjangoFilterBackend
 from rest_framework import status, viewsets
 from rest_framework.decorators import action
 from rest_framework.pagination import PageNumberPagination
@@ -14,7 +13,7 @@ from rest_framework.response import Response
 from actions.registry import get_action
 from web.api.mixins import CharacterContextMixin
 from world.character_sheets.models import CharacterSheet
-from world.journals.filters import JournalEntryFilter
+from world.journals.filters import JournalEntryFilter, JournalFilterBackend
 from world.journals.models import JournalEntry, JournalTag
 from world.journals.serializers import (
     JournalDispositionSerializer,
@@ -56,7 +55,7 @@ class JournalEntryViewSet(CharacterContextMixin, viewsets.GenericViewSet):
 
     permission_classes = [IsAuthenticated]
     pagination_class = JournalEntryPagination
-    filter_backends = [DjangoFilterBackend]
+    filter_backends = [JournalFilterBackend]
     filterset_class = JournalEntryFilter
 
     @staticmethod
@@ -80,8 +79,13 @@ class JournalEntryViewSet(CharacterContextMixin, viewsets.GenericViewSet):
             .get(pk=pk)
         )
 
-    def _get_character_sheet(self, request: Request) -> CharacterSheet | None:
-        """Get the CharacterSheet for the requesting user's character."""
+    def get_character_sheet(self, request: Request) -> CharacterSheet | None:
+        """Get the CharacterSheet for the requesting user's character.
+
+        Public (not ``_``-prefixed, #3287) so ``JournalEntryFilter.filter_deceased`` can
+        call it via ``self.view`` — the same viewer-resolution path (and the same
+        ``_get_character`` mock point) every other method on this ViewSet uses.
+        """
         character = self._get_character(request)
         if not character:
             return None
@@ -132,7 +136,7 @@ class JournalEntryViewSet(CharacterContextMixin, viewsets.GenericViewSet):
     @action(detail=False, methods=["get"])
     def mine(self, request: Request) -> Response:
         """List the requesting character's own entries (including private)."""
-        sheet = self._get_character_sheet(request)
+        sheet = self.get_character_sheet(request)
         if not sheet:
             return Response(
                 {"detail": "No character found."},
@@ -175,7 +179,7 @@ class JournalEntryViewSet(CharacterContextMixin, viewsets.GenericViewSet):
                 status=status.HTTP_404_NOT_FOUND,
             )
 
-        sheet = self._get_character_sheet(request)
+        sheet = self.get_character_sheet(request)
         publicly_visible = entry.is_public or entry.revealed_at is not None
         if not publicly_visible:
             is_own = sheet is not None and entry.author_id == sheet.pk
@@ -340,7 +344,7 @@ class JournalEntryViewSet(CharacterContextMixin, viewsets.GenericViewSet):
         GET returns the current default; PATCH sets it via ``set_journal_disposition``
         (#3287) — the same seam ``journal disposition sheet=<...>`` uses on telnet.
         """
-        sheet = self._get_character_sheet(request)
+        sheet = self.get_character_sheet(request)
         if not sheet:
             return Response(
                 {"detail": "No character found."},
