@@ -17,7 +17,7 @@ from drf_spectacular.utils import extend_schema
 from rest_framework import mixins, permissions, status, viewsets
 from rest_framework.decorators import action
 from rest_framework.exceptions import ValidationError
-from rest_framework.permissions import IsAuthenticated
+from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework.request import Request
 from rest_framework.response import Response
 from rest_framework.serializers import BaseSerializer, Serializer
@@ -123,7 +123,10 @@ class StartingAreaViewSet(viewsets.ReadOnlyModelViewSet):
     queryset = StartingArea.objects.none()
 
     serializer_class = StartingAreaSerializer
-    permission_classes = [IsAuthenticated]
+    # Public shop-window read (#3305): landing page realm/Beginnings pitches.
+    # Anonymous-safe by construction: get_accessible_starting_areas /
+    # trust filtering in get_queryset gate content, not this permission.
+    permission_classes = [AllowAny]
 
     def get_queryset(self) -> QuerySet:
         """Return areas filtered by access level."""
@@ -141,7 +144,10 @@ class BeginningsViewSet(viewsets.ReadOnlyModelViewSet):
     pagination_class = None  # 2026-07 audit: opt out of default paginator (ADR-0138)
 
     serializer_class = BeginningsSerializer
-    permission_classes = [IsAuthenticated]
+    # Public shop-window read (#3305): landing page realm/Beginnings pitches.
+    # Anonymous-safe by construction: get_accessible_starting_areas /
+    # trust filtering in get_queryset gate content, not this permission.
+    permission_classes = [AllowAny]
     filter_backends = [DjangoFilterBackend]
     filterset_fields = ["starting_area"]
 
@@ -182,7 +188,15 @@ class BeginningsViewSet(viewsets.ReadOnlyModelViewSet):
         return queryset
 
     @extend_schema(responses=PerspectiveEntrySerializer(many=True))
-    @action(detail=True, methods=[HTTPMethod.GET])
+    @action(
+        detail=True,
+        methods=[HTTPMethod.GET],
+        # Keep this sub-action authenticated even though list/retrieve are now
+        # public (#3305): pins the existing behavior in test_perspective_endpoints.py
+        # (test_anonymous_gets_401_or_403) rather than widening it as a side effect
+        # of the class-level AllowAny change.
+        permission_classes=[IsAuthenticated],
+    )
     def perspectives(self, request: Request, pk: int | None = None) -> Response:
         """This beginning's perspective entries, ungated for the CG shop window (ADR-0224)."""
         beginnings = self.get_object()
