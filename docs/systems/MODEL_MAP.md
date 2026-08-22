@@ -3789,6 +3789,7 @@
 **Foreign Keys:**
   - season -> game_clock.GameSeason [FK]
 **Pointed to by:**
+  - standing_declarations <- societies.StandingDeclaration
   - social_engagement_trackers <- progression.WeeklySocialEngagement
   - random_scene_targets <- progression.RandomSceneTarget
   - development_transactions <- progression.DevelopmentTransaction
@@ -7939,6 +7940,8 @@
   - offices_held <- societies.OrganizationOffice
   - society_reputations <- societies.SocietyReputation
   - organization_reputations <- societies.OrganizationReputation
+  - standing_declarations_received <- societies.StandingDeclaration
+  - standing_declarations_made <- societies.StandingDeclaration
   - legend_entries <- societies.LegendEntry
   - legend_spreads <- societies.LegendSpread
   - legend_stories_written <- societies.LegendDeedStory
@@ -8768,6 +8771,7 @@
   - memberships <- societies.OrganizationMembership
   - offices <- societies.OrganizationOffice
   - reputations <- societies.OrganizationReputation
+  - standing_declarations <- societies.StandingDeclaration
   - proclamations <- societies.Proclamation
   - held_turf <- societies.NeighborhoodTurf
   - gang_turf_projects <- societies.GangTurfDetails
@@ -8993,6 +8997,13 @@
 **Pointed to by:**
   - proclamations <- societies.Proclamation
   - edict_kinds <- societies.EdictKind
+
+### StandingDeclaration
+**Foreign Keys:**
+  - organization -> societies.Organization [FK]
+  - target_persona -> scenes.Persona [FK]
+  - declared_by_persona -> scenes.Persona [FK]
+  - game_week -> game_clock.GameWeek [FK]
 
 ### StatureBand
 **Pointed to by:**

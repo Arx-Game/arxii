@@ -48,11 +48,12 @@ tier.range_description                       # "+250 to +499"
 
 | Model | Purpose | Key Fields |
 |-------|---------|------------|
-| `OrganizationRank` | One rung on an org's five-tier authority ladder | `organization`, `name`, `tier` (1 highest, 5 lowest), `can_invite`, `can_kick`, `can_manage_ranks`, `can_lead_rituals` |
+| `OrganizationRank` | One rung on an org's five-tier authority ladder | `organization`, `name`, `tier` (1 highest, 5 lowest), `can_invite`, `can_kick`, `can_manage_ranks`, `can_lead_rituals`, `can_declare_standing` (#3290) |
 | `OrganizationMembership` | Links a Persona to an Organization at a rank | `organization`, `persona` (FK to `scenes.Persona`), `rank` (FK to `OrganizationRank`), `joined_date`, `left_at`, `exiled_at` |
 | `OrganizationMembershipOffer` | Pending or resolved invitation/application | `organization`, `from_persona`, `to_persona`, `kind` (`INVITE`/`APPLICATION`), `status` (`PENDING`/`ACCEPTED`/`DECLINED`/`CANCELLED`), `created_at`, `resolved_at` |
 | `SocietyReputation` | Persona's reputation with a Society | `persona`, `society`, `value` (-1000 to +1000) |
 | `OrganizationReputation` | Persona's reputation with an Organization | `persona`, `organization`, `value` (-1000 to +1000) |
+| `StandingDeclaration` (#3290) | A leader's audited favor/disfavor declaration | `organization`, `target_persona`, `declared_by_persona`, `direction` (`StandingDirection` FAVOR/DISFAVOR), `delta_applied`, `citation`, `game_week` (FK, rate-limit key), `created_at`; unique per (organization, target_persona, game_week) |
 
 ### Legend System (models.Model)
 
@@ -257,6 +258,63 @@ plain invite/join path above is untouched and keeps working for every organizati
   frontend exists at all (tracked under "Organization UI" in
   `docs/roadmap/societies.md`'s MVP list). Nothing here blocks adding one later.
 
+### Standing Declarations (#3290)
+
+An org leader (a rank with `can_declare_standing=True`) can officially declare a
+persona favored or disfavored, a deliberate act distinct from the automated
+consequences (secret reveals, gang turf, stake resolution) that are the only other
+gameplay writers of `OrganizationReputation`.
+
+```python
+from world.societies.standing_services import declare_standing
+
+declaration = declare_standing(
+    organization=guild,
+    target_persona=member,
+    declared_by_persona=leader,
+    direction=StandingDirection.FAVOR,  # or DISFAVOR
+    citation="For tireless service to the guild.",
+)
+```
+
+Gates, in order:
+
+1. **Rank** — the declaring persona's active membership rank must carry
+   `can_declare_standing`; else `NotAuthorizedToDeclareStandingError`.
+2. **Target validity** — the target must be able to hold organization reputation at
+   all (`is_established_or_primary`); else `InvalidStandingTargetError`.
+3. **Consent (DISFAVOR only)** — DISFAVOR is antagonism and routes through the
+   #2170 antagonism-consent seam: the target's `hostile` `SocialConsentCategory`
+   rule must admit the declaring persona (`world.consent.services
+   .consent_blocks_targeting`) — the same category
+   `world.secrets.services.accusation_permitted` consults for the frame-job
+   denounce gate, reused rather than minting a new category. FAVOR is pure
+   benefit and skips this gate entirely. Refusal: `StandingConsentBlockedError`.
+4. **Rate limit** — at most one declaration per (organization, target_persona) per
+   IC `GameWeek` (`world.game_clock.week_services.get_current_game_week`); else
+   `StandingRateLimitedError`.
+
+The delta itself is a PLACEHOLDER magnitude (`STANDING_DECLARATION_FAVOR_DELTA` /
+`STANDING_DECLARATION_DISFAVOR_DELTA`, `constants.py`) applied through the existing
+`bump_organization_reputation` — `declare_standing` never writes
+`OrganizationReputation` directly. `StandingDeclaration.delta_applied` records the
+actual clamped move (old value → new value), which can be less than the nominal
+delta near the ±1000 ceiling/floor.
+
+**Action + telnet:** `declare_standing_action` (key `declare_standing`) takes
+`target`, `organization_id`, `direction`, `citation` kwargs; `CmdOrg` gains
+`org favor <person> in <organization>=<citation>` / `org disfavor <person> in
+<organization>=<citation>` subverbs routing through the same dispatcher every
+other `org` subverb uses.
+
+**Web:** the OrgPage Standing Declarations panel (`frontend/src/orgs/pages
+/OrgPage.tsx`) lists the org's public declaration history and, for a viewer whose
+own membership in that org carries `can_declare_standing`, offers a
+`DeclareStandingDialog` (`frontend/src/orgs/components/DeclareStandingDialog.tsx`)
+that dispatches through the generic `POST /api/actions/characters/{id}/dispatch/`
+seam (registry key `declare_standing`) — the same path `PersonaContextMenu`'s
+Challenge/Identify menu items use for a registry action with no `ActionTemplate`.
+
 ### DRF endpoints
 
 Read-only endpoints under `/api/societies/`:
@@ -268,6 +326,7 @@ Read-only endpoints under `/api/societies/`:
 | `/ranks/` | `OrganizationRankViewSet` | Rank ladders for visible organizations |
 | `/offers/` | `OrganizationMembershipOfferViewSet` | Offers owned/received/org-visible to the requester |
 | `/reputations/` | `OrganizationReputationViewSet` | The requester's active persona's org reputations (standing) — `{id, persona, organization, organization_name, tier}`, tier only, self-scoped (#1446) |
+| `/standing-declarations/` | `StandingDeclarationViewSet` | Public favor/disfavor declaration history (#3290) — `{id, organization, organization_name, target_persona, target_persona_name, declared_by_persona, declared_by_persona_name, direction, citation, created_at}`; **public** (unlike `/reputations/`), no `delta_applied` (mirrors the reputation viewset's "tier only, never the raw value" convention); writes go through `declare_standing_action`, never a POST here |
 
 All covenant-backed organizations are excluded from the membership/rank/offer endpoints.
 
@@ -282,6 +341,7 @@ All covenant-backed organizations are excluded from the membership/rank/offer en
 - `OrganizationMembership` has a unique constraint on `(organization, persona)`
 - `SocietyReputation` has a unique constraint on `(persona, society)`
 - `OrganizationReputation` has a unique constraint on `(persona, organization)`
+- `StandingDeclaration` has a unique constraint on `(organization, target_persona, game_week)` (#3290 rate limit)
 
 ---
 
@@ -294,6 +354,7 @@ All models registered with Django admin:
 - `OrganizationAdmin` - Collapsible principle/rank overrides, `OrganizationMembershipInline`
 - `OrganizationMembershipAdmin` - With effective title display
 - `SocietyReputationAdmin` / `OrganizationReputationAdmin` - With tier display
+- `StandingDeclarationAdmin` (#3290) - `delta_applied` visible for staff dispute resolution (the player-facing API omits it)
 - `LegendEntryAdmin` - With total value, spread count, `LegendSpreadInline`
 - `LegendSpreadAdmin` - With society reach tracking
 

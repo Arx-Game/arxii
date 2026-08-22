@@ -31064,6 +31064,82 @@ paths:
               schema:
                 $ref: '#/components/schemas/OrganizationReputation'
           description: ''
+  /api/societies/standing-declarations/:
+    get:
+      operationId: societies_standing_declarations_list
+      description: |-
+        List/retrieve leader favor/disfavor declarations (#3290).
+
+        Public read to any authenticated player (spec decision 4) — org politics
+        played through declarations are meant to be legible to bystanders, unlike
+        the raw ``OrganizationReputation`` value they move (which stays self-only,
+        see ``OrganizationReputationViewSet``). Writes never happen here — a
+        declaration is minted by ``DeclareStandingAction`` (web + telnet), which
+        calls ``world.societies.standing_services.declare_standing``.
+      parameters:
+      - in: query
+        name: declared_by_persona
+        schema:
+          type: number
+      - in: query
+        name: direction
+        schema:
+          type: string
+      - in: query
+        name: organization
+        schema:
+          type: number
+      - name: page
+        required: false
+        in: query
+        description: A page number within the paginated result set.
+        schema:
+          type: integer
+      - in: query
+        name: target_persona
+        schema:
+          type: number
+      tags:
+      - societies
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaginatedStandingDeclarationList'
+          description: ''
+  /api/societies/standing-declarations/{id}/:
+    get:
+      operationId: societies_standing_declarations_retrieve
+      description: |-
+        List/retrieve leader favor/disfavor declarations (#3290).
+
+        Public read to any authenticated player (spec decision 4) — org politics
+        played through declarations are meant to be legible to bystanders, unlike
+        the raw ``OrganizationReputation`` value they move (which stays self-only,
+        see ``OrganizationReputationViewSet``). Writes never happen here — a
+        declaration is minted by ``DeclareStandingAction`` (web + telnet), which
+        calls ``world.societies.standing_services.declare_standing``.
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: A unique integer value identifying this Standing Declaration.
+        required: true
+      tags:
+      - societies
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/StandingDeclaration'
+          description: ''
   /api/speaker-queues/:
     get:
       operationId: speaker_queues_list
@@ -43420,6 +43496,14 @@ components:
         * `hard` - Hard
         * `daunting` - Daunting
         * `harrowing` - Harrowing
+    DirectionEnum:
+      enum:
+      - favor
+      - disfavor
+      type: string
+      description: |-
+        * `favor` - Favor
+        * `disfavor` - Disfavor
     Discovery:
       type: object
       description: Serializer for discovery records.
@@ -54503,6 +54587,11 @@ components:
             — see needs-design follow-up filed alongside #708 (''Generic organization-ritual
             dispatch for non-Covenant org kinds''). Mirrors CovenantRank.can_lead_rituals,
             which IS consumed today by Covenant Sanctification.'
+        can_declare_standing:
+          type: boolean
+          description: Members at this rank can officially declare a persona favored
+            or disfavored with this organization (#3290), moving their OrganizationReputation
+            via a StandingDeclaration audit row.
       required:
       - id
       - name
@@ -54536,6 +54625,11 @@ components:
             — see needs-design follow-up filed alongside #708 (''Generic organization-ritual
             dispatch for non-Covenant org kinds''). Mirrors CovenantRank.can_lead_rituals,
             which IS consumed today by Covenant Sanctification.'
+        can_declare_standing:
+          type: boolean
+          description: Members at this rank can officially declare a persona favored
+            or disfavored with this organization (#3290), moving their OrganizationReputation
+            via a StandingDeclaration audit row.
       required:
       - name
       - tier
@@ -58706,6 +58800,29 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/StakeTemplate'
+    PaginatedStandingDeclarationList:
+      type: object
+      required:
+      - count
+      - results
+      properties:
+        count:
+          type: integer
+          example: 123
+        next:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=4
+        previous:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=2
+        results:
+          type: array
+          items:
+            $ref: '#/components/schemas/StandingDeclaration'
     PaginatedStoryFeedbackList:
       type: object
       required:
@@ -69867,6 +69984,66 @@ components:
       - effective_risk
       - is_ready
       - stakes
+    StandingDeclaration:
+      type: object
+      description: |-
+        A leader's public favor/disfavor declaration (#3290) — history/audit read.
+
+        Public by design (spec decision 4): the declaration itself (who, target,
+        direction, citation, when) is meant to be legible to bystanders, unlike
+        the raw ``OrganizationReputation`` value it moves. ``delta_applied`` is
+        deliberately NOT exposed here — the hidden-value convention
+        (``OrganizationReputationSerializer``: "tier only, never the raw value")
+        extends to the magnitude a declaration moved that value by; staff can read
+        it in the admin for dispute resolution.
+      properties:
+        id:
+          type: integer
+          readOnly: true
+        organization:
+          type: integer
+          description: The organization whose standing with the target moved.
+        organization_name:
+          type: string
+          readOnly: true
+        target_persona:
+          type: integer
+          description: The persona declared favored or disfavored.
+        target_persona_name:
+          type: string
+          readOnly: true
+        declared_by_persona:
+          type: integer
+          description: The leader persona who made the declaration.
+        declared_by_persona_name:
+          type: string
+          readOnly: true
+        direction:
+          allOf:
+          - $ref: '#/components/schemas/DirectionEnum'
+          description: |-
+            Whether this declaration pushed standing toward favor or disfavor.
+
+            * `favor` - Favor
+            * `disfavor` - Disfavor
+        citation:
+          type: string
+          description: The leader's public citation — why this declaration was made.
+        created_at:
+          type: string
+          format: date-time
+          readOnly: true
+      required:
+      - citation
+      - created_at
+      - declared_by_persona
+      - declared_by_persona_name
+      - direction
+      - id
+      - organization
+      - organization_name
+      - target_persona
+      - target_persona_name
     StandingEnum:
       enum:
       - core

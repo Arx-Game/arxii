@@ -19383,6 +19383,58 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
+  '/api/societies/standing-declarations/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /**
+     * @description List/retrieve leader favor/disfavor declarations (#3290).
+     *
+     *     Public read to any authenticated player (spec decision 4) — org politics
+     *     played through declarations are meant to be legible to bystanders, unlike
+     *     the raw ``OrganizationReputation`` value they move (which stays self-only,
+     *     see ``OrganizationReputationViewSet``). Writes never happen here — a
+     *     declaration is minted by ``DeclareStandingAction`` (web + telnet), which
+     *     calls ``world.societies.standing_services.declare_standing``.
+     */
+    get: operations['societies_standing_declarations_list'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/societies/standing-declarations/{id}/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /**
+     * @description List/retrieve leader favor/disfavor declarations (#3290).
+     *
+     *     Public read to any authenticated player (spec decision 4) — org politics
+     *     played through declarations are meant to be legible to bystanders, unlike
+     *     the raw ``OrganizationReputation`` value they move (which stays self-only,
+     *     see ``OrganizationReputationViewSet``). Writes never happen here — a
+     *     declaration is minted by ``DeclareStandingAction`` (web + telnet), which
+     *     calls ``world.societies.standing_services.declare_standing``.
+     */
+    get: operations['societies_standing_declarations_retrieve'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   '/api/speaker-queues/': {
     parameters: {
       query?: never;
@@ -25531,6 +25583,12 @@ export interface components {
      * @enum {string}
      */
     DifficultyEnum: 'trivial' | 'easy' | 'normal' | 'hard' | 'daunting' | 'harrowing';
+    /**
+     * @description * `favor` - Favor
+     *     * `disfavor` - Disfavor
+     * @enum {string}
+     */
+    DirectionEnum: 'favor' | 'disfavor';
     /** @description Serializer for discovery records. */
     Discovery: {
       /**
@@ -30913,6 +30971,8 @@ export interface components {
       can_manage_ranks?: boolean;
       /** @description Members at this rank may lead this organization's group rituals. No org-ritual dispatch mechanism consumes this yet for non-Covenant organizations — see needs-design follow-up filed alongside #708 ('Generic organization-ritual dispatch for non-Covenant org kinds'). Mirrors CovenantRank.can_lead_rituals, which IS consumed today by Covenant Sanctification. */
       can_lead_rituals?: boolean;
+      /** @description Members at this rank can officially declare a persona favored or disfavored with this organization (#3290), moving their OrganizationReputation via a StandingDeclaration audit row. */
+      can_declare_standing?: boolean;
     };
     OrganizationRankRequest: {
       /** @description Diegetic name for this rung (e.g., Guildmaster, Captain) */
@@ -30927,6 +30987,8 @@ export interface components {
       can_manage_ranks?: boolean;
       /** @description Members at this rank may lead this organization's group rituals. No org-ritual dispatch mechanism consumes this yet for non-Covenant organizations — see needs-design follow-up filed alongside #708 ('Generic organization-ritual dispatch for non-Covenant org kinds'). Mirrors CovenantRank.can_lead_rituals, which IS consumed today by Covenant Sanctification. */
       can_lead_rituals?: boolean;
+      /** @description Members at this rank can officially declare a persona favored or disfavored with this organization (#3290), moving their OrganizationReputation via a StandingDeclaration audit row. */
+      can_declare_standing?: boolean;
     };
     /** @description A persona's standing with an organization — named tier only, never the raw value. */
     OrganizationReputation: {
@@ -33554,6 +33616,21 @@ export interface components {
        */
       previous?: string | null;
       results: components['schemas']['StakeTemplate'][];
+    };
+    PaginatedStandingDeclarationList: {
+      /** @example 123 */
+      count: number;
+      /**
+       * Format: uri
+       * @example http://api.example.org/accounts/?page=4
+       */
+      next?: string | null;
+      /**
+       * Format: uri
+       * @example http://api.example.org/accounts/?page=2
+       */
+      previous?: string | null;
+      results: components['schemas']['StandingDeclaration'][];
     };
     PaginatedStoryFeedbackList: {
       /** @example 123 */
@@ -39367,6 +39444,40 @@ export interface components {
       readonly effective_risk: string;
       readonly is_ready: boolean;
       readonly stakes: components['schemas']['StakeSummary'][];
+    };
+    /**
+     * @description A leader's public favor/disfavor declaration (#3290) — history/audit read.
+     *
+     *     Public by design (spec decision 4): the declaration itself (who, target,
+     *     direction, citation, when) is meant to be legible to bystanders, unlike
+     *     the raw ``OrganizationReputation`` value it moves. ``delta_applied`` is
+     *     deliberately NOT exposed here — the hidden-value convention
+     *     (``OrganizationReputationSerializer``: "tier only, never the raw value")
+     *     extends to the magnitude a declaration moved that value by; staff can read
+     *     it in the admin for dispute resolution.
+     */
+    StandingDeclaration: {
+      readonly id: number;
+      /** @description The organization whose standing with the target moved. */
+      organization: number;
+      readonly organization_name: string;
+      /** @description The persona declared favored or disfavored. */
+      target_persona: number;
+      readonly target_persona_name: string;
+      /** @description The leader persona who made the declaration. */
+      declared_by_persona: number;
+      readonly declared_by_persona_name: string;
+      /**
+       * @description Whether this declaration pushed standing toward favor or disfavor.
+       *
+       *     * `favor` - Favor
+       *     * `disfavor` - Disfavor
+       */
+      direction: components['schemas']['DirectionEnum'];
+      /** @description The leader's public citation — why this declaration was made. */
+      citation: string;
+      /** Format: date-time */
+      readonly created_at: string;
     };
     /**
      * @description * `core` - Core Member
@@ -68824,6 +68935,54 @@ export interface operations {
         };
         content: {
           'application/json': components['schemas']['OrganizationReputation'];
+        };
+      };
+    };
+  };
+  societies_standing_declarations_list: {
+    parameters: {
+      query?: {
+        declared_by_persona?: number;
+        direction?: string;
+        organization?: number;
+        /** @description A page number within the paginated result set. */
+        page?: number;
+        target_persona?: number;
+      };
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['PaginatedStandingDeclarationList'];
+        };
+      };
+    };
+  };
+  societies_standing_declarations_retrieve: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        /** @description A unique integer value identifying this Standing Declaration. */
+        id: number;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['StandingDeclaration'];
         };
       };
     };

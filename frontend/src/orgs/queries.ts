@@ -5,7 +5,12 @@
 import { chooseCrisisOption } from '@/orgs/api';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 
-import { fetchOrganizationByName, fetchOrganizationById, fetchHouseFeed } from './api';
+import {
+  fetchOrganizationByName,
+  fetchOrganizationById,
+  fetchHouseFeed,
+  fetchStandingDeclarations,
+} from './api';
 
 /**
  * Resolve a same-named organization for a character's family (link target).
@@ -54,5 +59,14 @@ export function useChooseCrisisOption(orgId: number) {
       qc.invalidateQueries({ queryKey: ['orgs', 'detail', orgId] }).catch(() => {});
       qc.invalidateQueries({ queryKey: ['orgs', 'houseFeed', orgId] }).catch(() => {});
     },
+  });
+}
+
+/** This org's public standing-declaration history (#3290), newest first. */
+export function useStandingDeclarationsQuery(orgId: number) {
+  return useQuery({
+    queryKey: ['orgs', 'standingDeclarations', orgId],
+    queryFn: () => fetchStandingDeclarations(orgId),
+    enabled: orgId > 0,
   });
 }

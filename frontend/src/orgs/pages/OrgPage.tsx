@@ -10,15 +10,25 @@
  * Route: /orgs/:id
  */
 
+import { useMemo } from 'react';
 import { useParams } from 'react-router-dom';
 import { ErrorBoundary } from '@/components/ErrorBoundary';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { useOrganizationQuery, useHouseFeedQuery, useChooseCrisisOption } from '@/orgs/queries';
+import {
+  useOrganizationQuery,
+  useHouseFeedQuery,
+  useChooseCrisisOption,
+  useStandingDeclarationsQuery,
+} from '@/orgs/queries';
 import { OperationsSection } from '@/tasking/components/OperationsSection';
-import type { HouseCrisis, HouseDetail, HouseStature } from '@/orgs/api';
+import type { HouseCrisis, HouseDetail, HouseStature, StandingDeclaration } from '@/orgs/api';
+import { DeclareStandingDialog } from '@/orgs/components/DeclareStandingDialog';
+import { useAppSelector } from '@/store/hooks';
+import { useMyRosterEntriesQuery } from '@/roster/queries';
+import { useOrganizationMembershipsQuery } from '@/reputation/queries';
 
 // ---------------------------------------------------------------------------
 // Loading skeleton
@@ -305,6 +315,74 @@ function HouseSection({ orgId, house }: { orgId: number; house: HouseDetail }) {
   );
 }
 
+const DIRECTION_LABEL: Record<StandingDeclaration['direction'], string> = {
+  favor: 'Favored',
+  disfavor: 'Disfavored',
+};
+
+/** Standing/History panel (#3290): the org's public favor/disfavor record + a
+ * declare affordance for the viewer's own persona, when its rank in this org
+ * carries `can_declare_standing`. */
+function StandingSection({ orgId, orgName }: { orgId: number; orgName: string }) {
+  const { data: declarations = [], isLoading } = useStandingDeclarationsQuery(orgId);
+
+  const activeCharacterName = useAppSelector((state) => state.game.active);
+  const { data: myRosterEntries = [] } = useMyRosterEntriesQuery();
+  const characterId = useMemo(
+    () => myRosterEntries.find((e) => e.name === activeCharacterName)?.character_id ?? null,
+    [myRosterEntries, activeCharacterName]
+  );
+  const { data: myMemberships = [] } = useOrganizationMembershipsQuery(true);
+  const canDeclare = useMemo(
+    () =>
+      myMemberships.some((m) => m.organization === orgId && m.rank?.can_declare_standing === true),
+    [myMemberships, orgId]
+  );
+
+  return (
+    <Card>
+      <CardHeader className="pb-3">
+        <div className="flex items-center justify-between">
+          <CardTitle className="text-lg">Standing Declarations</CardTitle>
+          {canDeclare && characterId !== null && (
+            <DeclareStandingDialog
+              organizationId={orgId}
+              organizationName={orgName}
+              characterId={characterId}
+            >
+              <Button size="sm" variant="outline">
+                Declare Standing
+              </Button>
+            </DeclareStandingDialog>
+          )}
+        </div>
+      </CardHeader>
+      <CardContent>
+        {isLoading ? (
+          <Skeleton className="h-4 w-40" />
+        ) : declarations.length === 0 ? (
+          <p className="text-sm text-muted-foreground">No standing has been declared.</p>
+        ) : (
+          <ul className="space-y-2 text-sm">
+            {declarations.map((d) => (
+              <li key={d.id} className="space-y-0.5">
+                <div className="flex items-center gap-2">
+                  <Badge variant={d.direction === 'favor' ? 'secondary' : 'destructive'}>
+                    {DIRECTION_LABEL[d.direction]}
+                  </Badge>
+                  <span className="font-medium">{d.target_persona_name}</span>
+                  <span className="text-muted-foreground">by {d.declared_by_persona_name}</span>
+                </div>
+                <p className="text-muted-foreground">{d.citation}</p>
+              </li>
+            ))}
+          </ul>
+        )}
+      </CardContent>
+    </Card>
+  );
+}
+
 export function OrgPageInner({ orgId }: { orgId: number }) {
   const { data: org, isLoading, isError } = useOrganizationQuery(orgId);
 
@@ -349,6 +427,7 @@ export function OrgPageInner({ orgId }: { orgId: number }) {
         </CardContent>
       </Card>
       {org.house && <HouseSection orgId={orgId} house={org.house} />}
+      <StandingSection orgId={orgId} orgName={org.name} />
       <OperationsSection orgId={orgId} />
     </div>
   );
