@@ -502,6 +502,7 @@ class OrgDossierSerializer(serializers.Serializer):
     betrothals = serializers.ListField(child=serializers.CharField())
     open_crises = DossierCrisisSerializer(many=True)
     recent_shifts = DossierShiftSerializer(many=True)
+    consorts = DossierConsortSerializer(many=True)
 
 
 class OrgAppealSignonSerializer(serializers.ModelSerializer):
@@ -572,4 +573,3 @@ class OrgAppealResolveInputSerializer(serializers.Serializer):
 
     verdict = serializers.ChoiceField(choices=["grant", "decline"])
     answer = serializers.CharField(required=False, allow_blank=True, default="")
-    consorts = DossierConsortSerializer(many=True)
