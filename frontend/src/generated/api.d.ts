@@ -39882,6 +39882,7 @@ export interface components {
       clues: components['schemas']['WorldBuilderRoomClue'][];
       clue_triggers: components['schemas']['WorldBuilderClueTrigger'][];
       portal_anchors: components['schemas']['WorldBuilderPortalAnchor'][];
+      desc_variants: components['schemas']['WorldBuilderRoomDescVariant'][];
       grants: string[];
     };
     /** @description Read-only serializer for StrainAvailability — per-character strain cap snapshot. */
@@ -42042,6 +42043,7 @@ export interface components {
       clues: components['schemas']['WorldBuilderRoomClue'][];
       clue_triggers: components['schemas']['WorldBuilderClueTrigger'][];
       portal_anchors: components['schemas']['WorldBuilderPortalAnchor'][];
+      desc_variants: components['schemas']['WorldBuilderRoomDescVariant'][];
     };
     /** @description One RoomClue placement, nested in a WorldBuilderRoom payload (#2451). */
     WorldBuilderRoomClue: {
@@ -42050,6 +42052,13 @@ export interface components {
       clue_slug: string;
       detect_difficulty: number;
       fixture_key: string | null;
+    };
+    /** @description One authored season/phase description variant (#3291). */
+    WorldBuilderRoomDescVariant: {
+      id: number;
+      season: string | null;
+      phase: string | null;
+      description: string;
     };
     /** @description Selection-time room detail (#3269): exit profiles + comfort breakdown. */
     WorldBuilderRoomDetail: {
