@@ -74,11 +74,13 @@ class OpenGameActionTests(TavernGameActionsTestBase):
 
 class JoinGameActionTests(TavernGameActionsTestBase):
     def test_join_seats_the_actor_and_grows_pot(self):
+        from world.tavern_games.services import open_session
+
         _opener, opener_persona = _seated_actor(self.place, db_key="Opener2")
-        session = GameSession.objects.create(
-            place=self.place, game=self.game, ante=10, opened_by=opener_persona
-        )
-        GameSeat.objects.create(session=session, persona=opener_persona, ante_paid=10)
+        # Open through the real service (not a bare GameSession.objects.create) so
+        # the opener's own ante is actually escrowed into the pot first (pot=10),
+        # matching what a real "open" always does before anyone else joins.
+        session = open_session(place=self.place, game=self.game, persona=opener_persona, ante=10)
 
         joiner, joiner_persona = _seated_actor(self.place, db_key="Joiner")
         result = JoinGameAction().run(actor=joiner, session=session)

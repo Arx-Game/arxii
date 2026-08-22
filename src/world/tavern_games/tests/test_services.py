@@ -15,8 +15,7 @@ from django.test import TestCase
 from evennia_extensions.factories import CharacterFactory, ObjectDBFactory, RoomProfileFactory
 from world.character_sheets.factories import CharacterSheetFactory
 from world.currency.services import get_or_create_purse, transfer
-from world.scenes.constants import PersonaType
-from world.scenes.factories import PersonaFactory, PlaceFactory
+from world.scenes.factories import PlaceFactory
 from world.scenes.place_models import PlacePresence
 from world.tavern_games.constants import GameSessionState
 from world.tavern_games.exceptions import (
@@ -44,10 +43,18 @@ def _fund(sheet, amount: int) -> None:
 
 
 def _persona_at_place(place, *, name: str, funded: int = 0):
-    """Create a persona (with sheet + character) seated at *place*, funded with *funded* coppers."""
+    """Create a persona (with sheet + character) seated at *place*, funded with *funded* coppers.
+
+    Uses the sheet's own auto-created PRIMARY persona (``CharacterSheetFactory``'s
+    ``primary_persona`` post_generation hook names it after ``character.db_key`` -
+    i.e. *name*) rather than minting a second, separately-named persona: an
+    explicit ``PersonaFactory(..., name=name)`` here would collide with that
+    auto-created row on the (character_sheet, name) unique constraint, since
+    both would share the same *name*.
+    """
     character = CharacterFactory(db_key=name)
     sheet = CharacterSheetFactory(character=character)
-    persona = PersonaFactory(character_sheet=sheet, name=name, persona_type=PersonaType.ESTABLISHED)
+    persona = sheet.primary_persona
     sheet.active_persona = persona
     sheet.save(update_fields=["active_persona"])
     if funded:
