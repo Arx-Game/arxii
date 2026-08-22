@@ -115,10 +115,14 @@ plus four custom actions that dispatch the REGISTRY actions exactly like
 
 ## Web frontend
 
-The Place bar (`frontend/src/scenes/components/PlaceBar.tsx` neighborhood)
-gains a game widget showing the open session at the room (state, ante, pot,
-seats) with Join/Roll/Leave buttons and an Open form, scoped to whichever
-Place the viewer's `viewer_is_present` flag says they're at.
+`TavernGameWidget` (`frontend/src/scenes/components/TavernGameWidget.tsx`)
+shows the open session at the room (state, ante, pot, seats) with Join/Roll/
+Leave buttons and an Open form, scoped to whichever Place the viewer's
+`viewer_is_present` flag says they're at. Mounted at both Place-bar
+composition roots, directly alongside `PlaceBar`/`SpeakerQueueBar`:
+`SceneDetailPage.tsx` and `GamePage.tsx` (the latter via `GameWindow`'s
+`tavernGameWidget` prop, mirroring its existing `placeBar`/`speakerQueueBar`
+props).
 
 ## Seeding
 

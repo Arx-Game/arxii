@@ -103,6 +103,14 @@ vi.mock('@/scenes/components/PlaceBar', () => ({
   PlaceBar: () => <div data-testid="place-bar">PlaceBar</div>,
 }));
 
+// Tavern games (#3292): TavernGameWidget is another self-fetching Place-bar
+// component (fetchTavernGames/fetchTavernGameSessions), same rationale as
+// PlaceBar above - stub it rather than let it hit the real actionQueries
+// functions the mock below leaves un-overridden.
+vi.mock('@/scenes/components/TavernGameWidget', () => ({
+  TavernGameWidget: () => <div data-testid="tavern-game-widget">TavernGameWidget</div>,
+}));
+
 vi.mock('@/scenes/components/SpeakerQueueBar', () => ({
   SpeakerQueueBar: () => <div data-testid="speaker-queue-bar">SpeakerQueueBar</div>,
 }));

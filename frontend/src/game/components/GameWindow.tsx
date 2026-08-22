@@ -78,6 +78,8 @@ interface GameWindowProps {
   isAtPlace?: boolean;
   /** `PlaceBar`, rendered directly above the composer (#2156). */
   placeBar?: ReactNode;
+  /** `TavernGameWidget`, rendered alongside PlaceBar (#3292). */
+  tavernGameWidget?: ReactNode;
   /** `SpeakerQueueBar`, rendered alongside PlaceBar (#2356). */
   speakerQueueBar?: ReactNode;
   /** `PendingActionAttachments`, rendered directly above the composer (#2156). */
@@ -108,6 +110,7 @@ export function GameWindow({
   onPoseSubmitted,
   isAtPlace,
   placeBar,
+  tavernGameWidget,
   speakerQueueBar,
   pendingAttachments,
   conversationTabs,
@@ -245,6 +248,7 @@ export function GameWindow({
         <ChatWindow messages={session.messages} />
       )}
       {placeBar}
+      {tavernGameWidget}
       {speakerQueueBar}
       {pendingAttachments}
       <CommandInput
