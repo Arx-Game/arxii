@@ -287,7 +287,7 @@ describe('OrgPageInner', () => {
           },
         ],
         isLoading: false,
-      } as ReturnType<typeof useStandingDeclarationsQuery>);
+      } as unknown as ReturnType<typeof useStandingDeclarationsQuery>);
 
       render(<OrgPageInner orgId={7} />);
 
@@ -300,7 +300,7 @@ describe('OrgPageInner', () => {
       mockedUseStandingDeclarationsQuery.mockReturnValue({
         data: [],
         isLoading: false,
-      } as ReturnType<typeof useStandingDeclarationsQuery>);
+      } as unknown as ReturnType<typeof useStandingDeclarationsQuery>);
       mockedUseOrganizationMembershipsQuery.mockReturnValue({
         data: [
           {
@@ -321,7 +321,7 @@ describe('OrgPageInner', () => {
       mockedUseStandingDeclarationsQuery.mockReturnValue({
         data: [],
         isLoading: false,
-      } as ReturnType<typeof useStandingDeclarationsQuery>);
+      } as unknown as ReturnType<typeof useStandingDeclarationsQuery>);
       mockedUseOrganizationMembershipsQuery.mockReturnValue({
         data: [
           {
