@@ -436,6 +436,7 @@ from actions.definitions.speaker_queue import (
     SkipSpeakerAction,
 )
 from actions.definitions.species_gm import ApplyShadeUndeathAction
+from actions.definitions.standing_declarations import declare_standing_action
 from actions.definitions.story_builder import (
     CloseSceneRoomAction,
     CreateStoryAreaAction,
@@ -792,6 +793,7 @@ _ALL_ACTIONS: list[Action] = [
     org_promote_action,
     org_demote_action,
     org_expel_action,
+    declare_standing_action,
     intimidate,
     persuade,
     deceive,
