@@ -62,6 +62,7 @@ class OrgAppealApiTests(TestCase):
         lodge_response = self.client.post(
             reverse("societies:organization-appeal-list"),
             {"organization": self.org.pk, "title": "Bandits", "body": "Please send aid."},
+            format="json",
         )
         self.assertEqual(lodge_response.status_code, status.HTTP_201_CREATED)
         appeal_id = lodge_response.data["id"]
@@ -72,6 +73,7 @@ class OrgAppealApiTests(TestCase):
         signon_response = self.client.post(
             reverse("societies:organization-appeal-signon", args=[appeal_id]),
             {"note": "I'll go."},
+            format="json",
         )
         self.assertEqual(signon_response.status_code, status.HTTP_200_OK)
         self.assertEqual(len(signon_response.data["signons"]), 1)
@@ -82,6 +84,7 @@ class OrgAppealApiTests(TestCase):
         resolve_response = self.client.post(
             reverse("societies:organization-appeal-resolve", args=[appeal_id]),
             {"verdict": "grant", "answer": "Guards are dispatched."},
+            format="json",
         )
         self.assertEqual(resolve_response.status_code, status.HTTP_200_OK)
         self.assertEqual(resolve_response.data["state"], OrgAppealState.GRANTED)
@@ -125,6 +128,7 @@ class OrgAppealApiTests(TestCase):
         response = self.client.post(
             reverse("societies:organization-appeal-resolve", args=[appeal.pk]),
             {"verdict": "grant", "answer": "Sure."},
+            format="json",
         )
         self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
         appeal.refresh_from_db()
@@ -135,12 +139,14 @@ class OrgAppealApiTests(TestCase):
         first = self.client.post(
             reverse("societies:organization-appeal-list"),
             {"organization": self.org.pk, "title": "First", "body": "Body one."},
+            format="json",
         )
         self.assertEqual(first.status_code, status.HTTP_201_CREATED)
 
         second = self.client.post(
             reverse("societies:organization-appeal-list"),
             {"organization": self.org.pk, "title": "Second", "body": "Body two."},
+            format="json",
         )
         self.assertEqual(second.status_code, status.HTTP_400_BAD_REQUEST)
 
@@ -148,7 +154,8 @@ class OrgAppealApiTests(TestCase):
         self.client.force_authenticate(user=self.petitioner_account)
         appeal = OrgAppealFactory(organization=self.org, petitioner_persona=self.petitioner_persona)
         response = self.client.post(
-            reverse("societies:organization-appeal-withdraw", args=[appeal.pk])
+            reverse("societies:organization-appeal-withdraw", args=[appeal.pk]),
+            format="json",
         )
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         self.assertEqual(response.data["state"], OrgAppealState.WITHDRAWN)

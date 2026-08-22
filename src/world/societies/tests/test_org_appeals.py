@@ -315,6 +315,11 @@ class OrgAppealActionTests(TestCase):
         tenure = grant_test_tenure(self.member_roster.character_sheet)
         tenure.player_data.account.is_staff = True
         tenure.player_data.account.save()
+        # RosterTenure.related_cache_fields only lists player_data(.account) —
+        # not roster_entry — so a fresh tenure does not itself invalidate
+        # roster_entry.cached_tenures; drop it explicitly so current_tenure
+        # (and active_account) see the tenure just created.
+        self.member_roster.invalidate_tenure_cache()
 
         result = org_appeal_resolve_action.execute(
             self.member,
@@ -454,5 +459,8 @@ class CmdAppealTests(TestCase):
     def test_withdraw_rejects_non_numeric_id(self):
         cmd = _make_cmd("withdraw not-a-number")
         cmd.func()
-        cmd.caller.msg.assert_called_once()
-        assert "numeric" in cmd.caller.msg.call_args.args[0].lower()
+        # DispatchCommand.func()'s CommandError handler sends both the plain-text
+        # message and a structured command_error payload (mirrors test_grant_item.py
+        # / test_dispatchers.py's documented two-call convention) — assert the text
+        # was sent, not that msg() was called exactly once.
+        cmd.caller.msg.assert_any_call("Which appeal? Use its numeric id.")
