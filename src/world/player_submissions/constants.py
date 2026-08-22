@@ -26,6 +26,7 @@ class SubmissionCategory(models.TextChoices):
     SYSTEM_ERROR = "system_error", "System Error"  # auto-captured runtime errors (#1164)
     PETITION = "petition", "Petition"  # urgent staff-contact requests (#2288)
     CATALOG_SUGGESTION = "catalog_suggestion", "Catalog Suggestion"  # GM scenario catalog (#2127)
+    CHECK_PROPOSAL = "check_proposal", "Check Proposal"  # new CheckType proposals (#3295)
 
 
 class ReportCategory(models.TextChoices):

@@ -34,6 +34,8 @@ import { CombatRail } from '@/combat/components/CombatRail';
 import { GMEncounterControls } from '@/combat/sections/GMEncounterControls';
 import { LinkedStoriesPanel } from '@/crossover/components/LinkedStoriesPanel';
 import { GMAdjudicationPanel } from '../components/GMAdjudicationPanel';
+import { SelfCheckPanel } from '../components/SelfCheckPanel';
+import { CheckCallPromptCard } from '../components/CheckCallPromptCard';
 
 export function SceneDetailPage() {
   const { id = '' } = useParams();
@@ -228,6 +230,18 @@ export function SceneDetailPage() {
           />
         )}
         {scene && <LinkedStoriesPanel sceneId={id} />}
+        {/* #3295 — scene check invocation: self-check picker (any player),
+            pending call-answer prompts, and the GM's Call For Check tab. */}
+        {isActive && (
+          <div className="mt-2">
+            <CheckCallPromptCard />
+          </div>
+        )}
+        {isActive && (
+          <div className="mt-2">
+            <SelfCheckPanel />
+          </div>
+        )}
         {scene?.viewer_can_gm && (
           <div className="mt-2">
             <GMAdjudicationPanel scene={scene} />

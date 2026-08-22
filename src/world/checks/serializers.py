@@ -8,9 +8,10 @@ from drf_spectacular.utils import extend_schema_field
 from rest_framework import serializers
 
 from world.checks.constants import ModifierSourceKind
-from world.checks.models import CheckType
+from world.checks.models import CheckCallTarget, CheckType
 from world.checks.outcome_models import ConsequenceOutcome, ConsequenceOutcomeModifier
 from world.checks.outcome_utils import build_outcome_display
+from world.scenes.action_constants import DifficultyChoice
 
 # Provenance kinds scoped to staff reads.
 _STAFF_ONLY_SOURCE_KINDS = frozenset({ModifierSourceKind.ROLLMOD})
@@ -19,10 +20,10 @@ _STAFF_ONLY_SOURCE_KINDS = frozenset({ModifierSourceKind.ROLLMOD})
 class CheckTypeSerializer(serializers.ModelSerializer):
     """Read-only catalog listing for the web GM check-invocation picker (#3070).
 
-    Mirrors ``InvokeCatalogCheckAction``'s own catalog rendering
-    (``_check_type_summary``/``_format_catalog_row`` in
-    ``actions/definitions/gm_adjudication.py``) so the web picker shows the same
-    stat+skill trait pairing a GM sees via telnet ``gm check find``.
+    Mirrors the shared catalog rendering (``check_type_summary``/
+    ``format_catalog_row`` in ``world.checks.catalog_invocation``, #3295) so the
+    web picker shows the same stat+skill trait pairing a GM sees via telnet
+    ``gm check find``.
     """
 
     category_name = serializers.CharField(source="category.name", read_only=True)
@@ -42,6 +43,27 @@ class CheckTypeSerializer(serializers.ModelSerializer):
             traits = obj.traits.select_related("trait").order_by("-weight")
         names = [ctt.trait.name for ctt in traits]
         return " + ".join(names) if names else ""
+
+
+class CheckCallTargetSerializer(serializers.Serializer):
+    """Read-only payload for one of the requesting player's pending check calls (#3295).
+
+    Mirrors ``GMSummonOfferSerializer``'s shape: answer/decline dispatch through
+    the generic REGISTRY action-dispatch endpoint (``answer_check_call``/
+    ``decline_check_call``) rather than a DRF action here.
+    """
+
+    id = serializers.IntegerField(read_only=True)
+    call_id = serializers.IntegerField(source="call.pk", read_only=True)
+    check_type_name = serializers.CharField(source="call.check_type.name", read_only=True)
+    band = serializers.CharField(source="call.band", read_only=True)
+    band_label = serializers.SerializerMethodField()
+    caller_display_name = serializers.CharField(source="call.caller_persona.name", read_only=True)
+    scene_id = serializers.IntegerField(source="call.scene_id", read_only=True)
+    created_at = serializers.DateTimeField(source="call.created_at", read_only=True)
+
+    def get_band_label(self, obj: CheckCallTarget) -> str:
+        return DifficultyChoice(obj.call.band).label
 
 
 class ConsequenceOutcomeModifierSerializer(serializers.ModelSerializer):

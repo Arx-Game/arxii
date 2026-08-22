@@ -90,6 +90,22 @@ class ModifierSourceKind(models.TextChoices):
     SOULFRAY = "soulfray", "Soulfray"
 
 
+class CheckCallTargetStatus(models.TextChoices):
+    """A ``CheckCallTarget`` row's state (#3295).
+
+    Row existence IS the pending prompt -- there is no separate "open" bit.
+    ``DECLINED`` exists for an explicit dismiss; simply never answering has the
+    identical effect ("declining = not rolling, no mechanical force" per the
+    ruling) since nothing ever polls for or forces a stale ``PENDING`` row.
+    Expiry/timeout polish is an explicitly deferred follow-up, not this enum's
+    job.
+    """
+
+    PENDING = "pending", "Pending"
+    ANSWERED = "answered", "Answered"
+    DECLINED = "declined", "Declined"
+
+
 class SecurityCheckKind(models.TextChoices):
     """Security-domain check kinds map to CheckType rows (#2180).
 

@@ -465,6 +465,12 @@ class ActionRegistryTests(TestCase):
             # #2127 — GM scenario catalog: situation find/browse + suggestion inbox.
             "gm_find_situation",
             "gm_submit_catalog_suggestion",
+            # #3295 — scene check invocation: player self-checks, GM calls, proposals.
+            "scene_self_check",
+            "call_for_check",
+            "answer_check_call",
+            "decline_check_call",
+            "propose_check_type",
             # #2010 — GM battle staging: JUNIOR-gated catalog-pick-to-live-Battle actions.
             "create_battle",
             "stage_battle_map",

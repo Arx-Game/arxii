@@ -308,6 +308,39 @@ to enhance mundane social actions with magical techniques.
 
 **Design spec:** `docs/superpowers/specs/2026-03-22-scene-checks-and-interaction-refactor-design.md`
 
+### Phase 5.6c: Player/GM Scene Check Invocation — DONE (#3295)
+Players roll catalog checks on themselves mid-scene, GMs call for checks from
+named targets, and a proposal pipeline handles catalog gaps — all restating
+#2118's catalog-only firewall (never a freeform stat/skill/difficulty
+invention).
+
+**What was built:**
+- **Shared catalog core** (`world.checks.catalog_invocation`) — the resolve/
+  find/band-validation logic extracted from #2118's `InvokeCatalogCheckAction`,
+  so every catalog-check invocation surface (SENIOR ad-hoc, player self-check,
+  GM call) resolves against the exact same code.
+- **`SceneSelfCheckAction`** (`scene_self_check`) — any player, SELF-target
+  only, broadcasts a Narrator-style OUTCOME line to the room via the scene
+  interaction pipeline, attributed to the roller's own presenting persona
+  (never the raw character name — the #981 alt-leak rule).
+- **`CallForCheckAction`** (`call_for_check`) — JUNIOR+ GM, creates a `CheckCall`
+  + one `CheckCallTarget` row per named target, broadcasts the call to the room.
+  Never rolls anything itself.
+- **`AnswerCheckCallAction`/`DeclineCheckCallAction`** — a target's one-tap
+  response; answering dispatches the same self-check core bound to the call's
+  own check/band (never a free pick); declining is quiet, no mechanical force.
+- **Proposal pipeline** — `ProposeCheckAction` routes a structured `CheckProposal`
+  (`world.player_submissions`, `SubmissionCategory.CHECK_PROPOSAL`) to the staff
+  inbox; adoption (authoring the real `CheckType`) stays a separate manual act.
+- **Telnet** (`commands/scene_checks.py`): `check`/`callcheck`. **Web:**
+  `SelfCheckPanel`/`CheckCallPromptCard` + a `Call For Check` tab on
+  `GMAdjudicationPanel`.
+
+**Deferred (verified, not this phase):** GM umpire in-flight modifier tooling
+beyond the one-step edge/setback shift (see `docs/roadmap/gm-system.md`'s
+"Umpire check-modifier tooling" note); check-call expiry/timeout polish;
+contested checks (two players opposed) — no substrate decision yet.
+
 ### Phase 5.7: Situation Runtime
 The Situation and Challenge models exist but there is no runtime lifecycle.
 
