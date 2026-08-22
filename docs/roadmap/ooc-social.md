@@ -199,7 +199,7 @@ IC-authored correspondence surface. Closed end-to-end:
 - **Examine integration:** the room's Notice Board hint line now renders the
   board's actual current postings, not just a flavor hint.
 
-Details: `docs/systems/boards.md`, ADR-0226 (IC-persona authorship).
+Details: `docs/systems/boards.md`, ADR-0228 (IC-persona authorship).
 
 ## What's Needed for MVP
 - ~~Friend list system~~ — SHIPPED (#1727): `FriendsTab`/`FriendButton` over

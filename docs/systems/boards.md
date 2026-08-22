@@ -102,7 +102,7 @@ A post's author renders via the same per-viewer persona display resolution
 used everywhere else (`scenes.persona_display.resolve_display_for_viewer`):
 an anonymous/masked persona shows the mask (or a composed sdesc if
 undiscovered), a discovered mask reveals `"<mask> (<real>)"`, staff see
-through every mask. See `docs/adr/0226-board-posts-are-authored-by-persona.md`
+through every mask. See `docs/adr/0228-board-posts-are-authored-by-persona.md`
 for why authorship is IC (persona), not OOC (account).
 
 ## Tests

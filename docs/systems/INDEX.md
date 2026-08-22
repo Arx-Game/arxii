@@ -4444,7 +4444,7 @@ board) - never both (DB check constraint, no JSON). Posts are signed,
 persistent, exact-text notices authored by a `scenes.Persona` - a masked
 persona posts under its false identity. Distinct from #2986 rumors
 (distorting, spreading) and the GM-only `TableBulletinPost` (OOC,
-table-scoped) - see `docs/adr/0226-board-posts-are-authored-by-persona.md`.
+table-scoped) - see `docs/adr/0228-board-posts-are-authored-by-persona.md`.
 
 - **Models** (`world.boards.models`): `Board` (nullable `room_profile` /
   `organization` FKs, exactly-one-set check constraint + a per-anchor unique
