@@ -17,7 +17,12 @@ from typing import TYPE_CHECKING, cast
 from django.utils import timezone
 
 from world.player_submissions.constants import PetitionCategory, SubmissionStatus
-from world.player_submissions.models import Petition, SubmitterStanding, SystemErrorReport
+from world.player_submissions.models import (
+    CheckProposal,
+    Petition,
+    SubmitterStanding,
+    SystemErrorReport,
+)
 
 if TYPE_CHECKING:
     from collections.abc import Callable
@@ -26,7 +31,7 @@ if TYPE_CHECKING:
     from evennia.objects.models import ObjectDB
 
     from typeclasses.characters import Character
-    from world.scenes.models import Scene
+    from world.scenes.models import Persona, Scene
 
 logger = logging.getLogger(__name__)
 
@@ -236,3 +241,31 @@ def sender_context(account: AccountDB) -> dict:
         "dismissed_count": standing.dismissed_count,
         "is_ignored": standing.is_ignored,
     }
+
+
+def submit_check_proposal(  # noqa: PLR0913 - one column per structured proposal field, no JSON
+    account: AccountDB,
+    persona: Persona,
+    *,
+    proposed_name: str,
+    intent: str,
+    situation_text: str,
+    suggested_traits_text: str = "",
+    scene: Scene | None = None,
+) -> CheckProposal:
+    """Create a ``CheckProposal`` row, routed to the staff inbox (#3295).
+
+    Pure creation -- never touches the live ``CheckType`` catalog (the catalog-only
+    ruling, Tehom 2026-08-21). Staff adopts a proposal by hand-authoring the real
+    ``CheckType`` row separately (through the normal content path) and resolving
+    this row, mirroring ``world.gm.services.submit_catalog_suggestion`` (#2127).
+    """
+    return CheckProposal.objects.create(
+        submitted_by_account=account,
+        submitted_by_persona=persona,
+        proposed_name=proposed_name,
+        intent=intent,
+        suggested_traits_text=suggested_traits_text,
+        situation_text=situation_text,
+        scene=scene,
+    )

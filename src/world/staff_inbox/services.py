@@ -7,7 +7,7 @@ triage. Does not own any models — purely a view layer.
 
 from __future__ import annotations
 
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from django.urls import reverse
 
@@ -16,6 +16,7 @@ from world.gm.models import CatalogSuggestion, GMApplication
 from world.player_submissions.constants import SubmissionCategory, SubmissionStatus
 from world.player_submissions.models import (
     BugReport,
+    CheckProposal,
     Petition,
     PlayerFeedback,
     PlayerReport,
@@ -25,6 +26,9 @@ from world.player_submissions.services import sender_context
 from world.roster.models.applications import RosterApplication
 from world.roster.models.choices import ApplicationStatus
 from world.staff_inbox.types import InboxItem
+
+if TYPE_CHECKING:
+    from collections.abc import Callable
 
 #: Cap per-category slice in account history responses. This endpoint is a
 #: summary view, not paginated — the frontend can link to per-type ViewSets
@@ -174,6 +178,104 @@ def _catalog_suggestion_to_item(obj: CatalogSuggestion) -> InboxItem:
     )
 
 
+def _check_proposal_to_item(obj: CheckProposal) -> InboxItem:
+    return InboxItem(
+        source_type=SubmissionCategory.CHECK_PROPOSAL,
+        source_pk=obj.pk,
+        title=f"Check Proposal: {obj.proposed_name}",
+        reporter_summary=_reporter_summary(
+            obj.submitted_by_persona.name,
+            obj.submitted_by_account.username,
+        ),
+        created_at=obj.created_at,
+        status=obj.status,
+        detail_url=reverse("player_submissions:check-proposal-detail", args=[obj.pk]),
+    )
+
+
+def _open_check_proposal_items() -> list[InboxItem]:
+    proposal_qs = CheckProposal.objects.filter(
+        status=SubmissionStatus.OPEN,
+    ).select_related("submitted_by_account", "submitted_by_persona")
+    return [_check_proposal_to_item(p) for p in proposal_qs]
+
+
+def _open_feedback_items() -> list[InboxItem]:
+    feedback_qs = PlayerFeedback.objects.filter(
+        status=SubmissionStatus.OPEN,
+    ).select_related(
+        "reporter_account",
+        "reporter_persona__character_sheet__character",
+    )
+    return [_feedback_to_item(fb) for fb in feedback_qs]
+
+
+def _open_bug_items() -> list[InboxItem]:
+    bug_qs = BugReport.objects.filter(
+        status=SubmissionStatus.OPEN,
+    ).select_related(
+        "reporter_account",
+        "reporter_persona__character_sheet__character",
+    )
+    return [_bug_to_item(br) for br in bug_qs]
+
+
+def _open_report_items() -> list[InboxItem]:
+    report_qs = PlayerReport.objects.filter(
+        status=SubmissionStatus.OPEN,
+    ).select_related(
+        "reporter_account",
+        "reported_account",
+        "reporter_persona__character_sheet__character",
+        "reported_persona__character_sheet__character",
+    )
+    return [_report_to_item(pr) for pr in report_qs]
+
+
+def _open_system_error_items() -> list[InboxItem]:
+    error_qs = SystemErrorReport.objects.filter(
+        status=SubmissionStatus.OPEN,
+    ).select_related("actor_persona__character_sheet__character")
+    return [_system_error_to_item(err) for err in error_qs]
+
+
+def _open_character_application_items() -> list[InboxItem]:
+    application_qs = RosterApplication.objects.filter(
+        status=ApplicationStatus.PENDING,
+    ).select_related("character", "player_data__account")
+    return [_application_to_item(app) for app in application_qs]
+
+
+def _open_gm_application_items() -> list[InboxItem]:
+    gm_app_qs = GMApplication.objects.filter(
+        status=GMApplicationStatus.PENDING,
+    ).select_related("account")
+    return [_gm_application_to_item(app) for app in gm_app_qs]
+
+
+def _open_catalog_suggestion_items() -> list[InboxItem]:
+    suggestion_qs = CatalogSuggestion.objects.filter(
+        status=SubmissionStatus.OPEN,
+    ).select_related("submitted_by")
+    return [_catalog_suggestion_to_item(s) for s in suggestion_qs]
+
+
+# Category -> no-arg fetcher, for every source EXCEPT petitions (which need
+# ``include_ignored`` threaded through) — a data table instead of one
+# ``if _include(...)`` branch per category keeps ``get_staff_inbox`` flat as
+# sources are added (#3295 added the eighth).
+_SIMPLE_CATEGORY_FETCHERS: list[tuple[str, Callable[[], list[InboxItem]]]] = [
+    (SubmissionCategory.PLAYER_FEEDBACK, _open_feedback_items),
+    (SubmissionCategory.BUG_REPORT, _open_bug_items),
+    (SubmissionCategory.PLAYER_REPORT, _open_report_items),
+    (SubmissionCategory.SYSTEM_ERROR, _open_system_error_items),
+    (SubmissionCategory.CHARACTER_APPLICATION, _open_character_application_items),
+    (SubmissionCategory.GM_APPLICATION, _open_gm_application_items),
+    (SubmissionCategory.CATALOG_SUGGESTION, _open_catalog_suggestion_items),
+    (SubmissionCategory.CHECK_PROPOSAL, _open_check_proposal_items),
+]
+
+
 def get_staff_inbox(
     *,
     categories: list[str] | None = None,
@@ -198,61 +300,12 @@ def get_staff_inbox(
 
     items: list[InboxItem] = []
 
-    if _include(SubmissionCategory.PLAYER_FEEDBACK):
-        feedback_qs = PlayerFeedback.objects.filter(
-            status=SubmissionStatus.OPEN,
-        ).select_related(
-            "reporter_account",
-            "reporter_persona__character_sheet__character",
-        )
-        items.extend(_feedback_to_item(fb) for fb in feedback_qs)
-
-    if _include(SubmissionCategory.BUG_REPORT):
-        bug_qs = BugReport.objects.filter(
-            status=SubmissionStatus.OPEN,
-        ).select_related(
-            "reporter_account",
-            "reporter_persona__character_sheet__character",
-        )
-        items.extend(_bug_to_item(br) for br in bug_qs)
-
-    if _include(SubmissionCategory.PLAYER_REPORT):
-        report_qs = PlayerReport.objects.filter(
-            status=SubmissionStatus.OPEN,
-        ).select_related(
-            "reporter_account",
-            "reported_account",
-            "reporter_persona__character_sheet__character",
-            "reported_persona__character_sheet__character",
-        )
-        items.extend(_report_to_item(pr) for pr in report_qs)
-
-    if _include(SubmissionCategory.SYSTEM_ERROR):
-        error_qs = SystemErrorReport.objects.filter(
-            status=SubmissionStatus.OPEN,
-        ).select_related("actor_persona__character_sheet__character")
-        items.extend(_system_error_to_item(err) for err in error_qs)
-
-    if _include(SubmissionCategory.CHARACTER_APPLICATION):
-        application_qs = RosterApplication.objects.filter(
-            status=ApplicationStatus.PENDING,
-        ).select_related("character", "player_data__account")
-        items.extend(_application_to_item(app) for app in application_qs)
-
-    if _include(SubmissionCategory.GM_APPLICATION):
-        gm_app_qs = GMApplication.objects.filter(
-            status=GMApplicationStatus.PENDING,
-        ).select_related("account")
-        items.extend(_gm_application_to_item(app) for app in gm_app_qs)
+    for category, fetch in _SIMPLE_CATEGORY_FETCHERS:
+        if _include(category):
+            items.extend(fetch())
 
     if _include(SubmissionCategory.PETITION):
         items.extend(_open_petition_items(include_ignored=include_ignored))
-
-    if _include(SubmissionCategory.CATALOG_SUGGESTION):
-        suggestion_qs = CatalogSuggestion.objects.filter(
-            status=SubmissionStatus.OPEN,
-        ).select_related("submitted_by")
-        items.extend(_catalog_suggestion_to_item(s) for s in suggestion_qs)
 
     items.sort(key=lambda i: i.created_at, reverse=True)
     return items
