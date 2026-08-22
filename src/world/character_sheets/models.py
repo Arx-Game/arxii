@@ -40,6 +40,7 @@ from world.character_sheets.types import (
     ActivityState,
     LifecycleState,
     MaritalStatus,
+    PosthumousJournalDisposition,
     ProfileTextField,
     SheetVisibility,
 )
@@ -635,6 +636,16 @@ class CharacterSheet(SharedMemoryModel):
         null=True,
         blank=True,
         help_text="When lifecycle_state last changed. Null for default ALIVE.",
+    )
+    posthumous_journal_disposition = models.CharField(
+        max_length=6,
+        choices=PosthumousJournalDisposition.choices,
+        default=PosthumousJournalDisposition.REVEAL,
+        help_text=(
+            "Default fate of this character's private journal entries after death (#3287)."
+            " REVEAL is the Arx I black-journal precedent; SEAL keeps them buried. A"
+            " per-entry JournalEntry.posthumous_override can override this default."
+        ),
     )
 
     # OC distinction (#671 — minimal pair; full OC creation flow is a follow-up)

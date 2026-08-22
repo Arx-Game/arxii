@@ -3,13 +3,20 @@
 from unittest.mock import patch
 
 from django.test import TestCase, tag
+from django.utils import timezone
 from rest_framework import status
 from rest_framework.test import APIClient
 
 from evennia_extensions.factories import AccountFactory, CharacterFactory
 from world.character_sheets.factories import CharacterSheetFactory
-from world.journals.constants import ResponseType
-from world.journals.factories import JournalEntryFactory, JournalTagFactory
+from world.character_sheets.types import PosthumousJournalDisposition
+from world.estates.factories import EstateSettlementFactory
+from world.journals.constants import PosthumousOverride, ResponseType
+from world.journals.factories import (
+    JournalBequestGrantFactory,
+    JournalEntryFactory,
+    JournalTagFactory,
+)
 from world.roster.factories import PlayerDataFactory, RosterTenureFactory
 from world.scenes.factories import PersonaFactory
 from world.scenes.models import Block, Mute
@@ -620,3 +627,161 @@ class JournalResponseMuteViewTests(TestCase):
         titles = [r["title"] for r in response.data["responses"]]
         self.assertIn("From Muted", titles)
         self.assertIn("From Control", titles)
+
+
+class JournalPosthumousLeakTableTests(TestCase):
+    """Viewset visibility tests for the #3287 spec's leak table.
+
+    Rows covered: public feed pre-death (private stays hidden), SEALED entries post-death
+    (never readable by anyone, feed or bequest), bequest read (recipient-only, no grant = no
+    access), and revealed entries riding the same block/mute gate as ordinary public entries.
+    """
+
+    @classmethod
+    def setUpTestData(cls) -> None:
+        cls.user = AccountFactory()
+        cls.viewer_character = CharacterFactory()
+        cls.viewer_sheet = CharacterSheetFactory(character=cls.viewer_character)
+
+        cls.deceased_sheet = CharacterSheetFactory()
+        cls.settlement = EstateSettlementFactory(character_sheet=cls.deceased_sheet)
+
+        cls.unrevealed_private = JournalEntryFactory(
+            author=cls.deceased_sheet, title="Still Private", is_public=False
+        )
+        cls.revealed_entry = JournalEntryFactory(
+            author=cls.deceased_sheet,
+            title="Revealed After Death",
+            is_public=False,
+            revealed_at=timezone.now(),
+            revealed_by_settlement=cls.settlement,
+        )
+        cls.sealed_entry = JournalEntryFactory(
+            author=cls.deceased_sheet,
+            title="Sealed Forever",
+            is_public=False,
+            posthumous_override=PosthumousOverride.SEAL,
+        )
+
+    def setUp(self) -> None:
+        self.client = APIClient()
+        self.client.force_authenticate(user=self.user)
+
+    def test_public_feed_excludes_unrevealed_private(self) -> None:
+        """Pre-death privacy unchanged: an unrevealed private entry never hits the feed."""
+        response = self.client.get("/api/journals/entries/")
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        titles = [e["title"] for e in response.data["results"]]
+        self.assertNotIn("Still Private", titles)
+        self.assertNotIn("Sealed Forever", titles)
+
+    def test_public_feed_includes_revealed_entry(self) -> None:
+        """A revealed private entry surfaces in the public feed, still marked private."""
+        response = self.client.get("/api/journals/entries/")
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        results = {e["title"]: e for e in response.data["results"]}
+        self.assertIn("Revealed After Death", results)
+        entry = results["Revealed After Death"]
+        self.assertFalse(entry["is_public"])
+        self.assertTrue(entry["is_posthumous"])
+
+    @patch("world.journals.views.JournalEntryViewSet._get_character")
+    def test_sealed_entry_never_retrievable_by_anyone(self, mock_get_char: object) -> None:
+        """SEAL beats everything -- not even a granted bequest recipient can read it."""
+        JournalBequestGrantFactory(
+            recipient_sheet=self.viewer_sheet,
+            deceased_sheet=self.deceased_sheet,
+            created_by_settlement=self.settlement,
+        )
+        mock_get_char.return_value = self.viewer_character
+        response = self.client.get(f"/api/journals/entries/{self.sealed_entry.pk}/")
+        self.assertEqual(response.status_code, status.HTTP_404_NOT_FOUND)
+
+    @patch("world.journals.views.JournalEntryViewSet._get_character")
+    def test_deceased_corpus_without_grant_is_empty(self, mock_get_char: object) -> None:
+        """No JournalBequestGrant -- browsing the deceased's corpus returns nothing."""
+        mock_get_char.return_value = self.viewer_character
+        response = self.client.get(f"/api/journals/entries/?deceased={self.deceased_sheet.pk}")
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(response.data["results"], [])
+
+    @patch("world.journals.views.JournalEntryViewSet._get_character")
+    def test_granted_recipient_browses_non_sealed_corpus(self, mock_get_char: object) -> None:
+        """A grant surfaces the non-sealed private entries, excluding the sealed one."""
+        JournalBequestGrantFactory(
+            recipient_sheet=self.viewer_sheet,
+            deceased_sheet=self.deceased_sheet,
+            created_by_settlement=self.settlement,
+        )
+        mock_get_char.return_value = self.viewer_character
+        response = self.client.get(f"/api/journals/entries/?deceased={self.deceased_sheet.pk}")
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        titles = [e["title"] for e in response.data["results"]]
+        self.assertIn("Still Private", titles)
+        self.assertIn("Revealed After Death", titles)
+        self.assertNotIn("Sealed Forever", titles)
+
+    @patch("world.journals.views.JournalEntryViewSet._get_character")
+    def test_granted_recipient_can_retrieve_non_sealed_entry(self, mock_get_char: object) -> None:
+        JournalBequestGrantFactory(
+            recipient_sheet=self.viewer_sheet,
+            deceased_sheet=self.deceased_sheet,
+            created_by_settlement=self.settlement,
+        )
+        mock_get_char.return_value = self.viewer_character
+        response = self.client.get(f"/api/journals/entries/{self.unrevealed_private.pk}/")
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+
+    @patch("world.journals.views.JournalEntryViewSet._get_character")
+    def test_non_recipient_cannot_retrieve_private_entry(self, mock_get_char: object) -> None:
+        """No grant at all -- the entry stays 404, same as any other private entry."""
+        mock_get_char.return_value = self.viewer_character
+        response = self.client.get(f"/api/journals/entries/{self.unrevealed_private.pk}/")
+        self.assertEqual(response.status_code, status.HTTP_404_NOT_FOUND)
+
+
+class JournalPosthumousDispositionEndpointTests(TestCase):
+    """GET/PATCH /api/journals/entries/disposition/ -- the sheet-level default (#3287)."""
+
+    @classmethod
+    def setUpTestData(cls) -> None:
+        cls.user = AccountFactory()
+        cls.character = CharacterFactory()
+        cls.sheet = CharacterSheetFactory(character=cls.character)
+
+    def setUp(self) -> None:
+        self.client = APIClient()
+        self.client.force_authenticate(user=self.user)
+
+    @patch("world.journals.views.JournalEntryViewSet._get_character")
+    def test_get_returns_current_default(self, mock_get_char: object) -> None:
+        mock_get_char.return_value = self.character
+        response = self.client.get("/api/journals/entries/disposition/")
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(
+            response.data["posthumous_journal_disposition"], PosthumousJournalDisposition.REVEAL
+        )
+
+    @patch("world.journals.views.JournalEntryViewSet._get_character")
+    def test_patch_sets_seal(self, mock_get_char: object) -> None:
+        mock_get_char.return_value = self.character
+        response = self.client.patch(
+            "/api/journals/entries/disposition/",
+            {"disposition": "seal"},
+            format="json",
+        )
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.sheet.refresh_from_db()
+        self.assertEqual(
+            self.sheet.posthumous_journal_disposition, PosthumousJournalDisposition.SEAL
+        )
+
+    @patch("world.journals.views.JournalEntryViewSet._get_character")
+    def test_patch_rejects_invalid_value(self, mock_get_char: object) -> None:
+        mock_get_char.return_value = self.character
+        response = self.client.patch(
+            "/api/journals/entries/disposition/",
+            {"disposition": "nonsense"},
+            format="json",
+        )
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)

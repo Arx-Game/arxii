@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from django.db.models import Count, Prefetch, QuerySet
+from django.db.models import Count, Prefetch, Q, QuerySet
 from django_filters.rest_framework import DjangoFilterBackend
 from rest_framework import status, viewsets
 from rest_framework.decorators import action
@@ -17,13 +17,19 @@ from world.character_sheets.models import CharacterSheet
 from world.journals.filters import JournalEntryFilter
 from world.journals.models import JournalEntry, JournalTag
 from world.journals.serializers import (
+    JournalDispositionSerializer,
     JournalEntryCreateSerializer,
     JournalEntryDetailSerializer,
     JournalEntryEditSerializer,
     JournalEntryListSerializer,
     JournalResponseCreateSerializer,
 )
-from world.journals.services import exclude_blocked_and_muted_authors
+from world.journals.services import (
+    entry_visible_via_bequest,
+    exclude_blocked_and_muted_authors,
+    has_journal_bequest_grant,
+    sealed_effective_q,
+)
 
 
 class JournalEntryPagination(PageNumberPagination):
@@ -39,11 +45,14 @@ class JournalEntryViewSet(CharacterContextMixin, viewsets.GenericViewSet):
     ViewSet for journal entries.
 
     Endpoints:
-    - GET  /entries/        — list public entries (supports ?author, ?tag filters)
+    - GET  /entries/        — list public entries (supports ?author, ?tag, ?deceased filters)
     - GET  /entries/mine/   — list own entries including private
     - GET  /entries/<id>/   — retrieve single entry
     - POST /entries/        — create a new entry
+    - PATCH /entries/<id>/  — edit an entry (owner only)
     - POST /entries/<id>/respond/ — create praise/retort response
+    - GET/PATCH /entries/disposition/ — read/set the caller's sheet-level default
+      posthumous journal disposition (#3287)
     """
 
     permission_classes = [IsAuthenticated]
@@ -96,17 +105,53 @@ class JournalEntryViewSet(CharacterContextMixin, viewsets.GenericViewSet):
 
     def list(self, request: Request) -> Response:
         """
-        List public journal entries.
+        List public journal entries, or (with ``?deceased=``) a bequeathed corpus.
 
         Supports query params:
         - ?author=<character_id> — filter by author
         - ?tag=<tag_name> — filter by tag name
+        - ?deceased=<character_sheet_id> — browse a deceased sheet's non-sealed private
+          entries, ONLY when the caller holds a ``JournalBequestGrant`` for that sheet
+          (#3287 Decision 3). Empty when no grant exists — never a permission error, so a
+          probing id can't confirm whether a grant exists for someone else.
 
-        Blocked/muted authors' entries are excluded (#2996 Decision 2) — see
-        ``exclude_blocked_and_muted_authors``.
+        The public feed includes entries revealed by an estate settlement
+        (``revealed_at`` set) alongside ``is_public=True`` ones (#3287 Decision 2) — a
+        reveal never flips ``is_public``. Blocked/muted authors' entries are excluded
+        (#2996 Decision 2) — see ``exclude_blocked_and_muted_authors``.
         """
-        queryset = self.filter_queryset(self.get_queryset()).filter(is_public=True)
+        deceased_id = request.query_params.get("deceased")
+        if deceased_id:
+            return self._list_bequeathed_corpus(request, deceased_id)
+
+        queryset = self.filter_queryset(self.get_queryset()).filter(
+            Q(is_public=True) | Q(revealed_at__isnull=False)
+        )
         queryset = exclude_blocked_and_muted_authors(queryset, viewer_account=request.user)
+
+        page = self.paginate_queryset(queryset)
+        if page is not None:
+            serializer = JournalEntryListSerializer(page, many=True)
+            return self.get_paginated_response(serializer.data)
+
+        return Response(JournalEntryListSerializer(queryset, many=True).data)
+
+    def _list_bequeathed_corpus(self, request: Request, deceased_id: str) -> Response:
+        """``?deceased=`` branch of ``list`` — see its docstring for the contract."""
+        sheet = self._get_character_sheet(request)
+        if not sheet:
+            return Response(
+                {"detail": "No character found."},
+                status=status.HTTP_404_NOT_FOUND,
+            )
+        if not has_journal_bequest_grant(recipient_sheet=sheet, deceased_sheet_id=deceased_id):
+            queryset = self._get_base_queryset().none()
+        else:
+            queryset = (
+                self._get_base_queryset()
+                .filter(author_id=deceased_id)
+                .exclude(sealed_effective_q())
+            )
 
         page = self.paginate_queryset(queryset)
         if page is not None:
@@ -138,8 +183,9 @@ class JournalEntryViewSet(CharacterContextMixin, viewsets.GenericViewSet):
         """
         Retrieve a single journal entry.
 
-        Public entries are visible to all authenticated users.
-        Private entries are only visible to their author.
+        Visible when: public, revealed by an estate settlement, authored by the caller, or
+        (#3287 Decision 3) the caller holds a bequest grant over the author's writings and
+        this entry's effective disposition isn't SEAL.
         """
         try:
             entry = (
@@ -160,15 +206,15 @@ class JournalEntryViewSet(CharacterContextMixin, viewsets.GenericViewSet):
                 status=status.HTTP_404_NOT_FOUND,
             )
 
-        if not entry.is_public:
-            sheet = self._get_character_sheet(request)
-            if not sheet or entry.author_id != sheet.pk:
+        sheet = self._get_character_sheet(request)
+        publicly_visible = entry.is_public or entry.revealed_at is not None
+        if not publicly_visible:
+            is_own = sheet is not None and entry.author_id == sheet.pk
+            if not is_own and not entry_visible_via_bequest(entry, sheet):
                 return Response(
                     {"detail": "Not found."},
                     status=status.HTTP_404_NOT_FOUND,
                 )
-        else:
-            sheet = self._get_character_sheet(request)
 
         # #2996 Decision 2 — mute: a response persists normally (write-then-filter, never
         # skip-the-write) but is excluded from the entry AUTHOR's own view of responses to
@@ -212,6 +258,7 @@ class JournalEntryViewSet(CharacterContextMixin, viewsets.GenericViewSet):
             body=serializer.validated_data["body"],
             is_public=serializer.validated_data["is_public"],
             tags=serializer.validated_data.get("tags"),
+            posthumous_override=serializer.validated_data.get("posthumous_override"),
         )
         if not result.success:
             return Response(
@@ -258,6 +305,7 @@ class JournalEntryViewSet(CharacterContextMixin, viewsets.GenericViewSet):
             entry=entry,
             title=serializer.validated_data.get("title"),
             body=serializer.validated_data.get("body"),
+            posthumous_override=serializer.validated_data.get("posthumous_override"),
         )
         if not result.success:
             return Response(
@@ -315,3 +363,38 @@ class JournalEntryViewSet(CharacterContextMixin, viewsets.GenericViewSet):
             JournalEntryDetailSerializer(response_entry).data,
             status=status.HTTP_201_CREATED,
         )
+
+    @action(detail=False, methods=["get", "patch"])
+    def disposition(self, request: Request) -> Response:
+        """Read or set the caller's sheet-level default posthumous journal disposition.
+
+        GET returns the current default; PATCH sets it via ``set_journal_disposition``
+        (#3287) — the same seam ``journal disposition sheet=<...>`` uses on telnet.
+        """
+        sheet = self._get_character_sheet(request)
+        if not sheet:
+            return Response(
+                {"detail": "No character found."},
+                status=status.HTTP_404_NOT_FOUND,
+            )
+
+        if request.method == "GET":
+            return Response(
+                {"posthumous_journal_disposition": sheet.posthumous_journal_disposition}
+            )
+
+        serializer = JournalDispositionSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+
+        character = self._get_character(request)
+        result = get_action("set_journal_disposition").run(
+            actor=character,
+            disposition=serializer.validated_data["disposition"],
+        )
+        if not result.success:
+            return Response(
+                {"detail": result.message},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        return Response({"posthumous_journal_disposition": result.data["disposition"]})

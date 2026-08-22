@@ -13,14 +13,23 @@ import { Badge } from '@/components/ui/badge';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { toast } from 'sonner';
-import type { JournalEntrySummary, JournalResponseType } from '../api';
+import type { JournalEntrySummary, JournalResponseType, PosthumousJournalDisposition } from '../api';
 import {
+  useJournalDisposition,
   useJournalEntries,
   useJournalEntry,
   useMyJournalEntries,
   useRespondToJournal,
+  useSetJournalDisposition,
 } from '../queries';
 import { JournalComposerDialog } from '../components/JournalComposerDialog';
 
@@ -50,7 +59,10 @@ function MyJournalSection() {
 
   return (
     <section className="space-y-3" data-testid="my-journal-section">
-      <h2 className="text-lg font-medium">My Journal</h2>
+      <div className="flex items-center justify-between gap-4">
+        <h2 className="text-lg font-medium">My Journal</h2>
+        <PosthumousDispositionPicker />
+      </div>
       {isLoading ? (
         <p className="text-sm text-muted-foreground">Loading…</p>
       ) : entries.length === 0 ? (
@@ -76,6 +88,45 @@ function MyJournalSection() {
         hasPrev={!!data?.previous}
       />
     </section>
+  );
+}
+
+/**
+ * Sheet-level default posthumous journal disposition (#3287) -- "after your death, reveal
+ * or seal your private entries." Lives beside "My Journal" since it governs exactly those
+ * entries; per-entry overrides are set from the composer/edit surface instead.
+ */
+function PosthumousDispositionPicker() {
+  const { data } = useJournalDisposition();
+  const setDisposition = useSetJournalDisposition();
+
+  if (!data) return null;
+
+  return (
+    <div className="flex items-center gap-2" data-testid="posthumous-disposition-picker">
+      <Label htmlFor="posthumous-disposition" className="text-xs text-muted-foreground">
+        After my death
+      </Label>
+      <Select
+        value={data.posthumous_journal_disposition}
+        onValueChange={(val) => {
+          setDisposition.mutate(val as PosthumousJournalDisposition, {
+            onSuccess: () => toast.success('Posthumous disposition updated.'),
+            onError: (err) =>
+              toast.error(err instanceof Error ? err.message : 'Failed to update disposition'),
+          });
+        }}
+        disabled={setDisposition.isPending}
+      >
+        <SelectTrigger id="posthumous-disposition" className="h-8 w-44">
+          <SelectValue />
+        </SelectTrigger>
+        <SelectContent>
+          <SelectItem value="reveal">Reveal after death</SelectItem>
+          <SelectItem value="seal">Seal forever</SelectItem>
+        </SelectContent>
+      </Select>
+    </div>
   );
 }
 
@@ -196,6 +247,11 @@ function EntryRow({
             <CardTitle className="text-base">{entry.title}</CardTitle>
             {!entry.is_public ? <Badge variant="outline">Private</Badge> : null}
           </div>
+          {entry.is_posthumous ? (
+            <p className="text-xs italic text-muted-foreground">
+              From the journals of {entry.author_name}, revealed after death.
+            </p>
+          ) : null}
           <div className="flex flex-wrap items-center gap-1.5 text-xs text-muted-foreground">
             <span>{entry.author_name}</span>
             <span>·</span>

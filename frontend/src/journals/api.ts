@@ -23,6 +23,15 @@ const ENTRIES_URL = '/api/journals/entries';
 
 export type JournalResponseType = 'praise' | 'retort';
 
+/**
+ * Posthumous disposition (#3287) — the black journal afterlife. INHERIT falls through to
+ * the author's sheet-level default; REVEAL/SEAL pin one entry regardless of that default.
+ */
+export type PosthumousOverride = 'inherit' | 'reveal' | 'seal';
+
+/** The character-sheet-level default (`CharacterSheet.posthumous_journal_disposition`). */
+export type PosthumousJournalDisposition = 'reveal' | 'seal';
+
 export interface JournalTag {
   id: number;
   name: string;
@@ -41,6 +50,10 @@ export interface JournalEntrySummary {
   edited_at: string | null;
   tags: JournalTag[];
   response_count: number;
+  posthumous_override: PosthumousOverride;
+  revealed_at: string | null;
+  /** True once this entry has surfaced through an estate settlement. */
+  is_posthumous: boolean;
 }
 
 /** Shape returned by retrieve/create/respond (`JournalEntryDetailSerializer`). */
@@ -57,6 +70,9 @@ export interface JournalEntryDetail {
   edited_at: string | null;
   tags: JournalTag[];
   responses: JournalEntrySummary[];
+  posthumous_override: PosthumousOverride;
+  revealed_at: string | null;
+  is_posthumous: boolean;
 }
 
 export interface PaginatedJournalEntries {
@@ -74,6 +90,12 @@ export type JournalEntryListFilters = {
   author?: number;
   /** Tag name — filter by tag. */
   tag?: string;
+  /**
+   * CharacterSheet id of a deceased character whose bequeathed corpus the caller is
+   * browsing (#3287). Requires a `JournalBequestGrant` — otherwise returns empty, never
+   * an error (so a probing id can't confirm a grant exists for someone else).
+   */
+  deceased?: number;
   page?: number;
   page_size?: number;
 };
@@ -84,12 +106,20 @@ export interface CreateJournalEntryRequest {
   is_public: boolean;
   /** Freeform chip tags — never comma-split; each entry is one tag. */
   tags: string[];
+  /** Omit to leave the backend default (INHERIT) — only send when the author overrides it. */
+  posthumous_override?: PosthumousOverride;
 }
 
 export interface RespondToJournalRequest {
   title: string;
   body: string;
   response_type: JournalResponseType;
+}
+
+export interface EditJournalEntryRequest {
+  title?: string;
+  body?: string;
+  posthumous_override?: PosthumousOverride;
 }
 
 function jsonHeaders(): HeadersInit {
@@ -108,8 +138,9 @@ function buildQuery(params: Record<string, string | number | undefined>): string
 /**
  * GET /api/journals/entries/
  *
- * Public feed. Supports `?author=` and `?tag=` filters, paginated
- * (page_size default 20, per `JournalEntryPagination`).
+ * Public feed. Supports `?author=`, `?tag=`, and `?deceased=` filters, paginated
+ * (page_size default 20, per `JournalEntryPagination`). `?deceased=` switches to browsing a
+ * bequeathed corpus (#3287) — empty unless the caller holds a grant for that sheet.
  */
 export async function listJournalEntries(
   filters: JournalEntryListFilters = {}
@@ -175,3 +206,48 @@ export async function respondToJournal(
   }
   return res.json();
 }
+
+/** PATCH /api/journals/entries/{id}/ */
+export async function editJournalEntry(
+  id: number,
+  body: EditJournalEntryRequest
+): Promise<JournalEntryDetail> {
+  const res = await apiFetch(`${ENTRIES_URL}/${id}/`, {
+    method: 'PATCH',
+    headers: jsonHeaders(),
+    body: JSON.stringify(body),
+  });
+  if (!res.ok) {
+    await readErrorDetail(res, 'Failed to update journal entry');
+  }
+  return res.json();
+}
+
+export interface JournalDispositionResponse {
+  posthumous_journal_disposition: PosthumousJournalDisposition;
+}
+
+/** GET /api/journals/entries/disposition/ — the caller's sheet-level default (#3287). */
+export async function getJournalDisposition(): Promise<JournalDispositionResponse> {
+  const res = await apiFetch(`${ENTRIES_URL}/disposition/`);
+  if (!res.ok) {
+    await readErrorDetail(res, 'Failed to load posthumous journal disposition');
+  }
+  return res.json();
+}
+
+/** PATCH /api/journals/entries/disposition/ — set the caller's sheet-level default (#3287). */
+export async function setJournalDisposition(
+  disposition: PosthumousJournalDisposition
+): Promise<JournalDispositionResponse> {
+  const res = await apiFetch(`${ENTRIES_URL}/disposition/`, {
+    method: 'PATCH',
+    headers: jsonHeaders(),
+    body: JSON.stringify({ disposition }),
+  });
+  if (!res.ok) {
+    await readErrorDetail(res, 'Failed to update posthumous journal disposition');
+  }
+  return res.json();
+}
+
