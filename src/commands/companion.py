@@ -29,6 +29,7 @@ _SUBVERBS: dict[str, str] = {
     "order": "order_companion",
     "mount": "mount_companion",
     "dismount": "dismount_companion",
+    "emote": "companion_emote",
 }
 # "list" and "status" are handled locally (status hub), not dispatched.
 
@@ -49,8 +50,10 @@ _BIND_SUBVERB = "bind"
 _POSITIONAL_SUBVERBS = frozenset({"release", "fight", "deploy", "mount"})
 # "dismount" takes no argument — it dismounts whatever the caller is riding.
 
-# The order subverb has its own multi-token parser.
+# The order and emote subverbs have their own multi-token parsers.
 _ORDER_SUBVERB = "order"
+_EMOTE_SUBVERB = "emote"
+_MIN_EMOTE_TOKENS = 2  # <name> <text...>
 _MIN_ORDER_TOKENS = 2  # <name> <verb>
 _MIN_ATTACK_TOKENS = 3  # <name> attack <target>
 _MIN_ATTACK_WITH_ABILITY_TOKENS = 5  # <name> attack <target> with <ability>
@@ -79,9 +82,13 @@ class CmdCompanion(DispatchCommand):
         companion order <name> defend <ally>  - tell a companion to defend an ally
         companion mount <name|id>             - mount a ridable companion
         companion dismount                    - dismount your current mount
+        companion emote <name|id> <text>      - pose as a bonded, present companion
 
     ``name=`` must be the final token on ``bind`` (it greedily consumes the rest
-    of the line so names with spaces work).
+    of the line so names with spaces work). ``emote`` requires the companion be
+    bound to you AND present in your current room (#3294); authorship (block/
+    mute/consent) stays on your own persona, and the feed shows the companion as
+    the actor with a tell naming you.
     """
 
     key = "companion"
@@ -117,6 +124,8 @@ class CmdCompanion(DispatchCommand):
             return self._args_bind(parse_greedy_kwargs(self._rest, greedy_key=_NAME_KWARG))
         if self._subverb == _ORDER_SUBVERB:
             return self._args_order(self._rest)
+        if self._subverb == _EMOTE_SUBVERB:
+            return self._args_emote(self._rest)
         if self._subverb in _POSITIONAL_SUBVERBS:
             return {"companion_id": self._resolve_companion_id(self._rest)}
         return {}  # all subverbs gated in func(); this path is unreachable
@@ -268,6 +277,16 @@ class CmdCompanion(DispatchCommand):
         msg = f"Unknown order verb '{verb}'. Try: attack, hold, defend."
         raise CommandError(msg)
 
+    def _args_emote(self, rest: str) -> dict[str, Any]:
+        """Parse ``emote <name|id> <text...>`` (#3294): first token names the
+        companion; everything after is the pose text verbatim."""
+        parts = rest.split(maxsplit=1)
+        if len(parts) < _MIN_EMOTE_TOKENS:
+            msg = "Usage: companion emote <name|id> <text>"
+            raise CommandError(msg)
+        companion_id = self._resolve_companion_id(parts[0])
+        return {"companion_id": companion_id, "text": parts[1]}
+
     def _resolve_order_target(self, name: str) -> int:
         """Resolve a target name/pk to a CombatOpponent or BattleUnit pk."""
         from world.combat.models import CombatOpponent  # noqa: PLC0415
@@ -319,7 +338,9 @@ class CmdCompanion(DispatchCommand):
 
     def _show_status_hub(self) -> None:
         """List the caller's active companions + remaining capacity per gift."""
-        lines = ["|wCompanion actions|n: bind, release, fight, deploy, order, mount, dismount"]
+        lines = [
+            "|wCompanion actions|n: bind, release, fight, deploy, order, mount, dismount, emote"
+        ]
 
         sheet = self.caller.character_sheet
         if sheet is None:
