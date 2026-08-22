@@ -145,7 +145,8 @@ landing in full game chrome with an empty switcher. Closed end-to-end:
 
 - **Homepage + copy.** Branded homepage hero replaces Evennia boilerplate; `NewPlayerSection`
   carries real new-player copy; a built `/how-to-start` route replaces the two dead links;
-  stale `/lore*` links now point at `/codex`.
+  stale `/lore*` links now point at `/codex`. **Superseded by the Gatefold landing page
+  (#3305), see "Built - Gatefold Landing Page" below.**
 - **Registration.** `RegisterPage` surfaces real field-level validation errors (not generic
   post-submit text) plus inline password hints, via a `<Toaster />` (`@/components/ui/sonner`)
   now mounted once at the `App.tsx` root instead of per-page.
@@ -175,6 +176,32 @@ landing in full game chrome with an empty switcher. Closed end-to-end:
 Details: `docs/systems/character_creation.md`'s "Email Notifications (#2162)" section,
 `docs/systems/INDEX.md`'s Roster/Character Creation entries,
 `docs/audits/2026-07-10-webclient-rp-ux-audit.md` §8 (annotated with `[FIXED #2162]` markers).
+
+## Built - Gatefold Landing Page (#3305)
+
+Replaces the #2162-era branded-hero homepage with a scroll-through folio
+(`frontend/src/home/`, `GatefoldPage`): a night cover, Chapter I realms (public
+starting areas + expandable Beginnings), Chapter II codex drop-cap with featured
+entries, Chapter III a scene excerpt plus a monthly-count line, a registration-aware
+Door, and a motto imprint. The old `evennia_replacements` homepage components,
+`/api/status/`, and `SceneListCard` were deleted rather than kept alongside the new
+page; see ADR-0226.
+
+- **Door funnel preserved, `NewPlayerSection` retired.** The Door slot renders
+  `WelcomePanel` for an authenticated visitor (unchanged component, unchanged
+  first-login/pending-application/draft-link behavior from #2162) and a
+  register/login call-to-action otherwise. `NewPlayerSection`'s copy was folded
+  into the Door's anonymous-visitor copy and the existing `/how-to-start` route;
+  no new copy surface was added.
+- **Realms and Beginnings pitch content reads publicly.** Chapter I calls the
+  existing `world/character_creation` `StartingAreaViewSet`/`BeginningsViewSet`
+  (now `AllowAny` reads, queryset-gated; see `docs/systems/realms.md`) instead of
+  a new endpoint.
+- **Theming.** The landing page forces the `arx` realm palette (paper/ink tuned)
+  via the theme provider's `setForcedRealm`, restoring the visitor's stored
+  theme choice on navigating away.
+
+Details: ADR-0226, `docs/systems/realms.md`.
 
 ## What's Needed for MVP
 - ~~Friend list system~~ — SHIPPED (#1727): `FriendsTab`/`FriendButton` over
