@@ -176,6 +176,31 @@ Details: `docs/systems/character_creation.md`'s "Email Notifications (#2162)" se
 `docs/systems/INDEX.md`'s Roster/Character Creation entries,
 `docs/audits/2026-07-10-webclient-rp-ux-audit.md` §8 (annotated with `[FIXED #2162]` markers).
 
+## Built - Player-Postable Bulletin Boards (#3286)
+
+The Arx I bbpost/bbread loop had no equivalent: the shipped Notice Board room
+feature only carried a derived, read-only tidings feed, and org pages had no
+IC-authored correspondence surface. Closed end-to-end:
+
+- **Models (world/boards):** `Board` (anchored to a room XOR an organization,
+  DB check constraint - no JSON), `BoardPost` (author is a `scenes.Persona`,
+  IC authorship - a masked persona posts under its false identity; soft-delete
+  only). Two new `OrganizationRank` booleans, `can_post_to_board` /
+  `can_moderate_board`.
+- **Services:** permission logic (LOCATION = presence in the room to post or
+  remove-own; ORG = rank booleans; staff always) raises a typed `BoardError`;
+  read-side block/mute exclusion mirrors the journals feed.
+- **Actions + telnet + API:** `PostToBoardAction` / `EditBoardPostAction` /
+  `RemoveBoardPostAction` (ADR-0001); telnet `CmdBoard` (`board`,
+  `board read <n>`, `board post <title>=<body>`, `board remove <n>`); read-only
+  `BoardViewSet` / `BoardPostViewSet`, ORG reads gated on active membership.
+- **Web:** OrgPage's Board section, and a board block in the room panel when
+  the room carries a Notice Board - both share one `BoardPanel` component.
+- **Examine integration:** the room's Notice Board hint line now renders the
+  board's actual current postings, not just a flavor hint.
+
+Details: `docs/systems/boards.md`, ADR-0226 (IC-persona authorship).
+
 ## What's Needed for MVP
 - ~~Friend list system~~ — SHIPPED (#1727): `FriendsTab`/`FriendButton` over
   `world/scenes/friend_views.py`

@@ -10,14 +10,19 @@
  * Route: /orgs/:id
  */
 
+import { useMemo } from 'react';
 import { useParams } from 'react-router-dom';
 import { ErrorBoundary } from '@/components/ErrorBoundary';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { useAppSelector } from '@/store/hooks';
+import { useMyRosterEntriesQuery } from '@/roster/queries';
 import { useOrganizationQuery, useHouseFeedQuery, useChooseCrisisOption } from '@/orgs/queries';
 import { OperationsSection } from '@/tasking/components/OperationsSection';
+import { BoardPanel } from '@/boards/components/BoardPanel';
+import { useBoardForOrgQuery } from '@/boards/queries';
 import type { HouseCrisis, HouseDetail, HouseStature } from '@/orgs/api';
 
 // ---------------------------------------------------------------------------
@@ -305,6 +310,29 @@ function HouseSection({ orgId, house }: { orgId: number; house: HouseDetail }) {
   );
 }
 
+/** Resolves the org's board and renders it once loaded (#3286); silent when absent
+ * (a non-member sees nothing — the API gates read access server-side). */
+function OrgBoardSection({ orgId }: { orgId: number }) {
+  const activeCharacter = useAppSelector((state) => state.game.active);
+  const { data: myEntries = [] } = useMyRosterEntriesQuery();
+  const characterId = useMemo(
+    () => myEntries.find((entry) => entry.name === activeCharacter)?.character_id ?? null,
+    [myEntries, activeCharacter]
+  );
+  const { data: board } = useBoardForOrgQuery(orgId);
+  if (!board) return null;
+  return (
+    <Card>
+      <CardHeader className="pb-3">
+        <CardTitle className="text-lg">{board.name}</CardTitle>
+      </CardHeader>
+      <CardContent className="p-0">
+        <BoardPanel boardId={board.id} boardName={board.name} characterId={characterId} />
+      </CardContent>
+    </Card>
+  );
+}
+
 export function OrgPageInner({ orgId }: { orgId: number }) {
   const { data: org, isLoading, isError } = useOrganizationQuery(orgId);
 
@@ -350,6 +378,7 @@ export function OrgPageInner({ orgId }: { orgId: number }) {
       </Card>
       {org.house && <HouseSection orgId={orgId} house={org.house} />}
       <OperationsSection orgId={orgId} />
+      <OrgBoardSection orgId={orgId} />
     </div>
   );
 }
