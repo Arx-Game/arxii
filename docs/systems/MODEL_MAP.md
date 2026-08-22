@@ -181,6 +181,10 @@
   - mutes_received <- scenes.Mute
   - treasured_signoffs <- stories.TreasuredSignoff
 
+### RoomDescVariant
+**Foreign Keys:**
+  - room_profile -> evennia_extensions.RoomProfile [FK]
+
 ### RoomProfile
 **Foreign Keys:**
   - objectdb -> evennia.ObjectDB [OneToOne]
@@ -199,6 +203,7 @@
   - residents <- character_sheets.CharacterSheet
   - hidden_clues <- clues.RoomClue
   - clue_triggers <- clues.ClueTrigger
+  - desc_variants <- evennia_extensions.RoomDescVariant
   - durance_training_sites <- progression.DuranceTrainingSite
   - resonance_grants <- magic.ResonanceGrant
   - portal_anchors <- magic.PortalAnchor
