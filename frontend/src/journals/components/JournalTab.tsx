@@ -8,17 +8,27 @@
  * `response_count`, which includes the author's own follow-ups), so a real
  * "responses to me" count would need a new backend shape; out of scope for
  * this task per the brief (no backend changes).
+ *
+ * VoteButton gating (#3302): `entries/mine/` is filtered server-side to the
+ * requesting character's own entries only (`views.py`'s `mine` action), so
+ * every row here is always the viewer's own; the same own-entry gate used
+ * on `JournalsPage` therefore always evaluates to hidden. Wired anyway (not
+ * dead: it's the correctness gate, not a feature) so this list renders
+ * VoteButton the moment it ever surfaces someone else's entry.
  */
 import { useState } from 'react';
 import { Link } from 'react-router-dom';
 import { PenLine } from 'lucide-react';
 import { Button } from '@/components/ui/button';
+import { VoteButton } from '@/components/VoteButton';
+import { useMyRosterEntriesQuery } from '@/roster/queries';
 import { useMyJournalEntries } from '../queries';
 import { JournalComposerDialog } from './JournalComposerDialog';
 
 export function JournalTab() {
   const [composerOpen, setComposerOpen] = useState(false);
   const { data, isLoading } = useMyJournalEntries();
+  const { data: myRosterEntries = [] } = useMyRosterEntriesQuery();
   const recent = (data?.results ?? []).slice(0, 5);
 
   return (
@@ -41,19 +51,24 @@ export function JournalTab() {
         </p>
       ) : (
         <ul className="space-y-2">
-          {recent.map((entry) => (
-            <li key={entry.id}>
-              <Link
-                to="/journals"
-                className="block rounded border px-2 py-1.5 text-sm hover:bg-accent"
-              >
-                <span className="block truncate font-medium">{entry.title}</span>
-                <span className="block text-xs text-muted-foreground">
-                  {new Date(entry.created_at).toLocaleDateString()}
-                </span>
-              </Link>
-            </li>
-          ))}
+          {recent.map((entry) => {
+            const isOwnEntry = myRosterEntries.some((e) => e.character_id === entry.author);
+            const canVote = entry.is_public && !isOwnEntry;
+            return (
+              <li key={entry.id} className="flex items-center gap-1">
+                <Link
+                  to="/journals"
+                  className="block min-w-0 flex-1 rounded border px-2 py-1.5 text-sm hover:bg-accent"
+                >
+                  <span className="block truncate font-medium">{entry.title}</span>
+                  <span className="block text-xs text-muted-foreground">
+                    {new Date(entry.created_at).toLocaleDateString()}
+                  </span>
+                </Link>
+                {canVote ? <VoteButton targetType="journal" targetId={entry.id} /> : null}
+              </li>
+            );
+          })}
         </ul>
       )}
 
