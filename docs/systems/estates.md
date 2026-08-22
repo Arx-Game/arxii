@@ -18,7 +18,7 @@ WIRED]** as of #1985.
 |---|---|
 | `Will` | OneToOne → CharacterSheet; `testament_text` (read aloud at the reading); freely edited while alive, service-frozen once a settlement exists |
 | `WillExecutor` | will FK + `scenes.Persona` FK; any one tagged executor can perform the reading |
-| `Bequest` | will FK, `kind` (`BequestKind`: SPECIFIC_ITEM / COIN_AMOUNT / ALL_COIN / BUILDING / BUSINESS / RESIDUARY), matching target FK, typed `recipient_persona` XOR `recipient_organization`; one RESIDUARY per will (partial unique); items/businesses require persona recipients (orgs cannot hold either surface) |
+| `Bequest` | will FK, `kind` (`BequestKind`: SPECIFIC_ITEM / COIN_AMOUNT / ALL_COIN / BUILDING / BUSINESS / RESIDUARY / WRITINGS, #3287), matching target FK (WRITINGS has none — the deceased's private-journal corpus IS the asset), typed `recipient_persona` XOR `recipient_organization`; one RESIDUARY per will (partial unique); items/businesses/WRITINGS require persona recipients (orgs cannot hold either surface) |
 | `EstateSettlement` | OneToOne → CharacterSheet; `deadline`, `status` (PENDING/SETTLED/PARKED), `settled_via` (FUNERAL/READING/AUTO) |
 | `EstateClaim` | settlement FK + ItemInstance FK + typed claimant pair — an inherited grievance over an unrecovered theft; claimant-visible only, the holder is never notified |
 | `EstateConfig` | pk=1 singleton: `settlement_window_days` (default 14 real days, PLACEHOLDER) |
@@ -32,7 +32,8 @@ WIRED]** as of #1985.
 - **`execute_settlement(sheet, via=…)`** — THE one idempotent execution path, atomic
   + `select_for_update`, PENDING-only (first door wins). Order: resolve the **estate
   heir** → debts → bequests (kind-major, `order` within kind) → residuary sweep →
-  contract party substitution → end tenancies/employment → mint claims. PARKED
+  contract party substitution → end tenancies/employment → mint claims → journal
+  reveal + WRITINGS bequest grant (#3287, see below). PARKED
   (escheat unresolvable while assets need a home) rolls back to ZERO estate
   mutations — a staff queue, never a half-estate.
 - **Estate-heir chain** (every fall-through lands on the next link): valid RESIDUARY
@@ -87,6 +88,27 @@ provenance never leaks. Blocked bequests fall through the estate-heir chain.
 see all); serializer-enforced freeze + kind/target coherence (mirrors `clean()`).
 `settlements/` — read-only, executors + staff. `claims/` — read-only, claimant only.
 
+## Journal afterlife (#3287)
+
+Private journal entries no longer die with their author — `execute_settlement` makes two
+explicit calls (no signals, ADR-0009) into `world.journals.services`:
+
+- **`reveal_journals_for_settlement(sheet, settlement)`** — always runs, every settlement
+  (no bequest gates it). Stamps `revealed_at`/`revealed_by_settlement` on the deceased's
+  private entries whose *effective* disposition is REVEAL — a per-entry
+  `JournalEntry.posthumous_override` (INHERIT/REVEAL/SEAL) that falls through to
+  `CharacterSheet.posthumous_journal_disposition` (REVEAL default/SEAL) when INHERIT. Never
+  mutates `is_public` — authorship history stays true even after an entry surfaces. SEAL
+  entries are skipped entirely.
+- **`grant_journal_bequest(recipient_sheet, deceased_sheet, settlement)`** — runs once per
+  `BequestKind.WRITINGS` line in the will (via `_grant_writings_bequests`, mirroring every
+  other bequest kind's ademption/fall-through-to-heir rule). Mints a `JournalBequestGrant`
+  giving the recipient read access to the deceased's *non-sealed* private entries. SEAL beats
+  a grant — enforced at the journals read path (`services.sealed_effective_q` /
+  `entry_visible_via_bequest`), never by filtering the grant row itself.
+
+See `docs/systems/INDEX.md`'s Journals entry and ADR-0227 for the read-path/API detail.
+
 ## Tests
 
 `src/world/estates/tests/` — `test_models`, `test_settlement_open` (death-writer
@@ -105,3 +127,5 @@ wiring), `test_intestate`, `test_settlement` (execution journeys), `test_doors`,
 - **Societies** — org recipients, treasuries, `Domain.owner_org` escheat; title
   succession (`SuccessionLaw`/`pass_title`) stays deliberately untouched
 - **Consent** — the `receiving-stolen-goods` category (ADR-0113 tree)
+- **Journals (#3287)** — `execute_settlement` calls `reveal_journals_for_settlement` +
+  `grant_journal_bequest`; see "Journal afterlife" above

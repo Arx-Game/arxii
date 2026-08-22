@@ -358,6 +358,7 @@ class ActionRegistryTests(TestCase):
             "create_journal_entry",
             "respond_to_journal",
             "edit_journal_entry",
+            "set_journal_disposition",
             "set_character_goals",
             "log_goal_progress",
             "claim_kudos",

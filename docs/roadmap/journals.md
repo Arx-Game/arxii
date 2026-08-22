@@ -9,7 +9,10 @@ IC writing by players — journals, praises, retorts, and weekly XP awards. Jour
 ## Key Design Points
 - **XP rewards for writing:** Characters earn diminishing XP for journal entries (5/2/1 for first three per week)
 - **Praise/retort system:** Players respond to public entries with praises (agreement) or retorts (disagreement), each awarding XP to both parties
-- **Public/private visibility:** Entries are either public or private — no intermediate visibility tiers
+- **Public/private visibility:** Entries are either public or private — no intermediate
+  visibility tiers. A private entry's death disposition (reveal to the world / seal
+  forever / bequeath to a chosen reader) is a separate axis, not a third tier — see
+  "Posthumous afterlife" below
 - **Freeform tags:** Entries can have multiple tags for filtering and discovery
 - **Weekly XP reset:** All XP caps reset weekly based on timestamps (not cron)
 
@@ -49,6 +52,20 @@ IC writing by players — journals, praises, retorts, and weekly XP awards. Jour
   but excludes it from the entry AUTHOR's own read (`JournalEntryViewSet.retrieve`) — any other
   viewer is unaffected.
 
+- **Posthumous afterlife (#3287, ADR-0227)** — private entries no longer die with their
+  author. `CharacterSheet.posthumous_journal_disposition` (REVEAL default / SEAL) plus a
+  per-entry `JournalEntry.posthumous_override` (INHERIT default / REVEAL / SEAL) decide the
+  fate; `world.journals.services.reveal_journals_for_settlement` and `.grant_journal_bequest`
+  are called explicitly (no signals) from the shipped `estates.services.execute_settlement`
+  pipeline (#1985, ADR-0133) — reveal always runs at settlement, the bequest grant only when
+  the will carries a `BequestKind.WRITINGS` line. `is_public` is never mutated by a reveal.
+  SEAL always wins, even over a bequest grant. Read paths: the public feed includes
+  `revealed_at`-stamped entries; a bequest recipient browses the deceased's non-sealed
+  private corpus via `GET /api/journals/entries/?deceased=<sheet_id>`; the composer/edit
+  surface and telnet `journal disposition` set the sheet default and per-entry override.
+  This closes the "no afterlife" gap noted in #3287's spec (private entries were previously
+  a write-only drawer that died with the character).
+
 ## Deferred (depends on systems that don't exist yet)
 - **Relationship gating for retorts** — retorts should validate antagonistic relationship (needs relationships system)
 - **Fame signal emission from praises** — praises should emit fame signal (needs fame/reputation system)
@@ -56,6 +73,7 @@ IC writing by players — journals, praises, retorts, and weekly XP awards. Jour
 - **Read tracking / unread filtering** — track which entries a character has read
 - **Great Archive IC location gating** — IC access point for the journal archive (needs world building)
 - **GoalJournal removal** — remove old goal-specific journals once migrated (ThreadJournal already removed; see Thread linking above)
+- **In-life investigation/magic access to private journals (#3287, deferred)** — the clue-grant seam exists (`clues/services.py`) but needs authored Clue content + a ruling on whether living-character journal secrecy is ever pierceable; no physical relic-book item either (no consumer today)
 
 ## Notes
 - Retorts award more XP to receiver (3) than giver (1) to incentivize dramatic conflict

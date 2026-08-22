@@ -18,6 +18,10 @@ class BequestKind(models.TextChoices):
     BUILDING = "building", "Building"
     BUSINESS = "business", "Business"
     RESIDUARY = "residuary", "Residuary (everything else)"
+    # No target FK (#3287) — the deceased's own private-journal corpus IS the asset; executing
+    # it creates a world.journals.JournalBequestGrant for the recipient instead of moving a
+    # specific row.
+    WRITINGS = "writings", "Writings (Private Journal Corpus)"
 
 
 class SettlementStatus(models.TextChoices):

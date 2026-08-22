@@ -10,10 +10,12 @@ entry_list = JournalEntryViewSet.as_view({"get": "list", "post": "create"})
 entry_detail = JournalEntryViewSet.as_view({"get": "retrieve", "patch": "partial_update"})
 entry_mine = JournalEntryViewSet.as_view({"get": "mine"})
 entry_respond = JournalEntryViewSet.as_view({"post": "respond"})
+entry_disposition = JournalEntryViewSet.as_view({"get": "disposition", "patch": "disposition"})
 
 urlpatterns = [
     path("entries/", entry_list, name="entry-list"),
     path("entries/mine/", entry_mine, name="entry-mine"),
+    path("entries/disposition/", entry_disposition, name="entry-disposition"),
     path("entries/<int:pk>/", entry_detail, name="entry-detail"),
     path("entries/<int:pk>/respond/", entry_respond, name="entry-respond"),
 ]
