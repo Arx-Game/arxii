@@ -48,7 +48,10 @@ function ReviewRow({ entry }: { entry: PendingCanonReviewEntry }) {
   const changesMutation = useRequestCanonReviewChanges();
 
   return (
-    <tr className="border-b last:border-0 hover:bg-accent/50" data-testid="pending-canon-review-row">
+    <tr
+      className="border-b last:border-0 hover:bg-accent/50"
+      data-testid="pending-canon-review-row"
+    >
       <td className="py-3 pr-4">
         <Link
           to={`/stories/${entry.story_id}`}
