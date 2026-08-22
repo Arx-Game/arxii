@@ -43973,6 +43973,20 @@ components:
         * `ELEMENTAL` - Elemental
         * `CONSTRUCT` - Construct
         * `SPIRIT` - Spirit
+    DossierConsort:
+      type: object
+      properties:
+        holder:
+          type: string
+        consorts:
+          type: integer
+        cap:
+          type: integer
+          nullable: true
+      required:
+      - cap
+      - consorts
+      - holder
     DossierCrisis:
       type: object
       properties:
@@ -54513,9 +54527,14 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/DossierShift'
+        consorts:
+          type: array
+          items:
+            $ref: '#/components/schemas/DossierConsort'
       required:
       - band_name
       - betrothals
+      - consorts
       - family_name
       - headline
       - name

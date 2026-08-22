@@ -25800,6 +25800,11 @@ export interface components {
      * @enum {string}
      */
     DomainEnum: 'BEAST' | 'UNDEAD' | 'ELEMENTAL' | 'CONSTRUCT' | 'SPIRIT';
+    DossierConsort: {
+      holder: string;
+      consorts: number;
+      cap: number | null;
+    };
     DossierCrisis: {
       domain_name: string;
       severity: string;
@@ -30949,6 +30954,7 @@ export interface components {
       betrothals: string[];
       open_crises: components['schemas']['DossierCrisis'][];
       recent_shifts: components['schemas']['DossierShift'][];
+      consorts: components['schemas']['DossierConsort'][];
     };
     /** @description Board row: a live task with its template summary and fulfillment. */
     OrgTask: {
