@@ -7,7 +7,7 @@ import { ProtectedRoute } from './components/ProtectedRoute';
 import { RequireCharacter } from './components/RequireCharacter';
 import { StaffRoute } from './components/StaffRoute';
 import { Skeleton } from './components/ui/skeleton';
-import { HomePage } from './evennia_replacements/HomePage';
+import { GatefoldPage } from './home/GatefoldPage';
 import { GamePage } from './game/GamePage';
 import { LoginPage } from './evennia_replacements/LoginPage';
 import { RegisterPage } from './evennia_replacements/RegisterPage';
@@ -351,7 +351,7 @@ function App() {
           the root boundary remains the last resort. */}
       <ErrorBoundary>
         <Routes>
-          <Route path="/" element={<HomePage />} />
+          <Route path="/" element={<GatefoldPage />} />
           <Route
             path="/login"
             element={

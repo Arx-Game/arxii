@@ -47,15 +47,6 @@ export interface RegistrationStatus {
   open: boolean;
 }
 
-export interface StatusData {
-  online: number;
-  accounts: number;
-  characters: number;
-  rooms: number;
-  recentPlayers: Array<{ id: number; name: string; avatar_url?: string }>;
-  news: Array<{ id: number; title: string }>;
-}
-
 export interface AuthFlow {
   id: string;
   is_pending: boolean;
