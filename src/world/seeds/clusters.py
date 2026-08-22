@@ -380,6 +380,12 @@ def _seed_market() -> None:
     seed_market_demo()
 
 
+def _seed_tavern_games() -> None:
+    from world.tavern_games.seeds import ensure_dice_game  # noqa: PLC0415
+
+    ensure_dice_game()
+
+
 def _seed_kinship() -> None:
     from world.seeds.kinship import seed_kinship_demo  # noqa: PLC0415
 
@@ -640,6 +646,9 @@ CLUSTER_SEEDERS: dict[str, Callable[[], None]] = {
     "ceremonies": _seed_ceremonies,
     # Market: the PLACEHOLDER capital square + NPC stock stall (#2066).
     "market": _seed_market,
+    # Tavern games: the starter Highest Roll dice game (#3292) - without it
+    # `game open` fails "no such game" on a fresh clone/dev DB.
+    "tavern_games": _seed_tavern_games,
     # Kinship: the PLACEHOLDER ducal demo tree + slots/pool + truth-pair (#2062).
     "kinship": _seed_kinship,
     # Houses: the demo house made a landed peer — org + particle + recognition
@@ -783,6 +792,7 @@ def seeded_models_by_cluster() -> dict[str, list[type[Model]]]:
     )
     from world.species.models import Species  # noqa: PLC0415
     from world.tasking.models import TaskTemplate  # noqa: PLC0415
+    from world.tavern_games.models import TavernGame  # noqa: PLC0415
     from world.traits.models import ResultChart, Trait  # noqa: PLC0415
     from world.weather.models import WeatherType  # noqa: PLC0415
     from world.worship.models import WorshippedBeing, WorshipTradition  # noqa: PLC0415
@@ -932,6 +942,8 @@ def seeded_models_by_cluster() -> dict[str, list[type[Model]]]:
         "ceremonies": [CeremonyType],
         # Market: the PLACEHOLDER capital square (#2066).
         "market": [MarketSquare],
+        # Tavern games: the starter Highest Roll dice game (#3292).
+        "tavern_games": [TavernGame],
         # GM trust ladder: the 5 default GMLevelCap rows, one per GMLevel (#2000).
         # Also seeds the starter scenario-catalog SituationKind taxonomy + difficulty
         # guides (#2127); represented by SituationKind alongside GMLevelCap.

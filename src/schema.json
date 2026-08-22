@@ -34757,6 +34757,187 @@ paths:
       responses:
         '204':
           description: No response body
+  /api/tavern-games/games/:
+    get:
+      operationId: tavern_games_games_list
+      description: Read-only catalog of curated coin-stakes games.
+      parameters:
+      - name: page
+        required: false
+        in: query
+        description: A page number within the paginated result set.
+        schema:
+          type: integer
+      tags:
+      - tavern-games
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaginatedTavernGameList'
+          description: ''
+  /api/tavern-games/games/{id}/:
+    get:
+      operationId: tavern_games_games_retrieve
+      description: Read-only catalog of curated coin-stakes games.
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: A unique integer value identifying this tavern game.
+        required: true
+      tags:
+      - tavern-games
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TavernGame'
+          description: ''
+  /api/tavern-games/sessions/:
+    get:
+      operationId: tavern_games_sessions_list
+      description: Read state; every write routes through the matching REGISTRY action.
+      parameters:
+      - name: page
+        required: false
+        in: query
+        description: A page number within the paginated result set.
+        schema:
+          type: integer
+      - in: query
+        name: place
+        schema:
+          type: number
+      - in: query
+        name: room
+        schema:
+          type: number
+      - in: query
+        name: state
+        schema:
+          type: string
+      tags:
+      - tavern-games
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaginatedGameSessionList'
+          description: ''
+  /api/tavern-games/sessions/{id}/:
+    get:
+      operationId: tavern_games_sessions_retrieve
+      description: Read state; every write routes through the matching REGISTRY action.
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: A unique integer value identifying this game session.
+        required: true
+      tags:
+      - tavern-games
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/GameSession'
+          description: ''
+  /api/tavern-games/sessions/{id}/join/:
+    post:
+      operationId: tavern_games_sessions_join_create
+      description: Read state; every write routes through the matching REGISTRY action.
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: A unique integer value identifying this game session.
+        required: true
+      tags:
+      - tavern-games
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/GameSession'
+          description: ''
+  /api/tavern-games/sessions/{id}/leave/:
+    post:
+      operationId: tavern_games_sessions_leave_create
+      description: Read state; every write routes through the matching REGISTRY action.
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: A unique integer value identifying this game session.
+        required: true
+      tags:
+      - tavern-games
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/GameSession'
+          description: ''
+  /api/tavern-games/sessions/{id}/roll/:
+    post:
+      operationId: tavern_games_sessions_roll_create
+      description: Read state; every write routes through the matching REGISTRY action.
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: A unique integer value identifying this game session.
+        required: true
+      tags:
+      - tavern-games
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/GameSession'
+          description: ''
+  /api/tavern-games/sessions/open/:
+    post:
+      operationId: tavern_games_sessions_open_create
+      description: 'Open a new table. Body: ``place``, ``game``, ``ante``.'
+      tags:
+      - tavern-games
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/GameSession'
+          description: ''
   /api/tidings/feed/:
     get:
       operationId: tidings_feed_list
@@ -47434,6 +47615,76 @@ components:
         * `claimed` - Claimed
         * `expired` - Expired
         * `revoked` - Revoked
+    GameSession:
+      type: object
+      properties:
+        id:
+          type: integer
+          readOnly: true
+        place:
+          type: integer
+          readOnly: true
+        place_name:
+          type: string
+          readOnly: true
+        game:
+          type: integer
+          readOnly: true
+        game_name:
+          type: string
+          readOnly: true
+        state:
+          allOf:
+          - $ref: '#/components/schemas/StateEnum'
+          readOnly: true
+        ante:
+          type: integer
+          readOnly: true
+          description: Fixed ante every seat pays to join, in coppers.
+        pot:
+          type: integer
+          readOnly: true
+          description: Coppers currently escrowed at the table (sum of unrefunded
+            antes).
+        opened_by:
+          type: integer
+          readOnly: true
+        opened_at:
+          type: string
+          format: date-time
+          readOnly: true
+        resolved_at:
+          type: string
+          format: date-time
+          readOnly: true
+          nullable: true
+        seats:
+          type: array
+          items:
+            type: object
+            additionalProperties: {}
+          description: |-
+            Read the ``Prefetch(..., to_attr="cached_seats")`` list.
+
+            Every ``GameSession`` this serializer runs against comes from a
+            queryset built with ``world.tavern_games.views._seats_prefetch()``
+            (the viewset's own ``queryset``, or ``_fetch_session_with_seats``
+            after a write) - so ``cached_seats`` is always present as a real
+            instance attribute, never a literal-string ``getattr`` fallback.
+          readOnly: true
+      required:
+      - ante
+      - game
+      - game_name
+      - id
+      - opened_at
+      - opened_by
+      - place
+      - place_name
+      - pot
+      - resolved_at
+      - seats
+      - state
     GearArchetypeCompatibility:
       type: object
       description: Read-only serializer for GearArchetypeCompatibility join rows.
@@ -56277,6 +56528,29 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/GameInvite'
+    PaginatedGameSessionList:
+      type: object
+      required:
+      - count
+      - results
+      properties:
+        count:
+          type: integer
+          example: 123
+        next:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=4
+        previous:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=2
+        results:
+          type: array
+          items:
+            $ref: '#/components/schemas/GameSession'
     PaginatedGemitList:
       type: object
       required:
@@ -59005,6 +59279,29 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/TaskTemplate'
+    PaginatedTavernGameList:
+      type: object
+      required:
+      - count
+      - results
+      properties:
+        count:
+          type: integer
+          example: 123
+        next:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=4
+        previous:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=2
+        results:
+          type: array
+          items:
+            $ref: '#/components/schemas/TavernGame'
     PaginatedTechniqueList:
       type: object
       required:
@@ -65608,6 +65905,11 @@ components:
         * `medium` - Medium Effort
         * `high` - High Effort
         * `extreme` - Extreme Effort
+    ResolutionKindEnum:
+      enum:
+      - highest_roll
+      type: string
+      description: '* `highest_roll` - Highest Roll'
     ResolutionTypeEnum:
       enum:
       - destroy
@@ -69950,6 +70252,16 @@ components:
       - level
       - stat_cap
       - stats
+    StateEnum:
+      enum:
+      - open
+      - resolved
+      - abandoned
+      type: string
+      description: |-
+        * `open` - Open
+        * `resolved` - Resolved
+        * `abandoned` - Abandoned
     StationStatus:
       type: object
       description: LAB station snapshot within a crafting quote (#1234).
@@ -72016,6 +72328,42 @@ components:
       required:
       - duration
       - name
+    TavernGame:
+      type: object
+      properties:
+        id:
+          type: integer
+          readOnly: true
+        name:
+          type: string
+          readOnly: true
+        rules_blurb:
+          type: string
+          readOnly: true
+          description: Player-facing rules summary shown before opening a session.
+        min_ante:
+          type: integer
+          readOnly: true
+          description: Smallest ante an opener may set, in coppers.
+        max_ante:
+          type: integer
+          readOnly: true
+          description: Largest ante an opener may set, in coppers.
+        resolution_kind:
+          allOf:
+          - $ref: '#/components/schemas/ResolutionKindEnum'
+          readOnly: true
+        is_active:
+          type: boolean
+          readOnly: true
+      required:
+      - id
+      - is_active
+      - max_ante
+      - min_ante
+      - name
+      - resolution_kind
+      - rules_blurb
     Technique:
       type: object
       description: Serializer for Technique records with intensity and control stats.

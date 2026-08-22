@@ -466,6 +466,12 @@ from actions.definitions.tasking import (
     PostListenerAction,
     SuppressListenerAction,
 )
+from actions.definitions.tavern_games import (
+    JoinGameAction,
+    LeaveGameAction,
+    OpenGameAction,
+    RollGameAction,
+)
 from actions.definitions.technique_authoring import AuthorTechniqueAction
 from actions.definitions.technique_training import TrainTechniqueAction
 from actions.definitions.threads import WeaveThreadAction
@@ -666,6 +672,11 @@ _ALL_ACTIONS: list[Action] = [
     SetSituationAction(),
     PlaceChallengeAction(),
     PerformRitualAction(),
+    # #3292 - tavern games: coin-stakes dice gambling open/join/roll/leave.
+    OpenGameAction(),
+    JoinGameAction(),
+    RollGameAction(),
+    LeaveGameAction(),
     AuthorTechniqueAction(),
     TrainTechniqueAction(),
     SetLanguageAction(),

@@ -21308,6 +21308,142 @@ export interface paths {
     patch: operations['tasking_templates_partial_update'];
     trace?: never;
   };
+  '/api/tavern-games/games/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /** @description Read-only catalog of curated coin-stakes games. */
+    get: operations['tavern_games_games_list'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/tavern-games/games/{id}/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /** @description Read-only catalog of curated coin-stakes games. */
+    get: operations['tavern_games_games_retrieve'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/tavern-games/sessions/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /** @description Read state; every write routes through the matching REGISTRY action. */
+    get: operations['tavern_games_sessions_list'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/tavern-games/sessions/{id}/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /** @description Read state; every write routes through the matching REGISTRY action. */
+    get: operations['tavern_games_sessions_retrieve'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/tavern-games/sessions/{id}/join/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /** @description Read state; every write routes through the matching REGISTRY action. */
+    post: operations['tavern_games_sessions_join_create'];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/tavern-games/sessions/{id}/leave/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /** @description Read state; every write routes through the matching REGISTRY action. */
+    post: operations['tavern_games_sessions_leave_create'];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/tavern-games/sessions/{id}/roll/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /** @description Read state; every write routes through the matching REGISTRY action. */
+    post: operations['tavern_games_sessions_roll_create'];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/tavern-games/sessions/open/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /** @description Open a new table. Body: ``place``, ``game``, ``ante``. */
+    post: operations['tavern_games_sessions_open_create'];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   '/api/tidings/feed/': {
     parameters: {
       query?: never;
@@ -27408,6 +27544,35 @@ export interface components {
      * @enum {string}
      */
     GameInviteStatusEnum: 'pending' | 'claimed' | 'expired' | 'revoked';
+    GameSession: {
+      readonly id: number;
+      readonly place: number;
+      readonly place_name: string;
+      readonly game: number;
+      readonly game_name: string;
+      readonly state: components['schemas']['StateEnum'];
+      /** @description Fixed ante every seat pays to join, in coppers. */
+      readonly ante: number;
+      /** @description Coppers currently escrowed at the table (sum of unrefunded antes). */
+      readonly pot: number;
+      readonly opened_by: number;
+      /** Format: date-time */
+      readonly opened_at: string;
+      /** Format: date-time */
+      readonly resolved_at: string | null;
+      /**
+       * @description Read the ``Prefetch(..., to_attr="cached_seats")`` list.
+       *
+       *     Every ``GameSession`` this serializer runs against comes from a
+       *     queryset built with ``world.tavern_games.views._seats_prefetch()``
+       *     (the viewset's own ``queryset``, or ``_fetch_session_with_seats``
+       *     after a write) - so ``cached_seats`` is always present as a real
+       *     instance attribute, never a literal-string ``getattr`` fallback.
+       */
+      readonly seats: {
+        [key: string]: unknown;
+      }[];
+    };
     /** @description Read-only serializer for GearArchetypeCompatibility join rows. */
     GearArchetypeCompatibility: {
       readonly id: number;
@@ -32002,6 +32167,21 @@ export interface components {
       previous?: string | null;
       results: components['schemas']['GameInvite'][];
     };
+    PaginatedGameSessionList: {
+      /** @example 123 */
+      count: number;
+      /**
+       * Format: uri
+       * @example http://api.example.org/accounts/?page=4
+       */
+      next?: string | null;
+      /**
+       * Format: uri
+       * @example http://api.example.org/accounts/?page=2
+       */
+      previous?: string | null;
+      results: components['schemas']['GameSession'][];
+    };
     PaginatedGemitList: {
       /** @example 123 */
       count: number;
@@ -33749,6 +33929,21 @@ export interface components {
        */
       previous?: string | null;
       results: components['schemas']['TaskTemplate'][];
+    };
+    PaginatedTavernGameList: {
+      /** @example 123 */
+      count: number;
+      /**
+       * Format: uri
+       * @example http://api.example.org/accounts/?page=4
+       */
+      next?: string | null;
+      /**
+       * Format: uri
+       * @example http://api.example.org/accounts/?page=2
+       */
+      previous?: string | null;
+      results: components['schemas']['TavernGame'][];
     };
     PaginatedTechniqueList: {
       /** @example 123 */
@@ -37313,6 +37508,11 @@ export interface components {
      */
     ResistEffortEnum: 'very_low' | 'low' | 'medium' | 'high' | 'extreme';
     /**
+     * @description * `highest_roll` - Highest Roll
+     * @enum {string}
+     */
+    ResolutionKindEnum: 'highest_roll';
+    /**
      * @description * `destroy` - Destroy (removed for everyone)
      *     * `personal` - Personal (resolved for this character only)
      *     * `temporary` - Temporary (suppressed for N rounds)
@@ -39407,6 +39607,13 @@ export interface components {
       level: number;
       stats: components['schemas']['MaturationStatEntry'][];
     };
+    /**
+     * @description * `open` - Open
+     *     * `resolved` - Resolved
+     *     * `abandoned` - Abandoned
+     * @enum {string}
+     */
+    StateEnum: 'open' | 'resolved' | 'abandoned';
     /** @description LAB station snapshot within a crafting quote (#1234). */
     StationStatus: {
       present: boolean;
@@ -40414,6 +40621,18 @@ export interface components {
        *     * `predator` - Predator Band
        */
       target_kind?: components['schemas']['TargetKindDdaEnum'];
+    };
+    TavernGame: {
+      readonly id: number;
+      readonly name: string;
+      /** @description Player-facing rules summary shown before opening a session. */
+      readonly rules_blurb: string;
+      /** @description Smallest ante an opener may set, in coppers. */
+      readonly min_ante: number;
+      /** @description Largest ante an opener may set, in coppers. */
+      readonly max_ante: number;
+      readonly resolution_kind: components['schemas']['ResolutionKindEnum'];
+      readonly is_active: boolean;
     };
     /** @description Serializer for Technique records with intensity and control stats. */
     Technique: {
@@ -71982,6 +72201,182 @@ export interface operations {
         };
         content: {
           'application/json': components['schemas']['TaskTemplate'];
+        };
+      };
+    };
+  };
+  tavern_games_games_list: {
+    parameters: {
+      query?: {
+        /** @description A page number within the paginated result set. */
+        page?: number;
+      };
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['PaginatedTavernGameList'];
+        };
+      };
+    };
+  };
+  tavern_games_games_retrieve: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        /** @description A unique integer value identifying this tavern game. */
+        id: number;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['TavernGame'];
+        };
+      };
+    };
+  };
+  tavern_games_sessions_list: {
+    parameters: {
+      query?: {
+        /** @description A page number within the paginated result set. */
+        page?: number;
+        place?: number;
+        room?: number;
+        state?: string;
+      };
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['PaginatedGameSessionList'];
+        };
+      };
+    };
+  };
+  tavern_games_sessions_retrieve: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        /** @description A unique integer value identifying this game session. */
+        id: number;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['GameSession'];
+        };
+      };
+    };
+  };
+  tavern_games_sessions_join_create: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        /** @description A unique integer value identifying this game session. */
+        id: number;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['GameSession'];
+        };
+      };
+    };
+  };
+  tavern_games_sessions_leave_create: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        /** @description A unique integer value identifying this game session. */
+        id: number;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['GameSession'];
+        };
+      };
+    };
+  };
+  tavern_games_sessions_roll_create: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        /** @description A unique integer value identifying this game session. */
+        id: number;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['GameSession'];
+        };
+      };
+    };
+  };
+  tavern_games_sessions_open_create: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['GameSession'];
         };
       };
     };

@@ -1591,6 +1591,7 @@
   - beat_completions <- stories.BeatCompletion
   - episode_resolutions <- stories.EpisodeResolution
   - story_progress <- stories.StoryProgress
+  - gambling_loss_ledgers <- tavern_games.GamblingLossLedger
   - vitals <- vitals.CharacterVitals
   - carrying_body <- vitals.CarriedBody
   - carried_by <- vitals.CarriedBody
@@ -3801,6 +3802,7 @@
   - goal_journals <- goals.GoalJournal
   - journal_xp_trackers <- journals.WeeklyJournalXP
   - relationships <- relationships.CharacterRelationship
+  - gambling_loss_ledgers <- tavern_games.GamblingLossLedger
 
 ### ScheduledTaskRecord
 
@@ -8048,6 +8050,8 @@
   - listener_posts_handled <- tasking.ListenerPost
   - flipped_listener_posts <- tasking.ListenerPost
   - task_fulfillments_handled <- tasking.TaskFulfillment
+  - opened_tavern_game_sessions <- tavern_games.GameSession
+  - tavern_game_seats <- tavern_games.GameSeat
   - led_voyages <- travel.Voyage
   - voyage_participations <- travel.VoyageParticipant
   - voyage_invites_received <- travel.VoyageInvite
@@ -8065,6 +8069,7 @@
 **Pointed to by:**
   - interactions <- scenes.Interaction
   - presences <- scenes.PlacePresence
+  - tavern_game_sessions <- tavern_games.GameSession
 
 ### PlacePresence
 **Foreign Keys:**
@@ -9537,6 +9542,39 @@
 - `resolve_task(task: 'OrgTask') -> 'TaskFulfillment' - Resolve an ASSIGNED task now: agent check -> route payouts + risk pool.`
 - `resolve_task_for_mission(instance, route=None) -> 'None' - Terminal-completion seam (#2820 phase 5) — mirrors the crisis seam.`
 - `target_label(task: 'OrgTask') -> 'str'`
+
+
+## world.tavern_games
+
+### GamblingLossLedger
+**Foreign Keys:**
+  - character_sheet -> character_sheets.CharacterSheet [FK]
+  - game_week -> game_clock.GameWeek [FK]
+
+### GameSeat
+**Foreign Keys:**
+  - session -> tavern_games.GameSession [FK]
+  - persona -> scenes.Persona [FK]
+
+### GameSession
+**Foreign Keys:**
+  - place -> scenes.Place [FK]
+  - game -> tavern_games.TavernGame [FK]
+  - opened_by -> scenes.Persona [FK]
+**Pointed to by:**
+  - seats <- tavern_games.GameSeat
+
+### TavernGamblingConfig
+
+### TavernGame
+**Pointed to by:**
+  - sessions <- tavern_games.GameSession
+
+### Service Functions
+- `join_session(*, session: 'GameSession', persona: 'Persona') -> 'GameSeat' - Ante in and take a seat at an OPEN session.`
+- `leave_session(*, session: 'GameSession', persona: 'Persona') -> 'None' - Leave the table: refund this seat's ante. Closes the session when it's empty.`
+- `open_session(*, place: 'Place', game: 'TavernGame', persona: 'Persona', ante: 'int') -> 'GameSession' - Open a new table at ``place``: the opener seats and antes in immediately.`
+- `roll(*, session: 'GameSession', persona: 'Persona') -> 'GameSeat' - Roll the dice for this hand. Auto-resolves once every seat has rolled.`
 
 
 

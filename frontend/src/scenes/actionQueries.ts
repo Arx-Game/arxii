@@ -16,6 +16,8 @@ import type {
   CastResponse,
   PendingActionTarget,
   SpeakerQueue,
+  GameSession,
+  TavernGame,
 } from './actionTypes';
 
 /**
@@ -338,6 +340,53 @@ export async function skipSpeakerInQueue(queueId: number, personaName: string): 
     body: JSON.stringify({ target_name: personaName }),
   });
   if (!res.ok) throw new Error('Failed to skip speaker');
+}
+
+// ---------------------------------------------------------------------------
+// Tavern games API (#3292)
+// ---------------------------------------------------------------------------
+
+export async function fetchTavernGames(): Promise<{ results: TavernGame[] }> {
+  const res = await apiFetch('/api/tavern-games/games/');
+  if (!res.ok) throw new Error('Failed to load tavern games');
+  return res.json();
+}
+
+export async function fetchTavernGameSessions(roomId: string): Promise<{ results: GameSession[] }> {
+  const res = await apiFetch(`/api/tavern-games/sessions/?room=${roomId}&state=open`);
+  if (!res.ok) throw new Error('Failed to load tavern game sessions');
+  return res.json();
+}
+
+export async function openTavernGameSession(
+  placeId: number,
+  gameId: number,
+  ante: number
+): Promise<GameSession> {
+  const res = await apiFetch('/api/tavern-games/sessions/open/', {
+    method: 'POST',
+    body: JSON.stringify({ place: placeId, game: gameId, ante }),
+  });
+  if (!res.ok) throw new Error('Failed to open a tavern game table');
+  return res.json();
+}
+
+export async function joinTavernGameSession(sessionId: number): Promise<GameSession> {
+  const res = await apiFetch(`/api/tavern-games/sessions/${sessionId}/join/`, { method: 'POST' });
+  if (!res.ok) throw new Error('Failed to join the table');
+  return res.json();
+}
+
+export async function rollTavernGameSession(sessionId: number): Promise<GameSession> {
+  const res = await apiFetch(`/api/tavern-games/sessions/${sessionId}/roll/`, { method: 'POST' });
+  if (!res.ok) throw new Error('Failed to roll the dice');
+  return res.json();
+}
+
+export async function leaveTavernGameSession(sessionId: number): Promise<GameSession> {
+  const res = await apiFetch(`/api/tavern-games/sessions/${sessionId}/leave/`, { method: 'POST' });
+  if (!res.ok) throw new Error('Failed to leave the table');
+  return res.json();
 }
 
 /**

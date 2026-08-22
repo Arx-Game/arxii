@@ -57,6 +57,7 @@ class TestClusterRegistry(TestCase):
                 "survivability",
                 "ceremonies",
                 "market",
+                "tavern_games",
                 "gm",
                 "kinship",
                 "houses",
