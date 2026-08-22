@@ -10361,18 +10361,16 @@ export interface paths {
     /**
      * @description List public journal entries, or (with ``?deceased=``) a bequeathed corpus.
      *
-     *     Supports query params:
+     *     Supports query params (all handled by ``JournalEntryFilter``):
      *     - ?author=<character_id> — filter by author
      *     - ?tag=<tag_name> — filter by tag name
      *     - ?deceased=<character_sheet_id> — browse a deceased sheet's non-sealed private
      *       entries, ONLY when the caller holds a ``JournalBequestGrant`` for that sheet
-     *       (#3287 Decision 3). Empty when no grant exists — never a permission error, so a
-     *       probing id can't confirm whether a grant exists for someone else.
+     *       (#3287 Decision 3, gated in ``JournalEntryFilter.filter_deceased`` per
+     *       ``tools/lint_use_filterset.py``). Empty when no grant exists — never a permission
+     *       error, so a probing id can't confirm whether a grant exists for someone else.
      *
-     *     The public feed includes entries revealed by an estate settlement
-     *     (``revealed_at`` set) alongside ``is_public=True`` ones (#3287 Decision 2) — a
-     *     reveal never flips ``is_public``. Blocked/muted authors' entries are excluded
-     *     (#2996 Decision 2) — see ``exclude_blocked_and_muted_authors``.
+     *     See ``get_queryset()`` for the public-feed contract (revealed entries, block/mute).
      */
     get: operations['journals_entries_retrieve'];
     put?: never;
