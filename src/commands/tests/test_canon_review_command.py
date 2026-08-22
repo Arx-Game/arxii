@@ -10,8 +10,11 @@ from django.test import TestCase
 from commands.canon_review import CmdCanonReview
 from commands.story import CmdStory
 from evennia_extensions.factories import AccountFactory
+from world.gm.constants import GMLevel
+from world.gm.factories import GMProfileFactory, seed_default_gm_level_caps
 from world.stories.constants import CanonReviewStatus, ImpactTier
 from world.stories.factories import StoryFactory
+from world.stories.models import CanonReview
 from world.stories.services.canon_review import (
     clear_canon_review,
     request_canon_review,
@@ -77,6 +80,59 @@ class StoryImpactCommandTests(TestCase):
         self.story.refresh_from_db()
         self.assertEqual(self.story.impact_tier, ImpactTier.TABLE)
         self.assertTrue(any("frozen" in m.lower() for m in messages))
+
+
+class StoryImpactRequestsReviewTests(TestCase):
+    """``story impact`` wires ``ensure_canon_review_for_story`` (#3304).
+
+    Setting the tier to REGIONAL/WORLD opens (or auto-clears) a review, so
+    the request loop is reachable from telnet, not just from Django admin.
+    """
+
+    def setUp(self) -> None:
+        seed_default_gm_level_caps()
+        self.owner = AccountFactory()
+        self.caller = MagicMock()
+        self.caller.msg = MagicMock()
+        self.caller.account = self.owner
+        self.story = StoryFactory(impact_tier=ImpactTier.TABLE, owners=[self.owner])
+
+    def _run(self, args: str) -> list[str]:
+        cmd = _make_story_cmd(self.caller, args)
+        cmd.func()
+        return _messages(self.caller)
+
+    def test_world_tier_creates_pending_review(self) -> None:
+        self._run(f"impact {self.story.pk}=world")
+        review = self.story.canon_reviews.get()
+        self.assertEqual(review.status, CanonReviewStatus.PENDING)
+        self.assertEqual(review.tier, ImpactTier.WORLD)
+
+    def test_world_tier_never_auto_clears_even_for_senior_gm(self) -> None:
+        GMProfileFactory(account=self.owner, level=GMLevel.SENIOR)
+        self._run(f"impact {self.story.pk}=world")
+        review = self.story.canon_reviews.get()
+        self.assertEqual(review.status, CanonReviewStatus.PENDING)
+
+    def test_regional_tier_pending_for_gm_without_auto_clear(self) -> None:
+        GMProfileFactory(account=self.owner, level=GMLevel.JUNIOR)
+        messages = self._run(f"impact {self.story.pk}=regional")
+        review = self.story.canon_reviews.get()
+        self.assertEqual(review.status, CanonReviewStatus.PENDING)
+        self.assertTrue(any("awaiting staff" in m.lower() for m in messages))
+
+    def test_regional_tier_auto_clears_for_experienced_gm(self) -> None:
+        GMProfileFactory(account=self.owner, level=GMLevel.EXPERIENCED)
+        messages = self._run(f"impact {self.story.pk}=regional")
+        review = self.story.canon_reviews.get()
+        self.assertEqual(review.status, CanonReviewStatus.CLEARED)
+        self.assertIsNone(review.reviewer)
+        self.assertEqual(review.notes, "auto-cleared by GM level cap")
+        self.assertTrue(any("auto-cleared" in m.lower() for m in messages))
+
+    def test_table_tier_creates_no_review(self) -> None:
+        self._run(f"impact {self.story.pk}=table")
+        self.assertFalse(CanonReview.objects.filter(story=self.story).exists())
 
 
 class StoryReviewStatusCommandTests(TestCase):

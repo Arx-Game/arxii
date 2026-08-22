@@ -20,7 +20,8 @@ from rest_framework.test import APITestCase
 from core_management.test_utils import suppress_permission_errors
 from evennia_extensions.factories import AccountFactory
 from world.character_sheets.factories import CharacterSheetFactory
-from world.gm.factories import GMProfileFactory, GMTableFactory
+from world.gm.constants import GMLevel
+from world.gm.factories import GMLevelCapFactory, GMProfileFactory, GMTableFactory
 from world.stories.constants import StoryScope
 from world.stories.factories import StoryFactory
 from world.stories.models import (
@@ -41,6 +42,13 @@ class StoryAssignViewSetTest(APITestCase):
         cls.lead_gm_account = AccountFactory()
         cls.lead_gm_profile = GMProfileFactory(account=cls.lead_gm_account)
         cls.gm_table = GMTableFactory(gm=cls.lead_gm_profile)
+        # GLOBAL-scope authoring is cap-gated (#3304). Most tests in this class
+        # exercise the assign *mechanics* (scope <-> target invariant,
+        # progress-row creation), not the GMLevelCap authorization boundary,
+        # so the Lead GM's STARTING-level cap is granted the permission here;
+        # GlobalScopeAuthoringGateTest below exercises the boundary itself
+        # with its own un-permitting cap.
+        GMLevelCapFactory(level=GMLevel.STARTING, allow_global_scope_authoring=True)
 
         cls.unrelated_account = AccountFactory()
 
@@ -276,3 +284,81 @@ class StoryAssignViewSetTest(APITestCase):
         assert not GroupStoryProgress.objects.filter(story=story).exists()
         assert not GlobalStoryProgress.objects.filter(story=story).exists()
         assert StoryProgress.objects.filter(story=story).count() == 1
+
+
+class GlobalScopeAuthoringGateTest(APITestCase):
+    """GLOBAL-scope authoring is gated on GMLevelCap.allow_global_scope_authoring (#3304).
+
+    A non-staff Lead GM whose level cap does not permit GLOBAL-scope authoring
+    is refused with 400 (mirrors ``_gm_allows_custom_stakes``'s gate shape);
+    staff bypass and a permitting cap both succeed.
+    """
+
+    @classmethod
+    def setUpTestData(cls):
+        cls.lead_gm_account = AccountFactory()
+        cls.lead_gm_profile = GMProfileFactory(account=cls.lead_gm_account, level=GMLevel.STARTING)
+        cls.gm_table = GMTableFactory(gm=cls.lead_gm_profile)
+
+    def _make_story(self):
+        return StoryFactory(
+            owners=[self.lead_gm_account],
+            primary_table=self.gm_table,
+            scope=StoryScope.UNASSIGNED,
+        )
+
+    def _post(self, story):
+        url = reverse("story-assign", kwargs={"pk": story.pk})
+        return self.client.post(
+            url, json.dumps({"scope": "global"}), content_type="application/json"
+        )
+
+    def test_refused_without_permitting_cap(self):
+        """No GMLevelCap row for the Lead GM's level -> refused (most-restrictive fallback)."""
+        story = self._make_story()
+        self.client.force_authenticate(user=self.lead_gm_account)
+
+        response = self._post(story)
+
+        assert response.status_code == status.HTTP_400_BAD_REQUEST, response.data
+        assert "scope" in response.data
+        story.refresh_from_db()
+        assert story.scope == StoryScope.UNASSIGNED
+        assert not GlobalStoryProgress.objects.filter(story=story).exists()
+
+    def test_refused_with_non_permitting_cap(self):
+        """A GMLevelCap row exists but allow_global_scope_authoring=False -> refused."""
+        GMLevelCapFactory(level=GMLevel.STARTING, allow_global_scope_authoring=False)
+        story = self._make_story()
+        self.client.force_authenticate(user=self.lead_gm_account)
+
+        response = self._post(story)
+
+        assert response.status_code == status.HTTP_400_BAD_REQUEST, response.data
+        story.refresh_from_db()
+        assert story.scope == StoryScope.UNASSIGNED
+
+    def test_allowed_with_permitting_cap(self):
+        """A GMLevelCap row with allow_global_scope_authoring=True -> succeeds."""
+        GMLevelCapFactory(level=GMLevel.STARTING, allow_global_scope_authoring=True)
+        story = self._make_story()
+        self.client.force_authenticate(user=self.lead_gm_account)
+
+        response = self._post(story)
+
+        assert response.status_code == status.HTTP_200_OK, response.data
+        story.refresh_from_db()
+        assert story.scope == StoryScope.GLOBAL
+        assert GlobalStoryProgress.objects.filter(story=story).exists()
+
+    def test_staff_bypasses_the_gate(self):
+        """Staff may assign GLOBAL scope with no GMLevelCap row at all."""
+        story = self._make_story()
+        staff_account = AccountFactory(is_staff=True)
+        self.client.force_authenticate(user=staff_account)
+
+        response = self._post(story)
+
+        assert response.status_code == status.HTTP_200_OK, response.data
+        story.refresh_from_db()
+        assert story.scope == StoryScope.GLOBAL

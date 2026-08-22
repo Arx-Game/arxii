@@ -316,15 +316,29 @@ def validate_stakes_readiness(beat: Beat) -> StakesReadinessReport:
 def _canon_review_problems(beat: Beat) -> list[str]:
     """Readiness problems caused by an uncleared canon-impact review (#2003).
 
-    Only WORLD-tier stories are gated here: TABLE is never reviewed, and
-    REGIONAL auto-clears for EXPERIENCED+ GMs (so it never blocks readiness
-    at this seam — the auto-clear decision is a separate concern handled when
-    a review is requested/decided, not at activation time).
+    Only WORLD-tier stories are gated (blocked) here: TABLE is never
+    reviewed, and REGIONAL auto-clears for EXPERIENCED+ GMs (so it never
+    blocks readiness at this seam — the auto-clear decision is a separate
+    concern handled when a review is requested/decided, not at activation
+    time).
+
+    Before checking the WORLD gate, this also ensures a review exists for
+    the beat's *effective* (escalation-aware) tier via
+    ``ensure_canon_review_for_story`` (#3304) — so a GROUP/GLOBAL story whose
+    beats trigger the escalation heuristic (EXTREME risk / society-FACTION
+    stake) cannot dodge review just because its authored ``impact_tier`` was
+    never manually raised to REGIONAL/WORLD.
     """
     from world.stories.constants import ImpactTier  # noqa: PLC0415
-    from world.stories.services.canon_review import story_is_cleared  # noqa: PLC0415
+    from world.stories.services.canon_review import (  # noqa: PLC0415
+        ensure_canon_review_for_story,
+        story_is_cleared,
+    )
 
     story = beat.episode.chapter.story
+    gm_profile = story.primary_table.gm if story.primary_table_id else None
+    ensure_canon_review_for_story(story, gm_profile)
+
     if story.impact_tier != ImpactTier.WORLD:
         return []
     if story_is_cleared(story):
