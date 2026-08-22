@@ -66,12 +66,14 @@ export function RealmThemeProvider({ children, forcedTheme }: RealmThemeProvider
   });
 
   // A runtime override layer set imperatively via context (`setForcedRealm`),
-  // independent of the `forcedTheme` prop and of `storedTheme`. Seeded from
-  // the prop so a provider that mounts already forced (e.g. `forcedTheme="arx"`)
-  // reports that value immediately.
-  const [forcedRealm, setForcedRealmState] = useState<RealmTheme | undefined>(
-    forcedTheme ?? undefined
-  );
+  // independent of the `forcedTheme` prop and of `storedTheme`. Always starts
+  // undefined — `storedTheme`'s own initializer already returns `forcedTheme`
+  // when the prop is set, so `realmTheme = forcedRealm ?? storedTheme`
+  // resolves correctly at mount without seeding this from the prop. Seeding
+  // it from the prop would make it sticky: if the prop later changed to a
+  // different value, the sync effect below would update `storedTheme` but
+  // this state would still win the `??`, leaving the rendered realm stuck.
+  const [forcedRealm, setForcedRealmState] = useState<RealmTheme | undefined>(undefined);
 
   const setForcedRealm = useCallback(
     (theme: RealmTheme | undefined) => {

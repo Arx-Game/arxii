@@ -129,6 +129,22 @@ describe('RealmThemeProvider', () => {
     expect(screen.getByTestId('theme')).toHaveTextContent('inferna');
   });
 
+  it('tracks a changing forcedTheme prop across rerenders (no setForcedRealm involved)', () => {
+    const { rerender } = render(
+      <RealmThemeProvider forcedTheme="arx">
+        <ThemeDisplay />
+      </RealmThemeProvider>
+    );
+    expect(document.documentElement.dataset.realm).toBe('arx');
+
+    rerender(
+      <RealmThemeProvider forcedTheme="umbros">
+        <ThemeDisplay />
+      </RealmThemeProvider>
+    );
+    expect(document.documentElement.dataset.realm).toBe('umbros');
+  });
+
   it('prevents setRealmTheme when forcedTheme is active', async () => {
     const user = userEvent.setup();
     render(
