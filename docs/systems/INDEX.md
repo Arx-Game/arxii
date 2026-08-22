@@ -1368,7 +1368,7 @@ Character journal entries (public/private), praises, retorts, freeform tags, wee
   blocked pair is rejected with a neutral shared failure, a muted pair's response persists but
   is hidden from the entry author's own read only — see `world/scenes/CLAUDE.md`'s Block/Mute
   entries and ADR-0204
-- **Posthumous afterlife (#3287, ADR-0226):** a `CharacterSheet.posthumous_journal_disposition`
+- **Posthumous afterlife (#3287, ADR-0227):** a `CharacterSheet.posthumous_journal_disposition`
   (REVEAL default / SEAL) plus a per-entry `JournalEntry.posthumous_override`
   (INHERIT default / REVEAL / SEAL) decide what happens to a character's private entries at
   death. `services.reveal_journals_for_settlement` and `services.grant_journal_bequest` are

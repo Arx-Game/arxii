@@ -107,7 +107,7 @@ explicit calls (no signals, ADR-0009) into `world.journals.services`:
   a grant — enforced at the journals read path (`services.sealed_effective_q` /
   `entry_visible_via_bequest`), never by filtering the grant row itself.
 
-See `docs/systems/INDEX.md`'s Journals entry and ADR-0226 for the read-path/API detail.
+See `docs/systems/INDEX.md`'s Journals entry and ADR-0227 for the read-path/API detail.
 
 ## Tests
 

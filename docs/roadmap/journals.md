@@ -52,7 +52,7 @@ IC writing by players — journals, praises, retorts, and weekly XP awards. Jour
   but excludes it from the entry AUTHOR's own read (`JournalEntryViewSet.retrieve`) — any other
   viewer is unaffected.
 
-- **Posthumous afterlife (#3287, ADR-0226)** — private entries no longer die with their
+- **Posthumous afterlife (#3287, ADR-0227)** — private entries no longer die with their
   author. `CharacterSheet.posthumous_journal_disposition` (REVEAL default / SEAL) plus a
   per-entry `JournalEntry.posthumous_override` (INHERIT default / REVEAL / SEAL) decide the
   fate; `world.journals.services.reveal_journals_for_settlement` and `.grant_journal_bequest`
