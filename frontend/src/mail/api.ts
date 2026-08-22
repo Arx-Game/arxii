@@ -28,7 +28,7 @@ export async function searchTenures(term: string): Promise<PaginatedResponse<Ros
   return res.json();
 }
 
-/** Mark a received letter as read (idempotent; recipient-only via the scoped queryset). */
+/** Mark a received message as read (idempotent; recipient-only via the scoped queryset). */
 export async function markMailRead(id: number): Promise<PlayerMail> {
   const res = await apiFetch(`/api/roster/mail/${id}/mark-read/`, { method: 'POST' });
   if (!res.ok) {

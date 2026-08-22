@@ -185,7 +185,7 @@ scene-count line, Chapter I realms (public starting areas + expandable
 Beginnings), Chapter II codex drop-cap with featured entries, Chapter III a
 scene excerpt, a registration-aware Door, and a motto imprint. The old
 `evennia_replacements` homepage components, `/api/status/`, and `SceneListCard`
-were deleted rather than kept alongside the new page; see ADR-0226.
+were deleted rather than kept alongside the new page; see ADR-0227.
 
 - **Door funnel preserved, `NewPlayerSection` retired.** The Door slot renders
   `WelcomePanel` for an authenticated visitor (unchanged component, unchanged
@@ -201,7 +201,7 @@ were deleted rather than kept alongside the new page; see ADR-0226.
   via the theme provider's `setForcedRealm`, restoring the visitor's stored
   theme choice on navigating away.
 
-Details: ADR-0226, `docs/systems/realms.md`.
+Details: ADR-0227, `docs/systems/realms.md`.
 
 ## What's Needed for MVP
 - ~~Friend list system~~ — SHIPPED (#1727): `FriendsTab`/`FriendButton` over

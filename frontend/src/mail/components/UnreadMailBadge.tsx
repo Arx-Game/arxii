@@ -1,8 +1,8 @@
 /**
- * Unread letter counter badge for the top-level navigation.
+ * Unread mail counter badge for the top-level navigation.
  *
- * Shows a red badge with the count of unread received mail across the
- * player's tenures. Clicking navigates to the mail inbox. Mirrors
+ * Shows a red badge with the count of unread OOC mail across the player's
+ * tenures. Clicking navigates to the mail inbox. Mirrors
  * `UnreadNarrativeBadge` (frontend/src/narrative/components/UnreadNarrativeBadge.tsx).
  */
 
@@ -19,9 +19,9 @@ export function UnreadMailBadge() {
     <Link
       to="/profile/mail"
       className="flex items-center gap-1.5"
-      aria-label={`Letters, ${count} unread ${count === 1 ? 'letter' : 'letters'}`}
+      aria-label={`Mail, ${count} unread ${count === 1 ? 'message' : 'messages'}`}
     >
-      Letters
+      Mail
       <Badge variant="destructive" className="bg-red-600 hover:bg-red-700">
         {count}
       </Badge>

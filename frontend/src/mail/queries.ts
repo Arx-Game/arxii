@@ -33,7 +33,7 @@ export function useTenureSearch(term: string) {
   });
 }
 
-/** Marks a single received letter read; invalidates the mail list + unread count on success. */
+/** Marks a single received message read; invalidates the mail list + unread count on success. */
 export function useMarkMailRead(id: number) {
   const queryClient = useQueryClient();
   return useMutation({
@@ -45,7 +45,7 @@ export function useMarkMailRead(id: number) {
 }
 
 /**
- * Unread-letter count for the "Letters" header badge — mirrors
+ * Unread-mail count for the "Mail" header badge - mirrors
  * `useUnreadNarrativeCount` (REST count query, guarded on auth so the query
  * doesn't fire on unauthenticated page loads like the login page).
  */

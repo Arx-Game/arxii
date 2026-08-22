@@ -1,4 +1,4 @@
-# ADR-0226: The Gatefold landing page reads existing endpoints, not a new realms API
+# ADR-0227: The Gatefold landing page reads existing endpoints, not a new realms API
 
 **Status:** Accepted (2026-08-22) - extends ADR-0224, precedented by ADR-0146.
 

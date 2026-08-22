@@ -1,5 +1,10 @@
 # PlayerMail is the letters surface at MVP; tenure-routed anonymity is the mechanism
 
+> **Superseded by ADR-0226 (#3303).** The IC-letters framing below is wrong: PlayerMail is
+> the OOC player-to-player message surface (its original identity, per #124/#146,
+> predating this ADR); IC missives (#3289) get their own separate system and storage. The
+> tenure-routed anonymity mechanism described below still stands unchanged.
+
 `world.roster.PlayerMail` (tenure-to-tenure, threaded via `in_reply_to`) is the whole letters
 system for #2160 — compose/inbox at `/profile/mail`, in-scene quick-compose from the character
 card (`SendLetterDialog` pre-filling `ComposeMailForm`), unread badge, and a `MAIL_ARRIVED`
