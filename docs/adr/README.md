@@ -232,6 +232,7 @@ treat those names as hints to confirm, not gospel.
 - [0224 - The CG shop window serves perspective content ungated](0224-cg-shop-window-serves-perspective-content-ungated.md) (#3281; extends ADR-0222)
 - [0225 - Arx I is archived to object storage + a static basic-auth site, not kept running](0225-arx1-archived-to-object-storage-static-site.md)
 - [0226 - PlayerMail is OOC between players; IC missives are a separate system](0226-playermail-is-ooc-ic-missives-are-a-separate-system.md) (#3303; supersedes ADR-0116)
+- [0227 - The Gatefold landing page reads existing endpoints, not a new realms API](0227-gatefold-landing-page-and-shop-window-reads.md) (#3305; extends ADR-0224)
 
 ### Gift & resonance economy
 - [0050 — Gifts are Major or Minor; species abilities are a species-granted Minor Gift](0050-gifts-are-major-or-minor-species-abilities-are-minor-gifts.md)
