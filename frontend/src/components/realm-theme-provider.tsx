@@ -24,6 +24,13 @@ interface RealmThemeContextValue {
   realmTheme: RealmTheme | null;
   /** Set the realm theme. Pass null to remove theming entirely. */
   setRealmTheme: (theme: RealmTheme | null) => void;
+  /**
+   * Force a realm theme at runtime, overriding both the stored choice and the
+   * `forcedTheme` prop. Pass `undefined` to clear the force — the provider
+   * re-reads localStorage and restores the user's stored realm (it does not
+   * simply fall back to whatever value happened to be in state).
+   */
+  setForcedRealm: (theme: RealmTheme | undefined) => void;
   /** Whether plain mode is active (disables all realm theming). */
   plainMode: boolean;
   /** Toggle plain mode on or off. */
@@ -44,7 +51,10 @@ interface RealmThemeProviderProps {
 }
 
 export function RealmThemeProvider({ children, forcedTheme }: RealmThemeProviderProps) {
-  const [realmTheme, setRealmThemeState] = useState<RealmTheme | null>(() => {
+  // The underlying stored/prop-driven theme selection. This is what
+  // `setRealmTheme` writes to and what localStorage backs; the `forcedTheme`
+  // prop's forcing behavior lives here, unchanged from before.
+  const [storedTheme, setStoredThemeState] = useState<RealmTheme | null>(() => {
     if (forcedTheme !== undefined) return forcedTheme;
     try {
       const stored = localStorage.getItem(STORAGE_KEY);
@@ -54,6 +64,43 @@ export function RealmThemeProvider({ children, forcedTheme }: RealmThemeProvider
     }
     return null;
   });
+
+  // A runtime override layer set imperatively via context (`setForcedRealm`),
+  // independent of the `forcedTheme` prop and of `storedTheme`. Seeded from
+  // the prop so a provider that mounts already forced (e.g. `forcedTheme="arx"`)
+  // reports that value immediately.
+  const [forcedRealm, setForcedRealmState] = useState<RealmTheme | undefined>(
+    forcedTheme ?? undefined
+  );
+
+  const setForcedRealm = useCallback(
+    (theme: RealmTheme | undefined) => {
+      if (theme !== undefined) {
+        setForcedRealmState(theme);
+        return;
+      }
+      // Clearing the force: don't just drop back to whatever `storedTheme`
+      // happens to hold in state — re-read localStorage directly, so the
+      // user's stored realm is restored even if `storedTheme` went stale
+      // while the force was active (e.g. another tab changed it). This also
+      // preserves an active `forcedTheme` PROP: the prop keeps `storedTheme`
+      // pinned to its own value (see the sync effect below), so a stored
+      // localStorage value never overrides it here.
+      setForcedRealmState(undefined);
+      if (forcedTheme !== undefined) return;
+      try {
+        const stored = localStorage.getItem(STORAGE_KEY);
+        setStoredThemeState(stored && isValidRealmTheme(stored) ? stored : null);
+      } catch {
+        setStoredThemeState(null);
+      }
+    },
+    [forcedTheme]
+  );
+
+  // The effective theme actually rendered: the runtime force wins, then the
+  // stored/prop-driven selection.
+  const realmTheme = forcedRealm ?? storedTheme;
 
   const [plainMode, setPlainModeState] = useState<boolean>(() => {
     try {
@@ -67,7 +114,7 @@ export function RealmThemeProvider({ children, forcedTheme }: RealmThemeProvider
     (theme: RealmTheme | null) => {
       // Don't override if a forced theme is set
       if (forcedTheme !== undefined) return;
-      setRealmThemeState(theme);
+      setStoredThemeState(theme);
       try {
         if (theme) {
           localStorage.setItem(STORAGE_KEY, theme);
@@ -97,7 +144,7 @@ export function RealmThemeProvider({ children, forcedTheme }: RealmThemeProvider
   // Sync forced theme changes
   useEffect(() => {
     if (forcedTheme !== undefined) {
-      setRealmThemeState(forcedTheme);
+      setStoredThemeState(forcedTheme);
     }
   }, [forcedTheme]);
 
@@ -128,7 +175,9 @@ export function RealmThemeProvider({ children, forcedTheme }: RealmThemeProvider
   }, [plainMode]);
 
   return (
-    <RealmThemeContext.Provider value={{ realmTheme, setRealmTheme, plainMode, setPlainMode }}>
+    <RealmThemeContext.Provider
+      value={{ realmTheme, setRealmTheme, setForcedRealm, plainMode, setPlainMode }}
+    >
       {children}
     </RealmThemeContext.Provider>
   );
