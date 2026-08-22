@@ -318,13 +318,7 @@ function HouseSection({ orgId, house }: { orgId: number; house: HouseDetail }) {
  * redux-free so its unit tests render without a store `<Provider>`, and
  * matches `RoomPanel`'s convention of taking the active character as a prop
  * from its caller rather than reading the store itself. */
-function OrgBoardSection({
-  orgId,
-  characterId,
-}: {
-  orgId: number;
-  characterId?: number | null;
-}) {
+function OrgBoardSection({ orgId, characterId }: { orgId: number; characterId?: number | null }) {
   const { data: board } = useBoardForOrgQuery(orgId);
   if (!board) return null;
   return (
