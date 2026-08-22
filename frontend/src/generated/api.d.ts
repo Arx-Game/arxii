@@ -20166,11 +20166,12 @@ export interface paths {
      *     - GROUP: creates GroupStoryProgress for the given gm_table
      *     - GLOBAL: creates the GlobalStoryProgress singleton
      *
-     *     The scope <-> target invariant is enforced by
-     *     AssignStoryInputSerializer.validate(), so an invalid combination is a
-     *     400 (no scope change, no progress row). Because scope is set before
-     *     the create_*_progress call, StoryNotAssignedError cannot fire — no
-     *     try/except is needed.
+     *     The scope <-> target invariant, AND (for GLOBAL) the
+     *     ``allow_global_scope_authoring`` GMLevelCap gate (#3304), are enforced
+     *     by AssignStoryInputSerializer.validate(), so an invalid combination or
+     *     an under-leveled GM's GLOBAL attempt is a 400 (no scope change, no
+     *     progress row). Because scope is set before the create_*_progress
+     *     call, StoryNotAssignedError cannot fire — no try/except is needed.
      */
     post: operations['stories_assign_to_scope_create'];
     delete?: never;
