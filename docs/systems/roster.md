@@ -313,7 +313,7 @@ RosterTenure.objects.for_player(player_data)                 # For specific play
 - `GET /api/roster/tenures/` - List tenures with search by character name
 - `GET /api/roster/tenures/mine/` - Current user's active tenures (for dropdown selection)
 
-### Mail (`/api/roster/mail/`) — the letters surface (#2160, ADR-0116)
+### Mail (`/api/roster/mail/`) — the OOC player-to-player mail surface (#2160, ADR-0226)
 - `GET /api/roster/mail/` - List received mail (newest first)
 - `POST /api/roster/mail/` - Send mail (validates sender_tenure ownership); fires
   `notify_mail_arrived(recipient_tenure, mail)` via `transaction.on_commit`, pushing a
@@ -325,9 +325,10 @@ RosterTenure.objects.for_player(player_data)                 # For specific play
 - `GET /api/roster/mail/unread-count/` - Count of unread, unarchived mail across the
   requester's tenures (`UnreadMailCountSerializer`)
 
-Web-only surface: compose at `/profile/mail` or in-scene via `SendLetterDialog` (pre-fills
-`ComposeMailForm` from the character card quick actions), unread badge in the header
-(`UnreadMailBadge`), mark-read-on-open in `ReceivedMailList`. No telnet mail command.
+Web-only surface: compose at `/profile/mail` or in-scene via `MessagePlayerDialog` (pre-fills
+`ComposeMailForm` from the character card's "Message the player" quick action), unread badge
+in the header (`UnreadMailBadge`), mark-read-on-open in `ReceivedMailList`. No telnet mail
+command.
 
 ### Applications (`/api/roster/applications/`) - staff review queue (#3265)
 - `GET /api/roster/applications/` - List applications; `?status=` filters by
