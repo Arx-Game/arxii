@@ -15,6 +15,15 @@
   background: hsl(var(--background));
 }
 
+/* Reference's `a:focus-visible` treatment — a visible accent outline instead
+   of the browser default, on every link/button in the page (fix round 1,
+   finding 3). */
+.gatefold a:focus-visible,
+.gatefold button:focus-visible {
+  outline: 2px solid hsl(var(--primary));
+  outline-offset: 3px;
+}
+
 /* ---------- cover: always night, regardless of light/dark mode ---------- */
 .gatefold-cover {
   position: relative;

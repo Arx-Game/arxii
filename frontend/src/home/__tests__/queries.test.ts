@@ -12,12 +12,14 @@ import type { ReactNode } from 'react';
 import { createElement } from 'react';
 import {
   firstOfMonthISO,
+  useFeaturedLore,
   useMonthlySceneCount,
   usePublicBeginnings,
   usePublicStartingAreas,
   useSceneExcerpt,
 } from '../queries';
 import type { Beginnings, StartingArea } from '@/character-creation/types';
+import type { CodexEntryListItem } from '@/codex/types';
 import type { Interaction, SceneListItem } from '@/scenes/types';
 
 vi.mock('../api', () => ({
@@ -28,7 +30,12 @@ vi.mock('../api', () => ({
   getCompletedSceneCount: vi.fn(),
 }));
 
+vi.mock('@/codex/api', () => ({
+  getFeaturedEntries: vi.fn(),
+}));
+
 import * as api from '../api';
+import * as codexApi from '@/codex/api';
 
 function createWrapper() {
   const queryClient = new QueryClient({
@@ -219,6 +226,43 @@ describe('home query hooks', () => {
 
       expect(result.current.data).toBe(14);
       expect(api.getCompletedSceneCount).toHaveBeenCalledWith(firstOfMonthISO());
+    });
+  });
+
+  describe('useFeaturedLore', () => {
+    const mockEntry: CodexEntryListItem = {
+      id: 10,
+      name: 'The Shroud',
+      summary: 'A grey veil no army and no messenger ever crossed.',
+      is_public: true,
+      is_featured: true,
+      featured_order: 1,
+      subject: 1,
+      subject_name: 'The World',
+      subject_path: [],
+      display_order: 1,
+      knowledge_status: null,
+      known_by: [],
+      art_url: null,
+      perspective_of: null,
+    };
+
+    it('fetches featured codex entries', async () => {
+      vi.mocked(codexApi.getFeaturedEntries).mockResolvedValue([mockEntry]);
+
+      const { result } = renderHook(() => useFeaturedLore(), { wrapper: createWrapper() });
+
+      await waitFor(() => expect(result.current.isSuccess).toBe(true));
+      expect(result.current.data).toEqual([mockEntry]);
+    });
+
+    it('resolves quietly (no throw) when the fetch fails — no throwOnError on this page', async () => {
+      vi.mocked(codexApi.getFeaturedEntries).mockRejectedValue(new Error('boom'));
+
+      const { result } = renderHook(() => useFeaturedLore(), { wrapper: createWrapper() });
+
+      await waitFor(() => expect(result.current.isError).toBe(true));
+      expect(result.current.data).toBeUndefined();
     });
   });
 });

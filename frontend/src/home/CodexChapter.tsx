@@ -3,15 +3,17 @@
  *
  * Body prose is verbatim Apostate copy (arx-the-empty-city.md) — not
  * agent-drafted, so it carries no PLACEHOLDER marker. The index list below it
- * is live: `useFeaturedCodexEntries()`, the existing codex lore-teaser hook.
+ * is live: `useFeaturedLore()` (home-scoped — no `throwOnError`, unlike the
+ * Codex page's own `useFeaturedCodexEntries`; a codex API failure must hide
+ * the index list, never blank the whole landing page).
  */
 
 import { Link } from 'react-router-dom';
 import { Skeleton } from '@/components/ui/skeleton';
-import { useFeaturedCodexEntries } from '@/codex/queries';
+import { useFeaturedLore } from './queries';
 
 export function CodexChapter() {
-  const { data: entries, isLoading } = useFeaturedCodexEntries();
+  const { data: entries, isLoading } = useFeaturedLore();
 
   return (
     <div className="gatefold-leaf" id="codex">

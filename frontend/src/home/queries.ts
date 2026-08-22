@@ -15,7 +15,9 @@ import {
   getSceneInteractions,
   getScenesSpotlight,
 } from './api';
+import { getFeaturedEntries } from '@/codex/api';
 import type { Beginnings, StartingArea } from '@/character-creation/types';
+import type { CodexEntryListItem } from '@/codex/types';
 import type { Interaction, SceneListItem } from '@/scenes/types';
 
 const FIVE_MINUTES = 5 * 60 * 1000;
@@ -33,6 +35,7 @@ export const homeKeys = {
   sceneExcerpt: () => [...homeKeys.all, 'scene-excerpt'] as const,
   monthlySceneCount: (finishedAfter: string) =>
     [...homeKeys.all, 'monthly-scene-count', finishedAfter] as const,
+  featuredLore: () => [...homeKeys.all, 'featured-lore'] as const,
 };
 
 export function usePublicStartingAreas() {
@@ -99,6 +102,22 @@ export function useMonthlySceneCount() {
   return useQuery<number>({
     queryKey: homeKeys.monthlySceneCount(finishedAfter),
     queryFn: () => getCompletedSceneCount(finishedAfter),
+    staleTime: FIVE_MINUTES,
+  });
+}
+
+/**
+ * Featured codex entries for CodexChapter. A home-scoped wrapper around the
+ * same `getFeaturedEntries` fetcher `@/codex/queries`'s `useFeaturedCodexEntries`
+ * uses — that hook sets `throwOnError: true`, which is correct for the Codex
+ * page's own error boundary but would blank the ENTIRE Gatefold page on a
+ * codex API failure (#3305 fix round 1, finding 1). This wrapper has no
+ * `throwOnError`, matching every other hook in this file.
+ */
+export function useFeaturedLore() {
+  return useQuery<CodexEntryListItem[]>({
+    queryKey: homeKeys.featuredLore(),
+    queryFn: getFeaturedEntries,
     staleTime: FIVE_MINUTES,
   });
 }

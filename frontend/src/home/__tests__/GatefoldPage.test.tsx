@@ -22,16 +22,13 @@ const mockUsePublicStartingAreas = vi.fn();
 const mockUsePublicBeginnings = vi.fn();
 const mockUseSceneExcerpt = vi.fn();
 const mockUseMonthlySceneCount = vi.fn();
+const mockUseFeaturedLore = vi.fn();
 vi.mock('../queries', () => ({
   usePublicStartingAreas: () => mockUsePublicStartingAreas(),
   usePublicBeginnings: (...args: unknown[]) => mockUsePublicBeginnings(...args),
   useSceneExcerpt: () => mockUseSceneExcerpt(),
   useMonthlySceneCount: () => mockUseMonthlySceneCount(),
-}));
-
-const mockUseFeaturedCodexEntries = vi.fn();
-vi.mock('@/codex/queries', () => ({
-  useFeaturedCodexEntries: () => mockUseFeaturedCodexEntries(),
+  useFeaturedLore: () => mockUseFeaturedLore(),
 }));
 
 const mockUseRegistrationStatus = vi.fn();
@@ -98,7 +95,7 @@ function setDefaultMocks() {
   mockUsePublicBeginnings.mockReturnValue({ data: [], isLoading: false });
   mockUseSceneExcerpt.mockReturnValue({ data: null });
   mockUseMonthlySceneCount.mockReturnValue({ data: undefined });
-  mockUseFeaturedCodexEntries.mockReturnValue({ data: codexEntries, isLoading: false });
+  mockUseFeaturedLore.mockReturnValue({ data: codexEntries, isLoading: false });
   mockUseRegistrationStatus.mockReturnValue({ data: { open: true } });
   mockUsePageBackgrounds.mockReturnValue({ data: [] });
   mockUseDraft.mockReturnValue({ data: null });
@@ -187,5 +184,51 @@ describe('GatefoldPage', () => {
 
     expect(screen.queryByRole('link', { name: 'Begin' })).not.toBeInTheDocument();
     expect(screen.getByText(`Welcome back, ${mockAccount.display_name}`)).toBeInTheDocument();
+  });
+
+  it('does not blank the page when the featured-entries query errors', () => {
+    setDefaultMocks();
+    // No throwOnError anywhere on this page (fix round 1, finding 1) — an
+    // errored query resolves with `data: undefined`, never an uncaught throw.
+    mockUseFeaturedLore.mockReturnValue({ data: undefined, isLoading: false });
+    const { container } = renderWithProviders(<GatefoldPage />);
+
+    expect(container).not.toBeEmptyDOMElement();
+    // The chapter's own prose still renders — only the index list is hidden.
+    expect(screen.getByText('Of the Empty City')).toBeInTheDocument();
+    expect(screen.queryByText('The Shroud')).not.toBeInTheDocument();
+  });
+
+  it('does not blank the page when the featured-entries query returns nothing', () => {
+    setDefaultMocks();
+    mockUseFeaturedLore.mockReturnValue({ data: [], isLoading: false });
+    const { container } = renderWithProviders(<GatefoldPage />);
+
+    expect(container).not.toBeEmptyDOMElement();
+    expect(screen.getByText('Of the Empty City')).toBeInTheDocument();
+  });
+
+  it('shows the monthly scene count line when the count is positive', () => {
+    setDefaultMocks();
+    mockUseMonthlySceneCount.mockReturnValue({ data: 14 });
+    renderWithProviders(<GatefoldPage />);
+
+    expect(screen.getByText(/14 public scenes concluded this month/)).toBeInTheDocument();
+  });
+
+  it('hides the monthly scene count line when the count is 0', () => {
+    setDefaultMocks();
+    mockUseMonthlySceneCount.mockReturnValue({ data: 0 });
+    renderWithProviders(<GatefoldPage />);
+
+    expect(screen.queryByText(/concluded this month/)).not.toBeInTheDocument();
+  });
+
+  it('hides the monthly scene count line when the count is undefined', () => {
+    setDefaultMocks();
+    mockUseMonthlySceneCount.mockReturnValue({ data: undefined });
+    renderWithProviders(<GatefoldPage />);
+
+    expect(screen.queryByText(/concluded this month/)).not.toBeInTheDocument();
   });
 });
