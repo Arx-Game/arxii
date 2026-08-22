@@ -335,9 +335,7 @@ function StandingSection({ orgId, orgName }: { orgId: number; orgName: string })
   const { data: myMemberships = [] } = useOrganizationMembershipsQuery(true);
   const canDeclare = useMemo(
     () =>
-      myMemberships.some(
-        (m) => m.organization === orgId && m.rank?.can_declare_standing === true
-      ),
+      myMemberships.some((m) => m.organization === orgId && m.rank?.can_declare_standing === true),
     [myMemberships, orgId]
   );
 
@@ -373,9 +371,7 @@ function StandingSection({ orgId, orgName }: { orgId: number; orgName: string })
                     {DIRECTION_LABEL[d.direction]}
                   </Badge>
                   <span className="font-medium">{d.target_persona_name}</span>
-                  <span className="text-muted-foreground">
-                    by {d.declared_by_persona_name}
-                  </span>
+                  <span className="text-muted-foreground">by {d.declared_by_persona_name}</span>
                 </div>
                 <p className="text-muted-foreground">{d.citation}</p>
               </li>
