@@ -3451,6 +3451,7 @@ paths:
       - character-creation
       security:
       - cookieAuth: []
+      - {}
       responses:
         '200':
           content:
@@ -3479,6 +3480,7 @@ paths:
       - character-creation
       security:
       - cookieAuth: []
+      - {}
       responses:
         '200':
           content:
@@ -4763,6 +4765,7 @@ paths:
       - character-creation
       security:
       - cookieAuth: []
+      - {}
       responses:
         '200':
           content:
@@ -4787,6 +4790,7 @@ paths:
       - character-creation
       security:
       - cookieAuth: []
+      - {}
       responses:
         '200':
           content:
@@ -14501,6 +14505,7 @@ paths:
       - interactions
       security:
       - cookieAuth: []
+      - {}
       responses:
         '200':
           content:
@@ -29315,6 +29320,11 @@ paths:
       description: ViewSet for managing scenes
       parameters:
       - in: query
+        name: finished_after
+        schema:
+          type: string
+          format: date-time
+      - in: query
         name: gm
         schema:
           type: string
@@ -32310,18 +32320,6 @@ paths:
               schema:
                 $ref: '#/components/schemas/Stake'
           description: ''
-  /api/status/:
-    get:
-      operationId: status_retrieve
-      description: Return game statistics and recent activity.
-      tags:
-      - status
-      security:
-      - cookieAuth: []
-      - {}
-      responses:
-        '200':
-          description: No response body
   /api/stories/:
     get:
       operationId: stories_list

@@ -19996,23 +19996,6 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
-  '/api/status/': {
-    parameters: {
-      query?: never;
-      header?: never;
-      path?: never;
-      cookie?: never;
-    };
-    /** @description Return game statistics and recent activity. */
-    get: operations['status_retrieve'];
-    put?: never;
-    post?: never;
-    delete?: never;
-    options?: never;
-    head?: never;
-    patch?: never;
-    trace?: never;
-  };
   '/api/stories/': {
     parameters: {
       query?: never;
@@ -67360,6 +67343,7 @@ export interface operations {
   scenes_list: {
     parameters: {
       query?: {
+        finished_after?: string;
         gm?: string;
         is_active?: boolean;
         location?: number;
@@ -69889,24 +69873,6 @@ export interface operations {
         content: {
           'application/json': components['schemas']['Stake'];
         };
-      };
-    };
-  };
-  status_retrieve: {
-    parameters: {
-      query?: never;
-      header?: never;
-      path?: never;
-      cookie?: never;
-    };
-    requestBody?: never;
-    responses: {
-      /** @description No response body */
-      200: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content?: never;
       };
     };
   };
