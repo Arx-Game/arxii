@@ -14,7 +14,7 @@ decision 5).
 
 from __future__ import annotations
 
-import random
+import secrets
 from typing import TYPE_CHECKING
 
 from django.db import transaction
@@ -38,6 +38,11 @@ if TYPE_CHECKING:
     from world.character_sheets.models import CharacterSheet
     from world.scenes.models import Persona
     from world.scenes.place_models import Place
+
+
+# Coin is at stake, so rolls come from the OS entropy source rather than the
+# predictable Mersenne Twister (SonarCloud S2245 on the original random.randint).
+_TABLE_RNG = secrets.SystemRandom()
 
 
 def _require_present(*, place: Place, persona: Persona) -> None:
@@ -201,7 +206,7 @@ def roll(*, session: GameSession, persona: Persona) -> GameSeat:
     if seat_count < MIN_SEATS_TO_ROLL:
         raise NotEnoughSeatsError
 
-    seat.roll_result = random.randint(1, DICE_SIDES)  # noqa: S311 - public table roll, not a security value
+    seat.roll_result = _TABLE_RNG.randint(1, DICE_SIDES)
     seat.save(update_fields=["roll_result"])
     _narrate(
         character=persona.character_sheet.character,
