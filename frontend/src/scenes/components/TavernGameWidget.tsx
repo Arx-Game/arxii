@@ -129,7 +129,10 @@ export function TavernGameWidget({ roomId }: Props) {
       </span>
       <div className="flex flex-wrap gap-1">
         {session.seats.map((seat) => (
-          <span key={seat.id} className="rounded bg-muted px-2 py-0.5 text-xs text-muted-foreground">
+          <span
+            key={seat.id}
+            className="rounded bg-muted px-2 py-0.5 text-xs text-muted-foreground"
+          >
             {seat.persona_name}
             {seat.roll_result != null ? `: ${seat.roll_result}` : ''}
           </span>
@@ -137,17 +140,32 @@ export function TavernGameWidget({ roomId }: Props) {
       </div>
       <div className="ml-auto flex gap-1">
         {!mySeat && (
-          <Button size="sm" variant="ghost" disabled={joinMut.isPending} onClick={() => joinMut.mutate()}>
+          <Button
+            size="sm"
+            variant="ghost"
+            disabled={joinMut.isPending}
+            onClick={() => joinMut.mutate()}
+          >
             Join
           </Button>
         )}
         {mySeat && mySeat.roll_result == null && (
-          <Button size="sm" variant="ghost" disabled={rollMut.isPending} onClick={() => rollMut.mutate()}>
+          <Button
+            size="sm"
+            variant="ghost"
+            disabled={rollMut.isPending}
+            onClick={() => rollMut.mutate()}
+          >
             Roll
           </Button>
         )}
         {mySeat && (
-          <Button size="sm" variant="ghost" disabled={leaveMut.isPending} onClick={() => leaveMut.mutate()}>
+          <Button
+            size="sm"
+            variant="ghost"
+            disabled={leaveMut.isPending}
+            onClick={() => leaveMut.mutate()}
+          >
             Leave
           </Button>
         )}
