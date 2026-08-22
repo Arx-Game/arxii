@@ -226,8 +226,10 @@ test-affected *args: _fs-warn
 # including CI's own --keepdb (CI builds the test DB once via
 # tools/build_schema.py, then reuses it across the run). Builds the test DB
 # automatically the first time; pass `--rebuild` to force a rebuild after a
-# model change. Uses --parallel (cpu_count workers). Auto-confirms the
-# destroy-test-DB prompt.
+# model change. Uses --parallel; the worker count is cpu_count() capped by
+# available memory, since each worker holds a full Django+Evennia stack
+# (~350MB) — see _parallel_worker_count in src/cli/arx.py, and override with
+# ARX_TEST_MAX_WORKERS. Auto-confirms the destroy-test-DB prompt.
 #   just regression
 #   just regression --rebuild
 regression *args: _fs-warn
