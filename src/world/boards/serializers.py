@@ -55,7 +55,7 @@ class BoardPostSerializer(serializers.ModelSerializer):
         )
 
         request = self.context.get("request")
-        user = getattr(request, "user", None)
+        user = request.user if request is not None else None
         viewer_persona_ids: set[int] = set()
         viewer_sheet_ids: set[int] = set()
         is_staff = False
