@@ -95,7 +95,7 @@ class CompanionViewSet(PuppetActorMixin, viewsets.ReadOnlyModelViewSet):
         context = super().get_serializer_context()
         persona = _active_persona_for_request(self.request)
         if persona is not None:
-            context["actor_location_id"] = persona.character_sheet.character.location_id
+            context["actor_location_id"] = persona.character_sheet.character.db_location_id
         return context
 
     # ------------------------------------------------------------------

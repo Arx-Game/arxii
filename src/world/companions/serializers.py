@@ -33,7 +33,7 @@ class CompanionSerializer(serializers.ModelSerializer):
         location_id = self.context.get("actor_location_id")
         if location_id is None or obj.objectdb_id is None:
             return False
-        return obj.objectdb.location_id == location_id
+        return obj.objectdb.db_location_id == location_id
 
 
 class BindActionSerializer(serializers.Serializer):

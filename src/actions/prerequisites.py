@@ -823,7 +823,7 @@ class CompanionPresentPrerequisite(Prerequisite):
             return False, "That is not your companion."
         if companion.objectdb is None:
             return False, f"{companion.name} has no in-world presence."
-        if companion.objectdb.location_id != actor.location_id:
+        if companion.objectdb.db_location_id != actor.db_location_id:
             return False, f"{companion.name} is not here."
         return True, ""
 

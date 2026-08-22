@@ -460,7 +460,7 @@ def _resolve_present_companion(actor: ObjectDB, companion_id: int):
     companion, failure = _resolve_owned_companion(actor, companion_id)
     if failure is not None:
         return None, failure
-    if companion.objectdb.location_id != actor.location_id:
+    if companion.objectdb.db_location_id != actor.db_location_id:
         return None, ActionResult(success=False, message=f"{companion.name} is not here.")
     return companion, None
 
