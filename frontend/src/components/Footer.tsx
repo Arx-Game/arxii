@@ -17,6 +17,9 @@ export function Footer() {
           <Button variant="ghost" asChild>
             <Link to="/scenes">Scenes</Link>
           </Button>
+          <Button variant="ghost" asChild>
+            <Link to="/login">Log in</Link>
+          </Button>
         </div>
         <p>
           Powered by{' '}

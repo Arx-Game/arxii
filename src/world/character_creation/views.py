@@ -198,7 +198,11 @@ class BeginningsViewSet(viewsets.ReadOnlyModelViewSet):
         permission_classes=[IsAuthenticated],
     )
     def perspectives(self, request: Request, pk: int | None = None) -> Response:
-        """This beginning's perspective entries, ungated for the CG shop window (ADR-0224)."""
+        """This beginning's perspective entries.
+
+        Knowledge-ungated within CG per ADR-0224; still requires an
+        authenticated account (see #3305 review).
+        """
         beginnings = self.get_object()
         entries = [
             grant.entry
@@ -409,10 +413,11 @@ class TraditionViewSet(viewsets.ReadOnlyModelViewSet):
     @extend_schema(responses=PerspectiveEntrySerializer(many=True))
     @action(detail=True, methods=[HTTPMethod.GET])
     def perspectives(self, request: Request, pk: str | None = None) -> Response:
-        """This tradition's perspective entries, ungated for the CG shop window (ADR-0224).
+        """This tradition's perspective entries.
 
-        Resolved directly: get_queryset is beginning_id-scoped and would 404
-        every detail route.
+        Knowledge-ungated within CG per ADR-0224; still requires an
+        authenticated account (see #3305 review). Resolved directly:
+        get_queryset is beginning_id-scoped and would 404 every detail route.
         """
         try:
             tradition = Tradition.objects.get(pk=pk, is_active=True)

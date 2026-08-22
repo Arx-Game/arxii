@@ -6,7 +6,7 @@ This file provides guidance for Claude Code when working with the React frontend
 
 ## React Frontend Architecture
 
-Modern React application with TypeScript, Vite, and Tailwind CSS powering the Arx II game experience.
+Modern React application with TypeScript, Vite, and Tailwind CSS powering the Arx game experience.
 
 ### Core Stack
 
