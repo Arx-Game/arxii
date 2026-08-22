@@ -4,7 +4,6 @@ import {
   RegistrationStatus,
   SignupResponse,
   SocialProvider,
-  StatusData,
 } from './types';
 import { getCookie } from '@/lib/utils';
 
@@ -31,14 +30,6 @@ export function apiFetch(url: string, options: RequestInit = {}) {
     ...options,
     headers,
   });
-}
-
-export async function fetchStatus(): Promise<StatusData> {
-  const res = await apiFetch('/api/status/');
-  if (!res.ok) {
-    throw new Error('Failed to load status');
-  }
-  return res.json();
 }
 
 export async function fetchAccount(): Promise<AccountData | null> {

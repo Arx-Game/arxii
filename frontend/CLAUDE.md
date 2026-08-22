@@ -2,7 +2,7 @@
 
 This file provides guidance for Claude Code when working with the React frontend.
 
-**This is the game.** The frontend is not a companion to a text-based MUD - it is the primary and intended way players experience Arx II. Every feature should be designed as a first-class web experience: interactive UI components, visual feedback, rich layouts. Think modern web RPG, not terminal emulator with a coat of paint.
+**This is the game.** The frontend is not a companion to a text-based MUD - it is the primary and intended way players experience Arx. Every feature should be designed as a first-class web experience: interactive UI components, visual feedback, rich layouts. Think modern web RPG, not terminal emulator with a coat of paint.
 
 ## React Frontend Architecture
 

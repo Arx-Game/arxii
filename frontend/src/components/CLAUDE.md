@@ -35,9 +35,8 @@ Character-specific UI components:
 
 ### Specialized Components
 
-- **`SceneListCard.tsx`**: Scene display component
-- **`ScenesSpotlight.tsx`**: Featured scenes display
-- **`QuickActions.tsx`**: Quick action menu
+- **`SceneListCard.tsx`**: Scene display component (kept for reuse; its former caller,
+  `ScenesSpotlight.tsx`, was removed in the Gatefold landing-page rebuild — #3305)
 - **`SearchSelect.tsx`**: Searchable select component
 - **`TenureSearch.tsx`**, **`TenureMultiSearch.tsx`**: Character search components
 - **`WelcomePanel.tsx`**: First-login home-page card for an authenticated account — "Enter the
