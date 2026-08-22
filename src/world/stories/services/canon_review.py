@@ -165,12 +165,26 @@ def ensure_canon_review_for_story(story: Story, gm_profile: GMProfile | None) ->
       the GM's level cap.
 
     Idempotent — safe to call on every readiness check / impact-tier save.
+    A repeat call short-circuits to the existing CLEARED review once one
+    covers the required tier (at or above it), rather than minting a second
+    row: ``request_canon_review``'s own dedup only matches a still-PENDING
+    row, so without this a second call after an auto-clear (PENDING ->
+    CLEARED, nothing PENDING left to match) would open and immediately
+    auto-clear a brand new review every time it's called.
     """
     from world.stories.constants import ImpactTier  # noqa: PLC0415
 
+    tier_order = [ImpactTier.TABLE, ImpactTier.REGIONAL, ImpactTier.WORLD]
     tier = escalation_tier_for_story(story)
     if tier == ImpactTier.TABLE:
         return None
+
+    cleared = (
+        story.canon_reviews.filter(status=CanonReviewStatus.CLEARED).order_by("-created_at").first()
+    )
+    if cleared is not None and tier_order.index(cleared.tier) >= tier_order.index(tier):
+        return cleared
+
     review = request_canon_review(story, tier=tier)
     if (
         review.status == CanonReviewStatus.PENDING
