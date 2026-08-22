@@ -106,7 +106,13 @@ export function JournalComposerDialog({ open, onClose, initialTags }: JournalCom
     const payload =
       posthumousOverride === 'inherit'
         ? { title: title.trim(), body, is_public: isPublic, tags }
-        : { title: title.trim(), body, is_public: isPublic, tags, posthumous_override: posthumousOverride };
+        : {
+            title: title.trim(),
+            body,
+            is_public: isPublic,
+            tags,
+            posthumous_override: posthumousOverride,
+          };
     createEntry.mutate(payload, {
       onSuccess: () => {
         toast.success('Journal entry recorded.');

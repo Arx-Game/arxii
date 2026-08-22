@@ -22,7 +22,11 @@ import {
 } from '@/components/ui/select';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { toast } from 'sonner';
-import type { JournalEntrySummary, JournalResponseType, PosthumousJournalDisposition } from '../api';
+import type {
+  JournalEntrySummary,
+  JournalResponseType,
+  PosthumousJournalDisposition,
+} from '../api';
 import {
   useJournalDisposition,
   useJournalEntries,
