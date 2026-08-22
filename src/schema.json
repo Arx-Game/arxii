@@ -1,8 +1,8 @@
 openapi: 3.0.3
 info:
-  title: Arx II API
+  title: Arx API
   version: 0.1.0
-  description: API for Arx II MUD web interface
+  description: API for the Arx web interface
 paths:
   /api/achievements/achievements/:
     get:
@@ -3491,8 +3491,11 @@ paths:
   /api/character-creation/beginnings/{id}/perspectives/:
     get:
       operationId: character_creation_beginnings_perspectives_list
-      description: This beginning's perspective entries, ungated for the CG shop window
-        (ADR-0224).
+      description: |-
+        This beginning's perspective entries.
+
+        Knowledge-ungated within CG per ADR-0224; still requires an
+        authenticated account (see #3305 review).
       parameters:
       - in: path
         name: id
@@ -4963,10 +4966,11 @@ paths:
     get:
       operationId: character_creation_traditions_perspectives_list
       description: |-
-        This tradition's perspective entries, ungated for the CG shop window (ADR-0224).
+        This tradition's perspective entries.
 
-        Resolved directly: get_queryset is beginning_id-scoped and would 404
-        every detail route.
+        Knowledge-ungated within CG per ADR-0224; still requires an
+        authenticated account (see #3305 review). Resolved directly:
+        get_queryset is beginning_id-scoped and would 404 every detail route.
       parameters:
       - in: query
         name: beginning_id

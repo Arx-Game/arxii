@@ -2245,7 +2245,12 @@ export interface paths {
       path?: never;
       cookie?: never;
     };
-    /** @description This beginning's perspective entries, ungated for the CG shop window (ADR-0224). */
+    /**
+     * @description This beginning's perspective entries.
+     *
+     *     Knowledge-ungated within CG per ADR-0224; still requires an
+     *     authenticated account (see #3305 review).
+     */
     get: operations['character_creation_beginnings_perspectives_list'];
     put?: never;
     post?: never;
@@ -3323,10 +3328,11 @@ export interface paths {
       cookie?: never;
     };
     /**
-     * @description This tradition's perspective entries, ungated for the CG shop window (ADR-0224).
+     * @description This tradition's perspective entries.
      *
-     *     Resolved directly: get_queryset is beginning_id-scoped and would 404
-     *     every detail route.
+     *     Knowledge-ungated within CG per ADR-0224; still requires an
+     *     authenticated account (see #3305 review). Resolved directly:
+     *     get_queryset is beginning_id-scoped and would 404 every detail route.
      */
     get: operations['character_creation_traditions_perspectives_list'];
     put?: never;
