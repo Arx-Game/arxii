@@ -28,6 +28,8 @@ from world.societies.models import (
     OrganizationRank,
     OrganizationReputation,
     OrganizationType,
+    OrgAppeal,
+    OrgAppealSignon,
     PhilosophicalArchetype,
     Society,
     SocietyReputation,
@@ -170,6 +172,29 @@ class OrganizationMembershipOfferFactory(factory_django.DjangoModelFactory):
     to_persona = factory.SubFactory(PersonaFactory)
     kind = OrganizationMembershipOffer.Kind.INVITE
     status = OrganizationMembershipOffer.Status.PENDING
+
+
+class OrgAppealFactory(factory_django.DjangoModelFactory):
+    """Factory for OrgAppeal instances (#3293)."""
+
+    class Meta:
+        model = OrgAppeal
+
+    organization = factory.SubFactory(OrganizationFactory)
+    petitioner_persona = factory.SubFactory(PersonaFactory)
+    title = factory.Sequence(lambda n: f"Appeal {n}")
+    body = factory.Faker("paragraph")
+
+
+class OrgAppealSignonFactory(factory_django.DjangoModelFactory):
+    """Factory for OrgAppealSignon instances (#3293)."""
+
+    class Meta:
+        model = OrgAppealSignon
+
+    appeal = factory.SubFactory(OrgAppealFactory)
+    member_persona = factory.SubFactory(PersonaFactory)
+    note = ""
 
 
 class OrganizationObligationFactory(factory_django.DjangoModelFactory):

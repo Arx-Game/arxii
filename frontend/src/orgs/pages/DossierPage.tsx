@@ -16,6 +16,7 @@ import { ErrorBoundary } from '@/components/ErrorBoundary';
 import { Badge } from '@/components/ui/badge';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Skeleton } from '@/components/ui/skeleton';
+import { LodgeAppealDialog } from '@/orgs/components/LodgeAppealDialog';
 import { fetchOrgDossier, type OrgDossier } from '@/orgs/api';
 
 const TREND_ARROW: Record<string, string> = {
@@ -52,14 +53,17 @@ function DossierInner({ orgId }: { orgId: number }) {
     <div className="space-y-4" data-testid="dossier-page">
       <Card>
         <CardHeader className="pb-3">
-          <div className="flex items-center gap-3">
-            <CardTitle className="text-xl">{data.name}</CardTitle>
-            {data.org_type_name && <Badge variant="outline">{data.org_type_name}</Badge>}
-            {data.band_name && (
-              <Badge variant={data.trend === 'falling' ? 'destructive' : 'secondary'}>
-                {data.band_name} {TREND_ARROW[data.trend] ?? ''}
-              </Badge>
-            )}
+          <div className="flex items-center justify-between gap-3">
+            <div className="flex items-center gap-3">
+              <CardTitle className="text-xl">{data.name}</CardTitle>
+              {data.org_type_name && <Badge variant="outline">{data.org_type_name}</Badge>}
+              {data.band_name && (
+                <Badge variant={data.trend === 'falling' ? 'destructive' : 'secondary'}>
+                  {data.band_name} {TREND_ARROW[data.trend] ?? ''}
+                </Badge>
+              )}
+            </div>
+            <LodgeAppealDialog orgId={orgId} orgName={data.name} />
           </div>
         </CardHeader>
         <CardContent className="space-y-2 text-sm">

@@ -34,6 +34,7 @@ from world.societies.constants import (
     DeedKnowledgeSource,
     ObligationOrigin,
     ObligationState,
+    OrgAppealState,
 )
 from world.societies.renown_config import RenownAwardConfig
 from world.societies.types import ReputationTier
@@ -566,6 +567,13 @@ class OrganizationRank(SharedMemoryModel):
             "Covenant Sanctification."
         ),
     )
+    can_resolve_appeals = models.BooleanField(
+        default=False,
+        help_text=(
+            "Members at this rank can grant/decline appeals lodged with this "
+            "organization (#3293). Staff may always resolve regardless of this flag."
+        ),
+    )
 
     class Meta:
         ordering = ["tier"]
@@ -867,6 +875,113 @@ class OrganizationOffice(SharedMemoryModel):
 
     def __str__(self) -> str:
         return f"{self.title or self.slug} ({self.organization})"
+
+
+class OrgAppeal(SharedMemoryModel):
+    """A free-text IC ask lodged with an organization, for its members to see and answer (#3293).
+
+    "Appeal" is the canonical term for this IC ask; "petition" stays reserved for the
+    unrelated OOC staff-contact ticket (``world.player_submissions.models.Petition``) — see
+    ADR-0231.
+
+    FK direction (ADR-0010): this is the specific/dependent request model; it points at the
+    general primitives (``Organization``, ``Persona``) with no back-reference from either.
+
+    Lifecycle:
+        OPEN -> GRANTED / DECLINED  (leadership resolves, with a written answer)
+             -> WITHDRAWN           (the petitioner rescinds)
+
+    Only one OPEN appeal per (organization, petitioner) at a time (partial unique
+    constraint) — the DB constraint is the contract, per the ``GroupStoryRequest``
+    precedent (``stories/models.py`` #2119); the service layer does not pre-check it.
+    """
+
+    organization = models.ForeignKey(
+        Organization,
+        on_delete=models.CASCADE,
+        related_name="appeals",
+        help_text="The organization this appeal was lodged with.",
+    )
+    petitioner_persona = models.ForeignKey(
+        PERSONA_MODEL,
+        on_delete=models.CASCADE,
+        related_name="lodged_org_appeals",
+        help_text="The persona asking the organization for help.",
+    )
+    title = models.CharField(max_length=120, help_text="Short subject line for the ask.")
+    body = models.TextField(help_text="The free-text appeal, addressed to the organization.")
+    state = models.CharField(
+        max_length=20,
+        choices=OrgAppealState.choices,
+        default=OrgAppealState.OPEN,
+    )
+    resolution_text = models.TextField(
+        blank=True,
+        help_text=(
+            "Leadership's written answer (RP, not a mechanical payload — see #3293 "
+            "Decision 5). Empty until resolved."
+        ),
+    )
+    resolved_by_persona = models.ForeignKey(
+        PERSONA_MODEL,
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="+",
+        help_text="The member persona who granted/declined this appeal. Null until resolved.",
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+    resolved_at = models.DateTimeField(null=True, blank=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ["-created_at"]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["organization", "petitioner_persona"],
+                condition=models.Q(state=OrgAppealState.OPEN),
+                name="unique_open_org_appeal_per_petitioner",
+            ),
+        ]
+        indexes = [
+            models.Index(fields=["organization", "state"]),
+        ]
+
+    def __str__(self) -> str:
+        return f"OrgAppeal({self.organization.name}: {self.title!r} state={self.state})"
+
+
+class OrgAppealSignon(SharedMemoryModel):
+    """A member's public show of support for an open :class:`OrgAppeal` (#3293).
+
+    Visible to org members and the petitioner — leadership sees who champions the
+    ask, and the petitioner sees who to thank. One row per (appeal, member).
+    """
+
+    appeal = models.ForeignKey(
+        OrgAppeal,
+        on_delete=models.CASCADE,
+        related_name="signons",
+    )
+    member_persona = models.ForeignKey(
+        PERSONA_MODEL,
+        on_delete=models.CASCADE,
+        related_name="org_appeal_signons",
+    )
+    note = models.CharField(max_length=240, blank=True, help_text="Optional short note.")
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["created_at"]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["appeal", "member_persona"],
+                name="unique_org_appeal_signon_per_member",
+            ),
+        ]
+
+    def __str__(self) -> str:
+        return f"OrgAppealSignon(appeal=#{self.appeal_id}, member=#{self.member_persona_id})"
 
 
 class SocietyReputation(SharedMemoryModel):

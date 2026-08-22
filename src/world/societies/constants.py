@@ -325,3 +325,21 @@ class ObligationState(models.TextChoices):
     OWED = "owed", "Owed"
     SETTLED = "settled", "Settled"
     SETTLED_BY_SPONSOR = "settled_by_sponsor", "Settled by Sponsor"
+
+
+# ---------------------------------------------------------------------------
+# OrgAppeal (#3293) — appeals to organizations
+# ---------------------------------------------------------------------------
+
+
+class OrgAppealState(models.TextChoices):
+    """Lifecycle of an :class:`~world.societies.models.OrgAppeal`.
+
+    ``OPEN`` is the only state a member may sign onto or leadership may
+    resolve; ``GRANTED``/``DECLINED``/``WITHDRAWN`` are all terminal.
+    """
+
+    OPEN = "open", "Open"
+    GRANTED = "granted", "Granted"
+    DECLINED = "declined", "Declined"
+    WITHDRAWN = "withdrawn", "Withdrawn"
