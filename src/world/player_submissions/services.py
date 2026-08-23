@@ -31,6 +31,7 @@ if TYPE_CHECKING:
     from evennia.objects.models import ObjectDB
 
     from typeclasses.characters import Character
+    from world.player_submissions.models import PlayerReport
     from world.scenes.models import Persona, Scene
 
 logger = logging.getLogger(__name__)
@@ -269,3 +270,103 @@ def submit_check_proposal(  # noqa: PLR0913 - one column per structured proposal
         situation_text=situation_text,
         scene=scene,
     )
+
+
+class HiddenPresenceReportError(Exception):
+    """No reportable hidden presence at the reporter's location. Safe user message."""
+
+    def __init__(self, msg: str, *, user_message: str) -> None:
+        super().__init__(msg)
+        self.user_message = user_message
+
+
+def report_hidden_presence(
+    *,
+    reporter_account: AccountDB,
+    reporter_persona: Persona,
+    behavior_description: str,
+    category: str,
+) -> list[PlayerReport]:
+    """File PlayerReports against the concealed occupants of the reporter's room (#3288).
+
+    The "hidden identity, disclosed presence" ruling's enforcement half: anyone can
+    report an unseen presence without learning who it is. Identity resolution happens
+    entirely server-side — one PlayerReport per concealed occupant currently in the
+    reporter's room, anchored on that occupant's ACTIVE persona (never surfaced to
+    the reporter; staff reads it from the submissions queue).
+
+    Raises HiddenPresenceReportError when the reporter has no location, no concealed
+    occupant is present, or a concealed occupant can't be resolved to a persona.
+    """
+    from django.core.exceptions import ObjectDoesNotExist  # noqa: PLC0415
+    from evennia.objects.models import ObjectDB  # noqa: PLC0415
+
+    from world.conditions.models import ConditionInstance  # noqa: PLC0415
+    from world.player_submissions.models import PlayerReport  # noqa: PLC0415
+    from world.scenes.interaction_services import get_active_scene  # noqa: PLC0415
+    from world.scenes.services import active_persona_for_sheet  # noqa: PLC0415
+
+    location_id = (
+        ObjectDB.objects.filter(pk=reporter_persona.character_sheet_id)
+        .values_list("db_location_id", flat=True)
+        .first()
+    )
+    if location_id is None:
+        msg = "reporter has no location"
+        raise HiddenPresenceReportError(msg, user_message="You aren't anywhere reportable.")
+
+    occupant_ids = list(
+        ObjectDB.objects.filter(db_location_id=location_id).values_list("pk", flat=True)
+    )
+    concealed_ids = set(
+        ConditionInstance.objects.filter(
+            target_id__in=occupant_ids,
+            condition__category__conceals_from_perception=True,
+            is_suppressed=False,
+            resolved_at__isnull=True,
+        ).values_list("target_id", flat=True)
+    )
+    concealed_ids.discard(reporter_persona.character_sheet_id)
+    if not concealed_ids:
+        msg = "no concealed occupant present"
+        raise HiddenPresenceReportError(
+            msg, user_message="There is no hidden presence here to report."
+        )
+
+    location = ObjectDB.objects.filter(pk=location_id).first()
+    scene = get_active_scene(location) if location is not None else None
+
+    reports: list[PlayerReport] = []
+    for concealed in ObjectDB.objects.filter(pk__in=concealed_ids):
+        try:
+            sheet = concealed.sheet_data
+        except (AttributeError, ObjectDoesNotExist):
+            continue
+        reported_persona = active_persona_for_sheet(sheet)
+        if reported_persona is None or reported_persona.pk == reporter_persona.pk:
+            continue
+        try:
+            entry = sheet.roster_entry
+            tenure = entry.current_tenure
+        except ObjectDoesNotExist:
+            tenure = None
+        if tenure is None:
+            continue
+        reports.append(
+            PlayerReport.objects.create(
+                reporter_account=reporter_account,
+                reported_account_id=tenure.player_data.account_id,
+                reporter_persona=reporter_persona,
+                reported_persona=reported_persona,
+                behavior_description=behavior_description,
+                category=category,
+                scene=scene,
+                location_id=location_id,
+            )
+        )
+    if not reports:
+        msg = "concealed occupants unresolvable to played personas"
+        raise HiddenPresenceReportError(
+            msg, user_message="There is no hidden presence here to report."
+        )
+    return reports

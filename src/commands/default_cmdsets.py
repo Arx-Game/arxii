@@ -170,6 +170,7 @@ from commands.social.tidings import CmdTidings
 from commands.speaker_queue import CmdLine  # #2356
 from commands.species_gm import CmdMakeShade  # #2862 gap close
 from commands.sphinx import CmdSphinx  # #2640
+from commands.stealth import CmdSneak
 from commands.story import CmdStory
 from commands.story_rooms import CmdJoinRoom, CmdLeaveRoom, CmdSceneRoom  # #2450
 from commands.technique import CmdTechnique
@@ -350,6 +351,8 @@ class CharacterCmdSet(default_cmds.CharacterCmdSet):
             # #1463 — self-presence toggles: transient away + persistent quiet/hidden mode.
             CmdAfk,
             CmdHide,
+            # #3288 — mundane stealth stance: IC concealment, OOC presence disclosed.
+            CmdSneak,
             # #1491 — telnet face of RestAction; spend AP to become Well-Rested.
             CmdRest,
             CmdSelect,

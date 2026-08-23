@@ -1,7 +1,7 @@
 """Security check resolution helpers (#2180).
 
 Thin mapping layer that maps a SecurityCheckKind to its CheckType and
-delegates to the existing perform_check pipeline. Callers (child issues
+delegates to the existing perform_check_with_modifiers pipeline. Callers (child issues
 #2176, #2178, #2179) compute target_difficulty from domain context (lock
 level, guard level, window height) and pass it as an int.
 """
@@ -15,7 +15,7 @@ from world.checks.constants import (
     SECURITY_CHECK_TYPE_NAMES,
     SecurityCheckKind,
 )
-from world.checks.services import perform_check
+from world.checks.services import perform_check_with_modifiers
 
 if TYPE_CHECKING:
     from evennia.objects.models import ObjectDB
@@ -60,7 +60,9 @@ def resolve_security_check(
         )
         raise ValueError(msg)
     stat_override = SECURITY_CHECK_STAT_OVERRIDE.get(kind)
-    return perform_check(
+    # #3288: modifier-aware delegation — conditions/equipment/fashion reach a
+    # security roll exactly as they already reached guard detection's inline roll.
+    return perform_check_with_modifiers(
         actor,
         check_type,
         target_difficulty=target_difficulty,
