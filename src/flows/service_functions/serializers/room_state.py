@@ -338,7 +338,30 @@ class RoomStatePayloadSerializer(serializers.Serializer):
             "npc_givers": self._get_npc_givers(room),
             "decorations": self._get_decorations(room),
             "comfort_level": self._get_comfort_level(room),
+            "has_unseen_presence": self._has_unseen_presence(room),
         }
+
+    def _has_unseen_presence(self, room: BaseState) -> bool:
+        """#3288 — whether ANY occupant carries active concealment, room-derived.
+
+        The mandatory OOC disclosure ("hidden identity, disclosed presence"):
+        unconditional and scene-independent, closing the gap where a room with
+        players but no formal Scene disclosed nothing. Deliberately ignores
+        per-viewer detection piercing — a viewer who has pierced the concealment
+        simply has strictly more information; the flag never carries identity.
+        One batched EXISTS query over the room's occupants (no-queries-in-loops).
+        """
+        from world.conditions.models import ConditionInstance  # noqa: PLC0415
+
+        occupant_ids = [state.obj.pk for state in room.contents if state.obj.pk is not None]
+        if not occupant_ids:
+            return False
+        return ConditionInstance.objects.filter(
+            target_id__in=occupant_ids,
+            condition__category__conceals_from_perception=True,
+            is_suppressed=False,
+            resolved_at__isnull=True,
+        ).exists()
 
     def _get_decorations(self, room: BaseState) -> list[str]:
         """#2991 — placed decoration names, oldest first, so decor is legible in scenes.

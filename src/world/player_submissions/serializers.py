@@ -8,7 +8,7 @@ from django.core.exceptions import ObjectDoesNotExist
 from evennia.objects.models import ObjectDB
 from rest_framework import serializers
 
-from world.player_submissions.constants import PetitionCategory
+from world.player_submissions.constants import PetitionCategory, ReportCategory
 from world.player_submissions.github_issues import (
     issue_draft_for_bug,
     issue_draft_for_error,
@@ -234,6 +234,27 @@ class PlayerReportCreateSerializer(serializers.ModelSerializer):
         attrs["reported_persona"] = reported
         attrs["reported_account_id"] = _account_for_persona(reported)
         return attrs
+
+
+class HiddenPresenceReportCreateSerializer(serializers.Serializer):
+    """#3288 — report the unseen presence in your current room.
+
+    Deliberately carries NO reported-identity input: the reporter never learns who
+    the hidden presence is. Resolution happens server-side in
+    ``services.report_hidden_presence`` against the concealed occupants of the
+    reporter's room.
+    """
+
+    reporter_persona = serializers.PrimaryKeyRelatedField(queryset=Persona.objects.all())
+    category = serializers.ChoiceField(
+        choices=ReportCategory.choices,
+        default=ReportCategory.HARASSMENT,
+    )
+    behavior_description = serializers.CharField()
+
+    def validate_reporter_persona(self, value: Persona) -> Persona:
+        account = self.context["account"]
+        return _validate_owned_persona(value, account.pk)
 
 
 class PlayerReportDetailSerializer(serializers.ModelSerializer):
