@@ -266,7 +266,12 @@ def execute_settlement(character_sheet: CharacterSheet, *, via: str) -> EstateSe
 
 
 def _apply_estate(settlement: EstateSettlement) -> None:
-    """Debts -> bequests (kind-major) -> residuary sweep -> substitution -> claims."""
+    """Debts -> bequests (kind-major) -> residuary sweep -> substitution -> claims.
+
+    The journal afterlife (#3287) rides this same pipeline: reveal runs unconditionally for
+    every settlement (Decision 2 — no new death hook), and a WRITINGS bequest mints a
+    read-access grant instead of moving a specific asset (Decision 3).
+    """
     sheet = settlement.character_sheet
     will = Will.objects.filter(character_sheet=sheet).first()
     bequests = list(will.bequests.all()) if will is not None else []
@@ -292,6 +297,45 @@ def _apply_estate(settlement: EstateSettlement) -> None:
     _substitute_contracts(sheet, heir_persona, heir_org)
     _end_residency_and_work(sheet)
     _mint_claims(sheet, settlement, bequests, heir_persona, heir_org)
+    _reveal_journals(sheet, settlement)
+    _grant_writings_bequests(sheet, settlement, bequests, heir_persona)
+
+
+def _reveal_journals(sheet: CharacterSheet, settlement: EstateSettlement) -> None:
+    """Always runs (#3287 Decision 2) — the journal reveal has no bequest of its own."""
+    from world.journals.services import reveal_journals_for_settlement  # noqa: PLC0415
+
+    reveal_journals_for_settlement(sheet, settlement)
+
+
+def _grant_writings_bequests(
+    sheet: CharacterSheet,
+    settlement: EstateSettlement,
+    bequests: list[Bequest],
+    heir_persona: Any,
+) -> None:
+    """A WRITINGS bequest mints a JournalBequestGrant instead of moving a specific asset.
+
+    An invalid/refusing named recipient falls through to the estate heir, mirroring every
+    other bequest kind's ademption/fall-through rule. No heir at all: the bequest lapses —
+    there is no "estate keeps it" state for a read-access grant.
+    """
+    from world.journals.services import grant_journal_bequest  # noqa: PLC0415
+
+    for bequest in bequests:
+        if bequest.kind != BequestKind.WRITINGS:
+            continue
+        recipient_persona = bequest.recipient_persona
+        target = (
+            recipient_persona if _persona_recipient_is_valid(recipient_persona) else heir_persona
+        )
+        if target is None:
+            continue
+        grant_journal_bequest(
+            recipient_sheet=target.character_sheet,
+            deceased_sheet=sheet,
+            settlement=settlement,
+        )
 
 
 def _resolve_estate_heir(sheet: CharacterSheet, residuary: Bequest | None) -> tuple[Any, Any]:

@@ -31,6 +31,7 @@ import world.areas.models
 import world.assets.models
 import world.battles.models
 import world.beta_reset.models
+import world.boards.models
 import world.boundaries.models
 import world.buildings.models
 import world.captivity.models

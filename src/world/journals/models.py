@@ -9,7 +9,7 @@ from django.utils.functional import cached_property
 from evennia.utils.idmapper.models import SharedMemoryModel
 
 from world.character_sheets.models import CharacterSheet
-from world.journals.constants import ResponseType
+from world.journals.constants import PosthumousOverride, ResponseType
 
 if TYPE_CHECKING:
     from world.game_clock.models import GameWeek
@@ -60,11 +60,37 @@ class JournalEntry(SharedMemoryModel):
         help_text="System-derived IC timestamp. Populated when IC time system exists.",
     )
 
+    # Posthumous disposition (#3287) — the black journal afterlife. INHERIT (default) falls
+    # through to the author's CharacterSheet.posthumous_journal_disposition; REVEAL/SEAL pin
+    # this one entry. revealed_at/revealed_by_settlement are stamped ONLY by
+    # world.journals.services.reveal_journals_for_settlement, called from
+    # estates.services.execute_settlement — never any other path. is_public is never mutated
+    # by a reveal, so authorship history stays true even after the entry surfaces.
+    posthumous_override = models.CharField(
+        max_length=7,
+        choices=PosthumousOverride.choices,
+        default=PosthumousOverride.INHERIT,
+    )
+    revealed_at = models.DateTimeField(
+        null=True,
+        blank=True,
+        help_text="Stamped at estate settlement when this private entry's disposition is REVEAL.",
+    )
+    revealed_by_settlement = models.ForeignKey(
+        "arxii.EstateSettlement",
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="revealed_journal_entries",
+        help_text="Which settlement revealed this entry — audit trail (#3287 spec Decision 2).",
+    )
+
     class Meta:
         indexes = [
             models.Index(fields=["-created_at"]),
             models.Index(fields=["author", "-created_at"]),
             models.Index(fields=["is_public", "-created_at"]),
+            models.Index(fields=["revealed_at"]),
         ]
         constraints = [
             models.CheckConstraint(
@@ -91,6 +117,17 @@ class JournalEntry(SharedMemoryModel):
     def cached_responses(self) -> list:
         """Responses to this entry. Supports Prefetch(to_attr=)."""
         return list(self.responses.all())
+
+    def effective_posthumous_disposition(self) -> str:
+        """Resolve INHERIT to the author's sheet-level default (#3287).
+
+        Returns a plain string comparable to both ``PosthumousOverride`` and
+        ``CharacterSheet.PosthumousJournalDisposition`` values — the two TextChoices
+        deliberately share the "reveal"/"seal" literals.
+        """
+        if self.posthumous_override != PosthumousOverride.INHERIT:
+            return self.posthumous_override
+        return self.author.posthumous_journal_disposition
 
     def __str__(self) -> str:
         return f"{self.title} by {self.author}"
@@ -162,3 +199,43 @@ class WeeklyJournalXP(SharedMemoryModel):
 
     def __str__(self) -> str:
         return f"WeeklyJournalXP for {self.character_sheet}"
+
+
+class JournalBequestGrant(SharedMemoryModel):
+    """A bequest of writings: read access to a deceased sheet's non-sealed private entries.
+
+    Minted ONLY inside ``estates.services.execute_settlement`` (via
+    ``world.journals.services.grant_journal_bequest``) when the deceased's will carries a
+    ``BequestKind.WRITINGS`` line — never any other way, so the grant's mere existence proves
+    a settlement happened (#3287 Decision 3). SEAL beats a grant: a sealed entry stays
+    unreadable even to a granted recipient — enforced at the read path, not here.
+    """
+
+    recipient_sheet = models.ForeignKey(
+        CharacterSheet,
+        on_delete=models.CASCADE,
+        related_name="journal_bequests_received",
+    )
+    deceased_sheet = models.ForeignKey(
+        CharacterSheet,
+        on_delete=models.CASCADE,
+        related_name="journal_bequests_granted",
+    )
+    created_by_settlement = models.ForeignKey(
+        "arxii.EstateSettlement",
+        on_delete=models.CASCADE,
+        related_name="journal_bequest_grants",
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["deceased_sheet_id", "id"]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["recipient_sheet", "deceased_sheet"],
+                name="unique_journal_bequest_grant",
+            ),
+        ]
+
+    def __str__(self) -> str:
+        return f"{self.recipient_sheet} inherits {self.deceased_sheet}'s writings"

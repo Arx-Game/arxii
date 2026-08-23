@@ -7,7 +7,7 @@ import django.db.models.deletion
 
 class Migration(migrations.Migration):
     dependencies = [
-        ("arxii", "0163_interaction_attributed_companion"),
+        ("arxii", "0167_organizationrank_can_declare_standing_and_more"),
         migrations.swappable_dependency(settings.AUTH_USER_MODEL),
     ]
 

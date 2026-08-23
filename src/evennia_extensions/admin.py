@@ -17,6 +17,7 @@ from evennia_extensions.models import (
     PageBackground,
     PlayerAllowList,
     PlayerData,
+    RoomDescVariant,
     RoomProfile,
     RoomSizeTier,
 )
@@ -246,12 +247,21 @@ class EmailAddressAdmin(admin.ModelAdmin):
     mark_as_unverified.short_description = "Mark selected email addresses as unverified"
 
 
+class RoomDescVariantInline(admin.TabularInline):
+    """Season/time-of-day description variants authored for a room (#3291)."""
+
+    model = RoomDescVariant
+    extra = 1
+    fields: ClassVar[list[str]] = ["season", "phase", "description"]
+
+
 @admin.register(RoomProfile)
 class RoomProfileAdmin(admin.ModelAdmin):
     list_display: ClassVar[list[str]] = ["objectdb", "area", "size", "is_outdoor", "is_public"]
     list_filter: ClassVar[list[str]] = ["area__level", "is_outdoor", "is_public", "size"]
     search_fields: ClassVar[list[str]] = ["objectdb__db_key"]
     autocomplete_fields: ClassVar[list[str]] = ["area", "objectdb"]
+    inlines: ClassVar[list[type[admin.TabularInline]]] = [RoomDescVariantInline]
 
 
 @admin.register(RoomSizeTier)

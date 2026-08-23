@@ -65,6 +65,8 @@ vi.mock('../queries', () => ({
   useJournalEntry: () => mockUseJournalEntry(),
   useRespondToJournal: () => mockUseRespondToJournal(),
   useCreateJournalEntry: () => mockUseCreateJournalEntry(),
+  useJournalDisposition: () => ({ data: undefined }),
+  useSetJournalDisposition: () => ({ mutate: vi.fn(), isPending: false }),
 }));
 
 import { JournalsPage } from '../pages/JournalsPage';
@@ -82,6 +84,9 @@ function makeEntry(overrides: Partial<JournalEntrySummary> = {}): JournalEntrySu
     edited_at: null,
     tags: [],
     response_count: 0,
+    posthumous_override: 'inherit',
+    revealed_at: null,
+    is_posthumous: false,
     ...overrides,
   };
 }

@@ -17,6 +17,7 @@ from world.societies.filters import (
     OrganizationMembershipFilter,
     OrganizationMembershipOfferFilter,
     OrganizationRankFilter,
+    StandingDeclarationFilter,
 )
 from world.societies.models import (
     Organization,
@@ -24,6 +25,7 @@ from world.societies.models import (
     OrganizationMembershipOffer,
     OrganizationRank,
     OrganizationReputation,
+    StandingDeclaration,
 )
 from world.societies.permissions import IsOwnMembership, active_persona_q
 from world.societies.serializers import (
@@ -33,6 +35,7 @@ from world.societies.serializers import (
     OrganizationReputationSerializer,
     OrganizationSerializer,
     OrgDossierSerializer,
+    StandingDeclarationSerializer,
 )
 from world.tidings.serializers import PublicFeedItemSerializer
 
@@ -339,3 +342,28 @@ class OrganizationMembershipOfferViewSet(viewsets.ReadOnlyModelViewSet):
             organization__memberships__exiled_at__isnull=True,
         )
         return (owned | received | org_visible).distinct()
+
+
+class StandingDeclarationViewSet(viewsets.ReadOnlyModelViewSet):
+    """List/retrieve leader favor/disfavor declarations (#3290).
+
+    Public read to any authenticated player (spec decision 4) — org politics
+    played through declarations are meant to be legible to bystanders, unlike
+    the raw ``OrganizationReputation`` value they move (which stays self-only,
+    see ``OrganizationReputationViewSet``). Writes never happen here — a
+    declaration is minted by ``DeclareStandingAction`` (web + telnet), which
+    calls ``world.societies.standing_services.declare_standing``.
+    """
+
+    queryset = StandingDeclaration.objects.select_related(
+        "organization", "target_persona", "declared_by_persona"
+    ).order_by("-created_at")
+    serializer_class = StandingDeclarationSerializer
+    permission_classes = [IsAuthenticated]
+    pagination_class = SocietiesPagination
+    filter_backends = [DjangoFilterBackend]
+    filterset_class = StandingDeclarationFilter
+
+    def get_queryset(self):
+        qs = super().get_queryset()
+        return qs.filter(organization__covenant__isnull=True)

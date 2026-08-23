@@ -31,6 +31,7 @@ from world.societies.models import (
     Society,
     SocietyReputation,
     SpreadingConfig,
+    StandingDeclaration,
 )
 
 # =============================================================================
@@ -333,8 +334,16 @@ class OrganizationRankAdmin(admin.ModelAdmin):
         "can_kick",
         "can_manage_ranks",
         "can_lead_rituals",
+        "can_declare_standing",
     ]
-    list_filter = ["organization", "can_invite", "can_kick", "can_manage_ranks", "can_lead_rituals"]
+    list_filter = [
+        "organization",
+        "can_invite",
+        "can_kick",
+        "can_manage_ranks",
+        "can_lead_rituals",
+        "can_declare_standing",
+    ]
     ordering = ["organization", "tier"]
 
 
@@ -391,6 +400,30 @@ class OrganizationReputationAdmin(admin.ModelAdmin):
         return obj.get_tier().display_name
 
     get_tier_display.short_description = "Tier"
+
+
+@admin.register(StandingDeclaration)
+class StandingDeclarationAdmin(admin.ModelAdmin):
+    """Admin interface for StandingDeclaration — the leader favor/disfavor audit log.
+
+    ``delta_applied`` is deliberately visible here even though the player-facing
+    API omits it (#3290) — staff dispute resolution needs the exact magnitude.
+    """
+
+    list_display = [
+        "organization",
+        "target_persona",
+        "declared_by_persona",
+        "direction",
+        "delta_applied",
+        "game_week",
+        "created_at",
+    ]
+    list_filter = ["organization", "direction"]
+    search_fields = ["target_persona__name", "declared_by_persona__name", "citation"]
+    ordering = ["-created_at"]
+    raw_id_fields = ["organization", "target_persona", "declared_by_persona", "game_week"]
+    readonly_fields = ["created_at"]
 
 
 # =============================================================================

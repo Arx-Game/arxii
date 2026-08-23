@@ -36,6 +36,7 @@ const room: WorldBuilderRoom = {
   clues: [],
   clue_triggers: [],
   portal_anchors: [],
+  desc_variants: [],
 };
 
 const exits: WorldBuilderExit[] = [

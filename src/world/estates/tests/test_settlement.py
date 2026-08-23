@@ -3,6 +3,7 @@
 from django.test import TestCase
 
 from world.character_sheets.factories import CharacterSheetFactory
+from world.character_sheets.types import PosthumousJournalDisposition
 from world.currency.constants import ContractFormality, ContractStatus
 from world.currency.models import Business, Contract, ContractTerm
 from world.currency.services import get_or_create_purse, get_or_create_treasury
@@ -13,6 +14,9 @@ from world.estates.services import execute_settlement, open_settlement
 from world.items.constants import OwnershipEventType
 from world.items.factories import ItemInstanceFactory
 from world.items.models import OwnershipEvent
+from world.journals.constants import PosthumousOverride
+from world.journals.factories import JournalEntryFactory
+from world.journals.models import JournalBequestGrant
 from world.roster.factories import RosterEntryFactory, RosterTenureFactory
 from world.societies.factories import OrganizationFactory
 from world.vitals.constants import CharacterLifeState
@@ -239,3 +243,103 @@ class IntestateJourneyTests(TestCase):
         item.refresh_from_db()
         self.assertIsNone(item.holder_character_sheet)
         self.assertEqual(get_or_create_treasury(org).balance, 250)
+
+
+class JournalAfterlifeSettlementTests(TestCase):
+    """The black-journal afterlife riding execute_settlement (#3287): the three
+    dispositions plus a WRITINGS bequest."""
+
+    def test_reveal_disposition_stamps_private_entries(self):
+        sheet = _dead_sheet()
+        sheet.posthumous_journal_disposition = PosthumousJournalDisposition.REVEAL
+        sheet.save(update_fields=["posthumous_journal_disposition"])
+        entry = JournalEntryFactory(author=sheet, is_public=False)
+        open_settlement(sheet)
+        settlement = execute_settlement(sheet, via=SettlementDoor.AUTO)
+        entry.refresh_from_db()
+        self.assertIsNotNone(entry.revealed_at)
+        self.assertEqual(entry.revealed_by_settlement, settlement)
+        self.assertFalse(entry.is_public)
+
+    def test_seal_disposition_never_reveals(self):
+        sheet = _dead_sheet()
+        sheet.posthumous_journal_disposition = PosthumousJournalDisposition.SEAL
+        sheet.save(update_fields=["posthumous_journal_disposition"])
+        entry = JournalEntryFactory(author=sheet, is_public=False)
+        open_settlement(sheet)
+        execute_settlement(sheet, via=SettlementDoor.AUTO)
+        entry.refresh_from_db()
+        self.assertIsNone(entry.revealed_at)
+
+    def test_per_entry_override_wins_over_sheet_default(self):
+        sheet = _dead_sheet()
+        sheet.posthumous_journal_disposition = PosthumousJournalDisposition.REVEAL
+        sheet.save(update_fields=["posthumous_journal_disposition"])
+        sealed_entry = JournalEntryFactory(
+            author=sheet, is_public=False, posthumous_override=PosthumousOverride.SEAL
+        )
+        open_settlement(sheet)
+        execute_settlement(sheet, via=SettlementDoor.AUTO)
+        sealed_entry.refresh_from_db()
+        self.assertIsNone(sealed_entry.revealed_at)
+
+    def test_writings_bequest_grants_recipient_access(self):
+        sheet = _dead_sheet()
+        recipient = _living_persona()
+        will = WillFactory(character_sheet=sheet)
+        BequestFactory(
+            will=will,
+            kind=BequestKind.WRITINGS,
+            recipient_persona=recipient,
+        )
+        BequestFactory(will=will, kind=BequestKind.RESIDUARY, recipient_persona=recipient)
+        open_settlement(sheet)
+        settlement = execute_settlement(sheet, via=SettlementDoor.AUTO)
+        grant = JournalBequestGrant.objects.get(
+            recipient_sheet=recipient.character_sheet, deceased_sheet=sheet
+        )
+        self.assertEqual(grant.created_by_settlement, settlement)
+
+    def test_writings_bequest_falls_through_to_heir_when_recipient_invalid(self):
+        sheet = _dead_sheet()
+        dead_recipient = _dead_sheet()
+        heir = _living_persona()
+        will = WillFactory(character_sheet=sheet)
+        BequestFactory(
+            will=will,
+            kind=BequestKind.WRITINGS,
+            recipient_persona=dead_recipient.primary_persona,
+        )
+        BequestFactory(will=will, kind=BequestKind.RESIDUARY, recipient_persona=heir)
+        open_settlement(sheet)
+        execute_settlement(sheet, via=SettlementDoor.AUTO)
+        self.assertFalse(
+            JournalBequestGrant.objects.filter(
+                recipient_sheet=dead_recipient, deceased_sheet=sheet
+            ).exists()
+        )
+        self.assertTrue(
+            JournalBequestGrant.objects.filter(
+                recipient_sheet=heir.character_sheet, deceased_sheet=sheet
+            ).exists()
+        )
+
+    def test_no_writings_bequest_no_grant(self):
+        sheet = _dead_sheet()
+        heir = _living_persona()
+        will = WillFactory(character_sheet=sheet)
+        BequestFactory(will=will, kind=BequestKind.RESIDUARY, recipient_persona=heir)
+        open_settlement(sheet)
+        execute_settlement(sheet, via=SettlementDoor.AUTO)
+        self.assertFalse(JournalBequestGrant.objects.filter(deceased_sheet=sheet).exists())
+
+    def test_reveal_runs_even_with_no_will_at_all(self):
+        """Decision 2 — reveal has no bequest of its own; it always runs at settlement."""
+        sheet = _dead_sheet()
+        sheet.posthumous_journal_disposition = PosthumousJournalDisposition.REVEAL
+        sheet.save(update_fields=["posthumous_journal_disposition"])
+        entry = JournalEntryFactory(author=sheet, is_public=False)
+        open_settlement(sheet)
+        execute_settlement(sheet, via=SettlementDoor.AUTO)
+        entry.refresh_from_db()
+        self.assertIsNotNone(entry.revealed_at)

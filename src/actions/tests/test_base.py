@@ -348,6 +348,7 @@ class ActionRegistryTests(TestCase):
             "org_promote",
             "org_demote",
             "org_expel",
+            "declare_standing",
             "treat_condition",
             "break_free",
             "reveal_condition",
@@ -360,6 +361,7 @@ class ActionRegistryTests(TestCase):
             "create_journal_entry",
             "respond_to_journal",
             "edit_journal_entry",
+            "set_journal_disposition",
             "set_character_goals",
             "log_goal_progress",
             "claim_kudos",
@@ -606,9 +608,11 @@ class ActionRegistryTests(TestCase):
             "staff_remove_functionary",
             "staff_remove_place",
             "staff_remove_room",
+            "staff_remove_room_desc_variant",
             "staff_remove_room_feature",
             "staff_set_exit_detail",
             "staff_set_room_blueprint",
+            "staff_set_room_desc_variant",
             "staff_set_room_stat",
             "staff_set_starting_room",
             "staff_set_travel_hub",
@@ -637,6 +641,10 @@ class ActionRegistryTests(TestCase):
             "leave_story_room",
             "spin_up_scene_room",
             "close_scene_room",
+            # #3286 — player-postable bulletin boards.
+            "post_to_board",
+            "edit_board_post",
+            "remove_board_post",
         }
         assert set(ACTIONS_BY_KEY.keys()) == expected_keys
 
