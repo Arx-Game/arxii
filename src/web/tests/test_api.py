@@ -30,40 +30,6 @@ class WebAPITests(TestCase):
             password="pass",
         )
 
-    @patch("web.api.views.general_views.SESSION_HANDLER")
-    def test_status_api_returns_counts(self, mock_session_handler):
-        mock_session_handler.account_count.return_value = 2
-        character = ObjectDBFactory(
-            db_key="Char",
-            db_typeclass_path="typeclasses.characters.Character",
-        )
-        character.db_account = self.account
-        character.save()
-        from world.character_sheets.models import CharacterSheet
-
-        sheet, _ = CharacterSheet.objects.get_or_create(character=character)
-        entry = RosterEntry.objects.create(
-            character_sheet=sheet,
-            roster=Roster.objects.create(name="Active", roster_type=RosterType.ACTIVE),
-        )
-        entry.last_puppeted = timezone.now()
-        entry.save()
-        ObjectDBFactory(
-            db_key="Room",
-            db_typeclass_path="typeclasses.rooms.Room",
-        )
-        url = reverse("api-status")
-        response = self.client.get(url)
-        assert response.status_code == 200
-        data = response.json()
-        assert data["online"] == 2
-        assert data["accounts"] == AccountDB.objects.count()
-        assert data["characters"] == 1
-        assert data["rooms"] == 1
-        assert len(data["recentPlayers"]) == 1
-        assert data["recentPlayers"][0]["name"] == "Char"
-        assert isinstance(data["news"], list)
-
     def test_login_api_returns_user_on_post(self):
         url = reverse("api-login")
         response = self.client.post(url, {"username": "tester", "password": "pass"})

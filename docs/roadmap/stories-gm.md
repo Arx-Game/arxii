@@ -437,3 +437,26 @@ deliberately does **not** call it — it runs outside story participation.
 `CHARACTER_LEVEL_AT_LEAST` beats now flip in real time on an in-play advance, in
 addition to login catch-up (`catch_up_character_stories`) and retroactive match
 on new story progress.
+
+### Canon-review request loop + GLOBAL-scope gate — DONE (#3304)
+
+The #2003 canon-review lifecycle (`CanonReview`, `CanonReviewViewSet`,
+`story_is_cleared` gating) shipped with no production caller ever creating a
+review row — a Lead GM setting `story impact <id>=regional|world` produced a
+tier that could only clear via a staff hand-created row in Django admin.
+`ensure_canon_review_for_story(story, gm_profile)` (`canon_review.py`) closes
+the loop: the web impact-setting path, telnet `story impact`, and the
+escalation-aware readiness check now all request (and, for a REGIONAL tier
+and an auto-clearing GM level, immediately system-clear) a review. See
+`docs/systems/stories.md`'s "Review-request loop (#3304)" section for the
+full seam-by-seam breakdown.
+
+`allow_global_scope_authoring` (`GMLevelCap`) was similarly unconsumed outside
+factories/admin — GLOBAL-scope story authoring is now gated on it at the
+`assign-to-scope` scope<->target invariant, with the usual staff bypass and
+most-restrictive (refuse) fallback when no cap row exists.
+
+The staff-facing side landed too: `pending_canon_reviews` was already computed
+by `StaffWorkloadView` but never rendered — `PendingCanonReviewsPanel` on
+`StaffWorkloadPage` now lists the pending queue and wires
+`CanonReviewViewSet`'s `clear`/`changes` actions.

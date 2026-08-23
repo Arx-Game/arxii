@@ -147,3 +147,52 @@ class CompanionBindJourneyTests(EvenniaTestCase):
         self.assertIsNotNone(companion.released_at)
         self.assertFalse(companion.is_active)
         self.assertFalse(ObjectDB.objects.filter(pk=object_id).exists())
+
+    def test_bind_emote_journey(self) -> None:
+        """Full bind -> companion emote -> feed attribution loop (#3294).
+
+        Proves the tactical bind seam and the new social emote seam compose:
+        a freshly bound companion is present in the owner's room, so the
+        emote succeeds immediately, and the resulting scene-feed Interaction
+        carries the companion attribution while authorship stays the owner's.
+        """
+        from actions.definitions.companions import BindCompanionAction, CompanionEmoteAction
+        from world.checks.test_helpers import force_check_outcome
+        from world.companions.models import Companion, CompanionArchetype
+        from world.scenes.constants import InteractionMode
+        from world.scenes.models import Interaction
+        from world.traits.factories import CheckOutcomeFactory
+
+        hawk = CompanionArchetype.objects.get(name="Hawk")
+        success = CheckOutcomeFactory(name="Journey Emote Bind Success", success_level=5)
+        with force_check_outcome(success):
+            bind_result = BindCompanionAction().run(
+                actor=self.owner, gift_id=self.gift.pk, archetype_id=hawk.pk, name="Skree"
+            )
+        self.assertTrue(bind_result.success, bind_result.message)
+        companion = Companion.objects.get(name="Skree")
+
+        emote_result = CompanionEmoteAction().run(
+            actor=self.owner,
+            companion_id=companion.pk,
+            text="Skree screeches and wheels overhead.",
+        )
+        self.assertTrue(emote_result.success, emote_result.message)
+
+        interaction = Interaction.objects.get(content="Skree screeches and wheels overhead.")
+        self.assertEqual(interaction.mode, InteractionMode.POSE)
+        self.assertEqual(interaction.attributed_companion_id, companion.pk)
+        self.assertEqual(interaction.persona.character_sheet_id, self.sheet.pk)
+
+        # Moving the companion out of the room blocks a further emote (no
+        # ghost-posing an absent pet) — the prior interaction still stands.
+        self.owner.__dict__.pop("companions", None)
+        companion.objectdb.location = self.room_b
+        companion.objectdb.save()
+        absent_result = CompanionEmoteAction().run(
+            actor=self.owner,
+            companion_id=companion.pk,
+            text="Skree screeches from afar.",
+        )
+        self.assertFalse(absent_result.success)
+        self.assertFalse(Interaction.objects.filter(content="Skree screeches from afar.").exists())

@@ -1,4 +1,14 @@
-"""ChallengeContent — capabilities, properties, applications, and starter challenges.
+"""ChallengeContent — integration-test content builder, deliberately NOT a runtime seeder.
+
+Builds the Capabilities & Challenges content suite with FactoryBoy factories for the
+pipeline integration tests (``src/integration_tests/pipeline/test_challenge_pipeline.py``,
+``test_situation_pipeline.py``), which import it through the
+``integration_tests.game_content.challenges`` compatibility facade. It is intentionally
+absent from ``CLUSTER_SEEDERS`` — the runtime consequence-layer bootstrap rows come from
+the ``social_actions``/``magic``/``items``/``spy_tasks``/``survivability`` seeders. Born
+as Phase 7 integration-test content (#379); relocated here with the other seed-content
+builders by roadmap 3.2 (#1220); provenance traced in #3090 after it was mistaken for a
+dead seeder.
 
 Creates the full Capabilities & Challenges content suite:
   - 19 CapabilityTypes (physical, magical, social, mental)

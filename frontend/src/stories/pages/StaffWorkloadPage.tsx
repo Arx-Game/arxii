@@ -28,6 +28,7 @@ import { WorkloadStatCard } from '../components/WorkloadStatCard';
 import { PerGMQueueTable } from '../components/PerGMQueueTable';
 import { StaleStoriesTable } from '../components/StaleStoriesTable';
 import { FrontierStoriesTable } from '../components/FrontierStoriesTable';
+import { PendingCanonReviewsPanel } from '../components/PendingCanonReviewsPanel';
 import { ExpireBeatsButton } from '../components/ExpireBeatsButton';
 import { SendGemitDialog } from '@/narrative/components/SendGemitDialog';
 import type { StaffWorkloadResponse } from '../types';
@@ -83,7 +84,14 @@ function LoadingSkeleton() {
       </section>
 
       {/* Tables */}
-      {(['Per-GM Queue Depth', 'Stale Stories', 'Stories at Frontier'] as const).map((title) => (
+      {(
+        [
+          'Per-GM Queue Depth',
+          'Stale Stories',
+          'Stories at Frontier',
+          'Pending Canon Reviews',
+        ] as const
+      ).map((title) => (
         <section key={title}>
           <Skeleton className="mb-4 h-6 w-48" />
           <TableSkeleton rows={3} />
@@ -227,6 +235,16 @@ function StaffWorkloadInner({ data }: { data: StaffWorkloadResponse }) {
         <SectionHeader title="Stories at Frontier" count={data.stories_at_frontier.length} />
         <div className="mt-4">
           <FrontierStoriesTable entries={data.stories_at_frontier} />
+        </div>
+      </section>
+
+      {/* ------------------------------------------------------------------ */}
+      {/* Pending canon reviews (#2003/#3304)                                  */}
+      {/* ------------------------------------------------------------------ */}
+      <section data-testid="pending-canon-reviews-section">
+        <SectionHeader title="Pending Canon Reviews" count={data.pending_canon_reviews.length} />
+        <div className="mt-4">
+          <PendingCanonReviewsPanel entries={data.pending_canon_reviews} />
         </div>
       </section>
 

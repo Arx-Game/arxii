@@ -1,7 +1,7 @@
 """Companion API views (#672).
 
-Read surface + write endpoints (bind/release/fight/deploy) that converge on
-``action.run()`` via ``PuppetActorMixin`` — the same pattern as
+Read surface + write endpoints (bind/release/fight/deploy/order/emote) that
+converge on ``action.run()`` via ``PuppetActorMixin`` — the same pattern as
 ``SanctumViewSet`` (#1497).
 """
 
@@ -18,6 +18,7 @@ from rest_framework.response import Response
 
 from actions.definitions.companions import (
     BindCompanionAction,
+    CompanionEmoteAction,
     CompanionFightAction,
     DeployCompanionAction,
     OrderCompanionAction,
@@ -29,6 +30,7 @@ from world.companions.serializers import (
     BindActionSerializer,
     CompanionArchetypeSerializer,
     CompanionSerializer,
+    EmoteActionSerializer,
     OrderActionSerializer,
 )
 from world.magic.views_actor import PuppetActorMixin
@@ -66,8 +68,10 @@ def _active_persona_for_request(request: Request) -> Persona | None:
 class CompanionViewSet(PuppetActorMixin, viewsets.ReadOnlyModelViewSet):
     """Read + action endpoints for the player's companion surface.
 
-    `list`/`retrieve` return the caller's own active companions (read-only).
-    POST actions delegate to the four Actions in
+    `list`/`retrieve` return the caller's own active companions (read-only),
+    each carrying `is_present` (#3294) — whether the companion's live object
+    currently shares the actor's room, gating the web composer's "as
+    <companion>" emote toggle. POST actions delegate to the Actions in
     ``actions/definitions/companions.py``; ``ActionResult`` fields map 1:1 to
     the response bodies so the contract matches ``SanctumViewSet`` (#1918).
     """
@@ -84,7 +88,15 @@ class CompanionViewSet(PuppetActorMixin, viewsets.ReadOnlyModelViewSet):
             return Companion.objects.none()
         return Companion.objects.filter(
             owner=persona.character_sheet, released_at__isnull=True
-        ).select_related("archetype")
+        ).select_related("archetype", "objectdb")
+
+    def get_serializer_context(self):
+        """Seed ``actor_location_id`` (#3294) — see ``CompanionSerializer.get_is_present``."""
+        context = super().get_serializer_context()
+        persona = _active_persona_for_request(self.request)
+        if persona is not None:
+            context["actor_location_id"] = persona.character_sheet.character.db_location_id
+        return context
 
     # ------------------------------------------------------------------
     # Write endpoints — converge on action.run()
@@ -189,6 +201,34 @@ class CompanionViewSet(PuppetActorMixin, viewsets.ReadOnlyModelViewSet):
             target_id=serializer.validated_data.get("target_id"),
             ability_id=serializer.validated_data.get("ability_id"),
             ally_id=serializer.validated_data.get("ally_id"),
+        )
+        if not result.success:
+            return Response({"detail": result.message}, status=status.HTTP_400_BAD_REQUEST)
+        return Response(result.data)
+
+    @action(detail=True, methods=["post"], url_path="emote")
+    def emote(self, request, pk=None):
+        """Pose as a bonded, present companion — ``POST
+        /api/companions/companions/{id}/emote/`` (#3294).
+
+        Wraps :class:`actions.definitions.companions.CompanionEmoteAction`. The
+        companion id comes from the URL; ``get_queryset`` scopes it to the
+        caller's own active companions (foreign -> 404). The Action re-validates
+        ownership + room presence via ``CompanionPresentPrerequisite`` (defense
+        in depth).
+        """
+        serializer = EmoteActionSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        companion = self.get_object()
+        actor = self._resolve_actor(request)
+        if actor is None:
+            return Response(
+                {"detail": NO_ACTIVE_CHARACTER_DETAIL}, status=status.HTTP_400_BAD_REQUEST
+            )
+        result = CompanionEmoteAction().run(
+            actor=actor,
+            companion_id=companion.pk,
+            text=serializer.validated_data["text"],
         )
         if not result.success:
             return Response({"detail": result.message}, status=status.HTTP_400_BAD_REQUEST)

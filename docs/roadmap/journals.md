@@ -51,8 +51,16 @@ IC writing by players — journals, praises, retorts, and weekly XP awards. Jour
   write-then-filter, since a rejection here can't leak); a mute persists the response normally
   but excludes it from the entry AUTHOR's own read (`JournalEntryViewSet.retrieve`) — any other
   viewer is unaffected.
+- **Weekly-vote UI on public journal entries (#3302)** — `VoteButton` (`targetType="journal"`)
+  is mounted on `JournalsPage`'s public feed rows and the in-scene `JournalTab`, gated by
+  `is_public` and hidden when `entry.author` (a CharacterSheet id) is one of the viewer's own
+  roster characters (the backend already refuses self-votes, via
+  `services/voting.py::get_author_account_for_target`, so this is a UX-only guard). Shares the
+  same weekly budget as pose/action votes and shows up in `VotesPanel`'s history via the
+  existing `journal` target-type label; no backend change was needed, since the JOURNAL vote
+  target was already fully wired.
 
-- **Posthumous afterlife (#3287, ADR-0227)** — private entries no longer die with their
+- **Posthumous afterlife (#3287, ADR-0229)** — private entries no longer die with their
   author. `CharacterSheet.posthumous_journal_disposition` (REVEAL default / SEAL) plus a
   per-entry `JournalEntry.posthumous_override` (INHERIT default / REVEAL / SEAL) decide the
   fate; `world.journals.services.reveal_journals_for_settlement` and `.grant_journal_bequest`

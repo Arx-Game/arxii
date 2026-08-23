@@ -81,6 +81,33 @@ Telnet: `companion mount <name|id>` / `companion dismount` (`CmdCompanion`,
 `DismountCompanionAction` (`actions/definitions/companions.py`) on the same
 REGISTRY seam every other companion verb uses.
 
+## Companion emote (#3294)
+
+Companions are characters, not turrets: an owner can pose *as* their bonded
+companion in a social scene. `Interaction` (`world.scenes`) gains a nullable
+`attributed_companion` FK -> `companions.Companion` (migration
+`0163_interaction_attributed_companion`) — cosmetic feed attribution only.
+`Interaction.persona` stays the companion's owner in every case, so block/
+mute/consent/moderation all key on the same field they always have; the
+attribution FK never substitutes for authorship (see the Scenes doc's
+"Companion attribution" entry for the pipeline-side detail).
+
+`actions.definitions.companions.CompanionEmoteAction` (`companion_emote`
+key) — gated by `CompanionPresentPrerequisite` (owned by the actor, active,
+AND co-located: `companion.objectdb.location == actor.location`). Presence
+is usually automatic — `Character.at_post_move` already moves a PC's active
+companions along with them (see "Room presence" above) — but the gate stops
+a ghost-pose if a companion was ever left behind. Delivery is POSE-level,
+same convention as `PoseAction`: the player writes the companion's own name
+into the pose text (no auto name-prepend).
+
+Telnet: `companion emote <name|id> <text>` (`CmdCompanion`). Web: `POST
+/api/companions/companions/{id}/emote/` (see the Write endpoints table
+below) plus a composer "as `<companion>`" toggle (`CompanionSelector.tsx`,
+pattern-mirrors `LanguageSelector.tsx`) shown only when `CompanionSerializer
+.is_present` is true for at least one bonded companion — never offered for
+an absent one.
+
 ## API
 
 `world.companions.views.{CompanionViewSet, CompanionArchetypeViewSet}` —
@@ -96,6 +123,7 @@ router routes). Read endpoints are read-only; write endpoints converge on
 | `/api/companions/companions/{id}/release/` | POST | — | `{}` (200) / `{detail}` (400) |
 | `/api/companions/companions/{id}/fight/` | POST | — | `{opponent_id}` (200) / `{detail}` (400) |
 | `/api/companions/companions/{id}/deploy/` | POST | — | `{vehicle_id}` (200) / `{detail}` (400) |
+| `/api/companions/companions/{id}/emote/` | POST | `{text}` | `{}` (200) / `{detail}` (400) |
 
 Detail-level endpoints (`release`/`fight`/`deploy`) scope the companion via
 `get_queryset` (the caller's active companions); a foreign companion returns
@@ -118,6 +146,7 @@ companion bind archetype=<name|id> gift=<name|id> name=<text>
 companion release <name|id>
 companion fight <name|id>             — requires active encounter
 companion deploy <name|id>            — requires active battle
+companion emote <name|id> <text>      — pose as a bonded, present companion (#3294)
 ```
 
 `name=` must be the final token on `bind` (it greedily consumes the rest of

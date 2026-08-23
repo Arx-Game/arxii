@@ -1,4 +1,4 @@
-# ADR-0227: Posthumous journal disposition is author-controlled, default REVEAL
+# ADR-0229: Posthumous journal disposition is author-controlled, default REVEAL
 
 **Status:** Accepted (2026-08-22, #3287).
 
