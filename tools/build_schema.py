@@ -114,7 +114,7 @@ def main() -> None:
     from django.core.management import call_command  # noqa: PLC0415
     from django.db import connection, transaction  # noqa: PLC0415
 
-    call_command("migrate", run_syncdb=True, interactive=False, verbosity=1)
+    call_command("migrate", run_syncdb=True, interactive=False, verbosity=0)
 
     if _schema_already_built(connection):
         print("schema already built (arxii_interaction is partitioned) — skipping SQL + seeds")

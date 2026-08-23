@@ -119,6 +119,10 @@ jobs:
           # seconds-per-test varies up to ~2x between apps (actions and
           # world.combat run far slower per test than the small apps).
           # Each shard targets ~344s of test runtime (+~60s fixed setup).
+          # NOTE: the per-app estimates below were measured before the
+          # CharacterCmdSet batched-add fix (object creation dropped from
+          # ~0.5s to ~20ms) and had drifted to ~2x anyway; re-measure from the
+          # --durations output of a green run before the next rebalance.
           # To refresh: pull per-shard "Run tests" step seconds from a green
           # run, scale each app's estimate by its shard's actual/estimated
           # factor, and re-balance greedily (one such iteration converges
@@ -284,6 +288,10 @@ jobs:
       # DB must have tables before `arx test` runs. Migration-chain validity
       # is gated by the makemigrations --check step (ty job) and the nightly
       # migration-replay workflow, not per-shard.
+      # ~30s. It was ~6min until build_schema.py passed verbosity=0 to
+      # migrate: at verbosity>=1 migrate runs the migration autodetector +
+      # optimizer over all ~1,200 (migration-less) models just to print a
+      # "changes not reflected in a migration" hint (ADR-0083 update).
       - name: Build schema from model state
         run: uv run python tools/build_schema.py
       # Build the test DB by CLONING the just-built default DB rather than
@@ -319,7 +327,10 @@ jobs:
             test -n "$PART_LABELS"
             LABELS="$LABELS $PART_LABELS"
           fi
-          uv run arx test --keepdb --parallel $LABELS
+          # `-- --durations 25` passes Django's --durations through the typer
+          # wrapper so every shard log ends with its 25 slowest tests - the
+          # data the matrix rebalance procedure above needs, without a local run.
+          uv run arx test --keepdb --parallel $LABELS -- --durations 25
 
   # Aggregator: succeeds iff every backend-shard matrix entry succeeded.
   # Lets branch protection require a single status check named "backend"

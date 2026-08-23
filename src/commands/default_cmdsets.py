@@ -528,8 +528,14 @@ class CharacterCmdSet(default_cmds.CharacterCmdSet):
             # #2640 — the Sphinx of Black Quartz's vow-suitability verdict.
             CmdSphinx,
         )
-        for command_cls in command_classes:
-            self.add(command_cls())
+        # One batched add, not one add() per command: Evennia's CmdSet.add()
+        # runs commands.count() (an __eq__ set-intersection against every
+        # command already in the set) and then rebuilds list(set(commands))
+        # on EVERY call, so adding ~230 commands one at a time cost ~470ms per
+        # cmdset instantiation - paid on every object creation (at_first_save)
+        # and every cmdset rebuild. Passing the list does the dedup pass once
+        # (~10ms). Same replace-on-duplicate semantics: later entries win.
+        self.add([command_cls() for command_cls in command_classes])
 
 
 class AccountCmdSet(default_cmds.AccountCmdSet):
