@@ -1941,6 +1941,30 @@ is deferred to its own follow-up (not two-party-confirm shaped).
 - **Source:** `src/world/items/trade/`
 - **Details:** [trade.md](trade.md)
 
+### Tavern Games (#3292)
+A pure social-fun coin sink: characters at a table in a social hub open a
+curated coin-stakes dice game, ante in, roll, winner takes the pot, visible
+to the room. Pure chance at MVP (no skill input); server-side `randint`.
+
+- **Models:** `TavernGame` (`NaturalKeyMixin`, curated content, one row at
+  MVP), `TavernGamblingConfig` (singleton, weekly loss cap), `GameSession`
+  (place + game + escrowed pot, OPEN/RESOLVED/ABANDONED), `GameSeat`
+  (ante_paid + nullable roll_result), `GamblingLossLedger`
+  (character_sheet + game_week, mirrors `currency.PurseDrainWeek`)
+- **Services:** `world.tavern_games.services` - open_session/join_session/
+  roll/leave_session; ante is a currency sink into `GameSession.pot`, payout
+  is a currency mint from the pot, refund on leave; loss-cap refusal locks +
+  bumps the week's ledger row in the same transaction as the ante sink;
+  highest-roll resolve with whole-table re-roll on a tie; public POSE/OUTCOME
+  narration via `world.scenes.interaction_services`
+- **Surfaces:** 4 REGISTRY actions (`tavern_game_open`/`_join`/`_roll`/
+  `_leave`); `/api/tavern-games/` (`games/` read-only catalog, `sessions/`
+  read + open/join/roll/leave custom actions); telnet `game` namespace; web
+  Place-bar game widget; seeds cluster `tavern_games`
+- **Source:** `src/world/tavern_games/`
+- **Details:** [tavern-games.md](tavern-games.md)
+- **Glossary:** `src/world/tavern_games/AGENT_GLOSSARY.md`
+
 ### Roster
 Character lifecycle management with web-first applications and player anonymity.
 

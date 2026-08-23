@@ -174,6 +174,7 @@ from commands.sphinx import CmdSphinx  # #2640
 from commands.stealth import CmdSneak
 from commands.story import CmdStory
 from commands.story_rooms import CmdJoinRoom, CmdLeaveRoom, CmdSceneRoom  # #2450
+from commands.tavern_games import CmdGame  # #3292
 from commands.technique import CmdTechnique
 from commands.threads import CmdThreads
 from commands.training import CmdTrain  # #2739
@@ -523,6 +524,8 @@ class CharacterCmdSet(default_cmds.CharacterCmdSet):
             # #2503 — GM improv stage-prop namespace (conjure a prop / tag a property).
             CmdStage,
             CmdMarket,
+            # #3292 - tavern games: coin-stakes dice gambling open/join/roll/leave.
+            CmdGame,
             # #1832 — ship commission/upgrade/repair/status namespace.
             CmdShip,
             # #2179 — vault access-list management namespace.

@@ -42,6 +42,7 @@ import { threadToComposerMode, tabKeyToComposerMode } from '@/scenes/hooks/threa
 import { usePendingUnlinkedActions } from '@/scenes/hooks/usePendingUnlinkedActions';
 import { ConsentPrompt } from '@/scenes/components/ConsentPrompt';
 import { PlaceBar } from '@/scenes/components/PlaceBar';
+import { TavernGameWidget } from '@/scenes/components/TavernGameWidget';
 import { SpeakerQueueBar } from '@/scenes/components/SpeakerQueueBar';
 import { ActionPanel } from '@/scenes/components/ActionPanel';
 import { PendingActionAttachments } from '@/scenes/components/PendingActionAttachments';
@@ -543,6 +544,9 @@ export function GamePage() {
                   : undefined
               }
               placeBar={placesRoomId ? <PlaceBar sceneId={placesRoomId} /> : undefined}
+              tavernGameWidget={
+                placesRoomId ? <TavernGameWidget roomId={placesRoomId} /> : undefined
+              }
               speakerQueueBar={placesRoomId ? <SpeakerQueueBar roomId={placesRoomId} /> : undefined}
               pendingAttachments={
                 sceneId ? (

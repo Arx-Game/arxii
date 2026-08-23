@@ -358,6 +358,44 @@ export interface SpeakerQueue {
 }
 
 // ---------------------------------------------------------------------------
+// Tavern games types (#3292)
+// ---------------------------------------------------------------------------
+
+export interface TavernGame {
+  id: number;
+  name: string;
+  rules_blurb: string;
+  min_ante: number;
+  max_ante: number;
+  resolution_kind: string;
+  is_active: boolean;
+}
+
+export interface GameSeat {
+  id: number;
+  persona: number;
+  persona_name: string;
+  ante_paid: number;
+  roll_result: number | null;
+  seated_at: string;
+}
+
+export interface GameSession {
+  id: number;
+  place: number;
+  place_name: string;
+  game: number;
+  game_name: string;
+  state: 'open' | 'resolved' | 'abandoned';
+  ante: number;
+  pot: number;
+  opened_by: number;
+  opened_at: string;
+  resolved_at: string | null;
+  seats: GameSeat[];
+}
+
+// ---------------------------------------------------------------------------
 // Standalone technique cast types
 // ---------------------------------------------------------------------------
 

@@ -1,5 +1,19 @@
 # Crafting, Fashion & Economy
 
+## Built (2026-08-22, #3292 - tavern games)
+
+Coin-stakes dice gambling at a scene Place (spec on #3292): `game open
+<name>=<ante>` at a social hub, ante escrowed into a session pot via the
+currency service (never a parallel ledger), highest-roll resolve (tied
+leaders re-roll the whole table), refund-on-leave, and a per-character
+weekly loss cap (`TavernGamblingConfig`, PLACEHOLDER magnitude) as the
+escape valve. Public POSE/OUTCOME narration to the room. One seeded dice
+game rides the clone-bootstrap seed path. Web Place-bar widget + telnet
+`game` namespace + `/api/tavern-games/`. See
+[tavern-games.md](tavern-games.md). Deferred: cheating as a Skulduggery
+move, card games with hidden state, NPC house games/rake, side bets, and a
+real idle-session timeout sweep.
+
 ## Built (2026-08-02, #2886 — accents round 2)
 
 - The ratified accent vocabulary (7 axes) + `AccentExclusion` oppositions;

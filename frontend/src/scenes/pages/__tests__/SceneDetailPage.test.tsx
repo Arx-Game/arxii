@@ -78,6 +78,15 @@ vi.mock('../../actionQueries', async () => {
     respondToRequest: vi.fn(),
     fetchActionPanelData: vi.fn(() => Promise.resolve({ techniques: [], pending_requests: [] })),
     fetchPlaces: vi.fn(() => Promise.resolve({ results: [] })),
+    // Tavern games (#3292): TavernGameWidget mounts alongside PlaceBar and
+    // pulls these in - empty results so it renders nothing in this suite,
+    // which isn't exercising the coin-stakes widget itself.
+    fetchTavernGames: vi.fn(() => Promise.resolve({ results: [] })),
+    fetchTavernGameSessions: vi.fn(() => Promise.resolve({ results: [] })),
+    openTavernGameSession: vi.fn(),
+    joinTavernGameSession: vi.fn(),
+    rollTavernGameSession: vi.fn(),
+    leaveTavernGameSession: vi.fn(),
     fetchAvailableActions,
     useAvailableActionsQuery: (
       characterId: number | null,
