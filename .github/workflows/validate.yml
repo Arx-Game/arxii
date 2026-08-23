@@ -88,6 +88,15 @@ jobs:
           if [ -f infra/ansible/site.yml ]; then
             ansible-playbook --syntax-check -i 'localhost,' infra/ansible/site.yml
           fi
+          # The converge scripts load ansible.cfg via ANSIBLE_CONFIG (#3325).
+          # Prove the cfg actually LOADS in this collections environment: a
+          # cfg referencing an unavailable plugin (e.g. stdout_callback =
+          # yaml, no community.general) parses and lints fine but kills the
+          # real converge at startup — exactly the 2026-08-23 19:05 run.
+          # syntax-check above doesn't exercise the callback path; a real
+          # (local, trivial) play does.
+          printf -- '---\n- hosts: localhost\n  connection: local\n  gather_facts: false\n  tasks:\n    - name: Cfg loads\n      ansible.builtin.debug:\n        msg: ok\n' > /tmp/cfg-smoke.yml
+          ANSIBLE_CONFIG=infra/ansible/ansible.cfg ansible-playbook -i 'localhost,' /tmp/cfg-smoke.yml
 
   secrets-scan:
     # Public repo + secrets-adjacent infra => NOT deferrable. Scans full
