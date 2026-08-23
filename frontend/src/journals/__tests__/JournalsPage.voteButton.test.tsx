@@ -65,6 +65,8 @@ vi.mock('../queries', () => ({
   useJournalEntry: () => mockUseJournalEntry(),
   useRespondToJournal: () => mockUseRespondToJournal(),
   useCreateJournalEntry: () => mockUseCreateJournalEntry(),
+  useJournalDisposition: () => ({ data: undefined }),
+  useSetJournalDisposition: () => ({ mutate: vi.fn(), isPending: false }),
 }));
 
 import { JournalsPage } from '../pages/JournalsPage';
