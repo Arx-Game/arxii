@@ -194,3 +194,15 @@ _Avoid_: maiden name, birth suffix.
 **Degree of Address**:
 How much of a composed name a persona leads with (`NameDegree`: familiar / common / styled / full formal), a per-Persona preference orthogonal to the **Title Suffix** (`TitleSuffixMode`: none / primary / all held titles). Formal contexts render full formal regardless of preference.
 _Avoid_: name length setting, verbosity.
+
+**Appeal** (`OrgAppeal`, #3293):
+The canonical IC term for a free-text ask lodged with an organization — any character may lodge one, members read and sign onto it, leadership resolves it (`GRANTED`/`DECLINED`) with a written answer, or the petitioner withdraws it. Mirrors `GroupStoryRequest`'s OPEN→resolved shape for a different target (org vs. GM pool). See ADR-0231.
+_Avoid_: **petition** — that word is reserved for the unrelated OOC staff-contact ticket (`player_submissions.Petition`); never use it for this IC surface.
+
+**Sign On** (`OrgAppealSignon`):
+A member's public show of support for an open Appeal — visible to org members and the petitioner, distinct from resolving it. Recorded as one row per (appeal, member); re-signing on is idempotent, not an error.
+_Avoid_: co-sign, endorse (Endorse is a separate scene-pose mechanic).
+
+**can_resolve_appeals**:
+The `OrganizationRank` capability flag gating who may grant or decline an Appeal for that organization — independent of `can_manage_ranks`; staff may always resolve regardless of rank.
+_Avoid_: appeal permission, resolver flag.

@@ -126,3 +126,97 @@ export async function fetchStandingDeclarations(orgId: number): Promise<Standing
   const data = (await res.json()) as PaginatedStandingDeclarations;
   return data.results;
 }
+// ---------------------------------------------------------------------------
+// Appeals to organizations (#3293)
+//
+// Hand-rolled types: the generated `components['schemas']` types above come
+// from `pnpm generate:types` running against a live drf-spectacular schema,
+// which this change doesn't regenerate. Swap these for the generated
+// equivalents the next time that step runs.
+// ---------------------------------------------------------------------------
+
+export type OrgAppealState = 'open' | 'granted' | 'declined' | 'withdrawn';
+
+export interface OrgAppealSignon {
+  id: number;
+  member_persona: number;
+  member_persona_name: string;
+  note: string;
+  created_at: string;
+}
+
+export interface OrgAppeal {
+  id: number;
+  organization: number;
+  organization_name: string;
+  petitioner_persona: number;
+  petitioner_persona_name: string;
+  title: string;
+  body: string;
+  state: OrgAppealState;
+  resolution_text: string;
+  resolved_by_persona: number | null;
+  resolved_by_persona_name: string;
+  created_at: string;
+  resolved_at: string | null;
+  signons: OrgAppealSignon[];
+}
+
+interface PaginatedOrgAppeals {
+  results: OrgAppeal[];
+}
+
+/** List appeals visible to the requester for one organization (#3293). */
+export async function fetchOrgAppeals(orgId: number): Promise<OrgAppeal[]> {
+  const res = await apiFetch(`/api/societies/appeals/?organization=${orgId}`);
+  if (!res.ok) await throwApiError(res, 'Failed to load appeals');
+  const data = (await res.json()) as PaginatedOrgAppeals;
+  return data.results;
+}
+
+/** Lodge an appeal with an organization. POST /api/societies/appeals/ */
+export async function lodgeOrgAppeal(
+  orgId: number,
+  title: string,
+  body: string
+): Promise<OrgAppeal> {
+  const res = await apiFetch('/api/societies/appeals/', {
+    method: 'POST',
+    body: JSON.stringify({ organization: orgId, title, body }),
+  });
+  if (!res.ok) await throwApiError(res, 'Failed to lodge the appeal');
+  return res.json();
+}
+
+/** Sign onto an open appeal. POST /api/societies/appeals/{id}/signon/ */
+export async function signonOrgAppeal(appealId: number, note: string): Promise<OrgAppeal> {
+  const res = await apiFetch(`/api/societies/appeals/${appealId}/signon/`, {
+    method: 'POST',
+    body: JSON.stringify({ note }),
+  });
+  if (!res.ok) await throwApiError(res, 'Failed to sign onto the appeal');
+  return res.json();
+}
+
+/** Grant/decline an open appeal. POST /api/societies/appeals/{id}/resolve/ */
+export async function resolveOrgAppeal(
+  appealId: number,
+  verdict: 'grant' | 'decline',
+  answer: string
+): Promise<OrgAppeal> {
+  const res = await apiFetch(`/api/societies/appeals/${appealId}/resolve/`, {
+    method: 'POST',
+    body: JSON.stringify({ verdict, answer }),
+  });
+  if (!res.ok) await throwApiError(res, 'Failed to resolve the appeal');
+  return res.json();
+}
+
+/** Withdraw your own open appeal. POST /api/societies/appeals/{id}/withdraw/ */
+export async function withdrawOrgAppeal(appealId: number): Promise<OrgAppeal> {
+  const res = await apiFetch(`/api/societies/appeals/${appealId}/withdraw/`, {
+    method: 'POST',
+  });
+  if (!res.ok) await throwApiError(res, 'Failed to withdraw the appeal');
+  return res.json();
+}

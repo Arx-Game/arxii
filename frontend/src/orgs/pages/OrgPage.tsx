@@ -25,6 +25,7 @@ import {
   useChooseCrisisOption,
   useStandingDeclarationsQuery,
 } from '@/orgs/queries';
+import { AppealsPanel } from '@/orgs/components/AppealsPanel';
 import { OperationsSection } from '@/tasking/components/OperationsSection';
 import { BoardPanel } from '@/boards/components/BoardPanel';
 import { useBoardForOrgQuery } from '@/boards/queries';
@@ -462,6 +463,7 @@ export function OrgPageInner({
       </Card>
       {org.house && <HouseSection orgId={orgId} house={org.house} />}
       <StandingSection orgId={orgId} orgName={org.name} />
+      <AppealsPanel orgId={orgId} />
       <OperationsSection orgId={orgId} />
       <OrgBoardSection orgId={orgId} characterId={characterId} />
     </div>

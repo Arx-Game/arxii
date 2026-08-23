@@ -315,6 +315,12 @@ from actions.definitions.npc_services import (
     resolve_npc_offer,
     start_npc_interaction,
 )
+from actions.definitions.org_appeals import (
+    org_appeal_lodge_action,
+    org_appeal_resolve_action,
+    org_appeal_signon_action,
+    org_appeal_withdraw_action,
+)
 from actions.definitions.org_vault import vault_deposit, vault_withdraw
 from actions.definitions.organizations import (
     org_apply_action,
@@ -825,6 +831,10 @@ _ALL_ACTIONS: list[Action] = [
     org_demote_action,
     org_expel_action,
     declare_standing_action,
+    org_appeal_lodge_action,
+    org_appeal_signon_action,
+    org_appeal_resolve_action,
+    org_appeal_withdraw_action,
     intimidate,
     persuade,
     deceive,

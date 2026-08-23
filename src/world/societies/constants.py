@@ -360,3 +360,18 @@ STANDING_DECLARATION_DISFAVOR_DELTA = -50
 # hostile play?"), not a distinct flavor of antagonism deserving its own
 # category and its own row in every player's consent settings.
 STANDING_DISFAVOR_CONSENT_CATEGORY_KEY = "hostile"
+# OrgAppeal (#3293) — appeals to organizations
+# ---------------------------------------------------------------------------
+
+
+class OrgAppealState(models.TextChoices):
+    """Lifecycle of an :class:`~world.societies.models.OrgAppeal`.
+
+    ``OPEN`` is the only state a member may sign onto or leadership may
+    resolve; ``GRANTED``/``DECLINED``/``WITHDRAWN`` are all terminal.
+    """
+
+    OPEN = "open", "Open"
+    GRANTED = "granted", "Granted"
+    DECLINED = "declined", "Declined"
+    WITHDRAWN = "withdrawn", "Withdrawn"

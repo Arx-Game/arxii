@@ -81,6 +81,7 @@ def ensure_default_rank_ladder(organization: Organization) -> list[OrganizationR
                 # mirroring can_manage_ranks.
                 can_post_to_board=True,
                 can_moderate_board=is_top,
+                can_resolve_appeals=is_top,
             )
         )
     return ranks

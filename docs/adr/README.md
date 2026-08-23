@@ -236,6 +236,7 @@ treat those names as hints to confirm, not gospel.
 - [0228 - Stealth conceals identity, never presence - one-way disclosure](0228-stealth-conceals-identity-never-presence.md) (#3288)
 - [0229 - Posthumous journal disposition is author-controlled, default REVEAL](0229-posthumous-journal-disposition-is-author-controlled.md) (#3287; rides ADR-0133's execute_settlement, ADR-0009 no-signals)
 - [0230 - Board posts are authored by Persona, not by account or CharacterSheet](0230-board-posts-are-authored-by-persona.md) (#3286)
+- [0231 - Org appeals are a distinct IC surface from the OOC staff-contact Petition](0231-org-appeals-are-distinct-from-ooc-petitions.md) (#3293)
 
 ### Gift & resonance economy
 - [0050 — Gifts are Major or Minor; species abilities are a species-granted Minor Gift](0050-gifts-are-major-or-minor-species-abilities-are-minor-gifts.md)

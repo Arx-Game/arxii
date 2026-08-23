@@ -123,7 +123,7 @@ from commands.mood import CmdFeel, CmdSense  # #2994
 from commands.motif import CmdMotif
 from commands.network import CmdNetwork  # #2820
 from commands.offer_response import CmdDecline
-from commands.organizations import CmdOrg
+from commands.organizations import CmdAppeal, CmdOrg
 from commands.outfit import CmdOutfit  # #1866
 from commands.pacts import CmdPact
 from commands.persona import CmdPersona
@@ -481,6 +481,8 @@ class CharacterCmdSet(default_cmds.CharacterCmdSet):
             CmdCeremony,
             # #1511 — organization membership lifecycle.
             CmdOrg,
+            # #3293 — appeals to organizations.
+            CmdAppeal,
             # #1348 — progression-reward telnet commands: kudos/vote/randomscene/pathintent.
             CmdKudos,
             CmdVote,

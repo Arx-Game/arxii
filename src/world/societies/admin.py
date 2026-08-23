@@ -27,6 +27,8 @@ from world.societies.models import (
     OrganizationRank,
     OrganizationReputation,
     OrganizationType,
+    OrgAppeal,
+    OrgAppealSignon,
     RankingBandLabel,
     Society,
     SocietyReputation,
@@ -335,6 +337,7 @@ class OrganizationRankAdmin(admin.ModelAdmin):
         "can_manage_ranks",
         "can_lead_rituals",
         "can_declare_standing",
+        "can_resolve_appeals",
     ]
     list_filter = [
         "organization",
@@ -343,6 +346,7 @@ class OrganizationRankAdmin(admin.ModelAdmin):
         "can_manage_ranks",
         "can_lead_rituals",
         "can_declare_standing",
+        "can_resolve_appeals",
     ]
     ordering = ["organization", "tier"]
 
@@ -355,6 +359,34 @@ class OrganizationMembershipOfferAdmin(admin.ModelAdmin):
     list_filter = ["kind", "status", "organization"]
     readonly_fields = ["created_at", "resolved_at"]
     raw_id_fields = ["organization", "from_persona", "to_persona"]
+
+
+class OrgAppealSignonInline(admin.TabularInline):
+    """Inline for viewing an appeal's signons."""
+
+    model = OrgAppealSignon
+    extra = 0
+    fields = ["member_persona", "note", "created_at"]
+    readonly_fields = ["created_at"]
+    raw_id_fields = ["member_persona"]
+
+
+@admin.register(OrgAppeal)
+class OrgAppealAdmin(admin.ModelAdmin):
+    """Admin interface for OrgAppeal management (#3293)."""
+
+    list_display = [
+        "organization",
+        "title",
+        "petitioner_persona",
+        "state",
+        "resolved_by_persona",
+        "created_at",
+    ]
+    list_filter = ["state", "organization"]
+    readonly_fields = ["created_at", "resolved_at", "updated_at"]
+    raw_id_fields = ["organization", "petitioner_persona", "resolved_by_persona"]
+    inlines = [OrgAppealSignonInline]
 
 
 # =============================================================================

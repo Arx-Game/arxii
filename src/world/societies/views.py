@@ -6,7 +6,7 @@ from http import HTTPMethod
 
 from django_filters.rest_framework import DjangoFilterBackend
 from drf_spectacular.utils import extend_schema
-from rest_framework import viewsets
+from rest_framework import mixins, viewsets
 from rest_framework.decorators import action
 from rest_framework.pagination import PageNumberPagination
 from rest_framework.permissions import IsAuthenticated
@@ -17,6 +17,7 @@ from world.societies.filters import (
     OrganizationMembershipFilter,
     OrganizationMembershipOfferFilter,
     OrganizationRankFilter,
+    OrgAppealFilter,
     StandingDeclarationFilter,
 )
 from world.societies.models import (
@@ -25,6 +26,7 @@ from world.societies.models import (
     OrganizationMembershipOffer,
     OrganizationRank,
     OrganizationReputation,
+    OrgAppeal,
     StandingDeclaration,
 )
 from world.societies.permissions import IsOwnMembership, active_persona_q
@@ -34,10 +36,33 @@ from world.societies.serializers import (
     OrganizationRankSerializer,
     OrganizationReputationSerializer,
     OrganizationSerializer,
+    OrgAppealCreateSerializer,
+    OrgAppealResolveInputSerializer,
+    OrgAppealSerializer,
+    OrgAppealSignonInputSerializer,
     OrgDossierSerializer,
     StandingDeclarationSerializer,
 )
 from world.tidings.serializers import PublicFeedItemSerializer
+
+
+def _active_persona_for_request(request):
+    """Resolve the request user's ACTIVE persona, or None.
+
+    Small local mirror of ``world.tasking.permissions.active_persona_for_request``
+    (kept in-app rather than cross-imported from ``tasking`` — a private
+    per-file helper is the established pattern here, see e.g. `_actor_persona`
+    duplicated across `actions/definitions/*.py`).
+    """
+    from world.roster.models import RosterEntry  # noqa: PLC0415
+    from world.scenes.services import active_persona_for_sheet  # noqa: PLC0415
+
+    if not request.user.is_authenticated:
+        return None
+    entry = RosterEntry.objects.for_account(request.user).first()
+    if entry is None:
+        return None
+    return active_persona_for_sheet(entry.character_sheet)
 
 
 class SocietiesPagination(PageNumberPagination):
@@ -367,3 +392,153 @@ class StandingDeclarationViewSet(viewsets.ReadOnlyModelViewSet):
     def get_queryset(self):
         qs = super().get_queryset()
         return qs.filter(organization__covenant__isnull=True)
+
+
+class OrgAppealViewSet(
+    mixins.CreateModelMixin,
+    mixins.ListModelMixin,
+    mixins.RetrieveModelMixin,
+    viewsets.GenericViewSet,
+):
+    """Appeals to organizations (#3293) — list/read + lodge/signon/resolve/withdraw.
+
+    Read is member-gated (mirrors `tasking/views.py`'s `OrgTaskViewSet`):
+    visible rows are the organization's active members' + the petitioner's
+    own appeals — an org's inbound asks are its own business, not public.
+    Lodging, signing on, resolving, and withdrawing all dispatch through the
+    matching REGISTRY Action (ADR-0001) — the same seam telnet's `CmdAppeal`
+    uses.
+    """
+
+    queryset = (
+        OrgAppeal.objects.select_related(
+            "organization", "petitioner_persona", "resolved_by_persona"
+        )
+        .prefetch_related("signons__member_persona")  # noqa: PREFETCH_STRING
+        .order_by("-created_at")
+    )
+    serializer_class = OrgAppealSerializer
+    permission_classes = [IsAuthenticated]
+    pagination_class = SocietiesPagination
+    filter_backends = [DjangoFilterBackend]
+    filterset_class = OrgAppealFilter
+
+    def get_queryset(self):
+        qs = super().get_queryset()
+        user = self.request.user
+        if user.is_staff:
+            return qs
+        owned = qs.filter(active_persona_q(user, path="petitioner_persona"))
+        org_visible = qs.filter(
+            active_persona_q(user, path="organization__memberships__persona"),
+            organization__memberships__left_at__isnull=True,
+            organization__memberships__exiled_at__isnull=True,
+        )
+        return (owned | org_visible).distinct()
+
+    def _refetch(self, appeal: OrgAppeal) -> OrgAppeal:
+        """Re-fetch *appeal* dropping any stale ``signons`` prefetch cache.
+
+        ``self.get_object()`` may have prefetched ``signons`` before a mutating
+        action created/changed related rows; a plain ``refresh_from_db()``
+        would leave that stale cache in place (SharedMemoryModel instances are
+        shared — see the idmapper caching notes in `world/CLAUDE.md`), so drop
+        it explicitly before re-serializing.
+        """
+        appeal.refresh_from_db()
+        # `_prefetched_objects_cache` is a Django-internal instance attribute only
+        # set when prefetch_related actually ran (e.g. never on the `create()`
+        # return path, which fetches directly) — read it via __dict__ instead of
+        # getattr() so a never-prefetched appeal doesn't need a literal-default
+        # fallback (tools/lint_getattr_literal.py).
+        cache = appeal.__dict__.get("_prefetched_objects_cache")
+        if cache is not None:
+            cache.pop("signons", None)
+        return appeal
+
+    def create(self, request, *args, **kwargs):
+        """Lodge an appeal — dispatched through LodgeAppealAction (ADR-0001)."""
+        from actions.registry import get_action  # noqa: PLC0415
+
+        persona = _active_persona_for_request(request)
+        if persona is None:
+            return Response({"detail": "No active persona."}, status=400)
+
+        payload = OrgAppealCreateSerializer(data=request.data)
+        payload.is_valid(raise_exception=True)
+        data = payload.validated_data
+
+        result = get_action("org_appeal_lodge").run(
+            persona.character_sheet.character,
+            organization_id=data["organization"].pk,
+            title=data["title"],
+            body=data["body"],
+        )
+        if not result.success:
+            return Response({"detail": result.message}, status=400)
+        appeal = OrgAppeal.objects.get(pk=result.data["appeal_id"])
+        return Response(self.get_serializer(appeal).data, status=201)
+
+    @action(detail=True, methods=[HTTPMethod.POST])
+    def signon(self, request, pk=None):
+        """A member signs onto this open appeal — SignonAppealAction."""
+        from actions.registry import get_action  # noqa: PLC0415
+
+        appeal = self.get_object()
+        persona = _active_persona_for_request(request)
+        if persona is None:
+            return Response({"detail": "No active persona."}, status=400)
+
+        payload = OrgAppealSignonInputSerializer(data=request.data)
+        payload.is_valid(raise_exception=True)
+
+        result = get_action("org_appeal_signon").run(
+            persona.character_sheet.character,
+            appeal_id=appeal.pk,
+            note=payload.validated_data["note"],
+        )
+        if not result.success:
+            return Response({"detail": result.message}, status=400)
+        return Response(self.get_serializer(self._refetch(appeal)).data)
+
+    @action(detail=True, methods=[HTTPMethod.POST])
+    def resolve(self, request, pk=None):
+        """Leadership (or staff) grants/declines this open appeal — ResolveAppealAction."""
+        from actions.registry import get_action  # noqa: PLC0415
+
+        appeal = self.get_object()
+        persona = _active_persona_for_request(request)
+        if persona is None:
+            return Response({"detail": "No active persona."}, status=400)
+
+        payload = OrgAppealResolveInputSerializer(data=request.data)
+        payload.is_valid(raise_exception=True)
+        data = payload.validated_data
+
+        result = get_action("org_appeal_resolve").run(
+            persona.character_sheet.character,
+            appeal_id=appeal.pk,
+            verdict=data["verdict"],
+            answer=data["answer"],
+        )
+        if not result.success:
+            return Response({"detail": result.message}, status=400)
+        return Response(self.get_serializer(self._refetch(appeal)).data)
+
+    @action(detail=True, methods=[HTTPMethod.POST])
+    def withdraw(self, request, pk=None):
+        """The petitioner withdraws their own open appeal — WithdrawAppealAction."""
+        from actions.registry import get_action  # noqa: PLC0415
+
+        appeal = self.get_object()
+        persona = _active_persona_for_request(request)
+        if persona is None:
+            return Response({"detail": "No active persona."}, status=400)
+
+        result = get_action("org_appeal_withdraw").run(
+            persona.character_sheet.character,
+            appeal_id=appeal.pk,
+        )
+        if not result.success:
+            return Response({"detail": result.message}, status=400)
+        return Response(self.get_serializer(self._refetch(appeal)).data)

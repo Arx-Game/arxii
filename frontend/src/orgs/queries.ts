@@ -6,10 +6,15 @@ import { chooseCrisisOption } from '@/orgs/api';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 
 import {
-  fetchOrganizationByName,
-  fetchOrganizationById,
   fetchHouseFeed,
+  fetchOrganizationById,
+  fetchOrganizationByName,
+  fetchOrgAppeals,
   fetchStandingDeclarations,
+  lodgeOrgAppeal,
+  resolveOrgAppeal,
+  signonOrgAppeal,
+  withdrawOrgAppeal,
 } from './api';
 
 /**
@@ -68,5 +73,74 @@ export function useStandingDeclarationsQuery(orgId: number) {
     queryKey: ['orgs', 'standingDeclarations', orgId],
     queryFn: () => fetchStandingDeclarations(orgId),
     enabled: orgId > 0,
+  });
+}
+
+// ---------------------------------------------------------------------------
+// Appeals to organizations (#3293)
+// ---------------------------------------------------------------------------
+
+const appealsQueryKey = (orgId: number) => ['orgs', 'appeals', orgId];
+
+/** List appeals for one organization, member-gated on the backend. */
+export function useOrgAppealsQuery(orgId: number) {
+  return useQuery({
+    queryKey: appealsQueryKey(orgId),
+    queryFn: () => fetchOrgAppeals(orgId),
+    enabled: orgId > 0,
+  });
+}
+
+/** Lodge an appeal — the outsider dialog on the org's public dossier page. */
+export function useLodgeOrgAppealMutation(orgId: number) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ title, body }: { title: string; body: string }) =>
+      lodgeOrgAppeal(orgId, title, body),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: appealsQueryKey(orgId) }).catch(() => {});
+    },
+  });
+}
+
+/** Sign onto an open appeal. */
+export function useSignonOrgAppealMutation(orgId: number) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ appealId, note }: { appealId: number; note: string }) =>
+      signonOrgAppeal(appealId, note),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: appealsQueryKey(orgId) }).catch(() => {});
+    },
+  });
+}
+
+/** Grant/decline an open appeal — leadership only (backend-enforced). */
+export function useResolveOrgAppealMutation(orgId: number) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({
+      appealId,
+      verdict,
+      answer,
+    }: {
+      appealId: number;
+      verdict: 'grant' | 'decline';
+      answer: string;
+    }) => resolveOrgAppeal(appealId, verdict, answer),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: appealsQueryKey(orgId) }).catch(() => {});
+    },
+  });
+}
+
+/** Withdraw your own open appeal. */
+export function useWithdrawOrgAppealMutation(orgId: number) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (appealId: number) => withdrawOrgAppeal(appealId),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: appealsQueryKey(orgId) }).catch(() => {});
+    },
   });
 }
