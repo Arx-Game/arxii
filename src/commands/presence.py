@@ -89,8 +89,8 @@ class CmdHide(ArxCommand):
         if target:
             self.msg(
                 "You are now |yhidden|n, appearing offline. You're off where/who and "
-                "unpageable except to your allowlist; mail, missions, and channels still work, "
-                "and people in your room still see you. Type unhide to come back."
+                "unpageable except to your allowlist; OOC messages, missions, and channels "
+                "still work, and people in your room still see you. Type unhide to come back."
             )
         else:
             self.msg("You are no longer hidden; you appear online again.")

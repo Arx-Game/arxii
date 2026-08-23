@@ -6,7 +6,7 @@ from rest_framework.test import APITestCase
 
 from evennia_extensions.factories import AccountFactory
 from world.gm.constants import GMLevel
-from world.gm.factories import GMProfileFactory, seed_default_gm_level_caps
+from world.gm.factories import GMProfileFactory, GMTableFactory, seed_default_gm_level_caps
 from world.societies.constants import RenownRisk
 from world.stories.constants import (
     BeatOutcome,
@@ -31,6 +31,7 @@ from world.stories.models import Beat, CanonReview, Story, TransitionRequiredOut
 from world.stories.services.canon_review import (
     _notify_story_owners,
     clear_canon_review,
+    ensure_canon_review_for_story,
     latest_review_for_story,
     pending_canon_reviews,
     regional_auto_clears,
@@ -156,6 +157,122 @@ class CanonReviewServiceTests(TestCase):
         clear_canon_review(review, staff)
         with self.assertRaises(ValueError):
             clear_canon_review(review, staff)
+
+
+class EnsureCanonReviewForStoryTests(TestCase):
+    """``ensure_canon_review_for_story`` — the #3304 orchestrator.
+
+    tier >= REGIONAL requests a review; REGIONAL + an auto-clearing GM level
+    system-clears it immediately; WORLD never auto-clears no matter the
+    GM's level.
+    """
+
+    def setUp(self) -> None:
+        seed_default_gm_level_caps()
+
+    def test_table_tier_creates_no_review(self) -> None:
+        story = Story.objects.create(title="T", description="", impact_tier=ImpactTier.TABLE)
+        result = ensure_canon_review_for_story(story, None)
+        self.assertIsNone(result)
+        self.assertFalse(CanonReview.objects.filter(story=story).exists())
+
+    def test_world_tier_requests_pending_review_with_no_gm_profile(self) -> None:
+        story = Story.objects.create(title="T", description="", impact_tier=ImpactTier.WORLD)
+        review = ensure_canon_review_for_story(story, None)
+        self.assertIsNotNone(review)
+        self.assertEqual(review.status, CanonReviewStatus.PENDING)
+        self.assertEqual(review.tier, ImpactTier.WORLD)
+
+    def test_world_tier_never_auto_clears_for_senior_gm(self) -> None:
+        story = Story.objects.create(title="T", description="", impact_tier=ImpactTier.WORLD)
+        senior = GMProfileFactory(level=GMLevel.SENIOR)
+        review = ensure_canon_review_for_story(story, senior)
+        self.assertEqual(review.status, CanonReviewStatus.PENDING)
+
+    def test_regional_tier_pending_without_auto_clearing_gm(self) -> None:
+        story = Story.objects.create(title="T", description="", impact_tier=ImpactTier.REGIONAL)
+        junior = GMProfileFactory(level=GMLevel.JUNIOR)
+        review = ensure_canon_review_for_story(story, junior)
+        self.assertEqual(review.status, CanonReviewStatus.PENDING)
+
+    def test_regional_tier_auto_clears_for_experienced_gm(self) -> None:
+        story = Story.objects.create(title="T", description="", impact_tier=ImpactTier.REGIONAL)
+        experienced = GMProfileFactory(level=GMLevel.EXPERIENCED)
+        review = ensure_canon_review_for_story(story, experienced)
+        self.assertEqual(review.status, CanonReviewStatus.CLEARED)
+        self.assertIsNone(review.reviewer)
+        self.assertEqual(review.notes, "auto-cleared by GM level cap")
+
+    def test_regional_tier_with_no_gm_profile_stays_pending(self) -> None:
+        """No gm_profile (e.g. staff-driven web edit) never auto-clears."""
+        story = Story.objects.create(title="T", description="", impact_tier=ImpactTier.REGIONAL)
+        review = ensure_canon_review_for_story(story, None)
+        self.assertEqual(review.status, CanonReviewStatus.PENDING)
+
+    def test_idempotent_second_call_does_not_re_clear_or_duplicate(self) -> None:
+        story = Story.objects.create(title="T", description="", impact_tier=ImpactTier.REGIONAL)
+        experienced = GMProfileFactory(level=GMLevel.EXPERIENCED)
+        first = ensure_canon_review_for_story(story, experienced)
+        second = ensure_canon_review_for_story(story, experienced)
+        self.assertEqual(first.pk, second.pk)
+        self.assertEqual(CanonReview.objects.filter(story=story).count(), 1)
+
+    def test_uses_escalated_tier_not_raw_impact_tier(self) -> None:
+        """A GROUP story whose beats escalate to REGIONAL gets a review even
+        though its authored impact_tier is still TABLE."""
+        from world.stories.constants import StoryScope
+
+        story = StoryFactory(scope=StoryScope.GROUP, impact_tier=ImpactTier.TABLE)
+        BeatFactory(episode__chapter__story=story, risk=RenownRisk.EXTREME)
+        review = ensure_canon_review_for_story(story, None)
+        self.assertIsNotNone(review)
+        self.assertEqual(review.tier, ImpactTier.REGIONAL)
+        self.assertEqual(story.impact_tier, ImpactTier.TABLE)
+
+
+class ReadinessEnsuresCanonReviewTests(TestCase):
+    """``validate_stakes_readiness`` calls ``ensure_canon_review_for_story``
+    with the escalation-aware tier (#3304) — beat-driven escalation cannot
+    dodge review just because the author never raised ``impact_tier``."""
+
+    def setUp(self) -> None:
+        seed_default_gm_level_caps()
+
+    def test_group_story_extreme_beat_gets_a_review_on_readiness_check(self) -> None:
+        from world.stories.constants import StoryScope
+
+        story = StoryFactory(scope=StoryScope.GROUP, impact_tier=ImpactTier.TABLE)
+        beat = BeatFactory(episode__chapter__story=story, risk=RenownRisk.EXTREME)
+        self.assertFalse(CanonReview.objects.filter(story=story).exists())
+
+        validate_stakes_readiness(beat)
+
+        review = CanonReview.objects.get(story=story)
+        self.assertEqual(review.tier, ImpactTier.REGIONAL)
+        self.assertEqual(review.status, CanonReviewStatus.PENDING)
+
+    def test_group_story_extreme_beat_auto_clears_for_experienced_lead_gm(self) -> None:
+        from world.stories.constants import StoryScope
+
+        lead_gm = GMProfileFactory(level=GMLevel.EXPERIENCED)
+        table = GMTableFactory(gm=lead_gm)
+        story = StoryFactory(
+            scope=StoryScope.GROUP, impact_tier=ImpactTier.TABLE, primary_table=table
+        )
+        beat = BeatFactory(episode__chapter__story=story, risk=RenownRisk.EXTREME)
+
+        validate_stakes_readiness(beat)
+
+        review = CanonReview.objects.get(story=story)
+        self.assertEqual(review.status, CanonReviewStatus.CLEARED)
+
+    def test_character_scope_story_never_gets_a_review_from_readiness(self) -> None:
+        story = StoryFactory(impact_tier=ImpactTier.TABLE)
+        beat = BeatFactory(episode__chapter__story=story, risk=RenownRisk.EXTREME)
+
+        validate_stakes_readiness(beat)
+
+        self.assertFalse(CanonReview.objects.filter(story=story).exists())
 
 
 class CanonReviewReadinessIntegrationTests(TestCase):

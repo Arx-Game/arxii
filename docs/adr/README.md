@@ -170,7 +170,7 @@ treat those names as hints to confirm, not gospel.
 - [0113 — Consent defaults are a category tree, not per-category flags](0113-consent-defaults-are-a-category-tree.md) (extends ADR-0024)
 - [0114 — Player-authored accusations are weight-bearing secrets, gated by consent not the model](0114-accusations-are-weight-bearing-player-secrets.md) (extends ADR-0062/0113)
 - [0115 — Applause is three axes, not one economy: votes=popularity, kudos=graciousness, reactions=expression](0115-applause-three-axes.md)
-- [0116 — PlayerMail is the letters surface at MVP; tenure-routed anonymity is the mechanism](0116-playermail-is-the-letters-surface-at-mvp.md)
+- [0116 — PlayerMail is the letters surface at MVP; tenure-routed anonymity is the mechanism](0116-playermail-is-the-letters-surface-at-mvp.md) (superseded by ADR-0226)
 - [0117 — Relationship reads are scoped to the caller's own outbound rows, plus a soul-tether carve-out](0117-relationship-reads-scoped-to-own-outbound-rows.md)
 - [0118 — Reactive ward costs debit the applier, falling back to the bearer](0118-reactive-costs-debit-the-applier.md) (extends ADR-0060)
 - [0119 — The accusation→heat bridge lives justice-side, and its tier is emergent from the real deed underneath](0119-accusation-heat-bridge-tier-is-emergent-from-the-deed.md) (extends ADR-0114/0010)
@@ -231,6 +231,11 @@ treat those names as hints to confirm, not gospel.
 - [0223 - Technique combat power is measured in damage-equivalents against a reference matchup, with parsed (not probed) mitigation](0223-technique-combat-power-in-damage-equivalents.md) (#3279)
 - [0224 - The CG shop window serves perspective content ungated](0224-cg-shop-window-serves-perspective-content-ungated.md) (#3281; extends ADR-0222)
 - [0225 - Arx I is archived to object storage + a static basic-auth site, not kept running](0225-arx1-archived-to-object-storage-static-site.md)
+- [0226 - PlayerMail is OOC between players; IC missives are a separate system](0226-playermail-is-ooc-ic-missives-are-a-separate-system.md) (#3303; supersedes ADR-0116)
+- [0227 - The Gatefold landing page reads existing endpoints, not a new realms API](0227-gatefold-landing-page-and-shop-window-reads.md) (#3305; extends ADR-0224)
+- [0228 - Stealth conceals identity, never presence - one-way disclosure](0228-stealth-conceals-identity-never-presence.md) (#3288)
+- [0229 - Posthumous journal disposition is author-controlled, default REVEAL](0229-posthumous-journal-disposition-is-author-controlled.md) (#3287; rides ADR-0133's execute_settlement, ADR-0009 no-signals)
+- [0230 - Board posts are authored by Persona, not by account or CharacterSheet](0230-board-posts-are-authored-by-persona.md) (#3286)
 - [0231 - Org appeals are a distinct IC surface from the OOC staff-contact Petition](0231-org-appeals-are-distinct-from-ooc-petitions.md) (#3293)
 
 ### Gift & resonance economy

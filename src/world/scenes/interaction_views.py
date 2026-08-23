@@ -8,8 +8,8 @@ from django.db.models import Prefetch, Q, QuerySet
 from django_filters.rest_framework import DjangoFilterBackend
 from rest_framework import mixins, status, viewsets
 from rest_framework.decorators import action
-from rest_framework.pagination import CursorPagination, PageNumberPagination
-from rest_framework.permissions import BasePermission, IsAuthenticated
+from rest_framework.pagination import BasePagination, CursorPagination, PageNumberPagination
+from rest_framework.permissions import AllowAny, BasePermission, IsAuthenticated
 from rest_framework.request import Request
 from rest_framework.response import Response
 from rest_framework.serializers import BaseSerializer
@@ -168,6 +168,7 @@ class InteractionViewSet(
             "scene",
             "place",
             "language",  # #2993: read-time comprehension needs is_universal/trait_id inline
+            "attributed_companion",  # #3294: N+1-safe companion-attribution rendering
         ).prefetch_related(
             Prefetch(
                 "persona__character_sheet__resonances",
@@ -273,11 +274,23 @@ class InteractionViewSet(
         return InteractionListSerializer
 
     def get_permissions(self) -> list[BasePermission]:
+        if self.action == "list":
+            # Public shop-window read (#3305): landing-page scene excerpt.
+            # Scoping lives in InteractionQuerySet.visible_to's anonymous
+            # branch (public-room-heard only, 90-day bound).
+            return [AllowAny()]
         if self.action == "destroy":
             return [IsAuthenticated(), IsInteractionWriter()]
         if self.action == "retrieve":
             return [IsAuthenticated(), CanViewInteraction()]
         return [permission() for permission in self.permission_classes]
+
+    @property
+    def paginator(self) -> BasePagination | None:
+        pager = super().paginator
+        if pager is not None and not self.request.user.is_authenticated:
+            pager.page_size = 5  # landing page needs ~2; no throttling exists (#3305)
+        return pager
 
     def destroy(self, request: Request, *args: Any, **kwargs: Any) -> Response:
         interaction = self.get_object()

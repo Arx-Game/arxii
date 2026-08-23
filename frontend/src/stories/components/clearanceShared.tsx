@@ -91,6 +91,16 @@ interface ClearanceNoteDialogProps {
   triggerLabel: string;
   /** Variant for the trigger button. */
   triggerVariant?: 'default' | 'outline' | 'destructive';
+  /**
+   * When true, the note is required: the "(optional)" label suffix is
+   * hidden and submitting a blank note shows an inline error instead of
+   * calling {@link onSubmit} (mirrors CanonReviewChangesInputSerializer's
+   * required-notes contract, #3304). Defaults to false — every existing
+   * caller (grant/deny/resolve) treats the note as optional.
+   */
+  noteRequired?: boolean;
+  /** Inline error shown when noteRequired is true and the note is blank. */
+  requiredErrorMessage?: string;
 }
 
 /**
@@ -110,6 +120,8 @@ export function ClearanceNoteDialog({
   triggerLabel,
   triggerVariant,
   submitVariant,
+  noteRequired = false,
+  requiredErrorMessage = 'This field is required.',
 }: ClearanceNoteDialogProps) {
   const [open, setOpen] = useState(false);
   const [note, setNote] = useState('');
@@ -126,7 +138,12 @@ export function ClearanceNoteDialog({
   function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     setError('');
-    onSubmit(note.trim(), {
+    const trimmed = note.trim();
+    if (noteRequired && !trimmed) {
+      setError(requiredErrorMessage);
+      return;
+    }
+    onSubmit(trimmed, {
       setError,
       close: () => handleOpenChange(false),
     });
@@ -146,7 +163,8 @@ export function ClearanceNoteDialog({
           </DialogHeader>
           <div className="mt-4 space-y-1.5">
             <Label htmlFor={`${triggerTestId}-note`}>
-              {noteLabel} <span className="text-muted-foreground">(optional)</span>
+              {noteLabel}{' '}
+              {!noteRequired && <span className="text-muted-foreground">(optional)</span>}
             </Label>
             <Textarea
               id={`${triggerTestId}-note`}

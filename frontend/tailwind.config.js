@@ -19,6 +19,7 @@ export default {
     extend: {
       fontFamily: {
         display: ['Cinzel', 'Georgia', 'serif'],
+        body: ['"EB Garamond"', 'Georgia', 'serif'],
       },
       colors: {
         border: 'hsl(var(--border))',
