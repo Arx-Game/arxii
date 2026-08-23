@@ -3425,15 +3425,52 @@ enters, the intruder rolls Stealth vs. a difficulty constant.
 - **Detection service:** `check_guard_detection(character, room)`
   (`world.npc_services.guard_services`) — fires from
   `Character.at_post_move` as a `run_safely` block. Resolves the room's active
-  GUARD; if the arriving character lacks owner/tenant standing, rolls the
-  existing `Stealth` CheckType against `GUARD_DETECTION_DIFFICULTY` (PLACEHOLDER
-  50). On failure: room echo + owner `.msg()` if online and co-located. On
-  success: no echo (intruder passes unnoticed).
+  GUARD; an unauthorized arrival branches on the sneak stance (#3288): a loud
+  (non-sneaking) entrant is noticed automatically — no roll — while a sneaking
+  entrant contests `resolve_security_check(SNEAK)` against
+  `GUARD_DETECTION_DIFFICULTY` (PLACEHOLDER 50); a guard win strips the stance.
+  On detection: room echo + owner `.msg()` if online and co-located.
 - **Actions:** `assign_guard` / `unassign_guard` / `list_guard_assignments`
   (REGISTRY, `IsRoomOwnerPrerequisite`-gated, `target_type=SELF`).
 - **Telnet:** `guard` command (`guard assign <npc>` / `guard unassign` / `guard`).
 - **Deferred:** persistent security log.
 - **Source:** `src/world/npc_services/guard_services.py`
+
+### Mundane Stealth — sneak/unsneak stance (#3288, ADR-0228)
+Hidden identity, disclosed presence: a sneaking character drops off IC
+surfaces via the #1225 `Concealed` condition (sneak-sourced instances only —
+magical concealment is untouched), while every room they occupy discloses an
+identity-free unseen presence. Disclosure is one-way: arrivals always announce
+(anonymous echo + `room_state` flag), departures are silent (normal "X leaves"
+broadcast suppressed while sneaking). One concealment roll per room per visit
+(`.ndb` anti-spam token); arriving re-rolls automatically — failure strips the
+stance quietly and the arrival is a normal visible one.
+
+- **Services:** `world.stealth.services` — `is_sneaking` / `start_sneaking` /
+  `stop_sneaking` (instance-scoped by `source_description="sneaking"`),
+  `roll_sneak` (SNEAK oracle vs `SNEAK_BASE_DIFFICULTY`, PLACEHOLDER 25),
+  `reroll_on_arrival`, per-room token helpers, `refresh_room_state`.
+- **Oracle:** `resolve_security_check` (`world.checks.security_services`) now
+  delegates to `perform_check_with_modifiers` — conditions/equipment reach
+  security rolls; first live caller of the #2180 SNEAK kind.
+- **Actions:** `sneak` / `unsneak` (REGISTRY, `target_type=SELF`,
+  `actions/definitions/stealth.py`). **Telnet:** `sneak` / `unsneak`
+  (`commands/stealth.py`, `CmdHide`-style verb branch).
+- **Movement hooks:** `Character.announce_move_from` (silent while sneaking) /
+  `announce_move_to` (re-roll resolves BEFORE the announce; still-hidden →
+  anonymous echo, never silence).
+- **Disclosure:** `room_state` payload's `has_unseen_presence` — room-derived
+  (any occupant with active concealment; scene-independent, unlike the
+  scene-scoped #1225 unseen-observer banner, which is unchanged). Frontend:
+  unseen-presence row in the room panel (`UnseenPresenceRow.tsx`) with the
+  identity-free report dialog.
+- **Report path:** `POST /api/player-submissions/player-reports/hidden-presence/`
+  — `report_hidden_presence` (`world.player_submissions.services`) resolves the
+  room's concealed occupants into staff-visible `PlayerReport`s; the reporter
+  never learns identity.
+- **Counter-play:** the existing `search` verb (`SearchAction`, AP+fatigue)
+  already pierces concealed characters per-observer — no new discovery verb.
+- **Source:** `src/world/stealth/services.py`
 
 ### Servant/Doorman Assignment, Pampering Ambience, Expulsion (#2989)
 Household daily-life behaviors riding the #2178 `NPCAssignment` substrate:
