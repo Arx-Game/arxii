@@ -422,6 +422,15 @@
 #    completes regardless of the caller, so the retry is at worst a harmless
 #    second reload of an already-current Server (Portal keeps players
 #    connected through it either way).
+#
+# The 2026-08-23 evening run proved the drop is not random: reconnect
+# succeeded, then the retry died IDENTICALLY, both attempts at ~260 s — the
+# GitHub runner's Azure SNAT evicting a flow idle for ~4 min. A blocking
+# `systemctl reload` sends nothing for the several minutes a Server restart
+# now takes, and ansible.cfg's keepalives were silently not loaded (fixed in
+# standup.sh/rehearse.sh: ANSIBLE_CONFIG is now exported). async/poll below
+# is the second, independent guard: each 15 s poll is fresh channel traffic,
+# so the reload survives even if the cfg regresses to unloaded again.
 - name: Read which release the Server last provably reloaded into
   ansible.builtin.slurp:
     src: "{{ app_reload_stamp }}"
@@ -442,6 +451,11 @@
          or (app_reload_stamp_read.content | default('') | b64decode | trim)
             != app_checkout.after }}
 
+# async/poll: the reload blocks for the full Server restart (minutes) with
+# no output; detached-plus-poll keeps the SSH path active every 15 s instead
+# of one long silent block. 600 s comfortably exceeds systemd's own
+# TimeoutStartSec=300 cap on ExecReload, so a genuinely hung reload is
+# failed by systemd (loudly, as a task failure) before the async limit.
 - name: Reload Evennia on a code / deps / migration change (Portal keeps players connected)
   ansible.builtin.systemd_service:
     name: "{{ app_service }}"
@@ -449,6 +463,8 @@
   when: app_needs_reload | bool
   register: app_reload
   ignore_unreachable: true
+  async: 600
+  poll: 15
 
 - name: Reconnect if the SSH channel dropped mid-reload
   ansible.builtin.wait_for_connection:
@@ -460,6 +476,8 @@
     name: "{{ app_service }}"
     state: reloaded
   when: (app_needs_reload | bool) and (app_reload.unreachable | default(false))
+  async: 600
+  poll: 15
 
 # Direct to the localhost-bound backend (not through Caddy/Cloudflare), with
 # the real Host header — django_hardening's ALLOWED_HOSTS rejects a bare

@@ -25,6 +25,16 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"; readonly SCRIPT_DIR
 INFRA_DIR="$(cd "${SCRIPT_DIR}/.." && pwd)"; readonly INFRA_DIR
 readonly TF_DIR="${INFRA_DIR}/terraform/prod"
 readonly ANSIBLE_DIR="${INFRA_DIR}/ansible"
+# Load ansible.cfg EXPLICITLY. Ansible only auto-loads ./ansible.cfg from the
+# process CWD, and both CI and local runs invoke this script from the repo
+# root — so the cfg (SSH keepalives, ControlPersist=600s, pipelining) was
+# silently never in effect on any button press. That is what killed the
+# 2026-08-23 deploys: `systemctl reload` blocked >4 min with zero channel
+# traffic, and the GitHub runner's Azure SNAT drops idle flows at ~4 min
+# (both reload attempts died at ~260 s — the idle timeout, not a hiccup).
+# The 2026-08-15 keepalive "fix" in ansible.cfg never actually applied in CI;
+# the migrate task only survived because async/poll generates traffic.
+export ANSIBLE_CONFIG="${ANSIBLE_DIR}/ansible.cfg"
 readonly INVENTORY_DIR="${ANSIBLE_DIR}/inventory"
 readonly INVENTORY="${INVENTORY_DIR}/hosts.yml"                       # generated, gitignored
 readonly GROUP_VARS_FILE="${INVENTORY_DIR}/group_vars/arxii_prod.yml" # generated, gitignored

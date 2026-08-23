@@ -40,6 +40,10 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"; readonly SCRIPT_DIR
 INFRA_DIR="$(cd "${SCRIPT_DIR}/.." && pwd)"; readonly INFRA_DIR
 readonly STAGE_DIR="${INFRA_DIR}/terraform/ephemeral-stage"
 readonly ANSIBLE_DIR="${INFRA_DIR}/ansible"
+# Load ansible.cfg explicitly — Ansible only auto-loads it from the process
+# CWD, which is the repo root in CI and wherever the operator happens to be
+# locally. Same fix (and full rationale) as standup.sh.
+export ANSIBLE_CONFIG="${ANSIBLE_DIR}/ansible.cfg"
 readonly INVENTORY_DIR="${ANSIBLE_DIR}/inventory"
 readonly INVENTORY="${INVENTORY_DIR}/hosts.rehearsal.yml"                  # generated, gitignored
 readonly GROUP_VARS_FILE="${INVENTORY_DIR}/group_vars/arxii_rehearsal.yml" # generated, gitignored
