@@ -63,7 +63,7 @@ test.describe('Player Stories — My Active Stories page', () => {
 
     // Without a backend session, ProtectedRoute redirects to /login.
     // Either the stories page h1 ("My Stories") or the login page h1
-    // ("Login to Arx II") must be visible — both mean the React app is
+    // ("Login to Arx") must be visible — both mean the React app is
     // rendering correctly and no crash occurred.
     await expect(page.locator('h1').first()).toBeVisible();
 

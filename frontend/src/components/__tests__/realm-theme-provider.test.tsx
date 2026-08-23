@@ -1,8 +1,20 @@
-import { render, screen } from '@testing-library/react';
+import { act, render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { describe, expect, it, beforeEach } from 'vitest';
 
 import { RealmThemeProvider, useRealmTheme } from '../realm-theme-provider';
+
+// Probe component that surfaces the context object via a mutable holder, so
+// tests can drive context setters directly (mirrors the ThemeDisplay pattern
+// below, but exposes the raw context instead of rendering it into the DOM).
+function makeContextProbe() {
+  const holder: { current: ReturnType<typeof useRealmTheme> | null } = { current: null };
+  function ContextProbe() {
+    holder.current = useRealmTheme();
+    return null;
+  }
+  return { holder, ContextProbe };
+}
 
 // Helper component to expose context values for testing
 function ThemeDisplay() {
@@ -117,6 +129,22 @@ describe('RealmThemeProvider', () => {
     expect(screen.getByTestId('theme')).toHaveTextContent('inferna');
   });
 
+  it('tracks a changing forcedTheme prop across rerenders (no setForcedRealm involved)', () => {
+    const { rerender } = render(
+      <RealmThemeProvider forcedTheme="arx">
+        <ThemeDisplay />
+      </RealmThemeProvider>
+    );
+    expect(document.documentElement.dataset.realm).toBe('arx');
+
+    rerender(
+      <RealmThemeProvider forcedTheme="umbros">
+        <ThemeDisplay />
+      </RealmThemeProvider>
+    );
+    expect(document.documentElement.dataset.realm).toBe('umbros');
+  });
+
   it('prevents setRealmTheme when forcedTheme is active', async () => {
     const user = userEvent.setup();
     render(
@@ -206,6 +234,46 @@ describe('plain mode', () => {
       </RealmThemeProvider>
     );
     expect(screen.getByTestId('plain-mode')).toHaveTextContent('on');
+  });
+});
+
+describe('setForcedRealm', () => {
+  it('forces a realm and restores the stored choice on clear', () => {
+    localStorage.setItem('realm-theme', 'umbros');
+    const { holder, ContextProbe } = makeContextProbe();
+
+    render(
+      <RealmThemeProvider>
+        <ContextProbe />
+      </RealmThemeProvider>
+    );
+
+    act(() => holder.current?.setForcedRealm('arx'));
+    expect(document.documentElement.dataset.realm).toBe('arx');
+
+    act(() => holder.current?.setForcedRealm(undefined));
+    expect(document.documentElement.dataset.realm).toBe('umbros');
+  });
+
+  it('overrides an active forcedTheme prop and restores the prop-forced value on clear', () => {
+    localStorage.setItem('realm-theme', 'umbros');
+    const { holder, ContextProbe } = makeContextProbe();
+
+    render(
+      <RealmThemeProvider forcedTheme="inferna">
+        <ContextProbe />
+      </RealmThemeProvider>
+    );
+
+    expect(document.documentElement.dataset.realm).toBe('inferna');
+
+    act(() => holder.current?.setForcedRealm('arx'));
+    expect(document.documentElement.dataset.realm).toBe('arx');
+
+    // Clearing the context-level force falls back to storedTheme, which the
+    // forcedTheme prop still controls (not the localStorage value).
+    act(() => holder.current?.setForcedRealm(undefined));
+    expect(document.documentElement.dataset.realm).toBe('inferna');
   });
 });
 

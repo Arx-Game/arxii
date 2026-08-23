@@ -8,6 +8,7 @@ from rest_framework.test import APITestCase
 
 from core_management.test_utils import suppress_permission_errors
 from evennia_extensions.factories import AccountFactory, CharacterFactory, ObjectDBFactory
+from evennia_extensions.models import PlayerData
 from world.character_sheets.factories import CharacterSheetFactory
 from world.magic.factories import (
     PoseEndorsementFactory,
@@ -168,6 +169,66 @@ class InteractionViewSetTestCase(APITestCase):
         assert response.status_code == status.HTTP_200_OK
         assert "receivers" in response.data
         assert len(response.data["receivers"]) == 1
+
+
+class InteractionCompanionAttributionTests(APITestCase):
+    """Companion pose attribution (#3294): serializer payload + block-exclusion parity.
+
+    The attribution FK is purely cosmetic — feed exclusion (block/mute) must key on
+    the author persona/tenure exactly as a normal pose, never on the companion.
+    """
+
+    def _side(self):
+        account = AccountFactory()
+        player_data, _ = PlayerData.objects.get_or_create(account=account)
+        entry = RosterEntryFactory()
+        RosterTenureFactory(player_data=player_data, roster_entry=entry)
+        sheet = entry.character_sheet
+        return account, player_data, sheet, sheet.primary_persona
+
+    def setUp(self) -> None:
+        from world.companions.factories import CompanionFactory
+
+        self.owner_account, self.owner_pd, self.owner_sheet, self.owner_face = self._side()
+        self.viewer_account, self.viewer_pd, _viewer_sheet, self.viewer_face = self._side()
+        self.client.force_authenticate(user=self.viewer_account)
+
+        self.companion = CompanionFactory(owner=self.owner_sheet, name="Fang")
+        self.interaction = InteractionFactory(
+            persona=self.owner_face,
+            attributed_companion=self.companion,
+            content="Fang growls at the intruder.",
+        )
+
+    def test_serializer_includes_attributed_companion(self) -> None:
+        url = reverse("interaction-list")
+        response = self.client.get(url)
+        assert response.status_code == status.HTTP_200_OK
+        row = next(r for r in response.data["results"] if r["id"] == self.interaction.pk)
+        assert row["attributed_companion"] == {"id": self.companion.pk, "name": "Fang"}
+
+    def test_normal_pose_has_no_attributed_companion(self) -> None:
+        plain = InteractionFactory(persona=self.owner_face, content="waves.")
+        url = reverse("interaction-list")
+        response = self.client.get(url)
+        row = next(r for r in response.data["results"] if r["id"] == plain.pk)
+        assert row["attributed_companion"] is None
+
+    def test_block_excludes_companion_attributed_pose_same_as_normal_pose(self) -> None:
+        """A blocked owner's companion pose is excluded exactly like a normal pose."""
+        from world.scenes.models import Block
+
+        Block.objects.create(
+            owner=self.viewer_pd,
+            blocked_player=self.owner_pd,
+            blocker_persona=self.viewer_face,
+            blocked_persona=self.owner_face,
+        )
+        url = reverse("interaction-list")
+        response = self.client.get(url)
+        assert response.status_code == status.HTTP_200_OK
+        ids = {row["id"] for row in response.data["results"]}
+        assert self.interaction.pk not in ids
 
 
 class InteractionFeedPrivacyTests(APITestCase):

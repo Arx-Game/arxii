@@ -59,10 +59,20 @@ REVERSE_SQL = SRC_DIR / "world/scenes/sql/partition_interaction_reverse.sql"
 # a plain post-partition AddField, correctly present after 0142 via the same
 # ADD COLUMN cascade, and intentionally absent from this frozen snapshot.
 #
+# `attributed_companion_id` (#3294) is a FK to companions.Companion, added well
+# after the partition migration — same story again: a plain post-partition
+# AddField, correctly present via the same ADD COLUMN cascade, and intentionally
+# absent from this frozen snapshot.
+#
 # These columns are subtracted from the model-column set before comparing to the
 # SQL, so the hook still catches drift for every OTHER column. Adding an entry
 # here is a deliberate "this column is post-partition by construction" assertion.
-POST_PARTITION_COLUMNS = {"fury_committed_id", "writer_account_id", "language_id"}
+POST_PARTITION_COLUMNS = {
+    "fury_committed_id",
+    "writer_account_id",
+    "language_id",
+    "attributed_companion_id",
+}
 
 
 def _setup_django() -> None:

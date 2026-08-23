@@ -1207,10 +1207,19 @@ class CmdStory(ArxNamespaceCommand):
         story's Lead GM or staff — mirrors ``user_owns_or_leads_story`` exactly
         so telnet can't escalate past the web API. Refuses to lower a tier once
         a review is CLEARED (the tier is frozen at clearance).
+
+        REGIONAL/WORLD calls ``ensure_canon_review_for_story`` (#3304) after
+        saving — this is the telnet half of the impact-tier request-loop seam
+        (the web PATCH-update path is the other half, ``StoryViewSet.
+        perform_update``); requests a review, auto-clearing it for a
+        REGIONAL tier when the caller's GM level permits.
         """
-        from world.stories.constants import ImpactTier  # noqa: PLC0415
+        from world.stories.constants import CanonReviewStatus, ImpactTier  # noqa: PLC0415
         from world.stories.permissions import user_owns_or_leads_story  # noqa: PLC0415
-        from world.stories.services.canon_review import story_is_cleared  # noqa: PLC0415
+        from world.stories.services.canon_review import (  # noqa: PLC0415
+            ensure_canon_review_for_story,
+            story_is_cleared,
+        )
 
         if "=" not in rest:
             raise CommandError(_IMPACT_USAGE)
@@ -1239,6 +1248,14 @@ class CmdStory(ArxNamespaceCommand):
         story.impact_tier = new_tier
         story.save(update_fields=["impact_tier"])
         self.msg(f"Impact tier set to {new_tier} for {story.title}.")
+
+        gm_profile = account.gm_profile_or_none if account else None
+        review = ensure_canon_review_for_story(story, gm_profile)
+        if review is not None:
+            if review.status == CanonReviewStatus.CLEARED:
+                self.msg("Canon review auto-cleared by your GM level.")
+            elif review.status == CanonReviewStatus.PENDING:
+                self.msg("Canon review requested; awaiting staff clearance.")
 
     def _handle_review_status(self, rest: str) -> None:
         """Show a story's impact tier, review state, and readiness problems (#2003).

@@ -115,6 +115,7 @@ class InteractionListSerializer(serializers.ModelSerializer):
     is_muted = serializers.SerializerMethodField()
     language_id = serializers.IntegerField(read_only=True, allow_null=True)
     language_name = serializers.SerializerMethodField()
+    attributed_companion = serializers.SerializerMethodField()
 
     class Meta:
         model = Interaction
@@ -131,6 +132,7 @@ class InteractionListSerializer(serializers.ModelSerializer):
             "is_muted",
             "language_id",
             "language_name",
+            "attributed_companion",
             "endorsee_sheet_id",
             "is_favorited",
             "reactions",
@@ -361,6 +363,19 @@ class InteractionListSerializer(serializers.ModelSerializer):
 
     def get_language_name(self, obj: Interaction) -> str | None:
         return obj.language.name if obj.language_id else None
+
+    def get_attributed_companion(self, obj: Interaction) -> dict | None:
+        """Cosmetic companion pose attribution (#3294): ``{id, name}`` or ``None``.
+
+        Authorship stays entirely on ``persona`` — already resolved above with the
+        full per-viewer display/mask/discovery treatment via ``_persona_display_map``.
+        The frontend builds the owner tell ("via <owner>") from that same resolved
+        ``persona`` field rather than a second identity-resolution path here, so a
+        masked owner's companion pose correctly shows the mask, never the real name.
+        """
+        if obj.attributed_companion_id is None:
+            return None
+        return {"id": obj.attributed_companion_id, "name": obj.attributed_companion.name}
 
     def get_is_favorited(self, obj: Interaction) -> bool:
         roster_entry_ids: set[int] = self.context.get("roster_entry_ids", set())

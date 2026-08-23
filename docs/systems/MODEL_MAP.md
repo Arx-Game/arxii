@@ -7855,6 +7855,7 @@
   - place -> scenes.Place [FK] (nullable)
   - language -> species.Language [FK] (nullable)
   - fury_committed -> magic.FuryTier [FK] (nullable)
+  - attributed_companion -> companions.Companion [FK] (nullable)
   - target_personas -> scenes.Persona [M2M]
 **Pointed to by:**
   - consequence_outcomes <- checks.ConsequenceOutcome

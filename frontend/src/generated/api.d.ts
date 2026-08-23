@@ -2245,7 +2245,12 @@ export interface paths {
       path?: never;
       cookie?: never;
     };
-    /** @description This beginning's perspective entries, ungated for the CG shop window (ADR-0224). */
+    /**
+     * @description This beginning's perspective entries.
+     *
+     *     Knowledge-ungated within CG per ADR-0224; still requires an
+     *     authenticated account (see #3305 review).
+     */
     get: operations['character_creation_beginnings_perspectives_list'];
     put?: never;
     post?: never;
@@ -3323,10 +3328,11 @@ export interface paths {
       cookie?: never;
     };
     /**
-     * @description This tradition's perspective entries, ungated for the CG shop window (ADR-0224).
+     * @description This tradition's perspective entries.
      *
-     *     Resolved directly: get_queryset is beginning_id-scoped and would 404
-     *     every detail route.
+     *     Knowledge-ungated within CG per ADR-0224; still requires an
+     *     authenticated account (see #3305 review). Resolved directly:
+     *     get_queryset is beginning_id-scoped and would 404 every detail route.
      */
     get: operations['character_creation_traditions_perspectives_list'];
     put?: never;
@@ -4803,8 +4809,10 @@ export interface paths {
     /**
      * @description Read + action endpoints for the player's companion surface.
      *
-     *     `list`/`retrieve` return the caller's own active companions (read-only).
-     *     POST actions delegate to the four Actions in
+     *     `list`/`retrieve` return the caller's own active companions (read-only),
+     *     each carrying `is_present` (#3294) — whether the companion's live object
+     *     currently shares the actor's room, gating the web composer's "as
+     *     <companion>" emote toggle. POST actions delegate to the Actions in
      *     ``actions/definitions/companions.py``; ``ActionResult`` fields map 1:1 to
      *     the response bodies so the contract matches ``SanctumViewSet`` (#1918).
      */
@@ -4827,8 +4835,10 @@ export interface paths {
     /**
      * @description Read + action endpoints for the player's companion surface.
      *
-     *     `list`/`retrieve` return the caller's own active companions (read-only).
-     *     POST actions delegate to the four Actions in
+     *     `list`/`retrieve` return the caller's own active companions (read-only),
+     *     each carrying `is_present` (#3294) — whether the companion's live object
+     *     currently shares the actor's room, gating the web composer's "as
+     *     <companion>" emote toggle. POST actions delegate to the Actions in
      *     ``actions/definitions/companions.py``; ``ActionResult`` fields map 1:1 to
      *     the response bodies so the contract matches ``SanctumViewSet`` (#1918).
      */
@@ -4856,6 +4866,32 @@ export interface paths {
      *     Wraps :class:`actions.definitions.companions.DeployCompanionAction`.
      */
     post: operations['companions_companions_deploy_create'];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/companions/companions/{id}/emote/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /**
+     * @description Pose as a bonded, present companion — ``POST
+     *     /api/companions/companions/{id}/emote/`` (#3294).
+     *
+     *     Wraps :class:`actions.definitions.companions.CompanionEmoteAction`. The
+     *     companion id comes from the URL; ``get_queryset`` scopes it to the
+     *     caller's own active companions (foreign -> 404). The Action re-validates
+     *     ownership + room presence via ``CompanionPresentPrerequisite`` (defense
+     *     in depth).
+     */
+    post: operations['companions_companions_emote_create'];
     delete?: never;
     options?: never;
     head?: never;
@@ -19996,23 +20032,6 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
-  '/api/status/': {
-    parameters: {
-      query?: never;
-      header?: never;
-      path?: never;
-      cookie?: never;
-    };
-    /** @description Return game statistics and recent activity. */
-    get: operations['status_retrieve'];
-    put?: never;
-    post?: never;
-    delete?: never;
-    options?: never;
-    head?: never;
-    patch?: never;
-    trace?: never;
-  };
   '/api/stories/': {
     parameters: {
       query?: never;
@@ -20166,11 +20185,12 @@ export interface paths {
      *     - GROUP: creates GroupStoryProgress for the given gm_table
      *     - GLOBAL: creates the GlobalStoryProgress singleton
      *
-     *     The scope <-> target invariant is enforced by
-     *     AssignStoryInputSerializer.validate(), so an invalid combination is a
-     *     400 (no scope change, no progress row). Because scope is set before
-     *     the create_*_progress call, StoryNotAssignedError cannot fire — no
-     *     try/except is needed.
+     *     The scope <-> target invariant, AND (for GLOBAL) the
+     *     ``allow_global_scope_authoring`` GMLevelCap gate (#3304), are enforced
+     *     by AssignStoryInputSerializer.validate(), so an invalid combination or
+     *     an under-leveled GM's GLOBAL attempt is a 400 (no scope change, no
+     *     progress row). Because scope is set before the create_*_progress
+     *     call, StoryNotAssignedError cannot fire — no try/except is needed.
      */
     post: operations['stories_assign_to_scope_create'];
     delete?: never;
@@ -24591,6 +24611,14 @@ export interface components {
       readonly bonded_at: string;
       /** Format: date-time */
       readonly released_at: string | null;
+      /**
+       * @description True when the companion's live object shares the actor's current room (#3294).
+       *
+       *     Gates the web composer's "as <companion>" emote toggle. ``actor_location_id``
+       *     is seeded onto the serializer context by ``CompanionViewSet.get_serializer_context``;
+       *     with no resolvable actor location, every companion reads as absent.
+       */
+      readonly is_present: boolean;
     };
     CompanionArchetype: {
       readonly id: number;
@@ -28196,6 +28224,18 @@ export interface components {
       readonly is_muted: boolean;
       readonly language_id: number | null;
       readonly language_name: string | null;
+      /**
+       * @description Cosmetic companion pose attribution (#3294): ``{id, name}`` or ``None``.
+       *
+       *     Authorship stays entirely on ``persona`` — already resolved above with the
+       *     full per-viewer display/mask/discovery treatment via ``_persona_display_map``.
+       *     The frontend builds the owner tell ("via <owner>") from that same resolved
+       *     ``persona`` field rather than a second identity-resolution path here, so a
+       *     masked owner's companion pose correctly shows the mask, never the real name.
+       */
+      readonly attributed_companion: {
+        [key: string]: unknown;
+      } | null;
       readonly endorsee_sheet_id: number;
       readonly is_favorited: boolean;
       /** @description Aggregate emoji counts with reacted-by-current-user flag. */
@@ -28345,6 +28385,18 @@ export interface components {
       readonly is_muted: boolean;
       readonly language_id: number | null;
       readonly language_name: string | null;
+      /**
+       * @description Cosmetic companion pose attribution (#3294): ``{id, name}`` or ``None``.
+       *
+       *     Authorship stays entirely on ``persona`` — already resolved above with the
+       *     full per-viewer display/mask/discovery treatment via ``_persona_display_map``.
+       *     The frontend builds the owner tell ("via <owner>") from that same resolved
+       *     ``persona`` field rather than a second identity-resolution path here, so a
+       *     masked owner's companion pose correctly shows the mask, never the real name.
+       */
+      readonly attributed_companion: {
+        [key: string]: unknown;
+      } | null;
       readonly endorsee_sheet_id: number;
       readonly is_favorited: boolean;
       /** @description Aggregate emoji counts with reacted-by-current-user flag. */
@@ -48226,6 +48278,28 @@ export interface operations {
       };
     };
   };
+  companions_companions_emote_create: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        /** @description A unique integer value identifying this Companion. */
+        id: number;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['Companion'];
+        };
+      };
+    };
+  };
   companions_companions_fight_create: {
     parameters: {
       query?: never;
@@ -67369,6 +67443,7 @@ export interface operations {
   scenes_list: {
     parameters: {
       query?: {
+        finished_after?: string;
         gm?: string;
         is_active?: boolean;
         location?: number;
@@ -69898,24 +69973,6 @@ export interface operations {
         content: {
           'application/json': components['schemas']['Stake'];
         };
-      };
-    };
-  };
-  status_retrieve: {
-    parameters: {
-      query?: never;
-      header?: never;
-      path?: never;
-      cookie?: never;
-    };
-    requestBody?: never;
-    responses: {
-      /** @description No response body */
-      200: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content?: never;
       };
     };
   };

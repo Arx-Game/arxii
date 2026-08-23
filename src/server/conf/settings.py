@@ -87,7 +87,7 @@ INSTALLED_APPS += [
 ######################################################################
 
 # This is the name of your game. Make it catchy!
-SERVERNAME = "Arx II"
+SERVERNAME = "Arx"
 EVENNIA_ADMIN = False
 MULTISESSION_MODE = 2
 AUTO_CREATE_CHARACTER_WITH_ACCOUNT = False
@@ -377,8 +377,8 @@ REST_FRAMEWORK = {
 }
 
 SPECTACULAR_SETTINGS = {
-    "TITLE": "Arx II API",
-    "DESCRIPTION": "API for Arx II MUD web interface",
+    "TITLE": "Arx API",
+    "DESCRIPTION": "API for the Arx web interface",
     "VERSION": "0.1.0",
     "SCHEMA_PATH_PREFIX": r"/api/",
     "SERVE_INCLUDE_SCHEMA": False,

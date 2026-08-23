@@ -13,10 +13,10 @@ interface Props {
   onSent?: () => void;
   /**
    * Pre-fill props for a "compose to a specific character" quick action
-   * (#2160's character-card "Send a letter"). When `initialRecipientTenureId`
-   * is set, the recipient row renders a static "To: {initialRecipientDisplay}"
-   * label instead of `TenureSearch` — that component's display text is
-   * internal state we can't hand it from outside.
+   * (#2160's character-card "Message the player"). When
+   * `initialRecipientTenureId` is set, the recipient row renders a static
+   * "To: {initialRecipientDisplay}" label instead of `TenureSearch` - that
+   * component's display text is internal state we can't hand it from outside.
    */
   initialRecipientTenureId?: number;
   initialRecipientDisplay?: string;
@@ -57,7 +57,7 @@ export function ComposeMailForm({
   }, [replyTo]);
 
   // Syncs the pre-filled recipient/sender when a parent hands us a new one
-  // (e.g. the character-card "Send a letter" dialog is reused for a
+  // (e.g. the character-card "Message the player" dialog is reused for a
   // different character without remounting this form).
   useEffect(() => {
     if (initialRecipientTenureId != null) {
