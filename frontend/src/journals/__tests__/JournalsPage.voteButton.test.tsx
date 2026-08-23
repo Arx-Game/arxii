@@ -84,6 +84,9 @@ function makeEntry(overrides: Partial<JournalEntrySummary> = {}): JournalEntrySu
     edited_at: null,
     tags: [],
     response_count: 0,
+    posthumous_override: 'inherit',
+    revealed_at: null,
+    is_posthumous: false,
     ...overrides,
   };
 }
