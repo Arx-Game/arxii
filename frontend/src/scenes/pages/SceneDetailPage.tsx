@@ -8,6 +8,7 @@ import { SceneHeader } from '../components/SceneHeader';
 import { SceneInteractionPanel } from '../components/SceneInteractionPanel';
 import { ActionPanel } from '../components/ActionPanel';
 import { PlaceBar } from '../components/PlaceBar';
+import { TavernGameWidget } from '../components/TavernGameWidget';
 import { SpeakerQueueBar } from '../components/SpeakerQueueBar';
 import { SceneTacticalMap } from '../components/SceneTacticalMap';
 import { HighlightReel } from '../components/HighlightReel';
@@ -34,6 +35,8 @@ import { CombatRail } from '@/combat/components/CombatRail';
 import { GMEncounterControls } from '@/combat/sections/GMEncounterControls';
 import { LinkedStoriesPanel } from '@/crossover/components/LinkedStoriesPanel';
 import { GMAdjudicationPanel } from '../components/GMAdjudicationPanel';
+import { SelfCheckPanel } from '../components/SelfCheckPanel';
+import { CheckCallPromptCard } from '../components/CheckCallPromptCard';
 
 export function SceneDetailPage() {
   const { id = '' } = useParams();
@@ -215,6 +218,7 @@ export function SceneDetailPage() {
         {isActive && <EntryFlourishOfferGate characterSheetId={characterSheetId} />}
         {scene && <SceneLinesAndVeilsCard sceneId={id} />}
         {placesRoomId && <PlaceBar sceneId={placesRoomId} />}
+        {placesRoomId && <TavernGameWidget roomId={placesRoomId} />}
         {placesRoomId && <SpeakerQueueBar roomId={placesRoomId} />}
         <SceneTacticalMap sceneId={id} />
         <HighlightReel sceneId={id} canGm={scene?.viewer_can_gm} />
@@ -228,6 +232,18 @@ export function SceneDetailPage() {
           />
         )}
         {scene && <LinkedStoriesPanel sceneId={id} />}
+        {/* #3295 — scene check invocation: self-check picker (any player),
+            pending call-answer prompts, and the GM's Call For Check tab. */}
+        {isActive && (
+          <div className="mt-2">
+            <CheckCallPromptCard />
+          </div>
+        )}
+        {isActive && (
+          <div className="mt-2">
+            <SelfCheckPanel />
+          </div>
+        )}
         {scene?.viewer_can_gm && (
           <div className="mt-2">
             <GMAdjudicationPanel scene={scene} />

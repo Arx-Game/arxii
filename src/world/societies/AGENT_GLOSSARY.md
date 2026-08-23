@@ -33,8 +33,12 @@ The live award *mechanism* — `fire_renown_award` reading an authored `RenownAw
 _Avoid_: fame (fame is one output of Renown), reputation, the Legend total.
 
 **OrganizationRank**:
-A per-organization rung on the five-tier rank ladder (tier 1 highest, tier 5 lowest). Carries the diegetic name for that rung and capability flags (`can_invite`, `can_kick`, `can_manage_ranks`, `can_lead_rituals`). Generic organizations auto-create a default ladder from their `OrganizationType` titles on first save; covenants do not use this model. `can_lead_rituals` mirrors `CovenantRank.can_lead_rituals` (#708) but has no consuming org-ritual dispatch yet — see the needs-design follow-up on generic organization-ritual dispatch.
+A per-organization rung on the five-tier rank ladder (tier 1 highest, tier 5 lowest). Carries the diegetic name for that rung and capability flags (`can_invite`, `can_kick`, `can_manage_ranks`, `can_lead_rituals`, `can_declare_standing`). Generic organizations auto-create a default ladder from their `OrganizationType` titles on first save; covenants do not use this model. `can_lead_rituals` mirrors `CovenantRank.can_lead_rituals` (#708) but has no consuming org-ritual dispatch yet — see the needs-design follow-up on generic organization-ritual dispatch.
 _Avoid_: rank row, rank level.
+
+**Standing Declaration** (`StandingDeclaration`, #3290):
+A leader's deliberate, audited act of officially declaring a persona favored or disfavored with an organization — the one player-facing writer of `OrganizationReputation` (every other write is an automated consequence: secret reveals, gang turf, stake resolution). Rank-gated (`OrganizationRank.can_declare_standing`); DISFAVOR additionally requires the target's `hostile` antagonism consent (#2170, the same category the frame-job denounce gate consults); rate-limited to one per (organization, target persona) per IC week. The delta applies through the existing `bump_organization_reputation` — the declaration row is an audit trail, never a parallel writer. Public by design, unlike the hidden reputation value it moves.
+_Avoid_: standing bump (that conflates the act with the mechanism), favor grant, disfavor order.
 
 **OrganizationMembershipOffer**:
 A pending or resolved invitation or application to join a generic organization. `INVITE` offers are directed at a specific persona (`to_persona`); `APPLICATION` offers are directed at the organization by an applicant (`from_persona`, `to_persona` null). Invites are resolved through the shared offer registry (`accept org` / `decline org`); applications are resolved by an authorized member.

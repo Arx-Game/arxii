@@ -16,6 +16,7 @@ from world.societies.models import (
     OrgAppeal,
     OrgAppealSignon,
     Proclamation,
+    StandingDeclaration,
 )
 
 _ORGANIZATION_NAME_SOURCE = "organization.name"
@@ -32,6 +33,9 @@ class OrganizationRankSerializer(serializers.ModelSerializer):
             "can_kick",
             "can_manage_ranks",
             "can_lead_rituals",
+            "can_declare_standing",
+            "can_post_to_board",
+            "can_moderate_board",
             "can_resolve_appeals",
         ]
 
@@ -248,6 +252,40 @@ class OrganizationReputationSerializer(serializers.ModelSerializer):
 
     def get_tier(self, obj: OrganizationReputation) -> str:
         return obj.get_tier().value
+
+
+class StandingDeclarationSerializer(serializers.ModelSerializer):
+    """A leader's public favor/disfavor declaration (#3290) — history/audit read.
+
+    Public by design (spec decision 4): the declaration itself (who, target,
+    direction, citation, when) is meant to be legible to bystanders, unlike
+    the raw ``OrganizationReputation`` value it moves. ``delta_applied`` is
+    deliberately NOT exposed here — the hidden-value convention
+    (``OrganizationReputationSerializer``: "tier only, never the raw value")
+    extends to the magnitude a declaration moved that value by; staff can read
+    it in the admin for dispute resolution.
+    """
+
+    organization_name = serializers.CharField(source=_ORGANIZATION_NAME_SOURCE, read_only=True)
+    target_persona_name = serializers.CharField(source="target_persona.name", read_only=True)
+    declared_by_persona_name = serializers.CharField(
+        source="declared_by_persona.name", read_only=True
+    )
+
+    class Meta:
+        model = StandingDeclaration
+        fields = [
+            "id",
+            "organization",
+            "organization_name",
+            "target_persona",
+            "target_persona_name",
+            "declared_by_persona",
+            "declared_by_persona_name",
+            "direction",
+            "citation",
+            "created_at",
+        ]
 
 
 class OrganizationMembershipOfferSerializer(serializers.ModelSerializer):

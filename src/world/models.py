@@ -31,6 +31,7 @@ import world.areas.models
 import world.assets.models
 import world.battles.models
 import world.beta_reset.models
+import world.boards.models
 import world.boundaries.models
 import world.buildings.models
 import world.captivity.models
@@ -87,6 +88,7 @@ import world.species.models
 import world.stories.models
 import world.tarot.models
 import world.tasking.models
+import world.tavern_games.models
 import world.traits.models
 import world.travel.models
 import world.vitals.models

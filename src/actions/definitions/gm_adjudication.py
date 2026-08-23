@@ -27,11 +27,8 @@ from world.scenes.action_constants import DIFFICULTY_VALUES, DifficultyChoice
 if TYPE_CHECKING:
     from evennia.objects.models import ObjectDB
 
-    from world.checks.models import CheckType
 
 _CATALOG_HINT = "No such check -- try `gm check find <term>`."
-_FIND_RESULT_LIMIT = 15
-_DESCRIPTION_SNIPPET_LEN = 80
 
 # GMAwardAction.award_type values.
 _AWARD_TYPE_XP = "xp"
@@ -96,49 +93,11 @@ def _resolve_gm_target(kwargs: dict[str, Any]) -> ObjectDB | None:
     return ObjectDB.objects.filter(pk=target).first()
 
 
-def _check_type_summary(check_type: CheckType) -> str:
-    """Return the "stat+skill" trait pairing summary for a catalog listing row."""
-    names = [
-        ctt.trait.name for ctt in check_type.traits.select_related("trait").order_by("-weight")
-    ]
-    return " + ".join(names) if names else "(no traits configured)"
-
-
-def _description_snippet(check_type: CheckType) -> str:
-    text = (check_type.description or "").strip()
-    if len(text) <= _DESCRIPTION_SNIPPET_LEN:
-        return text
-    return text[: _DESCRIPTION_SNIPPET_LEN - 1].rstrip() + "..."
-
-
-def _format_catalog_row(check_type: CheckType) -> str:
-    return (
-        f"[{check_type.pk}] {check_type.name} ({_check_type_summary(check_type)})"
-        f" -- {_description_snippet(check_type)}"
-    )
-
-
-def _search_catalog(query: str) -> list[CheckType]:
-    """Search the authored, active CheckType catalog by name, trait, or description.
-
-    The discovery road (Decision 4): a bare search or empty query lists the catalog
-    head so finding the right check is always the paved path, never invention.
-    """
-    from django.db.models import Q  # noqa: PLC0415
-
-    from world.checks.models import CheckType  # noqa: PLC0415
-
-    qs = CheckType.objects.filter(is_active=True).select_related("category")
-    query = query.strip()
-    if query:
-        qs = qs.filter(
-            Q(name__icontains=query)
-            | Q(description__icontains=query)
-            | Q(traits__trait__name__icontains=query)
-        ).distinct()
-    return list(
-        qs.order_by("category__display_order", "display_order", "name")[:_FIND_RESULT_LIMIT]
-    )
+# Catalog resolve/find/band-validation core lives in ``world.checks.catalog_invocation``
+# (#3295) -- extracted from this action so every catalog-check invocation surface
+# (this SENIOR ad-hoc action, a player's scene self-check, a GM's call-for-check)
+# resolves against the same shared code. Imported lazily inside methods below to
+# match this module's existing lazy-import style.
 
 
 @dataclass
@@ -195,39 +154,33 @@ class InvokeCatalogCheckAction(Action):
         return self._invoke(target, kwargs)
 
     def _find(self, kwargs: dict[str, Any]) -> ActionResult:
+        from world.checks.catalog_invocation import (  # noqa: PLC0415
+            render_catalog_listing,
+            search_catalog,
+        )
+
         query = str(kwargs.get("query") or "")
-        matches = _search_catalog(query)
-        if not matches:
-            message = f"No checks matched {query!r}." if query.strip() else "The catalog is empty."
-            return ActionResult(success=True, message=message)
-        header = f"Checks matching {query.strip()!r}:" if query.strip() else "Check catalog:"
-        lines = [header, *(_format_catalog_row(ct) for ct in matches)]
-        return ActionResult(success=True, message="\n".join(lines))
+        matches = search_catalog(query)
+        return ActionResult(success=True, message=render_catalog_listing(query, matches))
 
     def _invoke(self, target: ObjectDB, kwargs: dict[str, Any]) -> ActionResult:
-        from world.checks.models import CheckType  # noqa: PLC0415
+        from world.checks.catalog_invocation import (  # noqa: PLC0415
+            resolve_band,
+            resolve_check_type_ref,
+        )
         from world.checks.services import perform_check  # noqa: PLC0415
 
-        check_type_ref = str(kwargs.get("check_type_ref") or "").strip()
-        if not check_type_ref:
-            return ActionResult(success=False, message=_CATALOG_HINT)
+        resolved = resolve_check_type_ref(
+            kwargs.get("check_type_ref"), not_found_hint=_CATALOG_HINT
+        )
+        if isinstance(resolved, ActionResult):
+            return resolved
+        check_type = resolved
 
-        try:
-            check_type = resolve_model_by_pk_or_name(
-                CheckType,
-                check_type_ref,
-                qs=CheckType.objects.filter(is_active=True),
-                not_found_msg=_CATALOG_HINT,
-            )
-        except CommandError as err:
-            return ActionResult(success=False, message=str(err))
-
-        difficulty = kwargs.get("difficulty")
-        if difficulty not in DifficultyChoice.values:
-            return ActionResult(
-                success=False,
-                message="Pick a difficulty band: " + ", ".join(DifficultyChoice.values) + ".",
-            )
+        band_result = resolve_band(kwargs.get("difficulty"))
+        if isinstance(band_result, ActionResult):
+            return band_result
+        difficulty = band_result
 
         edge_reason = str(kwargs.get("edge_reason") or "").strip()
         setback_reason = str(kwargs.get("setback_reason") or "").strip()

@@ -78,6 +78,15 @@ vi.mock('../../actionQueries', async () => {
     respondToRequest: vi.fn(),
     fetchActionPanelData: vi.fn(() => Promise.resolve({ techniques: [], pending_requests: [] })),
     fetchPlaces: vi.fn(() => Promise.resolve({ results: [] })),
+    // Tavern games (#3292): TavernGameWidget mounts alongside PlaceBar and
+    // pulls these in - empty results so it renders nothing in this suite,
+    // which isn't exercising the coin-stakes widget itself.
+    fetchTavernGames: vi.fn(() => Promise.resolve({ results: [] })),
+    fetchTavernGameSessions: vi.fn(() => Promise.resolve({ results: [] })),
+    openTavernGameSession: vi.fn(),
+    joinTavernGameSession: vi.fn(),
+    rollTavernGameSession: vi.fn(),
+    leaveTavernGameSession: vi.fn(),
     fetchAvailableActions,
     useAvailableActionsQuery: (
       characterId: number | null,
@@ -239,6 +248,15 @@ vi.mock('@/magic/queries', () => ({
   usePendingEntryFlourishOffers: () => ({ data: { results: [] } }),
   useRespondToEntryFlourish: vi.fn(() => ({ mutate: vi.fn(), isPending: false })),
   useCharacterResonances: vi.fn(() => ({ data: [], isLoading: false })),
+}));
+
+// SelfCheckPanel + CheckCallPromptCard (#3295) self-fetching queries — same
+// "mock the query module so the real fetch never fires" pattern as every
+// other panel query module in this file (jsdom's fetch cannot resolve a
+// relative URL, so an unmocked queryFn crashes any test that reaches it).
+vi.mock('@/checks/queries', () => ({
+  usePlayerCheckTypeCatalog: vi.fn(() => ({ data: [] })),
+  useMyCheckCalls: vi.fn(() => ({ data: [] })),
 }));
 
 // ---------------------------------------------------------------------------

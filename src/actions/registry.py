@@ -26,6 +26,11 @@ from actions.definitions.battles import (
     SpawnBattleUnitsAction,
     StageBattleMapAction,
 )
+from actions.definitions.boards import (
+    EditBoardPostAction,
+    PostToBoardAction,
+    RemoveBoardPostAction,
+)
 from actions.definitions.cast import CastTechniqueAction
 from actions.definitions.ceremonies import (
     AbandonCeremonyAction,
@@ -234,6 +239,7 @@ from actions.definitions.journals import (
     CreateJournalEntryAction,
     EditJournalEntryAction,
     RespondToJournalAction,
+    SetJournalDispositionAction,
 )
 from actions.definitions.language import SetLanguageAction, TrainLanguageAction
 from actions.definitions.locations import (
@@ -397,6 +403,13 @@ from actions.definitions.sanctum import (
     SanctumSeverAction,
     SanctumWeaveAction,
 )
+from actions.definitions.scene_checks import (
+    AnswerCheckCallAction,
+    CallForCheckAction,
+    DeclineCheckCallAction,
+    ProposeCheckAction,
+    SceneSelfCheckAction,
+)
 from actions.definitions.scene_reactions import (
     ReactToWindowAction,
     ToggleFavoriteAction,
@@ -443,6 +456,7 @@ from actions.definitions.speaker_queue import (
     SkipSpeakerAction,
 )
 from actions.definitions.species_gm import ApplyShadeUndeathAction
+from actions.definitions.standing_declarations import declare_standing_action
 from actions.definitions.stealth import SneakAction, UnsneakAction
 from actions.definitions.story_builder import (
     CloseSceneRoomAction,
@@ -473,6 +487,12 @@ from actions.definitions.tasking import (
     PlantRedHerringAction,
     PostListenerAction,
     SuppressListenerAction,
+)
+from actions.definitions.tavern_games import (
+    JoinGameAction,
+    LeaveGameAction,
+    OpenGameAction,
+    RollGameAction,
 )
 from actions.definitions.technique_authoring import AuthorTechniqueAction
 from actions.definitions.technique_training import TrainTechniqueAction
@@ -545,10 +565,12 @@ from actions.definitions.world_builder import (
     StaffRemovePlaceAction,
     StaffRemovePortalAnchorAction,
     StaffRemoveRoomAction,
+    StaffRemoveRoomDescVariantAction,
     StaffRemoveRoomFeatureAction,
     StaffRenameExitAction,
     StaffSetExitDetailAction,
     StaffSetRoomBlueprintAction,
+    StaffSetRoomDescVariantAction,
     StaffSetRoomStatAction,
     StaffSetStartingRoomAction,
     StaffSetTravelHubAction,
@@ -676,6 +698,11 @@ _ALL_ACTIONS: list[Action] = [
     SetSituationAction(),
     PlaceChallengeAction(),
     PerformRitualAction(),
+    # #3292 - tavern games: coin-stakes dice gambling open/join/roll/leave.
+    OpenGameAction(),
+    JoinGameAction(),
+    RollGameAction(),
+    LeaveGameAction(),
     AuthorTechniqueAction(),
     TrainTechniqueAction(),
     SetLanguageAction(),
@@ -760,6 +787,7 @@ _ALL_ACTIONS: list[Action] = [
     CreateJournalEntryAction(),
     RespondToJournalAction(),
     EditJournalEntryAction(),
+    SetJournalDispositionAction(),
     SetCharacterGoalsAction(),
     LogGoalProgressAction(),
     GiveWriteupKudosAction(),
@@ -802,6 +830,7 @@ _ALL_ACTIONS: list[Action] = [
     org_promote_action,
     org_demote_action,
     org_expel_action,
+    declare_standing_action,
     org_appeal_lodge_action,
     org_appeal_signon_action,
     org_appeal_resolve_action,
@@ -903,6 +932,12 @@ _ALL_ACTIONS: list[Action] = [
     # #2127 — GM scenario catalog: situation find/browse + suggestion inbox.
     FindSituationAction(),
     SubmitCatalogSuggestionAction(),
+    # #3295 — scene check invocation: player self-checks, GM calls, proposals.
+    SceneSelfCheckAction(),
+    CallForCheckAction(),
+    AnswerCheckCallAction(),
+    DeclineCheckCallAction(),
+    ProposeCheckAction(),
     # #2010 — GM battle staging: JUNIOR-gated catalog-pick-to-live-Battle actions.
     CreateBattleAction(),
     StageBattleMapAction(),
@@ -1027,6 +1062,8 @@ _ALL_ACTIONS: list[Action] = [
     StaffRemoveAmbientLineAction(),
     StaffAddAmbientEmitAction(),
     StaffRemoveAmbientEmitAction(),
+    StaffSetRoomDescVariantAction(),
+    StaffRemoveRoomDescVariantAction(),
     StaffInstallRoomFeatureAction(),
     StaffRemoveRoomFeatureAction(),
     StaffAssignFunctionaryAction(),
@@ -1061,6 +1098,10 @@ _ALL_ACTIONS: list[Action] = [
     LeaveStoryRoomAction(),
     SpinUpSceneRoomAction(),
     CloseSceneRoomAction(),
+    # #3286 — player-postable bulletin boards.
+    PostToBoardAction(),
+    EditBoardPostAction(),
+    RemoveBoardPostAction(),
 ]
 
 # Lookup by key

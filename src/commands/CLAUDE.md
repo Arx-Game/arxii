@@ -106,6 +106,12 @@ actions, backends, and service functions.
   (telnet has no pk to reference); `places leave` leaves whichever Place the
   caller's active persona currently occupies. Calls `JoinPlaceAction`/
   `LeavePlaceAction` (`actions/definitions/places.py`) directly.
+- **`tavern_games.py`**: `CmdGame` (`game`, #3292) - coin-stakes dice gambling at the
+  caller's current Place. Bare `game` shows the open table there, if any; `game open
+  <name>=<ante>` opens one; `game join`/`game roll`/`game leave` act on the single
+  open session at that Place. Every subverb dispatches the matching REGISTRY action
+  (`tavern_game_open`/`_join`/`_roll`/`_leave`, `actions/definitions/tavern_games.py`)
+  -- the same seam the web Place-bar game widget uses.
 - **`positions.py`**: `CmdPosition` (`position`, #2005) — the telnet face of the tactical
   position graph, mirroring `CmdPlaces`' shape. Bare `position` lists the caller's current
   room's staged positions with kind, occupants, and ADJACENT-reach adjacency (or

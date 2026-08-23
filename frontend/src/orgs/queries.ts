@@ -7,9 +7,10 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 
 import {
   fetchHouseFeed,
-  fetchOrgAppeals,
   fetchOrganizationById,
   fetchOrganizationByName,
+  fetchOrgAppeals,
+  fetchStandingDeclarations,
   lodgeOrgAppeal,
   resolveOrgAppeal,
   signonOrgAppeal,
@@ -63,6 +64,15 @@ export function useChooseCrisisOption(orgId: number) {
       qc.invalidateQueries({ queryKey: ['orgs', 'detail', orgId] }).catch(() => {});
       qc.invalidateQueries({ queryKey: ['orgs', 'houseFeed', orgId] }).catch(() => {});
     },
+  });
+}
+
+/** This org's public standing-declaration history (#3290), newest first. */
+export function useStandingDeclarationsQuery(orgId: number) {
+  return useQuery({
+    queryKey: ['orgs', 'standingDeclarations', orgId],
+    queryFn: () => fetchStandingDeclarations(orgId),
+    enabled: orgId > 0,
   });
 }
 

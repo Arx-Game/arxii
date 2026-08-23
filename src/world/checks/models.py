@@ -7,11 +7,17 @@ from evennia.utils.idmapper.models import SharedMemoryModel
 from core.natural_keys import NaturalKeyManager, NaturalKeyMixin
 from world.areas.positioning.constants import PositionKind
 from world.assets.constants import AssetStatus
-from world.checks.constants import EffectTarget, EffectType, PositionDestination
+from world.checks.constants import (
+    CheckCallTargetStatus,
+    EffectTarget,
+    EffectType,
+    PositionDestination,
+)
 
 # Import outcome models so migrations and admin discover them.
 from world.checks.outcome_models import ConsequenceOutcome, ConsequenceOutcomeModifier  # noqa: F401
 from world.contributors.models import CreditedContent
+from world.scenes.action_constants import DifficultyChoice
 
 # Lazy model references (Django app_label.ModelName), extracted to satisfy S1192.
 CHECK_TYPE_MODEL = "arxii.CheckType"
@@ -649,3 +655,87 @@ class ConsequenceEffect(NaturalKeyMixin, CreditedContent, SharedMemoryModel):
             return
         if self.position_destination == PositionDestination.NAMED and not self.position_name:
             errors["position_name"] = "position_name is required when destination is NAMED"
+
+
+class CheckCall(SharedMemoryModel):
+    """A GM's room-visible request that named targets roll a catalog check (#3295).
+
+    Created by ``CallForCheckAction`` (JUNIOR+ GM). Anchored on the scene the
+    call was issued in -- the same scene-scoped anchor other in-scene prompt
+    rows use (mirrors ``Petition.scene``) -- rather than the room directly, so
+    the call travels with the scene's own log/audience rules. Per-target
+    answer/decline state lives on ``CheckCallTarget``, not here: a call with
+    three targets is three independent prompts, not one shared yes/no.
+
+    Never selects, composes, or fires a ``ConsequenceOutcome``/consequence pool
+    (the #2118 firewall, restated for #3295) -- ``check_type``/``band`` are the
+    only mechanical inputs, and answering a call just dispatches the same
+    catalog self-check core every other surface here uses.
+    """
+
+    scene = models.ForeignKey(
+        "arxii.Scene",
+        on_delete=models.CASCADE,
+        related_name="check_calls",
+        help_text="The scene this call was issued in.",
+    )
+    caller_persona = models.ForeignKey(
+        "arxii.Persona",
+        on_delete=models.CASCADE,
+        related_name="check_calls_issued",
+        help_text="The GM's persona at the moment of the call.",
+    )
+    check_type = models.ForeignKey(
+        CHECK_TYPE_MODEL,
+        on_delete=models.CASCADE,
+        related_name="check_calls",
+        help_text="The authored catalog check being called for.",
+    )
+    band = models.CharField(
+        max_length=20,
+        choices=DifficultyChoice.choices,
+        help_text="The DifficultyChoice band the calling GM picked -- theater, echoed to targets.",
+    )
+    created_at = models.DateTimeField(auto_now_add=True, db_index=True)
+
+    class Meta:
+        ordering = ["-created_at"]
+
+    def __str__(self) -> str:
+        return f"CheckCall({self.check_type.name} @ {self.band}, scene {self.scene_id})"
+
+
+class CheckCallTarget(SharedMemoryModel):
+    """One targeted player's answer state for a ``CheckCall`` (#3295).
+
+    Row existence is the pending prompt; ``status`` moves PENDING ->
+    ANSWERED/DECLINED exactly once (``resolved_at`` stamps that transition).
+    Answering dispatches the SAME ``SceneSelfCheckAction`` core bound to the
+    call's own ``check_type``/``band`` -- the target never picks their own.
+    """
+
+    call = models.ForeignKey(
+        CheckCall,
+        on_delete=models.CASCADE,
+        related_name="targets",
+    )
+    target_sheet = models.ForeignKey(
+        "arxii.CharacterSheet",
+        on_delete=models.CASCADE,
+        related_name="check_call_targets",
+        help_text="The character asked to roll.",
+    )
+    status = models.CharField(
+        max_length=20,
+        choices=CheckCallTargetStatus.choices,
+        default=CheckCallTargetStatus.PENDING,
+        db_index=True,
+    )
+    resolved_at = models.DateTimeField(null=True, blank=True)
+
+    class Meta:
+        ordering = ["pk"]
+        unique_together = ["call", "target_sheet"]
+
+    def __str__(self) -> str:
+        return f"CheckCallTarget({self.target_sheet_id}, {self.status})"

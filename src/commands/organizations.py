@@ -2,7 +2,8 @@
 
 Mirrors `CmdDuel` and `CmdCombat`: a single namespace routes the lifecycle
 verbs through the shared `dispatch_player_action` seam so the telnet path and
-web path converge on the same actions.
+web path converge on the same actions. `favor`/`disfavor` (#3290) reuse the
+same routing for the leader standing-declaration action.
 
 Also home to `CmdAppeal` (#3293) — appeals to organizations. A sibling
 namespace, not a subverb of `org`, since its default (unlabelled) grammar
@@ -17,6 +18,7 @@ from actions.constants import ActionBackend
 from actions.types import ActionRef
 from commands.command import DispatchCommand
 from commands.exceptions import CommandError
+from world.societies.constants import StandingDirection
 from world.societies.models import Organization, OrgAppeal
 
 _SUBVERBS: dict[str, str] = {
@@ -27,24 +29,34 @@ _SUBVERBS: dict[str, str] = {
     "promote": "org_promote",
     "demote": "org_demote",
     "expel": "org_expel",
+    "favor": "declare_standing",
+    "disfavor": "declare_standing",
 }
 
 _TWO_ARG_SUBVERBS = frozenset({"invite", "promote", "demote", "expel"})
 _ONE_ARG_SUBVERBS = frozenset({"apply", "join", "leave"})
+_STANDING_SUBVERBS = frozenset({"favor", "disfavor"})
+_STANDING_DIRECTION_BY_SUBVERB: dict[str, str] = {
+    "favor": StandingDirection.FAVOR,
+    "disfavor": StandingDirection.DISFAVOR,
+}
+_MSG_NO_CITATION = "A public citation is required."
 
 
 class CmdOrg(DispatchCommand):
-    """Manage organization membership.
+    """Manage organization membership and leader standing declarations.
 
     Usage:
-        org                              - list subverbs
-        org invite <person> in <org>   - invite a co-located character
-        org apply <org>                  - apply to join an organization
-        org join <org>                   - accept a pending invitation
-        org leave <org>                  - leave an organization
-        org promote <person> in <org>    - promote a lower-ranked member
-        org demote <person> in <org>    - demote a lower-ranked member
-        org expel <person> in <org>     - forcibly remove a lower-ranked member
+        org                                    - list subverbs
+        org invite <person> in <org>         - invite a co-located character
+        org apply <org>                        - apply to join an organization
+        org join <org>                         - accept a pending invitation
+        org leave <org>                        - leave an organization
+        org promote <person> in <org>          - promote a lower-ranked member
+        org demote <person> in <org>          - demote a lower-ranked member
+        org expel <person> in <org>           - forcibly remove a lower-ranked member
+        org favor <person> in <org>=<citation>    - declare a member favored (#3290)
+        org disfavor <person> in <org>=<citation> - declare a member disfavored (#3290)
     """
 
     key = "org"
@@ -76,6 +88,9 @@ class CmdOrg(DispatchCommand):
         )
 
     def resolve_action_args(self) -> dict[str, Any]:
+        if self._subverb in _STANDING_SUBVERBS:
+            return self._resolve_standing_args()
+
         if self._subverb in _TWO_ARG_SUBVERBS:
             target_name, org_name = self.parse_two_args(
                 "in",
@@ -94,6 +109,28 @@ class CmdOrg(DispatchCommand):
 
         return {}
 
+    def _resolve_standing_args(self) -> dict[str, Any]:
+        usage = f"Usage: org {self._subverb} <person> in <organization>=<citation>."
+        args = self._require_rest(usage)
+        head, sep, citation = args.partition("=")
+        if not sep:
+            raise CommandError(usage)
+        target_name, _, org_name = head.partition(" in ")
+        target_name = target_name.strip()
+        org_name = org_name.strip()
+        citation = citation.strip()
+        if not target_name or not org_name:
+            raise CommandError(usage)
+        if not citation:
+            raise CommandError(_MSG_NO_CITATION)
+        target = self.search_or_raise(target_name)
+        return {
+            "target": target,
+            "organization_id": self._resolve_org(org_name).pk,
+            "direction": _STANDING_DIRECTION_BY_SUBVERB[self._subverb],
+            "citation": citation,
+        }
+
     def _resolve_org(self, value: str) -> Organization:
         return self.resolve_by_name_or_id(
             Organization,
@@ -110,7 +147,8 @@ class CmdOrg(DispatchCommand):
         self.msg(
             "Org actions: invite <person> in <org>, apply <org>, join <org>, "
             "leave <org>, promote <person> in <org>, demote <person> in <org>, "
-            "expel <person> in <org>."
+            "expel <person> in <org>, favor <person> in <org>=<citation>, "
+            "disfavor <person> in <org>=<citation>."
         )
 
 

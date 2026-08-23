@@ -5,20 +5,23 @@ from __future__ import annotations
 from typing import TYPE_CHECKING, Any
 
 from django.db import transaction
+from django.db.models import Count, Prefetch, Q
 from django.utils import timezone
 from evennia.accounts.models import AccountDB
 
 from world.achievements.models import StatDefinition
 from world.achievements.services import increment_stat
+from world.character_sheets.types import PosthumousJournalDisposition
 from world.journals.constants import (
     JOURNAL_POST_XP,
     PRAISE_GIVEN_XP,
     PRAISE_RECEIVED_XP,
     RETORT_GIVEN_XP,
     RETORT_RECEIVED_XP,
+    PosthumousOverride,
     ResponseType,
 )
-from world.journals.models import JournalEntry, JournalTag, WeeklyJournalXP
+from world.journals.models import JournalBequestGrant, JournalEntry, JournalTag, WeeklyJournalXP
 from world.journals.types import JournalError
 from world.progression.services.awards import award_xp
 
@@ -27,6 +30,7 @@ if TYPE_CHECKING:
 
     from evennia_extensions.models import PlayerData
     from world.character_sheets.models import CharacterSheet
+    from world.estates.models import EstateSettlement
 
 
 def player_for_sheet(sheet: CharacterSheet) -> PlayerData | None:
@@ -114,13 +118,14 @@ def _emit_stats(character_sheet: CharacterSheet, *stat_keys: str) -> None:
         increment_stat(character_sheet, stat)
 
 
-def create_journal_entry(
+def create_journal_entry(  # noqa: PLR0913 - explicit content/visibility/tag/override kwargs
     *,
     author: CharacterSheet,
     title: str,
     body: str,
     is_public: bool,
     tags: list[str] | None = None,
+    posthumous_override: str = PosthumousOverride.INHERIT,
 ) -> JournalEntry:
     """
     Create a journal entry and award weekly XP.
@@ -131,6 +136,7 @@ def create_journal_entry(
         body: Entry body text.
         is_public: Whether the entry is publicly visible.
         tags: Optional list of tag names to attach.
+        posthumous_override: Per-entry disposition override (#3287); INHERIT by default.
 
     Returns:
         The created JournalEntry.
@@ -141,6 +147,7 @@ def create_journal_entry(
             title=title,
             body=body,
             is_public=is_public,
+            posthumous_override=posthumous_override,
         )
 
         if tags:
@@ -293,9 +300,13 @@ def edit_journal_entry(
     entry: JournalEntry,
     title: str | None = None,
     body: str | None = None,
+    posthumous_override: str | None = None,
 ) -> JournalEntry:
     """
-    Edit an existing journal entry. Sets edited_at timestamp.
+    Edit an existing journal entry. Sets edited_at timestamp for title/body edits.
+
+    ``posthumous_override`` (#3287) is metadata, not editorial content — changing it alone
+    does not stamp ``edited_at``.
 
     Raises:
         ValueError: If the entry is a response (praise/retort).
@@ -303,15 +314,127 @@ def edit_journal_entry(
     if entry.response_type:
         raise JournalError(JournalError.EDIT_RESPONSE)
 
+    update_fields: list[str] = []
     if title is not None:
         entry.title = title
-    if body is not None:
-        entry.body = body
-    entry.edited_at = timezone.now()
-    update_fields = ["edited_at"]
-    if title is not None:
         update_fields.append("title")
     if body is not None:
+        entry.body = body
         update_fields.append("body")
-    entry.save(update_fields=update_fields)
+    if title is not None or body is not None:
+        entry.edited_at = timezone.now()
+        update_fields.append("edited_at")
+    if posthumous_override is not None:
+        entry.posthumous_override = posthumous_override
+        update_fields.append("posthumous_override")
+    if update_fields:
+        entry.save(update_fields=update_fields)
     return entry
+
+
+def set_sheet_posthumous_disposition(*, sheet: CharacterSheet, disposition: str) -> CharacterSheet:
+    """Set a character's sheet-level default posthumous journal disposition (#3287)."""
+    sheet.posthumous_journal_disposition = disposition
+    sheet.save(update_fields=["posthumous_journal_disposition"])
+    return sheet
+
+
+def reveal_journals_for_settlement(sheet: CharacterSheet, settlement: EstateSettlement) -> int:
+    """Stamp ``revealed_at``/``revealed_by_settlement`` on the sheet's REVEAL-effective
+    private entries (#3287 Decision 2). Called from ``estates.services.execute_settlement`` —
+    the shipped, timer-backed death pipeline — never from any other path.
+
+    - Never mutates ``is_public``; authorship history stays true.
+    - Idempotent: only entries with ``revealed_at__isnull=True`` are considered, so a re-run
+      never re-stamps (settlement itself is already first-door-wins idempotent, but this
+      guard is cheap insurance).
+    - SEAL-effective entries are excluded entirely, never touched.
+
+    Returns the number of entries revealed.
+    """
+    candidates = JournalEntry.objects.filter(
+        author=sheet, is_public=False, revealed_at__isnull=True
+    ).select_related("author")
+    now = timezone.now()
+    revealed_count = 0
+    for entry in candidates:
+        if entry.effective_posthumous_disposition() != PosthumousOverride.REVEAL:
+            continue
+        entry.revealed_at = now
+        entry.revealed_by_settlement = settlement
+        entry.save(update_fields=["revealed_at", "revealed_by_settlement"])
+        revealed_count += 1
+    return revealed_count
+
+
+def grant_journal_bequest(
+    *,
+    recipient_sheet: CharacterSheet,
+    deceased_sheet: CharacterSheet,
+    settlement: EstateSettlement,
+) -> JournalBequestGrant:
+    """Grant read access to a deceased sheet's non-sealed private entries (#3287 Decision 3).
+
+    Called from ``estates.services.execute_settlement`` when the deceased's will carries a
+    ``BequestKind.WRITINGS`` line. Idempotent per (recipient, deceased) pair via
+    ``get_or_create`` backed by the model's unique constraint — a settlement re-run never
+    mints a duplicate (first-door-wins already guards against that at the caller too).
+    """
+    grant, _created = JournalBequestGrant.objects.get_or_create(
+        recipient_sheet=recipient_sheet,
+        deceased_sheet=deceased_sheet,
+        defaults={"created_by_settlement": settlement},
+    )
+    return grant
+
+
+def sealed_effective_q() -> Q:
+    """A ``Q`` matching ``JournalEntry`` rows whose EFFECTIVE posthumous disposition is SEAL.
+
+    SEAL always wins (#3287 Decision 3) — used to exclude sealed entries from a bequest
+    recipient's read of a deceased's corpus, regardless of the sheet-level default.
+    """
+    return Q(posthumous_override=PosthumousOverride.SEAL) | Q(
+        posthumous_override=PosthumousOverride.INHERIT,
+        author__posthumous_journal_disposition=PosthumousJournalDisposition.SEAL,
+    )
+
+
+def has_journal_bequest_grant(*, recipient_sheet: CharacterSheet, deceased_sheet_id: int) -> bool:
+    """Whether ``recipient_sheet`` holds a bequest grant over ``deceased_sheet_id``'s writings."""
+    return JournalBequestGrant.objects.filter(
+        recipient_sheet=recipient_sheet, deceased_sheet_id=deceased_sheet_id
+    ).exists()
+
+
+def entry_visible_via_bequest(entry: JournalEntry, viewer_sheet: CharacterSheet | None) -> bool:
+    """Whether ``viewer_sheet`` may read ``entry`` under a bequest grant (retrieve path).
+
+    SEAL beats a grant — checked first so a sealed entry never needs the grant query.
+    """
+    if viewer_sheet is None:
+        return False
+    if entry.effective_posthumous_disposition() == PosthumousOverride.SEAL:
+        return False
+    return has_journal_bequest_grant(
+        recipient_sheet=viewer_sheet, deceased_sheet_id=entry.author_id
+    )
+
+
+def base_entries_queryset() -> QuerySet[JournalEntry]:
+    """The annotated/prefetched base queryset every list-style journal read builds on.
+
+    Extracted from ``JournalEntryViewSet._get_base_queryset`` (#3287) so
+    ``JournalEntryFilter.filter_deceased`` gets the same tag prefetch + response_count
+    annotation the serializer needs, without ``world.journals.filters`` importing
+    ``world.journals.views`` (would create a filters.py <-> views.py import cycle).
+    """
+    return (
+        JournalEntry.objects.select_related("author__character")
+        .prefetch_related(
+            Prefetch("tags", queryset=JournalTag.objects.all(), to_attr="cached_tags"),
+        )
+        .annotate(response_count=Count("responses"))
+        .order_by("-created_at")
+        .distinct()
+    )

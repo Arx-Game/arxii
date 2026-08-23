@@ -31,6 +31,7 @@ const baseRoom: WorldBuilderRoom = {
   clues: [],
   clue_triggers: [],
   portal_anchors: [],
+  desc_variants: [],
 };
 
 function anchor(id: number, kindName: string, name = kindName): WorldBuilderPortalAnchor {

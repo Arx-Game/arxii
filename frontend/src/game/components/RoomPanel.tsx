@@ -22,8 +22,23 @@ import { ObjectsList } from './room-panel/ObjectsList';
 import { NpcGiversBlock } from './room-panel/NpcGiversBlock';
 import { RoomEditorPanel } from './room-panel/RoomEditorPanel';
 import { HubTidingsPanel } from './room-panel/HubTidingsPanel';
+import { BoardPanel } from '@/boards/components/BoardPanel';
+import { useBoardForRoomQuery } from '@/boards/queries';
 import { RoomAuraPicker } from './room-panel/RoomAuraPicker';
 import { SceneHighlightsPanel } from './room-panel/SceneHighlightsPanel';
+
+/** Resolves the room's LOCATION board and renders it once loaded (#3286). */
+function RoomBoardPanel({
+  roomProfileId,
+  characterId,
+}: {
+  roomProfileId: number;
+  characterId?: number | null;
+}) {
+  const { data: board } = useBoardForRoomQuery(roomProfileId);
+  if (!board) return null;
+  return <BoardPanel boardId={board.id} boardName={board.name} characterId={characterId} />;
+}
 
 export interface RoomData {
   id: number;
@@ -216,6 +231,10 @@ export function RoomPanel({
       {room.description && <RoomDescription description={room.description} />}
 
       {room.hub && <HubTidingsPanel hub={room.hub} viewerEntryId={viewerEntryId} />}
+
+      {room.hub?.kind === 'NOTICE_BOARD' && (
+        <RoomBoardPanel roomProfileId={room.id} characterId={characterId} />
+      )}
 
       {scene && <SceneHighlightsPanel sceneId={scene.id} />}
 

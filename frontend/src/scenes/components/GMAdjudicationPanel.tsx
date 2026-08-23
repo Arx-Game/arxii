@@ -204,6 +204,106 @@ function CallCheckTab({ characterId, targetCharacterId }: TabProps) {
 }
 
 // ---------------------------------------------------------------------------
+// Call For Check tab (#3295) — JUNIOR+ GM, room-visible prompt, targets answer
+// themselves. Distinct from Call Check above (SENIOR-only ad-hoc invocation,
+// #2118): this never rolls anything itself.
+// ---------------------------------------------------------------------------
+
+function CallForCheckTab({
+  characterId,
+  personas,
+}: {
+  characterId: number;
+  personas: ScenePersona[];
+}) {
+  const [search, setSearch] = useState('');
+  const [checkTypeId, setCheckTypeId] = useState<number | null>(null);
+  const [difficulty, setDifficulty] = useState<DifficultyBand>('normal');
+  const [targetIds, setTargetIds] = useState<number[]>([]);
+  const { data: checkTypes = [] } = useCheckTypeCatalog(search, true);
+  const dispatch = useDispatchPlayerAction(characterId);
+
+  const withCharacter = personas.filter((p) => p.character_sheet != null);
+  const canSubmit = checkTypeId !== null && targetIds.length > 0 && !dispatch.isPending;
+
+  function toggleTarget(id: number) {
+    setTargetIds((prev) => (prev.includes(id) ? prev.filter((t) => t !== id) : [...prev, id]));
+  }
+
+  function handleSubmit() {
+    if (!canSubmit) return;
+    dispatch
+      .mutateAsync({
+        ref: { backend: 'registry', registry_key: 'call_for_check' },
+        kwargs: { check_type_ref: checkTypeId, difficulty, targets: targetIds },
+      })
+      .then((result) => reportResult(result, 'Check called.'))
+      .catch(() => toast.error('Could not call that check.'));
+  }
+
+  return (
+    <div className="space-y-3" data-testid="gm-adjudication-callforcheck-tab">
+      <div className="space-y-1">
+        <Label htmlFor="gm-callforcheck-search">Check</Label>
+        <Input
+          id="gm-callforcheck-search"
+          placeholder="Search the check catalog…"
+          value={search}
+          onChange={(e) => setSearch(e.target.value)}
+        />
+        <select
+          className={SELECT_CLASS}
+          value={checkTypeId ?? ''}
+          onChange={(e) => setCheckTypeId(e.target.value ? Number(e.target.value) : null)}
+          data-testid="gm-callforcheck-type-select"
+        >
+          <option value="">Select a check…</option>
+          {checkTypes.map((ct) => (
+            <option key={ct.id} value={ct.id}>
+              {ct.name}
+              {ct.trait_summary ? ` (${ct.trait_summary})` : ''}
+            </option>
+          ))}
+        </select>
+      </div>
+      <div className="space-y-1">
+        <Label htmlFor="gm-callforcheck-difficulty">Difficulty</Label>
+        <select
+          id="gm-callforcheck-difficulty"
+          className={SELECT_CLASS}
+          value={difficulty}
+          onChange={(e) => setDifficulty(e.target.value as DifficultyBand)}
+        >
+          {DIFFICULTY_BANDS.map((band) => (
+            <option key={band.value} value={band.value}>
+              {band.label}
+            </option>
+          ))}
+        </select>
+      </div>
+      <div className="space-y-1">
+        <Label>Targets</Label>
+        <div className="space-y-1 rounded-md border p-2" data-testid="gm-callforcheck-targets">
+          {withCharacter.map((p) => (
+            <label key={p.id} className="flex items-center gap-2 text-sm">
+              <input
+                type="checkbox"
+                checked={targetIds.includes(p.character_sheet as number)}
+                onChange={() => toggleTarget(p.character_sheet as number)}
+              />
+              {p.name}
+            </label>
+          ))}
+        </div>
+      </div>
+      <Button disabled={!canSubmit} onClick={handleSubmit} data-testid="gm-callforcheck-submit">
+        {dispatch.isPending ? 'Calling…' : 'Call For Check'}
+      </Button>
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
 // Award tab
 // ---------------------------------------------------------------------------
 
@@ -606,6 +706,9 @@ export function GMAdjudicationPanel({ scene }: GMAdjudicationPanelProps) {
             <TabsTrigger value="check" data-testid="gm-tab-check">
               Call Check
             </TabsTrigger>
+            <TabsTrigger value="callforcheck" data-testid="gm-tab-callforcheck">
+              Call For Check
+            </TabsTrigger>
             <TabsTrigger value="award" data-testid="gm-tab-award">
               Award
             </TabsTrigger>
@@ -621,6 +724,9 @@ export function GMAdjudicationPanel({ scene }: GMAdjudicationPanelProps) {
           </TabsList>
           <TabsContent value="check">
             <CallCheckTab characterId={characterId} targetCharacterId={targetCharacterId} />
+          </TabsContent>
+          <TabsContent value="callforcheck">
+            <CallForCheckTab characterId={characterId} personas={personas} />
           </TabsContent>
           <TabsContent value="award">
             <AwardTab characterId={characterId} targetCharacterId={targetCharacterId} />

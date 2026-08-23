@@ -12,6 +12,7 @@ from world.societies.views import (
     OrganizationViewSet,
     OrgAppealViewSet,
     ProclamationViewSet,
+    StandingDeclarationViewSet,
 )
 
 app_name = "societies"
@@ -31,6 +32,11 @@ router.register(
     r"offers",
     OrganizationMembershipOfferViewSet,
     basename="organization-membership-offer",
+)
+router.register(
+    r"standing-declarations",
+    StandingDeclarationViewSet,
+    basename="standing-declaration",
 )
 router.register(r"appeals", OrgAppealViewSet, basename="organization-appeal")
 

@@ -32,6 +32,7 @@ import world.agriculture.admin
 import world.areas.admin
 import world.assets.admin
 import world.battles.admin
+import world.boards.admin
 import world.boundaries.admin
 import world.buildings.admin
 import world.captivity.admin
@@ -85,6 +86,7 @@ import world.species.admin
 import world.stories.admin
 import world.tarot.admin
 import world.tasking.admin
+import world.tavern_games.admin
 import world.traits.admin
 import world.travel.admin
 import world.vitals.admin

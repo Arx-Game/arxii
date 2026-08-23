@@ -747,7 +747,8 @@ Character advantages and disadvantages (CG Stage 6: Traits).
 ### Checks
 Check resolution engine — converts trait values to ranks and rolls against result charts.
 
-- **Models:** `CheckCategory`, `CheckType`, `CheckTypeTrait`, `CheckTypeAspect`, `CheckTypeCapabilityModifier` (#2505 — curated authored `(check_type, capability)` weight, `related_name="capability_modifiers"`)
+- **Models:** `CheckCategory`, `CheckType`, `CheckTypeTrait`, `CheckTypeAspect`, `CheckTypeCapabilityModifier` (#2505 — curated authored `(check_type, capability)` weight, `related_name="capability_modifiers"`), `CheckCall`/`CheckCallTarget` (#3295 — a GM's room-visible request that named targets roll a catalog check; one `CheckCallTarget` row per target, `status` PENDING/ANSWERED/DECLINED)
+- **Scene check invocation (#3295, ADR-restating #2118's firewall):** every check anyone rolls in a scene is an authored `CheckType` at a `DifficultyChoice` band — never a freeform stat/skill/difficulty invention. `world.checks.catalog_invocation` is the shared resolve/find/band-validation core, consumed by the SENIOR ad-hoc `InvokeCatalogCheckAction` (#2118) and three new REGISTRY actions in `actions/definitions/scene_checks.py`: `SceneSelfCheckAction` (key `scene_self_check`, any player, SELF-only, broadcasts to the room via `record_interaction`/`render_challenge_outcome_narration`), `CallForCheckAction` (key `call_for_check`, JUNIOR+ GM, creates a `CheckCall` + `CheckCallTarget` rows), `AnswerCheckCallAction`/`DeclineCheckCallAction` (keys `answer_check_call`/`decline_check_call` — a target's one-tap response; answering dispatches the same self-check core bound to the call's own check/band). None of these select, compose, or fire a `ConsequenceOutcome`/consequence pool. Telnet: `check`/`callcheck` (`commands/scene_checks.py`). Web: `SelfCheckPanel`/`CheckCallPromptCard` (`frontend/src/scenes/components/`) + a `CallForCheckTab` on `GMAdjudicationPanel`. When the catalog lacks a fitting check, `ProposeCheckAction` (key `propose_check_type`) routes a structured `CheckProposal` (`world.player_submissions.models`, `SubmissionCategory.CHECK_PROPOSAL`) to the staff inbox via `submit_check_proposal` — it never creates a live `CheckType` row; adoption is a separate manual staff act.
 - **Seeded check types:** `Composure` (willpower-weighted; resistance-specific — seeded via `create_resistance_check_types()` in `checks/factories.py`; used by `compute_resist_increment`)
 - **Key Functions:** `perform_check(character, check_type, target_difficulty, extra_modifiers) -> CheckResult`, `get_rollmod(character) -> int`, `compute_check_rating(character, check_type, extra_modifiers=0) -> int` (pre-roll total points, no dice roll — the one answer for "what does this character bring to this check"), `compute_resist_increment(defender_character, resist_effort_level, *, level_override=None, award_development=False) -> int` (#2707, ADR-0166: routes through `compute_check_rating` on the Composure CheckType, so it now carries the defender's full rating — trait, specialization, aspect, and capability points, but NOT perk points, since `compute_check_rating` takes no `situation_ctx` and `_situational_perk_check_bonus` short-circuits to 0 without one — plus the effort modifier, clamped ≥ 0; the ACTIVE half of an opposed check. `level_override` SUBSTITUTES for the defender's resolved level so a `CombatOpponent`'s authored `level` reaches the resist path. `award_development=True` (#3066, opt-in, scene call sites only) awards the defender check-based dp for a player-declared resist effort via the same chokepoint `perform_check` uses internally), `level_opposition(check_type, *, level, character=None) -> int` (#2707, ADR-0166: the PASSIVE half — `LEVEL_POINTS_PER_LEVEL * level` plus, when `character` is given, the acting check's aspects scored against the defender's Path; deliberately exclusive with `compute_resist_increment` — a call site uses one or the other, never both, since an active rating already contains level points; combat's clash roll is the deliberate exception that opposes neither, staying at `target_difficulty=0` since a clash grades two rolls against each other instead)
 - **Result-chart direction (ADR-0165):** `rank_difference = roller_rank - target_rank`; positive means the roller is stronger and gets the easier chart — the convention `ResultChart.rank_difference`'s own `help_text` states and the engine computes; guarded by `world/checks/tests/test_chart_direction.py`.
@@ -1037,14 +1038,29 @@ buildings up to entire planes. A `Room` is not its own `Area` level — it hangs
   trigger). Weekly decay sweep (`cleanup_quality_decay_tick`) decays above-normal
   quality after `CLEANUP_DWELL_DAYS` and regains below-normal after
   `CLEANUP_REGAIN_WEEKS`. Room descriptions get quality-based suffixes at display
-  time. Contributors earn celestial resonance (via `ProjectKindResonanceAward`) and
-  society reputation (via `bump_society_reputation` with `area.dominant_society`).
+  time, appended after any #3291 season/phase description variant has already
+  replaced the base desc (see `RoomState.get_display_desc`,
+  `flows/object_states/room_state.py`). Contributors earn celestial resonance (via
+  `ProjectKindResonanceAward`) and society reputation (via `bump_society_reputation`
+  with `area.dominant_society`).
+- **Room Description Variants (#3291):** `evennia_extensions.RoomDescVariant`
+  (`room_profile` FK, nullable `season`/`phase` TextChoices reusing
+  `world.game_clock.constants.Season`/`TimePhase`, `description` text, unique on
+  `(room_profile, season, phase)`) - optional builder-authored prose for a specific
+  IC season/time-of-day. `resolve_room_description(profile, ic_now)`
+  (`evennia_extensions.services.room_desc_variants`) resolves most-specific-wins:
+  `(season, phase)` > `(season, -)` > `(-, phase)`, falling back to the base desc
+  (including when the game clock is unset). An event's `temporary_description`
+  overlay (`world.events.services._apply_room_overlay`) always takes precedence
+  over a variant. Authoring: `RoomDescVariantInline` on `RoomProfileAdmin`, plus
+  `staff_set_room_desc_variant`/`staff_remove_room_desc_variant` in the staff
+  world-builder canvas below.
 - **Staff World-Builder Canvas (#2449, epic #2436):** `world.areas.grid_services`
   extracts the area-generic room-graph core (`create_room`, `create_exit_pair`,
   `cell_occupied`, `place_room_on_grid`, `stranded_rooms` BFS, `promote_to_authored`,
   `suggest_fixture_key`, `ensure_slug_change_allowed`) out of
   `world.buildings.room_services` (#670), so the owner-facing Room Builder and the
-  staff canvas share one substrate instead of two drifting copies. Thirty-seven REGISTRY
+  staff canvas share one substrate instead of two drifting copies. Thirty-nine REGISTRY
   actions (`src/actions/definitions/world_builder.py`, `category="world_builder"`,
   `target_type=SELF`) — `create_area`/`edit_area`/`staff_dig_room`/`staff_edit_room`/
   `staff_link_rooms`/`staff_unlink_rooms`/`staff_rename_exit`/`staff_place_room`/
@@ -1052,7 +1068,8 @@ buildings up to entire planes. A `Room` is not its own `Area` level — it hangs
   `promote_area` + the six #2451 discovery/portal verbs + the #3269 Phase B
   room-authoring set (stats/places/ambient/feature/staffing/travel/blueprint/
   bindings/exit-detail/duplicate/batch-dig; `edit_area` carries the Phase C
-  area metadata) — gated solely by
+  area metadata) + the #3291 `staff_set_room_desc_variant`/
+  `staff_remove_room_desc_variant` pair — gated solely by
   `StaffOnlyPrerequisite` (no ownership/tenancy standing, and deliberately no
   GM-ladder trust check — see ADR-0139). `staff_dig_room` requires an AUTHORED area
   and always authors the new room outright; `staff_remove_room` refuses an
@@ -1271,15 +1288,16 @@ Mechanical regional climate + transient weather feeding the #1514 comfort substr
 ### Societies
 Social structures, organizations, reputation, and legend tracking.
 
-- **Models:** `Society`, `OrganizationType`, `Organization`, `OrganizationRank` (+ `can_resolve_appeals` boolean, #3293), `OrganizationMembership`, `OrganizationMembershipOffer`, `OrganizationOffice` (#2239 — named portfolio: `slug`/`title`/`holder`/`feeds_check`), `OrganizationObligation` (#2428 — personal Golden Hare debt: `debtor` CharacterSheet → `creditor` Organization, `origin`/`state` TextChoices, never deleted; distinct from `currency.OrgObligation`'s org-to-org tithe/tax), `OrgAppeal` / `OrgAppealSignon` (#3293 — appeals to organizations: free-text IC ask, OPEN → GRANTED/DECLINED/WITHDRAWN, partial-unique one OPEN appeal per (org, petitioner); see ADR-0231 for the Appeal/Petition vocabulary split), `SocietyReputation`, `OrganizationReputation`, `LegendEntry`, `LegendSpread`
+- **Models:** `Society`, `OrganizationType`, `Organization`, `OrganizationRank` (`can_resolve_appeals` #3293 — leader gate for appeal resolution; `can_declare_standing` #3290 — leader gate for standing declarations, alongside `can_invite`/`can_kick`/`can_manage_ranks`/`can_lead_rituals`), `OrganizationMembership`, `OrganizationMembershipOffer`, `OrganizationOffice` (#2239 — named portfolio: `slug`/`title`/`holder`/`feeds_check`), `OrganizationObligation` (#2428 — personal Golden Hare debt: `debtor` CharacterSheet → `creditor` Organization, `origin`/`state` TextChoices, never deleted; distinct from `currency.OrgObligation`'s org-to-org tithe/tax), `OrgAppeal` / `OrgAppealSignon` (#3293 — appeals to organizations: free-text IC ask, OPEN → GRANTED/DECLINED/WITHDRAWN, partial-unique one OPEN appeal per (org, petitioner); see ADR-0231 for the Appeal/Petition vocabulary split), `SocietyReputation`, `OrganizationReputation`, `StandingDeclaration` (#3290 — leader favor/disfavor audit row: `organization`/`target_persona`/`declared_by_persona` FKs, `direction` (`StandingDirection` FAVOR/DISFAVOR), `delta_applied`, `citation`, `game_week` FK (rate-limit key), `created_at`; unique per (organization, target_persona, game_week)), `LegendEntry`, `LegendSpread`
 - **Office services** (`office_services.py`, #2239): `appoint_office` / `vacate_office` / `office_holder` / `holds_office`
 - **Obligation services** (`obligation_services.py`, #2428): `settle_obligation(obligation, token)` (redeems the Hare via `currency.redeem_favor_token`, flips `OWED` → `SETTLED`, stamps `settled_at`/`settled_by_token`; raises `ObligationNotOwedError` if not `OWED`) / `has_open_obligation(sheet, org)` (read-only gate for training/entrance flows)
+- **Standing declarations** (`standing_services.py`, #3290): `declare_standing(*, organization, target_persona, declared_by_persona, direction, citation)` — rank-gates on `can_declare_standing`, gates DISFAVOR through the #2170 antagonism-consent seam (the `hostile` `SocialConsentCategory`, the same one `world.secrets.services.accusation_permitted` consults for frame-job denounce), rate-limits to one declaration per (organization, target_persona) per IC `GameWeek`, applies the PLACEHOLDER `STANDING_DECLARATION_FAVOR_DELTA`/`STANDING_DECLARATION_DISFAVOR_DELTA` (`constants.py`) via the existing `bump_organization_reputation` (never a parallel writer), and mints the `StandingDeclaration` audit row. Typed errors: `NotAuthorizedToDeclareStandingError`, `InvalidStandingTargetError`, `StandingConsentBlockedError`, `StandingRateLimitedError`.
 - **Appeal services** (`appeal_services.py`, #3293): `lodge_appeal` / `signon_appeal` / `resolve_appeal` (rank `can_resolve_appeals` or staff) / `withdraw_appeal` (petitioner-only) / `can_resolve_org_appeals(persona, organization)`
-- **Enums:** `ReputationTier`, `OrganizationMembershipOffer.Kind`, `OrganizationMembershipOffer.Status`, `OrgAppealState` (OPEN/GRANTED/DECLINED/WITHDRAWN)
+- **Enums:** `ReputationTier`, `OrganizationMembershipOffer.Kind`, `OrganizationMembershipOffer.Status`, `StandingDirection` (#3290 — FAVOR/DISFAVOR), `OrgAppealState` (OPEN/GRANTED/DECLINED/WITHDRAWN)
 - **Key Services:** `ensure_default_rank_ladder`, `join_organization`, `leave_organization`, `invite_to_organization`, `apply_to_organization`, `accept_invitation`, `decline_invitation`, `accept_application`, `decline_application`, `promote_member`, `demote_member`, `expel_member`
-- **Action Keys:** `org_invite`, `org_apply`, `org_join`, `org_leave`, `org_promote`, `org_demote`, `org_expel`, `org_appeal_lodge`, `org_appeal_signon`, `org_appeal_resolve`, `org_appeal_withdraw` (#3293)
-- **Telnet:** `org <subverb>` command; `appeal <org>=<title>/<body>` / `appeal list <org>` / `appeal signon <id>[=<note>]` / `appeal resolve <id>=grant|decline/<answer>` / `appeal withdraw <id>` (`CmdAppeal`, #3293); `accept org` / `decline org` offer responses
-- **DRF:** `OrganizationViewSet` (`?name=` iexact filter), `OrganizationMembershipViewSet`, `OrganizationRankViewSet`, `OrganizationMembershipOfferViewSet`, `OrganizationReputationViewSet`, `OrgAppealViewSet` (list/retrieve + `signon`/`resolve`/`withdraw` actions, member-gated: members + own appeals) at `/api/societies/organizations/`, `/api/societies/memberships/`, `/api/societies/ranks/`, `/api/societies/offers/`, `/api/societies/reputations/`, and `/api/societies/appeals/` (self-scoped org standing, #1446)
+- **Action Keys:** `org_invite`, `org_apply`, `org_join`, `org_leave`, `org_promote`, `org_demote`, `org_expel`, `declare_standing` (#3290 — direction kwarg picks FAVOR/DISFAVOR, shared by both telnet subverbs and the web dialog), `org_appeal_lodge`, `org_appeal_signon`, `org_appeal_resolve`, `org_appeal_withdraw` (#3293)
+- **Telnet:** `org <subverb>` command (`favor`/`disfavor <person> in <org>=<citation>` added #3290); `appeal <org>=<title>/<body>` / `appeal list <org>` / `appeal signon <id>[=<note>]` / `appeal resolve <id>=grant|decline/<answer>` / `appeal withdraw <id>` (`CmdAppeal`, #3293); `accept org` / `decline org` offer responses
+- **DRF:** `OrganizationViewSet` (`?name=` iexact filter), `OrganizationMembershipViewSet`, `OrganizationRankViewSet`, `OrganizationMembershipOfferViewSet`, `OrganizationReputationViewSet`, `OrgAppealViewSet` (list/retrieve + `signon`/`resolve`/`withdraw` actions, member-gated: members + own appeals), `StandingDeclarationViewSet` (#3290 — public read, unlike the self-scoped reputation viewset; writes go through `declare_standing_action`, never a POST here) at `/api/societies/organizations/`, `/api/societies/memberships/`, `/api/societies/ranks/`, `/api/societies/offers/`, `/api/societies/reputations/` (self-scoped org standing, #1446), `/api/societies/standing-declarations/`, and `/api/societies/appeals/`
 - **Principle Axes:** mercy, method, status, change, allegiance, power (-5 to +5)
 - **Legend deed from crossing:** `LegendEntry.audere_majora_crossing` — reverse OneToOne to `AudereMajoraCrossing` (magic app); set when `cross_threshold` mints a deed via `fire_renown_award` + `_mint_crossing_deed`.
 - **Scandal reach fork (#1464, ADR-0082):** `world/societies/scandal.py` —
@@ -1351,21 +1369,36 @@ Goal domain allocation and journal-based XP progression.
 ### Journals
 Character journal entries (public/private), praises, retorts, freeform tags, weekly XP.
 
-- **Models:** `JournalEntry` (FK CharacterSheet author; self-FK parent for responses), `JournalTag`, `WeeklyJournalXP`
+- **Models:** `JournalEntry` (FK CharacterSheet author; self-FK parent for responses;
+  `posthumous_override`/`revealed_at`/`revealed_by_settlement` #3287), `JournalTag`,
+  `WeeklyJournalXP`, `JournalBequestGrant` (recipient_sheet/deceased_sheet FKs CharacterSheet,
+  created_by_settlement FK estates.EstateSettlement, #3287)
 - **Write services:** `create_journal_entry` / `create_journal_response` / `edit_journal_entry`; `JournalError` user-safe exception in `types.py`
-- **Action-backed (#1350, ADR-0001):** `create_journal_entry` / `respond_to_journal` / `edit_journal_entry` Actions wrap the services; web `JournalEntryViewSet` + telnet `CmdJournal` (`journal write|respond|edit`) converge on `action.run()`
+- **Action-backed (#1350, ADR-0001):** `create_journal_entry` / `respond_to_journal` / `edit_journal_entry` / `set_journal_disposition` (#3287) Actions wrap the services; web `JournalEntryViewSet` + telnet `CmdJournal` (`journal write|respond|edit|disposition`) converge on `action.run()`
 - **Web surface (#2160):** previously zero web frontend (telnet-only); now `/journals`
   (composer, public feed, own-entries tab) plus a `JournalTab` quick-compose panel in the
   in-scene sidebar. `/journal` (singular) was freed from the missions ledger, which moved to
   `/missions/journal` in the same PR — see Missions below and `journals/AGENT_GLOSSARY.md`'s
   disambiguation entry for the "journal" homonym across apps.
-- **Integrates with:** progression (weekly XP awards), achievements (`journals.total_written`/`total_public` stats), threads (`JournalEntry.related_threads` M2M)
+- **Integrates with:** progression (weekly XP awards), achievements (`journals.total_written`/`total_public` stats), threads (`JournalEntry.related_threads` M2M), estates (posthumous reveal + writings bequest, #3287)
 - **Account block/mute (#2996):** the public feed excludes an account-level-blocked account's
   entries both directions, and an account-level-muted account's entries from the muter's own
   feed only (`services.exclude_blocked_and_muted_authors`); a praise/retort response between a
   blocked pair is rejected with a neutral shared failure, a muted pair's response persists but
   is hidden from the entry author's own read only — see `world/scenes/CLAUDE.md`'s Block/Mute
   entries and ADR-0204
+- **Posthumous afterlife (#3287, ADR-0229):** a `CharacterSheet.posthumous_journal_disposition`
+  (REVEAL default / SEAL) plus a per-entry `JournalEntry.posthumous_override`
+  (INHERIT default / REVEAL / SEAL) decide what happens to a character's private entries at
+  death. `services.reveal_journals_for_settlement` and `services.grant_journal_bequest` are
+  called explicitly from `estates.services.execute_settlement` (no signals) — the reveal always
+  runs; the grant only when the will carries a `BequestKind.WRITINGS` line. SEAL always wins,
+  even over a bequest grant (enforced at the read path via `services.sealed_effective_q` /
+  `entry_visible_via_bequest`, never by excluding sealed rows from the grant itself). Read
+  paths: the public feed includes `revealed_at`-stamped entries (`is_public` is never mutated
+  by a reveal); a bequest recipient browses the deceased's non-sealed private corpus via
+  `GET /api/journals/entries/?deceased=<sheet_id>`; `GET/PATCH /api/journals/entries/disposition/`
+  reads/sets the caller's sheet-level default.
 - **Source:** `src/world/journals/` (no dedicated `docs/systems/journals.md`; see the app's
   `CLAUDE.md` and `AGENT_GLOSSARY.md`)
 ### Action Points
@@ -1908,6 +1941,30 @@ is deferred to its own follow-up (not two-party-confirm shaped).
   IC-scoped); web `TradePanel` (two-column staging card)
 - **Source:** `src/world/items/trade/`
 - **Details:** [trade.md](trade.md)
+
+### Tavern Games (#3292)
+A pure social-fun coin sink: characters at a table in a social hub open a
+curated coin-stakes dice game, ante in, roll, winner takes the pot, visible
+to the room. Pure chance at MVP (no skill input); server-side `randint`.
+
+- **Models:** `TavernGame` (`NaturalKeyMixin`, curated content, one row at
+  MVP), `TavernGamblingConfig` (singleton, weekly loss cap), `GameSession`
+  (place + game + escrowed pot, OPEN/RESOLVED/ABANDONED), `GameSeat`
+  (ante_paid + nullable roll_result), `GamblingLossLedger`
+  (character_sheet + game_week, mirrors `currency.PurseDrainWeek`)
+- **Services:** `world.tavern_games.services` - open_session/join_session/
+  roll/leave_session; ante is a currency sink into `GameSession.pot`, payout
+  is a currency mint from the pot, refund on leave; loss-cap refusal locks +
+  bumps the week's ledger row in the same transaction as the ante sink;
+  highest-roll resolve with whole-table re-roll on a tie; public POSE/OUTCOME
+  narration via `world.scenes.interaction_services`
+- **Surfaces:** 4 REGISTRY actions (`tavern_game_open`/`_join`/`_roll`/
+  `_leave`); `/api/tavern-games/` (`games/` read-only catalog, `sessions/`
+  read + open/join/roll/leave custom actions); telnet `game` namespace; web
+  Place-bar game widget; seeds cluster `tavern_games`
+- **Source:** `src/world/tavern_games/`
+- **Details:** [tavern-games.md](tavern-games.md)
+- **Glossary:** `src/world/tavern_games/AGENT_GLOSSARY.md`
 
 ### Roster
 Character lifecycle management with web-first applications and player anonymity.
@@ -4486,6 +4543,59 @@ registering a service strategy + per-kind details model.
     ward's reaction at install time; the condition must be from a harmful
     (`is_negative=True`) category.
 
+### Boards (player-postable bulletin boards - #3286)
+The IC read/write layer the Notice Board room feature and org pages were
+missing: a `Board` is anchored to EITHER a `RoomProfile` (LOCATION board,
+riding the shipped NOTICE_BOARD room feature) OR an `Organization` (ORG
+board) - never both (DB check constraint, no JSON). Posts are signed,
+persistent, exact-text notices authored by a `scenes.Persona` - a masked
+persona posts under its false identity. Distinct from #2986 rumors
+(distorting, spreading) and the GM-only `TableBulletinPost` (OOC,
+table-scoped) - see `docs/adr/0228-board-posts-are-authored-by-persona.md`.
+
+- **Models** (`world.boards.models`): `Board` (nullable `room_profile` /
+  `organization` FKs, exactly-one-set check constraint + a per-anchor unique
+  constraint - one board per room, one per org; `max_active_posts`, default
+  30, newest-first display cap - no auto-expiry at MVP, older posts stay in
+  the DB), `BoardPost` (`board` FK, `author_persona` FK `scenes.Persona`,
+  `title`, `body`, `created_at`, `edited_at`, soft-delete
+  `removed_by_persona` / `removed_at` - moderation never hard-deletes).
+- **Permission booleans** on `societies.OrganizationRank`: `can_post_to_board`
+  (every default rank grants it - org boards are rank-and-file coordination),
+  `can_moderate_board` (leadership-only by default, mirrors
+  `can_manage_ranks`).
+- **Services** (`world.boards.services`): `create_board_post` /
+  `edit_board_post` / `remove_board_post` (permission logic lives here,
+  raises typed `BoardError`) - LOCATION posting/remove-own requires physical
+  presence in the board's room; ORG posting requires `can_post_to_board`,
+  removing another member's post requires `can_moderate_board` or staff.
+  `get_or_create_location_board` / `get_or_create_org_board`;
+  `visible_posts_for_board` (display-cap + soft-delete filter);
+  `exclude_blocked_and_muted_board_authors` (mirrors
+  `journals.services.exclude_blocked_and_muted_authors`).
+- **Room-feature integration:** `room_features.services.handle_notice_board_progression`
+  get-or-creates the LOCATION board on install; `PostToBoardAction` also
+  lazily get-or-creates it at first post (covers a NOTICE_BOARD room
+  installed before #3286 shipped).
+- **Action-backed (ADR-0001):** `PostToBoardAction` / `EditBoardPostAction` /
+  `RemoveBoardPostAction` (`actions/definitions/boards.py`); telnet
+  `CmdBoard` (`board`, `board read <n>`, `board post <title>=<body>`,
+  `board remove <n>`, scoped to the caller's current room) and the web
+  dispatch seam converge on the same Actions.
+- **API:** `BoardViewSet` / `BoardPostViewSet` (`world/boards/views.py`,
+  read-only - writes go through action dispatch); ORG board visibility is
+  gated on active `OrganizationMembership` (mirrors
+  `tasking.views.OrgTaskViewSet`), LOCATION boards are public reads.
+- **Web:** OrgPage's Board section (`orgs/pages/OrgPage.tsx`), and the room
+  panel's board block (`game/components/RoomPanel.tsx`,
+  `boards/components/BoardPanel.tsx`) - both share one `BoardPanel` read/post
+  component.
+- **Examine integration:** `actions/definitions/examine_extras.py`'s room
+  section renders the LOCATION board's current postings under the existing
+  Notice Board hint line.
+- **Source:** `src/world/boards/` (see the app's `AGENT_GLOSSARY.md` and
+  `docs/systems/boards.md` for the full write-up).
+
 ### Sanctum (Plan 4 §F — first Room Feature kind)
 Plan 4 §F (#669 §F, shipped via #703). Per-resonance per-room
 generation surface installed via the Ritual of Sanctification. Two
@@ -6931,14 +7041,16 @@ funeral finish, executor will-reading, or the deadline sweeper (14 real days, PL
 
 - **Models** (`world/estates`): `Will` (OneToOne sheet; testament prose; frozen once a
   settlement exists), `WillExecutor` (persona; any one may read), `Bequest` (kind-major
-  lines: SPECIFIC_ITEM/COIN_AMOUNT/ALL_COIN/BUILDING/BUSINESS/RESIDUARY; typed
-  persona-XOR-org recipient; items/businesses persona-only), `EstateSettlement`
+  lines: SPECIFIC_ITEM/COIN_AMOUNT/ALL_COIN/BUILDING/BUSINESS/RESIDUARY/WRITINGS (#3287,
+  no target FK — the corpus itself is the asset); typed persona-XOR-org recipient;
+  items/businesses/WRITINGS persona-only), `EstateSettlement`
   (PENDING/SETTLED/PARKED + `settled_via`), `EstateClaim` (inherited theft grievance,
   claimant-visible only), `EstateConfig` (singleton window).
 - **Services**: `open_settlement` (from `_mark_dead`, which now also stamps
   `Kinsperson.is_deceased` + fires `handle_death_for_pacts`); `execute_settlement` (ONE
   idempotent path: debts → bequests → residuary sweep → contract substitution → tenancy/
-  employment end → claims; PARKED = zero-mutation rollback); `resolve_intestate_heir`
+  employment end → claims → journal reveal + WRITINGS bequest grant, #3287; PARKED =
+  zero-mutation rollback); `resolve_intestate_heir`
   (family-org head → public-record kin; hidden kin never auto-inherit);
   `resolve_escheat_org` (nearest `Domain.owner_org` by parent walk).
 - **Ownership/theft**: `OwnershipEventType.INHERITED` (+ `PROVENANCE_EVENT_TYPES`);

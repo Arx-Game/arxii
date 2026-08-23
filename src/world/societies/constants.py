@@ -328,6 +328,38 @@ class ObligationState(models.TextChoices):
 
 
 # ---------------------------------------------------------------------------
+# StandingDeclaration (#3290) — leader-declared favor/disfavor
+#
+# An org leader (OrganizationRank.can_declare_standing) deliberately moves a
+# persona's OrganizationReputation via the existing bump_organization_reputation
+# writer (renown.py) and mints an audit row. PLACEHOLDER magnitudes; tuning
+# is a follow-up once play tests how fast declared standing should move the
+# hidden -1000..+1000 value relative to deed-driven bumps.
+# ---------------------------------------------------------------------------
+
+
+class StandingDirection(models.TextChoices):
+    """Which way a :class:`~world.societies.models.StandingDeclaration` pushes standing."""
+
+    FAVOR = "favor", "Favor"
+    DISFAVOR = "disfavor", "Disfavor"
+
+
+# PLACEHOLDER magnitude: a single declaration nudges standing by this much.
+# Small relative to the -1000..+1000 range so a leader can't singlehandedly
+# swing a tier in one act; repeated declarations (rate-limited to one per
+# (org, target) per IC week) accumulate over time.
+STANDING_DECLARATION_FAVOR_DELTA = 50
+STANDING_DECLARATION_DISFAVOR_DELTA = -50
+
+# Antagonism consent category key gating DISFAVOR declarations (#2170 seam).
+# Reuses the same "hostile" category the frame-job denounce/accusation gate
+# consults (world.secrets.services.accusation_permitted) rather than minting
+# a new category — a leader publicly marking a PC disfavored is the same
+# antagonism-consent question ("has this player opted into being targeted by
+# hostile play?"), not a distinct flavor of antagonism deserving its own
+# category and its own row in every player's consent settings.
+STANDING_DISFAVOR_CONSENT_CATEGORY_KEY = "hostile"
 # OrgAppeal (#3293) — appeals to organizations
 # ---------------------------------------------------------------------------
 

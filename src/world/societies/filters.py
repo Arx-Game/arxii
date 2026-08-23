@@ -10,6 +10,7 @@ from world.societies.models import (
     OrganizationMembershipOffer,
     OrganizationRank,
     OrgAppeal,
+    StandingDeclaration,
 )
 
 
@@ -60,6 +61,17 @@ class OrganizationMembershipOfferFilter(django_filters.FilterSet):
     class Meta:
         model = OrganizationMembershipOffer
         fields = ["organization", "kind", "status", "to_persona", "from_persona"]
+
+
+class StandingDeclarationFilter(django_filters.FilterSet):
+    organization = django_filters.NumberFilter(field_name="organization_id")
+    target_persona = django_filters.NumberFilter(field_name="target_persona_id")
+    declared_by_persona = django_filters.NumberFilter(field_name="declared_by_persona_id")
+    direction = django_filters.CharFilter(field_name="direction", lookup_expr="iexact")
+
+    class Meta:
+        model = StandingDeclaration
+        fields = ["organization", "target_persona", "declared_by_persona", "direction"]
 
 
 class OrgAppealFilter(django_filters.FilterSet):

@@ -75,6 +75,12 @@ def ensure_default_rank_ladder(organization: Organization) -> list[OrganizationR
                 can_kick=is_top,
                 can_manage_ranks=is_top,
                 can_lead_rituals=is_top,
+                can_declare_standing=is_top,
+                # #3286: every default rank can post to the org's own board (rank
+                # and file coordination is the point); moderation is leadership-only,
+                # mirroring can_manage_ranks.
+                can_post_to_board=True,
+                can_moderate_board=is_top,
                 can_resolve_appeals=is_top,
             )
         )

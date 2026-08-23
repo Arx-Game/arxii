@@ -22,6 +22,32 @@ interface PaginatedOrganizations {
 }
 
 /**
+ * A leader's public favor/disfavor declaration (#3290) — GET /api/societies/standing-declarations/.
+ *
+ * Hand-written (not sourced from `components['schemas']`) — the serializer is new and
+ * `just gen-api-types` has not run against it yet; regenerate `frontend/src/generated/api.d.ts`
+ * before merge and this can switch to the generated type like its siblings above.
+ * `delta_applied` is deliberately absent — the backend never exposes the raw magnitude to
+ * players (same "tier only" convention as `OrganizationReputation`).
+ */
+export interface StandingDeclaration {
+  id: number;
+  organization: number;
+  organization_name: string;
+  target_persona: number;
+  target_persona_name: string;
+  declared_by_persona: number;
+  declared_by_persona_name: string;
+  direction: 'favor' | 'disfavor';
+  citation: string;
+  created_at: string;
+}
+
+interface PaginatedStandingDeclarations {
+  results: StandingDeclaration[];
+}
+
+/**
  * Resolve an organization by exact (iexact) name.
  * GET /api/societies/organizations/?name={name}
  */
@@ -87,6 +113,19 @@ export async function chooseCrisisOption(
   return res.json();
 }
 
+/**
+ * Fetch this org's public standing-declaration history (#3290) — newest first.
+ * GET /api/societies/standing-declarations/?organization={id}
+ *
+ * Public read to any authenticated player — org politics played through leader
+ * declarations are meant to be legible to bystanders (spec decision 4).
+ */
+export async function fetchStandingDeclarations(orgId: number): Promise<StandingDeclaration[]> {
+  const res = await apiFetch(`/api/societies/standing-declarations/?organization=${orgId}`);
+  if (!res.ok) throw new Error('Failed to load standing declarations');
+  const data = (await res.json()) as PaginatedStandingDeclarations;
+  return data.results;
+}
 // ---------------------------------------------------------------------------
 // Appeals to organizations (#3293)
 //

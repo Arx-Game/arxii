@@ -25,6 +25,7 @@ from commands.agriculture import CmdHarvest
 from commands.alterations import CmdMageScar
 from commands.assets import CmdIntroduce
 from commands.battle import CmdBattle
+from commands.boards import CmdBoard
 from commands.canon_review import CmdCanonReview
 from commands.captivity import CmdDemandRansom
 from commands.carry import CmdCarry, CmdSetDown  # #2852
@@ -140,6 +141,7 @@ from commands.retire import CmdRetire  # #2287
 from commands.ritual import CmdRitual
 from commands.sanctum import CmdSanctum
 from commands.scene import CmdScene
+from commands.scene_checks import CmdCallCheck, CmdCheck  # #3295
 from commands.seance import CmdSeance
 from commands.select import CmdSelect
 from commands.servant import CmdServant  # #2989
@@ -172,6 +174,7 @@ from commands.sphinx import CmdSphinx  # #2640
 from commands.stealth import CmdSneak
 from commands.story import CmdStory
 from commands.story_rooms import CmdJoinRoom, CmdLeaveRoom, CmdSceneRoom  # #2450
+from commands.tavern_games import CmdGame  # #3292
 from commands.technique import CmdTechnique
 from commands.threads import CmdThreads
 from commands.training import CmdTrain  # #2739
@@ -386,6 +389,9 @@ class CharacterCmdSet(default_cmds.CharacterCmdSet):
             # #2004 — GM dashboard + idle-tables listing.
             CmdGMDashboard,
             CmdGMIdle,
+            # #3295 — scene check invocation: player self-checks + GM calls.
+            CmdCheck,
+            CmdCallCheck,
             # #1505 — basic telnet parity for GM-table admin (web is the primary surface).
             CmdGMTable,
             # #1496 — staff/GM technique authoring workbench (perm(Builder)).
@@ -484,6 +490,8 @@ class CharacterCmdSet(default_cmds.CharacterCmdSet):
             CmdPathIntent,
             # #1346 — covenant membership lifecycle telnet namespace.
             CmdCovenant,
+            # #3286 — player-postable bulletin boards.
+            CmdBoard,
             # #2239 — in-play domain management + office delegation.
             CmdDomain,
             # #2999 — org pacts + betrothal telnet namespace.
@@ -518,6 +526,8 @@ class CharacterCmdSet(default_cmds.CharacterCmdSet):
             # #2503 — GM improv stage-prop namespace (conjure a prop / tag a property).
             CmdStage,
             CmdMarket,
+            # #3292 - tavern games: coin-stakes dice gambling open/join/roll/leave.
+            CmdGame,
             # #1832 — ship commission/upgrade/repair/status namespace.
             CmdShip,
             # #2179 — vault access-list management namespace.
@@ -527,8 +537,14 @@ class CharacterCmdSet(default_cmds.CharacterCmdSet):
             # #2640 — the Sphinx of Black Quartz's vow-suitability verdict.
             CmdSphinx,
         )
-        for command_cls in command_classes:
-            self.add(command_cls())
+        # One batched add, not one add() per command: Evennia's CmdSet.add()
+        # runs commands.count() (an __eq__ set-intersection against every
+        # command already in the set) and then rebuilds list(set(commands))
+        # on EVERY call, so adding ~230 commands one at a time cost ~470ms per
+        # cmdset instantiation - paid on every object creation (at_first_save)
+        # and every cmdset rebuild. Passing the list does the dedup pass once
+        # (~10ms). Same replace-on-duplicate semantics: later entries win.
+        self.add([command_cls() for command_cls in command_classes])
 
 
 class AccountCmdSet(default_cmds.AccountCmdSet):

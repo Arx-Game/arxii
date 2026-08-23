@@ -39,6 +39,7 @@ term is chosen and the rest are listed under `_Avoid_`.
 - [journals](src/world/journals/AGENT_GLOSSARY.md)
 - [npc_services](src/world/npc_services/AGENT_GLOSSARY.md) — incl. the #2827 tier-ladder terms
 - [tasking](src/world/tasking/AGENT_GLOSSARY.md)
+- [tavern_games](src/world/tavern_games/AGENT_GLOSSARY.md)
 - [tarot](src/world/tarot/AGENT_GLOSSARY.md)
 - [currency](src/world/currency/AGENT_GLOSSARY.md)
 - [beta_reset](src/world/beta_reset/AGENT_GLOSSARY.md)
@@ -54,6 +55,7 @@ term is chosen and the rest are listed under `_Avoid_`.
 - [assets](src/world/assets/AGENT_GLOSSARY.md)
 - [distinctions](src/world/distinctions/AGENT_GLOSSARY.md)
 - [narrative](src/world/narrative/AGENT_GLOSSARY.md)
+- [boards](src/world/boards/AGENT_GLOSSARY.md)
 
 ## Relationships (how the root concepts connect)
 
