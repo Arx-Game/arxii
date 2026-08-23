@@ -11,6 +11,10 @@
   roles:
     - base
     - ssh_hardening
+    # Gated agent-ops account (docs/operations/ops-access.md): the arxops
+    # user always exists; access is toggled by the ARXII_OPS_SSH_PUBKEY
+    # Environment Variable (empty = empty authorized_keys = no login).
+    - ops_access
     - host_firewall
     - fail2ban
     - unattended_upgrades

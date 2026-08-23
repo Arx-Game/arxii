@@ -1,0 +1,54 @@
+---
+# Least-privilege ops user for gated devcontainer/agent sessions — the
+# server half of docs/operations/ops-access.md (the client half is the
+# devcontainer's ARXII_OPS_KEY_DIR mount + firewall gate). Deliberately NOT
+# arxadmin: an agent session gets diagnostics + service bounce, never
+# Postgres, /etc/arxii secrets, user management, or general sudo.
+#
+# systemd-journal: read `journalctl` without sudo. adm: read /var/log
+# (Caddy, auth.log). Both are stock Ubuntu groups.
+- name: Create the arxops user (least-privilege agent-ops account)
+  ansible.builtin.user:
+    name: "{{ ops_user }}"
+    shell: /bin/bash
+    groups: [systemd-journal, adm]
+    append: true
+
+- name: Ensure arxops ~/.ssh exists
+  ansible.builtin.file:
+    path: "/home/{{ ops_user }}/.ssh"
+    state: directory
+    owner: "{{ ops_user }}"
+    group: "{{ ops_group }}"
+    mode: "0700"
+
+# The pubkey's presence IS the server-side access toggle. copy (not
+# ansible.posix.authorized_key) so an empty ops_pubkey deterministically
+# writes an EMPTY file — sshd is key-only (ssh_hardening), so empty means
+# no login. authorized_key's absent-state would need the key value we no
+# longer have at revoke time.
+- name: Install (or clear) arxops authorized_keys — pubkey presence is the toggle
+  ansible.builtin.copy:
+    content: "{{ ops_pubkey ~ '\n' if ops_pubkey else '' }}"
+    dest: "/home/{{ ops_user }}/.ssh/authorized_keys"
+    owner: "{{ ops_user }}"
+    group: "{{ ops_group }}"
+    mode: "0600"
+
+# Exact commands only — NO wildcards. A sudoers glob like `systemctl
+# status arxii*` matches SPACES too, so `arxii --flag $(...)`-shaped
+# arguments would slip through; enumerating exact argv lines closes that.
+# journalctl/status/log-reads need no sudo (groups above); what needs root
+# is exactly the service-bounce set the deploy itself performs.
+- name: Scoped sudoers for arxops (exact commands, visudo-validated)
+  ansible.builtin.copy:
+    dest: /etc/sudoers.d/arxops
+    owner: root
+    group: root
+    mode: "0440"
+    validate: /usr/sbin/visudo -cf %s
+    content: |
+      # Managed by Ansible (ops_access). Least-privilege agent-ops set.
+      arxops ALL=(root) NOPASSWD: /usr/bin/systemctl reload {{ app_service | default('arxii') }}
+      arxops ALL=(root) NOPASSWD: /usr/bin/systemctl restart {{ app_service | default('arxii') }}
+      arxops ALL=(root) NOPASSWD: /usr/bin/systemctl start {{ app_service | default('arxii') }}

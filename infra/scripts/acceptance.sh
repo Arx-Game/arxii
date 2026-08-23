@@ -317,6 +317,17 @@ chk   "base role authorizes SSH keys for arxadmin (authorized_key task)" \
   "grep -q 'ansible.posix.authorized_key' infra/ansible/roles/base/tasks/main.yml && grep -q 'user: arxadmin' infra/ansible/roles/base/tasks/main.yml"
 chk   "ssh_hardening's ssh_allow_users references arxadmin (not the nologin service user)" \
   "grep -A1 '^ssh_allow_users:' infra/ansible/roles/ssh_hardening/defaults/main.yml | grep -q arxadmin"
+# Gated agent-ops access (docs/operations/ops-access.md): the sudoers file
+# must be visudo-validated and wildcard-free (a sudoers glob matches spaces,
+# so `systemctl status arxii*` would authorize arbitrary trailing argv).
+chk   "ops_access sudoers is visudo-validated" \
+  "grep -q 'visudo -cf' infra/ansible/roles/ops_access/tasks/main.yml"
+chkno "ops_access sudoers contains no wildcards" \
+  "grep 'NOPASSWD' infra/ansible/roles/ops_access/tasks/main.yml | grep -F '*'"
+chk   "ops_access clears authorized_keys when the pubkey Variable is empty (revoke path)" \
+  "grep -q \"if ops_pubkey else ''\" infra/ansible/roles/ops_access/tasks/main.yml"
+chk   "devcontainer firewall gates prod SSH on the ops-key mount" \
+  "grep -q 'arxii-ops-key/arxii_ops' .devcontainer/init-firewall.sh && grep -q -- '--dport 22 -j REJECT' .devcontainer/init-firewall.sh"
 
 # (f) The first-run superuser PASSWORD (unlike username/email) is a real
 # secret with no safe default — it must be preflight-required.

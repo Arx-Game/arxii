@@ -1,4 +1,10 @@
 ---
 ssh_allow_users:
   - arxadmin
+  # arxops: the gated least-privilege agent-ops user (roles/ops_access,
+  # docs/operations/ops-access.md). Always listed — sshd ignores unknown
+  # names, auth is key-only, and roles/ops_access writes an EMPTY
+  # authorized_keys when access is toggled off, so listing it here grants
+  # nothing by itself.
+  - arxops
 ssh_port: 22

@@ -130,6 +130,13 @@ jobs:
           # read via lookup('env', ...) in roles/caddy/defaults). Set it (a
           # bcrypt hash from `caddy hash-password`) to roll the archive out.
           ARXII_ARX1_ARCHIVE_BASICAUTH_HASH: ${{ secrets.ARXII_ARX1_ARCHIVE_BASICAUTH_HASH }}
+          # Optional — the gated agent-ops PUBLIC key (a Variable, not a
+          # secret: the private half never leaves the operator's machine).
+          # Empty/unset means roles/ops_access writes an EMPTY arxops
+          # authorized_keys (= no agent access; clean converge). Clear the
+          # Variable + press the button to revoke. See
+          # docs/operations/ops-access.md.
+          ARXII_OPS_SSH_PUBKEY: ${{ vars.ARXII_OPS_SSH_PUBKEY }}
           ARXII_CADDY_CF_DNS_TOKEN: ${{ secrets.ARXII_CADDY_CF_DNS_TOKEN }}
           # #3153: ansible-step-only, deliberately never in secrets_map (see
           # secrets.env.example) — the content_repo role's clone task reads

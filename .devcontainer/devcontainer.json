@@ -25,7 +25,10 @@
   // Use our copy (arxii-firewall.sh), NOT the claude-code feature's
   // /usr/local/bin/init-firewall.sh — the upstream version flushes the nat
   // table and breaks Docker's embedded DNS resolver. See Dockerfile.
-  "postStartCommand": "sudo /usr/local/bin/arxii-firewall.sh",
+  // The && chain also installs/removes the gated prod-ops SSH key from the
+  // /run/arxii-ops-key mount (docs/operations/ops-access.md) — after the
+  // firewall so both gates read the mount in the same start.
+  "postStartCommand": "sudo /usr/local/bin/arxii-firewall.sh && bash .devcontainer/ops-key-install.sh",
   "remoteEnv": {
     "PATH": "/home/vscode/.local/bin:${containerEnv:PATH}"
   }

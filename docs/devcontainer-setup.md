@@ -19,6 +19,9 @@ This setup provides two independent boundaries:
 - **Network**: an egress firewall (iptables + ipset) runs inside the container on every
   start. It is default-deny for outbound traffic and allows only the destinations Claude
   Code actually needs (Anthropic API, GitHub, PyPI, npm). Everything else is rejected.
+  SSH to the prod Linode is additionally gated: it is rejected unless the operator
+  opted in at `just dc-up` time via `ARXII_OPS_KEY_DIR` — see
+  `docs/operations/ops-access.md`.
 
 This is defense-in-depth, not a full sandbox: a compromised or mistaken agent can still
 modify anything in the bind-mounted workspace and can still send data to the explicitly
