@@ -7,7 +7,7 @@ import core.natural_keys
 
 
 class Migration(migrations.Migration):
-    dependencies = [("arxii", "0163_interaction_attributed_companion")]
+    dependencies = [("arxii", "0168_checkcall_checkproposal_checkcalltarget")]
 
     operations = [
         migrations.CreateModel(

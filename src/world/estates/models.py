@@ -137,7 +137,11 @@ class Bequest(SharedMemoryModel):
 
     # Items and businesses are persona/sheet-held surfaces (ItemInstance.holder_
     # character_sheet, Business.owner_persona) — an organization cannot hold them.
-    _PERSONA_ONLY_KINDS = frozenset({BequestKind.SPECIFIC_ITEM, BequestKind.BUSINESS})
+    # WRITINGS mints a JournalBequestGrant keyed on a CharacterSheet recipient (#3287) — an
+    # organization has no journal to inherit into.
+    _PERSONA_ONLY_KINDS = frozenset(
+        {BequestKind.SPECIFIC_ITEM, BequestKind.BUSINESS, BequestKind.WRITINGS}
+    )
 
     def clean(self) -> None:
         target_field = self._KIND_TARGET_FIELD.get(BequestKind(self.kind))

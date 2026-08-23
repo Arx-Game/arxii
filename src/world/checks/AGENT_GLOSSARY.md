@@ -93,3 +93,31 @@ condition/check pair — see `docs/systems/checks.md`'s authoring guardrail — 
 double-counting through both a direct `ConditionCheckModifier` and an indirect
 `ConditionCapabilityEffect` routed through a weighted capability.
 _Avoid_: capability bonus, capability check link, inferred capability check
+
+**Check call** (#3295):
+A GM's room-visible request that named target(s) roll a specific authored `CheckType`
+at a specific `DifficultyChoice` band — modeled as one `CheckCall` row (the check +
+band + scene + calling GM's persona) plus one `CheckCallTarget` row per target
+(`status` PENDING/ANSWERED/DECLINED). The GM never rolls anything; each target
+answers (one tap, dispatches the bound self-check) or declines (quiet, no
+mechanical force) on their own. Distinct from `InvokeCatalogCheckAction`'s ad-hoc
+GM invocation (#2118), which rolls immediately against a target the GM picks and
+never creates a call/prompt.
+_Avoid_: check request, GM check prompt (the row IS the prompt — "prompt" alone
+undersells that it's a structured, catalog-bound object with its own targets and
+states)
+
+**Check proposal** (#3295):
+A player's (or GM's) structured suggestion for a new `CheckType` the catalog is
+missing — `name`/`intent`/`suggested_traits_text`/`situation_text`, routed to the
+staff inbox as a `CheckProposal` row (`world.player_submissions`,
+`SubmissionCategory.CHECK_PROPOSAL`) and never a live catalog write. The catalog-only
+ruling's escape valve: when nothing fits, propose instead of inventing a freeform
+stat/skill/difficulty combination on the spot. Adoption — staff authoring the real
+`CheckType` row — is a separate, manual act; resolving the proposal (adopt/decline
+with `review_notes`) never auto-creates it. Distinct from `CatalogSuggestion`
+(#2127, `world.gm`) — the GM scenario-catalog's own freeform-text suggestion kind,
+which this deliberately does NOT reuse (structured columns, no JSON, and scoped
+to any player, not just GMs).
+_Avoid_: check request (confusable with "check call" above), catalog suggestion
+(that name is already `CatalogSuggestion`, a different model)

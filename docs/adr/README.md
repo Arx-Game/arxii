@@ -233,6 +233,9 @@ treat those names as hints to confirm, not gospel.
 - [0225 - Arx I is archived to object storage + a static basic-auth site, not kept running](0225-arx1-archived-to-object-storage-static-site.md)
 - [0226 - PlayerMail is OOC between players; IC missives are a separate system](0226-playermail-is-ooc-ic-missives-are-a-separate-system.md) (#3303; supersedes ADR-0116)
 - [0227 - The Gatefold landing page reads existing endpoints, not a new realms API](0227-gatefold-landing-page-and-shop-window-reads.md) (#3305; extends ADR-0224)
+- [0228 - Stealth conceals identity, never presence - one-way disclosure](0228-stealth-conceals-identity-never-presence.md) (#3288)
+- [0229 - Posthumous journal disposition is author-controlled, default REVEAL](0229-posthumous-journal-disposition-is-author-controlled.md) (#3287; rides ADR-0133's execute_settlement, ADR-0009 no-signals)
+- [0230 - Board posts are authored by Persona, not by account or CharacterSheet](0230-board-posts-are-authored-by-persona.md) (#3286)
 
 ### Gift & resonance economy
 - [0050 — Gifts are Major or Minor; species abilities are a species-granted Minor Gift](0050-gifts-are-major-or-minor-species-abilities-are-minor-gifts.md)

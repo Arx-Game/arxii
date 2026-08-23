@@ -320,6 +320,90 @@ class Petition(SharedMemoryModel):
         return f"petition ({self.category}) by account {self.account_id}"
 
 
+class CheckProposal(SharedMemoryModel):
+    """A player's (or GM's) proposed new ``CheckType``, routed to the staff inbox (#3295).
+
+    The catalog-only ruling (Tehom, 2026-08-21): every check anyone rolls is an
+    authored ``CheckType`` -- never a freeform stat+skill+difficulty invention.
+    When the catalog lacks a fitting check, a player proposes one instead of
+    inventing it on the spot. This row is the proposal -- structured columns,
+    no JSON -- never a live catalog write; staff adopt a proposal by authoring
+    the real ``CheckType`` row through the normal content path and resolving
+    this row separately (``reviewer``/``review_notes``/``resolved_at``), the
+    same "propose, never auto-create" shape as ``world.gm.models
+    .CatalogSuggestion`` (#2127).
+
+    Deliberately has no FK to ``world.checks.models.CheckType`` -- there is no
+    row to point at until (and unless) staff author one, and ``player_submissions``
+    stays dependency-free of the checks app either way (ADR-0010 FK direction).
+    """
+
+    submitted_by_account = models.ForeignKey(
+        "accounts.AccountDB",
+        on_delete=models.CASCADE,
+        related_name="check_proposals",
+        help_text="OOC authoring, not IC -- mirrors PlayerFeedback.reporter_account.",
+    )
+    submitted_by_persona = models.ForeignKey(
+        PERSONA_MODEL,
+        on_delete=models.CASCADE,
+        related_name="check_proposals",
+        help_text="The persona the submitter was wearing when proposing.",
+    )
+    proposed_name = models.CharField(
+        max_length=100,
+        help_text="The check's proposed name (e.g. 'Riverside Tracking').",
+    )
+    intent = models.TextField(
+        help_text="What this check is meant to cover -- the gap in the catalog.",
+    )
+    suggested_traits_text = models.CharField(
+        max_length=200,
+        blank=True,
+        default="",
+        help_text=(
+            "Suggested stat+skill pairing in plain text (e.g. 'Perception + Survival'). "
+            "Advisory only -- no live Trait FK exists until staff author the real row."
+        ),
+    )
+    situation_text = models.TextField(
+        help_text="The situation this check would serve -- when someone would roll it.",
+    )
+    scene = models.ForeignKey(
+        "arxii.Scene",
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="check_proposals",
+        help_text="The scene the proposal arose in, if any.",
+    )
+    status = models.CharField(
+        max_length=20,
+        choices=SubmissionStatus.choices,
+        default=SubmissionStatus.OPEN,
+        db_index=True,
+    )
+    reviewer = models.ForeignKey(
+        "accounts.AccountDB",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="+",
+        help_text="Staff account that reviewed this proposal.",
+    )
+    review_notes = models.TextField(blank=True, default="")
+    created_at = models.DateTimeField(auto_now_add=True, db_index=True)
+    resolved_at = models.DateTimeField(null=True, blank=True)
+
+    class Meta:
+        ordering = ["-created_at"]
+        verbose_name = "Check Proposal"
+        verbose_name_plural = "Check Proposals"
+
+    def __str__(self) -> str:
+        return f"CheckProposal({self.proposed_name!r} by {self.submitted_by_account.username})"
+
+
 class SubmitterStanding(SharedMemoryModel):
     """Per-account staff-contact track record (#2288).
 

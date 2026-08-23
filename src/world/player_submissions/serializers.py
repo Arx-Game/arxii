@@ -8,13 +8,14 @@ from django.core.exceptions import ObjectDoesNotExist
 from evennia.objects.models import ObjectDB
 from rest_framework import serializers
 
-from world.player_submissions.constants import PetitionCategory
+from world.player_submissions.constants import PetitionCategory, ReportCategory
 from world.player_submissions.github_issues import (
     issue_draft_for_bug,
     issue_draft_for_error,
 )
 from world.player_submissions.models import (
     BugReport,
+    CheckProposal,
     Petition,
     PlayerFeedback,
     PlayerReport,
@@ -236,6 +237,27 @@ class PlayerReportCreateSerializer(serializers.ModelSerializer):
         return attrs
 
 
+class HiddenPresenceReportCreateSerializer(serializers.Serializer):
+    """#3288 — report the unseen presence in your current room.
+
+    Deliberately carries NO reported-identity input: the reporter never learns who
+    the hidden presence is. Resolution happens server-side in
+    ``services.report_hidden_presence`` against the concealed occupants of the
+    reporter's room.
+    """
+
+    reporter_persona = serializers.PrimaryKeyRelatedField(queryset=Persona.objects.all())
+    category = serializers.ChoiceField(
+        choices=ReportCategory.choices,
+        default=ReportCategory.HARASSMENT,
+    )
+    behavior_description = serializers.CharField()
+
+    def validate_reporter_persona(self, value: Persona) -> Persona:
+        account = self.context["account"]
+        return _validate_owned_persona(value, account.pk)
+
+
 class PlayerReportDetailSerializer(serializers.ModelSerializer):
     """Staff-only detail serializer with full identity context."""
 
@@ -395,3 +417,68 @@ class PetitionCreateSerializer(serializers.Serializer):
     subject_character = serializers.PrimaryKeyRelatedField(
         queryset=ObjectDB.objects.all(), required=False, allow_null=True
     )
+
+
+class CheckProposalCreateSerializer(serializers.ModelSerializer):
+    """Frontend supplies ``submitted_by_persona``; the account is server-derived (#3295)."""
+
+    class Meta:
+        model = CheckProposal
+        fields = [
+            "submitted_by_persona",
+            "proposed_name",
+            "intent",
+            "suggested_traits_text",
+            "situation_text",
+            "scene",
+        ]
+
+    def validate_submitted_by_persona(self, value: Persona) -> Persona:
+        account = self.context["account"]
+        return _validate_owned_persona(value, account.pk)
+
+
+class CheckProposalDetailSerializer(serializers.ModelSerializer):
+    """Staff-inbox detail view: adopt/decline with review notes (#3295)."""
+
+    submitted_by_account_username = serializers.CharField(
+        source="submitted_by_account.username",
+        read_only=True,
+    )
+    submitted_by_persona_name = serializers.CharField(
+        source="submitted_by_persona.name",
+        read_only=True,
+    )
+
+    class Meta:
+        model = CheckProposal
+        fields = [
+            "id",
+            "submitted_by_account",
+            "submitted_by_account_username",
+            "submitted_by_persona",
+            "submitted_by_persona_name",
+            "proposed_name",
+            "intent",
+            "suggested_traits_text",
+            "situation_text",
+            "scene",
+            "status",
+            "reviewer",
+            "review_notes",
+            "created_at",
+            "resolved_at",
+        ]
+        read_only_fields = [
+            "id",
+            "submitted_by_account",
+            "submitted_by_persona",
+            "proposed_name",
+            "intent",
+            "suggested_traits_text",
+            "situation_text",
+            "scene",
+            "reviewer",
+            "created_at",
+            "resolved_at",
+        ]

@@ -2,8 +2,13 @@
 
 from rest_framework import serializers
 
-from world.journals.constants import ResponseType
+from world.character_sheets.types import PosthumousJournalDisposition
+from world.journals.constants import PosthumousOverride, ResponseType
 from world.journals.models import JournalEntry, JournalTag
+
+# The JournalEntryEditSerializer field name, extracted to satisfy the string-literal lint
+# (tools/lint_string_literal.py) at its "posthumous_override" in attrs membership check below.
+_POSTHUMOUS_OVERRIDE_FIELD = "posthumous_override"
 
 
 class JournalTagSerializer(serializers.ModelSerializer):
@@ -21,6 +26,10 @@ class JournalEntryListSerializer(serializers.ModelSerializer):
     author_name = serializers.CharField(source="author.character.db_key", read_only=True)
     tags = serializers.SerializerMethodField()
     response_count = serializers.IntegerField(read_only=True, default=0)
+    # Posthumous provenance (#3287) — "from the journals of <author_name>, revealed after
+    # death" is rendered client-side from author_name + is_posthumous; no server-authored
+    # copy string here (deslop: no AI-voice flourish baked into the API).
+    is_posthumous = serializers.SerializerMethodField()
 
     class Meta:
         model = JournalEntry
@@ -36,12 +45,19 @@ class JournalEntryListSerializer(serializers.ModelSerializer):
             "edited_at",
             "tags",
             "response_count",
+            "posthumous_override",
+            "revealed_at",
+            "is_posthumous",
         ]
         read_only_fields = fields
 
     def get_tags(self, obj: JournalEntry) -> list[dict]:
         """Get tags using cached property."""
         return JournalTagSerializer(obj.cached_tags, many=True).data
+
+    def get_is_posthumous(self, obj: JournalEntry) -> bool:
+        """True once this entry has surfaced through an estate settlement."""
+        return obj.revealed_at is not None
 
 
 class JournalEntryDetailSerializer(serializers.ModelSerializer):
@@ -50,6 +66,7 @@ class JournalEntryDetailSerializer(serializers.ModelSerializer):
     author_name = serializers.CharField(source="author.character.db_key", read_only=True)
     tags = serializers.SerializerMethodField()
     responses = serializers.SerializerMethodField()
+    is_posthumous = serializers.SerializerMethodField()
 
     class Meta:
         model = JournalEntry
@@ -66,6 +83,9 @@ class JournalEntryDetailSerializer(serializers.ModelSerializer):
             "edited_at",
             "tags",
             "responses",
+            "posthumous_override",
+            "revealed_at",
+            "is_posthumous",
         ]
         read_only_fields = fields
 
@@ -78,6 +98,10 @@ class JournalEntryDetailSerializer(serializers.ModelSerializer):
         responses = sorted(obj.cached_responses, key=lambda r: r.created_at, reverse=True)
         return JournalEntryListSerializer(responses, many=True).data
 
+    def get_is_posthumous(self, obj: JournalEntry) -> bool:
+        """True once this entry has surfaced through an estate settlement."""
+        return obj.revealed_at is not None
+
 
 class JournalEntryCreateSerializer(serializers.Serializer):
     """Serializer for creating a new journal entry."""
@@ -89,6 +113,13 @@ class JournalEntryCreateSerializer(serializers.Serializer):
         child=serializers.CharField(max_length=100),
         required=False,
         default=list,
+    )
+    # Per-entry posthumous override (#3287); INHERIT falls through to the author's sheet
+    # default. Optional — the composer only shows this when the author wants to override.
+    posthumous_override = serializers.ChoiceField(
+        choices=PosthumousOverride.choices,
+        default=PosthumousOverride.INHERIT,
+        required=False,
     )
 
 
@@ -105,9 +136,21 @@ class JournalEntryEditSerializer(serializers.Serializer):
 
     title = serializers.CharField(max_length=200, required=False)
     body = serializers.CharField(required=False)
+    # Per-entry posthumous override (#3287) — settable on its own, without title/body.
+    posthumous_override = serializers.ChoiceField(
+        choices=PosthumousOverride.choices, required=False
+    )
 
     def validate(self, attrs: dict) -> dict:
-        if not attrs.get("title") and not attrs.get("body"):
-            msg = "At least one of title or body is required."
+        has_content = attrs.get("title") or attrs.get("body")
+        has_override = _POSTHUMOUS_OVERRIDE_FIELD in attrs
+        if not has_content and not has_override:
+            msg = "At least one of title, body, or posthumous_override is required."
             raise serializers.ValidationError(msg)
         return attrs
+
+
+class JournalDispositionSerializer(serializers.Serializer):
+    """Serializer for setting the caller's sheet-level posthumous journal disposition."""
+
+    disposition = serializers.ChoiceField(choices=PosthumousJournalDisposition.choices)

@@ -55,6 +55,7 @@ term is chosen and the rest are listed under `_Avoid_`.
 - [assets](src/world/assets/AGENT_GLOSSARY.md)
 - [distinctions](src/world/distinctions/AGENT_GLOSSARY.md)
 - [narrative](src/world/narrative/AGENT_GLOSSARY.md)
+- [boards](src/world/boards/AGENT_GLOSSARY.md)
 
 ## Relationships (how the root concepts connect)
 

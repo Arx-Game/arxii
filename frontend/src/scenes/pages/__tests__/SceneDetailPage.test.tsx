@@ -250,6 +250,15 @@ vi.mock('@/magic/queries', () => ({
   useCharacterResonances: vi.fn(() => ({ data: [], isLoading: false })),
 }));
 
+// SelfCheckPanel + CheckCallPromptCard (#3295) self-fetching queries — same
+// "mock the query module so the real fetch never fires" pattern as every
+// other panel query module in this file (jsdom's fetch cannot resolve a
+// relative URL, so an unmocked queryFn crashes any test that reaches it).
+vi.mock('@/checks/queries', () => ({
+  usePlayerCheckTypeCatalog: vi.fn(() => ({ data: [] })),
+  useMyCheckCalls: vi.fn(() => ({ data: [] })),
+}));
+
 // ---------------------------------------------------------------------------
 // Mock redux selectors (game.active character + auth.account)
 // ---------------------------------------------------------------------------

@@ -11,6 +11,7 @@ from world.societies.views import (
     OrganizationReputationViewSet,
     OrganizationViewSet,
     ProclamationViewSet,
+    StandingDeclarationViewSet,
 )
 
 app_name = "societies"
@@ -30,6 +31,11 @@ router.register(
     r"offers",
     OrganizationMembershipOfferViewSet,
     basename="organization-membership-offer",
+)
+router.register(
+    r"standing-declarations",
+    StandingDeclarationViewSet,
+    basename="standing-declaration",
 )
 
 urlpatterns = [

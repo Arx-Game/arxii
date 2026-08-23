@@ -460,6 +460,40 @@ class Character(ObjectParent, DefaultCharacter):
         # Execute look command to send room state to frontend via flow system
         self.execute_cmd("look")
 
+    def announce_move_from(self, destination, msg=None, mapping=None, **kwargs):
+        """Departure broadcast — suppressed entirely while sneaking (#3288).
+
+        Disclosure is one-way: the "RP is never observed unknowingly" guarantee
+        protects against unannounced watchers, not unannounced exits, so a hidden
+        character slips out with no message of any kind.
+        """
+        from world.stealth.services import is_sneaking
+
+        if is_sneaking(self):
+            return
+        super().announce_move_from(destination, msg=msg, mapping=mapping, **kwargs)
+
+    def announce_move_to(self, source_location, msg=None, mapping=None, **kwargs):
+        """Arrival broadcast — anonymous while sneaking, never silent (#3288).
+
+        The per-room concealment re-roll resolves here, BEFORE any arrival
+        message: still-hidden arrivals replace the normal announce with the
+        identity-free unseen-presence echo (arrivals always announce — one-way
+        disclosure), while a failed re-roll quietly strips the stance and falls
+        through to the normal, visible announce.
+        """
+        from world.stealth.services import reroll_on_arrival
+
+        if reroll_on_arrival(self):
+            if self.location is not None:
+                self.location.msg_contents(
+                    "PLACEHOLDER An unseen presence arrived, stealthily avoiding notice.",
+                    exclude=self,
+                )
+            self.msg("PLACEHOLDER You slip in, keeping to the shadows.")
+            return
+        super().announce_move_to(source_location, msg=msg, mapping=mapping, **kwargs)
+
     def send_room_state(self):
         """Send current room state to this character's frontend.
 

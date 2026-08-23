@@ -1259,6 +1259,87 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
+  '/api/boards/boards/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /**
+     * @description Read-only board metadata: list/retrieve.
+     *
+     *     LOCATION boards are visible to everyone; ORG boards only to active members.
+     */
+    get: operations['boards_boards_list'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/boards/boards/{id}/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /**
+     * @description Read-only board metadata: list/retrieve.
+     *
+     *     LOCATION boards are visible to everyone; ORG boards only to active members.
+     */
+    get: operations['boards_boards_retrieve'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/boards/posts/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /**
+     * @description List posts, applying the per-board display cap when ``?board=`` is given.
+     *
+     *     Without a ``board`` filter, falls back to the plain filtered queryset
+     *     (cross-board browsing has no single cap to apply).
+     */
+    get: operations['boards_posts_list'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/boards/posts/{id}/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /** @description Read-only board posts: list/retrieve. Writes dispatch through Actions. */
+    get: operations['boards_posts_retrieve'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   '/api/boundaries/content-themes/': {
     parameters: {
       query?: never;
@@ -3528,6 +3609,54 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
+  '/api/checks/check-call-targets/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /**
+     * @description Read-only inbox of the requesting player's pending ``CheckCall`` prompts (#3295).
+     *
+     *     Mirrors ``GMSummonOfferViewSet``'s shape: answer/decline are NOT DRF actions
+     *     here -- they dispatch through the generic REGISTRY action-dispatch endpoint
+     *     (``answer_check_call``/``decline_check_call``), the seam telnet's ``check
+     *     answer``/``check decline`` also reaches.
+     */
+    get: operations['checks_check_call_targets_list'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/checks/check-call-targets/{id}/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /**
+     * @description Read-only inbox of the requesting player's pending ``CheckCall`` prompts (#3295).
+     *
+     *     Mirrors ``GMSummonOfferViewSet``'s shape: answer/decline are NOT DRF actions
+     *     here -- they dispatch through the generic REGISTRY action-dispatch endpoint
+     *     (``answer_check_call``/``decline_check_call``), the seam telnet's ``check
+     *     answer``/``check decline`` also reaches.
+     */
+    get: operations['checks_check_call_targets_retrieve'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   '/api/checks/check-types/': {
     parameters: {
       query?: never;
@@ -3650,6 +3779,62 @@ export interface paths {
      *     written by the resolution pipeline.
      */
     get: operations['checks_consequence_outcomes_retrieve'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/checks/player-check-types/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /**
+     * @description Read-only catalog browse for the player-facing roll picker (#3295).
+     *
+     *     Open to any authenticated player -- unlike ``CheckTypeViewSet`` (GM-only,
+     *     staff-authored rows only), this is the "easy to find is the feature"
+     *     discovery surface every player's own self-check roll picker uses. An
+     *     optional ``character_id`` query param, when it resolves to a character the
+     *     requesting account currently plays (validated the same way
+     *     ``CanCreatePersonaInScene`` validates ownership), additionally surfaces
+     *     that character's own synthesized magic ``CheckType`` row -- never another
+     *     character's (``catalog_queryset``'s existing owner_sheet scope).
+     */
+    get: operations['checks_player_check_types_list'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/checks/player-check-types/{id}/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /**
+     * @description Read-only catalog browse for the player-facing roll picker (#3295).
+     *
+     *     Open to any authenticated player -- unlike ``CheckTypeViewSet`` (GM-only,
+     *     staff-authored rows only), this is the "easy to find is the feature"
+     *     discovery surface every player's own self-check roll picker uses. An
+     *     optional ``character_id`` query param, when it resolves to a character the
+     *     requesting account currently plays (validated the same way
+     *     ``CanCreatePersonaInScene`` validates ownership), additionally surfaces
+     *     that character's own synthesized magic ``CheckType`` row -- never another
+     *     character's (``catalog_queryset``'s existing owner_sheet scope).
+     */
+    get: operations['checks_player_check_types_retrieve'];
     put?: never;
     post?: never;
     delete?: never;
@@ -10395,14 +10580,18 @@ export interface paths {
       cookie?: never;
     };
     /**
-     * @description List public journal entries.
+     * @description List public journal entries, or (with ``?deceased=``) a bequeathed corpus.
      *
-     *     Supports query params:
+     *     Supports query params (all handled by ``JournalEntryFilter``):
      *     - ?author=<character_id> — filter by author
      *     - ?tag=<tag_name> — filter by tag name
+     *     - ?deceased=<character_sheet_id> — browse a deceased sheet's non-sealed private
+     *       entries, ONLY when the caller holds a ``JournalBequestGrant`` for that sheet
+     *       (#3287 Decision 3, gated in ``JournalEntryFilter.filter_deceased`` per
+     *       ``tools/lint_use_filterset.py``). Empty when no grant exists — never a permission
+     *       error, so a probing id can't confirm whether a grant exists for someone else.
      *
-     *     Blocked/muted authors' entries are excluded (#2996 Decision 2) — see
-     *     ``exclude_blocked_and_muted_authors``.
+     *     See ``get_queryset()`` for the public-feed contract (revealed entries, block/mute).
      */
     get: operations['journals_entries_retrieve'];
     put?: never;
@@ -10424,8 +10613,9 @@ export interface paths {
     /**
      * @description Retrieve a single journal entry.
      *
-     *     Public entries are visible to all authenticated users.
-     *     Private entries are only visible to their author.
+     *     Visible when: public, revealed by an estate settlement, authored by the caller, or
+     *     (#3287 Decision 3) the caller holds a bequest grant over the author's writings and
+     *     this entry's effective disposition isn't SEAL.
      */
     get: operations['journals_entries_retrieve_2'];
     put?: never;
@@ -10452,6 +10642,34 @@ export interface paths {
     options?: never;
     head?: never;
     patch?: never;
+    trace?: never;
+  };
+  '/api/journals/entries/disposition/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /**
+     * @description Read or set the caller's sheet-level default posthumous journal disposition.
+     *
+     *     GET returns the current default; PATCH sets it via ``set_journal_disposition``
+     *     (#3287) — the same seam ``journal disposition sheet=<...>`` uses on telnet.
+     */
+    get: operations['journals_entries_disposition_retrieve'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    /**
+     * @description Read or set the caller's sheet-level default posthumous journal disposition.
+     *
+     *     GET returns the current default; PATCH sets it via ``set_journal_disposition``
+     *     (#3287) — the same seam ``journal disposition sheet=<...>`` uses on telnet.
+     */
+    patch: operations['journals_entries_disposition_partial_update'];
     trace?: never;
   };
   '/api/journals/entries/mine/': {
@@ -15999,6 +16217,88 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
+  '/api/player-submissions/check-proposals/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /**
+     * @description Staff triage of proposed new ``CheckType`` rows (#3295).
+     *
+     *     Create is open to any authenticated player (the catalog-only ruling's
+     *     proposal pipeline is for players AND GMs, not staff-gated); list/retrieve/
+     *     update stay staff-only via ``_SubmissionViewSetMixin``, same shape as
+     *     ``BugReportViewSet``/``PlayerReportViewSet``. Adoption is a manual, separate
+     *     act (staff author the real ``CheckType`` through the normal content path) —
+     *     this endpoint only tracks the proposal's own review status.
+     */
+    get: operations['player_submissions_check_proposals_list'];
+    put?: never;
+    /**
+     * @description Staff triage of proposed new ``CheckType`` rows (#3295).
+     *
+     *     Create is open to any authenticated player (the catalog-only ruling's
+     *     proposal pipeline is for players AND GMs, not staff-gated); list/retrieve/
+     *     update stay staff-only via ``_SubmissionViewSetMixin``, same shape as
+     *     ``BugReportViewSet``/``PlayerReportViewSet``. Adoption is a manual, separate
+     *     act (staff author the real ``CheckType`` through the normal content path) —
+     *     this endpoint only tracks the proposal's own review status.
+     */
+    post: operations['player_submissions_check_proposals_create'];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/player-submissions/check-proposals/{id}/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /**
+     * @description Staff triage of proposed new ``CheckType`` rows (#3295).
+     *
+     *     Create is open to any authenticated player (the catalog-only ruling's
+     *     proposal pipeline is for players AND GMs, not staff-gated); list/retrieve/
+     *     update stay staff-only via ``_SubmissionViewSetMixin``, same shape as
+     *     ``BugReportViewSet``/``PlayerReportViewSet``. Adoption is a manual, separate
+     *     act (staff author the real ``CheckType`` through the normal content path) —
+     *     this endpoint only tracks the proposal's own review status.
+     */
+    get: operations['player_submissions_check_proposals_retrieve'];
+    /**
+     * @description Staff triage of proposed new ``CheckType`` rows (#3295).
+     *
+     *     Create is open to any authenticated player (the catalog-only ruling's
+     *     proposal pipeline is for players AND GMs, not staff-gated); list/retrieve/
+     *     update stay staff-only via ``_SubmissionViewSetMixin``, same shape as
+     *     ``BugReportViewSet``/``PlayerReportViewSet``. Adoption is a manual, separate
+     *     act (staff author the real ``CheckType`` through the normal content path) —
+     *     this endpoint only tracks the proposal's own review status.
+     */
+    put: operations['player_submissions_check_proposals_update'];
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    /**
+     * @description Staff triage of proposed new ``CheckType`` rows (#3295).
+     *
+     *     Create is open to any authenticated player (the catalog-only ruling's
+     *     proposal pipeline is for players AND GMs, not staff-gated); list/retrieve/
+     *     update stay staff-only via ``_SubmissionViewSetMixin``, same shape as
+     *     ``BugReportViewSet``/``PlayerReportViewSet``. Adoption is a manual, separate
+     *     act (staff author the real ``CheckType`` through the normal content path) —
+     *     this endpoint only tracks the proposal's own review status.
+     */
+    patch: operations['player_submissions_check_proposals_partial_update'];
+    trace?: never;
+  };
   '/api/player-submissions/feedback/': {
     parameters: {
       query?: never;
@@ -16220,6 +16520,29 @@ export interface paths {
      *     queryset, serializers, and filterset.
      */
     patch: operations['player_submissions_player_reports_partial_update'];
+    trace?: never;
+  };
+  '/api/player-submissions/player-reports/hidden-presence/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /**
+     * @description #3288 — report the unseen presence in the reporter's room.
+     *
+     *     No reported-identity input and none in the response: the server resolves
+     *     the room's concealed occupants into staff-visible PlayerReports; the
+     *     reporter only learns that the report was filed.
+     */
+    post: operations['player_submissions_player_reports_hidden_presence_create'];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
     trace?: never;
   };
   '/api/player-submissions/system-errors/': {
@@ -19411,6 +19734,58 @@ export interface paths {
      *     Self-only: rows are scoped to personas the requester currently plays.
      */
     get: operations['societies_reputations_retrieve'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/societies/standing-declarations/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /**
+     * @description List/retrieve leader favor/disfavor declarations (#3290).
+     *
+     *     Public read to any authenticated player (spec decision 4) — org politics
+     *     played through declarations are meant to be legible to bystanders, unlike
+     *     the raw ``OrganizationReputation`` value they move (which stays self-only,
+     *     see ``OrganizationReputationViewSet``). Writes never happen here — a
+     *     declaration is minted by ``DeclareStandingAction`` (web + telnet), which
+     *     calls ``world.societies.standing_services.declare_standing``.
+     */
+    get: operations['societies_standing_declarations_list'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/societies/standing-declarations/{id}/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /**
+     * @description List/retrieve leader favor/disfavor declarations (#3290).
+     *
+     *     Public read to any authenticated player (spec decision 4) — org politics
+     *     played through declarations are meant to be legible to bystanders, unlike
+     *     the raw ``OrganizationReputation`` value they move (which stays self-only,
+     *     see ``OrganizationReputationViewSet``). Writes never happen here — a
+     *     declaration is minted by ``DeclareStandingAction`` (web + telnet), which
+     *     calls ``world.societies.standing_services.declare_standing``.
+     */
+    get: operations['societies_standing_declarations_retrieve'];
     put?: never;
     post?: never;
     delete?: never;
@@ -23209,6 +23584,7 @@ export interface components {
      *     * `building` - Building
      *     * `business` - Business
      *     * `residuary` - Residuary (everything else)
+     *     * `writings` - Writings (Private Journal Corpus)
      * @enum {string}
      */
     BequestKindEnum:
@@ -23217,7 +23593,8 @@ export interface components {
       | 'all_coin'
       | 'building'
       | 'business'
-      | 'residuary';
+      | 'residuary'
+      | 'writings';
     BequestRequest: {
       will: number;
       /** @description Execution order within this bequest's kind. */
@@ -23313,6 +23690,38 @@ export interface components {
        *     * `defender` - Defender
        */
       defending_side_role: components['schemas']['DefendingSideRoleEnum'];
+    };
+    Board: {
+      readonly id: number;
+      /** @description LOCATION board anchor: the room this board physically stands in. */
+      room_profile?: number | null;
+      /** @description ORG board anchor: the organization this board belongs to. */
+      organization?: number | null;
+      /** @description Display name for this board. */
+      name: string;
+      /** @description Newest-first display cap. Older posts fall off the display but are retained in the DB (no auto-expiry at MVP). */
+      max_active_posts?: number;
+      readonly is_location_board: boolean;
+      readonly is_org_board: boolean;
+    };
+    /**
+     * @description Read-only board post — writes go through action dispatch (ADR-0001).
+     *
+     *     ``author_display`` renders through the same per-viewer persona display
+     *     resolution as everywhere else (a masked poster shows the mask; a
+     *     discovered mask reveals; staff sees through every mask).
+     */
+    BoardPost: {
+      readonly id: number;
+      board: number;
+      title: string;
+      body: string;
+      readonly author_display: string;
+      /** Format: date-time */
+      readonly created_at: string;
+      /** Format: date-time */
+      edited_at?: string | null;
+      readonly is_removed: boolean;
     };
     /** @description One eligible posting on a board (preview row). */
     BoardPosting: {
@@ -24494,12 +24903,93 @@ export interface components {
      */
     CharacterVitalsStatusEnum: 'alive' | 'dying' | 'incapacitated' | 'dead';
     /**
+     * @description Read-only payload for one of the requesting player's pending check calls (#3295).
+     *
+     *     Mirrors ``GMSummonOfferSerializer``'s shape: answer/decline dispatch through
+     *     the generic REGISTRY action-dispatch endpoint (``answer_check_call``/
+     *     ``decline_check_call``) rather than a DRF action here.
+     */
+    CheckCallTarget: {
+      readonly id: number;
+      readonly call_id: number;
+      readonly check_type_name: string;
+      readonly band: string;
+      readonly band_label: string;
+      readonly caller_display_name: string;
+      readonly scene_id: number;
+      /** Format: date-time */
+      readonly created_at: string;
+    };
+    /** @description Frontend supplies ``submitted_by_persona``; the account is server-derived (#3295). */
+    CheckProposalCreate: {
+      /** @description The persona the submitter was wearing when proposing. */
+      submitted_by_persona: number;
+      /** @description The check's proposed name (e.g. 'Riverside Tracking'). */
+      proposed_name: string;
+      /** @description What this check is meant to cover -- the gap in the catalog. */
+      intent: string;
+      /** @description Suggested stat+skill pairing in plain text (e.g. 'Perception + Survival'). Advisory only -- no live Trait FK exists until staff author the real row. */
+      suggested_traits_text?: string;
+      /** @description The situation this check would serve -- when someone would roll it. */
+      situation_text: string;
+      /** @description The scene the proposal arose in, if any. */
+      scene?: number | null;
+    };
+    /** @description Frontend supplies ``submitted_by_persona``; the account is server-derived (#3295). */
+    CheckProposalCreateRequest: {
+      /** @description The persona the submitter was wearing when proposing. */
+      submitted_by_persona: number;
+      /** @description The check's proposed name (e.g. 'Riverside Tracking'). */
+      proposed_name: string;
+      /** @description What this check is meant to cover -- the gap in the catalog. */
+      intent: string;
+      /** @description Suggested stat+skill pairing in plain text (e.g. 'Perception + Survival'). Advisory only -- no live Trait FK exists until staff author the real row. */
+      suggested_traits_text?: string;
+      /** @description The situation this check would serve -- when someone would roll it. */
+      situation_text: string;
+      /** @description The scene the proposal arose in, if any. */
+      scene?: number | null;
+    };
+    /** @description Staff-inbox detail view: adopt/decline with review notes (#3295). */
+    CheckProposalDetail: {
+      readonly id: number;
+      /** @description OOC authoring, not IC -- mirrors PlayerFeedback.reporter_account. */
+      readonly submitted_by_account: number;
+      readonly submitted_by_account_username: string;
+      /** @description The persona the submitter was wearing when proposing. */
+      readonly submitted_by_persona: number;
+      readonly submitted_by_persona_name: string;
+      /** @description The check's proposed name (e.g. 'Riverside Tracking'). */
+      readonly proposed_name: string;
+      /** @description What this check is meant to cover -- the gap in the catalog. */
+      readonly intent: string;
+      /** @description Suggested stat+skill pairing in plain text (e.g. 'Perception + Survival'). Advisory only -- no live Trait FK exists until staff author the real row. */
+      readonly suggested_traits_text: string;
+      /** @description The situation this check would serve -- when someone would roll it. */
+      readonly situation_text: string;
+      /** @description The scene the proposal arose in, if any. */
+      readonly scene: number | null;
+      status?: components['schemas']['StatusD66Enum'];
+      /** @description Staff account that reviewed this proposal. */
+      readonly reviewer: number | null;
+      review_notes?: string;
+      /** Format: date-time */
+      readonly created_at: string;
+      /** Format: date-time */
+      readonly resolved_at: string | null;
+    };
+    /** @description Staff-inbox detail view: adopt/decline with review notes (#3295). */
+    CheckProposalDetailRequest: {
+      status?: components['schemas']['StatusD66Enum'];
+      review_notes?: string;
+    };
+    /**
      * @description Read-only catalog listing for the web GM check-invocation picker (#3070).
      *
-     *     Mirrors ``InvokeCatalogCheckAction``'s own catalog rendering
-     *     (``_check_type_summary``/``_format_catalog_row`` in
-     *     ``actions/definitions/gm_adjudication.py``) so the web picker shows the same
-     *     stat+skill trait pairing a GM sees via telnet ``gm check find``.
+     *     Mirrors the shared catalog rendering (``check_type_summary``/
+     *     ``format_catalog_row`` in ``world.checks.catalog_invocation``, #3295) so the
+     *     web picker shows the same stat+skill trait pairing a GM sees via telnet
+     *     ``gm check find``.
      */
     CheckType: {
       readonly id: number;
@@ -25695,6 +26185,12 @@ export interface components {
      * @enum {string}
      */
     DifficultyEnum: 'trivial' | 'easy' | 'normal' | 'hard' | 'daunting' | 'harrowing';
+    /**
+     * @description * `favor` - Favor
+     *     * `disfavor` - Disfavor
+     * @enum {string}
+     */
+    DirectionEnum: 'favor' | 'disfavor';
     /** @description Serializer for discovery records. */
     Discovery: {
       /**
@@ -28027,6 +28523,34 @@ export interface components {
       readonly target_kind: string;
       /** Format: date-time */
       readonly found_at: string;
+    };
+    /**
+     * @description #3288 — report the unseen presence in your current room.
+     *
+     *     Deliberately carries NO reported-identity input: the reporter never learns who
+     *     the hidden presence is. Resolution happens server-side in
+     *     ``services.report_hidden_presence`` against the concealed occupants of the
+     *     reporter's room.
+     */
+    HiddenPresenceReportCreate: {
+      reporter_persona: number;
+      /** @default harassment */
+      category: components['schemas']['CategoryC06Enum'];
+      behavior_description: string;
+    };
+    /**
+     * @description #3288 — report the unseen presence in your current room.
+     *
+     *     Deliberately carries NO reported-identity input: the reporter never learns who
+     *     the hidden presence is. Resolution happens server-side in
+     *     ``services.report_hidden_presence`` against the concealed occupants of the
+     *     reporter's room.
+     */
+    HiddenPresenceReportCreateRequest: {
+      reporter_persona: number;
+      /** @default harassment */
+      category: components['schemas']['CategoryC06Enum'];
+      behavior_description: string;
     };
     /**
      * @description A scene's highlight reel: a sealed featured moment + a ranked index (#1241, #2161).
@@ -31130,6 +31654,12 @@ export interface components {
       can_manage_ranks?: boolean;
       /** @description Members at this rank may lead this organization's group rituals. No org-ritual dispatch mechanism consumes this yet for non-Covenant organizations — see needs-design follow-up filed alongside #708 ('Generic organization-ritual dispatch for non-Covenant org kinds'). Mirrors CovenantRank.can_lead_rituals, which IS consumed today by Covenant Sanctification. */
       can_lead_rituals?: boolean;
+      /** @description Members at this rank can officially declare a persona favored or disfavored with this organization (#3290), moving their OrganizationReputation via a StandingDeclaration audit row. */
+      can_declare_standing?: boolean;
+      /** @description Members at this rank can pin new notices to this organization's board (#3286). */
+      can_post_to_board?: boolean;
+      /** @description Members at this rank can remove ANY notice from this organization's board (authors may always remove their own; staff always can) (#3286). */
+      can_moderate_board?: boolean;
     };
     OrganizationRankRequest: {
       /** @description Diegetic name for this rung (e.g., Guildmaster, Captain) */
@@ -31144,6 +31674,12 @@ export interface components {
       can_manage_ranks?: boolean;
       /** @description Members at this rank may lead this organization's group rituals. No org-ritual dispatch mechanism consumes this yet for non-Covenant organizations — see needs-design follow-up filed alongside #708 ('Generic organization-ritual dispatch for non-Covenant org kinds'). Mirrors CovenantRank.can_lead_rituals, which IS consumed today by Covenant Sanctification. */
       can_lead_rituals?: boolean;
+      /** @description Members at this rank can officially declare a persona favored or disfavored with this organization (#3290), moving their OrganizationReputation via a StandingDeclaration audit row. */
+      can_declare_standing?: boolean;
+      /** @description Members at this rank can pin new notices to this organization's board (#3286). */
+      can_post_to_board?: boolean;
+      /** @description Members at this rank can remove ANY notice from this organization's board (authors may always remove their own; staff always can) (#3286). */
+      can_moderate_board?: boolean;
     };
     /** @description A persona's standing with an organization — named tier only, never the raw value. */
     OrganizationReputation: {
@@ -31532,6 +32068,36 @@ export interface components {
       previous?: string | null;
       results: components['schemas']['Block'][];
     };
+    PaginatedBoardList: {
+      /** @example 123 */
+      count: number;
+      /**
+       * Format: uri
+       * @example http://api.example.org/accounts/?page=4
+       */
+      next?: string | null;
+      /**
+       * Format: uri
+       * @example http://api.example.org/accounts/?page=2
+       */
+      previous?: string | null;
+      results: components['schemas']['Board'][];
+    };
+    PaginatedBoardPostList: {
+      /** @example 123 */
+      count: number;
+      /**
+       * Format: uri
+       * @example http://api.example.org/accounts/?page=4
+       */
+      next?: string | null;
+      /**
+       * Format: uri
+       * @example http://api.example.org/accounts/?page=2
+       */
+      previous?: string | null;
+      results: components['schemas']['BoardPost'][];
+    };
     PaginatedBoardPostingList: {
       count: number;
       results: components['schemas']['BoardPosting'][];
@@ -31700,6 +32266,21 @@ export interface components {
        */
       previous?: string | null;
       results: components['schemas']['CharacterRelationshipList'][];
+    };
+    PaginatedCheckProposalDetailList: {
+      /** @example 123 */
+      count: number;
+      /**
+       * Format: uri
+       * @example http://api.example.org/accounts/?page=4
+       */
+      next?: string | null;
+      /**
+       * Format: uri
+       * @example http://api.example.org/accounts/?page=2
+       */
+      previous?: string | null;
+      results: components['schemas']['CheckProposalDetail'][];
     };
     PaginatedCheckTypeList: {
       /** @example 123 */
@@ -33787,6 +34368,21 @@ export interface components {
       previous?: string | null;
       results: components['schemas']['StakeTemplate'][];
     };
+    PaginatedStandingDeclarationList: {
+      /** @example 123 */
+      count: number;
+      /**
+       * Format: uri
+       * @example http://api.example.org/accounts/?page=4
+       */
+      next?: string | null;
+      /**
+       * Format: uri
+       * @example http://api.example.org/accounts/?page=2
+       */
+      previous?: string | null;
+      results: components['schemas']['StandingDeclaration'][];
+    };
     PaginatedStoryFeedbackList: {
       /** @example 123 */
       count: number;
@@ -34595,6 +35191,11 @@ export interface components {
       lifetime_earned?: number;
       /** @description Optional player-defined description of how this resonance manifests. */
       flavor_text?: string;
+    };
+    /** @description Staff-inbox detail view: adopt/decline with review notes (#3295). */
+    PatchedCheckProposalDetailRequest: {
+      status?: components['schemas']['StatusD66Enum'];
+      review_notes?: string;
     };
     /**
      * @description Serializer for CovenantRank (the per-covenant authority ladder).
@@ -39621,6 +40222,40 @@ export interface components {
       readonly stakes: components['schemas']['StakeSummary'][];
     };
     /**
+     * @description A leader's public favor/disfavor declaration (#3290) — history/audit read.
+     *
+     *     Public by design (spec decision 4): the declaration itself (who, target,
+     *     direction, citation, when) is meant to be legible to bystanders, unlike
+     *     the raw ``OrganizationReputation`` value it moves. ``delta_applied`` is
+     *     deliberately NOT exposed here — the hidden-value convention
+     *     (``OrganizationReputationSerializer``: "tier only, never the raw value")
+     *     extends to the magnitude a declaration moved that value by; staff can read
+     *     it in the admin for dispute resolution.
+     */
+    StandingDeclaration: {
+      readonly id: number;
+      /** @description The organization whose standing with the target moved. */
+      organization: number;
+      readonly organization_name: string;
+      /** @description The persona declared favored or disfavored. */
+      target_persona: number;
+      readonly target_persona_name: string;
+      /** @description The leader persona who made the declaration. */
+      declared_by_persona: number;
+      readonly declared_by_persona_name: string;
+      /**
+       * @description Whether this declaration pushed standing toward favor or disfavor.
+       *
+       *     * `favor` - Favor
+       *     * `disfavor` - Disfavor
+       */
+      direction: components['schemas']['DirectionEnum'];
+      /** @description The leader's public citation — why this declaration was made. */
+      citation: string;
+      /** Format: date-time */
+      readonly created_at: string;
+    };
+    /**
      * @description * `core` - Core Member
      *     * `minor` - Minor Member
      * @enum {string}
@@ -40141,6 +40776,7 @@ export interface components {
       clues: components['schemas']['WorldBuilderRoomClue'][];
       clue_triggers: components['schemas']['WorldBuilderClueTrigger'][];
       portal_anchors: components['schemas']['WorldBuilderPortalAnchor'][];
+      desc_variants: components['schemas']['WorldBuilderRoomDescVariant'][];
       grants: string[];
     };
     /** @description Read-only serializer for StrainAvailability — per-character strain cap snapshot. */
@@ -42313,6 +42949,7 @@ export interface components {
       clues: components['schemas']['WorldBuilderRoomClue'][];
       clue_triggers: components['schemas']['WorldBuilderClueTrigger'][];
       portal_anchors: components['schemas']['WorldBuilderPortalAnchor'][];
+      desc_variants: components['schemas']['WorldBuilderRoomDescVariant'][];
     };
     /** @description One RoomClue placement, nested in a WorldBuilderRoom payload (#2451). */
     WorldBuilderRoomClue: {
@@ -42321,6 +42958,13 @@ export interface components {
       clue_slug: string;
       detect_difficulty: number;
       fixture_key: string | null;
+    };
+    /** @description One authored season/phase description variant (#3291). */
+    WorldBuilderRoomDescVariant: {
+      id: number;
+      season: string | null;
+      phase: string | null;
+      description: string;
     };
     /** @description Selection-time room detail (#3269): exit profiles + comfort breakdown. */
     WorldBuilderRoomDetail: {
@@ -44035,6 +44679,101 @@ export interface operations {
         };
         content: {
           'application/json': components['schemas']['Block'];
+        };
+      };
+    };
+  };
+  boards_boards_list: {
+    parameters: {
+      query?: {
+        organization?: number;
+        /** @description A page number within the paginated result set. */
+        page?: number;
+        /** @description Number of results to return per page. */
+        page_size?: number;
+        room_profile?: number;
+      };
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['PaginatedBoardList'];
+        };
+      };
+    };
+  };
+  boards_boards_retrieve: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        /** @description A unique integer value identifying this board. */
+        id: number;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['Board'];
+        };
+      };
+    };
+  };
+  boards_posts_list: {
+    parameters: {
+      query?: {
+        board?: number;
+        /** @description A page number within the paginated result set. */
+        page?: number;
+        /** @description Number of results to return per page. */
+        page_size?: number;
+      };
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['PaginatedBoardPostList'];
+        };
+      };
+    };
+  };
+  boards_posts_retrieve: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        /** @description A unique integer value identifying this board post. */
+        id: number;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['BoardPost'];
         };
       };
     };
@@ -46927,6 +47666,47 @@ export interface operations {
       };
     };
   };
+  checks_check_call_targets_list: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['CheckCallTarget'][];
+        };
+      };
+    };
+  };
+  checks_check_call_targets_retrieve: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        /** @description A unique integer value identifying this check call target. */
+        id: number;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['CheckCallTarget'];
+        };
+      };
+    };
+  };
   checks_check_types_list: {
     parameters: {
       query?: {
@@ -47022,6 +47802,54 @@ export interface operations {
         };
         content: {
           'application/json': components['schemas']['ConsequenceOutcome'];
+        };
+      };
+    };
+  };
+  checks_player_check_types_list: {
+    parameters: {
+      query?: {
+        category?: string;
+        /** @description A page number within the paginated result set. */
+        page?: number;
+        /** @description Number of results to return per page. */
+        page_size?: number;
+        search?: string;
+      };
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['PaginatedCheckTypeList'];
+        };
+      };
+    };
+  };
+  checks_player_check_types_retrieve: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        /** @description A unique integer value identifying this check type. */
+        id: number;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['CheckType'];
         };
       };
     };
@@ -51578,8 +52406,16 @@ export interface operations {
          *     * `building` - Building
          *     * `business` - Business
          *     * `residuary` - Residuary (everything else)
+         *     * `writings` - Writings (Private Journal Corpus)
          */
-        kind?: 'all_coin' | 'building' | 'business' | 'coin_amount' | 'residuary' | 'specific_item';
+        kind?:
+          | 'all_coin'
+          | 'building'
+          | 'business'
+          | 'coin_amount'
+          | 'residuary'
+          | 'specific_item'
+          | 'writings';
         /** @description A page number within the paginated result set. */
         page?: number;
         /** @description Number of results to return per page. */
@@ -56163,6 +56999,42 @@ export interface operations {
       path: {
         id: number;
       };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description No response body */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+    };
+  };
+  journals_entries_disposition_retrieve: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description No response body */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+    };
+  };
+  journals_entries_disposition_partial_update: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
       cookie?: never;
     };
     requestBody?: never;
@@ -64418,6 +65290,127 @@ export interface operations {
       };
     };
   };
+  player_submissions_check_proposals_list: {
+    parameters: {
+      query?: {
+        /** @description A page number within the paginated result set. */
+        page?: number;
+        /** @description Number of results to return per page. */
+        page_size?: number;
+      };
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['PaginatedCheckProposalDetailList'];
+        };
+      };
+    };
+  };
+  player_submissions_check_proposals_create: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['CheckProposalCreateRequest'];
+      };
+    };
+    responses: {
+      201: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['CheckProposalCreate'];
+        };
+      };
+    };
+  };
+  player_submissions_check_proposals_retrieve: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        /** @description A unique integer value identifying this Check Proposal. */
+        id: number;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['CheckProposalDetail'];
+        };
+      };
+    };
+  };
+  player_submissions_check_proposals_update: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        /** @description A unique integer value identifying this Check Proposal. */
+        id: number;
+      };
+      cookie?: never;
+    };
+    requestBody?: {
+      content: {
+        'application/json': components['schemas']['CheckProposalDetailRequest'];
+      };
+    };
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['CheckProposalDetail'];
+        };
+      };
+    };
+  };
+  player_submissions_check_proposals_partial_update: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        /** @description A unique integer value identifying this Check Proposal. */
+        id: number;
+      };
+      cookie?: never;
+    };
+    requestBody?: {
+      content: {
+        'application/json': components['schemas']['PatchedCheckProposalDetailRequest'];
+      };
+    };
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['CheckProposalDetail'];
+        };
+      };
+    };
+  };
   player_submissions_feedback_list: {
     parameters: {
       query?: {
@@ -64795,6 +65788,29 @@ export interface operations {
         };
         content: {
           'application/json': components['schemas']['PlayerReportDetail'];
+        };
+      };
+    };
+  };
+  player_submissions_player_reports_hidden_presence_create: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['HiddenPresenceReportCreateRequest'];
+      };
+    };
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['HiddenPresenceReportCreate'];
         };
       };
     };
@@ -69118,6 +70134,54 @@ export interface operations {
         };
         content: {
           'application/json': components['schemas']['OrganizationReputation'];
+        };
+      };
+    };
+  };
+  societies_standing_declarations_list: {
+    parameters: {
+      query?: {
+        declared_by_persona?: number;
+        direction?: string;
+        organization?: number;
+        /** @description A page number within the paginated result set. */
+        page?: number;
+        target_persona?: number;
+      };
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['PaginatedStandingDeclarationList'];
+        };
+      };
+    };
+  };
+  societies_standing_declarations_retrieve: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        /** @description A unique integer value identifying this Standing Declaration. */
+        id: number;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['StandingDeclaration'];
         };
       };
     };

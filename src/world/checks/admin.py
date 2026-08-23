@@ -3,6 +3,8 @@
 from django.contrib import admin
 
 from world.checks.models import (
+    CheckCall,
+    CheckCallTarget,
     CheckCategory,
     CheckType,
     CheckTypeAspect,
@@ -80,3 +82,25 @@ class ConsequenceAdmin(admin.ModelAdmin):
     search_fields = ["label"]
     list_select_related = ["outcome_tier"]
     inlines = [ConsequenceEffectInline]
+
+
+# ---------------------------------------------------------------------------
+# Scene check invocation (#3295)
+# ---------------------------------------------------------------------------
+
+
+class CheckCallTargetInline(admin.TabularInline):
+    model = CheckCallTarget
+    extra = 0
+    fields = ["target_sheet", "status", "resolved_at"]
+    readonly_fields = ["resolved_at"]
+    autocomplete_fields = ["target_sheet"]
+
+
+@admin.register(CheckCall)
+class CheckCallAdmin(admin.ModelAdmin):
+    list_display = ["check_type", "band", "scene", "caller_persona", "created_at"]
+    list_filter = ["band"]
+    list_select_related = ["check_type", "scene", "caller_persona"]
+    autocomplete_fields = ["scene", "caller_persona", "check_type"]
+    inlines = [CheckCallTargetInline]

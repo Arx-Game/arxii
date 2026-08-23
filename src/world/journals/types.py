@@ -8,6 +8,7 @@ _JOURNAL_ERROR_MESSAGES: dict[str, str] = {
     # leak that a block is involved: "this entry isn't available to respond to right now" has
     # many innocent causes (deleted, locked, moderation, ...). Never says "blocked."
     "UNAVAILABLE": "This entry is not available to respond to right now.",
+    "INVALID_DISPOSITION": "That is not a valid posthumous disposition.",
 }
 
 
@@ -23,6 +24,7 @@ class JournalError(Exception):
     SELF_RESPONSE = _JOURNAL_ERROR_MESSAGES["SELF_RESPONSE"]
     EDIT_RESPONSE = _JOURNAL_ERROR_MESSAGES["EDIT_RESPONSE"]
     UNAVAILABLE = _JOURNAL_ERROR_MESSAGES["UNAVAILABLE"]
+    INVALID_DISPOSITION = _JOURNAL_ERROR_MESSAGES["INVALID_DISPOSITION"]
 
     @property
     def user_message(self) -> str:

@@ -68,5 +68,15 @@ at once. Per-PR coverage is now the structural `standalone-sql-wiring` hook
 (`tools/check_standalone_sql_wiring.py`); nightly coverage is a full `pg_catalog` diff
 between the two paths (`tools/compare_schemas.py`).
 
+**Update (2026-08-23, CI speed-up):** `build_schema.py`'s 5-6.5 minute "Build schema"
+step was ~98% Django's `migrate` command running the migration **autodetector +
+optimizer** after syncdb - at `verbosity >= 1` it diffs the (empty, migrations-disabled)
+graph against all ~1,200 models to print the "changes not yet reflected in a migration"
+hint, feeding ~1,200 `CreateModel` ops to an O(n^2) optimizer (187M `reduce()` calls).
+The real DDL + SQL files + seeds take ~30s. `build_schema.py` now calls `migrate` with
+`verbosity=0`; the SQLite tier never hit this because Django's `create_test_db` passes
+`verbosity - 1`. The per-job fixed cost is now small enough that caching a `pg_dump` of
+the built schema (rejected alternative (b) above) is not worth its staleness risk.
+
 > Status: accepted · Source: CI-speedup branch, task 5 · Related: ADR-0013 (schema-only
 > migrations pre-production), ADR-0021 (merge queue + single-leaf migration guard)

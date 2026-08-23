@@ -35,6 +35,7 @@ const baseRoom: WorldBuilderRoom = {
   clues: [],
   clue_triggers: [],
   portal_anchors: [],
+  desc_variants: [],
 };
 
 function renderNode(room: WorldBuilderRoom) {

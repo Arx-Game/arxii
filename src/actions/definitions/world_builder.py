@@ -1,10 +1,10 @@
 """Staff world-builder actions (#2449) — the canvas's dispatch seam.
 
-Thirty-seven REGISTRY actions (eleven original + six discovery/portal-authoring
-#2451, plus the #3269 recoverability pair and the Phase B room-authoring set:
+Thirty-nine REGISTRY actions (eleven original + six discovery/portal-authoring
+#2451, plus the #3269 recoverability pair, the Phase B room-authoring set:
 stats, places, ambient lines/emits, feature fiat, staffing, travel hub,
-blueprint, starting-room bindings, exit detail, duplicate, batch dig),
-all ``category="world_builder"``, ``target_type=SELF``,
+blueprint, starting-room bindings, exit detail, duplicate, batch dig, and the
+#3291 description-variant pair), all ``category="world_builder"``, ``target_type=SELF``,
 gated by ``StaffOnlyPrerequisite`` alone (no ownership/tenancy standing — this is
 staff tooling, not a player-facing builder). Each is a thin wrapper over the
 Task 1+2 substrate: ``world.areas.grid_services`` (room/exit/grid primitives +
@@ -1262,6 +1262,78 @@ class StaffRemoveAmbientEmitAction(_WorldBuilderAction):
             note = " (It carried a writer credit; the content repo copy is untouched.)"
         emit.delete()
         return ActionResult(success=True, message=f"Ambient emit removed.{note}")
+
+
+@dataclass
+class StaffSetRoomDescVariantAction(_WorldBuilderAction):
+    """Author (create or overwrite) a season/phase description variant (#3291).
+
+    Kwargs: ``room_id``, ``description``, optional ``season``/``phase`` (at
+    least one must be set — a variant with neither would just duplicate the
+    base description). Upserts on the (room, season, phase) triple.
+    """
+
+    key: str = "staff_set_room_desc_variant"
+    name: str = "Set Room Description Variant"
+    icon: str = "calendar"
+
+    def execute(
+        self,
+        actor: ObjectDB,
+        context: ActionContext | None = None,
+        **kwargs: Any,
+    ) -> ActionResult:
+        from evennia_extensions.models import RoomDescVariant  # noqa: PLC0415
+        from world.game_clock.constants import Season, TimePhase  # noqa: PLC0415
+
+        profile = _resolve_room_profile(kwargs.get("room_id"))
+        if profile is None:
+            return ActionResult(success=False, message=_NO_SUCH_ROOM_MSG)
+        description = (kwargs.get("description") or "").strip()
+        if not description:
+            return ActionResult(success=False, message="Write the variant description.")
+        season = (kwargs.get("season") or "").strip() or None
+        if season is not None and season not in Season.values:
+            options = ", ".join(Season.values)
+            return ActionResult(success=False, message=f"Pick a season: {options}.")
+        phase = (kwargs.get("phase") or "").strip() or None
+        if phase is not None and phase not in TimePhase.values:
+            options = ", ".join(TimePhase.values)
+            return ActionResult(success=False, message=f"Pick a phase: {options}.")
+        if season is None and phase is None:
+            return ActionResult(
+                success=False, message="Set a season or a phase (or both) for the variant."
+            )
+        RoomDescVariant.objects.update_or_create(
+            room_profile=profile,
+            season=season,
+            phase=phase,
+            defaults={"description": description},
+        )
+        return ActionResult(success=True, message="Description variant saved.")
+
+
+@dataclass
+class StaffRemoveRoomDescVariantAction(_WorldBuilderAction):
+    """Remove a room description variant. Kwarg: ``variant_id``."""
+
+    key: str = "staff_remove_room_desc_variant"
+    name: str = "Remove Room Description Variant"
+    icon: str = "trash"
+
+    def execute(
+        self,
+        actor: ObjectDB,
+        context: ActionContext | None = None,
+        **kwargs: Any,
+    ) -> ActionResult:
+        from evennia_extensions.models import RoomDescVariant  # noqa: PLC0415
+
+        variant = RoomDescVariant.objects.filter(pk=kwargs.get("variant_id") or 0).first()
+        if variant is None:
+            return ActionResult(success=False, message="No such description variant.")
+        variant.delete()
+        return ActionResult(success=True, message="Description variant removed.")
 
 
 @dataclass

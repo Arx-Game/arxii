@@ -153,7 +153,8 @@ class RoomStateSerializerCharacterSplitTests(TestCase):
 
     def test_payload_has_all_expected_keys(self):
         """Payload keys: room/characters/objects/exits/scene + heat (#1765) + hub (#1450)
-        + npc_givers (#3044) + decorations/comfort_level (#2991)."""
+        + npc_givers (#3044) + decorations/comfort_level (#2991)
+        + has_unseen_presence (#3288)."""
         payload = build_room_state_payload(self.caller_state, self.room_state)
         assert set(payload.keys()) == {
             "room",
@@ -166,6 +167,7 @@ class RoomStateSerializerCharacterSplitTests(TestCase):
             "npc_givers",
             "decorations",
             "comfort_level",
+            "has_unseen_presence",
         }
         # Cold persona → the self-only heat field is None (never another player's data).
         assert payload["heat"] is None
@@ -176,6 +178,8 @@ class RoomStateSerializerCharacterSplitTests(TestCase):
         # No RoomDecoration rows here → empty, and the bare neutral comfort level (5).
         assert payload["decorations"] == []
         assert payload["comfort_level"] == 5
+        # No concealed occupant → no unseen-presence disclosure (#3288).
+        assert payload["has_unseen_presence"] is False
 
     def test_objects_carry_is_mission_board_false_by_default(self):
         """A plain object with no MissionGiver is never a board (#3044)."""
@@ -359,3 +363,14 @@ class RoomStateSerializerConcealmentTests(TestCase):
         payload = build_room_state_payload(self.caller_state, self.room_state)
         char_names = [c["name"] for c in payload["characters"]]
         assert self.concealed.key in char_names
+
+    def test_has_unseen_presence_flag_disclosed(self):
+        """#3288 — a concealed occupant always flips the identity-free room flag."""
+        payload = build_room_state_payload(self.caller_state, self.room_state)
+        assert payload["has_unseen_presence"] is True
+
+    def test_flag_stays_true_for_detecting_viewer(self):
+        """#3288 — piercing gives the viewer MORE info; the disclosure never retracts."""
+        register_detection(self.caller_sheet, self.concealed)
+        payload = build_room_state_payload(self.caller_state, self.room_state)
+        assert payload["has_unseen_presence"] is True
