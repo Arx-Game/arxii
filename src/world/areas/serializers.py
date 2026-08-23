@@ -268,6 +268,15 @@ class WorldBuilderBreadcrumbSerializer(serializers.Serializer):
     level_display = serializers.CharField()
 
 
+class WorldBuilderRoomDescVariantSerializer(serializers.Serializer):
+    """One authored season/phase description variant (#3291)."""
+
+    id = serializers.IntegerField()
+    season = serializers.CharField(allow_null=True)
+    phase = serializers.CharField(allow_null=True)
+    description = serializers.CharField()
+
+
 class WorldBuilderRoomSerializer(serializers.Serializer):
     """One RoomProfile in the staff area-manager payload (#2449).
 
@@ -305,6 +314,7 @@ class WorldBuilderRoomSerializer(serializers.Serializer):
     clues = WorldBuilderRoomClueSerializer(many=True)
     clue_triggers = WorldBuilderClueTriggerSerializer(many=True)
     portal_anchors = WorldBuilderPortalAnchorSerializer(many=True)
+    desc_variants = WorldBuilderRoomDescVariantSerializer(many=True)
 
 
 class WorldBuilderExitSerializer(serializers.Serializer):

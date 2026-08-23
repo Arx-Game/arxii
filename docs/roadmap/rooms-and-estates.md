@@ -286,6 +286,42 @@ defenses:
   `src/world/npc_services/expulsion_services.py`,
   `src/actions/definitions/npc_ambience.py`.
 
+## Built (2026-08-22, #3291 - seasonal and time-of-day room description variants)
+
+- **`RoomDescVariant`** (`evennia_extensions.models`, next to `RoomProfile`):
+  `room_profile` FK, nullable `season`/`phase` TextChoices (reusing
+  `world.game_clock.constants.Season`/`TimePhase`), `description` text,
+  unique on `(room_profile, season, phase)`. A row needs at least a season
+  or a phase (`clean()` rejects an all-blank row, which would just
+  duplicate the base description).
+- **Resolution:** `resolve_room_description(profile, ic_now)`
+  (`evennia_extensions.services.room_desc_variants`) picks the most
+  specific match, most-specific-wins: `(season, phase)` > `(season, -)` >
+  `(-, phase)`, returning `None` (keep the base desc) when nothing matches
+  or the game clock has never been set.
+- **Wired into `RoomState.get_display_desc`** (`flows/object_states/room_state.py`):
+  the variant replaces the base desc before the area-quality suffix is
+  appended; an active event `temporary_description` overlay
+  (`world.events.services._apply_room_overlay`) always wins over a
+  variant, unchanged from before this issue.
+  `GLANCE_MODE` is unaffected.
+  No mechanical enclosure gate - a fully interior room can still carry
+  night/day variants, an authoring choice, not a mechanical one.
+- **Authoring:** a `RoomDescVariantInline` on `RoomProfileAdmin`
+  (Django admin), plus the staff world-builder canvas
+  (`staff_set_room_desc_variant`/`staff_remove_room_desc_variant` REGISTRY
+  actions in `actions/definitions/world_builder.py`, and the variant list
+  in the room-detail read payload). The React canvas surface to author
+  variants inline (parallel to the existing ambient-line/emit sections) is
+  not yet wired in this PR - the backend authoring seam (actions +
+  payload) is complete and tested; the frontend panel is a follow-up slice.
+- **No live re-push:** a viewer sees the new desc on next look/room fetch,
+  same as the existing event-overlay behavior. A phase-transition push
+  would hook off `weather/tasks.py`'s existing phase-transition firing
+  point, deferred until a consumer justifies it.
+- **Content:** no seeded variants in this PR - content authoring is a
+  separate pass.
+
 ## Overview
 
 Rooms are the spatial substrate of the world. Buildings and estates are

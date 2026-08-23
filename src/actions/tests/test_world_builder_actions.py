@@ -1356,6 +1356,93 @@ class PhaseBRoomAuthoringTests(TestCase):
         assert [(r.grid_x, r.grid_y) for r in rooms] == [(0, 1), (0, 2), (0, 3)]
 
 
+class RoomDescVariantActionTests(TestCase):
+    """#3291 — staff_set_room_desc_variant / staff_remove_room_desc_variant."""
+
+    def setUp(self) -> None:
+        self.staff = _staff_actor("DescVariantStaff")
+        self.area = AreaFactory(
+            name="Variant Ward", level=AreaLevel.WARD, origin=GridOrigin.AUTHORED, slug="var-ward"
+        )
+        self.profile = RoomProfileFactory(area=self.area)
+
+    def test_set_creates_variant(self) -> None:
+        from actions.definitions.world_builder import StaffSetRoomDescVariantAction
+        from evennia_extensions.models import RoomDescVariant
+
+        result = StaffSetRoomDescVariantAction().run(
+            self.staff,
+            room_id=self.profile.objectdb_id,
+            season="winter",
+            description="Frost rimes every rail.",
+        )
+        assert result.success, result.message
+        variant = RoomDescVariant.objects.get(room_profile=self.profile, season="winter")
+        assert variant.phase is None
+        assert variant.description == "Frost rimes every rail."
+
+    def test_set_upserts_on_same_key(self) -> None:
+        from actions.definitions.world_builder import StaffSetRoomDescVariantAction
+        from evennia_extensions.models import RoomDescVariant
+
+        StaffSetRoomDescVariantAction().run(
+            self.staff,
+            room_id=self.profile.objectdb_id,
+            phase="night",
+            description="Torches gutter in the dark.",
+        )
+        result = StaffSetRoomDescVariantAction().run(
+            self.staff,
+            room_id=self.profile.objectdb_id,
+            phase="night",
+            description="Lanterns burn low.",
+        )
+        assert result.success, result.message
+        assert RoomDescVariant.objects.filter(room_profile=self.profile, phase="night").count() == 1
+        variant = RoomDescVariant.objects.get(room_profile=self.profile, phase="night")
+        assert variant.description == "Lanterns burn low."
+
+    def test_set_requires_season_or_phase(self) -> None:
+        from actions.definitions.world_builder import StaffSetRoomDescVariantAction
+
+        result = StaffSetRoomDescVariantAction().run(
+            self.staff, room_id=self.profile.objectdb_id, description="Featureless."
+        )
+        assert not result.success
+
+    def test_set_rejects_bad_season(self) -> None:
+        from actions.definitions.world_builder import StaffSetRoomDescVariantAction
+
+        result = StaffSetRoomDescVariantAction().run(
+            self.staff,
+            room_id=self.profile.objectdb_id,
+            season="monsoon",
+            description="Not a real season.",
+        )
+        assert not result.success
+
+    def test_remove_deletes_variant(self) -> None:
+        from actions.definitions.world_builder import StaffRemoveRoomDescVariantAction
+        from evennia_extensions.factories import RoomDescVariantFactory
+        from evennia_extensions.models import RoomDescVariant
+
+        variant = RoomDescVariantFactory(room_profile=self.profile, season="summer")
+        result = StaffRemoveRoomDescVariantAction().run(self.staff, variant_id=variant.pk)
+        assert result.success, result.message
+        assert not RoomDescVariant.objects.filter(pk=variant.pk).exists()
+
+    def test_non_staff_cannot_set(self) -> None:
+        from actions.definitions.world_builder import StaffSetRoomDescVariantAction
+        from evennia_extensions.models import RoomDescVariant
+
+        player = _player_actor("DescVariantPlayer")
+        result = StaffSetRoomDescVariantAction().run(
+            player, room_id=self.profile.objectdb_id, season="spring", description="Nope."
+        )
+        assert not result.success
+        assert not RoomDescVariant.objects.filter(room_profile=self.profile).exists()
+
+
 class PhaseCAreaMetadataTests(TestCase):
     """#3269 Phase C — edit_area's metadata kwargs + the below-REGION climate warning."""
 
