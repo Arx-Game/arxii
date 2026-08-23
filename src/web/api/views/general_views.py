@@ -1,13 +1,10 @@
 """General API views for the web interface."""
 
 from allauth.account.models import EmailAddress
-from django.conf import settings
 from django.contrib.auth import logout
 from django.utils.decorators import method_decorator
 from django.views.decorators.csrf import ensure_csrf_cookie
-from evennia import SESSION_HANDLER
 from evennia.accounts.models import AccountDB
-from evennia.utils import class_from_module
 from rest_framework import status
 from rest_framework.permissions import AllowAny
 from rest_framework.response import Response
@@ -15,47 +12,6 @@ from rest_framework.views import APIView
 
 from web.api.payload_helpers import build_account_payload_context
 from web.api.serializers import AccountPlayerSerializer
-from world.roster.models import RosterEntry
-
-
-class ServerStatusAPIView(APIView):
-    """Return overall game status."""
-
-    permission_classes = [AllowAny]
-
-    def get(self, request, *args, **kwargs):
-        """Return game statistics and recent activity."""
-        character_cls = class_from_module(
-            settings.BASE_CHARACTER_TYPECLASS,
-            fallback=settings.FALLBACK_CHARACTER_TYPECLASS,
-        )
-        room_cls = class_from_module(
-            settings.BASE_ROOM_TYPECLASS,
-            fallback=settings.FALLBACK_ROOM_TYPECLASS,
-        )
-
-        recent_entries = (
-            RosterEntry.objects.filter(
-                roster__is_active=True,
-                last_puppeted__isnull=False,
-            )
-            .select_related("character_sheet", "character_sheet__character")
-            .order_by("-last_puppeted")[:4]
-        )
-        recent_players = [
-            {"id": entry.id, "name": entry.character_sheet.character.key}
-            for entry in recent_entries
-        ]
-
-        data = {
-            "online": SESSION_HANDLER.account_count(),
-            "accounts": AccountDB.objects.count(),
-            "characters": character_cls.objects.all_family().count(),
-            "rooms": room_cls.objects.all_family().count(),
-            "recentPlayers": recent_players,
-            "news": [],
-        }
-        return Response(data)
 
 
 @method_decorator(ensure_csrf_cookie, name="dispatch")

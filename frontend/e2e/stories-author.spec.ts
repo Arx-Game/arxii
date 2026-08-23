@@ -66,7 +66,7 @@ test.describe('Story Author — author editor page', () => {
 
     // Without a backend session, ProtectedRoute redirects to /login.
     // Either the author page h1 ("Story Author") or the login page h1
-    // ("Login to Arx II") must be visible — both mean the React app is
+    // ("Login to Arx") must be visible — both mean the React app is
     // rendering correctly and no crash occurred.
     await expect(page.locator('h1').first()).toBeVisible();
 

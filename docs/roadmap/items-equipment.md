@@ -325,7 +325,7 @@ What shipped:
 - **Visibility:** `_is_visible_to` in `prerequisites.py` checks same-location presence
   and delegates to the real perception/concealment seam `can_perceive`
   (`world.conditions.services`, #1225). Player-driven concealment exists too — the
-  sneak stance (#3288, ADR-0226) produces the same `Concealed` condition. No
+  sneak stance (#3288, ADR-0228) produces the same `Concealed` condition. No
   darkness system yet.
 - **`CmdUse` telnet command** (`src/commands/evennia_overrides/items.py`) — grammars:
   `use <item>` and `use <item> on <target>`. Alias: `apply`.

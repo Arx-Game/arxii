@@ -1,4 +1,4 @@
-# ADR-0226: Stealth conceals identity, never presence — and disclosure is one-way
+# ADR-0228: Stealth conceals identity, never presence — and disclosure is one-way
 
 **Status:** Accepted (2026-08-21, ruled by ApostateCD on #3288)
 

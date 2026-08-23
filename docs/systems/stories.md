@@ -913,10 +913,48 @@ stake a society-level FACTION subject (`StakeSubjectKind.FACTION` +
 review purposes. Surfaced as a readiness problem, not a hard block; the author's
 `impact_tier` on the model is unchanged.
 
+### Review-request loop (#3304)
+
+`ensure_canon_review_for_story(story, gm_profile)` (`canon_review.py`) is the
+one orchestrator every seam that can raise a story's canon-review tier routes
+through, instead of calling `request_canon_review`/`clear_canon_review`
+directly:
+
+- **tier < REGIONAL** (the *escalated* effective tier, from
+  `escalation_tier_for_story` — not the raw `impact_tier`): no-op, no review.
+- **tier == REGIONAL**: a review is requested; if `gm_profile` is not None and
+  its level cap auto-clears REGIONAL, the review is immediately system-cleared
+  (`reviewer=None`, notes `"auto-cleared by GM level cap"`) — an auditable
+  stamp, not an invisible skip. `clear_canon_review` accepts `reviewer=None`
+  for exactly this path; `CanonReviewViewSet.clear` always passes the
+  authenticated staff account, so the web API can never produce a
+  system-stamped row.
+- **tier == WORLD**: always requested, never auto-cleared, at any GM level.
+
+Callers: the web `story impact` path (`StoryViewSet.perform_update`, whenever
+a PATCH/PUT changes `impact_tier`), telnet's `story impact` (`_handle_impact`
+in `commands/story.py`), and the readiness gate itself
+(`stakes._canon_review_problems`, called from every `validate_stakes_readiness`
+check) — the last of these uses the *escalated* tier, so a GROUP/GLOBAL story
+whose beats trigger the escalation heuristic gets a review even though its
+authored `impact_tier` was never manually raised. All three calls are
+idempotent (safe on every readiness check / impact-tier save).
+
+### GLOBAL-scope authoring gate (#3304)
+
+`GMLevelCap.allow_global_scope_authoring` gates `POST
+/api/stories/{id}/assign-to-scope/` (`AssignStoryInputSerializer`, the
+`scope <-> target` invariant neighborhood): a non-staff Lead GM assigning
+GLOBAL scope needs a permitting cap row (`_gm_allows_global_scope`, mirrors
+`_gm_allows_custom_stakes`'s most-restrictive fallback — no GMProfile or no
+cap row refuses); staff bypass unconditionally.
+
 ### Queue + verbs
 
 - **Staff queue**: `StaffWorkloadView` (`GET /api/stories/staff-workload/`)
-  surfaces `pending_canon_reviews` (aged).
+  surfaces `pending_canon_reviews` (aged); rendered on the frontend as the
+  `PendingCanonReviewsPanel` on `StaffWorkloadPage` (list, clear with notes,
+  request changes — consumes the same `CanonReviewViewSet` actions below).
 - **Web verbs**: `CanonReviewViewSet` (`/api/canon-reviews/`) — staff-only
   `list`/`retrieve` + `clear` (approve) and `changes` (request changes) detail
   actions.

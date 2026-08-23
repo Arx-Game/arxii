@@ -15,6 +15,8 @@ import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { toast } from 'sonner';
+import { VoteButton } from '@/components/VoteButton';
+import { useMyRosterEntriesQuery } from '@/roster/queries';
 import type { JournalEntrySummary, JournalResponseType } from '../api';
 import {
   useJournalEntries,
@@ -188,34 +190,47 @@ function EntryRow({
   onToggle: () => void;
   showResponseForm: boolean;
 }) {
+  // Own-entry gate for VoteButton (#3302), mirroring PoseUnit's isSelfPose
+  // guard: VoteButton has no self-guard of its own (the backend rejects
+  // self-votes; this is UX only), so the row computes whether `entry.author`
+  // (a CharacterSheet id) is one of the viewer's own characters and decides
+  // whether to mount. Also requires `is_public`, since only public entries
+  // carry a vote target server-side.
+  const { data: myRosterEntries = [] } = useMyRosterEntriesQuery();
+  const isOwnEntry = myRosterEntries.some((e) => e.character_id === entry.author);
+  const canVote = entry.is_public && !isOwnEntry;
+
   return (
     <Card>
-      <button type="button" className="block w-full text-left" onClick={onToggle}>
-        <CardHeader className="p-4">
-          <div className="flex items-center justify-between gap-2">
-            <CardTitle className="text-base">{entry.title}</CardTitle>
-            {!entry.is_public ? <Badge variant="outline">Private</Badge> : null}
-          </div>
-          <div className="flex flex-wrap items-center gap-1.5 text-xs text-muted-foreground">
-            <span>{entry.author_name}</span>
-            <span>·</span>
-            <span>{new Date(entry.created_at).toLocaleDateString()}</span>
-            {entry.response_count > 0 ? (
-              <>
-                <span>·</span>
-                <span>
-                  {entry.response_count} response{entry.response_count === 1 ? '' : 's'}
-                </span>
-              </>
-            ) : null}
-            {entry.tags.map((tag) => (
-              <Badge key={tag.id} variant="secondary">
-                {tag.name}
-              </Badge>
-            ))}
-          </div>
-        </CardHeader>
-      </button>
+      <div className="flex items-start justify-between gap-2 p-4">
+        <button type="button" className="min-w-0 flex-1 text-left" onClick={onToggle}>
+          <CardHeader className="p-0">
+            <div className="flex items-center justify-between gap-2">
+              <CardTitle className="text-base">{entry.title}</CardTitle>
+              {!entry.is_public ? <Badge variant="outline">Private</Badge> : null}
+            </div>
+            <div className="flex flex-wrap items-center gap-1.5 text-xs text-muted-foreground">
+              <span>{entry.author_name}</span>
+              <span>·</span>
+              <span>{new Date(entry.created_at).toLocaleDateString()}</span>
+              {entry.response_count > 0 ? (
+                <>
+                  <span>·</span>
+                  <span>
+                    {entry.response_count} response{entry.response_count === 1 ? '' : 's'}
+                  </span>
+                </>
+              ) : null}
+              {entry.tags.map((tag) => (
+                <Badge key={tag.id} variant="secondary">
+                  {tag.name}
+                </Badge>
+              ))}
+            </div>
+          </CardHeader>
+        </button>
+        {canVote ? <VoteButton targetType="journal" targetId={entry.id} /> : null}
+      </div>
       {expanded ? (
         <CardContent className="p-4 pt-0">
           <EntryDetail entryId={entry.id} showResponseForm={showResponseForm} />

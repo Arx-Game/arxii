@@ -52,10 +52,11 @@ This file provides specific guidance for working with the roster system in Arx I
 
 ### Extended Models (evennia_extensions/models.py)
 - **PlayerData**: Extends AccountDB with player preferences and session tracking
-- **PlayerMail**: Letters (mail) with tenure-to-tenure targeting, routed by `RosterTenure` so the
-  current player of a character receives it regardless of who that is. Web-only surface
-  (`/profile/mail` + in-scene quick-compose); no telnet mail command exists or is planned
-  (ADR-0116).
+- **PlayerMail**: OOC, player-to-player mail with tenure-to-tenure targeting, routed by
+  `RosterTenure` so the current player of a character receives it regardless of who that
+  is. Web-only surface (`/profile/mail` + in-scene "Message the player" quick-compose);
+  no telnet mail command exists or is planned (ADR-0226; IC missives are #3289's separate
+  system).
 - **PlayerAllowList**: Social contact allowlist. The old account-level `PlayerBlockList` was
   removed (#1278) — block/mute now lives on `world.scenes.Block`/`Mute` (see
   `world/scenes/CLAUDE.md`).
@@ -83,10 +84,10 @@ When implementing commands like `@ic`, `@characters`, `@apply`:
 - System updates PlayerData.current_character field
 - Must verify character is available via active RosterTenure
 
-### Mail System (Letters)
+### Mail System (OOC player-to-player)
 - Web-only: players compose at `/profile/mail`, or quick-compose in-scene from a character's
-  card (pre-filled `ComposeMailForm` via `SendLetterDialog`, #2160) — no telnet mail command
-  exists; telnet parity is deliberately out of scope (ADR-0116).
+  card (pre-filled `ComposeMailForm` via `MessagePlayerDialog`, #2160) — no telnet mail command
+  exists; telnet parity is deliberately out of scope (ADR-0226).
 - Players target a character name; the system routes to that character's current player via
   `RosterTenure.recipient_tenure`
 - Maintains character context while preserving player anonymity

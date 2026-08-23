@@ -237,6 +237,16 @@ export interface FrontierStoryEntry {
   scope: StoryScope;
 }
 
+/** One PENDING canon review in StaffWorkloadView.pending_canon_reviews (#2003/#3304). */
+export interface PendingCanonReviewEntry {
+  review_id: number;
+  story_id: number;
+  story_title: string;
+  tier: string;
+  created_at: string;
+  days_aging: number;
+}
+
 export interface StaffWorkloadResponse {
   per_gm_queue_depth: PerGMQueueEntry[];
   stale_stories: StaleStoryEntry[];
@@ -245,6 +255,22 @@ export interface StaffWorkloadResponse {
   open_session_requests_count: number;
   /** Map of scope → story count */
   counts_by_scope: Record<string, number>;
+  /** Pending canon-impact reviews — the #2003/#3304 review-request queue. */
+  pending_canon_reviews: PendingCanonReviewEntry[];
+}
+
+// ---------------------------------------------------------------------------
+// CanonReviewViewSet (#2003/#3304)
+// ---------------------------------------------------------------------------
+
+export type CanonReview = components['schemas']['CanonReview'];
+
+export interface CanonReviewClearBody {
+  notes?: string;
+}
+
+export interface CanonReviewChangesBody {
+  notes: string;
 }
 
 // ---------------------------------------------------------------------------

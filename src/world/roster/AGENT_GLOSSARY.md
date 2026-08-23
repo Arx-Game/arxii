@@ -77,17 +77,20 @@ kinship graph). Root terms live in `AGENT_GLOSSARY_MAP.md`.
   end reasons (disowned / married-out / renounced / annulled), with dates.
   `Kinsperson.family` is only the surname denorm of the active primary
   claim. _Avoid:_ family as a container that owns people.
-- **Letter (PlayerMail)** — a `PlayerMail` row: private, tenure-to-tenure
-  correspondence (`sender_tenure` → `recipient_tenure`, threaded via
-  `in_reply_to`), routed by `RosterTenure` rather than `AccountDB` so it
-  preserves player-anonymity: the recipient is addressed and displayed as
-  the current player of a character, never by account (#2160,
-  ADR-0116). Web is the letters surface — compose/inbox at
-  `/profile/mail`, an in-scene quick-compose from the character card, an
-  unread badge, and a `MAIL_ARRIVED` websocket push on send; there is
-  deliberately no telnet mail command. _Avoid:_ "mail Ariel" as a telnet
-  verb (retired aspiration, never built); messenger/courier (a distinct,
-  not-yet-built in-fiction delivery layer — see ADR-0116).
+- **Mail (PlayerMail)** - a `PlayerMail` row: private, OOC, tenure-to-tenure
+  correspondence between players (`sender_tenure` -> `recipient_tenure`,
+  threaded via `in_reply_to`), routed by `RosterTenure` rather than
+  `AccountDB` so it preserves player-anonymity: the recipient is addressed
+  and displayed as the current player of a character, never by account
+  (#124/#146, reaffirmed #3303, ADR-0226). Web is the mail surface -
+  compose/inbox at `/profile/mail`, an in-scene "Message the player"
+  quick-compose from the character card, an unread badge, and a
+  `MAIL_ARRIVED` websocket push on send; there is deliberately no telnet
+  mail command. _Avoid:_ letters/missives/correspondence for this surface
+  (that framing belongs to #3289's separate, not-yet-built IC messaging
+  system - see ADR-0226); "mail Ariel" as a telnet verb (retired
+  aspiration, never built); messenger/courier (part of that same
+  not-yet-built IC delivery layer).
 
 **Consort**:
 A realm-recognized OFFICIAL secondary partner (#3091) — a realm-scoped `UnionKind` row carrying the stature vocabulary fields (`stature_share_pct=50`, `contributes_to_origin_house=False`, `requires_landed_title=True`, `max_concurrent` = the realm cap: Inferna 3, Umbros/Ariwn/Aythirmok 1). A consort's renown weighs half toward the senior party's house, only while the senior holds a landed `Title`, and never flows back to the consort's origin house. Luxen recognizes no consorts — expressed as the ABSENCE of a Luxen consort row, never a flag. Realm rows carry realm display names; "consort" is the mechanical term in code/docs only (Arx 1 used "consort" for a title holder's spouse — that sense is styled by courtesy titles here, not this word).

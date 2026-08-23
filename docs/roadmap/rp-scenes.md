@@ -320,6 +320,28 @@ resolving on accept).
 - **Details:** [magic.md](../systems/magic.md#technique-entrance-2183) · ADR:
   [0113](../adr/0113-entrance-carries-the-cast.md).
 
+### Companion Pose Attribution — DONE (#3294)
+
+A companion's owner can pose *as* the companion in a social scene: the room sees the
+wolfhound growl, attributed to the wolfhound, while authorship (consent/moderation/
+block/mute) stays entirely the owner's.
+
+- **Model:** `Interaction.attributed_companion` — nullable FK → `companions.Companion`,
+  purely cosmetic feed attribution. `Interaction.persona` is unconditionally the owner's
+  own worn face, so every existing read-visibility/block/mute surface keys on it exactly
+  as a normal pose.
+- **Action:** `CompanionEmoteAction` (`companion_emote`), gated by
+  `CompanionPresentPrerequisite` — companion must be bound to the actor AND co-located
+  (`objectdb.location == actor.location`); no ghost-posing an absent pet.
+- **Telnet:** `companion emote <name|id> <text>` (`CmdCompanion`).
+- **Web:** `POST /api/companions/companions/{id}/emote/`; composer "as `<companion>`"
+  toggle (`CompanionSelector.tsx`) shown only when a bound companion is present
+  (`CompanionSerializer.is_present`); feed row (`PoseUnit.tsx`) renders the companion as
+  the actor with an owner tell built from the persona field's existing per-viewer display
+  resolution.
+- **Details:** [companions.md](../systems/companions.md#companion-emote-3294),
+  [scenes.md](../systems/scenes.md#companion-pose-attribution-3294).
+
 ### Relationship Integration
 - RelationshipUpdate has linked_interaction FK and reference_mode
 

@@ -223,4 +223,7 @@ export interface InteractionWsPayload {
   place_name: string | null;
   receiver_persona_ids: number[];
   target_persona_ids: number[];
+  /** Cosmetic companion pose attribution (#3294); null/absent for a normal pose. */
+  attributed_companion_id?: number | null;
+  attributed_companion_name?: string | null;
 }

@@ -982,6 +982,20 @@ class Interaction(SharedMemoryModel):
         related_name="+",
         help_text="Post-resolution audit of the realized Fury tier (clash + non-clash).",
     )
+    attributed_companion = models.ForeignKey(
+        "arxii.Companion",
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="+",
+        help_text=(
+            "Cosmetic pose attribution (#3294): when set, the feed renders this bonded "
+            "companion as the visible actor with an owner tell, e.g. a wolfhound's growl "
+            "attributed to the wolfhound. Authorship — block/mute/consent/moderation — "
+            "stays entirely on `persona`, which is always the companion's OWNER; this "
+            "field is never a substitute writer and never affects visibility filtering."
+        ),
+    )
     timestamp = models.DateTimeField(auto_now_add=True, db_index=True)
 
     objects = InteractionManager()

@@ -62,42 +62,37 @@ function captureConsoleErrors(page: Page): () => string[] {
 // ---------------------------------------------------------------------------
 
 test.describe('Visitor homepage', () => {
-  test('homepage renders with hero, status, and navigation', async ({ page }) => {
+  test('homepage renders the Gatefold cover and no console errors', async ({ page }) => {
     const getErrors = captureConsoleErrors(page);
     await page.goto(BASE_URL);
     await page.waitForLoadState('networkidle');
 
-    // Hero section
-    await expect(page.locator('h1').first()).toContainText('Welcome to Arx II');
-    await expect(page.getByText('Play in the browser')).toBeVisible();
+    // Cover section — giant wordmark, never the old "Welcome to Arx II" hero.
+    // Scoped to #main-content: the site header renders its own <h1> (SiteTitle).
+    await expect(page.locator('#main-content h1').first()).toHaveText('ARX');
+    await expect(page.getByText('Welcome to Arx II')).toHaveCount(0);
 
-    // Status block should be present (even if stats are 0)
-    // The StatusBlock renders server stats from /api/status/
     const root = page.locator('#root');
     await expect(root).not.toBeEmpty();
 
     expect(getErrors()).toEqual([]);
   });
 
-  test('homepage shows game stats from live API', async ({ page }) => {
+  test('homepage does not crash or show an error boundary', async ({ page }) => {
     await page.goto(BASE_URL);
     await page.waitForLoadState('networkidle');
 
-    // The StatsCard should show numbers (accounts, characters, rooms)
-    // These come from /api/status/ — if the API is down, the card shows
-    // loading skeletons instead of numbers.
-    const statsText = await page.locator('#root').textContent();
-    // At minimum the page should not show a crash or error boundary
-    expect(statsText).not.toContain('Something went wrong');
+    const bodyText = await page.locator('#root').textContent();
+    expect(bodyText).not.toContain('Something went wrong');
   });
 
-  test('navigation links work from homepage', async ({ page }) => {
+  test('the Door CTA is visible and links to registration', async ({ page }) => {
     await page.goto(BASE_URL);
     await page.waitForLoadState('networkidle');
 
-    // The "Play in the browser" button links to /game
-    const playButton = page.getByRole('link', { name: /play in the browser/i });
-    await expect(playButton).toBeVisible();
+    const beginLink = page.getByRole('link', { name: 'Begin' });
+    await expect(beginLink).toBeVisible();
+    await expect(beginLink).toHaveAttribute('href', '/register');
   });
 });
 
@@ -110,7 +105,7 @@ test.describe('Registration flow', () => {
     await page.goto(`${BASE_URL}/register`);
     await page.waitForLoadState('networkidle');
 
-    await expect(page.locator('h1')).toContainText('Register for Arx II');
+    await expect(page.locator('h1')).toContainText('Register for Arx');
 
     // All four fields should be present
     await expect(page.locator('#username')).toBeVisible();
@@ -201,7 +196,7 @@ test.describe('Login flow', () => {
     await page.goto(`${BASE_URL}/login`);
     await page.waitForLoadState('networkidle');
 
-    await expect(page.locator('h1')).toContainText('Login to Arx II');
+    await expect(page.locator('h1')).toContainText('Login to Arx');
     await expect(page.locator('input[type="password"]')).toBeVisible();
     await expect(page.getByRole('link', { name: /register/i })).toBeVisible();
   });

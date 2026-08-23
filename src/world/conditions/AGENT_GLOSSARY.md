@@ -102,7 +102,7 @@ lethal). Player answers are the `hazard_endure`/`hazard_retreat` actions.
 _Avoid_: sunlight-specific framings (the sun supplies only the refuge logic and
 thresholds); "AFK eviction" (it is a safety guard, not idle policing).
 
-**sneak stance / unseen presence** (#3288, ADR-0226):
+**sneak stance / unseen presence** (#3288, ADR-0228):
 The mundane-stealth producer of the Concealed condition — `world.stealth.services`
 applies/strips sneak-sourced instances (discriminated by
 `source_description="sneaking"`; magical concealment is never that module's to

@@ -27,6 +27,8 @@ import type { StaffWorkloadResponse } from '../types';
 vi.mock('../api', () => ({
   getStaffWorkload: vi.fn(),
   expireOverdueBeats: vi.fn(),
+  clearCanonReview: vi.fn(),
+  requestCanonReviewChanges: vi.fn(),
 }));
 
 import * as api from '../api';
@@ -69,12 +71,31 @@ const emptyResponse: StaffWorkloadResponse = {
   pending_agm_claims_count: 0,
   open_session_requests_count: 0,
   counts_by_scope: {},
+  pending_canon_reviews: [],
 };
 
 const fullResponse: StaffWorkloadResponse = {
   pending_agm_claims_count: 3,
   open_session_requests_count: 5,
   counts_by_scope: { character: 4, group: 2, global: 1 },
+  pending_canon_reviews: [
+    {
+      review_id: 30,
+      story_id: 40,
+      story_title: 'The Fracturing Accord',
+      tier: 'world',
+      created_at: '2026-03-01T00:00:00Z',
+      days_aging: 5,
+    },
+    {
+      review_id: 31,
+      story_id: 41,
+      story_title: 'A Quiet Border Dispute',
+      tier: 'regional',
+      created_at: '2026-04-01T00:00:00Z',
+      days_aging: 1,
+    },
+  ],
   per_gm_queue_depth: [
     { gm_profile_id: 1, gm_name: 'Alice GM', episodes_ready: 7, pending_claims: 2 },
     { gm_profile_id: 2, gm_name: 'Bob GM', episodes_ready: 2, pending_claims: 0 },
@@ -137,7 +158,7 @@ describe('StaffWorkloadPage', () => {
   // Section rendering
   // -------------------------------------------------------------------------
 
-  it('renders all five sections with full data', async () => {
+  it('renders all six sections with full data', async () => {
     mockSuccess(fullResponse);
     render(<StaffWorkloadPage />, { wrapper: createWrapper() });
 
@@ -149,6 +170,7 @@ describe('StaffWorkloadPage', () => {
     expect(screen.getByTestId('per-gm-section')).toBeInTheDocument();
     expect(screen.getByTestId('stale-stories-section')).toBeInTheDocument();
     expect(screen.getByTestId('frontier-section')).toBeInTheDocument();
+    expect(screen.getByTestId('pending-canon-reviews-section')).toBeInTheDocument();
     expect(screen.getByTestId('manual-actions-section')).toBeInTheDocument();
   });
 
@@ -233,6 +255,20 @@ describe('StaffWorkloadPage', () => {
     expect(screen.getByText('Rise of Northhold')).toBeInTheDocument();
   });
 
+  it('renders pending canon review rows', async () => {
+    mockSuccess(fullResponse);
+    render(<StaffWorkloadPage />, { wrapper: createWrapper() });
+
+    await waitFor(() => {
+      expect(screen.getByTestId('pending-canon-reviews-table')).toBeInTheDocument();
+    });
+
+    const rows = screen.getAllByTestId('pending-canon-review-row');
+    expect(rows).toHaveLength(2);
+    expect(screen.getByText('The Fracturing Accord')).toBeInTheDocument();
+    expect(screen.getByText('A Quiet Border Dispute')).toBeInTheDocument();
+  });
+
   // -------------------------------------------------------------------------
   // Empty states
   // -------------------------------------------------------------------------
@@ -267,6 +303,16 @@ describe('StaffWorkloadPage', () => {
       expect(screen.getByTestId('frontier-stories-empty')).toBeInTheDocument();
     });
     expect(screen.getByText('No stories at the authoring frontier.')).toBeInTheDocument();
+  });
+
+  it('renders pending canon reviews empty state when none are pending', async () => {
+    mockSuccess(emptyResponse);
+    render(<StaffWorkloadPage />, { wrapper: createWrapper() });
+
+    await waitFor(() => {
+      expect(screen.getByTestId('pending-canon-reviews-empty')).toBeInTheDocument();
+    });
+    expect(screen.getByText('No canon reviews are pending.')).toBeInTheDocument();
   });
 
   // -------------------------------------------------------------------------
@@ -416,6 +462,82 @@ describe('StaffWorkloadPage', () => {
 
     await waitFor(() => {
       expect(toast.success).toHaveBeenCalledWith('Expired 1 overdue beat');
+    });
+  });
+
+  // -------------------------------------------------------------------------
+  // Pending canon review actions: clear / request changes
+  // -------------------------------------------------------------------------
+
+  it('clears a pending canon review from its row dialog', async () => {
+    const user = userEvent.setup();
+    vi.mocked(api.clearCanonReview).mockResolvedValue({
+      id: 30,
+      story: 40,
+      tier: 'world',
+      status: 'cleared',
+      reviewer: 1,
+      notes: 'looks good',
+      created_at: '2026-03-01T00:00:00Z',
+      resolved_at: '2026-03-06T00:00:00Z',
+    });
+    mockSuccess(fullResponse);
+    render(<StaffWorkloadPage />, { wrapper: createWrapper() });
+
+    await waitFor(() => {
+      expect(screen.getAllByTestId('clear-canon-review-btn')).toHaveLength(2);
+    });
+
+    await user.click(screen.getAllByTestId('clear-canon-review-btn')[0]);
+    const dialog = screen.getByRole('dialog');
+    await user.click(within(dialog).getByRole('button', { name: 'Clear' }));
+
+    await waitFor(() => {
+      expect(api.clearCanonReview).toHaveBeenCalledWith(30, { notes: '' });
+    });
+    await waitFor(() => {
+      expect(toast.success).toHaveBeenCalledWith('Canon review cleared');
+    });
+  });
+
+  it('requests changes on a pending canon review, requiring notes', async () => {
+    const user = userEvent.setup();
+    vi.mocked(api.requestCanonReviewChanges).mockResolvedValue({
+      id: 30,
+      story: 40,
+      tier: 'world',
+      status: 'changes_requested',
+      reviewer: 1,
+      notes: 'narrow the scope',
+      created_at: '2026-03-01T00:00:00Z',
+      resolved_at: '2026-03-06T00:00:00Z',
+    });
+    mockSuccess(fullResponse);
+    render(<StaffWorkloadPage />, { wrapper: createWrapper() });
+
+    await waitFor(() => {
+      expect(screen.getAllByTestId('request-canon-review-changes-btn')).toHaveLength(2);
+    });
+
+    await user.click(screen.getAllByTestId('request-canon-review-changes-btn')[0]);
+    const dialog = screen.getByRole('dialog');
+
+    // Submitting with no notes shows an inline error and does not call the API.
+    await user.click(within(dialog).getByRole('button', { name: 'Request Changes' }));
+    expect(within(dialog).getByText(/notes are required/i)).toBeInTheDocument();
+    expect(api.requestCanonReviewChanges).not.toHaveBeenCalled();
+
+    // Fill in notes and resubmit.
+    await user.type(within(dialog).getByLabelText(/notes/i), 'narrow the scope');
+    await user.click(within(dialog).getByRole('button', { name: 'Request Changes' }));
+
+    await waitFor(() => {
+      expect(api.requestCanonReviewChanges).toHaveBeenCalledWith(30, {
+        notes: 'narrow the scope',
+      });
+    });
+    await waitFor(() => {
+      expect(toast.success).toHaveBeenCalledWith('Changes requested');
     });
   });
 });
