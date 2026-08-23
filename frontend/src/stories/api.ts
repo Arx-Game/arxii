@@ -25,6 +25,9 @@ import type {
   BeatCompletion,
   BeatCreateBody,
   BeatUpdateBody,
+  CanonReview,
+  CanonReviewChangesBody,
+  CanonReviewClearBody,
   Chapter,
   ChapterCreateBody,
   ChapterList,
@@ -115,6 +118,50 @@ export async function getStaffWorkload(): Promise<StaffWorkloadResponse> {
   const res = await apiFetch('/api/stories/staff-workload/');
   if (!res.ok) throw new Error('Failed to load staff workload');
   return res.json() as Promise<StaffWorkloadResponse>;
+}
+
+// ---------------------------------------------------------------------------
+// Canon review lifecycle (#2003/#3304) — staff-only.
+//
+// The PENDING list itself is not fetched separately: StaffWorkloadResponse
+// already carries it (`pending_canon_reviews`), so the panel reuses that
+// query instead of duplicating a list call against /api/canon-reviews/.
+// ---------------------------------------------------------------------------
+
+/** POST /api/canon-reviews/{id}/clear/ — staff approves a PENDING review. */
+export async function clearCanonReview(
+  reviewId: number,
+  body: CanonReviewClearBody
+): Promise<CanonReview> {
+  const res = await apiFetch(`/api/canon-reviews/${reviewId}/clear/`, {
+    method: 'POST',
+    headers: jsonHeaders(),
+    body: JSON.stringify(body),
+  });
+  if (!res.ok) {
+    const err = new Error('Failed to clear canon review') as Error & { response?: Response };
+    err.response = res;
+    throw err;
+  }
+  return res.json() as Promise<CanonReview>;
+}
+
+/** POST /api/canon-reviews/{id}/changes/ — staff sends a PENDING review back with notes. */
+export async function requestCanonReviewChanges(
+  reviewId: number,
+  body: CanonReviewChangesBody
+): Promise<CanonReview> {
+  const res = await apiFetch(`/api/canon-reviews/${reviewId}/changes/`, {
+    method: 'POST',
+    headers: jsonHeaders(),
+    body: JSON.stringify(body),
+  });
+  if (!res.ok) {
+    const err = new Error('Failed to request changes') as Error & { response?: Response };
+    err.response = res;
+    throw err;
+  }
+  return res.json() as Promise<CanonReview>;
 }
 
 // ---------------------------------------------------------------------------

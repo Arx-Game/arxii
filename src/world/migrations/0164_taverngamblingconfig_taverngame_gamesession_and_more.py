@@ -7,9 +7,7 @@ import core.natural_keys
 
 
 class Migration(migrations.Migration):
-    dependencies = [
-        ("arxii", "0162_traditioncodexgrant_is_perspective_and_more"),
-    ]
+    dependencies = [("arxii", "0163_interaction_attributed_companion")]
 
     operations = [
         migrations.CreateModel(

@@ -32,6 +32,8 @@ import type {
   AssignStoryBody,
   Beat,
   BeatOutcome,
+  CanonReviewChangesBody,
+  CanonReviewClearBody,
   ChapterCreateBody,
   ClearanceDecisionBody,
   ClearanceResolveBody,
@@ -181,6 +183,34 @@ export function useStaffWorkload() {
     queryKey: storiesKeys.staffWorkload(),
     queryFn: api.getStaffWorkload,
     throwOnError: true,
+  });
+}
+
+// ---------------------------------------------------------------------------
+// Canon review lifecycle (#2003/#3304) — the PENDING list lives on
+// StaffWorkloadResponse, so only the two decision mutations are needed here;
+// both invalidate staff-workload to refresh the queue.
+// ---------------------------------------------------------------------------
+
+export function useClearCanonReview() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ reviewId, body }: { reviewId: number; body: CanonReviewClearBody }) =>
+      api.clearCanonReview(reviewId, body),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: storiesKeys.staffWorkload() }).catch(() => {});
+    },
+  });
+}
+
+export function useRequestCanonReviewChanges() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ reviewId, body }: { reviewId: number; body: CanonReviewChangesBody }) =>
+      api.requestCanonReviewChanges(reviewId, body),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: storiesKeys.staffWorkload() }).catch(() => {});
+    },
   });
 }
 

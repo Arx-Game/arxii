@@ -16,6 +16,49 @@ _WINDOWS = "Windows"
 _DJANGO_SETTINGS_KEY = "DJANGO_SETTINGS_MODULE"
 _ALLOW_INTEGRATION_KEY = "ALLOW_INTEGRATION_TESTS"
 
+# Each parallel worker loads a full Django+Evennia stack (~350MB resident), so the
+# ceiling that matters is memory, not cores. Django's bare ``--parallel`` resolves to
+# cpu_count(), which exhausts a memory-capped devcontainer long before it saturates
+# the CPU: two concurrent 8-worker runs from separate worktrees consumed ~6GB and all
+# of swap, wedging the container until the runs were killed. Deriving the count from
+# *available* memory also makes a second concurrent run self-limit, because the first
+# run's resident set has already shrunk what the second one sees.
+_MB_PER_TEST_WORKER = 500
+_MAX_WORKERS_ENV_KEY = "ARX_TEST_MAX_WORKERS"
+
+
+def _available_memory_mb() -> int | None:
+    """Return MemAvailable in MB, or None when the platform does not expose it."""
+    try:
+        with Path("/proc/meminfo").open(encoding="utf-8") as handle:
+            for line in handle:
+                if line.startswith("MemAvailable:"):
+                    return int(line.split()[1]) // 1024
+    except (OSError, ValueError, IndexError):
+        return None
+    return None
+
+
+def _parallel_worker_count() -> int:
+    """Number of test workers to request, capped by available memory.
+
+    ``ARX_TEST_MAX_WORKERS`` overrides the derived value; an unparseable override is
+    ignored rather than fatal, so a bad env var degrades to the default instead of
+    breaking every test invocation.
+    """
+    override = os.environ.get(_MAX_WORKERS_ENV_KEY)
+    if override:
+        try:
+            return max(1, int(override))
+        except ValueError:
+            pass
+    workers = os.cpu_count() or 1
+    available_mb = _available_memory_mb()
+    if available_mb is not None:
+        workers = min(workers, max(1, available_mb // _MB_PER_TEST_WORKER))
+    return workers
+
+
 # Define typer options/arguments as module-level variables to avoid B008
 TEST_ARGS_ARG = typer.Argument(None, help="Test apps/modules to run")
 PARALLEL_OPTION = typer.Option(False, "--parallel", "-p", help="Run tests in parallel")
@@ -168,7 +211,7 @@ def run_tests(  # noqa: C901
 
     # Add performance options
     if parallel:
-        command.append("--parallel")
+        command.append(f"--parallel={_parallel_worker_count()}")
     if keepdb:
         command.append("--keepdb")
     if failfast:

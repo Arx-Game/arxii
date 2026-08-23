@@ -8,7 +8,10 @@ export function UserNav() {
     return <ProfileDropdown account={account} />;
   }
   return (
-    <nav>
+    <nav className="flex items-center gap-3">
+      <Link to="/register" className="text-primary hover:underline">
+        Register
+      </Link>
       <Link to="/login" className="text-primary hover:underline">
         Log in
       </Link>

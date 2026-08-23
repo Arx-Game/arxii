@@ -11,16 +11,9 @@ Replaces default Evennia web interface with custom React implementation while ma
 
 ### Home Interface
 
-- **`HomePage.tsx`**: Main landing page with game status
-- **`NewPlayerSection.tsx`**: New player onboarding information
-- **`NewsTeaser.tsx`**: Latest news and updates display
-- **`StatusBlock.tsx`**: Server status information
-- **`StatsCard.tsx`**: Game statistics display
-- **`RecentConnected.tsx`**: Recently connected players
-
-### Lore Interface
-
-- **`FeaturedLore.tsx`**: Data-driven lore teasers — fetches featured public codex entries via `useFeaturedCodexEntries()` and renders expandable accordion cards (#2430).
+The public landing page (`/`) moved to `src/home/` — see `GatefoldPage.tsx`, `Cover.tsx`,
+`RealmsChapter.tsx`, `CodexChapter.tsx`, `ScenesChapter.tsx`, `Door.tsx` (#3305). This app now
+holds only the auth pages below plus the shared account/CSRF API layer.
 
 ### API Integration
 
@@ -32,7 +25,6 @@ Replaces default Evennia web interface with custom React implementation while ma
 
 - **CSRF Protection**: Automatic CSRF token handling for security
 - **Social Authentication**: Integration with django-allauth for OAuth
-- **Real-time Status**: Live server and player statistics
 - **Responsive Design**: Mobile-friendly responsive layout
 
 ## Integration Points

@@ -47,3 +47,16 @@ realm.theme  # RealmTheme value for frontend visual theming
 ## Admin
 
 - `RealmAdmin` - Simple list with name and theme; searchable by name
+
+---
+
+## Public API (Gatefold landing page, #3305)
+
+Realm pitch content is not served through a dedicated `world/realms` endpoint.
+The public landing page reads it off the existing character-creation surface
+instead: `GET /api/character-creation/starting-areas/` (+ `beginnings/`),
+opened to anonymous reads (queryset-gated, not permission-gated) per
+ADR-0227. There is deliberately no `world/realms` API: a `Realm` is reachable
+today only as an FK on `StartingArea`/`Society`/`Area`/`CharacterSheet.origin_realm`,
+and adding a parallel read surface for the same pitch content was rejected as
+duplication (see ADR-0227).

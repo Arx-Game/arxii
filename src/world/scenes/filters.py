@@ -14,6 +14,7 @@ class SceneFilter(django_filters.FilterSet):
     status = django_filters.CharFilter(method="filter_status")
     gm = django_filters.NumberFilter(method="filter_gm")
     player = django_filters.NumberFilter(method="filter_player")
+    finished_after = django_filters.IsoDateTimeFilter(field_name="date_finished", lookup_expr="gte")
 
     class Meta:
         model = Scene
@@ -25,6 +26,7 @@ class SceneFilter(django_filters.FilterSet):
             "status",
             "gm",
             "player",
+            "finished_after",
         ]
 
     def filter_status(self, queryset: QuerySet[Scene], name: str, value: str) -> QuerySet[Scene]:
