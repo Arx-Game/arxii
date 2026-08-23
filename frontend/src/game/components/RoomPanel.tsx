@@ -53,6 +53,8 @@ export interface RoomData {
   hub: HubTidings | null;
   /** Active NPC placements standing in this room (#3044); absent on older fixtures. */
   npc_givers?: NpcGiver[];
+  /** #3288 — true when ANY occupant is concealed. Identity-free OOC disclosure. */
+  has_unseen_presence?: boolean;
 }
 
 interface RoomPanelProps {
@@ -68,6 +70,8 @@ interface RoomPanelProps {
   hasActiveBattle?: boolean;
   /** The viewer's active RosterEntry pk — threads to the hub wanted board (#1826). */
   viewerEntryId?: number | null;
+  /** The viewer's active persona pk — the unseen-presence report identity (#3288). */
+  viewerPersonaId?: number | null;
 }
 
 export function RoomPanel({
@@ -79,6 +83,7 @@ export function RoomPanel({
   hasActiveEncounter = false,
   hasActiveBattle = false,
   viewerEntryId = null,
+  viewerPersonaId = null,
 }: RoomPanelProps) {
   const { send } = useGameSocket();
   const dispatch = useAppDispatch();
@@ -233,7 +238,12 @@ export function RoomPanel({
 
       {scene && <SceneHighlightsPanel sceneId={scene.id} />}
 
-      <CharactersList characters={room.characters} onCharacterClick={onCharacterClick} />
+      <CharactersList
+        characters={room.characters}
+        onCharacterClick={onCharacterClick}
+        hasUnseenPresence={Boolean(room.has_unseen_presence)}
+        viewerPersonaId={viewerPersonaId}
+      />
       <NpcGiversBlock npcGivers={room.npc_givers ?? []} />
       <ExitsList exits={room.exits} onExit={handleExit} />
       <PortalsBlock characterId={characterId} />
