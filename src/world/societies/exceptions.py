@@ -146,6 +146,60 @@ class NotAGenericOrganizationError(OrganizationMembershipError):
     )
 
 
+class StandingDeclarationError(Exception):
+    """Base for typed :class:`~world.societies.models.StandingDeclaration` exceptions.
+
+    Carries a safe ``user_message`` and an allowlist so callers can surface
+    errors to end-users without leaking internal details, mirroring
+    ``OrganizationMembershipError``'s convention.
+    """
+
+    user_message: str = "That standing declaration could not be made."
+    SAFE_MESSAGES: ClassVar[frozenset[str]] = frozenset(
+        {"That standing declaration could not be made."}
+    )
+
+
+class NotAuthorizedToDeclareStandingError(StandingDeclarationError):
+    """Raised when the declaring persona's rank lacks ``can_declare_standing``."""
+
+    user_message = "You are not authorized to declare standing for this organization."
+    SAFE_MESSAGES = frozenset({"You are not authorized to declare standing for this organization."})
+
+
+class InvalidStandingTargetError(StandingDeclarationError):
+    """Raised when the target persona cannot hold organization reputation."""
+
+    user_message = "Only primary or established personas can be declared favored or disfavored."
+    SAFE_MESSAGES = frozenset(
+        {"Only primary or established personas can be declared favored or disfavored."}
+    )
+
+
+class StandingConsentBlockedError(StandingDeclarationError):
+    """Raised when a DISFAVOR declaration's target has not opened themselves to antagonism."""
+
+    user_message = (
+        "They have not opened themselves to being antagonised. "
+        "You can declare favor, but not disfavor, without their consent."
+    )
+    SAFE_MESSAGES = frozenset(
+        {
+            "They have not opened themselves to being antagonised. "
+            "You can declare favor, but not disfavor, without their consent."
+        }
+    )
+
+
+class StandingRateLimitedError(StandingDeclarationError):
+    """Raised when this (org, target) pair already has a declaration this IC week."""
+
+    user_message = "This organization has already declared standing for them this week."
+    SAFE_MESSAGES = frozenset(
+        {"This organization has already declared standing for them this week."}
+    )
+
+
 class ObligationError(Exception):
     """Base for typed :class:`~world.societies.models.OrganizationObligation` exceptions.
 

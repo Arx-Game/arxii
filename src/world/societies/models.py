@@ -34,6 +34,7 @@ from world.societies.constants import (
     DeedKnowledgeSource,
     ObligationOrigin,
     ObligationState,
+    StandingDirection,
 )
 from world.societies.renown_config import RenownAwardConfig
 from world.societies.types import ReputationTier
@@ -566,6 +567,14 @@ class OrganizationRank(SharedMemoryModel):
             "Covenant Sanctification."
         ),
     )
+    can_declare_standing = models.BooleanField(
+        default=False,
+        help_text=(
+            "Members at this rank can officially declare a persona favored or "
+            "disfavored with this organization (#3290), moving their "
+            "OrganizationReputation via a StandingDeclaration audit row."
+        ),
+    )
     can_post_to_board = models.BooleanField(
         default=False,
         help_text=(
@@ -1035,6 +1044,69 @@ class OrganizationReputation(SharedMemoryModel):
             The ReputationTier enum member corresponding to the current value.
         """
         return ReputationTier.from_value(self.value)
+
+
+class StandingDeclaration(SharedMemoryModel):
+    """An org leader's official, audited favor/disfavor declaration (#3290).
+
+    The row is the audit trail; the actual :class:`OrganizationReputation` delta
+    is applied through the existing ``bump_organization_reputation`` writer
+    (``renown.py``) by ``world.societies.standing_services.declare_standing`` —
+    this model never writes reputation itself. Public by design (decision 4 of
+    the #3290 spec): org politics played through leader declarations are meant
+    to be legible to bystanders, not hidden the way the raw reputation value is.
+    """
+
+    organization = models.ForeignKey(
+        Organization,
+        on_delete=models.CASCADE,
+        related_name="standing_declarations",
+        help_text="The organization whose standing with the target moved.",
+    )
+    target_persona = models.ForeignKey(
+        PERSONA_MODEL,
+        on_delete=models.CASCADE,
+        related_name="standing_declarations_received",
+        help_text="The persona declared favored or disfavored.",
+    )
+    declared_by_persona = models.ForeignKey(
+        PERSONA_MODEL,
+        on_delete=models.CASCADE,
+        related_name="standing_declarations_made",
+        help_text="The leader persona who made the declaration.",
+    )
+    direction = models.CharField(
+        max_length=16,
+        choices=StandingDirection.choices,
+        help_text="Whether this declaration pushed standing toward favor or disfavor.",
+    )
+    delta_applied = models.IntegerField(
+        help_text="The clamped delta actually applied via bump_organization_reputation.",
+    )
+    citation = models.TextField(
+        help_text="The leader's public citation — why this declaration was made.",
+    )
+    game_week = models.ForeignKey(
+        "arxii.GameWeek",
+        on_delete=models.PROTECT,
+        related_name="standing_declarations",
+        help_text="IC week this declaration was made in — backs the per-(org, target) rate limit.",
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        verbose_name = "Standing Declaration"
+        verbose_name_plural = "Standing Declarations"
+        ordering = ["-created_at"]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["organization", "target_persona", "game_week"],
+                name="unique_standing_declaration_per_org_target_week",
+            ),
+        ]
+
+    def __str__(self) -> str:
+        return f"{self.declared_by_persona.name}: {self.direction} {self.target_persona.name}"
 
 
 class LegendSourceType(NaturalKeyMixin, SharedMemoryModel):

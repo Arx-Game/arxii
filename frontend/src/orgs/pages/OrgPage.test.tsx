@@ -11,7 +11,7 @@
  */
 
 import { render, screen } from '@testing-library/react';
-import { describe, expect, it, vi } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { OrgPageInner } from './OrgPage';
 import type { Organization } from '@/orgs/api';
@@ -25,12 +25,36 @@ vi.mock('@/orgs/queries', () => ({
     error: null,
   })),
   useHouseFeedQuery: vi.fn(() => ({ data: [] })),
+  useStandingDeclarationsQuery: vi.fn(() => ({ data: [], isLoading: false })),
 }));
 
 vi.mock('@/tasking/queries', () => ({
   useOrgTasksQuery: vi.fn(() => ({ data: [] })),
   useOrgRosterQuery: vi.fn(() => ({ data: [] })),
   useListenerPostsQuery: vi.fn(() => ({ data: [] })),
+}));
+
+// #3290 Standing section deps — gating the "Declare Standing" affordance.
+vi.mock('@/store/hooks', () => ({
+  useAppSelector: vi.fn((selector: (state: unknown) => unknown) =>
+    selector({ game: { active: 'TestChar' } })
+  ),
+}));
+
+vi.mock('@/roster/queries', () => ({
+  useMyRosterEntriesQuery: vi.fn(() => ({
+    data: [{ id: 1, name: 'TestChar', character_id: 42 }],
+  })),
+}));
+
+vi.mock('@/reputation/queries', () => ({
+  useOrganizationMembershipsQuery: vi.fn(() => ({ data: [] })),
+}));
+
+// Stubbed to a plain trigger passthrough — its own dispatch/search hooks are
+// covered by DeclareStandingDialog's own test file, not here.
+vi.mock('@/orgs/components/DeclareStandingDialog', () => ({
+  DeclareStandingDialog: ({ children }: { children: React.ReactNode }) => <>{children}</>,
 }));
 
 // OrgPageInner takes characterId as a plain prop (not redux) precisely so this
@@ -40,7 +64,8 @@ vi.mock('@/boards/queries', () => ({
   useBoardForOrgQuery: vi.fn(() => ({ data: undefined })),
 }));
 
-import { useOrganizationQuery } from '@/orgs/queries';
+import { useOrganizationQuery, useStandingDeclarationsQuery } from '@/orgs/queries';
+import { useOrganizationMembershipsQuery } from '@/reputation/queries';
 
 const mockedUseOrganizationQuery = vi.mocked(useOrganizationQuery);
 
@@ -238,5 +263,86 @@ describe('OrgPageInner', () => {
     expect(screen.getByText('-800')).toBeInTheDocument();
     expect(screen.getByText(/2nd of 11 polities/)).toBeInTheDocument();
     expect(screen.getByText(/prestige rank 3/)).toBeInTheDocument();
+  });
+
+  describe('Standing Declarations (#3290)', () => {
+    const mockedUseStandingDeclarationsQuery = vi.mocked(useStandingDeclarationsQuery);
+    const mockedUseOrganizationMembershipsQuery = vi.mocked(useOrganizationMembershipsQuery);
+
+    beforeEach(() => {
+      mockedUseOrganizationQuery.mockReturnValue({
+        data: ORG,
+        isLoading: false,
+        isError: false,
+      } as ReturnType<typeof useOrganizationQuery>);
+    });
+
+    it('renders the declaration history', () => {
+      mockedUseStandingDeclarationsQuery.mockReturnValue({
+        data: [
+          {
+            id: 1,
+            organization: 7,
+            organization_name: 'The Gilded Compass',
+            target_persona: 3,
+            target_persona_name: 'Serenity Vale',
+            declared_by_persona: 9,
+            declared_by_persona_name: 'Guildmaster Orrin',
+            direction: 'favor',
+            citation: 'For tireless service to the guild.',
+            created_at: '2026-08-20T00:00:00Z',
+          },
+        ],
+        isLoading: false,
+      } as unknown as ReturnType<typeof useStandingDeclarationsQuery>);
+
+      render(<OrgPageInner orgId={7} />);
+
+      expect(screen.getByText('Serenity Vale')).toBeInTheDocument();
+      expect(screen.getByText(/Guildmaster Orrin/)).toBeInTheDocument();
+      expect(screen.getByText(/For tireless service to the guild/)).toBeInTheDocument();
+    });
+
+    it('hides the Declare Standing affordance for a non-privileged rank', () => {
+      mockedUseStandingDeclarationsQuery.mockReturnValue({
+        data: [],
+        isLoading: false,
+      } as unknown as ReturnType<typeof useStandingDeclarationsQuery>);
+      mockedUseOrganizationMembershipsQuery.mockReturnValue({
+        data: [
+          {
+            id: 1,
+            organization: 7,
+            persona: 1,
+            rank: { id: 5, name: 'Initiate', can_declare_standing: false },
+          },
+        ],
+      } as unknown as ReturnType<typeof useOrganizationMembershipsQuery>);
+
+      render(<OrgPageInner orgId={7} />);
+
+      expect(screen.queryByRole('button', { name: /Declare Standing/i })).not.toBeInTheDocument();
+    });
+
+    it('shows the Declare Standing affordance for a leader rank', () => {
+      mockedUseStandingDeclarationsQuery.mockReturnValue({
+        data: [],
+        isLoading: false,
+      } as unknown as ReturnType<typeof useStandingDeclarationsQuery>);
+      mockedUseOrganizationMembershipsQuery.mockReturnValue({
+        data: [
+          {
+            id: 1,
+            organization: 7,
+            persona: 1,
+            rank: { id: 1, name: 'Guildmaster', can_declare_standing: true },
+          },
+        ],
+      } as unknown as ReturnType<typeof useOrganizationMembershipsQuery>);
+
+      render(<OrgPageInner orgId={7} />);
+
+      expect(screen.getByRole('button', { name: /Declare Standing/i })).toBeInTheDocument();
+    });
   });
 });

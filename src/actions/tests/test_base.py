@@ -348,6 +348,7 @@ class ActionRegistryTests(TestCase):
             "org_promote",
             "org_demote",
             "org_expel",
+            "declare_standing",
             "treat_condition",
             "break_free",
             "reveal_condition",
