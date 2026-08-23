@@ -2,19 +2,34 @@ import { Users } from 'lucide-react';
 import { Avatar, AvatarImage, AvatarFallback } from '@/components/ui/avatar';
 import { cn } from '@/lib/utils';
 import type { RoomStateObject } from '@/hooks/types';
+import { UnseenPresenceRow } from './UnseenPresenceRow';
 
 interface CharactersListProps {
   characters: RoomStateObject[];
   onCharacterClick?: (character: RoomStateObject) => void;
+  /** #3288 — true when a concealed occupant is here; renders the identity-free row. */
+  hasUnseenPresence?: boolean;
+  /** The viewer's active persona pk, for the unseen-presence report affordance. */
+  viewerPersonaId?: number | null;
 }
 
-export function CharactersList({ characters, onCharacterClick }: CharactersListProps) {
+export function CharactersList({
+  characters,
+  onCharacterClick,
+  hasUnseenPresence = false,
+  viewerPersonaId = null,
+}: CharactersListProps) {
   return (
     <div className="border-b px-3 py-2">
       <div className="mb-1 flex items-center gap-1 text-xs font-semibold uppercase text-muted-foreground">
         <Users className="h-3 w-3" />
         Characters ({characters.length})
       </div>
+      {hasUnseenPresence && (
+        <ul className="mb-1 space-y-1">
+          <UnseenPresenceRow viewerPersonaId={viewerPersonaId} />
+        </ul>
+      )}
       {characters.length > 0 ? (
         <ul className="space-y-1">
           {characters.map((char) => {

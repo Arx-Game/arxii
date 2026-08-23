@@ -101,3 +101,15 @@ the configured unanswered count (never the first — nothing is instantaneously
 lethal). Player answers are the `hazard_endure`/`hazard_retreat` actions.
 _Avoid_: sunlight-specific framings (the sun supplies only the refuge logic and
 thresholds); "AFK eviction" (it is a safety guard, not idle policing).
+
+**sneak stance / unseen presence** (#3288, ADR-0228):
+The mundane-stealth producer of the Concealed condition — `world.stealth.services`
+applies/strips sneak-sourced instances (discriminated by
+`source_description="sneaking"`; magical concealment is never that module's to
+touch). "Unseen presence" is the mandatory identity-free OOC disclosure of ANY
+concealed occupant: the room-derived `has_unseen_presence` flag on `room_state`
+plus the anonymous arrival echo. Disclosure is one-way — arrivals always
+announce, departures are silent. Concealment rolls are per room per visit.
+_Avoid_: "hide" (that is the OOC presence-privacy toggle, `CmdHide`); "invisible"
+(implies the magical producer); any mechanic that conceals *presence* rather
+than *identity*.

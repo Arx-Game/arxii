@@ -438,6 +438,7 @@ from actions.definitions.speaker_queue import (
     SkipSpeakerAction,
 )
 from actions.definitions.species_gm import ApplyShadeUndeathAction
+from actions.definitions.stealth import SneakAction, UnsneakAction
 from actions.definitions.story_builder import (
     CloseSceneRoomAction,
     CreateStoryAreaAction,
@@ -598,6 +599,8 @@ _ALL_ACTIONS: list[Action] = [
     StoryContributeAction(),
     LaunchPropagandaCampaignAction(),
     SetActivePersonaAction(),
+    SneakAction(),
+    UnsneakAction(),
     # #1866 — Places join/leave telnet coverage.
     JoinPlaceAction(),
     LeavePlaceAction(),

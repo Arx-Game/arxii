@@ -24,6 +24,7 @@ export function handleRoomStatePayload(
         is_public: payload.room.is_public ?? false,
         hub: payload.hub ?? null,
         npc_givers: payload.npc_givers ?? [],
+        has_unseen_presence: payload.has_unseen_presence ?? false,
       },
     })
   );

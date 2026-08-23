@@ -16255,6 +16255,29 @@ export interface paths {
     patch: operations['player_submissions_player_reports_partial_update'];
     trace?: never;
   };
+  '/api/player-submissions/player-reports/hidden-presence/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /**
+     * @description #3288 — report the unseen presence in the reporter's room.
+     *
+     *     No reported-identity input and none in the response: the server resolves
+     *     the room's concealed occupants into staff-visible PlayerReports; the
+     *     reporter only learns that the report was filed.
+     */
+    post: operations['player_submissions_player_reports_hidden_presence_create'];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   '/api/player-submissions/system-errors/': {
     parameters: {
       query?: never;
@@ -27897,6 +27920,34 @@ export interface components {
       readonly target_kind: string;
       /** Format: date-time */
       readonly found_at: string;
+    };
+    /**
+     * @description #3288 — report the unseen presence in your current room.
+     *
+     *     Deliberately carries NO reported-identity input: the reporter never learns who
+     *     the hidden presence is. Resolution happens server-side in
+     *     ``services.report_hidden_presence`` against the concealed occupants of the
+     *     reporter's room.
+     */
+    HiddenPresenceReportCreate: {
+      reporter_persona: number;
+      /** @default harassment */
+      category: components['schemas']['CategoryC06Enum'];
+      behavior_description: string;
+    };
+    /**
+     * @description #3288 — report the unseen presence in your current room.
+     *
+     *     Deliberately carries NO reported-identity input: the reporter never learns who
+     *     the hidden presence is. Resolution happens server-side in
+     *     ``services.report_hidden_presence`` against the concealed occupants of the
+     *     reporter's room.
+     */
+    HiddenPresenceReportCreateRequest: {
+      reporter_persona: number;
+      /** @default harassment */
+      category: components['schemas']['CategoryC06Enum'];
+      behavior_description: string;
     };
     /**
      * @description A scene's highlight reel: a sealed featured moment + a ranked index (#1241, #2161).
@@ -64655,6 +64706,29 @@ export interface operations {
         };
         content: {
           'application/json': components['schemas']['PlayerReportDetail'];
+        };
+      };
+    };
+  };
+  player_submissions_player_reports_hidden_presence_create: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['HiddenPresenceReportCreateRequest'];
+      };
+    };
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['HiddenPresenceReportCreate'];
         };
       };
     };

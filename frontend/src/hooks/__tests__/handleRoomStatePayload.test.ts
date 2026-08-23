@@ -77,6 +77,7 @@ describe('handleRoomStatePayload', () => {
           is_public: false,
           hub: null,
           npc_givers: [],
+          has_unseen_presence: false,
         },
       });
       expect(mockDispatch).toHaveBeenCalledTimes(2);
@@ -470,6 +471,7 @@ describe('handleRoomStatePayload', () => {
           is_public: false,
           hub: null,
           npc_givers: [],
+          has_unseen_presence: false,
         },
       });
     });
@@ -565,6 +567,7 @@ describe('handleRoomStatePayload', () => {
           is_public: false,
           hub: null,
           npc_givers: [],
+          has_unseen_presence: false,
         },
       });
     });
@@ -653,6 +656,7 @@ describe('handleRoomStatePayload', () => {
           is_public: false,
           hub: null,
           npc_givers: [],
+          has_unseen_presence: false,
         },
       });
 
