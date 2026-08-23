@@ -33,6 +33,13 @@ vi.mock('@/tasking/queries', () => ({
   useListenerPostsQuery: vi.fn(() => ({ data: [] })),
 }));
 
+// OrgPageInner takes characterId as a plain prop (not redux) precisely so this
+// file needs no store <Provider> (#3286) — but the Board section's own
+// react-query hook still needs mocking, same as the tasking queries above.
+vi.mock('@/boards/queries', () => ({
+  useBoardForOrgQuery: vi.fn(() => ({ data: undefined })),
+}));
+
 import { useOrganizationQuery } from '@/orgs/queries';
 
 const mockedUseOrganizationQuery = vi.mocked(useOrganizationQuery);

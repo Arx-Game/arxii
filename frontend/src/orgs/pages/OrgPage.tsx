@@ -10,14 +10,19 @@
  * Route: /orgs/:id
  */
 
+import { useMemo } from 'react';
 import { useParams } from 'react-router-dom';
 import { ErrorBoundary } from '@/components/ErrorBoundary';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { useAppSelector } from '@/store/hooks';
+import { useMyRosterEntriesQuery } from '@/roster/queries';
 import { useOrganizationQuery, useHouseFeedQuery, useChooseCrisisOption } from '@/orgs/queries';
 import { OperationsSection } from '@/tasking/components/OperationsSection';
+import { BoardPanel } from '@/boards/components/BoardPanel';
+import { useBoardForOrgQuery } from '@/boards/queries';
 import type { HouseCrisis, HouseDetail, HouseStature } from '@/orgs/api';
 
 // ---------------------------------------------------------------------------
@@ -305,7 +310,39 @@ function HouseSection({ orgId, house }: { orgId: number; house: HouseDetail }) {
   );
 }
 
-export function OrgPageInner({ orgId }: { orgId: number }) {
+/** Resolves the org's board and renders it once loaded (#3286); silent when absent
+ * (a non-member sees nothing — the API gates read access server-side).
+ *
+ * `characterId` arrives as a prop, not a redux read here — mirrors every
+ * other OrgPage panel (props / react-query only), keeps `OrgPageInner`
+ * redux-free so its unit tests render without a store `<Provider>`, and
+ * matches `RoomPanel`'s convention of taking the active character as a prop
+ * from its caller rather than reading the store itself. */
+function OrgBoardSection({ orgId, characterId }: { orgId: number; characterId?: number | null }) {
+  const { data: board } = useBoardForOrgQuery(orgId);
+  if (!board) return null;
+  return (
+    <Card>
+      <CardHeader className="pb-3">
+        <CardTitle className="text-lg">{board.name}</CardTitle>
+      </CardHeader>
+      <CardContent className="p-0">
+        <BoardPanel boardId={board.id} boardName={board.name} characterId={characterId} />
+      </CardContent>
+    </Card>
+  );
+}
+
+export function OrgPageInner({
+  orgId,
+  characterId = null,
+}: {
+  orgId: number;
+  /** The active puppet's ObjectDB/CharacterSheet pk; posting on the Board tab
+   * is disabled without one. Only the route-level `OrgPage` export resolves
+   * this (from redux) — direct callers (tests) default to null/read-only. */
+  characterId?: number | null;
+}) {
   const { data: org, isLoading, isError } = useOrganizationQuery(orgId);
 
   if (isLoading) return <OrgSkeleton />;
@@ -350,6 +387,7 @@ export function OrgPageInner({ orgId }: { orgId: number }) {
       </Card>
       {org.house && <HouseSection orgId={orgId} house={org.house} />}
       <OperationsSection orgId={orgId} />
+      <OrgBoardSection orgId={orgId} characterId={characterId} />
     </div>
   );
 }
@@ -358,9 +396,22 @@ export function OrgPageInner({ orgId }: { orgId: number }) {
 // Page export
 // ---------------------------------------------------------------------------
 
+/** Resolves the active puppet's ObjectDB pk (redux `game.active` name -> roster
+ * entry) for the Board tab's post/remove affordance. Lives only in the
+ * route-level export below — `OrgPageInner` itself stays redux-free. */
+function useActiveCharacterId(): number | null {
+  const activeCharacter = useAppSelector((state) => state.game.active);
+  const { data: myEntries = [] } = useMyRosterEntriesQuery();
+  return useMemo(
+    () => myEntries.find((entry) => entry.name === activeCharacter)?.character_id ?? null,
+    [myEntries, activeCharacter]
+  );
+}
+
 export function OrgPage() {
   const { id = '' } = useParams<{ id: string }>();
   const orgId = parseInt(id, 10);
+  const characterId = useActiveCharacterId();
 
   if (isNaN(orgId) || orgId <= 0) {
     return (
@@ -373,7 +424,7 @@ export function OrgPage() {
   return (
     <div className="container mx-auto px-4 py-6 sm:px-6 sm:py-8 lg:px-8">
       <ErrorBoundary>
-        <OrgPageInner orgId={orgId} />
+        <OrgPageInner orgId={orgId} characterId={characterId} />
       </ErrorBoundary>
     </div>
   );

@@ -319,8 +319,18 @@ def handle_notice_board_progression(
 
     The board's 'content' is reachability — where one stands, the room carries
     the local tidings slice (arrival echo, ``tidings local``, web hub panel).
+
+    #3286: also get-or-creates the player-postable ``boards.Board`` row
+    anchored to this room, so a freshly-installed Notice Board is immediately
+    postable — no separate lazy-creation step is needed once the feature
+    installs (the ``PostToBoardAction`` lazy get_or_create at first post is
+    the fallback for a room whose feature installed before #3286 shipped).
     """
-    _install_or_level_feature(project, target_level)
+    details = _install_or_level_feature(project, target_level)
+
+    from world.boards.services import get_or_create_location_board  # noqa: PLC0415
+
+    get_or_create_location_board(details.target_room_profile)
 
 
 def handle_town_crier_progression(

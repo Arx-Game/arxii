@@ -1825,6 +1825,129 @@ paths:
               schema:
                 $ref: '#/components/schemas/Block'
           description: ''
+  /api/boards/boards/:
+    get:
+      operationId: boards_boards_list
+      description: |-
+        Read-only board metadata: list/retrieve.
+
+        LOCATION boards are visible to everyone; ORG boards only to active members.
+      parameters:
+      - in: query
+        name: organization
+        schema:
+          type: number
+      - name: page
+        required: false
+        in: query
+        description: A page number within the paginated result set.
+        schema:
+          type: integer
+      - name: page_size
+        required: false
+        in: query
+        description: Number of results to return per page.
+        schema:
+          type: integer
+      - in: query
+        name: room_profile
+        schema:
+          type: number
+      tags:
+      - boards
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaginatedBoardList'
+          description: ''
+  /api/boards/boards/{id}/:
+    get:
+      operationId: boards_boards_retrieve
+      description: |-
+        Read-only board metadata: list/retrieve.
+
+        LOCATION boards are visible to everyone; ORG boards only to active members.
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: A unique integer value identifying this board.
+        required: true
+      tags:
+      - boards
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Board'
+          description: ''
+  /api/boards/posts/:
+    get:
+      operationId: boards_posts_list
+      description: |-
+        List posts, applying the per-board display cap when ``?board=`` is given.
+
+        Without a ``board`` filter, falls back to the plain filtered queryset
+        (cross-board browsing has no single cap to apply).
+      parameters:
+      - in: query
+        name: board
+        schema:
+          type: number
+      - name: page
+        required: false
+        in: query
+        description: A page number within the paginated result set.
+        schema:
+          type: integer
+      - name: page_size
+        required: false
+        in: query
+        description: Number of results to return per page.
+        schema:
+          type: integer
+      tags:
+      - boards
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaginatedBoardPostList'
+          description: ''
+  /api/boards/posts/{id}/:
+    get:
+      operationId: boards_posts_retrieve
+      description: 'Read-only board posts: list/retrieve. Writes dispatch through
+        Actions.'
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: A unique integer value identifying this board post.
+        required: true
+      tags:
+      - boards
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BoardPost'
+          description: ''
   /api/boundaries/content-themes/:
     get:
       operationId: boundaries_content_themes_list
@@ -38337,6 +38460,83 @@ components:
       required:
       - defending_side_role
       - id
+    Board:
+      type: object
+      properties:
+        id:
+          type: integer
+          readOnly: true
+        room_profile:
+          type: integer
+          nullable: true
+          description: 'LOCATION board anchor: the room this board physically stands
+            in.'
+        organization:
+          type: integer
+          nullable: true
+          description: 'ORG board anchor: the organization this board belongs to.'
+        name:
+          type: string
+          description: Display name for this board.
+          maxLength: 100
+        max_active_posts:
+          type: integer
+          maximum: 32767
+          minimum: 0
+          description: Newest-first display cap. Older posts fall off the display
+            but are retained in the DB (no auto-expiry at MVP).
+        is_location_board:
+          type: boolean
+          readOnly: true
+        is_org_board:
+          type: boolean
+          readOnly: true
+      required:
+      - id
+      - is_location_board
+      - is_org_board
+      - name
+    BoardPost:
+      type: object
+      description: |-
+        Read-only board post — writes go through action dispatch (ADR-0001).
+
+        ``author_display`` renders through the same per-viewer persona display
+        resolution as everywhere else (a masked poster shows the mask; a
+        discovered mask reveals; staff sees through every mask).
+      properties:
+        id:
+          type: integer
+          readOnly: true
+        board:
+          type: integer
+        title:
+          type: string
+          maxLength: 200
+        body:
+          type: string
+        author_display:
+          type: string
+          readOnly: true
+        created_at:
+          type: string
+          format: date-time
+          readOnly: true
+        edited_at:
+          type: string
+          format: date-time
+          nullable: true
+        is_removed:
+          type: boolean
+          readOnly: true
+      required:
+      - author_display
+      - board
+      - body
+      - created_at
+      - id
+      - is_removed
+      - title
     BoardPosting:
       type: object
       description: One eligible posting on a board (preview row).
@@ -54685,6 +54885,14 @@ components:
             — see needs-design follow-up filed alongside #708 (''Generic organization-ritual
             dispatch for non-Covenant org kinds''). Mirrors CovenantRank.can_lead_rituals,
             which IS consumed today by Covenant Sanctification.'
+        can_post_to_board:
+          type: boolean
+          description: Members at this rank can pin new notices to this organization's
+            board (#3286).
+        can_moderate_board:
+          type: boolean
+          description: Members at this rank can remove ANY notice from this organization's
+            board (authors may always remove their own; staff always can) (#3286).
       required:
       - id
       - name
@@ -54718,6 +54926,14 @@ components:
             — see needs-design follow-up filed alongside #708 (''Generic organization-ritual
             dispatch for non-Covenant org kinds''). Mirrors CovenantRank.can_lead_rituals,
             which IS consumed today by Covenant Sanctification.'
+        can_post_to_board:
+          type: boolean
+          description: Members at this rank can pin new notices to this organization's
+            board (#3286).
+        can_moderate_board:
+          type: boolean
+          description: Members at this rank can remove ANY notice from this organization's
+            board (authors may always remove their own; staff always can) (#3286).
       required:
       - name
       - tier
@@ -55390,6 +55606,52 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/Block'
+    PaginatedBoardList:
+      type: object
+      required:
+      - count
+      - results
+      properties:
+        count:
+          type: integer
+          example: 123
+        next:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=4
+        previous:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=2
+        results:
+          type: array
+          items:
+            $ref: '#/components/schemas/Board'
+    PaginatedBoardPostList:
+      type: object
+      required:
+      - count
+      - results
+      properties:
+        count:
+          type: integer
+          example: 123
+        next:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=4
+        previous:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=2
+        results:
+          type: array
+          items:
+            $ref: '#/components/schemas/BoardPost'
     PaginatedBoardPostingList:
       type: object
       properties:

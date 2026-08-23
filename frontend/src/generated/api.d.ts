@@ -1259,6 +1259,87 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
+  '/api/boards/boards/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /**
+     * @description Read-only board metadata: list/retrieve.
+     *
+     *     LOCATION boards are visible to everyone; ORG boards only to active members.
+     */
+    get: operations['boards_boards_list'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/boards/boards/{id}/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /**
+     * @description Read-only board metadata: list/retrieve.
+     *
+     *     LOCATION boards are visible to everyone; ORG boards only to active members.
+     */
+    get: operations['boards_boards_retrieve'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/boards/posts/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /**
+     * @description List posts, applying the per-board display cap when ``?board=`` is given.
+     *
+     *     Without a ``board`` filter, falls back to the plain filtered queryset
+     *     (cross-board browsing has no single cap to apply).
+     */
+    get: operations['boards_posts_list'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/boards/posts/{id}/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /** @description Read-only board posts: list/retrieve. Writes dispatch through Actions. */
+    get: operations['boards_posts_retrieve'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   '/api/boundaries/content-themes/': {
     parameters: {
       query?: never;
@@ -23236,6 +23317,38 @@ export interface components {
        */
       defending_side_role: components['schemas']['DefendingSideRoleEnum'];
     };
+    Board: {
+      readonly id: number;
+      /** @description LOCATION board anchor: the room this board physically stands in. */
+      room_profile?: number | null;
+      /** @description ORG board anchor: the organization this board belongs to. */
+      organization?: number | null;
+      /** @description Display name for this board. */
+      name: string;
+      /** @description Newest-first display cap. Older posts fall off the display but are retained in the DB (no auto-expiry at MVP). */
+      max_active_posts?: number;
+      readonly is_location_board: boolean;
+      readonly is_org_board: boolean;
+    };
+    /**
+     * @description Read-only board post — writes go through action dispatch (ADR-0001).
+     *
+     *     ``author_display`` renders through the same per-viewer persona display
+     *     resolution as everywhere else (a masked poster shows the mask; a
+     *     discovered mask reveals; staff sees through every mask).
+     */
+    BoardPost: {
+      readonly id: number;
+      board: number;
+      title: string;
+      body: string;
+      readonly author_display: string;
+      /** Format: date-time */
+      readonly created_at: string;
+      /** Format: date-time */
+      edited_at?: string | null;
+      readonly is_removed: boolean;
+    };
     /** @description One eligible posting on a board (preview row). */
     BoardPosting: {
       readonly template_id: number;
@@ -31051,6 +31164,10 @@ export interface components {
       can_manage_ranks?: boolean;
       /** @description Members at this rank may lead this organization's group rituals. No org-ritual dispatch mechanism consumes this yet for non-Covenant organizations — see needs-design follow-up filed alongside #708 ('Generic organization-ritual dispatch for non-Covenant org kinds'). Mirrors CovenantRank.can_lead_rituals, which IS consumed today by Covenant Sanctification. */
       can_lead_rituals?: boolean;
+      /** @description Members at this rank can pin new notices to this organization's board (#3286). */
+      can_post_to_board?: boolean;
+      /** @description Members at this rank can remove ANY notice from this organization's board (authors may always remove their own; staff always can) (#3286). */
+      can_moderate_board?: boolean;
     };
     OrganizationRankRequest: {
       /** @description Diegetic name for this rung (e.g., Guildmaster, Captain) */
@@ -31065,6 +31182,10 @@ export interface components {
       can_manage_ranks?: boolean;
       /** @description Members at this rank may lead this organization's group rituals. No org-ritual dispatch mechanism consumes this yet for non-Covenant organizations — see needs-design follow-up filed alongside #708 ('Generic organization-ritual dispatch for non-Covenant org kinds'). Mirrors CovenantRank.can_lead_rituals, which IS consumed today by Covenant Sanctification. */
       can_lead_rituals?: boolean;
+      /** @description Members at this rank can pin new notices to this organization's board (#3286). */
+      can_post_to_board?: boolean;
+      /** @description Members at this rank can remove ANY notice from this organization's board (authors may always remove their own; staff always can) (#3286). */
+      can_moderate_board?: boolean;
     };
     /** @description A persona's standing with an organization — named tier only, never the raw value. */
     OrganizationReputation: {
@@ -31452,6 +31573,36 @@ export interface components {
        */
       previous?: string | null;
       results: components['schemas']['Block'][];
+    };
+    PaginatedBoardList: {
+      /** @example 123 */
+      count: number;
+      /**
+       * Format: uri
+       * @example http://api.example.org/accounts/?page=4
+       */
+      next?: string | null;
+      /**
+       * Format: uri
+       * @example http://api.example.org/accounts/?page=2
+       */
+      previous?: string | null;
+      results: components['schemas']['Board'][];
+    };
+    PaginatedBoardPostList: {
+      /** @example 123 */
+      count: number;
+      /**
+       * Format: uri
+       * @example http://api.example.org/accounts/?page=4
+       */
+      next?: string | null;
+      /**
+       * Format: uri
+       * @example http://api.example.org/accounts/?page=2
+       */
+      previous?: string | null;
+      results: components['schemas']['BoardPost'][];
     };
     PaginatedBoardPostingList: {
       count: number;
@@ -43911,6 +44062,101 @@ export interface operations {
         };
         content: {
           'application/json': components['schemas']['Block'];
+        };
+      };
+    };
+  };
+  boards_boards_list: {
+    parameters: {
+      query?: {
+        organization?: number;
+        /** @description A page number within the paginated result set. */
+        page?: number;
+        /** @description Number of results to return per page. */
+        page_size?: number;
+        room_profile?: number;
+      };
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['PaginatedBoardList'];
+        };
+      };
+    };
+  };
+  boards_boards_retrieve: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        /** @description A unique integer value identifying this board. */
+        id: number;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['Board'];
+        };
+      };
+    };
+  };
+  boards_posts_list: {
+    parameters: {
+      query?: {
+        board?: number;
+        /** @description A page number within the paginated result set. */
+        page?: number;
+        /** @description Number of results to return per page. */
+        page_size?: number;
+      };
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['PaginatedBoardPostList'];
+        };
+      };
+    };
+  };
+  boards_posts_retrieve: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        /** @description A unique integer value identifying this board post. */
+        id: number;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['BoardPost'];
         };
       };
     };

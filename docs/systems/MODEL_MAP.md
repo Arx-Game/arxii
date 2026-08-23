@@ -192,6 +192,7 @@
   - size -> evennia_extensions.RoomSizeTier [FK] (nullable)
   - default_blueprint -> areas.PositionBlueprint [FK] (nullable)
 **Pointed to by:**
+  - boards <- boards.Board
   - entry_for_buildings <- buildings.Building
   - design_details <- buildings.InteriorDesignDetails
   - polish_by_category <- buildings.RoomPolish
@@ -876,6 +877,33 @@
 - `preview_pristine_world_wipe() -> 'WipeReport' - Dry-run: count what ``wipe_pristine_world(execute=True)`` would delete.`
 - `refresh_legend_views() -> None - Refresh all legend materialized views concurrently.`
 - `wipe_pristine_world(*, execute: 'bool' = False, confirm: 'str | None' = None, backup_verified_at: 'datetime | None' = None) -> 'WipeReport' - Dry-run (default) or execute the guarded beta-reset wipe.`
+
+
+## world.boards
+
+### Board
+**Foreign Keys:**
+  - room_profile -> evennia_extensions.RoomProfile [FK] (nullable)
+  - organization -> societies.Organization [FK] (nullable)
+**Pointed to by:**
+  - posts <- boards.BoardPost
+
+### BoardPost
+**Foreign Keys:**
+  - board -> boards.Board [FK]
+  - author_persona -> scenes.Persona [FK]
+  - removed_by_persona -> scenes.Persona [FK] (nullable)
+
+### Service Functions
+- `can_moderate_board(persona: 'Persona', board: 'Board', *, is_staff: 'bool' = False) -> 'bool' - Whether ``persona`` may remove ANY post on ``board`` (not just their own).`
+- `can_post_to_board(persona: 'Persona', board: 'Board', *, actor_room_profile: 'RoomProfile | None') -> 'bool' - Whether ``persona`` may post a new notice to ``board`` right now.`
+- `create_board_post(*, board: 'Board', author_persona: 'Persona', title: 'str', body: 'str', actor_room_profile: 'RoomProfile | None' = None) -> 'BoardPost' - Pin a new notice to ``board`` as ``author_persona`` (#3286).`
+- `edit_board_post(*, post: 'BoardPost', editor_persona: 'Persona', title: 'str', body: 'str') -> 'BoardPost' - Edit a notice's title/body — author-only, regardless of board kind (#3286).`
+- `exclude_blocked_and_muted_board_authors(queryset: 'QuerySet[BoardPost]', *, viewer_account) -> 'QuerySet[BoardPost]' - Exclude blocked/muted authors' posts from a board read (mirrors journals #2996).`
+- `get_or_create_location_board(room_profile: 'RoomProfile') -> 'Board' - Get or create the LOCATION board anchored to this room (#3286).`
+- `get_or_create_org_board(organization: 'Organization') -> 'Board' - Get or create the ORG board anchored to this organization (#3286).`
+- `remove_board_post(*, post: 'BoardPost', remover_persona: 'Persona', actor_room_profile: 'RoomProfile | None' = None, is_staff: 'bool' = False) -> 'BoardPost' - Soft-delete a notice: stamp ``removed_by_persona``/``removed_at`` (#3286).`
+- `visible_posts_for_board(board: 'Board') -> 'QuerySet[BoardPost]' - Active posts on ``board``, newest-first, capped to ``max_active_posts``.`
 
 
 ## world.boundaries
@@ -7947,6 +7975,8 @@
   - food_transfers_initiated <- agriculture.FoodTransfer
   - promoted_assets <- assets.NPCAsset
   - asset_ownerships <- assets.NPCAsset
+  - board_posts <- boards.BoardPost
+  - board_posts_removed <- boards.BoardPost
   - owned_buildings <- buildings.Building
   - buildings_constructed <- buildings.Building
   - purchased_building_listings <- buildings.BuildingListing
@@ -8782,6 +8812,7 @@
 **Pointed to by:**
   - held_assets <- assets.NPCAsset
   - capture_consequence_effects <- checks.ConsequenceEffect
+  - boards <- boards.Board
   - building_listings <- buildings.BuildingListing
   - captives <- captivity.Captivity
   - child_orgs <- societies.Organization
