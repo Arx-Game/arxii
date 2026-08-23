@@ -1,8 +1,8 @@
 openapi: 3.0.3
 info:
-  title: Arx II API
+  title: Arx API
   version: 0.1.0
-  description: API for Arx II MUD web interface
+  description: API for the Arx web interface
 paths:
   /api/achievements/achievements/:
     get:
@@ -3451,6 +3451,7 @@ paths:
       - character-creation
       security:
       - cookieAuth: []
+      - {}
       responses:
         '200':
           content:
@@ -3479,6 +3480,7 @@ paths:
       - character-creation
       security:
       - cookieAuth: []
+      - {}
       responses:
         '200':
           content:
@@ -3489,8 +3491,11 @@ paths:
   /api/character-creation/beginnings/{id}/perspectives/:
     get:
       operationId: character_creation_beginnings_perspectives_list
-      description: This beginning's perspective entries, ungated for the CG shop window
-        (ADR-0224).
+      description: |-
+        This beginning's perspective entries.
+
+        Knowledge-ungated within CG per ADR-0224; still requires an
+        authenticated account (see #3305 review).
       parameters:
       - in: path
         name: id
@@ -4763,6 +4768,7 @@ paths:
       - character-creation
       security:
       - cookieAuth: []
+      - {}
       responses:
         '200':
           content:
@@ -4787,6 +4793,7 @@ paths:
       - character-creation
       security:
       - cookieAuth: []
+      - {}
       responses:
         '200':
           content:
@@ -4959,10 +4966,11 @@ paths:
     get:
       operationId: character_creation_traditions_perspectives_list
       description: |-
-        This tradition's perspective entries, ungated for the CG shop window (ADR-0224).
+        This tradition's perspective entries.
 
-        Resolved directly: get_queryset is beginning_id-scoped and would 404
-        every detail route.
+        Knowledge-ungated within CG per ADR-0224; still requires an
+        authenticated account (see #3305 review). Resolved directly:
+        get_queryset is beginning_id-scoped and would 404 every detail route.
       parameters:
       - in: query
         name: beginning_id
@@ -7150,8 +7158,10 @@ paths:
       description: |-
         Read + action endpoints for the player's companion surface.
 
-        `list`/`retrieve` return the caller's own active companions (read-only).
-        POST actions delegate to the four Actions in
+        `list`/`retrieve` return the caller's own active companions (read-only),
+        each carrying `is_present` (#3294) — whether the companion's live object
+        currently shares the actor's room, gating the web composer's "as
+        <companion>" emote toggle. POST actions delegate to the Actions in
         ``actions/definitions/companions.py``; ``ActionResult`` fields map 1:1 to
         the response bodies so the contract matches ``SanctumViewSet`` (#1918).
       parameters:
@@ -7194,8 +7204,10 @@ paths:
       description: |-
         Read + action endpoints for the player's companion surface.
 
-        `list`/`retrieve` return the caller's own active companions (read-only).
-        POST actions delegate to the four Actions in
+        `list`/`retrieve` return the caller's own active companions (read-only),
+        each carrying `is_present` (#3294) — whether the companion's live object
+        currently shares the actor's room, gating the web composer's "as
+        <companion>" emote toggle. POST actions delegate to the Actions in
         ``actions/definitions/companions.py``; ``ActionResult`` fields map 1:1 to
         the response bodies so the contract matches ``SanctumViewSet`` (#1918).
       parameters:
@@ -7223,6 +7235,36 @@ paths:
         Deploy a companion into a battle — ``POST /api/companions/companions/{id}/deploy/``.
 
         Wraps :class:`actions.definitions.companions.DeployCompanionAction`.
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: A unique integer value identifying this Companion.
+        required: true
+      tags:
+      - companions
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Companion'
+          description: ''
+  /api/companions/companions/{id}/emote/:
+    post:
+      operationId: companions_companions_emote_create
+      description: |-
+        Pose as a bonded, present companion — ``POST
+        /api/companions/companions/{id}/emote/`` (#3294).
+
+        Wraps :class:`actions.definitions.companions.CompanionEmoteAction`. The
+        companion id comes from the URL; ``get_queryset`` scopes it to the
+        caller's own active companions (foreign -> 404). The Action re-validates
+        ownership + room presence via ``CompanionPresentPrerequisite`` (defense
+        in depth).
       parameters:
       - in: path
         name: id
@@ -14630,6 +14672,7 @@ paths:
       - interactions
       security:
       - cookieAuth: []
+      - {}
       responses:
         '200':
           content:
@@ -29606,6 +29649,11 @@ paths:
       description: ViewSet for managing scenes
       parameters:
       - in: query
+        name: finished_after
+        schema:
+          type: string
+          format: date-time
+      - in: query
         name: gm
         schema:
           type: string
@@ -32601,18 +32649,6 @@ paths:
               schema:
                 $ref: '#/components/schemas/Stake'
           description: ''
-  /api/status/:
-    get:
-      operationId: status_retrieve
-      description: Return game statistics and recent activity.
-      tags:
-      - status
-      security:
-      - cookieAuth: []
-      - {}
-      responses:
-        '200':
-          description: No response body
   /api/stories/:
     get:
       operationId: stories_list
@@ -32927,11 +32963,12 @@ paths:
         - GROUP: creates GroupStoryProgress for the given gm_table
         - GLOBAL: creates the GlobalStoryProgress singleton
 
-        The scope <-> target invariant is enforced by
-        AssignStoryInputSerializer.validate(), so an invalid combination is a
-        400 (no scope change, no progress row). Because scope is set before
-        the create_*_progress call, StoryNotAssignedError cannot fire — no
-        try/except is needed.
+        The scope <-> target invariant, AND (for GLOBAL) the
+        ``allow_global_scope_authoring`` GMLevelCap gate (#3304), are enforced
+        by AssignStoryInputSerializer.validate(), so an invalid combination or
+        an under-leveled GM's GLOBAL attempt is a 400 (no scope change, no
+        progress row). Because scope is set before the create_*_progress
+        call, StoryNotAssignedError cannot fire — no try/except is needed.
       parameters:
       - in: path
         name: id
@@ -41896,10 +41933,20 @@ components:
           format: date-time
           readOnly: true
           nullable: true
+        is_present:
+          type: boolean
+          description: |-
+            True when the companion's live object shares the actor's current room (#3294).
+
+            Gates the web composer's "as <companion>" emote toggle. ``actor_location_id``
+            is seeded onto the serializer context by ``CompanionViewSet.get_serializer_context``;
+            with no resolvable actor location, every companion reads as absent.
+          readOnly: true
       required:
       - archetype
       - bonded_at
       - id
+      - is_present
       - name
       - released_at
     CompanionArchetype:
@@ -49642,6 +49689,19 @@ components:
           type: string
           nullable: true
           readOnly: true
+        attributed_companion:
+          type: object
+          additionalProperties: {}
+          nullable: true
+          description: |-
+            Cosmetic companion pose attribution (#3294): ``{id, name}`` or ``None``.
+
+            Authorship stays entirely on ``persona`` — already resolved above with the
+            full per-viewer display/mask/discovery treatment via ``_persona_display_map``.
+            The frontend builds the owner tell ("via <owner>") from that same resolved
+            ``persona`` field rather than a second identity-resolution path here, so a
+            masked owner's companion pose correctly shows the mask, never the real name.
+          readOnly: true
         endorsee_sheet_id:
           type: integer
           readOnly: true
@@ -49772,6 +49832,7 @@ components:
           readOnly: true
       required:
       - action_links
+      - attributed_companion
       - content
       - dramatic_moment_suggestions
       - dramatic_moment_tags
@@ -49910,6 +49971,19 @@ components:
           type: string
           nullable: true
           readOnly: true
+        attributed_companion:
+          type: object
+          additionalProperties: {}
+          nullable: true
+          description: |-
+            Cosmetic companion pose attribution (#3294): ``{id, name}`` or ``None``.
+
+            Authorship stays entirely on ``persona`` — already resolved above with the
+            full per-viewer display/mask/discovery treatment via ``_persona_display_map``.
+            The frontend builds the owner tell ("via <owner>") from that same resolved
+            ``persona`` field rather than a second identity-resolution path here, so a
+            masked owner's companion pose correctly shows the mask, never the real name.
+          readOnly: true
         endorsee_sheet_id:
           type: integer
           readOnly: true
@@ -50035,6 +50109,7 @@ components:
           readOnly: true
       required:
       - action_links
+      - attributed_companion
       - content
       - dramatic_moment_suggestions
       - dramatic_moment_tags

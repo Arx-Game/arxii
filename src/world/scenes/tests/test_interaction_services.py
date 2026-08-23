@@ -508,6 +508,48 @@ class TestRecordInteraction(TestCase):
         assert result is not None
         assert result.place == place
 
+    def test_attributed_companion_is_cosmetic_only(self) -> None:
+        """attributed_companion (#3294) threads through, but persona stays the writer.
+
+        Authorship (block/mute/consent) must never move to the companion — the FK
+        is purely cosmetic feed attribution.
+        """
+        from world.companions.factories import CompanionFactory
+
+        room = ObjectDBFactory(
+            db_key="Hall",
+            db_typeclass_path="typeclasses.rooms.Room",
+        )
+        char_a = CharacterFactory(db_key="Alice", location=room)
+        identity_a = CharacterSheetFactory(character=char_a)
+        companion = CompanionFactory(owner=identity_a)
+
+        result = record_interaction(
+            character=char_a,
+            content="Fang growls at the intruder.",
+            mode=InteractionMode.POSE,
+            attributed_companion=companion,
+        )
+        assert result is not None
+        assert result.attributed_companion_id == companion.pk
+        assert result.persona == identity_a.primary_persona
+
+    def test_no_attributed_companion_by_default(self) -> None:
+        room = ObjectDBFactory(
+            db_key="Hall",
+            db_typeclass_path="typeclasses.rooms.Room",
+        )
+        char_a = CharacterFactory(db_key="Alice", location=room)
+        CharacterSheetFactory(character=char_a)
+
+        result = record_interaction(
+            character=char_a,
+            content="waves.",
+            mode=InteractionMode.POSE,
+        )
+        assert result is not None
+        assert result.attributed_companion_id is None
+
 
 class TestRecordWhisperInteraction(TestCase):
     def setUp(self) -> None:
@@ -616,6 +658,8 @@ class TestPushInteraction(TestCase):
             "target_persona_ids": [],
             "language_id": None,
             "language_name": None,
+            "attributed_companion_id": None,
+            "attributed_companion_name": None,
         }
         mock_a.assert_called_once_with(interaction=((), expected_payload))
         mock_b.assert_called_once_with(interaction=((), expected_payload))

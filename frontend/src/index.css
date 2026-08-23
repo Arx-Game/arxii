@@ -106,13 +106,13 @@
 
   /* Arx — City of the Dead: faded grandeur, haunted-beautiful */
   [data-realm='arx'] {
-    --background: 40 22% 94%;
+    --background: 40 35% 90%;
     --foreground: 220 12% 16%;
     --card: 40 20% 95%;
     --card-foreground: 220 12% 16%;
     --popover: 40 20% 95%;
     --popover-foreground: 220 12% 16%;
-    --primary: 43 40% 38%;
+    --primary: 10 60% 34%;
     --primary-foreground: 40 25% 96%;
     --secondary: 40 18% 89%;
     --secondary-foreground: 220 12% 20%;

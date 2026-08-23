@@ -40,6 +40,8 @@ class InteractionPayload(TypedDict):
     target_persona_ids: list[int]
     language_id: int | None
     language_name: str | None
+    attributed_companion_id: int | None
+    attributed_companion_name: str | None
 
 
 class ReactionAggregation(TypedDict):

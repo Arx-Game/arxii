@@ -441,6 +441,25 @@ class StoryViewSet(viewsets.ModelViewSet):
         story = serializer.save()
         story.owners.add(self.request.user)
 
+    def perform_update(self, serializer: BaseSerializer) -> None:
+        """Persist story edits; wire the canon-review seam when impact_tier changes (#3304).
+
+        ``impact_tier`` is a writable ``StoryDetailSerializer`` field (no dedicated
+        action endpoint exists) — this generic PATCH/PUT is the web half of the
+        impact-tier request-loop seam, mirroring telnet's ``_handle_impact``
+        (``commands/story.py``) so the review queue fills regardless of which
+        surface a Lead GM used.
+        """
+        from world.stories.services.canon_review import (  # noqa: PLC0415
+            ensure_canon_review_for_story,
+        )
+
+        old_tier = serializer.instance.impact_tier if serializer.instance else None
+        story = serializer.save()
+        if story.impact_tier != old_tier:
+            gm_profile = self.request.user.gm_profile_or_none
+            ensure_canon_review_for_story(story, gm_profile)
+
     @action(detail=True, methods=[HTTPMethod.POST], permission_classes=[CanParticipateInStory])
     def apply_to_participate(self, request: Request, pk: int | None = None) -> Response:
         """Apply to participate in a story"""
@@ -611,11 +630,12 @@ class StoryViewSet(viewsets.ModelViewSet):
         - GROUP: creates GroupStoryProgress for the given gm_table
         - GLOBAL: creates the GlobalStoryProgress singleton
 
-        The scope <-> target invariant is enforced by
-        AssignStoryInputSerializer.validate(), so an invalid combination is a
-        400 (no scope change, no progress row). Because scope is set before
-        the create_*_progress call, StoryNotAssignedError cannot fire — no
-        try/except is needed.
+        The scope <-> target invariant, AND (for GLOBAL) the
+        ``allow_global_scope_authoring`` GMLevelCap gate (#3304), are enforced
+        by AssignStoryInputSerializer.validate(), so an invalid combination or
+        an under-leveled GM's GLOBAL attempt is a 400 (no scope change, no
+        progress row). Because scope is set before the create_*_progress
+        call, StoryNotAssignedError cannot fire — no try/except is needed.
         """
         from world.stories.services.progress import (  # noqa: PLC0415
             create_character_progress,
@@ -624,7 +644,9 @@ class StoryViewSet(viewsets.ModelViewSet):
         )
 
         story = self.get_object()
-        ser = AssignStoryInputSerializer(data=request.data, context={"story": story})
+        ser = AssignStoryInputSerializer(
+            data=request.data, context={"story": story, "request": request}
+        )
         ser.is_valid(raise_exception=True)
         data = ser.validated_data
         scope = data["scope"]

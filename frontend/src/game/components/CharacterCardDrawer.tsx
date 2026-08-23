@@ -12,7 +12,7 @@ import type { RelationshipWriteupMode } from '@/relationships/components/Relatio
 import type { CharacterRelationshipList } from '@/relationships/api';
 import type { PoseUnitAvatarClickPersona } from '@/scenes/components/PoseUnit';
 import { JournalComposerDialog } from '@/journals/components/JournalComposerDialog';
-import { SendLetterDialog } from './SendLetterDialog';
+import { MessagePlayerDialog } from './MessagePlayerDialog';
 
 /**
  * Decide whether the "Record an impression" quick action opens the
@@ -58,9 +58,10 @@ export interface CharacterCardDrawerProps {
  * Quick actions: "Record an impression" (#2159) opens `RelationshipWriteupDialog`
  * in impression or development mode per `resolveWriteupMode` above. "Write a
  * journal" (#2160) opens `JournalComposerDialog` pre-tagged with the resolved
- * character's name once `entry` resolves. "Send a letter" (#2160) opens
- * `SendLetterDialog` pre-addressed to the character's live tenure
- * (`entry.tenures.find(t => t.end_date === null)`) — hidden when there's no
+ * character's name once `entry` resolves. "Message the player" (#2160) opens
+ * `MessagePlayerDialog` - an OOC message to whoever currently plays this
+ * character, pre-addressed to their live tenure
+ * (`entry.tenures.find(t => t.end_date === null)`) - hidden when there's no
  * live tenure, since a vacant character has no one to address (same gating
  * philosophy as the FriendButton viewer-required gate below).
  *
@@ -86,7 +87,7 @@ export function CharacterCardDrawer({
   const liveTenure = entry?.tenures.find((tenure) => tenure.end_date === null) ?? null;
 
   const [journalOpen, setJournalOpen] = useState(false);
-  const [letterOpen, setLetterOpen] = useState(false);
+  const [messageOpen, setMessageOpen] = useState(false);
 
   // Undefined for a disguise/temporary persona with no public roster match —
   // `useMyRelationshipToTarget` stays disabled and `resolveWriteupMode` falls
@@ -165,9 +166,9 @@ export function CharacterCardDrawer({
                   type="button"
                   variant="outline"
                   size="sm"
-                  onClick={() => setLetterOpen(true)}
+                  onClick={() => setMessageOpen(true)}
                 >
-                  Send a letter
+                  Message the player
                 </Button>
               )}
             </div>
@@ -180,9 +181,9 @@ export function CharacterCardDrawer({
               />
             )}
             {entry && liveTenure && (
-              <SendLetterDialog
-                open={letterOpen}
-                onClose={() => setLetterOpen(false)}
+              <MessagePlayerDialog
+                open={messageOpen}
+                onClose={() => setMessageOpen(false)}
                 recipientTenureId={liveTenure.id}
                 recipientDisplay={entry.character.name}
               />

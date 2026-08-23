@@ -992,6 +992,19 @@ def _gm_allows_custom_stakes(user) -> bool:
     return cap.allow_custom_stakes
 
 
+def _gm_allows_global_scope(user) -> bool:
+    """Whether a non-staff author's GMLevelCap permits GLOBAL-scope authoring (#3304).
+
+    No GMProfile or no cap row → False (most-restrictive fallback, mirrors
+    ``_gm_allows_custom_stakes``).
+    """
+    try:
+        cap = GMLevelCap.objects.get(level=user.gm_profile.level)
+    except (GMProfile.DoesNotExist, GMLevelCap.DoesNotExist):
+        return False
+    return cap.allow_global_scope_authoring
+
+
 class BeatSerializer(serializers.ModelSerializer):
     """Full serializer for Beat including all Phase 2 predicate config fields."""
 
@@ -2031,7 +2044,23 @@ class AssignStoryInputSerializer(serializers.Serializer):
             raise serializers.ValidationError({"scope": msg})
 
         self._validate_scope_target_invariant(attrs)
+        if attrs["scope"] == StoryScope.GLOBAL:
+            self._validate_global_scope_authoring()
         return attrs
+
+    def _validate_global_scope_authoring(self) -> None:
+        """Gate GLOBAL-scope authoring to staff or a permitting GMLevelCap (#3304).
+
+        Mirrors ``_gm_allows_custom_stakes``'s most-restrictive fallback: no
+        request in context, no GMProfile, or no cap row all refuse.
+        """
+        request = self.context.get("request")
+        user = request.user if request is not None else None
+        if user is not None and user.is_staff:
+            return
+        if user is None or not _gm_allows_global_scope(user):
+            msg = "Your GM level does not permit authoring GLOBAL-scope stories."
+            raise serializers.ValidationError({"scope": msg})
 
     @staticmethod
     def _validate_scope_target_invariant(attrs: Any) -> None:

@@ -1,13 +1,15 @@
 /**
- * SendLetterDialog — thin Dialog wrapper around `ComposeMailForm`, pre-addressed
- * to a character from the character-card "Send a letter" quick action (#2160).
+ * MessagePlayerDialog - thin Dialog wrapper around `ComposeMailForm`, pre-addressed
+ * to a character from the character-card "Message the player" quick action (#2160).
+ * This is an OOC affordance - it messages whoever currently plays the character, not
+ * the character in-fiction (see `AGENT_GLOSSARY.md` in `world/roster`, ADR-0226).
  *
  * Externally controlled (`open`/`onClose`), matching `JournalComposerDialog`'s
- * pattern rather than owning its own trigger — `CharacterCardDrawer` opens it
+ * pattern rather than owning its own trigger - `CharacterCardDrawer` opens it
  * from its own quick-action button.
  *
  * `recipientTenureId`/`recipientDisplay` come from the card's resolved live
- * tenure (`entry.tenures.find(t => t.end_date === null)`) — the card only
+ * tenure (`entry.tenures.find(t => t.end_date === null)`) - the card only
  * offers this action when a live tenure exists (a vacant character has no one
  * to address), so both are always required here. `senderTenureId` is optional:
  * only pass it when the viewer's own current tenure is unambiguous from
@@ -18,24 +20,24 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/u
 import { toast } from 'sonner';
 import { ComposeMailForm } from '@/mail/components/ComposeMailForm';
 
-interface SendLetterDialogProps {
+interface MessagePlayerDialogProps {
   open: boolean;
   onClose: () => void;
   /** The pre-addressed recipient's live `RosterTenure` id. */
   recipientTenureId: number;
   /** The pre-addressed recipient's display name, shown as "To: {name}". */
   recipientDisplay: string;
-  /** The viewer's own tenure id, when unambiguous — hides `MyTenureSelect`. */
+  /** The viewer's own tenure id, when unambiguous - hides `MyTenureSelect`. */
   senderTenureId?: number;
 }
 
-export function SendLetterDialog({
+export function MessagePlayerDialog({
   open,
   onClose,
   recipientTenureId,
   recipientDisplay,
   senderTenureId,
-}: SendLetterDialogProps) {
+}: MessagePlayerDialogProps) {
   function handleOpenChange(isOpen: boolean) {
     if (!isOpen) onClose();
   }
@@ -44,14 +46,14 @@ export function SendLetterDialog({
     <Dialog open={open} onOpenChange={handleOpenChange}>
       <DialogContent>
         <DialogHeader>
-          <DialogTitle>Send a Letter to {recipientDisplay}</DialogTitle>
+          <DialogTitle>Message the player of {recipientDisplay}</DialogTitle>
         </DialogHeader>
         <ComposeMailForm
           initialRecipientTenureId={recipientTenureId}
           initialRecipientDisplay={recipientDisplay}
           fixedSenderTenureId={senderTenureId}
           onSent={() => {
-            toast.success(`Letter sent to ${recipientDisplay}.`);
+            toast.success(`Message sent to ${recipientDisplay}'s player.`);
             onClose();
           }}
         />

@@ -1957,15 +1957,17 @@ Character lifecycle management with web-first applications and player anonymity.
   hosts the shared `_send_email`/`_get_staff_emails` primitives; `RosterEmailService`
   extends it unchanged. `world.character_creation.email_service.CGEmailService`
   extends the same base — see Character Creation above.
-- **Letters web surface (#2160, ADR-0116):** `PlayerMailViewSet` gained two actions —
+- **OOC mail web surface (#2160, ADR-0226):** `PlayerMailViewSet` gained two actions —
   `POST /api/roster/mail/{id}/mark-read/` (idempotent, recipient-scoped via the queryset) and
   `GET /api/roster/mail/unread-count/` (unread + unarchived, across the requester's tenures).
   Sending mail fires `notify_mail_arrived` via `transaction.on_commit` (the
   `notify_battle_state_changed` pattern), pushing a new `WebsocketMessageType.MAIL_ARRIVED`
   (`src/web/webclient/message_types.py`) payload — `mail_id`/`sender_display`/`subject` only, no
-  account identifiers. Frontend: in-scene quick-compose (`SendLetterDialog` pre-filling
-  `ComposeMailForm`) from the character card, an `UnreadMailBadge` in the header, and a
-  mark-read-on-open flow in `ReceivedMailList`. No telnet mail command exists or is planned.
+  account identifiers. Frontend: in-scene "Message the player" quick-compose
+  (`MessagePlayerDialog` pre-filling `ComposeMailForm`) from the character card, an
+  `UnreadMailBadge` in the header, and a mark-read-on-open flow in `ReceivedMailList`. No
+  telnet mail command exists or is planned. PlayerMail is OOC between players; IC missives
+  are #3289's separate system (ADR-0226).
 - **Game invites (#2483):** `GameInvite` model + `GameInviteViewSet` for
   player-to-friend contextual invites. Trust-gated via `PlayerTrust` (new
   `INVITE` `TrustCategory`, `BASIC` minimum, seeded via the Big Button
@@ -4194,10 +4196,20 @@ companion. Full detail: [companions.md](companions.md).
 - **Actions** (`actions/definitions/companions.py`, REGISTRY,
   `category="companions"`): `BindCompanionAction` (`bind_companion`) — gated
   by `HasCompanionCapacityPrerequisite`, executes via `perform_check` against
-  `CompanionArchetype.bind_difficulty`.
+  `CompanionArchetype.bind_difficulty`. `CompanionEmoteAction`
+  (`companion_emote`, #3294) — pose *as* a bonded, present companion, gated
+  by `CompanionPresentPrerequisite` (owned + active + co-located).
+- **Companion emote (#3294):** `world.scenes.models.Interaction
+  .attributed_companion` — nullable FK → `Companion`, purely cosmetic feed
+  attribution (`Interaction.persona` stays the owner for block/mute/consent).
+  Telnet `companion emote <name|id> <text>`; web `POST
+  /api/companions/companions/{id}/emote/` + a composer toggle gated on
+  `CompanionSerializer.is_present`. Full detail: [companions.md](companions.md#companion-emote-3294),
+  [scenes.md](scenes.md#companion-pose-attribution-3294).
 - **REST API:** `world.companions.views.{CompanionViewSet,
-  CompanionArchetypeViewSet}` — read-only, mounted at `/api/companions/`.
-  Binding happens via the Action dispatch seam, not a ViewSet write.
+  CompanionArchetypeViewSet}` — read endpoints are read-only; write endpoints
+  (`bind`/`release`/`fight`/`deploy`/`order`/`emote`) converge on
+  `action.run()` via `PuppetActorMixin`, mounted at `/api/companions/`.
 - **Cross-app dependencies:** `world.character_sheets`, `world.magic`
   (Gift/Thread/ThreadPullEffect), `world.checks` (`perform_check`).
 - **Source:** `src/world/companions/`
