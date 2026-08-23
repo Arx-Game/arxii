@@ -552,3 +552,77 @@ class PlayerReportListQueryCountTest(TestCase):
             3,
             f"Query count grew from {small} to {large} — N+1 regression",
         )
+
+
+class HiddenPresenceReportTest(TestCase):
+    """#3288 — report the room's unseen presence without ever learning who it is."""
+
+    @classmethod
+    def setUpTestData(cls) -> None:
+        from world.conditions.factories import (
+            ConditionCategoryFactory,
+            ConditionInstanceFactory,
+            ConditionTemplateFactory,
+        )
+
+        cls.room = RoomProfileFactory().objectdb
+        cls.account = AccountFactory(username="hp-reporter")
+        cls.character, cls.reporter_persona = _create_played_persona(cls.account, "HPReporter")
+        cls.character.location = cls.room
+        cls.character.save()
+
+        cls.hidden_account = AccountFactory(username="hp-hidden")
+        cls.hidden_character, cls.hidden_persona = _create_played_persona(
+            cls.hidden_account, "HPHidden"
+        )
+        cls.hidden_character.location = cls.room
+        cls.hidden_character.save()
+
+        category = ConditionCategoryFactory(name="Concealed", conceals_from_perception=True)
+        template = ConditionTemplateFactory(name="Concealed", category=category)
+        ConditionInstanceFactory(
+            target=cls.hidden_character,
+            condition=template,
+            source_description="sneaking",
+        )
+
+    def _post(self, client: APIClient):
+        return client.post(
+            "/api/player-submissions/player-reports/hidden-presence/",
+            {
+                "reporter_persona": self.reporter_persona.pk,
+                "behavior_description": "lurking to make people uncomfortable",
+            },
+            format="json",
+        )
+
+    def test_files_report_against_resolved_hidden_occupant(self) -> None:
+        client = APIClient()
+        client.force_authenticate(user=self.account)
+        response = self._post(client)
+        self.assertEqual(response.status_code, 201)
+        report = PlayerReport.objects.get()
+        self.assertEqual(report.reported_persona, self.hidden_persona)
+        self.assertEqual(report.reported_account, self.hidden_account)
+        self.assertEqual(report.reporter_account, self.account)
+
+    def test_response_carries_no_identity(self) -> None:
+        client = APIClient()
+        client.force_authenticate(user=self.account)
+        response = self._post(client)
+        self.assertEqual(response.status_code, 201)
+        self.assertEqual(set(response.json().keys()), {"filed"})
+
+    def test_no_hidden_presence_rejects(self) -> None:
+        from world.conditions.models import ConditionInstance
+
+        ConditionInstance.objects.all().delete()
+        client = APIClient()
+        client.force_authenticate(user=self.account)
+        response = self._post(client)
+        self.assertEqual(response.status_code, 400)
+        self.assertEqual(PlayerReport.objects.count(), 0)
+
+    def test_unauthenticated_rejected(self) -> None:
+        response = self._post(APIClient())
+        self.assertIn(response.status_code, (401, 403))

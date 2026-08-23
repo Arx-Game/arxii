@@ -312,6 +312,8 @@ class ActionRegistryTests(TestCase):
             "remove_encounter_participant",
             "resolve_encounter_round",
             "set_active_persona",
+            "sneak",
+            "unsneak",
             "join_place",
             "leave_place",
             "shift_form",

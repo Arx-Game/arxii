@@ -72,6 +72,14 @@ export function FocusPanel({
     const match = myRosterEntries.find((entry) => entry.name === roomCharacter);
     return match?.id ?? null;
   }, [myRosterEntries, roomCharacter]);
+  // The active puppet's worn persona pk — the unseen-presence report identity (#3288).
+  const viewerPersonaId = useMemo<number | null>(() => {
+    if (!roomCharacter) {
+      return null;
+    }
+    const match = myRosterEntries.find((entry) => entry.name === roomCharacter);
+    return match?.active_persona_id ?? match?.primary_persona_id ?? null;
+  }, [myRosterEntries, roomCharacter]);
 
   // When the underlying room, scene, or active puppet changes (player
   // switches puppets, moves rooms, or starts/ends a scene), reset the
@@ -130,6 +138,7 @@ export function FocusPanel({
           hasActiveEncounter={hasActiveEncounter}
           hasActiveBattle={hasActiveBattle}
           viewerEntryId={viewerEntryId}
+          viewerPersonaId={viewerPersonaId}
         />
       );
       break;

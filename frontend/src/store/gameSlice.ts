@@ -24,6 +24,8 @@ interface RoomData {
   hub: HubTidings | null;
   /** Active NPC placements standing in this room (#3044); absent on older fixtures. */
   npc_givers?: NpcGiver[];
+  /** #3288 — true when ANY occupant is concealed. Identity-free OOC disclosure. */
+  has_unseen_presence?: boolean;
 }
 
 /**

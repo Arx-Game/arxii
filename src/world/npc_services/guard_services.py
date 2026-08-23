@@ -2,8 +2,10 @@
 
 Post-arrival guard detection: when a character enters a room that has an
 active GUARD ``NPCAssignment``, and the character lacks owner/tenant standing,
-roll the intruder's Stealth against a difficulty constant. On failure (the guard
-detects them), emit a room echo and alert the owner if online and co-located.
+the guard notices them — automatically for a loud (non-sneaking) entrant, or
+after winning the SNEAK security-oracle contest against a sneaking one (#3288;
+a guard win also strips the sneak stance). On detection, emit a room echo and
+alert the owner if online and co-located.
 """
 
 from __future__ import annotations
@@ -17,10 +19,11 @@ if TYPE_CHECKING:
 
     from world.scenes.models import Persona
 
-#: PLACEHOLDER difficulty for the guard detection check. The intruder rolls
-#: Stealth against this difficulty; a failed check (success_level <= 0) =
-#: detected. #2180 may refine this into an opposed Perception roll or a
-#: per-NPC value.
+#: PLACEHOLDER difficulty for the guard detection check. A SNEAKING intruder
+#: rolls the SNEAK security oracle against this difficulty; a failed check
+#: (success_level <= 0) = detected and the stance is stripped. Loud entrants
+#: don't roll at all (#3288). #2180 may refine this into an opposed Perception
+#: roll or a per-NPC value.
 GUARD_DETECTION_DIFFICULTY = 50
 
 
@@ -76,20 +79,33 @@ def check_guard_detection(character: ObjectDB, room: ObjectDB) -> None:
     if is_owner(persona, room) or is_tenant(persona, room):
         return
 
-    # Roll the intruder's Stealth against the guard's detection difficulty.
-    from world.checks.models import CheckType  # noqa: PLC0415
-    from world.checks.services import perform_check_with_modifiers  # noqa: PLC0415
-
-    stealth_check = CheckType.objects.get(name="Stealth")
-    result = perform_check_with_modifiers(
-        character=character,
-        check_type=stealth_check,
-        target_difficulty=GUARD_DETECTION_DIFFICULTY,
+    # #3288: detection branches on the sneak stance. A loud (non-sneaking)
+    # unauthorized entrant is simply noticed — no free roll (the old per-entry
+    # "dice tax" is gone). A sneaking entrant contests the SNEAK security
+    # oracle against the guard's difficulty; a guard win strips the stance
+    # publicly (being spotted means being SEEN).
+    from world.checks.constants import SecurityCheckKind  # noqa: PLC0415
+    from world.checks.security_services import resolve_security_check  # noqa: PLC0415
+    from world.stealth.services import (  # noqa: PLC0415
+        is_sneaking,
+        refresh_room_state,
+        stop_sneaking,
     )
 
-    # success_level <= 0 means the intruder failed to stay hidden = detected.
-    if result.success_level > 0:
-        return
+    if is_sneaking(character):
+        try:
+            result = resolve_security_check(
+                SecurityCheckKind.SNEAK,
+                character,
+                target_difficulty=GUARD_DETECTION_DIFFICULTY,
+            )
+        except ValueError:
+            # Stealth CheckType unseeded — treat as an ordinary loud entry.
+            result = None
+        if result is not None and result.success_level > 0:
+            return
+        stop_sneaking(character)
+        refresh_room_state(character)
 
     _emit_guard_alert(character, room, guard_assignment)
 
