@@ -134,6 +134,11 @@ chk   "app_deploy reload survives an SSH drop (ignore_unreachable + retry)" \
   "grep -q 'ignore_unreachable: true' infra/ansible/roles/app_deploy/tasks/main.yml && grep -q 'Retry the reload after a reconnect' infra/ansible/roles/app_deploy/tasks/main.yml"
 chk   "app_deploy stamps the reloaded SHA after a health check" \
   "grep -q 'app_reload_stamp' infra/ansible/roles/app_deploy/tasks/main.yml && grep -q 'Wait until the reloaded Server answers' infra/ansible/roles/app_deploy/tasks/main.yml"
+# 2026-08-23 reload-wedge: a reload needs the running Server's cooperation
+# (a dead DB connection made shutdown() raise, so the Server never stopped
+# and four deploys stranded); the rescue restart needs none.
+chk   "app_deploy reload falls back to a full restart on failure (wedged Server)" \
+  "grep -q 'rescue:' infra/ansible/roles/app_deploy/tasks/main.yml && grep -q 'state: restarted' infra/ansible/roles/app_deploy/tasks/main.yml"
 chk   "app_deploy's health-check backend == caddy's caddy_backend" \
   "[ \"\$(sed -n 's/^app_web_backend: //p' infra/ansible/roles/app_deploy/defaults/main.yml)\" = \"\$(sed -n 's/^caddy_backend: //p' infra/ansible/roles/caddy/defaults/main.yml | sed 's/ *#.*//')\" ]"
 chk   "app_deploy guards superuser create with an exists-check (idempotent)" \

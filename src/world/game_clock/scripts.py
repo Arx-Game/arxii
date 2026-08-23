@@ -4,6 +4,8 @@ from __future__ import annotations
 
 import logging
 
+from django.db import close_old_connections
+
 from typeclasses.scripts import Script
 from world.game_clock.services import get_ic_now
 from world.game_clock.task_registry import run_due_tasks
@@ -28,6 +30,19 @@ class GameTickScript(Script):
         self.start_delay = True
 
     def at_repeat(self) -> None:
+        # Discard dead/expired DB connections BEFORE any query. The Server is
+        # a long-lived process holding one main-thread Django connection; a
+        # Postgres restart under it (e.g. unattended-upgrades) leaves that
+        # connection dead, and every Twisted-side query then raises
+        # OperationalError("the connection is closed") until something closes
+        # it — including Evennia's own shutdown(), whose FIRST statement is a
+        # ServerConfig query, which is how `evennia reload` wedged forever on
+        # 2026-08-23 (four deploys stranded). Web requests self-heal via
+        # Django's request_started signal; this is the equivalent for the
+        # tick path. close() is local (no server roundtrip), so this never
+        # raises, and the next query transparently reopens — bounding the
+        # dead-connection window to one TICK_INTERVAL.
+        close_old_connections()
         ic_now = get_ic_now()
         executed = run_due_tasks(ic_now=ic_now)
         if executed:
