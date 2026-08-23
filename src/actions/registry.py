@@ -397,6 +397,13 @@ from actions.definitions.sanctum import (
     SanctumSeverAction,
     SanctumWeaveAction,
 )
+from actions.definitions.scene_checks import (
+    AnswerCheckCallAction,
+    CallForCheckAction,
+    DeclineCheckCallAction,
+    ProposeCheckAction,
+    SceneSelfCheckAction,
+)
 from actions.definitions.scene_reactions import (
     ReactToWindowAction,
     ToggleFavoriteAction,
@@ -904,6 +911,12 @@ _ALL_ACTIONS: list[Action] = [
     # #2127 — GM scenario catalog: situation find/browse + suggestion inbox.
     FindSituationAction(),
     SubmitCatalogSuggestionAction(),
+    # #3295 — scene check invocation: player self-checks, GM calls, proposals.
+    SceneSelfCheckAction(),
+    CallForCheckAction(),
+    AnswerCheckCallAction(),
+    DeclineCheckCallAction(),
+    ProposeCheckAction(),
     # #2010 — GM battle staging: JUNIOR-gated catalog-pick-to-live-Battle actions.
     CreateBattleAction(),
     StageBattleMapAction(),

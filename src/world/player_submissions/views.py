@@ -7,6 +7,7 @@ from http import HTTPMethod
 from typing import Any, cast
 
 from django.db.models import QuerySet
+from django.utils import timezone
 from django_filters.rest_framework import DjangoFilterBackend
 from evennia.accounts.models import AccountDB
 from rest_framework import mixins, serializers, status
@@ -26,6 +27,7 @@ from world.player_submissions.filters import (
 from world.player_submissions.github_issues import GitHubIssueError, file_issue_for_report
 from world.player_submissions.models import (
     BugReport,
+    CheckProposal,
     Petition,
     PlayerFeedback,
     PlayerReport,
@@ -34,6 +36,8 @@ from world.player_submissions.models import (
 from world.player_submissions.serializers import (
     BugReportCreateSerializer,
     BugReportDetailSerializer,
+    CheckProposalCreateSerializer,
+    CheckProposalDetailSerializer,
     FileIssueInputSerializer,
     HiddenPresenceReportCreateSerializer,
     PetitionCreateSerializer,
@@ -281,6 +285,51 @@ class PlayerReportViewSet(
                 status=status.HTTP_400_BAD_REQUEST,
             )
         return Response({"filed": len(reports)}, status=status.HTTP_201_CREATED)
+
+
+class CheckProposalViewSet(
+    _SubmissionViewSetMixin,
+    mixins.CreateModelMixin,
+    mixins.ListModelMixin,
+    mixins.RetrieveModelMixin,
+    mixins.UpdateModelMixin,
+    GenericViewSet,
+):
+    """Staff triage of proposed new ``CheckType`` rows (#3295).
+
+    Create is open to any authenticated player (the catalog-only ruling's
+    proposal pipeline is for players AND GMs, not staff-gated); list/retrieve/
+    update stay staff-only via ``_SubmissionViewSetMixin``, same shape as
+    ``BugReportViewSet``/``PlayerReportViewSet``. Adoption is a manual, separate
+    act (staff author the real ``CheckType`` through the normal content path) —
+    this endpoint only tracks the proposal's own review status.
+    """
+
+    queryset = CheckProposal.objects.select_related(
+        "submitted_by_account",
+        "submitted_by_persona__character_sheet__character",
+    ).order_by("-created_at")
+
+    def get_serializer_class(self) -> type[serializers.Serializer]:
+        if self.action == "create":
+            return CheckProposalCreateSerializer
+        return CheckProposalDetailSerializer
+
+    def perform_create(self, serializer: serializers.BaseSerializer) -> None:
+        serializer.save(submitted_by_account=self.request.user)
+
+    def perform_update(self, serializer: serializers.BaseSerializer) -> None:
+        """Staff resolution stamps reviewer/resolved_at once, on the OPEN->closed edge."""
+        instance = self.get_object()
+        old_status = instance.status
+        updated = serializer.save()
+        if old_status == SubmissionStatus.OPEN and updated.status in (
+            SubmissionStatus.REVIEWED,
+            SubmissionStatus.DISMISSED,
+        ):
+            updated.reviewer = self.request.user
+            updated.resolved_at = timezone.now()
+            updated.save(update_fields=["reviewer", "resolved_at"])
 
 
 class PetitionViewSet(

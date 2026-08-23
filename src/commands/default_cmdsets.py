@@ -141,6 +141,7 @@ from commands.retire import CmdRetire  # #2287
 from commands.ritual import CmdRitual
 from commands.sanctum import CmdSanctum
 from commands.scene import CmdScene
+from commands.scene_checks import CmdCallCheck, CmdCheck  # #3295
 from commands.seance import CmdSeance
 from commands.select import CmdSelect
 from commands.servant import CmdServant  # #2989
@@ -387,6 +388,9 @@ class CharacterCmdSet(default_cmds.CharacterCmdSet):
             # #2004 — GM dashboard + idle-tables listing.
             CmdGMDashboard,
             CmdGMIdle,
+            # #3295 — scene check invocation: player self-checks + GM calls.
+            CmdCheck,
+            CmdCallCheck,
             # #1505 — basic telnet parity for GM-table admin (web is the primary surface).
             CmdGMTable,
             # #1496 — staff/GM technique authoring workbench (perm(Builder)).

@@ -1440,6 +1440,7 @@
   - ramparts <- areas.Rampart
   - consequence_outcomes <- checks.ConsequenceOutcome
   - owned_check_types <- checks.CheckType
+  - check_call_targets <- checks.CheckCallTarget
   - detected_concealments <- conditions.ConditionInstance
   - treatment_attempts_as_helper <- conditions.TreatmentAttempt
   - treatment_attempts_as_target <- conditions.TreatmentAttempt
@@ -1685,6 +1686,19 @@
 
 ## world.checks
 
+### CheckCall
+**Foreign Keys:**
+  - scene -> scenes.Scene [FK]
+  - caller_persona -> scenes.Persona [FK]
+  - check_type -> checks.CheckType [FK]
+**Pointed to by:**
+  - targets <- checks.CheckCallTarget
+
+### CheckCallTarget
+**Foreign Keys:**
+  - call -> checks.CheckCall [FK]
+  - target_sheet -> character_sheets.CharacterSheet [FK]
+
 ### CheckCategory
 **Foreign Keys:**
   - written_by -> contributors.ContentContributor [FK] (nullable)
@@ -1707,6 +1721,7 @@
   - capability_modifiers <- checks.CheckTypeCapabilityModifier
   - aspects <- checks.CheckTypeAspect
   - specializations <- checks.CheckTypeSpecialization
+  - check_calls <- checks.CheckCall
   - cures_conditions <- conditions.ConditionTemplate
   - resists_condition_applications <- conditions.ConditionTemplate
   - breaks_free_conditions <- conditions.ConditionTemplate
@@ -4666,6 +4681,7 @@
 
 ### Service Functions
 - `award_xp(account: 'AccountDB', amount: 'int', reason: 'str' = ProgressionReason.SYSTEM_AWARD, description: 'str' = '', gm: 'AccountDB | None' = None) -> 'XPTransaction' - Award XP to an account.`
+- `base_entries_queryset() -> 'QuerySet[JournalEntry]' - The annotated/prefetched base queryset every list-style journal read builds on.`
 - `create_journal_entry(*, author: 'CharacterSheet', title: 'str', body: 'str', is_public: 'bool', tags: 'list[str] | None' = None, posthumous_override: 'str' = PosthumousOverride.INHERIT) -> 'JournalEntry' - Create a journal entry and award weekly XP.`
 - `create_journal_response(*, author: 'CharacterSheet', parent: 'JournalEntry', response_type: 'ResponseType', title: 'str', body: 'str') -> 'JournalEntry' - Create a praise or retort response to a journal entry.`
 - `edit_journal_entry(*, entry: 'JournalEntry', title: 'str | None' = None, body: 'str | None' = None, posthumous_override: 'str | None' = None) -> 'JournalEntry' - Edit an existing journal entry. Sets edited_at timestamp for title/body edits.`
@@ -6869,6 +6885,13 @@
   - reporter_persona -> scenes.Persona [FK]
   - location -> evennia.ObjectDB [FK] (nullable)
 
+### CheckProposal
+**Foreign Keys:**
+  - submitted_by_account -> evennia.AccountDB [FK]
+  - submitted_by_persona -> scenes.Persona [FK]
+  - scene -> scenes.Scene [FK] (nullable)
+  - reviewer -> evennia.AccountDB [FK] (nullable)
+
 ### Petition
 **Foreign Keys:**
   - account -> evennia.AccountDB [FK]
@@ -6903,11 +6926,13 @@
 - `kudos_total_for(account: 'AccountDB') -> 'int' - The sender's kudos total — the staff inbox's sort key (#2288).`
 - `record_resolution(account: 'AccountDB', status: 'str') -> 'SubmitterStanding' - Stamp the submitter's track record when staff resolve their submission.`
 - `report_error(exc: 'BaseException', *, label: 'str', actor: 'ObjectDB | None' = None) -> 'None' - Capture an exception as a deduplicated ``SystemErrorReport`` + a structured log.`
+- `report_hidden_presence(*, reporter_account: 'AccountDB', reporter_persona: 'Persona', behavior_description: 'str', category: 'str') -> 'list[PlayerReport]' - File PlayerReports against the concealed occupants of the reporter's room (#3288).`
 - `resolve_petition(petition: 'Petition', *, status: 'str', staff_notes: 'str' = '') -> 'Petition' - Staff close a petition; the outcome feeds the track record.`
 - `run_safely(label: 'str', fn: 'Callable[[], object]', *, actor: 'ObjectDB | None' = None) -> 'object' - Run an optional / best-effort callable; on failure capture + notify, never raise.`
 - `sender_context(account: 'AccountDB') -> 'dict' - Kudos + standing columns shown beside every submission.`
 - `set_ignored(account: 'AccountDB', *, ignored: 'bool') -> 'SubmitterStanding' - The perma-ignore bit: submissions persist but never surface. Silent.`
 - `standing_for(account: 'AccountDB') -> 'SubmitterStanding'`
+- `submit_check_proposal(account: 'AccountDB', persona: 'Persona', *, proposed_name: 'str', intent: 'str', situation_text: 'str', suggested_traits_text: 'str' = '', scene: 'Scene | None' = None) -> 'CheckProposal' - Create a ``CheckProposal`` row, routed to the staff inbox (#3295).`
 - `submit_petition(account: 'AccountDB', *, category: 'str', description: 'str', scene: 'Scene | None' = None, subject_character: 'ObjectDB | None' = None) -> 'Petition' - File the one open petition an account may hold — emergency-only.`
 
 
@@ -7976,6 +8001,7 @@
   - food_transfers_initiated <- agriculture.FoodTransfer
   - promoted_assets <- assets.NPCAsset
   - asset_ownerships <- assets.NPCAsset
+  - check_calls_issued <- checks.CheckCall
   - board_posts <- boards.BoardPost
   - board_posts_removed <- boards.BoardPost
   - owned_buildings <- buildings.Building
@@ -8071,6 +8097,7 @@
   - bug_reports <- player_submissions.BugReport
   - reports_submitted <- player_submissions.PlayerReport
   - reports_against <- player_submissions.PlayerReport
+  - check_proposals <- player_submissions.CheckProposal
   - projects_owned <- projects.Project
   - project_contributions <- projects.Contribution
   - discoveries_as_subject <- scenes.PersonaDiscovery
@@ -8153,6 +8180,7 @@
   - event -> events.Event [FK] (nullable)
   - participants -> evennia.AccountDB [M2M]
 **Pointed to by:**
+  - check_calls <- checks.CheckCall
   - treatment_attempts <- conditions.TreatmentAttempt
   - situation_instances <- mechanics.SituationInstance
   - battle <- battles.Battle
@@ -8185,6 +8213,7 @@
   - fashion_showings <- items.FashionShowing
   - npc_regard_events <- npc_services.NpcRegardEvent
   - petitions <- player_submissions.Petition
+  - check_proposals <- player_submissions.CheckProposal
   - relationshipupdate_set <- relationships.RelationshipUpdate
   - relationshipdevelopment_set <- relationships.RelationshipDevelopment
   - relationshipcapstone_set <- relationships.RelationshipCapstone
@@ -9165,6 +9194,21 @@
 - `get_account_submission_history(account_id: 'int') -> 'dict[str, dict[str, Any]]' - Return all submissions related to an account.`
 - `get_staff_inbox(*, categories: 'list[str] | None' = None, include_ignored: 'bool' = False) -> 'list[InboxItem]' - Aggregate open items from all submission sources.`
 - `sender_context(account: 'AccountDB') -> 'dict' - Kudos + standing columns shown beside every submission.`
+
+
+## world.stealth
+
+### Service Functions
+- `concealed_template() -> 'ConditionTemplate | None' - The seeded Concealed ConditionTemplate, or None when unseeded.`
+- `is_sneaking(character: 'ObjectDB') -> 'bool' - Whether the character currently holds sneak-sourced concealment.`
+- `mark_room_rolled(character: 'ObjectDB') -> 'None' - Stamp the per-room anti-spam token: one sneak roll per room per visit.`
+- `refresh_room_state(character: 'ObjectDB') -> 'None' - Re-broadcast room_state at the character's location.`
+- `reroll_on_arrival(character: 'ObjectDB') -> 'bool' - Per-room re-roll as a sneaking character arrives somewhere new.`
+- `roll_sneak(character: 'ObjectDB') -> 'CheckResult' - One concealment roll — the SNEAK security oracle vs the base difficulty.`
+- `room_already_rolled(character: 'ObjectDB') -> 'bool' - Whether this room's one sneak roll has already happened this visit.`
+- `sneak_instance(character: 'ObjectDB') -> 'ConditionInstance | None' - The character's active sneak-sourced Concealed instance, or None.`
+- `start_sneaking(character: 'ObjectDB') -> 'bool' - Apply sneak-sourced concealment after a passed roll. Returns success.`
+- `stop_sneaking(character: 'ObjectDB') -> 'bool' - Remove sneak-sourced concealment (unsneak / guard strip / failed arrival).`
 
 
 ## world.stories

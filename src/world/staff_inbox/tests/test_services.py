@@ -9,6 +9,7 @@ from evennia_extensions.factories import AccountFactory
 from world.player_submissions.constants import SubmissionCategory, SubmissionStatus
 from world.player_submissions.factories import (
     BugReportFactory,
+    CheckProposalFactory,
     PlayerFeedbackFactory,
     PlayerReportFactory,
     SystemErrorReportFactory,
@@ -129,6 +130,36 @@ class StaffInboxCatalogSuggestionTest(TestCase):
 
         CatalogSuggestionFactory(status=SubmissionStatus.DISMISSED)
         items = get_staff_inbox(categories=[SubmissionCategory.CATALOG_SUGGESTION])
+        assert len(items) == 1  # only the OPEN one from setUpTestData
+
+
+class StaffInboxCheckProposalTest(TestCase):
+    """Coverage for CheckProposal -> InboxItem wiring (#3295)."""
+
+    @classmethod
+    def setUpTestData(cls) -> None:
+        cls.proposal = CheckProposalFactory()
+
+    def test_check_proposal_appears_in_inbox(self) -> None:
+        items = get_staff_inbox()
+        matches = [i for i in items if i.source_type == SubmissionCategory.CHECK_PROPOSAL]
+        assert len(matches) == 1
+        assert matches[0].source_pk == self.proposal.pk
+        assert self.proposal.submitted_by_account.username in matches[0].reporter_summary
+        assert self.proposal.proposed_name in matches[0].title
+
+    def test_check_proposal_filtered_by_category(self) -> None:
+        items = get_staff_inbox(categories=[SubmissionCategory.CHECK_PROPOSAL])
+        assert len(items) == 1
+
+    def test_check_proposal_excluded_by_category(self) -> None:
+        items = get_staff_inbox(categories=[SubmissionCategory.PLAYER_FEEDBACK])
+        matches = [i for i in items if i.source_type == SubmissionCategory.CHECK_PROPOSAL]
+        assert len(matches) == 0
+
+    def test_non_open_check_proposal_excluded(self) -> None:
+        CheckProposalFactory(status=SubmissionStatus.DISMISSED)
+        items = get_staff_inbox(categories=[SubmissionCategory.CHECK_PROPOSAL])
         assert len(items) == 1  # only the OPEN one from setUpTestData
 
 

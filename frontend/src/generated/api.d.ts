@@ -3609,6 +3609,54 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
+  '/api/checks/check-call-targets/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /**
+     * @description Read-only inbox of the requesting player's pending ``CheckCall`` prompts (#3295).
+     *
+     *     Mirrors ``GMSummonOfferViewSet``'s shape: answer/decline are NOT DRF actions
+     *     here -- they dispatch through the generic REGISTRY action-dispatch endpoint
+     *     (``answer_check_call``/``decline_check_call``), the seam telnet's ``check
+     *     answer``/``check decline`` also reaches.
+     */
+    get: operations['checks_check_call_targets_list'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/checks/check-call-targets/{id}/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /**
+     * @description Read-only inbox of the requesting player's pending ``CheckCall`` prompts (#3295).
+     *
+     *     Mirrors ``GMSummonOfferViewSet``'s shape: answer/decline are NOT DRF actions
+     *     here -- they dispatch through the generic REGISTRY action-dispatch endpoint
+     *     (``answer_check_call``/``decline_check_call``), the seam telnet's ``check
+     *     answer``/``check decline`` also reaches.
+     */
+    get: operations['checks_check_call_targets_retrieve'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   '/api/checks/check-types/': {
     parameters: {
       query?: never;
@@ -3731,6 +3779,62 @@ export interface paths {
      *     written by the resolution pipeline.
      */
     get: operations['checks_consequence_outcomes_retrieve'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/checks/player-check-types/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /**
+     * @description Read-only catalog browse for the player-facing roll picker (#3295).
+     *
+     *     Open to any authenticated player -- unlike ``CheckTypeViewSet`` (GM-only,
+     *     staff-authored rows only), this is the "easy to find is the feature"
+     *     discovery surface every player's own self-check roll picker uses. An
+     *     optional ``character_id`` query param, when it resolves to a character the
+     *     requesting account currently plays (validated the same way
+     *     ``CanCreatePersonaInScene`` validates ownership), additionally surfaces
+     *     that character's own synthesized magic ``CheckType`` row -- never another
+     *     character's (``catalog_queryset``'s existing owner_sheet scope).
+     */
+    get: operations['checks_player_check_types_list'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/checks/player-check-types/{id}/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /**
+     * @description Read-only catalog browse for the player-facing roll picker (#3295).
+     *
+     *     Open to any authenticated player -- unlike ``CheckTypeViewSet`` (GM-only,
+     *     staff-authored rows only), this is the "easy to find is the feature"
+     *     discovery surface every player's own self-check roll picker uses. An
+     *     optional ``character_id`` query param, when it resolves to a character the
+     *     requesting account currently plays (validated the same way
+     *     ``CanCreatePersonaInScene`` validates ownership), additionally surfaces
+     *     that character's own synthesized magic ``CheckType`` row -- never another
+     *     character's (``catalog_queryset``'s existing owner_sheet scope).
+     */
+    get: operations['checks_player_check_types_retrieve'];
     put?: never;
     post?: never;
     delete?: never;
@@ -16113,6 +16217,88 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
+  '/api/player-submissions/check-proposals/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /**
+     * @description Staff triage of proposed new ``CheckType`` rows (#3295).
+     *
+     *     Create is open to any authenticated player (the catalog-only ruling's
+     *     proposal pipeline is for players AND GMs, not staff-gated); list/retrieve/
+     *     update stay staff-only via ``_SubmissionViewSetMixin``, same shape as
+     *     ``BugReportViewSet``/``PlayerReportViewSet``. Adoption is a manual, separate
+     *     act (staff author the real ``CheckType`` through the normal content path) —
+     *     this endpoint only tracks the proposal's own review status.
+     */
+    get: operations['player_submissions_check_proposals_list'];
+    put?: never;
+    /**
+     * @description Staff triage of proposed new ``CheckType`` rows (#3295).
+     *
+     *     Create is open to any authenticated player (the catalog-only ruling's
+     *     proposal pipeline is for players AND GMs, not staff-gated); list/retrieve/
+     *     update stay staff-only via ``_SubmissionViewSetMixin``, same shape as
+     *     ``BugReportViewSet``/``PlayerReportViewSet``. Adoption is a manual, separate
+     *     act (staff author the real ``CheckType`` through the normal content path) —
+     *     this endpoint only tracks the proposal's own review status.
+     */
+    post: operations['player_submissions_check_proposals_create'];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/player-submissions/check-proposals/{id}/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /**
+     * @description Staff triage of proposed new ``CheckType`` rows (#3295).
+     *
+     *     Create is open to any authenticated player (the catalog-only ruling's
+     *     proposal pipeline is for players AND GMs, not staff-gated); list/retrieve/
+     *     update stay staff-only via ``_SubmissionViewSetMixin``, same shape as
+     *     ``BugReportViewSet``/``PlayerReportViewSet``. Adoption is a manual, separate
+     *     act (staff author the real ``CheckType`` through the normal content path) —
+     *     this endpoint only tracks the proposal's own review status.
+     */
+    get: operations['player_submissions_check_proposals_retrieve'];
+    /**
+     * @description Staff triage of proposed new ``CheckType`` rows (#3295).
+     *
+     *     Create is open to any authenticated player (the catalog-only ruling's
+     *     proposal pipeline is for players AND GMs, not staff-gated); list/retrieve/
+     *     update stay staff-only via ``_SubmissionViewSetMixin``, same shape as
+     *     ``BugReportViewSet``/``PlayerReportViewSet``. Adoption is a manual, separate
+     *     act (staff author the real ``CheckType`` through the normal content path) —
+     *     this endpoint only tracks the proposal's own review status.
+     */
+    put: operations['player_submissions_check_proposals_update'];
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    /**
+     * @description Staff triage of proposed new ``CheckType`` rows (#3295).
+     *
+     *     Create is open to any authenticated player (the catalog-only ruling's
+     *     proposal pipeline is for players AND GMs, not staff-gated); list/retrieve/
+     *     update stay staff-only via ``_SubmissionViewSetMixin``, same shape as
+     *     ``BugReportViewSet``/``PlayerReportViewSet``. Adoption is a manual, separate
+     *     act (staff author the real ``CheckType`` through the normal content path) —
+     *     this endpoint only tracks the proposal's own review status.
+     */
+    patch: operations['player_submissions_check_proposals_partial_update'];
+    trace?: never;
+  };
   '/api/player-submissions/feedback/': {
     parameters: {
       query?: never;
@@ -24581,12 +24767,93 @@ export interface components {
      */
     CharacterVitalsStatusEnum: 'alive' | 'dying' | 'incapacitated' | 'dead';
     /**
+     * @description Read-only payload for one of the requesting player's pending check calls (#3295).
+     *
+     *     Mirrors ``GMSummonOfferSerializer``'s shape: answer/decline dispatch through
+     *     the generic REGISTRY action-dispatch endpoint (``answer_check_call``/
+     *     ``decline_check_call``) rather than a DRF action here.
+     */
+    CheckCallTarget: {
+      readonly id: number;
+      readonly call_id: number;
+      readonly check_type_name: string;
+      readonly band: string;
+      readonly band_label: string;
+      readonly caller_display_name: string;
+      readonly scene_id: number;
+      /** Format: date-time */
+      readonly created_at: string;
+    };
+    /** @description Frontend supplies ``submitted_by_persona``; the account is server-derived (#3295). */
+    CheckProposalCreate: {
+      /** @description The persona the submitter was wearing when proposing. */
+      submitted_by_persona: number;
+      /** @description The check's proposed name (e.g. 'Riverside Tracking'). */
+      proposed_name: string;
+      /** @description What this check is meant to cover -- the gap in the catalog. */
+      intent: string;
+      /** @description Suggested stat+skill pairing in plain text (e.g. 'Perception + Survival'). Advisory only -- no live Trait FK exists until staff author the real row. */
+      suggested_traits_text?: string;
+      /** @description The situation this check would serve -- when someone would roll it. */
+      situation_text: string;
+      /** @description The scene the proposal arose in, if any. */
+      scene?: number | null;
+    };
+    /** @description Frontend supplies ``submitted_by_persona``; the account is server-derived (#3295). */
+    CheckProposalCreateRequest: {
+      /** @description The persona the submitter was wearing when proposing. */
+      submitted_by_persona: number;
+      /** @description The check's proposed name (e.g. 'Riverside Tracking'). */
+      proposed_name: string;
+      /** @description What this check is meant to cover -- the gap in the catalog. */
+      intent: string;
+      /** @description Suggested stat+skill pairing in plain text (e.g. 'Perception + Survival'). Advisory only -- no live Trait FK exists until staff author the real row. */
+      suggested_traits_text?: string;
+      /** @description The situation this check would serve -- when someone would roll it. */
+      situation_text: string;
+      /** @description The scene the proposal arose in, if any. */
+      scene?: number | null;
+    };
+    /** @description Staff-inbox detail view: adopt/decline with review notes (#3295). */
+    CheckProposalDetail: {
+      readonly id: number;
+      /** @description OOC authoring, not IC -- mirrors PlayerFeedback.reporter_account. */
+      readonly submitted_by_account: number;
+      readonly submitted_by_account_username: string;
+      /** @description The persona the submitter was wearing when proposing. */
+      readonly submitted_by_persona: number;
+      readonly submitted_by_persona_name: string;
+      /** @description The check's proposed name (e.g. 'Riverside Tracking'). */
+      readonly proposed_name: string;
+      /** @description What this check is meant to cover -- the gap in the catalog. */
+      readonly intent: string;
+      /** @description Suggested stat+skill pairing in plain text (e.g. 'Perception + Survival'). Advisory only -- no live Trait FK exists until staff author the real row. */
+      readonly suggested_traits_text: string;
+      /** @description The situation this check would serve -- when someone would roll it. */
+      readonly situation_text: string;
+      /** @description The scene the proposal arose in, if any. */
+      readonly scene: number | null;
+      status?: components['schemas']['StatusD66Enum'];
+      /** @description Staff account that reviewed this proposal. */
+      readonly reviewer: number | null;
+      review_notes?: string;
+      /** Format: date-time */
+      readonly created_at: string;
+      /** Format: date-time */
+      readonly resolved_at: string | null;
+    };
+    /** @description Staff-inbox detail view: adopt/decline with review notes (#3295). */
+    CheckProposalDetailRequest: {
+      status?: components['schemas']['StatusD66Enum'];
+      review_notes?: string;
+    };
+    /**
      * @description Read-only catalog listing for the web GM check-invocation picker (#3070).
      *
-     *     Mirrors ``InvokeCatalogCheckAction``'s own catalog rendering
-     *     (``_check_type_summary``/``_format_catalog_row`` in
-     *     ``actions/definitions/gm_adjudication.py``) so the web picker shows the same
-     *     stat+skill trait pairing a GM sees via telnet ``gm check find``.
+     *     Mirrors the shared catalog rendering (``check_type_summary``/
+     *     ``format_catalog_row`` in ``world.checks.catalog_invocation``, #3295) so the
+     *     web picker shows the same stat+skill trait pairing a GM sees via telnet
+     *     ``gm check find``.
      */
     CheckType: {
       readonly id: number;
@@ -31835,6 +32102,21 @@ export interface components {
       previous?: string | null;
       results: components['schemas']['CharacterRelationshipList'][];
     };
+    PaginatedCheckProposalDetailList: {
+      /** @example 123 */
+      count: number;
+      /**
+       * Format: uri
+       * @example http://api.example.org/accounts/?page=4
+       */
+      next?: string | null;
+      /**
+       * Format: uri
+       * @example http://api.example.org/accounts/?page=2
+       */
+      previous?: string | null;
+      results: components['schemas']['CheckProposalDetail'][];
+    };
     PaginatedCheckTypeList: {
       /** @example 123 */
       count: number;
@@ -34714,6 +34996,11 @@ export interface components {
       lifetime_earned?: number;
       /** @description Optional player-defined description of how this resonance manifests. */
       flavor_text?: string;
+    };
+    /** @description Staff-inbox detail view: adopt/decline with review notes (#3295). */
+    PatchedCheckProposalDetailRequest: {
+      status?: components['schemas']['StatusD66Enum'];
+      review_notes?: string;
     };
     /**
      * @description Serializer for CovenantRank (the per-covenant authority ladder).
@@ -47160,6 +47447,47 @@ export interface operations {
       };
     };
   };
+  checks_check_call_targets_list: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['CheckCallTarget'][];
+        };
+      };
+    };
+  };
+  checks_check_call_targets_retrieve: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        /** @description A unique integer value identifying this check call target. */
+        id: number;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['CheckCallTarget'];
+        };
+      };
+    };
+  };
   checks_check_types_list: {
     parameters: {
       query?: {
@@ -47255,6 +47583,54 @@ export interface operations {
         };
         content: {
           'application/json': components['schemas']['ConsequenceOutcome'];
+        };
+      };
+    };
+  };
+  checks_player_check_types_list: {
+    parameters: {
+      query?: {
+        category?: string;
+        /** @description A page number within the paginated result set. */
+        page?: number;
+        /** @description Number of results to return per page. */
+        page_size?: number;
+        search?: string;
+      };
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['PaginatedCheckTypeList'];
+        };
+      };
+    };
+  };
+  checks_player_check_types_retrieve: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        /** @description A unique integer value identifying this check type. */
+        id: number;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['CheckType'];
         };
       };
     };
@@ -64691,6 +65067,127 @@ export interface operations {
         };
         content: {
           'application/json': components['schemas']['BugReportDetail'];
+        };
+      };
+    };
+  };
+  player_submissions_check_proposals_list: {
+    parameters: {
+      query?: {
+        /** @description A page number within the paginated result set. */
+        page?: number;
+        /** @description Number of results to return per page. */
+        page_size?: number;
+      };
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['PaginatedCheckProposalDetailList'];
+        };
+      };
+    };
+  };
+  player_submissions_check_proposals_create: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['CheckProposalCreateRequest'];
+      };
+    };
+    responses: {
+      201: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['CheckProposalCreate'];
+        };
+      };
+    };
+  };
+  player_submissions_check_proposals_retrieve: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        /** @description A unique integer value identifying this Check Proposal. */
+        id: number;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['CheckProposalDetail'];
+        };
+      };
+    };
+  };
+  player_submissions_check_proposals_update: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        /** @description A unique integer value identifying this Check Proposal. */
+        id: number;
+      };
+      cookie?: never;
+    };
+    requestBody?: {
+      content: {
+        'application/json': components['schemas']['CheckProposalDetailRequest'];
+      };
+    };
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['CheckProposalDetail'];
+        };
+      };
+    };
+  };
+  player_submissions_check_proposals_partial_update: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        /** @description A unique integer value identifying this Check Proposal. */
+        id: number;
+      };
+      cookie?: never;
+    };
+    requestBody?: {
+      content: {
+        'application/json': components['schemas']['PatchedCheckProposalDetailRequest'];
+      };
+    };
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['CheckProposalDetail'];
         };
       };
     };

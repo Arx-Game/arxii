@@ -381,6 +381,84 @@ returns a bare graded result with no consequences. Telnet: `gm check [find
 `GMApplyConditionAction` (`gm_apply_condition`) round out the GM adjudication toolkit — see
 `docs/systems/INDEX.md` and `docs/roadmap/gm-system.md`.
 
+**Catalog resolve/find/band-validation core (#3295):** the check-ref resolution,
+catalog search/listing, and band validation this action uses were extracted into
+`world.checks.catalog_invocation` — `resolve_check_type_ref`/`search_catalog`/
+`render_catalog_listing`/`resolve_band`/`catalog_queryset` — so every catalog-check
+invocation surface (this SENIOR ad-hoc action, and the player/GM scene surfaces
+below) resolves against the exact same code, never a parallel reimplementation.
+`InvokeCatalogCheckAction` itself is unchanged behaviorally — same messages, same
+gate, same result shape.
+
+---
+
+## Scene Check Invocation (#3295)
+
+**Ruling (Tehom, 2026-08-21):** players roll checks at their own discretion, and
+GMs call for checks — but every check anyone rolls is an authored `CheckType` at a
+`DifficultyChoice` band, never a freeform stat/skill/difficulty invention (the
+same #2118 firewall, restated). When the catalog lacks a fitting check, the answer
+is a proposal, never an on-the-spot invention.
+
+Three loops, all thin `action.run()` dispatchers over the shared
+`world.checks.catalog_invocation` core (`actions/definitions/scene_checks.py`):
+
+- **`SceneSelfCheckAction`** (registry key `scene_self_check`) — any player,
+  SELF-target only. Resolves `check_type_ref` against the catalog scoped to the
+  actor's own `CharacterSheet` (`catalog_queryset(owner_sheet=actor_sheet)` — sees
+  staff-authored rows plus the actor's own synthesized magic `CheckType`, never
+  another character's), fires `perform_check` as-is, and broadcasts a
+  Narrator-style OUTCOME line to the room via `world.scenes.interaction_services
+  .record_interaction` + `render_challenge_outcome_narration` — the roller's own
+  currently-presenting persona names the roll (never the raw character key; the
+  #981 alt-leak rule, since OUTCOME-mode interactions render with no
+  payload-persona name of their own).
+- **`CallForCheckAction`** (`call_for_check`) — JUNIOR+ GM
+  (`MinimumGMLevelPrerequisite`), staff-authored catalog only (no `owner_sheet`
+  scoping — a GM cannot call for a target's private synthesized check). Requires
+  an active scene at the GM's location; creates one `CheckCall` row plus one
+  `CheckCallTarget` row per named target, and broadcasts the call itself to the
+  room. Never rolls anything.
+- **`AnswerCheckCallAction`/`DeclineCheckCallAction`** (`answer_check_call`/
+  `decline_check_call`) — a named target's own one-tap response. Answering
+  dispatches the SAME self-check core, bound to the call's own `check_type`/
+  `band` (the target never picks their own) and marks the `CheckCallTarget` row
+  `ANSWERED`. Declining marks it `DECLINED` quietly (no broadcast) — "declining =
+  not rolling, no mechanical force." Both refuse if the row isn't `PENDING`
+  (already answered/declined, or not this actor's call to answer).
+
+**Models** (`world/checks/models.py`): `CheckCall` (scene FK, `caller_persona`,
+`check_type`, `band`) and `CheckCallTarget` (`call` FK, `target_sheet`, `status`
+— `CheckCallTargetStatus.PENDING`/`ANSWERED`/`DECLINED`, `unique_together =
+["call", "target_sheet"]`). Row existence is the pending prompt; expiry/timeout
+polish is an explicitly deferred follow-up.
+
+**Proposal pipeline** (Decision 4 — never auto-creates a catalog row):
+`ProposeCheckAction` (`propose_check_type`) routes a structured `CheckProposal`
+(`world.player_submissions.models` — `proposed_name`/`intent`/
+`suggested_traits_text`/`situation_text`, no JSON) to the staff inbox via
+`world.player_submissions.services.submit_check_proposal`
+(`SubmissionCategory.CHECK_PROPOSAL`). Staff resolve it
+(`CheckProposalViewSet`, `PATCH /api/player-submissions/check-proposals/<id>/`)
+with `review_notes`; adoption itself — authoring the real `CheckType` row — is a
+separate, manual act through the normal content path.
+
+**Telnet** (`commands/scene_checks.py`): `check` / `check find <term>` (catalog
+browse, scoped to the caller's own sheet) / `check <name> [at <band>]` (self-check
+— an omitted band defaults to `normal` at the telnet layer only, never inside the
+Action) / `check propose <name>=<intent>` / `check answer <call-id>` / `check
+decline <call-id>`; `callcheck <name>=<target1>,<target2> [at <band>]` (GM call).
+
+**Web:** `SelfCheckPanel` + `CheckCallPromptCard`
+(`frontend/src/scenes/components/`), mounted on the scene detail page for any
+active-scene participant; a `Call For Check` tab on `GMAdjudicationPanel` for
+GMs. Reads go through `PlayerCheckTypeViewSet`
+(`GET /api/checks/player-check-types/`, any authenticated player — unlike the
+GM-only `CheckTypeViewSet`) and `CheckCallTargetViewSet`
+(`GET /api/checks/check-call-targets/`, the requesting player's own pending
+prompts). All mutations dispatch through the generic REGISTRY action-dispatch
+seam (`useDispatchPlayerAction`), never a bespoke POST endpoint.
+
 ---
 
 ## Quick-Placing an Authored Challenge (#2865)

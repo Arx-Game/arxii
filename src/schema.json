@@ -5323,6 +5323,57 @@ paths:
       responses:
         '200':
           description: No response body
+  /api/checks/check-call-targets/:
+    get:
+      operationId: checks_check_call_targets_list
+      description: |-
+        Read-only inbox of the requesting player's pending ``CheckCall`` prompts (#3295).
+
+        Mirrors ``GMSummonOfferViewSet``'s shape: answer/decline are NOT DRF actions
+        here -- they dispatch through the generic REGISTRY action-dispatch endpoint
+        (``answer_check_call``/``decline_check_call``), the seam telnet's ``check
+        answer``/``check decline`` also reaches.
+      tags:
+      - checks
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/CheckCallTarget'
+          description: ''
+  /api/checks/check-call-targets/{id}/:
+    get:
+      operationId: checks_check_call_targets_retrieve
+      description: |-
+        Read-only inbox of the requesting player's pending ``CheckCall`` prompts (#3295).
+
+        Mirrors ``GMSummonOfferViewSet``'s shape: answer/decline are NOT DRF actions
+        here -- they dispatch through the generic REGISTRY action-dispatch endpoint
+        (``answer_check_call``/``decline_check_call``), the seam telnet's ``check
+        answer``/``check decline`` also reaches.
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: A unique integer value identifying this check call target.
+        required: true
+      tags:
+      - checks
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CheckCallTarget'
+          description: ''
   /api/checks/check-types/:
     get:
       operationId: checks_check_types_list
@@ -5510,6 +5561,84 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ConsequenceOutcome'
+          description: ''
+  /api/checks/player-check-types/:
+    get:
+      operationId: checks_player_check_types_list
+      description: |-
+        Read-only catalog browse for the player-facing roll picker (#3295).
+
+        Open to any authenticated player -- unlike ``CheckTypeViewSet`` (GM-only,
+        staff-authored rows only), this is the "easy to find is the feature"
+        discovery surface every player's own self-check roll picker uses. An
+        optional ``character_id`` query param, when it resolves to a character the
+        requesting account currently plays (validated the same way
+        ``CanCreatePersonaInScene`` validates ownership), additionally surfaces
+        that character's own synthesized magic ``CheckType`` row -- never another
+        character's (``catalog_queryset``'s existing owner_sheet scope).
+      parameters:
+      - in: query
+        name: category
+        schema:
+          type: string
+      - name: page
+        required: false
+        in: query
+        description: A page number within the paginated result set.
+        schema:
+          type: integer
+      - name: page_size
+        required: false
+        in: query
+        description: Number of results to return per page.
+        schema:
+          type: integer
+      - in: query
+        name: search
+        schema:
+          type: string
+      tags:
+      - checks
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaginatedCheckTypeList'
+          description: ''
+  /api/checks/player-check-types/{id}/:
+    get:
+      operationId: checks_player_check_types_retrieve
+      description: |-
+        Read-only catalog browse for the player-facing roll picker (#3295).
+
+        Open to any authenticated player -- unlike ``CheckTypeViewSet`` (GM-only,
+        staff-authored rows only), this is the "easy to find is the feature"
+        discovery surface every player's own self-check roll picker uses. An
+        optional ``character_id`` query param, when it resolves to a character the
+        requesting account currently plays (validated the same way
+        ``CanCreatePersonaInScene`` validates ownership), additionally surfaces
+        that character's own synthesized magic ``CheckType`` row -- never another
+        character's (``catalog_queryset``'s existing owner_sheet scope).
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: A unique integer value identifying this check type.
+        required: true
+      tags:
+      - checks
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CheckType'
           description: ''
   /api/classes/aspects/:
     get:
@@ -25947,6 +26076,168 @@ paths:
               schema:
                 $ref: '#/components/schemas/BugReportDetail'
           description: ''
+  /api/player-submissions/check-proposals/:
+    get:
+      operationId: player_submissions_check_proposals_list
+      description: |-
+        Staff triage of proposed new ``CheckType`` rows (#3295).
+
+        Create is open to any authenticated player (the catalog-only ruling's
+        proposal pipeline is for players AND GMs, not staff-gated); list/retrieve/
+        update stay staff-only via ``_SubmissionViewSetMixin``, same shape as
+        ``BugReportViewSet``/``PlayerReportViewSet``. Adoption is a manual, separate
+        act (staff author the real ``CheckType`` through the normal content path) —
+        this endpoint only tracks the proposal's own review status.
+      parameters:
+      - name: page
+        required: false
+        in: query
+        description: A page number within the paginated result set.
+        schema:
+          type: integer
+      - name: page_size
+        required: false
+        in: query
+        description: Number of results to return per page.
+        schema:
+          type: integer
+      tags:
+      - player-submissions
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaginatedCheckProposalDetailList'
+          description: ''
+    post:
+      operationId: player_submissions_check_proposals_create
+      description: |-
+        Staff triage of proposed new ``CheckType`` rows (#3295).
+
+        Create is open to any authenticated player (the catalog-only ruling's
+        proposal pipeline is for players AND GMs, not staff-gated); list/retrieve/
+        update stay staff-only via ``_SubmissionViewSetMixin``, same shape as
+        ``BugReportViewSet``/``PlayerReportViewSet``. Adoption is a manual, separate
+        act (staff author the real ``CheckType`` through the normal content path) —
+        this endpoint only tracks the proposal's own review status.
+      tags:
+      - player-submissions
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CheckProposalCreateRequest'
+        required: true
+      security:
+      - cookieAuth: []
+      responses:
+        '201':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CheckProposalCreate'
+          description: ''
+  /api/player-submissions/check-proposals/{id}/:
+    get:
+      operationId: player_submissions_check_proposals_retrieve
+      description: |-
+        Staff triage of proposed new ``CheckType`` rows (#3295).
+
+        Create is open to any authenticated player (the catalog-only ruling's
+        proposal pipeline is for players AND GMs, not staff-gated); list/retrieve/
+        update stay staff-only via ``_SubmissionViewSetMixin``, same shape as
+        ``BugReportViewSet``/``PlayerReportViewSet``. Adoption is a manual, separate
+        act (staff author the real ``CheckType`` through the normal content path) —
+        this endpoint only tracks the proposal's own review status.
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: A unique integer value identifying this Check Proposal.
+        required: true
+      tags:
+      - player-submissions
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CheckProposalDetail'
+          description: ''
+    put:
+      operationId: player_submissions_check_proposals_update
+      description: |-
+        Staff triage of proposed new ``CheckType`` rows (#3295).
+
+        Create is open to any authenticated player (the catalog-only ruling's
+        proposal pipeline is for players AND GMs, not staff-gated); list/retrieve/
+        update stay staff-only via ``_SubmissionViewSetMixin``, same shape as
+        ``BugReportViewSet``/``PlayerReportViewSet``. Adoption is a manual, separate
+        act (staff author the real ``CheckType`` through the normal content path) —
+        this endpoint only tracks the proposal's own review status.
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: A unique integer value identifying this Check Proposal.
+        required: true
+      tags:
+      - player-submissions
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CheckProposalDetailRequest'
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CheckProposalDetail'
+          description: ''
+    patch:
+      operationId: player_submissions_check_proposals_partial_update
+      description: |-
+        Staff triage of proposed new ``CheckType`` rows (#3295).
+
+        Create is open to any authenticated player (the catalog-only ruling's
+        proposal pipeline is for players AND GMs, not staff-gated); list/retrieve/
+        update stay staff-only via ``_SubmissionViewSetMixin``, same shape as
+        ``BugReportViewSet``/``PlayerReportViewSet``. Adoption is a manual, separate
+        act (staff author the real ``CheckType`` through the normal content path) —
+        this endpoint only tracks the proposal's own review status.
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: A unique integer value identifying this Check Proposal.
+        required: true
+      tags:
+      - player-submissions
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PatchedCheckProposalDetailRequest'
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CheckProposalDetail'
+          description: ''
   /api/player-submissions/feedback/:
     get:
       operationId: player_submissions_feedback_list
@@ -41215,15 +41506,214 @@ components:
         * `dying` - dying
         * `incapacitated` - incapacitated
         * `dead` - dead
+    CheckCallTarget:
+      type: object
+      description: |-
+        Read-only payload for one of the requesting player's pending check calls (#3295).
+
+        Mirrors ``GMSummonOfferSerializer``'s shape: answer/decline dispatch through
+        the generic REGISTRY action-dispatch endpoint (``answer_check_call``/
+        ``decline_check_call``) rather than a DRF action here.
+      properties:
+        id:
+          type: integer
+          readOnly: true
+        call_id:
+          type: integer
+          readOnly: true
+        check_type_name:
+          type: string
+          readOnly: true
+        band:
+          type: string
+          readOnly: true
+        band_label:
+          type: string
+          readOnly: true
+        caller_display_name:
+          type: string
+          readOnly: true
+        scene_id:
+          type: integer
+          readOnly: true
+        created_at:
+          type: string
+          format: date-time
+          readOnly: true
+      required:
+      - band
+      - band_label
+      - call_id
+      - caller_display_name
+      - check_type_name
+      - created_at
+      - id
+      - scene_id
+    CheckProposalCreate:
+      type: object
+      description: Frontend supplies ``submitted_by_persona``; the account is server-derived
+        (#3295).
+      properties:
+        submitted_by_persona:
+          type: integer
+          description: The persona the submitter was wearing when proposing.
+        proposed_name:
+          type: string
+          description: The check's proposed name (e.g. 'Riverside Tracking').
+          maxLength: 100
+        intent:
+          type: string
+          description: What this check is meant to cover -- the gap in the catalog.
+        suggested_traits_text:
+          type: string
+          description: Suggested stat+skill pairing in plain text (e.g. 'Perception
+            + Survival'). Advisory only -- no live Trait FK exists until staff author
+            the real row.
+          maxLength: 200
+        situation_text:
+          type: string
+          description: The situation this check would serve -- when someone would
+            roll it.
+        scene:
+          type: integer
+          nullable: true
+          description: The scene the proposal arose in, if any.
+      required:
+      - intent
+      - proposed_name
+      - situation_text
+      - submitted_by_persona
+    CheckProposalCreateRequest:
+      type: object
+      description: Frontend supplies ``submitted_by_persona``; the account is server-derived
+        (#3295).
+      properties:
+        submitted_by_persona:
+          type: integer
+          description: The persona the submitter was wearing when proposing.
+        proposed_name:
+          type: string
+          minLength: 1
+          description: The check's proposed name (e.g. 'Riverside Tracking').
+          maxLength: 100
+        intent:
+          type: string
+          minLength: 1
+          description: What this check is meant to cover -- the gap in the catalog.
+        suggested_traits_text:
+          type: string
+          description: Suggested stat+skill pairing in plain text (e.g. 'Perception
+            + Survival'). Advisory only -- no live Trait FK exists until staff author
+            the real row.
+          maxLength: 200
+        situation_text:
+          type: string
+          minLength: 1
+          description: The situation this check would serve -- when someone would
+            roll it.
+        scene:
+          type: integer
+          nullable: true
+          description: The scene the proposal arose in, if any.
+      required:
+      - intent
+      - proposed_name
+      - situation_text
+      - submitted_by_persona
+    CheckProposalDetail:
+      type: object
+      description: 'Staff-inbox detail view: adopt/decline with review notes (#3295).'
+      properties:
+        id:
+          type: integer
+          readOnly: true
+        submitted_by_account:
+          type: integer
+          readOnly: true
+          description: OOC authoring, not IC -- mirrors PlayerFeedback.reporter_account.
+        submitted_by_account_username:
+          type: string
+          readOnly: true
+        submitted_by_persona:
+          type: integer
+          readOnly: true
+          description: The persona the submitter was wearing when proposing.
+        submitted_by_persona_name:
+          type: string
+          readOnly: true
+        proposed_name:
+          type: string
+          readOnly: true
+          description: The check's proposed name (e.g. 'Riverside Tracking').
+        intent:
+          type: string
+          readOnly: true
+          description: What this check is meant to cover -- the gap in the catalog.
+        suggested_traits_text:
+          type: string
+          readOnly: true
+          description: Suggested stat+skill pairing in plain text (e.g. 'Perception
+            + Survival'). Advisory only -- no live Trait FK exists until staff author
+            the real row.
+        situation_text:
+          type: string
+          readOnly: true
+          description: The situation this check would serve -- when someone would
+            roll it.
+        scene:
+          type: integer
+          readOnly: true
+          nullable: true
+          description: The scene the proposal arose in, if any.
+        status:
+          $ref: '#/components/schemas/StatusD66Enum'
+        reviewer:
+          type: integer
+          readOnly: true
+          nullable: true
+          description: Staff account that reviewed this proposal.
+        review_notes:
+          type: string
+        created_at:
+          type: string
+          format: date-time
+          readOnly: true
+        resolved_at:
+          type: string
+          format: date-time
+          readOnly: true
+          nullable: true
+      required:
+      - created_at
+      - id
+      - intent
+      - proposed_name
+      - resolved_at
+      - reviewer
+      - scene
+      - situation_text
+      - submitted_by_account
+      - submitted_by_account_username
+      - submitted_by_persona
+      - submitted_by_persona_name
+      - suggested_traits_text
+    CheckProposalDetailRequest:
+      type: object
+      description: 'Staff-inbox detail view: adopt/decline with review notes (#3295).'
+      properties:
+        status:
+          $ref: '#/components/schemas/StatusD66Enum'
+        review_notes:
+          type: string
     CheckType:
       type: object
       description: |-
         Read-only catalog listing for the web GM check-invocation picker (#3070).
 
-        Mirrors ``InvokeCatalogCheckAction``'s own catalog rendering
-        (``_check_type_summary``/``_format_catalog_row`` in
-        ``actions/definitions/gm_adjudication.py``) so the web picker shows the same
-        stat+skill trait pairing a GM sees via telnet ``gm check find``.
+        Mirrors the shared catalog rendering (``check_type_summary``/
+        ``format_catalog_row`` in ``world.checks.catalog_invocation``, #3295) so the
+        web picker shows the same stat+skill trait pairing a GM sees via telnet
+        ``gm check find``.
       properties:
         id:
           type: integer
@@ -56011,6 +56501,29 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/CharacterRelationshipList'
+    PaginatedCheckProposalDetailList:
+      type: object
+      required:
+      - count
+      - results
+      properties:
+        count:
+          type: integer
+          example: 123
+        next:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=4
+        previous:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=2
+        results:
+          type: array
+          items:
+            $ref: '#/components/schemas/CheckProposalDetail'
     PaginatedCheckTypeList:
       type: object
       required:
@@ -60566,6 +61079,14 @@ components:
         flavor_text:
           type: string
           description: Optional player-defined description of how this resonance manifests.
+    PatchedCheckProposalDetailRequest:
+      type: object
+      description: 'Staff-inbox detail view: adopt/decline with review notes (#3295).'
+      properties:
+        status:
+          $ref: '#/components/schemas/StatusD66Enum'
+        review_notes:
+          type: string
     PatchedCovenantRankRequest:
       type: object
       description: |-

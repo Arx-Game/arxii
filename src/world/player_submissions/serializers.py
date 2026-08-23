@@ -15,6 +15,7 @@ from world.player_submissions.github_issues import (
 )
 from world.player_submissions.models import (
     BugReport,
+    CheckProposal,
     Petition,
     PlayerFeedback,
     PlayerReport,
@@ -416,3 +417,68 @@ class PetitionCreateSerializer(serializers.Serializer):
     subject_character = serializers.PrimaryKeyRelatedField(
         queryset=ObjectDB.objects.all(), required=False, allow_null=True
     )
+
+
+class CheckProposalCreateSerializer(serializers.ModelSerializer):
+    """Frontend supplies ``submitted_by_persona``; the account is server-derived (#3295)."""
+
+    class Meta:
+        model = CheckProposal
+        fields = [
+            "submitted_by_persona",
+            "proposed_name",
+            "intent",
+            "suggested_traits_text",
+            "situation_text",
+            "scene",
+        ]
+
+    def validate_submitted_by_persona(self, value: Persona) -> Persona:
+        account = self.context["account"]
+        return _validate_owned_persona(value, account.pk)
+
+
+class CheckProposalDetailSerializer(serializers.ModelSerializer):
+    """Staff-inbox detail view: adopt/decline with review notes (#3295)."""
+
+    submitted_by_account_username = serializers.CharField(
+        source="submitted_by_account.username",
+        read_only=True,
+    )
+    submitted_by_persona_name = serializers.CharField(
+        source="submitted_by_persona.name",
+        read_only=True,
+    )
+
+    class Meta:
+        model = CheckProposal
+        fields = [
+            "id",
+            "submitted_by_account",
+            "submitted_by_account_username",
+            "submitted_by_persona",
+            "submitted_by_persona_name",
+            "proposed_name",
+            "intent",
+            "suggested_traits_text",
+            "situation_text",
+            "scene",
+            "status",
+            "reviewer",
+            "review_notes",
+            "created_at",
+            "resolved_at",
+        ]
+        read_only_fields = [
+            "id",
+            "submitted_by_account",
+            "submitted_by_persona",
+            "proposed_name",
+            "intent",
+            "suggested_traits_text",
+            "situation_text",
+            "scene",
+            "reviewer",
+            "created_at",
+            "resolved_at",
+        ]
