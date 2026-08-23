@@ -296,7 +296,13 @@ after the box itself is provisioned, the app_deploy role runs (in order):
    service user, in the `arxii.slice` cgroup with the memory cap from
    `base_game_memory_max`). On subsequent deploys it `reloads` instead
    of restarting, so the Portal keeps connected players online across
-   code/deps/migration changes.
+   code/deps/migration changes. The reload is hardened two ways
+   (2026-08-23 standup failure): it survives a dropped SSH connection
+   (ignore-unreachable + reconnect + retry), and "needs a reload" is
+   re-derived from a host-side stamp file (`app_reload_stamp`, written
+   only after a post-reload health check against the localhost backend
+   succeeds) — so a run that dies on the reload task is fixed by simply
+   pressing the button again; the re-run cannot silently skip the reload.
 
 What the button **does not** do (deliberately, by-design):
 - It does not load any game-content fixtures. The plan is to load those

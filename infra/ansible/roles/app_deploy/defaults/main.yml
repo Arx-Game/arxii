@@ -72,6 +72,17 @@ app_frontend_dist_index: "{{ app_release_dir }}/src/web/static/dist/index.html"
 # makes a toolchain-pin bump also force a rebuild.
 app_frontend_toolchain_marker: "{{ app_release_dir }}/src/web/static/dist/.arxii-toolchain"
 
+# Reload hardening (2026-08-23 standup failure: the SSH connection died on
+# the reload task itself and a re-converge would have silently skipped it).
+# Localhost web backend the post-reload health check polls. MUST equal
+# roles/caddy/defaults/main.yml's caddy_backend — same "two roles pinned
+# equal" idiom as app_secret_settings_src above; acceptance.sh pins them.
+app_web_backend: "127.0.0.1:4001"
+# Written (the deployed SHA) only AFTER a reload has passed the health
+# check. Compared on every converge, so a run that died mid-reload gets the
+# reload re-fired by the next button press instead of silently skipped.
+app_reload_stamp: /opt/arxii/reloaded_sha
+
 # First-run Django/Evennia superuser. Username + email are operator choices
 # (set via Environment Variables on the workflow); the password comes from
 # the gated Environment Secret ARXII_DJANGO_SUPERUSER_PASSWORD and is

@@ -126,6 +126,16 @@ chk   "app_deploy migrate runs detached (survives an SSH drop)" \
   "grep -q 'async: \"{{ app_migrate_async_timeout }}\"' infra/ansible/roles/app_deploy/tasks/main.yml"
 chk   "ansible.cfg sets SSH keepalives for long silent tasks" \
   "grep -q 'ServerAliveInterval=30' infra/ansible/ansible.cfg"
+# 2026-08-23: the reload must survive an SSH drop (ignore_unreachable +
+# retry) AND be re-derivable on a re-run (stamp written only after the
+# health check), or a run that dies on the reload leaves the Server on
+# pre-deploy code with the next converge reporting green.
+chk   "app_deploy reload survives an SSH drop (ignore_unreachable + retry)" \
+  "grep -q 'ignore_unreachable: true' infra/ansible/roles/app_deploy/tasks/main.yml && grep -q 'Retry the reload after a reconnect' infra/ansible/roles/app_deploy/tasks/main.yml"
+chk   "app_deploy stamps the reloaded SHA after a health check" \
+  "grep -q 'app_reload_stamp' infra/ansible/roles/app_deploy/tasks/main.yml && grep -q 'Wait until the reloaded Server answers' infra/ansible/roles/app_deploy/tasks/main.yml"
+chk   "app_deploy's health-check backend == caddy's caddy_backend" \
+  "[ \"\$(sed -n 's/^app_web_backend: //p' infra/ansible/roles/app_deploy/defaults/main.yml)\" = \"\$(sed -n 's/^caddy_backend: //p' infra/ansible/roles/caddy/defaults/main.yml | sed 's/ *#.*//')\" ]"
 chk   "app_deploy guards superuser create with an exists-check (idempotent)" \
   "grep -q 'is_superuser=True' infra/ansible/roles/app_deploy/tasks/main.yml && grep -q \"'YES' not in\" infra/ansible/roles/app_deploy/tasks/main.yml"
 chk   "secrets_vault maps ARXII_DJANGO_SUPERUSER_PASSWORD -> DJANGO_SUPERUSER_PASSWORD" \
