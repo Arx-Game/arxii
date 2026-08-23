@@ -71082,6 +71082,10 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/WorldBuilderPortalAnchor'
+        desc_variants:
+          type: array
+          items:
+            $ref: '#/components/schemas/WorldBuilderRoomDescVariant'
         grants:
           type: array
           items:
@@ -71092,6 +71096,7 @@ components:
       - clue_triggers
       - clues
       - default_blueprint
+      - desc_variants
       - description
       - enclosure
       - exported_at
@@ -75437,12 +75442,17 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/WorldBuilderPortalAnchor'
+        desc_variants:
+          type: array
+          items:
+            $ref: '#/components/schemas/WorldBuilderRoomDescVariant'
       required:
       - ambient_counts
       - area_id
       - clue_triggers
       - clues
       - default_blueprint
+      - desc_variants
       - description
       - enclosure
       - exported_at
@@ -75488,6 +75498,25 @@ components:
       - detect_difficulty
       - fixture_key
       - id
+    WorldBuilderRoomDescVariant:
+      type: object
+      description: One authored season/phase description variant (#3291).
+      properties:
+        id:
+          type: integer
+        season:
+          type: string
+          nullable: true
+        phase:
+          type: string
+          nullable: true
+        description:
+          type: string
+      required:
+      - description
+      - id
+      - phase
+      - season
     WorldBuilderRoomDetail:
       type: object
       description: 'Selection-time room detail (#3269): exit profiles + comfort breakdown.'

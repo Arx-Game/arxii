@@ -5,7 +5,7 @@ import django.db.models.deletion
 
 
 class Migration(migrations.Migration):
-    dependencies = [("arxii", "0163_interaction_attributed_companion")]
+    dependencies = [("arxii", "0164_roomdescvariant")]
 
     operations = [
         migrations.CreateModel(
