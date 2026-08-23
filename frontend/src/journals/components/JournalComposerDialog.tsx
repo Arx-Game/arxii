@@ -28,8 +28,16 @@ import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
 import { Switch } from '@/components/ui/switch';
 import { Textarea } from '@/components/ui/textarea';
+import type { PosthumousOverride } from '../api';
 import { useCreateJournalEntry } from '../queries';
 
 interface JournalComposerDialogProps {
@@ -45,6 +53,9 @@ export function JournalComposerDialog({ open, onClose, initialTags }: JournalCom
   const [isPublic, setIsPublic] = useState(false);
   const [tags, setTags] = useState<string[]>([]);
   const [tagDraft, setTagDraft] = useState('');
+  // Per-entry posthumous override (#3287) -- INHERIT (default) falls through to the
+  // character's sheet-level disposition; only meaningful while the entry stays private.
+  const [posthumousOverride, setPosthumousOverride] = useState<PosthumousOverride>('inherit');
 
   const createEntry = useCreateJournalEntry();
 
@@ -60,6 +71,7 @@ export function JournalComposerDialog({ open, onClose, initialTags }: JournalCom
       setIsPublic(false);
       setTags(initialTags ?? []);
       setTagDraft('');
+      setPosthumousOverride('inherit');
     }
     wasOpenRef.current = open;
   }, [open, initialTags]);
@@ -90,18 +102,26 @@ export function JournalComposerDialog({ open, onClose, initialTags }: JournalCom
 
   function handleSubmit() {
     if (!title.trim() || !body.trim() || createEntry.isPending) return;
-    createEntry.mutate(
-      { title: title.trim(), body, is_public: isPublic, tags },
-      {
-        onSuccess: () => {
-          toast.success('Journal entry recorded.');
-          onClose();
-        },
-        onError: (err) => {
-          toast.error(err instanceof Error ? err.message : 'Failed to post journal entry');
-        },
-      }
-    );
+    // Omit the field entirely at the INHERIT default -- never send a no-op override.
+    const payload =
+      posthumousOverride === 'inherit'
+        ? { title: title.trim(), body, is_public: isPublic, tags }
+        : {
+            title: title.trim(),
+            body,
+            is_public: isPublic,
+            tags,
+            posthumous_override: posthumousOverride,
+          };
+    createEntry.mutate(payload, {
+      onSuccess: () => {
+        toast.success('Journal entry recorded.');
+        onClose();
+      },
+      onError: (err) => {
+        toast.error(err instanceof Error ? err.message : 'Failed to post journal entry');
+      },
+    });
   }
 
   const canSubmit = title.trim().length > 0 && body.trim().length > 0 && !createEntry.isPending;
@@ -140,6 +160,24 @@ export function JournalComposerDialog({ open, onClose, initialTags }: JournalCom
             <Label htmlFor="journal-public">Public</Label>
             <Switch id="journal-public" checked={isPublic} onCheckedChange={setIsPublic} />
           </div>
+          {!isPublic ? (
+            <div className="space-y-2">
+              <Label htmlFor="journal-disposition">After your death</Label>
+              <Select
+                value={posthumousOverride}
+                onValueChange={(val) => setPosthumousOverride(val as PosthumousOverride)}
+              >
+                <SelectTrigger id="journal-disposition">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="inherit">Use my character's default</SelectItem>
+                  <SelectItem value="reveal">Reveal this entry</SelectItem>
+                  <SelectItem value="seal">Seal this entry forever</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+          ) : null}
           <div className="space-y-2">
             <Label htmlFor="journal-tag-input">Tags</Label>
             {tags.length > 0 ? (

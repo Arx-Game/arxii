@@ -304,6 +304,19 @@ class ProfileTextField(models.TextChoices):
     PERSONALITY = "personality", "Personality"
 
 
+class PosthumousJournalDisposition(models.TextChoices):
+    """Author-controlled default for what happens to private journal entries after death (#3287).
+
+    REVEAL is the default — the Arx I black-journal precedent (a private journal became the
+    historical record once its author died). SEAL keeps everything private buried forever. A
+    per-entry ``JournalEntry.posthumous_override`` (INHERIT/REVEAL/SEAL) can override this
+    default for individual entries; INHERIT falls through to this field.
+    """
+
+    REVEAL = "reveal", "Reveal after death (default)"
+    SEAL = "seal", "Seal forever"
+
+
 class MaritalStatus(models.TextChoices):
     """Marital status choices for characters."""
 

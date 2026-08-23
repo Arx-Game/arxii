@@ -1564,6 +1564,8 @@
   - original_reclamation_claims <- items.ReclamationClaim
   - journal_entries <- journals.JournalEntry
   - weekly_journal_xp <- journals.WeeklyJournalXP
+  - journal_bequests_received <- journals.JournalBequestGrant
+  - journal_bequests_granted <- journals.JournalBequestGrant
   - frame_jobs_against <- justice.FrameJobDetails
   - denouncements_made <- justice.DenounceRecord
   - commanded_military_units <- military.MilitaryUnit
@@ -3493,6 +3495,8 @@
   - character_sheet -> character_sheets.CharacterSheet [OneToOne]
 **Pointed to by:**
   - claims <- estates.EstateClaim
+  - revealed_journal_entries <- journals.JournalEntry
+  - journal_bequest_grants <- journals.JournalBequestGrant
 
 ### Will
 **Foreign Keys:**
@@ -4606,10 +4610,17 @@
 
 ## world.journals
 
+### JournalBequestGrant
+**Foreign Keys:**
+  - recipient_sheet -> character_sheets.CharacterSheet [FK]
+  - deceased_sheet -> character_sheets.CharacterSheet [FK]
+  - created_by_settlement -> estates.EstateSettlement [FK]
+
 ### JournalEntry
 **Foreign Keys:**
   - author -> character_sheets.CharacterSheet [FK]
   - parent -> journals.JournalEntry [FK] (nullable)
+  - revealed_by_settlement -> estates.EstateSettlement [FK] (nullable)
   - related_threads -> magic.Thread [M2M]
 **Pointed to by:**
   - responses <- journals.JournalEntry
@@ -4626,12 +4637,18 @@
 
 ### Service Functions
 - `award_xp(account: 'AccountDB', amount: 'int', reason: 'str' = ProgressionReason.SYSTEM_AWARD, description: 'str' = '', gm: 'AccountDB | None' = None) -> 'XPTransaction' - Award XP to an account.`
-- `create_journal_entry(*, author: 'CharacterSheet', title: 'str', body: 'str', is_public: 'bool', tags: 'list[str] | None' = None) -> 'JournalEntry' - Create a journal entry and award weekly XP.`
+- `create_journal_entry(*, author: 'CharacterSheet', title: 'str', body: 'str', is_public: 'bool', tags: 'list[str] | None' = None, posthumous_override: 'str' = PosthumousOverride.INHERIT) -> 'JournalEntry' - Create a journal entry and award weekly XP.`
 - `create_journal_response(*, author: 'CharacterSheet', parent: 'JournalEntry', response_type: 'ResponseType', title: 'str', body: 'str') -> 'JournalEntry' - Create a praise or retort response to a journal entry.`
-- `edit_journal_entry(*, entry: 'JournalEntry', title: 'str | None' = None, body: 'str | None' = None) -> 'JournalEntry' - Edit an existing journal entry. Sets edited_at timestamp.`
+- `edit_journal_entry(*, entry: 'JournalEntry', title: 'str | None' = None, body: 'str | None' = None, posthumous_override: 'str | None' = None) -> 'JournalEntry' - Edit an existing journal entry. Sets edited_at timestamp for title/body edits.`
+- `entry_visible_via_bequest(entry: 'JournalEntry', viewer_sheet: 'CharacterSheet | None') -> 'bool' - Whether ``viewer_sheet`` may read ``entry`` under a bequest grant (retrieve path).`
 - `exclude_blocked_and_muted_authors(queryset: 'QuerySet[JournalEntry]', *, viewer_account: 'Any') -> 'QuerySet[JournalEntry]' - Exclude blocked/muted authors' entries from a journal feed queryset (#2996 Decision 2).`
+- `grant_journal_bequest(*, recipient_sheet: 'CharacterSheet', deceased_sheet: 'CharacterSheet', settlement: 'EstateSettlement') -> 'JournalBequestGrant' - Grant read access to a deceased sheet's non-sealed private entries (#3287 Decision 3).`
+- `has_journal_bequest_grant(*, recipient_sheet: 'CharacterSheet', deceased_sheet_id: 'int') -> 'bool' - Whether ``recipient_sheet`` holds a bequest grant over ``deceased_sheet_id``'s writings.`
 - `increment_stat(character_sheet: 'CharacterSheet', stat: 'StatDefinition', amount: 'int' = 1) -> 'int' - Increment a stat tracker (create if needed) and check for achievements.`
 - `player_for_sheet(sheet: 'CharacterSheet') -> 'PlayerData | None' - The PlayerData currently playing this character sheet, or None (#2996).`
+- `reveal_journals_for_settlement(sheet: 'CharacterSheet', settlement: 'EstateSettlement') -> 'int' - Stamp ``revealed_at``/``revealed_by_settlement`` on the sheet's REVEAL-effective`
+- `sealed_effective_q() -> 'Q' - A ``Q`` matching ``JournalEntry`` rows whose EFFECTIVE posthumous disposition is SEAL.`
+- `set_sheet_posthumous_disposition(*, sheet: 'CharacterSheet', disposition: 'str') -> 'CharacterSheet' - Set a character's sheet-level default posthumous journal disposition (#3287).`
 
 
 ## world.justice
