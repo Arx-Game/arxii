@@ -303,6 +303,10 @@ after the box itself is provisioned, the app_deploy role runs (in order):
    only after a post-reload health check against the localhost backend
    succeeds) — so a run that dies on the reload task is fixed by simply
    pressing the button again; the re-run cannot silently skip the reload.
+   If the reload itself *fails* (a wedged Server can block a graceful
+   reload forever — the 2026-08-23 dead-DB-connection incident), the play
+   falls back to a full `systemctl restart`: players drop on that path
+   only, and the deploy still lands.
 
 What the button **does not** do (deliberately, by-design):
 - It does not load any game-content fixtures. The plan is to load those

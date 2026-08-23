@@ -451,33 +451,56 @@
          or (app_reload_stamp_read.content | default('') | b64decode | trim)
             != app_checkout.after }}
 
-# async/poll: the reload blocks for the full Server restart (minutes) with
-# no output; detached-plus-poll keeps the SSH path active every 15 s instead
-# of one long silent block. 600 s comfortably exceeds systemd's own
-# TimeoutStartSec=300 cap on ExecReload, so a genuinely hung reload is
-# failed by systemd (loudly, as a task failure) before the async limit.
-- name: Reload Evennia on a code / deps / migration change (Portal keeps players connected)
-  ansible.builtin.systemd_service:
-    name: "{{ app_service }}"
-    state: reloaded
+# Reload, falling back to a full restart if the reload FAILS. The fallback
+# exists because a reload needs the running Server's cooperation and a
+# wedged Server can withhold it forever: on 2026-08-23 the old Server's
+# main-thread DB connection had died under it (Postgres restart days into
+# its uptime), Evennia's shutdown() raised OperationalError on its very
+# first statement, the Server never stopped, and four consecutive deploys
+# stranded while `evennia reload` waited for a shutdown that could not
+# happen. A restart needs no cooperation: graceful stop is attempted, the
+# stop-timeout SIGKILLs the whole cgroup (sweeping any hung `evennia
+# reload` launchers too), ExecStopPost clears twistd stragglers, and
+# ExecStart brings up the new release cold. Players drop on the fallback
+# path only — acceptable next to a deploy that otherwise cannot land.
+#
+# async/poll on every job: the reload/restart blocks for the full Server
+# restart (minutes) with no output; detached-plus-poll keeps the SSH path
+# active every 15 s instead of one long silent block. 600 s comfortably
+# exceeds systemd's own TimeoutStartSec=300 cap on ExecReload, so a hung
+# reload is failed by systemd (loudly) before the async limit; 900 s on the
+# restart covers stop-timeout + kill + a slow cold start.
+- name: Reload Evennia, restarting instead if the Server cannot cooperate
   when: app_needs_reload | bool
-  register: app_reload
-  ignore_unreachable: true
-  async: 600
-  poll: 15
+  block:
+    - name: Reload Evennia on a code / deps / migration change (Portal keeps players connected)
+      ansible.builtin.systemd_service:
+        name: "{{ app_service }}"
+        state: reloaded
+      register: app_reload
+      ignore_unreachable: true
+      async: 600
+      poll: 15
 
-- name: Reconnect if the SSH channel dropped mid-reload
-  ansible.builtin.wait_for_connection:
-    timeout: 300
-  when: (app_needs_reload | bool) and (app_reload.unreachable | default(false))
+    - name: Reconnect if the SSH channel dropped mid-reload
+      ansible.builtin.wait_for_connection:
+        timeout: 300
+      when: app_reload.unreachable | default(false)
 
-- name: Retry the reload after a reconnect (idempotent; systemd finishes an accepted job anyway)
-  ansible.builtin.systemd_service:
-    name: "{{ app_service }}"
-    state: reloaded
-  when: (app_needs_reload | bool) and (app_reload.unreachable | default(false))
-  async: 600
-  poll: 15
+    - name: Retry the reload after a reconnect (idempotent; systemd finishes an accepted job anyway)
+      ansible.builtin.systemd_service:
+        name: "{{ app_service }}"
+        state: reloaded
+      when: app_reload.unreachable | default(false)
+      async: 600
+      poll: 15
+  rescue:
+    - name: Fall back to a full restart (wedged Server; players drop, deploy lands)
+      ansible.builtin.systemd_service:
+        name: "{{ app_service }}"
+        state: restarted
+      async: 900
+      poll: 15
 
 # Direct to the localhost-bound backend (not through Caddy/Cloudflare), with
 # the real Host header — django_hardening's ALLOWED_HOSTS rejects a bare
