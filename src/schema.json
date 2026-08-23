@@ -11075,6 +11075,7 @@ paths:
           - coin_amount
           - residuary
           - specific_item
+          - writings
         description: |-
           * `specific_item` - Specific Item
           * `coin_amount` - Coin Amount
@@ -11082,6 +11083,7 @@ paths:
           * `building` - Building
           * `business` - Business
           * `residuary` - Residuary (everything else)
+          * `writings` - Writings (Private Journal Corpus)
       - name: page
         required: false
         in: query
@@ -16215,14 +16217,18 @@ paths:
     get:
       operationId: journals_entries_retrieve
       description: |-
-        List public journal entries.
+        List public journal entries, or (with ``?deceased=``) a bequeathed corpus.
 
-        Supports query params:
+        Supports query params (all handled by ``JournalEntryFilter``):
         - ?author=<character_id> — filter by author
         - ?tag=<tag_name> — filter by tag name
+        - ?deceased=<character_sheet_id> — browse a deceased sheet's non-sealed private
+          entries, ONLY when the caller holds a ``JournalBequestGrant`` for that sheet
+          (#3287 Decision 3, gated in ``JournalEntryFilter.filter_deceased`` per
+          ``tools/lint_use_filterset.py``). Empty when no grant exists — never a permission
+          error, so a probing id can't confirm whether a grant exists for someone else.
 
-        Blocked/muted authors' entries are excluded (#2996 Decision 2) — see
-        ``exclude_blocked_and_muted_authors``.
+        See ``get_queryset()`` for the public-feed contract (revealed entries, block/mute).
       tags:
       - journals
       security:
@@ -16246,8 +16252,9 @@ paths:
       description: |-
         Retrieve a single journal entry.
 
-        Public entries are visible to all authenticated users.
-        Private entries are only visible to their author.
+        Visible when: public, revealed by an estate settlement, authored by the caller, or
+        (#3287 Decision 3) the caller holds a bequest grant over the author's writings and
+        this entry's effective disposition isn't SEAL.
       parameters:
       - in: path
         name: id
@@ -16287,6 +16294,35 @@ paths:
         schema:
           type: integer
         required: true
+      tags:
+      - journals
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          description: No response body
+  /api/journals/entries/disposition/:
+    get:
+      operationId: journals_entries_disposition_retrieve
+      description: |-
+        Read or set the caller's sheet-level default posthumous journal disposition.
+
+        GET returns the current default; PATCH sets it via ``set_journal_disposition``
+        (#3287) — the same seam ``journal disposition sheet=<...>`` uses on telnet.
+      tags:
+      - journals
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          description: No response body
+    patch:
+      operationId: journals_entries_disposition_partial_update
+      description: |-
+        Read or set the caller's sheet-level default posthumous journal disposition.
+
+        GET returns the current default; PATCH sets it via ``set_journal_disposition``
+        (#3287) — the same seam ``journal disposition sheet=<...>`` uses on telnet.
       tags:
       - journals
       security:
@@ -38213,6 +38249,7 @@ components:
       - building
       - business
       - residuary
+      - writings
       type: string
       description: |-
         * `specific_item` - Specific Item
@@ -38221,6 +38258,7 @@ components:
         * `building` - Building
         * `business` - Business
         * `residuary` - Residuary (everything else)
+        * `writings` - Writings (Private Journal Corpus)
     BequestRequest:
       type: object
       properties:
@@ -71306,6 +71344,10 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/WorldBuilderPortalAnchor'
+        desc_variants:
+          type: array
+          items:
+            $ref: '#/components/schemas/WorldBuilderRoomDescVariant'
         grants:
           type: array
           items:
@@ -71316,6 +71358,7 @@ components:
       - clue_triggers
       - clues
       - default_blueprint
+      - desc_variants
       - description
       - enclosure
       - exported_at
@@ -75661,12 +75704,17 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/WorldBuilderPortalAnchor'
+        desc_variants:
+          type: array
+          items:
+            $ref: '#/components/schemas/WorldBuilderRoomDescVariant'
       required:
       - ambient_counts
       - area_id
       - clue_triggers
       - clues
       - default_blueprint
+      - desc_variants
       - description
       - enclosure
       - exported_at
@@ -75712,6 +75760,25 @@ components:
       - detect_difficulty
       - fixture_key
       - id
+    WorldBuilderRoomDescVariant:
+      type: object
+      description: One authored season/phase description variant (#3291).
+      properties:
+        id:
+          type: integer
+        season:
+          type: string
+          nullable: true
+        phase:
+          type: string
+          nullable: true
+        description:
+          type: string
+      required:
+      - description
+      - id
+      - phase
+      - season
     WorldBuilderRoomDetail:
       type: object
       description: 'Selection-time room detail (#3269): exit profiles + comfort breakdown.'

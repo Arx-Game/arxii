@@ -39,7 +39,13 @@ class RoomState(BaseState):
             return self.default_description
 
     def get_display_desc(self, mode: str = "look", **kwargs: Any) -> str:
-        """Return the room description, with area quality modifier if applicable."""
+        """Return the room description.
+
+        Order: season/phase variant (#3291) replaces the base desc, unless an
+        event's ``temporary_description`` overlay is active (that always wins;
+        see ``world.events.services._apply_room_overlay``); the area-quality
+        suffix, if any, is appended last.
+        """
         desc = super().get_display_desc(mode=mode, **kwargs)
         if mode == GLANCE_MODE:
             return desc
@@ -49,10 +55,21 @@ class RoomState(BaseState):
         from world.areas.services import get_room_profile  # noqa: PLC0415
 
         profile = get_room_profile(self.obj)
-        if profile is not None and profile.area is not None:
-            suffix = area_quality_description_suffix(profile.area)
-            if suffix:
-                desc = f"{desc}\n\n{suffix}"
+        if profile is not None:
+            overlay_active = bool(self.obj.item_data.temporary_description)
+            if not overlay_active:
+                from evennia_extensions.services.room_desc_variants import (  # noqa: PLC0415
+                    resolve_room_description,
+                )
+                from world.game_clock.services import get_ic_now  # noqa: PLC0415
+
+                variant_desc = resolve_room_description(profile, get_ic_now())
+                if variant_desc is not None:
+                    desc = variant_desc
+            if profile.area is not None:
+                suffix = area_quality_description_suffix(profile.area)
+                if suffix:
+                    desc = f"{desc}\n\n{suffix}"
         return desc
 
     def get_categories(self) -> dict:

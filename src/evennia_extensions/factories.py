@@ -9,7 +9,13 @@ from evennia.objects.models import ObjectDB
 from evennia.utils import create
 import factory
 
-from evennia_extensions.models import Media, PageBackground, PageBackgroundSlot, RoomProfile
+from evennia_extensions.models import (
+    Media,
+    PageBackground,
+    PageBackgroundSlot,
+    RoomDescVariant,
+    RoomProfile,
+)
 
 
 class ObjectDBFactory(factory.django.DjangoModelFactory):
@@ -246,3 +252,15 @@ class RoomProfileFactory(factory.django.DjangoModelFactory):
                 setattr(instance, field, value)
             instance.save()
         return instance
+
+
+class RoomDescVariantFactory(factory.django.DjangoModelFactory):
+    """Factory for a season/phase room description variant (#3291)."""
+
+    class Meta:
+        model = RoomDescVariant
+
+    room_profile = factory.SubFactory(RoomProfileFactory)
+    season = None
+    phase = None
+    description = factory.Sequence(lambda n: f"Variant description {n}.")

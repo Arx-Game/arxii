@@ -10476,14 +10476,18 @@ export interface paths {
       cookie?: never;
     };
     /**
-     * @description List public journal entries.
+     * @description List public journal entries, or (with ``?deceased=``) a bequeathed corpus.
      *
-     *     Supports query params:
+     *     Supports query params (all handled by ``JournalEntryFilter``):
      *     - ?author=<character_id> — filter by author
      *     - ?tag=<tag_name> — filter by tag name
+     *     - ?deceased=<character_sheet_id> — browse a deceased sheet's non-sealed private
+     *       entries, ONLY when the caller holds a ``JournalBequestGrant`` for that sheet
+     *       (#3287 Decision 3, gated in ``JournalEntryFilter.filter_deceased`` per
+     *       ``tools/lint_use_filterset.py``). Empty when no grant exists — never a permission
+     *       error, so a probing id can't confirm whether a grant exists for someone else.
      *
-     *     Blocked/muted authors' entries are excluded (#2996 Decision 2) — see
-     *     ``exclude_blocked_and_muted_authors``.
+     *     See ``get_queryset()`` for the public-feed contract (revealed entries, block/mute).
      */
     get: operations['journals_entries_retrieve'];
     put?: never;
@@ -10505,8 +10509,9 @@ export interface paths {
     /**
      * @description Retrieve a single journal entry.
      *
-     *     Public entries are visible to all authenticated users.
-     *     Private entries are only visible to their author.
+     *     Visible when: public, revealed by an estate settlement, authored by the caller, or
+     *     (#3287 Decision 3) the caller holds a bequest grant over the author's writings and
+     *     this entry's effective disposition isn't SEAL.
      */
     get: operations['journals_entries_retrieve_2'];
     put?: never;
@@ -10533,6 +10538,34 @@ export interface paths {
     options?: never;
     head?: never;
     patch?: never;
+    trace?: never;
+  };
+  '/api/journals/entries/disposition/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /**
+     * @description Read or set the caller's sheet-level default posthumous journal disposition.
+     *
+     *     GET returns the current default; PATCH sets it via ``set_journal_disposition``
+     *     (#3287) — the same seam ``journal disposition sheet=<...>`` uses on telnet.
+     */
+    get: operations['journals_entries_disposition_retrieve'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    /**
+     * @description Read or set the caller's sheet-level default posthumous journal disposition.
+     *
+     *     GET returns the current default; PATCH sets it via ``set_journal_disposition``
+     *     (#3287) — the same seam ``journal disposition sheet=<...>`` uses on telnet.
+     */
+    patch: operations['journals_entries_disposition_partial_update'];
     trace?: never;
   };
   '/api/journals/entries/mine/': {
@@ -23177,6 +23210,7 @@ export interface components {
      *     * `building` - Building
      *     * `business` - Business
      *     * `residuary` - Residuary (everything else)
+     *     * `writings` - Writings (Private Journal Corpus)
      * @enum {string}
      */
     BequestKindEnum:
@@ -23185,7 +23219,8 @@ export interface components {
       | 'all_coin'
       | 'building'
       | 'business'
-      | 'residuary';
+      | 'residuary'
+      | 'writings';
     BequestRequest: {
       will: number;
       /** @description Execution order within this bequest's kind. */
@@ -40136,6 +40171,7 @@ export interface components {
       clues: components['schemas']['WorldBuilderRoomClue'][];
       clue_triggers: components['schemas']['WorldBuilderClueTrigger'][];
       portal_anchors: components['schemas']['WorldBuilderPortalAnchor'][];
+      desc_variants: components['schemas']['WorldBuilderRoomDescVariant'][];
       grants: string[];
     };
     /** @description Read-only serializer for StrainAvailability — per-character strain cap snapshot. */
@@ -42296,6 +42332,7 @@ export interface components {
       clues: components['schemas']['WorldBuilderRoomClue'][];
       clue_triggers: components['schemas']['WorldBuilderClueTrigger'][];
       portal_anchors: components['schemas']['WorldBuilderPortalAnchor'][];
+      desc_variants: components['schemas']['WorldBuilderRoomDescVariant'][];
     };
     /** @description One RoomClue placement, nested in a WorldBuilderRoom payload (#2451). */
     WorldBuilderRoomClue: {
@@ -42304,6 +42341,13 @@ export interface components {
       clue_slug: string;
       detect_difficulty: number;
       fixture_key: string | null;
+    };
+    /** @description One authored season/phase description variant (#3291). */
+    WorldBuilderRoomDescVariant: {
+      id: number;
+      season: string | null;
+      phase: string | null;
+      description: string;
     };
     /** @description Selection-time room detail (#3269): exit profiles + comfort breakdown. */
     WorldBuilderRoomDetail: {
@@ -51656,8 +51700,16 @@ export interface operations {
          *     * `building` - Building
          *     * `business` - Business
          *     * `residuary` - Residuary (everything else)
+         *     * `writings` - Writings (Private Journal Corpus)
          */
-        kind?: 'all_coin' | 'building' | 'business' | 'coin_amount' | 'residuary' | 'specific_item';
+        kind?:
+          | 'all_coin'
+          | 'building'
+          | 'business'
+          | 'coin_amount'
+          | 'residuary'
+          | 'specific_item'
+          | 'writings';
         /** @description A page number within the paginated result set. */
         page?: number;
         /** @description Number of results to return per page. */
@@ -56241,6 +56293,42 @@ export interface operations {
       path: {
         id: number;
       };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description No response body */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+    };
+  };
+  journals_entries_disposition_retrieve: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description No response body */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+    };
+  };
+  journals_entries_disposition_partial_update: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
       cookie?: never;
     };
     requestBody?: never;

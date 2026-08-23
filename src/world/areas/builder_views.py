@@ -153,8 +153,9 @@ def _authoring_sidecars(profiles: list[RoomProfile]) -> dict[str, dict]:
     """Phase B per-room authoring surfaces (#3269), all bulk queries.
 
     Returns keyed maps: places, feature, functionaries, ambient_counts,
-    travel_hub, starting_bindings.
+    travel_hub, starting_bindings, desc_variants (#3291).
     """
+    from evennia_extensions.models import RoomDescVariant  # noqa: PLC0415
     from world.character_creation.models import Beginnings, StartingArea  # noqa: PLC0415
     from world.narrative.models import AmbientEmit, AmbientEmoteLine  # noqa: PLC0415
     from world.npc_services.models import Functionary  # noqa: PLC0415
@@ -204,6 +205,16 @@ def _authoring_sidecars(profiles: list[RoomProfile]) -> dict[str, dict]:
         bindings.setdefault(beginning.starting_room_override_id, []).append(
             f"Beginning: {beginning.name}"
         )
+    desc_variants: dict[int, list[dict]] = {}
+    for variant in RoomDescVariant.objects.filter(room_profile_id__in=room_ids):
+        desc_variants.setdefault(variant.room_profile_id, []).append(
+            {
+                "id": variant.pk,
+                "season": variant.season,
+                "phase": variant.phase,
+                "description": variant.description,
+            }
+        )
     return {
         "places": places,
         "feature": feature,
@@ -211,6 +222,7 @@ def _authoring_sidecars(profiles: list[RoomProfile]) -> dict[str, dict]:
         "ambient_counts": ambient_counts,
         "travel_hub": travel_hub,
         "starting_bindings": bindings,
+        "desc_variants": desc_variants,
     }
 
 
@@ -331,6 +343,7 @@ def _room_rows(profiles: list[RoomProfile]) -> list[dict]:
             "clues": clues_by_room.get(p.objectdb_id, []),
             "clue_triggers": triggers_by_room.get(p.objectdb_id, []),
             "portal_anchors": anchors_by_room.get(p.objectdb_id, []),
+            "desc_variants": authoring["desc_variants"].get(p.objectdb_id, []),
         }
         for p in profiles
     ]

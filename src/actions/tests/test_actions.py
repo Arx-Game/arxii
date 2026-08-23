@@ -93,6 +93,43 @@ class LookActionRestDispatchTests(TestCase):
         assert result.success is False
 
 
+class LookActionRoomDescVariantTests(TestCase):
+    """#3291 — a shared telnet/web look journey against a room with an
+    authored season/phase description variant (``LookAction`` is the one
+    seam both ``CmdLook`` and the web examine-on-click dispatch converge on)."""
+
+    def test_look_shows_the_seasonal_variant(self):
+        from datetime import UTC, datetime
+
+        from evennia_extensions.factories import RoomDescVariantFactory
+        from evennia_extensions.models import ObjectDisplayData
+        from world.game_clock.factories import GameClockFactory
+
+        room = ObjectDBFactory(
+            db_key="the frozen courtyard",
+            db_typeclass_path="typeclasses.rooms.Room",
+        )
+        ObjectDisplayData.objects.create(object=room, permanent_description="A courtyard.")
+        profile = RoomProfileFactory(objectdb=room)
+        RoomDescVariantFactory(
+            room_profile=profile,
+            season="winter",
+            phase="night",
+            description="Frost silvers every stone under a black midwinter sky.",
+        )
+        GameClockFactory(
+            anchor_ic_time=datetime(1, 1, 10, 2, 0, tzinfo=UTC),  # WINTER, NIGHT
+            paused=True,
+        )
+        actor = ObjectDBFactory(db_key="Walker", location=room)
+
+        result = LookAction().run(actor, target=room)
+
+        assert result.success is True
+        assert "Frost silvers every stone under a black midwinter sky." in result.message
+        assert "A courtyard." not in result.message
+
+
 class LookActionConcealmentTests(TestCase):
     """Telnet parity for #1225 — ``get_display_characters`` gates on ``can_perceive``.
 

@@ -9,8 +9,15 @@ _Avoid_: testament (for the whole record — testament is the prose field only).
 
 **Bequest**:
 One line of a will (`estates.Bequest`): a kind (specific item, coin amount, all coin,
-building, business, residuary), its target, and exactly one recipient (persona XOR
-organization). Items and businesses require character recipients. _Avoid_: legacy.
+building, business, residuary, writings — #3287), its target, and exactly one recipient
+(persona XOR organization). Items, businesses, and writings require character recipients.
+_Avoid_: legacy.
+
+**Writings (bequest kind)**:
+A `BequestKind.WRITINGS` line (#3287) has no target FK — the deceased's own private journal
+corpus IS the asset. Executing it mints a `journals.JournalBequestGrant` for the recipient
+instead of moving a specific row; see `journals/AGENT_GLOSSARY.md`'s Journal Bequest Grant
+entry. _Avoid_: journal inheritance (say "writings bequest").
 
 **Executor**:
 A persona tagged on a will (`estates.WillExecutor`); any one of them may perform the

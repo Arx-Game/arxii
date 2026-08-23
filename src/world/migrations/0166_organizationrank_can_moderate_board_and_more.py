@@ -5,7 +5,7 @@ import django.db.models.deletion
 
 
 class Migration(migrations.Migration):
-    dependencies = [("arxii", "0163_interaction_attributed_companion")]
+    dependencies = [("arxii", "0165_journalbequestgrant_and_more")]
 
     operations = [
         migrations.AddField(
