@@ -150,9 +150,16 @@ canon-touching content before it pays. One PENDING review per story (partial
 unique); `CanonReviewStatus` (PENDING → CLEARED / CHANGES_REQUESTED). The gate
 is auto-downgrade-not-block (pillar-7 pattern): an unreviewed WORLD-tier
 story's staked beats are UNREADY → effective risk NONE (the scene still runs,
-nothing pays) via `validate_stakes_readiness`'s canon-review problem. Surfaced
-on the staff `StaffWorkloadView` pending-queue and decided via the
-`canonreview` telnet command or `CanonReviewViewSet` web verbs.
+nothing pays) via `validate_stakes_readiness`'s canon-review problem. Requested
+(or, for an auto-clearing REGIONAL GM, system-cleared) by
+`ensure_canon_review_for_story` (#3304) whenever the web/telnet `story impact`
+setters or the beat-driven escalation heuristic raise a story's effective
+tier — a system-cleared row stamps `reviewer=None`,
+`notes="auto-cleared by GM level cap"` rather than skipping the row, so
+trust-based clearance stays auditable. Surfaced on the staff
+`StaffWorkloadView` pending-queue (rendered as `PendingCanonReviewsPanel` on
+`StaffWorkloadPage`) and decided via the `canonreview` telnet command or
+`CanonReviewViewSet` web verbs.
 _Avoid_: sign-off (that's `TreasuredSignoff` / custody), approval gate.
 
 **Surrender** (GM):

@@ -791,6 +791,44 @@ class HasCompanionCapacityPrerequisite(Prerequisite):
 
 
 @dataclass
+class CompanionPresentPrerequisite(Prerequisite):
+    """Companion (kwarg ``companion_id``) must be owned by actor, active, and
+    present in actor's current room (#3294 — companion emote).
+
+    Same owner/active/objectdb standard ``_resolve_owned_companion`` enforces
+    for the tactical companion verbs, plus the room-presence check an emote
+    additionally needs (a companion pose is a room-level pose).
+    """
+
+    def is_met(  # noqa: PLR0911 - readable early-exit cascade, mirrors can_view_interaction
+        self, actor, target=None, context=None
+    ) -> tuple[bool, str]:
+        from world.companions.models import Companion  # noqa: PLC0415
+
+        kwargs = (context or {}).get("kwargs", {})
+        companion_id = kwargs.get("companion_id")
+        if not companion_id:
+            return False, "Pick a companion to emote as."
+
+        sheet = resolve_actor_sheet(actor)
+        if sheet is None:
+            return False, "You have no character sheet."
+
+        companion = Companion.objects.select_related("owner").filter(pk=companion_id).first()
+        if companion is None:
+            return False, "No such companion."
+        if not companion.is_active:
+            return False, f"{companion.name} is no longer active."
+        if companion.owner_id != sheet.pk:
+            return False, "That is not your companion."
+        if companion.objectdb is None:
+            return False, f"{companion.name} has no in-world presence."
+        if companion.objectdb.db_location_id != actor.db_location_id:
+            return False, f"{companion.name} is not here."
+        return True, ""
+
+
+@dataclass
 class GhostWindowPrerequisite(Prerequisite):
     """Bound a dead character's emit/pose to recognized containers (#2287).
 

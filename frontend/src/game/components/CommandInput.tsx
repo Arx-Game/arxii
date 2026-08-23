@@ -6,6 +6,9 @@ import { RichTextInput } from '@/components/RichTextInput';
 import { PersonaAvatar } from '@/components/PersonaAvatar';
 import { ModeSelector } from '@/scenes/components/ModeSelector';
 import { LanguageSelector } from './LanguageSelector';
+import { CompanionSelector } from './CompanionSelector';
+import { companionEmote } from '@/companions/api';
+import type { CompanionSummary } from '@/companions/types';
 import { ActionAttachment } from '@/scenes/components/ActionAttachment';
 import {
   EntranceTechniqueAttachment,
@@ -119,6 +122,10 @@ export function CommandInput({
   const [historyIndex, setHistoryIndex] = useState<number>(-1);
   // #904 — next pose is a Make-an-Entrance (pose_kind=entry, REST path only).
   const [isEntrance, setIsEntrance] = useState(false);
+  // #3294 — pose as this bonded, present companion instead of yourself. Sticky
+  // (not one-shot like isEntrance) until the player clears it back to "Speak
+  // as yourself" — puppeting a companion is usually more than one line.
+  const [asCompanion, setAsCompanion] = useState<CompanionSummary | null>(null);
   // #2183 — optional technique+target attached to the next entrance pose.
   const [entranceTechnique, setEntranceTechnique] = useState<EntranceTechniqueSelection | null>(
     null
@@ -150,6 +157,28 @@ export function CommandInput({
     }
 
     submittingRef.current = true;
+
+    // #3294 — companion-attributed pose: a dedicated dispatch, bypassing
+    // ModeSelector's mode entirely (a companion emote is always a room-level
+    // pose). The server re-validates ownership + room presence on every call
+    // (CompanionPresentPrerequisite), so a stale toggle (companion left the
+    // room mid-composition) fails loud via toast rather than ghost-posing.
+    if (asCompanion) {
+      companionEmote(asCompanion.id, trimmed)
+        .then(() => {
+          setHistory((prev) => [...prev, trimmed]);
+          setHistoryIndex(-1);
+          setCommand('');
+        })
+        .catch((error: unknown) => {
+          const message = error instanceof Error ? error.message : 'Failed to emote as companion.';
+          toast.error(message);
+        })
+        .finally(() => {
+          submittingRef.current = false;
+        });
+      return;
+    }
 
     const fullCommand = buildFullCommand(trimmed, composerMode);
 
@@ -243,6 +272,7 @@ export function CommandInput({
     sceneId,
     personaId,
     pendingActionIds,
+    asCompanion,
     detachedActionIds,
     onPoseSubmitted,
     isEntrance,
@@ -289,6 +319,11 @@ export function CommandInput({
   }, []);
 
   const ghostText = useMemo(() => {
+    // #3294 \u2014 a companion emote overrides the normal mode ghost text entirely
+    // (submission bypasses composerMode while active).
+    if (asCompanion) {
+      return `\ud83d\udc3e As ${asCompanion.name}`;
+    }
     if (!composerMode) return '';
     const mode = composerMode.command.charAt(0).toUpperCase() + composerMode.command.slice(1);
     let text: string;
@@ -305,7 +340,7 @@ export function CommandInput({
       text += ' | \u2728 Entrance';
     }
     return text;
-  }, [composerMode, actionAttachment, isEntrance]);
+  }, [asCompanion, composerMode, actionAttachment, isEntrance]);
 
   // #2183 — entrance-technique target candidates: the scene's participants.
   const entranceCandidates = useMemo<TargetCandidate[]>(
@@ -366,6 +401,7 @@ export function CommandInput({
             {composerMode && SPEECH_COMPOSER_MODES.has(composerMode.command) && (
               <LanguageSelector character={character} />
             )}
+            <CompanionSelector value={asCompanion} onChange={setAsCompanion} />
           </div>
         }
         rightSlot={

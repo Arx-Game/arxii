@@ -658,12 +658,20 @@ actions, backends, and service functions.
   Namespaced subverbs avoid exit/channel/alias collisions (mirrors
   `CmdSignature`/`CmdSanctum`). No business logic in the command.
 - **`companion.py`**: `CmdCompanion` (`companion`, #1918) — the companion lifecycle namespace. One
-  `DispatchCommand` routes a leading subverb (`bind` / `fight` / `deploy` / `release`) through
+  `DispatchCommand` routes a leading subverb (`bind` / `fight` / `deploy` / `release` / `order` /
+  `mount` / `dismount` / `emote`) through
   `dispatch_player_action` — the same seam the web `CompanionViewSet` uses — reaching the Actions in
   `actions/definitions/companions.py`. Bare `companion`/`companion status`/`companion list` = status hub
   (active companions + remaining capacity). Grammar:
   `companion bind archetype=<name|id> gift=<name|id> name=<text>`,
-  `companion release <name|id>`, `companion fight <name|id>`, `companion deploy <name|id>`.
+  `companion release <name|id>`, `companion fight <name|id>`, `companion deploy <name|id>`,
+  `companion emote <name|id> <text>` (#3294 — pose *as* a bonded, present companion;
+  `CompanionEmoteAction`, key `companion_emote`, gated by `CompanionPresentPrerequisite`
+  — owned, active, AND co-located with the actor. Authorship for block/mute/consent stays
+  on the owner's own persona via `record_interaction`'s normal persona resolution; the new
+  nullable `Interaction.attributed_companion` FK is purely cosmetic feed attribution, never
+  a substitute writer. Web parity: `POST /api/companions/companions/{id}/emote/` and the
+  composer's "as `<companion>`" toggle, shown only when a bound companion is present).
   Namespaced subverbs avoid exit/channel/alias collisions (mirrors `CmdSanctum`/`CmdCombat`).
   No business logic in the command.
 - **`crafting_station.py`**: `CmdLabStation` (`station`, #1234) — the Lab

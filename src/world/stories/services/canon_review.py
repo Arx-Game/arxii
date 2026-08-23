@@ -119,10 +119,15 @@ def regional_auto_clears(gm_profile: GMProfile) -> bool:
     return bool(cap and cap.auto_clear_regional)
 
 
-def request_canon_review(story: Story) -> CanonReview:
+def request_canon_review(story: Story, *, tier: str | None = None) -> CanonReview:
     """Create a PENDING ``CanonReview`` for ``story``.
 
-    Idempotent: returns the existing pending review if one is already open.
+    Idempotent: returns the existing pending review if one is already open
+    (its ``tier`` is left as-is — a review already in flight keeps the tier
+    it was opened at). ``tier`` defaults to ``story.impact_tier``;
+    ``ensure_canon_review_for_story`` passes the escalated effective tier
+    explicitly so a beat-driven escalation is recorded even when the
+    author's own ``impact_tier`` hasn't been raised.
     """
     existing = story.canon_reviews.filter(status=CanonReviewStatus.PENDING).first()
     if existing is not None:
@@ -131,18 +136,79 @@ def request_canon_review(story: Story) -> CanonReview:
         review, _created = CanonReview.objects.get_or_create(
             story=story,
             status=CanonReviewStatus.PENDING,
-            defaults={"tier": story.impact_tier},
+            defaults={"tier": tier if tier is not None else story.impact_tier},
         )
+    return review
+
+
+def ensure_canon_review_for_story(story: Story, gm_profile: GMProfile | None) -> CanonReview | None:
+    """Wire the impact-tier request loop end to end (#3304).
+
+    The single orchestrator every seam that can raise a story's canon-review
+    tier routes through: the web/telnet ``story impact`` setters and the
+    beat-driven escalation heuristic (``escalation_tier_for_story``, called
+    from ``stakes._canon_review_problems``) all call this instead of
+    ``request_canon_review`` directly, so none of them can raise the
+    effective tier without a review existing to show for it.
+
+    Uses the *escalated* effective tier (``escalation_tier_for_story``), not
+    the raw ``story.impact_tier`` — a GROUP/GLOBAL story that never had its
+    authored tier raised but whose beats trigger the escalation heuristic
+    still gets a review.
+
+    - Effective tier TABLE: no review needed, returns None.
+    - Effective tier REGIONAL: a review is requested; if ``gm_profile`` is
+      not None and its level cap auto-clears REGIONAL
+      (``regional_auto_clears``), the review is immediately system-cleared
+      (``reviewer=None``, an auditable stamp rather than skipping the row).
+    - Effective tier WORLD: always requested, never auto-cleared, no matter
+      the GM's level cap.
+
+    Idempotent — safe to call on every readiness check / impact-tier save.
+    A repeat call short-circuits to the existing CLEARED review once one
+    covers the required tier (at or above it), rather than minting a second
+    row: ``request_canon_review``'s own dedup only matches a still-PENDING
+    row, so without this a second call after an auto-clear (PENDING ->
+    CLEARED, nothing PENDING left to match) would open and immediately
+    auto-clear a brand new review every time it's called.
+    """
+    from world.stories.constants import ImpactTier  # noqa: PLC0415
+
+    tier_order = [ImpactTier.TABLE, ImpactTier.REGIONAL, ImpactTier.WORLD]
+    tier = escalation_tier_for_story(story)
+    if tier == ImpactTier.TABLE:
+        return None
+
+    cleared = (
+        story.canon_reviews.filter(status=CanonReviewStatus.CLEARED).order_by("-created_at").first()
+    )
+    if cleared is not None and tier_order.index(cleared.tier) >= tier_order.index(tier):
+        return cleared
+
+    review = request_canon_review(story, tier=tier)
+    if (
+        review.status == CanonReviewStatus.PENDING
+        and tier == ImpactTier.REGIONAL
+        and gm_profile is not None
+        and regional_auto_clears(gm_profile)
+    ):
+        review = clear_canon_review(review, reviewer=None, notes="auto-cleared by GM level cap")
     return review
 
 
 def clear_canon_review(
     review: CanonReview,
-    reviewer: AccountDB,
+    reviewer: AccountDB | None,
     *,
     notes: str = "",
 ) -> CanonReview:
-    """Mark a PENDING review CLEARED and stamp the resolution."""
+    """Mark a PENDING review CLEARED and stamp the resolution.
+
+    ``reviewer=None`` is the system auto-clear path
+    (``ensure_canon_review_for_story``'s REGIONAL auto-clear branch, #3304).
+    ``CanonReviewViewSet.clear`` always passes the authenticated staff
+    account, so the API path can never produce a system-stamped row.
+    """
     if review.status != CanonReviewStatus.PENDING:
         msg = (
             f"CanonReview {review.pk} is not PENDING (status={review.status!r}); "

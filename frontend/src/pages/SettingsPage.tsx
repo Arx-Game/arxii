@@ -26,8 +26,8 @@ function VisibilityPreferences() {
               <Label htmlFor="appear-offline">Quiet (hidden) mode</Label>
               <p className="text-sm text-muted-foreground">
                 When on, you don&apos;t appear in <code>where</code>/<code>who</code> and can&apos;t
-                be paged except by your allowlist. Mail, missions, channels, and same-room presence
-                are unaffected.
+                be paged except by your allowlist. OOC messages, missions, channels, and same-room
+                presence are unaffected.
               </p>
             </div>
             <Switch

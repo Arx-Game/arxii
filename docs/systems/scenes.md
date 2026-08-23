@@ -134,6 +134,28 @@ in-character presence. Being able to react to a scene your character wasn't pres
 is intentional product behavior. Only `react_to_window` (the IC reaction-window system,
 `world/scenes/reaction_services.py`) is perception-gated.
 
+### Companion pose attribution (#3294)
+
+`Interaction.attributed_companion` — nullable FK -> `companions.Companion`
+(`on_delete=SET_NULL`, migration `0163_interaction_attributed_companion`,
+added post-partition like `language`/`fury_committed` — see
+`tools/check_partition_sql_drift.py`'s `POST_PARTITION_COLUMNS`). Set by
+`create_interaction`/`record_interaction`'s `attributed_companion` kwarg when
+an owner poses *as* their bonded companion (`actions.definitions.companions
+.CompanionEmoteAction`, see `docs/systems/companions.md`).
+
+**Purely cosmetic.** `Interaction.persona` is unconditionally the writer's own
+worn face — exactly the same resolution every other pose uses
+(`active_persona_for_sheet`) — so block/mute/consent/moderation, and every
+existing read-visibility surface above, key on `persona` precisely as they do
+for a normal pose. `attributed_companion` only changes rendering: the
+serializer (`InteractionListSerializer.get_attributed_companion`) exposes
+`{id, name}` alongside the already-per-viewer-resolved `persona` field, and
+the frontend (`PoseUnit.tsx`) shows the companion as the visible actor with
+an owner tell built from that same resolved `persona.name` — never a second
+identity-resolution path, so a masked owner's companion pose still shows the
+mask, never the real name.
+
 ### SceneMessage
 
 ```python

@@ -75,6 +75,8 @@ interface PoseUnitAvatarProps {
  * `onAvatarClick` isn't provided.
  */
 function PoseUnitAvatar({ interaction, onAvatarClick }: PoseUnitAvatarProps) {
+  // #3294 — no companion art exists; the owner's own thumbnail stands in even
+  // when the companion is the displayed actor (see PoseUnitActorLabel).
   const avatar = (
     <PersonaAvatar
       source={{
@@ -104,6 +106,46 @@ function PoseUnitAvatar({ interaction, onAvatarClick }: PoseUnitAvatarProps) {
     >
       {avatar}
     </button>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Companion attribution (#3294)
+// ---------------------------------------------------------------------------
+
+interface PoseUnitActorLabelProps {
+  interaction: Interaction;
+  onAddTarget?: (personaName: string) => void;
+}
+
+/**
+ * The pose's displayed actor name (#3294): the bonded companion when the pose
+ * carries `attributed_companion`, else the writer's own (already per-viewer
+ * resolved) persona name. A companion pose always shows an owner tell next to
+ * the name — honest puppetry, never a hidden actor. Double-click-to-target
+ * still names the owner's own persona (`interaction.persona.name`), since a
+ * companion has no targetable Persona of its own.
+ */
+function PoseUnitActorLabel({ interaction, onAddTarget }: PoseUnitActorLabelProps) {
+  const companion = interaction.attributed_companion;
+  const displayName = companion ? companion.name : interaction.persona.name;
+  return (
+    <span
+      onDoubleClick={() => onAddTarget?.(interaction.persona.name)}
+      className="cursor-pointer text-sm font-medium"
+      title="Double-click to add as target"
+    >
+      {displayName}
+      {companion && (
+        <span
+          className="ml-1 text-xs font-normal text-muted-foreground"
+          title={`Puppeted by ${interaction.persona.name}`}
+          data-testid="companion-owner-tell"
+        >
+          (via {interaction.persona.name})
+        </span>
+      )}
+    </span>
   );
 }
 
@@ -313,13 +355,7 @@ export function PoseUnit({
           sceneId={sceneId}
           onAttachAction={onAttachAction}
         >
-          <span
-            onDoubleClick={() => onAddTarget?.(interaction.persona.name)}
-            className="cursor-pointer text-sm font-medium"
-            title="Double-click to add as target"
-          >
-            {interaction.persona.name}
-          </span>
+          <PoseUnitActorLabel interaction={interaction} onAddTarget={onAddTarget} />
         </PersonaContextMenu>
         <span className="text-xs text-muted-foreground">
           {new Date(interaction.timestamp).toLocaleString()}

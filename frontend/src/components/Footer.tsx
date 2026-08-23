@@ -1,3 +1,4 @@
+import { Link } from 'react-router-dom';
 import { Button } from './ui/button';
 import { Separator } from './ui/separator';
 
@@ -8,13 +9,16 @@ export function Footer() {
       <div className="container flex flex-col items-center gap-2 py-6 text-center text-sm text-muted-foreground">
         <div className="flex gap-4">
           <Button variant="ghost" asChild>
-            <a href="/docs">Docs</a>
+            <Link to="/codex">Codex</Link>
           </Button>
           <Button variant="ghost" asChild>
-            <a href="/policies">Policies</a>
+            <Link to="/roster">Roster</Link>
           </Button>
           <Button variant="ghost" asChild>
-            <a href="/credits">Credits</a>
+            <Link to="/scenes">Scenes</Link>
+          </Button>
+          <Button variant="ghost" asChild>
+            <Link to="/login">Log in</Link>
           </Button>
         </div>
         <p>
