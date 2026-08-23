@@ -54,7 +54,9 @@ class BequestSerializer(serializers.ModelSerializer):
         BequestKind.BUILDING: "building",
         BequestKind.BUSINESS: "business",
     }
-    _PERSONA_ONLY_KINDS = frozenset({BequestKind.SPECIFIC_ITEM, BequestKind.BUSINESS})
+    _PERSONA_ONLY_KINDS = frozenset(
+        {BequestKind.SPECIFIC_ITEM, BequestKind.BUSINESS, BequestKind.WRITINGS}
+    )
 
     def validate(self, attrs: dict) -> dict:
         """Validate will is not frozen, then delegate to coherence helpers."""

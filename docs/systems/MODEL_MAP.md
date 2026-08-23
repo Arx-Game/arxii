@@ -181,6 +181,10 @@
   - mutes_received <- scenes.Mute
   - treasured_signoffs <- stories.TreasuredSignoff
 
+### RoomDescVariant
+**Foreign Keys:**
+  - room_profile -> evennia_extensions.RoomProfile [FK]
+
 ### RoomProfile
 **Foreign Keys:**
   - objectdb -> evennia.ObjectDB [OneToOne]
@@ -188,6 +192,7 @@
   - size -> evennia_extensions.RoomSizeTier [FK] (nullable)
   - default_blueprint -> areas.PositionBlueprint [FK] (nullable)
 **Pointed to by:**
+  - boards <- boards.Board
   - entry_for_buildings <- buildings.Building
   - design_details <- buildings.InteriorDesignDetails
   - polish_by_category <- buildings.RoomPolish
@@ -199,6 +204,7 @@
   - residents <- character_sheets.CharacterSheet
   - hidden_clues <- clues.RoomClue
   - clue_triggers <- clues.ClueTrigger
+  - desc_variants <- evennia_extensions.RoomDescVariant
   - durance_training_sites <- progression.DuranceTrainingSite
   - resonance_grants <- magic.ResonanceGrant
   - portal_anchors <- magic.PortalAnchor
@@ -871,6 +877,33 @@
 - `preview_pristine_world_wipe() -> 'WipeReport' - Dry-run: count what ``wipe_pristine_world(execute=True)`` would delete.`
 - `refresh_legend_views() -> None - Refresh all legend materialized views concurrently.`
 - `wipe_pristine_world(*, execute: 'bool' = False, confirm: 'str | None' = None, backup_verified_at: 'datetime | None' = None) -> 'WipeReport' - Dry-run (default) or execute the guarded beta-reset wipe.`
+
+
+## world.boards
+
+### Board
+**Foreign Keys:**
+  - room_profile -> evennia_extensions.RoomProfile [FK] (nullable)
+  - organization -> societies.Organization [FK] (nullable)
+**Pointed to by:**
+  - posts <- boards.BoardPost
+
+### BoardPost
+**Foreign Keys:**
+  - board -> boards.Board [FK]
+  - author_persona -> scenes.Persona [FK]
+  - removed_by_persona -> scenes.Persona [FK] (nullable)
+
+### Service Functions
+- `can_moderate_board(persona: 'Persona', board: 'Board', *, is_staff: 'bool' = False) -> 'bool' - Whether ``persona`` may remove ANY post on ``board`` (not just their own).`
+- `can_post_to_board(persona: 'Persona', board: 'Board', *, actor_room_profile: 'RoomProfile | None') -> 'bool' - Whether ``persona`` may post a new notice to ``board`` right now.`
+- `create_board_post(*, board: 'Board', author_persona: 'Persona', title: 'str', body: 'str', actor_room_profile: 'RoomProfile | None' = None) -> 'BoardPost' - Pin a new notice to ``board`` as ``author_persona`` (#3286).`
+- `edit_board_post(*, post: 'BoardPost', editor_persona: 'Persona', title: 'str', body: 'str') -> 'BoardPost' - Edit a notice's title/body — author-only, regardless of board kind (#3286).`
+- `exclude_blocked_and_muted_board_authors(queryset: 'QuerySet[BoardPost]', *, viewer_account) -> 'QuerySet[BoardPost]' - Exclude blocked/muted authors' posts from a board read (mirrors journals #2996).`
+- `get_or_create_location_board(room_profile: 'RoomProfile') -> 'Board' - Get or create the LOCATION board anchored to this room (#3286).`
+- `get_or_create_org_board(organization: 'Organization') -> 'Board' - Get or create the ORG board anchored to this organization (#3286).`
+- `remove_board_post(*, post: 'BoardPost', remover_persona: 'Persona', actor_room_profile: 'RoomProfile | None' = None, is_staff: 'bool' = False) -> 'BoardPost' - Soft-delete a notice: stamp ``removed_by_persona``/``removed_at`` (#3286).`
+- `visible_posts_for_board(board: 'Board') -> 'QuerySet[BoardPost]' - Active posts on ``board``, newest-first, capped to ``max_active_posts``.`
 
 
 ## world.boundaries
@@ -1559,6 +1592,8 @@
   - original_reclamation_claims <- items.ReclamationClaim
   - journal_entries <- journals.JournalEntry
   - weekly_journal_xp <- journals.WeeklyJournalXP
+  - journal_bequests_received <- journals.JournalBequestGrant
+  - journal_bequests_granted <- journals.JournalBequestGrant
   - frame_jobs_against <- justice.FrameJobDetails
   - denouncements_made <- justice.DenounceRecord
   - commanded_military_units <- military.MilitaryUnit
@@ -3488,6 +3523,8 @@
   - character_sheet -> character_sheets.CharacterSheet [OneToOne]
 **Pointed to by:**
   - claims <- estates.EstateClaim
+  - revealed_journal_entries <- journals.JournalEntry
+  - journal_bequest_grants <- journals.JournalBequestGrant
 
 ### Will
 **Foreign Keys:**
@@ -4602,10 +4639,17 @@
 
 ## world.journals
 
+### JournalBequestGrant
+**Foreign Keys:**
+  - recipient_sheet -> character_sheets.CharacterSheet [FK]
+  - deceased_sheet -> character_sheets.CharacterSheet [FK]
+  - created_by_settlement -> estates.EstateSettlement [FK]
+
 ### JournalEntry
 **Foreign Keys:**
   - author -> character_sheets.CharacterSheet [FK]
   - parent -> journals.JournalEntry [FK] (nullable)
+  - revealed_by_settlement -> estates.EstateSettlement [FK] (nullable)
   - related_threads -> magic.Thread [M2M]
 **Pointed to by:**
   - responses <- journals.JournalEntry
@@ -4622,12 +4666,18 @@
 
 ### Service Functions
 - `award_xp(account: 'AccountDB', amount: 'int', reason: 'str' = ProgressionReason.SYSTEM_AWARD, description: 'str' = '', gm: 'AccountDB | None' = None) -> 'XPTransaction' - Award XP to an account.`
-- `create_journal_entry(*, author: 'CharacterSheet', title: 'str', body: 'str', is_public: 'bool', tags: 'list[str] | None' = None) -> 'JournalEntry' - Create a journal entry and award weekly XP.`
+- `create_journal_entry(*, author: 'CharacterSheet', title: 'str', body: 'str', is_public: 'bool', tags: 'list[str] | None' = None, posthumous_override: 'str' = PosthumousOverride.INHERIT) -> 'JournalEntry' - Create a journal entry and award weekly XP.`
 - `create_journal_response(*, author: 'CharacterSheet', parent: 'JournalEntry', response_type: 'ResponseType', title: 'str', body: 'str') -> 'JournalEntry' - Create a praise or retort response to a journal entry.`
-- `edit_journal_entry(*, entry: 'JournalEntry', title: 'str | None' = None, body: 'str | None' = None) -> 'JournalEntry' - Edit an existing journal entry. Sets edited_at timestamp.`
+- `edit_journal_entry(*, entry: 'JournalEntry', title: 'str | None' = None, body: 'str | None' = None, posthumous_override: 'str | None' = None) -> 'JournalEntry' - Edit an existing journal entry. Sets edited_at timestamp for title/body edits.`
+- `entry_visible_via_bequest(entry: 'JournalEntry', viewer_sheet: 'CharacterSheet | None') -> 'bool' - Whether ``viewer_sheet`` may read ``entry`` under a bequest grant (retrieve path).`
 - `exclude_blocked_and_muted_authors(queryset: 'QuerySet[JournalEntry]', *, viewer_account: 'Any') -> 'QuerySet[JournalEntry]' - Exclude blocked/muted authors' entries from a journal feed queryset (#2996 Decision 2).`
+- `grant_journal_bequest(*, recipient_sheet: 'CharacterSheet', deceased_sheet: 'CharacterSheet', settlement: 'EstateSettlement') -> 'JournalBequestGrant' - Grant read access to a deceased sheet's non-sealed private entries (#3287 Decision 3).`
+- `has_journal_bequest_grant(*, recipient_sheet: 'CharacterSheet', deceased_sheet_id: 'int') -> 'bool' - Whether ``recipient_sheet`` holds a bequest grant over ``deceased_sheet_id``'s writings.`
 - `increment_stat(character_sheet: 'CharacterSheet', stat: 'StatDefinition', amount: 'int' = 1) -> 'int' - Increment a stat tracker (create if needed) and check for achievements.`
 - `player_for_sheet(sheet: 'CharacterSheet') -> 'PlayerData | None' - The PlayerData currently playing this character sheet, or None (#2996).`
+- `reveal_journals_for_settlement(sheet: 'CharacterSheet', settlement: 'EstateSettlement') -> 'int' - Stamp ``revealed_at``/``revealed_by_settlement`` on the sheet's REVEAL-effective`
+- `sealed_effective_q() -> 'Q' - A ``Q`` matching ``JournalEntry`` rows whose EFFECTIVE posthumous disposition is SEAL.`
+- `set_sheet_posthumous_disposition(*, sheet: 'CharacterSheet', disposition: 'str') -> 'CharacterSheet' - Set a character's sheet-level default posthumous journal disposition (#3287).`
 
 
 ## world.justice
@@ -7926,6 +7976,8 @@
   - food_transfers_initiated <- agriculture.FoodTransfer
   - promoted_assets <- assets.NPCAsset
   - asset_ownerships <- assets.NPCAsset
+  - board_posts <- boards.BoardPost
+  - board_posts_removed <- boards.BoardPost
   - owned_buildings <- buildings.Building
   - buildings_constructed <- buildings.Building
   - purchased_building_listings <- buildings.BuildingListing
@@ -8763,6 +8815,7 @@
 **Pointed to by:**
   - held_assets <- assets.NPCAsset
   - capture_consequence_effects <- checks.ConsequenceEffect
+  - boards <- boards.Board
   - building_listings <- buildings.BuildingListing
   - captives <- captivity.Captivity
   - child_orgs <- societies.Organization

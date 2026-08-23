@@ -5,7 +5,12 @@ from factory.django import DjangoModelFactory
 
 from world.character_sheets.factories import CharacterSheetFactory
 from world.journals.constants import ResponseType
-from world.journals.models import JournalEntry, JournalTag, WeeklyJournalXP
+from world.journals.models import (
+    JournalBequestGrant,
+    JournalEntry,
+    JournalTag,
+    WeeklyJournalXP,
+)
 
 
 class JournalEntryFactory(DjangoModelFactory):
@@ -53,3 +58,14 @@ class WeeklyJournalXPFactory(DjangoModelFactory):
         model = WeeklyJournalXP
 
     character_sheet = factory.SubFactory(CharacterSheetFactory)
+
+
+class JournalBequestGrantFactory(DjangoModelFactory):
+    """Factory for creating JournalBequestGrant instances (#3287)."""
+
+    class Meta:
+        model = JournalBequestGrant
+
+    recipient_sheet = factory.SubFactory(CharacterSheetFactory)
+    deceased_sheet = factory.SubFactory(CharacterSheetFactory)
+    created_by_settlement = factory.SubFactory("world.estates.factories.EstateSettlementFactory")

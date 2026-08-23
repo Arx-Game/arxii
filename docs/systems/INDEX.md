@@ -1037,14 +1037,29 @@ buildings up to entire planes. A `Room` is not its own `Area` level — it hangs
   trigger). Weekly decay sweep (`cleanup_quality_decay_tick`) decays above-normal
   quality after `CLEANUP_DWELL_DAYS` and regains below-normal after
   `CLEANUP_REGAIN_WEEKS`. Room descriptions get quality-based suffixes at display
-  time. Contributors earn celestial resonance (via `ProjectKindResonanceAward`) and
-  society reputation (via `bump_society_reputation` with `area.dominant_society`).
+  time, appended after any #3291 season/phase description variant has already
+  replaced the base desc (see `RoomState.get_display_desc`,
+  `flows/object_states/room_state.py`). Contributors earn celestial resonance (via
+  `ProjectKindResonanceAward`) and society reputation (via `bump_society_reputation`
+  with `area.dominant_society`).
+- **Room Description Variants (#3291):** `evennia_extensions.RoomDescVariant`
+  (`room_profile` FK, nullable `season`/`phase` TextChoices reusing
+  `world.game_clock.constants.Season`/`TimePhase`, `description` text, unique on
+  `(room_profile, season, phase)`) - optional builder-authored prose for a specific
+  IC season/time-of-day. `resolve_room_description(profile, ic_now)`
+  (`evennia_extensions.services.room_desc_variants`) resolves most-specific-wins:
+  `(season, phase)` > `(season, -)` > `(-, phase)`, falling back to the base desc
+  (including when the game clock is unset). An event's `temporary_description`
+  overlay (`world.events.services._apply_room_overlay`) always takes precedence
+  over a variant. Authoring: `RoomDescVariantInline` on `RoomProfileAdmin`, plus
+  `staff_set_room_desc_variant`/`staff_remove_room_desc_variant` in the staff
+  world-builder canvas below.
 - **Staff World-Builder Canvas (#2449, epic #2436):** `world.areas.grid_services`
   extracts the area-generic room-graph core (`create_room`, `create_exit_pair`,
   `cell_occupied`, `place_room_on_grid`, `stranded_rooms` BFS, `promote_to_authored`,
   `suggest_fixture_key`, `ensure_slug_change_allowed`) out of
   `world.buildings.room_services` (#670), so the owner-facing Room Builder and the
-  staff canvas share one substrate instead of two drifting copies. Thirty-seven REGISTRY
+  staff canvas share one substrate instead of two drifting copies. Thirty-nine REGISTRY
   actions (`src/actions/definitions/world_builder.py`, `category="world_builder"`,
   `target_type=SELF`) — `create_area`/`edit_area`/`staff_dig_room`/`staff_edit_room`/
   `staff_link_rooms`/`staff_unlink_rooms`/`staff_rename_exit`/`staff_place_room`/
@@ -1052,7 +1067,8 @@ buildings up to entire planes. A `Room` is not its own `Area` level — it hangs
   `promote_area` + the six #2451 discovery/portal verbs + the #3269 Phase B
   room-authoring set (stats/places/ambient/feature/staffing/travel/blueprint/
   bindings/exit-detail/duplicate/batch-dig; `edit_area` carries the Phase C
-  area metadata) — gated solely by
+  area metadata) + the #3291 `staff_set_room_desc_variant`/
+  `staff_remove_room_desc_variant` pair — gated solely by
   `StaffOnlyPrerequisite` (no ownership/tenancy standing, and deliberately no
   GM-ladder trust check — see ADR-0139). `staff_dig_room` requires an AUTHORED area
   and always authors the new room outright; `staff_remove_room` refuses an
@@ -1351,21 +1367,36 @@ Goal domain allocation and journal-based XP progression.
 ### Journals
 Character journal entries (public/private), praises, retorts, freeform tags, weekly XP.
 
-- **Models:** `JournalEntry` (FK CharacterSheet author; self-FK parent for responses), `JournalTag`, `WeeklyJournalXP`
+- **Models:** `JournalEntry` (FK CharacterSheet author; self-FK parent for responses;
+  `posthumous_override`/`revealed_at`/`revealed_by_settlement` #3287), `JournalTag`,
+  `WeeklyJournalXP`, `JournalBequestGrant` (recipient_sheet/deceased_sheet FKs CharacterSheet,
+  created_by_settlement FK estates.EstateSettlement, #3287)
 - **Write services:** `create_journal_entry` / `create_journal_response` / `edit_journal_entry`; `JournalError` user-safe exception in `types.py`
-- **Action-backed (#1350, ADR-0001):** `create_journal_entry` / `respond_to_journal` / `edit_journal_entry` Actions wrap the services; web `JournalEntryViewSet` + telnet `CmdJournal` (`journal write|respond|edit`) converge on `action.run()`
+- **Action-backed (#1350, ADR-0001):** `create_journal_entry` / `respond_to_journal` / `edit_journal_entry` / `set_journal_disposition` (#3287) Actions wrap the services; web `JournalEntryViewSet` + telnet `CmdJournal` (`journal write|respond|edit|disposition`) converge on `action.run()`
 - **Web surface (#2160):** previously zero web frontend (telnet-only); now `/journals`
   (composer, public feed, own-entries tab) plus a `JournalTab` quick-compose panel in the
   in-scene sidebar. `/journal` (singular) was freed from the missions ledger, which moved to
   `/missions/journal` in the same PR — see Missions below and `journals/AGENT_GLOSSARY.md`'s
   disambiguation entry for the "journal" homonym across apps.
-- **Integrates with:** progression (weekly XP awards), achievements (`journals.total_written`/`total_public` stats), threads (`JournalEntry.related_threads` M2M)
+- **Integrates with:** progression (weekly XP awards), achievements (`journals.total_written`/`total_public` stats), threads (`JournalEntry.related_threads` M2M), estates (posthumous reveal + writings bequest, #3287)
 - **Account block/mute (#2996):** the public feed excludes an account-level-blocked account's
   entries both directions, and an account-level-muted account's entries from the muter's own
   feed only (`services.exclude_blocked_and_muted_authors`); a praise/retort response between a
   blocked pair is rejected with a neutral shared failure, a muted pair's response persists but
   is hidden from the entry author's own read only — see `world/scenes/CLAUDE.md`'s Block/Mute
   entries and ADR-0204
+- **Posthumous afterlife (#3287, ADR-0229):** a `CharacterSheet.posthumous_journal_disposition`
+  (REVEAL default / SEAL) plus a per-entry `JournalEntry.posthumous_override`
+  (INHERIT default / REVEAL / SEAL) decide what happens to a character's private entries at
+  death. `services.reveal_journals_for_settlement` and `services.grant_journal_bequest` are
+  called explicitly from `estates.services.execute_settlement` (no signals) — the reveal always
+  runs; the grant only when the will carries a `BequestKind.WRITINGS` line. SEAL always wins,
+  even over a bequest grant (enforced at the read path via `services.sealed_effective_q` /
+  `entry_visible_via_bequest`, never by excluding sealed rows from the grant itself). Read
+  paths: the public feed includes `revealed_at`-stamped entries (`is_public` is never mutated
+  by a reveal); a bequest recipient browses the deceased's non-sealed private corpus via
+  `GET /api/journals/entries/?deceased=<sheet_id>`; `GET/PATCH /api/journals/entries/disposition/`
+  reads/sets the caller's sheet-level default.
 - **Source:** `src/world/journals/` (no dedicated `docs/systems/journals.md`; see the app's
   `CLAUDE.md` and `AGENT_GLOSSARY.md`)
 ### Action Points
@@ -4486,6 +4517,59 @@ registering a service strategy + per-kind details model.
     ward's reaction at install time; the condition must be from a harmful
     (`is_negative=True`) category.
 
+### Boards (player-postable bulletin boards - #3286)
+The IC read/write layer the Notice Board room feature and org pages were
+missing: a `Board` is anchored to EITHER a `RoomProfile` (LOCATION board,
+riding the shipped NOTICE_BOARD room feature) OR an `Organization` (ORG
+board) - never both (DB check constraint, no JSON). Posts are signed,
+persistent, exact-text notices authored by a `scenes.Persona` - a masked
+persona posts under its false identity. Distinct from #2986 rumors
+(distorting, spreading) and the GM-only `TableBulletinPost` (OOC,
+table-scoped) - see `docs/adr/0228-board-posts-are-authored-by-persona.md`.
+
+- **Models** (`world.boards.models`): `Board` (nullable `room_profile` /
+  `organization` FKs, exactly-one-set check constraint + a per-anchor unique
+  constraint - one board per room, one per org; `max_active_posts`, default
+  30, newest-first display cap - no auto-expiry at MVP, older posts stay in
+  the DB), `BoardPost` (`board` FK, `author_persona` FK `scenes.Persona`,
+  `title`, `body`, `created_at`, `edited_at`, soft-delete
+  `removed_by_persona` / `removed_at` - moderation never hard-deletes).
+- **Permission booleans** on `societies.OrganizationRank`: `can_post_to_board`
+  (every default rank grants it - org boards are rank-and-file coordination),
+  `can_moderate_board` (leadership-only by default, mirrors
+  `can_manage_ranks`).
+- **Services** (`world.boards.services`): `create_board_post` /
+  `edit_board_post` / `remove_board_post` (permission logic lives here,
+  raises typed `BoardError`) - LOCATION posting/remove-own requires physical
+  presence in the board's room; ORG posting requires `can_post_to_board`,
+  removing another member's post requires `can_moderate_board` or staff.
+  `get_or_create_location_board` / `get_or_create_org_board`;
+  `visible_posts_for_board` (display-cap + soft-delete filter);
+  `exclude_blocked_and_muted_board_authors` (mirrors
+  `journals.services.exclude_blocked_and_muted_authors`).
+- **Room-feature integration:** `room_features.services.handle_notice_board_progression`
+  get-or-creates the LOCATION board on install; `PostToBoardAction` also
+  lazily get-or-creates it at first post (covers a NOTICE_BOARD room
+  installed before #3286 shipped).
+- **Action-backed (ADR-0001):** `PostToBoardAction` / `EditBoardPostAction` /
+  `RemoveBoardPostAction` (`actions/definitions/boards.py`); telnet
+  `CmdBoard` (`board`, `board read <n>`, `board post <title>=<body>`,
+  `board remove <n>`, scoped to the caller's current room) and the web
+  dispatch seam converge on the same Actions.
+- **API:** `BoardViewSet` / `BoardPostViewSet` (`world/boards/views.py`,
+  read-only - writes go through action dispatch); ORG board visibility is
+  gated on active `OrganizationMembership` (mirrors
+  `tasking.views.OrgTaskViewSet`), LOCATION boards are public reads.
+- **Web:** OrgPage's Board section (`orgs/pages/OrgPage.tsx`), and the room
+  panel's board block (`game/components/RoomPanel.tsx`,
+  `boards/components/BoardPanel.tsx`) - both share one `BoardPanel` read/post
+  component.
+- **Examine integration:** `actions/definitions/examine_extras.py`'s room
+  section renders the LOCATION board's current postings under the existing
+  Notice Board hint line.
+- **Source:** `src/world/boards/` (see the app's `AGENT_GLOSSARY.md` and
+  `docs/systems/boards.md` for the full write-up).
+
 ### Sanctum (Plan 4 §F — first Room Feature kind)
 Plan 4 §F (#669 §F, shipped via #703). Per-resonance per-room
 generation surface installed via the Ritual of Sanctification. Two
@@ -6931,14 +7015,16 @@ funeral finish, executor will-reading, or the deadline sweeper (14 real days, PL
 
 - **Models** (`world/estates`): `Will` (OneToOne sheet; testament prose; frozen once a
   settlement exists), `WillExecutor` (persona; any one may read), `Bequest` (kind-major
-  lines: SPECIFIC_ITEM/COIN_AMOUNT/ALL_COIN/BUILDING/BUSINESS/RESIDUARY; typed
-  persona-XOR-org recipient; items/businesses persona-only), `EstateSettlement`
+  lines: SPECIFIC_ITEM/COIN_AMOUNT/ALL_COIN/BUILDING/BUSINESS/RESIDUARY/WRITINGS (#3287,
+  no target FK — the corpus itself is the asset); typed persona-XOR-org recipient;
+  items/businesses/WRITINGS persona-only), `EstateSettlement`
   (PENDING/SETTLED/PARKED + `settled_via`), `EstateClaim` (inherited theft grievance,
   claimant-visible only), `EstateConfig` (singleton window).
 - **Services**: `open_settlement` (from `_mark_dead`, which now also stamps
   `Kinsperson.is_deceased` + fires `handle_death_for_pacts`); `execute_settlement` (ONE
   idempotent path: debts → bequests → residuary sweep → contract substitution → tenancy/
-  employment end → claims; PARKED = zero-mutation rollback); `resolve_intestate_heir`
+  employment end → claims → journal reveal + WRITINGS bequest grant, #3287; PARKED =
+  zero-mutation rollback); `resolve_intestate_heir`
   (family-org head → public-record kin; hidden kin never auto-inherit);
   `resolve_escheat_org` (nearest `Domain.owner_org` by parent walk).
 - **Ownership/theft**: `OwnershipEventType.INHERITED` (+ `PROVENANCE_EVENT_TYPES`);

@@ -9,7 +9,9 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import * as api from './api';
 import type {
   CreateJournalEntryRequest,
+  EditJournalEntryRequest,
   JournalEntryListFilters,
+  PosthumousJournalDisposition,
   RespondToJournalRequest,
 } from './api';
 
@@ -19,6 +21,7 @@ export const journalsKeys = {
   list: (filters: JournalEntryListFilters = {}) => [...journalsKeys.lists(), filters] as const,
   mine: (page = 1) => [...journalsKeys.all, 'mine', page] as const,
   detail: (id: number) => [...journalsKeys.all, 'detail', id] as const,
+  disposition: () => [...journalsKeys.all, 'disposition'] as const,
 };
 
 /** GET /api/journals/entries/ — public feed, optionally filtered by author/tag. */
@@ -76,6 +79,46 @@ export function useRespondToJournal() {
       queryClient.invalidateQueries({ queryKey: journalsKeys.detail(entryId) }).catch(() => {});
       queryClient.invalidateQueries({ queryKey: journalsKeys.lists() }).catch(() => {});
       queryClient.invalidateQueries({ queryKey: journalsKeys.mine() }).catch(() => {});
+    },
+  });
+}
+
+/**
+ * PATCH /api/journals/entries/{id}/ — edit title/body and/or the per-entry posthumous
+ * override (#3287). Invalidates the entry's detail plus "mine" (own-entries tab shows the
+ * updated override) and the public feed (title/body edits should refresh there too).
+ */
+export function useEditJournalEntry() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({ entryId, body }: { entryId: number; body: EditJournalEntryRequest }) =>
+      api.editJournalEntry(entryId, body),
+    onSuccess: (_data, { entryId }) => {
+      queryClient.invalidateQueries({ queryKey: journalsKeys.detail(entryId) }).catch(() => {});
+      queryClient.invalidateQueries({ queryKey: journalsKeys.lists() }).catch(() => {});
+      queryClient.invalidateQueries({ queryKey: journalsKeys.mine() }).catch(() => {});
+    },
+  });
+}
+
+/** GET /api/journals/entries/disposition/ — the caller's sheet-level default (#3287). */
+export function useJournalDisposition() {
+  return useQuery({
+    queryKey: journalsKeys.disposition(),
+    queryFn: () => api.getJournalDisposition(),
+  });
+}
+
+/**
+ * PATCH /api/journals/entries/disposition/ — set the caller's sheet-level default (#3287).
+ */
+export function useSetJournalDisposition() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (disposition: PosthumousJournalDisposition) =>
+      api.setJournalDisposition(disposition),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: journalsKeys.disposition() }).catch(() => {});
     },
   });
 }

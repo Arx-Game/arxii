@@ -25,6 +25,7 @@ from commands.agriculture import CmdHarvest
 from commands.alterations import CmdMageScar
 from commands.assets import CmdIntroduce
 from commands.battle import CmdBattle
+from commands.boards import CmdBoard
 from commands.canon_review import CmdCanonReview
 from commands.captivity import CmdDemandRansom
 from commands.carry import CmdCarry, CmdSetDown  # #2852
@@ -482,6 +483,8 @@ class CharacterCmdSet(default_cmds.CharacterCmdSet):
             CmdPathIntent,
             # #1346 — covenant membership lifecycle telnet namespace.
             CmdCovenant,
+            # #3286 — player-postable bulletin boards.
+            CmdBoard,
             # #2239 — in-play domain management + office delegation.
             CmdDomain,
             # #2999 — org pacts + betrothal telnet namespace.

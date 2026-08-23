@@ -142,6 +142,9 @@ def _room_examine_sections(room, looker) -> list[str]:
     ):
         # PLACEHOLDER flavor line (Apostate rewrite pass; keep dash-free).
         sections.append("|wA notice board stands here; try |ctidings local|w.|n")
+        board_section = _maybe_render_location_board_posts(profile, looker)
+        if board_section is not None:
+            sections.append(board_section)
 
     # #1765 — the looker's own pursuit heat here (self-only; None when SAFE).
     from world.justice.display import room_heat_line  # noqa: PLC0415
@@ -151,6 +154,60 @@ def _room_examine_sections(room, looker) -> list[str]:
         sections.append(heat_line)
 
     return sections
+
+
+def _maybe_render_location_board_posts(room_profile, looker) -> str | None:
+    """Render the room's LOCATION board postings on examine (#3286).
+
+    Returns None when no ``Board`` row exists yet for this room (a NOTICE_BOARD
+    feature can install before anyone has posted — the board row itself is
+    lazily get_or_create'd at first post) or the board carries no active
+    posts. Block/mute exclusion mirrors the journals feed
+    (``exclude_blocked_and_muted_board_authors``); author names render via the
+    same per-viewer persona display resolution as everywhere else
+    (``resolve_display_for_viewer`` — a masked poster shows the mask).
+    """
+    from world.boards.models import Board  # noqa: PLC0415
+    from world.boards.services import (  # noqa: PLC0415
+        exclude_blocked_and_muted_board_authors,
+        visible_posts_for_board,
+    )
+
+    board = Board.objects.filter(room_profile=room_profile).first()
+    if board is None:
+        return None
+
+    posts = visible_posts_for_board(board)
+    account = looker.account if looker is not None else None
+    posts = exclude_blocked_and_muted_board_authors(posts, viewer_account=account)
+    posts = list(posts)
+    if not posts:
+        return None
+
+    from core_management.permissions import is_staff_observer  # noqa: PLC0415
+    from world.scenes.persona_display import (  # noqa: PLC0415
+        resolve_display_for_viewer,
+        viewer_context_for_account,
+    )
+
+    viewer_persona_ids: set[int] = set()
+    viewer_sheet_ids: set[int] = set()
+    if account is not None:
+        viewer_persona_ids, viewer_sheet_ids = viewer_context_for_account(account)
+    is_staff = is_staff_observer(looker)
+
+    lines: list[str] = ["", f"|w{board.name}|n", ""]
+    for i, post in enumerate(posts, start=1):
+        author_name, _ = resolve_display_for_viewer(
+            post.author_persona,
+            viewer_persona_ids=viewer_persona_ids,
+            viewer_sheet_ids=viewer_sheet_ids,
+            is_staff=is_staff,
+        )
+        lines.append(f"  |c{i}|n. {post.title} |x(by {author_name})|n")
+    lines.append("")
+    lines.append("|xUse 'board read <n>' to read a notice.|n")
+    return "\n".join(lines)
 
 
 def _maybe_render_crafted_provenance(obj) -> str | None:

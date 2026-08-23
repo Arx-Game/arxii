@@ -26,6 +26,11 @@ from actions.definitions.battles import (
     SpawnBattleUnitsAction,
     StageBattleMapAction,
 )
+from actions.definitions.boards import (
+    EditBoardPostAction,
+    PostToBoardAction,
+    RemoveBoardPostAction,
+)
 from actions.definitions.cast import CastTechniqueAction
 from actions.definitions.ceremonies import (
     AbandonCeremonyAction,
@@ -234,6 +239,7 @@ from actions.definitions.journals import (
     CreateJournalEntryAction,
     EditJournalEntryAction,
     RespondToJournalAction,
+    SetJournalDispositionAction,
 )
 from actions.definitions.language import SetLanguageAction, TrainLanguageAction
 from actions.definitions.locations import (
@@ -540,10 +546,12 @@ from actions.definitions.world_builder import (
     StaffRemovePlaceAction,
     StaffRemovePortalAnchorAction,
     StaffRemoveRoomAction,
+    StaffRemoveRoomDescVariantAction,
     StaffRemoveRoomFeatureAction,
     StaffRenameExitAction,
     StaffSetExitDetailAction,
     StaffSetRoomBlueprintAction,
+    StaffSetRoomDescVariantAction,
     StaffSetRoomStatAction,
     StaffSetStartingRoomAction,
     StaffSetTravelHubAction,
@@ -755,6 +763,7 @@ _ALL_ACTIONS: list[Action] = [
     CreateJournalEntryAction(),
     RespondToJournalAction(),
     EditJournalEntryAction(),
+    SetJournalDispositionAction(),
     SetCharacterGoalsAction(),
     LogGoalProgressAction(),
     GiveWriteupKudosAction(),
@@ -1019,6 +1028,8 @@ _ALL_ACTIONS: list[Action] = [
     StaffRemoveAmbientLineAction(),
     StaffAddAmbientEmitAction(),
     StaffRemoveAmbientEmitAction(),
+    StaffSetRoomDescVariantAction(),
+    StaffRemoveRoomDescVariantAction(),
     StaffInstallRoomFeatureAction(),
     StaffRemoveRoomFeatureAction(),
     StaffAssignFunctionaryAction(),
@@ -1053,6 +1064,10 @@ _ALL_ACTIONS: list[Action] = [
     LeaveStoryRoomAction(),
     SpinUpSceneRoomAction(),
     CloseSceneRoomAction(),
+    # #3286 — player-postable bulletin boards.
+    PostToBoardAction(),
+    EditBoardPostAction(),
+    RemoveBoardPostAction(),
 ]
 
 # Lookup by key

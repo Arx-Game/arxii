@@ -22,6 +22,8 @@ if TYPE_CHECKING:
 
 _MSG_NO_ACTIVE_CHARACTER = "No active character."
 _MSG_ENTRY_NOT_FOUND = "That journal entry was not found."
+_MSG_INVALID_DISPOSITION = "disposition must be reveal or seal."
+_MSG_INVALID_OVERRIDE = "override must be inherit, reveal, or seal."
 
 
 @dataclass
@@ -53,11 +55,16 @@ class CreateJournalEntryAction(_BaseJournalAction):
         context: ActionContext | None = None,
         **kwargs: Any,
     ) -> ActionResult:
+        from world.journals.constants import PosthumousOverride  # noqa: PLC0415
         from world.journals.services import create_journal_entry  # noqa: PLC0415
 
         sheet = self._sheet(actor)
         if sheet is None:
             return ActionResult(success=False, message=_MSG_NO_ACTIVE_CHARACTER)
+
+        posthumous_override = kwargs.get("posthumous_override", PosthumousOverride.INHERIT)
+        if posthumous_override not in PosthumousOverride.values:
+            return ActionResult(success=False, message=_MSG_INVALID_OVERRIDE)
 
         entry = create_journal_entry(
             author=sheet,
@@ -65,6 +72,7 @@ class CreateJournalEntryAction(_BaseJournalAction):
             body=kwargs.get("body", ""),
             is_public=bool(kwargs.get("is_public", False)),
             tags=kwargs.get("tags"),
+            posthumous_override=posthumous_override,
         )
         return ActionResult(
             success=True,
@@ -142,12 +150,13 @@ class EditJournalEntryAction(_BaseJournalAction):
     icon: str = "edit-3"
     category: str = "journals"
 
-    def execute(
+    def execute(  # noqa: PLR0911 - one return per validation/failure branch, deliberately flat
         self,
         actor: ObjectDB,
         context: ActionContext | None = None,
         **kwargs: Any,
     ) -> ActionResult:
+        from world.journals.constants import PosthumousOverride  # noqa: PLC0415
         from world.journals.models import JournalEntry  # noqa: PLC0415
         from world.journals.services import edit_journal_entry  # noqa: PLC0415
         from world.journals.types import JournalError  # noqa: PLC0415
@@ -169,11 +178,16 @@ class EditJournalEntryAction(_BaseJournalAction):
         else:
             return ActionResult(success=False, message="No journal entry selected.")
 
+        posthumous_override = kwargs.get("posthumous_override")
+        if posthumous_override is not None and posthumous_override not in PosthumousOverride.values:
+            return ActionResult(success=False, message=_MSG_INVALID_OVERRIDE)
+
         try:
             updated = edit_journal_entry(
                 entry=entry,
                 title=kwargs.get("title"),
                 body=kwargs.get("body"),
+                posthumous_override=posthumous_override,
             )
         except JournalError as exc:
             return ActionResult(success=False, message=exc.user_message)
@@ -182,4 +196,38 @@ class EditJournalEntryAction(_BaseJournalAction):
             success=True,
             message=f"You revise '{updated.title}'.",
             data={"entry_id": updated.pk},
+        )
+
+
+@dataclass
+class SetJournalDispositionAction(_BaseJournalAction):
+    """Set the actor's sheet-level default posthumous journal disposition (#3287)."""
+
+    key: str = "set_journal_disposition"
+    name: str = "Set Posthumous Journal Disposition"
+    icon: str = "shield"
+    category: str = "journals"
+
+    def execute(
+        self,
+        actor: ObjectDB,
+        context: ActionContext | None = None,
+        **kwargs: Any,
+    ) -> ActionResult:
+        from world.character_sheets.types import PosthumousJournalDisposition  # noqa: PLC0415
+        from world.journals.services import set_sheet_posthumous_disposition  # noqa: PLC0415
+
+        sheet = self._sheet(actor)
+        if sheet is None:
+            return ActionResult(success=False, message=_MSG_NO_ACTIVE_CHARACTER)
+
+        disposition = kwargs.get("disposition")
+        if disposition not in PosthumousJournalDisposition.values:
+            return ActionResult(success=False, message=_MSG_INVALID_DISPOSITION)
+
+        set_sheet_posthumous_disposition(sheet=sheet, disposition=disposition)
+        return ActionResult(
+            success=True,
+            message=f"Your private journals will {disposition} after death by default.",
+            data={"disposition": disposition},
         )

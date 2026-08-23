@@ -1825,6 +1825,129 @@ paths:
               schema:
                 $ref: '#/components/schemas/Block'
           description: ''
+  /api/boards/boards/:
+    get:
+      operationId: boards_boards_list
+      description: |-
+        Read-only board metadata: list/retrieve.
+
+        LOCATION boards are visible to everyone; ORG boards only to active members.
+      parameters:
+      - in: query
+        name: organization
+        schema:
+          type: number
+      - name: page
+        required: false
+        in: query
+        description: A page number within the paginated result set.
+        schema:
+          type: integer
+      - name: page_size
+        required: false
+        in: query
+        description: Number of results to return per page.
+        schema:
+          type: integer
+      - in: query
+        name: room_profile
+        schema:
+          type: number
+      tags:
+      - boards
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaginatedBoardList'
+          description: ''
+  /api/boards/boards/{id}/:
+    get:
+      operationId: boards_boards_retrieve
+      description: |-
+        Read-only board metadata: list/retrieve.
+
+        LOCATION boards are visible to everyone; ORG boards only to active members.
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: A unique integer value identifying this board.
+        required: true
+      tags:
+      - boards
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Board'
+          description: ''
+  /api/boards/posts/:
+    get:
+      operationId: boards_posts_list
+      description: |-
+        List posts, applying the per-board display cap when ``?board=`` is given.
+
+        Without a ``board`` filter, falls back to the plain filtered queryset
+        (cross-board browsing has no single cap to apply).
+      parameters:
+      - in: query
+        name: board
+        schema:
+          type: number
+      - name: page
+        required: false
+        in: query
+        description: A page number within the paginated result set.
+        schema:
+          type: integer
+      - name: page_size
+        required: false
+        in: query
+        description: Number of results to return per page.
+        schema:
+          type: integer
+      tags:
+      - boards
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaginatedBoardPostList'
+          description: ''
+  /api/boards/posts/{id}/:
+    get:
+      operationId: boards_posts_retrieve
+      description: 'Read-only board posts: list/retrieve. Writes dispatch through
+        Actions.'
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: A unique integer value identifying this board post.
+        required: true
+      tags:
+      - boards
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BoardPost'
+          description: ''
   /api/boundaries/content-themes/:
     get:
       operationId: boundaries_content_themes_list
@@ -10952,6 +11075,7 @@ paths:
           - coin_amount
           - residuary
           - specific_item
+          - writings
         description: |-
           * `specific_item` - Specific Item
           * `coin_amount` - Coin Amount
@@ -10959,6 +11083,7 @@ paths:
           * `building` - Building
           * `business` - Business
           * `residuary` - Residuary (everything else)
+          * `writings` - Writings (Private Journal Corpus)
       - name: page
         required: false
         in: query
@@ -16092,14 +16217,18 @@ paths:
     get:
       operationId: journals_entries_retrieve
       description: |-
-        List public journal entries.
+        List public journal entries, or (with ``?deceased=``) a bequeathed corpus.
 
-        Supports query params:
+        Supports query params (all handled by ``JournalEntryFilter``):
         - ?author=<character_id> — filter by author
         - ?tag=<tag_name> — filter by tag name
+        - ?deceased=<character_sheet_id> — browse a deceased sheet's non-sealed private
+          entries, ONLY when the caller holds a ``JournalBequestGrant`` for that sheet
+          (#3287 Decision 3, gated in ``JournalEntryFilter.filter_deceased`` per
+          ``tools/lint_use_filterset.py``). Empty when no grant exists — never a permission
+          error, so a probing id can't confirm whether a grant exists for someone else.
 
-        Blocked/muted authors' entries are excluded (#2996 Decision 2) — see
-        ``exclude_blocked_and_muted_authors``.
+        See ``get_queryset()`` for the public-feed contract (revealed entries, block/mute).
       tags:
       - journals
       security:
@@ -16123,8 +16252,9 @@ paths:
       description: |-
         Retrieve a single journal entry.
 
-        Public entries are visible to all authenticated users.
-        Private entries are only visible to their author.
+        Visible when: public, revealed by an estate settlement, authored by the caller, or
+        (#3287 Decision 3) the caller holds a bequest grant over the author's writings and
+        this entry's effective disposition isn't SEAL.
       parameters:
       - in: path
         name: id
@@ -16164,6 +16294,35 @@ paths:
         schema:
           type: integer
         required: true
+      tags:
+      - journals
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          description: No response body
+  /api/journals/entries/disposition/:
+    get:
+      operationId: journals_entries_disposition_retrieve
+      description: |-
+        Read or set the caller's sheet-level default posthumous journal disposition.
+
+        GET returns the current default; PATCH sets it via ``set_journal_disposition``
+        (#3287) — the same seam ``journal disposition sheet=<...>`` uses on telnet.
+      tags:
+      - journals
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          description: No response body
+    patch:
+      operationId: journals_entries_disposition_partial_update
+      description: |-
+        Read or set the caller's sheet-level default posthumous journal disposition.
+
+        GET returns the current default; PATCH sets it via ``set_journal_disposition``
+        (#3287) — the same seam ``journal disposition sheet=<...>`` uses on telnet.
       tags:
       - journals
       security:
@@ -38166,6 +38325,7 @@ components:
       - building
       - business
       - residuary
+      - writings
       type: string
       description: |-
         * `specific_item` - Specific Item
@@ -38174,6 +38334,7 @@ components:
         * `building` - Building
         * `business` - Business
         * `residuary` - Residuary (everything else)
+        * `writings` - Writings (Private Journal Corpus)
     BequestRequest:
       type: object
       properties:
@@ -38375,6 +38536,83 @@ components:
       required:
       - defending_side_role
       - id
+    Board:
+      type: object
+      properties:
+        id:
+          type: integer
+          readOnly: true
+        room_profile:
+          type: integer
+          nullable: true
+          description: 'LOCATION board anchor: the room this board physically stands
+            in.'
+        organization:
+          type: integer
+          nullable: true
+          description: 'ORG board anchor: the organization this board belongs to.'
+        name:
+          type: string
+          description: Display name for this board.
+          maxLength: 100
+        max_active_posts:
+          type: integer
+          maximum: 32767
+          minimum: 0
+          description: Newest-first display cap. Older posts fall off the display
+            but are retained in the DB (no auto-expiry at MVP).
+        is_location_board:
+          type: boolean
+          readOnly: true
+        is_org_board:
+          type: boolean
+          readOnly: true
+      required:
+      - id
+      - is_location_board
+      - is_org_board
+      - name
+    BoardPost:
+      type: object
+      description: |-
+        Read-only board post — writes go through action dispatch (ADR-0001).
+
+        ``author_display`` renders through the same per-viewer persona display
+        resolution as everywhere else (a masked poster shows the mask; a
+        discovered mask reveals; staff sees through every mask).
+      properties:
+        id:
+          type: integer
+          readOnly: true
+        board:
+          type: integer
+        title:
+          type: string
+          maxLength: 200
+        body:
+          type: string
+        author_display:
+          type: string
+          readOnly: true
+        created_at:
+          type: string
+          format: date-time
+          readOnly: true
+        edited_at:
+          type: string
+          format: date-time
+          nullable: true
+        is_removed:
+          type: boolean
+          readOnly: true
+      required:
+      - author_display
+      - board
+      - body
+      - created_at
+      - id
+      - is_removed
+      - title
     BoardPosting:
       type: object
       description: One eligible posting on a board (preview row).
@@ -54736,6 +54974,14 @@ components:
           description: Members at this rank can officially declare a persona favored
             or disfavored with this organization (#3290), moving their OrganizationReputation
             via a StandingDeclaration audit row.
+        can_post_to_board:
+          type: boolean
+          description: Members at this rank can pin new notices to this organization's
+            board (#3286).
+        can_moderate_board:
+          type: boolean
+          description: Members at this rank can remove ANY notice from this organization's
+            board (authors may always remove their own; staff always can) (#3286).
       required:
       - id
       - name
@@ -54774,6 +55020,14 @@ components:
           description: Members at this rank can officially declare a persona favored
             or disfavored with this organization (#3290), moving their OrganizationReputation
             via a StandingDeclaration audit row.
+        can_post_to_board:
+          type: boolean
+          description: Members at this rank can pin new notices to this organization's
+            board (#3286).
+        can_moderate_board:
+          type: boolean
+          description: Members at this rank can remove ANY notice from this organization's
+            board (authors may always remove their own; staff always can) (#3286).
       required:
       - name
       - tier
@@ -55446,6 +55700,52 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/Block'
+    PaginatedBoardList:
+      type: object
+      required:
+      - count
+      - results
+      properties:
+        count:
+          type: integer
+          example: 123
+        next:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=4
+        previous:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=2
+        results:
+          type: array
+          items:
+            $ref: '#/components/schemas/Board'
+    PaginatedBoardPostList:
+      type: object
+      required:
+      - count
+      - results
+      properties:
+        count:
+          type: integer
+          example: 123
+        next:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=4
+        previous:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=2
+        results:
+          type: array
+          items:
+            $ref: '#/components/schemas/BoardPost'
     PaginatedBoardPostingList:
       type: object
       properties:
@@ -71221,6 +71521,10 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/WorldBuilderPortalAnchor'
+        desc_variants:
+          type: array
+          items:
+            $ref: '#/components/schemas/WorldBuilderRoomDescVariant'
         grants:
           type: array
           items:
@@ -71231,6 +71535,7 @@ components:
       - clue_triggers
       - clues
       - default_blueprint
+      - desc_variants
       - description
       - enclosure
       - exported_at
@@ -75576,12 +75881,17 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/WorldBuilderPortalAnchor'
+        desc_variants:
+          type: array
+          items:
+            $ref: '#/components/schemas/WorldBuilderRoomDescVariant'
       required:
       - ambient_counts
       - area_id
       - clue_triggers
       - clues
       - default_blueprint
+      - desc_variants
       - description
       - enclosure
       - exported_at
@@ -75627,6 +75937,25 @@ components:
       - detect_difficulty
       - fixture_key
       - id
+    WorldBuilderRoomDescVariant:
+      type: object
+      description: One authored season/phase description variant (#3291).
+      properties:
+        id:
+          type: integer
+        season:
+          type: string
+          nullable: true
+        phase:
+          type: string
+          nullable: true
+        description:
+          type: string
+      required:
+      - description
+      - id
+      - phase
+      - season
     WorldBuilderRoomDetail:
       type: object
       description: 'Selection-time room detail (#3269): exit profiles + comfort breakdown.'

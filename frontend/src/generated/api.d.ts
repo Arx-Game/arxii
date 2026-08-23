@@ -1259,6 +1259,87 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
+  '/api/boards/boards/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /**
+     * @description Read-only board metadata: list/retrieve.
+     *
+     *     LOCATION boards are visible to everyone; ORG boards only to active members.
+     */
+    get: operations['boards_boards_list'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/boards/boards/{id}/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /**
+     * @description Read-only board metadata: list/retrieve.
+     *
+     *     LOCATION boards are visible to everyone; ORG boards only to active members.
+     */
+    get: operations['boards_boards_retrieve'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/boards/posts/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /**
+     * @description List posts, applying the per-board display cap when ``?board=`` is given.
+     *
+     *     Without a ``board`` filter, falls back to the plain filtered queryset
+     *     (cross-board browsing has no single cap to apply).
+     */
+    get: operations['boards_posts_list'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/boards/posts/{id}/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /** @description Read-only board posts: list/retrieve. Writes dispatch through Actions. */
+    get: operations['boards_posts_retrieve'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   '/api/boundaries/content-themes/': {
     parameters: {
       query?: never;
@@ -10395,14 +10476,18 @@ export interface paths {
       cookie?: never;
     };
     /**
-     * @description List public journal entries.
+     * @description List public journal entries, or (with ``?deceased=``) a bequeathed corpus.
      *
-     *     Supports query params:
+     *     Supports query params (all handled by ``JournalEntryFilter``):
      *     - ?author=<character_id> — filter by author
      *     - ?tag=<tag_name> — filter by tag name
+     *     - ?deceased=<character_sheet_id> — browse a deceased sheet's non-sealed private
+     *       entries, ONLY when the caller holds a ``JournalBequestGrant`` for that sheet
+     *       (#3287 Decision 3, gated in ``JournalEntryFilter.filter_deceased`` per
+     *       ``tools/lint_use_filterset.py``). Empty when no grant exists — never a permission
+     *       error, so a probing id can't confirm whether a grant exists for someone else.
      *
-     *     Blocked/muted authors' entries are excluded (#2996 Decision 2) — see
-     *     ``exclude_blocked_and_muted_authors``.
+     *     See ``get_queryset()`` for the public-feed contract (revealed entries, block/mute).
      */
     get: operations['journals_entries_retrieve'];
     put?: never;
@@ -10424,8 +10509,9 @@ export interface paths {
     /**
      * @description Retrieve a single journal entry.
      *
-     *     Public entries are visible to all authenticated users.
-     *     Private entries are only visible to their author.
+     *     Visible when: public, revealed by an estate settlement, authored by the caller, or
+     *     (#3287 Decision 3) the caller holds a bequest grant over the author's writings and
+     *     this entry's effective disposition isn't SEAL.
      */
     get: operations['journals_entries_retrieve_2'];
     put?: never;
@@ -10452,6 +10538,34 @@ export interface paths {
     options?: never;
     head?: never;
     patch?: never;
+    trace?: never;
+  };
+  '/api/journals/entries/disposition/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /**
+     * @description Read or set the caller's sheet-level default posthumous journal disposition.
+     *
+     *     GET returns the current default; PATCH sets it via ``set_journal_disposition``
+     *     (#3287) — the same seam ``journal disposition sheet=<...>`` uses on telnet.
+     */
+    get: operations['journals_entries_disposition_retrieve'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    /**
+     * @description Read or set the caller's sheet-level default posthumous journal disposition.
+     *
+     *     GET returns the current default; PATCH sets it via ``set_journal_disposition``
+     *     (#3287) — the same seam ``journal disposition sheet=<...>`` uses on telnet.
+     */
+    patch: operations['journals_entries_disposition_partial_update'];
     trace?: never;
   };
   '/api/journals/entries/mine/': {
@@ -23148,6 +23262,7 @@ export interface components {
      *     * `building` - Building
      *     * `business` - Business
      *     * `residuary` - Residuary (everything else)
+     *     * `writings` - Writings (Private Journal Corpus)
      * @enum {string}
      */
     BequestKindEnum:
@@ -23156,7 +23271,8 @@ export interface components {
       | 'all_coin'
       | 'building'
       | 'business'
-      | 'residuary';
+      | 'residuary'
+      | 'writings';
     BequestRequest: {
       will: number;
       /** @description Execution order within this bequest's kind. */
@@ -23252,6 +23368,38 @@ export interface components {
        *     * `defender` - Defender
        */
       defending_side_role: components['schemas']['DefendingSideRoleEnum'];
+    };
+    Board: {
+      readonly id: number;
+      /** @description LOCATION board anchor: the room this board physically stands in. */
+      room_profile?: number | null;
+      /** @description ORG board anchor: the organization this board belongs to. */
+      organization?: number | null;
+      /** @description Display name for this board. */
+      name: string;
+      /** @description Newest-first display cap. Older posts fall off the display but are retained in the DB (no auto-expiry at MVP). */
+      max_active_posts?: number;
+      readonly is_location_board: boolean;
+      readonly is_org_board: boolean;
+    };
+    /**
+     * @description Read-only board post — writes go through action dispatch (ADR-0001).
+     *
+     *     ``author_display`` renders through the same per-viewer persona display
+     *     resolution as everywhere else (a masked poster shows the mask; a
+     *     discovered mask reveals; staff sees through every mask).
+     */
+    BoardPost: {
+      readonly id: number;
+      board: number;
+      title: string;
+      body: string;
+      readonly author_display: string;
+      /** Format: date-time */
+      readonly created_at: string;
+      /** Format: date-time */
+      edited_at?: string | null;
+      readonly is_removed: boolean;
     };
     /** @description One eligible posting on a board (preview row). */
     BoardPosting: {
@@ -31076,6 +31224,10 @@ export interface components {
       can_lead_rituals?: boolean;
       /** @description Members at this rank can officially declare a persona favored or disfavored with this organization (#3290), moving their OrganizationReputation via a StandingDeclaration audit row. */
       can_declare_standing?: boolean;
+      /** @description Members at this rank can pin new notices to this organization's board (#3286). */
+      can_post_to_board?: boolean;
+      /** @description Members at this rank can remove ANY notice from this organization's board (authors may always remove their own; staff always can) (#3286). */
+      can_moderate_board?: boolean;
     };
     OrganizationRankRequest: {
       /** @description Diegetic name for this rung (e.g., Guildmaster, Captain) */
@@ -31092,6 +31244,10 @@ export interface components {
       can_lead_rituals?: boolean;
       /** @description Members at this rank can officially declare a persona favored or disfavored with this organization (#3290), moving their OrganizationReputation via a StandingDeclaration audit row. */
       can_declare_standing?: boolean;
+      /** @description Members at this rank can pin new notices to this organization's board (#3286). */
+      can_post_to_board?: boolean;
+      /** @description Members at this rank can remove ANY notice from this organization's board (authors may always remove their own; staff always can) (#3286). */
+      can_moderate_board?: boolean;
     };
     /** @description A persona's standing with an organization — named tier only, never the raw value. */
     OrganizationReputation: {
@@ -31479,6 +31635,36 @@ export interface components {
        */
       previous?: string | null;
       results: components['schemas']['Block'][];
+    };
+    PaginatedBoardList: {
+      /** @example 123 */
+      count: number;
+      /**
+       * Format: uri
+       * @example http://api.example.org/accounts/?page=4
+       */
+      next?: string | null;
+      /**
+       * Format: uri
+       * @example http://api.example.org/accounts/?page=2
+       */
+      previous?: string | null;
+      results: components['schemas']['Board'][];
+    };
+    PaginatedBoardPostList: {
+      /** @example 123 */
+      count: number;
+      /**
+       * Format: uri
+       * @example http://api.example.org/accounts/?page=4
+       */
+      next?: string | null;
+      /**
+       * Format: uri
+       * @example http://api.example.org/accounts/?page=2
+       */
+      previous?: string | null;
+      results: components['schemas']['BoardPost'][];
     };
     PaginatedBoardPostingList: {
       count: number;
@@ -40096,6 +40282,7 @@ export interface components {
       clues: components['schemas']['WorldBuilderRoomClue'][];
       clue_triggers: components['schemas']['WorldBuilderClueTrigger'][];
       portal_anchors: components['schemas']['WorldBuilderPortalAnchor'][];
+      desc_variants: components['schemas']['WorldBuilderRoomDescVariant'][];
       grants: string[];
     };
     /** @description Read-only serializer for StrainAvailability — per-character strain cap snapshot. */
@@ -42256,6 +42443,7 @@ export interface components {
       clues: components['schemas']['WorldBuilderRoomClue'][];
       clue_triggers: components['schemas']['WorldBuilderClueTrigger'][];
       portal_anchors: components['schemas']['WorldBuilderPortalAnchor'][];
+      desc_variants: components['schemas']['WorldBuilderRoomDescVariant'][];
     };
     /** @description One RoomClue placement, nested in a WorldBuilderRoom payload (#2451). */
     WorldBuilderRoomClue: {
@@ -42264,6 +42452,13 @@ export interface components {
       clue_slug: string;
       detect_difficulty: number;
       fixture_key: string | null;
+    };
+    /** @description One authored season/phase description variant (#3291). */
+    WorldBuilderRoomDescVariant: {
+      id: number;
+      season: string | null;
+      phase: string | null;
+      description: string;
     };
     /** @description Selection-time room detail (#3269): exit profiles + comfort breakdown. */
     WorldBuilderRoomDetail: {
@@ -43978,6 +44173,101 @@ export interface operations {
         };
         content: {
           'application/json': components['schemas']['Block'];
+        };
+      };
+    };
+  };
+  boards_boards_list: {
+    parameters: {
+      query?: {
+        organization?: number;
+        /** @description A page number within the paginated result set. */
+        page?: number;
+        /** @description Number of results to return per page. */
+        page_size?: number;
+        room_profile?: number;
+      };
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['PaginatedBoardList'];
+        };
+      };
+    };
+  };
+  boards_boards_retrieve: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        /** @description A unique integer value identifying this board. */
+        id: number;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['Board'];
+        };
+      };
+    };
+  };
+  boards_posts_list: {
+    parameters: {
+      query?: {
+        board?: number;
+        /** @description A page number within the paginated result set. */
+        page?: number;
+        /** @description Number of results to return per page. */
+        page_size?: number;
+      };
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['PaginatedBoardPostList'];
+        };
+      };
+    };
+  };
+  boards_posts_retrieve: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        /** @description A unique integer value identifying this board post. */
+        id: number;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['BoardPost'];
         };
       };
     };
@@ -51521,8 +51811,16 @@ export interface operations {
          *     * `building` - Building
          *     * `business` - Business
          *     * `residuary` - Residuary (everything else)
+         *     * `writings` - Writings (Private Journal Corpus)
          */
-        kind?: 'all_coin' | 'building' | 'business' | 'coin_amount' | 'residuary' | 'specific_item';
+        kind?:
+          | 'all_coin'
+          | 'building'
+          | 'business'
+          | 'coin_amount'
+          | 'residuary'
+          | 'specific_item'
+          | 'writings';
         /** @description A page number within the paginated result set. */
         page?: number;
         /** @description Number of results to return per page. */
@@ -56106,6 +56404,42 @@ export interface operations {
       path: {
         id: number;
       };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description No response body */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+    };
+  };
+  journals_entries_disposition_retrieve: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description No response body */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+    };
+  };
+  journals_entries_disposition_partial_update: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
       cookie?: never;
     };
     requestBody?: never;
