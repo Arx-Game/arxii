@@ -401,17 +401,90 @@
     state: started
     daemon_reload: true
 
+# --- Reload (drop-resilient + state-derived) --------------------------------
+# Two hardening layers, both from the 2026-08-23 standup failure, where the
+# SSH connection was closed from the host side during this exact task after
+# 84 green ones — and a re-run of the button would have silently skipped the
+# reload, leaving the Server on pre-deploy code while reporting green:
+#
+# 1. "Needs a reload" is derived from HOST state, not only from run-local
+#    change flags. The flags (`app_checkout is changed` etc.) exist only
+#    inside the run that made the changes; a play that dies between the
+#    symlink flip and a confirmed reload loses them, and the next converge
+#    of the same ref sees nothing changed. The stamp file — written only
+#    after the reload passes the health check below — records which release
+#    the Server last provably reloaded into; stamp != checked-out SHA forces
+#    the reload regardless of the flags.
+#
+# 2. The reload itself survives a dropped SSH connection, in the same spirit
+#    as the migrate task's async/poll (2026-08-15 incident): ignore the
+#    unreachable, reconnect, retry. Once systemd accepts a reload job it
+#    completes regardless of the caller, so the retry is at worst a harmless
+#    second reload of an already-current Server (Portal keeps players
+#    connected through it either way).
+- name: Read which release the Server last provably reloaded into
+  ansible.builtin.slurp:
+    src: "{{ app_reload_stamp }}"
+  register: app_reload_stamp_read
+  failed_when: false
+
+# `| bool` on every consumer below — the folded expression renders as the
+# STRING "True"/"False", same gotcha as roles/caddy's caddy_archive_enabled.
+- name: Decide whether Evennia needs a reload (change flags OR stale stamp)
+  ansible.builtin.set_fact:
+    app_needs_reload: >-
+      {{ app_checkout is changed
+         or app_symlink is changed
+         or app_uv_sync is changed
+         or app_frontend_build is changed
+         or app_migrate is changed
+         or app_collectstatic is changed
+         or (app_reload_stamp_read.content | default('') | b64decode | trim)
+            != app_checkout.after }}
+
 - name: Reload Evennia on a code / deps / migration change (Portal keeps players connected)
   ansible.builtin.systemd_service:
     name: "{{ app_service }}"
     state: reloaded
-  when: >
-    app_checkout is changed
-    or app_symlink is changed
-    or app_uv_sync is changed
-    or app_frontend_build is changed
-    or app_migrate is changed
-    or app_collectstatic is changed
+  when: app_needs_reload | bool
+  register: app_reload
+  ignore_unreachable: true
+
+- name: Reconnect if the SSH channel dropped mid-reload
+  ansible.builtin.wait_for_connection:
+    timeout: 300
+  when: (app_needs_reload | bool) and (app_reload.unreachable | default(false))
+
+- name: Retry the reload after a reconnect (idempotent; systemd finishes an accepted job anyway)
+  ansible.builtin.systemd_service:
+    name: "{{ app_service }}"
+    state: reloaded
+  when: (app_needs_reload | bool) and (app_reload.unreachable | default(false))
+
+# Direct to the localhost-bound backend (not through Caddy/Cloudflare), with
+# the real Host header — django_hardening's ALLOWED_HOSTS rejects a bare
+# 127.0.0.1 Host with a 400. 301/302 accepted alongside 200: an SSL-redirect
+# answer still proves the Server process is up and serving requests.
+- name: Wait until the reloaded Server answers on the web backend
+  ansible.builtin.uri:
+    url: "http://{{ app_web_backend }}/"
+    headers:
+      Host: "{{ caddy_web_fqdn }}"
+    status_code: [200, 301, 302]
+  register: app_reload_health
+  until: app_reload_health is succeeded
+  retries: 60
+  delay: 5
+  when: app_needs_reload | bool
+
+- name: Stamp the reloaded release SHA (a re-run re-derives "reload landed" from this)
+  ansible.builtin.copy:
+    content: "{{ app_checkout.after }}"
+    dest: "{{ app_reload_stamp }}"
+    owner: root
+    group: root
+    mode: "0644"
+  when: app_needs_reload | bool
 
 # --- Portal-crash watchdog ---------------------------------------------------
 # Type=forking + PIDFile=server.pid (arxii.service.j2) only supervises the
