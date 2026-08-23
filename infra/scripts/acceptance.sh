@@ -257,6 +257,18 @@ assert_before "standup.sh unsets LINODE_TOKEN/CLOUDFLARE_API_TOKEN before invoki
   '^[[:space:]]*unset LINODE_TOKEN CLOUDFLARE_API_TOKEN' '^[[:space:]]*ansible-playbook -i' \
   infra/scripts/standup.sh
 
+# ansible.cfg only auto-loads from the process CWD (repo root in CI), so the
+# SSH keepalives/ControlPersist in infra/ansible/ansible.cfg were silently
+# never in effect until ANSIBLE_CONFIG was exported (2026-08-23: both reload
+# attempts died at the Azure SNAT ~4-min idle timeout). Guard the export in
+# BOTH converge scripts, before their ansible-playbook invocations.
+assert_before "standup.sh exports ANSIBLE_CONFIG before invoking ansible-playbook" \
+  '^export ANSIBLE_CONFIG=' '^[[:space:]]*ansible-playbook -i' \
+  infra/scripts/standup.sh
+assert_before "rehearse.sh exports ANSIBLE_CONFIG before invoking ansible-playbook" \
+  '^export ANSIBLE_CONFIG=' '^[[:space:]]*ansible-playbook -i' \
+  infra/scripts/rehearse.sh
+
 # (c) The caddy DNS-01 plugin install and the Caddyfile directive that
 # needs it are paired — if either half disappears the other is stale.
 chk   "caddy role fetches the caddy-dns/cloudflare plugin build" \
