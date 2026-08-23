@@ -1,4 +1,4 @@
-# ADR-0228: Board posts are authored by Persona, not by account or CharacterSheet
+# ADR-0230: Board posts are authored by Persona, not by account or CharacterSheet
 
 **Status:** Accepted (2026-08-22, #3286).
 

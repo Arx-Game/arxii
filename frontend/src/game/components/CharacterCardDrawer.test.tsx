@@ -246,7 +246,7 @@ describe('CharacterCardDrawer', () => {
   });
 
   // #2160 Task 4: quick actions.
-  it('renders both quick actions when entry+live tenure resolve; hides "Send a letter" with no live tenure', () => {
+  it('renders both quick actions when entry+live tenure resolve; hides "Message the player" with no live tenure', () => {
     mockSearchMatch(matchedEntry([liveTenure()]));
     const { unmount } = renderWithProviders(
       <CharacterCardDrawer
@@ -257,7 +257,7 @@ describe('CharacterCardDrawer', () => {
       />
     );
     expect(screen.getByRole('button', { name: /write a journal/i })).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: /send a letter/i })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /message the player/i })).toBeInTheDocument();
     unmount();
 
     mockSearchMatch(matchedEntry([endedTenure()]));
@@ -270,7 +270,7 @@ describe('CharacterCardDrawer', () => {
       />
     );
     expect(screen.getByRole('button', { name: /write a journal/i })).toBeInTheDocument();
-    expect(screen.queryByRole('button', { name: /send a letter/i })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /message the player/i })).not.toBeInTheDocument();
   });
 
   describe('with no public roster match (disguise / temporary / unlisted persona)', () => {

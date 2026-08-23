@@ -1,4 +1,4 @@
-export const SITE_NAME = 'Arx II';
+export const SITE_NAME = 'Arx';
 
 // WebSocket configuration
 //

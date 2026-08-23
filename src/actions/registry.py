@@ -75,6 +75,7 @@ from actions.definitions.communication import (
 )
 from actions.definitions.companions import (
     BindCompanionAction,
+    CompanionEmoteAction,
     CompanionFightAction,
     DeployCompanionAction,
     DismountCompanionAction,
@@ -871,6 +872,7 @@ _ALL_ACTIONS: list[Action] = [
     MountCompanionAction(),
     DismountCompanionAction(),
     PromoteSummonAction(),
+    CompanionEmoteAction(),
     # #1866 — door lock/unlock telnet coverage.
     LockAction(),
     UnlockAction(),

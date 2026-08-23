@@ -33,7 +33,7 @@ class CompanionCommandParsingTests(TestCase):
     def test_subverb_map_covers_all_ops(self) -> None:
         self.assertEqual(
             set(_SUBVERBS),
-            {"bind", "fight", "deploy", "release", "order", "mount", "dismount"},
+            {"bind", "fight", "deploy", "release", "order", "mount", "dismount", "emote"},
         )
 
     def test_unknown_subverb_messages_and_does_not_dispatch(self) -> None:
@@ -98,6 +98,10 @@ class CompanionCommandRefTests(TestCase):
     def test_dismount_ref(self) -> None:
         ref = self._cmd_with_subverb("dismount").resolve_action_ref()
         self.assertEqual(ref.registry_key, "dismount_companion")
+
+    def test_emote_ref(self) -> None:
+        ref = self._cmd_with_subverb("emote").resolve_action_ref()
+        self.assertEqual(ref.registry_key, "companion_emote")
 
 
 class CompanionCommandKwargsTests(TestCase):
@@ -304,6 +308,41 @@ class CompanionCommandKwargsTests(TestCase):
 
         self.assertEqual(kwargs["companion_id"], 8)
 
+    def test_emote_resolves_companion_id_and_text(self) -> None:
+        cmd = _make_cmd("emote Fang growls at the intruder.")
+        cmd._subverb = "emote"
+        cmd._rest = "Fang growls at the intruder."
+
+        cmd.caller.sheet_data = MagicMock()
+        mock_companion = MagicMock()
+        mock_companion.pk = 21
+
+        with patch("world.companions.models.Companion.objects") as comp_obj:
+            qs = MagicMock()
+            qs.filter.return_value.first.return_value = mock_companion
+            comp_obj.filter.return_value = qs
+
+            kwargs = cmd.resolve_action_args()
+
+        self.assertEqual(kwargs["companion_id"], 21)
+        self.assertEqual(kwargs["text"], "growls at the intruder.")
+
+    def test_emote_missing_text_raises_command_error(self) -> None:
+        cmd = _make_cmd("emote Fang")
+        cmd._subverb = "emote"
+        cmd._rest = "Fang"
+
+        with self.assertRaises(CommandError):
+            cmd.resolve_action_args()
+
+    def test_emote_missing_everything_raises_command_error(self) -> None:
+        cmd = _make_cmd("emote")
+        cmd._subverb = "emote"
+        cmd._rest = ""
+
+        with self.assertRaises(CommandError):
+            cmd.resolve_action_args()
+
 
 class CompanionCommandDispatchTests(TestCase):
     """Full func() dispatch tests — mock dispatch_player_action to assert kwargs."""
@@ -410,6 +449,31 @@ class CompanionCommandDispatchTests(TestCase):
         _, ref, kwargs = dispatch.call_args.args
         self.assertEqual(ref.registry_key, "deploy_companion")
         self.assertEqual(kwargs["companion_id"], 14)
+
+    def test_emote_dispatches_with_companion_id_and_text(self) -> None:
+        cmd = _make_cmd("emote Fang growls at the intruder.")
+        cmd.caller.sheet_data = MagicMock()
+        mock_companion = MagicMock()
+        mock_companion.pk = 21
+        result = DispatchResult(
+            backend=ActionBackend.REGISTRY,
+            deferred=False,
+            detail=ActionResult(success=True, message=""),
+        )
+        with (
+            patch("world.companions.models.Companion.objects") as comp_obj,
+            patch(_DISPATCH, return_value=result) as dispatch,
+        ):
+            qs = MagicMock()
+            qs.filter.return_value.first.return_value = mock_companion
+            comp_obj.filter.return_value = qs
+            cmd.func()
+
+        dispatch.assert_called_once()
+        _, ref, kwargs = dispatch.call_args.args
+        self.assertEqual(ref.registry_key, "companion_emote")
+        self.assertEqual(kwargs["companion_id"], 21)
+        self.assertEqual(kwargs["text"], "growls at the intruder.")
 
 
 class CompanionCommandStatusHubTests(TestCase):

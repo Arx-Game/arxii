@@ -1,0 +1,372 @@
+/**
+ * Gatefold landing page (#3305) — folio/leaf layout on top of the app's
+ * `arx` realm-theme design tokens (see index.css [data-realm='arx']).
+ *
+ * Scoped under the `.gatefold` root class so none of this leaks onto other
+ * pages. Class names mirror docs/superpowers/plans/gatefold-reference.html,
+ * each prefixed `gatefold-`.
+ */
+
+.gatefold {
+  font-family: 'EB Garamond', Georgia, serif;
+  font-size: 1.1875rem;
+  line-height: 1.62;
+  color: hsl(var(--foreground));
+  background: hsl(var(--background));
+}
+
+/* Reference's `a:focus-visible` treatment — a visible accent outline instead
+   of the browser default, on every link/button in the page (fix round 1,
+   finding 3). */
+.gatefold a:focus-visible,
+.gatefold button:focus-visible {
+  outline: 2px solid hsl(var(--primary));
+  outline-offset: 3px;
+}
+
+/* ---------- cover: always night, regardless of light/dark mode ---------- */
+.gatefold-cover {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-end;
+  padding: 5.5rem clamp(1.25rem, 5vw, 4rem) clamp(3rem, 8vh, 5.5rem);
+  overflow: hidden;
+  color: #e8e2d4;
+  background:
+    radial-gradient(ellipse 120% 55% at 50% 100%, rgba(201, 168, 62, 0.14), transparent 55%),
+    radial-gradient(ellipse 95% 80% at 85% -15%, rgba(46, 62, 92, 0.8), transparent 68%),
+    radial-gradient(ellipse 50% 45% at 72% 30%, rgba(35, 48, 72, 0.5), transparent 70%), #0e1116;
+}
+.gatefold-cover-inner {
+  position: relative;
+  max-width: 72rem;
+  width: 100%;
+  margin: 0 auto;
+}
+.gatefold-cover h1 {
+  font-family: 'Cinzel', Georgia, serif;
+  font-weight: 700;
+  font-size: clamp(5rem, 17vw, 14rem);
+  letter-spacing: 0.08em;
+  line-height: 0.95;
+  margin: 0 0 1.5rem -0.05em;
+  color: #e8e2d4;
+}
+@media (min-width: 75rem) {
+  .gatefold-cover h1 {
+    letter-spacing: 0.05em;
+  }
+}
+.gatefold-hero-prose {
+  max-width: 34rem;
+  font-size: clamp(1.2rem, 1.6vw, 1.4rem);
+  line-height: 1.6;
+  color: #b9b2a2;
+  font-style: italic;
+  margin: 0;
+}
+.gatefold-hero-prose em {
+  color: #e8e2d4;
+  font-style: normal;
+}
+.gatefold-hero-plays {
+  margin: 3rem 0 0;
+  display: flex;
+  justify-content: flex-end;
+  align-items: center;
+  gap: 0.75rem;
+  color: #8b93a3;
+  font-size: 1rem;
+}
+.gatefold-hero-plays::after {
+  content: '';
+  display: block;
+  width: 3.5rem;
+  height: 1px;
+  background: rgba(201, 168, 62, 0.35);
+}
+
+/* ---------- the pages: folio apparatus on the `arx` realm tokens ---------- */
+.gatefold-leaf {
+  margin: 0 auto;
+  padding: clamp(3rem, 7vh, 5rem) clamp(1.25rem, 4vw, 3rem);
+  display: grid;
+  grid-template-columns: 1fr minmax(0, 38rem) minmax(12rem, 15rem) 1fr;
+  gap: clamp(2rem, 4vw, 3.5rem);
+}
+.gatefold-leaf > .gatefold-leaf-main {
+  grid-column: 2;
+  min-width: 0;
+}
+.gatefold-leaf > aside {
+  grid-column: 3;
+  font-size: 0.9375rem;
+  line-height: 1.55;
+  color: hsl(var(--muted-foreground));
+  border-left: 1px solid hsl(var(--border));
+  padding-left: 1.4rem;
+  align-self: start;
+  position: sticky;
+  top: 2rem;
+  margin-top: 2.9rem;
+}
+.gatefold-leaf > aside .gatefold-note {
+  display: block;
+  margin-bottom: 1.4rem;
+}
+.gatefold-leaf > aside b {
+  color: hsl(var(--foreground));
+  font-weight: 600;
+}
+.gatefold-leaf > aside a {
+  text-decoration: underline;
+  text-decoration-thickness: 1px;
+  text-underline-offset: 3px;
+}
+@media (max-width: 58rem) {
+  .gatefold-leaf {
+    grid-template-columns: 1fr;
+  }
+  .gatefold-leaf > .gatefold-leaf-main,
+  .gatefold-leaf > aside {
+    grid-column: 1;
+  }
+  .gatefold-leaf > aside {
+    border-left: none;
+    padding: 1.25rem 0;
+    border-top: 1px solid hsl(var(--border));
+    border-bottom: 1px solid hsl(var(--border));
+    position: static;
+    margin-top: 0.5rem;
+  }
+}
+
+.gatefold-leaf h2 {
+  font-family: 'Cinzel', Georgia, serif;
+  font-weight: 600;
+  font-size: clamp(1.5rem, 2.6vw, 1.9rem);
+  letter-spacing: 0.1em;
+  color: hsl(var(--primary));
+  margin: 0 0 0.4rem;
+  text-wrap: balance;
+}
+.gatefold-chapter-no {
+  font-family: 'Cinzel', Georgia, serif;
+  font-size: 0.8125rem;
+  font-weight: 600;
+  letter-spacing: 0.25em;
+  color: hsl(var(--muted-foreground));
+  text-transform: uppercase;
+  display: block;
+  margin-bottom: 1rem;
+}
+.gatefold-leaf-body p {
+  margin: 1.1rem 0;
+  text-wrap: pretty;
+}
+
+.gatefold-dropcap::first-letter {
+  font-family: 'Cinzel', Georgia, serif;
+  font-weight: 700;
+  font-size: 4.85em;
+  float: left;
+  line-height: 0.76;
+  padding: 0.08em 0.06em 0 0;
+  color: hsl(var(--primary));
+}
+@supports (initial-letter: 3) {
+  .gatefold-dropcap::first-letter {
+    initial-letter: 3;
+    float: none;
+    font-size: unset;
+    line-height: unset;
+    padding: 0 0.06em 0 0;
+  }
+}
+.gatefold-caps {
+  text-transform: uppercase;
+  font-size: 0.82em;
+  letter-spacing: 0.08em;
+  font-weight: 500;
+}
+
+/* realm rows (accordion — replaces the reference's static Beginnings list) */
+.gatefold-realm-item {
+  margin: 0 0 0.25rem;
+  border-bottom: 1px solid hsl(var(--border));
+}
+.gatefold-realm-trigger {
+  padding: 0.9rem 0 !important;
+}
+.gatefold-realm-name {
+  font-family: 'Cinzel', Georgia, serif;
+  font-size: 1.2rem;
+  font-weight: 600;
+  letter-spacing: 0.05em;
+}
+.gatefold-realm-desc {
+  margin: 0 0 1rem;
+  color: hsl(var(--muted-foreground));
+}
+.gatefold-begin-item {
+  margin: 0 0 1.5rem 1rem;
+  padding-left: 1rem;
+  border-left: 1px solid hsl(var(--border));
+}
+.gatefold-begin-item:last-child {
+  margin-bottom: 0.5rem;
+}
+.gatefold-begin-item h4 {
+  font-family: 'Cinzel', Georgia, serif;
+  font-size: 1.05rem;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  margin: 0 0 0.4rem;
+  color: hsl(var(--primary));
+}
+.gatefold-begin-item p {
+  margin: 0;
+  color: hsl(var(--muted-foreground));
+}
+
+/* codex index */
+.gatefold-index-list {
+  margin: 2rem 0 0;
+  padding: 0;
+  list-style: none;
+}
+.gatefold-index-list li {
+  padding: 1.3rem 0;
+  border-top: 1px solid hsl(var(--border));
+}
+.gatefold-index-list li:last-child {
+  border-bottom: 1px solid hsl(var(--border));
+}
+.gatefold-entry-name {
+  font-family: 'Cinzel', Georgia, serif;
+  font-weight: 600;
+  font-size: 1.05rem;
+  letter-spacing: 0.04em;
+}
+.gatefold-entry-name a {
+  color: hsl(var(--primary));
+  text-decoration: underline;
+  text-decoration-thickness: 1px;
+  text-underline-offset: 5px;
+}
+.gatefold-index-list p {
+  margin: 0.4rem 0 0;
+  color: hsl(var(--muted-foreground));
+  font-size: 1.05rem;
+}
+.gatefold-more-line {
+  margin: 1.75rem 0 0;
+  font-size: 1.05rem;
+}
+.gatefold-more-line a {
+  color: hsl(var(--primary));
+  text-decoration: underline;
+  text-decoration-thickness: 1px;
+  text-underline-offset: 4px;
+}
+
+/* scene record + testament */
+.gatefold-scene-record {
+  margin: 2rem 0 0;
+}
+.gatefold-scene-record h3 {
+  font-family: 'Cinzel', Georgia, serif;
+  font-size: 1.05rem;
+  font-weight: 600;
+  letter-spacing: 0.05em;
+  color: hsl(var(--primary));
+  margin: 0 0 0.9rem;
+}
+.gatefold-pose {
+  margin: 0 0 0.9rem;
+}
+.gatefold-scene-meta {
+  display: block;
+  color: hsl(var(--muted-foreground));
+  font-size: 0.9375rem;
+}
+.gatefold-testament {
+  margin: 2.5rem 0 0 2rem;
+}
+.gatefold-testament blockquote {
+  margin: 0 0 0.8rem;
+  font-style: italic;
+  font-size: 1.1rem;
+  line-height: 1.68;
+}
+.gatefold-testament cite {
+  font-style: normal;
+  font-size: 0.875rem;
+  color: hsl(var(--muted-foreground));
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+}
+
+/* fleuron + door */
+.gatefold-fleuron {
+  margin: 0 auto 1.75rem;
+  color: hsl(var(--primary));
+  font-size: 2rem;
+  line-height: 1;
+  text-align: center;
+}
+.gatefold-colophon {
+  text-align: center;
+  max-width: 40rem;
+  margin: 0 auto;
+  padding: clamp(4rem, 10vh, 7rem) clamp(1.25rem, 4vw, 3rem) clamp(4rem, 10vh, 7rem);
+}
+.gatefold-colophon h2 {
+  font-family: 'Cinzel', Georgia, serif;
+  font-weight: 600;
+  letter-spacing: 0.1em;
+  font-size: clamp(1.8rem, 3.5vw, 2.4rem);
+  color: hsl(var(--primary));
+  margin: 0 -0.1em 1.25rem 0;
+  text-wrap: balance;
+}
+.gatefold-colophon > p {
+  color: hsl(var(--foreground));
+  margin: 0 0 2.5rem;
+}
+.gatefold-btn {
+  display: inline-block;
+  font-family: 'Cinzel', Georgia, serif;
+  font-weight: 600;
+  font-size: 0.9375rem;
+  letter-spacing: 0.2em;
+  text-transform: uppercase;
+  background: hsl(var(--primary));
+  color: hsl(var(--primary-foreground));
+  border: 1px solid hsl(var(--primary));
+  padding: 1.05rem 2.7rem 1.05rem 2.9rem;
+}
+.gatefold-btn:hover {
+  opacity: 0.88;
+  text-decoration: none;
+}
+.gatefold-btn-quiet {
+  display: inline-block;
+  margin-left: 1.4rem;
+  color: hsl(var(--primary));
+  font-style: italic;
+  text-decoration: underline;
+  text-decoration-thickness: 1px;
+  text-underline-offset: 4px;
+}
+.gatefold-imprint {
+  font-family: 'Cinzel', Georgia, serif;
+  color: hsl(var(--primary));
+  font-size: 0.875rem;
+  font-weight: 600;
+  letter-spacing: 0.22em;
+  margin: 3rem -0.22em 0 0;
+  text-transform: uppercase;
+  text-wrap: balance;
+}

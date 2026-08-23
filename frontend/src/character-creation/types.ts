@@ -219,7 +219,7 @@ export interface PathSkillSuggestion {
 
 /**
  * Character path definition.
- * Paths are the narrative-focused class system for Arx II.
+ * Paths are the narrative-focused class system for Arx.
  */
 export interface Path {
   id: number;
