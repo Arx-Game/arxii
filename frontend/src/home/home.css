@@ -62,8 +62,8 @@
   max-width: 34rem;
   font-size: clamp(1.2rem, 1.6vw, 1.4rem);
   line-height: 1.6;
+  font-weight: 500;
   color: #b9b2a2;
-  font-style: italic;
   margin: 0;
 }
 .gatefold-hero-prose em {
