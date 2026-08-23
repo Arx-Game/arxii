@@ -57,6 +57,23 @@ iptables -A INPUT  -p udp --sport 53 -j ACCEPT
 iptables -A OUTPUT -p tcp --dport 53 -j ACCEPT
 iptables -A INPUT  -p tcp --sport 53 -m state --state ESTABLISHED -j ACCEPT
 
+# Gated prod-ops SSH (docs/operations/ops-access.md). The global port-22
+# ACCEPT below (git-over-SSH) would otherwise reach the prod Linode too, so
+# the ONLY thing separating an agent from prod would be key possession.
+# Belt-and-suspenders: unless the ops key was mounted in (see
+# docker-compose.yml's /run/arxii-ops-key mount — present only when the
+# operator set ARXII_OPS_KEY_DIR at `just dc-up` time), REJECT prod SSH
+# outright, first-match before the ACCEPT. Both gates fail closed and are
+# controlled by the same single env var. Update the IP if the prod Linode
+# is ever rebuilt (= tofu output instance_ipv4).
+ARXII_PROD_IPV4="23.92.20.94"
+if [ ! -s /run/arxii-ops-key/arxii_ops ]; then
+    iptables -A OUTPUT -d "$ARXII_PROD_IPV4" -p tcp --dport 22 -j REJECT
+    echo "Prod ops gate: CLOSED (no ops key mounted; SSH to ${ARXII_PROD_IPV4} rejected)"
+else
+    echo "Prod ops gate: OPEN (ops key mounted; SSH to ${ARXII_PROD_IPV4} allowed)"
+fi
+
 # SSH — allows git-over-SSH and inbound responses.
 iptables -A OUTPUT -p tcp --dport 22 -j ACCEPT
 iptables -A INPUT  -p tcp --sport 22 -m state --state ESTABLISHED -j ACCEPT

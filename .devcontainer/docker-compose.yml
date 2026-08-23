@@ -43,6 +43,16 @@ services:
       # generates dev.env from src/.env with DATABASE_URL rewritten before
       # `just dc-up` brings the stack up.
       - ./dev.env:/workspaces/arxii/src/.env
+      # Gated prod-ops SSH key (docs/operations/ops-access.md). Default is a
+      # committed EMPTY dir, so a container brought up without the env var —
+      # from VS Code, CI, or a plain `just dc-up` — has no key and the
+      # egress firewall keeps prod SSH blocked (see init-firewall.sh's prod
+      # gate; ops-key-install.sh copies the key into ~/.ssh with 0600 perms,
+      # which a Windows-drive bind mount can't carry). Enable with
+      #   ARXII_OPS_KEY_DIR=<abs path to key dir> just dc-up
+      # and disable by bringing the stack down/up WITHOUT the var. Read-only:
+      # nothing in the container can alter or delete the host-side key.
+      - ${ARXII_OPS_KEY_DIR:-./no-ops-key}:/run/arxii-ops-key:ro
     # ALSO load dev.env as process environment so non-Django tools (gh, curl,
     # etc.) can read variables like GH_TOKEN without sourcing the .env file
     # manually. The bind-mount above is what Django/django-environ reads; this

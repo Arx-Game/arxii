@@ -391,6 +391,16 @@ Installed once by the converge, then running unattended on the box:
   first start; `roles/secrets_perms` asserts that posture per file, so do not "harden" the
   cert to `0600` — the next renewal would revert it and fail the converge.
 
+## Gated devcontainer ops access (`arxops`)
+
+A second, deliberately weaker SSH identity exists for devcontainer/agent
+sessions: the `arxops` user (roles/ops_access) — journal + log reads, sudo
+for exactly `systemctl reload/restart/start arxii`, nothing else. Access is
+double-gated (client: `ARXII_OPS_KEY_DIR` mount + container firewall;
+server: the `ARXII_OPS_SSH_PUBKEY` Environment Variable) and both gates
+fail closed. Full setup + session workflow:
+`docs/operations/ops-access.md`.
+
 ## Generating the SSH admin key (one-time)
 
 The button creates a brand-new Linode instance and Ansible needs to SSH into it
