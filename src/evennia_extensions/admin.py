@@ -32,12 +32,14 @@ class PlayerDataAdmin(admin.ModelAdmin):
         "account",
         "display_name",
         "karma",
+        "arx1_archive_access",
         "created_date",
         "profile_picture",
     ]
     list_filter: ClassVar[list[str]] = [
         "hide_from_watch",
         "private_mode",
+        "arx1_archive_access",
         "created_date",
     ]
     search_fields: ClassVar[list[str]] = ["account__username", "display_name"]
@@ -51,6 +53,17 @@ class PlayerDataAdmin(admin.ModelAdmin):
             {"fields": ("profile_picture", "max_storage", "max_file_size")},
         ),
         ("Session Info", {"fields": ("last_login_ip",)}),
+        (
+            "Arx I Archive",
+            {
+                "fields": ("arx1_archive_access",),
+                "description": (
+                    "Grants this account read access to the Arx I archive. Staff "
+                    "and accounts holding a GMProfile already have it without "
+                    "this box ticked (#3320, ADR-0232)."
+                ),
+            },
+        ),
         ("Staff Notes", {"fields": ("gm_notes",), "classes": ("collapse",)}),
         (
             "Timestamps",

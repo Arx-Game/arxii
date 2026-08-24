@@ -2,6 +2,7 @@ from django.urls import include, path
 from drf_spectacular.views import SpectacularAPIView
 from rest_framework.permissions import AllowAny
 
+from web.api.views.arx1_archive_views import Arx1ArchiveAuthorizeAPIView
 from web.api.views.general_views import (
     CurrentUserAPIView,
     EmailVerificationAPIView,
@@ -19,6 +20,12 @@ from web.api.views.search_views import (
 
 urlpatterns = [
     path("backgrounds/", PageBackgroundListAPIView.as_view(), name="api-backgrounds"),
+    # Caddy forward_auth subrequest for the Arx I archive vhost (#3320).
+    path(
+        "arx1-archive/authorize/",
+        Arx1ArchiveAuthorizeAPIView.as_view(),
+        name="api-arx1-archive-authorize",
+    ),
     path("user/", CurrentUserAPIView.as_view(), name="api-current-user"),
     path(
         "register/availability/",
