@@ -74,7 +74,7 @@
 	# MUST agree, and acceptance.sh asserts they do.
 	#
 	# The prefix is a LITERAL here, not a templated var, on purpose: CI's
-	# validate.yml stubs every whole `{{ ... }}` with a placeholder
+	# validate.yml stubs every whole Jinja substitution with a placeholder
 	# HOSTNAME before `caddy adapt`, and a path matcher that does not
 	# start with "/" is a parse error - a templated prefix would fail
 	# validation as a stub artifact. See roles/arx1_archive for the other
