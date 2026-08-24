@@ -36,6 +36,14 @@ if [ ! -e "${work}/site/index.html" ]; then
   echo "extracted tree has no top-level index.html — refusing to install" >&2
   exit 1
 fi
+# The export was crawled from a site served at a HOST ROOT, so its pages carry
+# root-relative links. The archive now lives under a path prefix on the web
+# vhost (#3320, ADR-0232), so those links have to be re-pointed or every one of
+# them escapes the archive into the Arx II SPA. Done here rather than in the
+# export so the tarball already in the bucket does not have to be regenerated
+# on the retired Arx I box. Idempotent, so a re-sync is still safe.
+/usr/local/sbin/arx1-prefix-rewrite "${work}/site" "{{ arx1_archive_url_prefix }}"
+
 chmod -R a+rX "${work}/site"
 
 # Swap. ${work} may sit on a different filesystem, so stage the tree beside

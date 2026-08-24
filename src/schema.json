@@ -806,6 +806,18 @@ paths:
               schema:
                 $ref: '#/components/schemas/AreaRoom'
           description: ''
+  /api/arx1-archive/authorize/:
+    get:
+      operationId: arx1_archive_authorize_retrieve
+      description: Return 200 (allowed), 403 (denied), or 302 to login (anonymous).
+      tags:
+      - arx1-archive
+      security:
+      - cookieAuth: []
+      - {}
+      responses:
+        '200':
+          description: No response body
   /api/assets/:
     get:
       operationId: assets_list

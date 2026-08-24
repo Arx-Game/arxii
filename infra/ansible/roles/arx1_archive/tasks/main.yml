@@ -13,6 +13,21 @@
     cache_valid_time: 3600
     lock_timeout: 600
 
+# Plain copy, not template: the rewriter takes its prefix as an argument, so
+# the file on the box is byte-identical to the one in the repo - and the repo
+# copy is the one CI runs --self-test against. See #3320 / ADR-0232.
+#
+# NOTE: keep issue refs OUT of the `name:` scalar. An unquoted YAML scalar
+# treats " #" as the start of a comment, so "(see #3320)" silently truncates
+# the task name mid-sentence - caught by ansible-lint on the first push.
+- name: Install the archive link-prefix rewriter
+  ansible.builtin.copy:
+    src: "{{ playbook_dir }}/../scripts/arx1/arx1_prefix_rewrite.py"
+    dest: /usr/local/sbin/arx1-prefix-rewrite
+    owner: root
+    group: root
+    mode: "0750"
+
 - name: Install the sync script
   ansible.builtin.template:
     src: arx1-archive-sync.sh.j2

@@ -53,6 +53,20 @@ class PlayerData(RelatedCacheClearingMixin, SharedMemoryModel):
         ),
     )
 
+    # Staff-granted read access to the Arx I historical archive (#3320,
+    # ADR-0232). Default False on purpose: the archive holds black journals,
+    # secrets, clues and GM notes, so registering for an Arx II account is not
+    # itself grounds to read it. Staff and anyone holding a GMProfile are
+    # admitted without this flag - see web.api.views.arx1_archive_views.
+    arx1_archive_access = models.BooleanField(
+        default=False,
+        db_index=True,
+        help_text=(
+            "Staff grant: this account may read the Arx I archive at "
+            "/arxmush-archive/. Staff and GMs are admitted without it."
+        ),
+    )
+
     account = models.OneToOneField(
         AccountDB,
         on_delete=models.CASCADE,

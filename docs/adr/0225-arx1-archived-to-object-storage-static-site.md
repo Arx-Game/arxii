@@ -1,6 +1,11 @@
 # ADR-0225: Arx I is archived to object storage + a static basic-auth site, not kept running
 
-**Status:** Accepted (2026-08-21, Tehom in-session).
+**Status:** Accepted (2026-08-21, Tehom in-session). **Partly superseded by
+[ADR-0232](0232-arx1-archive-gated-on-arx-ii-accounts.md)** (2026-08-24): the
+archive is no longer served at `archive.<domain>` behind a shared basic-auth
+password, and no longer "no backend, no websocket, no Django" - it is a path on
+the web vhost gated per Arx II account. What is archived, where, and the
+messenger boundary below all stand.
 
 The Arx I Linode ($50/month) is retired. Its durable data - the sqlite database,
 the rpevent logs (public and GM/OOC variants), and a "resurrection kit" (code,

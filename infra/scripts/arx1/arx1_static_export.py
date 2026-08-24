@@ -167,10 +167,17 @@ HREF_RE = re.compile(r"""(href=["'])([^"']*\?[^"']+)(["'])""")
 def rewrite_query_links(html, base_path):
     """Point query-string hrefs at their exported filenames.
 
-    Plain path links need no rewriting (the tree mirrors the URL space);
+    Plain path links need no rewriting HERE (the tree mirrors the URL space);
     only ?query URLs get distinct filenames. url_to_relpath is
     deterministic, so this needs no global crawl state and each page can be
     rewritten and written to disk the moment it is fetched.
+
+    The tree is emitted ROOT-RELATIVE on purpose even though the archive is
+    now served under a path prefix (#3320, ADR-0232). Re-pointing those links
+    is arx1_prefix_rewrite.py's job, run by roles/arx1_archive at install
+    time: this script only ever ran on the Arx I box, which is retired, so
+    doing it here would leave the tarball already in the bucket unfixable
+    without reviving that box. One implementation, applied on the way in.
     """
 
     def repl(match):

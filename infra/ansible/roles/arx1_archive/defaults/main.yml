@@ -18,6 +18,19 @@ arx1_archive_enabled: true
 # vhost's file_server root) — both default to the same path on purpose.
 arx1_archive_root: /srv/arx1-archive
 
+# URL prefix the archive is mounted under on the web vhost (#3320, ADR-0232).
+# MUST match the literal in roles/caddy's Caddyfile templates and
+# ARCHIVE_URL_PREFIX in src/web/api/views/arx1_archive_views.py;
+# infra/scripts/acceptance.sh asserts all three agree.
+#
+# This is not cosmetic. The export was crawled from a site served at a host
+# ROOT, so its pages carry ROOT-RELATIVE links (href="/lore/", href="/",
+# src="/static/..."). Served under a prefix and left alone, every one of them
+# would escape the archive: "/lore/" would hit the Arx II SPA and
+# "/static/..." would pull Arx II's own collected static instead of Arx I's.
+# The sync script rewrites them on the way in - see the template.
+arx1_archive_url_prefix: /arxmush-archive
+
 # Source object: the static-site export tarball the Arx I freeze pipeline
 # uploaded (infra/scripts/arx1/ + the runbook). Lives in the PRIMARY backups
 # bucket under its own prefix; the R2 copy of the same object is the offsite

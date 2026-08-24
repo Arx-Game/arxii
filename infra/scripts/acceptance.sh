@@ -591,6 +591,44 @@ chk   "settings.py guards sentry_sdk.init() behind a non-empty SENTRY_DSN" \
 chk   "settings.py disables Sentry PII capture (send_default_pii=False)" \
   "grep -q 'send_default_pii=False' src/server/conf/settings.py"
 
+echo "== #3320 / ADR-0232 (Arx I archive behind Arx II accounts) =="
+# The URL prefix is a cross-file contract with no single source of truth:
+# Caddy mounts it as a LITERAL (a templated path matcher would not survive
+# validate.yml's placeholder stubbing), the sync role rewrites the export's
+# root-relative links to it, and Django builds its login redirect from it.
+# Drift in any one of the three serves a page whose links all escape the
+# archive - which is exactly the failure the prefix rewrite exists to stop.
+chk   "Caddyfile mounts the archive at the literal /arxmush-archive path" \
+  "grep -q 'handle_path /arxmush-archive/\*' infra/ansible/roles/caddy/templates/Caddyfile.j2"
+chk   "the rehearsal Caddyfile mounts the same path (templates stay in lockstep)" \
+  "grep -q 'handle_path /arxmush-archive/\*' infra/ansible/roles/caddy/templates/Caddyfile.rehearsal.j2"
+chk   "assets are exempted from the auth subrequest by a longer, earlier prefix" \
+  "grep -q 'handle_path /arxmush-archive/static/\*' infra/ansible/roles/caddy/templates/Caddyfile.j2"
+chk   "the gated block forwards auth to the Django endpoint that answers it" \
+  "grep -q 'uri /api/arx1-archive/authorize/' infra/ansible/roles/caddy/templates/Caddyfile.j2 && grep -q 'arx1-archive/authorize/' src/web/api/urls.py"
+chk   "the sync role rewrites the export's links to the same prefix" \
+  "grep -q 'arx1_archive_url_prefix: /arxmush-archive' infra/ansible/roles/arx1_archive/defaults/main.yml"
+chk   "Django builds its login redirect from the same prefix" \
+  "grep -q 'ARCHIVE_URL_PREFIX = \"/arxmush-archive/\"' src/web/api/views/arx1_archive_views.py"
+chk   "the sync script actually invokes the rewriter before installing" \
+  "grep -q 'arx1-prefix-rewrite' infra/ansible/roles/arx1_archive/templates/arx1-archive-sync.sh.j2"
+chk   "the link rewriter's own contract holds (idempotence, off-site links)" \
+  "python3 infra/scripts/arx1/arx1_prefix_rewrite.py --self-test"
+# The shared password is gone; a lingering basic_auth block would silently
+# re-gate the archive behind a credential nobody has any more.
+chkno "no basic_auth directive survives in Caddyfile.j2" \
+  "nc infra/ansible/roles/caddy/templates/Caddyfile.j2 | grep -nE 'basic_auth'"
+chkno "no basic_auth directive survives in Caddyfile.rehearsal.j2" \
+  "nc infra/ansible/roles/caddy/templates/Caddyfile.rehearsal.j2 | grep -nE 'basic_auth'"
+chkno "no role still READS the retired archive basic-auth secret" \
+  "nc infra/ansible/roles/caddy/defaults/main.yml | grep -nE 'ARX1_ARCHIVE_BASICAUTH'"
+chkno "the standup workflow no longer passes the retired secret through" \
+  "nc .github/workflows/standup.yml | grep -nE 'ARX1_ARCHIVE_BASICAUTH'"
+# ADR-0225 made the archive deliberately Django-free; ADR-0232 reverses that,
+# and an unmarked ADR-0225 would keep directing readers at the old design.
+chk   "ADR-0225 is marked superseded by ADR-0232" \
+  "grep -q 'ADR-0232' docs/adr/0225-arx1-archived-to-object-storage-static-site.md"
+
 echo
 if [[ "${fails}" -gt 0 ]]; then
   echo "ACCEPTANCE: ${fails} FAILED"; exit 1

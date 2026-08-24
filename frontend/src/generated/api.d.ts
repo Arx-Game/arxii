@@ -546,6 +546,23 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
+  '/api/arx1-archive/authorize/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /** @description Return 200 (allowed), 403 (denied), or 302 to login (anonymous). */
+    get: operations['arx1_archive_authorize_retrieve'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   '/api/assets/': {
     parameters: {
       query?: never;
@@ -44039,6 +44056,24 @@ export interface operations {
         content: {
           'application/json': components['schemas']['AreaRoom'];
         };
+      };
+    };
+  };
+  arx1_archive_authorize_retrieve: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description No response body */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
       };
     };
   };

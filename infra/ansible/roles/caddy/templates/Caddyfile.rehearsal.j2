@@ -59,36 +59,83 @@
 		file_server
 	}
 
+{% if caddy_archive_enabled | bool %}
+	# --- Arx I static archive (#3320, ADR-0232) -------------------------
+	# Read-only historical pages exported from the Arx I sqlite DB
+	# (docs/operations/arx1-archival.md), served straight from disk. It
+	# lives on THIS vhost, at a path, rather than on its own subdomain
+	# precisely so the Arx II session cookie reaches it without
+	# SESSION_COOKIE_DOMAIN having to be widened to every subdomain.
+	#
+	# handle_path, not handle: it strips the prefix before file_server
+	# resolves the path, so caddy_archive_root stays the exported tree's
+	# own root. The archive's HTML is rewritten to carry this prefix on
+	# its root-relative links by the arx1_archive sync role - the two
+	# MUST agree, and acceptance.sh asserts they do.
+	#
+	# The prefix is a LITERAL here, not a templated var, on purpose: CI's
+	# validate.yml stubs every whole `{{ ... }}` with a placeholder
+	# HOSTNAME before `caddy adapt`, and a path matcher that does not
+	# start with "/" is a parse error - a templated prefix would fail
+	# validation as a stub artifact. See roles/arx1_archive for the other
+	# half of the contract.
+	#
+	# The static block comes first and is deliberately ungated: css and
+	# js reveal nothing, and sparing them the subrequest keeps a page
+	# load to one authorization round trip instead of dozens.
+	handle_path /arxmush-archive/static/* {
+		header X-Robots-Tag "noindex, nofollow"
+		root * {{ caddy_archive_root }}/static
+		file_server
+	}
+
+	handle_path /arxmush-archive/* {
+		header X-Robots-Tag "noindex, nofollow"
+		# Django answers 200 / 403 / 302-to-login and serves no bytes.
+		# forward_auth returns any non-2xx to the client verbatim, so the
+		# 302 is what sends a logged-out reader to the SPA login page.
+		forward_auth {{ caddy_backend }} {
+			uri /api/arx1-archive/authorize/
+			copy_headers Cookie
+		}
+		root * {{ caddy_archive_root }}
+		file_server
+	}
+{% endif %}
+
 	handle {
 		reverse_proxy {{ caddy_backend }} {
 			header_up X-Real-IP {header.CF-Connecting-IP}
 		}
 	}
 }
-{% if caddy_archive_enabled | bool %}
+{% if caddy_archive_redirect_enabled | bool %}
 
-# Arx I static archive — kept in lockstep with Caddyfile.j2 (see its block
-# comment). Never actually rendered in rehearsal: caddy_archive_enabled is
-# hard-false there (its defaults expression includes `not
-# caddy_rehearsal_mode`, and the stage box holds no
-# ARXII_ARX1_ARCHIVE_BASICAUTH_HASH secret anyway — prod-adjacent, by the
-# isolation doctrine). Present so the two templates stay the same site set,
-# and CI's validate.yml (which drops control-flow lines before adapt) still
-# validates this block's shape against the stock binary.
+# Arx I archive, legacy address — kept in lockstep with Caddyfile.j2 (see
+# its block comment). Never actually rendered in rehearsal:
+# caddy_archive_redirect_enabled is hard-false there (its defaults expression
+# includes `not caddy_rehearsal_mode`, and the stage box has no archive fqdn
+# anyway — prod-adjacent, by the isolation doctrine). Present so the two
+# templates stay the same site set, and CI's validate.yml (which drops
+# control-flow lines before adapt) still validates this block's shape against
+# the stock binary. The archive moved onto the web vhost at
+# /arxmush-archive (#3320, ADR-0232 — superseding ADR-0225's
+# "no backend, no Django" isolation property); this block only keeps the
+# links already handed out alive. No basic_auth: there is no shared
+# credential any more, and the target does its own per-account check.
+# Jinja control-flow lines in this template must sit ALONE on their own
+# lines — CI's validate.yml drops such lines wholesale before `caddy
+# adapt`, so this block is always validated. (`| bool` is load-bearing:
+# the folded expression renders as the STRING "True"/"False" — see
+# roles/caddy/defaults/main.yml.)
 {{ caddy_archive_fqdn }} {
-	encode zstd gzip
 	header {
 		Strict-Transport-Security "max-age=31536000; includeSubDomains; preload"
 		X-Content-Type-Options "nosniff"
-		X-Frame-Options "DENY"
 		Referrer-Policy "strict-origin-when-cross-origin"
 		X-Robots-Tag "noindex, nofollow"
 		-Server
 	}
-	basic_auth {
-		{{ caddy_archive_basicauth_user }} {{ caddy_archive_basicauth_hash }}
-	}
-	root * {{ caddy_archive_root }}
-	file_server
+	redir https://{{ caddy_web_fqdn }}/arxmush-archive{uri} permanent
 }
 {% endif %}
