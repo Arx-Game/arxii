@@ -124,12 +124,6 @@ jobs:
           # entirely (settings.py only calls sentry_sdk.init() when
           # SENTRY_DSN is non-empty); not in standup.sh's REQUIRED_ARXII.
           ARXII_SENTRY_DSN: ${{ secrets.ARXII_SENTRY_DSN }}
-          # Optional — empty/unset means roles/caddy renders NO Arx I archive
-          # vhost (a clean converge, not a refused one); not in REQUIRED_ARXII
-          # and never on-box (caddy-step-only, like the DNS token below —
-          # read via lookup('env', ...) in roles/caddy/defaults). Set it (a
-          # bcrypt hash from `caddy hash-password`) to roll the archive out.
-          ARXII_ARX1_ARCHIVE_BASICAUTH_HASH: ${{ secrets.ARXII_ARX1_ARCHIVE_BASICAUTH_HASH }}
           # Optional — the gated agent-ops PUBLIC key (a Variable, not a
           # secret: the private half never leaves the operator's machine).
           # Empty/unset means roles/ops_access writes an EMPTY arxops

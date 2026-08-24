@@ -174,12 +174,6 @@ disables the feature, never refuses the converge — `secrets_vault`'s
   `SENTRY_ENVIRONMENT` (prod: `production`; rehearsal: `rehearsal`) and
   `SENTRY_RELEASE` (the deployed commit SHA, stamped by `app_deploy` after
   checkout) are derived on-box, not operator-supplied.
-- `ARXII_ARX1_ARCHIVE_BASICAUTH_HASH` — bcrypt hash (from `caddy
-  hash-password`) of the shared password for the read-only Arx I archive
-  site. Caddy-step-only: read via `lookup('env', ...)` in `roles/caddy`'s
-  defaults, never written on-box (it configures Caddy, not the app). Unset
-  means the `archive.<domain>` vhost is simply not rendered. See "Arx I
-  archive" below and `docs/operations/arx1-archival.md`.
 
 **Pre-stored by the operator — ansible-step-only, never written to the app's
 own EnvironmentFile (#3153; a third category alongside "on-box runtime"
@@ -715,16 +709,30 @@ recovery-only, so:
 The retired Arx I game's history lives in both backup buckets under the
 `arx1/` prefix (sqlite snapshot, rpevent logs, resurrection kit — uploaded
 and byte-verified by `infra/scripts/arx1/`), and a static export of its
-website is served by the Arx II box's Caddy behind basic auth. Two levers:
+website is served by the Arx II box's Caddy at `<web_fqdn>/arxmush-archive`
+behind an Arx II account login (#3320, ADR-0232 — superseding the shared
+basic-auth password ADR-0225 shipped with). Three levers:
 
-- **Vhost**: `roles/caddy` renders the `archive.<domain>` site block only
-  when the optional `ARXII_ARX1_ARCHIVE_BASICAUTH_HASH` gated-Environment
-  secret is set (a bcrypt hash from `caddy hash-password`) — unset means no
-  vhost, a clean converge (same posture as `ARXII_SENTRY_DSN`).
+- **Route**: `roles/caddy` mounts the archive on the WEB vhost as two
+  `handle_path` blocks. `/arxmush-archive/*` goes through `forward_auth` to
+  Django's `/api/arx1-archive/authorize/`, which answers 200 / 403 /
+  302-to-login; `/arxmush-archive/static/*` is ungated (assets reveal
+  nothing, and sparing them the subrequest keeps a page load to one
+  authorization round trip). A path rather than a subdomain so the
+  host-only session cookie reaches it — `SESSION_COOKIE_DOMAIN` stays unset.
+  There is no archive secret any more.
+- **Access**: staff and any account holding a `GMProfile` are admitted
+  outright; everyone else needs `PlayerData.arx1_archive_access`, which
+  defaults to `False` and is granted per account in the Django admin.
 - **Content**: `roles/arx1_archive` (`never`-tagged, like content_repo)
   pulls `arx1/arx1-site-export.tar.zst` from the primary bucket, verifies
-  its checksum, and installs it at `/srv/arx1-archive` — the button's
-  "Also pull the static Arx I archive export" checkbox.
+  its checksum, re-points its root-relative links under the prefix
+  (`arx1_prefix_rewrite.py` — the export was crawled from a host root), and
+  installs it at `/srv/arx1-archive` — the button's "Also pull the static
+  Arx I archive export" checkbox.
+
+`archive.<domain>` survives as a 301 onto the new path (rendered only when
+`caddy_archive_fqdn` is wired), so links already handed out keep working.
 
 The GM/OOC rpevent logs are backup-only and never served. Full runbook
 (freeze, upload, export, serve, Linode teardown):

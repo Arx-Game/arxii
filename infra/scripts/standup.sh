@@ -282,9 +282,10 @@ hostfw_tls_telnet_port: ${tls_telnet_port}
 
 # caddy (roles/caddy/defaults/main.yml)
 caddy_web_fqdn: "${web_fqdn}"
-# The Arx I archive vhost fqdn — wiring it here does NOT enable the vhost:
-# roles/caddy's caddy_archive_enabled also requires the (optional)
-# ARXII_ARX1_ARCHIVE_BASICAUTH_HASH secret to be set. See
+# The LEGACY Arx I archive fqdn. Since #3320/ADR-0232 the archive itself is
+# served by the web vhost at /arxmush-archive behind an Arx II login; wiring
+# this only turns archive.<domain> into a 301 onto that path, so links already
+# handed out keep working. Empty = never rolled out = no redirect vhost. See
 # docs/operations/arx1-archival.md.
 caddy_archive_fqdn: "${archive_fqdn}"
 caddy_acme_email: "${ARXII_ACME_EMAIL:-admin@${TF_VAR_domain}}"

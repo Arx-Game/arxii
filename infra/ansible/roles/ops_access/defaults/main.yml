@@ -4,12 +4,12 @@
 # by whether ops_pubkey is non-empty — an empty value writes an EMPTY
 # authorized_keys, and with password auth globally disabled (ssh_hardening)
 # an empty keyfile means no login at all. Clean-converge posture, same idiom
-# as the optional archive vhost.
+# as the optional archive redirect vhost.
 ops_user: arxops
 ops_group: arxops
 # = the ARXII_OPS_SSH_PUBKEY gated Environment VARIABLE (not a secret — this
 # is a public key; the private half never leaves the operator's machine).
 # Read via lookup('env', ...) directly, same idiom as roles/caddy's
-# caddy_archive_basicauth_hash. Clear the Variable and press the button to
-# revoke server-side.
+# caddy_acme_email / CADDY_CF_DNS_TOKEN. Clear the Variable and press the
+# button to revoke server-side.
 ops_pubkey: "{{ lookup('env', 'ARXII_OPS_SSH_PUBKEY') }}"

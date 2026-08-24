@@ -38,29 +38,35 @@ caddy_static_root: "/opt/arxii/current/src/server/.static"
 # DNS-edit-scoped Cloudflare token supplied via env (CADDY_CF_DNS_TOKEN),
 # which is a NEW on-box secret to add to the gated-Environment contract.
 caddy_acme_email: "ops@example"
-# --- Arx I static archive vhost (docs/operations/arx1-archival.md) ----------
-# A second, static-only site block: the read-only Arx I historical archive,
-# served straight from disk behind basic auth. Enabled only when ALL of:
-# not rehearsal (the hash secret is prod-adjacent), the fqdn is wired
-# (standup.sh writes it from `tofu output archive_fqdn`), and the operator
-# has set the ARXII_ARX1_ARCHIVE_BASICAUTH_HASH gated-Environment secret
-# (a bcrypt hash from `caddy hash-password`). A missing secret means
-# "archive not rolled out yet" — a clean converge with no archive vhost,
-# NOT a refused one. This is deliberately the secrets_map_optional posture
-# (see roles/secrets_vault), not the fail-closed secrets_map one, and the
-# var is read here directly (like the DNS-01 token) because it configures
-# Caddy, never the app — it has no business in /etc/arxii/arxii.env.
-# NOTE: consume caddy_archive_enabled with `| bool` — the folded expression
-# renders to the STRING "True"/"False", and a bare `{% if %}` on a non-empty
+# --- Arx I static archive (docs/operations/arx1-archival.md) ----------------
+# The archive is served BY THE WEB VHOST, at the literal path /arxmush-archive
+# (#3320, ADR-0232), behind a forward_auth subrequest to Django's
+# /api/arx1-archive/authorize/ - Arx II accounts instead of the shared
+# basic-auth password ADR-0225 shipped with. It is a path rather than a
+# subdomain so the session cookie reaches it with SESSION_COOKIE_DOMAIN left
+# unset (a widened cookie would go to EVERY future subdomain).
+#
+# The prefix is a literal in the Caddyfile template, not a var: CI's
+# validate.yml stubs every `{{ ... }}` with a placeholder hostname, and a path
+# matcher must start with "/". roles/arx1_archive rewrites the exported HTML's
+# root-relative links to the same literal; acceptance.sh asserts they agree.
+#
+# NOTE: consume the enabled flags with `| bool` - the folded expressions
+# render to the STRING "True"/"False", and a bare `{% if %}` on a non-empty
 # string is always truthy.
-caddy_archive_fqdn: "" # = tofu output archive_fqdn (via generated group_vars)
 caddy_archive_root: /srv/arx1-archive
-caddy_archive_basicauth_user: archive
-caddy_archive_basicauth_hash: "{{ lookup('env', 'ARXII_ARX1_ARCHIVE_BASICAUTH_HASH') }}"
+# Mount the archive path blocks. Prod-only: the stage box holds no archive
+# content and the export is prod-adjacent, by the isolation doctrine.
 caddy_archive_enabled: >-
+  {{ not caddy_rehearsal_mode }}
+# The old archive.<domain> vhost, reduced to a 301 onto the path above so
+# links already handed out keep working. Rendered only once the fqdn is wired
+# (standup.sh writes it from `tofu output archive_fqdn`); an empty fqdn means
+# "the subdomain was never rolled out", which needs no redirect.
+caddy_archive_fqdn: "" # = tofu output archive_fqdn (via generated group_vars)
+caddy_archive_redirect_enabled: >-
   {{ (not caddy_rehearsal_mode)
-     and (caddy_archive_fqdn | length > 0)
-     and (caddy_archive_basicauth_hash | length > 0) }}
+     and (caddy_archive_fqdn | length > 0) }}
 
 # #2236 Phase 3 P1 (dress rehearsal). When true: deploy Caddyfile.rehearsal.j2
 # (local_certs, no DNS-01) instead of Caddyfile.j2, and skip the
