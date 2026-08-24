@@ -2,14 +2,22 @@
 
 End state (ruled 2026-08-21): the Arx I Linode is deleted; its data survives as
 checksummed, twice-replicated archives in object storage; a read-only static
-copy of the Arx I website is served from the Arx II box behind basic auth at
-`archive.<domain>`; and making Arx I *playable* again someday stays possible via
-a "resurrection kit" - without keeping any zombie process running today.
+copy of the Arx I website is served from the Arx II box at
+`<web_fqdn>/arxmush-archive`, behind an Arx II account login; and making Arx I
+*playable* again someday stays possible via a "resurrection kit" - without
+keeping any zombie process running today.
+
+The archive shipped behind one shared basic-auth password (ADR-0225). Since
+#3320 / **ADR-0232** it is gated on Arx II accounts instead: staff and anyone
+holding a `GMProfile` read it outright, everyone else needs a per-account grant
+a staffer ticks in the Django admin. That bought per-person revocation, which a
+shared password cannot have, at the price of the archive no longer being
+independent of the app.
 
 Cost after retirement: ~$0/month. The compressed archive rides the flat-rate
 Linode backups bucket the Arx II box already pays for, plus Cloudflare R2
 (10 GB-month free tier, $0.015/GB-month past it, zero egress). The static site
-costs the Arx II box only disk and an extra Caddy vhost. The $50/month Arx I
+costs the Arx II box only disk and two routes on the web vhost. The $50/month Arx I
 Linode goes away entirely.
 
 Decision record: ADR-0225. Content policy (ruled 2026-08-21): **everything
@@ -22,8 +30,8 @@ surfaced. Verified: messengers have no web view in arxcode (model + telnet
 handler + Django admin only, and the crawler skips /admin), so they exist
 only inside the private sqlite backup - if anyone ever builds NEW archive
 surfaces from that DB, messengers stay excluded. The GM/OOC rpevent logs are
-likewise backup-only (player OOC information). The site is basic-auth gated
-so previously login-gated content is not crawlable or stranger-readable.
+likewise backup-only (player OOC information). The site is login-gated so
+previously login-gated content is not crawlable or stranger-readable.
 
 ## Moving parts (all in this repo)
 
@@ -32,9 +40,12 @@ so previously login-gated content is not crawlable or stranger-readable.
 | Freeze script | `infra/scripts/arx1/arx1-freeze.sh` | the Arx I box |
 | Upload + verify script | `infra/scripts/arx1/arx1-upload.sh` | the Arx I box |
 | Static-site exporter (DRAFT) | `infra/scripts/arx1/arx1_static_export.py` | the Arx I venv |
-| Archive vhost (basic auth, TLS) | `roles/caddy` (`caddy_archive_*` vars) | Arx II box, every converge |
+| Archive routes on the web vhost | `roles/caddy` (`caddy_archive_*` vars) | Arx II box, every converge |
+| Authorization endpoint | `src/web/api/views/arx1_archive_views.py` | the Arx II app |
+| Access grant flag | `PlayerData.arx1_archive_access` (Django admin) | per account, by staff |
+| Link-prefix rewriter | `infra/scripts/arx1/arx1_prefix_rewrite.py` | Arx II box, each sync |
 | Content sync (bucket -> web root) | `roles/arx1_archive` (`--tags arx1_archive`) | Arx II box, on demand |
-| DNS record `archive.<domain>` | `terraform/modules/cloudflare_dns` | tofu apply (the button) |
+| DNS record `archive.<domain>` (301 only) | `terraform/modules/cloudflare_dns` | tofu apply (the button) |
 
 ## Step 1 - freeze the data (on the Arx I box)
 
@@ -136,23 +147,52 @@ it.
 
 ## Step 4 - serve it from the Arx II box
 
-1. Generate the shared credential's hash: `caddy hash-password` (any machine
-   with caddy; the password itself goes wherever you share such things).
-2. Set the gated `prod` Environment secret `ARXII_ARX1_ARCHIVE_BASICAUTH_HASH`
-   to that hash. This secret is the vhost's enable switch: while it is unset,
-   converges render no archive vhost at all (optional posture, like
-   `ARXII_SENTRY_DSN` - a clean converge, not a refused one).
-3. Press the button ("Stand up infra") with **Also pull the static Arx I
-   archive export** checked. The tofu step creates the `archive.<domain>` DNS
-   records; the caddy role renders the basic-auth vhost (login `archive`,
-   password per the hash) and issues its cert; the `arx1_archive` role pulls
-   the export from the bucket, verifies its checksum, and installs it at
-   `/srv/arx1-archive`.
-4. Browse `https://archive.<domain>/`, authenticate, spot-check an event page.
+There is no archive credential to create. Press the button ("Stand up infra")
+with **Also pull the static Arx I archive export** checked:
+
+- the caddy role mounts `/arxmush-archive/*` on the web vhost behind a
+  `forward_auth` subrequest to `/api/arx1-archive/authorize/`, plus an ungated
+  `/arxmush-archive/static/*` for assets;
+- the `arx1_archive` role pulls the export from the bucket, verifies its
+  checksum, re-points its root-relative links under the prefix, and installs it
+  at `/srv/arx1-archive`;
+- the tofu step creates the `archive.<domain>` DNS records, which now serve a
+  301 onto the path above so any link already handed out keeps working.
+
+Then, as a staffer:
+
+1. Browse `https://<web_fqdn>/arxmush-archive/` while logged out - it must
+   bounce you to `/login`, and log in must land you back on the page you asked
+   for.
+2. Browse it logged in and spot-check an event page and a journal.
+3. Grant a reader: Django admin -> Player data -> the account -> **Arx I
+   Archive** -> tick `arx1_archive_access`. Untick to revoke; the next request
+   is refused. Staff and GMs need no tick.
 
 Re-running after a re-uploaded export: press the button with the same checkbox
-again (the sync is a re-runnable oneshot). The vhost itself needs no checkbox;
-it converges every deploy once the secret exists.
+again (the sync is a re-runnable oneshot, and the link rewrite is idempotent).
+The routes themselves need no checkbox; they converge every deploy.
+
+**Retiring the shared password.** `ARXII_ARX1_ARCHIVE_BASICAUTH_HASH` is dead.
+Delete it from the gated `prod` Environment - nothing reads it, and leaving a
+retired credential in an Environment is how it gets reused by mistake.
+
+**Why a path and not the subdomain.** Reaching the archive with an Arx II
+session means the session cookie has to arrive with the request. The cookie is
+host-only (`SESSION_COOKIE_DOMAIN` unset), so `archive.<domain>` never saw it.
+Widening the cookie to `.<domain>` would have fixed that by handing the Arx II
+session to *every* future subdomain; mounting the archive as a path fixes it by
+never raising the question. `/arxmush-archive` rather than `/archive` because
+`/archive` is wanted for in-game use.
+
+**Why the links get rewritten.** The export was crawled from a site served at a
+host root, so its pages carry root-relative links (`href="/lore/"`,
+`src="/static/..."`). Under a prefix those escape the archive - `/lore/` would
+hit the Arx II SPA and `/static/` would serve Arx II's own collected static.
+`arx1_prefix_rewrite.py` re-points them during the sync. It runs there rather
+than in the exporter because the exporter only ever ran on the Arx I box, which
+is retired: fixing it at export time would mean the tarball already in the
+bucket could not be corrected without reviving that box.
 
 ## Step 5 - retire the Arx I Linode
 
