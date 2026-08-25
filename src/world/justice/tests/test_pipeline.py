@@ -258,7 +258,13 @@ class LethalWallTests(JusticeFixtureMixin, TestCase):
         )
 
     def test_npc_can_be_executed(self):
-        case = self._catastrophic_case(self.persona)  # factory persona: no account
+        # spec #2378 §9: terminal (EXECUTION/BANISHMENT) needs max weight AND an
+        # exhausted case — never a surprise off a single catastrophic roll. Seed
+        # failed_outs one below the threshold so initiate_trial's increment lands
+        # exactly on it (was: max weight alone was enough for an NPC).
+        case = self._catastrophic_case(
+            self.persona, failed_outs=EXECUTION_MIN_FAILED_OUTS - 1
+        )  # factory persona: no account
         initiate_trial(case, self.persona, check_levels=[-3])
         case.refresh_from_db()
         self.assertEqual(case.sentence_kind, SentenceKind.EXECUTION)
@@ -268,14 +274,20 @@ class LethalWallTests(JusticeFixtureMixin, TestCase):
         case = self._catastrophic_case(persona, failed_outs=5)
         initiate_trial(case, persona, check_levels=[-3])
         case.refresh_from_db()
-        self.assertEqual(case.sentence_kind, SentenceKind.BRIG_TERM)
+        # spec #2378 §9: an exhausted, max-weight case now always reaches the
+        # terminal branch; the lethal wall (ADR-0023) only decides EXECUTION vs
+        # BANISHMENT within it, never a fallback to BRIG_TERM.
+        self.assertEqual(case.sentence_kind, SentenceKind.BANISHMENT)
 
     def test_pc_opt_in_still_needs_exhaustion(self):
         persona = self._pc_persona(opt_in=True)
         case = self._catastrophic_case(persona, failed_outs=0)
         initiate_trial(case, persona, check_levels=[-3])
         case.refresh_from_db()
-        self.assertEqual(case.sentence_kind, SentenceKind.BRIG_TERM)
+        # spec #2378 §9: max weight with an unexhausted case (failed_outs=1 after
+        # this trial's increment) falls through to the EXILE/BRIG band, not
+        # straight to BRIG_TERM — a first offense at max weight is EXILE.
+        self.assertEqual(case.sentence_kind, SentenceKind.EXILE)
 
     def test_pc_opt_in_and_exhausted_reaches_execution(self):
         persona = self._pc_persona(opt_in=True)

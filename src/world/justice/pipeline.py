@@ -26,6 +26,8 @@ from world.justice.constants import (
     EVIDENCE_WEIGHT_MANUFACTURED_MAX,
     EVIDENCE_WEIGHT_REAL,
     EXECUTION_MIN_FAILED_OUTS,
+    EXILE_TERM_DAYS_MIN,
+    EXILE_TERM_DAYS_PER_WEIGHT_DIV,
     FINE_COPPERS_PER_WEIGHT,
     GUARD_ENCOUNTER_PCT_NPC_TRANSACTION,
     GUARD_ENCOUNTER_PCT_PUBLIC_INTERACTION,
@@ -49,7 +51,12 @@ from world.justice.models import (
     JusticeCase,
     PersonaHeat,
 )
+from world.justice.sentences import end_captivity, schedule_sentence, terminal_kind_for
 from world.justice.services import enforcing_society_for
+
+# Import shim: relocated to sentences.py (#2378) — kept so `_release` and existing
+# tests that reach into `pipeline._end_captivity` keep working.
+_end_captivity = end_captivity
 
 if TYPE_CHECKING:
     from world.areas.models import Area
@@ -302,20 +309,6 @@ def _release(case: JusticeCase, status: str) -> None:
     _end_captivity(case)
 
 
-def _end_captivity(case: JusticeCase) -> None:
-    if case.captivity is None:
-        return
-    from django.core.exceptions import ObjectDoesNotExist  # noqa: PLC0415
-
-    from world.captivity.constants import CaptivityStatus  # noqa: PLC0415
-    from world.captivity.services import resolve_captivity  # noqa: PLC0415
-
-    try:
-        resolve_captivity(case.captivity, status=CaptivityStatus.RELEASED)
-    except (ObjectDoesNotExist, ValueError):
-        return
-
-
 # ---------------------------------------------------------------------------
 # Trial — captive-initiated, defense-only agency
 # ---------------------------------------------------------------------------
@@ -373,7 +366,7 @@ def initiate_trial(
             "sentence_amount",
         ]
     )
-    _end_captivity(case)
+    schedule_sentence(case)
     return case
 
 
@@ -417,16 +410,27 @@ def _apply_sentence(case: JusticeCase) -> None:
         return
 
     # Full verdict.
-    if weight >= MAX_VALUE_FLOOR and _execution_reachable(case):
-        case.sentence_kind = SentenceKind.EXECUTION
-        case.sentence_amount = 0
-    elif weight >= HUNTED_VALUE_FLOOR:
-        case.sentence_kind = SentenceKind.BRIG_TERM
-        case.sentence_amount = max(1, weight * BRIG_DAYS_PER_WEIGHT // 10)
-    else:
-        case.sentence_kind = SentenceKind.FINE
-        case.sentence_amount = weight * FINE_COPPERS_PER_WEIGHT * 2
+    case.sentence_kind, case.sentence_amount = _default_kind_and_amount(case, weight)
     _collect_fine(case)
+
+
+def _default_kind_and_amount(case: JusticeCase, weight: int) -> tuple[str, int]:
+    """Pure kind/amount selection for a FULL verdict — no saves inside.
+
+    Terminal (EXECUTION/BANISHMENT) requires BOTH max weight AND an exhausted
+    case (spec #2378 §9: a terminal sentence is never a surprise from a single
+    catastrophic roll — it needs weight AND spent chances). Max weight alone,
+    with outs not yet exhausted, falls through to the EXILE/BRIG band below
+    (treated as weight >= HUNTED). Task 4's ladder consult wraps this helper.
+    """
+    if weight >= MAX_VALUE_FLOOR and case.failed_outs >= EXECUTION_MIN_FAILED_OUTS:
+        return terminal_kind_for(case), 0
+    if weight >= HUNTED_VALUE_FLOOR:
+        if case.failed_outs <= 1:
+            term = max(EXILE_TERM_DAYS_MIN, weight // EXILE_TERM_DAYS_PER_WEIGHT_DIV)
+            return SentenceKind.EXILE, term
+        return SentenceKind.BRIG_TERM, max(1, weight * BRIG_DAYS_PER_WEIGHT // 10)
+    return SentenceKind.FINE, weight * FINE_COPPERS_PER_WEIGHT * 2
 
 
 def _execution_reachable(case: JusticeCase) -> bool:
