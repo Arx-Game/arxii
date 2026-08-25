@@ -230,6 +230,7 @@ class ExileSentenceTests(_SentenceCaseMixin, TestCase):
         # HUNTED weight, failed_outs=0 pre-trial → 1 after increment → EXILE band.
         case = self._case(weight=HUNTED_VALUE_FLOOR, failed_outs=0)
         captivity = self._hold(case)
+        before = timezone.now()
 
         initiate_trial(case, case.persona, check_levels=[-3])
         case.refresh_from_db()
@@ -240,5 +241,39 @@ class ExileSentenceTests(_SentenceCaseMixin, TestCase):
             EXILE_TERM_DAYS_MIN, HUNTED_VALUE_FLOOR // EXILE_TERM_DAYS_PER_WEIGHT_DIV
         )
         self.assertEqual(case.sentence_amount, expected_amount)
-        # apply_exile is a Task 3 stub in this task: it only releases captivity.
         self.assertEqual(captivity.status, CaptivityStatus.RELEASED)
+
+        decree = ExileDecree.objects.get(case=case)
+        self.assertEqual(decree.persona, case.persona)
+        self.assertEqual(decree.area, self.kingdom)
+        self.assertIsNotNone(decree.ends_at)
+        self.assertEqual(case.sentence_ends_at, decree.ends_at)
+        self.assertGreaterEqual(
+            decree.ends_at, before + timedelta(days=expected_amount) - timedelta(minutes=1)
+        )
+
+        heat_row = PersonaHeat.objects.get(
+            persona=case.persona, area=self.kingdom, society=self.crown
+        )
+        self.assertGreaterEqual(heat_row.value, EXILE_PIN_VALUE)
+        self.assertEqual(heat_row.pinned_until, decree.pin_until)
+
+        # self.kingdom has no exile_destination configured: eject no-ops safely.
+        self.assertIsNone(self.kingdom.exile_destination)
+
+    def test_exile_ejects_when_destination_set(self):
+        from evennia_extensions.factories import RoomProfileFactory
+
+        destination = RoomProfileFactory()
+        self.kingdom.exile_destination = destination
+        self.kingdom.save(update_fields=["exile_destination"])
+
+        case = self._case(weight=HUNTED_VALUE_FLOOR, failed_outs=0)
+        self._hold(case)
+
+        initiate_trial(case, case.persona, check_levels=[-3])
+        case.refresh_from_db()
+
+        sheet = case.persona.character_sheet
+        sheet.refresh_from_db()
+        self.assertEqual(sheet.character.location, destination.objectdb)

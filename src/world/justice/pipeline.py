@@ -17,6 +17,8 @@ from django.utils import timezone
 from world.justice.constants import (
     ADVOCACY_CHECK_TYPE_NAME,
     ADVOCACY_WEIGHT_PER_LEVEL,
+    BREACH_OF_EXILE_CRIME_SLUG,
+    BREACH_WEIGHT_BONUS,
     BRIG_DAYS_PER_WEIGHT,
     EVASION_BOTCH_LEVEL,
     EVASION_CHECK_TYPE_NAME,
@@ -47,11 +49,17 @@ from world.justice.constants import (
 from world.justice.models import (
     CrimeKind,
     ExculpatoryEvidence,
+    ExileDecree,
     GuardEncounter,
     JusticeCase,
     PersonaHeat,
 )
-from world.justice.sentences import end_captivity, schedule_sentence, terminal_kind_for
+from world.justice.sentences import (
+    end_captivity,
+    is_magically_concealed,
+    schedule_sentence,
+    terminal_kind_for,
+)
 from world.justice.services import enforcing_society_for
 
 # Import shim: relocated to sentences.py (#2378) — kept so `_release` and existing
@@ -111,12 +119,16 @@ def maybe_guard_encounter(
 ) -> GuardEncounter | None:
     """Roll the trigger ladder. Only fires against active play in public space.
 
-    Below each trigger's tier floor: nothing. An already-open encounter or an
-    open case suppresses new pressure (they're already caught or cornered).
+    Below each trigger's tier floor: nothing, UNLESS an active exile decree
+    covers this persona/area — a breach is always pressure-eligible regardless
+    of current heat (#2378 Task 3). An already-open encounter or an open case
+    still suppresses new pressure either way (they're already caught or
+    cornered).
     """
     if area is None:
         return None
-    if heat_value_for(persona, area) < _TRIGGER_FLOOR.get(trigger, MAX_VALUE_FLOOR):
+    below_floor = heat_value_for(persona, area) < _TRIGGER_FLOOR.get(trigger, MAX_VALUE_FLOOR)
+    if below_floor and ExileDecree.active_for(persona, area) is None:
         return None
     if GuardEncounter.objects.filter(persona=persona, area=area, resolved_at__isnull=True).exists():
         return None
@@ -141,10 +153,20 @@ def maybe_guard_encounter(
 def _resolve_evasion_level(encounter: GuardEncounter, check_level: int | None) -> int:
     """Determine the evasion check success level for an encounter.
 
-    ``check_level`` injects a band for tests; otherwise the evasion check type
-    rolls (degrading to a plain escape when unseeded — pressure never lands
-    without the content in place).
+    An active, still-pinned exile decree on this persona/area forces a near-auto
+    botch (mundane evasion vs a pinned warrant) — UNLESS the persona is magically
+    concealed, in which case the existing rolled level (below) applies untouched
+    (#2378 Task 3). Otherwise ``check_level`` injects a band for tests; unset, the
+    evasion check type rolls (degrading to a plain escape when unseeded — pressure
+    never lands without the content in place).
     """
+    decree = ExileDecree.active_for(encounter.persona, encounter.area)
+    if (
+        decree is not None
+        and decree.pin_until > timezone.now()
+        and not is_magically_concealed(encounter.persona)
+    ):
+        return EVASION_BOTCH_LEVEL
     if check_level is not None:
         return check_level
     from world.checks.models import CheckType  # noqa: PLC0415
@@ -209,6 +231,8 @@ def _open_case_for_capture(encounter: GuardEncounter) -> JusticeCase | None:
     if society is None:
         return None
     weight = heat_value_for(encounter.persona, encounter.area)
+    if ExileDecree.active_for(encounter.persona, encounter.area) is not None:
+        weight += _mint_breach_heat(encounter)
     case = JusticeCase.objects.create(
         persona=encounter.persona,
         area=encounter.area,
@@ -219,6 +243,26 @@ def _open_case_for_capture(encounter: GuardEncounter) -> JusticeCase | None:
     if case.captivity is not None:
         case.save(update_fields=["captivity"])
     return case
+
+
+def _mint_breach_heat(encounter: GuardEncounter) -> int:
+    """Breach of Exile: mint its own crime heat and return the ladder-climbing bonus.
+
+    Returning to an area under an active decree is its own offense — a higher
+    prosecution weight (``BREACH_WEIGHT_BONUS``) plus the incremented
+    ``failed_outs`` at the next trial climbs the sentencing ladder naturally.
+    """
+    from world.justice.services import accrue_heat  # noqa: PLC0415
+
+    kind, _ = CrimeKind.objects.get_or_create(
+        slug=BREACH_OF_EXILE_CRIME_SLUG,
+        defaults={
+            "name": "Breach of Exile",
+            "description": "PLACEHOLDER: returning to an area under an active decree.",
+        },
+    )
+    accrue_heat(persona=encounter.persona, crime_kind=kind, area=encounter.area)
+    return BREACH_WEIGHT_BONUS
 
 
 def _take_into_custody(encounter: GuardEncounter, society):
