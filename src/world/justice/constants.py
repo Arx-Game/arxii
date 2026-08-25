@@ -164,3 +164,27 @@ class SentenceKind(models.TextChoices):
     HUMILIATION = "humiliation", "Public Humiliation"
     EXILE = "exile", "Exile"
     EXECUTION = "execution", "Execution"
+    CONFISCATION = "confiscation", "Confiscation"
+    BANISHMENT = "banishment", "Banishment"
+    ARENA_TRIAL = "arena_trial", "Trial by Combat"
+
+
+# --- Sentence enforcement (#2378) — PLACEHOLDER magnitudes ---
+# Exile pin: heat is held (decay-exempt) at its current value for this many
+# days after an ExileDecree is issued, then resumes normal decay.
+EXILE_PIN_DAYS = 7  # PLACEHOLDER magnitudes (spec #2378)
+# Heat value the pin holds the persona at, floor-style (never lowers heat).
+EXILE_PIN_VALUE = 300  # PLACEHOLDER magnitudes (spec #2378)
+# Exile term length: max(EXILE_TERM_DAYS_MIN, weight // EXILE_TERM_DAYS_PER_WEIGHT_DIV).
+EXILE_TERM_DAYS_MIN = 14  # PLACEHOLDER magnitudes (spec #2378)
+EXILE_TERM_DAYS_PER_WEIGHT_DIV = 5  # PLACEHOLDER magnitudes (spec #2378)
+# Rescue window: days a terminal sentence (execution/arena trial) sits pending
+# before it's carried out, giving allies a chance to intervene.
+RESCUE_WINDOW_DAYS = 7  # PLACEHOLDER magnitudes (spec #2378)
+# Public humiliation: term length and the prestige hit it lands.
+HUMILIATION_TERM_DAYS = 30  # PLACEHOLDER magnitudes (spec #2378)
+HUMILIATION_PRESTIGE_HIT = 50  # PLACEHOLDER magnitudes (spec #2378)
+# Breach of exile: crime slug minted when an exiled persona is caught back
+# inside the exiling area, and the heat-weight bonus that crime carries.
+BREACH_OF_EXILE_CRIME_SLUG = "breach-of-exile"
+BREACH_WEIGHT_BONUS = 50  # PLACEHOLDER magnitudes (spec #2378)
