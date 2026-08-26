@@ -354,17 +354,18 @@ position graph, mirroring `CmdPlaces`' shape:
   `ActionResult.message` verbatim (no separate telnet error copy).
 - `position/place <target>=<position name>` (#3385) — dispatches `GMPlaceInPositionAction`.
   `<target>` resolves via `self.caller.search(target_name, location=self.caller.location)`
-  (co-located search only); `<position name>` resolves via the same `_resolve_position`
-  helper as bare `position <name>`. No gate in the command itself — the Action re-checks
+  (co-located search only); `<position name>` resolves via the shared
+  `resolve_position_by_name` helper (`commands/utils/gm_resolution.py`) — the same one bare
+  `position <name>` uses. No gate in the command itself — the Action re-checks
   `_actor_may_gm_place` server-side regardless of what a forged dispatch claims.
 
 Registered in `commands/default_cmdsets.py` alongside `CmdPlaces`.
 
 **`src/commands/encounter.py`** — `CmdEncounter add <name> <tier> [pool [position]]` (#3385)
-gained an optional 4th token: a position name, resolved against `Position.objects.filter(room=
-self.caller.location)` via a small helper mirroring `CmdPosition._resolve_position`, forwarded
-as `position_id` to `AddOpponentAction` — closing telnet's gap with the web `AddOpponentDialog`,
-which has taken a position since #2005.
+gained an optional 4th token: a position name, resolved via the same shared
+`resolve_position_by_name(room, name)` helper `CmdPosition` uses
+(`commands/utils/gm_resolution.py`), forwarded as `position_id` to `AddOpponentAction` —
+closing telnet's gap with the web `AddOpponentDialog`, which has taken a position since #2005.
 
 ### Shared Serializers [BUILT & WIRED]
 

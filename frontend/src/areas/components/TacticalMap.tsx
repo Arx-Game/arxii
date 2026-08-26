@@ -174,7 +174,7 @@ export function TacticalMap({
         })
       ),
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [nodes, layout, occupantsByPosition, moveActionByPositionId, onPickPosition]
+    [nodes, layout, occupantsByPosition, moveActionByPositionId, onPickPosition, onGMPlace]
   );
 
   const flowEdges: Edge[] = useMemo(

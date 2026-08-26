@@ -9,7 +9,7 @@
  * If the scene has no positions, renders nothing.
  */
 
-import { useMemo, useState } from 'react';
+import { useMemo } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { toast } from 'sonner';
 import { useAppSelector } from '@/store/hooks';
@@ -17,19 +17,12 @@ import { useMyRosterEntriesQuery } from '@/roster/queries';
 import { useDispatchPlayerAction } from '@/combat/queries';
 import { isDispatchFailure } from '@/combat/types';
 import { TacticalMap } from '@/areas/components/TacticalMap';
+import { GMPlacementControls } from '@/areas/components/GMPlacementControls';
 import type { OccupantSummary } from '@/areas/components/PositionMapNode';
 import { fetchScene, sceneKeys } from '../queries';
 import { useAvailableActionsQuery } from '../actionQueries';
 import type { SceneDetail } from '../types';
 import type { PlayerAction } from '../actionTypes';
-import { Button } from '@/components/ui/button';
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '@/components/ui/select';
 
 interface Props {
   sceneId: string;
@@ -85,9 +78,6 @@ export function SceneTacticalMap({ sceneId }: Props) {
   // ---------------------------------------------------------------------------
   const { mutateAsync: dispatchAction, isPending } = useDispatchPlayerAction(characterId ?? 0);
   const queryClient = useQueryClient();
-
-  const [isPlacing, setIsPlacing] = useState(false);
-  const [placeTargetId, setPlaceTargetId] = useState<number | null>(null);
 
   // ---------------------------------------------------------------------------
   // Derived data — build memos before any conditional return (rules of hooks)
@@ -151,29 +141,6 @@ export function SceneTacticalMap({ sceneId }: Props) {
       });
   };
 
-  const handleGMPlace = (positionId: number): boolean => {
-    if (placeTargetId == null) {
-      return false;
-    }
-    const action = gmPlaceActions.find((a) => a.ref.position_id === positionId);
-    if (!action) {
-      return false;
-    }
-    dispatchAction({ ref: action.ref, kwargs: { target_object_id: placeTargetId } })
-      .then((result) => {
-        if (isDispatchFailure(result)) {
-          toast.error(result.message ?? 'Placement rejected.');
-          return;
-        }
-        setPlaceTargetId(null);
-        queryClient.invalidateQueries({ queryKey: sceneKeys.detail(sceneId) }).catch(() => {});
-      })
-      .catch((err: unknown) => {
-        toast.error(err instanceof Error ? err.message : 'Placement failed.');
-      });
-    return true;
-  };
-
   // ---------------------------------------------------------------------------
   // Render
   // ---------------------------------------------------------------------------
@@ -182,49 +149,27 @@ export function SceneTacticalMap({ sceneId }: Props) {
       <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
         Positions
       </p>
-      {gmPlaceActions.length > 0 && (
-        <div className="flex items-center gap-2">
-          <Button
-            type="button"
-            variant={isPlacing ? 'default' : 'outline'}
-            size="sm"
-            data-testid="gm-place-toggle"
-            onClick={() => {
-              setIsPlacing((prev) => !prev);
-              setPlaceTargetId(null);
-            }}
-          >
-            Place
-          </Button>
-          {isPlacing && (
-            <Select
-              value={placeTargetId !== null ? String(placeTargetId) : ''}
-              onValueChange={(v) => setPlaceTargetId(v === '' ? null : Number(v))}
-            >
-              <SelectTrigger className="h-8 w-48 text-xs" data-testid="gm-place-target-select">
-                <SelectValue placeholder="Select a target…" />
-              </SelectTrigger>
-              <SelectContent>
-                {placeTargets.map((target) => (
-                  <SelectItem key={target.id} value={String(target.id)}>
-                    {target.name}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          )}
-        </div>
-      )}
-      <div className="h-[320px] rounded-md border border-border">
-        <TacticalMap
-          nodes={positionNodes}
-          edges={positionEdges}
-          occupantsByPosition={occupantsByPosition}
-          moveActions={moveActions}
-          onDispatchMove={handleDispatchMove}
-          onGMPlace={isPlacing && placeTargetId != null ? handleGMPlace : undefined}
-        />
-      </div>
+      <GMPlacementControls
+        gmPlaceActions={gmPlaceActions}
+        targets={placeTargets}
+        dispatchAction={dispatchAction}
+        onPlaced={() => {
+          queryClient.invalidateQueries({ queryKey: sceneKeys.detail(sceneId) }).catch(() => {});
+        }}
+      >
+        {(onGMPlace) => (
+          <div className="h-[320px] rounded-md border border-border">
+            <TacticalMap
+              nodes={positionNodes}
+              edges={positionEdges}
+              occupantsByPosition={occupantsByPosition}
+              moveActions={moveActions}
+              onDispatchMove={handleDispatchMove}
+              onGMPlace={onGMPlace}
+            />
+          </div>
+        )}
+      </GMPlacementControls>
 
       {setTheStageAction && (
         <button

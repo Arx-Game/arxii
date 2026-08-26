@@ -19,6 +19,8 @@ from world.stories.models import Episode, Story
 if TYPE_CHECKING:
     from django.db.models import Model, QuerySet
 
+    from world.areas.positioning.models import Position
+
 _T = TypeVar("_T", bound="Model")
 
 _NO_CONTROLLING_ACCOUNT = "No controlling account."
@@ -199,3 +201,32 @@ def resolve_character_sheet_in_room(
         raise CommandError(not_found_msg) from exc
 
     return sheet
+
+
+def resolve_position_by_name(room: object, name: str) -> Position:
+    """Resolve a ``Position`` by name, scoped to *room* (telnet has no pk to reference).
+
+    Case-insensitive exact match, falling back to a unique prefix match. Shared by
+    ``CmdPosition`` (``commands/positions.py``, #2005) and ``CmdEncounter add``'s
+    position token (``commands/encounter.py``, #3385) so the two commands don't carry
+    independent copies of the same name-resolution algorithm.
+
+    Raises:
+        CommandError: When no position matches, or a prefix match is ambiguous.
+    """
+    from world.areas.positioning.models import Position as PositionModel  # noqa: PLC0415
+
+    positions = list(PositionModel.objects.filter(room=room))
+    lname = name.lower()
+    for position in positions:
+        if position.name.lower() == lname:
+            return position
+    prefix_matches = [p for p in positions if p.name.lower().startswith(lname)]
+    if len(prefix_matches) == 1:
+        return prefix_matches[0]
+    if len(prefix_matches) > 1:
+        names = ", ".join(p.name for p in prefix_matches)
+        msg = f"'{name}' is ambiguous: {names}."
+        raise CommandError(msg)
+    msg = f"No such position here: '{name}'."
+    raise CommandError(msg)

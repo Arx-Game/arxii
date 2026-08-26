@@ -7,13 +7,9 @@ A thin command face for the eight encounter actions in
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING
-
 from commands.exceptions import CommandError
 from commands.namespace import ArxNamespaceCommand
-
-if TYPE_CHECKING:
-    from world.areas.positioning.models import Position
+from commands.utils.gm_resolution import resolve_position_by_name
 
 _USAGE = (
     "Usage: encounter <subcommand>\n"
@@ -87,8 +83,8 @@ class CmdEncounter(ArxNamespaceCommand):
         already effectively required by ``_resolve_add_opponent_inputs``'s
         validation (``gm_combat.py``) even though this usage string calls it
         optional. Resolved against the encounter's spawn room (the caller's
-        current room) via ``_resolve_position``, mirroring ``CmdPosition
-        ._resolve_position``.
+        current room) via the shared ``resolve_position_by_name`` helper -- the
+        same one ``CmdPosition`` uses.
         """
         from actions.definitions.gm_combat import AddOpponentAction  # noqa: PLC0415
 
@@ -107,38 +103,14 @@ class CmdEncounter(ArxNamespaceCommand):
             "threat_pool_id": threat_pool_id,
         }
         if len(tokens) > _ADD_POSITION_INDEX:
-            position = self._resolve_position(tokens[_ADD_POSITION_INDEX])
+            room = self.caller.location
+            if room is None:
+                msg = "You aren't anywhere."
+                raise CommandError(msg)
+            position = resolve_position_by_name(room, tokens[_ADD_POSITION_INDEX])
             kwargs["position_id"] = position.pk
 
         self._run_action(AddOpponentAction, **kwargs)
-
-    def _resolve_position(self, name: str) -> Position:
-        """Resolve *name* to a ``Position`` scoped to the caller's current room.
-
-        Mirrors ``CmdPosition._resolve_position`` (``positions.py``):
-        case-insensitive exact match, falling back to a unique prefix match.
-        """
-        from world.areas.positioning.models import Position  # noqa: PLC0415
-
-        room = self.caller.location
-        if room is None:
-            msg = "You aren't anywhere."
-            raise CommandError(msg)
-
-        positions = list(Position.objects.filter(room=room))
-        lname = name.lower()
-        for position in positions:
-            if position.name.lower() == lname:
-                return position
-        prefix_matches = [p for p in positions if p.name.lower().startswith(lname)]
-        if len(prefix_matches) == 1:
-            return prefix_matches[0]
-        if len(prefix_matches) > 1:
-            names = ", ".join(p.name for p in prefix_matches)
-            msg = f"'{name}' is ambiguous: {names}."
-            raise CommandError(msg)
-        msg = f"No such position here: '{name}'."
-        raise CommandError(msg)
 
     def _handle_default(self, rest: str) -> None:
         """Parse ``default <tier>`` and dispatch PreviewOpponentDefaultsAction."""

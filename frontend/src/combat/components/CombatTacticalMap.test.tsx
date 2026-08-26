@@ -49,6 +49,7 @@ import { fetchAvailableActions } from '@/scenes/actionQueries';
 import { toast } from 'sonner';
 import { CombatTacticalMap } from './CombatTacticalMap';
 import type { EncounterDetail } from '../types';
+import { makeGMPlaceAction } from '@/test/utils/playerActionFixtures';
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -92,30 +93,6 @@ function makeMoveAction(positionId: number, displayName: string): PlayerAction {
       approach_id: null,
       technique_id: null,
       registry_key: 'move_to_position',
-      position_id: positionId,
-    },
-    target_spec: null,
-    enhancements: [],
-    strain: null,
-  };
-}
-
-function makeGMPlaceAction(positionId: number): PlayerAction {
-  return {
-    backend: 'registry',
-    display_name: `Place in position: ${positionId}`,
-    description: '',
-    difficulty: null,
-    prerequisite_met: true,
-    prerequisite_reasons: [],
-    check_type: { id: 1, name: 'Standard' },
-    action_template: null,
-    ref: {
-      backend: 'registry',
-      challenge_instance_id: null,
-      approach_id: null,
-      technique_id: null,
-      registry_key: 'gm_place_in_position',
       position_id: positionId,
     },
     target_spec: null,

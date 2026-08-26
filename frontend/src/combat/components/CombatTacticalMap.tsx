@@ -9,24 +9,17 @@
  * move_to_position/take_position PlayerActions the scene view uses.
  */
 
-import { useMemo, useState } from 'react';
+import { useMemo } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import { toast } from 'sonner';
 import { combatKeys, useCombatEncounter, useDispatchPlayerAction } from '../queries';
 import { isDispatchFailure } from '../types';
 import { useAvailableActionsQuery } from '@/scenes/actionQueries';
 import { TacticalMap } from '@/areas/components/TacticalMap';
+import { GMPlacementControls } from '@/areas/components/GMPlacementControls';
 import type { OccupantSummary } from '@/areas/components/PositionMapNode';
 import type { PlayerAction } from '@/scenes/actionTypes';
 import type { PositionTargetShape } from '@/actions/types';
-import { Button } from '@/components/ui/button';
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '@/components/ui/select';
 
 export interface CombatTacticalMapProps {
   encounterId: number;
@@ -75,9 +68,6 @@ export function CombatTacticalMap({
 
   const { mutateAsync: dispatchAction } = useDispatchPlayerAction(characterId);
   const queryClient = useQueryClient();
-
-  const [isPlacing, setIsPlacing] = useState(false);
-  const [placeTargetId, setPlaceTargetId] = useState<number | null>(null);
 
   const occupantsByPosition = useMemo(() => {
     const map = new Map<number, OccupantSummary[]>();
@@ -149,78 +139,33 @@ export function CombatTacticalMap({
       .map((o) => ({ id: o.objectdb_id as number, name: o.name })),
   ];
 
-  const handleGMPlace = (positionId: number): boolean => {
-    if (placeTargetId == null) {
-      return false;
-    }
-    const action = gmPlaceActions.find((a) => a.ref.position_id === positionId);
-    if (!action) {
-      return false;
-    }
-    dispatchAction({ ref: action.ref, kwargs: { target_object_id: placeTargetId } })
-      .then((result) => {
-        if (isDispatchFailure(result)) {
-          toast.error(result.message ?? 'Placement rejected.');
-          return;
-        }
-        setPlaceTargetId(null);
-        queryClient
-          .invalidateQueries({ queryKey: combatKeys.encounter(encounterId) })
-          .catch(() => {});
-      })
-      .catch((err: unknown) => {
-        toast.error(err instanceof Error ? err.message : 'Placement failed.');
-      });
-    return true;
-  };
-
   return (
     <div
       className="h-[480px] rounded-lg border border-border bg-card"
       data-testid="combat-tactical-map"
     >
-      {gmPlaceActions.length > 0 && (
-        <div className="flex items-center gap-2 border-b border-border p-2">
-          <Button
-            type="button"
-            variant={isPlacing ? 'default' : 'outline'}
-            size="sm"
-            data-testid="gm-place-toggle"
-            onClick={() => {
-              setIsPlacing((prev) => !prev);
-              setPlaceTargetId(null);
-            }}
-          >
-            Place
-          </Button>
-          {isPlacing && (
-            <Select
-              value={placeTargetId !== null ? String(placeTargetId) : ''}
-              onValueChange={(v) => setPlaceTargetId(v === '' ? null : Number(v))}
-            >
-              <SelectTrigger className="h-8 w-48 text-xs" data-testid="gm-place-target-select">
-                <SelectValue placeholder="Select a target…" />
-              </SelectTrigger>
-              <SelectContent>
-                {placeTargets.map((target) => (
-                  <SelectItem key={target.id} value={String(target.id)}>
-                    {target.name}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          )}
-        </div>
-      )}
-      <TacticalMap
-        nodes={encounter.position_nodes ?? []}
-        edges={encounter.position_edges ?? []}
-        occupantsByPosition={occupantsByPosition}
-        moveActions={moveActions}
-        onDispatchMove={handleDispatchMove}
-        onPickPosition={isPositionPickActive ? onPickPosition : undefined}
-        onGMPlace={isPlacing && placeTargetId != null ? handleGMPlace : undefined}
-      />
+      <GMPlacementControls
+        gmPlaceActions={gmPlaceActions}
+        targets={placeTargets}
+        dispatchAction={dispatchAction}
+        onPlaced={() => {
+          queryClient
+            .invalidateQueries({ queryKey: combatKeys.encounter(encounterId) })
+            .catch(() => {});
+        }}
+      >
+        {(onGMPlace) => (
+          <TacticalMap
+            nodes={encounter.position_nodes ?? []}
+            edges={encounter.position_edges ?? []}
+            occupantsByPosition={occupantsByPosition}
+            moveActions={moveActions}
+            onDispatchMove={handleDispatchMove}
+            onPickPosition={isPositionPickActive ? onPickPosition : undefined}
+            onGMPlace={onGMPlace}
+          />
+        )}
+      </GMPlacementControls>
     </div>
   );
 }

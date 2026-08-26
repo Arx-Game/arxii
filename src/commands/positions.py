@@ -11,14 +11,13 @@ or ``MoveToPositionAction`` when already placed.
 ``position/place <target>=<position name>`` (#3385) dispatches
 ``GMPlaceInPositionAction`` -- staff/GM-fiat unchecked placement of any
 co-located object. No business logic here: the command resolves ``<target>``
-via a co-located search and ``<position name>`` via ``_resolve_position``,
-then hands both to the action, which re-checks the GM gate and co-location
-server-side regardless of what this command validated.
+via a co-located search and ``<position name>`` via the shared
+``resolve_position_by_name`` helper, then hands both to the action, which
+re-checks the GM gate and co-location server-side regardless of what this
+command validated.
 """
 
 from __future__ import annotations
-
-from typing import TYPE_CHECKING
 
 from actions.definitions.positioning import (
     GMPlaceInPositionAction,
@@ -27,9 +26,7 @@ from actions.definitions.positioning import (
 )
 from commands.command import ArxCommand
 from commands.exceptions import CommandError
-
-if TYPE_CHECKING:
-    from world.areas.positioning.models import Position
+from commands.utils.gm_resolution import resolve_position_by_name
 
 _SWITCH_PLACE = "place"
 _USAGE_PLACE = "Usage: position/place <target>=<position name>"
@@ -104,24 +101,6 @@ class CmdPosition(ArxCommand):
             )
         self.msg("\n".join(lines))
 
-    def _resolve_position(self, room: object, name: str) -> Position:
-        from world.areas.positioning.models import Position  # noqa: PLC0415
-
-        positions = list(Position.objects.filter(room=room))
-        lname = name.lower()
-        for position in positions:
-            if position.name.lower() == lname:
-                return position
-        prefix_matches = [p for p in positions if p.name.lower().startswith(lname)]
-        if len(prefix_matches) == 1:
-            return prefix_matches[0]
-        if len(prefix_matches) > 1:
-            names = ", ".join(p.name for p in prefix_matches)
-            msg = f"'{name}' is ambiguous: {names}."
-            raise CommandError(msg)
-        msg = f"No such position here: '{name}'."
-        raise CommandError(msg)
-
     def _do_position(self, name: str) -> None:
         from world.areas.positioning.services import position_of  # noqa: PLC0415
 
@@ -129,7 +108,7 @@ class CmdPosition(ArxCommand):
         if room is None:
             msg = "You aren't anywhere."
             raise CommandError(msg)
-        position = self._resolve_position(room, name)
+        position = resolve_position_by_name(room, name)
 
         if position_of(self.caller) is None:
             result = TakePositionAction().run(self.caller, position_id=position.pk)
@@ -157,7 +136,7 @@ class CmdPosition(ArxCommand):
         if target is None:
             return  # search() sends its own error message
 
-        position = self._resolve_position(room, position_name)
+        position = resolve_position_by_name(room, position_name)
 
         result = GMPlaceInPositionAction().run(
             self.caller, position_id=position.pk, target_object_id=target.pk
