@@ -33,6 +33,8 @@ outcome** (a closed issue or a "SHIPPED" line is not proof). See the ledger's go
 - DEFEND halves / INTERPOSE zeroes incoming damage.
 - SUCCOR shelters a named ally from a round-ticked environmental hazard, in both combat and
   non-combat scene rounds (#1744, ADR-0069) — the environmental-DoT sibling of INTERPOSE.
+  Reachable from web since #3381 (`YourTurn`'s Succor ally picker, generic registry dispatch
+  — `combat_succor` had no web caller before, registry-only).
 - **Guardian reactions — best-of check selection and technique-guardian BARRIER (#2207),
   two journey tests.** Interpose's Melee-Defense twin (seeded per interpose capability,
   `interpose_content.py`) is reachable on the REAL dispatch path:
@@ -163,12 +165,19 @@ outcome** (a closed issue or a "SHIPPED" line is not proof). See the ledger's go
   (INTACT/CRACKED/CRUMBLING) renders on the tactical map as a colored ring
   (`PositionMapNode`, #2209).
 - **On-use items as a round action (#2023/#2120).** `combat use <item> [on <target>]`
-  (telnet) and `POST /api/combat/{pk}/use_item/` (web) both declare a USE_ITEM
-  `CombatRoundAction` through the shared `combat_use` REGISTRY action; round resolution
-  dispatches the real `UseItemAction` with the declared target threaded through (a healing
-  potion declared on an ally provably lands on the ally, not the user — the #2120
-  target-forwarding fix) and decrements the item charge (journey tests in
-  `world/combat/tests/test_combat_maneuvers_e2e.py` + `test_use_item_maneuver.py`).
+  (telnet) declares a USE_ITEM `CombatRoundAction` through the shared `combat_use`
+  REGISTRY action; round resolution dispatches the real `UseItemAction` with the declared
+  target threaded through (a healing potion declared on an ally provably lands on the
+  ally, not the user — the #2120 target-forwarding fix) and decrements the item charge
+  (journey tests in `world/combat/tests/test_combat_maneuvers_e2e.py` +
+  `test_use_item_maneuver.py`). The dedicated `POST /api/combat/{pk}/use_item/` REST
+  action existed server-side too but had no frontend caller — `frontend/src/inventory/
+  hooks/useUseItem.ts` called the separate non-combat item-use endpoint instead, never
+  threading a combat target or spending the round action. Closed by #3381: `YourTurn`'s
+  Use Item control (item picker filtered to `is_usable` + an optional self/ally/opponent
+  target select) dispatches through the generic registry seam (`combat_use`), not the
+  dedicated REST action — see Decision 1 in the issue's spec for why generic dispatch was
+  picked as the uniform path going forward.
 - **Ready-mode early resolution (#2120).** In `PaceMode.READY`, the round resolves the
   moment every ACTIVE participant is ready (`maybe_resolve_on_ready`, wired into
   `combat ready` / the web `ready` endpoint via `ReadyAction`); a lone ready participant
@@ -314,6 +323,22 @@ outcome** (a closed issue or a "SHIPPED" line is not proof). See the ledger's go
   (`YourTurn`'s ward + technique selects) — typechecked/linted, no e2e run
   (Playwright is blocked in this devcontainer for every spec, not specific to
   this feature).
+- **Web maneuver reachability closed for the last orphaned/absent verbs (#3381).**
+  Rally/Demoralize/Taunt/Parley had dedicated `CombatEncounterViewSet` REST actions
+  (rally, demoralize, taunt, parley — `world/combat/views.py`) with no frontend caller;
+  Succor/Charge/Joust/duel-Withdraw had no REST action at all (registry-only, reachable
+  only via a bespoke `registryRef` dispatch that nothing built). All six are now wired
+  through the existing generic registry-dispatch seam (`useDispatchPlayerAction`/
+  `registryRef`), not the dedicated REST actions (which stay in place, untouched, per the
+  issue's Decision 2 — removing them is a deferred, separately-scoped follow-up). New
+  surfaces: an opponent click-menu on `CombatantsList` (Taunt/Demoralize/Parley, a Radix
+  `DropdownMenu` mirroring `PersonaContextMenu`'s pattern); Rally/Succor ally pickers and a
+  "Mounted Maneuvers" mini-panel in `YourTurn`; and a site-wide `DuelWithdrawNotifier`
+  (mounted alongside `DuelChallengeNotifier`, not embedded in the combat rail — a
+  `DuelChallenge` has no `CombatEncounter` until accepted, so the rail never renders in the
+  window a withdraw affordance needs to cover). Typechecked/linted + Vitest component
+  coverage (`CombatantsList.test.tsx`, `YourTurn.test.tsx`,
+  `DuelWithdrawNotifier.test.tsx`); no e2e run (Playwright is blocked in this devcontainer).
 
 ## The combat gaps that define MVP (see the ledger's DO pillar)
 
@@ -393,7 +418,14 @@ outcome** (a closed issue or a "SHIPPED" line is not proof). See the ledger's go
   .CHARGE` (force-move onto a distant opponent then attack, with flat
   check/damage bonuses doubled for a `GearArchetype.LANCE`), and `CombatManeuver
   .JOUST` (2-participant DUEL-only mounted lance pass, graded by opposed
-  success_level margin into unhorse/lesser-hit/tie bands). Flying, and any
+  success_level margin into unhorse/lesser-hit/tie bands). Both maneuvers had no REST
+  action and no frontend caller until #3381 — `get_player_actions` excludes bare registry
+  actions by design, so they were reachable only via a bespoke frontend `registryRef`
+  dispatch, which didn't exist. Closed by #3381: `YourTurn`'s "Mounted Maneuvers"
+  mini-panel (gated on the viewer's own `Mounted` condition; Joust additionally gated on
+  `encounter_type === 'duel'`) dispatches `combat_charge`/`combat_joust` through the
+  generic registry seam — no client-side Mounted+Lance+reach re-validation, a rejected
+  declaration surfaces the backend's own message inline. Flying, and any
   battle-scale (war) mounted/cavalry mechanics, remain P2/unscoped. Ranged /
   archery enforcement shipped (#2011): REACH_N multi-hop reach, offensive-only elevation bonus, attack-cover via PositionShelter.applies_to_attacks.
 
