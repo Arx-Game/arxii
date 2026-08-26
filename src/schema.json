@@ -46127,18 +46127,7 @@ components:
         engagement_locks:
           type: array
           items:
-            type: object
-            additionalProperties: {}
-          description: |-
-            Return active EngagementLock records for this encounter (#2020).
-
-            Exposes foil pairings (who is dueling whom) to the frontend combat UI.
-            Returns only ACTIVE locks so resolved ones don't appear after breaking.
-
-            Uses the ``engagement_locks_cached`` prefetch-to-attr set on the
-            viewset's ``_base_queryset`` so no extra query fires during detail
-            serialization. Falls back to a direct filter for callers that don't
-            use the viewset (e.g. unit tests that call the serializer directly).
+            $ref: '#/components/schemas/EngagementLock'
           readOnly: true
         resolution_order:
           type: array
@@ -46332,6 +46321,35 @@ components:
         * `party_combat` - Party Combat
         * `open_encounter` - Open Encounter
         * `duel` - Duel
+    EngagementLock:
+      type: object
+      description: |-
+        Schema-only shape of get_engagement_locks rows on EncounterDetailSerializer (#3386).
+
+        Never instantiated for serialization — exists so drf-spectacular emits a
+        concrete component instead of {[key: string]: unknown}, mirroring
+        ClashContributorSerializer above. Field shape matches the dict
+        ``get_engagement_locks`` builds verbatim.
+      properties:
+        id:
+          type: integer
+        opponent_id:
+          type: integer
+        participant_id:
+          type: integer
+        status:
+          type: string
+        initiated_by:
+          type: string
+        started_round:
+          type: integer
+      required:
+      - id
+      - initiated_by
+      - opponent_id
+      - participant_id
+      - started_round
+      - status
     EntryFlourishRespondRequest:
       type: object
       description: |-

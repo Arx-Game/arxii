@@ -6638,6 +6638,31 @@ reactive maneuvers (COVER, INTERPOSE, DEFEND stance), and clash-of-wills.
   entry and a `conditions_applied` entry) in one call, mirroring
   `PlayableCombatScenarioFactory`'s style; use it instead of hand-rolling boss-fight
   fixtures. Driven end-to-end by `src/integration_tests/test_boss_fight_journey.py`.
+- **Engagement locks — foil duels (#2020, player surface #3386):** `EngagementLock`
+  (`world/combat/models.py`) pairs one PC to one opponent; while ACTIVE the locked
+  opponent's targeting narrows to just that PC (`_build_opponent_round_actions`,
+  `world/combat/services.py`). #2020 shipped the whole mechanic (threat tracking,
+  autonomous lock formation past `auto_lock_threshold`, boss-suppression consumer —
+  see the break-bar entry above) but left its two player entry points unreachable
+  until #3386: `EngageAction`/`DisengageAction` (`actions/definitions/
+  combat_maneuvers.py`, registry keys `combat_engage`/`combat_disengage`) are now
+  routed from telnet `combat engage <opponent>`/`combat disengage`
+  (`CmdCombat._SUBVERBS`, `src/commands/combat_maneuvers.py`) — the same REGISTRY
+  keys the web reaches generically via `useDispatchPlayerAction`
+  (`{ ref: { backend: 'registry', registry_key: 'combat_engage' }, kwargs: {
+  opponent_id } }`); no bespoke web click affordance yet — that's #3381's scope.
+  `EncounterDetailSerializer.get_engagement_locks` is schema-typed via
+  `@extend_schema_field(EngagementLockSerializer(many=True))` (mirrors
+  `get_clashes`/`ClashStateSerializer`), and `CombatantsList.tsx` renders a
+  read-only "Locked: `<PC name>`" badge on the paired opponent row — no click
+  handling. **Lock-lifecycle close-out (#3386):** fleeing while locked now breaks
+  the lock (`LockBreakReason.FLEE`, `_resolve_flee` in `world/combat/services.py`)
+  alongside the pre-existing defeat-breaks-lock and disengage-breaks-lock paths —
+  a PC who flees no longer leaves a phantom pairing behind.
+  `trigger_interference_drama` (`world/combat/engagement_locks.py`) — the "an ally
+  interfering with a locked NPC is a narrative payoff" mechanic — remains
+  unwired (zero callers); flagged, not built, pending a real
+  non-locked-PC-attacks-locked-opponent detection mechanism.
 - **Duels — `DuelChallenge` + GM-initiated lethal duels (#568, #3068):** `DuelChallenge`
   (`world/combat/models.py`) is the one challenge/accept/decline/withdraw handshake model
   for BOTH shapes: PC-vs-PC (`challenger_sheet` set, accepting opens `create_pvp_duel`) and

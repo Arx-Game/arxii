@@ -15,6 +15,10 @@
  * Condition badges: each row renders its `active_conditions` as ConditionBadge
  *   chips that deep-link to the shared condition-detail modal on click.
  *
+ * Engagement-lock badge (#3386): an opponent row shows "Locked: <PC name>" when
+ * an active EngagementLock names them — read-only visibility only, no click
+ * handling or dispatch. The click-to-engage/disengage menu is #3381's scope.
+ *
  * Phase 8, Task 8.3 — unified-combat-ui plan.
  */
 
@@ -152,9 +156,11 @@ function ParticipantRow({ participant }: ParticipantRowProps) {
 
 interface OpponentRowProps {
   opponent: Opponent;
+  /** Name of the PC this opponent is engagement-locked to, if any (#3386). */
+  lockedToName?: string;
 }
 
-function OpponentRow({ opponent }: OpponentRowProps) {
+function OpponentRow({ opponent, lockedToName }: OpponentRowProps) {
   return (
     <div
       className={cn(
@@ -186,6 +192,14 @@ function OpponentRow({ opponent }: OpponentRowProps) {
               {opponent.current_position.name}
             </span>
           )}
+          {lockedToName && (
+            <span
+              data-testid="engagement-lock-badge"
+              className="shrink-0 rounded bg-primary/10 px-1 py-0.5 text-[10px] text-primary"
+            >
+              Locked: {lockedToName}
+            </span>
+          )}
         </div>
         {/* HP mini-bar */}
         <HpBar health={opponent.health} maxHealth={opponent.max_health} className="mt-0.5" />
@@ -205,7 +219,16 @@ export function CombatantsList({
   collapsed = false,
   onToggleCollapse,
 }: CombatantsListProps) {
-  const { participants, opponents } = encounter;
+  const { participants, opponents, engagement_locks: engagementLocks } = encounter;
+
+  // Map opponent id -> locked PC's display name (#3386, read-only visibility).
+  const lockedOpponentNames = new Map<number, string>();
+  for (const lock of engagementLocks ?? []) {
+    const pc = participants.find((p) => p.id === lock.participant_id);
+    if (pc) {
+      lockedOpponentNames.set(lock.opponent_id, pc.character_name);
+    }
+  }
 
   return (
     <div className="rounded-md border border-border bg-card" data-testid="combatants-list-section">
@@ -253,7 +276,7 @@ export function CombatantsList({
                 Opponents
               </p>
               {opponents.map((o) => (
-                <OpponentRow key={o.id} opponent={o} />
+                <OpponentRow key={o.id} opponent={o} lockedToName={lockedOpponentNames.get(o.id)} />
               ))}
             </div>
           )}
