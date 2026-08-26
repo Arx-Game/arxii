@@ -1,4 +1,4 @@
-# Justice — local law, crime taxonomy, persona pursuit heat (#1765)
+# Justice — local law, crime taxonomy, persona pursuit heat (#1765, pipeline + sentence enforcement #1826/#2378)
 
 **Heat** is *how actively local forces hunt a specific persona in a specific place* —
 distinct from `SocietyReputation` (how a group regards you). Laws are per-area data;
@@ -158,14 +158,144 @@ Actions: `gather_evidence`, `dispose_evidence`, `start_frame_job`,
 actions/definitions/investigation). Telnet: the `evidence` namespace, `frame`,
 `accuse/refute`, `accuse/denounce`, `gossip smear`, `search start`.
 
-## Deferred (verified against code at spec time)
+## Pipeline (`world/justice/pipeline.py`, #1826/#2378)
 
-Guard-encounter spawning (combat domain — no pursuit-NPC surface exists);
-#1334 secrets-outing writer (calls `associate_heat`); allied-society warrant
-sharing; active heat-clearing (bribe/pardon — #1826); wanted-poster/public-knowledge
-surfaces; the automated justice pipeline downstream of heat (NPC guards → arrest →
-NPC-judge trial, lethal outcomes + the lethal-consent flag) — #2378; NPC
-false-accusers (a content loop over this machinery) — future content issue.
+Guard pressure to trial: `maybe_guard_encounter` rolls the trigger ladder
+(NPC_TRANSACTION/PUBLIC_INTERACTION/ROOM_ARRIVAL, each gated behind its own tier floor)
+against active public play only — never offline, never private rooms. An active
+`ExileDecree` on the persona/area is always pressure-eligible regardless of current
+heat (a breach never waits for heat to climb back up). `resolve_guard_encounter` runs
+the evasion check (`_resolve_evasion_level`): escape clean / seen (+heat,
+`EVASION_ESCAPE_HEAT_BUMP`) / captured; a still-pinned exile decree forces a
+near-auto-botch (`EVASION_BOTCH_LEVEL`) — mundane evasion can't beat a pinned warrant —
+UNLESS the persona is magically concealed (`sentences.is_magically_concealed`, seam
+below). Capture opens a `JusticeCase` and brigs the captive (`_take_into_custody` —
+routes to the area's Brig room feature via `room_features.brig_services
+.find_brig_for_area`/`brig_has_capacity` when one exists with room, else the
+instanced-cell default); a captured breach also mints its own `breach-of-exile`
+CrimeKind heat (`_mint_breach_heat`, `BREACH_WEIGHT_BONUS`) on top of ordinary
+prosecution weight. `failed_outs` on the new case is seeded from the persona's own
+history in that area — a count of prior TRIED, non-acquitted cases
+(`_prior_conviction_count`) — so escalation (ladder rungs above level 0, breach
+past re-exile, both terminal kinds) climbs organically across repeat offenses
+rather than resetting to 0 on every fresh capture.
+
+**The trial waits on the captive** (`initiate_trial`) — argument checks by the accused
+plus helpers (`submit_exculpatory`; a threshold releases outright; a manufactured
+submission later exposed backfires on the SUBMITTER, never the accused). A FULL
+verdict's sentence (`_apply_sentence`) scales with prosecution weight through
+`_default_kind_and_amount`'s bands (FINE → HUMILIATION → EXILE/BRIG_TERM → terminal),
+then `_ladder_kind_and_amount` lets the society's `SentenceLadderRung` override the
+kind — except the lethal wall (ADR-0023): a rung can never produce
+EXECUTION/BANISHMENT unless the terminal conditions independently hold (max weight AND
+an exhausted case, `failed_outs >= EXECUTION_MIN_FAILED_OUTS`), and even then
+`sentences.terminal_kind_for` downgrades EXECUTION to BANISHMENT for a PC who hasn't
+opted into lethal consequences (ADR-0233 amends ADR-0023's scope note for this fork).
+`initiate_trial` hands the resolved case to `sentences.schedule_sentence` and fires
+`notifications.notify_verdict_safely`.
+
+## Sentence enforcement (`world/justice/sentences.py`, #2378)
+
+`schedule_sentence` routes a just-TRIED case's `sentence_kind` to its enforcement
+path: FINE/HUMILIATION release outright (`apply_humiliation` — a deed-prestige hit,
+clamped at zero; NO prose beyond neutral procedural strings — Dan authors the real
+humiliation copy personally); BRIG_TERM holds until `JusticeCase.sentence_ends_at`
+with a best-effort brig-visitation advert (`notifications.notify_brig_visitation`, OOC
+to the accused's active friends — skipped entirely when the accused's persona is a
+fake name, an identity-bridge guard: the advert names the persona, and sending it to
+friends of the persona's tenure would bridge mask→character identity OOC); every
+`end_captivity` call (the shared release used across FINE/HUMILIATION/EXILE/
+CONFISCATION and the FULL-verdict path) is best-effort against a captivity that
+already resolved on its own — a jailbreak or rescue before the sentence lands raises
+`CaptivityError`, caught alongside the pre-existing not-found/invalid-status guards
+rather than 500ing mid-enforcement; EXECUTION/BANISHMENT hold through the rescue window
+(`JusticeCase.terminal_due_at = now + RESCUE_WINDOW_DAYS`); EXILE calls `apply_exile`
+(mints an `ExileDecree`, pins heat via `pin_heat_for_decree`, ends captivity, ejects to
+`Area.exile_destination` via `eject` — a null-safe no-op for a bodiless persona or an
+area with no destination configured); CONFISCATION calls `apply_confiscation` (seizes
+the accused's whole carried inventory into the area's Brig room via
+`room_features.brig_services.find_brig_for_area`, recoverable not destroyed; falls
+back to a double-rate fine, `_collect_fine_double`, when there's no Brig or no body).
+
+`sentence_sweep_tick` is the daily cron body (`justice.sentence_sweep` in
+`game_clock/tasks.py`): `_sweep_brig_releases` frees every HELD captivity whose
+BRIG_TERM has matured; `_sweep_terminals` carries out (or voids) every terminal
+sentence whose rescue window has closed — a rescue or an escape (captivity no longer
+HELD by sweep time) voids it (`notify_verdict_safely(reason=VOIDED)`, never the
+CARRIED_OUT copy); otherwise `_carry_out_execution` re-judges the lethal wall
+(`terminal_kind_for`) before carrying it out — a sentence_kind of EXECUTION judged
+up to `RESCUE_WINDOW_DAYS` earlier may no longer clear the wall by carry-out time
+(e.g. an NPC persona's sheet gets claimed by a player without lethal-consequences
+opt-in during the window); when it no longer clears, `sentence_kind` is updated to
+BANISHMENT and saved, and carry-out delegates to `_carry_out_banishment` so the
+record stays truthful about what actually happened. `_carry_out_execution` itself
+releases the captivity slot BEFORE flipping `CharacterSheet.lifecycle_state` to
+DEAD — ordering matters, `resolve_captivity` unconditionally flips lifecycle back to
+ALIVE as part of freeing the cell. `_carry_out_banishment` mints a permanent
+`ExileDecree`, pins heat, ejects — mirrors `apply_exile`'s captivity-then-eject
+ordering for the same reason.
+
+A pardon (`lifecycle.pardon_persona`) never waits on this sweep. It voids a scheduled
+terminal directly at grant time — clears `terminal_due_at`, releases a HELD captive,
+and fires the VOIDED notice itself, so the sweep never sees that case again — and
+releases any open AWAITING_TRIAL case outright via `pipeline._release(case,
+CaseStatus.RELEASED_PARDON)`, so a pardoned captive never stands trial on the erased
+warrant. `_sweep_terminals`'s own `CaseStatus.RELEASED_PARDON` check stays as a
+belt-and-braces double-void guard; in practice an AWAITING_TRIAL-origin case never
+carries a terminal `sentence_kind`, so the branch doesn't fire, but the status is now
+a real, written value rather than an orphaned enum member.
+
+`active_public_marks(area)` derives the public record on read (no stored, expiring
+row) from three live sources: still-term-limited humiliations
+(`HUMILIATION_TERM_DAYS`), active `ExileDecree` rows (permanent when `ends_at` is
+null), and pending terminal countdowns (`terminal_due_at` in the future, not yet
+carried out) — surfaced on the wanted board (`GET /api/justice/wanted/`'s `records`
+field, `PublicMarkSerializer`) and `GET /api/justice/my-case/`'s sentence/countdown
+fields (`MyCaseSerializer`) for the captive's own case. The verdict itself also fires a
+`tidings` VERDICT feed item (`tidings.services._verdict_items` — neutral procedural
+headline naming only the sentence kind, never humiliation specifics: there is no
+narrative data on `JusticeCase` to leak).
+
+`is_magically_concealed(persona)` is the ratified magic-exception seam (spec #2378
+§5): magical concealment (invisibility, shapechange) should bypass the mundane exile
+gauntlet absent magical detection. Always returns False today — the magical-detection
+taxonomy is TehomCD's substrate. It should ride the existing security-check oracle
+(`resolve_security_check(SecurityCheckKind.SNEAK)`, `world.checks.security_services`)
+that stealth/guard detection already uses (`world.stealth.services`,
+`world.npc_services.guard_services`), coordinating with TehomCD's magical-detection
+taxonomy rather than inventing a parallel check — wire it when that taxonomy exists.
+
+### Models (additions, #2378)
+
+- **`ExileDecree`** — one persona's standing banishment from one area under one
+  society. `ends_at` null = permanent (a banishment); set = a term (an exile).
+  `lifted_at` records an early pardon. `pin_until` is the heat-pin window. `case` is
+  SET_NULL so the decree survives a purged case. `ExileDecree.active_for(persona,
+  area)` is the one read seam every enforcement caller uses.
+- **`SentenceLadderRung`** — `(society, level, sentence_kind, flavor)`, unique per
+  `(society, level)`. `level` is matched against `failed_outs - 1`. `flavor` is
+  PLACEHOLDER realm text pending the lore pass. Seeded for Umbros/Inferna via
+  `seeds.seed_placeholder_sentence_ladders` (skips a society gracefully when absent).
+- **`PersonaHeat.pinned_until`** — decay-exempt hold at value through an exile pin
+  (`pin_heat_for_decree`).
+- **`JusticeCase.sentence_ends_at`/`terminal_due_at`/`terminal_carried_out_at`** —
+  brig release / exile term end; rescue-window deadline; when a terminal was actually
+  carried out.
+- **`Area.exile_destination`** (`world/areas/models.py`) — the RoomProfile the
+  banished are ejected to (outside the walls); null = no physical move.
+
+## Deferred (verified against code, updated #2378)
+
+Still open from before this slice: #1334 secrets-outing writer (calls
+`associate_heat`); allied-society warrant sharing; NPC false-accusers (a content loop
+over this machinery) — future content issue. Newly deferred by the sentence-enforcement
+slice itself (all #2378): **arena/trial-by-combat mechanics** — `ARENA_TRIAL` rungs are
+seeded but INERT (substituted for `BRIG_TERM` at consult time) pending TehomCD's combat
+substrate; **magical-detection wiring** for `is_magically_concealed` (TehomCD, seam
+above); **realm sentencing-ladder content, execution-method prose, and every
+PLACEHOLDER copy string in the sentencing paths above** (lore/Apostate pass);
+**humiliation prose specifically** stays Apostate-authored only — the mechanics hook
+(`apply_humiliation`) is neutral by design and never narrative.
 
 ## Authored law postures (Apostate, 2026-07-03 — transcribe to AreaLaw when the grid lands)
 

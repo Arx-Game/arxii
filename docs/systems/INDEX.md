@@ -1582,13 +1582,42 @@ captured (`resolve_guard_encounter`); capture brigs via captivity and opens a
 checks by accused + helpers, nobody prosecutes); helpers can only help
 (`submit_exculpatory` — threshold releases outright; manufactured evidence
 exposed backfires on the SUBMITTER). Sentences scale with prosecution weight
-(fine/brig/humiliation/exile); **the lethal wall holds** (ADR-0023):
+(fine/brig/humiliation/exile), a society's `SentenceLadderRung` can override the
+kind on repeat offenses (`ARENA_TRIAL` seeded but INERT pending the combat
+substrate); **the lethal wall holds** (ADR-0023):
 `PlayerData.lethal_consequences_opt_in` + an exhausted case (`failed_outs`)
-gate PC execution — NPCs may hang.
+gate PC execution — NPCs may hang; a non-opted PC's terminal instead lands
+BANISHMENT, the non-lethal terminal ADR-0233 adds (amends ADR-0023's scope
+note, doesn't supersede it).
+
+**Sentence enforcement (#2378, `justice/sentences.py`):** `schedule_sentence`
+dispatches a TRIED case's verdict to its enforcement path; `sentence_sweep_tick`
+is the daily cron (`justice.sentence_sweep`) that serves matured BRIG_TERM
+releases and carries out (or voids, on rescue/pardon) due terminal sentences.
+EXILE mints an `ExileDecree` + floors/holds heat at `pin_heat_for_decree`
+(shared with terminal BANISHMENT) and ejects to `Area.exile_destination`
+(`eject`, null-safe); returning under an active decree mints its own
+`breach-of-exile` CrimeKind heat (`pipeline._mint_breach_heat`) and forces a
+near-auto-botch evasion roll unless magically concealed (`is_magically_concealed`
+— seam, always False today, TehomCD's detection substrate). CONFISCATION seizes
+carried goods into the area's Brig room (`room_features.brig_services
+.find_brig_for_area`/`brig_has_capacity` — also the capture-time custody route,
+promoted from #1862) or falls back to a double-rate fine. HUMILIATION applies a
+clamped deed-prestige hit (`apply_humiliation`, mechanics-only — Apostate authors
+the real copy). `active_public_marks(area)` derives the wanted board's public
+record (no stored row) from live humiliations/decrees/pending terminals, surfaced
+on `GET /api/justice/wanted/`'s `records` field and `GET /api/justice/my-case/`'s
+sentence/countdown fields; a sentenced verdict also fires a `tidings` VERDICT feed
+item. `justice/notifications.py`: `notify_verdict`/`notify_verdict_safely` deliver
+a verdict/carried-out/voided notice (three DISTINCT bodies — a voided terminal
+never re-sends sentence-affirming copy) to the case's reachable audience;
+`notify_brig_visitation` OOC-adverts a served brig term to the accused's active
+friends.
 
 - **Models:** `CrimeKind` (normalized vocabulary; **content rule: no sexual crimes,
   ever**), `AreaLaw` (`heat_weight` posture + `exempts`), `DeedCrimeTag`
-  (→ `LegendEntry`), `PersonaHeat` (persona × area × enforcing society), `HeatSource`
+  (→ `LegendEntry`), `PersonaHeat` (persona × area × enforcing society;
+  `pinned_until` — decay-exempt exile-pin hold, #2378), `HeatSource`
   (allegation provenance — false accusations are emergent, never flagged),
   `AccusationCrimeClaim` (→ `secrets.Secret` — the frame-job→heat bridge; `real_deed`
   null = wild L2, set = L3 frame for a real crime; `retracted_at` set by
@@ -1596,7 +1625,13 @@ gate PC execution — NPCs may hang.
   left at its scene; → `items.ItemInstance` when gathered; states
   AT_SCENE→GATHERED→TAMPERING→OFF_GRID→PRODUCED/DISPOSED), `FrameJobDetails`
   (FRAME_JOB Project payload), `AccusationNullification` (proven-fabrication
-  record + the authorship secret), `DenounceRecord` (once-only backfire guard)
+  record + the authorship secret), `DenounceRecord` (once-only backfire guard),
+  `ExileDecree` (persona × area × society banishment; `ends_at` null = permanent,
+  #2378), `SentenceLadderRung` (per-society escalation step keyed on
+  `(society, level)`, matched against `failed_outs - 1`, #2378); `JusticeCase`
+  gains `sentence_ends_at`/`terminal_due_at`/`terminal_carried_out_at` (#2378);
+  `areas.Area` gains `exile_destination` (RoomProfile the banished are ejected to,
+  #2378)
 - **Key functions (`world/justice/services.py`):** `law_for`, `enforcing_society_for`,
   `accrue_heat`, `accrue_for_deed_knowledge` (evidence-disposal dampener), `heat_for`,
   `associate_heat`, `tag_deed_crimes` (+ evidence generation), `heat_decay_tick`
@@ -1606,14 +1641,27 @@ gate PC execution — NPCs may hang.
   counter-play (#1825): `evidence.generate_crime_evidence`/`gather_evidence`/
   `dispose_evidence`, `frame_jobs.start_frame_job`/`resolve_frame_job` (FRAME_JOB
   handler), `nullification.nullify_accusation`, `denounce.denounce_framer`,
-  `case_file.has_local_authority`/`produce_case_evidence`/`examine_evidence`
+  `case_file.has_local_authority`/`produce_case_evidence`/`examine_evidence`;
+  sentence enforcement (`justice/sentences.py`, #2378): `schedule_sentence`,
+  `sentence_sweep_tick`, `apply_exile`, `apply_confiscation`, `apply_humiliation`,
+  `active_public_marks`, `terminal_kind_for`, `pin_heat_for_decree`, `eject`,
+  `is_magically_concealed`; seeds: `seeds.seed_placeholder_sentence_ladders`
+  (Umbros/Inferna placeholder rungs, skips gracefully when a society is absent)
 - **Writers:** deed-knowledge seam (`grant_deed_knowledge(room=…)`); mission report
   CRIME_WATCH sink (`missions.integrations.crime_watch.flag_crime` + the
   MOSTLY_ACCURATE dodge + masked-report association chance)
 - **Surfaces (self-only):** room-desc tier line + `heat` on the room-state payload;
   safe-now relief line on movement; `sheet/crime` + web Crime tab over
   `GET /api/justice/heat/` (tiers only, never raw values; `PersonaHeatSerializer`
-  also carries `society` id for the web Reputation tab's client-side join, #1446)
+  also carries `society` id for the web Reputation tab's client-side join, #1446);
+  public standing (#2378): the wanted board's `records` field (`PublicMarkSerializer`)
+  and `GET /api/justice/my-case/` (`MyCaseSerializer` — `sentence_kind`,
+  `sentence_amount`, `sentence_ends_at`, `terminal_due_at`, `failed_outs`) plus web
+  sentence-countdown UI on the character sheet's Crime tab. Fix
+  round (#2378 Task 7): `scenes` serializer identity leaks closed —
+  `endorsee_sheet_id` and `dramatic_moment_tags`' sheet ids now gate behind the same
+  reveal predicate as the rest of a masked persona's identity, so a disguised
+  persona can no longer be unmasked through those two fields.
 - **Source:** `src/world/justice/`
 - **Details:** [justice.md](justice.md)
 
