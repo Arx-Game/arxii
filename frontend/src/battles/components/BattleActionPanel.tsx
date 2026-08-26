@@ -26,7 +26,7 @@
  */
 
 import { useMemo, useState, type FormEvent } from 'react';
-import { useQueryClient } from '@tanstack/react-query';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 
 import { useAppSelector } from '@/store/hooks';
 import { useMyRosterEntriesQuery } from '@/roster/queries';
@@ -34,6 +34,8 @@ import { useDispatchPlayerAction } from '@/combat/queries';
 import { isDispatchFailure } from '@/combat/types';
 import { registryRef } from '@/combat/duels/DuelChallengeControls';
 import { useCastableTechniques } from '@/scenes/actionQueries';
+import { fetchScene, sceneKeys } from '@/scenes/queries';
+import type { SceneDetail } from '@/scenes/types';
 
 import { battleKeys } from '../queries';
 import {
@@ -96,19 +98,165 @@ export function BattleActionPanel({ sceneId, battle, detail }: Props) {
       round?.status === 'declaring'
   );
 
-  if (!showDeclaration || !battle || !detail || !myParticipant || characterId === null) {
-    return null;
-  }
+  // Phase 2 (#3389 Decision 3) — SceneDetail.viewer_can_gm as the client-side
+  // hint for the GM lifecycle controls; the strict server-side gate
+  // (_actor_may_gm_battle) lives inside each Action's execute() unchanged.
+  // Only fetched once a Battle exists — no lifecycle to control otherwise.
+  const { data: scene } = useQuery<SceneDetail>({
+    queryKey: sceneKeys.detail(sceneId),
+    queryFn: () => fetchScene(String(sceneId)),
+    enabled: Boolean(battle),
+  });
+  const showLifecycle = Boolean(battle && detail && scene?.viewer_can_gm && characterId !== null);
+
+  if (!showDeclaration && !showLifecycle) return null;
 
   return (
     <div className="space-y-3" data-testid="battle-action-panel">
-      <BattleDeclarationSection
-        sceneId={sceneId}
-        battleId={battle.id}
-        characterId={characterId}
-        detail={detail}
-        myParticipant={myParticipant}
-      />
+      {showLifecycle && battle && detail && characterId !== null && (
+        <BattleLifecycleSection
+          sceneId={sceneId}
+          battleId={battle.id}
+          characterId={characterId}
+          round={round}
+          isConcluded={detail.concluded_at != null}
+        />
+      )}
+      {showDeclaration && battle && detail && myParticipant && characterId !== null && (
+        <BattleDeclarationSection
+          sceneId={sceneId}
+          battleId={battle.id}
+          characterId={characterId}
+          detail={detail}
+          myParticipant={myParticipant}
+        />
+      )}
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// BattleLifecycleSection — Phase 2 (#3389): GM round begin/resolve/conclude
+// ---------------------------------------------------------------------------
+
+interface LifecycleProps {
+  sceneId: number;
+  battleId: number;
+  characterId: number;
+  round: BattleRoundSummary | null;
+  isConcluded: boolean;
+}
+
+function BattleLifecycleSection({
+  sceneId,
+  battleId,
+  characterId,
+  round,
+  isConcluded,
+}: LifecycleProps) {
+  const queryClient = useQueryClient();
+  const { mutateAsync: dispatchAction, isPending } = useDispatchPlayerAction(characterId);
+  const [feedback, setFeedback] = useState<{ text: string; error: boolean } | null>(null);
+  const [confirmingConclude, setConfirmingConclude] = useState(false);
+
+  function invalidateBattleQueries() {
+    queryClient.invalidateQueries({ queryKey: battleKeys.detail(battleId) });
+    queryClient.invalidateQueries({ queryKey: battleKeys.forScene(sceneId) });
+  }
+
+  function dispatchLifecycle(registryKey: string, defaultMessage: string) {
+    dispatchAction(registryRef(registryKey))
+      .then((result) => {
+        if (isDispatchFailure(result)) {
+          setFeedback({ text: result.message ?? defaultMessage, error: true });
+          return;
+        }
+        setFeedback({ text: result.message ?? defaultMessage, error: false });
+        setConfirmingConclude(false);
+        invalidateBattleQueries();
+      })
+      .catch((err: unknown) =>
+        setFeedback({ text: err instanceof Error ? err.message : defaultMessage, error: true })
+      );
+  }
+
+  const canBegin = round === null || round.status === 'completed';
+  const canResolve = round?.status === 'declaring';
+
+  return (
+    <div
+      className="space-y-2 rounded border border-border p-3"
+      data-testid="battle-lifecycle-section"
+    >
+      <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+        Round Lifecycle (GM)
+      </p>
+      {feedback && (
+        <p
+          className={feedback.error ? 'text-xs text-destructive' : 'text-xs text-muted-foreground'}
+          data-testid="battle-lifecycle-feedback"
+        >
+          {feedback.text}
+        </p>
+      )}
+
+      <div className="flex gap-2">
+        <button
+          type="button"
+          disabled={isPending || !canBegin}
+          onClick={() => dispatchLifecycle('begin_battle_round', 'Round begun.')}
+          className={DISPATCH_BUTTON_CLASS}
+          data-testid="battle-lifecycle-begin"
+        >
+          Begin Round
+        </button>
+        <button
+          type="button"
+          disabled={isPending || !canResolve}
+          onClick={() => dispatchLifecycle('resolve_battle_round', 'Round resolved.')}
+          className={DISPATCH_BUTTON_CLASS}
+          data-testid="battle-lifecycle-resolve"
+        >
+          Resolve Round
+        </button>
+      </div>
+
+      {confirmingConclude ? (
+        <div className="space-y-1">
+          <p className="text-xs text-destructive">
+            This force-ends the war. This cannot be undone.
+          </p>
+          <div className="flex gap-1">
+            <button
+              type="button"
+              disabled={isPending}
+              onClick={() => dispatchLifecycle('conclude_battle', 'Battle concluded.')}
+              className="flex-1 rounded border border-destructive/40 bg-destructive/5 px-2 py-1 text-xs font-medium text-destructive hover:bg-destructive/10 disabled:cursor-not-allowed disabled:opacity-50"
+              data-testid="battle-lifecycle-confirm-conclude"
+            >
+              Confirm Conclude
+            </button>
+            <button
+              type="button"
+              disabled={isPending}
+              onClick={() => setConfirmingConclude(false)}
+              className="flex-1 rounded border border-input px-2 py-1 text-xs disabled:cursor-not-allowed disabled:opacity-50"
+            >
+              Cancel
+            </button>
+          </div>
+        </div>
+      ) : (
+        <button
+          type="button"
+          disabled={isPending || isConcluded}
+          onClick={() => setConfirmingConclude(true)}
+          className="w-full rounded border border-destructive/40 bg-destructive/5 px-3 py-1.5 text-xs font-medium text-destructive transition-colors hover:bg-destructive/10 disabled:cursor-not-allowed disabled:opacity-50"
+          data-testid="battle-lifecycle-conclude"
+        >
+          Conclude Battle
+        </button>
+      )}
     </div>
   );
 }

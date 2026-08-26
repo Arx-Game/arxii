@@ -55,8 +55,17 @@ vi.mock('@/scenes/actionQueries', () => ({
   })),
 }));
 
+vi.mock('@/scenes/queries', async () => {
+  const actual = await vi.importActual<typeof import('@/scenes/queries')>('@/scenes/queries');
+  return {
+    ...actual,
+    fetchScene: vi.fn(),
+  };
+});
+
 import { useDispatchPlayerAction } from '@/combat/queries';
 import { useCastableTechniques } from '@/scenes/actionQueries';
+import { fetchScene } from '@/scenes/queries';
 import { BattleActionPanel } from './BattleActionPanel';
 
 // ---------------------------------------------------------------------------
@@ -155,6 +164,27 @@ const MOCK_BATTLE_DETAIL: BattleDetail = {
   deeds: [],
 };
 
+const MOCK_SCENE_NOT_GM = {
+  id: 1,
+  name: 'Test Scene',
+  description: '',
+  date_started: '',
+  location: null,
+  participants: [],
+  is_active: true,
+  is_owner: false,
+  viewer_can_gm: false,
+  positions: [],
+  position_adjacency: [],
+  persona_positions: [],
+  active_round: null,
+  personas: [],
+  position_nodes: [],
+  position_edges: [],
+};
+
+const MOCK_SCENE_GM = { ...MOCK_SCENE_NOT_GM, viewer_can_gm: true };
+
 // ---------------------------------------------------------------------------
 // Tests
 // ---------------------------------------------------------------------------
@@ -162,6 +192,7 @@ const MOCK_BATTLE_DETAIL: BattleDetail = {
 describe('BattleActionPanel — BattleDeclarationSection (#3389 Phase 1)', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    vi.mocked(fetchScene).mockResolvedValue(MOCK_SCENE_NOT_GM);
     vi.mocked(useDispatchPlayerAction).mockReturnValue({
       mutateAsync: vi.fn(() => Promise.resolve()),
       isPending: false,
@@ -342,6 +373,164 @@ describe('BattleActionPanel — BattleDeclarationSection (#3389 Phase 1)', () =>
 
     const feedback = await screen.findByTestId('battle-declaration-feedback');
     expect(feedback).toHaveTextContent('No active round to declare into.');
+    expect(feedback).toHaveClass('text-destructive');
+  });
+});
+
+describe('BattleActionPanel — BattleLifecycleSection (#3389 Phase 2)', () => {
+  const detailNoParticipants: BattleDetail = { ...MOCK_BATTLE_DETAIL, participants: [] };
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    vi.mocked(useDispatchPlayerAction).mockReturnValue({
+      mutateAsync: vi.fn(() => Promise.resolve()),
+      isPending: false,
+    } as unknown as ReturnType<typeof useDispatchPlayerAction>);
+    vi.mocked(useCastableTechniques).mockReturnValue({
+      data: [],
+    } as unknown as ReturnType<typeof useCastableTechniques>);
+  });
+
+  it('renders nothing when the viewer is not the scene GM (viewer_can_gm=false)', async () => {
+    vi.mocked(fetchScene).mockResolvedValue(MOCK_SCENE_NOT_GM);
+    const { container } = render(
+      <BattleActionPanel sceneId={1} battle={{ id: 7 }} detail={detailNoParticipants} />,
+      { wrapper: createWrapper() }
+    );
+    await vi.waitFor(() => {
+      expect(container).toBeEmptyDOMElement();
+    });
+  });
+
+  it('renders the lifecycle section when viewer_can_gm=true, independent of participant standing', async () => {
+    vi.mocked(fetchScene).mockResolvedValue(MOCK_SCENE_GM);
+    render(<BattleActionPanel sceneId={1} battle={{ id: 7 }} detail={detailNoParticipants} />, {
+      wrapper: createWrapper(),
+    });
+    expect(await screen.findByTestId('battle-lifecycle-section')).toBeInTheDocument();
+  });
+
+  it('Begin Round is enabled when there is no open round', async () => {
+    vi.mocked(fetchScene).mockResolvedValue(MOCK_SCENE_GM);
+    render(
+      <BattleActionPanel
+        sceneId={1}
+        battle={{ id: 7 }}
+        detail={{ ...detailNoParticipants, round: null }}
+      />,
+      { wrapper: createWrapper() }
+    );
+    expect(await screen.findByTestId('battle-lifecycle-begin')).not.toBeDisabled();
+  });
+
+  it('Begin Round is disabled while a round is DECLARING', async () => {
+    vi.mocked(fetchScene).mockResolvedValue(MOCK_SCENE_GM);
+    render(
+      <BattleActionPanel
+        sceneId={1}
+        battle={{ id: 7 }}
+        detail={{ ...detailNoParticipants, round: { number: 1, status: 'declaring' } }}
+      />,
+      { wrapper: createWrapper() }
+    );
+    expect(await screen.findByTestId('battle-lifecycle-begin')).toBeDisabled();
+  });
+
+  it('Resolve Round is enabled only while the round is DECLARING, and dispatches resolve_battle_round', async () => {
+    const mockMutateAsync = vi.fn(() => Promise.resolve());
+    vi.mocked(useDispatchPlayerAction).mockReturnValue({
+      mutateAsync: mockMutateAsync,
+      isPending: false,
+    } as unknown as ReturnType<typeof useDispatchPlayerAction>);
+    vi.mocked(fetchScene).mockResolvedValue(MOCK_SCENE_GM);
+
+    const user = userEvent.setup();
+    render(
+      <BattleActionPanel
+        sceneId={1}
+        battle={{ id: 7 }}
+        detail={{ ...detailNoParticipants, round: { number: 1, status: 'declaring' } }}
+      />,
+      { wrapper: createWrapper() }
+    );
+
+    const resolveButton = await screen.findByTestId('battle-lifecycle-resolve');
+    expect(resolveButton).not.toBeDisabled();
+    await user.click(resolveButton);
+
+    expect(mockMutateAsync).toHaveBeenCalledWith({
+      ref: { backend: 'registry', registry_key: 'resolve_battle_round' },
+      kwargs: {},
+    });
+  });
+
+  it('Conclude Battle requires a confirm step before dispatching conclude_battle', async () => {
+    const mockMutateAsync = vi.fn(() => Promise.resolve());
+    vi.mocked(useDispatchPlayerAction).mockReturnValue({
+      mutateAsync: mockMutateAsync,
+      isPending: false,
+    } as unknown as ReturnType<typeof useDispatchPlayerAction>);
+    vi.mocked(fetchScene).mockResolvedValue(MOCK_SCENE_GM);
+
+    const user = userEvent.setup();
+    render(<BattleActionPanel sceneId={1} battle={{ id: 7 }} detail={detailNoParticipants} />, {
+      wrapper: createWrapper(),
+    });
+
+    const concludeButton = await screen.findByTestId('battle-lifecycle-conclude');
+    await user.click(concludeButton);
+    expect(mockMutateAsync).not.toHaveBeenCalled();
+    expect(await screen.findByTestId('battle-lifecycle-confirm-conclude')).toBeInTheDocument();
+
+    await user.click(screen.getByTestId('battle-lifecycle-confirm-conclude'));
+    expect(mockMutateAsync).toHaveBeenCalledWith({
+      ref: { backend: 'registry', registry_key: 'conclude_battle' },
+      kwargs: {},
+    });
+  });
+
+  it('Conclude Battle is disabled once the battle already has concluded_at set', async () => {
+    vi.mocked(fetchScene).mockResolvedValue(MOCK_SCENE_GM);
+    render(
+      <BattleActionPanel
+        sceneId={1}
+        battle={{ id: 7 }}
+        detail={{ ...detailNoParticipants, concluded_at: '2026-08-26T00:00:00Z' }}
+      />,
+      { wrapper: createWrapper() }
+    );
+    expect(await screen.findByTestId('battle-lifecycle-conclude')).toBeDisabled();
+  });
+
+  it('shows the server failure message on a lifecycle business-rule rejection', async () => {
+    const mockMutateAsync = vi.fn(() =>
+      Promise.resolve({
+        backend: 'registry',
+        deferred: false,
+        message: "Only the battle's GM or staff can do that.",
+        success: false,
+      })
+    );
+    vi.mocked(useDispatchPlayerAction).mockReturnValue({
+      mutateAsync: mockMutateAsync,
+      isPending: false,
+    } as unknown as ReturnType<typeof useDispatchPlayerAction>);
+    vi.mocked(fetchScene).mockResolvedValue(MOCK_SCENE_GM);
+
+    const user = userEvent.setup();
+    render(
+      <BattleActionPanel
+        sceneId={1}
+        battle={{ id: 7 }}
+        detail={{ ...detailNoParticipants, round: null }}
+      />,
+      { wrapper: createWrapper() }
+    );
+
+    await user.click(await screen.findByTestId('battle-lifecycle-begin'));
+
+    const feedback = await screen.findByTestId('battle-lifecycle-feedback');
+    expect(feedback).toHaveTextContent("Only the battle's GM or staff can do that.");
     expect(feedback).toHaveClass('text-destructive');
   });
 });
