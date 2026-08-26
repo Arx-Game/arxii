@@ -5298,9 +5298,9 @@ holder is never notified a claim exists.
     (catastrophe loses all). `org_has_pending_gems` widens the empty-gate so a gems-but-no-coin
     mine still collects. `CollectionResult` grew `gem_value_landed` / `stones_delivered` /
     `stones_lost`. Currency reaches this via a lazy import (FK direction preserved — currency
-    stays free of an items dependency at load). Remaining sub-slices: the `game_clock`
-    scheduling and the minister seam (#2239) — the crafting draw itself shipped (see the
-    currency section's `distribute_material_allowance`).
+    stays free of an items dependency at load). Remaining sub-slices: only the minister seam
+    (#2239) — the `game_clock` scheduling shipped (#2610) and the crafting draw itself shipped
+    (see the currency section's `distribute_material_allowance`).
   - **Personal material sale** (`world.items.market.services.sell_materials`,
     `@transaction.atomic`, #2540 slice 2) — sells `amount` of a `CharacterSheet`'s
     `MaterialBucket` value for one category at the market's PLACEHOLDER

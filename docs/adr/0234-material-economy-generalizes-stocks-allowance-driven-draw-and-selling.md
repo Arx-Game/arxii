@@ -1,4 +1,4 @@
-# 0234 — Material economy: rename over duplicate, per-category stock, allowance-driven crafting draw, and collection-scoped selling
+# ADR-0234: Material economy renames stocks over duplicating them, keeps per-category stock, drives crafting via allowance, and sells only at collection time
 
 **Status:** accepted (2026-08-26, #2540 slice 2)
 
