@@ -18,6 +18,8 @@ from evennia.utils.idmapper import models as idmapper_models
 from world.character_sheets.factories import CharacterSheetFactory
 from world.magic.factories import (
     CharacterResonanceFactory,
+    DramaticMomentTagFactory,
+    DramaticMomentTypeFactory,
     PoseEndorsementFactory,
     ResonanceFactory,
     SceneEntryEndorsementFactory,
@@ -172,6 +174,89 @@ class EndorseeSheetIdMaskReveal2378Tests(TestCase):
         _set_empty_cached_attrs(barefaced_pose)
         data = InteractionListSerializer(barefaced_pose, context=_make_context()).data
         assert data["endorsee_sheet_id"] == barefaced_sheet.pk
+
+
+class DramaticMomentTagSheetIdReveal2378Tests(TestCase):
+    """dramatic_moment_tags' character_sheet_id honors the reveal predicate (#2378).
+
+    Sibling leak to endorsee_sheet_id — ``DramaticMomentTag.character_sheet`` is a
+    real-identity FK, gated at the SHEET level via ``_revealed_sheet_ids`` (a tag's
+    sheet need not be the pose author's own persona, unlike endorsee_sheet_id).
+    """
+
+    @classmethod
+    def setUpTestData(cls) -> None:
+        idmapper_models.flush_cache()
+        cls.masked_sheet = CharacterSheetFactory()
+        cls.masked_persona = PersonaFactory(character_sheet=cls.masked_sheet, is_fake_name=True)
+        cls.masked_pose = InteractionFactory(persona=cls.masked_persona, pose_kind=PoseKind.ENTRY)
+        cls.viewer_sheet = CharacterSheetFactory()
+        cls.moment_type = DramaticMomentTypeFactory()
+
+    def setUp(self) -> None:
+        idmapper_models.flush_cache()
+
+    def _pose_with_tag(self, character_sheet):
+        interaction = self.masked_pose
+        _set_empty_cached_attrs(interaction)
+        tag = DramaticMomentTagFactory(
+            interaction=interaction,
+            moment_type=self.moment_type,
+            character_sheet=character_sheet,
+        )
+        interaction.cached_dramatic_moment_tags = [tag]
+        return interaction
+
+    def test_masked_undiscovered_viewer_hides_id_keeps_label(self) -> None:
+        """A tag on the masked pose author's OWN sheet, undiscovered: id hidden, label kept."""
+        interaction = self._pose_with_tag(self.masked_sheet)
+        data = InteractionListSerializer(
+            interaction,
+            context=_make_context(viewer_sheet_ids={self.viewer_sheet.pk}),
+        ).data
+        tags = data["dramatic_moment_tags"]
+        assert len(tags) == 1
+        assert tags[0]["moment_type_label"] == self.moment_type.label
+        assert tags[0]["character_sheet_id"] is None
+
+    def test_discovered_viewer_reveals_id(self) -> None:
+        PersonaDiscoveryFactory(
+            persona=self.masked_persona,
+            linked_to=self.masked_sheet.primary_persona,
+            discovered_by=self.viewer_sheet,
+        )
+        interaction = self._pose_with_tag(self.masked_sheet)
+        data = InteractionListSerializer(
+            interaction,
+            context=_make_context(viewer_sheet_ids={self.viewer_sheet.pk}),
+        ).data
+        assert data["dramatic_moment_tags"][0]["character_sheet_id"] == self.masked_sheet.pk
+
+    def test_staff_viewer_reveals_id(self) -> None:
+        interaction = self._pose_with_tag(self.masked_sheet)
+        data = InteractionListSerializer(interaction, context=_make_context(is_staff=True)).data
+        assert data["dramatic_moment_tags"][0]["character_sheet_id"] == self.masked_sheet.pk
+
+    def test_viewer_own_sheet_reveals_id(self) -> None:
+        """The tag targets the viewer's OWN sheet directly — not the pose author's sheet."""
+        interaction = self._pose_with_tag(self.viewer_sheet)
+        data = InteractionListSerializer(
+            interaction,
+            context=_make_context(viewer_sheet_ids={self.viewer_sheet.pk}),
+        ).data
+        assert data["dramatic_moment_tags"][0]["character_sheet_id"] == self.viewer_sheet.pk
+
+    def test_tag_on_sheet_absent_from_page_hides_id(self) -> None:
+        """A tag naming a sheet with no persona anywhere on this page stays hidden."""
+        absent_sheet = CharacterSheetFactory()
+        interaction = self._pose_with_tag(absent_sheet)
+        data = InteractionListSerializer(
+            interaction,
+            context=_make_context(viewer_sheet_ids={self.viewer_sheet.pk}),
+        ).data
+        tags = data["dramatic_moment_tags"]
+        assert tags[0]["moment_type_label"] == self.moment_type.label
+        assert tags[0]["character_sheet_id"] is None
 
 
 class Task2EndorsableResonancesTests(TestCase):

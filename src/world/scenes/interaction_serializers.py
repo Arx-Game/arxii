@@ -549,13 +549,69 @@ class InteractionListSerializer(serializers.ModelSerializer):
         ]
 
     def get_dramatic_moment_tags(self, obj: Interaction) -> list[dict]:
+        """Dramatic-moment badges: label always public, ``character_sheet_id`` gated (#2378).
+
+        ``DramaticMomentTag.character_sheet`` is a real-identity FK — unlike
+        ``endorsee_sheet_id`` (gated by the tagged pose's OWN persona), a tag's sheet can
+        belong to any participant, not necessarily this pose's author, so it can't reuse
+        that per-row flag. Exposed iff the viewer is staff, the sheet is one of the
+        viewer's own, or the sheet has at least one persona on this page whose identity is
+        already revealed (``_revealed_sheet_ids``, batched off the shared display map) —
+        otherwise ``character_sheet_id`` is ``None`` and the row (moment_type_label + tag)
+        still renders, since the moment itself is public.
+        """
         tags = getattr(obj, "cached_dramatic_moment_tags", None)  # noqa: GETATTR_LITERAL - Prefetch(to_attr=...) sets this
         if tags is None:
             return []
-        return [
-            {"moment_type_label": t.moment_type.label, "character_sheet_id": t.character_sheet_id}
-            for t in tags
-        ]
+        is_staff = bool(self.context.get("is_staff", False))
+        viewer_sheet_ids: set[int] = set(self.context.get("viewer_sheet_ids", set()))
+        revealed_sheet_ids = self._revealed_sheet_ids()
+        result = []
+        for t in tags:
+            sheet_id = t.character_sheet_id
+            visible = is_staff or sheet_id in viewer_sheet_ids or sheet_id in revealed_sheet_ids
+            result.append(
+                {
+                    "moment_type_label": t.moment_type.label,
+                    "character_sheet_id": sheet_id if visible else None,
+                }
+            )
+        return result
+
+    def _revealed_sheet_ids(self) -> set[int]:
+        """Context-cached set of character_sheet ids revealed to this viewer (#2378).
+
+        Derived from the SAME rows and display map ``_persona_display_map`` already
+        builds for the page (no extra queries): a sheet is in the set when at least one of
+        its personas appearing on this page has ``reveal_allowed`` True (own face, staff,
+        barefaced, or discovered). A sheet with no persona on this page never lands in the
+        set — conservative by design, per ``get_dramatic_moment_tags``.
+        """
+        cache_key = "_revealed_sheet_ids_cache"
+        cached = self.context.get(cache_key)
+        if cached is not None:
+            return cached
+        display_map = self._persona_display_map()
+        if self.parent is not None:
+            rows = list(self.parent.instance or [])
+        elif self.instance is not None:
+            rows = [self.instance]
+        else:
+            rows = []
+        revealed: set[int] = set()
+        seen_persona_ids: set[int] = set()
+        for row in rows:
+            persona = row.persona
+            if persona.pk in seen_persona_ids:
+                continue
+            seen_persona_ids.add(persona.pk)
+            _name, _is_discovered, reveal_allowed = display_map.get(
+                persona.pk, (persona.name, False, not persona.is_fake_name)
+            )
+            if reveal_allowed:
+                revealed.add(persona.character_sheet_id)
+        self.context[cache_key] = revealed
+        return revealed
 
     def _viewer_can_gm_scene(self, scene: Scene | None) -> bool:
         """Mirror ``SceneListSerializer.get_viewer_can_gm`` for this interaction's scene (#2183).
