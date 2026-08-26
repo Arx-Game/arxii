@@ -82,11 +82,15 @@ class DistributionResult:
 
     Sequence: collect -> debt principal (a flat share of gross, first) -> member
     allowance (from the post-debt remainder) -> materials allowance (a share of what
-    the collection landed per category, #2540 slice 2). ``debt_principal_paid`` is the
-    coppers that left the treasury toward principal this dispatch.
+    the collection landed per category, #2540 slice 2) -> auto-sell of excess materials
+    (#2540 slice 2, always last). ``debt_principal_paid`` is the coppers that left the
+    treasury toward principal this dispatch; ``auto_sold`` is the coppers minted to the
+    treasury from liquidating any ``OrgMaterialStock`` row still over threshold after the
+    allowance leg (0 when nothing sold).
     """
 
     collection: CollectionResult
     debt_principal_paid: int
     allowance: AllowanceResult
     material_allowance: MaterialAllowanceResult
+    auto_sold: int = 0

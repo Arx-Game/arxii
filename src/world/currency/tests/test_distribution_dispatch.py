@@ -17,6 +17,7 @@ from evennia_extensions.factories import AccountFactory
 from world.character_sheets.factories import CharacterSheetFactory
 from world.checks.factories import CheckTypeFactory
 from world.checks.test_helpers import force_check_outcome
+from world.currency.constants import MATERIAL_AUTO_SELL_THRESHOLD
 from world.currency.models import CurrencyTransfer, DebtInstrument, OrgIncomeStream
 from world.currency.services import (
     accrue_income_stream,
@@ -27,7 +28,7 @@ from world.currency.services import (
 )
 from world.items.factories import MaterialCategoryFactory
 from world.items.gems.buckets import material_value
-from world.items.materials_models import StreamMaterialPool
+from world.items.materials_models import OrgMaterialStock, StreamMaterialPool
 from world.scenes.factories import PersonaFactory
 from world.societies.factories import OrganizationFactory, OrganizationMembershipFactory
 from world.traits.factories import CheckOutcomeFactory
@@ -127,9 +128,39 @@ class CollectAndDistributeTests(TestCase):
         self.assertTrue(result.collection.catastrophe)
         self.assertEqual(result.debt_principal_paid, 0)
         self.assertEqual(result.allowance.total_distributed, 0)
+        self.assertEqual(result.auto_sold, 0)
         self.assertFalse(
             CurrencyTransfer.objects.filter(reason__startswith="debt principal").exists()
         )
+
+    def test_auto_sell_rides_along_as_the_last_leg(self) -> None:
+        """#2540 slice 2: auto-sell fires after the allowance leg — it only sells what
+        the allowance leg left behind above threshold."""
+        category = MaterialCategoryFactory(name="Cordwood")
+        StreamMaterialPool.objects.create(
+            income_stream=self.stream, material_category=category, uncollected_value=15_000
+        )
+        result = self._dispatch()
+        # Gross materials 15,000 -> landed 13,500 (10% graft). Allowance draws 50% (6,750)
+        # for the one active member, leaving 6,750 in stock -> excess 1,750 over threshold.
+        self.assertEqual(result.material_allowance.total_by_category, [(category, 6_750)])
+        self.assertGreater(result.auto_sold, 0)
+        self.assertEqual(result.auto_sold, 1_750 * 40 // 100)
+        stock = OrgMaterialStock.objects.get(organization=self.org, material_category=category)
+        self.assertEqual(stock.value, MATERIAL_AUTO_SELL_THRESHOLD)
+        self.assertTrue(
+            CurrencyTransfer.objects.filter(
+                reason=f"auto-sold surplus: {category.name}", amount=result.auto_sold
+            ).exists()
+        )
+
+    def test_stock_at_or_under_threshold_never_auto_sells(self) -> None:
+        category = MaterialCategoryFactory(name="Semiprecious")
+        StreamMaterialPool.objects.create(
+            income_stream=self.stream, material_category=category, uncollected_value=100
+        )
+        result = self._dispatch()
+        self.assertEqual(result.auto_sold, 0)
 
     def test_materials_allowance_rides_along_with_landed_materials(self) -> None:
         """#2540 slice 2: the materials leg wires straight off ``collection.landed_by_category``."""

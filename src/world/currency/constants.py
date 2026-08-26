@@ -196,3 +196,9 @@ DEBT_PRINCIPAL_GROSS_PCT = 13
 # members — the materials analogue of ALLOWANCE_SURPLUS_PCT, "the crafting draw".
 # PLACEHOLDER — magnitude is Apostate's tuning call.
 MATERIALS_ALLOWANCE_PCT = 50
+
+# Org auto-sell of excess materials (#2540 slice 2): a per-category OrgMaterialStock row
+# over this value has its excess liquidated into the treasury at the end of every
+# collect_and_distribute dispatch, so an unused stockpile doesn't just pile up forever.
+# PLACEHOLDER — magnitude is Apostate's tuning call.
+MATERIAL_AUTO_SELL_THRESHOLD = 5000

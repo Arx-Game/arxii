@@ -314,6 +314,8 @@ def _land_route_collection(
             "PLACEHOLDER: raw materials were shared out to "
             f"{dispatch.material_allowance.member_count} members."
         )
+    if dispatch.auto_sold > 0:
+        lines.append(f"PLACEHOLDER: surplus stores were sold off for {dispatch.auto_sold} coppers.")
     return lines
 
 

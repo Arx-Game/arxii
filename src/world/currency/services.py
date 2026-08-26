@@ -29,6 +29,7 @@ from world.currency.constants import (
     DEBT_PRINCIPAL_GROSS_PCT,
     DENOMINATION_VALUES,
     GRAFT_FLOOR_PCT,
+    MATERIAL_AUTO_SELL_THRESHOLD,
     MATERIALS_ALLOWANCE_PCT,
     MINT_FEE_PCT,
     NOTARY_FEE_COPPERS,
@@ -820,6 +821,49 @@ def distribute_material_allowance(
 
 
 @transaction.atomic
+def auto_sell_excess_materials(*, organization: Organization) -> int:
+    """Liquidate any ``OrgMaterialStock`` row over ``MATERIAL_AUTO_SELL_THRESHOLD`` (#2540 slice 2).
+
+    The org-level analogue of ``market.sell_materials`` — a house dumps material surplus it
+    has no use for rather than let it accumulate unbounded, since nothing else in the game
+    currently spends from an org's stock besides the materials allowance leg. Called at the
+    END of ``collect_and_distribute`` (rides the piloted collection event, not the cron).
+    For each category over threshold, ``excess = value - MATERIAL_AUTO_SELL_THRESHOLD`` sells
+    at the market's ``MATERIAL_SALE_RATE_PCT`` (imported from its market home — one rate
+    constant, no duplicate) into the treasury. Rows read/debited under
+    ``select_for_update`` — the same locking discipline the materials allowance leg uses,
+    since both debit the same stock table and must not race each other negative. A category
+    whose excess is too small for the rate to round up to a single copper is left alone
+    (never debit stock for zero coppers, mirroring the allowance leg's own zero-guard); a
+    stock at or under the threshold never sells anything. Each category liquidates
+    independently — a tiny excess in one never blocks another's sale. Returns the total
+    coppers minted to the treasury (0 when nothing sold).
+    """
+    from world.items.market.services import MATERIAL_SALE_RATE_PCT  # noqa: PLC0415
+    from world.items.materials_models import OrgMaterialStock  # noqa: PLC0415
+
+    treasury = get_or_create_treasury(organization)
+    total_coins = 0
+    stocks = OrgMaterialStock.objects.select_for_update().filter(
+        organization=organization, value__gt=MATERIAL_AUTO_SELL_THRESHOLD
+    )
+    for stock in stocks:
+        excess = stock.value - MATERIAL_AUTO_SELL_THRESHOLD
+        coins = excess * MATERIAL_SALE_RATE_PCT // 100
+        if coins <= 0:
+            continue
+        stock.value -= excess
+        stock.save(update_fields=["value"])
+        transfer(
+            amount=coins,
+            reason=f"auto-sold surplus: {stock.material_category.name}",
+            to_treasury=treasury,
+        )
+        total_coins += coins
+    return total_coins
+
+
+@transaction.atomic
 def service_debt_principal(*, organization: Organization, basis: int) -> int:
     """Pay a flat share of ``basis`` (the collection's gross) toward debt principal.
 
@@ -870,13 +914,16 @@ def collect_and_distribute(
     catastrophe, gems all as before) → ``service_debt_principal`` (the mandatory
     debt-first share of GROSS) → ``distribute_allowance`` on the post-debt remainder
     of what actually landed → ``distribute_material_allowance`` (#2540 slice 2, "the
-    crafting draw") on the materials the same collection landed per category. Each
-    phase is independently atomic (a later phase's failure never claws back an earlier
-    one, mirroring ``run_weekly_economy``); the remainder after the coin allowance
-    simply stays in the treasury, and the remainder after the materials allowance stays
-    in ``OrgMaterialStock``. ``success_level_override`` passes straight through to
-    ``collect_org_income`` for a caller (a route-graded task landing) that already
-    resolved the run's outcome elsewhere and skips the check.
+    crafting draw") on the materials the same collection landed per category →
+    ``auto_sell_excess_materials`` (#2540 slice 2) liquidating whatever the house's
+    ``OrgMaterialStock`` is still sitting on above threshold, per category, into the
+    treasury — always LAST, so it only ever sells what the allowance leg didn't already
+    draw down. Each phase is independently atomic (a later phase's failure never claws
+    back an earlier one, mirroring ``run_weekly_economy``); the remainder after the coin
+    allowance simply stays in the treasury, and the remainder after the materials
+    allowance (and any auto-sale) stays in ``OrgMaterialStock``. ``success_level_override``
+    passes straight through to ``collect_org_income`` for a caller (a route-graded task
+    landing) that already resolved the run's outcome elsewhere and skips the check.
     """
     collection = collect_org_income(
         organization=organization,
@@ -892,11 +939,13 @@ def collect_and_distribute(
     material_allowance = distribute_material_allowance(
         organization=organization, landed_by_category=collection.landed_by_category
     )
+    auto_sold = auto_sell_excess_materials(organization=organization)
     return DistributionResult(
         collection=collection,
         debt_principal_paid=debt_paid,
         allowance=allowance,
         material_allowance=material_allowance,
+        auto_sold=auto_sold,
     )
 
 

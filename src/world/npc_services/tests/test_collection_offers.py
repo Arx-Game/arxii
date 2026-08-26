@@ -66,6 +66,8 @@ class CollectionOfferTests(TestCase):
         self.assertGreater(treasury.balance, 0)
         self.assertIn("banked", result.message)
         self.assertFalse(result.payload["catastrophe"])
+        self.assertEqual(result.payload["auto_sold"], 0)
+        self.assertNotIn("surplus stores", result.message)
 
     def test_catastrophe_toasts_the_loss(self) -> None:
         outcome = CheckOutcomeFactory(name="offer_collect_cata", success_level=-2)
@@ -111,6 +113,23 @@ class CollectionOfferTests(TestCase):
             result = run_collection(self.offer, self.persona)
         self.assertEqual(result.payload["material_allowance_member_count"], 1)
         self.assertIn("raw materials were shared out to 1 members", result.message)
+
+    def test_collection_auto_sells_excess_materials_and_reports_it(self) -> None:
+        """#2540 slice 2: with no active piloted member to draw the allowance, a big
+        enough landing piles into OrgMaterialStock above threshold and auto-sells into
+        the treasury, reported once — only when something actually sold."""
+        category = MaterialCategoryFactory(name="Cordwood")
+        StreamMaterialPool.objects.create(
+            income_stream=self.stream, material_category=category, uncollected_value=10_000
+        )
+        outcome = CheckOutcomeFactory(name="offer_collect_autosell", success_level=1)
+        with force_check_outcome(outcome):
+            result = run_collection(self.offer, self.persona)
+        self.assertGreater(result.payload["auto_sold"], 0)
+        self.assertIn("surplus stores were sold off for", result.message)
+        treasury = get_or_create_treasury(self.family)
+        treasury.refresh_from_db()
+        self.assertGreaterEqual(treasury.balance, result.payload["auto_sold"])
 
     def test_catastrophe_pays_no_debt_or_allowance(self) -> None:
         """A catastrophe lands nothing to distribute, so no distribution lines appear."""

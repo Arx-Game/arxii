@@ -457,6 +457,10 @@ def run_collection(offer: NPCServiceOffer, persona: Persona) -> EffectResult:
             " PLACEHOLDER: raw materials were shared out to "
             f"{dispatch.material_allowance.member_count} members."
         )
+    if dispatch.auto_sold > 0:
+        message += (
+            f" PLACEHOLDER: surplus stores were sold off for {format_coppers(dispatch.auto_sold)}."
+        )
     return EffectResult(
         kind=OfferKind.COLLECTION.value,
         object_label=f"Collection for {organization.name}",
@@ -469,6 +473,7 @@ def run_collection(offer: NPCServiceOffer, persona: Persona) -> EffectResult:
             "debt_principal_paid": dispatch.debt_principal_paid,
             "allowance_member_count": dispatch.allowance.member_count,
             "material_allowance_member_count": dispatch.material_allowance.member_count,
+            "auto_sold": dispatch.auto_sold,
         },
     )
 
