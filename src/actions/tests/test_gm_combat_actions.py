@@ -433,6 +433,13 @@ class GMTriggerDramaticBeatActionTests(GMCombatActionTestBase):
 
     def setUp(self) -> None:
         super().setUp()
+        # is_staff_observer's staff bypass walks .account (the puppeting-account
+        # attribute), not the roster-tenure-derived active_account _make_actor_with_account
+        # wires up — set it explicitly, mirroring test_gm_adjudication_actions.py's
+        # staff_actor fixture.
+        self.gm_actor.db_account = self.gm_account
+        self.gm_actor.save()
+
         self.encounter.escalation_curve = EscalationCurveFactory(spike_intensity_amount=4)
         self.encounter.save(update_fields=["escalation_curve"])
         self.participant = self._add_participant()
