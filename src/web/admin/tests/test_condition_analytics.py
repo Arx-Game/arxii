@@ -9,6 +9,7 @@ from __future__ import annotations
 
 from decimal import Decimal
 
+from django.core.cache import cache
 from django.test import TestCase
 from django.urls import reverse
 from evennia.accounts.models import AccountDB
@@ -119,6 +120,13 @@ class TuningConditionsFragmentViewTests(TestCase):
             name="Cursed Silence", passive_decay_per_day=0, has_progression=False
         )
 
+    def setUp(self) -> None:
+        # The view now also builds a cached DE panel (#3390) keyed only on params, not
+        # DB content - clear it per test so one test class's fixtures never leak a
+        # stale corpus into another's request at the same default params.
+        cache.clear()
+        self.addCleanup(cache.clear)
+
     def test_staff_non_superuser_forbidden(self) -> None:
         self.client.force_login(self.staff)
         resp = self.client.get(reverse("admin_tuning_conditions"))
@@ -145,3 +153,51 @@ class TuningConditionsFragmentViewTests(TestCase):
         self.assertEqual(resp.status_code, 200)
         body = resp.content.decode()
         assert "9" in body
+
+
+class ConditionsDePanelTests(TestCase):
+    """DE column extension of the Conditions panel (#3390, Decision 1)."""
+
+    @classmethod
+    def setUpTestData(cls) -> None:
+        cls.super = AccountDB.objects.create_superuser(
+            "rootadmin5", "root5@example.com", "pw-123456"
+        )
+        cls.condition = ConditionTemplateFactory(
+            name="Withering Curse", passive_decay_per_day=0, has_progression=False
+        )
+        cls.dot = ConditionDamageOverTimeFactory(
+            condition=cls.condition, stage=None, base_damage=4, scales_with_severity=True
+        )
+
+    def setUp(self) -> None:
+        cache.clear()
+        self.addCleanup(cache.clear)
+
+    def test_duration_rounds_field_renders(self) -> None:
+        self.client.force_login(self.super)
+        resp = self.client.get(reverse("admin_tuning_conditions"))
+        self.assertEqual(resp.status_code, 200)
+        body = resp.content.decode()
+        assert 'name="duration_rounds"' in body
+
+    def test_de_column_and_danger_score_both_render_for_same_condition(self) -> None:
+        self.client.force_login(self.super)
+        resp = self.client.get(reverse("admin_tuning_conditions"))
+        self.assertEqual(resp.status_code, 200)
+        body = resp.content.decode()
+        assert "Withering Curse" in body
+        # DE reference frame line renders (proves the new panel data built).
+        assert "Reference DPR" in body
+
+    def test_duration_rounds_query_param_changes_de_total(self) -> None:
+        self.client.force_login(self.super)
+        resp_short = self.client.get(reverse("admin_tuning_conditions"), {"duration_rounds": 1})
+        resp_long = self.client.get(reverse("admin_tuning_conditions"), {"duration_rounds": 9})
+        self.assertEqual(resp_short.status_code, 200)
+        self.assertEqual(resp_long.status_code, 200)
+        # A longer duration must scale the DoT-carrying condition's DE upward -
+        # base_damage=4, scales_with_severity, so at severity=5 (default) DE grows
+        # linearly with duration_rounds (5 x more rounds x per_round=20 = 100 vs 20).
+        assert "20.00" in resp_short.content.decode()
+        assert "180.00" in resp_long.content.decode()

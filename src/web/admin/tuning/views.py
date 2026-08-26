@@ -27,7 +27,11 @@ from django.http import HttpRequest, HttpResponse
 from django.shortcuts import render
 
 from actions.models.consequence_pools import ConsequencePool
-from web.admin.tuning import technique_analytics
+from web.admin.tuning import (
+    capability_power_analytics,
+    condition_power_analytics,
+    technique_analytics,
+)
 from web.admin.tuning.checks_analytics import compute_chart_distributions, compute_matchup
 from web.admin.tuning.condition_analytics import compute_condition_danger
 from web.admin.tuning.consequence_analytics import inspect_pool, list_pools
@@ -127,18 +131,47 @@ def tuning_consequences_fragment(request: HttpRequest) -> HttpResponse:
     return render(request, "admin/tuning/_consequences_panel.html", context)
 
 
+_DEFAULT_CONDITION_DURATION_ROUNDS = 3
+
+
 @superuser_required
 def tuning_conditions_fragment(request: HttpRequest) -> HttpResponse:
-    """Condition-danger panel: ranks conditions by severity/DoT danger score (#1221).
+    """Condition-danger panel: ranks conditions by severity/DoT danger score (#1221),
+    now alongside a DE column (#3390, Decision 1).
 
-    `severity` query param drives the slider re-render (`hx-get` on input) so
-    the form lives inside the fragment template (see `_conditions_panel.html`).
+    `severity` (existing) and `duration_rounds` (#3390, new) query params drive the
+    slider re-renders (`hx-get` on input) so both fields live inside the fragment
+    template (see `_conditions_panel.html`). The existing `compute_condition_danger`
+    ranking is unchanged; the new DE panel (`condition_power_analytics`) is merged
+    into the same template context by `ConditionTemplate.pk`, and its rows (sorted
+    `total_de` desc) become the panel's default row order.
     """
     severity = _int_query_param(request, "severity", _DEFAULT_CONDITION_SEVERITY)
+    duration_rounds = _int_query_param(
+        request, "duration_rounds", _DEFAULT_CONDITION_DURATION_ROUNDS
+    )
+
+    danger_rows = compute_condition_danger(at_severity=severity)
+    danger_by_name = {row.template_name: row for row in danger_rows}
+
+    power_params = condition_power_analytics.ConditionPowerAnalyticsParams(
+        at_severity=severity, duration_rounds=duration_rounds
+    )
+    power_panel = condition_power_analytics.build_condition_power_panel(power_params)
+    merged_rows = [
+        condition_power_analytics.ConditionPanelRow(
+            power=report, danger=danger_by_name.get(report.name)
+        )
+        for report in power_panel.rows
+    ]
 
     context = {
-        "rows": compute_condition_danger(at_severity=severity),
+        "rows": danger_rows,
         "severity": severity,
+        "duration_rounds": duration_rounds,
+        "power_rows": merged_rows,
+        "power_reference": power_panel.reference,
+        "power_provenance_summary": power_panel.provenance_summary,
     }
     return render(request, "admin/tuning/_conditions_panel.html", context)
 
@@ -374,3 +407,92 @@ def tuning_techniques_fragment(request: HttpRequest) -> HttpResponse:
 
     context = {"form": form, "panel": panel}
     return render(request, "admin/tuning/_techniques_panel.html", context)
+
+
+# 24h - mirrors `_TECHNIQUE_CACHE_TIMEOUT`.
+_CAPABILITY_CACHE_TIMEOUT = 60 * 60 * 24
+# Fixed pointer key, mirroring `_TECHNIQUE_LAST_KEY`.
+_CAPABILITY_LAST_KEY = "tuning-capability-power:last"
+
+
+class CapabilityAnalyticsForm(forms.Form):
+    """Validates/clamps the Capabilities panel's `EvalContext` knobs (#3390).
+
+    Mirrors `TechniqueAnalyticsForm`'s contract minus `sort` - capabilities have no
+    header-link re-sort feature; the panel always renders `total_de` desc.
+    """
+
+    level = forms.IntegerField()
+    thread_level = forms.IntegerField()
+    roller_points = forms.IntegerField()
+    target_difficulty = forms.IntegerField()
+    roll_modifier = forms.IntegerField()
+
+    def clean_level(self) -> int:
+        return _clamp(self.cleaned_data["level"], 1, 30)
+
+    def clean_thread_level(self) -> int:
+        return _clamp(self.cleaned_data["thread_level"], 0, 30)
+
+
+def _capability_form_defaults() -> dict[str, Any]:
+    """Initial values for a fresh GET form, mirroring `CapabilityPowerAnalyticsParams`."""
+    defaults = capability_power_analytics.CapabilityPowerAnalyticsParams()
+    return {
+        "level": defaults.level,
+        "thread_level": defaults.thread_level,
+        "roller_points": defaults.roller_points,
+        "target_difficulty": defaults.target_difficulty,
+        "roll_modifier": defaults.roll_modifier,
+    }
+
+
+def _capability_cache_key(
+    params: capability_power_analytics.CapabilityPowerAnalyticsParams,
+) -> str:
+    """Exact-param cache key for the built panel."""
+    return (
+        f"tuning-capability-power:{params.level}:{params.thread_level}:"
+        f"{params.roller_points}:{params.target_difficulty}:{params.roll_modifier}"
+    )
+
+
+def _cache_capability_panel(
+    params: capability_power_analytics.CapabilityPowerAnalyticsParams,
+    panel: capability_power_analytics.CapabilityPowerPanelData,
+) -> None:
+    cache_key = _capability_cache_key(params)
+    cache.set(cache_key, panel, _CAPABILITY_CACHE_TIMEOUT)
+    cache.set(_CAPABILITY_LAST_KEY, cache_key, _CAPABILITY_CACHE_TIMEOUT)
+
+
+@superuser_required
+def tuning_capabilities_fragment(request: HttpRequest) -> HttpResponse:
+    """Capabilities combat-power panel: DE-per-point league table (#3390).
+
+    Mirrors `tuning_techniques_fragment`'s GET-shows-last-cached-result /
+    POST-builds-and-caches contract. Read-only analytics tooling (ADR-0093's existing
+    contract) - no new dispatch/action seam.
+    """
+    panel: capability_power_analytics.CapabilityPowerPanelData | None = None
+
+    if request.method == "POST":
+        form = CapabilityAnalyticsForm(request.POST)
+        if form.is_valid():
+            params = capability_power_analytics.CapabilityPowerAnalyticsParams(
+                level=form.cleaned_data["level"],
+                thread_level=form.cleaned_data["thread_level"],
+                roller_points=form.cleaned_data["roller_points"],
+                target_difficulty=form.cleaned_data["target_difficulty"],
+                roll_modifier=form.cleaned_data["roll_modifier"],
+            )
+            panel = capability_power_analytics.build_capability_power_panel(params)
+            _cache_capability_panel(params, panel)
+    else:
+        form = CapabilityAnalyticsForm(initial=_capability_form_defaults())
+        last_key = cache.get(_CAPABILITY_LAST_KEY)
+        if last_key:
+            panel = cache.get(last_key)
+
+    context = {"form": form, "panel": panel}
+    return render(request, "admin/tuning/_capabilities_panel.html", context)
