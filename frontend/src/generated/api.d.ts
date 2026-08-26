@@ -23309,6 +23309,26 @@ export interface components {
       readonly persona: {
         [key: string]: unknown;
       } | null;
+      readonly character_sheet_id: number;
+      /**
+       * @description Mirrors ``open_champion_duel``'s own Champion-standing gate verbatim
+       *
+       *     (``world.battles.services``, ``ChallengeChampionDuelAction``'s
+       *     ``NotAChampionError`` source of truth) so the web duel-challenge
+       *     control (#3389) doesn't render for a participant who will always be
+       *     rejected server-side. Read-only visibility hint, not a new write path
+       *     — dispatch remains gated by the unchanged service-layer check.
+       */
+      readonly is_champion: boolean;
+      /**
+       * @description Whether this participant already has a declaration in the CURRENT round (#3389).
+       *
+       *     Reads ``cached_declarations`` (the view's Prefetch, world/battles/views.py)
+       *     against ``current_round_id`` stashed once by
+       *     ``BattleDetailSerializer.to_representation`` — never a per-participant
+       *     query, so this stays flat regardless of roster size.
+       */
+      readonly declared_this_round: boolean;
     };
     /**
      * @description * `active` - Active

@@ -19,6 +19,7 @@ import { useParams } from 'react-router-dom';
 
 import { cn } from '@/lib/utils';
 
+import { BattleActionPanel } from '../components/BattleActionPanel';
 import { BattleMapCanvas } from '../components/BattleMapCanvas';
 import { PlaceDetailPanel } from '../components/PlaceDetailPanel';
 import { StagingPanel } from '../components/StagingPanel';
@@ -128,6 +129,7 @@ export function BattleMapPage() {
         </div>
         <div className="min-h-0 space-y-4 overflow-y-auto" data-testid="battle-map-panel-column">
           <StagingPanel sceneId={sceneId} battle={battle} detail={detail} />
+          <BattleActionPanel sceneId={sceneId} battle={battle} detail={detail} />
           <PlaceDetailPanel
             place={selectedPlace}
             sides={detail.sides}
