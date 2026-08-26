@@ -308,6 +308,7 @@ class ActionRegistryTests(TestCase):
             "add_encounter_participant",
             "add_opponent",
             "begin_encounter_round",
+            "create_encounter",
             "end_encounter",
             "pause_encounter",
             "preview_opponent_defaults",
