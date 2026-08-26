@@ -6862,6 +6862,34 @@ paths:
               schema:
                 $ref: '#/components/schemas/EncounterDetail'
           description: ''
+  /api/combat/{id}/remove_opponent/:
+    post:
+      operationId: combat_remove_opponent_create
+      description: 'Remove an NPC opponent from the encounter (GM action, #3382).'
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: A unique integer value identifying this combat encounter.
+        required: true
+      tags:
+      - combat
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/EncounterDetailRequest'
+        required: true
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EncounterDetail'
+          description: ''
   /api/combat/{id}/remove_participant/:
     post:
       operationId: combat_remove_participant_create
@@ -55423,11 +55451,13 @@ components:
       - active
       - defeated
       - fled
+      - removed
       type: string
       description: |-
         * `active` - Active
         * `defeated` - Defeated
         * `fled` - Fled
+        * `removed` - Removed
     OpponentTierEnum:
       enum:
       - swarm

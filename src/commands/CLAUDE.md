@@ -147,8 +147,10 @@ actions, backends, and service functions.
   same generic available-actions dispatcher. See "Scene Administration" in
   `docs/systems/scenes.md`. No business logic in the command.
 - **`encounter.py`**: `CmdEncounter` (`encounter`, #1494) — the GM combat-encounter lifecycle
-  namespace, thin over the eight Actions in `actions/definitions/gm_combat.py` (`begin`/
-  `resolve`/`add`/`default`/`addpc`/`removepc`/`pause`/`end`). Every subverb is gated by
+  namespace, thin over the Actions in `actions/definitions/gm_combat.py` (`begin`/
+  `resolve`/`add`/`default`/`addpc`/`removepc`/`removenpc`/`pause`/`end`; `removenpc` added
+  #3382 — pull a live `CombatOpponent` out of the fight without a defeat/flee, symmetric with
+  `removepc`). Every subverb is gated by
   `_actor_may_gm_encounter` (staff or `encounter.scene.is_gm(account)`) in the Action layer —
   reads the same `SceneParticipation.is_gm` flag `enroll_present_table_gms`/
   `GrantSceneGMAction`/`_enroll_lead_gm_on_scene` write (#2113). No business logic in the command.

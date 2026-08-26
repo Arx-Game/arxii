@@ -1,6 +1,6 @@
 """GM combat-encounter lifecycle telnet namespace (#1494).
 
-A thin command face for the eight encounter actions in
+A thin command face for the encounter actions in
 ``actions.definitions.gm_combat``. Each subverb delegates directly to
 ``Action().run(actor=self.caller, **kwargs)``. No business logic lives here.
 """
@@ -18,6 +18,7 @@ _USAGE = (
     "  encounter default <tier>                - preview opponent defaults\n"
     "  encounter addpc <character>             - add a PC to the encounter\n"
     "  encounter removepc <participant>        - remove a PC from the encounter\n"
+    "  encounter removenpc <opponent>          - remove an NPC opponent (#3382)\n"
     "  encounter pause                         - pause/resume the encounter\n"
     "  encounter end                           - force-end the encounter\n"
     "  encounter duel <character> <name> <tier> <pool>\n"
@@ -28,6 +29,7 @@ _ADD_USAGE = "Usage: encounter add <name> <tier> [pool]"
 _DEFAULT_USAGE = "Usage: encounter default <tier>"
 _ADDPC_USAGE = "Usage: encounter addpc <character>"
 _REMOVEPC_USAGE = "Usage: encounter removepc <participant>"
+_REMOVENPC_USAGE = "Usage: encounter removenpc <opponent>"
 _DUEL_USAGE = "Usage: encounter duel <character> <name> <tier> <pool>"
 
 # Token-count thresholds for argument parsing.
@@ -42,6 +44,7 @@ _SUBVERB_HANDLERS: dict[str, str] = {
     "default": "_handle_default",
     "addpc": "_handle_addpc",
     "removepc": "_handle_removepc",
+    "removenpc": "_handle_removenpc",
     "pause": "_handle_pause",
     "end": "_handle_end",
     "duel": "_handle_duel",
@@ -118,6 +121,16 @@ class CmdEncounter(ArxNamespaceCommand):
         self._run_action(
             RemoveEncounterParticipantAction,
             participant_id=participant_id.split()[0],
+        )
+
+    def _handle_removenpc(self, rest: str) -> None:
+        """Parse ``removenpc <opponent>`` and dispatch RemoveOpponentAction (#3382)."""
+        from actions.definitions.gm_combat import RemoveOpponentAction  # noqa: PLC0415
+
+        opponent_id = self._require_arg(rest, _REMOVENPC_USAGE)
+        self._run_action(
+            RemoveOpponentAction,
+            opponent_id=opponent_id.split()[0],
         )
 
     def _handle_pause(self, _rest: str) -> None:

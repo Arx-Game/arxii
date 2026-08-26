@@ -25,7 +25,7 @@ from world.scenes.constants import RoundStatus
 if TYPE_CHECKING:
     from evennia.objects.models import ObjectDB
 
-    from world.combat.models import CombatEncounter, CombatParticipant
+    from world.combat.models import CombatEncounter, CombatOpponent, CombatParticipant
     from world.combat.scaling import OpponentStatBlock
 
 
@@ -100,6 +100,35 @@ def _resolve_participant_in_encounter(
         raise CommandError(not_found_msg) from exc
 
     return participant
+
+
+def _resolve_opponent_in_encounter(
+    encounter: CombatEncounter,
+    value: str,
+) -> CombatOpponent:
+    """Resolve an ACTIVE opponent by PK or by case-insensitive exact name (#3382).
+
+    Scoped to ``status=ACTIVE`` — a GM shouldn't "remove" an opponent that's
+    already defeated/fled/removed. ``CombatOpponent.name`` is freehand text
+    (not unique), so PK is tried first when the value is all-digits.
+    """
+    from django.core.exceptions import MultipleObjectsReturned, ObjectDoesNotExist  # noqa: PLC0415
+
+    from world.combat.constants import OpponentStatus  # noqa: PLC0415
+    from world.combat.models import CombatOpponent  # noqa: PLC0415
+
+    queryset = CombatOpponent.objects.filter(encounter=encounter, status=OpponentStatus.ACTIVE)
+    not_found_msg = f"No active opponent named {value!r} in this encounter."
+
+    try:
+        if value.isdigit():
+            opponent = queryset.get(pk=value)
+        else:
+            opponent = queryset.get(name__iexact=value)
+    except (ObjectDoesNotExist, MultipleObjectsReturned) as exc:
+        raise CommandError(not_found_msg) from exc
+
+    return opponent
 
 
 def _permission_failure_result(encounter: CombatEncounter | None) -> ActionResult:
@@ -296,6 +325,49 @@ class AddOpponentAction(Action):
         return ActionResult(
             success=True,
             message=f"Opponent '{opponent.name}' added to the encounter.",
+        )
+
+
+@dataclass
+class RemoveOpponentAction(Action):
+    """Remove an NPC opponent from the active encounter (#3382)."""
+
+    key: str = "remove_opponent"
+    name: str = "Remove Opponent"
+    icon: str = "skull-off"
+    category: str = "combat"
+    target_type: TargetType = TargetType.AREA
+    costs_turn: bool = False
+
+    def execute(
+        self,
+        actor: ObjectDB,
+        context: ActionContext | None = None,
+        *,
+        opponent_id: str | None = None,
+        **kwargs: Any,
+    ) -> ActionResult:
+        from world.combat.services import remove_opponent  # noqa: PLC0415
+
+        encounter, error = _active_encounter_for_gm(actor)
+        if error:
+            return error
+        if opponent_id is None:
+            return ActionResult(success=False, message="An opponent is required.")
+
+        try:
+            opponent = _resolve_opponent_in_encounter(encounter, str(opponent_id))
+        except CommandError as err:
+            return ActionResult(success=False, message=str(err))
+
+        try:
+            remove_opponent(opponent)
+        except ValueError as err:
+            return ActionResult(success=False, message=str(err))
+
+        return ActionResult(
+            success=True,
+            message=f"Opponent '{opponent.name}' removed from the encounter.",
         )
 
 
