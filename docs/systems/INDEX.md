@@ -7482,7 +7482,7 @@ Admin-hosted, superuser-only HTMX dashboards for difficulty tuning/simulation an
   `blend_power_contribution`/`specialty_power_contribution`
   (`world/magic/services/power_terms.py`), and mitigation magnitudes parsed from
   MODIFY_PAYLOAD reactive triggers via `protective_magnitude`
-  (`world/magic/services/targeting.py`). #3390 (ADR-0233) extracted the row-independent
+  (`world/magic/services/targeting.py`). #3390 (ADR-0234) extracted the row-independent
   DE formula core into `world/magic/services/de_valuation.py` and its shared
   `compute_reference_frame(EvalContext) -> ReferenceFrame` median-baseline-attack
   bootstrap, so the standalone condition (`world/magic/services/condition_power_eval.py`
