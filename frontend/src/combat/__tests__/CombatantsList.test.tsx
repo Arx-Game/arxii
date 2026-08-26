@@ -453,20 +453,22 @@ describe('CombatantsList', () => {
   // ---------------------------------------------------------------------------
 
   it('renders a "Locked: <PC name>" badge on an opponent named by an active engagement lock', () => {
-    const encounter = makeEncounter(
-      [makeParticipant({ id: 1, character_name: 'Aerande' })],
-      [makeOpponent({ id: 10, name: 'Mire Knight' })]
-    );
-    encounter.engagement_locks = [
-      {
-        id: 1,
-        opponent_id: 10,
-        participant_id: 1,
-        status: 'active',
-        initiated_by: 'pc_challenge',
-        started_round: 1,
-      },
-    ];
+    const encounter: EncounterDetail = {
+      ...makeEncounter(
+        [makeParticipant({ id: 1, character_name: 'Aerande' })],
+        [makeOpponent({ id: 10, name: 'Mire Knight' })]
+      ),
+      engagement_locks: [
+        {
+          id: 1,
+          opponent_id: 10,
+          participant_id: 1,
+          status: 'active',
+          initiated_by: 'pc_challenge',
+          started_round: 1,
+        },
+      ],
+    };
 
     render(<CombatantsList encounter={encounter} />, { wrapper: createWrapper() });
 
