@@ -26964,20 +26964,7 @@ export interface components {
       /** @description Check whether the requesting user is GM of the linked scene. */
       readonly is_gm: boolean;
       readonly clashes: components['schemas']['ClashState'][];
-      /**
-       * @description Return active EngagementLock records for this encounter (#2020).
-       *
-       *     Exposes foil pairings (who is dueling whom) to the frontend combat UI.
-       *     Returns only ACTIVE locks so resolved ones don't appear after breaking.
-       *
-       *     Uses the ``engagement_locks_cached`` prefetch-to-attr set on the
-       *     viewset's ``_base_queryset`` so no extra query fires during detail
-       *     serialization. Falls back to a direct filter for callers that don't
-       *     use the viewset (e.g. unit tests that call the serializer directly).
-       */
-      readonly engagement_locks: {
-        [key: string]: unknown;
-      }[];
+      readonly engagement_locks: components['schemas']['EngagementLock'][];
       /**
        * @description ACTIVE PC participant PKs in initiative (speed-rank) order.
        *
@@ -27054,6 +27041,22 @@ export interface components {
      * @enum {string}
      */
     EncounterTypeEnum: 'party_combat' | 'open_encounter' | 'duel';
+    /**
+     * @description Schema-only shape of get_engagement_locks rows on EncounterDetailSerializer (#3386).
+     *
+     *     Never instantiated for serialization — exists so drf-spectacular emits a
+     *     concrete component instead of {[key: string]: unknown}, mirroring
+     *     ClashContributorSerializer above. Field shape matches the dict
+     *     ``get_engagement_locks`` builds verbatim.
+     */
+    EngagementLock: {
+      id: number;
+      opponent_id: number;
+      participant_id: number;
+      status: string;
+      initiated_by: string;
+      started_round: number;
+    };
     /**
      * @description Request shape for the player's entry-flourish resonance pick.
      *

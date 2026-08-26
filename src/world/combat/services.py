@@ -7906,6 +7906,18 @@ def _resolve_flee(
         participant.status = ParticipantStatus.FLED
         participant.save(update_fields=["status"])
 
+        # Release any active engagement lock the fleeing PC held (#3386):
+        # fleeing shouldn't leave a phantom pairing behind.
+        from world.combat.constants import LockBreakReason  # noqa: PLC0415
+        from world.combat.engagement_locks import break_engagement_lock  # noqa: PLC0415
+
+        active_lock = EngagementLock.objects.filter(
+            participant=participant,
+            status=EngagementLockStatus.ACTIVE,
+        ).first()
+        if active_lock is not None:
+            break_engagement_lock(active_lock, reason=LockBreakReason.FLEE)
+
         # Combat-owned engagement teardown on successful flee (#872).
         from world.mechanics.constants import EngagementType  # noqa: PLC0415
         from world.mechanics.services import end_engagement  # noqa: PLC0415
