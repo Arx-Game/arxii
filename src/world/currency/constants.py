@@ -190,3 +190,9 @@ ALLOWANCE_SURPLUS_PCT = 50
 # replace) the weekly at-source ARREARS withholding (#927): arrears = interest, this =
 # principal. PLACEHOLDER — magnitude is Apostate's tuning call.
 DEBT_PRINCIPAL_GROSS_PCT = 13
+
+# Materials allowance (#2540 slice 2): the non-discretionary share of a collection's
+# newly landed material value (per category) that auto-splits among active piloted
+# members — the materials analogue of ALLOWANCE_SURPLUS_PCT, "the crafting draw".
+# PLACEHOLDER — magnitude is Apostate's tuning call.
+MATERIALS_ALLOWANCE_PCT = 50

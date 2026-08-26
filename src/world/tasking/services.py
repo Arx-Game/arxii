@@ -283,9 +283,10 @@ def _land_route_collection(
     pools are lost and ``collect_org_income`` raises ``ValidationError`` when
     there was nothing to gather in the first place — either way this stays a
     report line, never a hard failure of the task resolution itself. The debt-first
-    + member-allowance legs ride along via ``collect_and_distribute`` (#2540), so a
-    route-graded landing also services the org's debt principal and pays its
-    active members before the remainder settles in the treasury.
+    + member-allowance + materials-allowance legs ride along via ``collect_and_distribute``
+    (#2540), so a route-graded landing also services the org's debt principal and pays its
+    active members coin and (per category) raw materials before the remainders settle in
+    the treasury / ``OrgMaterialStock``.
     """
     from django.core.exceptions import ValidationError  # noqa: PLC0415
 
@@ -307,6 +308,11 @@ def _land_route_collection(
     if dispatch.allowance.member_count > 0:
         lines.append(
             f"PLACEHOLDER: allowances went out to {dispatch.allowance.member_count} members."
+        )
+    if dispatch.material_allowance.total_by_category:
+        lines.append(
+            "PLACEHOLDER: raw materials were shared out to "
+            f"{dispatch.material_allowance.member_count} members."
         )
     return lines
 

@@ -29,6 +29,7 @@ from world.currency.constants import (
     DEBT_PRINCIPAL_GROSS_PCT,
     DENOMINATION_VALUES,
     GRAFT_FLOOR_PCT,
+    MATERIALS_ALLOWANCE_PCT,
     MINT_FEE_PCT,
     NOTARY_FEE_COPPERS,
     ContractFormality,
@@ -57,6 +58,7 @@ from world.currency.types import (
     CollectionResult,
     DistributionResult,
     ImprovementResult,
+    MaterialAllowanceResult,
 )
 
 logger = logging.getLogger(__name__)
@@ -68,7 +70,7 @@ if TYPE_CHECKING:
 
     from world.character_sheets.models import CharacterSheet
     from world.currency.models import DistinctionPurseDrain
-    from world.items.models import ItemInstance
+    from world.items.models import ItemInstance, MaterialCategory
     from world.scenes.models import Persona
     from world.societies.models import Organization
 
@@ -76,6 +78,31 @@ if TYPE_CHECKING:
 def _account_active_since(account: AccountDB | None, cutoff: datetime) -> bool:
     """A piloted account counts as active when it logged in on/after ``cutoff`` (#929/#932)."""
     return account is not None and account.last_login is not None and account.last_login >= cutoff
+
+
+def _active_allowance_sheets(
+    organization: Organization, cutoff: datetime
+) -> dict[int, CharacterSheet]:
+    """Scan the org's active piloted members eligible for a non-discretionary allowance (#2540).
+
+    Shared by ``distribute_allowance`` (coin) and ``distribute_material_allowance``
+    (materials, #2540 slice 2) — same population, same activity cutoff. A member is
+    counted once even across multiple member personas; pure NPCs have no ``db_account``
+    and are excluded for free. Keyed by ``CharacterSheet.pk``.
+    """
+    from world.societies.models import OrganizationMembership  # noqa: PLC0415
+
+    active_sheets: dict[int, CharacterSheet] = {}
+    memberships = OrganizationMembership.objects.filter(
+        organization=organization, left_at__isnull=True, exiled_at__isnull=True
+    ).select_related("persona__character_sheet__character__db_account")
+    for membership in memberships:
+        sheet = membership.persona.character_sheet
+        if sheet is None or sheet.pk in active_sheets:
+            continue
+        if _account_active_since(sheet.character.db_account, cutoff):
+            active_sheets[sheet.pk] = sheet
+    return active_sheets
 
 
 def get_or_create_purse(character_sheet: CharacterSheet) -> CharacterPurse:
@@ -696,8 +723,6 @@ def distribute_allowance(*, organization: Organization, surplus: int) -> Allowan
     the treasury (where the collected surplus sits); the pool is capped at the treasury balance so
     it never overdraws. Whole-copper division; the remainder simply stays in the treasury.
     """
-    from world.societies.models import OrganizationMembership  # noqa: PLC0415
-
     if surplus <= 0:
         return AllowanceResult(total_distributed=0, per_member=0, member_count=0)
     treasury = get_or_create_treasury(organization)
@@ -710,16 +735,7 @@ def distribute_allowance(*, organization: Organization, surplus: int) -> Allowan
         return AllowanceResult(total_distributed=0, per_member=0, member_count=0)
 
     cutoff = timezone.now() - timedelta(days=ACTIVE_WEEK_LOGIN_DAYS)
-    active_sheets: dict[int, CharacterSheet] = {}
-    memberships = OrganizationMembership.objects.filter(
-        organization=organization, left_at__isnull=True, exiled_at__isnull=True
-    ).select_related("persona__character_sheet__character__db_account")
-    for membership in memberships:
-        sheet = membership.persona.character_sheet
-        if sheet is None or sheet.pk in active_sheets:
-            continue
-        if _account_active_since(sheet.character.db_account, cutoff):
-            active_sheets[sheet.pk] = sheet
+    active_sheets = _active_allowance_sheets(organization, cutoff)
     if not active_sheets:
         return AllowanceResult(total_distributed=0, per_member=0, member_count=0)
 
@@ -738,6 +754,69 @@ def distribute_allowance(*, organization: Organization, surplus: int) -> Allowan
     return AllowanceResult(
         total_distributed=distributed, per_member=per_member, member_count=len(active_sheets)
     )
+
+
+@transaction.atomic
+def distribute_material_allowance(
+    *, organization: Organization, landed_by_category: list[tuple[MaterialCategory, int]]
+) -> MaterialAllowanceResult:
+    """Auto-split a share of newly landed materials among active piloted members (#2540 slice 2).
+
+    "The crafting draw" — the materials analogue of ``distribute_allowance``. Rides the
+    same non-discretionary rail and the same active-piloted population
+    (``_active_allowance_sheets``), but the pool is a PLACEHOLDER share
+    (``MATERIALS_ALLOWANCE_PCT``) of what a collection just landed **per category**
+    rather than treasury coin surplus. For each ``(material_category, landed)``: the
+    member pool is ``landed * MATERIALS_ALLOWANCE_PCT // 100``, split evenly
+    (``per_member = member_pool // len(active_sheets)``, whole-value division — the
+    floor remainder stays in the house's ``OrgMaterialStock``). The stock is debited by
+    exactly the total actually credited (``per_member * member_count``), read under
+    ``select_for_update`` and capped at the stock's current value so a race with a
+    concurrent spend can never drive it negative — capping recomputes ``per_member``
+    down from the capped total so no member is credited more than the stock actually
+    gives up. A category with nothing landed is skipped; a missing stock row (shouldn't
+    happen — the collection that produced ``landed_by_category`` just credited it) is
+    skipped rather than created negative.
+    """
+    from world.items.gems.buckets import credit_materials  # noqa: PLC0415
+    from world.items.materials_models import OrgMaterialStock  # noqa: PLC0415
+
+    if not landed_by_category:
+        return MaterialAllowanceResult(total_by_category=[], member_count=0)
+
+    cutoff = timezone.now() - timedelta(days=ACTIVE_WEEK_LOGIN_DAYS)
+    active_sheets = _active_allowance_sheets(organization, cutoff)
+    if not active_sheets:
+        return MaterialAllowanceResult(total_by_category=[], member_count=0)
+    member_count = len(active_sheets)
+
+    total_by_category: list[tuple[MaterialCategory, int]] = []
+    for material_category, landed in landed_by_category:
+        if landed <= 0:
+            continue
+        member_pool = landed * MATERIALS_ALLOWANCE_PCT // 100
+        per_member = member_pool // member_count
+        if per_member <= 0:
+            continue
+        stock = (
+            OrgMaterialStock.objects.select_for_update()
+            .filter(organization=organization, material_category=material_category)
+            .first()
+        )
+        if stock is None:
+            continue
+        capped_total = min(per_member * member_count, stock.value)
+        per_member = capped_total // member_count
+        if per_member <= 0:
+            continue
+        credited_total = per_member * member_count
+        for sheet in active_sheets.values():
+            credit_materials(sheet, material_category, per_member)
+        stock.value -= credited_total
+        stock.save(update_fields=["value"])
+        total_by_category.append((material_category, credited_total))
+
+    return MaterialAllowanceResult(total_by_category=total_by_category, member_count=member_count)
 
 
 @transaction.atomic
@@ -790,11 +869,14 @@ def collect_and_distribute(
     Sequence: ``collect_org_income`` (the active piloted collection — band, graft,
     catastrophe, gems all as before) → ``service_debt_principal`` (the mandatory
     debt-first share of GROSS) → ``distribute_allowance`` on the post-debt remainder
-    of what actually landed. Each phase is independently atomic (a later phase's
-    failure never claws back an earlier one, mirroring ``run_weekly_economy``); the
-    remainder after the allowance simply stays in the treasury. ``success_level_override``
-    passes straight through to ``collect_org_income`` for a caller (a route-graded task
-    landing) that already resolved the run's outcome elsewhere and skips the check.
+    of what actually landed → ``distribute_material_allowance`` (#2540 slice 2, "the
+    crafting draw") on the materials the same collection landed per category. Each
+    phase is independently atomic (a later phase's failure never claws back an earlier
+    one, mirroring ``run_weekly_economy``); the remainder after the coin allowance
+    simply stays in the treasury, and the remainder after the materials allowance stays
+    in ``OrgMaterialStock``. ``success_level_override`` passes straight through to
+    ``collect_org_income`` for a caller (a route-graded task landing) that already
+    resolved the run's outcome elsewhere and skips the check.
     """
     collection = collect_org_income(
         organization=organization,
@@ -807,8 +889,14 @@ def collect_and_distribute(
     debt_paid = service_debt_principal(organization=organization, basis=basis)
     surplus = max(0, collection.landed - debt_paid)
     allowance = distribute_allowance(organization=organization, surplus=surplus)
+    material_allowance = distribute_material_allowance(
+        organization=organization, landed_by_category=collection.landed_by_category
+    )
     return DistributionResult(
-        collection=collection, debt_principal_paid=debt_paid, allowance=allowance
+        collection=collection,
+        debt_principal_paid=debt_paid,
+        allowance=allowance,
+        material_allowance=material_allowance,
     )
 
 

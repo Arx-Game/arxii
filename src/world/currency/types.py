@@ -53,6 +53,20 @@ class AllowanceResult:
 
 
 @dataclass(frozen=True)
+class MaterialAllowanceResult:
+    """Outcome of one non-discretionary materials allowance distribution (#2540 slice 2).
+
+    The materials analogue of ``AllowanceResult`` — "the crafting draw". ``total_by_category``
+    is the per-category value actually credited to members (sums the ``per_member`` share
+    times ``member_count``; only categories with a positive credited total appear, so it never
+    carries a zero entry); ``member_count`` is how many active piloted members shared it.
+    """
+
+    total_by_category: list[tuple[MaterialCategory, int]]
+    member_count: int
+
+
+@dataclass(frozen=True)
 class ImprovementResult:
     """Outcome of one domain-investment attempt."""
 
@@ -67,10 +81,12 @@ class DistributionResult:
     """Outcome of one full collection-distribution dispatch (#2540, ruled 2026-07-20).
 
     Sequence: collect -> debt principal (a flat share of gross, first) -> member
-    allowance (from the post-debt remainder). ``debt_principal_paid`` is the coppers
-    that left the treasury toward principal this dispatch.
+    allowance (from the post-debt remainder) -> materials allowance (a share of what
+    the collection landed per category, #2540 slice 2). ``debt_principal_paid`` is the
+    coppers that left the treasury toward principal this dispatch.
     """
 
     collection: CollectionResult
     debt_principal_paid: int
     allowance: AllowanceResult
+    material_allowance: MaterialAllowanceResult
