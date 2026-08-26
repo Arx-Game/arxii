@@ -6,10 +6,11 @@ intimidate roll. On a successful roll the Boon action fulfills it (mirroring how
 ``BlackmailAction`` mints Leverage on a successful press). Specifying the ask up front is
 what lets a piloted target gauge whether it's an easy "just no."
 
-Only ``MONEY`` fulfillment is wired in this slice; ``HELD_ITEM`` needs an item-ownership-
-transfer seam, ``VAULT_ITEM`` needs the bank/vault system, and ``DEED`` is RP-only. The
-per-Boon affection cost (each granted Boon stacks) and the ``BoonAction`` template wiring
-are follow-up slices — see the umbrella spec #2540.
+Every kind fulfills: ``MONEY`` through the single currency mutation point, ``HELD_ITEM``
+through a lean sheet-level hand-over, ``VAULT_ITEM`` through the org vault's audited
+withdraw, and ``DEED`` is RP-only (no mechanical transfer, RP resolution only). The
+per-Boon affection cost (each granted Boon stacks) is charged by the ``boon`` resolver —
+see ``boon_services.py`` and the umbrella spec #2540.
 """
 
 from __future__ import annotations

@@ -268,35 +268,47 @@ def _apply_route_payouts(
                 acquire_clue(roster_entry, drawn)
     lines = apply_spy_payouts(route, task, fulfillment)
     if route.collection_success_level is not None:
-        lines.append(_land_route_collection(route, task, handler_sheet))
+        lines.extend(_land_route_collection(route, task, handler_sheet))
     lines.extend(_flag_pact_betrayal(task))
     return lines
 
 
 def _land_route_collection(
     route: TaskOutcomeRoute, task: OrgTask, handler_sheet: CharacterSheet
-) -> str:
+) -> list[str]:
     """Lands the issuing org's income collection at the route's authored grade (#696 item 2).
 
     Catastrophe (a very negative authored level mapping through
     ``_collection_band_pct`` to None) is the authored Critical Failure route: the
     pools are lost and ``collect_org_income`` raises ``ValidationError`` when
     there was nothing to gather in the first place — either way this stays a
-    report line, never a hard failure of the task resolution itself.
+    report line, never a hard failure of the task resolution itself. The debt-first
+    + member-allowance legs ride along via ``collect_and_distribute`` (#2540), so a
+    route-graded landing also services the org's debt principal and pays its
+    active members before the remainder settles in the treasury.
     """
     from django.core.exceptions import ValidationError  # noqa: PLC0415
 
-    from world.currency.services import collect_org_income  # noqa: PLC0415
+    from world.currency.services import collect_and_distribute  # noqa: PLC0415
 
     try:
-        collection = collect_org_income(
+        dispatch = collect_and_distribute(
             organization=task.org,
             character=handler_sheet.character,
             success_level_override=route.collection_success_level,
         )
     except ValidationError:
-        return "PLACEHOLDER: The coffers held nothing worth collecting."
-    return f"PLACEHOLDER: The levy run brought {collection.landed} coppers home."
+        return ["PLACEHOLDER: The coffers held nothing worth collecting."]
+    lines = [f"PLACEHOLDER: The levy run brought {dispatch.collection.landed} coppers home."]
+    if dispatch.debt_principal_paid > 0:
+        lines.append(
+            f"PLACEHOLDER: {dispatch.debt_principal_paid} coppers went to the house's creditors."
+        )
+    if dispatch.allowance.member_count > 0:
+        lines.append(
+            f"PLACEHOLDER: allowances went out to {dispatch.allowance.member_count} members."
+        )
+    return lines
 
 
 def _flag_pact_betrayal(task: OrgTask) -> list[str]:

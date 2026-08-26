@@ -781,7 +781,9 @@ def service_debt_principal(*, organization: Organization, basis: int) -> int:
     return paid_total
 
 
-def collect_and_distribute(*, organization: Organization, character) -> DistributionResult:
+def collect_and_distribute(
+    *, organization: Organization, character, success_level_override: int | None = None
+) -> DistributionResult:
     """The full collection-distribution dispatch (#2540, ruled 2026-07-20).
 
     Sequence: ``collect_org_income`` (the active piloted collection — band, graft,
@@ -789,9 +791,15 @@ def collect_and_distribute(*, organization: Organization, character) -> Distribu
     debt-first share of GROSS) → ``distribute_allowance`` on the post-debt remainder
     of what actually landed. Each phase is independently atomic (a later phase's
     failure never claws back an earlier one, mirroring ``run_weekly_economy``); the
-    remainder after the allowance simply stays in the treasury.
+    remainder after the allowance simply stays in the treasury. ``success_level_override``
+    passes straight through to ``collect_org_income`` for a caller (a route-graded task
+    landing) that already resolved the run's outcome elsewhere and skips the check.
     """
-    collection = collect_org_income(organization=organization, character=character)
+    collection = collect_org_income(
+        organization=organization,
+        character=character,
+        success_level_override=success_level_override,
+    )
     # A catastrophe landed nothing — this collection funds no debt service (old treasury
     # funds are not clawed; the creditor's share rides actual collections only).
     basis = 0 if collection.catastrophe else collection.gathered

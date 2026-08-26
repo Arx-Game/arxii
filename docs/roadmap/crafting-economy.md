@@ -1,5 +1,38 @@
 # Crafting, Fashion & Economy
 
+## Built (2026-08-26, #2540 — distribution wiring slice)
+
+House distribution goes live end-to-end (spec ratified 2026-07-20 on #2540); this
+activates machinery the earlier #930/#2540 slices built but left half-wired:
+
+- **`collect_and_distribute` dispatched everywhere collection lands** — both live
+  call sites (the active piloted collection, `npc_services.effects.run_collection`,
+  and the route-graded mission landing, `tasking._land_route_collection`) now run
+  debt-first principal service (`service_debt_principal`) and the active-piloted
+  allowance split (`distribute_allowance`) on every collection, not just a bare
+  `collect_org_income`. `success_level_override` threads through for the
+  already-graded mission path.
+- **`TreasuryWithdrawAction`** (key `treasury_withdraw`) — the discretionary
+  treasury→purse draw #930 never built, now player-reachable and bank-gated (the
+  Layer 4 access-surface ruling extends to coin, not just vault items).
+- **BANK `RoomFeatureKind` seeded** (`ensure_bank_kind`,
+  `world/room_features/seeds.py`) — the WHERE gate the vault and treasury actions
+  share (a bank room on grid, or an owner-installed bank-access decor feature).
+- **`DeliverCollectionAction`** (key `deliver_collection`, "Deliver the Take") —
+  the collection mission's return leg over `resolve_vault_transit`; embezzlement
+  goes live via `keep_item_ids` (subset-validated against the carrier's own open
+  `VaultTransit` rows, resolved atomically, double-gated by `can_embezzle_from`'s
+  piloted-consent check).
+- **Vault audit reader** (`GET /api/currency/org-books/{id}/vault-events/`,
+  `OrgVaultEventSerializer`) — member-gated, capped at 50, newest first. Kept
+  deliberately invisible in the UI beyond the raw feed: the tally-vs-deposits gap
+  is the in-world discovery hook for a skim, per `OrgVaultEvent`'s own docstring.
+
+See [INDEX.md](../systems/INDEX.md) (Org vault + currency sections) and
+[tasking.md](../systems/tasking.md) (Domain collection) for the wired detail.
+The **crafting-draw** off `OrgGemStock` and the **minister seam** (#2239) remain
+unbuilt — this slice is distribution, not the crafting-draw follow-on.
+
 ## Built (2026-08-22, #3292 - tavern games)
 
 Coin-stakes dice gambling at a scene Place (spec on #3292): `game open
@@ -184,8 +217,8 @@ The enchant-and-attach flow for facets and styles is fully playable end-to-end.
   gains `required_value` — a "N value of {tier}" bulk requirement drawing fungibly from the buckets
   ("gem-covered table, don't care which"), while named Rare-Find stones are never auto-consumed.
   The crafting cost path splits value reqs from 0a instance reqs. Remaining 0b work: risky
-  prying/re-set, hard cut skill-cap + consequence-pool narration, and the **domain-cron wiring**
-  (Build-1 track).
+  prying/re-set and hard cut skill-cap + consequence-pool narration. (The domain-cron wiring
+  shipped — see #2610.)
 
 - **Mine accrual (Build 0b, slice 7) — DONE.** `accrue_mine_cycle()` runs one weekly cycle for a
   mine holding: `DomainHolding` gains `mine_quality` + `common_gem_tier`, and the cycle accrues the
@@ -204,8 +237,8 @@ The enchant-and-attach flow for facets and styles is fully playable end-to-end.
   `stones_lost`. The gem side lives in `world.items.gems.collection` (a lazy import from the
   currency dispatch, keeping currency free of an items dependency at load).
   **Remaining domain-cron sub-slices:** the **crafting draw** (house members craft from the
-  collected `OrgGemStock`), the `game_clock` **scheduling**, and the minister seam (#2239).
-  Plus: the **cut recipe** (slice 3 PR) + refinements.
+  collected `OrgGemStock`) and the minister seam (#2239). (The `game_clock` scheduling
+  shipped — see #2610.) Plus: the **cut recipe** (slice 3 PR) + refinements.
 
 - **Handler registry** (`CraftingHandler` ABC + `FacetAttachHandler` / `StyleAttachHandler`).
   New kinds (alchemy, wand-crafting, etc.) plug in by authoring a `CraftingRecipe` row +

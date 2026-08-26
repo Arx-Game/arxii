@@ -7,6 +7,7 @@ from world.room_features.constants import (
     RoomFeatureServiceStrategy,
 )
 from world.room_features.seeds import (
+    ensure_bank_kind,
     ensure_captains_quarters_kind,
     ensure_lab_kind,
     ensure_library_kind,
@@ -68,6 +69,19 @@ class EnsureSiegeDeckKindTests(TestCase):
     def test_idempotent(self) -> None:
         first = ensure_siege_deck_kind()
         second = ensure_siege_deck_kind()
+        self.assertEqual(first.pk, second.pk)
+
+
+class EnsureBankKindTests(TestCase):
+    def test_creates_bank_kind(self) -> None:
+        kind = ensure_bank_kind()
+        self.assertEqual(kind.service_strategy, RoomFeatureServiceStrategy.BANK)
+        self.assertEqual(kind.max_level, 1)
+        self.assertEqual(kind.install_mechanism, RoomFeatureInstallMechanism.PROJECT)
+
+    def test_idempotent(self) -> None:
+        first = ensure_bank_kind()
+        second = ensure_bank_kind()
         self.assertEqual(first.pk, second.pk)
 
 
