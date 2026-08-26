@@ -1,5 +1,34 @@
 # Crafting, Fashion & Economy
 
+## Built (2026-08-26, #2540 slice 2 — personal + org material selling, Task 5)
+
+Closes the loop on the crafting draw: material value can now leave the economy as coppers on
+both ends, personal and org.
+
+- **`sell_materials(*, seller_sheet, material_category, amount)`** (`world.items.market.services`,
+  `@transaction.atomic`) — sells `amount` of a member's `MaterialBucket` value at a PLACEHOLDER
+  `MATERIAL_SALE_RATE_PCT` (40%), coppers minted straight to the seller's purse. Frictionless by
+  design (Apostate, ADR-0234): no stall, no NPC, no location gate, unlike the fence (#2862) —
+  bulk material is abstract value, not a haggled-over physical good. The coin computation runs
+  BEFORE the bucket debit, so a sale too small to round up to one copper is refused outright
+  rather than burning bucket value for nothing. Surfaced via `SellMaterialsAction`
+  (`actions.definitions.market`, key `sell_materials`).
+- **`auto_sell_excess_materials(*, organization)`** (`world.currency.services`,
+  `@transaction.atomic`) — the org-level sibling: liquidates any `OrgMaterialStock` row over the
+  PLACEHOLDER `MATERIAL_AUTO_SELL_THRESHOLD` at the same `MATERIAL_SALE_RATE_PCT`, into the
+  treasury. Called ONLY at the end of `collect_and_distribute`, after the materials allowance
+  leg — never the weekly cron directly, since an unpiloted scheduled sale would be exactly the
+  "automatic gain" ADR-0081 forbids. Rows locked under `select_for_update`, the same discipline
+  the allowance leg uses since both debit the same stock table.
+- **Fix round: both sell paths made atomic** (`sell_materials` AND `sell_to_fence`, commit
+  `32b1a8d37`) — a mid-sale exception (e.g. the coin `transfer` call raising) previously left a
+  spent-but-unpaid seller: the bucket/item was already gone but no coin had landed. Both now
+  wrap the full debit-then-pay sequence in `@transaction.atomic`.
+- **See also ADR-0234** for the "frictionless personal sale, collection-scoped org auto-sell"
+  ruling and the systemic idmapper-rollback-staleness observation this fix round surfaced (a
+  rolled-back `SharedMemoryModel` mutation can read stale in-memory values until
+  `flush_instance_cache()` — ADR-0008 trade-off, not a defect of this slice).
+
 ## Built (2026-08-26, #2540 slice 2 — materials allowance, "the crafting draw", Task 4)
 
 The member-share leg of the crafting draw off `OrgMaterialStock` flagged as unbuilt in

@@ -3830,13 +3830,25 @@ an idle org reaches stasis in both directions (loan interest still accrues — o
   skipped, capped by treasury; a catastrophe funds no debt service; complements the weekly
   at-source ARREARS/interest withholding #927] → `distribute_allowance` on the post-debt
   remainder of what landed → `distribute_material_allowance` (#2540 slice 2) on
-  `collection.landed_by_category`; each phase independently atomic; the coin remainder stays in
-  the treasury, the materials remainder stays in `OrgMaterialStock`.
+  `collection.landed_by_category` → `auto_sell_excess_materials` (#2540 slice 2, ALWAYS LAST —
+  liquidates whatever `OrgMaterialStock` the allowance leg didn't already draw down) — each
+  phase independently atomic; the coin remainder stays in the treasury, the materials remainder
+  stays in `OrgMaterialStock`.
   `success_level_override` passes straight through to `collect_org_income` for a
   caller that already resolved the run's outcome elsewhere. Returns `DistributionResult`, which
-  now carries `material_allowance: MaterialAllowanceResult` alongside `allowance`). Both entry
+  carries `material_allowance: MaterialAllowanceResult` alongside `allowance` and `auto_sold:
+  int` (coppers minted to the treasury from the auto-sell leg, 0 when nothing sold)). Both entry
   points append one PLACEHOLDER report line ("raw materials were shared out to N members")
   only when `material_allowance.total_by_category` is non-empty.
+  `auto_sell_excess_materials(*, organization)` (`world.currency.services`, #2540 slice 2) — the
+  org-level analogue of `market.sell_materials`: for each `OrgMaterialStock` row over the
+  PLACEHOLDER `MATERIAL_AUTO_SELL_THRESHOLD`, sells `excess = value - threshold` at the market's
+  `MATERIAL_SALE_RATE_PCT` (imported from its market home, one rate constant, no duplicate) into
+  the treasury; rows read/debited under `select_for_update`, same locking discipline as the
+  allowance leg since both debit the same stock table. A category whose excess rounds to zero
+  coppers is left alone; each category liquidates independently. Called ONLY from the end of
+  `collect_and_distribute` — never the weekly cron directly (ADR-0081/ADR-0234: automatic gain
+  is not automatic).
 - **Checks (#930):** Tax Collection / Household Command (presence + Leadership + Stewardship) and Domain
   Investment (intellect + Scholarship + Economics), seeded by the `governance` cluster
 - **Collection difficulty (#696 item 1):** `_collection_target_difficulty` derives the Tax
@@ -5286,8 +5298,24 @@ holder is never notified a claim exists.
     (catastrophe loses all). `org_has_pending_gems` widens the empty-gate so a gems-but-no-coin
     mine still collects. `CollectionResult` grew `gem_value_landed` / `stones_delivered` /
     `stones_lost`. Currency reaches this via a lazy import (FK direction preserved — currency
-    stays free of an items dependency at load). Remaining sub-slices: the crafting draw off
-    `OrgMaterialStock`, the `game_clock` scheduling, and the minister seam (#2239).
+    stays free of an items dependency at load). Remaining sub-slices: the `game_clock`
+    scheduling and the minister seam (#2239) — the crafting draw itself shipped (see the
+    currency section's `distribute_material_allowance`).
+  - **Personal material sale** (`world.items.market.services.sell_materials`,
+    `@transaction.atomic`, #2540 slice 2) — sells `amount` of a `CharacterSheet`'s
+    `MaterialBucket` value for one category at the market's PLACEHOLDER
+    `MATERIAL_SALE_RATE_PCT` (40%), coppers minted straight to the seller's purse
+    (`sell_to_fence`'s mint-to-purse convention). Apostate's frictionless ruling (ADR-0234):
+    unlike the fence (#2862), needs no stall, no NPC, no location gate — bulk material is
+    abstract bucket value, not a physical good to haggle over. The coin computation happens
+    BEFORE the bucket is touched, so a sale too small to round up to a single copper is refused
+    outright rather than debiting the bucket for nothing; raises `MarketServiceError` (wrapping
+    `InsufficientMaterialStock`) when the bucket falls short — nothing moves in that case.
+    Surfaced via `SellMaterialsAction` (`actions.definitions.market`, key `sell_materials`,
+    kwargs `material_category_id`/`amount`). Both this and `sell_to_fence` are
+    `@transaction.atomic` (fix commit `32b1a8d37` — a mid-sale exception previously left a
+    spent-but-unpaid seller). The org-level auto-sell sibling
+    (`currency.services.auto_sell_excess_materials`) is documented in the currency section.
 - **Org vault (#2540 Layer 4, `org_vault_models.py` + `services/org_vault.py`):** logical org
   custody of items — the ratified "model B with model D's access surface". `OrganizationVault`
   (OneToOne org, get-or-create; `withdraw_rank_max`, the `spend_rank_max` twin),
