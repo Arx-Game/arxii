@@ -15,6 +15,7 @@ stored row, term-limited by arithmetic on read.
 from __future__ import annotations
 
 from datetime import datetime, timedelta
+import logging
 from typing import TYPE_CHECKING
 
 from django.db.models import Q
@@ -32,7 +33,10 @@ from world.justice.constants import (
     SentenceKind,
 )
 from world.justice.models import ExileDecree, JusticeCase, PersonaHeat
+from world.justice.notifications import notify_brig_visitation, notify_verdict
 from world.justice.types import PublicMark
+
+logger = logging.getLogger(__name__)
 
 if TYPE_CHECKING:
     from world.areas.models import Area
@@ -301,6 +305,7 @@ def schedule_sentence(case: JusticeCase) -> None:
     elif kind == SentenceKind.BRIG_TERM:
         case.sentence_ends_at = timezone.now() + timedelta(days=case.sentence_amount)
         case.save(update_fields=["sentence_ends_at"])
+        _notify_brig_visitation(case)
     elif kind in (SentenceKind.EXECUTION, SentenceKind.BANISHMENT):
         case.terminal_due_at = timezone.now() + timedelta(days=RESCUE_WINDOW_DAYS)
         case.save(update_fields=["terminal_due_at"])
@@ -312,6 +317,31 @@ def schedule_sentence(case: JusticeCase) -> None:
         # ARENA_TRIAL and any other ladder-only kind aren't wired to a default
         # dispatch path yet (Task 3/4); release rather than leave captivity stranded.
         end_captivity(case)
+
+
+def _notify_brig_visitation(case: JusticeCase) -> None:
+    """Best-effort brig-visitation advert — never breaks sentence dispatch.
+
+    Mirrors :func:`world.societies.renown.fire_renown_award`'s notify guard (#2378
+    Task 6): the advert is a UX nicety, the sentence write is the source of truth.
+    """
+    try:
+        notify_brig_visitation(case)
+    except Exception:  # best-effort notify; never break sentence dispatch
+        logger.exception("justice.notify_brig_visitation failed for case %s", case.pk)
+
+
+def _notify_verdict(case: JusticeCase) -> None:
+    """Best-effort verdict re-notification for the sweep's carried-out/voided paths.
+
+    Mirrors :func:`world.societies.renown.fire_renown_award`'s notify guard (#2378
+    Task 6): the notification is a UX nicety, the terminal-sentence write is the
+    source of truth.
+    """
+    try:
+        notify_verdict(case)
+    except Exception:  # best-effort notify; never break the sweep
+        logger.exception("justice.notify_verdict failed for case %s", case.pk)
 
 
 # ---------------------------------------------------------------------------
@@ -354,6 +384,7 @@ def _carry_out_execution(case: JusticeCase, now) -> None:
         sheet.save(update_fields=["lifecycle_state", "lifecycle_state_at"])
     case.terminal_carried_out_at = now
     case.save(update_fields=["terminal_carried_out_at"])
+    _notify_verdict(case)
 
 
 def _carry_out_banishment(case: JusticeCase, now) -> None:
@@ -379,6 +410,7 @@ def _carry_out_banishment(case: JusticeCase, now) -> None:
 
     case.terminal_carried_out_at = now
     case.save(update_fields=["terminal_carried_out_at"])
+    _notify_verdict(case)
 
 
 def _sweep_terminals(now) -> int:
@@ -400,6 +432,7 @@ def _sweep_terminals(now) -> int:
         if rescued:
             case.terminal_due_at = None
             case.save(update_fields=["terminal_due_at"])
+            _notify_verdict(case)
             continue
         if case.sentence_kind == SentenceKind.EXECUTION:
             _carry_out_execution(case, now)

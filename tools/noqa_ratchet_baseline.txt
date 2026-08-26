@@ -6,4 +6,4 @@
 # the regexes defined in lint_noqa_ratchet.py's PATTERNS map.
 GETATTR_LITERAL 64
 pattern:BARE_OBJECTDB_CREATE 2
-pattern:BROAD_EXCEPT 114
+pattern:BROAD_EXCEPT 117
