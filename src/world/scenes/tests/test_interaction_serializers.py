@@ -23,16 +23,23 @@ from world.magic.factories import (
     SceneEntryEndorsementFactory,
 )
 from world.scenes.constants import PoseKind
-from world.scenes.factories import InteractionFactory, SceneFactory
+from world.scenes.factories import (
+    InteractionFactory,
+    PersonaDiscoveryFactory,
+    PersonaFactory,
+    SceneFactory,
+)
 from world.scenes.interaction_serializers import InteractionListSerializer
 
 
-def _make_context(
+def _make_context(  # noqa: PLR0913
     user_pk: int | None = None,
     persona_ids: set | None = None,
     roster_entry_ids: set | None = None,
     character_sheet_ids: set | None = None,
     scene_entry_endorsements: dict | None = None,
+    viewer_sheet_ids: set | None = None,
+    is_staff: bool = False,
 ) -> dict:
     """Build a minimal serializer context."""
     mock_request = MagicMock()
@@ -44,6 +51,8 @@ def _make_context(
         "roster_entry_ids": roster_entry_ids or set(),
         "character_sheet_ids": character_sheet_ids or set(),
         "scene_entry_endorsements": scene_entry_endorsements or {},
+        "viewer_sheet_ids": viewer_sheet_ids or set(),
+        "is_staff": is_staff,
     }
 
 
@@ -85,10 +94,84 @@ class Task1PoseKindEndorseeSheetIdTests(TestCase):
         assert data["pose_kind"] == "standard"
 
     def test_endorsee_sheet_id_matches_persona_character_sheet(self) -> None:
+        """A barefaced (non-anonymous) persona always reveals its sheet id."""
         interaction = self.entry_pose
         _set_empty_cached_attrs(interaction)
         data = InteractionListSerializer(interaction, context=_make_context()).data
         assert data["endorsee_sheet_id"] == self.sheet.pk
+
+
+class EndorseeSheetIdMaskReveal2378Tests(TestCase):
+    """endorsee_sheet_id honors the same per-viewer reveal predicate as persona display (#2378).
+
+    A masked persona (``is_fake_name=True``) shares its character_sheet_id with the
+    character's barefaced personas — exposing it unconditionally let any client correlate a
+    disguise with the real identity, bypassing per-viewer name masking entirely. These cases
+    exercise the reveal predicate directly: own face, staff, discovered, and undiscovered.
+    """
+
+    @classmethod
+    def setUpTestData(cls) -> None:
+        idmapper_models.flush_cache()
+        cls.masked_sheet = CharacterSheetFactory()
+        cls.masked_persona = PersonaFactory(character_sheet=cls.masked_sheet, is_fake_name=True)
+        cls.masked_pose = InteractionFactory(persona=cls.masked_persona, pose_kind=PoseKind.ENTRY)
+        cls.viewer_sheet = CharacterSheetFactory()
+
+    def setUp(self) -> None:
+        idmapper_models.flush_cache()
+
+    def _pose(self):
+        interaction = self.masked_pose
+        _set_empty_cached_attrs(interaction)
+        return interaction
+
+    def test_masked_undiscovered_viewer_returns_none(self) -> None:
+        """A viewer with no discovery of the mask, not staff, not the owner: sheet id hidden."""
+        data = InteractionListSerializer(
+            self._pose(),
+            context=_make_context(viewer_sheet_ids={self.viewer_sheet.pk}),
+        ).data
+        assert data["endorsee_sheet_id"] is None
+
+    def test_masked_discovered_viewer_returns_id(self) -> None:
+        """A viewer who has discovered the mask's identity sees the sheet id."""
+        PersonaDiscoveryFactory(
+            persona=self.masked_persona,
+            linked_to=self.masked_sheet.primary_persona,
+            discovered_by=self.viewer_sheet,
+        )
+        data = InteractionListSerializer(
+            self._pose(),
+            context=_make_context(viewer_sheet_ids={self.viewer_sheet.pk}),
+        ).data
+        assert data["endorsee_sheet_id"] == self.masked_sheet.pk
+
+    def test_staff_viewer_returns_id(self) -> None:
+        """Staff are universal discoverers — always see the sheet id behind a mask."""
+        data = InteractionListSerializer(
+            self._pose(),
+            context=_make_context(is_staff=True),
+        ).data
+        assert data["endorsee_sheet_id"] == self.masked_sheet.pk
+
+    def test_own_face_returns_id(self) -> None:
+        """The masked persona's own owner sees their own sheet id."""
+        data = InteractionListSerializer(
+            self._pose(),
+            context=_make_context(persona_ids={self.masked_persona.pk}),
+        ).data
+        assert data["endorsee_sheet_id"] == self.masked_sheet.pk
+
+    def test_barefaced_persona_returns_id(self) -> None:
+        """A non-anonymous persona always reveals, regardless of viewer."""
+        barefaced_sheet = CharacterSheetFactory()
+        barefaced_pose = InteractionFactory(
+            persona=barefaced_sheet.primary_persona, pose_kind=PoseKind.ENTRY
+        )
+        _set_empty_cached_attrs(barefaced_pose)
+        data = InteractionListSerializer(barefaced_pose, context=_make_context()).data
+        assert data["endorsee_sheet_id"] == barefaced_sheet.pk
 
 
 class Task2EndorsableResonancesTests(TestCase):

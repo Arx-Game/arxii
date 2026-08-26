@@ -103,9 +103,7 @@ class InteractionListSerializer(serializers.ModelSerializer):
     )
     dramatic_moment_tags = serializers.SerializerMethodField()
     dramatic_moment_suggestions = serializers.SerializerMethodField()
-    endorsee_sheet_id = serializers.IntegerField(
-        source="persona.character_sheet_id", read_only=True
-    )
+    endorsee_sheet_id = serializers.SerializerMethodField()
     endorsable_resonances = serializers.SerializerMethodField()
     pose_endorsers = serializers.SerializerMethodField()
     my_pose_endorsement = serializers.SerializerMethodField()
@@ -154,8 +152,8 @@ class InteractionListSerializer(serializers.ModelSerializer):
         # Per-viewer name resolution (#1109): own faces and named-public faces render real;
         # discovered anonymous faces reveal "<mask> (<real>)"; undiscovered anonymous faces
         # render a composed sdesc. Resolved once for the whole page (see _persona_display_map).
-        name, _is_discovered = self._persona_display_map().get(
-            obj.persona_id, (obj.persona.name, False)
+        name, _is_discovered, _reveal_allowed = self._persona_display_map().get(
+            obj.persona_id, (obj.persona.name, False, not obj.persona.is_fake_name)
         )
         return PersonaPayload(
             id=obj.persona_id,
@@ -163,7 +161,24 @@ class InteractionListSerializer(serializers.ModelSerializer):
             thumbnail_url=obj.persona.thumbnail_url or "",
         )
 
-    def _persona_display_map(self) -> dict[int, tuple[str, bool]]:
+    def get_endorsee_sheet_id(self, obj: Interaction) -> int | None:
+        """The endorsee's character_sheet id — ONLY when the viewer may know their identity.
+
+        A disguised persona (``Persona.is_fake_name=True``) unconditionally exposing its
+        ``character_sheet_id`` let any client correlate a masked persona with the same
+        character's barefaced personas (both personas share one sheet id), bypassing the
+        per-viewer name-masking in ``get_persona`` entirely (#2378). Reuses the same batched
+        ``reveal_allowed`` predicate from ``_persona_display_map`` (own face, staff, discovered
+        via ``PersonaDiscovery``, or a barefaced persona) — never a per-row query.
+        """
+        _name, _is_discovered, reveal_allowed = self._persona_display_map().get(
+            obj.persona_id, (obj.persona.name, False, not obj.persona.is_fake_name)
+        )
+        if not reveal_allowed:
+            return None
+        return obj.persona.character_sheet_id
+
+    def _persona_display_map(self) -> dict[int, tuple[str, bool, bool]]:
         """Cache the page's persona-display resolution on the shared context (O(1) queries)."""
         cached = self.context.get("_persona_display_map")
         if cached is not None:
