@@ -1,19 +1,23 @@
 """Sentence enforcement — brig terms served, terminal countdown, daily sweep (#2378).
 
 Post-verdict dispatch: :func:`schedule_sentence` routes a just-TRIED case's
-``sentence_kind`` to its enforcement path — an immediate release, a brig hold
-until ``sentence_ends_at``, a terminal sentence's rescue window
-(``terminal_due_at``), or an apply hook for the sentences later tasks build out
-(EXILE — Task 3; CONFISCATION — Task 4). :func:`sentence_sweep_tick` is the
-daily cron body: it serves matured brig terms and carries out terminal
-sentences whose rescue window has closed without a rescue/escape/pardon.
+``sentence_kind`` to its enforcement path — an immediate release (with a
+prestige-hit apply hook for HUMILIATION, Task 5), a brig hold until
+``sentence_ends_at``, a terminal sentence's rescue window (``terminal_due_at``),
+or an apply hook for the sentences later tasks build out (EXILE — Task 3;
+CONFISCATION — Task 4). :func:`sentence_sweep_tick` is the daily cron body: it
+serves matured brig terms and carries out terminal sentences whose rescue
+window has closed without a rescue/escape/pardon. :func:`active_public_marks`
+(Task 5) derives the public record of standing consequences in an area — no
+stored row, term-limited by arithmetic on read.
 """
 
 from __future__ import annotations
 
-from datetime import timedelta
+from datetime import datetime, timedelta
 from typing import TYPE_CHECKING
 
+from django.db.models import Q
 from django.utils import timezone
 
 from world.character_sheets.types import LifecycleState
@@ -21,13 +25,17 @@ from world.justice.constants import (
     EXILE_PIN_DAYS,
     EXILE_PIN_VALUE,
     FINE_COPPERS_PER_WEIGHT,
+    HUMILIATION_PRESTIGE_HIT,
+    HUMILIATION_TERM_DAYS,
     RESCUE_WINDOW_DAYS,
     CaseStatus,
     SentenceKind,
 )
 from world.justice.models import ExileDecree, JusticeCase, PersonaHeat
+from world.justice.types import PublicMark
 
 if TYPE_CHECKING:
+    from world.areas.models import Area
     from world.scenes.models import Persona
 
 # ---------------------------------------------------------------------------
@@ -187,6 +195,94 @@ def _collect_fine_double(case: JusticeCase) -> None:
     purse.save(update_fields=["balance"])
 
 
+def apply_humiliation(case: JusticeCase) -> None:
+    """HUMILIATION sentencing (#2378 Task 5): a deed-prestige hit, clamped at zero.
+
+    Called from :func:`schedule_sentence` BEFORE the sentence's outright release.
+    NO prose beyond neutral procedural strings anywhere in this path — the
+    persona's own record and the public feed both say only that they were
+    "sentenced by the magistrates," never what the humiliation was. Dan
+    (Apostate) authors the real humiliation copy personally; this hook is
+    mechanics-only.
+    """
+    from world.societies.renown import award_deed_prestige  # noqa: PLC0415
+
+    persona = case.persona
+    hit = min(HUMILIATION_PRESTIGE_HIT, max(0, persona.prestige_from_deeds))
+    if hit:
+        award_deed_prestige(persona, -hit)
+
+
+def active_public_marks(*, area: Area, now: datetime | None = None) -> list[PublicMark]:
+    """The public record standing against personas in ``area`` (#2378 Task 5).
+
+    Derived on read from three sources, term-limited by arithmetic rather than
+    a stored/expiring row (spec #2378 §4):
+
+    - **Humiliations** — cases sentenced HUMILIATION whose ``resolved_at`` is
+      still inside ``HUMILIATION_TERM_DAYS``; ``until`` is the day the mark ages
+      off.
+    - **Exiles/banishments** — active ``ExileDecree`` rows (not lifted, and
+      either permanent or not yet expired); ``until=None`` for a permanent
+      banishment, else the decree's ``ends_at``.
+    - **Pending terminals** — the visible countdown (spec #2378 §9): cases with
+      a ``terminal_due_at`` still in the future that haven't been carried out.
+
+    ``select_related("persona")`` on every source — no queries in the loops
+    that build the dataclass rows.
+    """
+    now = now or timezone.now()
+    area_name = area.name
+    marks: list[PublicMark] = []
+
+    humiliation_cases = JusticeCase.objects.filter(
+        area=area,
+        sentence_kind=SentenceKind.HUMILIATION,
+        resolved_at__gt=now - timedelta(days=HUMILIATION_TERM_DAYS),
+    ).select_related("persona")
+    marks.extend(
+        PublicMark(
+            kind=SentenceKind.HUMILIATION,
+            persona_name=case.persona.name,
+            area_name=area_name,
+            until=case.resolved_at + timedelta(days=HUMILIATION_TERM_DAYS),
+        )
+        for case in humiliation_cases
+    )
+
+    decrees = (
+        ExileDecree.objects.filter(area=area, lifted_at__isnull=True)
+        .filter(Q(ends_at__isnull=True) | Q(ends_at__gt=now))
+        .select_related("persona")
+    )
+    marks.extend(
+        PublicMark(
+            kind="banishment" if decree.ends_at is None else "exile",
+            persona_name=decree.persona.name,
+            area_name=area_name,
+            until=decree.ends_at,
+        )
+        for decree in decrees
+    )
+
+    terminal_cases = JusticeCase.objects.filter(
+        area=area,
+        terminal_due_at__gt=now,
+        terminal_carried_out_at__isnull=True,
+    ).select_related("persona")
+    marks.extend(
+        PublicMark(
+            kind=case.sentence_kind,
+            persona_name=case.persona.name,
+            area_name=area_name,
+            until=case.terminal_due_at,
+        )
+        for case in terminal_cases
+    )
+
+    return marks
+
+
 def schedule_sentence(case: JusticeCase) -> None:
     """Post-verdict dispatcher — routes a TRIED case's sentence to its enforcement path.
 
@@ -197,7 +293,10 @@ def schedule_sentence(case: JusticeCase) -> None:
     apply hooks.
     """
     kind = case.sentence_kind
-    if kind in (SentenceKind.FINE, SentenceKind.HUMILIATION):
+    if kind == SentenceKind.FINE:
+        end_captivity(case)
+    elif kind == SentenceKind.HUMILIATION:
+        apply_humiliation(case)
         end_captivity(case)
     elif kind == SentenceKind.BRIG_TERM:
         case.sentence_ends_at = timezone.now() + timedelta(days=case.sentence_amount)
