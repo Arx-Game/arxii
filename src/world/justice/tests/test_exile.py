@@ -31,6 +31,7 @@ from world.justice.constants import (
     EXILE_PIN_VALUE,
     MAX_VALUE_FLOOR,
     RESCUE_WINDOW_DAYS,
+    CaseStatus,
     GuardTrigger,
     SentenceKind,
 )
@@ -261,6 +262,7 @@ class PardonLiftTests(_DecreeFixtureMixin, TestCase):
             persona=self.persona,
             area=self.kingdom,
             society=self.crown,
+            status=CaseStatus.TRIED,
             sentence_kind=SentenceKind.BANISHMENT,
             terminal_due_at=now + timedelta(days=RESCUE_WINDOW_DAYS),
         )
@@ -281,12 +283,45 @@ class PardonLiftTests(_DecreeFixtureMixin, TestCase):
         captivity.refresh_from_db()
         self.assertEqual(captivity.status, CaptivityStatus.RELEASED)
 
+    def test_pardon_of_scheduled_terminal_delivers_voided_notice(self):
+        # Final review: the sweep never sees this case again once terminal_due_at
+        # is cleared — the VOIDED notice must fire right here, at pardon time.
+        from world.narrative.constants import NarrativeCategory
+        from world.narrative.models import NarrativeMessage
+
+        granter = self._magistrate()
+        now = timezone.now()
+        case = JusticeCase.objects.create(
+            persona=self.persona,
+            area=self.kingdom,
+            society=self.crown,
+            status=CaseStatus.TRIED,
+            sentence_kind=SentenceKind.BANISHMENT,
+            terminal_due_at=now + timedelta(days=RESCUE_WINDOW_DAYS),
+        )
+        captivity = CaptivityFactory(captive=self.persona.character_sheet)
+        case.captivity = captivity
+        case.save(update_fields=["captivity"])
+
+        pardon_persona(granter, self.persona, self.kingdom)
+
+        latest_body = (
+            NarrativeMessage.objects.filter(category=NarrativeCategory.JUSTICE)
+            .order_by("-id")
+            .values_list("body", flat=True)
+            .first()
+        )
+        self.assertIsNotNone(latest_body)
+        self.assertIn("was not carried out", latest_body)
+        self.assertNotIn("has been carried out", latest_body)
+
     def test_pardon_releases_held_brig_captive_and_clears_sentence_ends_at(self):
         granter = self._magistrate()
         case = JusticeCase.objects.create(
             persona=self.persona,
             area=self.kingdom,
             society=self.crown,
+            status=CaseStatus.TRIED,
             sentence_kind=SentenceKind.BRIG_TERM,
             sentence_ends_at=timezone.now() + timedelta(days=5),
         )

@@ -240,11 +240,31 @@ def _open_case_for_capture(encounter: GuardEncounter) -> JusticeCase | None:
         area=encounter.area,
         society=society,
         prosecution_weight=weight,
+        failed_outs=_prior_conviction_count(encounter.persona, encounter.area),
     )
     case.captivity = _take_into_custody(encounter, society)
     if case.captivity is not None:
         case.save(update_fields=["captivity"])
     return case
+
+
+def _prior_conviction_count(persona: Persona, area: Area) -> int:
+    """Seed a freshly captured case's ``failed_outs`` from the persona's history.
+
+    Fix (#2378 final review): every case previously opened at ``failed_outs=0``
+    regardless of history — the field only ever incremented once per case (the
+    +1 in :func:`initiate_trial`), so organically it was always 0→1. That made
+    the sentence ladder's rungs above level 0, breach-of-exile escalation past
+    re-exile, and both terminal kinds (``EXECUTION_MIN_FAILED_OUTS``) reachable
+    only when a test injected ``failed_outs`` by hand. Counting prior TRIED,
+    non-acquitted cases in this area gives each repeat offense its own out spent
+    — an acquittal never counts against the accused.
+    """
+    return (
+        JusticeCase.objects.filter(persona=persona, area=area, status=CaseStatus.TRIED)
+        .exclude(verdict=Verdict.ACQUITTED)
+        .count()
+    )
 
 
 def _mint_breach_heat(encounter: GuardEncounter) -> int:

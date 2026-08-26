@@ -23,6 +23,7 @@ from world.justice.constants import (
     RESCUE_WINDOW_DAYS,
     GuardTrigger,
     SentenceKind,
+    Verdict,
 )
 from world.justice.models import ExileDecree, GuardEncounter, JusticeCase, PersonaHeat
 from world.justice.pipeline import _take_into_custody, initiate_trial
@@ -69,6 +70,27 @@ class _SentenceCaseMixin(JusticeFixtureMixin):
         )
         BrigDetails.objects.create(feature_instance=instance, max_prisoners=BRIG_CAPACITY_PER_LEVEL)
         return brig_room
+
+
+class EndCaptivityAlreadyResolvedTests(_SentenceCaseMixin, TestCase):
+    """``end_captivity`` must not 500 when the captivity already resolved (#2378
+    final review) — e.g. a jailbreak/rescue before the accused calls for trial.
+    ``resolve_captivity`` raises ``NotHeldError`` (a ``CaptivityError``) on a
+    captivity that isn't HELD anymore; before the fix only
+    ``(ObjectDoesNotExist, ValueError)`` were caught, so an at-large accused
+    standing trial raised mid-enforcement.
+    """
+
+    def test_trial_survives_a_captivity_already_resolved(self):
+        case = self._case(weight=50, failed_outs=0)  # FINE band: schedule_sentence
+        captivity = self._hold(case)  # calls end_captivity directly.
+        resolve_captivity(captivity, status=CaptivityStatus.ESCAPED)  # already at large
+
+        initiate_trial(case, case.persona, check_levels=[-3])  # must not raise
+
+        case.refresh_from_db()
+        self.assertEqual(case.verdict, Verdict.FULL)
+        self.assertEqual(case.sentence_kind, SentenceKind.FINE)
 
 
 class BrigTermTests(_SentenceCaseMixin, TestCase):
@@ -174,6 +196,40 @@ class TerminalSentenceTests(_SentenceCaseMixin, TestCase):
         self.assertIsNotNone(sheet.lifecycle_state_at)
         self.assertEqual(captivity.status, CaptivityStatus.RELEASED)
         self.assertIsNotNone(case.terminal_carried_out_at)
+
+    def test_stale_execution_downgrades_to_banishment_when_claimed_without_optin(self):
+        # An NPC persona (no account) is sentenced to EXECUTION at trial time —
+        # the wall (ADR-0023) passes because there is no account to check.
+        case = self._catastrophic_case(self.persona)
+        captivity = self._hold(case)
+        initiate_trial(case, self.persona, check_levels=[-3])
+        case.refresh_from_db()
+        self.assertEqual(case.sentence_kind, SentenceKind.EXECUTION)
+
+        # A player claims the persona's sheet without opting into lethal
+        # consequences DURING the rescue window (#2378 final review) — the
+        # wall no longer passes by carry-out time even though it did at trial.
+        from world.roster.factories import PlayerDataFactory, RosterEntryFactory
+
+        player_data = PlayerDataFactory(lethal_consequences_opt_in=False)
+        entry = RosterEntryFactory(character_sheet=self.persona.character_sheet)
+        RosterTenureFactory(roster_entry=entry, player_data=player_data)
+
+        case.terminal_due_at = timezone.now() - timedelta(days=1)
+        case.save(update_fields=["terminal_due_at"])
+
+        touched = sentence_sweep_tick()
+
+        case.refresh_from_db()
+        captivity.refresh_from_db()
+        sheet = self.persona.character_sheet
+        sheet.refresh_from_db()
+        self.assertEqual(touched, 1)
+        self.assertEqual(case.sentence_kind, SentenceKind.BANISHMENT)
+        self.assertNotEqual(sheet.lifecycle_state, LifecycleState.DEAD)
+        self.assertEqual(captivity.status, CaptivityStatus.RELEASED)
+        self.assertIsNotNone(case.terminal_carried_out_at)
+        self.assertTrue(ExileDecree.objects.filter(case=case).exists())
 
     def test_non_opted_pc_gets_banishment_not_execution(self):
         from evennia_extensions.factories import RoomProfileFactory

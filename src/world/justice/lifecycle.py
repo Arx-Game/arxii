@@ -22,7 +22,9 @@ from world.justice.constants import (
     BRIBERY_CRIME_SLUG,
     MAGISTRATE_OFFICE,
     WANTED_VALUE_FLOOR,
+    CaseStatus,
     SentenceKind,
+    VerdictNotifyReason,
     tier_for_value,
 )
 from world.justice.models import (
@@ -220,6 +222,14 @@ def pardon_persona(granter: Persona, target: Persona, area: Area) -> PardonGrant
     (execution/banishment) still awaiting their rescue window are voided with
     any held captive walking free, and held BRIG_TERM captives are released
     with their sentence cleared.
+
+    An open AWAITING_TRIAL case is released outright too (final review): a
+    pardoned captive must never stand trial on a warrant the pardon just
+    erased — previously this branch never touched AWAITING_TRIAL cases, so a
+    pardoned captive stayed in the brig awaiting a trial on the stale weight.
+    A voided scheduled terminal fires the VOIDED notice right here, at grant
+    time — the sweep will never see the case again once ``terminal_due_at`` is
+    cleared below, so this is the only place that notice can fire.
     """
     society = enforcing_society_for(area)
     if society is None:
@@ -241,12 +251,22 @@ def pardon_persona(granter: Persona, target: Persona, area: Area) -> PardonGrant
 
     from world.captivity.constants import CaptivityStatus  # noqa: PLC0415
     from world.captivity.services import resolve_captivity  # noqa: PLC0415
+    from world.justice.notifications import notify_verdict_safely  # noqa: PLC0415
+    from world.justice.pipeline import _release  # noqa: PLC0415
 
     now = timezone.now()
     ExileDecree.objects.filter(persona=target, area=area, lifted_at__isnull=True).update(
         lifted_at=now
     )
     PersonaHeat.objects.filter(persona=target, area=area).update(pinned_until=None)
+
+    # A captive still awaiting trial is released outright — never tried on the
+    # stale weight the pardon just erased.
+    for case in JusticeCase.objects.filter(
+        persona=target, area=area, status=CaseStatus.AWAITING_TRIAL
+    ):
+        _release(case, CaseStatus.RELEASED_PARDON)
+
     for case in JusticeCase.objects.filter(
         persona=target, area=area, terminal_carried_out_at__isnull=True
     ).exclude(terminal_due_at__isnull=True):
@@ -255,6 +275,8 @@ def pardon_persona(granter: Persona, target: Persona, area: Area) -> PardonGrant
         # A held terminal captive walks free on pardon.
         if case.captivity and case.captivity.status == CaptivityStatus.HELD:
             resolve_captivity(case.captivity, status=CaptivityStatus.RELEASED)
+        # The sweep never sees this case again — the voided notice must fire now.
+        notify_verdict_safely(case, reason=VerdictNotifyReason.VOIDED)
 
     # Brig: release held brig captives in the area the same way.
     brig_cases = JusticeCase.objects.filter(

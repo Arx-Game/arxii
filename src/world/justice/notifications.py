@@ -138,8 +138,17 @@ def notify_brig_visitation(case: JusticeCase) -> int:
     (``end_date__isnull=True``), deduped by account pk. Sends an OOC line via
     ``account.msg`` — never an IC push. Returns the count of accounts notified (0 when
     the accused has no character/tenure to visit, e.g. a bodiless persona or a
-    test/NPC sheet outside the roster flow).
+    test/NPC sheet outside the roster flow — or when the accused's persona is a
+    fake name, see the identity-bridge guard below).
     """
+    # Identity-bridge guard (spec #2378 sec.2/sec.11, final review): a masked
+    # persona's brig advert names the accused by their persona - sending it to
+    # friends of the persona's TENURE would bridge mask -> character identity OOC,
+    # the exact leak class this branch closed for scenes. Skip the advert entirely
+    # rather than try to launder the name.
+    if case.persona.is_fake_name:
+        return 0
+
     from world.roster.models import RosterTenure  # noqa: PLC0415
 
     sheet = case.persona.character_sheet

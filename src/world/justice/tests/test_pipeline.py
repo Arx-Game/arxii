@@ -236,6 +236,51 @@ class TrialTests(JusticeFixtureMixin, TestCase):
         self.assertEqual(case.verdict, Verdict.ACQUITTED)
 
 
+class OrganicEscalationTests(JusticeFixtureMixin, TestCase):
+    """``failed_outs`` must carry across cases, not reset to 0 every capture (#2378
+    final review). Without the fix in ``_open_case_for_capture``, every freshly
+    captured case opened at ``failed_outs=0`` regardless of history, so the sentence
+    ladder's rungs above level 0, breach-of-exile escalation past re-exile, and both
+    terminal kinds were only ever reachable when a test injected ``failed_outs`` by
+    hand. This drives two real captures end-to-end with no injected counter at all.
+    """
+
+    def _capture(self, *, check_level=-3):
+        encounter = GuardEncounter.objects.create(
+            persona=self.persona, area=self.kingdom, trigger=GuardTrigger.ROOM_ARRIVAL
+        )
+        resolve_guard_encounter(encounter, check_level=check_level)
+        return JusticeCase.objects.filter(persona=self.persona).order_by("-pk").first()
+
+    def test_second_conviction_escalates_past_exile_without_injected_failed_outs(self):
+        _heat(self.persona, self.kingdom, self.crown, HUNTED_VALUE_FLOOR)
+
+        case1 = self._capture()
+        self.assertEqual(case1.failed_outs, 0)  # no history yet: nothing to seed from
+
+        initiate_trial(case1, self.persona, check_levels=[-3])
+        case1.refresh_from_db()
+        self.assertEqual(case1.verdict, Verdict.FULL)
+        self.assertEqual(case1.sentence_kind, SentenceKind.EXILE)
+        self.assertEqual(case1.failed_outs, 1)
+
+        # Breach: captured again in the same area under the still-active decree.
+        # apply_exile's heat pin floors heat at EXILE_PIN_VALUE (well above
+        # MAX_VALUE_FLOOR on its own), so this second conviction lands in the
+        # terminal band — a clean, unambiguous "past EXILE" for an NPC persona
+        # (no account): EXECUTION. The whole point is failed_outs=1 came from
+        # case1's own history, never injected.
+        case2 = self._capture()
+        self.assertEqual(case2.failed_outs, 1)
+
+        initiate_trial(case2, self.persona, check_levels=[-3])
+        case2.refresh_from_db()
+        self.assertEqual(case2.verdict, Verdict.FULL)
+        self.assertEqual(case2.failed_outs, 2)
+        self.assertNotEqual(case2.sentence_kind, SentenceKind.EXILE)
+        self.assertEqual(case2.sentence_kind, SentenceKind.EXECUTION)
+
+
 class LethalWallTests(JusticeFixtureMixin, TestCase):
     """ADR-0023: NPCs may hang; PCs need opt-in + an exhausted case."""
 

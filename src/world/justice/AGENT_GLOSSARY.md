@@ -77,9 +77,12 @@
   evasion can't beat a pinned warrant) unless the persona is magically concealed.
 - **Rescue window** — the interval between a terminal sentence (EXECUTION/BANISHMENT)
   being handed down and the daily sweep carrying it out, held on
-  `JusticeCase.terminal_due_at`. A rescue, an escape, or a pardon inside the window
-  voids the terminal outright (`notify_verdict` fires the VOIDED, never CARRIED_OUT,
-  copy); the window is a duration, not a location — nothing about it is "the brig."
+  `JusticeCase.terminal_due_at`. A rescue or an escape voids it the next time the sweep
+  runs (captivity no longer HELD); a pardon voids it immediately at grant time instead
+  (`lifecycle.pardon_persona` clears `terminal_due_at` and fires the VOIDED notice
+  itself — the sweep never sees that case). Either way `notify_verdict` fires the
+  VOIDED, never CARRIED_OUT, copy; the window is a duration, not a location — nothing
+  about it is "the brig."
 - **Public mark** — one row of `active_public_marks`' derived public record: a
   `PublicMark` dataclass built fresh on every read from three live sources (a
   still-term-limited humiliation, an active Exile Decree, or a pending terminal

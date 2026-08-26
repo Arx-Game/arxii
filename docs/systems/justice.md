@@ -174,7 +174,11 @@ routes to the area's Brig room feature via `room_features.brig_services
 .find_brig_for_area`/`brig_has_capacity` when one exists with room, else the
 instanced-cell default); a captured breach also mints its own `breach-of-exile`
 CrimeKind heat (`_mint_breach_heat`, `BREACH_WEIGHT_BONUS`) on top of ordinary
-prosecution weight.
+prosecution weight. `failed_outs` on the new case is seeded from the persona's own
+history in that area — a count of prior TRIED, non-acquitted cases
+(`_prior_conviction_count`) — so escalation (ladder rungs above level 0, breach
+past re-exile, both terminal kinds) climbs organically across repeat offenses
+rather than resetting to 0 on every fresh capture.
 
 **The trial waits on the captive** (`initiate_trial`) — argument checks by the accused
 plus helpers (`submit_exculpatory`; a threshold releases outright; a manufactured
@@ -197,7 +201,14 @@ path: FINE/HUMILIATION release outright (`apply_humiliation` — a deed-prestige
 clamped at zero; NO prose beyond neutral procedural strings — Dan authors the real
 humiliation copy personally); BRIG_TERM holds until `JusticeCase.sentence_ends_at`
 with a best-effort brig-visitation advert (`notifications.notify_brig_visitation`, OOC
-to the accused's active friends); EXECUTION/BANISHMENT hold through the rescue window
+to the accused's active friends — skipped entirely when the accused's persona is a
+fake name, an identity-bridge guard: the advert names the persona, and sending it to
+friends of the persona's tenure would bridge mask→character identity OOC); every
+`end_captivity` call (the shared release used across FINE/HUMILIATION/EXILE/
+CONFISCATION and the FULL-verdict path) is best-effort against a captivity that
+already resolved on its own — a jailbreak or rescue before the sentence lands raises
+`CaptivityError`, caught alongside the pre-existing not-found/invalid-status guards
+rather than 500ing mid-enforcement; EXECUTION/BANISHMENT hold through the rescue window
 (`JusticeCase.terminal_due_at = now + RESCUE_WINDOW_DAYS`); EXILE calls `apply_exile`
 (mints an `ExileDecree`, pins heat via `pin_heat_for_decree`, ends captivity, ejects to
 `Area.exile_destination` via `eject` — a null-safe no-op for a bodiless persona or an
@@ -209,14 +220,30 @@ back to a double-rate fine, `_collect_fine_double`, when there's no Brig or no b
 `sentence_sweep_tick` is the daily cron body (`justice.sentence_sweep` in
 `game_clock/tasks.py`): `_sweep_brig_releases` frees every HELD captivity whose
 BRIG_TERM has matured; `_sweep_terminals` carries out (or voids) every terminal
-sentence whose rescue window has closed — a rescue, an escape, or a pardon
-(`CaseStatus.RELEASED_PARDON`) inside the window voids it
-(`notify_verdict_safely(reason=VOIDED)`, never the CARRIED_OUT copy); otherwise
-`_carry_out_execution` (releases the captivity slot BEFORE flipping
-`CharacterSheet.lifecycle_state` to DEAD — ordering matters, `resolve_captivity`
-unconditionally flips lifecycle back to ALIVE as part of freeing the cell) or
-`_carry_out_banishment` (mints a permanent `ExileDecree`, pins heat, ejects — mirrors
-`apply_exile`'s captivity-then-eject ordering for the same reason).
+sentence whose rescue window has closed — a rescue or an escape (captivity no longer
+HELD by sweep time) voids it (`notify_verdict_safely(reason=VOIDED)`, never the
+CARRIED_OUT copy); otherwise `_carry_out_execution` re-judges the lethal wall
+(`terminal_kind_for`) before carrying it out — a sentence_kind of EXECUTION judged
+up to `RESCUE_WINDOW_DAYS` earlier may no longer clear the wall by carry-out time
+(e.g. an NPC persona's sheet gets claimed by a player without lethal-consequences
+opt-in during the window); when it no longer clears, `sentence_kind` is updated to
+BANISHMENT and saved, and carry-out delegates to `_carry_out_banishment` so the
+record stays truthful about what actually happened. `_carry_out_execution` itself
+releases the captivity slot BEFORE flipping `CharacterSheet.lifecycle_state` to
+DEAD — ordering matters, `resolve_captivity` unconditionally flips lifecycle back to
+ALIVE as part of freeing the cell. `_carry_out_banishment` mints a permanent
+`ExileDecree`, pins heat, ejects — mirrors `apply_exile`'s captivity-then-eject
+ordering for the same reason.
+
+A pardon (`lifecycle.pardon_persona`) never waits on this sweep. It voids a scheduled
+terminal directly at grant time — clears `terminal_due_at`, releases a HELD captive,
+and fires the VOIDED notice itself, so the sweep never sees that case again — and
+releases any open AWAITING_TRIAL case outright via `pipeline._release(case,
+CaseStatus.RELEASED_PARDON)`, so a pardoned captive never stands trial on the erased
+warrant. `_sweep_terminals`'s own `CaseStatus.RELEASED_PARDON` check stays as a
+belt-and-braces double-void guard; in practice an AWAITING_TRIAL-origin case never
+carries a terminal `sentence_kind`, so the branch doesn't fire, but the status is now
+a real, written value rather than an orphaned enum member.
 
 `active_public_marks(area)` derives the public record on read (no stored, expiring
 row) from three live sources: still-term-limited humiliations

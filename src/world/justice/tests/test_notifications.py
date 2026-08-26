@@ -173,6 +173,28 @@ class BrigVisitationTests(_CaseMixin, TestCase):
         self.assertIn("PLACEHOLDER (OOC): ", call_text)
         self.assertIn("is imprisoned in", call_text)
 
+    def test_masked_persona_gets_no_brig_advert(self):
+        # Identity-bridge guard (#2378 final review): a fake-name persona's brig
+        # advert would otherwise bridge mask -> character identity OOC to the
+        # accused's real-name friends — the leak class this branch closed for
+        # scenes. No message at all, not even a laundered one.
+        accused_tenure, accused_persona = self._pc_persona()
+        accused_persona.is_fake_name = True
+        accused_persona.save(update_fields=["is_fake_name"])
+        watcher_tenure = RosterTenureFactory()
+        add_friend(friender_tenure=watcher_tenure, friend_tenure=accused_tenure)
+
+        case = self._case(weight=120, failed_outs=1, persona=accused_persona)
+        self._hold(case, sheet=accused_persona.character_sheet)
+
+        watcher_account = watcher_tenure.player_data.account
+        with mock.patch.object(watcher_account, "msg", create=True) as mock_msg:
+            initiate_trial(case, accused_persona, check_levels=[-3])
+
+        case.refresh_from_db()
+        self.assertEqual(case.sentence_kind, "brig_term")
+        mock_msg.assert_not_called()
+
     def test_ended_friendship_is_not_notified(self):
         accused_tenure, accused_persona = self._pc_persona()
         watcher_tenure = RosterTenureFactory()

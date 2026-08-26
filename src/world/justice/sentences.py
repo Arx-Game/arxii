@@ -49,17 +49,26 @@ if TYPE_CHECKING:
 
 
 def end_captivity(case: JusticeCase) -> None:
-    """Release the case's captivity, if it has one. Relocated from pipeline.py (#2378)."""
+    """Release the case's captivity, if it has one. Relocated from pipeline.py (#2378).
+
+    Best-effort: an accused who is already at large by the time enforcement runs
+    (jailbreak, rescue — anything that already resolved the captivity) must not
+    500 the trial/sentence path. ``resolve_captivity`` raises ``NotHeldError`` (a
+    ``CaptivityError``) on a captivity that isn't HELD anymore — caught alongside
+    the pre-existing ``ObjectDoesNotExist``/``ValueError`` guards (#2378 final
+    review: this case was previously unguarded).
+    """
     if case.captivity is None:
         return
     from django.core.exceptions import ObjectDoesNotExist  # noqa: PLC0415
 
     from world.captivity.constants import CaptivityStatus  # noqa: PLC0415
+    from world.captivity.exceptions import CaptivityError  # noqa: PLC0415
     from world.captivity.services import resolve_captivity  # noqa: PLC0415
 
     try:
         resolve_captivity(case.captivity, status=CaptivityStatus.RELEASED)
-    except (ObjectDoesNotExist, ValueError):
+    except (ObjectDoesNotExist, ValueError, CaptivityError):
         return
 
 
@@ -361,6 +370,22 @@ def _sweep_brig_releases(now) -> int:
 
 
 def _carry_out_execution(case: JusticeCase, now) -> None:
+    """Carry out EXECUTION — but re-judge the lethal wall first (#2378 final review).
+
+    ``sentence_kind`` was set at trial time, up to ``RESCUE_WINDOW_DAYS`` before
+    the sweep gets here — if the wall (ADR-0023) no longer passes by carry-out
+    (e.g. an NPC persona's sheet gets claimed by a player without lethal-consequences
+    opt-in during the rescue window), a PC must never be executed on a stale
+    judgment. Re-running :func:`terminal_kind_for` downgrades to BANISHMENT and
+    delegates when the wall has since closed; ``sentence_kind`` is updated and
+    saved so the case record stays truthful about what actually happened.
+    """
+    if terminal_kind_for(case) == SentenceKind.BANISHMENT:
+        case.sentence_kind = SentenceKind.BANISHMENT
+        case.save(update_fields=["sentence_kind"])
+        _carry_out_banishment(case, now)
+        return
+
     from world.captivity.constants import CaptivityStatus  # noqa: PLC0415
     from world.captivity.services import resolve_captivity  # noqa: PLC0415
 
@@ -405,7 +430,14 @@ def _carry_out_banishment(case: JusticeCase, now) -> None:
 
 
 def _sweep_terminals(now) -> int:
-    """Carry out (or void) every terminal sentence whose rescue window is due."""
+    """Carry out (or void) every terminal sentence whose rescue window is due.
+
+    A pardon (:func:`world.justice.lifecycle.pardon_persona`) voids a scheduled
+    terminal directly at grant time — clears ``terminal_due_at`` and fires the
+    VOIDED notice itself — so this sweep never sees that case again; the
+    ``CaseStatus.RELEASED_PARDON`` check below is a belt-and-braces double-void
+    guard for a terminal case that somehow still reaches here with that status.
+    """
     from world.captivity.constants import CaptivityStatus  # noqa: PLC0415
 
     cases = JusticeCase.objects.filter(
