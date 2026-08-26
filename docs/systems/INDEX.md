@@ -1655,8 +1655,9 @@ friends.
   `GET /api/justice/heat/` (tiers only, never raw values; `PersonaHeatSerializer`
   also carries `society` id for the web Reputation tab's client-side join, #1446);
   public standing (#2378): the wanted board's `records` field (`PublicMarkSerializer`)
-  and `GET /api/justice/my-case/` (`MyCaseSerializer` — status, sentence, countdown
-  fields) plus web sentence-countdown UI on the character sheet's Crime tab. Fix
+  and `GET /api/justice/my-case/` (`MyCaseSerializer` — `sentence_kind`,
+  `sentence_amount`, `sentence_ends_at`, `terminal_due_at`, `failed_outs`) plus web
+  sentence-countdown UI on the character sheet's Crime tab. Fix
   round (#2378 Task 7): `scenes` serializer identity leaks closed —
   `endorsee_sheet_id` and `dramatic_moment_tags`' sheet ids now gate behind the same
   reveal predicate as the rest of a masked persona's identity, so a disguised

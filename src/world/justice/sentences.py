@@ -121,9 +121,12 @@ def is_magically_concealed(persona: Persona) -> bool:  # noqa: ARG001 — seam, 
     """Seam for the ratified magic exception (spec #2378 §5): magical concealment
     (invisibility, shapechange) bypasses the mundane exile gauntlet absent magical
     detection. The magical-detection taxonomy is TehomCD's substrate; wire this
-    to it when it exists. Candidate substrate: resolve_security_check(SNEAK) (#3301,
-    zero callers). Always False today — ``persona`` is part of the seam's
-    contract even though this stub body doesn't consult it yet.
+    to it when it exists. Should ride the existing security-check oracle
+    (``resolve_security_check(SecurityCheckKind.SNEAK)``, `world.checks.security_services`)
+    that stealth/guard detection already uses (`world.stealth.services`,
+    `world.npc_services.guard_services`) — coordinate with TehomCD's magical-detection
+    taxonomy rather than inventing a parallel check. Always False today — ``persona``
+    is part of the seam's contract even though this stub body doesn't consult it yet.
     """
     return False
 

@@ -232,8 +232,11 @@ narrative data on `JusticeCase` to leak).
 `is_magically_concealed(persona)` is the ratified magic-exception seam (spec #2378
 §5): magical concealment (invisibility, shapechange) should bypass the mundane exile
 gauntlet absent magical detection. Always returns False today — the magical-detection
-taxonomy is TehomCD's substrate (candidate seam: `resolve_security_check(SNEAK)`,
-#3301, zero callers) — wire it there when it exists.
+taxonomy is TehomCD's substrate. It should ride the existing security-check oracle
+(`resolve_security_check(SecurityCheckKind.SNEAK)`, `world.checks.security_services`)
+that stealth/guard detection already uses (`world.stealth.services`,
+`world.npc_services.guard_services`), coordinating with TehomCD's magical-detection
+taxonomy rather than inventing a parallel check — wire it when that taxonomy exists.
 
 ### Models (additions, #2378)
 
