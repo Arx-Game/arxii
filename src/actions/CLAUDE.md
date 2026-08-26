@@ -56,6 +56,28 @@ They do not use the command system, dispatchers, or handlers.
   existing combat service; shared by telnet `CmdCombat` (`combat <subverb>`) and the web
   `CombatEncounterViewSet`. `yield` is not here — `YieldAction` (`duels.py`) is reused. The one
   new service is `toggle_action_ready`, extracted from the inline web `ready` toggle;
+  `gm_combat.py` (#1494, create #3388) — the GM combat-encounter lifecycle Actions, all
+  REGISTRY, `category="combat"`: `CreateEncounterAction` (key `create_encounter`, #3388,
+  `target_type=SELF`) resolves the actor's room's active scene via `get_active_scene()` and
+  gates on `world.combat.permissions.can_create_encounter_for_scene` (staff/scene-GM/scene-
+  co-owner — deliberately broader than the other seven actions below, which gate on
+  `_actor_may_gm_encounter`, staff-or-`is_gm`-only, since they act on an *existing* encounter
+  whose scene GM is presumably already settled); creates the `CombatEncounter` with an
+  optional `pace_mode` kwarg (default `PaceMode.TIMED`) and calls the shared
+  `world.combat.services.finalize_new_encounter` (room-defaulting + escalation-curve
+  assignment) — the same tail the web `CombatEncounterViewSet.perform_create` calls, so
+  telnet and web never diverge on what a freshly created encounter looks like.
+  `BeginEncounterRoundAction` (`begin_encounter_round`, `target_type=AREA`) advances
+  BETWEEN_ROUNDS → DECLARING; `ResolveEncounterRoundAction` (`resolve_encounter_round`)
+  resolves the current DECLARING round; `AddOpponentAction` (`add_opponent`) spawns an NPC
+  opponent from a `ThreatPool`; `AddEncounterParticipantAction`/
+  `RemoveEncounterParticipantAction` (`add_encounter_participant`/
+  `remove_encounter_participant`) enroll/mark-removed a PC; `PauseEncounterAction`
+  (`pause_encounter`) toggles the round timer; `EndEncounterAction` (`end_encounter`)
+  force-completes as ABANDONED; `PreviewOpponentDefaultsAction` (`preview_opponent_defaults`)
+  previews a tier's scaling formula output without mutating state. Shared by telnet
+  `CmdEncounter` (`encounter <subverb>`, `commands/encounter.py`) and the web
+  `CombatEncounterViewSet`;
   `locations.py` — `RoomEditAction`, key `"edit_room"` (#1470, widened #2452),
   owner-or-tenant-gated (`IsRoomTenantPrerequisite`) edit of the current room's
   name/description/public-listing via
