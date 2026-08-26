@@ -50,6 +50,7 @@ class TestClusterRegistry(TestCase):
                 "perception",
                 "civic_hubs",
                 "counterplay",
+                "bank",
                 "building_condition",
                 "property_grants",
                 "building_listings",
@@ -112,6 +113,28 @@ class TestClusterRegistry(TestCase):
         # Idempotent on re-run: no duplicate challenge rows.
         CLUSTER_SEEDERS["reactive_challenges"]()
         self.assertEqual(ChallengeTemplate.objects.filter(name=INTERPOSE_CHALLENGE_NAME).count(), 1)
+
+    def test_bank_cluster_seeds_the_bank_kind(self) -> None:
+        # #2540 deployment blocker: without this cluster registered, the BANK
+        # RoomFeatureKind never exists on a fresh database and every bank action
+        # (deposit/withdraw/treasury withdraw/deliver_collection) fails closed.
+        from world.room_features.constants import RoomFeatureServiceStrategy
+        from world.room_features.models import RoomFeatureKind
+
+        CLUSTER_SEEDERS["bank"]()
+        self.assertTrue(
+            RoomFeatureKind.objects.filter(
+                service_strategy=RoomFeatureServiceStrategy.BANK
+            ).exists()
+        )
+        # Idempotent on re-run: no duplicate kind row.
+        CLUSTER_SEEDERS["bank"]()
+        self.assertEqual(
+            RoomFeatureKind.objects.filter(
+                service_strategy=RoomFeatureServiceStrategy.BANK
+            ).count(),
+            1,
+        )
 
     def test_seeded_models_are_model_classes(self) -> None:
         models = seeded_models()

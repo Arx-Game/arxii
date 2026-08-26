@@ -25,6 +25,7 @@ from world.items.org_vault_models import VaultHolding, VaultTransit
 from world.items.services.org_vault import get_or_create_org_vault
 from world.room_features.constants import RoomFeatureServiceStrategy
 from world.room_features.factories import RoomFeatureInstanceFactory, RoomFeatureKindFactory
+from world.scenes.factories import PersonaFactory
 from world.societies.factories import OrganizationFactory, OrganizationMembershipFactory
 
 
@@ -256,3 +257,35 @@ class DeliverCollectionActionTests(TestCase):
         self.assertTrue(
             VaultTransit.objects.filter(item_instance=stone, resolved_at__isnull=True).exists()
         )
+
+    def test_sold_item_delivery_fails_and_buyer_keeps_it(self) -> None:
+        # #2540 review finding 2, exercised at the action layer: the carrier sold the
+        # stone before delivering. Must fail loud, not yank it out of the buyer's hands.
+        self._install_bank()
+        stone = self._open_transit()
+        buyer = PersonaFactory()
+        stone.holder_character_sheet = buyer.character_sheet
+        stone.save(update_fields=["holder_character_sheet"])
+        result = DeliverCollectionAction().run(actor=self.character, organization_id=self.org.pk)
+        self.assertFalse(result.success)
+        self.assertFalse(VaultHolding.objects.exists())
+        self.assertTrue(
+            VaultTransit.objects.filter(item_instance=stone, resolved_at__isnull=True).exists()
+        )
+        stone.refresh_from_db()
+        self.assertEqual(stone.holder_character_sheet, buyer.character_sheet)
+
+    def test_plain_deposit_then_delivery_does_not_wedge(self) -> None:
+        # #2540 review finding 3, exercised at the action layer: a plain
+        # VaultDepositAction landed first; the leftover open transit must resolve
+        # cleanly instead of IntegrityError-ing the whole deliver_collection act.
+        self._install_bank()
+        stone = self._open_transit()
+        deposit_result = VaultDepositAction().run(
+            actor=self.character, organization_id=self.org.pk, item_instance_id=stone.pk
+        )
+        self.assertTrue(deposit_result.success, deposit_result.message)
+        result = DeliverCollectionAction().run(actor=self.character, organization_id=self.org.pk)
+        self.assertTrue(result.success, result.message)
+        self.assertEqual(VaultHolding.objects.filter(item_instance=stone).count(), 1)
+        self.assertFalse(VaultTransit.objects.filter(resolved_at__isnull=True).exists())
