@@ -1483,7 +1483,7 @@ def _weekly_mine_accrual() -> int:
     """One weekly gem cycle per configured mine holding (#2540, Build 0b wiring).
 
     Rides the same rollover as the coin pools: haul amasses UNCOLLECTED
-    (``StreamCommonGemPool`` / ``PendingRareFind``) and only an active collection
+    (``StreamMaterialPool`` / ``PendingRareFind``) and only an active collection
     dispatch delivers it (ADR-0081 — automatic loss is fine, automatic gain is not).
     Lazy import keeps currency free of an items dependency at load (FK direction).
     """
@@ -1491,7 +1491,7 @@ def _weekly_mine_accrual() -> int:
     from world.societies.houses.models import DomainHolding  # noqa: PLC0415
 
     count = 0
-    for holding in DomainHolding.objects.filter(common_gem_tier__isnull=False):
+    for holding in DomainHolding.objects.filter(material_sources__isnull=False).distinct():
         try:
             accrue_mine_cycle(holding=holding)
             count += 1

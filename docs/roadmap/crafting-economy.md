@@ -1,5 +1,33 @@
 # Crafting, Fashion & Economy
 
+## Built (2026-08-26, #2540 slice 2 — material economy schema, Task 1)
+
+Rename-and-widen schema pass generalizing the Build 0b gem-only stock models to any
+bulk material, ahead of non-gem material content:
+
+- **Gem stocks generalized + moved.** `CommonGemBucket`/`StreamCommonGemPool`/
+  `OrgGemStock` → `MaterialBucket`/`StreamMaterialPool`/`OrgMaterialStock`, moved out
+  of `world.items.gems.models` into a new `world.items.materials_models`; each
+  model's `tier` FK → `material_category`. Genuinely gem-specific models (`GemGrade`,
+  `GemDetails`, `GemInstanceDetails`, `PendingRareFind`, `Adornment`) stay in
+  `gems.models`. Service functions renamed to match: `common_gem_value`/
+  `credit_common_gems`/`spend_common_gems` → `material_value`/`credit_materials`/
+  `spend_materials` (`world.items.gems.buckets`); `credit_org_gems` →
+  `credit_org_materials` (`world.items.gems.collection`, now kw-only
+  `material_category=`).
+- **`DomainHolding.mine_quality`/`common_gem_tier` dropped**, replaced by
+  `HoldingMaterialSource` (`world.societies.houses.models`): a holding can now carry
+  more than one production source, each with its own `quality` + `material_category`
+  + `source_kind` (`MaterialSourceKind.BULK`/`GEM_MINE`, `world.items.constants`).
+  `accrue_mine_cycle` reads the holding's `GEM_MINE` source row (interim edit — Task 2
+  rewires the function wholesale); `_weekly_mine_accrual` now queries
+  `material_sources__isnull=False`.
+- **Deviation from spec:** the brief asked to rename `InsufficientCommonGems` →
+  `InsufficientMaterials`, but that name was already taken by a distinct,
+  actively-used exception (`gather_consumable_pks`'s instance-shortfall error). Kept
+  the two exceptions separate; the bucket/stock-shortfall one is
+  `InsufficientMaterialStock`.
+
 ## Built (2026-08-26, #2540 — distribution wiring slice)
 
 House distribution goes live end-to-end (spec ratified 2026-07-20 on #2540); this
@@ -30,7 +58,7 @@ activates machinery the earlier #930/#2540 slices built but left half-wired:
 
 See [INDEX.md](../systems/INDEX.md) (Org vault + currency sections) and
 [tasking.md](../systems/tasking.md) (Domain collection) for the wired detail.
-The **crafting-draw** off `OrgGemStock` and the **minister seam** (#2239) remain
+The **crafting-draw** off `OrgMaterialStock` and the **minister seam** (#2239) remain
 unbuilt — this slice is distribution, not the crafting-draw follow-on.
 
 ## Built (2026-08-22, #3292 - tavern games)
@@ -213,31 +241,35 @@ The enchant-and-attach flow for facets and styles is fully playable end-to-end.
   axes give the fat "remarkable find" tail for free.
 
 - **Common-gem value buckets + bulk requirements (Build 0b, slice 5) — DONE.** `CommonGemBucket`
-  holds a crafter's common-gem value per tier (never instanced); `CraftingMaterialRequirement`
-  gains `required_value` — a "N value of {tier}" bulk requirement drawing fungibly from the buckets
-  ("gem-covered table, don't care which"), while named Rare-Find stones are never auto-consumed.
-  The crafting cost path splits value reqs from 0a instance reqs. Remaining 0b work: risky
-  prying/re-set and hard cut skill-cap + consequence-pool narration. (The domain-cron wiring
-  shipped — see #2610.)
+  (renamed `MaterialBucket` and generalized to `world.items.materials_models`, #2540 slice 2)
+  holds a crafter's material value per category (never instanced); `CraftingMaterialRequirement`
+  gains `required_value` — a "N value of {category}" bulk requirement drawing fungibly from the
+  buckets ("gem-covered table, don't care which"), while named Rare-Find stones are never
+  auto-consumed. The crafting cost path splits value reqs from 0a instance reqs. Remaining 0b
+  work: risky prying/re-set and hard cut skill-cap + consequence-pool narration. (The domain-cron
+  wiring shipped — see #2610.)
 
 - **Mine accrual (Build 0b, slice 7) — DONE.** `accrue_mine_cycle()` runs one weekly cycle for a
-  mine holding: `DomainHolding` gains `mine_quality` + `common_gem_tier`, and the cycle accrues the
-  haul into **uncollected** pools on the holding's income stream (`StreamCommonGemPool` for common
-  value, `PendingRareFind` for the stones) — the gem analogue of `OrgIncomeStream.uncollected_pool`.
-  **Design (Apostate):** gems are *lumped with tax collection* — they ride the same active
-  `collect_org_income` dispatch (same band + graft + catastrophe loss) into the house's stock.
+  mine holding: the holding's `HoldingMaterialSource` row (#2540 slice 2; replaces the earlier
+  `mine_quality` + `common_gem_tier` fields dropped from `DomainHolding`) carries `quality` +
+  `material_category`, and the cycle accrues the haul into **uncollected** pools on the holding's
+  income stream (`StreamMaterialPool` for common value, `PendingRareFind` for the stones) — the
+  gem analogue of `OrgIncomeStream.uncollected_pool`. **Design (Apostate):** gems are *lumped
+  with tax collection* — they ride the same active `collect_org_income` dispatch (same band +
+  graft + catastrophe loss) into the house's stock.
 
 - **Mine collection (Build 0b, domain-cron collection) — DONE.** `collect_org_income()` now
   gathers the org's pending gems alongside coin: the same Tax Collection check, outcome band,
   graft, and catastrophe apply to both. Net common value lands in the house's shared
-  `OrgGemStock` (`credit_org_gems`); surviving Rare-Find stones ride the same net rate into the
-  collector's hands, and a bad collection loses some (catastrophe loses all). The empty-gate
-  considers gems too, so a mine that accrued gems but no coin still collects
-  (`org_has_pending_gems`). `CollectionResult` grew `gem_value_landed` / `stones_delivered` /
-  `stones_lost`. The gem side lives in `world.items.gems.collection` (a lazy import from the
-  currency dispatch, keeping currency free of an items dependency at load).
+  `OrgMaterialStock` (`credit_org_materials`, renamed from `OrgGemStock`/`credit_org_gems`,
+  #2540 slice 2); surviving Rare-Find stones ride the same net rate into the collector's hands,
+  and a bad collection loses some (catastrophe loses all). The empty-gate considers gems too, so
+  a mine that accrued gems but no coin still collects (`org_has_pending_gems`).
+  `CollectionResult` grew `gem_value_landed` / `stones_delivered` / `stones_lost`. The gem side
+  lives in `world.items.gems.collection` (a lazy import from the currency dispatch, keeping
+  currency free of an items dependency at load).
   **Remaining domain-cron sub-slices:** the **crafting draw** (house members craft from the
-  collected `OrgGemStock`) and the minister seam (#2239). (The `game_clock` scheduling
+  collected `OrgMaterialStock`) and the minister seam (#2239). (The `game_clock` scheduling
   shipped — see #2610.) Plus: the **cut recipe** (slice 3 PR) + refinements.
 
 - **Handler registry** (`CraftingHandler` ABC + `FacetAttachHandler` / `StyleAttachHandler`).

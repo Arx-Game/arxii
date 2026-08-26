@@ -26,18 +26,15 @@ from typing import TYPE_CHECKING
 
 from django.db import transaction
 
+from world.items.constants import MaterialSourceKind
 from world.items.gems.constants import (
     COMMON_VALUE_PER_QUALITY,
     RARE_FIND_BASE_CHANCE,
     RARE_FIND_MAX_COUNT,
     GemAxis,
 )
-from world.items.gems.models import (
-    GemGrade,
-    GemInstanceDetails,
-    PendingRareFind,
-    StreamCommonGemPool,
-)
+from world.items.gems.models import GemGrade, GemInstanceDetails, PendingRareFind
+from world.items.materials_models import StreamMaterialPool
 from world.items.models import ItemInstance, ItemTemplate
 
 if TYPE_CHECKING:
@@ -151,25 +148,32 @@ def accrue_mine_cycle(
 ) -> GemHaul:
     """Run one weekly cycle for a mine ``holding``, accruing its haul into the uncollected pools.
 
-    Common value amasses in the stream's ``StreamCommonGemPool`` for the holding's
-    ``common_gem_tier``; each Rare Find becomes a ``PendingRareFind`` on the stream. Both sit
-    uncollected until an active collection dispatch (``collect_org_income``) delivers them with
-    the same graft/loss the coin pool rides. A holding with no income stream or no
-    ``common_gem_tier`` is not a configured gem mine — nothing accrues.
+    Common value amasses in the stream's ``StreamMaterialPool`` for the holding's GEM_MINE
+    ``HoldingMaterialSource``; each Rare Find becomes a ``PendingRareFind`` on the stream. Both
+    sit uncollected until an active collection dispatch (``collect_org_income``) delivers them
+    with the same graft/loss the coin pool rides. A holding with no income stream or no
+    GEM_MINE material source is not a configured gem mine — nothing accrues.
+
+    NOTE (#2540 Task 1, interim): this is a minimal edit that reads the holding's GEM_MINE
+    ``HoldingMaterialSource`` row instead of the now-dropped ``mine_quality``/
+    ``common_gem_tier`` fields. Task 2 rewires this function wholesale.
     """
     stream = holding.income_stream
-    tier = holding.common_gem_tier
-    if stream is None or tier is None:
-        return GemHaul(common_value=0, rare_finds=[])
-
-    haul = roll_gem_haul(
-        mine_quality=holding.mine_quality, minister_bonus=minister_bonus, roll=roll
+    source = (
+        holding.material_sources.filter(source_kind=MaterialSourceKind.GEM_MINE)
+        .select_related("material_category")
+        .first()
     )
+    if stream is None or source is None:
+        return GemHaul(common_value=0, rare_finds=[])
+    material_category = source.material_category
+
+    haul = roll_gem_haul(mine_quality=source.quality, minister_bonus=minister_bonus, roll=roll)
     with transaction.atomic():
         if haul.common_value > 0:
-            pool, created = StreamCommonGemPool.objects.get_or_create(
+            pool, created = StreamMaterialPool.objects.get_or_create(
                 income_stream=stream,
-                tier=tier,
+                material_category=material_category,
                 defaults={"uncollected_value": haul.common_value},
             )
             if not created:

@@ -2,8 +2,9 @@
 
 Gems are *lumped with tax collection*: ``collect_org_income`` gathers the org's uncollected
 gem pools + Rare-Find stones alongside coin, and the same outcome band + graft + catastrophe
-decide what lands. Net common value → the house's ``OrgGemStock``; surviving stones → the
-collector's hands; a bad collection loses some. Outcome bands are forced via the checks helper.
+decide what lands. Net common value → the house's ``OrgMaterialStock``; surviving stones →
+the collector's hands; a bad collection loses some. Outcome bands are forced via the checks
+helper.
 """
 
 from __future__ import annotations
@@ -20,7 +21,8 @@ from world.currency.services import (
     get_or_create_economics,
 )
 from world.items.factories import ItemInstanceFactory, MaterialCategoryFactory
-from world.items.gems.models import OrgGemStock, PendingRareFind, StreamCommonGemPool
+from world.items.gems.models import PendingRareFind
+from world.items.materials_models import OrgMaterialStock, StreamMaterialPool
 from world.societies.factories import OrganizationFactory
 from world.traits.factories import CheckOutcomeFactory
 
@@ -41,8 +43,8 @@ class GemCollectionTests(TestCase):
         self.stream = OrgIncomeStream.objects.create(
             organization=self.org, name="Gem Mine", kind="domain_tax", gross_amount=100
         )
-        StreamCommonGemPool.objects.create(
-            income_stream=self.stream, tier=self.tier, uncollected_value=1000
+        StreamMaterialPool.objects.create(
+            income_stream=self.stream, material_category=self.tier, uncollected_value=1000
         )
         self.stones = [ItemInstanceFactory() for _ in range(4)]
         for stone in self.stones:
@@ -54,7 +56,9 @@ class GemCollectionTests(TestCase):
             return collect_org_income(organization=self.org, character=self.character)
 
     def _stock_value(self) -> int:
-        stock = OrgGemStock.objects.filter(organization=self.org, tier=self.tier).first()
+        stock = OrgMaterialStock.objects.filter(
+            organization=self.org, material_category=self.tier
+        ).first()
         return stock.value if stock is not None else 0
 
     def test_clean_collection_lands_net_common_and_surviving_stones(self) -> None:
@@ -73,7 +77,9 @@ class GemCollectionTests(TestCase):
         # Pools zero and pendings resolve regardless of what survived.
         self.assertFalse(PendingRareFind.objects.filter(income_stream=self.stream).exists())
         self.stream.refresh_from_db()
-        pool = StreamCommonGemPool.objects.get(income_stream=self.stream, tier=self.tier)
+        pool = StreamMaterialPool.objects.get(
+            income_stream=self.stream, material_category=self.tier
+        )
         self.assertEqual(pool.uncollected_value, 0)
 
     def test_catastrophe_loses_all_common_and_all_stones(self) -> None:
@@ -84,7 +90,9 @@ class GemCollectionTests(TestCase):
         self.assertEqual(result.stones_lost, 4)
         self.assertEqual(self._stock_value(), 0)
         self.assertEqual(sum(1 for s in self.stones if _reloaded(s) is not None), 0)
-        pool = StreamCommonGemPool.objects.get(income_stream=self.stream, tier=self.tier)
+        pool = StreamMaterialPool.objects.get(
+            income_stream=self.stream, material_category=self.tier
+        )
         self.assertEqual(pool.uncollected_value, 0)  # the gems are simply gone
 
     def test_coin_and_gems_ride_the_same_dispatch(self) -> None:
@@ -113,7 +121,9 @@ class GemCollectionTests(TestCase):
         self._collect(1)
         # A second cycle accrues more common value (mutate-then-save, as accrual does — an
         # .update() would bypass the SharedMemoryModel cache), then a second collection stacks it.
-        pool = StreamCommonGemPool.objects.get(income_stream=self.stream, tier=self.tier)
+        pool = StreamMaterialPool.objects.get(
+            income_stream=self.stream, material_category=self.tier
+        )
         pool.uncollected_value = 1000
         pool.save(update_fields=["uncollected_value"])
         self._collect(1)

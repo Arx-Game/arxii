@@ -1585,7 +1585,7 @@
   - detected_traps <- room_features.Trap
   - prepared_ground <- room_features.PreparedGround
   - recipe_knowledge <- items.CharacterRecipeKnowledge
-  - common_gem_buckets <- items.CommonGemBucket
+  - material_buckets <- items.MaterialBucket
   - expulsion_bars <- npc_services.ExpulsionBar
   - vault_transits <- items.VaultTransit
   - trade_sessions_initiated <- items.TradeSession
@@ -2489,6 +2489,7 @@
 - `emit_event(event_name: str, payload: Any, location: Any, *, parent_stack: flows.flow_stack.FlowStack | None = None) -> flows.flow_stack.FlowStack - Dispatch ``event_name`` to every handler in ``location`` + contents.`
 - `end_encounter(encounter: 'CombatEncounter') -> 'CombatEncounter' - GM force-end: completes as ABANDONED (#876 §8).`
 - `expire_pulls_for_round(encounter: 'CombatEncounter') -> 'None' - Delete all CombatPull rows from prior rounds and recompute affected max_health.`
+- `finalize_new_encounter(encounter: 'CombatEncounter') -> 'None' - Apply the post-creation defaults every "scene-anchored, no explicit room" creation`
 - `get_clash_config() -> 'ClashConfig' - Get-or-create the ClashConfig singleton (pk=1).`
 - `get_concentration_check_type() -> 'CheckType' - Return the seeded 'Concentration' CheckType rolled at sustained-action`
 - `get_fatigue_penalty(character_sheet: 'CharacterSheet', category: 'str') -> 'int' - Return the check penalty for the current fatigue zone.`
@@ -2891,6 +2892,7 @@
 - `has_death_deferred(character: 'ObjectDB') -> bool - Return True if the character has any active condition granting death_deferred.`
 - `is_concealed(target: 'ObjectDB') -> bool - True if *target* holds any active perception-concealing condition.`
 - `is_untargetable(target: 'ObjectDB') -> bool - True if *target* holds any active intangibility condition.`
+- `opponent_condition_opposition(objectdb: 'ObjectDB', check_type: world.checks.models.CheckType) -> int - Difficulty delta an opposing entity's active conditions contribute (#3384).`
 - `perform_check_with_modifiers(character: 'ObjectDB', check_type: 'CheckType', target_difficulty: int = 0, extra_modifiers: int = 0, effort_level: str | None = None, fatigue_penalty: int = 0, specialization: 'Specialization | None' = None, *, situation_ctx: 'SituationContext | None' = None, level_override: int | None = None, scene: 'Scene | None' = None, extra_contributions: 'list[ModifierContribution] | None' = None, skip_fashion: bool = False, stat_override: str | int | None = None) -> world.checks.types.CheckResult - Run a check with all character modifiers gathered automatically.`
 - `perform_treatment(helper_sheet: 'CharacterSheet', target_sheet: 'CharacterSheet', scene: 'Scene', treatment: world.conditions.models.TreatmentTemplate, target_effect: 'ConditionInstance | PendingAlteration', bond_thread: 'Thread | None' = None, skip_engagement_gate: bool = False) -> world.conditions.types.TreatmentOutcome - Resolve a TreatmentTemplate against an effect instance.`
 - `priced_percent_severity(*, eff_intensity: int, target: 'ObjectDB') -> int - Apply-time percent severity for the bounded team-damage-percent lane (#2643).`
@@ -3309,8 +3311,8 @@
   - domain_holding <- societies.DomainHolding
   - declarations <- currency.IncomeDeclaration
   - garnishing_contracts <- currency.Contract
-  - common_gem_pools <- items.StreamCommonGemPool
   - pending_rare_finds <- items.PendingRareFind
+  - material_pools <- items.StreamMaterialPool
 
 ### OrgObligation
 **Foreign Keys:**
@@ -4156,11 +4158,6 @@
   - claim -> items.ReclamationClaim [FK]
   - ownership_event -> items.OwnershipEvent [FK]
 
-### CommonGemBucket
-**Foreign Keys:**
-  - character_sheet -> character_sheets.CharacterSheet [FK]
-  - tier -> items.MaterialCategory [FK]
-
 ### CraftedItemRecipe
 **Foreign Keys:**
   - item_instance -> items.ItemInstance [FK]
@@ -4462,15 +4459,20 @@
   - stock_listings <- items.StockListing
   - ware_listings <- items.WareListing
 
+### MaterialBucket
+**Foreign Keys:**
+  - character_sheet -> character_sheets.CharacterSheet [FK]
+  - material_category -> items.MaterialCategory [FK]
+
 ### MaterialCategory
 **Pointed to by:**
   - templates <- items.ItemTemplate
-  - common_gem_buckets <- items.CommonGemBucket
+  - material_buckets <- items.MaterialBucket
 
-### OrgGemStock
+### OrgMaterialStock
 **Foreign Keys:**
   - organization -> societies.Organization [FK]
-  - tier -> items.MaterialCategory [FK]
+  - material_category -> items.MaterialCategory [FK]
 
 ### OrgVaultEvent
 **Foreign Keys:**
@@ -4571,10 +4573,10 @@
   - stall -> items.MarketStall [FK]
   - template -> items.ItemTemplate [FK]
 
-### StreamCommonGemPool
+### StreamMaterialPool
 **Foreign Keys:**
   - income_stream -> currency.OrgIncomeStream [FK]
-  - tier -> items.MaterialCategory [FK]
+  - material_category -> items.MaterialCategory [FK]
 
 ### Style
 **Foreign Keys:**
@@ -8673,8 +8675,8 @@
   - domain -> societies.Domain [FK]
   - kind -> societies.HoldingKind [FK]
   - income_stream -> currency.OrgIncomeStream [OneToOne] (nullable)
-  - common_gem_tier -> items.MaterialCategory [FK] (nullable)
 **Pointed to by:**
+  - material_sources <- societies.HoldingMaterialSource
   - improvement_details <- societies.DomainImprovementDetails
 
 ### DomainImprovementDetails
@@ -8715,6 +8717,11 @@
 **Pointed to by:**
   - holdings <- societies.DomainHolding
   - house_templates <- societies.HouseTemplate
+
+### HoldingMaterialSource
+**Foreign Keys:**
+  - holding -> societies.DomainHolding [FK]
+  - material_category -> items.MaterialCategory [FK]
 
 ### HouseAspectDefinition
 **Foreign Keys:**
@@ -8933,7 +8940,7 @@
   - estate_claims <- estates.EstateClaim
   - event_invitations <- events.EventInvitation
   - vault_access_entries <- room_features.VaultAccessEntry
-  - gem_stocks <- items.OrgGemStock
+  - material_stocks <- items.OrgMaterialStock
   - npc_roles <- npc_services.NPCRole
   - loan_offers <- npc_services.LoanOfferDetails
   - regards_as_target <- npc_services.NpcRegard

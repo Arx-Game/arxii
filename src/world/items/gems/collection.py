@@ -1,15 +1,16 @@
 """Gem-side of the org income collection dispatch (Build 0b, domain-cron collection).
 
 Mining accrues a mine's haul into *uncollected* pools on the holding's income stream
-(``StreamCommonGemPool`` for common value, ``PendingRareFind`` for the stones). Per
+(``StreamMaterialPool`` for common value, ``PendingRareFind`` for the stones). Per
 Apostate's design, gems are **lumped with tax collection**: the same active
 ``collect_org_income`` dispatch that gathers coin also gathers gems, and the *same*
 outcome band + graft + catastrophe decide what survives. This module is the items-side
 seam that dispatch calls (a lazy import from ``currency.services``, keeping the FK
 direction — currency stays free of an items dependency at module load).
 
-Landing: net common value → the house's shared ``OrgGemStock`` (the stock members craft
-from); surviving Rare-Find stones → the collector's hands; a bad collection loses some.
+Landing: net common value → the house's shared ``OrgMaterialStock`` (the stock members
+craft from); surviving Rare-Find stones → the collector's hands; a bad collection loses
+some.
 """
 
 from __future__ import annotations
@@ -17,11 +18,8 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
-from world.items.gems.models import (
-    OrgGemStock,
-    PendingRareFind,
-    StreamCommonGemPool,
-)
+from world.items.gems.models import PendingRareFind
+from world.items.materials_models import OrgMaterialStock, StreamMaterialPool
 
 if TYPE_CHECKING:
     from world.character_sheets.models import CharacterSheet
@@ -43,14 +41,16 @@ class GemCollectionResult:
     stones_lost: int
 
 
-def credit_org_gems(
-    *, organization: Organization, tier: MaterialCategory, value: int
-) -> OrgGemStock:
-    """Add ``value`` common-gem coppers to the house's collected stock for ``tier``.
+def credit_org_materials(
+    *, organization: Organization, material_category: MaterialCategory, value: int
+) -> OrgMaterialStock:
+    """Add ``value`` coppers to the house's collected stock for ``material_category``.
 
     Mutate-then-save (SharedMemoryModel identity map — never ``F()`` + ``update``).
     """
-    stock, _ = OrgGemStock.objects.get_or_create(organization=organization, tier=tier)
+    stock, _ = OrgMaterialStock.objects.get_or_create(
+        organization=organization, material_category=material_category
+    )
     stock.value += value
     stock.save(update_fields=["value"])
     return stock
@@ -63,7 +63,7 @@ def org_has_pending_gems(organization: Organization) -> bool:
     stream's ``uncollected_pool`` is zero yet the gem pools are not.
     """
     return (
-        StreamCommonGemPool.objects.filter(
+        StreamMaterialPool.objects.filter(
             income_stream__organization=organization,
             income_stream__active=True,
             uncollected_value__gt=0,
@@ -87,20 +87,20 @@ def collect_org_gems(
     Called inside ``collect_org_income``'s atomic block. The pools zero the moment the
     attempt happens (the gems left with the collector), exactly like the coin. ``band_pct``
     is ``None`` on catastrophe — everything is lost. Otherwise net common value is credited
-    to ``OrgGemStock`` per tier, and ``floor(count × band × (1 − graft))`` of the stones
-    survive into ``collector_sheet``'s hands (the rest are destroyed).
+    to ``OrgMaterialStock`` per category, and ``floor(count × band × (1 − graft))`` of the
+    stones survive into ``collector_sheet``'s hands (the rest are destroyed).
     """
-    # Gather + zero the common-gem pools, aggregating per tier.
+    # Gather + zero the material pools, aggregating per category.
     pools = list(
-        StreamCommonGemPool.objects.filter(
+        StreamMaterialPool.objects.filter(
             income_stream__organization=organization,
             income_stream__active=True,
             uncollected_value__gt=0,
-        ).select_related("tier")
+        ).select_related("material_category")
     )
-    per_tier: dict[int, list] = {}
+    per_category: dict[int, list] = {}
     for pool in pools:
-        entry = per_tier.setdefault(pool.tier_id, [pool.tier, 0])
+        entry = per_category.setdefault(pool.material_category_id, [pool.material_category, 0])
         entry[1] += pool.uncollected_value
         pool.uncollected_value = 0
         pool.save(update_fields=["uncollected_value"])
@@ -124,11 +124,13 @@ def collect_org_gems(
         )
 
     common_landed = 0
-    for tier, gathered in per_tier.values():
+    for material_category, gathered in per_category.values():
         collected = gathered * band_pct // 100
         net = collected - collected * graft_pct // 100
         if net > 0:
-            credit_org_gems(organization=organization, tier=tier, value=net)
+            credit_org_materials(
+                organization=organization, material_category=material_category, value=net
+            )
             common_landed += net
 
     # Stones ride the same net rate as coin: band scales, graft eats its cut.
