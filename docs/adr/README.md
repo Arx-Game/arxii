@@ -71,7 +71,7 @@ treat those names as hints to confirm, not gospel.
 - [0013 — Schema-only migrations pre-production](0013-schema-only-migrations-pre-production.md) (**SUPERSEDED by ADR-0235** — alpha is durable; authored-content columns need backfills)
 - [0014 — No persisted derived data; derive-on-read](0014-no-persisted-derived-data-derive-on-read.md)
 - [0235 — Alpha is durable: the production database is the only master copy of authored content](0235-alpha-is-durable-the-production-database-is-the-master-copy.md) (**supersedes ADR-0013**; related ADR-0236, ADR-0201, ADR-0140)
-- [0236 — The content repo is retired; the database is the authoring surface, and a content load is never run again](0236-content-repo-retired-database-is-the-authoring-surface.md) (**supersedes ADR-0142's authoring direction**; related ADR-0235, ADR-0201, ADR-0168)
+- [0236 — The database is the authoring surface; the content repo is never loaded into a populated database again](0236-content-repo-retired-database-is-the-authoring-surface.md) (**supersedes ADR-0142's authoring direction**; related ADR-0235, ADR-0201, ADR-0168)
 - [0015 — No polymorphic / GenericFK / ContentType models](0015-no-polymorphic-genericfk-models.md)
 - [0016 — One shared base per concept; no parallel implementations](0016-one-shared-base-per-concept.md)
 - [0100 — Service functions read through cached handlers, not bare ORM queries](0100-service-functions-use-cached-handlers-not-queries.md)

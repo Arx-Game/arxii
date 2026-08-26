@@ -249,7 +249,15 @@
 # no-op (output contains no "Applying" lines). Sourcing the rendered
 # EnvironmentFile gives the migration the Postgres password + SECRET_KEY it
 # needs. Runs every deploy by design — the gate against schema-breaking
-# changes lives in the release-safety classifier upstream, not here.
+# changes belongs in the release-safety classifier upstream, not here.
+#
+# WARNING (2026-08-26): that classifier is DESIGNED BUT NOT BUILT. There is no
+# tools/check_release_safety.py and no CI step; grep for "release-safety" finds
+# only the design in docs/operations/observability-baseline.md §4.5. So this task
+# currently applies whatever migration reached main, unattended, with PR review
+# as the only gate — which since alpha means a RemoveField/DeleteModel merged
+# here destroys authored content that exists nowhere else (ADR-0235). Do not read
+# the line above as "something upstream already checked this."
 #
 # Deliberately `python -m django migrate`, NOT `evennia migrate`. Evennia's
 # launcher calls check_database() before it dispatches the command, and that

@@ -21,11 +21,34 @@ Durability from 2026-08-26 forward is **two-tier, split by what created the row*
   open beta. That is a stated alpha condition, not an accident, and it is the only
   reason this ADR is a two-tier rule rather than a blanket one.
 
-The consequence that governs every PR: **a migration that drops or renames a
-column, model or row holding authored content must carry a `RunPython` backfill in
-the same migration.** ADR-0013's delete-instead-of-backfill shortcut is withdrawn
-for authored-content tables; it survives only for play-state tables, whose rows
-alpha already declares expendable. This is not advisory. Deploy runs
+The consequence that governs every PR concerns the operations that actually destroy
+information: **`RemoveField` and `DeleteModel`** (and a `RunSQL`/`RunPython` that
+deletes). `RenameField`/`RenameModel` are *not* in scope here - the data survives the
+rename intact - though they remain flagged on the separate old-code/new-schema
+compatibility axis (`docs/operations/observability-baseline.md` §4.5), which is a
+different concern from this ADR's.
+
+A destructive operation on an authored-content table is exactly one of three things,
+and the author must say which in the PR:
+
+1. **Restructure** - the information survives in a different shape (split, merge,
+   retarget). A `RunPython` in the *same* migration carries it across. Mandatory;
+   this is the case ADR-0013 used to wave through.
+2. **Deliberate discard** - we have decided the data is not worth keeping. No
+   backfill exists or is wanted. What makes this safe is that it was decided rather
+   than defaulted into, and that the rows are recoverable from a backup taken before
+   the migration, not that any code preserved them.
+3. **Empty in production** - the table holds no authored rows. Legitimate, and the
+   most common case for a young model; it is a claim about production that has to be
+   *checked* against production, not assumed from a dev database.
+
+The failure mode this ADR exists to stop is (3) assumed when it is really (1), which
+is indistinguishable from a correct removal by reading the diff alone. Hence the
+declaration: the classifier can mechanically confirm that a `migrated` claim really
+does carry a `RunPython`, but "is this data worth keeping" is a human judgment and
+the gate's job is to force it to be stated and reviewed, never to compute it.
+
+This is not advisory. Deploy runs
 `python -m django migrate --noinput` unattended on every converge
 (`infra/ansible/roles/app_deploy/tasks/main.yml`), so **the merged migration is
 itself the destructive act** - no operator stands between a merge and a dropped

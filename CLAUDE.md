@@ -248,25 +248,30 @@ not disposable — see ADR-0235 and ADR-0236. Durability is two-tier:
 
 - **Authored content is irreplaceable.** Codex entries, lore prose, techniques,
   traditions, conditions, check types, catalogs, grid rooms — everything staff writes
-  lives *only* in the database. Fixtures are gitignored, the content repo is retired,
-  and repo seed data is clone-bootstrap/E2E scaffolding, not a copy of the corpus.
-  There is nothing to reload from. Dropping an authored column loses the text.
+  lives *only* in the database. Fixtures are gitignored, and repo seed data is
+  clone-bootstrap/E2E scaffolding, not a copy of the corpus. The content repo still
+  exists and may still be written to, but it is downstream now — never a source the
+  database is populated from (ADR-0236). There is nothing to reload from. Dropping an
+  authored column loses the text.
 - **Alpha play state is resettable** (characters, sheets, XP, scenes, encounters) —
   declared so to players, and the only reason this is a two-tier rule.
 
 What that requires of you:
 
-- **A migration that drops or renames an authored-content column, model or row MUST
-  carry a `RunPython` backfill in the same migration.** Deploy runs
-  `migrate --noinput` unattended on every converge, so the merged migration *is* the
-  destructive act — PR review is the only gate between it and production data. No
-  escape hatch: if the old column genuinely can't be backfilled, the content gets
-  re-authored first or Tehom rules on the PR.
+- **A `RemoveField`/`DeleteModel` on an authored-content table must declare its data
+  disposition in the PR** (ADR-0235): *restructure* — a `RunPython` in the same
+  migration carries the data across, and this one is mandatory; *deliberate discard* —
+  stated and signed off, recoverable only from backup; or *empty in production* — a
+  claim to be checked against prod, never assumed from a dev database. `RenameField`
+  is not data loss (the data survives) though it is still flagged on the separate
+  rollback-compatibility axis. Deploy runs `migrate --noinput` unattended on every
+  converge, so the merged migration *is* the destructive act — PR review is the only
+  gate between it and production data.
 - **Never run a content load against a populated database** —
   `build_content_fixtures.py --load`, the admin's "Load private content repo", or the
   Big Button's content phase. They are for empty databases only; a load silently
   overwrites every authored row whose `written_by` is unset (ADR-0201 freezes only
-  credited rows).
+  credited rows). Writing *to* the content repo, and exporting DB→repo, stay fine.
 - **Never drop, flush, or destroy any database** — dev or production. The dev database
   holds fixture and test state that is expensive to rebuild; production holds the
   corpus. `restore.sh` and `pull-prod` are the sanctioned destructive tools and both
