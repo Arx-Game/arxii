@@ -41,7 +41,10 @@ They do not use the command system, dispatchers, or handlers.
   non-cast/non-clash combat verbs as
   REGISTRY actions: `FleeAction`/`CoverAction`/`InterposeAction`/`SuccorAction`/
   `UseItemManeuverAction`/`ReadyAction`/
-  `UpgradeComboAction`/`RevertComboAction`/`JoinEncounterAction`/`LeaveEncounterAction` (keys
+  `UpgradeComboAction`/`RevertComboAction`/`JoinEncounterAction`/`LeaveEncounterAction`/
+  `RallyAction`/`DemoralizeAction`/`TauntAction`/`ParleyAction` (social maneuvers, #1590/#1591)/
+  `ChargeAction`/`JoustAction` (mounted, #1843)/`EngageAction`/`DisengageAction`
+  (engagement locks, #2020; currently surfaced from NOWHERE, see #3386) (keys
   prefixed `combat_`). `SuccorAction` (key `combat_succor`) wraps `declare_succor` — always
   names a specific ally (no "any ally" path, unlike Interpose). `UseItemManeuverAction`
   (key `combat_use`, #2120) wraps `declare_use_item` — a primary maneuver (consumes the
