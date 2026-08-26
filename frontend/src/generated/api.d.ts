@@ -4762,7 +4762,17 @@ export interface paths {
     delete?: never;
     options?: never;
     head?: never;
-    /** @description GM: change stakes/risk/pace/timer on a live encounter (#3383). */
+    /**
+     * @description GM: change stakes/risk/pace/timer on a live encounter (#3383).
+     *
+     *     Named ``update_settings`` rather than ``settings`` — ``APIView`` sets a
+     *     class attribute ``settings = api_settings`` (DRF's own settings
+     *     accessor, read by ``get_format_suffix``/``get_exception_handler``/etc.
+     *     via ``self.settings``); a same-named action method would shadow it on
+     *     the instance and break every other action on this ViewSet with
+     *     ``AttributeError: 'function' object has no attribute '...'``. The URL
+     *     stays ``/api/combat/{id}/settings/`` via ``url_path``.
+     */
     patch: operations['combat_settings_partial_update'];
     trace?: never;
   };
