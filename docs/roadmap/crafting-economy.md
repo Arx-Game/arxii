@@ -1,5 +1,29 @@
 # Crafting, Fashion & Economy
 
+## Built (2026-08-26, #2540 slice 2 — materials allowance, "the crafting draw", Task 4)
+
+The member-share leg of the crafting draw off `OrgMaterialStock` flagged as unbuilt in
+the distribution-wiring slice below now ships:
+
+- **`distribute_material_allowance(*, organization, landed_by_category)`**
+  (`world.currency.services`) — the materials analogue of `distribute_allowance`: for
+  each `(MaterialCategory, landed)` a collection just landed, a PLACEHOLDER
+  `MATERIALS_ALLOWANCE_PCT` (`currency.constants`) share splits evenly across the org's
+  active piloted members (`_active_allowance_sheets`, extracted from `distribute_allowance`
+  so both legs share one member scan) into each member's `MaterialBucket`
+  (`items.gems.buckets.credit_materials`). `OrgMaterialStock` is debited (`select_for_update`)
+  by exactly the total actually credited — `per_member * member_count`, whole-value
+  division, floor remainder stays in stock — capped at the stock's current value so a
+  concurrent spend can never drive it negative. Returns
+  `MaterialAllowanceResult(total_by_category, member_count)`.
+- **Wired into `collect_and_distribute`** right after the coin allowance leg, off
+  `collection.landed_by_category`; `DistributionResult` gains
+  `material_allowance: MaterialAllowanceResult`. Both live call sites
+  (`npc_services.effects.run_collection`, `tasking._land_route_collection`) append one
+  PLACEHOLDER report line ("raw materials were shared out to N members") only when
+  materials actually went out.
+- The minister seam (#2239) remains the only unbuilt domain-cron sub-slice.
+
 ## Built (2026-08-26, #2540 slice 2 — generalized material production, Task 2)
 
 Rewires the weekly cron off the gem-mine-only interim shape from Task 1 onto every
@@ -81,8 +105,10 @@ activates machinery the earlier #930/#2540 slices built but left half-wired:
 
 See [INDEX.md](../systems/INDEX.md) (Org vault + currency sections) and
 [tasking.md](../systems/tasking.md) (Domain collection) for the wired detail.
-The **crafting-draw** off `OrgMaterialStock` and the **minister seam** (#2239) remain
-unbuilt — this slice is distribution, not the crafting-draw follow-on.
+At the time of this slice the **crafting-draw** off `OrgMaterialStock` and the
+**minister seam** (#2239) remained unbuilt — this slice was distribution, not the
+crafting-draw follow-on. The crafting draw's member-share leg shipped in Task 4 above
+(`distribute_material_allowance`); the minister seam (#2239) is still open.
 
 ## Built (2026-08-22, #3292 - tavern games)
 
@@ -293,9 +319,10 @@ The enchant-and-attach flow for facets and styles is fully playable end-to-end.
   `CollectionResult` grew `gem_value_landed` / `stones_delivered` / `stones_lost`. The gem side
   lives in `world.items.gems.collection` (a lazy import from the currency dispatch, keeping
   currency free of an items dependency at load).
-  **Remaining domain-cron sub-slices:** the **crafting draw** (house members craft from the
-  collected `OrgMaterialStock`) and the minister seam (#2239). (The `game_clock` scheduling
-  shipped — see #2610.) Plus: the **cut recipe** (slice 3 PR) + refinements.
+  **Remaining domain-cron sub-slices:** the minister seam (#2239) — the **crafting draw**'s
+  member-share leg (house members auto-drawing from the collected `OrgMaterialStock`) shipped
+  in Task 4, see the top of this doc. (The `game_clock` scheduling shipped — see #2610.) Plus:
+  the **cut recipe** (slice 3 PR) + refinements.
 
 - **Handler registry** (`CraftingHandler` ABC + `FacetAttachHandler` / `StyleAttachHandler`).
   New kinds (alchemy, wand-crafting, etc.) plug in by authoring a `CraftingRecipe` row +

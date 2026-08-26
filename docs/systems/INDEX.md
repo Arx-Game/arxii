@@ -3809,7 +3809,18 @@ an idle org reaches stasis in both directions (loan interest still accrues — o
   `distribute_allowance(*, organization, surplus)` (#2540 — the non-discretionary allowance rail:
   a PLACEHOLDER `ALLOWANCE_SURPLUS_PCT` share of surplus auto-splits treasury→purse among *active
   piloted* members [account login within `ACTIVE_WEEK_LOGIN_DAYS`; pure NPCs excluded], the head
-  cannot withhold it),
+  cannot withhold it; the active-piloted member scan itself lives in the shared
+  `_active_allowance_sheets(organization, cutoff)` helper, reused below),
+  `distribute_material_allowance(*, organization, landed_by_category)` (#2540 slice 2, "the
+  crafting draw" — the materials analogue of `distribute_allowance`: for each
+  `(MaterialCategory, landed)` in `landed_by_category`, a PLACEHOLDER `MATERIALS_ALLOWANCE_PCT`
+  share splits evenly across `_active_allowance_sheets`'s population into each member's
+  `MaterialBucket` via `items.gems.buckets.credit_materials`; `OrgMaterialStock` [`select_for_update`]
+  is debited by exactly the total actually credited [`per_member * member_count`, floor
+  remainder stays in stock], capped at the stock's current value so a concurrent spend can
+  never drive it negative — the cap recomputes `per_member` down rather than over-crediting. A
+  category with nothing landed, or a missing stock row [shouldn't happen], is skipped. Returns
+  `MaterialAllowanceResult(total_by_category, member_count)`),
   `collect_and_distribute(*, organization, character, success_level_override=None)` (#2540,
   ruled 2026-07-20 — THE distribution dispatch, both live call sites now wired: the active
   piloted collection (`npc_services.effects.run_collection`) and the route-graded mission
@@ -3818,9 +3829,14 @@ an idle org reaches stasis in both directions (loan interest still accrues — o
   `DEBT_PRINCIPAL_GROSS_PCT` of GROSS toward debt principal, oldest first, diverting debts
   skipped, capped by treasury; a catastrophe funds no debt service; complements the weekly
   at-source ARREARS/interest withholding #927] → `distribute_allowance` on the post-debt
-  remainder of what landed; each phase independently atomic; the rest stays in the
-  treasury. `success_level_override` passes straight through to `collect_org_income` for a
-  caller that already resolved the run's outcome elsewhere. Returns `DistributionResult`)
+  remainder of what landed → `distribute_material_allowance` (#2540 slice 2) on
+  `collection.landed_by_category`; each phase independently atomic; the coin remainder stays in
+  the treasury, the materials remainder stays in `OrgMaterialStock`.
+  `success_level_override` passes straight through to `collect_org_income` for a
+  caller that already resolved the run's outcome elsewhere. Returns `DistributionResult`, which
+  now carries `material_allowance: MaterialAllowanceResult` alongside `allowance`). Both entry
+  points append one PLACEHOLDER report line ("raw materials were shared out to N members")
+  only when `material_allowance.total_by_category` is non-empty.
 - **Checks (#930):** Tax Collection / Household Command (presence + Leadership + Stewardship) and Domain
   Investment (intellect + Scholarship + Economics), seeded by the `governance` cluster
 - **Collection difficulty (#696 item 1):** `_collection_target_difficulty` derives the Tax

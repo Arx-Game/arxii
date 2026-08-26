@@ -1585,8 +1585,8 @@
   - detected_traps <- room_features.Trap
   - prepared_ground <- room_features.PreparedGround
   - recipe_knowledge <- items.CharacterRecipeKnowledge
-  - material_buckets <- items.MaterialBucket
   - expulsion_bars <- npc_services.ExpulsionBar
+  - material_buckets <- items.MaterialBucket
   - vault_transits <- items.VaultTransit
   - trade_sessions_initiated <- items.TradeSession
   - trade_sessions_received <- items.TradeSession
@@ -3349,6 +3349,7 @@
 - `collect_org_income(*, organization: 'Organization', character, success_level_override: 'int | None' = None) -> 'CollectionResult' - One active collection dispatch across every pooled stream of ``organization`` (#930).`
 - `deliver_mission_money(*, recipient_sheet: 'CharacterSheet', amount: 'int', ref: 'str', reason_label: 'str' = 'mission reward') -> 'None' - Reward money lands in the purse (#932 — replaces the Phase 5b stub).`
 - `distribute_allowance(*, organization: 'Organization', surplus: 'int') -> 'AllowanceResult' - Auto-split a share of ``surplus`` among the org's active piloted members (#2540).`
+- `distribute_material_allowance(*, organization: 'Organization', landed_by_category: 'list[tuple[MaterialCategory, int]]') -> 'MaterialAllowanceResult' - Auto-split a share of newly landed materials among active piloted members (#2540 slice 2).`
 - `extend_loan(*, creditor: 'Organization', debtor: 'Organization', principal: 'int', interest_bps_monthly: 'int' = 50, fiat: 'bool' = False) -> 'DebtInstrument' - Create a loan: principal moves creditor→debtor, instrument records it (#927).`
 - `format_coppers(amount: int) -> str - Canonical mixed display: ``1234`` → ``"12g 3s 4c"``.`
 - `fund_fame_display(persona: 'Persona', *, amount: 'int') -> 'int' - Spend money maintaining fame against decay (#932 fame churn).`
@@ -8940,11 +8941,11 @@
   - estate_claims <- estates.EstateClaim
   - event_invitations <- events.EventInvitation
   - vault_access_entries <- room_features.VaultAccessEntry
-  - material_stocks <- items.OrgMaterialStock
   - npc_roles <- npc_services.NPCRole
   - loan_offers <- npc_services.LoanOfferDetails
   - regards_as_target <- npc_services.NpcRegard
   - hosted_stalls <- items.MarketStall
+  - material_stocks <- items.OrgMaterialStock
   - item_vault <- items.OrganizationVault
   - ownership_records <- locations.LocationOwnership
   - tenancies <- locations.LocationTenancy
