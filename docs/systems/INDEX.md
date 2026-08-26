@@ -3784,6 +3784,12 @@ an idle org reaches stasis in both directions (loan interest still accrues — o
   graft, income streams w/ pools + `uncollected_total`, debts, obligations, contributions,
   ledger; per-line summon affordances drive the npc_services interaction dialog
   (`frontend/src/org_books/`)
+- **Vault-events surface (#2540):** `GET /api/currency/org-books/{org}/vault-events/`
+  (`OrgBooksViewSet.vault_events`, `OrgVaultEventSerializer`) — read-only reader for the
+  item vault's `OrgVaultEvent` audit rail (kind, item display name, actor persona name,
+  `created_at`; newest first, capped at 50); same membership gate as the books
+  (`_require_member_org` — visible to any active member, not just withdraw-authorized
+  ones, since the audit trail is how embezzlement gets discovered)
 - **Purse surface:** `GET /api/currency/purse/{character_id}/` (`CharacterPurseView`) —
   self-scoped `{balance}` coppers (vitals-view gating: staff or active tenure, else 404);
   lazy-creates the purse at zero. Feeds the web Status tab (`formatCoppers`) and
