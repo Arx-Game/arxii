@@ -441,6 +441,7 @@
   - realm -> realms.Realm [FK] (nullable)
   - climate -> weather.Climate [FK] (nullable)
   - dominant_society -> societies.Society [FK] (nullable)
+  - exile_destination -> evennia_extensions.RoomProfile [FK] (nullable)
   - allowed_building_kinds -> buildings.BuildingKind [M2M]
 **Pointed to by:**
   - children <- areas.Area
@@ -468,6 +469,7 @@
   - pardons <- justice.PardonGrant
   - guard_encounters <- justice.GuardEncounter
   - justice_cases <- justice.JusticeCase
+  - exile_decrees <- justice.ExileDecree
   - stat_overrides <- locations.LocationValueOverride
   - stat_modifiers <- locations.LocationValueModifier
   - ownership_records <- locations.LocationOwnership
@@ -4746,6 +4748,13 @@
   - case -> justice.JusticeCase [FK]
   - submitter_persona -> scenes.Persona [FK]
 
+### ExileDecree
+**Foreign Keys:**
+  - case -> justice.JusticeCase [FK] (nullable)
+  - persona -> scenes.Persona [FK]
+  - area -> areas.Area [FK]
+  - society -> societies.Society [FK]
+
 ### FrameJobDetails
 **Foreign Keys:**
   - project -> projects.Project [OneToOne]
@@ -4771,6 +4780,7 @@
   - captivity -> captivity.Captivity [FK] (nullable)
 **Pointed to by:**
   - exculpatory_evidence <- justice.ExculpatoryEvidence
+  - exile_decrees <- justice.ExileDecree
 
 ### LieLowState
 **Foreign Keys:**
@@ -4791,6 +4801,10 @@
   - society -> societies.Society [FK]
 **Pointed to by:**
   - sources <- justice.HeatSource
+
+### SentenceLadderRung
+**Foreign Keys:**
+  - society -> societies.Society [FK]
 
 ### Service Functions
 - `accrue_accusation_heat(*, secret: 'Secret', area: 'Area | None', scale: 'int' = 1) -> 'PersonaHeat | None' - Mint pursuit heat on an accusation's subject, where the allegation landed.`
@@ -8092,6 +8106,7 @@
   - guard_encounters <- justice.GuardEncounter
   - justice_cases <- justice.JusticeCase
   - exculpatory_submissions <- justice.ExculpatoryEvidence
+  - exile_decrees <- justice.ExileDecree
   - ownership_records <- locations.LocationOwnership
   - tenancies <- locations.LocationTenancy
   - mission_invites_received <- missions.MissionInvite
@@ -9082,6 +9097,8 @@
   - heat_rows <- justice.PersonaHeat
   - pardons <- justice.PardonGrant
   - justice_cases <- justice.JusticeCase
+  - exile_decrees <- justice.ExileDecree
+  - sentence_ladder <- justice.SentenceLadderRung
   - gemits <- narrative.Gemit
   - exposed_secrets <- secrets.Secret
 

@@ -5,9 +5,7 @@ import django.db.models.deletion
 
 
 class Migration(migrations.Migration):
-    dependencies = [
-        ("arxii", "0171_playerdata_arx1_archive_access"),
-    ]
+    dependencies = [("arxii", "0172_area_exile_destination_justicecase_sentence_ends_at_and_more")]
 
     operations = [
         migrations.AlterField(

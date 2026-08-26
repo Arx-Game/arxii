@@ -86,11 +86,15 @@ class DramaticMomentTagsOnInteractionTest(APITestCase):
         return f"{reverse('interaction-list')}?scene={scene_id}"
 
     def test_tagged_interaction_returns_moment_label(self):
+        """A tag on the pose author's own (barefaced) sheet reveals label + character_sheet_id
+        (#2378: the sheet has a barefaced persona on this page's display map, so it's
+        revealed)."""
         moment_type = DramaticMomentTypeFactory()
+        author_sheet = self.interaction.persona.character_sheet
         DramaticMomentTagFactory(
             interaction=self.interaction,
             moment_type=moment_type,
-            character_sheet=self.sheet,
+            character_sheet=author_sheet,
             scene=self.scene,
         )
         response = self.client.get(self._list_url(self.scene.pk))
@@ -101,7 +105,25 @@ class DramaticMomentTagsOnInteractionTest(APITestCase):
         self.assertIsInstance(tags, list)
         self.assertEqual(len(tags), 1)
         self.assertEqual(tags[0]["moment_type_label"], moment_type.label)
-        self.assertEqual(tags[0]["character_sheet_id"], self.sheet.pk)
+        self.assertEqual(tags[0]["character_sheet_id"], author_sheet.pk)
+
+    def test_tagged_interaction_hides_sheet_id_for_sheet_absent_from_page(self):
+        """A tag naming a sheet with no persona on this page's display map hides
+        character_sheet_id (#2378) — conservative default — but keeps the label public.
+        """
+        moment_type = DramaticMomentTypeFactory()
+        DramaticMomentTagFactory(
+            interaction=self.interaction,
+            moment_type=moment_type,
+            character_sheet=self.sheet,
+            scene=self.scene,
+        )
+        response = self.client.get(self._list_url(self.scene.pk))
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        tags = response.data["results"][0]["dramatic_moment_tags"]
+        self.assertEqual(len(tags), 1)
+        self.assertEqual(tags[0]["moment_type_label"], moment_type.label)
+        self.assertIsNone(tags[0]["character_sheet_id"])
 
     def test_untagged_interaction_returns_empty_list(self):
         response = self.client.get(self._list_url(self.scene.pk))

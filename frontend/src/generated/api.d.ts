@@ -10840,7 +10840,13 @@ export interface paths {
       path?: never;
       cookie?: never;
     };
-    /** @description GET /api/justice/my-case/?viewer= — the captive's own case picture (#2378). */
+    /**
+     * @description GET /api/justice/my-case/?viewer= — the captive's own case picture (#2378).
+     *
+     *     Surfaces the open case, or — once tried — the case behind a still-active
+     *     sentence, so the Task 8 frontend can render a countdown from
+     *     ``sentence_ends_at``/``terminal_due_at`` (#2378 Task 5).
+     */
     get: operations['justice_my_case_retrieve'];
     put?: never;
     post?: never;
@@ -10883,6 +10889,9 @@ export interface paths {
      *     ``viewer_can_pardon`` (the lord's-grant control gate, #1826) and the
      *     ``held`` list of awaiting-trial captives here (being held for trial is a
      *     public record — the discovery seam for the help-the-accused loop, #2378).
+     *     ``records`` (#2378 Task 5) adds the derived public record for the area —
+     *     active humiliation marks, exile/banishment decrees, and pending terminal
+     *     sentences (the visible countdown).
      */
     get: operations['justice_wanted_retrieve'];
     put?: never;
@@ -29078,7 +29087,17 @@ export interface components {
       readonly attributed_companion: {
         [key: string]: unknown;
       } | null;
-      readonly endorsee_sheet_id: number;
+      /**
+       * @description The endorsee's character_sheet id — ONLY when the viewer may know their identity.
+       *
+       *     A disguised persona (``Persona.is_fake_name=True``) unconditionally exposing its
+       *     ``character_sheet_id`` let any client correlate a masked persona with the same
+       *     character's barefaced personas (both personas share one sheet id), bypassing the
+       *     per-viewer name-masking in ``get_persona`` entirely (#2378). Reuses the same batched
+       *     ``reveal_allowed`` predicate from ``_persona_display_map`` (own face, staff, discovered
+       *     via ``PersonaDiscovery``, or a barefaced persona) — never a per-row query.
+       */
+      readonly endorsee_sheet_id: number | null;
       readonly is_favorited: boolean;
       /** @description Aggregate emoji counts with reacted-by-current-user flag. */
       readonly reactions: {
@@ -29099,6 +29118,18 @@ export interface components {
       readonly place_name: string | null;
       readonly target_persona_ids: number[];
       readonly action_links: components['schemas']['InteractionActionLink'][];
+      /**
+       * @description Dramatic-moment badges: label always public, ``character_sheet_id`` gated (#2378).
+       *
+       *     ``DramaticMomentTag.character_sheet`` is a real-identity FK — unlike
+       *     ``endorsee_sheet_id`` (gated by the tagged pose's OWN persona), a tag's sheet can
+       *     belong to any participant, not necessarily this pose's author, so it can't reuse
+       *     that per-row flag. Exposed iff the viewer is staff, the sheet is one of the
+       *     viewer's own, or the sheet has at least one persona on this page whose identity is
+       *     already revealed (``_revealed_sheet_ids``, batched off the shared display map) —
+       *     otherwise ``character_sheet_id`` is ``None`` and the row (moment_type_label + tag)
+       *     still renders, since the moment itself is public.
+       */
       readonly dramatic_moment_tags: {
         [key: string]: unknown;
       }[];
@@ -29239,7 +29270,17 @@ export interface components {
       readonly attributed_companion: {
         [key: string]: unknown;
       } | null;
-      readonly endorsee_sheet_id: number;
+      /**
+       * @description The endorsee's character_sheet id — ONLY when the viewer may know their identity.
+       *
+       *     A disguised persona (``Persona.is_fake_name=True``) unconditionally exposing its
+       *     ``character_sheet_id`` let any client correlate a masked persona with the same
+       *     character's barefaced personas (both personas share one sheet id), bypassing the
+       *     per-viewer name-masking in ``get_persona`` entirely (#2378). Reuses the same batched
+       *     ``reveal_allowed`` predicate from ``_persona_display_map`` (own face, staff, discovered
+       *     via ``PersonaDiscovery``, or a barefaced persona) — never a per-row query.
+       */
+      readonly endorsee_sheet_id: number | null;
       readonly is_favorited: boolean;
       /** @description Aggregate emoji counts with reacted-by-current-user flag. */
       readonly reactions: {
@@ -29260,6 +29301,18 @@ export interface components {
       readonly place_name: string | null;
       readonly target_persona_ids: number[];
       readonly action_links: components['schemas']['InteractionActionLink'][];
+      /**
+       * @description Dramatic-moment badges: label always public, ``character_sheet_id`` gated (#2378).
+       *
+       *     ``DramaticMomentTag.character_sheet`` is a real-identity FK — unlike
+       *     ``endorsee_sheet_id`` (gated by the tagged pose's OWN persona), a tag's sheet can
+       *     belong to any participant, not necessarily this pose's author, so it can't reuse
+       *     that per-row flag. Exposed iff the viewer is staff, the sheet is one of the
+       *     viewer's own, or the sheet has at least one persona on this page whose identity is
+       *     already revealed (``_revealed_sheet_ids``, batched off the shared display map) —
+       *     otherwise ``character_sheet_id`` is ``None`` and the row (moment_type_label + tag)
+       *     still renders, since the moment itself is public.
+       */
       readonly dramatic_moment_tags: {
         [key: string]: unknown;
       }[];
@@ -31319,6 +31372,7 @@ export interface components {
      *     * `renown` - Renown
      *     * `weather` - Weather
      *     * `ability` - Ability access
+     *     * `justice` - Justice
      * @enum {string}
      */
     NarrativeCategoryEnum:
@@ -31330,7 +31384,8 @@ export interface components {
       | 'covenant'
       | 'renown'
       | 'weather'
-      | 'ability';
+      | 'ability'
+      | 'justice';
     /** @description Player-facing message representation. Excludes ooc_note. */
     NarrativeMessage: {
       readonly id: number;
@@ -37991,6 +38046,7 @@ export interface components {
      *     * `birthday` - Birthday
      *     * `stature` - Stature
      *     * `menace` - Menace
+     *     * `verdict` - Verdict
      * @enum {string}
      */
     PublicFeedItemKindEnum:
@@ -38001,7 +38057,8 @@ export interface components {
       | 'proclamation'
       | 'birthday'
       | 'stature'
-      | 'menace';
+      | 'menace'
+      | 'verdict';
     /**
      * @description Wire shape for the optional ``action_context`` block in a pull preview.
      *

@@ -9,9 +9,15 @@ only mints inside the enforcing society's dominion (ADR: heat jurisdiction).
 
 from django.core.validators import MinValueValidator
 from django.db import models
+from django.utils import timezone
 from evennia.utils.idmapper.models import SharedMemoryModel
 
-from world.justice.constants import DEFAULT_HEAT_WEIGHT, EVIDENCE_BASE_QUALITY, EvidenceState
+from world.justice.constants import (
+    DEFAULT_HEAT_WEIGHT,
+    EVIDENCE_BASE_QUALITY,
+    EvidenceState,
+    SentenceKind,
+)
 
 # App-qualified model path repeated across FK references; centralized for dedup.
 _LEGEND_ENTRY_MODEL = "arxii.LegendEntry"
@@ -147,6 +153,11 @@ class PersonaHeat(SharedMemoryModel):
         related_name="heat_rows",
     )
     value = models.PositiveIntegerField(default=0)
+    pinned_until = models.DateTimeField(
+        null=True,
+        blank=True,
+        help_text="Decay-exempt and held at value until this instant (exile pin).",
+    )
     created_date = models.DateTimeField(auto_now_add=True)
     updated_date = models.DateTimeField(auto_now=True)
 
@@ -560,6 +571,13 @@ class JusticeCase(SharedMemoryModel):
     sentence_amount = models.PositiveIntegerField(
         default=0, help_text="Fine coppers or brig days, per sentence_kind."
     )
+    sentence_ends_at = models.DateTimeField(
+        null=True, blank=True, help_text="Brig release / exile term end (#2378)."
+    )
+    terminal_due_at = models.DateTimeField(
+        null=True, blank=True, help_text="Rescue-window deadline for a terminal sentence (#2378)."
+    )
+    terminal_carried_out_at = models.DateTimeField(null=True, blank=True)
     opened_at = models.DateTimeField(auto_now_add=True)
     resolved_at = models.DateTimeField(null=True, blank=True)
 
@@ -601,3 +619,79 @@ class ExculpatoryEvidence(SharedMemoryModel):
 
     def __str__(self) -> str:
         return f"evidence (w{self.weight}) on case {self.case_id}"
+
+
+class ExileDecree(SharedMemoryModel):
+    """One persona's standing banishment from one area, under one society (#2378).
+
+    Minted by an EXILE/BANISHMENT sentence. ``ends_at`` null means permanent
+    banishment; ``lifted_at`` records a pardon that ends it early. ``case`` is
+    SET_NULL so the decree survives if its originating case is later purged.
+    """
+
+    case = models.ForeignKey(
+        JusticeCase,
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="exile_decrees",
+    )
+    persona = models.ForeignKey(
+        _PERSONA_MODEL, on_delete=models.CASCADE, related_name="exile_decrees"
+    )
+    area = models.ForeignKey(_AREA_MODEL, on_delete=models.CASCADE, related_name="exile_decrees")
+    society = models.ForeignKey(
+        _SOCIETY_MODEL, on_delete=models.CASCADE, related_name="exile_decrees"
+    )
+    pin_until = models.DateTimeField()
+    ends_at = models.DateTimeField(null=True, blank=True, help_text="NULL = permanent banishment.")
+    lifted_at = models.DateTimeField(null=True, blank=True, help_text="Set on pardon.")
+    created_date = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["-created_date"]
+
+    @classmethod
+    def active_for(cls, persona, area, *, now=None):
+        now = now or timezone.now()
+        return (
+            cls.objects.filter(persona=persona, area=area, lifted_at__isnull=True)
+            .filter(models.Q(ends_at__isnull=True) | models.Q(ends_at__gt=now))
+            .first()
+        )
+
+    def __str__(self) -> str:
+        return f"exile decree persona {self.persona_id} from area {self.area_id}"
+
+
+class SentenceLadderRung(SharedMemoryModel):
+    """One society's escalation step in its sentencing ladder (#2378).
+
+    ``level`` is matched against ``failed_outs - 1`` on repeat offenses —
+    each additional failed-out climbs the ladder toward harsher sentences.
+    """
+
+    society = models.ForeignKey(
+        _SOCIETY_MODEL, on_delete=models.CASCADE, related_name="sentence_ladder"
+    )
+    level = models.PositiveSmallIntegerField(
+        help_text="0-based escalation step; matched against failed_outs - 1."
+    )
+    sentence_kind = models.CharField(max_length=20, choices=SentenceKind.choices)
+    flavor = models.CharField(
+        max_length=200,
+        blank=True,
+        default="",
+        help_text="PLACEHOLDER realm flavor; authored later.",
+    )
+
+    class Meta:
+        ordering = ["society_id", "level"]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["society", "level"], name="unique_society_ladder_level"
+            ),
+        ]
+
+    def __str__(self) -> str:
+        return f"society {self.society_id} rung {self.level} ({self.sentence_kind})"

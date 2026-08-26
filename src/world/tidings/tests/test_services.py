@@ -1,11 +1,15 @@
 """Tests for the public-reaction tidings feed service (#1450)."""
 
 from django.test import TestCase, tag
+from django.utils import timezone
 
 from evennia_extensions.factories import RoomProfileFactory
 from world.areas.constants import AreaLevel
 from world.areas.factories import AreaFactory
 from world.character_sheets.factories import CharacterSheetFactory
+from world.justice.constants import CaseStatus, SentenceKind, Verdict
+from world.justice.models import JusticeCase
+from world.justice.tests.test_services import JusticeFixtureMixin
 from world.secrets.factories import SecretFactory
 from world.societies.factories import (
     LegendEntryFactory,
@@ -159,3 +163,68 @@ class SocietyScopedFeedTests(TestCase):
             deed.societies_aware.add(self.crown)
 
         assert len(hub_feed_for_room(self.room, limit=2)) == 2
+
+
+class VerdictFeedTests(JusticeFixtureMixin, TestCase):
+    """Sentenced verdicts surface as VERDICT feed rows (#2378 Task 5)."""
+
+    def _tried_case(self, *, sentence_kind, verdict=Verdict.FULL, resolved_at=None):
+        return JusticeCase.objects.create(
+            persona=self.persona,
+            area=self.kingdom,
+            society=self.crown,
+            prosecution_weight=10,
+            status=CaseStatus.TRIED,
+            verdict=verdict,
+            sentence_kind=sentence_kind,
+            resolved_at=resolved_at or timezone.now(),
+        )
+
+    def test_tried_case_surfaces_as_a_verdict_item(self) -> None:
+        self._tried_case(sentence_kind=SentenceKind.BRIG_TERM)
+
+        items = public_feed_for_societies([self.crown.pk])
+
+        verdicts = [item for item in items if item.kind == FeedItemKind.VERDICT]
+        self.assertEqual(len(verdicts), 1)
+        self.assertEqual(verdicts[0].subject, self.persona.name)
+        self.assertEqual(verdicts[0].category, "justice")
+
+    def test_humiliation_headline_never_narrates_the_humiliation(self) -> None:
+        """Neutral procedural wording only — never what the humiliation was."""
+        self._tried_case(sentence_kind=SentenceKind.HUMILIATION)
+
+        items = public_feed_for_societies([self.crown.pk])
+
+        verdict = next(item for item in items if item.kind == FeedItemKind.VERDICT)
+        self.assertIn(self.persona.name, verdict.headline)
+        self.assertIn("sentenced", verdict.headline)
+        self.assertIn("Public Humiliation", verdict.headline)
+
+    def test_acquitted_case_does_not_surface(self) -> None:
+        self._tried_case(sentence_kind=SentenceKind.FINE, verdict=Verdict.ACQUITTED)
+
+        items = public_feed_for_societies([self.crown.pk])
+
+        self.assertFalse(any(item.kind == FeedItemKind.VERDICT for item in items))
+
+    def test_awaiting_trial_case_does_not_surface(self) -> None:
+        JusticeCase.objects.create(
+            persona=self.persona, area=self.kingdom, society=self.crown, prosecution_weight=10
+        )
+
+        items = public_feed_for_societies([self.crown.pk])
+
+        self.assertFalse(any(item.kind == FeedItemKind.VERDICT for item in items))
+
+    def test_verdict_kind_round_trips_through_the_serializer(self) -> None:
+        from world.tidings.serializers import PublicFeedItemSerializer
+
+        self._tried_case(sentence_kind=SentenceKind.BRIG_TERM)
+        item = next(
+            i for i in public_feed_for_societies([self.crown.pk]) if i.kind == FeedItemKind.VERDICT
+        )
+
+        serialized = PublicFeedItemSerializer(item).data
+
+        self.assertEqual(serialized["kind"], FeedItemKind.VERDICT)
