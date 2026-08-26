@@ -14,6 +14,8 @@ from world.currency.services import (
     get_or_create_purse,
     get_or_create_treasury,
 )
+from world.items.factories import MaterialCategoryFactory
+from world.items.materials_models import StreamMaterialPool
 from world.npc_services.constants import OfferKind
 from world.npc_services.effects import (
     OFFER_EFFECT_HANDLERS,
@@ -95,6 +97,20 @@ class CollectionOfferTests(TestCase):
         purse = get_or_create_purse(self.persona.character_sheet)
         purse.refresh_from_db()
         self.assertGreater(purse.balance, 0)
+
+    def test_collection_shares_out_materials_and_reports_it(self) -> None:
+        """#2540 slice 2: landed materials auto-split among active members, one PLACEHOLDER
+        line, only when materials actually went out."""
+        category = MaterialCategoryFactory(name="Semiprecious")
+        StreamMaterialPool.objects.create(
+            income_stream=self.stream, material_category=category, uncollected_value=1000
+        )
+        _pilot(self.persona)
+        outcome = CheckOutcomeFactory(name="offer_collect_materials", success_level=1)
+        with force_check_outcome(outcome):
+            result = run_collection(self.offer, self.persona)
+        self.assertEqual(result.payload["material_allowance_member_count"], 1)
+        self.assertIn("raw materials were shared out to 1 members", result.message)
 
     def test_catastrophe_pays_no_debt_or_allowance(self) -> None:
         """A catastrophe lands nothing to distribute, so no distribution lines appear."""

@@ -25,6 +25,9 @@ from world.currency.services import (
     get_or_create_purse,
     get_or_create_treasury,
 )
+from world.items.factories import MaterialCategoryFactory
+from world.items.gems.buckets import material_value
+from world.items.materials_models import StreamMaterialPool
 from world.scenes.factories import PersonaFactory
 from world.societies.factories import OrganizationFactory, OrganizationMembershipFactory
 from world.traits.factories import CheckOutcomeFactory
@@ -127,3 +130,26 @@ class CollectAndDistributeTests(TestCase):
         self.assertFalse(
             CurrencyTransfer.objects.filter(reason__startswith="debt principal").exists()
         )
+
+    def test_materials_allowance_rides_along_with_landed_materials(self) -> None:
+        """#2540 slice 2: the materials leg wires straight off ``collection.landed_by_category``."""
+        category = MaterialCategoryFactory(name="Semiprecious")
+        StreamMaterialPool.objects.create(
+            income_stream=self.stream, material_category=category, uncollected_value=1000
+        )
+        result = self._dispatch()
+        # Gross materials 1000 → landed 900 (10% graft, same band as coin) → 50% allowance
+        # pool 450 // 1 active member.
+        self.assertEqual(result.collection.landed_by_category, [(category, 900)])
+        self.assertEqual(result.material_allowance.member_count, 1)
+        self.assertEqual(result.material_allowance.total_by_category, [(category, 450)])
+        self.assertEqual(material_value(self.member.character_sheet, category), 450)
+
+    def test_catastrophe_leaves_materials_allowance_empty(self) -> None:
+        category = MaterialCategoryFactory(name="Semiprecious")
+        StreamMaterialPool.objects.create(
+            income_stream=self.stream, material_category=category, uncollected_value=1000
+        )
+        result = self._dispatch(success_level=-2)
+        self.assertEqual(result.material_allowance.total_by_category, [])
+        self.assertEqual(result.material_allowance.member_count, 0)
