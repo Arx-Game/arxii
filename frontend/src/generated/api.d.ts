@@ -23260,7 +23260,7 @@ export interface components {
       readonly units: components['schemas']['BattleUnit'][];
       readonly participants: components['schemas']['BattleParticipant'][];
       /** Format: date-time */
-      readonly concluded_at: string;
+      readonly concluded_at: string | null;
       /** Format: date-time */
       readonly created_at: string;
       readonly campaign_story_id: number | null;

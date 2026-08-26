@@ -4,7 +4,7 @@ import { vi } from 'vitest';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import type { ReactNode } from 'react';
 
-import type { BattleDetail } from '../types';
+import type { BattleDetail, BattleParticipant, BattlePlace, BattleUnit } from '../types';
 
 // ---------------------------------------------------------------------------
 // Mocks — must come before importing the component under test
@@ -81,9 +81,9 @@ function createWrapper() {
   };
 }
 
-const MY_PARTICIPANT = {
+const MY_PARTICIPANT: BattleParticipant = {
   id: 1,
-  status: 'active' as const,
+  status: 'active',
   side_id: 100,
   place_id: 900,
   persona: { id: 5000, name: 'Test Persona', thumbnail_url: null, thumbnail_media_url: null },
@@ -92,23 +92,27 @@ const MY_PARTICIPANT = {
   declared_this_round: false,
 };
 
-const ENEMY_UNIT = {
+const ENEMY_UNIT: BattleUnit = {
   id: 200,
   name: 'Goblin Raiders',
   descriptor: '',
-  quality: 'trained' as const,
-  status: 'active' as const,
+  quality: 'trained',
+  status: 'active',
   strength: 80,
   morale: 60,
-  individual_count: null,
+  // Serialized Decimal — the generated type is a non-nullable string
+  // (world/battles/serializers.py's BattleUnitSerializer has no
+  // individual_count=None case in its OpenAPI shape); "1" is a schema-legal
+  // stand-in, not a swarm-count claim this fixture needs to make.
+  individual_count: '1',
   side_id: 101,
   place_id: 900,
 };
 
-const OWN_PLACE = {
+const OWN_PLACE: BattlePlace = {
   id: 900,
   name: 'The Ford',
-  terrain_type: 'open' as const,
+  terrain_type: 'open',
   movement_cost: 1,
   x: 0,
   y: 0,

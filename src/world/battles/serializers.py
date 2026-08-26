@@ -358,7 +358,11 @@ class BattleDetailSerializer(serializers.ModelSerializer):
     )
     # Writeup fields (#1735) — additive to the existing aggregate; the live
     # battle-map page ignores these, the writeup page consumes them.
-    concluded_at = serializers.DateTimeField(read_only=True)
+    # allow_null=True: Battle.concluded_at is null=True at the model level
+    # (world/battles/models.py) — an UNRESOLVED battle genuinely serializes
+    # null (see test_api.py's assertIsNone), so the OpenAPI schema must say
+    # so too. Missing before #3389's fixture work surfaced the gap.
+    concluded_at = serializers.DateTimeField(read_only=True, allow_null=True)
     created_at = serializers.DateTimeField(read_only=True)
     campaign_story_id = serializers.IntegerField(read_only=True, allow_null=True)
     scene_id = serializers.IntegerField(read_only=True)
