@@ -4141,6 +4141,7 @@ def ensure_conditions_content() -> None:
         ensure_at_will_shifting_capability,
     )
     from world.conditions.charm_content import ensure_charm_content  # noqa: PLC0415
+    from world.conditions.gm_edge_content import ensure_gm_edge_content  # noqa: PLC0415
     from world.conditions.intoxication_content import (  # noqa: PLC0415
         ensure_intoxication_content,
     )
@@ -4150,3 +4151,4 @@ def ensure_conditions_content() -> None:
     ensure_berserk_content()
     ensure_intoxication_content()
     ensure_at_will_shifting_capability()
+    ensure_gm_edge_content()

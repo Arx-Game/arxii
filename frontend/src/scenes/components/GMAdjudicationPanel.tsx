@@ -7,8 +7,8 @@
  * instead of running the action. This panel dispatches the SAME
  * prerequisite-gated REGISTRY actions telnet's `gm`/`setsituation` commands
  * already use (`gm_invoke_check`, `gm_award_progression`, `gm_apply_condition`,
- * `set_situation`, `place_challenge`, `summon_player` — #3071) directly over the
- * generic REST dispatch seam
+ * `set_situation`, `place_challenge`, `summon_player` — #3071,
+ * `gm_trigger_dramatic_beat` — #3387) directly over the generic REST dispatch seam
  * (`useDispatchPlayerAction` -> `POST /api/actions/characters/{id}/dispatch/`),
  * mirroring `PersonaContextMenu.tsx`'s `challenge`/`identify` items — these
  * actions carry no `ActionTemplate`, so they never appear in the generic
@@ -426,6 +426,7 @@ function ConditionTab({ characterId, targetCharacterId }: TabProps) {
   const dispatch = useDispatchPlayerAction(characterId);
 
   const canSubmit = targetCharacterId !== null && conditionName !== '' && !dispatch.isPending;
+  const canQuickApply = targetCharacterId !== null && !dispatch.isPending;
 
   function handleSubmit() {
     if (!canSubmit) return;
@@ -442,8 +443,40 @@ function ConditionTab({ characterId, targetCharacterId }: TabProps) {
       .catch(() => toast.error('Could not apply the condition.'));
   }
 
+  // Quick Edge/Setback (#3387) — one-click round-scoped nudge. Dispatches the
+  // same gm_apply_condition seam with only target/condition_ref set, letting
+  // severity/duration fall back to the authored template defaults.
+  function quickApply(name: 'Edge' | 'Setback') {
+    if (!canQuickApply) return;
+    dispatch
+      .mutateAsync({
+        ref: { backend: 'registry', registry_key: 'gm_apply_condition' },
+        kwargs: { target: targetCharacterId, condition_ref: name },
+      })
+      .then((result) => reportResult(result, `${name} applied.`))
+      .catch(() => toast.error(`Could not apply ${name}.`));
+  }
+
   return (
     <div className="space-y-3" data-testid="gm-adjudication-condition-tab">
+      <div className="flex gap-2">
+        <Button
+          variant="outline"
+          disabled={!canQuickApply}
+          onClick={() => quickApply('Edge')}
+          data-testid="gm-condition-quick-edge"
+        >
+          Quick Edge
+        </Button>
+        <Button
+          variant="outline"
+          disabled={!canQuickApply}
+          onClick={() => quickApply('Setback')}
+          data-testid="gm-condition-quick-setback"
+        >
+          Quick Setback
+        </Button>
+      </div>
       <div className="space-y-1">
         <Label htmlFor="gm-condition-select">Condition</Label>
         <select
@@ -636,6 +669,52 @@ function SituationTab({ characterId }: { characterId: number }) {
 }
 
 // ---------------------------------------------------------------------------
+// Dramatic Beat tab (#3387) — SENIOR-gated manual apply_dramatic_surge trigger.
+// Server-side Prerequisite enforces the trust tier; the tab itself carries no
+// client-side gate, mirroring every other tab in this panel.
+// ---------------------------------------------------------------------------
+
+function DramaticBeatTab({ characterId, targetCharacterId }: TabProps) {
+  const [reason, setReason] = useState('');
+  const dispatch = useDispatchPlayerAction(characterId);
+
+  const canSubmit = targetCharacterId !== null && reason.trim() !== '' && !dispatch.isPending;
+
+  function handleSubmit() {
+    if (!canSubmit) return;
+    dispatch
+      .mutateAsync({
+        ref: { backend: 'registry', registry_key: 'gm_trigger_dramatic_beat' },
+        kwargs: { target: targetCharacterId, reason: reason.trim() },
+      })
+      .then((result) => reportResult(result, 'The spotlight turns.'))
+      .catch(() => toast.error('Could not trigger the dramatic beat.'));
+  }
+
+  return (
+    <div className="space-y-3" data-testid="gm-adjudication-dramaticbeat-tab">
+      <p className="text-xs text-muted-foreground">
+        Manually spotlights a dramatic beat on the selected participant (Senior GM+). A stated
+        reason is required and is kept as staff provenance — never broadcast to the room.
+      </p>
+      <div className="space-y-1">
+        <Label htmlFor="gm-dramaticbeat-reason">Reason</Label>
+        <Input
+          id="gm-dramaticbeat-reason"
+          placeholder="Why does this moment escalate?"
+          value={reason}
+          onChange={(e) => setReason(e.target.value)}
+          data-testid="gm-dramaticbeat-reason"
+        />
+      </div>
+      <Button disabled={!canSubmit} onClick={handleSubmit} data-testid="gm-dramaticbeat-submit">
+        {dispatch.isPending ? 'Triggering…' : 'Trigger Dramatic Beat'}
+      </Button>
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
 // Summon tab (#3071)
 // ---------------------------------------------------------------------------
 
@@ -718,6 +797,9 @@ export function GMAdjudicationPanel({ scene }: GMAdjudicationPanelProps) {
             <TabsTrigger value="situation" data-testid="gm-tab-situation">
               Situation
             </TabsTrigger>
+            <TabsTrigger value="dramaticbeat" data-testid="gm-tab-dramaticbeat">
+              Dramatic Beat
+            </TabsTrigger>
             <TabsTrigger value="summon" data-testid="gm-tab-summon">
               Summon
             </TabsTrigger>
@@ -736,6 +818,9 @@ export function GMAdjudicationPanel({ scene }: GMAdjudicationPanelProps) {
           </TabsContent>
           <TabsContent value="situation">
             <SituationTab characterId={characterId} />
+          </TabsContent>
+          <TabsContent value="dramaticbeat">
+            <DramaticBeatTab characterId={characterId} targetCharacterId={targetCharacterId} />
           </TabsContent>
           <TabsContent value="summon">
             <SummonTab characterId={characterId} targetCharacterId={targetCharacterId} />

@@ -10,6 +10,11 @@ toolkit's telnet face — thin ``resolve_action_args()``-style parsing +
 ``GMApplyConditionAction`` (``actions/definitions/gm_adjudication.py``), the
 same seam the web available-actions dispatcher uses.
 
+``gm dramatic <character> reason=<text>`` (#3387) is the SENIOR-gated manual
+dramatic-beat trigger — thin over ``GMTriggerDramaticBeatAction``
+(``actions/definitions/gm_combat.py``), a staff/senior stopgap for a beat none
+of the automatic surge detectors catch.
+
 ``gm suggest <kind>=<text>`` (#2127) is the scenario catalog's suggestion
 inbox verb — thin over ``SubmitCatalogSuggestionAction``
 (``actions/definitions/gm_catalog.py``), landing in the same staff inbox
@@ -43,6 +48,7 @@ _USAGE_AWARD = (
 _USAGE_CONDITION = (
     "Usage: gm condition <character> condition=<name> [severity=<n>] [duration=<n>] [note=<text>]"
 )
+_USAGE_DRAMATIC = "Usage: gm dramatic <character> reason=<text> (requires Senior GM+)"
 _USAGE_SUGGEST = (
     "Usage: gm suggest <kind>=<text>"
     " (kind: new_situation|check_fit|difficulty_guide|pool_guide|other)"
@@ -83,6 +89,7 @@ class CmdGMDashboard(ArxCommand):
       gm award <character> stat=<trait>
       gm award <character> technique=<name>
       gm condition <character> condition=<name> [severity=<n>] [duration=<n>] [note=<text>]
+      gm dramatic <character> reason=<text>     (requires Senior GM+)
       gm suggest <kind>=<text>
       gm trap list
       gm trap arm <id>
@@ -111,6 +118,8 @@ class CmdGMDashboard(ArxCommand):
                 self._handle_award(rest)
             elif first == "condition":  # noqa: STRING_LITERAL
                 self._handle_condition(rest)
+            elif first == "dramatic":  # noqa: STRING_LITERAL
+                self._handle_dramatic(rest)
             elif first == "suggest":  # noqa: STRING_LITERAL
                 self._handle_suggest(rest)
             elif first == "trap":  # noqa: STRING_LITERAL
@@ -266,6 +275,29 @@ class CmdGMDashboard(ArxCommand):
             run_kwargs["note"] = kwargs[_KEY_NOTE]
 
         result = GMApplyConditionAction().run(actor=self.caller, **run_kwargs)
+        if result.message:
+            self.msg(result.message)
+
+    def _handle_dramatic(self, rest: str) -> None:
+        """Dispatch GMTriggerDramaticBeatAction -- reason=<text> (#3387, Senior GM+)."""
+        from actions.definitions.gm_combat import GMTriggerDramaticBeatAction  # noqa: PLC0415
+
+        tokens = rest.split(maxsplit=1)
+        if not tokens:
+            raise CommandError(_USAGE_DRAMATIC)
+        char_name = tokens[0]
+        kv_rest = tokens[1] if len(tokens) > 1 else ""
+        kwargs, _flags = parse_kv_and_flags(
+            kv_rest,
+            multiword_keys=frozenset({"reason"}),
+            known_flags=frozenset(),
+        )
+        reason = kwargs.get("reason")
+        if not reason:
+            raise CommandError(_USAGE_DRAMATIC)
+
+        target = self._resolve_target(char_name)
+        result = GMTriggerDramaticBeatAction().run(actor=self.caller, target=target, reason=reason)
         if result.message:
             self.msg(result.message)
 

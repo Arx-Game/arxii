@@ -271,13 +271,14 @@ def _render_surge_narration(curve: EscalationCurve, character_name: str) -> str:
     return template.replace("{character}", character_name)
 
 
-def apply_dramatic_surge(
+def apply_dramatic_surge(  # noqa: PLR0913 - keyword-only surge fields, cohesive
     *,
     encounter: CombatEncounter,
     participant: CombatParticipant,
     amount: int,
     trigger_kind: str,
     subject_sheet: CharacterSheet | None = None,
+    reason: str = "",
 ) -> DramaticSurgeBeat | None:
     """Write one dramatic-surge event (#2013): the shared seam every trigger leg uses.
 
@@ -290,6 +291,9 @@ def apply_dramatic_surge(
     ``engagement.intensity_modifier``, broadcasts the generic narration line
     to the encounter's room (telnet + the room's scene log), and returns a
     ``DramaticSurgeBeat`` for inline use.
+
+    ``reason`` (#3387) is GM-stated provenance for a manual (``GM_MANUAL``)
+    trigger — every automatic trigger_kind leaves it blank.
     """
     from world.combat.models import (  # noqa: PLC0415
         CombatEncounter as _CombatEncounter,
@@ -312,7 +316,11 @@ def apply_dramatic_surge(
         participant=participant,
         trigger_kind=trigger_kind,
         subject_sheet=subject_sheet,
-        defaults={"amount": amount, "round_number": encounter.round_number},
+        defaults={
+            "amount": amount,
+            "round_number": encounter.round_number,
+            "reason": reason,
+        },
     )
     if not created:
         return None

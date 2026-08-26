@@ -140,8 +140,12 @@ The reserved combat primitive for a multi-round contest in which two sides pour 
 _Avoid_: contest, struggle, beam struggle, push (colloquial in code for Clash's tug-of-war progress — see `clash.py` — but ambiguous with Strain and Knockback; prefer "clash"); backfire / rejection / dissonance for unrelated opposing-resonance effects
 
 **Dramatic Surge**:
-A discontinuous, one-shot jump to `CharacterEngagement.intensity_modifier` at a dramatic combat beat — a bonded ally entering mortal peril, a hated NPC foe entering the fight, or a high-stakes encounter igniting — written through the single shared `apply_dramatic_surge` primitive and deduped per (encounter, participant, trigger kind, subject) via `DramaticSurgeRecord`. Narrated generically in the combat log; never names the bond, track, or subject.
+A discontinuous, one-shot jump to `CharacterEngagement.intensity_modifier` at a dramatic combat beat — a bonded ally entering mortal peril, a hated NPC foe entering the fight, a high-stakes encounter igniting, or (#3387) a SENIOR GM manually spotlighting a beat the automatic detectors miss (`SurgeTriggerKind.GM_MANUAL`, via `GMTriggerDramaticBeatAction`) — written through the single shared `apply_dramatic_surge` primitive and deduped per (encounter, participant, trigger kind, subject) via `DramaticSurgeRecord`. A manual trigger's `reason` is staff-facing provenance on the record, never broadcast. Narrated generically in the combat log; never names the bond, track, subject, or (for a manual trigger) the GM's stated reason.
 _Avoid_: clash (reserved, see above), spike (ambiguous with the pre-existing #872 grief "spike" internals — "surge" is the player-facing term), burst, power-up
+
+**Edge / Setback** (GM fiat, #3387):
+A curated, catalog-safe one-round nudge a GM applies through the existing `gm_apply_condition` lever — two authored `ConditionTemplate` rows (`world/conditions/gm_edge_content.py`) delivering a ±10 `ConditionCheckModifier` scoped to the Combat `CheckCategory`, `scales_with_severity=True`, expiring at the end of the round applied. Not a new mechanism — no bespoke GM-fiat modifier system exists or should exist alongside it.
+_Avoid_: buff/debuff (generic — Edge/Setback name this specific GM-fiat lever), bonus/penalty
 
 **Strain**:
 Anima a PC commits beyond a technique's effective cost floor, converted by a diminishing-returns curve (`StrainConfig`) into a power/intensity bonus passed to the cast. Strain scales the technique's power and progress delta — never the check roll.

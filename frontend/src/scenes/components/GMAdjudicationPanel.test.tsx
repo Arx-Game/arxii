@@ -169,6 +169,69 @@ test('Condition tab dispatches gm_apply_condition with the condition name', asyn
   });
 });
 
+test('Quick Edge button dispatches gm_apply_condition with condition_ref Edge (#3387)', async () => {
+  const user = userEvent.setup();
+  render(<GMAdjudicationPanel scene={makeScene()} />);
+
+  await user.selectOptions(screen.getByTestId('gm-adjudication-target-select'), '55');
+  await user.click(screen.getByTestId('gm-tab-condition'));
+  await user.click(screen.getByTestId('gm-condition-quick-edge'));
+
+  await waitFor(() => expect(mutateAsync).toHaveBeenCalled());
+  expect(mutateAsync).toHaveBeenCalledWith({
+    ref: { backend: 'registry', registry_key: 'gm_apply_condition' },
+    kwargs: { target: 55, condition_ref: 'Edge' },
+  });
+});
+
+test('Quick Setback button dispatches gm_apply_condition with condition_ref Setback (#3387)', async () => {
+  const user = userEvent.setup();
+  render(<GMAdjudicationPanel scene={makeScene()} />);
+
+  await user.selectOptions(screen.getByTestId('gm-adjudication-target-select'), '55');
+  await user.click(screen.getByTestId('gm-tab-condition'));
+  await user.click(screen.getByTestId('gm-condition-quick-setback'));
+
+  await waitFor(() => expect(mutateAsync).toHaveBeenCalled());
+  expect(mutateAsync).toHaveBeenCalledWith({
+    ref: { backend: 'registry', registry_key: 'gm_apply_condition' },
+    kwargs: { target: 55, condition_ref: 'Setback' },
+  });
+});
+
+test('Quick Edge button is disabled with no target selected', async () => {
+  const user = userEvent.setup();
+  render(<GMAdjudicationPanel scene={makeScene()} />);
+  await user.click(screen.getByTestId('gm-tab-condition'));
+  expect(screen.getByTestId('gm-condition-quick-edge')).toBeDisabled();
+});
+
+test('Dramatic Beat tab dispatches gm_trigger_dramatic_beat with target + reason (#3387)', async () => {
+  const user = userEvent.setup();
+  render(<GMAdjudicationPanel scene={makeScene()} />);
+
+  await user.selectOptions(screen.getByTestId('gm-adjudication-target-select'), '55');
+  await user.click(screen.getByTestId('gm-tab-dramaticbeat'));
+  await user.type(screen.getByTestId('gm-dramaticbeat-reason'), 'a costly misstep');
+  await user.click(screen.getByTestId('gm-dramaticbeat-submit'));
+
+  await waitFor(() => expect(mutateAsync).toHaveBeenCalled());
+  expect(mutateAsync).toHaveBeenCalledWith({
+    ref: { backend: 'registry', registry_key: 'gm_trigger_dramatic_beat' },
+    kwargs: { target: 55, reason: 'a costly misstep' },
+  });
+});
+
+test('Dramatic Beat tab submit is disabled without a reason', async () => {
+  const user = userEvent.setup();
+  render(<GMAdjudicationPanel scene={makeScene()} />);
+
+  await user.selectOptions(screen.getByTestId('gm-adjudication-target-select'), '55');
+  await user.click(screen.getByTestId('gm-tab-dramaticbeat'));
+
+  expect(screen.getByTestId('gm-dramaticbeat-submit')).toBeDisabled();
+});
+
 test('Situation tab dispatches set_situation with no target kwarg', async () => {
   const user = userEvent.setup();
   render(<GMAdjudicationPanel scene={makeScene()} />);

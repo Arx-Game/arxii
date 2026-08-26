@@ -187,6 +187,18 @@ unlocks, never grants" makes XP scarce, so this is the pull). Built:
   GM trust-tier check exists or was added — a below-tier GM's dispatch simply
   surfaces the backend's own prerequisite-refusal message via toast, the same as any
   other rejected dispatch.
+- **GM fiat levers mid-combat ✅ (#3387)** — three adjacent gaps flagged in a 2026-08-26
+  combat audit, ruled the same session (see ADR-0233). **Built:** a curated Edge/Setback
+  one-round nudge riding the existing `gm_apply_condition` lever (two `ConditionTemplate`
+  rows, `world/conditions/gm_edge_content.py`, no new mechanism) plus Quick Edge/Setback
+  buttons on the panel's Condition tab; a SENIOR-gated `GMTriggerDramaticBeatAction`
+  (`gm_trigger_dramatic_beat`) — a staff/senior stopgap that manually fires
+  `apply_dramatic_surge` on a named character with a required, persisted `reason`, for the
+  rare beat none of the automatic surge detectors catch — reachable via telnet
+  (`gm dramatic <character> reason=<text>`) and a new panel Dramatic Beat tab. **Not
+  built:** a GM-declaration override for `Situation` evaluators — ruled deliberate
+  (ADR-0233): GMs make a situation true (positioning, encounter settings), they don't
+  assert it past the evaluators.
 
 ### Staff Character and Staff Tooling
 - Staff has commands to edit world state, manage GMs, override any system
