@@ -15,12 +15,30 @@
  * Condition badges: each row renders its `active_conditions` as ConditionBadge
  *   chips that deep-link to the shared condition-detail modal on click.
  *
+ * Opponent click-menu (#3381): each opponent row carries a kebab-trigger
+ * dropdown (Radix, mirrors PersonaContextMenu.tsx's pattern) offering
+ * Taunt/Demoralize/Parley — a kebab icon rather than the row itself as the
+ * trigger, so it doesn't collide with the condition-badge deep-link already
+ * on the row. Only rendered when the caller passes `canDeclareManeuvers`
+ * (derived by CombatTurnPanel from `is_participant && status === 'declaring'`
+ * — GM/observer rows never get the menu) and a `characterId` to dispatch as.
+ *
  * Phase 8, Task 8.3 — unified-combat-ui plan.
  */
 
+import { MoreVertical } from 'lucide-react';
+import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
 import { PersonaAvatar } from '@/components/PersonaAvatar';
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu';
 import { ConditionBadge } from '../components/ConditionBadge';
+import { useRegistryDispatch } from '../queries';
+import { isDispatchFailure } from '../types';
 import type { EncounterDetail, Participant, Opponent } from '../types';
 import type { components } from '@/generated/api';
 
@@ -65,6 +83,21 @@ export interface CombatantsListProps {
   /** Whether the section is collapsed. Controlled by parent (Task 8.6). */
   collapsed?: boolean;
   onToggleCollapse?: () => void;
+  /**
+   * The viewer's character id — required to dispatch a maneuver from the
+   * opponent click-menu (#3381). Omitted/0 for a GM/observer, who never gets
+   * the menu regardless (see `canDeclareManeuvers`).
+   */
+  characterId?: number;
+  /**
+   * True when the viewer may declare a maneuver this round — mirrors
+   * `isDeclaringPhase` in YourTurn.tsx (`encounter.status === 'declaring'`)
+   * ANDed with `encounter.is_participant`. Threaded down from CombatTurnPanel
+   * (the shared parent that mounts both YourTurn and CombatantsList) rather
+   * than re-derived here, per #3381's leak-analysis: a GM/observer row must
+   * never render the menu.
+   */
+  canDeclareManeuvers?: boolean;
 }
 
 // ---------------------------------------------------------------------------
@@ -152,9 +185,41 @@ function ParticipantRow({ participant }: ParticipantRowProps) {
 
 interface OpponentRowProps {
   opponent: Opponent;
+  encounterId: number;
+  characterId?: number;
+  canDeclareManeuvers?: boolean;
 }
 
-function OpponentRow({ opponent }: OpponentRowProps) {
+/** One opponent-targeted maneuver offered by the click-menu (#3381). */
+const OPPONENT_MANEUVERS: {
+  key: 'combat_taunt' | 'combat_demoralize' | 'combat_parley';
+  label: string;
+}[] = [
+  { key: 'combat_taunt', label: 'Taunt' },
+  { key: 'combat_demoralize', label: 'Demoralize' },
+  { key: 'combat_parley', label: 'Parley' },
+];
+
+function OpponentRow({
+  opponent,
+  encounterId,
+  characterId,
+  canDeclareManeuvers = false,
+}: OpponentRowProps) {
+  const showMenu = canDeclareManeuvers && characterId != null;
+  const { mutateAsync, isPending } = useRegistryDispatch(encounterId, characterId ?? 0);
+
+  async function handleManeuver(registryKey: string, label: string) {
+    try {
+      const result = await mutateAsync({ registryKey, kwargs: { opponent_id: opponent.id } });
+      if (isDispatchFailure(result)) {
+        toast.error(result.message ?? `Failed to ${label.toLowerCase()}.`);
+      }
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : `Failed to ${label.toLowerCase()}.`);
+    }
+  }
+
   return (
     <div
       className={cn(
@@ -192,6 +257,37 @@ function OpponentRow({ opponent }: OpponentRowProps) {
         {/* Condition badges — deep-link to the condition-detail modal on click. */}
         <ConditionRow conditions={opponent.active_conditions} />
       </div>
+
+      {/* Opponent click-menu (#3381) — Taunt/Demoralize/Parley. A kebab trigger
+       * (not the row itself) avoids colliding with the condition-badge deep-link. */}
+      {showMenu && (
+        <DropdownMenu>
+          <DropdownMenuTrigger asChild>
+            <button
+              type="button"
+              data-testid={`opponent-menu-trigger-${opponent.id}`}
+              aria-label={`Actions on ${opponent.name}`}
+              className="shrink-0 rounded p-1 text-muted-foreground hover:bg-accent/50 hover:text-foreground"
+            >
+              <MoreVertical className="h-4 w-4" />
+            </button>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="end">
+            {OPPONENT_MANEUVERS.map(({ key, label }) => (
+              <DropdownMenuItem
+                key={key}
+                disabled={isPending}
+                data-testid={`opponent-${key}-${opponent.id}`}
+                onClick={() => {
+                  handleManeuver(key, label).catch(() => {});
+                }}
+              >
+                {label}
+              </DropdownMenuItem>
+            ))}
+          </DropdownMenuContent>
+        </DropdownMenu>
+      )}
     </div>
   );
 }
@@ -204,6 +300,8 @@ export function CombatantsList({
   encounter,
   collapsed = false,
   onToggleCollapse,
+  characterId,
+  canDeclareManeuvers = false,
 }: CombatantsListProps) {
   const { participants, opponents } = encounter;
 
@@ -253,7 +351,13 @@ export function CombatantsList({
                 Opponents
               </p>
               {opponents.map((o) => (
-                <OpponentRow key={o.id} opponent={o} />
+                <OpponentRow
+                  key={o.id}
+                  opponent={o}
+                  encounterId={encounter.id}
+                  characterId={characterId}
+                  canDeclareManeuvers={canDeclareManeuvers}
+                />
               ))}
             </div>
           )}

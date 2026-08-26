@@ -408,6 +408,40 @@ export function useGuardMutation(encounterId: number, characterId: number) {
 }
 
 // ---------------------------------------------------------------------------
+// Generic registry-maneuver dispatch hook (#3381)
+// ---------------------------------------------------------------------------
+
+/** Args for useRegistryDispatch — a bare registry_key + kwargs, no bespoke shape. */
+export interface RegistryDispatchArgs {
+  registryKey: string;
+  kwargs?: Record<string, unknown>;
+}
+
+/**
+ * Dispatch a registry-backend maneuver that has no dedicated REST wrapper and
+ * needs no bespoke request shape — rally/succor/taunt/demoralize/parley/
+ * combat_revert/combat_charge/combat_joust (#3381 Decision 1: all new wiring
+ * rides the generic dispatch seam). Generalizes `useGuardMutation`'s shape
+ * (POST via `api.postDispatchAction`, invalidate the encounter + consequence-
+ * outcome caches on success via `useEncounterMutation`) over an arbitrary
+ * registry_key/kwargs pair, since none of these verbs need Guard's bespoke
+ * redirect-destination handling. Callers still check `isDispatchFailure(result)`
+ * themselves — a business-rule rejection resolves HTTP 200 with `success: false`
+ * (#2423), and invalidating on that is harmless (the refetch returns unchanged
+ * state).
+ */
+export function useRegistryDispatch(encounterId: number, characterId: number) {
+  return useEncounterMutation<DispatchResult, RegistryDispatchArgs>(
+    encounterId,
+    ({ registryKey, kwargs = {} }) =>
+      api.postDispatchAction(characterId, {
+        ref: { backend: 'registry', registry_key: registryKey },
+        kwargs,
+      })
+  );
+}
+
+// ---------------------------------------------------------------------------
 // Consequence outcomes hook
 // ---------------------------------------------------------------------------
 
