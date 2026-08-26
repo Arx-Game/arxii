@@ -202,3 +202,45 @@ class ApplyTechniqueTreatmentsTest(TestCase):
             # Verify skip_engagement_gate=True was passed.
             _, kwargs = mock_perform.call_args
             self.assertTrue(kwargs.get("skip_engagement_gate"))
+
+    @patch("world.checks.services.perform_check")
+    def test_eff_intensity_forwarded_as_power_intensity(self, mock_perform_check):
+        """#3391 back-compat anchor: apply_technique_treatments forwards its eff_intensity
+        kwarg to perform_treatment as power_intensity, across a matrix of values. This
+        suite's shared treatment_template leaves mend_intensity_multiplier at the field
+        default (0), so real mend amounts stay unaffected by eff_intensity regardless
+        of what's forwarded — the wiring exists but has zero effect at the default.
+        """
+        mock_perform_check.return_value = _make_check_result(success_level=2)
+
+        for eff_intensity in (0, 10, 100):
+            with self.subTest(eff_intensity=eff_intensity):
+                # A fresh condition template + instance per iteration — the shared
+                # treatment_template's reduction_on_success would resolve a reused
+                # instance after enough successful iterations (leaving no matching
+                # target_effect for later calls), and ConditionInstance is unique per
+                # (target, condition), so a fresh template avoids both problems.
+                iteration_condition = ConditionTemplateFactory(
+                    name=f"Wound_TT_power_{eff_intensity}"
+                )
+                self.treatment_template.target_condition = iteration_condition
+                self.treatment_template.save(update_fields=["target_condition"])
+                ConditionInstanceFactory(
+                    target=self.target,
+                    condition=iteration_condition,
+                    severity=3,
+                )
+                with patch(
+                    "world.conditions.services.perform_treatment",
+                    wraps=perform_treatment,
+                ) as mock_perform:
+                    apply_technique_treatments(
+                        technique=self.technique,
+                        success_level=3,
+                        eff_intensity=eff_intensity,
+                        targets_by_kind={ConditionTargetKind.ALLY: [self.target]},
+                        source_character=self.caster,
+                        scene=self.scene,
+                    )
+                _, kwargs = mock_perform.call_args
+                self.assertEqual(kwargs.get("power_intensity"), eff_intensity)
